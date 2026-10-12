@@ -6,16 +6,19 @@
 // Run: pnpm test:tools   (node --test)
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
   assertCodeGeneratorConverged,
   assertPasswordPolicyConverged,
+  CODE_EMAIL_LIFETIME_CONSTANTS,
   EMAILED_CODE_GENERATOR_TYPES,
   formatCodeGenerator,
   formatPasswordPolicy,
   IdpPolicyError,
   LEGACY_LOGIN_OTP_GENERATOR_TYPES,
+  parseCodeEmailLifetimes,
   parseEmailedCodeShape,
   parsePasswordMinLength,
   parseVerifyCodeLength,
@@ -426,12 +429,18 @@ test("#2636: target WITH the digits step → check all four against its length",
     resolveEmailedCodeExpectation({
       provisionText: provisionDigits,
       verifyCodeSchemaText: schemaSix,
+      codeEmailsText: codeEmailsLifetimes,
     }),
     {
       check: true,
       length: 6,
       alphabet: "digits",
       generators: EMAILED_CODE_GENERATOR_TYPES,
+      expirySeconds: {
+        SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE: 3600,
+        SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE: 3600,
+        SECRET_GENERATOR_TYPE_OTP_EMAIL: 300,
+      },
     },
   );
 });
@@ -459,5 +468,108 @@ test("#2555: target whose provision length disagrees with VERIFY_CODE_LENGTH is 
       e instanceof IdpPolicyError &&
       /code length 6/.test(e.message) &&
       /VERIFY_CODE_LENGTH=8/.test(e.message),
+  );
+});
+
+// --- #2814: the lifetime the code email states is the lifetime the IdP keeps --
+// provision.sh preserves each generator's existing expiry; only this read-back
+// can notice a drifted lifetime, and the expected value is parsed from the
+// mailer copy's own constants at the target SHA (one source of truth).
+
+const codeEmailsLifetimes = [
+  "export const VERIFY_EMAIL_CODE_LIFETIME_SECONDS = 3600;",
+  "export const PASSWORD_RESET_CODE_LIFETIME_SECONDS = 3600;",
+  "export const LOGIN_EMAIL_CODE_LIFETIME_SECONDS = 300;",
+  "",
+].join("\n");
+
+const verifyGenerator = (expiry) => ({
+  secretGenerator: { ...digitsConverged.secretGenerator, expiry },
+});
+
+test("#2814: the code-email lifetimes are read from the mailer source, never hardcoded", () => {
+  assert.deepEqual(parseCodeEmailLifetimes(codeEmailsLifetimes), {
+    SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE: 3600,
+    SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE: 3600,
+    SECRET_GENERATOR_TYPE_OTP_EMAIL: 300,
+  });
+  assert.equal(
+    parseCodeEmailLifetimes(codeEmailsLifetimes.replace("= 3600;", "= 1800;"))
+      .SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE,
+    1800,
+  );
+});
+
+test("#2814: the shipped mailer source parses (the real code-emails.ts carries the constants)", () => {
+  const real = readFileSync(
+    new URL("../../apps/api/src/mailer/code-emails.ts", import.meta.url),
+    "utf8",
+  );
+  assert.deepEqual(
+    Object.keys(parseCodeEmailLifetimes(real)).sort(),
+    Object.keys(CODE_EMAIL_LIFETIME_CONSTANTS).sort(),
+  );
+});
+
+test("#2814: a pre-#2814 target (no lifetime constants) pins nothing — presence-only, as before", () => {
+  assert.deepEqual(parseCodeEmailLifetimes("export const X = 1;\n"), {});
+});
+
+test("#2814: a partial, renamed-to-expression or unreadable lifetime set is REJECTED", () => {
+  for (const text of [
+    codeEmailsLifetimes.replace(/^export const LOGIN.*$/m, ""),
+    codeEmailsLifetimes.replace("= 3600;", "= 60 * 60;"),
+    codeEmailsLifetimes.replace("= 300;", "= 0;"),
+  ]) {
+    assert.throws(() => parseCodeEmailLifetimes(text), IdpPolicyError);
+  }
+  assert.throws(() => parseCodeEmailLifetimes(undefined), IdpPolicyError);
+  assert.throws(() => parseCodeEmailLifetimes(""), IdpPolicyError);
+});
+
+test("#2814: a VERIFY_EMAIL_CODE expiry equal to the stated lifetime passes", () => {
+  assert.equal(
+    assertCodeGeneratorConverged(verifyGenerator("3600s"), digits6, 3600)
+      .expiry,
+    "3600s",
+  );
+});
+
+test("#2814: a VERIFY_EMAIL_CODE expiry that differs from the email copy is REJECTED", () => {
+  for (const expiry of ["30s", "1800s", "7200s"]) {
+    assert.throws(
+      () =>
+        assertCodeGeneratorConverged(verifyGenerator(expiry), digits6, 3600),
+      (e) =>
+        e instanceof IdpPolicyError &&
+        new RegExp(`expiry=${expiry}, expected 3600s`).test(e.message),
+    );
+  }
+});
+
+test("#2814: an expiry the deploy cannot read as seconds is REJECTED, never assumed equal", () => {
+  assert.throws(
+    () => assertCodeGeneratorConverged(verifyGenerator("1h"), digits6, 3600),
+    /expiry=1h is not a protobuf duration/,
+  );
+});
+
+test("#2814: the target's lifetimes travel with the code-generator expectation", () => {
+  const verdict = resolveEmailedCodeExpectation({
+    provisionText: provisionDigits,
+    verifyCodeSchemaText: schemaSix,
+    codeEmailsText: codeEmailsLifetimes.replace("= 3600;", "= 1800;"),
+  });
+  assert.equal(
+    verdict.expirySeconds.SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE,
+    1800,
+  );
+  assert.throws(
+    () =>
+      resolveEmailedCodeExpectation({
+        provisionText: provisionDigits,
+        verifyCodeSchemaText: schemaSix,
+      }),
+    IdpPolicyError,
   );
 });

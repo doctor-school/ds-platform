@@ -339,6 +339,65 @@ export function parseEmailedCodeShape(provisionText) {
 }
 
 /**
+ * Which `apps/api/src/mailer/code-emails.ts` constant states each emailed
+ * generator's lifetime (#2814). The email copy is rendered FROM these
+ * constants, so the number the deploy pins is the number the user reads.
+ * Generators whose code no email states a lifetime for (SMS, phone) are absent
+ * and keep the presence-only expiry check.
+ */
+export const CODE_EMAIL_LIFETIME_CONSTANTS = {
+  SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE: "VERIFY_EMAIL_CODE_LIFETIME_SECONDS",
+  SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE:
+    "PASSWORD_RESET_CODE_LIFETIME_SECONDS",
+  SECRET_GENERATOR_TYPE_OTP_EMAIL: "LOGIN_EMAIL_CODE_LIFETIME_SECONDS",
+};
+
+/**
+ * Read the code lifetimes the email copy states out of `code-emails.ts` at the
+ * deployed SHA (same reason as {@link parsePasswordMinLength}: the deploy is a
+ * plain `.mjs` CLI and a `--ref` target's value is that commit's, not the
+ * checkout's).
+ *
+ * A target that declares none of the constants predates #2814 and pins
+ * nothing (`{}`); a target that declares some but not all, or one that is not a
+ * positive integer literal, is refused — the deploy never guesses a lifetime.
+ *
+ * @param {string} sourceText contents of `code-emails.ts` at the target SHA
+ * @returns {Record<string, number>} seconds per generator type
+ */
+export function parseCodeEmailLifetimes(sourceText) {
+  if (typeof sourceText !== "string" || sourceText.trim() === "") {
+    throw new IdpPolicyError(
+      "cannot read the code-email lifetimes: empty apps/api/src/mailer/code-emails.ts source",
+    );
+  }
+  const declared = Object.entries(CODE_EMAIL_LIFETIME_CONSTANTS).map(
+    ([type, name]) => [
+      type,
+      name,
+      new RegExp(`export\\s+const\\s+${name}\\s*=\\s*([^;\\n]*);`).exec(
+        sourceText,
+      ),
+    ],
+  );
+  if (declared.every(([, , m]) => m === null)) return {};
+  const lifetimes = {};
+  for (const [type, name, m] of declared) {
+    const literal = m ? /^\s*(\d+)\s*$/.exec(m[1]) : null;
+    const value = literal ? Number(literal[1]) : NaN;
+    if (!Number.isInteger(value) || value <= 0) {
+      throw new IdpPolicyError(
+        `cannot read ${name} from apps/api/src/mailer/code-emails.ts` +
+          (m ? ` (declared as ${JSON.stringify(m[1].trim())})` : " (absent)") +
+          " — not a positive integer literal; the deploy refuses to guess the code lifetime.",
+      );
+    }
+    lifetimes[type] = value;
+  }
+  return lifetimes;
+}
+
+/**
  * Decide what the deploy's code-generator read-back checks, from the TARGET
  * commit's own sources. A target whose provision.sh converges nothing is
  * skipped (a `--ref` hotfix to a pre-#2555 commit ships an app and an IdP that
@@ -346,13 +405,16 @@ export function parseEmailedCodeShape(provisionText) {
  * whose `VERIFY_CODE_LENGTH` matches — otherwise the converge would succeed and
  * every code would be rejected by the code input.
  *
- * @param {{provisionText: string, verifyCodeSchemaText: string}} sources
- * @returns {{check: true, length: number, alphabet: string, generators: string[]} | {check: false, reason: string}}
+ * The target's code-email lifetimes ride along as `expirySeconds` (#2814).
+ *
+ * @param {{provisionText: string, verifyCodeSchemaText: string, codeEmailsText: string}} sources
+ * @returns {{check: true, length: number, alphabet: string, generators: string[], expirySeconds: Record<string, number>} | {check: false, reason: string}}
  * @throws {IdpPolicyError}
  */
 export function resolveEmailedCodeExpectation({
   provisionText,
   verifyCodeSchemaText,
+  codeEmailsText,
 }) {
   const shape = parseEmailedCodeShape(provisionText);
   if (shape === null) {
@@ -372,7 +434,11 @@ export function resolveEmailedCodeExpectation({
         " the code input.",
     );
   }
-  return { check: true, ...shape };
+  return {
+    check: true,
+    ...shape,
+    expirySeconds: parseCodeEmailLifetimes(codeEmailsText),
+  };
 }
 
 /**
@@ -380,15 +446,23 @@ export function resolveEmailedCodeExpectation({
  * `GET /admin/v1/secretgenerators/{type}`. Absent alphabet flags read as
  * `false` (proto3 defaults are dropped from the body — see
  * {@link assertPasswordPolicyConverged}); a present non-boolean is an error.
- * The expiry must be present: its value is provision.sh's to preserve, not the
- * deploy's to pin.
+ * The expiry must be present. provision.sh preserves it rather than writing it,
+ * so when the target's code email states this generator's lifetime the expiry
+ * must equal it (#2814) — otherwise the email promises a lifetime the code does
+ * not have and nothing else would fail.
  *
  * @param {unknown} generatorJson the body, or its `.secretGenerator` object
  * @param {{length: number, alphabet: string}} expected from {@link resolveEmailedCodeExpectation}
+ * @param {number} [expectedExpirySeconds] the lifetime the code email states
+ *   ({@link parseCodeEmailLifetimes}); omitted ⇒ presence-only
  * @returns {{length: number, alphabet: string, expiry: string}}
  * @throws {IdpPolicyError}
  */
-export function assertCodeGeneratorConverged(generatorJson, expected) {
+export function assertCodeGeneratorConverged(
+  generatorJson,
+  expected,
+  expectedExpirySeconds,
+) {
   const alphabet = CODE_ALPHABETS[expected?.alphabet];
   if (!alphabet) {
     throw new IdpPolicyError(
@@ -429,6 +503,18 @@ export function assertCodeGeneratorConverged(generatorJson, expected) {
     problems.push(
       `expiry is missing from the read-back: ${JSON.stringify(expiry ?? null)}`,
     );
+  } else if (expectedExpirySeconds !== undefined) {
+    // protojson renders google.protobuf.Duration as decimal seconds + "s".
+    const m = /^(\d+(?:\.\d+)?)s$/.exec(expiry);
+    if (!m) {
+      problems.push(
+        `expiry=${expiry} is not a protobuf duration — cannot compare it with the ${expectedExpirySeconds}s the code email states`,
+      );
+    } else if (Number(m[1]) !== expectedExpirySeconds) {
+      problems.push(
+        `expiry=${expiry}, expected ${expectedExpirySeconds}s (the lifetime apps/api/src/mailer/code-emails.ts states in the email)`,
+      );
+    }
   }
 
   if (problems.length > 0) {

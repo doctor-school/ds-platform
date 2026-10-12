@@ -105,7 +105,12 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    `LOGIN_OTP_CODE_LENGTH` converges the `…_OTP_EMAIL` / `…_OTP_SMS` pair to upper
    letters + digits. The length must equal `@ds/schemas` `VERIFY_CODE_LENGTH` at
    the same SHA; the deploy asserts that length, the target's alphabet and an
-   expiry present on every generator. A target whose `provision.sh` has neither
+   expiry present on every generator. The verify-email, password-reset and
+   `…_OTP_EMAIL` expiries must also equal the lifetimes the code emails state —
+   `VERIFY_EMAIL_CODE_LIFETIME_SECONDS`, `PASSWORD_RESET_CODE_LIFETIME_SECONDS`,
+   `LOGIN_EMAIL_CODE_LIFETIME_SECONDS` in `apps/api/src/mailer/code-emails.ts` at
+   the same SHA, which also render the email copy (#2814); `provision.sh` keeps
+   the live expiry, so a drifted lifetime fails here. A target whose `provision.sh` has neither
    constant (a `--ref` hotfix to a commit before step 8.septies) never converges
    the generators, so the deploy prints the line
    `skipped: target provision.sh does not converge the code generators` and

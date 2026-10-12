@@ -66,10 +66,44 @@ const RESET_COPY: CodeEmailCopy = {
     "Если вы не запрашивали сброс пароля — проигнорируйте это письмо.",
 };
 
-/** «Код действует 1 час» — the 3600 s code-generator lifetime (design §14.1). */
-const EXPIRY_LINE = "Код действует 1 час.";
+/*
+ * The code lifetimes the emails state (design §13.5, §14.1). The IdP generators
+ * hold the real lifetimes; the deploy's read-back (tools/deploy/idp-policy.mjs,
+ * #2814) parses these declarations at the deployed SHA and refuses a generator
+ * whose expiry differs, so each stays a plain integer literal in seconds.
+ */
+/** SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE lifetime, seconds. */
+export const VERIFY_EMAIL_CODE_LIFETIME_SECONDS = 3600;
+/** SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE lifetime, seconds. */
+export const PASSWORD_RESET_CODE_LIFETIME_SECONDS = 3600;
+/** SECRET_GENERATOR_TYPE_OTP_EMAIL (sign-in code) lifetime, seconds. */
+export const LOGIN_EMAIL_CODE_LIFETIME_SECONDS = 300;
 
-function compose(code: string, copy: CodeEmailCopy, expiry = EXPIRY_LINE): CodeEmailMessage {
+function pluralRu(n: number, one: string, few: string, many: string): string {
+  const mod100 = n % 100;
+  const mod10 = n % 10;
+  if (mod100 >= 11 && mod100 <= 14) return many;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
+}
+
+/** «Код действует N …» for a lifetime in whole hours or minutes. */
+export function codeLifetimeLine(seconds: number): string {
+  if (!Number.isInteger(seconds) || seconds <= 0 || seconds % 60 !== 0) {
+    throw new Error(
+      `code lifetime ${seconds}s cannot be stated in whole minutes`,
+    );
+  }
+  if (seconds % 3600 === 0) {
+    const hours = seconds / 3600;
+    return `Код действует ${hours} ${pluralRu(hours, "час", "часа", "часов")}.`;
+  }
+  const minutes = seconds / 60;
+  return `Код действует ${minutes} ${pluralRu(minutes, "минуту", "минуты", "минут")}.`;
+}
+
+function compose(code: string, copy: CodeEmailCopy, expiry: string): CodeEmailMessage {
   return composeEmail({
     subject: `${code} — ${copy.subjectTail}`,
     preheader: copy.preheader,
@@ -82,12 +116,20 @@ function compose(code: string, copy: CodeEmailCopy, expiry = EXPIRY_LINE): CodeE
 
 /** §13.3: the registration / resend email-verification artifact (EARS-1/3/25). */
 export function verificationCodeEmail(code: string): CodeEmailMessage {
-  return compose(code, VERIFY_COPY);
+  return compose(
+    code,
+    VERIFY_COPY,
+    codeLifetimeLine(VERIFY_EMAIL_CODE_LIFETIME_SECONDS),
+  );
 }
 
 /** §13.4: the password-reset artifact (EARS-11). */
 export function passwordResetCodeEmail(code: string): CodeEmailMessage {
-  return compose(code, RESET_COPY);
+  return compose(
+    code,
+    RESET_COPY,
+    codeLifetimeLine(PASSWORD_RESET_CODE_LIFETIME_SECONDS),
+  );
 }
 
 /**
@@ -98,7 +140,11 @@ export function passwordResetCodeEmail(code: string): CodeEmailMessage {
 export type CodeLifetime = "5m" | "1h";
 
 function expiryLine(lifetime: CodeLifetime): string {
-  return lifetime === "5m" ? "Код действует 5 минут." : EXPIRY_LINE;
+  return codeLifetimeLine(
+    lifetime === "5m"
+      ? LOGIN_EMAIL_CODE_LIFETIME_SECONDS
+      : VERIFY_EMAIL_CODE_LIFETIME_SECONDS,
+  );
 }
 
 const LOGIN_COPY: CodeEmailCopy = {

@@ -540,8 +540,8 @@ jobs:
       # short email-verification code lifetime so
       # `auth/zitadel-email-code-expiry.e2e-spec.ts` waits out a real expiry in
       # seconds instead of the hour staging and production carry (3600s, kept
-      # by `infra/dev-stand/idp/provision.sh` and read back and logged, not
-      # pinned, by the deploy in `tools/deploy/idp-policy.mjs`). The provisioned six-digit shape
+      # by `infra/dev-stand/idp/provision.sh` and pinned by the deploy read-back in
+      # `tools/deploy/idp-policy.mjs` to the lifetime the email states, #2814). The provisioned six-digit shape
       # is kept; only `expiry` changes, and it is read back before the suite
       # runs — the spec then re-reads it and refuses a value the IdP lacks.
       - name: Shorten the CI IdP email-verification code lifetime

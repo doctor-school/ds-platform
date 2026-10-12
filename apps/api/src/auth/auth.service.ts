@@ -576,11 +576,13 @@ export class AuthService {
    * 003 EARS-53: a reset requested with a phone. The EARS-14 budget is consumed
    * first, before any account lookup, so neither a refusal nor a miss signals
    * existence; the IdP then texts the code only to a confirmed phone the IdP
-   * still holds verified. Everything after the budget runs off the response
-   * path, like the email send, so every branch answers the one
-   * `reset_requested` within the EARS-16 floor. A limit refusal, an unknown or
-   * unconfirmed number and an IdP mismatch send nothing and are counted by
-   * EARS-56 — no ledger row, since no code was issued (EARS-18). A code
+   * still holds verified, on an account whose email is verified. Everything
+   * after the budget runs off the response path, like the email send, so every
+   * branch answers the one `reset_requested` within the EARS-16 floor. A limit
+   * refusal, an unknown or unconfirmed number and an IdP mismatch send nothing
+   * and are counted by EARS-56; a confirmed number on an unverified-email
+   * account sends nothing and is not counted (the number is confirmed). None
+   * writes a ledger row, since no code was issued (EARS-18). A code
    * actually requested writes `auth.password.reset_requested` with channel
    * `sms` (EARS-57). The EARS-33 synthetic suppression drops the provider hop
    * at the same point as SMS sign-in, keeping its ledger row.
@@ -667,14 +669,12 @@ export class AuthService {
     // session behind and the fresh session is the only survivor.
     await this.sessions.revokeAllForSub(session.sub);
     // 003 EARS-35: verify only after the reset code succeeds, but before the
-    // OIDC exchange; an unverified account cannot complete that exchange. A
-    // phone identifier means the code went by SMS (EARS-53): it proves the
-    // phone, not the mailbox, so the email-verified state is left untouched —
-    // a phone added outside the product (Zitadel console) on an account with
-    // an unverified email must not verify that email.
-    const emailFlipped = isPhoneIdentifier(identifier)
-      ? false
-      : await this.idp.markEmailVerified(session.sub);
+    // OIDC exchange; an unverified account cannot complete that exchange. An
+    // SMS reset code is issued only to an account whose email is already
+    // verified (EARS-53), so on that path the flip is an idempotent no-op and
+    // the completion's identifier — attacker-chosen, and resolving to the same
+    // per-user code either way — never decides it.
+    const emailFlipped = await this.idp.markEmailVerified(session.sub);
     if (emailFlipped) {
       await this.mirror.markEmailVerified(session.sub);
       await this.audit.record({

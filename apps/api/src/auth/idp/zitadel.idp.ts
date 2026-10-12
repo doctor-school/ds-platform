@@ -22,6 +22,7 @@ import {
   isPhoneIdentifier,
   type PasswordLoginResult,
   type RevalidateAdminAuthorityInput,
+  type SmsResetOutcome,
   type SmsSendOutcome,
   type TotpRegistration,
 } from "./idp.types.js";
@@ -1342,13 +1343,16 @@ export class ZitadelIdpClient implements IdpClient {
     }
   }
 
-  async requestSmsPasswordReset(phone: string): Promise<SmsSendOutcome> {
+  async requestSmsPasswordReset(phone: string): Promise<SmsResetOutcome> {
     // 003 EARS-53 (design → Password reset by SMS). The mirror names the
     // account that holds `phone` confirmed (EARS-58); the IdP user is then
     // re-read immediately before the send, because Zitadel texts the reset
     // code to the user's LAST phone whether or not it is verified, and the
     // mirror can lag the IdP (a failed displacement write, a console change).
-    // Only a verified IdP phone equal to the identifier is sent to. The send is
+    // Only a verified IdP phone equal to the identifier is sent to, and only
+    // on an account whose email is verified: the completion resolves an email
+    // and a phone identifier to the same user and the same per-user code, so
+    // an SMS code on an unproven mailbox would let EARS-35 verify it. The send is
     // the `sendLink` medium with `NOTIFICATION_TYPE_SMS`: Zitadel generates the
     // code (`PASSWORD_RESET_CODE`), renders the `passwordreset` message text
     // and hands it to the active SMS provider; the code is not returned, so it
@@ -1359,6 +1363,7 @@ export class ZitadelIdpClient implements IdpClient {
       const user = await this.getUser(sub);
       if (!user) return "failed";
       if (!user.phoneVerified || user.phone !== phone) return "unconfirmed";
+      if (!user.emailVerified) return "email_unverified";
       const res = await this.fetchImpl(
         this.url(`/v2/users/${sub}/password_reset`),
         {

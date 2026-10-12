@@ -1592,11 +1592,15 @@ describe("AuthService.requestPasswordReset — reset code by SMS (003 EARS-53/56
     return { idp, audit, mailer, service, counted };
   }
 
-  async function withConfirmedPhone(idp: FakeIdpClient): Promise<void> {
+  async function withConfirmedPhone(
+    idp: FakeIdpClient,
+    opts: { emailVerified: boolean } = { emailVerified: true },
+  ): Promise<void> {
     const { sub } = await idp.createUser({
       email: "sms-reset@ds.test",
       password: "Aa1!sufficiently-long",
     });
+    if (opts.emailVerified) await idp.markEmailVerified(sub);
     idp.attachPhone(sub, phone);
   }
 
@@ -1629,6 +1633,21 @@ describe("AuthService.requestPasswordReset — reset code by SMS (003 EARS-53/56
     expect(mailer.passwordResetCodeEmails).toEqual([]);
     expect(audit.events).toEqual([]);
     expect(counted).toHaveBeenCalledExactlyOnceWith("reset", phone);
+  });
+
+  it("EARS-53/35: a confirmed phone on an account whose email is unverified is not texted, writes no ledger row, is not counted and answers the same", async () => {
+    const { idp, audit, mailer, service, counted } = build();
+    await withConfirmedPhone(idp, { emailVerified: false });
+
+    await expect(
+      service.requestPasswordReset(phone, RESET_CTX),
+    ).resolves.toEqual({ status: "reset_requested" });
+    await flushMicrotasks();
+
+    expect(idp.smsPasswordResetSends()).toEqual([]);
+    expect(mailer.passwordResetCodeEmails).toEqual([]);
+    expect(audit.events).toEqual([]);
+    expect(counted).not.toHaveBeenCalled();
   });
 
   it("EARS-53/14: a reset refused by the SMS budget reaches no IdP, writes no ledger row, is counted and answers the same", async () => {

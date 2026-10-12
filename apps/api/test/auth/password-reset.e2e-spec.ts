@@ -396,9 +396,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
 // 003 EARS-53 (#2449): a reset requested with a CONFIRMED phone sends the code
 // by SMS through the IdP (the fake records the send; the code never reaches
 // the BFF or its mailer); an unknown or unconfirmed phone gets the identical
-// response with no SMS and no email, and is counted by EARS-56. EARS-35: a
-// reset completed with the SMS code leaves `email_verified` untouched — only
-// a code that went to the mailbox proves the mailbox.
+// response with no SMS and no email, and is counted by EARS-56. EARS-35: an
+// SMS code is sent only to an account whose email is already verified, so an
+// SMS-completed reset can never verify an unproven mailbox.
 describe.skipIf(!process.env.DATABASE_URL)(
   "Password reset by SMS to a confirmed phone (e2e, 003 EARS-53/35/56)",
   () => {
@@ -618,28 +618,40 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(idp.smsPasswordResetSends().length).toBe(sendsBefore);
     });
 
-    it("EARS-35: a reset completed with the SMS code does not flip email_verified and writes no auth.account.verified row", async () => {
+    it("EARS-35: a confirmed phone on an account whose email is unverified gets no SMS, so no completion through either identifier can verify that email", async () => {
       // A phone added outside the product (Zitadel console) on an account
-      // whose email was never verified: the SMS code proves the phone, not
-      // the mailbox.
+      // whose email was never verified. EARS-53 texts a reset code only to an
+      // account whose email is verified, so no SMS code exists here: the
+      // completion — with the phone or with the account email, which resolve
+      // to the same subject and the same per-user IdP code — cannot flip the
+      // unproven mailbox.
       const phone = uniquePhone();
       const a = await account("noflip", { verified: false, phone });
       expect(await emailVerified(a.email)).toBe(false);
       const since = await dbNow();
+      const sendsBefore = idp.smsPasswordResetSends().length;
 
-      await requestReset(phone);
+      const res = await requestReset(phone);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ status: "reset_requested" });
       await settle();
-      expect(idp.smsPasswordResetSends()).toContain(phone);
-      await app.inject({
-        method: "POST",
-        url: "/v1/auth/password/reset/complete",
-        headers: device,
-        payload: {
-          identifier: phone,
-          code: FAKE_VALID_CODE,
-          newPassword: "Brand-new-pw-9!",
-        },
-      });
+      expect(idp.smsPasswordResetSends().length).toBe(sendsBefore);
+      expect(resetMailsTo(a.email)).toBe(0);
+      expect(await resetRows(phone)).toEqual([]);
+
+      for (const identifier of [a.email, phone]) {
+        const done = await app.inject({
+          method: "POST",
+          url: "/v1/auth/password/reset/complete",
+          headers: device,
+          payload: {
+            identifier,
+            code: FAKE_VALID_CODE,
+            newPassword: "Brand-new-pw-9!",
+          },
+        });
+        expect(done.statusCode).toBe(400);
+      }
 
       expect(await emailVerified(a.email)).toBe(false);
       const { rows } = await pool.query(

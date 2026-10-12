@@ -347,8 +347,8 @@ against `FakeIdpClient`.
 A reset requested with a phone identifier passes the EARS-14 budget, then —
 off the response path, like the email send — `IdpClient.requestSmsPasswordReset`
 resolves the account through the mirror's confirmed phone (EARS-58), re-reads
-the IdP user and sends only when the IdP holds that number verified
-(`POST /v2/users/{id}/password_reset` with `sendLink` /
+the IdP user and sends only when the IdP holds that number verified and the
+account's email verified (`POST /v2/users/{id}/password_reset` with `sendLink` /
 `NOTIFICATION_TYPE_SMS`; Zitadel generates, texts and later checks the code,
 which never reaches the BFF). The `passwordreset` SMS text is provisioned in
 `infra/dev-stand/idp/provision.sh`. A sent code writes
@@ -356,8 +356,11 @@ which never reaches the BFF). The `passwordreset` SMS text is provisioned in
 unconfirmed number or an IdP mismatch sends nothing, writes no ledger row and
 increments `auth_sms_unconfirmed_phone_requests_total{flow="reset"}` with one
 masked log line (`sms-unconfirmed-counter.ts`; SMS sign-in counts
-`flow="signin"`). Completing a reset with a phone identifier never flips
-`email_verified` (EARS-35): the SMS code proves the phone, not the mailbox.
+`flow="signin"`). A confirmed number on an account whose email is unverified
+(a console-added phone) also sends nothing and writes no row, but is not
+counted. So an SMS code exists only for a verified email, and the completion's
+EARS-35 flip is an idempotent no-op on that path whichever identifier it names
+(an email and a phone resolve to the same per-user Zitadel code).
 
 ## SMS toll-fraud budget (`sms-budget/`, EARS-14, design §10)
 

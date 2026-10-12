@@ -896,8 +896,12 @@ api_idempotent PUT /admin/v1/text/message/verifyphone/en \
 # must revisit it (003-design → Provisioning).
 RU_PASSWORD_RESET_SMS_TEXT='Doctor.School: код для сброса пароля - {{.Code}}, никому его не сообщайте'
 EN_PASSWORD_RESET_SMS_TEXT='Doctor.School: your password reset code is {{.Code}}, do not share it with anyone'
-api_idempotent PUT /admin/v1/text/message/passwordreset/ru   "$(jq -nc --arg t "$RU_PASSWORD_RESET_SMS_TEXT" '{text:$t}')" >/dev/null   && echo "ensured passwordreset/ru branded reset SMS text" >&2
-api_idempotent PUT /admin/v1/text/message/passwordreset/en   "$(jq -nc --arg t "$EN_PASSWORD_RESET_SMS_TEXT" '{text:$t}')" >/dev/null   && echo "ensured passwordreset/en branded reset SMS text" >&2
+api_idempotent PUT /admin/v1/text/message/passwordreset/ru \
+  "$(jq -nc --arg t "$RU_PASSWORD_RESET_SMS_TEXT" '{text:$t}')" >/dev/null \
+  && echo "ensured passwordreset/ru branded reset SMS text" >&2
+api_idempotent PUT /admin/v1/text/message/passwordreset/en \
+  "$(jq -nc --arg t "$EN_PASSWORD_RESET_SMS_TEXT" '{text:$t}')" >/dev/null \
+  && echo "ensured passwordreset/en branded reset SMS text" >&2
 for _mt in init; do
   api_idempotent PUT "/admin/v1/text/message/${_mt}/ru" \
     '{"greeting":"Здравствуйте!"}' >/dev/null \

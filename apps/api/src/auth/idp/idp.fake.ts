@@ -17,6 +17,7 @@ import {
   type IdpUser,
   type PasswordLoginResult,
   type RevalidateAdminAuthorityInput,
+  type SmsResetOutcome,
   type SmsSendOutcome,
   type TotpRegistration,
 } from "./idp.types.js";
@@ -1055,12 +1056,14 @@ export class FakeIdpClient implements IdpClient {
     }
   }
 
-  requestSmsPasswordReset(phone: string): Promise<SmsSendOutcome> {
-    // 003 EARS-53 parity: only a phone an account holds verified is texted the
-    // reset code (the real adapter re-reads the IdP user before the send). The
-    // code stays inside the "IdP" — no mailer, no BFF transit (EARS-30).
+  requestSmsPasswordReset(phone: string): Promise<SmsResetOutcome> {
+    // 003 EARS-53 parity: only a phone an account holds verified, on an account
+    // whose email is verified, is texted the reset code (the real adapter
+    // re-reads the IdP user before the send). The code stays inside the "IdP"
+    // — no mailer, no BFF transit (EARS-30).
     const record = this.confirmedPhoneRecord(phone);
     if (!record) return Promise.resolve("unconfirmed");
+    if (!record.emailVerified) return Promise.resolve("email_unverified");
     this.resetCodes.set(record.sub, FAKE_VALID_CODE);
     this.smsResetSends.push(phone);
     return Promise.resolve("sent");

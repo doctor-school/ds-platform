@@ -192,6 +192,16 @@ export function isPhoneIdentifier(identifier: string): boolean {
  */
 export type SmsSendOutcome = "sent" | "unconfirmed" | "failed";
 
+/**
+ * The outcome of an SMS password-reset send (003 EARS-53): an
+ * {@link SmsSendOutcome}, plus `email_unverified` — the phone is a confirmed
+ * account phone but the account's email is not verified, so nothing was sent
+ * (EARS-35 holds by construction: an SMS reset code exists only for an
+ * account whose email is verified). The number IS confirmed, so EARS-56 does
+ * not count it. Never reflected to a client.
+ */
+export type SmsResetOutcome = SmsSendOutcome | "email_unverified";
+
 /** A Zitadel user as seen by the reconciliation sweep (EARS-19). */
 export interface IdpUser {
   sub: string;
@@ -660,13 +670,17 @@ export interface IdpClient {
    * `phone`, only while `phone` is the confirmed phone of an account (the
    * mirror, EARS-58) AND, re-read immediately before the send, the account's
    * IdP user holds that number verified (Zitadel texts the user's last phone,
-   * verified or not). The code is generated, sent and later checked by the
-   * IdP; it never transits the BFF (EARS-30). The EARS-14 budget is the
-   * caller's gate before this method. Never throws: `unconfirmed` for an
-   * unknown / unconfirmed / mismatched number, `failed` for a provider fault,
-   * `sent` when the IdP accepted the send — a server-side decision only.
+   * verified or not) AND the account's email verified (EARS-35 by
+   * construction: the completion may name either identifier, so no SMS code
+   * may exist for an unproven mailbox). The code is generated, sent and later
+   * checked by the IdP; it never transits the BFF (EARS-30). The EARS-14
+   * budget is the caller's gate before this method. Never throws:
+   * `unconfirmed` for an unknown / unconfirmed / mismatched number,
+   * `email_unverified` for a confirmed number on an unverified-email account,
+   * `failed` for a provider fault, `sent` when the IdP accepted the send — a
+   * server-side decision only.
    */
-  requestSmsPasswordReset(phone: string): Promise<SmsSendOutcome>;
+  requestSmsPasswordReset(phone: string): Promise<SmsResetOutcome>;
   /**
    * EARS-12: set a new password using a reset code and, on success, return a
    * **checked** Zitadel session — the same {@link IdpSession} shape `passwordLogin`

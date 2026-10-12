@@ -64,6 +64,42 @@ test("NEW: in the month view the column holds the facet panel only (row 56)", as
   await expect(column.getByTestId("events-compact-month")).toHaveCount(0);
 });
 
+test("NEW: the month view carries no tense tabs — at ≥1024 px its head row holds only «← Лента событий», right-aligned, and the tense stays in the URL (#2798)", async ({
+  page,
+}) => {
+  await page.goto("/events?tense=past&view=month&month=2026-09");
+  await expect(page.getByTestId("events-month-view")).toBeVisible();
+  const head = page.locator('[data-feed-block="head"]');
+  await expect(head.getByTestId("events-tense-tabs")).toHaveCount(0);
+  await expect(page.getByRole("tab")).toHaveCount(0);
+  const row = head.getByTestId("events-head-row");
+  await expect(row).toBeVisible();
+  const back = row.getByTestId("events-view-switch");
+  await expect(back).toHaveText("← Лента событий");
+  // Right-aligned: the link's right edge meets the row's.
+  const [rowBox, backBox] = [await row.boundingBox(), await back.boundingBox()];
+  expect(Math.abs(rowBox!.x + rowBox!.width - (backBox!.x + backBox!.width))).toBeLessThanOrEqual(1);
+
+  // «← Лента событий» returns to the feed in the tense the month came from.
+  await back.click();
+  await expect(page).toHaveURL(/tense=past/);
+  await expect(page).not.toHaveURL(/view=month/);
+  await expect(
+    page.getByTestId("events-tense-tabs").getByRole("tab", { name: "Прошедшие" }),
+  ).toHaveAttribute("aria-selected", "true");
+});
+
+test("NEW: below 1024 px the month view's head has no row under the subline (#2798)", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/events?tense=past&view=month&month=2026-09");
+  await expect(page.getByTestId("events-month-view")).toBeVisible();
+  await expect(page.getByTestId("events-tense-tabs")).toHaveCount(0);
+  await expect(page.getByTestId("events-head-row")).toBeHidden();
+  await expect(page.getByTestId("events-view-switch-narrow")).toBeVisible();
+});
+
 test("EARS-4.3: selecting a day beyond the current horizon widens `to=` so the day is inside the read it scrolls to (row 57)", async ({
   page,
 }) => {

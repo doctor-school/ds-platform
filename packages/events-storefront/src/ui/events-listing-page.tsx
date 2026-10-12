@@ -237,6 +237,7 @@ export async function EventsListingPage({
         )
       }
       tense={tense}
+      view={view}
       hrefs={{
         upcoming: tenseHref(listing, raw, "upcoming"),
         past: tenseHref(listing, raw, "past"),

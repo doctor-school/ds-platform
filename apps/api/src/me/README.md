@@ -16,9 +16,13 @@ registration, and no event surface.
 
 - **`GET /v1/me/profile` → `MyProfile` (003 EARS-27).** The **caller's own**
   identity fields projected from the `users` mirror row —
-  `{ email, emailVerified, phone, phoneVerified, displayName }` (nullable fields
-  are `null`-present, never omitted). Read-only on every path (no writes, no IdP
-  call); feeds the portal `/account` profile surface (003 EARS-28). Same
+  `{ email, emailVerified, phone, phoneVerified, displayName, suggestedPhone }`
+  (nullable fields are `null`-present, never omitted). `phone` is the
+  confirmed phone only (003 EARS-58); `suggestedPhone` is the contact phone as
+  typed in the caller's latest congress registration, `null` when it is the
+  confirmed phone (003 EARS-50). Read-only on every path (no writes, no IdP
+  call); feeds the portal `/account` profile surface (003 EARS-28). Confirming
+  a phone is `POST /v1/me/phone` in `auth/phone/` (003 EARS-47…52). Same
   fail-closed generic 401 + EARS-26 read-path self-heal as the sibling reads.
 - **`GET /v1/me/display-name` → `MyDisplayName` (EARS-16).** The **caller's own**
   `{ displayName }` — `null` until the JIT prompt completes. The portal reads it

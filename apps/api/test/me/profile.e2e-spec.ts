@@ -22,7 +22,12 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
-import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import { randomUUID } from "node:crypto";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 003 EARS-27 — the account-profile v1 self-read (`GET /v1/me/profile`,
 // design §12; GH #770). One thin, session-scoped projection of the caller's OWN
@@ -349,6 +354,63 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const visitor = await login(email);
       expect((await getProfile(cookieHeader(visitor))).statusCode).toBe(200);
       expect(await mirrorRole(email)).toBe("doctor_guest");
+    });
+
+    it("EARS-50: suggestedPhone is the latest congress registration's phone as typed, null without one or when it is the confirmed phone, and the read writes nothing", async () => {
+      const email = uniqueEmail("doc-prof-suggest");
+      const cookie = await doctorSession(email);
+      const read = async () =>
+        MyProfileSchema.parse((await getProfile(cookieHeader(cookie))).json());
+
+      // No registration: no suggestion.
+      expect((await read()).suggestedPhone).toBeNull();
+
+      const events = [randomUUID(), randomUUID()];
+      try {
+        for (const [i, id] of events.entries()) {
+          await pool.query(
+            `INSERT INTO events
+               (id, slug, title, school, starts_at, duration_min, description,
+                specialties, partner_ref, program_pdf_ref, state,
+                participation_format, kind_id, audience)
+             VALUES ($1,$2,'Конгресс','Конгресс','2027-04-23T09:00:00.000Z',480,
+                     'Конгресс.',ARRAY['cardiology'],'sponsor:congress',NULL,
+                     'published','offline', ${eventClassificationSql()})`,
+            [id, `ears50-${i}-${id.slice(0, 8)}`],
+          );
+        }
+        const { rows } = await pool.query<{ id: string }>(
+          "SELECT id FROM users WHERE email = $1",
+          [email],
+        );
+        const userId = rows[0]!.id;
+        // An older registration and the latest one, each typed differently.
+        await pool.query(
+          `INSERT INTO registrations (user_id, event_id, answers, registered_at)
+           VALUES ($1, $2, $3::jsonb, now() - interval '30 days'),
+                  ($1, $4, $5::jsonb, now())`,
+          [
+            userId,
+            events[0],
+            JSON.stringify({ contactPhone: "+7 916 000-00-01" }),
+            events[1],
+            JSON.stringify({ contactPhone: "8 (916) 123-45-67" }),
+          ],
+        );
+        const before = await dbRow(email);
+        expect((await read()).suggestedPhone).toBe("8 (916) 123-45-67");
+        // The read is a read: the mirror row is unchanged.
+        expect(await dbRow(email)).toEqual(before);
+
+        // Already the confirmed phone: no suggestion.
+        await pool.query(
+          "UPDATE users SET phone = $2, phone_verified = true WHERE id = $1",
+          [userId, "+79161234567"],
+        );
+        expect((await read()).suggestedPhone).toBeNull();
+      } finally {
+        for (const id of events) await deleteEventFixture(pool, id);
+      }
     });
   },
 );

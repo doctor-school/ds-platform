@@ -23,6 +23,7 @@ durable `audit_ledger` writer).
 | Password-reset routes                           | `auth.controller.ts`          | 11, 12                               |
 | Cascade + login + OTP + reset orchestration     | `auth.service.ts`             | 1–7, 11, 12, 14, 16, 20              |
 | SMS toll-fraud budget                           | `sms-budget/`                 | 14                                   |
+| Phone confirmation from `/account` (`/v1/me/phone`) | `phone/`                  | 47–52, 57, 58                        |
 | Rate limiter (per-user/IP/ASN)                  | `rate-limit/`                 | 13                                   |
 | Timing equalization                             | `timing/`                     | 16                                   |
 | Login captcha-after-N policy                    | `login-challenge/`            | 17                                   |
@@ -34,6 +35,20 @@ durable `audit_ledger` writer).
 | IdP port + adapters                             | `idp/`                        | (design §2)                          |
 | BFF session establish/refresh/logout/revoke-all | `session/`                    | 5, 8, 9, 10, 12                      |
 | Admin session tier (011)                        | `admin-session/`              | 011: 1, 2, 3, 5, 6, 7, 9, 10, 11, 13 |
+
+## Phone confirmation (`phone/`, EARS-47…52, 57, 58 — #2449)
+
+`POST /v1/me/phone {phone}` asks Zitadel to set the number on the session's
+IdP user, unverified, and to send a six-digit code through its SMS notifier
+(`POST /v2/users/{id}/phone`, resend `/phone/resend`); `POST /v1/me/phone/confirm
+{code}` verifies it (`/phone/verify`) and only then writes `users.phone` +
+`phone_verified`. The BFF keeps no pending record (003 design amendment
+2026-10-12). Both routes are `authenticated` / `fast-path` / `high-stakes`;
+the request is an EARS-13 sending door with the EARS-14 SMS budget, the
+confirm a verification door. A number another account holds confirmed gets the
+ordinary `code_sent` answer with nothing sent (EARS-51), floored by
+`@TimingEqualized`. Phone identifiers resolve to an account only through the
+confirmed phone of the mirror (`idp/confirmed-phone.directory.ts`, EARS-58).
 
 ## Admin session tier (`admin-session/`, spec 011 — EARS-1/2/3/10)
 

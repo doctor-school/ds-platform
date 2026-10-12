@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { test as base, createBdd } from "playwright-bdd";
 
 import { baseUrlFor, hostById, type HostConfig } from "../../hosts.js";
@@ -30,6 +31,24 @@ export interface StepWorld {
   upcomingStartsAt?: string;
   /** Actual slot date of the named golden recorded event. */
   recordedStartsAt?: string;
+  /** State the 019 events-feed journey carries from one step to the next. */
+  eventsFeed?: EventsFeedWorld;
+}
+
+/** What one 019 events-feed scenario remembers between its steps. */
+export interface EventsFeedWorld {
+  /** Feed URLs (path + query) in the order the journey left them. */
+  history: string[];
+  /** The card the journey opened, read from the rendered feed. */
+  card?: { title: string; href: string };
+  /** `YYYY-MM-DD` of the day picked in the compact month. */
+  pickedDay?: string;
+  /** The past screen before «Показать ещё»: its card count and the step it promised. */
+  pastBefore?: { cards: number; step: number; from: string | null };
+  /** The horizon before «Показать ещё» on «Будущие». */
+  horizonBefore?: { to: string | null; days: number };
+  /** The same URL opened in a second, cookie-free browser context. */
+  freshPage?: Page;
 }
 
 // playwright-bdd's bddgen detects the custom test instance by the

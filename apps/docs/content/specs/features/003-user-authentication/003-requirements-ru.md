@@ -43,6 +43,12 @@ issues:
     2556,
     2557,
     2144,
+    2449,
+    2774,
+    2775,
+    2776,
+    2777,
+    2779,
   ]
 prior_decisions:
   - ADR-0001 — Identity / Auth / RBAC (IdP = Zitadel; §1 hybrid RBAC, §3 dual identifiers, §4 auth methods, §6 tokens, §7 security baseline, §7.3 audit)

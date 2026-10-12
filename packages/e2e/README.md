@@ -538,3 +538,20 @@ and closes its context. Existing mocked trimming, Enter/Escape, header and
 accessibility coverage remains intact. Run this selected scenario on the
 lead-selected stand; this test-only change requires no owner Stage-B request or
 new slot.
+
+### Unverified-account code sign-in (003 EARS-34/41/16)
+
+`An unverified account signs in with the code from the sign-in mail` leaves a
+unique owned Academy registration code unconsumed, requests a fresh email code
+through the ordinary sign-in method, and requires an exact `otp_sent` response
+without private access. `steps/login-email-unverified.steps.ts` reuses the
+canonical fresh-addressed mail helper and projects only booleans from its detail
+to check the same six-digit code in both link-free bodies. Entering those digits
+on the actual six-cell step must accept once and open the same verified
+doctor_guest profile with a secure host-only session and no readable auth tokens.
+The native challenge, issued-code audit, no-DB-write and triad timing assertions
+remain explicitly owned by the existing API/IdP tests named in the scenario;
+the verified golden EARS-6 browser journey remains distinct. Trace-off fixtures,
+strict CAPTCHA preparation and owned-session cleanup follow existing journeys.
+Run this selected case on the lead-selected stand; a test-only PR requires no
+owner Stage-B request or new slot.

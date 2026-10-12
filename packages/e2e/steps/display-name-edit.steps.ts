@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
-import { installCaptchaStub } from "../lib/captcha-stub.js";
+import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
 import {
   assertNoPrivateRegistrationAccess,
@@ -64,7 +64,7 @@ async function assertOwnedProfile(state: DisplayNameEdit, saved: boolean) {
 
 Given(
   "a uniquely registered verified Academy account is on its own account page for inline name editing",
-  async ({ page, browser, httpCredentials, world }) => {
+  async ({ page, browser, baseURL, httpCredentials, world }) => {
     expect(world.host.id).toBe("academy");
     const context = await browser.newContext({
       locale: "ru-RU",
@@ -80,7 +80,11 @@ Given(
       writes: 0,
     };
     edits.set(page, state);
-    await installCaptchaStub(context);
+    await prepareCaptchaForJourney(
+      context,
+      baseURL ?? "",
+      process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
+    );
     const { response, code } = await registerOwnedCredentials(
       owned,
       world.hostBaseUrl,

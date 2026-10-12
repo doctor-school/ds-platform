@@ -1020,6 +1020,9 @@ api GET /admin/v1/policies/password/complexity | jq -r '.policy |
 # deployed SHA and re-reads the generators EMAILED_CODE_GENERATORS lists on the box.
 EMAILED_CODE_LENGTH=6
 EMAILED_CODE_GENERATORS=(SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE SECRET_GENERATOR_TYPE_OTP_EMAIL SECRET_GENERATOR_TYPE_OTP_SMS SECRET_GENERATOR_TYPE_VERIFY_PHONE_CODE)
+# Each generator keeps its existing expiry (read below and written back unchanged):
+# the lifetime is not this step's to set. The deploy read-back pins the emailed
+# ones to the lifetimes apps/api/src/mailer/code-emails.ts states (#2814).
 EMAILED_CODE_EXPIRIES=()
 # Per generator: the instance sequence the read-back row must reach — the PUT's
 # sequence, or the row's own when nothing was written.

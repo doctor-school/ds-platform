@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   CODE_EMAIL_SUBJECT_TAILS,
+  codeLifetimeLine,
+  LOGIN_EMAIL_CODE_LIFETIME_SECONDS,
+  loginCodeEmail,
+  PASSWORD_RESET_CODE_LIFETIME_SECONDS,
+  VERIFY_EMAIL_CODE_LIFETIME_SECONDS,
   passwordResetCodeEmail,
   verificationCodeEmail,
 } from "./code-emails.js";
@@ -85,3 +90,42 @@ for (const render of [verificationCodeEmail, passwordResetCodeEmail]) {
     expect(message.text).toContain('<>&"');
   });
 }
+
+// #2814: the lifetime the email states is rendered from the exported constants
+// the deploy's IdP read-back pins the generators to (tools/deploy/idp-policy.mjs)
+// — one source for the copy and the check.
+describe("#2814 code lifetime — one source for the copy and the deploy check", () => {
+  it("states each lifetime constant in Russian with the right plural", () => {
+    expect(codeLifetimeLine(VERIFY_EMAIL_CODE_LIFETIME_SECONDS)).toBe(
+      "Код действует 1 час.",
+    );
+    expect(codeLifetimeLine(PASSWORD_RESET_CODE_LIFETIME_SECONDS)).toBe(
+      "Код действует 1 час.",
+    );
+    expect(codeLifetimeLine(LOGIN_EMAIL_CODE_LIFETIME_SECONDS)).toBe(
+      "Код действует 5 минут.",
+    );
+    expect(codeLifetimeLine(7200)).toBe("Код действует 2 часа.");
+    expect(codeLifetimeLine(60)).toBe("Код действует 1 минуту.");
+  });
+
+  it("refuses a lifetime the copy cannot state in whole minutes", () => {
+    expect(() => codeLifetimeLine(90)).toThrow();
+    expect(() => codeLifetimeLine(0)).toThrow();
+  });
+
+  it("the verification, reset and login mails carry their own constant's line", () => {
+    expect(verificationCodeEmail(CODE).text).toContain(
+      codeLifetimeLine(VERIFY_EMAIL_CODE_LIFETIME_SECONDS),
+    );
+    expect(passwordResetCodeEmail(CODE).text).toContain(
+      codeLifetimeLine(PASSWORD_RESET_CODE_LIFETIME_SECONDS),
+    );
+    expect(loginCodeEmail(CODE, "5m").text).toContain(
+      codeLifetimeLine(LOGIN_EMAIL_CODE_LIFETIME_SECONDS),
+    );
+    expect(loginCodeEmail(CODE, "1h").text).toContain(
+      codeLifetimeLine(VERIFY_EMAIL_CODE_LIFETIME_SECONDS),
+    );
+  });
+});

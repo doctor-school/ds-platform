@@ -738,6 +738,9 @@ const SCHEMAS_AUTH_SCHEMA_PATH = "packages/schemas/src/auth/auth.schema.ts";
 const IDP_PROVISION_SCRIPT_PATH = "infra/dev-stand/idp/provision.sh";
 const SCHEMAS_REGISTER_FIELDS_PATH =
   "packages/schemas/src/storefront/register-fields.ts";
+// The code lifetimes the shipped emails state (#2814); provision.sh preserves
+// the live expiry, so the read-back pins it to these.
+const CODE_EMAILS_PATH = "apps/api/src/mailer/code-emails.ts";
 
 // Convergence must complete before the strict API is swapped into service.
 // IdP configuration is forward-only, but the previous app remains available.
@@ -825,11 +828,12 @@ sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; IDP_BASE_URL=${IDP_BAS
         "show",
         `${sha}:${SCHEMAS_REGISTER_FIELDS_PATH}`,
       ]),
+      codeEmailsText: localCap("git", ["show", `${sha}:${CODE_EMAILS_PATH}`]),
     });
   } catch (e) {
     die(
       `cannot resolve the expected code-generator shape from ${IDP_PROVISION_SCRIPT_PATH}` +
-        ` / ${SCHEMAS_REGISTER_FIELDS_PATH} at ${label} — ${IDP_ROLLBACK_HINT}:
+        ` / ${SCHEMAS_REGISTER_FIELDS_PATH} / ${CODE_EMAILS_PATH} at ${label} — ${IDP_ROLLBACK_HINT}:
   ${e.message}`,
       { rollbackHint: true },
     );
@@ -859,6 +863,8 @@ sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; IDP_BASE_URL=${IDP_BAS
       const verdict = assertCodeGeneratorConverged(
         JSON.parse(generatorRaw),
         codeExpectation,
+        codeExpectation.expirySeconds[type],
+        type,
       );
       console.log(
         `  ℹ prod IdP code generators @ ${IDP_BASE_URL}: ${formatCodeGenerator(type, verdict)}`,
@@ -868,8 +874,9 @@ sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; IDP_BASE_URL=${IDP_BAS
         `prod IdP code generator read-back REJECTED — ${IDP_ROLLBACK_HINT}:
   ${e.message}
 ` +
-          `  Re-run the converge by hand (infra/deploy/README.md → step 9); sign-in codes` +
-          ` would not match the shipped code input (#2555, #2636).`,
+          `  A length/alphabet mismatch: re-run the converge by hand (infra/deploy/README.md → step 9),` +
+          ` or sign-in codes would not match the shipped code input (#2555, #2636). An expiry` +
+          ` mismatch: apply the remedy named above (#2814).`,
         { rollbackHint: true },
       );
     }

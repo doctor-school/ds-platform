@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ZitadelIdpClient } from "../../src/auth/idp/zitadel.idp.js";
+import {
+  codeLifetimeLine,
+  VERIFY_EMAIL_CODE_LIFETIME_SECONDS,
+} from "../../src/mailer/code-emails.js";
 import { SmtpMailer } from "../../src/mailer/smtp-mailer.js";
 import { NOTIFICATION_SUBJECTS } from "../support/notification-subjects.js";
 
@@ -237,8 +241,12 @@ describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
       // The retired «без пробела» qualifier must be gone with the grouping.
       expect(mail!.Text).not.toContain("без пробела");
       expect(mail!.HTML).not.toContain("без пробела");
-      // Explicit expiry line (the VERIFY_EMAIL_CODE generator lifetime, 3600s).
-      expect(mail!.Text).toContain("Код действует 1 час");
+      // Explicit expiry line, rendered from the constant the deploy pins the
+      // stage/prod VERIFY_EMAIL_CODE generator to (#2814). This test IdP runs a
+      // shortened lifetime (#2764), so only the copy is asserted here.
+      expect(mail!.Text).toContain(
+        codeLifetimeLine(VERIFY_EMAIL_CODE_LIFETIME_SECONDS),
+      );
       // Explicit "if you didn't register, ignore this email" line.
       expect(mail!.Text).toContain("проигнорируйте это письмо");
 

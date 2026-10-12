@@ -35,8 +35,8 @@ import { NOTIFICATION_SUBJECTS } from "../support/notification-subjects.js";
  * What makes the wait short is the IdP instance, not the test: the CI `api-e2e`
  * job sets that generator's lifetime on its own throw-away Zitadel to
  * `IDP_VERIFY_EMAIL_CODE_TTL_S` seconds (staging and production carry 3600s,
- * kept by `infra/dev-stand/idp/provision.sh` and read back and logged, not
- * pinned, by the deploy in `tools/deploy/idp-policy.mjs`). This spec
+ * kept by `infra/dev-stand/idp/provision.sh` and pinned by the deploy read-back
+ * in `tools/deploy/idp-policy.mjs` to the lifetime the email states, #2814). This spec
  * reads the lifetime back from the live generator and refuses to run on a
  * supplied number that the IdP does not actually carry.
  *

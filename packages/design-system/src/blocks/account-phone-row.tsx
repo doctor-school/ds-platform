@@ -11,9 +11,11 @@ import {
 import { Badge } from "../primitives/badge";
 import { Button } from "../primitives/button";
 import { FormError } from "../primitives/form";
+import { maskPhoneInput } from "../primitives/fields/phone-mask";
 import { Input } from "../primitives/input";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "../primitives/input-otp";
 import { Link as DsLink } from "../primitives/link";
+import { LOGIN_RESEND_COOLDOWN_SECONDS } from "./login-card";
 import { useResendCountdown } from "./use-resend-countdown";
 
 /**
@@ -42,8 +44,9 @@ import { useResendCountdown } from "./use-resend-countdown";
  * user abandoned.
  */
 
-/** Resend cooldown — the same timer as the SMS sign-in code step (#227). */
-export const ACCOUNT_PHONE_RESEND_COOLDOWN_SECONDS = 30;
+/** Resend cooldown — the SMS sign-in code step's own timer (003 EARS-42/59). */
+export const ACCOUNT_PHONE_RESEND_COOLDOWN_SECONDS =
+  LOGIN_RESEND_COOLDOWN_SECONDS;
 
 /** The six-digit SMS code (EARS-48, as EARS-41). */
 const PHONE_CODE_LENGTH = 6;
@@ -159,15 +162,22 @@ function RowAction({
   children,
   testId,
   className = "",
+  buttonRef,
 }: {
   onClick: () => void;
   children: React.ReactNode;
   testId: string;
   className?: string;
+  buttonRef?: React.Ref<HTMLButtonElement>;
 }) {
   return (
     <DsLink asChild className={`text-sm font-extrabold ${className}`}>
-      <button type="button" onClick={onClick} data-testid={testId}>
+      <button
+        type="button"
+        onClick={onClick}
+        data-testid={testId}
+        ref={buttonRef}
+      >
         {children}
       </button>
     </DsLink>
@@ -218,6 +228,24 @@ export function AccountPhoneRow({
     setError(null);
   }, [phone, phoneVerified, suggestedPhone]);
 
+  // Leaving a step unmounts the focused control; the focus goes back to the
+  // row action instead of falling to the page.
+  const actionRef = React.useRef<HTMLButtonElement>(null);
+  const refocusAction = React.useRef(false);
+  React.useEffect(() => {
+    if (phase.kind === "display" && refocusAction.current) {
+      refocusAction.current = false;
+      actionRef.current?.focus();
+    }
+  }, [phase]);
+
+  // A malformed-number refusal of the code REQUEST is not a wrong code: no
+  // code exists yet (003 EARS-48 names the code-step failure only).
+  const requestFailure = (err: unknown): AccountPhoneFailure => {
+    const kind = actions.classifyError(err);
+    return kind === "invalid" ? "unavailable" : kind;
+  };
+
   const draftValid = RequestPhoneCodeRequestSchema.safeParse({
     phone: draft,
   }).success;
@@ -235,6 +263,7 @@ export function AccountPhoneRow({
   }
 
   function showUnconfirmed() {
+    refocusAction.current = true;
     setError(null);
     setCode("");
     setPhase({
@@ -248,6 +277,7 @@ export function AccountPhoneRow({
   function cancel() {
     if (codeRequested) showUnconfirmed();
     else {
+      refocusAction.current = true;
       setError(null);
       setPhase(previous);
     }
@@ -260,6 +290,7 @@ export function AccountPhoneRow({
     try {
       const status = await actions.requestCode(draft);
       if (status === "already_confirmed") {
+        refocusAction.current = true;
         setCodeRequested(false);
         setPhase({
           kind: "display",
@@ -274,7 +305,7 @@ export function AccountPhoneRow({
         setPhase({ kind: "code" });
       }
     } catch (err) {
-      setError(actions.classifyError(err));
+      setError(requestFailure(err));
     } finally {
       setPending(false);
     }
@@ -289,7 +320,7 @@ export function AccountPhoneRow({
       await actions.requestCode(draft);
       setResendNonce((n) => n + 1);
     } catch (err) {
-      setError(actions.classifyError(err));
+      setError(requestFailure(err));
     } finally {
       setPending(false);
     }
@@ -301,6 +332,7 @@ export function AccountPhoneRow({
     setError(null);
     try {
       const confirmed = await actions.confirm(value);
+      refocusAction.current = true;
       setCodeRequested(false);
       setCode("");
       setPhase({
@@ -343,7 +375,7 @@ export function AccountPhoneRow({
             placeholder={copy.placeholder}
             value={draft}
             onChange={(e) => {
-              setDraft(e.target.value);
+              setDraft(maskPhoneInput(e.target.value));
               setError(null);
             }}
             onKeyDown={(e) => {
@@ -354,10 +386,13 @@ export function AccountPhoneRow({
               if (e.key === "Escape") cancel();
             }}
             maxLength={32}
+            // Read-only while the code is requested: the SMS goes to the
+            // number the code step then names.
+            readOnly={pending}
             autoFocus
             aria-invalid={errorText ? true : undefined}
             aria-describedby={errorText ? "profile-phone-error" : undefined}
-            className="min-w-0 flex-[0_1_16rem]"
+            className="min-w-0 shrink grow-0 basis-64"
             data-testid="profile-phone-input"
           />
           <Button
@@ -411,6 +446,7 @@ export function AccountPhoneRow({
           autoFocus
           aria-label={copy.codeLabel}
           aria-invalid={wrong ? true : undefined}
+          aria-describedby={errorText ? "profile-phone-code-error" : undefined}
           data-testid="profile-phone-code"
         >
           <InputOTPGroup>
@@ -423,7 +459,9 @@ export function AccountPhoneRow({
             ))}
           </InputOTPGroup>
         </InputOTP>
-        {errorText ? <FormError>{errorText}</FormError> : null}
+        {errorText ? (
+          <FormError id="profile-phone-code-error">{errorText}</FormError>
+        ) : null}
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
           <Button
             type="button"
@@ -507,6 +545,7 @@ export function AccountPhoneRow({
       <RowAction
         onClick={open}
         testId="profile-phone-action"
+        buttonRef={actionRef}
         className="self-start layout:self-auto"
       >
         {actionLabel}

@@ -339,13 +339,21 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # status/body and interleaved triad median timing within 50 ms (30 ms floor).
     # Keep the distinct verified golden EARS-6 browser journey above intact.
 
-  @EARS-34 @EARS-16 @happy
+  @EARS-34 @EARS-16 @EARS-41 @EARS-8 @happy @verified-login-email-code
   Scenario: A login-email-code request for a verified account arms the challenge unchanged
-    Given a verified doctor_guest user
-    When the user requests an email login code for that identifier
-    Then the Zitadel otp_email login challenge is armed as usual
-    And no verification email is sent
-    And the response is indistinguishable in status, body, and timing from the unverified and nonexistent cases
+    Given a uniquely registered and verified Academy doctor_guest account is logged out for an email-code request
+    When the owned verified account requests its email login code through the Academy form
+    Then the verified-account request shows the neutral six-cell code step without a private session
+    And fresh addressed sign-in mail is delivered for the verified account without verification mail
+    When the owned verified account submits that delivered sign-in code
+    Then the accepted login code restores a secure private session for the same verified identity
+    # Retained native challenge proof: apps/api/src/auth/idp/zitadel.idp.spec.ts
+    # EARS-34 verified branch arms the otp_email session-create challenge.
+    # apps/api/test/auth/login-otp.e2e-spec.ts EARS-34/16 owns byte-identical
+    # status/body and interleaved triad median timing within 50 ms (30 ms floor).
+    # The browser projects the verified branch's actual acknowledgement, fresh
+    # login mail, absent verification mail and acceptance, not native IdP reads
+    # or statistical timing. Keep the golden verified EARS-6 journey distinct.
 
   @EARS-34 @EARS-16 @failure
   Scenario: A login-email-code request for a nonexistent identifier is a silent no-op

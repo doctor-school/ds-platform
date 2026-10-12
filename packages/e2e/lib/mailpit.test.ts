@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { extractLoginCode, mailpitUrlFor, selectLoginMail } from "./mailpit.js";
+import {
+  assertNoVerificationMail,
+  extractLoginCode,
+  mailpitUrlFor,
+  selectLoginMail,
+} from "./mailpit.js";
 
 describe("stage login mail selection", () => {
   it("EARS-6: derives the shared inbox from an Academy slot host", () => {
@@ -54,5 +59,172 @@ describe("stage login mail selection", () => {
     expect(
       extractLoginCode("550271 — код подтверждения Doctor.School"),
     ).toBeNull();
+  });
+});
+
+const after = "2026-10-12T00:00:00Z";
+const email = "verified-2794@example.test";
+const addressedMessage = (overrides = {}) => ({
+  ID: "fresh",
+  Created: after,
+  Subject: "123456 — код подтверждения Doctor.School",
+  To: [{ Address: email }],
+  ...overrides,
+});
+function verificationMailClient(
+  messages: unknown[],
+  metadata: Record<string, unknown> = {},
+) {
+  return {
+    get: vi.fn(async () => ({
+      ok: () => true,
+      status: () => 200,
+      json: async () => ({
+        total: 200,
+        messages_count: messages.length,
+        start: 0,
+        ...metadata,
+        messages,
+      }),
+    })),
+  };
+}
+afterEach(() => vi.useRealTimers());
+
+describe("verified-account login excludes verification mail", () => {
+  it("EARS-34: permits login mail and ignores stale or differently addressed verification mail through the full delivery horizon", async () => {
+    vi.useFakeTimers();
+    const request = verificationMailClient([
+      addressedMessage({ Subject: "123456 — код для входа в Doctor.School" }),
+      addressedMessage({ Created: "2026-10-11T00:00:00Z" }),
+      addressedMessage({ To: [{ Address: "other@example.test" }] }),
+    ]);
+    let settled = false;
+    const result = assertNoVerificationMail(
+      request,
+      "https://mailpit.example.test",
+      email,
+      after,
+    ).then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(settled, "absence cannot pass before the delivery deadline").toBe(
+      false,
+    );
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(result).resolves.toBeUndefined();
+    expect(request.get).toHaveBeenCalledTimes(31);
+  });
+
+  it("EARS-34: rejects fresh verification mail to the exact recipient without exposing its code", async () => {
+    const error = await assertNoVerificationMail(
+      verificationMailClient([addressedMessage()]),
+      "https://mailpit.example.test",
+      email.toUpperCase(),
+      after,
+    ).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe(
+      "Unexpected verification mail after verified login-code request",
+    );
+  });
+
+  it("EARS-34: rejects verification mail arriving at the end of the delivery horizon", async () => {
+    vi.useFakeTimers();
+    const messages: unknown[] = [];
+    const result = assertNoVerificationMail(
+      verificationMailClient(messages),
+      "https://mailpit.example.test",
+      email,
+      after,
+    );
+    const assertion = expect(result).rejects.toThrow(
+      "Unexpected verification mail",
+    );
+    await vi.advanceTimersByTimeAsync(14_500);
+    messages.push(addressedMessage());
+    await Promise.all([assertion, vi.advanceTimersByTimeAsync(500)]);
+  });
+
+  it.each([{ messages_count: 1 }, { start: 1 }])(
+    "EARS-34: rejects incomplete verification-mail query metadata %j",
+    async (metadata) => {
+      await expect(
+        assertNoVerificationMail(
+          verificationMailClient([], metadata),
+          "https://mailpit.example.test",
+          email,
+          after,
+        ),
+      ).rejects.toThrow("search payload");
+    },
+  );
+
+  it("EARS-34: fails closed on transport errors without retaining credential-bearing diagnostics", async () => {
+    const request = {
+      get: async () => {
+        throw new Error("credential-bearing transport bytes");
+      },
+    };
+    await expect(
+      assertNoVerificationMail(
+        request,
+        "https://mailpit.example.test",
+        email,
+        after,
+      ),
+    ).rejects.toThrow(/^Mailpit request failed$/);
+  });
+
+  it.each([
+    { Subject: undefined },
+    { Subject: 123456 },
+    { Created: "invalid" },
+    { To: [{ Address: 123 }] },
+  ])("EARS-34: rejects malformed addressed-mail data %j", async (overrides) => {
+    await expect(
+      assertNoVerificationMail(
+        verificationMailClient([addressedMessage(overrides)]),
+        "https://mailpit.example.test",
+        email,
+        after,
+      ),
+    ).rejects.toThrow("search payload");
+  });
+
+  it("EARS-34: fails closed on unsuccessful or malformed Mailpit search responses", async () => {
+    const unsuccessful = {
+      get: async () => ({
+        ok: () => false,
+        status: () => 503,
+        json: async () => ({}),
+      }),
+    };
+    await expect(
+      assertNoVerificationMail(
+        unsuccessful,
+        "https://mailpit.example.test",
+        email,
+        after,
+      ),
+    ).rejects.toThrow("Mailpit search failed with HTTP 503");
+    const malformed = {
+      get: async () => ({
+        ok: () => true,
+        status: () => 200,
+        json: async () => {
+          throw new Error("code-bearing JSON bytes");
+        },
+      }),
+    };
+    await expect(
+      assertNoVerificationMail(
+        malformed,
+        "https://mailpit.example.test",
+        email,
+        after,
+      ),
+    ).rejects.toThrow(/^Malformed Mailpit JSON payload$/);
   });
 });

@@ -212,12 +212,12 @@ sequenceDiagram
     B-->>S: the one enumeration-safe response (EARS-16)
     S->>B: POST /v1/auth/password/reset/complete {identifier, code, newPassword}
     B->>Z: POST /v2/users/{sub}/password {newPassword, verificationCode}  (unchanged, EARS-12)
-    B->>B: no email_verified flip (EARS-35 is a no-op here: a confirmed phone needs a session, a session needs a verified email, #2662)
+    B->>B: no email_verified flip for a phone identifier (EARS-35: an SMS code proves the phone, not the mailbox)
 ```
 
 **Why the re-read.** Zitadel sends the reset SMS to the user's last phone, verified or not, so the mirror gate alone could send a reset code to an unconfirmed number Q whenever the mirror and the IdP disagree (a failed displacement write, a phone changed outside the BFF). The send therefore happens only when the freshly read IdP phone is verified and equal to the identifier; otherwise the identical enumeration-safe no-send branch. The re-read is one extra IdP call on the confirmed branch; its timing sits inside the EARS-16 budget, which the verification measures.
 
-**EARS-35 on this path.** The email-verified flip is a no-op by construction rather than a rule keyed on a channel: a confirmed phone can only be set from a session, a session requires a verified email (the sign-in refusal for an unverified email, #2662), so an account that can be reset by SMS already has a verified email. The completion request carries only an identifier and a code, so the BFF would otherwise have to remember the channel; with this reading it does not.
+**EARS-35 on this path.** The completion skips the email-verified flip when the identifier is a phone: the code went by SMS, so it proves the phone, not the mailbox. For a phone confirmed through the product the skip changes nothing — a confirmed phone can only be set from a session, a session requires a verified email (the sign-in refusal for an unverified email, #2662) — but a phone added outside the product (the Zitadel console) on an account with an unverified email would otherwise let an SMS-completed reset verify that email. The completion request carries only an identifier and a code; the identifier already names the channel, so the BFF keeps no channel memory.
 
 The BFF never receives the SMS code, so §14's scrub and EARS-30 have nothing to hold for it. The email branch of §14 is untouched: an email identifier still uses `returnCode` and the mail chain, including for an account that also holds a confirmed phone.
 

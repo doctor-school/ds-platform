@@ -18,6 +18,25 @@ import { FakeMailer } from "../../src/mailer/mailer.fake.js";
 import { MAILER } from "../../src/mailer/mailer.types.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import {
+  DEFAULT_SMS_BUDGET_THRESHOLDS,
+  SMS_BUDGET_THRESHOLDS,
+} from "../../src/auth/sms-budget/sms-budget.types.js";
+import { hashIdentifier } from "../../src/auth/session/auth-audit.ledger.js";
+import {
+  describeTiming,
+  medianSpread,
+  sampleInterleaved,
+} from "../support/timing-oracle.js";
+
+/** Every EARS-14 window opened: the e2e cases send from one address. */
+const OPEN_SMS_BUDGET = {
+  ...DEFAULT_SMS_BUDGET_THRESHOLDS,
+  perPhonePerHour: 1_000_000,
+  perIpPerHour: 1_000_000,
+  perAsnPerHour: 1_000_000,
+  globalPerDay: 1_000_000,
+};
 
 // Password reset over HTTP (EARS-11 initiate, EARS-12 complete) — the controller
 // wiring on top of the IdP-port + session-layer logic. EARS-11's contract is an
@@ -370,6 +389,264 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
       // … and nothing was mutated: the email is still unverified (OWASP).
       expect(await emailVerified(email)).toBe(false);
+    });
+  },
+);
+
+// 003 EARS-53 (#2449): a reset requested with a CONFIRMED phone sends the code
+// by SMS through the IdP (the fake records the send; the code never reaches
+// the BFF or its mailer); an unknown or unconfirmed phone gets the identical
+// response with no SMS and no email, and is counted by EARS-56. EARS-35: a
+// reset completed with the SMS code leaves `email_verified` untouched — only
+// a code that went to the mailbox proves the mailbox.
+describe.skipIf(!process.env.DATABASE_URL)(
+  "Password reset by SMS to a confirmed phone (e2e, 003 EARS-53/35/56)",
+  () => {
+    let app: NestFastifyApplication;
+    let pool: pg.Pool;
+    let idp: FakeIdpClient;
+    let mailer: FakeMailer;
+    const consent = [{ purpose: "tos", version: "2026-01" }];
+    const password = "Aa1!ufficiently-long-pw";
+    const device = { "user-agent": "Test/1.0", "accept-language": "en-US" };
+    const runId = `${Date.now()}`;
+    const createdEmails: string[] = [];
+    const pepper =
+      process.env.AUDIT_IDENTIFIER_PEPPER ??
+      "test-only-insecure-audit-identifier-pepper";
+
+    function uniqueEmail(tag: string): string {
+      const email = `ears53-${tag}-${runId}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
+      createdEmails.push(email);
+      return email;
+    }
+
+    function uniquePhone(): string {
+      return `+7999${String(Date.now()).slice(-4)}${String(
+        Math.floor(Math.random() * 1000),
+      ).padStart(3, "0")}`;
+    }
+
+    async function account(
+      tag: string,
+      opts: { verified: boolean; phone?: string },
+    ): Promise<{ email: string; sub: string }> {
+      const email = uniqueEmail(tag);
+      const reg = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { email, password, consent },
+      });
+      expect(reg.statusCode).toBe(200);
+      if (opts.verified) {
+        const v = await app.inject({
+          method: "POST",
+          url: "/v1/auth/verify",
+          payload: { email, code: FAKE_VALID_CODE },
+        });
+        expect(v.statusCode).toBe(200);
+      }
+      const { rows } = await pool.query(
+        "SELECT zitadel_sub FROM users WHERE email = $1",
+        [email],
+      );
+      const sub = rows[0]?.zitadel_sub as string;
+      if (opts.phone) idp.attachPhone(sub, opts.phone);
+      return { email, sub };
+    }
+
+    async function requestReset(
+      identifier: string,
+    ): Promise<{ status: number; body: unknown; ms: number }> {
+      const t0 = performance.now();
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/password/reset",
+        headers: device,
+        payload: { identifier },
+      });
+      const ms = performance.now() - t0;
+      return { status: res.statusCode, body: res.json(), ms };
+    }
+
+    /** The reset send runs off the response path; let it settle. */
+    async function settle(): Promise<void> {
+      await new Promise((r) => setTimeout(r, 150));
+    }
+
+    async function emailVerified(email: string): Promise<boolean> {
+      const { rows } = await pool.query(
+        "SELECT email_verified FROM users WHERE email = $1",
+        [email],
+      );
+      return rows[0]?.email_verified as boolean;
+    }
+
+    async function dbNow(): Promise<Date> {
+      const { rows } = await pool.query<{ t: Date }>("SELECT now() AS t");
+      return rows[0]!.t;
+    }
+
+    async function resetRows(
+      identifier: string,
+    ): Promise<Record<string, unknown>[]> {
+      const { rows } = await pool.query<{ metadata: Record<string, unknown> }>(
+        `SELECT metadata FROM audit_ledger
+          WHERE event_type = 'auth.password.reset_requested'
+            AND metadata->>'identifier_hash' = $1`,
+        [hashIdentifier(identifier, pepper)],
+      );
+      return rows.map((r) => r.metadata);
+    }
+
+    function resetMailsTo(email: string): number {
+      return mailer.passwordResetCodeEmails.filter((m) => m.to === email)
+        .length;
+    }
+
+    beforeAll(async () => {
+      mailer = new FakeMailer();
+      idp = new FakeIdpClient(mailer);
+      const moduleRef: TestingModule = await Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(idp)
+        .overrideProvider(MAILER)
+        .useValue(mailer)
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        .useValue(RELAXED_RATE_LIMIT)
+        // Every case sends from one address and the timing case repeats one
+        // number; the EARS-14 windows are opened (their refusal is unit-proven).
+        .overrideProvider(SMS_BUDGET_THRESHOLDS)
+        .useValue(OPEN_SMS_BUDGET)
+        .compile();
+      app = moduleRef.createNestApplication<NestFastifyApplication>(
+        new FastifyAdapter(),
+      );
+      app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
+      await app.init();
+      await app.getHttpAdapter().getInstance().ready();
+      pool = app.get<pg.Pool>(DRIZZLE_POOL);
+    });
+
+    afterEach(async () => {
+      for (const email of createdEmails.splice(0))
+        await deleteUserFixture(pool, "email", email);
+    });
+
+    afterAll(async () => {
+      await app.close();
+    });
+
+    it("EARS-53: a reset requested with a confirmed phone texts the code through the IdP, mails nothing, and completing with it sets the password and signs in", async () => {
+      const phone = uniquePhone();
+      const a = await account("sms", { verified: true, phone });
+
+      const res = await requestReset(phone);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ status: "reset_requested" });
+      await settle();
+      expect(idp.smsPasswordResetSends()).toContain(phone);
+      expect(resetMailsTo(a.email)).toBe(0);
+      // EARS-57: one reset row with channel sms for the code actually sent.
+      expect(await resetRows(phone)).toEqual([
+        expect.objectContaining({ channel: "sms" }),
+      ]);
+
+      const done = await app.inject({
+        method: "POST",
+        url: "/v1/auth/password/reset/complete",
+        headers: device,
+        payload: {
+          identifier: phone,
+          code: FAKE_VALID_CODE,
+          newPassword: "Brand-new-pw-9!",
+        },
+      });
+      expect(done.statusCode).toBe(200);
+      expect(done.json()).toEqual({ status: "reset_completed" });
+      expect(
+        done.cookies.find((c) => c.name === SESSION_COOKIE_NAME),
+      ).toBeDefined();
+      expect(await emailVerified(a.email)).toBe(true);
+    });
+
+    it("EARS-53/16: an unknown or unconfirmed phone gets the identical response in status, body and timing, with no SMS and no email", async () => {
+      const confirmed = uniquePhone();
+      const unconfirmed = uniquePhone();
+      const unknown = uniquePhone();
+      await account("conf", { verified: true, phone: confirmed });
+      const u = await account("unconf", { verified: true, phone: unconfirmed });
+      idp.setIdentity(u.sub, { phoneVerified: false });
+      const sendsBefore = idp.smsPasswordResetSends().length;
+
+      const timing = await sampleInterleaved(
+        [confirmed, unconfirmed, unknown].map(
+          (identifier) => () => requestReset(identifier),
+        ),
+      );
+      console.info(
+        `EARS-53/16 confirmed/unconfirmed/unknown: ${describeTiming(timing)} ms`,
+      );
+      for (const r of timing.flatMap((c) => c.results)) {
+        expect(r.status).toBe(200);
+        expect(r.body).toEqual({ status: "reset_requested" });
+      }
+      expect(medianSpread(timing)).toBeLessThanOrEqual(50);
+
+      await settle();
+      const sent = idp.smsPasswordResetSends().slice(sendsBefore);
+      expect(sent.length).toBeGreaterThan(0);
+      expect(sent.every((p) => p === confirmed)).toBe(true);
+      expect(resetMailsTo(u.email)).toBe(0);
+      // EARS-56: no ledger row for a request that sent nothing.
+      expect(await resetRows(unconfirmed)).toEqual([]);
+      expect(await resetRows(unknown)).toEqual([]);
+    });
+
+    it("EARS-53: the email of an account that also holds a confirmed phone still gets the code by mail, and no SMS", async () => {
+      const phone = uniquePhone();
+      const a = await account("mail", { verified: true, phone });
+      const sendsBefore = idp.smsPasswordResetSends().length;
+
+      const res = await requestReset(a.email);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ status: "reset_requested" });
+      await settle();
+      expect(resetMailsTo(a.email)).toBe(1);
+      expect(idp.smsPasswordResetSends().length).toBe(sendsBefore);
+    });
+
+    it("EARS-35: a reset completed with the SMS code does not flip email_verified and writes no auth.account.verified row", async () => {
+      // A phone added outside the product (Zitadel console) on an account
+      // whose email was never verified: the SMS code proves the phone, not
+      // the mailbox.
+      const phone = uniquePhone();
+      const a = await account("noflip", { verified: false, phone });
+      expect(await emailVerified(a.email)).toBe(false);
+      const since = await dbNow();
+
+      await requestReset(phone);
+      await settle();
+      expect(idp.smsPasswordResetSends()).toContain(phone);
+      await app.inject({
+        method: "POST",
+        url: "/v1/auth/password/reset/complete",
+        headers: device,
+        payload: {
+          identifier: phone,
+          code: FAKE_VALID_CODE,
+          newPassword: "Brand-new-pw-9!",
+        },
+      });
+
+      expect(await emailVerified(a.email)).toBe(false);
+      const { rows } = await pool.query(
+        "SELECT 1 FROM audit_ledger WHERE subject_id = $1 AND event_type = 'auth.account.verified' AND created_at >= $2",
+        [a.sub, since],
+      );
+      expect(rows).toEqual([]);
     });
   },
 );

@@ -40,12 +40,14 @@ import {
   IdpInvalidArgumentError,
   IdpPasswordPolicyError,
   IdpUnavailableError,
+  isPhoneIdentifier,
   type IdpClient,
 } from "./idp/idp.types.js";
 import { AUTH_WEBHOOK_SECRET } from "./auth.tokens.js";
 import { webhookSecretMatches } from "./webhook-secret.js";
 import { UserMirrorService } from "./user-mirror.service.js";
 import { SmsBudgetService } from "./sms-budget/sms-budget.service.js";
+import { SmsUnconfirmedCounter } from "./sms-unconfirmed-counter.js";
 import {
   REGISTER_NOTICE_THROTTLE,
   type RegisterNoticeThrottle,
@@ -207,6 +209,9 @@ export class AuthService {
     private readonly smsBudget: SmsBudgetService,
   ) {}
 
+  /** 003 EARS-56: SMS requests for a phone that is not a confirmed account phone. */
+  private readonly unconfirmedPhones = new SmsUnconfirmedCounter();
+
   /**
    * EARS-5: password login. Delegates the credential check to the IdP port
    * (which is where the native Zitadel lockout counter increments on failure,
@@ -362,7 +367,15 @@ export class AuthService {
     // The audit `OtpSent` row + the enumeration-safe response below are unchanged
     // (the campaign measures the pipeline minus the relay hop only).
     if (!this.synthetic.suppress("sms", req.identifier)) {
-      await this.idp.requestSmsOtp(req.identifier);
+      const outcome = await this.idp.requestSmsOtp(req.identifier);
+      // 003 EARS-56: a phone no account holds confirmed (EARS-58) is counted
+      // and logged masked; no code was issued, so no ledger row (EARS-18).
+      // `failed` (a provider fault) likewise issued nothing. The response is
+      // the same `otp_sent` either way (EARS-16).
+      if (outcome === "unconfirmed") {
+        this.unconfirmedPhones.record("signin", req.identifier);
+      }
+      if (outcome !== "sent") return { status: "otp_sent" };
     }
     // EARS-18: `auth.otp.sent` (identifier masked). A budget-refused SMS threw
     // above and never reaches here, so a row exists only for an actual send.
@@ -544,7 +557,12 @@ export class AuthService {
    */
   async requestPasswordReset(
     identifier: string,
+    ctx: { ip: string; asn?: string | undefined },
   ): Promise<PasswordResetResponse> {
+    if (isPhoneIdentifier(identifier)) {
+      this.requestSmsPasswordReset(identifier, ctx);
+      return { status: "reset_requested" };
+    }
     this.dispatchEmail("password-reset", () =>
       this.idp.requestPasswordReset(identifier),
     );
@@ -552,6 +570,48 @@ export class AuthService {
     // resolving one would itself be an existence oracle, EARS-16).
     await this.audit.record({ type: "PasswordResetRequested", identifier });
     return { status: "reset_requested" };
+  }
+
+  /**
+   * 003 EARS-53: a reset requested with a phone. The EARS-14 budget is consumed
+   * first, before any account lookup, so neither a refusal nor a miss signals
+   * existence; the IdP then texts the code only to a confirmed phone the IdP
+   * still holds verified. Everything after the budget runs off the response
+   * path, like the email send, so every branch answers the one
+   * `reset_requested` within the EARS-16 floor. A limit refusal, an unknown or
+   * unconfirmed number and an IdP mismatch send nothing and are counted by
+   * EARS-56 — no ledger row, since no code was issued (EARS-18). A code
+   * actually requested writes `auth.password.reset_requested` with channel
+   * `sms` (EARS-57). The EARS-33 synthetic suppression drops the provider hop
+   * at the same point as SMS sign-in, keeping its ledger row.
+   */
+  private requestSmsPasswordReset(
+    phone: string,
+    ctx: { ip: string; asn?: string | undefined },
+  ): void {
+    const allowed = this.smsBudget.tryConsume({
+      phone,
+      ip: ctx.ip,
+      asn: ctx.asn,
+    });
+    if (!allowed) {
+      this.unconfirmedPhones.record("reset", phone);
+      return;
+    }
+    this.dispatchEmail("password-reset-sms", async () => {
+      if (!this.synthetic.suppress("sms", phone)) {
+        const outcome = await this.idp.requestSmsPasswordReset(phone);
+        if (outcome === "unconfirmed") {
+          this.unconfirmedPhones.record("reset", phone);
+        }
+        if (outcome !== "sent") return;
+      }
+      await this.audit.record({
+        type: "PasswordResetRequested",
+        identifier: phone,
+        channel: "sms",
+      });
+    });
   }
 
   /**
@@ -607,8 +667,14 @@ export class AuthService {
     // session behind and the fresh session is the only survivor.
     await this.sessions.revokeAllForSub(session.sub);
     // 003 EARS-35: verify only after the reset code succeeds, but before the
-    // OIDC exchange; an unverified account cannot complete that exchange.
-    const emailFlipped = await this.idp.markEmailVerified(session.sub);
+    // OIDC exchange; an unverified account cannot complete that exchange. A
+    // phone identifier means the code went by SMS (EARS-53): it proves the
+    // phone, not the mailbox, so the email-verified state is left untouched —
+    // a phone added outside the product (Zitadel console) on an account with
+    // an unverified email must not verify that email.
+    const emailFlipped = isPhoneIdentifier(identifier)
+      ? false
+      : await this.idp.markEmailVerified(session.sub);
     if (emailFlipped) {
       await this.mirror.markEmailVerified(session.sub);
       await this.audit.record({

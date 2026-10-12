@@ -175,6 +175,23 @@ export interface ConfirmedPhoneDirectory {
   subjectFor(phone: string): Promise<string | null>;
 }
 
+/**
+ * A phone identifier is `+`-prefixed E.164 (the sign-in identifier mask,
+ * 003 EARS-22); anything else is an email. The one split every sign-in and
+ * reset path makes.
+ */
+export function isPhoneIdentifier(identifier: string): boolean {
+  return identifier.startsWith("+");
+}
+
+/**
+ * The outcome of an SMS send the BFF asked the IdP for (003 EARS-7/53):
+ * `sent` — the IdP accepted it; `unconfirmed` — the phone is not a confirmed
+ * account phone (EARS-58), nothing was sent, EARS-56 counts it; `failed` — a
+ * provider fault, nothing known to be sent. Never reflected to a client.
+ */
+export type SmsSendOutcome = "sent" | "unconfirmed" | "failed";
+
 /** A Zitadel user as seen by the reconciliation sweep (EARS-19). */
 export interface IdpUser {
   sub: string;
@@ -572,9 +589,11 @@ export interface IdpClient {
    * EARS-7: trigger a Zitadel `otp_sms` **login** code. Same enumeration-safe
    * contract as {@link requestEmailOtp}. The SMS toll-fraud budget (EARS-14) is
    * the caller's gate **before** this method — a refused send never reaches here,
-   * so this method always attempts the (native) send.
+   * so this method always attempts the (native) send. Resolves the
+   * {@link SmsSendOutcome} — a server-side decision (the EARS-18 ledger row,
+   * the EARS-56 counter), never reflected to the client (EARS-16).
    */
-  requestSmsOtp(identifier: string): Promise<void>;
+  requestSmsOtp(identifier: string): Promise<SmsSendOutcome>;
   /**
    * EARS-7: verify an SMS login OTP → checked {@link IdpSession} or `null`. Same
    * contract as {@link loginWithEmailOtp} (design §6 convergence; EARS-16).
@@ -636,6 +655,18 @@ export interface IdpClient {
    * distinguishable oracle.
    */
   requestPasswordReset(identifier: string): Promise<void>;
+  /**
+   * 003 EARS-53: ask the IdP to send the password-reset code **by SMS** to
+   * `phone`, only while `phone` is the confirmed phone of an account (the
+   * mirror, EARS-58) AND, re-read immediately before the send, the account's
+   * IdP user holds that number verified (Zitadel texts the user's last phone,
+   * verified or not). The code is generated, sent and later checked by the
+   * IdP; it never transits the BFF (EARS-30). The EARS-14 budget is the
+   * caller's gate before this method. Never throws: `unconfirmed` for an
+   * unknown / unconfirmed / mismatched number, `failed` for a provider fault,
+   * `sent` when the IdP accepted the send — a server-side decision only.
+   */
+  requestSmsPasswordReset(phone: string): Promise<SmsSendOutcome>;
   /**
    * EARS-12: set a new password using a reset code and, on success, return a
    * **checked** Zitadel session — the same {@link IdpSession} shape `passwordLogin`

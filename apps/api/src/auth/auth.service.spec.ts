@@ -1,5 +1,5 @@
 import { InMemoryLoginHandoffStore } from "./login-handoff/login-handoff.store.js";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BadRequestException,
   ServiceUnavailableException,
@@ -26,6 +26,9 @@ import {
 } from "../mailer/register-notice-throttle.js";
 import type { Mailer } from "../mailer/mailer.types.js";
 import { SyntheticSuppression } from "../mailer/synthetic-suppression.js";
+import { SmsBudgetService } from "./sms-budget/sms-budget.service.js";
+import { DEFAULT_SMS_BUDGET_THRESHOLDS } from "./sms-budget/sms-budget.types.js";
+import { SmsUnconfirmedCounter } from "./sms-unconfirmed-counter.js";
 
 // AuthService.register error taxonomy (no DB). Registration is email-primary
 // (#202): the creation schema rejects baseline-violating passwords at the DTO
@@ -207,6 +210,9 @@ function makeStubDb() {
       fn({ insert: () => insertChain }),
   };
 }
+
+/** The request-coupled EARS-14 budget dimensions of a reset request. */
+const RESET_CTX = { ip: "203.0.113.7" };
 
 /** Let the fire-and-forget notice chain settle (it runs off the response path). */
 function flushMicrotasks(): Promise<void> {
@@ -421,7 +427,7 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
   it("EARS-12: when a reset completes, the system shall mint a fresh session and return its __Host- cookie", async () => {
     const { service, store } = await buildResetService();
 
-    await service.requestPasswordReset(email);
+    await service.requestPasswordReset(email, RESET_CTX);
     const result = await service.completePasswordReset(
       email,
       FAKE_VALID_CODE,
@@ -443,7 +449,7 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
   it("EARS-12: the minted session emits a session-created LoginSucceeded row alongside PasswordResetCompleted", async () => {
     const { service, audit, sub } = await buildResetService();
 
-    await service.requestPasswordReset(email);
+    await service.requestPasswordReset(email, RESET_CTX);
     await service.completePasswordReset(
       email,
       FAKE_VALID_CODE,
@@ -473,7 +479,7 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
     expect(await store.get(sidA)).toBeDefined();
     expect(await store.get(sidB)).toBeDefined();
 
-    await service.requestPasswordReset(email);
+    await service.requestPasswordReset(email, RESET_CTX);
     const result = await service.completePasswordReset(
       email,
       FAKE_VALID_CODE,
@@ -491,7 +497,7 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
 
   it("EARS-12: a bad/expired code stays a generic 400 (the throw precedes any session mint — no oracle)", async () => {
     const { service } = await buildResetService();
-    await service.requestPasswordReset(email);
+    await service.requestPasswordReset(email, RESET_CTX);
 
     const err = await service
       .completePasswordReset(email, "000000", newPassword, fingerprint)
@@ -1155,7 +1161,7 @@ describe("AuthService.completePasswordReset — proof-of-mailbox email verify (0
     const { service, idp, audit, mirrorFlips, sub } =
       await buildFlipService(false);
 
-    await service.requestPasswordReset(email);
+    await service.requestPasswordReset(email, RESET_CTX);
     await service.completePasswordReset(
       email,
       FAKE_VALID_CODE,
@@ -1177,7 +1183,7 @@ describe("AuthService.completePasswordReset — proof-of-mailbox email verify (0
   it("003 EARS-35: idempotent — a completed reset on an ALREADY-VERIFIED account performs no flip and appends NO auth.account.verified row", async () => {
     const { service, audit, mirrorFlips, sub } = await buildFlipService(true);
 
-    await service.requestPasswordReset(email);
+    await service.requestPasswordReset(email, RESET_CTX);
     await service.completePasswordReset(
       email,
       FAKE_VALID_CODE,
@@ -1203,7 +1209,7 @@ describe("AuthService.completePasswordReset — proof-of-mailbox email verify (0
     const sid = parseCookies(existing.cookie)[SESSION_COOKIE_NAME] as string;
     const before = structuredClone(await store.get(sid));
     expect(before).toBeDefined();
-    await service.requestPasswordReset(email);
+    await service.requestPasswordReset(email, RESET_CTX);
     const auditStart = audit.events.length;
     const revoke = vi.spyOn(sessions, "revokeAllForSub");
     const establish = vi.spyOn(sessions, "establish");
@@ -1553,5 +1559,93 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
 
     expect(unknown).toBeNull();
     expect(wrong).toBeNull();
+  });
+});
+
+describe("AuthService.requestPasswordReset — reset code by SMS (003 EARS-53/56/57)", () => {
+  const phone = "+79991234567";
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function build(thresholds = DEFAULT_SMS_BUDGET_THRESHOLDS) {
+    const mailer = new FakeMailer();
+    const idp = new FakeIdpClient(mailer);
+    const audit = new InMemoryAuthAuditLog();
+    const budget = new SmsBudgetService(thresholds, () => Date.now());
+    const service = new AuthService(
+      idp as unknown as IdpClient,
+      makeStubDb() as never,
+      undefined,
+      audit,
+      new InMemoryRegisterNoticeThrottle("test-pepper"),
+      SyntheticSuppression.disabled(),
+      new InMemoryLoginHandoffStore(),
+      {} as never,
+      {} as never,
+      budget,
+    );
+    const counted = vi
+      .spyOn(SmsUnconfirmedCounter.prototype, "record")
+      .mockImplementation(() => {});
+    return { idp, audit, mailer, service, counted };
+  }
+
+  async function withConfirmedPhone(idp: FakeIdpClient): Promise<void> {
+    const { sub } = await idp.createUser({
+      email: "sms-reset@ds.test",
+      password: "Aa1!sufficiently-long",
+    });
+    idp.attachPhone(sub, phone);
+  }
+
+  it("EARS-53: a confirmed phone is texted the code and the request is recorded with channel sms; no mail, no counter", async () => {
+    const { idp, audit, mailer, service, counted } = build();
+    await withConfirmedPhone(idp);
+
+    await expect(
+      service.requestPasswordReset(phone, RESET_CTX),
+    ).resolves.toEqual({ status: "reset_requested" });
+    await flushMicrotasks();
+
+    expect(idp.smsPasswordResetSends()).toEqual([phone]);
+    expect(mailer.passwordResetCodeEmails).toEqual([]);
+    expect(audit.events).toEqual([
+      { type: "PasswordResetRequested", identifier: phone, channel: "sms" },
+    ]);
+    expect(counted).not.toHaveBeenCalled();
+  });
+
+  it("EARS-53/56: an unconfirmed or unknown phone sends nothing, writes no ledger row, is counted for flow reset and answers the same", async () => {
+    const { idp, audit, mailer, service, counted } = build();
+
+    await expect(
+      service.requestPasswordReset(phone, RESET_CTX),
+    ).resolves.toEqual({ status: "reset_requested" });
+    await flushMicrotasks();
+
+    expect(idp.smsPasswordResetSends()).toEqual([]);
+    expect(mailer.passwordResetCodeEmails).toEqual([]);
+    expect(audit.events).toEqual([]);
+    expect(counted).toHaveBeenCalledExactlyOnceWith("reset", phone);
+  });
+
+  it("EARS-53/14: a reset refused by the SMS budget reaches no IdP, writes no ledger row, is counted and answers the same", async () => {
+    const { idp, audit, service, counted } = build({
+      ...DEFAULT_SMS_BUDGET_THRESHOLDS,
+      perPhonePerHour: 0,
+    });
+    await withConfirmedPhone(idp);
+    const reset = vi.spyOn(idp, "requestSmsPasswordReset");
+
+    await expect(
+      service.requestPasswordReset(phone, RESET_CTX),
+    ).resolves.toEqual({ status: "reset_requested" });
+    await flushMicrotasks();
+
+    expect(reset).not.toHaveBeenCalled();
+    expect(audit.events).toEqual([]);
+    expect(counted).toHaveBeenCalledExactlyOnceWith("reset", phone);
   });
 });

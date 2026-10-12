@@ -3334,3 +3334,107 @@ describe("003 confirmed phone (#2449) — adapter wire shape", () => {
     expect(calls).toEqual([]);
   });
 });
+
+describe("ZitadelIdpClient — reset code by SMS (003 EARS-53/56)", () => {
+  const PHONE = "+79991234567";
+
+  /** The IdP holds `idpPhone` on `u-1`; the reset send answers `resetStatus`. */
+  function idpFetch(
+    idpPhone: { phone?: string; isVerified?: boolean } | undefined,
+    resetStatus = 200,
+  ): { fetchImpl: FetchLike; calls: ScriptedCall[] } {
+    const calls: ScriptedCall[] = [];
+    const fetchImpl: FetchLike = (url, init) => {
+      calls.push({
+        url,
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+      });
+      if (url.endsWith("/v2/users")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              result: [
+                {
+                  userId: "u-1",
+                  human: {
+                    email: { email: "a@ds.test", isVerified: true },
+                    ...(idpPhone ? { phone: idpPhone } : {}),
+                  },
+                },
+              ],
+            }),
+        });
+      }
+      return Promise.resolve({
+        ok: resetStatus < 400,
+        status: resetStatus,
+        json: () => Promise.resolve({}),
+      });
+    };
+    return { fetchImpl, calls };
+  }
+
+  it("EARS-53: a confirmed phone the IdP holds verified gets the reset code by SMS — sendLink NOTIFICATION_TYPE_SMS, no returnCode", async () => {
+    const { fetchImpl, calls } = idpFetch({ phone: PHONE, isVerified: true });
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      fetchImpl,
+      confirmedPhones: confirmedPhones({ [PHONE]: "u-1" }),
+    });
+
+    await expect(client.requestSmsPasswordReset(PHONE)).resolves.toBe("sent");
+
+    const reset = calls.find((c) => c.url.endsWith("/password_reset"));
+    expect(reset?.url).toBe("http://idp.test:9080/v2/users/u-1/password_reset");
+    expect(JSON.parse(reset!.body ?? "{}")).toEqual({
+      sendLink: { notificationType: "NOTIFICATION_TYPE_SMS" },
+    });
+  });
+
+  it("EARS-53: a mirror-confirmed phone the IdP no longer holds verified, or holds a different number, is not texted", async () => {
+    for (const idpPhone of [
+      { phone: PHONE, isVerified: false },
+      { phone: "+79990000000", isVerified: true },
+      undefined,
+    ]) {
+      const { fetchImpl, calls } = idpFetch(idpPhone);
+      const client = new ZitadelIdpClient({
+        ...BASE_CONFIG,
+        fetchImpl,
+        confirmedPhones: confirmedPhones({ [PHONE]: "u-1" }),
+      });
+      await expect(client.requestSmsPasswordReset(PHONE)).resolves.toBe(
+        "unconfirmed",
+      );
+      expect(calls.some((c) => c.url.endsWith("/password_reset"))).toBe(false);
+    }
+  });
+
+  it("EARS-53/58: a phone no account holds confirmed reaches no IdP endpoint and is reported unconfirmed", async () => {
+    const { fetchImpl, calls } = idpFetch({ phone: PHONE, isVerified: true });
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      fetchImpl,
+      confirmedPhones: confirmedPhones({}),
+    });
+    await expect(client.requestSmsPasswordReset(PHONE)).resolves.toBe(
+      "unconfirmed",
+    );
+    await expect(client.requestSmsOtp(PHONE)).resolves.toBe("unconfirmed");
+    expect(calls).toEqual([]);
+  });
+
+  it("EARS-53/16: an IdP refusal of the send is a failure, never a throw", async () => {
+    const { fetchImpl } = idpFetch({ phone: PHONE, isVerified: true }, 500);
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      fetchImpl,
+      confirmedPhones: confirmedPhones({ [PHONE]: "u-1" }),
+    });
+    await expect(client.requestSmsPasswordReset(PHONE)).resolves.toBe("failed");
+  });
+});

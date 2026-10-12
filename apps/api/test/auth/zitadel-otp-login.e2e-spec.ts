@@ -595,7 +595,7 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     > | null = null;
     for (let attempt = 0; attempt < 3 && !tokens; attempt++) {
       const sentAt = new Date().toISOString();
-      await expect(client.requestSmsOtp(phone)).resolves.toBeUndefined();
+      await expect(client.requestSmsOtp(phone)).resolves.toBe("sent");
 
       const code = await fetchSmsCode(
         phone,

@@ -490,8 +490,12 @@ export class AuthController {
   })
   requestPasswordReset(
     @Body() dto: PasswordResetRequestDto,
+    @Ip() ip: string,
+    @Headers("x-asn") asn: string | undefined,
   ): Promise<PasswordResetResponse> {
-    return this.auth.requestPasswordReset(dto.identifier);
+    // 003 EARS-53: a phone-identifier reset texts the code, so it carries the
+    // EARS-14 budget dimensions (IP, edge-supplied ASN) as SMS sign-in does.
+    return this.auth.requestPasswordReset(dto.identifier, { ip, asn });
   }
 
   /**

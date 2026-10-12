@@ -230,14 +230,18 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # apps/api/test/auth/register.e2e-spec.ts / email-timing.e2e-spec.ts
     # native enumeration/timing proof; the browser changes no throttle lifetime.
 
-  @EARS-24 @EARS-42 @EARS-16 @happy
+  @EARS-24 @EARS-42 @EARS-16 @happy @registration-code-screen
   Scenario: The post-registration screen is the one code step for new and existing visitors
-    Given a visitor has submitted the registration form
-    When the storefront shows the post-registration screen
-    Then it is the one code step: "check your email", the address exactly as typed, six code cells and a resend with cooldown
-    And it offers «← Изменить почту» back to the registration form with the entered fields kept
-    And it offers no separate Sign in or Reset password block
-    And the screen never branches on whether the email was already registered
+    Given a new Academy visitor and an already-verified owned visitor with fresh guest browsers
+    When both owned visitors submit the Academy registration form and reach its code step
+    Then both code screens show check your email, the exact typed address, six cells and disabled resend cooldown
+    And each actual Change email control returns to registration with its entered fields and consent state kept
+    And neither owned code screen offers a separate Sign in or Reset password block
+    And the owned code screens never branch on whether the email was already registered
+    # NEW browser Back/draft preservation: registration-code-screen.steps.ts.
+    # Retain auth-flow register-door.test.tsx draft/consent contract and API
+    # registration privacy proof. The broader app-local re-registration/mail/
+    # accepted-code/session journey in auth-journeys.e2e.spec.ts remains intact.
 
   @EARS-25 @EARS-16 @happy
   Scenario: Resending a code is enumeration-resistant and fits the account state

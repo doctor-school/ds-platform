@@ -606,6 +606,26 @@ existing API/IdP replacement proof and broader app-local registration journeys
 remain intact. Run only this selected case on the lead-selected stand; this
 coverage change has no render surface and requires no Stage-B request or slot.
 
+### Uniform registration code screen and Back (003 EARS-24/42/16)
+
+`The post-registration screen is the one code step for new and existing visitors`
+prepares one real verified Academy account, revokes its prerequisite session,
+then drives new and existing addresses through the ordinary registration form
+in separate clean guest browsers. `steps/registration-code-screen.steps.ts`
+observes each actual arrival immediately: the same heading and exact mixed-case
+typed address, six visible code cells, disabled resend countdown and no separate
+sign-in/reset block or account-existence disclosure. Each has a fresh addressed
+code that remains unconsumed and no private session or profile access. Clicking
+the actual «← Изменить почту» control must carry the account return target and
+restore the originally entered email and password without test-side refilling;
+the Academy's read-only consent statement and absence of checkboxes remain.
+Password/code assertions retain only safe booleans, traces stay off, and cleanup
+revokes any owned prerequisite session before closing the owned contexts.
+The broader app-local re-registration/mail/code-acceptance/session journey,
+auth-flow draft/consent unit contract and native API privacy proof remain intact.
+Run only this selected case on the lead-selected stand; this coverage change has
+no render surface and requires no Stage-B request or slot.
+
 ### Duplicate-registration inbox suppression (003 EARS-23)
 
 `Repeated duplicate registrations do not flood the inbox` first creates a unique

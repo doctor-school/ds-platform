@@ -60,7 +60,9 @@ const BASE_DAYS = [
   {
     day: "2026-09-04",
     label: "4 сентября, пятница",
-    items: [card("evt-3", "2026-09-04T15:00:00.000Z")],
+    // The one НМО-accredited card: 019 EARS-14 proves НМО renders as this
+    // card's badge and nowhere as a heading (`events-purity.spec.ts`).
+    items: [card("evt-3", "2026-09-04T15:00:00.000Z", { nmo: true })],
   },
 ];
 

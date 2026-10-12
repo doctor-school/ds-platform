@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   fetchEventsLive: vi.fn(),
   fetchMyEvents: vi.fn(),
   fetchSpecialtyChoices: vi.fn(),
+  fetchMonthEntries: vi.fn(),
+  fetchMonthCounts: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -33,12 +35,15 @@ vi.mock("../server", async (importOriginal) => ({
   fetchEventsLive: mocks.fetchEventsLive,
   fetchMyEvents: mocks.fetchMyEvents,
   fetchSpecialtyChoices: mocks.fetchSpecialtyChoices,
+  fetchMonthEntries: mocks.fetchMonthEntries,
+  fetchMonthCounts: mocks.fetchMonthCounts,
 }));
 
 import { EventsListingPage } from "./events-listing-page";
 import { FeedSection, LiveSection, MyEventsSection } from "./feed-sections";
 import { FeedFrame } from "./feed-frame";
 import { LiveBlock } from "./live-block";
+import { MonthView } from "./month-view";
 
 const ROUTES = {
   listing: "/events",
@@ -121,6 +126,9 @@ const strip = (n: number) => ({
 });
 
 const SESSION = { cookie: "", forwardedFor: "" } as never;
+const REQUEST = { cookie: "", forwardedFor: "10.0.0.1" };
+const NO_SPECIALTIES = Promise.resolve([]);
+const EMPTY_PAGE: EventsFeedPage = { ...PAGE, cards: [], remaining: 0, matching: 0 };
 
 afterEach(cleanup);
 beforeEach(() => {
@@ -227,6 +235,8 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
           query: {},
           feed: Promise.resolve({ ok: false as const }),
           mine,
+          specialties: NO_SPECIALTIES,
+          request: REQUEST,
         })}
       </>,
     );
@@ -245,6 +255,8 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
         query: {},
         feed: Promise.resolve({ ok: true as const, value: PAGE }),
         mine: Promise.resolve({ ok: true, value: null }),
+        specialties: NO_SPECIALTIES,
+        request: REQUEST,
       }),
     );
     const more = screen.getByTestId("events-feed-show-more");
@@ -279,6 +291,130 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
     );
     expect(container).toBeEmptyDOMElement();
   });
+});
+
+describe("the empty state of both views (019 EARS-9, #2786)", () => {
+  const TOPICS = {
+    topic: [{ slug: "biomedical", title: "Медико-биологические науки", count: 0 }],
+    project: [{ slug: "golden", title: "Золотая школа", count: 0 }],
+  };
+  /** The empty block's actions in order, by accessible name and href. */
+  const actionsOf = (block: HTMLElement) =>
+    within(block)
+      .getAllByRole("link")
+      .map((link) => [link.textContent, link.getAttribute("href")]);
+
+  it("EARS-9: an empty feed names the first facet whose removal finds events, counted by a widen read of the same tense, and offers the widening then «Сбросить фильтры»", async () => {
+    mocks.fetchEventsFeed
+      .mockResolvedValueOnce({ ok: true, value: { ...EMPTY_PAGE, matching: 0 } })
+      .mockResolvedValueOnce({ ok: true, value: { ...EMPTY_PAGE, matching: 12 } });
+    const query = { tense: "past", project: "golden", topic: "biomedical" };
+    render(
+      await FeedSection({
+        config: ACADEMY,
+        query,
+        feed: Promise.resolve({ ok: true as const, value: { ...EMPTY_PAGE, facetOptions: TOPICS } }),
+        mine: Promise.resolve({ ok: true, value: null }),
+        specialties: NO_SPECIALTIES,
+        request: REQUEST,
+      }),
+    );
+    expect(mocks.fetchEventsFeed.mock.calls.map(([, raw, request]) => [raw, request])).toEqual([
+      [{ ...query, topic: undefined }, REQUEST],
+      [{ ...query, project: undefined }, REQUEST],
+    ]);
+    const empty = screen.getByTestId("events-feed-empty");
+    expect(empty).toHaveTextContent("Нет эфиров по фильтру «Проект: Золотая школа»");
+    expect(empty).toHaveTextContent("Без этого фильтра найдётся 12 эфиров.");
+    expect(actionsOf(empty)).toEqual([
+      ["Убрать фильтр «Проект: Золотая школа»", "/webinars?tense=past&topic=biomedical"],
+      ["Сбросить фильтры", "/webinars?tense=past"],
+    ]);
+  });
+
+  it("EARS-9: an empty doctor feed names a picked specialty by the specialty book «Специальность: <name>»", async () => {
+    mocks.fetchEventsFeed.mockResolvedValueOnce({ ok: true, value: { ...EMPTY_PAGE, matching: 3 } });
+    render(
+      await FeedSection({
+        config: DOCTOR,
+        query: { specialty: "neurology" },
+        feed: Promise.resolve({ ok: true as const, value: EMPTY_PAGE }),
+        mine: Promise.resolve({ ok: true, value: null }),
+        specialties: Promise.resolve([{ code: "neurology", name: "Неврология" }]),
+        request: REQUEST,
+      }),
+    );
+    const empty = screen.getByTestId("events-feed-empty");
+    expect(empty).toHaveTextContent("Нет событий по фильтру «Специальность: Неврология»");
+    expect(actionsOf(empty)).toEqual([
+      ["Показать смежные специальности", "/events"],
+      ["Сбросить фильтры", "/events"],
+    ]);
+  });
+
+  it("EARS-9: a non-empty feed makes no widen read", async () => {
+    render(
+      await FeedSection({
+        config: DOCTOR,
+        query: { format: "offline" },
+        feed: Promise.resolve({ ok: true as const, value: PAGE }),
+        mine: Promise.resolve({ ok: true, value: null }),
+        specialties: NO_SPECIALTIES,
+        request: REQUEST,
+      }),
+    );
+    expect(mocks.fetchEventsFeed).not.toHaveBeenCalled();
+  });
+
+  it("EARS-9: an empty month names the facet by its title and counts the tense's whole reach (#2786)", async () => {
+    mocks.fetchMonthEntries.mockResolvedValue({ ok: true, value: [] });
+    mocks.fetchMonthCounts.mockResolvedValue({ ok: true, value: [] });
+    mocks.fetchEventsFeed.mockResolvedValueOnce({ ok: true, value: { ...EMPTY_PAGE, matching: 1 } });
+    const raw = { view: "month", topic: "biomedical" };
+    render(
+      await MonthView({
+        config: ACADEMY,
+        raw,
+        month: "2026-10",
+        feed: Promise.resolve({ ok: true as const, value: { ...EMPTY_PAGE, facetOptions: TOPICS } }),
+        specialties: NO_SPECIALTIES,
+        request: REQUEST,
+      }),
+    );
+    expect(mocks.fetchEventsFeed).toHaveBeenCalledWith(ACADEMY, { ...raw, topic: undefined }, REQUEST);
+    const empty = screen.getByTestId("events-month-empty");
+    expect(empty).toHaveTextContent("Нет эфиров по фильтру «Тема: Медико-биологические науки»");
+    expect(empty).toHaveTextContent("Без этого фильтра найдётся 1 эфир.");
+    expect(actionsOf(empty)).toEqual([
+      ["Показать все темы", "/webinars?view=month"],
+      ["Сбросить фильтры", "/webinars?view=month"],
+    ]);
+  });
+
+  it.each([
+    ["finds nothing", { ok: true, value: { ...EMPTY_PAGE, matching: 0 } }],
+    ["fails", { ok: false }],
+  ])(
+    "EARS-9: an empty month whose every widen read %s offers no widening, only «Сбросить фильтры» (#2786)",
+    async (_case, widenRead) => {
+      mocks.fetchMonthEntries.mockResolvedValue({ ok: true, value: [] });
+      mocks.fetchMonthCounts.mockResolvedValue({ ok: true, value: [] });
+      mocks.fetchEventsFeed.mockResolvedValue(widenRead);
+      render(
+        await MonthView({
+          config: DOCTOR,
+          raw: { view: "month", kind: "lecture" },
+          month: "2026-10",
+          feed: Promise.resolve({ ok: true as const, value: EMPTY_PAGE }),
+          specialties: NO_SPECIALTIES,
+          request: REQUEST,
+        }),
+      );
+      const empty = screen.getByTestId("events-month-empty");
+      expect(empty).toHaveTextContent("По выбранным фильтрам событий нет");
+      expect(actionsOf(empty)).toEqual([["Сбросить фильтры", "/events?view=month"]]);
+    },
+  );
 });
 
 describe("<FeedFrame> — the head", () => {

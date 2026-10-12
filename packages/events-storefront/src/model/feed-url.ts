@@ -6,7 +6,6 @@ import {
   DOCTOR_EVENTS_FEED_HORIZON_DAYS,
   type RawQueryRecord,
   encodeQueryString,
-  rawQueryList,
   rawQueryScalar,
 } from "@ds/schemas";
 
@@ -119,21 +118,9 @@ export function showMoreHref(
   return href(listing, codecEntries({ ...raw, from, to }));
 }
 
-/** The feed href with one facet value (or the whole facet) removed. */
-export function withoutFeedParam(
-  listing: string,
-  raw: RawQueryRecord,
-  key: string,
-  value?: string,
-): string {
-  const next: RawQueryRecord = { ...raw };
-  if (value === undefined) {
-    next[key] = undefined;
-  } else {
-    const rest = (rawQueryList(raw[key]) ?? []).filter((v) => v !== value);
-    next[key] = rest.length > 0 ? rest : undefined;
-  }
-  return href(listing, codecEntries(next));
+/** The page query with one facet removed. */
+export function withoutFeedQuery(raw: RawQueryRecord, key: string): RawQueryRecord {
+  return { ...raw, [key]: undefined };
 }
 
 /** Only the entries of `keys`, in the codec's order. */

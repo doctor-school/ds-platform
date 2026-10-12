@@ -3,16 +3,10 @@ import { MonthPicker } from "@ds/design-system/blocks";
 import { Button } from "@ds/design-system/button";
 import type { RawQueryRecord } from "@ds/schemas";
 
-import { FEED_COPY } from "../copy/feed-copy";
 import { LISTING_COPY, eventNounOf } from "../copy/listing-copy";
 import { type EventsStorefrontHostConfig, eventPageHref } from "../host-config";
-import { hasAppliedFacets } from "../model/facets";
-import {
-  type BlockRead,
-  type EventsFeedPage,
-  emptyFeedState,
-  pageTodayOf,
-} from "../model/feed";
+import { type SpecialtyChoice, hasAppliedFacets } from "../model/facets";
+import { type BlockRead, type EventsFeedPage, pageTodayOf } from "../model/feed";
 import { dayHref, feedTenseOf, monthHref } from "../model/feed-url";
 import {
   buildMonthGrid,
@@ -29,6 +23,7 @@ import {
 import { type ReadRequest, fetchMonthCounts, fetchMonthEntries } from "../server";
 import { BlockError } from "./block-error";
 import { EmptyFeedBlock } from "./feed-list";
+import { readEmptyFeedState } from "./feed-sections";
 import { MonthCalendarDesktop, type MonthHrefs } from "./month-calendar-desktop";
 import { MonthCalendarMobile } from "./month-calendar-mobile";
 
@@ -53,12 +48,15 @@ export async function MonthView({
   raw,
   month,
   feed,
+  specialties,
   request,
 }: {
   config: EventsStorefrontHostConfig;
   raw: RawQueryRecord;
   month: string | undefined;
   feed: Promise<BlockRead<EventsFeedPage>>;
+  /** The specialty book — read only to name a picked specialty in the empty state. */
+  specialties: Promise<readonly SpecialtyChoice[]>;
   request: ReadRequest;
 }) {
   const t = LISTING_COPY.month;
@@ -131,6 +129,19 @@ export async function MonthView({
     </div>
   );
 
+  // An empty month under a facet offers the feed's widening, counted over the
+  // tense's whole reach (the canvas rule), its facets named by the read's titles.
+  const empty =
+    entries.ok && entries.value.length === 0 && hasAppliedFacets(raw, config.filterSet)
+      ? await readEmptyFeedState(
+          config,
+          raw,
+          read.ok ? read.value.facetOptions : {},
+          specialties,
+          request,
+        )
+      : null;
+
   const body = (() => {
     if (!entries.ok) {
       return (
@@ -141,13 +152,8 @@ export async function MonthView({
         />
       );
     }
-    if (entries.value.length === 0 && hasAppliedFacets(raw, config.filterSet)) {
-      return (
-        <EmptyFeedBlock
-          testId="events-month-empty"
-          empty={emptyFeedState(raw, { listing, noun, copy: FEED_COPY })}
-        />
-      );
+    if (empty !== null) {
+      return <EmptyFeedBlock testId="events-month-empty" empty={empty} />;
     }
     const grid = buildMonthGrid({ month: displayed, entries: entries.value, today });
     const horizon = read.ok ? read.value.horizon : undefined;

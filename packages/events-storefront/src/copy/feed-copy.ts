@@ -70,9 +70,13 @@ export const FEED_COPY = {
       `${manyNoun.charAt(0).toUpperCase()}${manyNoun.slice(1)} нет`,
     emptyByFacet: (manyNoun: string, facet: string) =>
       `Нет ${manyNoun} по фильтру «${facet}»`,
-    emptyByFacetBody: "Уберите фильтр, чтобы увидеть больше.",
+    /** `count` is the counted noun, «12 эфиров» (the canvas `K.empty`). */
+    widenCount: (count: string) => `Без этого фильтра найдётся ${count}.`,
+    widenSpecialtyCount: (count: string) =>
+      `В вашей и смежных специальностях найдётся ${count}.`,
     removeFacet: (facet: string) => `Убрать фильтр «${facet}»`,
     widenSpecialty: "Показать смежные специальности",
+    widenTopic: "Показать все темы",
     emptyFiltered: (manyNoun: string) => `По выбранным фильтрам ${manyNoun} нет`,
     emptyFilteredBody: "Сбросьте фильтры, чтобы увидеть всю ленту.",
     resetFilters: "Сбросить фильтры",

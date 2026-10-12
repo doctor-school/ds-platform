@@ -87,9 +87,11 @@ export function FeedList({
 }
 
 /**
- * An empty reading (019 EARS-9, LD-9): the cause, and the one action that
- * widens it — removing the facet that emptied it. Shared by the feed and the
- * month view (row 55 «пусто по фильтрам»).
+ * An empty reading (019 EARS-9, LD-9; canvas `emptyOf`): the cause, the
+ * widening as the primary action when one removal finds events, and the
+ * outline «Сбросить фильтры» beside it whenever a facet is applied. The action
+ * row wraps, and a long action label wraps inside its frame (390 px). Shared by
+ * the feed and the month view (row 55 «пусто по фильтрам»).
  */
 export function EmptyFeedBlock({
   empty,
@@ -108,12 +110,21 @@ export function EmptyFeedBlock({
         variant="no-records"
         title={empty.title}
         {...(empty.description ? { description: empty.description } : {})}
-        {...(empty.action
+        {...(empty.widen || empty.reset
           ? {
               action: (
-                <Button asChild variant="outline">
-                  <Link href={empty.action.href}>{empty.action.label}</Link>
-                </Button>
+                <div className="flex flex-wrap justify-center gap-3">
+                  {empty.widen ? (
+                    <Button asChild className="max-w-full whitespace-normal text-center">
+                      <Link href={empty.widen.href}>{empty.widen.label}</Link>
+                    </Button>
+                  ) : null}
+                  {empty.reset ? (
+                    <Button asChild variant="outline" className="max-w-full whitespace-normal text-center">
+                      <Link href={empty.reset.href}>{empty.reset.label}</Link>
+                    </Button>
+                  ) : null}
+                </div>
               ),
             }
           : {})}

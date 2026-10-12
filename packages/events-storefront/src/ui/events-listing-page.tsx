@@ -288,6 +288,7 @@ export async function EventsListingPage({
                 raw={raw}
                 month={pageMonthOf(raw)}
                 feed={feed}
+                specialties={specialties}
                 request={request}
               />
             </Suspense>
@@ -309,6 +310,8 @@ export async function EventsListingPage({
                   query={raw}
                   feed={feed}
                   mine={mine}
+                  specialties={specialties}
+                  request={request}
                 />
               </Suspense>
             </>

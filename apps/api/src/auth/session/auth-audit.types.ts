@@ -155,7 +155,13 @@ export type AuthAuditEvent =
   | { type: "RefreshReuseDetected"; sub: string; sid: string }
   | { type: "SessionRevoked"; sub: string; sid: string }
   // EARS-11 reset initiate (identifier masked; no subject — pre-identity).
-  | { type: "PasswordResetRequested"; identifier: string }
+  // 003 EARS-57: `channel: "sms"` marks a reset code actually texted to a
+  // confirmed phone (EARS-53); an email-identifier request carries none.
+  | {
+      type: "PasswordResetRequested";
+      identifier: string;
+      channel?: "sms" | undefined;
+    }
   // EARS-12 reset complete (user-level; spans every session of the subject).
   | { type: "PasswordResetCompleted"; sub: string }
   // EARS-15 native-lockout observation. Subject-level; the BFF records it when

@@ -19,8 +19,11 @@ import {
   type IdpSession,
   type IdpTokens,
   type IdpUser,
+  isPhoneIdentifier,
   type PasswordLoginResult,
   type RevalidateAdminAuthorityInput,
+  type SmsResetOutcome,
+  type SmsSendOutcome,
   type TotpRegistration,
 } from "./idp.types.js";
 import { InMemoryOtpChallengeStore } from "./otp-challenge-store.fake.js";
@@ -1340,6 +1343,43 @@ export class ZitadelIdpClient implements IdpClient {
     }
   }
 
+  async requestSmsPasswordReset(phone: string): Promise<SmsResetOutcome> {
+    // 003 EARS-53 (design → Password reset by SMS). The mirror names the
+    // account that holds `phone` confirmed (EARS-58); the IdP user is then
+    // re-read immediately before the send, because Zitadel texts the reset
+    // code to the user's LAST phone whether or not it is verified, and the
+    // mirror can lag the IdP (a failed displacement write, a console change).
+    // Only a verified IdP phone equal to the identifier is sent to, and only
+    // on an account whose email is verified: the completion resolves an email
+    // and a phone identifier to the same user and the same per-user code, so
+    // an SMS code on an unproven mailbox would let EARS-35 verify it. The send is
+    // the `sendLink` medium with `NOTIFICATION_TYPE_SMS`: Zitadel generates the
+    // code (`PASSWORD_RESET_CODE`), renders the `passwordreset` message text
+    // and hands it to the active SMS provider; the code is not returned, so it
+    // never transits the BFF (EARS-30). Never throws (EARS-16).
+    try {
+      const sub = await this.confirmedPhoneSubject(phone);
+      if (!sub) return "unconfirmed";
+      const user = await this.getUser(sub);
+      if (!user) return "failed";
+      if (!user.phoneVerified || user.phone !== phone) return "unconfirmed";
+      if (!user.emailVerified) return "email_unverified";
+      const res = await this.fetchImpl(
+        this.url(`/v2/users/${sub}/password_reset`),
+        {
+          method: "POST",
+          headers: this.headers(),
+          body: JSON.stringify({
+            sendLink: { notificationType: "NOTIFICATION_TYPE_SMS" },
+          }),
+        },
+      );
+      return res.ok ? "sent" : "failed";
+    } catch {
+      return "failed";
+    }
+  }
+
   async completePasswordReset(
     identifier: string,
     code: string,
@@ -1445,6 +1485,22 @@ export class ZitadelIdpClient implements IdpClient {
     challenge: "otpEmail" | "otpSms",
     deliver?: (to: string, code: string) => Promise<void>,
   ): Promise<boolean> {
+    return (
+      (await this.armOtpChallenge(identifier, challenge, deliver)) === "armed"
+    );
+  }
+
+  /**
+   * {@link requestOtpChallenge} with the reason a challenge was not armed:
+   * `no_account` when the identifier names no account (for a phone: no
+   * account holds it confirmed, 003 EARS-58), `failed` for any provider or
+   * store fault. The SMS path needs the distinction for 003 EARS-56.
+   */
+  private async armOtpChallenge(
+    identifier: string,
+    challenge: "otpEmail" | "otpSms",
+    deliver?: (to: string, code: string) => Promise<void>,
+  ): Promise<"armed" | "no_account" | "failed"> {
     // Enumeration-safe like `requestPasswordReset`: an unknown identifier (no
     // user) is a silent no-op, and ANY provider error still resolves — the
     // caller's acknowledgement must never become an existence/health oracle
@@ -1460,7 +1516,7 @@ export class ZitadelIdpClient implements IdpClient {
         challenge === "otpEmail"
           ? user?.userId
           : await this.resolveSignInUserId(identifier);
-      if (!userId) return false;
+      if (!userId) return "no_account";
       await this.ensureOtpFactor(userId, challenge);
       // 003 EARS-6/29: the email code returns to the BFF mailer (Zitadel sends
       // nothing); SMS keeps its native notifier and unchanged challenge.
@@ -1473,18 +1529,18 @@ export class ZitadelIdpClient implements IdpClient {
           challenges: { [challenge]: challengeBody },
         }),
       });
-      if (!res.ok) return false;
+      if (!res.ok) return "failed";
       const data = (await res.json()) as {
         sessionId?: string;
         sessionToken?: string;
         challenges?: { otpEmail?: string };
       };
-      if (!data.sessionId || !data.sessionToken) return false;
+      if (!data.sessionId || !data.sessionToken) return "failed";
       const code = data.challenges?.otpEmail;
       if (challenge === "otpEmail" && (typeof code !== "string" || !code))
-        return false;
+        return "failed";
       // A store write failure (e.g. Redis blip) falls into the enclosing catch
-      // below — still `false`, enumeration-safe (a store outage must not become a
+      // below — still `failed`, enumeration-safe (a store outage must not become a
       // health oracle either).
       await this.otpChallengeStore.set(identifier.toLowerCase(), {
         sessionId: data.sessionId,
@@ -1501,11 +1557,11 @@ export class ZitadelIdpClient implements IdpClient {
             this.requireMailer().sendLoginCodeEmail(addr, c));
         void send(to, code!).catch(() => {});
       }
-      return true;
+      return "armed";
     } catch {
       // A thrown fetch (network hiccup) is indistinguishable from success to the
       // caller — swallow it, exactly like `requestPasswordReset`'s `.catch`.
-      return false;
+      return "failed";
     }
   }
 
@@ -1846,11 +1902,14 @@ export class ZitadelIdpClient implements IdpClient {
     };
   }
 
-  async requestSmsOtp(identifier: string): Promise<void> {
+  async requestSmsOtp(identifier: string): Promise<SmsSendOutcome> {
     // The EARS-14 SMS toll-fraud budget is gated by the CALLER before this hop —
     // a refused send never reaches here, so this method always attempts the
-    // native send (no budget logic here, by contract).
-    await this.requestOtpChallenge(identifier, "otpSms");
+    // native send (no budget logic here, by contract). A phone no account holds
+    // confirmed arms nothing (003 EARS-58) and is reported for EARS-56.
+    const armed = await this.armOtpChallenge(identifier, "otpSms");
+    if (armed === "armed") return "sent";
+    return armed === "no_account" ? "unconfirmed" : "failed";
   }
 
   loginWithSmsOtp(
@@ -2696,10 +2755,6 @@ export class ZitadelIdpClient implements IdpClient {
  * silently found nobody), breaking the enumeration-safe "existing account"
  * branch (003 EARS-16, 044 EARS-7).
  */
-/** A phone identifier is `+`-prefixed E.164 (the split {@link identifierQuery} makes). */
-function isPhoneIdentifier(identifier: string): boolean {
-  return identifier.startsWith("+");
-}
 
 function identifierQuery(identifier: string):
   | { phoneQuery: { number: string } }

@@ -20,9 +20,10 @@ durable `audit_ledger` writer).
 | Login + session-read routes                         | `auth.controller.ts`          | 5, 8                                 |
 | Passwordless OTP-login routes                       | `auth.controller.ts`          | 6, 7, 8, 14, 44                      |
 | Refresh + logout routes                             | `auth.controller.ts`          | 9, 10                                |
-| Password-reset routes                               | `auth.controller.ts`          | 11, 12                               |
-| Cascade + login + OTP + reset orchestration         | `auth.service.ts`             | 1–7, 11, 12, 14, 16, 20              |
+| Password-reset routes                               | `auth.controller.ts`          | 11, 12, 53                           |
+| Cascade + login + OTP + reset orchestration         | `auth.service.ts`             | 1–7, 11, 12, 14, 16, 20, 35, 53      |
 | SMS toll-fraud budget                               | `sms-budget/`                 | 14                                   |
+| Unconfirmed-phone SMS request counter               | `sms-unconfirmed-counter.ts`  | 56                                   |
 | Phone confirmation from `/account` (`/v1/me/phone`) | `phone/`                      | 47–52, 57, 58                        |
 | Rate limiter (per-user/IP/ASN)                      | `rate-limit/`                 | 13                                   |
 | Timing equalization                                 | `timing/`                     | 16                                   |
@@ -341,6 +342,26 @@ plus the same exchange) and fail closed until exercised against a live instance;
 the BFF OTP orchestration (EARS-6/7) and the SMS budget (EARS-14) are proven
 against `FakeIdpClient`.
 
+## Reset code by SMS (EARS-53, 35, 56 — #2449)
+
+A reset requested with a phone identifier passes the EARS-14 budget, then —
+off the response path, like the email send — `IdpClient.requestSmsPasswordReset`
+resolves the account through the mirror's confirmed phone (EARS-58), re-reads
+the IdP user and sends only when the IdP holds that number verified and the
+account's email verified (`POST /v2/users/{id}/password_reset` with `sendLink` /
+`NOTIFICATION_TYPE_SMS`; Zitadel generates, texts and later checks the code,
+which never reaches the BFF). The `passwordreset` SMS text is provisioned in
+`infra/dev-stand/idp/provision.sh`. A sent code writes
+`auth.password.reset_requested` with `channel: sms`; a refusal, an unknown or
+unconfirmed number or an IdP mismatch sends nothing, writes no ledger row and
+increments `auth_sms_unconfirmed_phone_requests_total{flow="reset"}` with one
+masked log line (`sms-unconfirmed-counter.ts`; SMS sign-in counts
+`flow="signin"`). A confirmed number on an account whose email is unverified
+(a console-added phone) also sends nothing and writes no row, but is not
+counted. So an SMS code exists only for a verified email, and the completion's
+EARS-35 flip is an idempotent no-op on that path whichever identifier it names
+(an email and a phone resolve to the same per-user Zitadel code).
+
 ## SMS toll-fraud budget (`sms-budget/`, EARS-14, design §10)
 
 SMS itself is sent **natively by Zitadel** (`otp_sms`); the BFF owns the custom
@@ -354,7 +375,11 @@ IdP to send, so a refused send never reaches the provider and never costs money.
   tripped breaker that refuses the first send.
 - **Where it gates** — `AuthService.requestLoginOtp` calls it on the `sms`
   channel only; a refusal is a generic `429` (`GENERIC_THROTTLED`) that names no
-  threshold and no account (not an existence oracle, EARS-16/§10). The per-ASN
+  threshold and no account (not an existence oracle, EARS-16/§10).
+  `AuthService.requestPasswordReset` calls it for a phone identifier (003
+  EARS-53) before any account lookup; there a refusal is the ordinary
+  `reset_requested` (every reset answer is the same) and is counted by EARS-56.
+  `phone/` gates the `/account` confirmation SMS the same way (EARS-47). The per-ASN
   window is evaluated only when the edge supplies an `x-asn` header (the per-ASN
   limit is an edge/BFF concern, design §2); absent it, the budget degrades to
   phone/IP/global — which is the DEPLOYED behaviour today, since no infra layer

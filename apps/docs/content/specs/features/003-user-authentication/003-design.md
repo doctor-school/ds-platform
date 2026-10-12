@@ -202,22 +202,24 @@ sequenceDiagram
     opt mirror says confirmed
         B->>Z: re-read the IdP user (immediately before sendLink)
     end
-    alt mirror confirmed AND IdP phone verified AND equal to the identifier
+    alt mirror confirmed AND IdP phone verified AND equal to the identifier AND IdP email verified
         B->>Z: POST /v2/users/{sub}/password_reset {sendLink:{notificationType: NOTIFICATION_TYPE_SMS}}
         Z->>P: HTTP SMS webhook (passwordreset text with {{.Code}}, recipient = LastPhone)
         B->>B: audit auth.password.reset.requested (channel sms)
     else unknown / unconfirmed / mirror-IdP mismatch / limit refusal
         B->>B: no call, no SMS, no email; counter(flow=reset) (EARS-56)
+    else confirmed phone, IdP email unverified (a console-added phone)
+        B->>B: no call, no SMS, no email; not counted (the number is confirmed)
     end
     B-->>S: the one enumeration-safe response (EARS-16)
     S->>B: POST /v1/auth/password/reset/complete {identifier, code, newPassword}
     B->>Z: POST /v2/users/{sub}/password {newPassword, verificationCode}  (unchanged, EARS-12)
-    B->>B: no email_verified flip (EARS-35 is a no-op here: a confirmed phone needs a session, a session needs a verified email, #2662)
+    B->>B: EARS-35 flip is an idempotent no-op (an SMS code exists only for a verified email)
 ```
 
 **Why the re-read.** Zitadel sends the reset SMS to the user's last phone, verified or not, so the mirror gate alone could send a reset code to an unconfirmed number Q whenever the mirror and the IdP disagree (a failed displacement write, a phone changed outside the BFF). The send therefore happens only when the freshly read IdP phone is verified and equal to the identifier; otherwise the identical enumeration-safe no-send branch. The re-read is one extra IdP call on the confirmed branch; its timing sits inside the EARS-16 budget, which the verification measures.
 
-**EARS-35 on this path.** The email-verified flip is a no-op by construction rather than a rule keyed on a channel: a confirmed phone can only be set from a session, a session requires a verified email (the sign-in refusal for an unverified email, #2662), so an account that can be reset by SMS already has a verified email. The completion request carries only an identifier and a code, so the BFF would otherwise have to remember the channel; with this reading it does not.
+**EARS-35 on this path.** The SMS is sent only when the freshly read IdP user also holds its email verified, so an SMS reset code exists only for an account whose mailbox is already proven, and the completion's EARS-35 flip is an idempotent no-op on that path. The rule sits on the request side because the completion cannot know the channel: it carries only an identifier and a code, an email and a phone identifier resolve to the same Zitadel user, and Zitadel checks the one per-user reset code whichever channel issued it. A completion-side rule keyed on the identifier would let a caller request by phone and complete by email. For a phone confirmed through the product the email condition changes nothing — a confirmed phone can only be set from a session, a session requires a verified email (the sign-in refusal for an unverified email, #2662) — so it refuses only a phone added outside the product (the Zitadel console) on an account with an unverified email. That refusal gets the same enumeration-safe response and is not counted by EARS-56, because the number is confirmed.
 
 The BFF never receives the SMS code, so §14's scrub and EARS-30 have nothing to hold for it. The email branch of §14 is untouched: an email identifier still uses `returnCode` and the mail chain, including for an account that also holds a confirmed phone.
 

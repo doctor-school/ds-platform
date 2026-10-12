@@ -623,12 +623,14 @@ fi
 # PUT /admin/v1/text/message/{type}/ru —
 # init|verifyphone|verifyemailotp|verifysmsotp|password_change.)
 #
-# `verifyemail` and `passwordreset` carry NO live override (#910/#1045,
-# EARS-29): those sends ride the `returnCode` oneof — Zitadel generates and
-# verifies the code but sends NOTHING; the BFF mailer composes and dispatches
-# the branded, Russian, code-only, link-free artifacts
+# `verifyemail` carries NO live override, and `passwordreset` no EMAIL
+# override (#910/#1045, EARS-29): those mails ride the `returnCode` oneof —
+# Zitadel generates and verifies the code but sends NOTHING; the BFF mailer
+# composes and dispatches the branded, Russian, code-only, link-free artifacts
 # (apps/api/src/mailer/code-emails.ts is the copy SSOT). The former overrides
-# (steps 8.ter/#869 and 8.sexies/#880) are retired with that switch.
+# (steps 8.ter/#869 and 8.sexies/#880) are retired with that switch. The
+# `passwordreset` SMS `text` (003 EARS-53, below) is the one exception: the
+# reset by a confirmed phone is texted by Zitadel itself.
 #
 # TWO levers, because the instance default alone is NOT sufficient (proven live):
 #   (a) Default language → ru. The documented fallback. Necessary, but registrants
@@ -818,8 +820,9 @@ api GET /admin/v1/policies/login | jq -r '.policy |
 # Two-sided fix: the BFF now sends displayName = the registration email (#878,
 # apps/api zitadel.idp.ts), AND every user-facing greeting drops the name
 # variable — the neutral «Здравствуйте!» technique proven live on #869.
-# `verifyemail`/`passwordreset` are NOT touched here: those types are
-# BFF-sent (returnCode, #910/#1045) and carry no live override at all.
+# `verifyemail` is NOT touched here: it is BFF-sent (returnCode, #910/#1045)
+# and carries no live override at all; `passwordreset` gets only its SMS
+# `text` (below), never a greeting or other mail field.
 #
 # (a) verifyemailotp — the native email-OTP login template. Never rendered: the
 # EARS-6 login code rides returnCode + the BFF mailer (#2145); the override is
@@ -883,6 +886,22 @@ api_idempotent PUT /admin/v1/text/message/verifyphone/ru \
 api_idempotent PUT /admin/v1/text/message/verifyphone/en \
   "$(jq -nc --arg t "$EN_VERIFY_PHONE_TEXT" '{text:$t}')" >/dev/null \
   && echo "ensured verifyphone/en branded phone confirmation text" >&2
+# `passwordreset` SMS text — 003 EARS-53 (#2449): a reset requested with a
+# confirmed phone is sent by Zitadel's notifier (`sendLink` with
+# NOTIFICATION_TYPE_SMS) and the SMS carries this type's `text`. Branded like
+# `verifyphone`: the code only (`{{.Code}}`), no link, no button, no lifetime
+# (Zitadel passes no expiry to this type). Only `text` is set: the reset MAIL
+# never renders this type (it rides `returnCode` + the BFF mailer), so the
+# override touches no email; a future switch back to Zitadel-sent reset mail
+# must revisit it (003-design → Provisioning).
+RU_PASSWORD_RESET_SMS_TEXT='Doctor.School: код для сброса пароля - {{.Code}}, никому его не сообщайте'
+EN_PASSWORD_RESET_SMS_TEXT='Doctor.School: your password reset code is {{.Code}}, do not share it with anyone'
+api_idempotent PUT /admin/v1/text/message/passwordreset/ru \
+  "$(jq -nc --arg t "$RU_PASSWORD_RESET_SMS_TEXT" '{text:$t}')" >/dev/null \
+  && echo "ensured passwordreset/ru branded reset SMS text" >&2
+api_idempotent PUT /admin/v1/text/message/passwordreset/en \
+  "$(jq -nc --arg t "$EN_PASSWORD_RESET_SMS_TEXT" '{text:$t}')" >/dev/null \
+  && echo "ensured passwordreset/en branded reset SMS text" >&2
 for _mt in init; do
   api_idempotent PUT "/admin/v1/text/message/${_mt}/ru" \
     '{"greeting":"Здравствуйте!"}' >/dev/null \

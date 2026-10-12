@@ -22,6 +22,19 @@ import {
 } from "../../src/auth/sms-budget/sms-budget.types.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import { register as metrics } from "prom-client";
+import { hashIdentifier } from "../../src/auth/session/auth-audit.ledger.js";
+import { SMS_UNCONFIRMED_PHONE_METRIC } from "../../src/auth/sms-unconfirmed-counter.js";
+
+/** 003 EARS-56: the `flow="signin"` value of the unconfirmed-phone counter. */
+async function signinCount(): Promise<number> {
+  const metric = metrics.getSingleMetric(SMS_UNCONFIRMED_PHONE_METRIC);
+  if (!metric) return 0;
+  const hit = (await metric.get()).values.find(
+    (v) => v.labels.flow === "signin",
+  );
+  return hit?.value ?? 0;
+}
 import {
   describeTiming,
   medianSpread,
@@ -200,6 +213,29 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(res.statusCode).toBe(200);
       expect(res.json()).toEqual({ status: "authenticated" });
       expect(setCookie(res)).toContain(`${SESSION_COOKIE_NAME}=`);
+    });
+
+    it("EARS-56: an SMS login-code request for a phone no account holds confirmed is counted (flow signin), writes no ledger row and answers unchanged", async () => {
+      const phone = uniquePhone();
+      const pepper =
+        process.env.AUDIT_IDENTIFIER_PEPPER ??
+        "test-only-insecure-audit-identifier-pepper";
+      const before = await signinCount();
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/login/otp/request",
+        payload: { identifier: phone, channel: "sms" },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ status: "otp_sent" });
+      expect(await signinCount()).toBe(before + 1);
+      const { rows } = await pool.query(
+        `SELECT 1 FROM audit_ledger WHERE event_type = 'auth.otp.sent'
+          AND metadata->>'identifier_hash' = $1`,
+        [hashIdentifier(phone, pepper)],
+      );
+      expect(rows).toEqual([]);
     });
   },
 );

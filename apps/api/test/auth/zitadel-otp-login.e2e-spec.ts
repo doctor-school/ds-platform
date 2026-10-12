@@ -287,24 +287,66 @@ async function fetchSmsCode(
   event?: string,
 ): Promise<string | null> {
   for (let attempt = 0; attempt < 30; attempt++) {
-    const res = await fetch(
-      `${SMS_SINK_BASE}/api/messages?to=${encodeURIComponent(phone)}` +
-        `&after=${encodeURIComponent(afterIso)}` +
-        (event ? `&event=${encodeURIComponent(event)}` : ""),
-    );
-    if (res.ok) {
-      const data = (await res.json()) as {
-        messages?: Array<{
-          body?: string;
-          json?: { args?: { code?: string; oTP?: string } } | null;
-        }>;
-      };
-      const hit = (data.messages ?? [])[0]; // newest-first
-      if (hit) {
-        const code = extractSmsCode(hit);
-        if (code) return code;
-      }
+    const hit = await latestSms(phone, afterIso, event);
+    if (hit) {
+      const code = extractSmsCode(hit);
+      if (code) return code;
     }
+    await sleep(500);
+  }
+  return null;
+}
+
+type SinkSms = {
+  body?: string;
+  json?: {
+    args?: { code?: string; oTP?: string };
+    contextInfo?: { eventType?: string };
+  } | null;
+};
+
+/** The newest sink message to `phone` after `afterIso` (one read, no poll). */
+async function latestSms(
+  phone: string,
+  afterIso: string,
+  event?: string,
+): Promise<SinkSms | null> {
+  const res = await fetch(
+    `${SMS_SINK_BASE}/api/messages?to=${encodeURIComponent(phone)}` +
+      `&after=${encodeURIComponent(afterIso)}` +
+      (event ? `&event=${encodeURIComponent(event)}` : ""),
+  );
+  if (!res.ok) return null;
+  const data = (await res.json()) as { messages?: SinkSms[] };
+  return (data.messages ?? [])[0] ?? null; // newest-first
+}
+
+/**
+ * 003 EARS-53: the provisioned `passwordreset` SMS text
+ * (`infra/dev-stand/idp/provision.sh`, ru and en), with the six-digit code in
+ * place of `{{.Code}}`. Pinning the text proves the provisioning reached the
+ * IdP: Zitadel's bundled `passwordreset` copy is an email body (HTML, a
+ * lifetime line), which the SMS must never carry.
+ */
+const PASSWORD_RESET_SMS =
+  /Doctor\.School: (?:код для сброса пароля - ([0-9]{6}), никому его не сообщайте|your password reset code is ([0-9]{6}), do not share it with anyone)/;
+
+/**
+ * Poll the sink for the reset SMS to `phone` sent after `afterIso`. Filtered by
+ * the reset event (`user.human.password.code.added`, proven live): Zitadel
+ * re-renders the phone-verify SMS around the send, as for the login OTP.
+ */
+async function fetchResetSms(
+  phone: string,
+  afterIso: string,
+): Promise<SinkSms | null> {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const hit = await latestSms(
+      phone,
+      afterIso,
+      "user.human.password.code.added",
+    );
+    if (hit) return hit;
     await sleep(500);
   }
   return null;
@@ -595,7 +637,7 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     > | null = null;
     for (let attempt = 0; attempt < 3 && !tokens; attempt++) {
       const sentAt = new Date().toISOString();
-      await expect(client.requestSmsOtp(phone)).resolves.toBeUndefined();
+      await expect(client.requestSmsOtp(phone)).resolves.toBe("sent");
 
       const code = await fetchSmsCode(
         phone,
@@ -626,4 +668,73 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     expect(tokens!.refreshToken).toBeTruthy();
     expect(tokens!.claims.sub).toBe(created.sub);
   }, 45_000);
+
+  // 003 EARS-53 live: the real Zitadel SMS reset. `sendLink` with
+  // NOTIFICATION_TYPE_SMS makes Zitadel generate the code, render the
+  // provisioned `passwordreset` text and hand it to the HTTP SMS provider (the
+  // sink here); the code never reaches the BFF, so it is read from the sink
+  // only, then completes the reset through the same adapter call the BFF uses.
+  it("EARS-53: a reset requested with a confirmed phone on a verified-email account texts the provisioned six-digit code, and completing with it sets the password", async () => {
+    const email = newEmail();
+    const phone = `+1555${String(Date.now()).slice(-7)}`;
+    const created = await client.createUser({
+      email,
+      password: livePassword(),
+      phone,
+    });
+    createdIds.set(email, created.sub);
+    expect(created.alreadyExisted).toBe(false);
+
+    // EARS-53 sends only to an account whose email is verified (EARS-35) and
+    // whose IdP phone is verified; set both, waiting out the projection.
+    await untilProjected(
+      "markEmailVerified(created.sub)",
+      () => client.markEmailVerified(created.sub),
+      (ok) => ok === true,
+    );
+    await untilProjected(
+      "getUser(created.sub).phone",
+      () => client.getUser(created.sub),
+      (user) => !!user?.phone && user.emailVerified,
+    );
+    const verifyAt = new Date().toISOString();
+    await client.requestPhoneVerification(created.sub);
+    const verifyCode = await fetchSmsCode(
+      phone,
+      verifyAt,
+      "user.human.phone.code.added",
+    );
+    expect(verifyCode, "phone-verify SMS should reach the sink").toBeTruthy();
+    expect(await client.verifyPhone(created.sub, verifyCode!)).toBe(true);
+    confirmedPhones.set(phone, created.sub);
+    await untilProjected(
+      "getUser(created.sub).phoneVerified",
+      () => client.getUser(created.sub),
+      (user) => user?.phoneVerified === true,
+    );
+
+    const sentAt = new Date().toISOString();
+    await expect(client.requestSmsPasswordReset(phone)).resolves.toBe("sent");
+    const sms = await fetchResetSms(phone, sentAt);
+    expect(sms, "the reset SMS should reach the sink").toBeTruthy();
+    const match = PASSWORD_RESET_SMS.exec(sms!.body ?? "");
+    expect(
+      match,
+      `the reset SMS should carry the provisioned passwordreset text, got: ${sms!.body ?? ""}`,
+    ).toBeTruthy();
+    const code = match![1] ?? match![2]!;
+    expect(code).toMatch(/^[0-9]{6}$/);
+
+    const newPassword = livePassword();
+    const session = await client.completePasswordReset(
+      phone,
+      code,
+      newPassword,
+    );
+    expect(session, "the SMS code should complete the reset").toBeTruthy();
+    expect(session!.sub).toBe(created.sub);
+    await expect(
+      client.passwordLogin(email, newPassword),
+    ).resolves.toMatchObject({ outcome: "authenticated" });
+  }, 60_000);
 });

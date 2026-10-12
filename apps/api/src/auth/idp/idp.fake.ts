@@ -17,6 +17,8 @@ import {
   type IdpUser,
   type PasswordLoginResult,
   type RevalidateAdminAuthorityInput,
+  type SmsResetOutcome,
+  type SmsSendOutcome,
   type TotpRegistration,
 } from "./idp.types.js";
 import {
@@ -152,6 +154,7 @@ export class FakeIdpClient implements IdpClient {
   private readonly smsOtpChallenges = new Set<string>();
   /** How many times the BFF asked the (native) provider to send an SMS login code — the EARS-14 assertion hinge: a budget-refused send never reaches here. */
   private smsSends = 0;
+  private readonly smsResetSends: string[] = [];
   /**
    * A process-independent namespace keeps fresh fake instances from reusing a
    * retained Postgres mirror's subject on persistent e2e stands. The numeric
@@ -977,15 +980,17 @@ export class FakeIdpClient implements IdpClient {
     return Promise.resolve({ sub: record.sub, verifiedNow: true, session });
   }
 
-  requestSmsOtp(identifier: string): Promise<void> {
+  requestSmsOtp(identifier: string): Promise<SmsSendOutcome> {
     // The BFF calls this only after the EARS-14 budget allows the send, so every
     // call here is a real provider send — count it (the budget-refused path never
     // reaches this method). Whether a challenge is armed still depends on the
-    // identifier existing, but the BFF cannot tell (enumeration-safe, EARS-7/16).
+    // identifier existing; the outcome is a server-side decision only (the
+    // EARS-18 ledger row, the EARS-56 counter), never a response (EARS-7/16).
     this.smsSends++;
     const record = this.findByIdentifier(identifier);
-    if (record) this.smsOtpChallenges.add(record.sub);
-    return Promise.resolve();
+    if (!record) return Promise.resolve("unconfirmed");
+    this.smsOtpChallenges.add(record.sub);
+    return Promise.resolve("sent");
   }
 
   loginWithSmsOtp(
@@ -1049,6 +1054,24 @@ export class FakeIdpClient implements IdpClient {
         // swallowed by design (enumeration-safe void)
       }
     }
+  }
+
+  requestSmsPasswordReset(phone: string): Promise<SmsResetOutcome> {
+    // 003 EARS-53 parity: only a phone an account holds verified, on an account
+    // whose email is verified, is texted the reset code (the real adapter
+    // re-reads the IdP user before the send). The code stays inside the "IdP"
+    // — no mailer, no BFF transit (EARS-30).
+    const record = this.confirmedPhoneRecord(phone);
+    if (!record) return Promise.resolve("unconfirmed");
+    if (!record.emailVerified) return Promise.resolve("email_unverified");
+    this.resetCodes.set(record.sub, FAKE_VALID_CODE);
+    this.smsResetSends.push(phone);
+    return Promise.resolve("sent");
+  }
+
+  /** Test accessor (003 EARS-53): the phones a reset code was texted to, in order. */
+  smsPasswordResetSends(): readonly string[] {
+    return this.smsResetSends;
   }
 
   completePasswordReset(

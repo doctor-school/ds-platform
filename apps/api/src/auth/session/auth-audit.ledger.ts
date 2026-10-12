@@ -164,7 +164,10 @@ export function toLedgerRow(
         subjectId: null,
         sid: null,
         reason: null,
-        metadata: { identifier_hash: mask(event.identifier) },
+        metadata: {
+          identifier_hash: mask(event.identifier),
+          ...(event.channel ? { channel: event.channel } : {}),
+        },
       };
     case "PasswordResetCompleted":
       // Canonical class is `auth.password.{changed, reset_requested}` (ADR-0001

@@ -27,6 +27,7 @@
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span style="font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Ошибка</span>
       <div style="display:flex;border:2px solid {{ hairline }};overflow:hidden"><sc-for list="{{ errTabs }}" as="e" hint-placeholder-count="6"><button onClick="{{ e.onClick }}" style="{{ e.style }}">{{ e.name }}</button></sc-for></div>
+      <sc-if value="{{ isReset }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }};margin-left:6px">Идентификатор</span><div style="display:flex;border:2px solid {{ hairline }};overflow:hidden"><sc-for list="{{ resetIdTabs }}" as="r" hint-placeholder-count="2"><button onClick="{{ r.onClick }}" style="{{ r.style }}">{{ r.name }}</button></sc-for></div></sc-if>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:6px"><sc-for list="{{ docToggles }}" as="g" hint-placeholder-count="2"><button onClick="{{ g.onClick }}" style="{{ g.style }}">{{ g.name }}</button></sc-for></div>
     </div>
   </div>
@@ -126,6 +127,9 @@
                       <button onClick="{{ chEmail }}" data-tab="{{ chEmailOn }}" style="{{ chEmailStyle }}">Эл. почта</button>
                       <button onClick="{{ chSms }}" data-tab="{{ chSmsOn }}" style="{{ chSmsStyle }}">SMS</button>
                     </div>
+                    <sc-if value="{{ chSmsOn }}" hint-placeholder-val="{{ false }}">
+                      <div style="font-size:12.5px;line-height:1.5;color:{{ inkFaint }};margin-top:8px">Код по SMS придёт, только если телефон подтверждён в профиле. Если нет — выберите «Эл. почта».</div>
+                    </sc-if>
                   </div>
                   <div>
                     <label style="{{ fOtpId.labelStyle }}">{{ fOtpId.label }}</label>
@@ -222,12 +226,18 @@
                   <label style="{{ fResetId.labelStyle }}">{{ fResetId.label }}</label>
                   <input type="text" value="{{ fResetId.value }}" onChange="{{ fResetId.onChange }}" onBlur="{{ fResetId.onBlur }}" placeholder="{{ fResetId.placeholder }}" style="{{ fResetId.inputStyle }}">
                   <div style="{{ fResetId.errStyle }}">⚠ {{ fResetId.error }}</div>
+                  <sc-if value="{{ resetIsPhone }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:12.5px;line-height:1.5;color:{{ inkFaint }};margin-top:8px">Код по SMS придёт, только если телефон подтверждён в профиле. Если нет — укажите e-mail.</div>
+                  </sc-if>
                 </div>
                 <button onClick="{{ resetSend }}" data-btn="primary" aria-busy="{{ primaryBusyAttr }}" style="{{ primaryBtn }}">{{ resetSendLabel }}</button>
               </div>
             </sc-if>
             <sc-if value="{{ resetComplete }}" hint-placeholder-val="{{ false }}">
               <div style="display:flex;flex-direction:column;gap:18px">
+                <sc-if value="{{ resetIsPhone }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ resetViaEmail }}" data-link style="{{ linkBtn }};align-self:flex-start;padding:0;margin-top:-10px;text-align:left">Не пришло SMS? Сбросьте пароль по e-mail</button>
+                </sc-if>
                 <div>
                   <label style="display:block;font-size:12px;font-weight:700;color:{{ ink }};margin-bottom:10px">Код из сообщения</label>
                   <div style="display:flex">
@@ -302,11 +312,11 @@ class Component extends DCLogic {
     values: {}, touched: {},
     otp: Array(6).fill(''),
     med: false, partnerConsent: false, marketing: false, submitted: false,
-    partnerLink: false, returnCtx: false,
+    partnerLink: false, returnCtx: false, resetIdent: 'email',
     cooldown: 0, notice: false, verified: false, showPw: false, sending: ''
   };
   componentDidMount() {
-    this.mq = window.matchMedia('(max-width: 900px)');
+    this.mq = window.matchMedia('(max-width: 1023px)');
     this.upd = () => this.setState({ isMobile: this.mq.matches });
     this.upd();
     this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
@@ -317,7 +327,8 @@ class Component extends DCLogic {
   resetSub(extra) {
     return Object.assign({ loginTab: 'password', otpChannel: 'email', otpSent: false, resetStage: 'request', cooldown: 0, notice: false, verified: false, submitted: false, sending: '', values: {}, touched: {}, otp: Array(6).fill('') }, extra || {});
   }
-  go(screen) { this.setState(this.resetSub({ screen })); }
+  resetIdVal(k) { return k === 'phone' ? '+7 913 402-88-71' : 'doctor.ivanova@example.com'; }
+  go(screen) { this.setState(st => this.resetSub(screen === 'reset' ? { screen, values: { resetId: this.resetIdVal(st.resetIdent) } } : { screen })); }
   startCd() { this.setState({ cooldown: 30 }); }
   flash(key) { if (this.sendT) clearTimeout(this.sendT); this.setState({ sending: key }); this.sendT = setTimeout(() => this.setState({ sending: '' }), 1400); }
 
@@ -379,6 +390,7 @@ class Component extends DCLogic {
     const resendStyle = 'font:inherit;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;padding:8px 16px;min-height:35px;line-height:19px;background:transparent;border:0;cursor:' + (s.cooldown > 0 ? 'default' : 'pointer') + ';color:' + linkColor + ';opacity:' + (s.cooldown > 0 ? '.4' : '1') + ';text-underline-offset:4px';
 
     const smsStep = s.screen === 'login' && s.otpChannel === 'sms';
+    const resetIsPhone = /^[+\d]/.test((s.values['resetId'] || '').trim());
     const dest = s.values['otpId'] || s.values['resetId'] || s.values['regEmail'] || (smsStep ? '+7 912 345-67-89' : 'doctor.ivanova@example.com');
     const maskedDest = dest;
     const destEl = R('strong', { style: { overflowWrap: 'anywhere' } }, dest);
@@ -401,7 +413,9 @@ class Component extends DCLogic {
       verify: codeStepHead,
       reset: s.resetStage === 'request'
         ? ['Сброс пароля', 'Укажите e-mail или телефон — пришлём код для сброса.']
-        : ['Новый пароль', R('span', null, 'Код отправлен на ', destEl, '. Введите его и задайте новый пароль.')]
+        : ['Новый пароль', resetIsPhone
+          ? R('span', null, 'Если телефон ', destEl, ' подтверждён в профиле, мы отправили на него код по SMS. Введите его и задайте новый пароль.')
+          : R('span', null, 'Код отправлен на ', destEl, '. Введите его и задайте новый пароль.')]
     };
 
     // Ошибки операции — контекстные по экрану
@@ -566,6 +580,8 @@ class Component extends DCLogic {
       verified: s.verified, notice: s.notice, maskedDest, resendLabel, resendStyle,
       resend: () => { if (s.cooldown > 0) return; this.setState({ notice: true, verified: false, otp: Array(6).fill(''), values: Object.assign({}, s.values, { code: '' }) }); this.startCd(); },
       // сброс
+      resetIsPhone,
+      resetIdTabs: [['e-mail', 'email'], ['телефон', 'phone']].map(([name, k], i) => ({ name, style: pill(s.resetIdent === k, i === 0), onClick: () => this.setState(st => ({ resetIdent: k, values: Object.assign({}, st.values, { resetId: this.resetIdVal(k) }), touched: Object.assign({}, st.touched, { resetId: false }) })) })),
       resetRequest: s.resetStage === 'request', resetComplete: s.resetStage === 'complete',
       fResetId: mkField('resetId', 'Электронная почта или телефон', 'doctor@example.com или +7…', vIdent, 'Заполните это поле.'),
       fResetPw: mkField('resetPw', 'Новый пароль', '', vPw, 'Заполните это поле.'),
@@ -575,6 +591,7 @@ class Component extends DCLogic {
         const v = s.values['resetId'] || '';
         if (emailOk(v) || phoneOk(v)) { this.flash('reset'); setTimeout(() => this.setState({ resetStage: 'complete', notice: false }), 300); this.startCd(); }
       },
+      resetViaEmail: () => this.setState(st => ({ resetStage: 'request', resetIdent: 'email', notice: false, cooldown: 0, submitted: false, otp: Array(6).fill(''), values: Object.assign({}, st.values, { code: '', resetId: this.resetIdVal('email') }), touched: Object.assign({}, st.touched, { resetId: false }) })),
       resetRestart: () => this.setState({ resetStage: 'request', notice: false, cooldown: 0, otp: Array(6).fill(''), values: Object.assign({}, s.values, { code: '' }) }),
       goLogin: () => this.go('login'), goRegister: () => this.go('register'), goReset: () => this.go('reset')
     };

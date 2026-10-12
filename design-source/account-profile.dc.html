@@ -54,8 +54,42 @@
           <!-- Телефон -->
           <div style="{{ rowNext }}">
             <span style="{{ labelCell }}">Телефон</span>
-            <span style="{{ phoneStyle }}">{{ phoneVal }}</span>
-            <span></span>
+            <sc-if value="{{ phDisplay }}" hint-placeholder-val="{{ true }}">
+              <span style="display:flex;flex-direction:column;gap:6px;min-width:0">
+                <span style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0">
+                  <span style="{{ phoneStyle }}">{{ phoneVal }}</span>
+                  <sc-if value="{{ phConfirmed }}" hint-placeholder-val="{{ false }}"><span style="{{ badgeStyle }}">✓ подтверждён</span></sc-if>
+                </span>
+                <sc-if value="{{ phUnconfirmed }}" hint-placeholder-val="{{ false }}"><span style="{{ helperStyle }};margin-top:0">Не подтверждён — подтвердите, чтобы входить по SMS</span></sc-if>
+                <sc-if value="{{ phFromApp }}" hint-placeholder-val="{{ false }}"><span style="{{ helperStyle }};margin-top:0">Из заявки на конгресс — подтвердите, чтобы входить по SMS</span></sc-if>
+                <sc-if value="{{ phNote }}" hint-placeholder-val="{{ false }}"><span role="status" style="{{ phNoteStyle }}"><span style="color:{{ success }}">✓</span>Телефон подтверждён. Теперь можно входить по коду из SMS</span></sc-if>
+              </span>
+              <button onClick="{{ phOpen }}" style="{{ editLink }}">{{ phActionLabel }}</button>
+            </sc-if>
+            <sc-if value="{{ phEntry }}" hint-placeholder-val="{{ false }}">
+              <span style="{{ phEditCell }}">
+                <label for="ph-input" style="font-size:12px;font-weight:700;color:{{ ink }}">Номер телефона</label>
+                <span style="display:flex;gap:10px 16px;flex-wrap:wrap;align-items:center">
+                  <input id="ph-input" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7…" value="{{ phDraft }}" onChange="{{ phOnInput }}" onKeyDown="{{ phOnKey }}" aria-invalid="{{ phEntryErr }}" aria-describedby="ph-err" style="{{ phInputStyle }}">
+                  <button onClick="{{ phSend }}" aria-disabled="{{ phSendDisabled }}" style="{{ phSendStyle }}">Получить код</button>
+                  <button onClick="{{ phCancel }}" style="{{ phLink }}">Отмена</button>
+                </span>
+                <sc-if value="{{ phEntryErr }}" hint-placeholder-val="{{ false }}"><span id="ph-err" role="alert" style="{{ phErrStyle }}">{{ phErrText }}</span></sc-if>
+              </span>
+            </sc-if>
+            <sc-if value="{{ phCode }}" hint-placeholder-val="{{ false }}">
+              <span style="{{ phEditCell }}">
+                <span style="font-size:14px;line-height:1.5;font-weight:600;color:{{ inkMuted }}">Код отправлен по SMS на <b style="color:{{ ink }};white-space:nowrap">{{ phShown }}</b></span>
+                <span role="group" aria-label="Код из SMS" style="display:flex">
+                  <sc-for list="{{ phSlots }}" as="c" hint-placeholder-count="6"><input id="{{ c.id }}" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" aria-label="{{ c.label }}" aria-invalid="{{ phCodeErr }}" value="{{ c.value }}" onChange="{{ c.onChange }}" onKeyDown="{{ c.onKeyDown }}" onPaste="{{ c.onPaste }}" onFocus="{{ c.onFocus }}" onBlur="{{ c.onBlur }}" style="{{ c.style }}"></sc-for>
+                </span>
+                <sc-if value="{{ phCodeErr }}" hint-placeholder-val="{{ false }}"><span role="alert" style="{{ phErrStyle }}">{{ phErrText }}</span></sc-if>
+                <span style="display:flex;align-items:center;gap:8px 24px;flex-wrap:wrap">
+                  <button onClick="{{ phBack }}" style="{{ phBackStyle }}">← Изменить номер</button>
+                  <button onClick="{{ phResend }}" aria-disabled="{{ phResendDisabled }}" style="{{ phResendStyle }}">{{ phResendLabel }}</button>
+                </span>
+              </span>
+            </sc-if>
           </div>
           <!-- Пароль -->
           <a href="auth.dc.html" style="{{ rowNext }};text-decoration:none;cursor:pointer" style-hover="background:{{ hoverBg }}">
@@ -122,10 +156,44 @@
           <span></span>
         </div>
         <div style="{{ rowFlatNext }}">
-          <span style="{{ labelCell }}">Телефон</span>
-          <span style="{{ phoneStyle }}">{{ phoneVal }}</span>
-          <span></span>
-        </div>
+            <span style="{{ labelCell }}">Телефон</span>
+            <sc-if value="{{ phDisplay }}" hint-placeholder-val="{{ true }}">
+              <span style="display:flex;flex-direction:column;gap:6px;min-width:0">
+                <span style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0">
+                  <span style="{{ phoneStyle }}">{{ phoneVal }}</span>
+                  <sc-if value="{{ phConfirmed }}" hint-placeholder-val="{{ false }}"><span style="{{ badgeStyle }}">✓ подтверждён</span></sc-if>
+                </span>
+                <sc-if value="{{ phUnconfirmed }}" hint-placeholder-val="{{ false }}"><span style="{{ helperStyle }};margin-top:0">Не подтверждён — подтвердите, чтобы входить по SMS</span></sc-if>
+                <sc-if value="{{ phFromApp }}" hint-placeholder-val="{{ false }}"><span style="{{ helperStyle }};margin-top:0">Из заявки на конгресс — подтвердите, чтобы входить по SMS</span></sc-if>
+                <sc-if value="{{ phNote }}" hint-placeholder-val="{{ false }}"><span role="status" style="{{ phNoteStyle }}"><span style="color:{{ success }}">✓</span>Телефон подтверждён. Теперь можно входить по коду из SMS</span></sc-if>
+              </span>
+              <button onClick="{{ phOpen }}" style="{{ editLink }}">{{ phActionLabel }}</button>
+            </sc-if>
+            <sc-if value="{{ phEntry }}" hint-placeholder-val="{{ false }}">
+              <span style="{{ phEditCell }}">
+                <label for="ph-input" style="font-size:12px;font-weight:700;color:{{ ink }}">Номер телефона</label>
+                <span style="display:flex;gap:10px 16px;flex-wrap:wrap;align-items:center">
+                  <input id="ph-input" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7…" value="{{ phDraft }}" onChange="{{ phOnInput }}" onKeyDown="{{ phOnKey }}" aria-invalid="{{ phEntryErr }}" aria-describedby="ph-err" style="{{ phInputStyle }}">
+                  <button onClick="{{ phSend }}" aria-disabled="{{ phSendDisabled }}" style="{{ phSendStyle }}">Получить код</button>
+                  <button onClick="{{ phCancel }}" style="{{ phLink }}">Отмена</button>
+                </span>
+                <sc-if value="{{ phEntryErr }}" hint-placeholder-val="{{ false }}"><span id="ph-err" role="alert" style="{{ phErrStyle }}">{{ phErrText }}</span></sc-if>
+              </span>
+            </sc-if>
+            <sc-if value="{{ phCode }}" hint-placeholder-val="{{ false }}">
+              <span style="{{ phEditCell }}">
+                <span style="font-size:14px;line-height:1.5;font-weight:600;color:{{ inkMuted }}">Код отправлен по SMS на <b style="color:{{ ink }};white-space:nowrap">{{ phShown }}</b></span>
+                <span role="group" aria-label="Код из SMS" style="display:flex">
+                  <sc-for list="{{ phSlots }}" as="c" hint-placeholder-count="6"><input id="{{ c.id }}" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" aria-label="{{ c.label }}" aria-invalid="{{ phCodeErr }}" value="{{ c.value }}" onChange="{{ c.onChange }}" onKeyDown="{{ c.onKeyDown }}" onPaste="{{ c.onPaste }}" onFocus="{{ c.onFocus }}" onBlur="{{ c.onBlur }}" style="{{ c.style }}"></sc-for>
+                </span>
+                <sc-if value="{{ phCodeErr }}" hint-placeholder-val="{{ false }}"><span role="alert" style="{{ phErrStyle }}">{{ phErrText }}</span></sc-if>
+                <span style="display:flex;align-items:center;gap:8px 24px;flex-wrap:wrap">
+                  <button onClick="{{ phBack }}" style="{{ phBackStyle }}">← Изменить номер</button>
+                  <button onClick="{{ phResend }}" aria-disabled="{{ phResendDisabled }}" style="{{ phResendStyle }}">{{ phResendLabel }}</button>
+                </span>
+              </span>
+            </sc-if>
+          </div>
 
         <!-- Безопасность -->
         <div style="{{ secHeader }}">
@@ -190,10 +258,44 @@
     <main style="max-width:1104px;width:100%;margin:0 auto;padding:{{ mainPad }};box-sizing:border-box;flex:1">
       <div style="max-width:720px">
         <div style="{{ rowFlat }}">
-          <span style="{{ labelCell }}">Телефон</span>
-          <span style="{{ phoneStyle }}">{{ phoneVal }}</span>
-          <span></span>
-        </div>
+            <span style="{{ labelCell }}">Телефон</span>
+            <sc-if value="{{ phDisplay }}" hint-placeholder-val="{{ true }}">
+              <span style="display:flex;flex-direction:column;gap:6px;min-width:0">
+                <span style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0">
+                  <span style="{{ phoneStyle }}">{{ phoneVal }}</span>
+                  <sc-if value="{{ phConfirmed }}" hint-placeholder-val="{{ false }}"><span style="{{ badgeStyle }}">✓ подтверждён</span></sc-if>
+                </span>
+                <sc-if value="{{ phUnconfirmed }}" hint-placeholder-val="{{ false }}"><span style="{{ helperStyle }};margin-top:0">Не подтверждён — подтвердите, чтобы входить по SMS</span></sc-if>
+                <sc-if value="{{ phFromApp }}" hint-placeholder-val="{{ false }}"><span style="{{ helperStyle }};margin-top:0">Из заявки на конгресс — подтвердите, чтобы входить по SMS</span></sc-if>
+                <sc-if value="{{ phNote }}" hint-placeholder-val="{{ false }}"><span role="status" style="{{ phNoteStyle }}"><span style="color:{{ success }}">✓</span>Телефон подтверждён. Теперь можно входить по коду из SMS</span></sc-if>
+              </span>
+              <button onClick="{{ phOpen }}" style="{{ editLink }}">{{ phActionLabel }}</button>
+            </sc-if>
+            <sc-if value="{{ phEntry }}" hint-placeholder-val="{{ false }}">
+              <span style="{{ phEditCell }}">
+                <label for="ph-input" style="font-size:12px;font-weight:700;color:{{ ink }}">Номер телефона</label>
+                <span style="display:flex;gap:10px 16px;flex-wrap:wrap;align-items:center">
+                  <input id="ph-input" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7…" value="{{ phDraft }}" onChange="{{ phOnInput }}" onKeyDown="{{ phOnKey }}" aria-invalid="{{ phEntryErr }}" aria-describedby="ph-err" style="{{ phInputStyle }}">
+                  <button onClick="{{ phSend }}" aria-disabled="{{ phSendDisabled }}" style="{{ phSendStyle }}">Получить код</button>
+                  <button onClick="{{ phCancel }}" style="{{ phLink }}">Отмена</button>
+                </span>
+                <sc-if value="{{ phEntryErr }}" hint-placeholder-val="{{ false }}"><span id="ph-err" role="alert" style="{{ phErrStyle }}">{{ phErrText }}</span></sc-if>
+              </span>
+            </sc-if>
+            <sc-if value="{{ phCode }}" hint-placeholder-val="{{ false }}">
+              <span style="{{ phEditCell }}">
+                <span style="font-size:14px;line-height:1.5;font-weight:600;color:{{ inkMuted }}">Код отправлен по SMS на <b style="color:{{ ink }};white-space:nowrap">{{ phShown }}</b></span>
+                <span role="group" aria-label="Код из SMS" style="display:flex">
+                  <sc-for list="{{ phSlots }}" as="c" hint-placeholder-count="6"><input id="{{ c.id }}" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" aria-label="{{ c.label }}" aria-invalid="{{ phCodeErr }}" value="{{ c.value }}" onChange="{{ c.onChange }}" onKeyDown="{{ c.onKeyDown }}" onPaste="{{ c.onPaste }}" onFocus="{{ c.onFocus }}" onBlur="{{ c.onBlur }}" style="{{ c.style }}"></sc-for>
+                </span>
+                <sc-if value="{{ phCodeErr }}" hint-placeholder-val="{{ false }}"><span role="alert" style="{{ phErrStyle }}">{{ phErrText }}</span></sc-if>
+                <span style="display:flex;align-items:center;gap:8px 24px;flex-wrap:wrap">
+                  <button onClick="{{ phBack }}" style="{{ phBackStyle }}">← Изменить номер</button>
+                  <button onClick="{{ phResend }}" aria-disabled="{{ phResendDisabled }}" style="{{ phResendStyle }}">{{ phResendLabel }}</button>
+                </span>
+              </span>
+            </sc-if>
+          </div>
         <a href="auth.dc.html" style="{{ rowFlatNext }};text-decoration:none;cursor:pointer" style-hover="background:{{ hoverBg }}">
           <span style="{{ labelCell }}">Пароль</span>
           <span style="min-width:0">
@@ -222,7 +324,7 @@
   </dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:900},&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Анкета&quot;,&quot;Разделы&quot;,&quot;Визитка&quot;],&quot;default&quot;:&quot;Разделы&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Композиция&quot;},&quot;phoneFilled&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Данные&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:900},&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Анкета&quot;,&quot;Разделы&quot;,&quot;Визитка&quot;],&quot;default&quot;:&quot;Разделы&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Композиция&quot;},&quot;phone&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;не указан&quot;,&quot;из заявки&quot;,&quot;ввод номера&quot;,&quot;код отправлен&quot;,&quot;не подтверждён&quot;,&quot;подтверждён&quot;],&quot;default&quot;:&quot;из заявки&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Телефон&quot;},&quot;error&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;нет&quot;,&quot;неверный код&quot;,&quot;лимит&quot;],&quot;default&quot;:&quot;нет&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Телефон&quot;},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Тема&quot;}}">
 class Component extends DCLogic {
   state = {
     dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
@@ -232,15 +334,34 @@ class Component extends DCLogic {
     nameDraft: ''
   };
   componentDidMount() {
-    this.mq = window.matchMedia('(max-width: 900px)');
+    this.seed();
+    if (this.props.dark !== undefined) this.setState({ dark: !!this.props.dark });
+    this.timer = setInterval(() => this.setState(s => (s.cooldown > 0 ? { cooldown: s.cooldown - 1 } : null)), 1000);
+    this.mq = window.matchMedia('(max-width: 1023px)');
     this.upd = () => this.setState({ isMobile: this.mq.matches });
     this.upd();
     this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
   }
+  componentWillUnmount() { clearInterval(this.timer); }
+  componentDidUpdate(pp) {
+    if (pp.phone !== this.props.phone || pp.error !== this.props.error) this.seed();
+    if (pp.dark !== this.props.dark && this.props.dark !== undefined) this.setState({ dark: !!this.props.dark });
+  }
+  errProp() { return ({ 'нет': '', 'неверный код': 'wrong', 'лимит': 'limit' })[this.props.error ?? 'нет'] || ''; }
+  seed() {
+    const APP = '+7 913 402-88-71';
+    const phase = ({ 'не указан': 'none', 'из заявки': 'app', 'ввод номера': 'entry', 'код отправлен': 'code', 'не подтверждён': 'unconfirmed', 'подтверждён': 'confirmed' })[this.props.phone ?? 'из заявки'] || 'app';
+    const err = this.errProp();
+    this.setState({
+      phase, prevPhase: phase === 'entry' ? 'none' : phase === 'code' ? 'app' : phase,
+      draft: phase === 'code' ? APP : '', phone: APP, cooldown: phase === 'code' ? 59 : 0, err, justConfirmed: false, codeRequested: phase === 'code',
+      otp: phase === 'code' && err === 'wrong' ? '481920'.split('') : Array(6).fill('')
+    });
+  }
+  focusLater(id) { setTimeout(() => { const el = document.getElementById(id); if (el) el.focus(); }, 30); }
   renderVals() {
     const d = this.state.dark, m = this.state.isMobile;
     const variant = this.props.variant ?? 'Анкета';
-    const phoneFilled = this.props.phoneFilled ?? false;
 
     const ink = d ? '#fff' : 'oklch(.21 .02 250)';
     const surface = d ? 'oklch(.21 .02 250)' : '#fff';
@@ -307,13 +428,87 @@ class Component extends DCLogic {
 
     const editing = this.state.editing;
 
+    // ── Телефон ──
+    const s = this.state;
+    const phase = s.phase || 'app';
+    const otp = s.otp || Array(6).fill('');
+    const digitsOf = (v) => { let x = (v || '').replace(/\D/g, ''); if (x.length === 10) x = '7' + x; if (x[0] === '8') x = '7' + x.slice(1); return x; };
+    const fmt = (v) => { const x = digitsOf(v); return x.length === 11 ? '+7 ' + x.slice(1, 4) + ' ' + x.slice(4, 7) + '-' + x.slice(7, 9) + '-' + x.slice(9, 11) : (v || ''); };
+    const draftOk = digitsOf(s.draft).length === 11;
+    const errText = { wrong: 'Неверный код', limit: 'Слишком много попыток. Попробуйте позже' }[s.err] || '';
+    const entryErr = phase === 'entry' && s.err === 'limit';
+    const codeErr = phase === 'code' && (s.err === 'wrong' || s.err === 'limit');
+    const verify = (code) => {
+      const ep = this.errProp();
+      if (ep === 'wrong' || ep === 'limit') { this.setState({ err: ep }); return; }
+      this.setState(st => ({ phase: 'confirmed', phone: fmt(st.draft), justConfirmed: true, err: '', cooldown: 0, codeRequested: false }));
+    };
+    const send = () => {
+      if (!draftOk) { this.focusLater('ph-input'); return; }
+      const ep = this.errProp();
+      if (ep === 'limit') { this.setState({ err: ep }); return; }
+      this.setState({ phase: 'code', err: '', cooldown: 59, otp: Array(6).fill(''), codeRequested: true });
+      this.focusLater('pcode-0');
+    };
+    const toUnconfirmed = () => this.setState(st => ({ phase: 'unconfirmed', phone: fmt(st.draft) || st.phone, err: '', cooldown: 0, otp: Array(6).fill('') }));
+    const cancel = () => s.codeRequested ? toUnconfirmed() : this.setState(st => ({ phase: st.prevPhase || 'none', err: '' }));
+    const setOtp = (next, focusIdx) => {
+      this.setState({ otp: next, err: s.err === 'wrong' ? '' : s.err });
+      if (focusIdx != null) { const el = document.getElementById('pcode-' + focusIdx); if (el) el.focus(); }
+      if (next.every(Boolean)) verify(next.join(''));
+    };
+    const fillFrom = (i, digits) => { const next = otp.slice(); digits.slice(0, 6 - i).split('').forEach((d2, k) => { next[i + k] = d2; }); setOtp(next, Math.min(i + digits.length, 5)); };
+    const cellPx = m ? 44 : 40;
+    const phSlots = Array.from({ length: 6 }, (_, i) => ({
+      id: 'pcode-' + i, label: 'Цифра ' + (i + 1) + ' из 6', value: otp[i] || '',
+      onChange: (e) => {
+        const raw = e.target.value || '', dg = raw.replace(/\D/g, '');
+        if (!raw) { const next = otp.slice(); next[i] = ''; this.setState({ otp: next }); return; }
+        if (!dg) return;
+        if (dg.length > 1) { fillFrom(i, dg); return; }
+        const next = otp.slice(); next[i] = dg; setOtp(next, i < 5 ? i + 1 : null);
+      },
+      onFocus: () => this.setState({ focusCell: i }),
+      onBlur: () => this.setState(st => (st.focusCell === i ? { focusCell: -1 } : null)),
+      onKeyDown: (e) => { if (e.key === 'Backspace' && !otp[i] && i > 0) { const p = document.getElementById('pcode-' + (i - 1)); if (p) p.focus(); } },
+      onPaste: (e) => { e.preventDefault(); const dg = ((e.clipboardData && e.clipboardData.getData('text')) || '').replace(/\D/g, ''); if (dg) fillFrom(i, dg); },
+      style: 'width:' + cellPx + 'px;height:' + cellPx + 'px;box-sizing:border-box;text-align:center;font:inherit;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;border-radius:0;border:2px solid ' + (codeErr && s.err === 'wrong' ? destructive : otp[i] ? border : hairline) + ';background:' + surface + ';color:' + ink + (i > 0 ? ';margin-left:-2px' : '') + (s.focusCell === i ? ';position:relative;z-index:3' : otp[i] || codeErr ? ';position:relative;z-index:1' : '')
+    }));
+    const resendOff = s.cooldown > 0 || s.err === 'limit';
+    const phLink = 'font:inherit;background:none;border:0;cursor:pointer;font-size:13.5px;font-weight:800;color:' + accent + ';text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;padding:8px 0;white-space:nowrap';
+
     return {
       dark: d, isMobile: m, isDesktop: !m,
       isAnketa: variant === 'Анкета', isSections: variant === 'Разделы', isMasthead: variant === 'Визитка',
       name, initials,
       email: 'v.kovalev@omgmu.ru',
-      phoneVal: phoneFilled ? '+7 913 402-88-71' : 'не указан',
-      phoneStyle: phoneFilled ? valueStyle : 'font-size:16px;font-weight:600;color:' + inkFaint,
+      phoneVal: phase === 'none' ? 'не указан' : s.phone,
+      phoneStyle: phase === 'none' ? 'font-size:16px;font-weight:600;color:' + inkFaint : valueStyle,
+      phDisplay: phase === 'none' || phase === 'app' || phase === 'unconfirmed' || phase === 'confirmed',
+      phEntry: phase === 'entry', phCode: phase === 'code',
+      phConfirmed: phase === 'confirmed', phFromApp: phase === 'app', phUnconfirmed: phase === 'unconfirmed', phNote: phase === 'confirmed' && !!s.justConfirmed,
+      phActionLabel: phase === 'none' ? 'Добавить' : (phase === 'app' || phase === 'unconfirmed') ? 'Подтвердить' : 'Изменить',
+      phOpen: () => { this.setState(st => ({ prevPhase: st.phase, phase: 'entry', draft: (st.phase === 'app' || st.phase === 'unconfirmed') ? st.phone : '', err: '', justConfirmed: false })); this.focusLater('ph-input'); },
+      phDraft: s.draft || '',
+      phOnInput: (e) => this.setState({ draft: e.target.value, err: '' }),
+      phOnKey: (e) => { if (e.key === 'Enter') send(); if (e.key === 'Escape') cancel(); },
+      phSend: send, phCancel: cancel,
+      phSendDisabled: !draftOk,
+      phSendStyle: btnPrimary + (draftOk ? '' : ';opacity:.45;cursor:default'),
+      phInputStyle: inputStyle + ';flex:0 1 260px' + (entryErr ? ';border-color:' + destructive : ''),
+      phEditCell: 'grid-column:' + (m ? '1/-1' : '2/-1') + ';display:flex;flex-direction:column;gap:12px;min-width:0',
+      phLink,
+      phBackStyle: 'font:inherit;background:none;border:0;cursor:pointer;font-size:13.5px;font-weight:700;color:' + ink + ';padding:8px 0;white-space:nowrap',
+      phResendStyle: 'font:inherit;background:none;border:0;font-size:13.5px;font-weight:800;font-variant-numeric:tabular-nums;padding:8px 0;white-space:nowrap;cursor:' + (resendOff ? 'default' : 'pointer') + ';color:' + (resendOff ? inkFaint : accent) + (resendOff ? '' : ';text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px'),
+      phResendLabel: s.cooldown > 0 ? 'Отправить снова · ' + s.cooldown + ' с' : 'Отправить снова',
+      phResendDisabled: resendOff,
+      phResend: () => { if (resendOff) return; this.setState({ cooldown: 59, otp: Array(6).fill(''), err: '' }); this.focusLater('pcode-0'); },
+      phBack: toUnconfirmed,
+      phShown: fmt(s.draft) || s.phone,
+      phSlots, phEntryErr: entryErr, phCodeErr: codeErr, phErrText: errText,
+      phErrStyle: 'font-size:13px;line-height:1.45;font-weight:700;color:' + destructive,
+      phNoteStyle: 'display:flex;gap:8px;align-items:center;font-size:13px;line-height:1.4;font-weight:700;color:' + ink + ';border:2px solid ' + success + ';padding:8px 12px;margin-top:4px;width:fit-content;max-width:100%;box-sizing:border-box',
+      success,
       editing, notEditing: !editing,
       nameDraft: this.state.nameDraft,
       startEdit: () => this.setState({ editing: true, nameDraft: this.state.name }),

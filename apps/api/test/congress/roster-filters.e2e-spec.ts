@@ -268,7 +268,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       await deskEntry("D", {
         surname: "Елкина",
-        workplace: "ГКБ №15",
+        workplace: "ГКБ №15 Семёновская",
         city: "Ярославль",
         region: "Ярославская область",
         contactPhone: "+7 (900) 050-00-00",
@@ -302,6 +302,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await rows(`workplace=${enc("кардиол")}`)).toBe("C");
     });
 
+    it("044 EARS-23.17: ФИО and место работы treat «ё» and «е» as one letter on both sides", async () => {
+      // B is «Ёлкина», D is «Елкина».
+      expect(await rows(`name=${enc("Елкина")}`)).toBe("BD");
+      expect(await rows(`name=${enc("ёлкина")}`)).toBe("BD");
+      // D works at «ГКБ №15 Семёновская».
+      expect(await rows(`workplace=${enc("Семеновская")}`)).toBe("D");
+      expect(await rows(`workplace=${enc("семёнов")}`)).toBe("D");
+    });
+
     it("044 EARS-23.3: email — a column EARS-37 moved to the card — still filters by a case-insensitive «contains»", async () => {
       expect(await rows(`email=${enc(`FLT${run}-B`)}`)).toBe("B");
       expect(await rows(`email=${enc(`flt${run}-`)}`)).toBe("ABCD");
@@ -317,6 +326,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await rows(`phone=${enc("900")}`)).toBe("ABCD");
       // A term with no digit at all cannot be a phone filter.
       expect((await rosterRaw(`phone=${enc("abc")}`)).statusCode).toBe(400);
+    });
+
+    it("044 EARS-23.16: телефон — a FRAGMENT typed with the domestic leading «8» matches like «+7», as the main search does", async () => {
+      // «8 900» is the start of a number written domestically: +7 900 …
+      expect(await rows(`phone=${enc("8 900")}`)).toBe("ABCD");
+      expect(await rows(`phone=${enc("8 (900) 05")}`)).toBe("D");
+      // The full domestic number is the whole normalised number.
+      expect(await rows(`phone=${enc("89000500000")}`)).toBe("D");
+      // A bare fragment stays a «contains» anywhere in the digits.
+      expect(await rows(`phone=${enc("900")}`)).toBe("ABCD");
+      expect(await rows(`phone=${enc("0500")}`)).toBe("D");
+      // The main search applies the SAME rule to its phone arm.
+      expect(await rows(`q=${enc("8 (900) 05")}`)).toBe("D");
     });
 
     it("044 EARS-23.15: телефон of a platform-origin row (no congress answer) filters and sorts by the SAME normalised number the row displays — a stored «8 …» is found by «+7 …»", async () => {

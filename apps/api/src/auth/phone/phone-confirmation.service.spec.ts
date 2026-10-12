@@ -269,6 +269,67 @@ describe("PhoneConfirmationService", () => {
     expect(mailer.phoneConfirmedNotices).toEqual([]);
   });
 
+  it("EARS-48: a number set between the verify and the user read is never written as confirmed", async () => {
+    const { idp, mirror, mailer, service, types } = setup();
+    await service.requestCode(SUB, P, CTX);
+    // A concurrent request for Q lands after the code for P is accepted and
+    // before the confirmation reads the IdP user back.
+    const verify = idp.verifyPhone.bind(idp);
+    idp.verifyPhone = async (sub, code) => {
+      const ok = await verify(sub, code);
+      await idp.setPhone(sub, Q, "sms");
+      return ok;
+    };
+    const err = await service.confirm(SUB, FAKE_VALID_CODE).catch((e) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).message).toBe(
+      "the request could not be completed",
+    );
+    expect(mirror.accounts.get(SUB)).toMatchObject({
+      phone: null,
+      phoneVerified: false,
+    });
+    expect(await mirror.confirmedOwner(Q)).toBeNull();
+    expect(types()).not.toContain("PhoneConfirmed");
+    expect(mailer.phoneConfirmedNotices).toEqual([]);
+  });
+
+  it("EARS-48: a read that lags the accepted code is re-read briefly before the phone is written", async () => {
+    const { idp, mirror, service } = setup();
+    await service.requestCode(SUB, P, CTX);
+    const read = idp.getUser.bind(idp);
+    let reads = 0;
+    idp.getUser = async (sub) => {
+      const user = await read(sub);
+      // The first read after the verify still shows the number unverified.
+      reads += 1;
+      return user && reads === 2 ? { ...user, phoneVerified: false } : user;
+    };
+    expect(await service.confirm(SUB, FAKE_VALID_CODE)).toEqual({
+      status: "confirmed",
+      phone: P,
+    });
+    expect(mirror.accounts.get(SUB)).toMatchObject({
+      phone: P,
+      phoneVerified: true,
+    });
+  });
+
+  it("EARS-48: a phone the IdP never reports verified is the generic failure and writes nothing", async () => {
+    const { idp, mirror, service, types } = setup();
+    await service.requestCode(SUB, P, CTX);
+    const read = idp.getUser.bind(idp);
+    idp.getUser = async (sub) => {
+      const user = await read(sub);
+      return user ? { ...user, phoneVerified: false } : user;
+    };
+    await expect(service.confirm(SUB, FAKE_VALID_CODE)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(mirror.accounts.get(SUB)?.phone).toBeNull();
+    expect(types()).not.toContain("PhoneConfirmed");
+  });
+
   it("EARS-52: a mailer failure never alters the confirmation response", async () => {
     const { mailer, service } = setup();
     mailer.sendPhoneConfirmedNotice = () => Promise.reject(new Error("smtp"));

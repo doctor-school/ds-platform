@@ -49,6 +49,10 @@ export function phoneAccountLimitKey(sub: string): string {
   return `account:${sub}`;
 }
 
+/** EARS-48: the bounded re-read of an IdP user lagging an accepted code. */
+const VERIFIED_READ_ATTEMPTS = 3;
+const VERIFIED_READ_INTERVAL_MS = 100;
+
 const throttled = (): HttpException =>
   new HttpException(GENERIC_THROTTLED, HttpStatus.TOO_MANY_REQUESTS);
 
@@ -178,6 +182,25 @@ export class PhoneConfirmationService {
     }
   }
 
+  /**
+   * EARS-48: whether the IdP user holds `phone` verified after an accepted
+   * code. The user read can lag the verify (Zitadel projections), so an
+   * unverified read of the SAME number is re-read a bounded few times; a
+   * different or absent number is a definite no.
+   */
+  private async idpHoldsVerified(sub: string, phone: string): Promise<boolean> {
+    for (let attempt = 1; ; attempt++) {
+      const after = await this.idp.getUser(sub);
+      if (!after) throw new ServiceUnavailableException(GENERIC_UNAVAILABLE);
+      if (after.phone !== phone) return false;
+      if (after.phoneVerified) return true;
+      if (attempt >= VERIFIED_READ_ATTEMPTS) return false;
+      await new Promise((resolve) =>
+        setTimeout(resolve, VERIFIED_READ_INTERVAL_MS),
+      );
+    }
+  }
+
   /** EARS-48: confirm the code; on success write the confirmed phone. */
   async confirm(sub: string, code: string): Promise<ConfirmPhoneResponse> {
     const key = phoneAccountLimitKey(sub);
@@ -188,17 +211,22 @@ export class PhoneConfirmationService {
     const account = await this.mirror.account(sub);
     if (!account) throw new UnauthorizedException("authentication required");
 
-    const verified = await this.idp.verifyPhone(sub, submitted);
-    if (!verified) throw new BadRequestException(GENERIC_FAILURE);
+    // EARS-48: the number the code was issued for is read BEFORE the verify and
+    // must still be the IdP's phone, verified, AFTER it. A concurrent request
+    // that sets another number before the verify invalidates the code; one that
+    // lands after it changes the phone the re-read sees — both are refused, so
+    // a number the IdP never verified is never written as confirmed.
+    const before = await this.idp.getUser(sub);
+    if (!before) throw new ServiceUnavailableException(GENERIC_UNAVAILABLE);
 
-    // The accepted code proves the IdP now holds its phone verified; the read
-    // model can lag that write (Zitadel projections), so the number is taken
-    // from the user read without waiting for its verified flag.
-    const idpUser = await this.idp.getUser(sub);
-    if (!idpUser?.phone) {
-      throw new ServiceUnavailableException(GENERIC_UNAVAILABLE);
+    const verified = await this.idp.verifyPhone(sub, submitted);
+    if (!verified || !before.phone) {
+      throw new BadRequestException(GENERIC_FAILURE);
     }
-    const phone = idpUser.phone;
+    const phone = before.phone;
+    if (!(await this.idpHoldsVerified(sub, phone))) {
+      throw new BadRequestException(GENERIC_FAILURE);
+    }
     // EARS-48/51: losing the UNIQUE race to another account's earlier
     // confirmation writes nothing and answers like a wrong code — and the
     // number is dropped from this IdP user, so the IdP never holds a verified

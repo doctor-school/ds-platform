@@ -168,6 +168,9 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "EventProgrammeSection", section: "blocks" },
   { id: "EventPageKicker", section: "blocks" },
   { id: "FilterBar", section: "blocks" },
+  // 044 EARS-23 — the «Все фильтры» panel's debounced text control, shown
+  // inside the FilterBar more-filters preview (#2317).
+  { id: "FilterBarTextField", section: "blocks" },
 
   // ── Events facet panel (019 EARS-7, #1522) — the ONE shared events-filter
   // panel of both storefronts, catalogued per host facet set (doctor · Академия).

@@ -799,10 +799,23 @@ jobs:
       # they deliberately carry placeholder/broken links (a MEMORY.md index
       # fixture, #293) and verbatim PR bodies with session URLs (#2491), so no
       # file in that tree is a link-check input (#2494).
+      #
+      # GitHub source citations (`github.com/<owner>/<repo>/blob/<ref>/<path>`)
+      # are checked through `raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>`
+      # (`--remap`, #2747): GitHub's HTML blob view answers the hosted runner with
+      # HTTP 503 across whole runs, while the raw endpoint serves the same file at
+      # the same ref and still 404s a wrong owner/repo/ref/path. The `#L…` fragment
+      # is dropped — a raw text file has no anchors to verify. lychee applies the
+      # remap BEFORE the `.lycheeignore` match, so excluded URLs need their raw
+      # form listed there too (see the self-URL entry).
       - name: markdown-links
         uses: lycheeverse/lychee-action@v2
         with:
-          args: --no-progress --include-fragments --exclude-path tools/lint/guard-tests/fixtures/ .
+          args: >-
+            --no-progress --include-fragments
+            --exclude-path tools/lint/guard-tests/fixtures/
+            --remap '^https://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/([^#]+)(#.*)?$ https://raw.githubusercontent.com/$1/$2/$3/$4'
+            .
           fail: true
 
   # ─── WARN light guards ────────────────────────────────────────────────

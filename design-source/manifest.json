@@ -81,10 +81,10 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "account-profile.dc.html": {
-      "sha256": "1626cb2723b8932a0ea544e4afad6411661acbcc18ee7d6c1e5e86fa7e2bf2d9",
-      "pulledAt": "2026-09-28",
+      "sha256": "fa4b13b66bdc888ec1c9f8c03ddfe1e8d0e46f3389078aff52a20bbdd96c9f96",
+      "pulledAt": "2026-10-12T03:54:59.477Z",
       "remotePath": null,
-      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+      "note": "#2449 Stage A: owner redraw 2026-10-12 — phone row confirm flow; SMS hint + truthful reset step"
     },
     "archive/archive-auth-v1.dc.html": {
       "sha256": "1bdd6860724481d8461e0c72c21f84076ba24d7cc627e3664b420749d2337def",
@@ -122,10 +122,10 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "auth.dc.html": {
-      "sha256": "3cb16ec5174b176822736498c0ff513af55e0093bd452e47bfa2302f82e1ae2f",
-      "pulledAt": "2026-10-07T12:29:09.941Z",
-      "remotePath": "auth.dc.html",
-      "note": "lead mechanical copy edit via DesignSync 2026-10-07, owner decision А on #2468: return-context assurance line drops «— место за вами»"
+      "sha256": "7c1a263543a558dc51260019992a68279f9ef90322d0c21ceefc36173ad9b8d9",
+      "pulledAt": "2026-10-12T03:54:59.477Z",
+      "remotePath": null,
+      "note": "#2449 Stage A: owner redraw 2026-10-12 — phone row confirm flow; SMS hint + truthful reset step"
     },
     "doctor-cabinet.dc.html": {
       "sha256": "767892897620823bbf623c3a7b9e63a790e1a422725646997003eee47b7bb915",

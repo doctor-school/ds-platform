@@ -164,10 +164,12 @@ export type {
 } from "./event-list";
 export { EmptyState } from "./empty-state";
 export type { EmptyStateProps, EmptyStateVariant } from "./empty-state";
-export { FilterBar } from "./filter-bar";
+export { FilterBar, FilterBarTextField } from "./filter-bar";
 export type {
   FilterBarProps,
   FilterBarApplyMode,
+  FilterBarMoreFilters,
+  FilterBarTextFieldProps,
   AppliedFilter,
 } from "./filter-bar";
 // 019 EARS-7 — the ONE shared events facet panel (events-facets.dc.html);

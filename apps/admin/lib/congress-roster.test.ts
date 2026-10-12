@@ -16,6 +16,12 @@ import {
   rosterSortHref,
   rosterSortKeyOf,
   rosterSortQuery,
+  rosterFiltersAppliedCount,
+  rosterFiltersFromAddress,
+  rosterFiltersHref,
+  rosterFiltersQuery,
+  rosterRegisteredRange,
+  ROSTER_FILTERS_EMPTY,
 } from "./congress-roster";
 import {
   congressAttendanceUrl,
@@ -330,5 +336,112 @@ describe("044 EARS-22 server sort state", () => {
     ).toBe(
       "/v1/admin/events/e1/roster?page=1&pageSize=20&attendanceDay=2026-04-23&sort=presence&dir=desc",
     );
+  });
+});
+
+/**
+ * 044 EARS-23 — the per-column roster filters (owner layout F1, #2316): one pure
+ * mapper between the address, the screen state and the roster GET.
+ */
+describe("044 EARS-23 roster column filters", () => {
+  const SPECIALTY = "6f1c2b9e-1d2a-4c3b-9e8f-0a1b2c3d4e5f";
+
+  it("044 EARS-23: reads every filter from the address, trimmed; an unknown value reads as no filter", () => {
+    const filters = rosterFiltersFromAddress(
+      new URLSearchParams(
+        `name=%20Иванова%20&workplace=ГКБ&city=Химки&region=Московская%20область&phone=926&email=mail.ru&specialtyId=${SPECIALTY}&mailStatus=failed&registeredFrom=2026-10-01&registeredTo=2026-10-15&q=x&sort=city`,
+      ),
+    );
+    expect(filters).toEqual({
+      name: "Иванова",
+      workplace: "ГКБ",
+      city: "Химки",
+      region: "Московская область",
+      phone: "926",
+      email: "mail.ru",
+      specialtyId: SPECIALTY,
+      mailStatus: "failed",
+      registeredFrom: "2026-10-01",
+      registeredTo: "2026-10-15",
+    });
+    expect(
+      rosterFiltersFromAddress(
+        new URLSearchParams(
+          "mailStatus=bounced&specialtyId=not-a-uuid&registeredFrom=01.10.2026",
+        ),
+      ),
+    ).toEqual(ROSTER_FILTERS_EMPTY);
+  });
+
+  it("044 EARS-23: writes the filters into the address, dropping blanks and keeping the rest of the query", () => {
+    expect(
+      rosterFiltersHref(
+        "/events/e1/roster",
+        "sort=city&dir=desc&name=old&registration=r1",
+        { ...ROSTER_FILTERS_EMPTY, workplace: " ГКБ ", city: "Химки" },
+      ),
+    ).toBe(
+      "/events/e1/roster?sort=city&dir=desc&registration=r1&workplace=%D0%93%D0%9A%D0%91&city=%D0%A5%D0%B8%D0%BC%D0%BA%D0%B8",
+    );
+    expect(
+      rosterFiltersHref("/events/e1/roster", "name=x", ROSTER_FILTERS_EMPTY),
+    ).toBe("/events/e1/roster");
+  });
+
+  it("044 EARS-23: sends only applied filters, never a digit-less phone", () => {
+    expect(rosterFiltersQuery(ROSTER_FILTERS_EMPTY)).toEqual({});
+    expect(
+      rosterFiltersQuery({
+        ...ROSTER_FILTERS_EMPTY,
+        name: "Иван",
+        phone: "+ (",
+        mailStatus: "none",
+        specialtyId: SPECIALTY,
+      }),
+    ).toEqual({ name: "Иван", mailStatus: "none", specialtyId: SPECIALTY });
+    expect(
+      rosterFiltersQuery({ ...ROSTER_FILTERS_EMPTY, phone: "8 926" }),
+    ).toEqual({ phone: "8 926" });
+  });
+
+  it("044 EARS-23: an inverted date range is sent in order, never as the route's 400", () => {
+    expect(
+      rosterFiltersQuery({
+        ...ROSTER_FILTERS_EMPTY,
+        registeredFrom: "2026-10-15",
+        registeredTo: "2026-10-01",
+      }),
+    ).toEqual({ registeredFrom: "2026-10-01", registeredTo: "2026-10-15" });
+    expect(
+      rosterFiltersQuery({ ...ROSTER_FILTERS_EMPTY, registeredTo: "2026-10-01" }),
+    ).toEqual({ registeredTo: "2026-10-01" });
+  });
+
+  it("044 EARS-23: counts applied filters for the toggle badge — the date range is one filter", () => {
+    expect(rosterFiltersAppliedCount(ROSTER_FILTERS_EMPTY)).toBe(0);
+    expect(
+      rosterFiltersAppliedCount({
+        ...ROSTER_FILTERS_EMPTY,
+        specialtyId: SPECIALTY,
+        workplace: "ГКБ",
+        phone: "(",
+        registeredFrom: "2026-10-01",
+        registeredTo: "2026-10-15",
+      }),
+    ).toBe(3);
+  });
+
+  it("044 EARS-23: the date-range chip reads in Moscow days, ordered, with open ends", () => {
+    expect(
+      rosterRegisteredRange({
+        ...ROSTER_FILTERS_EMPTY,
+        registeredFrom: "2026-10-15",
+        registeredTo: "2026-10-01",
+      }),
+    ).toEqual({ from: "01.10.2026", to: "15.10.2026" });
+    expect(
+      rosterRegisteredRange({ ...ROSTER_FILTERS_EMPTY, registeredFrom: "2026-10-01" }),
+    ).toEqual({ from: "01.10.2026", to: "" });
+    expect(rosterRegisteredRange(ROSTER_FILTERS_EMPTY)).toBeNull();
   });
 });

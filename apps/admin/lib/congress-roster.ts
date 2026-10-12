@@ -1,5 +1,7 @@
 import {
   CONGRESS_ROSTER_SORT_DEFAULT,
+  CongressRosterMailStatusFilterSchema,
+  type CongressRosterMailStatusFilter,
   CongressRosterSortDirSchema,
   CongressRosterSortKeySchema,
   type CongressRosterRow,
@@ -205,6 +207,145 @@ export function rosterSortQuery(sort: RosterSort): {
   dir: CongressRosterSortDir;
 } {
   return { sort: sort.key, dir: sort.direction };
+}
+
+/**
+ * 044 EARS-23 — the per-column filters (owner layout F1, #2316). They live in
+ * the ADDRESS under the route's own param names, so a filtered roster is
+ * linkable and survives a reload; `""` = not applied.
+ */
+export const ROSTER_FILTER_KEYS = [
+  "name",
+  "workplace",
+  "city",
+  "region",
+  "phone",
+  "email",
+  "specialtyId",
+  "mailStatus",
+  "registeredFrom",
+  "registeredTo",
+] as const;
+export type RosterFilterKey = (typeof ROSTER_FILTER_KEYS)[number];
+
+export type RosterColumnFilters = Record<
+  Exclude<RosterFilterKey, "mailStatus">,
+  string
+> & { mailStatus: CongressRosterMailStatusFilter | "" };
+
+export const ROSTER_FILTERS_EMPTY: RosterColumnFilters = {
+  name: "",
+  workplace: "",
+  city: "",
+  region: "",
+  phone: "",
+  email: "",
+  specialtyId: "",
+  mailStatus: "",
+  registeredFrom: "",
+  registeredTo: "",
+};
+
+const CALENDAR_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The filters the address asks for; a value the route would refuse (an unknown
+ * mail status, a malformed id or day) reads as not applied.
+ */
+export function rosterFiltersFromAddress(
+  params: URLSearchParams,
+): RosterColumnFilters {
+  const read = (key: RosterFilterKey) => (params.get(key) ?? "").trim();
+  const mail = CongressRosterMailStatusFilterSchema.safeParse(
+    read("mailStatus"),
+  );
+  const day = (key: RosterFilterKey) =>
+    CALENDAR_DAY.test(read(key)) ? read(key) : "";
+  return {
+    name: read("name"),
+    workplace: read("workplace"),
+    city: read("city"),
+    region: read("region"),
+    phone: read("phone"),
+    email: read("email"),
+    specialtyId: UUID.test(read("specialtyId")) ? read("specialtyId") : "",
+    mailStatus: mail.success ? mail.data : "",
+    registeredFrom: day("registeredFrom"),
+    registeredTo: day("registeredTo"),
+  };
+}
+
+/** The address with `filters` written in (blanks removed), the rest of the query kept. */
+export function rosterFiltersHref(
+  pathname: string,
+  search: string,
+  filters: RosterColumnFilters,
+): string {
+  const params = new URLSearchParams(search);
+  for (const key of ROSTER_FILTER_KEYS) {
+    const value = filters[key].trim();
+    if (value) params.set(key, value);
+    else params.delete(key);
+  }
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
+/** The registration range in calendar order — the route refuses an inverted one. */
+function orderedRange(filters: RosterColumnFilters): [string, string] {
+  const { registeredFrom: from, registeredTo: to } = filters;
+  return from && to && from > to ? [to, from] : [from, to];
+}
+
+/** Whether a filter narrows anything — a phone term needs a digit (the route refuses one without). */
+function isApplied(filters: RosterColumnFilters, key: RosterFilterKey): boolean {
+  const value = filters[key].trim();
+  if (!value) return false;
+  return key === "phone" ? /\d/.test(value) : true;
+}
+
+/** The GET params the applied filters owe the roster route. */
+export function rosterFiltersQuery(
+  filters: RosterColumnFilters,
+): Partial<Record<RosterFilterKey, string>> {
+  const [from, to] = orderedRange(filters);
+  const ordered = { ...filters, registeredFrom: from, registeredTo: to };
+  const query: Partial<Record<RosterFilterKey, string>> = {};
+  for (const key of ROSTER_FILTER_KEYS) {
+    if (isApplied(ordered, key)) query[key] = ordered[key].trim();
+  }
+  return query;
+}
+
+/** The «Все фильтры» badge: applied filters, the date range counted once. */
+export function rosterFiltersAppliedCount(filters: RosterColumnFilters): number {
+  const single = ROSTER_FILTER_KEYS.filter(
+    (key) =>
+      key !== "registeredFrom" &&
+      key !== "registeredTo" &&
+      isApplied(filters, key),
+  ).length;
+  return single + (rosterRegisteredRange(filters) ? 1 : 0);
+}
+
+/** A `YYYY-MM-DD` Moscow day as «01.10.2026» — a calendar date, never shifted. */
+export function formatRosterDay(day: string): string {
+  const [year, month, date] = day.split("-");
+  return `${date}.${month}.${year}`;
+}
+
+/** The registration-range chip's two ends, ordered and formatted; `""` = open end. */
+export function rosterRegisteredRange(
+  filters: RosterColumnFilters,
+): { from: string; to: string } | null {
+  const [from, to] = orderedRange(filters);
+  if (!from && !to) return null;
+  return {
+    from: from ? formatRosterDay(from) : "",
+    to: to ? formatRosterDay(to) : "",
+  };
 }
 
 /** The roster's presence filter as the operator set it; `""` = not chosen. */

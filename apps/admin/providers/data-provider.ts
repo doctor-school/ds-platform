@@ -3,6 +3,7 @@
 import type { DataProvider, HttpError } from "@refinedev/core";
 import type { components } from "@ds/api-client";
 import { adminCsrfHeaders } from "@/lib/admin-auth";
+import type { RosterFilterKey } from "@/lib/congress-roster";
 import {
   ADMIN_LIST_PAGE_SIZE_MAX,
   LIFECYCLE_IMPACT_TOKEN_HEADER,
@@ -953,7 +954,7 @@ export const congressRosterUrl = {
       // 044 EARS-22 — the one server sort; `presence` only with its day.
       sort?: CongressRosterSortKey;
       dir?: CongressRosterSortDir;
-    },
+    } & Partial<Record<RosterFilterKey, string>>, // 044 EARS-23 — the column filters
   ) =>
     `${ADMIN_BASE}/events/${encodeURIComponent(eventIdOrSlug)}/roster?${relationQuery(query)}`,
   /**

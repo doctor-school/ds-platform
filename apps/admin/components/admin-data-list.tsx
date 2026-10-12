@@ -8,6 +8,7 @@ import {
   DataTable,
   FilterBar,
   type AppliedFilter,
+  type FilterBarMoreFilters,
   type DataTableColumn,
   type DataTableRecordColumn,
   type DataTableSort,
@@ -91,6 +92,8 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   filterable = true,
   extraFilters,
   extraApplied = [],
+  onResetExtra,
+  moreFilters,
   includeRetiredLabel,
   caption,
   record,
@@ -142,6 +145,15 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   extraFilters?: ReactNode;
   /** Chips for the resource-specific facets — the bar cannot know their labels. */
   extraApplied?: AppliedFilter[];
+  /**
+   * Clears every resource-specific facet in ONE step on «Сбросить всё». Needed
+   * where the facets share one store the chips' own removals each rewrite (the
+   * roster's address): removing them one by one would let the last write win.
+   * Without it, the chips are removed one by one.
+   */
+  onResetExtra?: () => void;
+  /** The `FilterBar` «Все фильтры» panel, for a list with more facets than one row holds. */
+  moreFilters?: FilterBarMoreFilters;
   /**
    * The retained-rows toggle in the RESOURCE's own words. Defaults to the
    * taxonomy wording («снятые с публикации»); a recording is «отозвана», and a
@@ -217,7 +229,8 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   ];
 
   const resetAll = () => {
-    applied.forEach((filter) => filter.onRemove());
+    if (onResetExtra) onResetExtra();
+    else extraApplied.forEach((filter) => filter.onRemove());
     onQueryChange({
       ...query,
       q: "",
@@ -275,6 +288,7 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
           resetLabel={t("common.list.resetAll")}
           isBusy={isLoading}
           busyLabel={t("common.list.busy")}
+          moreFilters={moreFilters}
           resultCount={
             <span data-testid={`${testId}-total`}>
               {t("common.list.found", { total })}

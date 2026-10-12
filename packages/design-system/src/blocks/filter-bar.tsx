@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { cn } from "../lib/utils";
+import { Badge } from "../primitives/badge";
 import { Button } from "../primitives/button";
 import { FilterChip } from "../primitives/filter-chip";
 import { Input } from "../primitives/input";
@@ -35,6 +36,16 @@ import { Label } from "../primitives/label";
  * the applied set is visible as REMOVABLE units (a bare «Фильтры (3)» does not
  * satisfy it), one clear-all returns to the default state, and the result count is
  * announced in a live region. All copy is app-supplied (no i18n in the package).
+ *
+ * `moreFilters` (044 EARS-23, owner Stage-A pick F1, #2316) is the opt-in second
+ * tier for a list with more facets than one row holds: a «Все фильтры» toggle at
+ * the end of the control row — badged with how many of its filters are applied —
+ * expands a panel INSIDE this same bar, never a popover or a second toolbar, so
+ * every narrowing control and every chip stay in one region. The panel inherits
+ * the bar's apply model; `FilterBarTextField` is its text control on the same
+ * debounce as the search field. With the toggle, «Сбросить всё» sits beside the
+ * chips it clears (the row end belongs to the toggle). A bar without the prop is
+ * unchanged.
  */
 
 export type FilterBarApplyMode = "instant" | "batch";
@@ -46,6 +57,26 @@ export interface AppliedFilter {
   label: string;
   /** Remove just this one filter. */
   onRemove: () => void;
+}
+
+export interface FilterBarMoreFilters {
+  /** The toggle's copy («Все фильтры»). */
+  label: string;
+  /** How many of the panel's filters are applied — badged on the toggle when > 0. */
+  appliedCount: number;
+  /** The badge's accessible wording («применено: 2») — the bare digit says nothing. */
+  appliedCountLabel: (count: number) => string;
+  /** The panel's heading — also its accessible group name. */
+  heading: string;
+  /** A line beside the heading (right-aligned ≥ sm). */
+  hint?: string;
+  /**
+   * The panel controls, laid on a 4-column grid ≥ lg (2 ≥ sm, 1 below); a control
+   * spanning two columns carries its own `lg:col-span-2`.
+   */
+  children: React.ReactNode;
+  /** Open on mount. The open state is the bar's own, in-page. */
+  defaultOpen?: boolean;
 }
 
 export interface FilterBarProps {
@@ -90,7 +121,154 @@ export interface FilterBarProps {
   submitLabel?: string;
   /** `batch` only — commit the whole draft. */
   onSubmit?: () => void;
+  /** Opt-in «Все фильтры» toggle + in-bar panel. */
+  moreFilters?: FilterBarMoreFilters;
   className?: string;
+}
+
+/**
+ * The instant model's text commit, shared by the search field and every
+ * `FilterBarTextField`: a draft the operator owns, one commit after the
+ * inactivity window, and a resync on an EXTERNAL value change only.
+ */
+function useInstantCommit({
+  value,
+  onCommit,
+  debounceMs = 400,
+  enabled = true,
+}: {
+  value: string;
+  onCommit?: ((value: string) => void) | undefined;
+  debounceMs?: number | undefined;
+  enabled?: boolean;
+}) {
+  const [draft, setDraft] = React.useState(value);
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The last value THIS control handed to the app. An arriving committed value
+  // equal to it is our own echo, not an external change.
+  const lastCommitted = React.useRef(value);
+  // A debounce window is open: the field, not the list, owns the newest keystrokes.
+  const [isPending, setIsPending] = React.useState(false);
+
+  // The control follows the app's committed value when it changes from OUTSIDE
+  // (reset-all, a URL restore, a server-corrected query) — never on the echo of
+  // its own commit. An unconditional resync deletes in-flight typing: the commit
+  // fires 400ms after a pause, and the parent's round trip lands while the
+  // operator is already typing the next word, overwriting it under the cursor.
+  // The debounce timer must call the callback of the LATEST render, never the
+  // one captured at keystroke time: the parent rebuilds `onCommit` around its
+  // current query, so a facet flipped inside the 400ms window would otherwise be
+  // rolled back by a commit carrying the pre-toggle query.
+  const commitRef = React.useRef(onCommit);
+  commitRef.current = onCommit;
+
+  React.useEffect(() => {
+    if (value === lastCommitted.current) return;
+    lastCommitted.current = value;
+    setDraft(value);
+    setIsPending(false);
+  }, [value]);
+
+  React.useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  const change = (next: string) => {
+    setDraft(next);
+    if (!enabled) return;
+    // The list must never re-query per keystroke — one commit after the
+    // inactivity window. The control owns the cue for that window itself, so
+    // the promise the block makes ("a busy cue in the field") holds for EVERY
+    // consumer instead of depending on a caller remembering to drive `isBusy`.
+    if (timer.current) clearTimeout(timer.current);
+    setIsPending(true);
+    timer.current = setTimeout(() => {
+      lastCommitted.current = next;
+      setIsPending(false);
+      commitRef.current?.(next);
+    }, debounceMs);
+  };
+
+  const clear = () => {
+    if (timer.current) clearTimeout(timer.current);
+    setIsPending(false);
+    lastCommitted.current = "";
+    setDraft("");
+  };
+
+  return { draft, change, clear, isPending };
+}
+
+/** The in-field busy cue for a debounce window or a query in flight. */
+function BusyCue({ label }: { label?: string | undefined }) {
+  return (
+    <span
+      role="status"
+      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-caption text-muted-foreground"
+    >
+      {label}
+    </span>
+  );
+}
+
+export interface FilterBarTextFieldProps {
+  label: string;
+  /** The committed value (blank = no filter). */
+  value: string;
+  /** Called once per inactivity window with the raw draft. */
+  onCommit: (value: string) => void;
+  placeholder?: string;
+  /** Debounce window — the bar's 400ms by default. */
+  debounceMs?: number;
+  busyLabel?: string;
+  /** e.g. `tel` / `email` for the on-screen keyboard. */
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  id?: string;
+  className?: string;
+}
+
+/**
+ * A text filter inside the `moreFilters` panel on the bar's instant model — the
+ * same debounce, echo handling and busy cue as the search field.
+ */
+export function FilterBarTextField({
+  label,
+  value,
+  onCommit,
+  placeholder,
+  debounceMs,
+  busyLabel,
+  inputMode,
+  id,
+  className,
+}: FilterBarTextFieldProps) {
+  const generated = React.useId();
+  const fieldId = id ?? generated;
+  const { draft, change, isPending } = useInstantCommit({
+    value,
+    onCommit,
+    debounceMs,
+  });
+  return (
+    <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
+      <Label htmlFor={fieldId}>{label}</Label>
+      <div className="relative">
+        <Input
+          id={fieldId}
+          type="text"
+          value={draft}
+          placeholder={placeholder}
+          inputMode={inputMode}
+          aria-busy={isPending || undefined}
+          onChange={(event) => change(event.target.value)}
+        />
+        {isPending ? <BusyCue label={busyLabel} /> : null}
+      </div>
+    </div>
+  );
 }
 
 export function FilterBar({
@@ -108,64 +286,45 @@ export function FilterBar({
   busyLabel,
   submitLabel,
   onSubmit,
+  moreFilters,
   className,
 }: FilterBarProps) {
   const searchId = React.useId();
-  const [draft, setDraft] = React.useState(search?.value ?? "");
-  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  // The last value THIS bar handed to the app. An arriving committed value equal
-  // to it is our own echo, not an external change.
-  const lastCommitted = React.useRef(search?.value ?? "");
-  // A debounce window is open: the field, not the list, owns the newest keystrokes.
-  const [isPending, setIsPending] = React.useState(false);
-
-  // The bar follows the app's committed value when it changes from OUTSIDE
-  // (reset-all, a URL restore, a server-corrected query) — never on the echo of
-  // its own commit. An unconditional resync deletes in-flight typing: the commit
-  // fires 400ms after a pause, and the parent's round trip lands while the
-  // operator is already typing the next word, overwriting it under the cursor.
-  // The debounce timer must call the callback of the LATEST render, never the
-  // one captured at keystroke time: the parent rebuilds `onCommit` around its
-  // current query, so a facet flipped inside the 400ms window would otherwise be
-  // rolled back by a commit carrying the pre-toggle query.
-  const commitRef = React.useRef(search?.onCommit);
-  commitRef.current = search?.onCommit;
-
-  const committed = search?.value ?? "";
-  React.useEffect(() => {
-    if (committed === lastCommitted.current) return;
-    lastCommitted.current = committed;
-    setDraft(committed);
-    setIsPending(false);
-  }, [committed]);
-
-  React.useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
+  const panelId = React.useId();
+  const headingId = React.useId();
+  const [panelOpen, setPanelOpen] = React.useState(
+    moreFilters?.defaultOpen ?? false,
   );
-
-  const onSearchChange = (value: string) => {
-    setDraft(value);
-    if (applyMode !== "instant" || !search) return;
-    // Instant model: the field is its own trigger, but the list must never
-    // re-query per keystroke — one commit after the inactivity window. The bar
-    // owns the cue for that window itself, so the promise the block makes ("a
-    // busy cue in the field") holds for EVERY consumer instead of depending on a
-    // caller remembering to drive `isBusy`.
-    if (timer.current) clearTimeout(timer.current);
-    setIsPending(true);
-    timer.current = setTimeout(() => {
-      lastCommitted.current = value;
-      setIsPending(false);
-      commitRef.current?.(value);
-    }, search.debounceMs ?? 400);
-  };
+  const {
+    draft,
+    change: onSearchChange,
+    clear: clearSearch,
+    isPending,
+  } = useInstantCommit({
+    value: search?.value ?? "",
+    onCommit: search?.onCommit,
+    debounceMs: search?.debounceMs,
+    enabled: applyMode === "instant" && Boolean(search),
+  });
 
   const showBusy = isBusy || isPending;
 
   const isFiltered = applied.length > 0 || draft.length > 0;
+
+  // Reset is offered only while something is applied.
+  const resetControl =
+    isFiltered && onResetAll ? (
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={() => {
+          clearSearch();
+          onResetAll();
+        }}
+      >
+        {resetLabel}
+      </Button>
+    ) : null;
 
   return (
     <section
@@ -194,14 +353,7 @@ export function FilterBar({
                 aria-busy={showBusy || undefined}
                 onChange={(event) => onSearchChange(event.target.value)}
               />
-              {showBusy ? (
-                <span
-                  role="status"
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-caption text-muted-foreground"
-                >
-                  {busyLabel}
-                </span>
-              ) : null}
+              {showBusy ? <BusyCue label={busyLabel} /> : null}
             </div>
           </div>
         ) : null}
@@ -216,27 +368,63 @@ export function FilterBar({
           </Button>
         ) : null}
 
-        {/* Reset is offered only while something is applied. */}
-        {isFiltered && onResetAll ? (
+        {moreFilters ? (
           <Button
             type="button"
-            variant="ghost"
-            onClick={() => {
-              if (timer.current) clearTimeout(timer.current);
-              setIsPending(false);
-              lastCommitted.current = "";
-              setDraft("");
-              onResetAll();
-            }}
+            variant="secondary"
+            aria-expanded={panelOpen}
+            aria-controls={panelId}
+            aria-label={
+              moreFilters.appliedCount > 0
+                ? `${moreFilters.label}, ${moreFilters.appliedCountLabel(moreFilters.appliedCount)}`
+                : undefined
+            }
+            onClick={() => setPanelOpen((open) => !open)}
           >
-            {resetLabel}
+            <SlidersIcon />
+            {moreFilters.label}
+            {moreFilters.appliedCount > 0 ? (
+              <Badge variant="count" aria-hidden="true">
+                {moreFilters.appliedCount}
+              </Badge>
+            ) : null}
+            <CaretIcon open={panelOpen} />
           </Button>
         ) : null}
+
+        {/* With the panel toggle the row end is the toggle's; reset then sits
+            beside the chips it clears. */}
+        {moreFilters ? null : resetControl}
       </form>
 
-      {applied.length > 0 ? (
+      {moreFilters ? (
+        <div
+          id={panelId}
+          role="group"
+          aria-labelledby={headingId}
+          hidden={!panelOpen}
+          className="grid grid-cols-1 gap-x-3 gap-y-3.5 border-t-2 border-hairline pt-3.5 sm:grid-cols-2 lg:grid-cols-4"
+        >
+          <div className="col-span-full flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+            <span
+              id={headingId}
+              className="text-sm font-extrabold text-foreground"
+            >
+              {moreFilters.heading}
+            </span>
+            {moreFilters.hint ? (
+              <span className="text-caption text-muted-foreground">
+                {moreFilters.hint}
+              </span>
+            ) : null}
+          </div>
+          {moreFilters.children}
+        </div>
+      ) : null}
+
+      {applied.length > 0 || (moreFilters && resetControl) ? (
         <div className="flex flex-wrap items-center gap-2">
-          {appliedLabel ? (
+          {appliedLabel && applied.length > 0 ? (
             <span className="text-caption text-muted-foreground">
               {appliedLabel}
             </span>
@@ -255,6 +443,7 @@ export function FilterBar({
               {item.label} ✕
             </FilterChip>
           ))}
+          {moreFilters ? resetControl : null}
         </div>
       ) : null}
 
@@ -268,5 +457,41 @@ export function FilterBar({
         </p>
       ) : null}
     </section>
+  );
+}
+
+/** The «Все фильтры» glyph — DS inline-icon convention (16-grid, square caps). */
+function SlidersIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="square"
+    >
+      <path d="M2 4h7M13 4h1M2 12h1M7 12h7" />
+      <rect x="9" y="2" width="3" height="4" />
+      <rect x="3" y="10" width="3" height="4" />
+    </svg>
+  );
+}
+
+/** The panel toggle's open/closed caret. */
+function CaretIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      aria-hidden="true"
+      fill="currentColor"
+      className={cn("transition-transform", open && "rotate-180")}
+    >
+      <path d="M4 6h8l-4 5z" />
+    </svg>
   );
 }

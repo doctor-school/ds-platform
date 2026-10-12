@@ -203,6 +203,17 @@ fixture-tier states a slot cannot reach on demand — nothing live, a failed rea
 three live strips, the full 390 accessibility matrix — stay in
 `apps/doctor/e2e/events-*.spec.ts`.
 
+The same Rule carries 019 EARS-9 (an empty feed by filters names the facet whose
+removal helps; a refused feed read stays inside its block with «Повторить»),
+EARS-15 (one shared composition at 1440/390 in light and dark), EARS-17 (a kind
+an editor publishes or retires) and EARS-18 (doctor and Academy render one
+module, differing only in header copy, filter set and content set; Issue #1530).
+The EARS-17 pair is tagged `@editor-write`: it publishes and retires a kind and
+an event through the real admin screens (`admin/event-kinds.ts`,
+`admin/events.ts`), so it runs only where `E2E_ADMIN_URL` names an admin this run
+owns (a local dev stand on a branch DB), is skipped otherwise — never on the
+read-only slot run — and its After hook retires what it created.
+
 `Given the golden doctor "verified-cardiologist" is signed in` (§6.1). A feature
 file never carries an email or a password. `lib/golden.ts` is the one place a
 seed name becomes a real `@ds/db` golden account plus the env var holding its IdP
@@ -256,8 +267,8 @@ suite drives a captcha-gated step yet; the first one calls the helper.
 admin screens: `bootstrapAdminSession` (a fresh `platform_admin` granted on the
 stand's IdP; the registrar/committee variants alongside), `signInAsAdmin` (the
 browser login with its TOTP enrollment/challenge, `totp.ts` being the independent
-RFC 6238 generator), and the event writers `createPublishedEvent`,
-`openEventLive` and the slug read-backs `eventSlugFromDetail` /
+RFC 6238 generator), the event writers `createPublishedEvent`, `retireEventFromStorefronts`,
+`openEventLive`, the kind writers `createPublishedEventKind` / `retireEventKind` and the slug read-backs `eventSlugFromDetail` /
 `eventSlugFromRoster`. The admin flow specs consume them, and so does a
 storefront spec that needs an event in a given state — it drives them on the
 admin origin in its own browser context instead of depending on a fixed seed whose

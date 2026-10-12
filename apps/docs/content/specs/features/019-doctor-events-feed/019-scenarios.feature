@@ -25,6 +25,9 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     # the golden dataset's: its doctors-audience volume events, the live doctors' broadcast
     # «Идущий сейчас эфир (эталон)» and the golden doctor "verified-cardiologist", who is
     # registered for it. Dates and counts are read from the slot, never re-typed.
+    # @editor-write scenarios publish and retire through the real admin, so they run
+    # only on a stand whose data the run owns (E2E_ADMIN_URL set, e.g. a local branch
+    # database) and skip, named, on the read-only slot run; they clean up what they made.
 
     @EARS-1 @EARS-3 @happy
     Scenario: A visitor reads the events screen in its composition and widens the horizon
@@ -165,6 +168,68 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       And the visitor widens the horizon until it reaches the golden upcoming broadcast's day
       Then the golden upcoming broadcast addressed to experts is not listed in the doctor feed
       And the «Идёт сейчас» block above the feed carries the golden doctors' broadcast with its live marker and title
+
+    @EARS-9 @happy
+    Scenario: A facet result that matches nothing names the facet whose removal finds events
+      Given a visitor with no account
+      And the viewport is 1440 wide
+      When the visitor opens «События» with the format «Онлайн» and a name search that no event matches
+      Then the feed states that no event matches the name-search facet and names that facet
+      And it states how many events the feed holds without that facet and offers to remove exactly that facet beside «Сбросить фильтры»
+      And the applied facets and the reset stay visible in the facet panel
+      When the visitor removes that facet from the empty state
+      Then the feed lists events again with the format «Онлайн» still applied and no name search in the URL
+
+    @EARS-9 @failure
+    Scenario: A failing feed read is contained to its own block
+      Given a visitor with no account
+      And the viewport is 1440 wide
+      When the visitor opens «События» from a horizon start that the events read refuses
+      Then the day feed states the cause in Russian and offers «Повторить»
+      And the «Идёт сейчас» block, the compact month and the facet panel stay usable
+      And no page-level error screen replaces the feed
+      When the visitor activates «Повторить»
+      Then the page re-reads in place, keeping the URL and the shell, and the day feed states the cause again
+
+    @EARS-15 @happy
+    Scenario: The doctor events screen is built from the shared module in both themes and at both breakpoints
+      Given a visitor with no account
+      When the visitor opens «События» at 1440 and at 390 wide, in the light and in the dark theme
+      Then every rendering composes the shared events module, its cards being the design-system event card
+      And the facet panel is the shared panel: a side column at 1440 and a counted «Фильтры» sheet at 390
+      And the dark theme repaints the cards through the theme tokens
+
+    @EARS-17 @happy @editor-write
+    Scenario: A kind an editor publishes reaches the facet and the card with no code change
+      Given an editor publishes a new event kind with a long title in the admin
+      And the editor publishes a doctors-audience event of that kind starting within the hour
+      And a visitor with no account
+      And the viewport is 1440 wide
+      When the visitor opens «События»
+      Then the kind facet offers the new kind
+      And that event's card carries the new kind's label without overflowing the card, the panel or the screen grid
+      When the visitor applies the new kind in the facet panel
+      Then the feed lists that event under the applied kind
+
+    @EARS-17 @failure @editor-write
+    Scenario: A kind an editor retires is no longer offered
+      Given an editor publishes a new event kind with a long title in the admin
+      And the editor publishes a doctors-audience event of that kind starting within the hour
+      And the editor retires that kind in the admin
+      And a visitor with no account
+      And the viewport is 1440 wide
+      When the visitor opens «События»
+      Then the kind facet does not offer the retired kind
+
+    @EARS-18 @happy
+    Scenario: Both storefronts mount one events module and differ only in the cited rows
+      Given a visitor with no account
+      And the viewport is 1440 wide
+      When the visitor opens the events screen on the doctor storefront and on the Academy
+      Then both render the same shared module: the head with the tense tabs, the block order, day groups of design-system cards, the compact month and the facet panel in the column
+      And the head copy differs only as the «headerCopy» row cites
+      And the facet sets differ only as the «filterSet» row cites
+      And the content sets differ as the «contentSet» row cites: no event is listed on both storefronts
 
   Rule: Remaining events-feed scenarios
 
@@ -336,28 +401,12 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       And the build fails review
 
     @EARS-9 @happy
-    Scenario: An empty facet result names the condition that emptied it
-      When the doctor applies a city facet that matches no event
-      Then the screen states which condition emptied it and names that city facet
-      And it offers a concrete weakening of exactly that facet
-      And the applied facets and the reset stay visible
-
-    @EARS-9 @happy
     Scenario: An empty specialty offers the adjacent areas instead
       Given a doctor whose specialty has no events at all
       When the doctor opens «События» with no facets applied
       Then the screen states that the specialty has nothing yet
       And it offers the nearest events of the adjacent directions from the managed relation
       And the wording differs from the empty-facet statement
-
-    @EARS-9 @failure
-    Scenario: A failing read is contained to its own block
-      Given the read behind the month grid fails
-      When the doctor opens «События»
-      Then the month grid states the cause in Russian and offers a retry
-      And the retry re-runs only that read
-      And the feed, the live block and the facet panel stay usable
-      And no page-level error screen replaces the feed
 
     @EARS-10 @happy
     # Read under 019 «Amendment — 2026-10-06»: the past card offers the recording only; the materials live on the recording's page.
@@ -489,25 +538,11 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       And no event is delivered to the client and hidden there
 
     @EARS-17 @happy
-    Scenario: A kind added by an editor appears without a code change
-      Given an editor publishes the kind «Клинический разбор с пациентом» in the admin
-      And a published event of that kind in the doctor's specialty
-      When the doctor opens «События»
-      Then the kind facet offers «Клинический разбор с пациентом»
-      And the event card carries that kind label without breaking the card or the panel
-
-    @EARS-17 @failure
-    Scenario: A retired kind is no longer offered
-      Given an editor retires the kind «Мастер-класс»
+    Scenario: The kind facet holds 3 and 9 published kinds
+      Given 3 published kinds of the event-kind dictionary carried by the doctor's events
       When the doctor opens the facet panel
-      Then «Мастер-класс» is not offered as a kind facet value
-      And the panel holds 3 and 9 published kinds without breaking the screen grid
-
-    @EARS-18 @happy
-    Scenario: Both storefronts mount one events feed module
-      When the doctor storefront and the Academy render their events feed
-      Then both render the same shared module
-      And they differ only in the content set, the filter set and the header copy listed in «Differences between storefronts»
+      Then the panel holds the 3 kinds without breaking the screen grid
+      And with 9 published kinds carried by the doctor's events it holds the 9 without breaking the screen grid
 
     @EARS-18 @failure
     Scenario: An uncited storefront difference is a defect

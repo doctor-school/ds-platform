@@ -73,6 +73,11 @@ export const API_COPY_ALLOWLIST: readonly string[] = [
   "apps/api/test/support/notification-subjects.ts",
 ];
 
+/** The portal/admin auth pages (`app/{login,register,verify,reset,mfa}/`):
+ * an Ask path (#2808) and environment-sensitive (#2699). */
+const AUTH_PAGE_RE =
+  /(?:^|\/)app\/(?:.*\/)?(?:login|register|verify|reset|mfa)\//;
+
 /** Ask areas: runtime code under these is ask; a test in them, or a
  * modified doc that follows the code, is not (#2807). */
 const AREA_ASK_PATH_RES: readonly RegExp[] = [
@@ -85,6 +90,7 @@ const AREA_ASK_PATH_RES: readonly RegExp[] = [
   /^packages\/auth-flow\//,
   /(?:^|\/)lib\/(?:.*\/)?[^/]*auth/i,
   /(?:^|\/)app\/(?:.*\/)?\(auth\)\//,
+  AUTH_PAGE_RE,
   /(?:^|\/)app\/(?:.*\/)?api\//,
   /(?:^|\/)route\.[cm]?[jt]sx?$/,
   /(?:^|\/)actions\//,
@@ -307,7 +313,7 @@ export function isNonRuntimePath(path: string): boolean {
  */
 const ENVIRONMENT_SENSITIVE_RES: readonly RegExp[] = [
   /(?:^|\/)lib\/(?:.*\/)?[^/]*auth/i,
-  /(?:^|\/)app\/(?:.*\/)?(?:login|register|verify|reset|mfa)\//,
+  AUTH_PAGE_RE,
   /(?:^|\/)(?:middleware|proxy)\.[^/]+$/,
   /^apps\/api\/drizzle\//,
   /^packages\/db\/src\/schema\//,

@@ -916,6 +916,8 @@ describe("merge-gate verifyChangeTierMergeOnGreen() (#2584, #2808)", () => {
     "apps/doctor/app/(auth)/login/page.tsx",
     "apps/portal/app/api/auth/callback/route.ts",
     "apps/portal/app/actions/register.ts",
+    "apps/admin/app/login/page.tsx",
+    "apps/portal/app/register/page.tsx",
   ])(
     "show: an auth / server / action file declared show (%s) still needs the pre-merge verdict",
     (filename) => {

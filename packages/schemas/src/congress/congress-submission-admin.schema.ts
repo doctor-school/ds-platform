@@ -286,7 +286,11 @@ export const CongressSubmissionCardSchema = z.object({
     .nullable(),
   committeeComment: z.string().nullable(),
   submitter: CongressSubmitterSchema.extend({
-    /** The contact phone from the 044 answers, else the account's own. */
+    /**
+     * The contact phone from the 044 answers, else the account's own,
+     * NORMALISED to E.164 (`normaliseContactPhone`, 044 EARS-29) — never the
+     * typed value. Rendered through `formatContactPhone` (046 EARS-28, 044 EARS-36).
+     */
     phone: z.string().nullable(),
     /**
      * A poster's submitter age in whole years on the event start date — never

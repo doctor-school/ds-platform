@@ -106,6 +106,7 @@ Feature: 044 — Congress sign-up
     Then both submissions receive the identical generic success response
     And both phones are stored on their registrations as typed and in the same normalised form
     And neither phone is written into any account's phone column
+    And the admin shows both phones in the same format "+7 (999) 123-45-67"
     And both registrations are marked "возможный дубль" in the roster read model
     When one of those two registrations is removed at the team's manual request
     Then the remaining registration is no longer marked "возможный дубль"

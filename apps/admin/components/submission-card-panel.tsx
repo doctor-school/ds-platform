@@ -53,6 +53,7 @@ import {
   submissionAuthorLines,
   submissionBodySections,
   submissionDecisionSummary,
+  submissionSubmitterPhone,
   type CommitteeDecisionRefusal,
 } from "@/lib/congress-submissions";
 import { congressSubmissionsUrl } from "@/providers/data-provider";
@@ -234,7 +235,7 @@ function CardFacts({ card }: { card: CongressSubmissionCard }) {
   const summary = submissionDecisionSummary(card, new Date());
   const authors = submissionAuthorLines(card.authors);
   const none = c("none");
-  const phone = card.submitter.phone;
+  const phone = submissionSubmitterPhone(card);
 
   return (
     <>

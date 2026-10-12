@@ -90,7 +90,10 @@ export const CongressParticipantCardSchema = z.strictObject({
   workplace: z.string().nullable(),
   city: z.string().nullable(),
   region: z.string().nullable(),
-  /** The phone exactly as typed (EARS-29), never the normalised form. */
+  /**
+   * The contact phone NORMALISED to E.164 (`normaliseContactPhone`, EARS-29) —
+   * never the typed value. Rendered through `formatContactPhone` (EARS-36).
+   */
   phone: z.string().nullable(),
   email: z.string().nullable(),
   registeredAt: z.iso.datetime(),

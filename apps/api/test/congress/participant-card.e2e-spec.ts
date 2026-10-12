@@ -341,7 +341,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         workplace: "ГКБ №1",
         city: "Москва",
         region: "Московская область",
-        phone: "+7 (900) 111-22-33",
+        // EARS-29/36: the normalised E.164 value — typed «+7 (900) 111-22-33».
+        phone: "+79001112233",
         email: ivanovaEmail,
         intakeOrigin: "desk",
         possibleDuplicate: true,
@@ -368,6 +369,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       expect(twinCard.possibleDuplicate).toBe(true);
       expect(soloCard.possibleDuplicate).toBe(false);
+      // EARS-36: the pair typed «+7 (900) 111-22-33» / «8 900 111 22 33» reads as
+      // ONE value — the API returns the normalised phone, never the typed one.
+      expect(twinCard.phone).toBe("+79001112233");
     });
 
     it("044 EARS-36.3: every congress day is present; an unmarked day reads present null with an empty history", async () => {
@@ -449,7 +453,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         patronymic: null,
         fullName: "Сайтова Ольга",
         city: "Тверь",
-        phone: "+7 (900) 000-00-01",
+        phone: "+79000000001",
         email: "legacy-site@ds.test",
         confirmationMail: { status: null, at: null },
       });

@@ -135,7 +135,11 @@ function registrationCells() {
     // email: `users.phone` is one of «the account's own profile values», so a
     // platform-origin row renders it rather than an empty cell. EARS-29 forbids
     // WRITING a congress phone into `users.phone`; reading the account's own
-    // number back is not that write.
+    // number back is not that write. This cell is the SEARCH input (literal
+    // «contains» over what was typed); the response maps it through
+    // `normaliseContactPhone` so the admin only ever receives the normalised
+    // E.164 value (EARS-29 stores the typed value, EARS-36 displays the
+    // normalised one in a single format).
     phone: sql<string | null>`coalesce(
       nullif(${registrations.answers}->>'contactPhone', ''),
       nullif(trim(${users.phone}), '')
@@ -520,7 +524,7 @@ export class RegistrationRepository {
         workplace: r.workplace ?? null,
         city: r.city ?? null,
         region: r.region ?? null,
-        phone: r.phone ?? null,
+        phone: normaliseContactPhone(r.phone ?? "") || null,
         email: r.email ?? null,
         registeredAt: r.registeredAt.toISOString(),
         confirmationMailStatus: r.confirmationMailStatus ?? null,
@@ -748,7 +752,7 @@ export class RegistrationRepository {
       workplace: row.workplace ?? null,
       city: row.city ?? null,
       region: row.region ?? null,
-      phone: row.phone ?? null,
+      phone: normaliseContactPhone(row.phone ?? "") || null,
       email: row.email ?? null,
       registeredAt: row.registeredAt.toISOString(),
       intakeOrigin: row.intakeOrigin,
@@ -892,10 +896,10 @@ export class RegistrationRepository {
    * because a registrar typing a phone fragment must not be able to turn the
    * search into a wildcard that matches the whole event.
    *
-   * The phone is the one cell where a literal «contains» is not enough: the row
-   * renders the number exactly as it was typed (EARS-29), so `+7 (900) 111-22-33`
-   * would be invisible to a registrar typing `89001112233`. The normalised value
-   * EARS-29 stores beside it exists for exactly that comparison, so a term that
+   * The phone is the one cell where a literal «contains» is not enough: the
+   * search cell is the typed text (EARS-29), so `+7 (900) 111-22-33` would be
+   * invisible to a registrar typing `89001112233`. The normalised value EARS-29
+   * stores beside it is what the row displays (EARS-36), so a term that
    * normalises to a phone of its own is ALSO matched against it, under the same
    * `8 → 7` and punctuation rules the intake applied to the stored value — which
    * is what makes the two comparable at all.

@@ -1,6 +1,7 @@
 import {
   CONGRESS_PERSONAL_DATA_PURPOSE,
   type CongressParticipantCard,
+  formatContactPhone,
 } from "@ds/schemas";
 import { formatMskDateTime } from "./msk";
 
@@ -24,8 +25,8 @@ export type ParticipantCardField =
   | "registeredAt";
 
 /**
- * The card's text facts as display strings. The phone is the one the
- * participant typed (EARS-29), never a normalised form; a field the
+ * The card's text facts as display strings. The phone is formatted from the
+ * normalised value so one number reads one way everywhere (044 EARS-36); a field the
  * registration does not carry (EARS-16) renders EMPTY — never a placeholder the
  * registrar could mistake for data.
  */
@@ -38,7 +39,8 @@ export function participantCardFields(
     workplace: card.workplace ?? "",
     city: card.city ?? "",
     region: card.region ?? "",
-    phone: card.phone ?? "",
+    // EARS-36: one display format, built from the normalised value.
+    phone: formatContactPhone(card.phone ?? ""),
     email: card.email ?? "",
     registeredAt: formatMskDateTime(card.registeredAt),
   };

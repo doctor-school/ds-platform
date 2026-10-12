@@ -29,7 +29,7 @@ const ROW = {
   workplace: "ГКБ №1",
   city: "Москва",
   region: "Москва",
-  phone: "+7 (900) 111-22-33",
+  phone: "+79001112233",
   email: "a@ds.test",
   registeredAt: "2026-11-01T07:00:00.000Z",
   confirmationMailStatus: "sent" as const,

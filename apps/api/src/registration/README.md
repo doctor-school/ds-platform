@@ -106,7 +106,7 @@ never a widening of the one above:
   is deterministic.
 - The row carries the answers the registrar identifies a person by — ФИО,
   specialty NAME (resolved through `specialties_minzdrav`, EARS-25), место
-  работы, город, область, телефон as typed (EARS-29), email, `registeredAt` and
+  работы, город, область, телефон as normalised E.164 (EARS-29, EARS-36), email, `registeredAt` and
   the confirmation-letter outcome. Every answer-derived cell is nullable and
   falls back to the account mirror (EARS-16) — `users.display_name`,
   `users.email`, `users.phone`: a platform-origin registration carries no
@@ -212,7 +212,7 @@ never a widening of the one above:
   (`EventRosterAdminController.card`) — 044 EARS-36 (#2383): the participant
   card the registrar opens from a roster row.
   - **Contents.** Every stored answer (name parts, full name, specialty name,
-    workplace, city, region, phone as typed, email — with the roster's EARS-16
+    workplace, city, region, phone as normalised E.164 (EARS-36), email — with the roster's EARS-16
     account fallback), `registeredAt`, `intakeOrigin`, the participant's
     congress consent rows (`consent_records`: purpose, version, captured-at,
     `paper` origin), `confirmationMail { status, at }`, the read-time

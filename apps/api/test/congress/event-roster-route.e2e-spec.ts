@@ -411,8 +411,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(row.workplace).toBe("ГКБ №1");
       expect(row.city).toBe("Москва");
       expect(row.region).toBe("Москва");
-      // EARS-29: the phone renders exactly as it was typed, not normalised.
-      expect(row.phone).toMatch(/^\+7 \(900\) /);
+      // EARS-29/36: the API returns the normalised E.164 value, never the typed one.
+      expect(row.phone).toMatch(/^\+7900\d{7}$/);
       expect(row.email).toContain("@ds.test");
     });
 
@@ -497,10 +497,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(row.specialtyName).toBe(specialty.name);
     });
 
-    it("044 EARS-18.5.5: …the телефон cell as the participant typed it", async () => {
+    it("044 EARS-18.5.5: …the телефон cell as the normalised E.164 value (EARS-36)", async () => {
       const page = await search("444-55-66");
       expect(page.total).toBe(1);
-      expect(page.items[0]!.phone).toBe("+7 (900) 444-55-66");
+      // The search matches the typed text; the row carries the normalised value (EARS-36).
+      expect(page.items[0]!.phone).toBe("+79004445566");
     });
 
     it("044 EARS-18.5.6: EARS-29 — a digits-only term in the OTHER domestic form finds the formatted number", async () => {
@@ -509,7 +510,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // stored beside the typed one, never the rendered cell.
       const page = await search("89004445566");
       expect(page.total).toBe(1);
-      expect(page.items[0]!.phone).toBe("+7 (900) 444-55-66");
+      expect(page.items[0]!.phone).toBe("+79004445566");
     });
 
     it("044 EARS-18.5.7: a term matching nobody is an empty page of the same event, not a 404 and not the whole roster", async () => {

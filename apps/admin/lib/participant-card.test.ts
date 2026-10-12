@@ -27,7 +27,8 @@ const card: CongressParticipantCard = {
   workplace: "ГКБ №1",
   city: "Химки",
   region: "Московская область",
-  phone: "8 (900) 111-22-33",
+  // The API sends the normalised E.164 value (EARS-29), never the typed one.
+  phone: "+79001112233",
   email: "ivanova@example.test",
   // 09:00 МСК == 06:00Z.
   registeredAt: "2026-11-20T06:00:00.000Z",
@@ -45,7 +46,7 @@ describe("044 EARS-36 participant card", () => {
     );
   });
 
-  it("EARS-36: shows every stored field — the phone exactly as typed, the date in МСК", () => {
+  it("EARS-36: shows every stored field — the phone in the one admin format, the date in МСК", () => {
     const fields = participantCardFields(card);
     expect(Object.keys(fields).sort()).toEqual(
       [
@@ -59,7 +60,12 @@ describe("044 EARS-36 participant card", () => {
         "workplace",
       ].sort(),
     );
-    expect(fields.phone).toBe("8 (900) 111-22-33");
+    expect(fields.phone).toBe("+7 (900) 111-22-33");
+    // A non-Russian number stays plain E.164; no phone stays an empty field.
+    expect(
+      participantCardFields({ ...card, phone: "+442079460958" }).phone,
+    ).toBe("+442079460958");
+    expect(participantCardFields({ ...card, phone: null }).phone).toBe("");
     expect(fields.workplace).toBe("ГКБ №1");
     expect(fields.region).toBe("Московская область");
     expect(fields.registeredAt).toContain("09:00");

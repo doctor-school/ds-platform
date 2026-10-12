@@ -35,7 +35,8 @@ const row: CongressRosterRow = {
   workplace: "ГКБ №1",
   city: "Москва",
   region: "Москва",
-  phone: "+7 (900) 111-22-33",
+  // The API sends the normalised E.164 value (EARS-29); the cell formats it (EARS-36).
+  phone: "+79001112233",
   email: "ivanova@example.test",
   // 09:00 МСК == 06:00Z.
   registeredAt: "2026-11-20T06:00:00.000Z",

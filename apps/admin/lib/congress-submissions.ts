@@ -11,6 +11,7 @@ import {
   type CongressSubmissionRegistryRow,
   type CongressSubmissionRegistrySort,
   type CongressSubmissionStatus,
+  formatContactPhone,
 } from "@ds/schemas";
 import { formatMskDateTime } from "./msk";
 
@@ -323,6 +324,17 @@ export function submissionBodySections(
   return BODY_SECTIONS[kind]
     .filter((section) => (body[section] ?? "").trim() !== "")
     .map((section) => ({ key: `${kind}.${section}`, text: body[section]! }));
+}
+
+/**
+ * 046 EARS-28 / 044 EARS-36 — the submitter's contact phone as the card shows
+ * it: the one admin format (`+7 (XXX) XXX-XX-XX` for a Russian number, plain
+ * E.164 otherwise); `null` when there is no phone, so the card renders «—».
+ */
+export function submissionSubmitterPhone(
+  card: Pick<CongressSubmissionCard, "submitter">,
+): string | null {
+  return formatContactPhone(card.submitter.phone ?? "") || null;
 }
 
 /** One author of the card's «Содержание»: the name, the workplace apart, the presenter flag. */

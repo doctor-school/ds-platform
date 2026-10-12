@@ -367,6 +367,35 @@ describe("AccountProfileCard — the confirmable phone row (003 #2449)", () => {
     expect(screen.queryByTestId("profile-phone-verified")).toBeNull();
   });
 
+  it("003 EARS-48: while a code is checked the field is read-only, never disabled (a browser drops focus from a disabled field), so after a wrong code the doctor corrects it from the keyboard", async () => {
+    const user = userEvent.setup();
+    let rejectFirst: (e: unknown) => void = () => {};
+    const confirm = vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise((_, reject) => (rejectFirst = reject)),
+      )
+      .mockResolvedValueOnce("+79134028871");
+    renderCard({ phoneActions: phoneActionsMock({ confirm }) });
+
+    await requestCodeFor(user, "+79134028871");
+    await screen.findByTestId("profile-phone-code-sent");
+    await user.keyboard("000000");
+    const field = screen.getByLabelText("Код из SMS");
+    expect(field).toHaveAttribute("readonly");
+    expect(field).not.toBeDisabled();
+    rejectFirst(new PhoneFailure("invalid"));
+    await screen.findByRole("alert");
+    expect(field).toHaveFocus();
+
+    await user.keyboard("{Backspace>6/}482913");
+
+    expect(confirm).toHaveBeenLastCalledWith("482913");
+    expect(
+      await screen.findByTestId("profile-phone-verified"),
+    ).toBeInTheDocument();
+  });
+
   it("003 EARS-51: a number confirmed on another account goes through the very same steps — code sent, then the generic wrong-code failure for any code", async () => {
     const user = userEvent.setup();
     renderCard({

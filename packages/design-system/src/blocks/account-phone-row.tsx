@@ -405,7 +405,9 @@ export function AccountPhoneRow({
           inputMode="numeric"
           pattern="[0-9]*"
           pasteTransformer={(raw: string) => raw.replace(/\D/g, "")}
-          disabled={pending}
+          // Read-only, not disabled: a browser moves focus off a disabled
+          // field, and the doctor corrects a wrong code from the keyboard.
+          readOnly={pending}
           autoFocus
           aria-label={copy.codeLabel}
           aria-invalid={wrong ? true : undefined}

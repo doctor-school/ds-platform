@@ -404,14 +404,52 @@ describe("044 EARS-23 roster column filters", () => {
     ).toEqual({ phone: "8 926" });
   });
 
-  it("044 EARS-23: an inverted date range is sent in order, never as the route's 400", () => {
+  it("044 EARS-23: a hand-edited address value the route would refuse is dropped as if absent — never sent to become a 400 page", () => {
+    const long = "а".repeat(161);
+    expect(
+      rosterFiltersFromAddress(
+        new URLSearchParams(
+          // An impossible day, a malformed day, text over the route's 160
+          // maximum and a phone with no digit at all.
+          `registeredFrom=2026-02-31&registeredTo=2026-13-01&name=${long}&workplace=${long}&city=${long}&region=${long}&email=${long}&phone=${encodeURIComponent("+ ( )")}`,
+        ),
+      ),
+    ).toEqual(ROSTER_FILTERS_EMPTY);
+    // Exactly 160 characters and a real leap day are kept.
+    const max = "а".repeat(160);
+    expect(
+      rosterFiltersFromAddress(
+        new URLSearchParams(`name=${max}&registeredFrom=2028-02-29`),
+      ),
+    ).toEqual({ ...ROSTER_FILTERS_EMPTY, name: max, registeredFrom: "2028-02-29" });
+  });
+
+  it("044 EARS-23: an inverted date range keeps its «с» and drops its «по» — never sent as the route's 400", () => {
+    const inverted = new URLSearchParams(
+      "registeredFrom=2026-10-15&registeredTo=2026-10-01",
+    );
+    const filters = rosterFiltersFromAddress(inverted);
+    expect(filters).toEqual({
+      ...ROSTER_FILTERS_EMPTY,
+      registeredFrom: "2026-10-15",
+    });
+    expect(rosterFiltersQuery(filters)).toEqual({ registeredFrom: "2026-10-15" });
+    // The same rule holds for filters built in memory.
     expect(
       rosterFiltersQuery({
         ...ROSTER_FILTERS_EMPTY,
         registeredFrom: "2026-10-15",
         registeredTo: "2026-10-01",
       }),
-    ).toEqual({ registeredFrom: "2026-10-01", registeredTo: "2026-10-15" });
+    ).toEqual({ registeredFrom: "2026-10-15" });
+    // One day on both ends is a valid range.
+    expect(
+      rosterFiltersQuery({
+        ...ROSTER_FILTERS_EMPTY,
+        registeredFrom: "2026-10-01",
+        registeredTo: "2026-10-01",
+      }),
+    ).toEqual({ registeredFrom: "2026-10-01", registeredTo: "2026-10-01" });
     expect(
       rosterFiltersQuery({ ...ROSTER_FILTERS_EMPTY, registeredTo: "2026-10-01" }),
     ).toEqual({ registeredTo: "2026-10-01" });
@@ -431,14 +469,21 @@ describe("044 EARS-23 roster column filters", () => {
     ).toBe(3);
   });
 
-  it("044 EARS-23: the date-range chip reads in Moscow days, ordered, with open ends", () => {
+  it("044 EARS-23: the date-range chip reads in Moscow days, with open ends; an inverted «по» is not shown", () => {
+    expect(
+      rosterRegisteredRange({
+        ...ROSTER_FILTERS_EMPTY,
+        registeredFrom: "2026-10-01",
+        registeredTo: "2026-10-15",
+      }),
+    ).toEqual({ from: "01.10.2026", to: "15.10.2026" });
     expect(
       rosterRegisteredRange({
         ...ROSTER_FILTERS_EMPTY,
         registeredFrom: "2026-10-15",
         registeredTo: "2026-10-01",
       }),
-    ).toEqual({ from: "01.10.2026", to: "15.10.2026" });
+    ).toEqual({ from: "15.10.2026", to: "" });
     expect(
       rosterRegisteredRange({ ...ROSTER_FILTERS_EMPTY, registeredFrom: "2026-10-01" }),
     ).toEqual({ from: "01.10.2026", to: "" });

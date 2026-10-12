@@ -144,6 +144,9 @@ const fullName = (index: number) => {
 };
 
 test.describe.configure({ mode: "serial" });
+// A native date input's «дд.мм.гггг» follows the BROWSER's UI language, not the
+// context locale — the registrar's Russian Chromium is launched as such.
+test.use({ channel: "chromium", launchOptions: { args: ["--lang=ru-RU"] } });
 
 test.describe("044 EARS-23 — the roster's column filters (F1)", () => {
   let context: BrowserContext;
@@ -168,7 +171,13 @@ test.describe("044 EARS-23 — the roster's column filters (F1)", () => {
     test.setTimeout(300_000);
     // One signed-in admin for the describe: every sign-in bootstraps a fresh
     // IdP account, and the shared IdP throttles serial sign-ups.
-    context = await browser.newContext({ baseURL: ADMIN_ORIGIN });
+    // An explicit context does not inherit the config's `use` — the registrar's
+    // locale and zone are set here, so a native date input reads «дд.мм.гггг».
+    context = await browser.newContext({
+      baseURL: ADMIN_ORIGIN,
+      locale: "ru-RU",
+      timezoneId: "Europe/Moscow",
+    });
     desk = await context.newPage();
     const page = desk;
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -278,6 +287,48 @@ test.describe("044 EARS-23 — the roster's column filters (F1)", () => {
     await chip(page, `Дата регистрации: с ${ruDay(tomorrow)}`).click();
     await expect(total(page)).toHaveText("Найдено: 2");
     await expect(page).not.toHaveURL(/registeredFrom=/);
+  });
+
+  test("044 EARS-23: телефон rejects a digit-less term and accepts digits under the 8 → 7 rule; a hand-edited address value the route would refuse is dropped, never a 400 page", async () => {
+    test.skip(!eventId, "depends on the event seeded above");
+    const page = desk;
+    await page.goto(`/events/${eventId}/roster`);
+    await toggle(page).click();
+    const phone = page.getByLabel("Телефон", { exact: true });
+
+    // Reject: no digit — not applied, no chip, the whole roster stays.
+    await phone.fill("+ (");
+    await expect(page).toHaveURL(/phone=/);
+    await expect(
+      page.getByTestId("roster-filters").getByRole("button", {
+        name: /^Убрать фильтр: Телефон/,
+      }),
+    ).toHaveCount(0);
+    await expect(total(page)).toHaveText(`Найдено: ${PEOPLE.length}`);
+
+    // Accept: «+7 999 555» finds the participant typed «8 999 555 11 22».
+    await phone.fill("+7 999 555");
+    await expect(chip(page, "Телефон: +7 999 555")).toBeVisible();
+    await expect(total(page)).toHaveText("Найдено: 1");
+    await expect(nameCells(page)).toHaveText([fullName(2)]);
+    await chip(page, "Телефон: +7 999 555").click();
+    await expect(total(page)).toHaveText(`Найдено: ${PEOPLE.length}`);
+
+    // A hand-edited address: an impossible day, text over the 160 maximum, an
+    // inverted range's «по» — all dropped, the roster renders unfiltered.
+    await page.goto(
+      `/events/${eventId}/roster?registeredFrom=2026-02-31&name=${"а".repeat(161)}&phone=${encodeURIComponent("()")}`,
+    );
+    await expect(total(page)).toHaveText(`Найдено: ${PEOPLE.length}`);
+    await expect(toggle(page)).toHaveAccessibleName("Все фильтры");
+    const today = mskDay();
+    await page.goto(
+      `/events/${eventId}/roster?registeredFrom=${today}&registeredTo=${mskDay(-1)}`,
+    );
+    await expect(
+      chip(page, `Дата регистрации: с ${ruDay(today)}`),
+    ).toBeVisible();
+    await expect(total(page)).toHaveText(`Найдено: ${PEOPLE.length}`);
   });
 
   test("044 EARS-23: the open filter panel is axe-clean (WCAG 2.1 AA) and folds to one column at 390", async () => {

@@ -175,6 +175,22 @@ function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 }
 
+/**
+ * 044 EARS-22/23/36 — the phone cell as the digits of `normaliseContactPhone`
+ * (without its `+`), computed in SQL: digits only, an 11-digit domestic `8…`
+ * read as `7…`, at most 15 digits. The answers' stored normalised number is
+ * preferred; a platform-origin row falls back to the account's `users.phone`,
+ * which is NOT stored normalised — so the rule is applied here, and the phone
+ * sort, the phone filter and the displayed number (normalised in the mapper)
+ * all key the same value. Empty → NULL.
+ */
+function normalisedPhoneDigits(
+  phoneNormalised: SQL<string | null>,
+  phone: SQL<string | null>,
+): SQL<string | null> {
+  return sql<string | null>`nullif(left(regexp_replace(regexp_replace(coalesce(${phoneNormalised}, ${phone}, ''), '[^0-9]', '', 'g'), '^8([0-9]{10})$', '7\\1'), 15), '')`;
+}
+
 /** The `specialties_minzdrav` join by the id the answers carry (EARS-25). */
 const specialtyJoin = sql`${specialtiesMinzdrav.id} = nullif(${registrations.answers}->>'specialtyId', '')::uuid`;
 
@@ -619,7 +635,7 @@ export class RegistrationRepository {
         key = russian(cells.city);
         break;
       case "phone":
-        key = sql`nullif(regexp_replace(coalesce(${cells.phoneNormalised}, ${cells.phone}), '[^0-9]', '', 'g'), '')`;
+        key = normalisedPhoneDigits(cells.phoneNormalised, cells.phone);
         break;
       case "presence":
         key = sql`exists (
@@ -666,8 +682,9 @@ export class RegistrationRepository {
    * - ФИО, место работы, email: case-insensitive «contains», the caller's
    *   wildcards escaped.
    * - телефон: «contains» on digits against the normalised number (the
-   *   account's own number for a platform-origin row) — the EARS-22 phone sort
-   *   key — with the term normalised under the intake's own `8 → 7` rule.
+   *   account's own number for a platform-origin row), both sides under the
+   *   intake's own `8 → 7` rule ({@link normalisedPhoneDigits}, also the
+   *   EARS-22 phone sort key), so the filter matches what the row displays.
    * - город / область: case-insensitive EQUALITY with the directory value the
    *   admin's searchable selector offers (#2316 owner refinement); a stored
    *   value outside the directory is simply never offered.
@@ -712,7 +729,7 @@ export class RegistrationRepository {
       // The leading `+` is dropped so a FRAGMENT matches anywhere in the digits.
       const digits = normaliseContactPhone(query.phone).replace(/^\+/, "");
       predicates.push(
-        sql`regexp_replace(coalesce(${cells.phoneNormalised}, ${cells.phone}, ''), '[^0-9]', '', 'g') like ${`%${digits}%`}`,
+        sql`coalesce(${normalisedPhoneDigits(cells.phoneNormalised, cells.phone)}, '') like ${`%${digits}%`}`,
       );
     }
     if (query.specialtyId !== undefined) {

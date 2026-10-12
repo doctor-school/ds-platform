@@ -319,6 +319,56 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect((await rosterRaw(`phone=${enc("abc")}`)).statusCode).toBe(400);
     });
 
+    it("044 EARS-23.15: телефон of a platform-origin row (no congress answer) filters and sorts by the SAME normalised number the row displays — a stored «8 …» is found by «+7 …»", async () => {
+      // D becomes a platform-origin row: the answers carry no contact phone, so
+      // the cell falls back to the account's own `users.phone`, stored «8 …».
+      const d = [...letterOf].find(([, l]) => l === "D")?.[0];
+      expect(d).toBeDefined();
+      const { rows: before } = await pool.query<{
+        answers: Record<string, unknown>;
+        user_id: string;
+        phone: string | null;
+      }>(
+        `SELECT r.answers, r.user_id, u.phone
+           FROM registrations r JOIN users u ON u.id = r.user_id
+          WHERE r.id = $1`,
+        [d],
+      );
+      const original = before[0]!;
+      await pool.query(
+        `UPDATE registrations
+            SET answers = answers - 'contactPhone' - 'contactPhoneNormalised'
+          WHERE id = $1`,
+        [d],
+      );
+      await pool.query("UPDATE users SET phone = $2 WHERE id = $1", [
+        original.user_id,
+        "8 (900) 000-00-01",
+      ]);
+      try {
+        const res = await rosterRaw(`phone=${enc("+7 900 000-00-01")}`);
+        expect(res.statusCode, res.body).toBe(200);
+        const page = CongressRosterListSchema.parse(res.json());
+        expect(page.items.map((r) => letterOf.get(r.registrationId))).toEqual([
+          "D",
+        ]);
+        // …and the row it finds displays that same normalised number.
+        expect(page.items[0]?.phone).toBe("+79000000001");
+        // The phone sort keys the same value: 7 900 000-00-01 sits right
+        // after B (7 900 000-00-00), never last as the raw «8…» digits would.
+        expect(await rows("sort=phone&dir=asc")).toBe("BDCA");
+      } finally {
+        await pool.query("UPDATE registrations SET answers = $2 WHERE id = $1", [
+          d,
+          original.answers,
+        ]);
+        await pool.query("UPDATE users SET phone = $2 WHERE id = $1", [
+          original.user_id,
+          original.phone,
+        ]);
+      }
+    });
+
     it("044 EARS-23.5: специальность filters by the directory id the row resolves its name from", async () => {
       expect(await rows(`specialtyId=${s1}`)).toBe("AD");
       expect(await rows(`specialtyId=${s2}`)).toBe("B");

@@ -1,4 +1,5 @@
 import {
+  CONGRESS_ROSTER_SEARCH_MAX,
   CONGRESS_ROSTER_SORT_DEFAULT,
   CongressRosterMailStatusFilterSchema,
   type CongressRosterMailStatusFilter,
@@ -250,30 +251,60 @@ const CALENDAR_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** A real `YYYY-MM-DD` calendar day — `2026-02-31` and `2026-13-01` are not. */
+function isCalendarDay(value: string): boolean {
+  if (!CALENDAR_DAY.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
+}
+
 /**
- * The filters the address asks for; a value the route would refuse (an unknown
- * mail status, a malformed id or day) reads as not applied.
+ * The registration range the route accepts: a «по» before the «с» is dropped
+ * (the «с» kept), so an inverted range never reaches the route's 400.
+ */
+function validRange(from: string, to: string): [string, string] {
+  return [from, from && to && from > to ? "" : to];
+}
+
+/**
+ * The filters the address asks for. A value the route would refuse is DROPPED
+ * — read as not applied, never sent to become a 400 page: an unknown mail
+ * status, a malformed id, an impossible or malformed day, text over the
+ * route's {@link CONGRESS_ROSTER_SEARCH_MAX}, a phone with no digit, and the
+ * «по» of an inverted range.
  */
 export function rosterFiltersFromAddress(
   params: URLSearchParams,
 ): RosterColumnFilters {
   const read = (key: RosterFilterKey) => (params.get(key) ?? "").trim();
+  const text = (key: RosterFilterKey) => {
+    const value = read(key);
+    return value.length > CONGRESS_ROSTER_SEARCH_MAX ? "" : value;
+  };
   const mail = CongressRosterMailStatusFilterSchema.safeParse(
     read("mailStatus"),
   );
   const day = (key: RosterFilterKey) =>
-    CALENDAR_DAY.test(read(key)) ? read(key) : "";
+    isCalendarDay(read(key)) ? read(key) : "";
+  const phone = text("phone");
+  const [registeredFrom, registeredTo] = validRange(
+    day("registeredFrom"),
+    day("registeredTo"),
+  );
   return {
-    name: read("name"),
-    workplace: read("workplace"),
-    city: read("city"),
-    region: read("region"),
-    phone: read("phone"),
-    email: read("email"),
+    name: text("name"),
+    workplace: text("workplace"),
+    city: text("city"),
+    region: text("region"),
+    phone: /\d/.test(phone) ? phone : "",
+    email: text("email"),
     specialtyId: UUID.test(read("specialtyId")) ? read("specialtyId") : "",
     mailStatus: mail.success ? mail.data : "",
-    registeredFrom: day("registeredFrom"),
-    registeredTo: day("registeredTo"),
+    registeredFrom,
+    registeredTo,
   };
 }
 
@@ -293,10 +324,9 @@ export function rosterFiltersHref(
   return query ? `${pathname}?${query}` : pathname;
 }
 
-/** The registration range in calendar order — the route refuses an inverted one. */
+/** The registration range the route accepts ({@link validRange}). */
 function orderedRange(filters: RosterColumnFilters): [string, string] {
-  const { registeredFrom: from, registeredTo: to } = filters;
-  return from && to && from > to ? [to, from] : [from, to];
+  return validRange(filters.registeredFrom, filters.registeredTo);
 }
 
 /** Whether a filter narrows anything — a phone term needs a digit (the route refuses one without). */

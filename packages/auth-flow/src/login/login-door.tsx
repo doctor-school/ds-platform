@@ -243,6 +243,7 @@ function loginCardCopyOf(config: AuthFlowHostConfig): LoginCardCopy {
       channelGroupLabel: copy.otp.channelGroupLabel,
       channelEmail: copy.otp.channelEmail,
       channelSms: copy.otp.channelSms,
+      channelSmsHint: copy.otp.channelSmsHint,
       emailLabel: copy.otp.emailLabel,
       emailPlaceholder: copy.otp.emailPlaceholder,
       phoneLabel: copy.otp.phoneLabel,

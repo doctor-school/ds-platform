@@ -28,7 +28,11 @@ import { completeReturnTarget } from "../client/return-completion";
 import { resolveAuthFlowCopy } from "../copy";
 import { withBoldDestination } from "../copy/destination";
 import { authErrorMessage } from "../errors";
-import { identifierFieldSchema } from "../fields";
+import {
+  identifierFieldSchema,
+  isPhoneIdentifier,
+  looksLikePhoneInput,
+} from "../fields";
 import { makeResolver } from "../form-resolver";
 import type { AuthFlowHostConfig, AuthFlowResetCopy } from "../host-config";
 import { ResetGlyph } from "./reset-glyph";
@@ -317,13 +321,24 @@ function cardCopyOf(copy: AuthFlowResetCopy): PasswordRecoveryCardCopy {
     title: copy.title,
     titleComplete: copy.completeTitle,
     descriptionRequest: copy.description,
-    // Canvas 404 — the typed identifier stands bold inside the sentence.
+    // Canvas 415–417 — the typed identifier stands bold inside the sentence;
+    // the block passes the HELD identifier (the one the BFF accepted), so a
+    // phone gets the conditional SMS sentence (003 EARS-54), an email EARS-42's.
     descriptionComplete: (destination) =>
-      withBoldDestination(copy.completeDescription, destination),
+      withBoldDestination(
+        isPhoneIdentifier(destination)
+          ? copy.completeDescriptionPhone
+          : copy.completeDescription,
+        destination,
+      ),
     backToSignIn: copy.backToSignIn,
     request: {
       identifierLabel: copy.identifierLabel,
       identifierPlaceholder: copy.identifierPlaceholder,
+      // 003 EARS-55 (b): static, read from the visitor's own input only —
+      // shown from the first «+» or digit (canvas auth.dc.html:392).
+      identifierHint: (identifier) =>
+        looksLikePhoneInput(identifier) ? copy.identifierPhoneHint : null,
       submit: copy.submit,
     },
     complete: {

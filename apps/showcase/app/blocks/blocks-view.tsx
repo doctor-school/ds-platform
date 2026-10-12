@@ -74,7 +74,11 @@ import { Label } from "@ds/design-system/label";
 import { Link } from "@ds/design-system/link";
 import { NativeSelect } from "@ds/design-system/native-select";
 import { Form, FormField } from "@ds/design-system/form";
-import { EmailField, PasswordField } from "@ds/design-system/fields";
+import {
+  EmailField,
+  PasswordField,
+  PhoneFieldSchema,
+} from "@ds/design-system/fields";
 
 /**
  * Blocks section (design-system-showcase spec §3.3). Each exported
@@ -1039,6 +1043,7 @@ const LOGIN_CARD_COPY: LoginCardCopy = {
     channelGroupLabel: "Where to send the code",
     channelEmail: "Email",
     channelSms: "SMS",
+    channelSmsHint: "SMS codes reach only a phone confirmed in your profile.",
     emailLabel: "Email",
     emailPlaceholder: "you@example.com",
     phoneLabel: "Phone",
@@ -1355,7 +1360,7 @@ const PASSWORD_RECOVERY_PROPS: PropRow[] = [
     type: "PasswordRecoveryCardCopy",
     required: true,
     description:
-      "Every visible string, grouped by step; descriptionComplete / complete.resendCountdown are functions of the destination as typed / remaining seconds.",
+      "Every visible string, grouped by step; descriptionComplete / request.identifierHint / complete.resendCountdown are functions of the destination as typed / the live identifier / remaining seconds.",
   },
   {
     name: "stage",
@@ -1428,6 +1433,11 @@ const PASSWORD_RECOVERY_COPY: PasswordRecoveryCardCopy = {
   request: {
     identifierLabel: "Email or phone",
     identifierPlaceholder: "you@example.com",
+    // Type a phone to see the request-step hint (the consumer picks the input).
+    identifierHint: (identifier) =>
+      PhoneFieldSchema.safeParse(identifier.trim()).success
+        ? "SMS codes reach only a phone confirmed in your profile."
+        : null,
     submit: "Send the code",
   },
   complete: {

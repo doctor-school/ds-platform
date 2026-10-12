@@ -253,6 +253,8 @@ export type AuthFlowLoginCopy = {
     readonly channelGroupLabel: string;
     readonly channelEmail: string;
     readonly channelSms: string;
+    /** 003 EARS-55 (a) — the static hint under the switch while «SMS» is selected. */
+    readonly channelSmsHint: string;
     readonly emailLabel: string;
     readonly emailPlaceholder: string;
     readonly phoneLabel: string;
@@ -369,11 +371,19 @@ export type AuthFlowResetCopy = {
   readonly description: string;
   readonly identifierLabel: string;
   readonly identifierPlaceholder: string;
+  /** 003 EARS-55 (b) — the static hint under the identifier while it holds a phone. */
+  readonly identifierPhoneHint: string;
   readonly submit: string;
   /** Complete stage (canvas `titles.reset`, complete branch). */
   readonly completeTitle: string;
   /** Template with `{destination}` — the address the code went to, as typed. */
   readonly completeDescription: string;
+  /**
+   * 003 EARS-54 — the phone variant, template with `{destination}`: the door
+   * cannot know whether the number is confirmed (EARS-16), so the sentence
+   * names SMS only conditionally.
+   */
+  readonly completeDescriptionPhone: string;
   readonly codeLabel: string;
   readonly newPasswordLabel: string;
   /** The persistent length hint under the new-password field. */

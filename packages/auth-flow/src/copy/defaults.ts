@@ -85,6 +85,9 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
       channelGroupLabel: "Канал кода",
       channelEmail: "Эл. почта",
       channelSms: "SMS",
+      // Canvas 130–132 (003 EARS-55 a).
+      channelSmsHint:
+        "Код по SMS придёт, только если телефон подтверждён в профиле. Если нет — выберите «Эл. почта».",
       emailLabel: "Электронная почта",
       emailPlaceholder: "doctor@example.com",
       phoneLabel: "Телефон",
@@ -156,10 +159,16 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
     description: "Укажите e-mail или телефон — пришлём код для сброса.",
     identifierLabel: "Электронная почта или телефон",
     identifierPlaceholder: "doctor@example.com или +7…",
+    // Canvas 229–231 (003 EARS-55 b).
+    identifierPhoneHint:
+      "Код по SMS придёт, только если телефон подтверждён в профиле. Если нет — укажите e-mail.",
     submit: "Отправить код сброса",
     completeTitle: "Новый пароль",
     completeDescription:
       "Код отправлен на {destination}. Введите его и задайте новый пароль.",
+    // Canvas 415–416 (003 EARS-54).
+    completeDescriptionPhone:
+      "Если телефон {destination} подтверждён в профиле, мы отправили на него код по SMS. Введите его и задайте новый пароль.",
     codeLabel: "Код из сообщения",
     newPasswordLabel: "Новый пароль",
     passwordHint: `Не менее ${PASSWORD_MIN_LENGTH} символов.`,

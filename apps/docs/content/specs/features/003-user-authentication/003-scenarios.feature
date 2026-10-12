@@ -218,13 +218,17 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then a BFF session is established
     And no second platform consent row is written and the existing consent is unchanged
 
-  @EARS-23 @failure
+  @EARS-23 @failure @registration-duplicate-mail
   Scenario: Repeated duplicate registrations do not flood the inbox
-    Given an email that is already registered
-    And a re-registration code mail was just sent to that address
-    When a visitor submits the registration form with that email again within the throttle window
-    Then no second code mail is sent
-    And the API response is still indistinguishable from the never-registered case
+    Given an Academy email registered by this scenario with a never-registered response observed
+    And a fresh re-registration code mail was delivered for the first duplicate Academy submission
+    When the visitor submits the Academy registration form for that email again within the real throttle window
+    Then no second addressed code mail is sent over the full delivery horizon inside that throttle window
+    And the duplicate registration API responses remain indistinguishable from the observed never-registered response
+    # NEW browser suppression proof: registration-duplicate-mail.steps.ts.
+    # Retain apps/api/src/auth/auth.service.spec.ts EARS-23 suppression and
+    # apps/api/test/auth/register.e2e-spec.ts / email-timing.e2e-spec.ts
+    # native enumeration/timing proof; the browser changes no throttle lifetime.
 
   @EARS-24 @EARS-42 @EARS-16 @happy
   Scenario: The post-registration screen is the one code step for new and existing visitors

@@ -605,3 +605,23 @@ and cleanup revokes the owned sessions and closes all owned contexts. The
 existing API/IdP replacement proof and broader app-local registration journeys
 remain intact. Run only this selected case on the lead-selected stand; this
 coverage change has no render surface and requires no Stage-B request or slot.
+
+### Duplicate-registration inbox suppression (003 EARS-23)
+
+`Repeated duplicate registrations do not flood the inbox` first creates a unique
+owned Academy account through the real registration form and observes its
+never-registered acknowledgement. `steps/registration-duplicate-mail.steps.ts`
+then submits the same form for that existing address, proves fresh addressed
+re-registration code delivery, and repeats the submission inside the unchanged
+900-second throttle. The canonical `assertNoAddressedMail` helper observes the
+full 15-second delivery horizon with no second mail. Before the repeat,
+`captureAddressedMailCheckpoint` records exactly the two distinct already-delivered
+recipient-bound IDs; every subsequently unseen addressed ID fails, regardless of
+the inbox/client clock difference. Both duplicate responses must match the
+original neutral status and exact acknowledgement. Actual request
+bodies bind the intended credentials and consent, while the unconsumed code step
+grants no private session or profile access. Trace-off auth fixtures, secret-safe
+inputs and strict CAPTCHA preparation remain in use, and cleanup closes only the
+owned context. Existing API suppression, enumeration and timing tests remain
+intact. Run only this selected case on the lead-selected stand; this coverage
+change has no render surface and requires no Stage-B request or slot.

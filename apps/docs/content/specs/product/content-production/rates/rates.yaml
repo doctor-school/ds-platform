@@ -5,11 +5,24 @@
 #   по точкам данных, а не статистическая медиана, если в источнике не сказано иное.
 # hourly_rub — [min, max] часовая ставка подрядчика (самозанятый / ИП / ГПХ / фирма); null — рынок
 #   не продаёт роль по часам или данных нет (причина — в notes).
+# hourly_by_grade_rub — { junior, middle, senior }, каждый [min, max]: внештатный час роли по грейду.
+#   Полосы грейдов покрывают hourly_rub без зазоров: граница между соседними грейдами — середина
+#   между их опорными точками (опорные точки — в hourly_basis). По умолчанию калькулятор берёт middle.
+# hourly_basis — текст: что включает цена часа и как она получена (рынок, пересчёт поштучной цены,
+#   производная gross × 1,5 ÷ 120 по методу Клерка; см. rates-ru.md, «Внештатный час по грейдам»).
+# monthly_gross_by_grade_rub — { junior, middle, senior }, каждый [min, median, max], Москва: зарплата
+#   по грейду, производная от monthly_gross_rub.moscow по правилу variables.grade_split (источники —
+#   sources роли + grade_split.sources; достоверность — не выше grade_split.confidence).
+# hourly_sources / hourly_confidence — источники и достоверность внештатного часа (hourly_rub,
+#   hourly_by_grade_rub) там, где они собраны отдельно от зарплатных sources / confidence роли.
 # per_piece — цена за единицу там, где рынок считает поштучно.
 # sources[].accessed — дата обращения; period — период данных источника.
+# sources[].kind — agency, если точка — средняя агентств/студий, а не частных исполнителей
+#   (по умолчанию — частный исполнитель или вакансия).
 meta:
   issue: https://github.com/doctor-school/ds-platform/issues/2526
-  as_of: 2026-10-05
+  extended_by: https://github.com/doctor-school/ds-platform/issues/2841
+  as_of: 2026-10-12
   currency: RUB
   net_to_gross: "вакансии «на руки» пересчитаны в gross как net ÷ 0,87 (НДФЛ 13 %; для верхних точек выше 2,4 млн ₽ в год ставка 15 % — пересчёт слегка занижает gross)"
   regions:
@@ -54,6 +67,178 @@ variables:
         publisher: "1С:ИТС — перечень ОКВЭД для пониженного тарифа МСП (виден в выдаче поиска)"
         period: 2026
         accessed: 2026-10-05
+  # Режим взносов — параметр калькулятора: какой применяется к юрлицу DS, подтверждает бухгалтерия
+  # (код тарифа в расчёте по страховым взносам: «01» — общий, «32» — МСП-приоритетный).
+  contributions_modes:
+    default: general
+    note: "бухгалтерия DS подтверждает режим; до подтверждения — general"
+    general:
+      label: "общий тариф"
+      rate: 0.302
+      formula: "gross × 0,302 в пределах базы 2 979 000 ₽ в год; сверх базы 15,1 %"
+    msp_priority:
+      label: "МСП-приоритетный (ОКВЭД 85 «Образование» / 59 «Производство кинофильмов, видеофильмов…»)"
+      formula: "min(gross, 40 639,5) × 0,30 + max(gross − 40 639,5, 0) × 0,15 + gross × 0,002"
+      effective_rate_by_gross:
+        "80000": 0.228
+        "120000": 0.203
+        "150000": 0.193
+        "200000": 0.182
+      condition: "реестр МСП + основной ОКВЭД в перечне распоряжения Правительства № 4125-р от 27.12.2025 (классы 58, 59, 62, 63, 72, 85 есть; 73 «Реклама» и 86 «Здравоохранение» нет) + ≥ 70 % дохода от этого вида деятельности"
+    sources:
+      - url: https://www.nalog.gov.ru/rn28/news/activities_fts/16614940/
+        publisher: "ФНС — с 2026 года: база 2 979 000; 30 / 15,1 %; МСП 15 % свыше 1,5 МРОТ = 40 639,5 ₽; условие 70 %; код тарифа 32"
+        period: 2026-04-13
+        accessed: 2026-10-12
+      - url: https://pravo.ppt.ru/rasporyazheniye/323194
+        publisher: "Распоряжение Правительства РФ № 4125-р от 27.12.2025, текст перечня ОКВЭД (85, 59 — в перечне; 73, 86 — нет)"
+        period: 2025-12-27
+        accessed: 2026-10-12
+      - url: https://kontur.ru/articles/4261
+        publisher: "Контур — предельная база 2026, перечень 4125-р, условия МСП, МРОТ 27 093"
+        period: 2026-04-20
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: high,
+        why: "ставки — закон и ФНС; эффективная ставка МСП — собственный расчёт по формуле; применимость к DS — за бухгалтерией",
+      }
+  # Прочие расходы работодателя на штатного сотрудника в ₽ в месяц, не процентом: почти не зависят
+  # от оклада. Отпуск и больничный сюда НЕ входят — они уже в делителе paid_hours_per_month
+  # (../model/teams.yaml); добавить их ещё и здесь — двойной учёт.
+  staff_other_costs_rub_month:
+    unit: ₽ на одного штатного сотрудника в месяц, [min, typical, max]
+    items:
+      dms: { label: "ДМС", rub: [0, 3500, 7500] }
+      workplace:
+        {
+          label: "рабочее место (компенсация удалёнки / доля коворкинга / фиксированное место)",
+          rub: [2000, 12000, 49000],
+        }
+      equipment:
+        { label: "техника, амортизация 36 мес.", rub: [3000, 5000, 10000] }
+      software: { label: "ПО и подписки на место", rub: [1500, 4000, 10000] }
+      training: { label: "обучение", rub: [0, 2000, 5000] }
+      hiring_turnover:
+        {
+          label: "найм и онбординг с учётом текучести 20 %",
+          rub: [1000, 3000, 8000],
+        }
+      hr_accounting:
+        {
+          label: "кадры, расчёт зарплаты, бухгалтерия на сотрудника (исключить, если уже в накладных листьях модели)",
+          rub: [1500, 3000, 6000],
+        }
+      other: { label: "связь, мероприятия, мерч", rub: [0, 1000, 3000] }
+    total_rub: [9000, 33500, 98500]
+    share_of_gross_120k: [0.075, 0.279, 0.821]
+    formula: "стоимость часа штата = (gross × (1 + взносы) + staff_other_costs_rub_month.total) ÷ paid_hours_per_month"
+    sources:
+      - url: https://www.kommersant.ru/doc/8295855
+        publisher: "Коммерсантъ — ДМС Москва и МО ≈ 40–45 тыс. ₽ на сотрудника в год, средний сегмент 80–100 тыс."
+        period: 2025
+        accessed: 2026-10-12
+      - url: https://www.kommersant.ru/doc/8438841
+        publisher: "Коммерсантъ / Bright Rich | CORFAC — место в гибком офисе Москвы 49 тыс. ₽ в месяц"
+        period: 2025
+        accessed: 2026-10-12
+      - url: https://officenavigator.ru/analytics/gibkie-ofisnye-prostranstva-moskvy-aprel-2025/
+        publisher: "Officenavigator — место в коворкинге Москвы 48 тыс. ₽ (I кв. 2025)"
+        period: 2025-04
+        accessed: 2026-10-12
+      - url: https://mperspektiva.ru/topics/core-xp-arenda-gibkikh-ofisov-v-moskve-podorozhala-v-poltora-raza-za-2025-god/
+        publisher: "Московская перспектива / CORE.XP — гибкий офис 54 377 ₽ с НДС за место"
+        period: 2025
+        accessed: 2026-10-12
+      - url: https://ppt.ru/news/144183
+        publisher: "ppt.ru — компенсация удалёнки ≈ 3 000 ₽/мес (оценка периода законопроекта)"
+        accessed: 2026-10-12
+      - url: https://www.sostav.ru/blogs/282708/97438
+        publisher: "Аспро.Финансы (Sostav) — полная стоимость ×1,4 к окладу, с ДМС и наймом ×1,45–1,55; найм 40–80 тыс. офисного специалиста, 120–250 тыс. редкого профиля"
+        period: 2026-07-23
+        accessed: 2026-10-12
+      - url: https://accessfinancial.com/ru/glossarii/autsorsing-rascheta-zarabotnoi-platy/
+        publisher: "accessfinancial.com — аутсорсинг расчёта зарплаты 15–50 € на сотрудника в месяц (европейский ориентир)"
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: low,
+        why: "ДМС и коворкинг — средняя (отраслевые обзоры); техника, ПО, обучение, кадры — собственные оценки по прайсам без российской статистики «на голову»; сверка: типичный денежный множитель 1 + 0,302 + 0,279 = 1,58 — у верха коридора Аспро ×1,45–1,55",
+      }
+  bonus_share:
+    default: 0
+    range: [0, 0.083]
+    unit: "доля к годовому gross (0,083 = 13-я зарплата); облагается взносами"
+    formula: "gross_для_часа = gross × (1 + bonus_share)"
+    basis: "премия — политика компании, а не рыночная норма; по умолчанию 0. Верх — 13-я зарплата: + 8,3 % gross, со взносами ≈ + 10,8 %. Отпускные растут вместе с премией — учтено тем, что bonus_share умножает gross до взносов"
+    sources:
+      - url: https://www.sostav.ru/blogs/282708/97438
+        publisher: "Аспро.Финансы (Sostav) — премии как часть полной стоимости сотрудника"
+        period: 2026-07-23
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: low,
+        why: "ставка премии — политика DS, не рынок; верх — арифметика 13-й зарплаты",
+      }
+  # Грейды штатных зарплат: вилка вакансий роли по Москве уже охватывает грейды, поэтому грейды
+  # нарезаются из неё, а не умножением медианы на межгрейдовые коэффициенты IT.
+  grade_split:
+    method: >-
+      Из monthly_gross_rub.moscow = [min, median, max]: lo = (min + median) ÷ 2, hi = (median + max) ÷ 2,
+      округление до 500 ₽. junior = [min, lo, median], middle = [lo, median, hi], senior = [median, hi, max].
+      Полосы грейдов перекрываются, как на рынке; median роли = median middle.
+    plausibility: >-
+      Хабр Карьера (IT) даёт шаг грейда ×1,9–2,3 (middle ÷ junior) и ×1,67–1,72 (senior ÷ middle) — по
+      всему стажу от стажёра до ведущего; вакансии ролей DS — специалисты с опытом, поэтому шаг уже
+      (у ролей файла senior ÷ middle по медианам ×1,06–1,5). Коэффициенты IT — только верхняя граница
+      правдоподобия, в значения не входят.
+    sources:
+      - url: https://career.habr.com/salaries
+        publisher: "Хабр Карьера, калькулятор зарплат (все IT) — junior 88 тыс., middle 167 тыс., senior 285 тыс. ₽"
+        n: "41 201 анкета"
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://habr.com/ru/articles/839252
+        publisher: "Хабр Карьера, разработчики 1П 2024 — джуны 75 000, мидлы 174 233, сеньоры 300 000 ₽"
+        period: 2024-H1
+        accessed: 2026-10-12
+      - url: https://habr.com/ru/companies/habr_career/articles/719730/
+        publisher: "Хабр Карьера, разработчики 2П 2022 — 70 / 150 / 250 тыс. ₽"
+        n: "5 792 зарплаты"
+        period: 2022-H2
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: low,
+        why: "грейды выведены правилом из вилки вакансий роли, а не из вакансий с указанным грейдом; межгрейдовые отношения проверены только по IT",
+      }
+  default_team_grade_mix:
+    junior: 0.2
+    middle: 0.6
+    senior: 0.2
+    unit: доля штатных часов роли по грейдам; сумма = 1
+    basis: >-
+      Студия 10–20 человек с медицинским контентом держит костяк из опытных специалистов: middle
+      ведут производство, senior — по одному на круг (ревью, стандарты, сложные единицы), junior —
+      вспомогательная работа под контролем. В опросах и вакансиях IT middle + senior — 65–80 %,
+      junior — 10–20 %. При 0,2 / 0,6 / 0,2 средняя по грейдам зарплата ≈ медиане роли
+      (monthly_gross_rub.median), поэтому смесь по умолчанию не сдвигает текущую себестоимость.
+    sources:
+      - url: https://ruitunion.org/posts/2024-10-23-grades-and-salaries/
+        publisher: "Профсоюз IT — middle и senior суммарно 79 % участников опроса (состав опроса, не штата)"
+        period: 2024-H2
+        accessed: 2026-10-12
+      - url: https://apptractor.ru/info/analytics/zarplaty-mobilnyh-razrabotchikov-po-dannym-habr-karera.html
+        publisher: "AppTractor по данным Хабр Карьеры — вакансии: junior 2,5 %, middle 45,2 %, senior 45,2 %, lead 7,1 % (структура спроса, не штата)"
+        n: "6 870 вакансий"
+        period: 2023-весна
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: low,
+        why: "распределения штата по грейдам в малых командах в открытых источниках нет; доли — суждение, сверенное с составом опросов и вакансий IT",
+      }
   contractor_on_top_rate:
     unit: доля к цене подрядчика, которую компания платит сверх неё
     npd_self_employed: 0
@@ -90,7 +275,9 @@ variables:
         accessed: 2026-10-05
   formulas:
     in_house_hourly_cost: "monthly_gross_rub.median × (1 + employer_contributions_rate) ÷ ../model/teams.yaml#capacity_variables.paid_hours_per_month"
+    in_house_hourly_cost_full: "(monthly_gross × (1 + bonus_share) × (1 + взносы[contributions_modes]) + staff_other_costs_rub_month.total_rub[typical]) ÷ ../model/teams.yaml#capacity_variables.paid_hours_per_month; monthly_gross — monthly_gross_rub или monthly_gross_by_grade_rub[грейд]"
     contractor_hourly_cost: "hourly_rub × (1 + contractor_on_top_rate[форма договора])"
+    contractor_hourly_cost_by_grade: "hourly_by_grade_rub[грейд] × (1 + contractor_on_top_rate[форма договора])"
     per_piece_cost: "per_piece.rub × (1 + contractor_on_top_rate[форма договора])"
     composite_rate: "средневзвешенная часовая стоимость ролей composite_of по долям их часов (из листьев модели или из состава команды в калькуляторе)"
 
@@ -120,10 +307,34 @@ roles:
         client manager фарма,
       ]
     engagement: штат
+    monthly_gross_by_grade_rub:
+      junior: [130000, 170000, 210000]
+      middle: [170000, 210000, 277500]
+      senior: [210000, 277500, 345000]
     monthly_gross_rub:
       moscow: [130000, 210000, 345000]
       russia_remote: [100000, 140000, 195000]
-    hourly_rub: null
+    hourly_rub: [1600, 4300]
+    hourly_by_grade_rub:
+      junior: [1600, 2100]
+      middle: [2100, 3450]
+      senior: [3450, 4300]
+    hourly_basis: "опорные точки junior 1 600 / middle 2 600 / senior 4 300: junior — средний час частного аккаунт-менеджера Workspace (digital, не фарма); middle/senior — производные: moscow gross × 1,5 ÷ 120 (Клерк). Цена исполнителя (самозанятый / ИП), без взносов сверху"
+    hourly_sources:
+      - url: https://workspace.ru/people/account-manager/
+        publisher: "Workspace.ru — средняя стоимость часа частного аккаунт-менеджера 1 600 ₽"
+        n: "270 специалистов"
+        period: 2026-10-12
+        accessed: 2026-10-12
+      - url: https://www.klerk.ru/materials/2025-10-06/skolko-stoit-chas-raboty-programmista/
+        publisher: "Клерк — фриланс-коэффициент 1,5 к зарплате при 120 оплачиваемых часах (метод производной ставки)"
+        period: 2025-10
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: low,
+        why: "одна рыночная точка digital-аккаунтов; ставка KAM фармы вне штата — производная",
+      }
     per_piece: []
     sources:
       - url: "https://hh.ru/search/vacancy?text=key+account+manager+фарма&area=113&only_with_salary=true"
@@ -149,10 +360,40 @@ roles:
         project manager / executive producer в EdTech,
       ]
     engagement: штат
+    monthly_gross_by_grade_rub:
+      junior: [100000, 130000, 160000]
+      middle: [130000, 160000, 210000]
+      senior: [160000, 210000, 260000]
     monthly_gross_rub:
       moscow: [100000, 160000, 260000]
       russia_remote: [80000, 120000, 200000]
-    hourly_rub: null
+    hourly_rub: [1500, 3500]
+    hourly_by_grade_rub:
+      junior: [1500, 1750]
+      middle: [1750, 2750]
+      senior: [2750, 3500]
+    hourly_basis: "опорные точки junior 1 500 / middle 2 000 / senior 3 500: junior — средний час частного PM (Workspace) и доход внештатного PM Solar Staff ÷ 100–120 ч; middle/senior — производные gross × 1,5 ÷ 120; консультации продюсеров 5–15 тыс. ₽/ч — хвост, не ставка; продюсеры запусков за 30–50 % выручки к DS неприменимы"
+    hourly_sources:
+      - url: https://workspace.ru/people/project-manager/
+        publisher: "Workspace.ru — средняя стоимость часа частного проджект-менеджера 1 500 ₽"
+        n: "1 114 специалистов"
+        period: 2026-10-12
+        accessed: 2026-10-12
+      - url: https://www.forbes.ru/biznes/554130-srednemesacnyj-dohod-frilanserov-vyros-na-25-v-2025-godu
+        publisher: "Forbes со ссылкой на Solar Staff — средний месячный доход внештатных менеджеров проектов 145 119 ₽"
+        n: "50 000+ исполнителей платформы"
+        period: 2025
+        accessed: 2026-10-12
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=продюсер+онлайн-курсов"
+        publisher: "Яндекс Услуги — продюсеры/создание курсов: от 5 000 и от 15 000 ₽ за 60 мин; курс от идеи до структуры от 90 000, запуск школы от 300 000 ₽"
+        n: 15
+        period: 2026-10-12
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: medium,
+        why: "Workspace и Solar Staff сходятся на ≈ 1 200–1 500 ₽/ч; верх — производный и консультационный хвост",
+      }
     per_piece: []
     sources:
       - url: "https://hh.ru/search/vacancy?text=продюсер+образовательных&search_field=name&area=113&only_with_salary=true"
@@ -188,10 +429,38 @@ roles:
         дизайнер образовательного опыта (instructional designer),
       ]
     engagement: штат
+    monthly_gross_by_grade_rub:
+      junior: [80000, 110000, 140000]
+      middle: [110000, 140000, 157500]
+      senior: [140000, 157500, 175000]
     monthly_gross_rub:
       moscow: [80000, 140000, 175000]
       russia_remote: [65000, 100000, 130000]
-    hourly_rub: null
+    hourly_rub: [1000, 3500]
+    hourly_by_grade_rub:
+      junior: [1000, 1500]
+      middle: [1500, 2750]
+      senior: [2750, 3500]
+    hourly_basis: "опорные точки junior 1 000 / middle 2 000 / senior 3 500: частные методисты Москвы 2 500–5 000 ₽/ч («от»), «средний рынок» 2 000 ₽/ч (Skillbox), опытные до 5 000 (Нетология); проект 50–60 тыс. при 30–40 ч ≈ 1 250–2 000 ₽/ч"
+    hourly_sources:
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=методист+онлайн-курсов"
+        publisher: "Яндекс Услуги — методисты Москвы: от 2 500, 5 000, 15 000 ₽ за 60 мин; разработка программ 10 000 ₽ за 90 мин"
+        n: 14
+        period: 2026-10-12
+        accessed: 2026-10-12
+      - url: https://skillbox.ru/media/education/kak-metodistu-nachat-zarabatyvat-na-frilanse/
+        publisher: "Skillbox Media — пример расчёта ставки методиста-фрилансера: рынок ≈ 2 000 ₽/ч, низ 500 ₽/ч (иллюстрация автора)"
+        period: 2023-05
+        accessed: 2026-10-12
+      - url: https://netology.ru/blog/09-2022-edmarket-who-is-metodist
+        publisher: "Нетология — час опытного методиста до 5 000 ₽, проекты от 30 000 ₽ (видно в выдаче поиска; страница 403)"
+        period: 2022-09
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: medium,
+        why: "несколько независимых точек сходятся на 1 000–5 000 ₽/ч; цены «от», без медицинской специфики НМО",
+      }
     per_piece:
       - {
           unit: "методология онлайн-курса за услугу (вакансия-проект)",
@@ -232,11 +501,49 @@ roles:
         сценарист электронных курсов,
       ]
     engagement: штат
+    monthly_gross_by_grade_rub:
+      junior: [70000, 97500, 125000]
+      middle: [97500, 125000, 148500]
+      senior: [125000, 148500, 172000]
     monthly_gross_rub:
       moscow: [70000, 125000, 172000]
       russia_remote: [40000, 80000, 120000]
-    hourly_rub: null
-    per_piece: []
+    hourly_rub: [900, 2300]
+    hourly_by_grade_rub:
+      junior: [900, 1200]
+      middle: [1200, 1900]
+      senior: [1900, 2300]
+    hourly_basis: "опорные точки junior 900 / middle 1 500 / senior 2 300: 550–1 150 ₽ за 1000 знаков × 1 500–2 000 знаков готового экспертного текста в час; производная gross × 1,5 ÷ 120 сходится (875–2 150). Сценарии курса и тестовые задания поштучно на рынке не найдены"
+    hourly_sources:
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=медицинский+редактор"
+        publisher: "Яндекс Услуги — медицинский копирайтер 700 ₽ / 1000 зн., редактура мед. статьи от 340, научное редактирование 100–150 ₽ / 1000 зн."
+        n: 15
+        period: 2026-10-12
+        accessed: 2026-10-12
+      - url: https://belberry.net/services/kontent/meditsinskiy-kopirayting/
+        publisher: "Belberry — 550 ₽ / 1000 знаков без пробелов, авторы с медицинским образованием (видно в выдаче поиска)"
+        kind: agency
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://medsprint.ru/services/medical-copywriting
+        publisher: "Медицинский копирайтинг, авторы-врачи — 1 150 ₽ / 1000 знаков (видно в выдаче поиска; атрибуция сниппета к этому сайту не проверена)"
+        kind: agency
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://timeweb.com/ru/community/articles/cena-zakaza-stati-skolko-stoit-chto-vliyaet-na-cenu-i-kak-vybrat-kopiraytera
+        publisher: "Timeweb Community — медицинские и юридические статьи 400–800 ₽ / 1000 символов"
+        period: 2025-05
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: low,
+        why: "поштучные цены согласованы, но часы — допущение о скорости; сценариев и тестов на рынке нет",
+      }
+    per_piece:
+      - {
+          unit: "медицинский текст автора с мед. образованием, 1000 знаков",
+          rub: [550, 1150],
+        }
     sources:
       - url: "https://hh.ru/search/vacancy?text=медицинский+редактор&search_field=name&area=113&only_with_salary=true"
         publisher: "hh.ru — Медиабюро Статус презенс «Медицинский редактор / медицинский писатель» до 150 000 на руки (≈172 000), iSEO от 70 000 gross"
@@ -266,14 +573,42 @@ roles:
         организатор образовательных проектов в медицине,
       ]
     engagement: штат
+    monthly_gross_by_grade_rub:
+      junior: [100000, 117500, 135000]
+      middle: [117500, 135000, 160000]
+      senior: [135000, 160000, 185000]
     monthly_gross_rub:
       moscow: [100000, 135000, 185000]
       russia_remote: [50000, 90000, 140000]
-    hourly_rub: null
+    hourly_rub: [1200, 2500]
+    hourly_by_grade_rub:
+      junior: [1200, 1450]
+      middle: [1450, 2100]
+      senior: [2100, 2500]
+    hourly_basis: "опорные точки junior 1 200 / middle 1 700 / senior 2 500: частный организатор от 1 500 ₽/ч (Яндекс Услуги); 45–150 тыс. ₽ за мероприятие ÷ 40–80 ч работы менеджера на одну конференцию / цикл НМО"
+    hourly_sources:
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=организация+конференций+event-менеджер"
+        publisher: "Яндекс Услуги — организация конференции от 1 500 ₽/ч; фикс от 5 000 до 80 000 ₽"
+        n: 175
+        period: 2026-10-12
+        accessed: 2026-10-12
+      - url: https://uchis-online.ru/blog/professii/skolko-zarabativaet-ivent-menedzher
+        publisher: "Учись Онлайн — ивент-фрилансер 100–150 тыс. ₽ за частный заказ, до 200 тыс. за крупное мероприятие (видно в выдаче поиска)"
+        period: 2026
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: low,
+        why: "одна часовая точка; цены за мероприятие пересчитаны по допущению 40–80 ч",
+      }
     per_piece:
       - {
           unit: "организация мероприятия за услугу (одна региональная вакансия)",
           rub: [45000, 45000],
+        }
+      - {
+          unit: "организация мероприятия фрилансером, за мероприятие (Учись Онлайн, hh.ru)",
+          rub: [45000, 150000],
         }
     sources:
       - url: "https://hh.ru/search/vacancy?text=%22event-менеджер%22+конференции&area=113&only_with_salary=true"
@@ -299,10 +634,34 @@ roles:
         KOL-менеджер (потолок),
       ]
     engagement: штат
+    monthly_gross_by_grade_rub:
+      junior: [80000, 100000, 120000]
+      middle: [100000, 120000, 152500]
+      senior: [120000, 152500, 185000]
     monthly_gross_rub:
       moscow: [80000, 120000, 185000]
       russia_remote: [70000, 100000, 140000]
-    hourly_rub: null
+    hourly_rub: [1000, 2300]
+    hourly_by_grade_rub:
+      junior: [1000, 1250]
+      middle: [1250, 1900]
+      senior: [1900, 2300]
+    hourly_basis: "ПРОИЗВОДНАЯ: опорные точки junior 1 000 / middle 1 500 / senior 2 300 = moscow gross [min, median, max] × 1,5 ÷ 120 (Клерк); проверка — частный аккаунт-менеджер Workspace 1 600 ₽/ч. Рынка «менеджера по работе с экспертами» вне штата нет"
+    hourly_sources:
+      - url: https://www.klerk.ru/materials/2025-10-06/skolko-stoit-chas-raboty-programmista/
+        publisher: "Клерк — фриланс-коэффициент 1,5 к зарплате при 120 оплачиваемых часах"
+        period: 2025-10
+        accessed: 2026-10-12
+      - url: https://workspace.ru/people/account-manager/
+        publisher: "Workspace.ru — средний час частного аккаунт-менеджера 1 600 ₽ (прокси)"
+        n: "270 специалистов"
+        period: 2026-10-12
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: low,
+        why: "производная от прокси-зарплаты; рынка роли вне штата нет",
+      }
     per_piece: []
     proxy_role: "менеджер по работе с авторами в онлайн-школе; если роли нужен медицинский диплом — медицинский советник (MSL) ≈ 172 000 gross"
     sources:
@@ -453,10 +812,34 @@ roles:
     market_titles:
       [выпускающий редактор / менеджер редакции научного медицинского журнала]
     engagement: штат
+    monthly_gross_by_grade_rub:
+      junior: [103400, 110000, 116700]
+      middle: [110000, 116700, 123500]
+      senior: [116700, 123500, 129900]
     monthly_gross_rub:
       moscow: [103400, 116700, 129900]
       russia_remote: null
-    hourly_rub: null
+    hourly_rub: [900, 1650]
+    hourly_by_grade_rub:
+      junior: [900, 1200]
+      middle: [1200, 1550]
+      senior: [1550, 1650]
+    hourly_basis: "опорные точки junior 900 / middle 1 450 / senior 1 650: junior — средний час частного редактора Workspace (не научного); middle/senior — ПРОИЗВОДНЫЕ gross × 1,5 ÷ 120"
+    hourly_sources:
+      - url: https://workspace.ru/people/editor/
+        publisher: "Workspace.ru — средняя стоимость часа частного редактора 900 ₽"
+        n: "450 специалистов"
+        period: 2026-10-12
+        accessed: 2026-10-12
+      - url: https://www.klerk.ru/materials/2025-10-06/skolko-stoit-chas-raboty-programmista/
+        publisher: "Клерк — фриланс-коэффициент 1,5 / 120 ч (метод)"
+        period: 2025-10
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: low,
+        why: "рыночная точка — общий редактор; выпускающих редакторов научных журналов вне штата не найдено",
+      }
     per_piece: []
     sources:
       - url: "https://hh.ru/search/vacancy?text=редакция+научного+журнала&area=113&only_with_salary=true&search_field=name"
@@ -500,10 +883,35 @@ roles:
         арт-директор видео,
       ]
     engagement: "штат; пик — подряд/самозанятый"
+    monthly_gross_by_grade_rub:
+      junior: [90000, 110000, 130000]
+      middle: [110000, 130000, 180000]
+      senior: [130000, 180000, 230000]
     monthly_gross_rub:
       moscow: [90000, 130000, 230000]
       russia_remote: null
-    hourly_rub: [2500, 3600]
+    hourly_rub: [900, 3000]
+    hourly_by_grade_rub:
+      junior: [900, 1500]
+      middle: [1500, 2500]
+      senior: [2500, 3000]
+    hourly_basis: "частные исполнители (не агентства), прокси — моушн-дизайнер: опорные точки junior 1 000 / middle 2 000 / senior 3 000 (грейды — оценка: junior ≈ нижняя цена «от», senior ≈ верх частных цен). Прежняя вилка 2 500–3 600 — средний час агентств Workspace (sources, kind: agency)"
+    hourly_sources:
+      - url: https://workspace.ru/people/motion-designer/
+        publisher: "Workspace.ru — средняя стоимость часа частного моушн-дизайнера 2 000 ₽"
+        n: "93 специалиста"
+        period: 2026-10-12
+        accessed: 2026-10-12
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=моушн+дизайн"
+        publisher: "Яндекс Услуги, Москва — частники «от 1 500», «от 2 000», «от 5 000 ₽»; 3D-моушн от 900 ₽/ч (видно в выдаче поиска)"
+        n: 135
+        period: 2026-10
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: low,
+        why: "отдельного рынка раскадровщиков в выдаче нет — оценка через частных моушн-дизайнеров; рублёвых цен за кадр раскадровки нет",
+      }
     per_piece:
       - {
           unit: "раскадровка одного ролика (вакансия-услуга)",
@@ -517,11 +925,13 @@ roles:
         period: 2026-10-05
         accessed: 2026-10-05
       - url: https://workspace.ru/illustration/
+        kind: agency
         publisher: "Workspace.ru — средний час агентств иллюстрации 2 500 ₽ (верхняя граница для частного исполнителя)"
         n: "528 агентств"
         period: 2026-10-05
         accessed: 2026-10-05
       - url: https://workspace.ru/animation-and-motiondesign/
+        kind: agency
         publisher: "Workspace.ru — средний час агентств анимации и моушн-дизайна 3 600 ₽"
         n: "113 агентств"
         period: 2026-10-05
@@ -536,10 +946,40 @@ roles:
     market_titles:
       [дизайнер инфографики, иллюстратор схем, технический иллюстратор]
     engagement: "штат; пик — подряд/самозанятый"
+    monthly_gross_by_grade_rub:
+      junior: [75000, 97500, 120000]
+      middle: [97500, 120000, 160000]
+      senior: [120000, 160000, 200000]
     monthly_gross_rub:
       moscow: [75000, 120000, 200000]
       russia_remote: [30000, 70000, 100000]
-    hourly_rub: [1500, 2500]
+    hourly_rub: [800, 2500]
+    hourly_by_grade_rub:
+      junior: [800, 1150]
+      middle: [1150, 2000]
+      senior: [2000, 2500]
+    hourly_basis: "частные исполнители: опорные точки junior 800 / middle 1 500 / senior 2 500 — оценка по поштучным ценам частников (инфографика 500–2 000 ₽ за схему, Profi в среднем 1 850 ₽ за услугу) при ≈ 1 ч на схему; прежняя вилка 1 500–2 500 опиралась на средний час агентств Workspace (kind: agency)"
+    hourly_sources:
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=инфографика+схемы"
+        publisher: "Яндекс Услуги — частники: от 500 ₽ за слайд, от 1 000 ₽ (до 8 пунктов), от 2 000 ₽"
+        n: 73
+        period: 2026-10
+        accessed: 2026-10-12
+      - url: https://profi.ru/it_freelance/infografika/web/
+        publisher: "Profi.ru — инфографика от 960 ₽, в среднем 1 850, максимум 5 320 ₽ за услугу (видно в выдаче поиска)"
+        n: "~7 078"
+        period: 2025–2026
+        accessed: 2026-10-12
+      - url: https://workspace.ru/people/graphic-designer/
+        publisher: "Workspace.ru — средний час частного графдизайнера 7 500 ₽ (искажён выбросами — только сигнал, не ставка)"
+        n: "1 777 специалистов"
+        period: 2026-10-12
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: medium,
+        why: "поштучные цены подтверждены двумя площадками; часовая ставка — пересчёт по допущению ≈ 1 ч на схему",
+      }
     per_piece:
       - {
           unit: "схема / технический рисунок (фикс-предложения FL.ru)",
@@ -562,6 +1002,7 @@ roles:
         period: 2026-10-05
         accessed: 2026-10-05
       - url: https://workspace.ru/illustration/
+        kind: agency
         publisher: "Workspace.ru — средний час агентств иллюстрации 2 500 ₽"
         n: "528 агентств"
         period: 2026-10-05
@@ -576,17 +1017,47 @@ roles:
     market_titles:
       [медицинский иллюстратор, 3D-визуализатор, 3D medical animator]
     engagement: "штат; пик — подряд/самозанятый"
+    monthly_gross_by_grade_rub:
+      junior: [75000, 105000, 135000]
+      middle: [105000, 135000, 212500]
+      senior: [135000, 212500, 290000]
     monthly_gross_rub:
       moscow: [75000, 135000, 290000]
       russia_remote: null
-    hourly_rub: [2500, 5000]
+    hourly_rub: [1200, 3500]
+    hourly_by_grade_rub:
+      junior: [1200, 1600]
+      middle: [1600, 2750]
+      senior: [2750, 3500]
+    hourly_basis: "частные 3D-дизайнеры и иллюстраторы общего профиля: опорные точки junior 1 200 / middle 2 000 / senior 3 500 (грейды — оценка). Надбавка за анатомическую точность не измерена — для медицинского иллюстратора это нижняя оценка; прежняя вилка 2 500–5 000 была суждением с надбавкой за дефицит"
+    hourly_sources:
+      - url: https://workspace.ru/people/3d-designer/
+        publisher: "Workspace.ru — средняя стоимость часа частного 3D-дизайнера 1 200 ₽"
+        n: "228 специалистов"
+        period: 2026-10-12
+        accessed: 2026-10-12
+      - url: https://profi.ru/it_freelance/illyustratory/
+        publisher: "Profi.ru — иллюстраторы от 1 500 до 15 000 ₽ за услугу (видно в выдаче поиска)"
+        n: "3 851"
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://anatomyart.ru/
+        publisher: "Частный медицинский иллюстратор (2D/3D) — прайса нет, только по запросу"
+        n: 1
+        period: 2026
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: low,
+        why: "публичных рублёвых прайсов на медицинскую иллюстрацию нет; медицинская надбавка не измерена",
+      }
     per_piece:
       - {
           unit: "3D-визуализация медтехники (одно предложение FL.ru)",
           rub: [4550, 4550],
         }
     proxy_role: "3D-визуализатор общего профиля (Москва); с надбавкой за дефицит анатомической точности"
-    notes: "ДЕФИЦИТНАЯ роль: вакансий и прайсов медицинского иллюстратора в России не найдено. Трудоёмкость одной иллюстрации — 5–26+ ч (Ohio State University, США); × час 2 500–5 000 ₽ ≈ 12,5–130 тыс. ₽ за иллюстрацию — производная оценка, не рыночная цена."
+    notes: "ДЕФИЦИТНАЯ роль: вакансий и прайсов медицинского иллюстратора в России не найдено. Трудоёмкость одной иллюстрации — 5–26+ ч (Ohio State University, США); × час 1 200–3 500 ₽ (частные исполнители) ≈ 6–91 тыс. ₽ за иллюстрацию — производная оценка, не рыночная цена."
     sources:
       - url: "https://hh.ru/search/vacancy?text=3D+визуализатор&area=1"
         publisher: "hh.ru — 3D-визуализаторы Москвы 50–250 тыс. на руки, проектные 50–400 тыс. за услугу"
@@ -615,10 +1086,40 @@ roles:
   - role: Медиа-круг — аниматор
     market_titles: [моушн-дизайнер, 2D-аниматор]
     engagement: "штат; пик — подряд/самозанятый"
+    monthly_gross_by_grade_rub:
+      junior: [70000, 100000, 130000]
+      middle: [100000, 130000, 175000]
+      senior: [130000, 175000, 220000]
     monthly_gross_rub:
       moscow: [70000, 130000, 220000]
       russia_remote: null
-    hourly_rub: [2000, 4000]
+    hourly_rub: [1000, 3600]
+    hourly_by_grade_rub:
+      junior: [1000, 1500]
+      middle: [1500, 2800]
+      senior: [2800, 3600]
+    hourly_basis: "частные моушн-дизайнеры и 2D-аниматоры: опорные точки junior 1 000 / middle 2 000 / senior 3 600 (грейды — оценка); прежняя вилка 2 000–4 000 опиралась на агентства Workspace (kind: agency)"
+    hourly_sources:
+      - url: https://workspace.ru/people/motion-designer/
+        publisher: "Workspace.ru — средний час частного моушн-дизайнера 2 000 ₽, средняя услуга 45 500 ₽"
+        n: "93 специалиста"
+        period: 2026-10-12
+        accessed: 2026-10-12
+      - url: https://profi.ru/it_freelance/moushn-dizain/price/
+        publisher: "Profi.ru — моушн-дизайн от 2 350 до 27 200 ₽ за услугу; 2D от 2 000, 3D от 3 000 (видно в выдаче поиска)"
+        n: "1 764"
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://m.vk.ru/@tradigital-skolko-stoit-2d-animaciya
+        publisher: "Tradigital (частный аниматор) — 2D-анимация 3 500–6 000 ₽ за секунду"
+        n: 1
+        period: 2019-01
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: medium,
+        why: "средний час Workspace (n = 93) сходится с ценами частников Яндекса и Profi",
+      }
     per_piece:
       - {
           unit: "2D-анимационный ролик до 30 с (фикс-предложение FL.ru)",
@@ -638,6 +1139,7 @@ roles:
         period: 2026
         accessed: 2026-10-05
       - url: https://workspace.ru/animation-and-motiondesign/
+        kind: agency
         publisher: "Workspace.ru — агентства анимации, средний час 3 600 ₽, топ-10 2 000–5 000 ₽"
         n: "113 агентств"
         period: 2026-10-05
@@ -657,7 +1159,28 @@ roles:
     market_titles: [оператор синтеза речи; диктор (верхний прокси)]
     engagement: "штат; пик — подряд/самозанятый"
     monthly_gross_rub: null
-    hourly_rub: [800, 1000]
+    hourly_rub: [1000, 2000]
+    hourly_basis: "частные дикторы — верхний прокси: Profi «от 1 000 ₽/ч», частник FL.ru 2 000 ₽/ч; почасовые цены дикторов редки, рынок считает за минуту чистовой записи (per_piece). Оператор синтеза — ставка монтажёра (proxy_role); грейды по часу не выводятся"
+    hourly_sources:
+      - url: https://profi.ru/artist/diktor/price/
+        publisher: "Profi.ru — дикторы от 1 000 ₽/ч; заявки 800 и 1 800–2 000 ₽ за минуту чистовой записи (видно в выдаче поиска)"
+        n: "1 363"
+        period: 2025–2026
+        accessed: 2026-10-12
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=диктор+озвучка"
+        publisher: "Яндекс Услуги — видео от 400 ₽ за минуту, 2 000 ₽ за минуту, начитка 15 с от 1 000 ₽"
+        n: 174
+        period: 2026-10
+        accessed: 2026-10-12
+      - url: https://www.fl.ru/users/VAUmedia
+        publisher: "FL.ru, частный диктор — час работы 2 000 ₽, ролик до 30 с 500 ₽, страница А4 1 500 ₽ (видно в выдаче поиска)"
+        n: 1
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: medium,
+        why: "две площадки и много частных цен за минуту; почасовые ставки редки",
+      }
     per_piece:
       - {
           unit: "минута речи студийного диктора (верхний прокси)",
@@ -685,10 +1208,35 @@ roles:
   - role: Медиа-круг — монтажёр
     market_titles: [видеомонтажёр, режиссёр монтажа]
     engagement: "штат; пик — подряд/самозанятый"
+    monthly_gross_by_grade_rub:
+      junior: [70000, 87500, 105000]
+      middle: [87500, 105000, 127500]
+      senior: [105000, 127500, 150000]
     monthly_gross_rub:
       moscow: [70000, 105000, 150000]
       russia_remote: [35000, 52000, 70000]
-    hourly_rub: [1500, 3500]
+    hourly_rub: [1500, 4000]
+    hourly_by_grade_rub:
+      junior: [1500, 2000]
+      middle: [2000, 3250]
+      senior: [3250, 4000]
+    hourly_basis: "частные видеомонтажёры: опорные точки junior 1 500 / middle 2 500 / senior 4 000 (грейды — оценка по ценам частников за услугу и минуту ролика); прежняя вилка 1 500–3 500 опиралась на агентства Workspace (kind: agency)"
+    hourly_sources:
+      - url: https://uslugi.yandex.ru/213-moscow/category/foto-video-i-audio/videomontazh--3215
+        publisher: "Яндекс Услуги — частные монтажёры «от 1 000 ₽» (чаще всего), «от 5 000», «от 10 000 ₽» за ролик"
+        n: 180
+        period: 2026-10
+        accessed: 2026-10-12
+      - url: https://profi.ru/krasota/photo-video-audio/videomontazh/price/
+        publisher: "Profi.ru — монтаж от 1 160 до 10 000 ₽ за услугу; заявки до 2 500 ₽ за минуту ролика, 4 000 ₽ за час готового обучающего материала (видно в выдаче поиска)"
+        n: "9 753"
+        period: 2026
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: medium,
+        why: "много частных цен, но за услугу; часовая ставка выведена",
+      }
     per_piece:
       - { unit: "минута готового видео (эконом)", rub: [400, 1000] }
     sources:
@@ -703,6 +1251,7 @@ roles:
         period: 2026
         accessed: 2026-10-05
       - url: https://workspace.ru/video-editing/
+        kind: agency
         publisher: "Workspace.ru — агентства видеомонтажа, средний час 3 500 ₽, топ-10 1 500–4 000 ₽"
         n: "99 агентств"
         period: 2026-10-05
@@ -724,10 +1273,35 @@ roles:
   - role: Медиа-круг — запись подкаста
     market_titles: [звукорежиссёр, звукоинженер подкастов]
     engagement: "штат; пик — подряд/самозанятый"
+    monthly_gross_by_grade_rub:
+      junior: [75000, 95000, 115000]
+      middle: [95000, 115000, 157500]
+      senior: [115000, 157500, 200000]
     monthly_gross_rub:
       moscow: [75000, 115000, 200000]
       russia_remote: [40000, 49000, 110000]
-    hourly_rub: [1500, 5000]
+    hourly_rub: [1200, 3000]
+    hourly_by_grade_rub:
+      junior: [1200, 1600]
+      middle: [1600, 2500]
+      senior: [2500, 3000]
+    hourly_basis: "частные звукорежиссёры — работа инженера без помещения: опорные точки junior 1 200 / middle 2 000 / senior 3 000 (грейды — оценка); прежняя вилка 1 500–5 000 — час студии вместе с помещением (per_piece)"
+    hourly_sources:
+      - url: https://profi.ru/artist/zvukorezhissery/
+        publisher: "Profi.ru — звукорежиссёры от 1 500 ₽/ч; звукооператоры от 1 200 до 10 000 ₽/ч (видно в выдаче поиска)"
+        n: "1 443"
+        period: 2025–2026
+        accessed: 2026-10-12
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=звукорежиссер+монтаж+подкаста"
+        publisher: "Яндекс Услуги — монтаж подкаста от 6 000 ₽ за час исходника, запись подкаста от 2 500 ₽"
+        n: "≥ 8"
+        period: 2026-10
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: medium,
+        why: "почасовая «от» на Profi сходится с поштучными ценами частников Яндекса",
+      }
     per_piece:
       - { unit: "смена звукорежиссёра", rub: [10000, 10000] }
       - {
@@ -758,10 +1332,38 @@ roles:
   - role: Медиа-круг — анонсы
     market_titles: [SMM-менеджер, контент-менеджер соцсетей, рилсмейкер]
     engagement: "штат; пик — подряд/самозанятый"
+    monthly_gross_by_grade_rub:
+      junior: [55000, 77500, 100000]
+      middle: [77500, 100000, 150000]
+      senior: [100000, 150000, 200000]
     monthly_gross_rub:
       moscow: [55000, 100000, 200000]
       russia_remote: null
-    hourly_rub: [850, 1800]
+    hourly_rub: [1000, 3000]
+    hourly_by_grade_rub:
+      junior: [1000, 1500]
+      middle: [1500, 2500]
+      senior: [2500, 3000]
+    hourly_basis: "частные рилсмейкеры и монтажёры шортсов: опорные точки junior 1 000 / middle 2 000 / senior 3 000 (грейды — оценка); рилс у фрилансера 2 000–8 000 ₽ за ролик. Прежняя вилка 850–1 800 — средний час SMM-агентств Workspace (kind: agency) и частные SMM-специалисты"
+    hourly_sources:
+      - url: https://www.sostav.ru/blogs/295126/113192
+        publisher: "Sostav (блог) — монтаж рилса у фрилансера 2 000–8 000 ₽ за ролик; рилсмейкер 50–70 тыс. ₽ в месяц на старте"
+        period: 2026-10-07
+        accessed: 2026-10-12
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=монтаж+рилс+шортс"
+        publisher: "Яндекс Услуги — монтаж рилс от 990 / 1 500 / 2 800 ₽, от 2 000 ₽/ч"
+        n: 134
+        period: 2026-10
+        accessed: 2026-10-12
+      - url: https://profi.ru/krasota/montazh-reels/price/
+        publisher: "Profi.ru — монтаж reels от 2 000 до 10 000 ₽/ч (видно в выдаче поиска)"
+        period: 2026
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: medium,
+        why: "свежий отраслевой обзор и цены двух площадок; почасовая ставка SMM-ведения не найдена (Workspace 142 800 ₽/ч — ошибка данных)",
+      }
     per_piece:
       - {
           unit: "ведение сообщества за месяц (средний бюджет агентства)",
@@ -779,6 +1381,7 @@ roles:
         period: 2026-10-05
         accessed: 2026-10-05
       - url: https://workspace.ru/blog/prices-and-budgets-in-smm/
+        kind: agency
         publisher: "Workspace.ru — средний час SMM 1 700–1 800 ₽, средний бюджет 60 / 100 тыс. ₽ в месяц"
         n: "≥ 482 агентства"
         accessed: 2026-10-05
@@ -811,6 +1414,10 @@ roles:
     market_titles:
       [юрист по договорной работе, корпоративный юрист, юридический аутсорсинг]
     engagement: "аутсорсинг (абонентское обслуживание) или штат"
+    monthly_gross_by_grade_rub:
+      junior: [115000, 150000, 185000]
+      middle: [150000, 185000, 237500]
+      senior: [185000, 237500, 290000]
     monthly_gross_rub:
       moscow: [115000, 185000, 290000]
       russia_remote: [60000, 75000, 120000]
@@ -857,6 +1464,10 @@ roles:
   - role: Сервисный круг — бухгалтер
     market_titles: [бухгалтер, ведущий бухгалтер, бухгалтерский аутсорсинг]
     engagement: "аутсорсинг или штат"
+    monthly_gross_by_grade_rub:
+      junior: [94000, 109500, 125000]
+      middle: [109500, 125000, 162500]
+      senior: [125000, 162500, 200000]
     monthly_gross_rub:
       moscow: [94000, 125000, 200000]
       russia_remote: [60000, 70000, 100000]
@@ -905,10 +1516,30 @@ roles:
         администратор учебного процесса,
       ]
     engagement: штат
+    monthly_gross_by_grade_rub:
+      junior: [60000, 75000, 90000]
+      middle: [75000, 90000, 115000]
+      senior: [90000, 115000, 140000]
     monthly_gross_rub:
       moscow: [60000, 90000, 140000]
       russia_remote: [55000, 70000, 100000]
-    hourly_rub: [650, 650]
+    hourly_rub: [300, 900]
+    hourly_by_grade_rub:
+      junior: [300, 475]
+      middle: [475, 775]
+      senior: [775, 900]
+    hourly_basis: "опорные точки junior 300 / middle 650 / senior 900: частные контент-менеджеры 270–400 ₽/ч (Яндекс Услуги), самоотчёт 650 ₽/ч (TenChat, источник ниже в sources); senior — суждение для администратора LMS с настройкой. Рынок ниже штатного часа (премия 0,81)"
+    hourly_sources:
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=контент-менеджер"
+        publisher: "Яндекс Услуги — частные контент-менеджеры от 270 и от 400 ₽/ч; 25 000 ₽/мес за 3–4 ч в день"
+        n: 108
+        period: 2026-10-12
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: low,
+        why: "контент-менеджер — прокси; администраторов LMS вне штата с ценой не найдено",
+      }
     per_piece: []
     proxy_role: "контент-менеджер и специалист учебного отдела EdTech — вакансий администратора LMS с зарплатой почти нет"
     sources:
@@ -946,6 +1577,10 @@ roles:
         техподдержка вебинара,
       ]
     engagement: "подряд за мероприятие"
+    monthly_gross_by_grade_rub:
+      junior: [90000, 102500, 115000]
+      middle: [102500, 115000, 147500]
+      senior: [115000, 147500, 180000]
     monthly_gross_rub:
       moscow: [90000, 115000, 180000]
       russia_remote: [65000, 90000, 180000]
@@ -994,12 +1629,37 @@ roles:
     market_titles:
       [специалист службы поддержки, специалист технической поддержки]
     engagement: штат
+    monthly_gross_by_grade_rub:
+      junior: [60000, 72500, 85300]
+      middle: [72500, 85300, 105000]
+      senior: [85300, 105000, 125000]
     monthly_gross_rub:
       moscow: [60000, 85300, 125000]
       russia_remote: [45000, 60100, 76000]
-    hourly_rub: null
+    hourly_rub: [300, 600]
+    hourly_by_grade_rub:
+      junior: [300, 375]
+      middle: [375, 525]
+      senior: [525, 600]
+    hourly_basis: "опорные точки junior 300 / middle 450 / senior 600: почасовой оператор КЦ health-tech 300 ₽/ч gross (hh.ru), частные контент-менеджеры 270–400 ₽/ч; senior (L2 со знанием платформы) — суждение: верх 1-й линии × 1,3. Рынок ниже штатного часа (премия 0,59) — производная формула × 1,5 для этой роли неверна"
+    hourly_sources:
+      - url: "https://hh.ru/search/vacancy?text=оператор+поддержки+почасовая+оплата&area=113&only_with_salary=true"
+        publisher: "hh.ru — АО «Цифровые технологии здоровья», оператор контактного центра 300 ₽ за час gross; удалённые операторы онлайн-заявок 30–46 тыс. ₽/мес"
+        n: 1
+        period: 2026-10-12
+        accessed: 2026-10-12
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=контент-менеджер"
+        publisher: "Яндекс Услуги — частные контент-менеджеры от 270 и от 400 ₽/ч; 25 000 ₽/мес за 3–4 ч в день"
+        n: 108
+        period: 2026-10-12
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: low,
+        why: "одна почасовая вакансия поддержки, остальное — смежный труд",
+      }
     per_piece: []
-    notes: "Медианы 85 300 (Москва) и 60 100 (Россия) — опубликованные медианы hh.ru. Поддержку покупают штатом или через контакт-центр; почасового рынка нет."
+    notes: "Медианы 85 300 (Москва) и 60 100 (Россия) — опубликованные медианы hh.ru. Поддержку покупают штатом или через контакт-центр; почасовой рынок тонкий (hourly_rub — по одной вакансии и смежному труду)."
     sources:
       - url: https://www.dp.ru/a/2025/08/27/lenoblast-oboshla-peterburg
         publisher: "Деловой Петербург со ссылкой на hh.ru — медиана предложения техподдержки Россия 60,1 тыс., Москва 85,3 тыс."
@@ -1026,10 +1686,34 @@ roles:
   - role: Ядро
     market_titles: [руководитель направления в EdTech / медицинском образовании]
     engagement: штат
+    monthly_gross_by_grade_rub:
+      junior: [150000, 175000, 200000]
+      middle: [175000, 200000, 250000]
+      senior: [200000, 250000, 300000]
     monthly_gross_rub:
       moscow: [150000, 200000, 300000]
       russia_remote: [100000, 140000, 200000]
-    hourly_rub: null
+    hourly_rub: [2500, 6000]
+    hourly_by_grade_rub:
+      junior: [2500, 3000]
+      middle: [3000, 4750]
+      senior: [4750, 6000]
+    hourly_basis: "опорные точки junior 2 500 / middle 3 500 / senior 6 000: руководитель направления вне штата — «фракционный» (interim) управленец; частные бизнес-консультанты Москвы 3 000–4 000 ₽/ч (низ), от 15 000 — хвост; junior — производная gross × 1,5 ÷ 120; middle — суждение между производной и нижней рыночной точкой"
+    hourly_sources:
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=бизнес-консультант+стратегия"
+        publisher: "Яндекс Услуги — бизнес-консультанты Москвы: 3 000, 4 000, от 15 000 ₽/ч"
+        n: 172
+        period: 2026-10-12
+        accessed: 2026-10-12
+      - url: https://www.klerk.ru/materials/2025-10-06/skolko-stoit-chas-raboty-programmista/
+        publisher: "Клерк — фриланс-коэффициент 1,5 / 120 ч (метод)"
+        period: 2025-10
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: low,
+        why: "рынка interim-руководителей направлений EdTech нет; консультанты — смежный рынок с широким разбросом",
+      }
     per_piece: []
     composite_of:
       [Ядро — стандарты, Ядро — консультант рынка, Ядро — калькулятор, Коуч]
@@ -1060,10 +1744,34 @@ roles:
     market_titles:
       [руководитель методического отдела, ведущий методолог онлайн-обучения]
     engagement: штат
+    monthly_gross_by_grade_rub:
+      junior: [120000, 145000, 170000]
+      middle: [145000, 170000, 210000]
+      senior: [170000, 210000, 250000]
     monthly_gross_rub:
       moscow: [120000, 170000, 250000]
       russia_remote: [70000, 100000, 150000]
-    hourly_rub: null
+    hourly_rub: [1500, 4000]
+    hourly_by_grade_rub:
+      junior: [1500, 1850]
+      middle: [1850, 2850]
+      senior: [2850, 4000]
+    hourly_basis: "опорные точки junior 1 500 / middle 2 200 / senior 3 500: производная gross × 1,5 ÷ 120, сверена с частным рынком опытных методистов 2 500–5 000 ₽/ч; верх диапазона 4 000 — верх опытного методиста"
+    hourly_sources:
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=методист+онлайн-курсов"
+        publisher: "Яндекс Услуги — методисты Москвы от 2 500 и 5 000 ₽ за 60 мин"
+        n: 14
+        period: 2026-10-12
+        accessed: 2026-10-12
+      - url: https://www.klerk.ru/materials/2025-10-06/skolko-stoit-chas-raboty-programmista/
+        publisher: "Клерк — фриланс-коэффициент 1,5 / 120 ч (метод)"
+        period: 2025-10
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: low,
+        why: "в основном производная; прямого рынка «руководителя стандартов контента» вне штата нет",
+      }
     per_piece: []
     proxy_role: руководитель учебно-методического отдела / ведущий методолог
     sources:
@@ -1091,12 +1799,39 @@ roles:
     market_titles:
       [market access manager (фарма), эксперт по экономике здравоохранения]
     engagement: "подряд по запросу (советующая роль)"
+    monthly_gross_by_grade_rub:
+      junior: [300000, 340000, 380000]
+      middle: [340000, 380000, 415000]
+      senior: [380000, 415000, 450000]
     monthly_gross_rub:
       moscow: [300000, 380000, 450000]
       russia_remote: null
+    # hourly_rub остаётся null: роль «подряд», и непустой hourly_rub переключил бы калькулятор
+    # со штатного прокси на почасовую цену — это решение калькулятора (#2661), не данных.
+    # Внештатный час по грейдам — ниже, в hourly_by_grade_rub (диапазон 4 000–10 000).
     hourly_rub: null
+    hourly_by_grade_rub:
+      junior: [4000, 4500]
+      middle: [4500, 7500]
+      senior: [7500, 10000]
+    hourly_basis: "ПРОИЗВОДНАЯ: опорные точки junior 4 000 / middle 5 000 / senior 10 000 — от штатного market access manager (gross × 1,5 ÷ 120 ≈ 3 750–5 625), верх — суждение по советующим часам консультантов и юрфирм 3–25 тыс. ₽/ч"
+    hourly_sources:
+      - url: https://www.klerk.ru/materials/2025-10-06/skolko-stoit-chas-raboty-programmista/
+        publisher: "Клерк — фриланс-коэффициент 1,5 / 120 ч (метод)"
+        period: 2025-10
+        accessed: 2026-10-12
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=бизнес-консультант+стратегия"
+        publisher: "Яндекс Услуги — бизнес-консультанты Москвы 3 000–20 000 ₽/ч (коридор)"
+        n: 172
+        period: 2026-10-12
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: low,
+        why: "производная от зарплат 2020–2023; цены независимого фарм-консалтинга не публикуются",
+      }
     per_piece: []
-    proxy_role: "штатный market access manager фармы; часовой стоимости рынка независимых консультантов не найдено — калькулятор берёт стоимость часа штатного прокси, ближайший наблюдаемый советующий час — юрфирмы 3–25 тыс. ₽"
+    proxy_role: "штатный market access manager фармы; публичных тарифов независимого фарм-консалтинга не найдено — калькулятор берёт стоимость часа штатного прокси; производный внештатный час — в hourly_by_grade_rub; ближайший наблюдаемый советующий час — юрфирмы 3–25 тыс. ₽"
     sources:
       - url: https://grapecareers.com/role/speczialist-po-dostupu-na-rynok-2/
         publisher: "Grape Careers — market access manager, средняя 380 тыс. gross, 300–450 тыс."
@@ -1120,10 +1855,39 @@ roles:
   - role: Ядро — калькулятор
     market_titles: [финансовый аналитик, экономист по себестоимости, FP&A]
     engagement: штат
+    monthly_gross_by_grade_rub:
+      junior: [115000, 150000, 185000]
+      middle: [150000, 185000, 242500]
+      senior: [185000, 242500, 300000]
     monthly_gross_rub:
       moscow: [115000, 185000, 300000]
       russia_remote: [52000, 95000, 200000]
-    hourly_rub: null
+    hourly_rub: [1500, 3500]
+    hourly_by_grade_rub:
+      junior: [1500, 1900]
+      middle: [1900, 2900]
+      senior: [2900, 3500]
+    hourly_basis: "опорные точки junior 1 500 / middle 2 300 / senior 3 500: доход внештатного аналитика Solar Staff ÷ 100–120 ч ≈ 1 060–1 270; частный финконсультант 3 000 ₽/ч; фриланс IT по грейдам (Клерк) junior 700–1 600, middle 1 800–3 300, senior от 3 300; middle — производная gross × 1,5 ÷ 120"
+    hourly_sources:
+      - url: https://www.forbes.ru/biznes/554130-srednemesacnyj-dohod-frilanserov-vyros-na-25-v-2025-godu
+        publisher: "Forbes со ссылкой на Solar Staff — средний месячный доход внештатных аналитиков 127 284 ₽"
+        n: "50 000+ исполнителей"
+        period: 2025
+        accessed: 2026-10-12
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=финансовый+директор+на+аутсорсинге"
+        publisher: "Яндекс Услуги — частный финансовый консультант 3 000 ₽/ч; финдиректор на аутсорсе 30–65 тыс. ₽/мес"
+        n: 143
+        period: 2026-10-12
+        accessed: 2026-10-12
+      - url: https://www.klerk.ru/materials/2025-10-06/skolko-stoit-chas-raboty-programmista/
+        publisher: "Клерк — фриланс-ставки IT по грейдам и коэффициент 1,5"
+        period: 2025-10
+        accessed: 2026-10-12
+    hourly_confidence:
+      {
+        level: medium,
+        why: "три независимых ориентира (Solar Staff, частный консультант, производная) лежат в 1 100–3 000 ₽/ч",
+      }
     per_piece: []
     sources:
       - url: https://career.hh.ru/article/finansovyj-analitik-professiya-budushego-ili-net
@@ -1149,6 +1913,10 @@ roles:
   - role: Коуч
     market_titles: [agile-коуч, scrum-мастер, фасилитатор команд]
     engagement: "штат или подряд/самозанятый"
+    monthly_gross_by_grade_rub:
+      junior: [140000, 170000, 200000]
+      middle: [170000, 200000, 230000]
+      senior: [200000, 230000, 260000]
     monthly_gross_rub:
       moscow: [140000, 200000, 260000]
       russia_remote: [93000, 120000, 150000]
@@ -1185,3 +1953,753 @@ roles:
         level: low,
         why: "штатные вакансии agile-коуча редки; час — прокси лайф- и бизнес-коучинга",
       }
+
+# ── Эксперты-врачи по грейдам: гонорар за час и за единицу ───────────────────────────────
+# per_hour_rub — [min, max] за час работы эксперта; per_unit_rub.lesson — за один записанный урок
+# (≈ 45 мин записи + 2–4 ч подготовки), per_unit_rub.course_review — за рецензию программы курса
+# (≈ 4–8 ч чтения и заключение). Цены — сумма эксперту (самозанятый / ГПХ: сверху
+# contractor_on_top_rate). derived: true — грейд выведен из других грейдов, а не из рынка.
+# Прямых прайсов (FMV-сетки фармкомпаний) в открытом доступе нет: суммы 2018–2022 годов
+# проиндексированы ×1,4 (накопленный ИПЦ, оценка) и опираются на базу «доход врача ÷ часы» × 2–3.
+experts:
+  base_hourly_basis: "средняя зарплата врача в ОМС 147 тыс. ₽ (ФФОМС, 2025) ÷ ≈ 165 ч ≈ 900 ₽/ч; разовая экспертная работа идёт с премией × 2–3"
+  sources:
+    - url: https://cuprum.media/razbor/big-pharma
+      publisher: "Cuprum — «в среднем 10–25 тысяч рублей за одну лекцию» (со слов врачей); 5 000 ₽ за описание клинического случая"
+      period: 2022-05
+      accessed: 2026-10-12
+    - url: https://www.rbc.ru/business/05/07/2018/5b3cd8cb9a7947ab9d1841ce
+      publisher: "РБК — руководитель сосудистого центра (профессор): за одну лекцию «около 25 тыс.» (видно в выдаче поиска)"
+      n: 1
+      period: 2018
+      accessed: 2026-10-12
+    - url: https://gxpnews.net/2019/07/v-2018-godu-farmkompanii-perechislili-rossijskim-vracham-bolee-35-mlrd-rublej/
+      publisher: "GxP News по данным AIPM — средняя годовая выплата врачу 24–252 тыс. ₽ в зависимости от компании, всего 3,5 млрд ₽ за 2018 (с логистикой)"
+      n: "44 компании"
+      period: 2018
+      accessed: 2026-10-12
+    - url: https://www.kommersant.ru/doc/6863397
+      publisher: "Коммерсантъ — 652,6 млн ₽ выплачено ≥ 9,1 тыс. специалистов за 2023 (≈ 72 тыс. ₽ на человека в год, с логистикой)"
+      period: 2023
+      accessed: 2026-10-12
+    - url: https://www.infullbroker.ru/news/srednemesyachnaya-zarplata-vrachey-v-2025-g-sostavila-147-nbsp-tys-r/
+      publisher: "ФФОМС — средняя зарплата врача в ОМС 147 тыс. ₽ (2025); опрос «Врачи РФ» — 60–80 тыс."
+      n: "1 622 (опрос)"
+      period: 2025
+      accessed: 2026-10-12
+    - url: https://uup.samgtu.ru/sites/uu.samgtu.ru/files/prikaz_na_pochasovuyu_oplatu_ot_26_fevralya_2018.pdf
+      publisher: "СамГТУ, приказ о почасовой оплате — рецензент: д.н. 329 ₽/ч, к.н. 289, без степени 268 (бюджетный пол; видно в выдаче поиска)"
+      period: 2018
+      accessed: 2026-10-12
+  grades:
+    врач:
+      per_hour_rub: [1500, 3000]
+      per_unit_rub:
+        lesson: [8000, 20000]
+        course_review: [5000, 15000]
+      derived: false
+      basis: "лекция 10 тыс. (Cuprum, нижняя граница) × 1,4 ≈ 14 тыс.; час — база 900 ₽ × 2–3"
+      confidence:
+        {
+          level: low,
+          why: "прямого прайса для врача без степени нет; выведено из журналистики и базы ОМС",
+        }
+    к.м.н.:
+      per_hour_rub: [2500, 5000]
+      per_unit_rub:
+        lesson: [15000, 30000]
+        course_review: [10000, 20000]
+      derived: false
+      basis: "середина вилки Cuprum 10–25 тыс. × 1,4 ≈ 14–35 тыс. за лекцию; степень даёт надбавку (в бюджетной сетке СамГТУ + 8–15 %, на рынке больше)"
+      confidence: { level: low, why: "выведено из Cuprum и бюджетной сетки" }
+    д.м.н.:
+      per_hour_rub: [4000, 8000]
+      per_unit_rub:
+        lesson: [25000, 45000]
+        course_review: [15000, 30000]
+      derived: false
+      basis: "профессор — 25 тыс. за лекцию (РБК, 2018) × 1,4 ≈ 35 тыс.; верх вилки Cuprum × 1,4 ≈ 35 тыс."
+      confidence:
+        {
+          level: low,
+          why: "одна прямая цитата профессора и одна журналистская оценка",
+        }
+    лидер мнений:
+      per_hour_rub: [8000, 20000]
+      per_unit_rub:
+        lesson: [40000, 100000]
+        course_review: [30000, 60000]
+      derived: true
+      derived_from: "д.м.н. × 1,5–2,5"
+      basis: "ПРОИЗВОДНАЯ: KOL платят за охват и дефицит, а не за степень — лекция, имя и аудитория продаются пакетом; годовые выплаты профессорам уровня KOL > 1 млн ₽ (РБК, AIPM). Множитель × 1,5–2,5 к д.м.н. — суждение"
+      confidence:
+        {
+          level: low,
+          why: "чисто производная; FMV-сетки компаний не публикуются",
+        }
+  gaps: "запросить FMV-сетку у дружественной фармкомпании и положение о почасовой оплате медвуза (Сеченовский университет, РНИМУ) 2025/26"
+
+# ── Внешние затраты: значения по умолчанию для ../calculator/products.yaml#externals ─────
+# Ключи совпадают с externals калькулятора; rub — на одну единицу per; market_rub — наблюдаемый
+# рынок для сверки. Курс пересчёта валютных цен — tools.fx.
+external_costs:
+  ai_generation:
+    per: урок
+    rub: 50000
+    basis: "значение аналитика по умолчанию: генерация медкадров и анимации урока (кредиты сервисов сверх подписок tools.opex_monthly и перегенерации). Подписки видеогенерации — 850–3 150 ₽ в месяц за место (Runway, Kling), но кредиты на 45-минутный урок с перегенерацией расходуются многократно"
+    sources:
+      - url: https://runway.com/pricing
+        publisher: "Runway — Standard 15 $, Pro 35 $ в месяц"
+        period: 2026
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: low,
+        why: "расход кредитов на урок не измерен; значение — суждение по умолчанию, владелец правит в калькуляторе",
+      }
+  voices_licences:
+    per: урок
+    rub: 50000
+    market_rub:
+      synthesis_per_minute: [1, 15]
+      studio_voice_per_minute: [400, 2000]
+    basis: "значение аналитика по умолчанию — верхний сценарий: 45 мин речи × ≈ 1 100 ₽ за минуту живого диктора ≈ 50 000 ₽. Синтез стоит 1–15 ₽ за минуту (SpeechKit, ElevenLabs) — при чистом синтезе затрата падает до ≈ 1 000 ₽ за урок плюс подписка"
+    sources:
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=диктор+озвучка"
+        publisher: "Яндекс Услуги — дикторы от 400 и 2 000 ₽ за минуту чистовой записи"
+        n: 174
+        period: 2026-10
+        accessed: 2026-10-12
+      - url: https://aistudio.yandex.ru/docs/ru/speechkit/pricing
+        publisher: "Yandex SpeechKit — 1 342 ₽ за 1 млн символов (≈ 0,6–1,3 ₽ за минуту речи, пересчёт ≈ 1 000 символов в минуту)"
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://elevenlabs.io/pricing
+        publisher: "ElevenLabs — Creator 22 $ (~121 мин), Pro 99 $ (~600 мин): ≈ 14–15 ₽ за минуту"
+        period: 2026
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: medium,
+        why: "цены за минуту подтверждены площадками и прайсами; выбор живой голос / синтез — решение владельца",
+      }
+  podcast_studio:
+    per: час записи
+    rub: 20000
+    market_rub: [3490, 14990]
+    basis: "значение аналитика по умолчанию — час записи вместе с работой студии над ним: «1 ч съёмки + 1 ч монтажа» 23 000–28 000 ₽ (Resonant Arts); голая аренда зала с камерами 3 490–14 990 ₽/ч. Калькулятор умножает на часы записи эпизода"
+    sources:
+      - url: https://resonantarts.com/studija_zvukozapisi/videopodcast/
+        publisher: "Resonant Arts — съёмка без монтажа 8 500 ₽ за 1-й час; 1 ч съёмки + 1 ч монтажа 23 000 / 28 000 ₽"
+        kind: agency
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://pro-stream.ru/podcasts/
+        publisher: "Pro-Stream — подкаст 1 / 2 / 3 камеры с оператором и режиссёрским переключением от 4 640 / 5 140 / 5 640 ₽/ч"
+        kind: agency
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://poslushaysuda.ru/
+        publisher: "Послушай сюда! — зал мини 4 990 ₽/ч; 2–4 камеры 7 990–11 990 ₽/ч, минимум 2 ч; абонемент 50 000 ₽ в месяц"
+        kind: agency
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://procast.moscow/
+        publisher: "ProCast — 7 990–14 990 ₽/ч; Podcastprosto 3 490–5 990 ₽/ч (видно в выдаче поиска)"
+        kind: agency
+        period: 2026
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: medium,
+        why: "много прайсов студий Москвы; 20 000 — час с постпродакшном, выше голой аренды",
+      }
+  podcast_speaker_fee:
+    per: эпизод
+    rub: 0
+    basis: "гость подкаста по умолчанию не получает гонорар (приглашённый эксперт выступает ради аудитории); платный гость — experts.grades[грейд].per_hour_rub × часы"
+    confidence: { level: low, why: "значение — политика DS, не рынок" }
+  event_venue_broadcast:
+    per: мероприятие
+    rub: 0
+    basis: "онлайн-трансляция идёт на собственной платформе DS (её стоимость — tools.platform_ds_monthly); для очного мероприятия площадку задают в калькуляторе"
+    confidence:
+      {
+        level: medium,
+        why: "собственная платформа; переменная стоимость трансляции ≈ трафик S3/CDN",
+      }
+  video_podcast:
+    per: эпизод
+    components:
+      multi_camera_crew:
+        rub: [15000, 45000]
+        unit: смена
+        basis: "оператор 15 000 ₽ за смену (прокат Kinozavod), 3 оператора ≈ 45 000; в студийном часе (podcast_studio) операторы уже включены"
+      director:
+        rub: [0, 40000]
+        unit: смена
+        basis: "в студийной ставке режиссёрское переключение включено (Pro-Stream); отдельная ставка режиссёра не найдена — 40 000 за день оператора-постановщика в рекламе (≈ 2020) — потолок"
+      grading_graphics:
+        rub: [8900, 21900]
+        unit: эпизод
+        basis: "отдельно не продаётся — входит в пакеты постпродакшна: «чистый монтаж» 8 900, «под ключ» 16 500, «+ рилс» 21 900 ₽ (Pro-Stream)"
+      cover:
+        rub: [1500, 5000]
+        unit: эпизод
+      clips:
+        rub_per_clip: [700, 2000]
+        clips_per_episode: [5, 10]
+        basis: "студия 700–1 300 ₽ за вертикальный ролик (Pro-Stream), 15 000 ₽ за 10 (Resonant Arts); фрилансер 2 000–8 000 ₽ (Sostav)"
+    sources:
+      - url: https://kinozavod.ru/personal/operator
+        publisher: "Kinozavod — оператор, 1 смена 15 000 ₽; 11 250–13 500 при 3–21+ сменах"
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://pro-stream.ru/podcasts/
+        publisher: "Pro-Stream — постпродакшн 8 900 / 16 500 / 21 900 ₽ за выпуск (цветокоррекция включена); рилс 700 / 1 300 ₽"
+        kind: agency
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://resonantarts.com/studija_zvukozapisi/videopodcast/
+        publisher: "Resonant Arts — монтаж Reels/Shorts 15 000 ₽ за 10 шт."
+        kind: agency
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://www.sostav.ru/blogs/295126/113192
+        publisher: "Sostav — фрилансер 2 000–8 000 ₽ за ролик"
+        period: 2026-10-07
+        accessed: 2026-10-12
+      - url: https://quick-offer.ru/job/dizayner-dlya-youtube-kanala-93037
+        publisher: "Quick-offer — превью 500–2 500 ₽, обложка 1 500–5 000 ₽ (ставки из вакансии)"
+        accessed: 2026-10-12
+      - url: https://teletype.in/@pro_cinematics/S8tWEdNrm
+        publisher: "Pro Cinematics — оператор-постановщик в рекламе от 40 000 ₽ в день (≈ 2020)"
+        period: 2020
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: medium,
+        why: "прайсы студий Москвы 2026; режиссёр и графика отдельно не продаются — low для этих строк",
+      }
+
+# ── Инструменты: подписки, платформа DS, оборудование ────────────────────────────────────
+# opex_monthly — ₽ в месяц; per: seat — за место (× число пользователей), team — на студию.
+# capex — price_rub и useful_life_months (срок полезного использования; ежемесячная доля =
+# price_rub ÷ useful_life_months). Валютные цены пересчитаны по fx; оплата зарубежных сервисов из РФ
+# идёт через посредника — сверху payment_markup.
+tools:
+  fx:
+    usd_rub: 84.9048
+    eur_rub: 94.9745
+    source:
+      url: "https://www.cbr.ru/scripts/XML_daily.asp?date_req=10/10/2026"
+      publisher: "ЦБ РФ — официальный курс на 10.10.2026"
+      accessed: 2026-10-12
+  payment_markup:
+    default: 0.1
+    range: [0.05, 0.29]
+    basis: "Stripe не принимает карты российских банков — подписки OpenAI, Anthropic, Midjourney, Runway, Kling, ElevenLabs, CapCut, Adobe оплачиваются через посредника: ≈ 550 ₽ фиксировано за подписку 20 $ (≈ 26–29 %), от 50 000 ₽ — 10 %, от 100 000 ₽ — 5–7 %"
+    source:
+      url: https://vc.ru/services/2912049-kak-oplatit-chatgpt-v-rossii
+      publisher: "vc.ru — комиссии посредников за оплату зарубежных подписок"
+      period: 2026-05
+      accessed: 2026-10-12
+    confidence:
+      { level: medium, why: "один обзор; комиссии посредников различаются" }
+  opex_monthly:
+    - {
+        item: "ChatGPT Business, место (годовая оплата)",
+        per: seat,
+        rub_month: 1698,
+        usd: 20,
+        url: "https://lenz.io/c/openai-chatgpt-business-5-dollar-price-cut-2026-72b95dee",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "Claude Team Standard, место (годовая оплата)",
+        per: seat,
+        rub_month: 1698,
+        usd: 20,
+        url: "https://claude.com/pricing",
+        accessed: 2026-10-12,
+        confidence: high,
+      }
+    - {
+        item: "Midjourney Standard",
+        per: seat,
+        rub_month: 2547,
+        usd: 30,
+        url: "https://eesel.ai/blog/midjourney-pricing",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "Runway Pro",
+        per: seat,
+        rub_month: 2972,
+        usd: 35,
+        url: "https://runway.com/pricing",
+        accessed: 2026-10-12,
+        confidence: high,
+      }
+    - {
+        item: "Kling Pro",
+        per: seat,
+        rub_month: 3141,
+        usd: 37,
+        url: "https://eesel.ai/blog/kling-ai-pricing",
+        accessed: 2026-10-12,
+        confidence: low,
+      }
+    - {
+        item: "ElevenLabs Pro (~600 мин синтеза)",
+        per: team,
+        rub_month: 8406,
+        usd: 99,
+        url: "https://elevenlabs.io/pricing",
+        accessed: 2026-10-12,
+        confidence: high,
+      }
+    - {
+        item: "Adobe Creative Cloud Pro (бывший All Apps), годовой план",
+        per: seat,
+        rub_month: 5942,
+        usd: 69.99,
+        url: "https://www.thepricer.org/how-much-does-adobe-creative-cloud-cost/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "CapCut Pro",
+        per: seat,
+        rub_month: 1697,
+        usd: 19.99,
+        url: "https://vc.ru/services/2983864-kak-oplatit-capcut-pro-iz-rossii",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "Figma Professional, Full seat",
+        per: seat,
+        rub_month: 1358,
+        usd: 16,
+        url: "https://www.figma.com/pricing/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "Яндекс 360 «Основной», 1 ТБ",
+        per: seat,
+        rub_month: 549,
+        url: "https://net-admin.su/blog/tarifi-yandex-360-dlya-biznesa",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "Yandex Object Storage, стандартное хранение, за 1 ТБ",
+        per: team,
+        rub_month: 2433,
+        basis: "2,376 ₽ за ГБ в месяц × 1 024",
+        url: "https://yandex.cloud/ru/docs/storage/pricing",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "домен .ru, продление (Рег.ру), 999 ₽ в год",
+        per: team,
+        rub_month: 83,
+        url: "https://www.reg.ru/company/news/12857",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+  opex_one_off:
+    - {
+        item: "DaVinci Resolve Studio, бессрочная лицензия",
+        price_rub: 25047,
+        usd: 295,
+        url: "https://subger.com/ru/service/davinci-resolve-studio",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+  platform_ds_monthly:
+    - {
+        item: "Timeweb Cloud ru-3, 4 vCPU / 8 ГБ / 80 ГБ NVMe (prod, preset 4803) + IPv4",
+        rub_month: 1980,
+        url: "infra/deploy/terraform/variables.tf (репозиторий DS; цена живого Timeweb API на apply)",
+        accessed: 2026-10-12,
+        confidence: high,
+      }
+    - {
+        item: "Timeweb Cloud, 8 vCPU / 12 ГБ / 100 ГБ (stage, preset 4805) + IPv4",
+        rub_month: 3080,
+        url: "infra/deploy/terraform/variables.tf (репозиторий DS)",
+        accessed: 2026-10-12,
+        confidence: high,
+      }
+    - {
+        item: "весь prod-контур (2 VPS + NAT + S3)",
+        rub_month: [4400, 4650],
+        url: "apps/docs/content/specs/tech/2026-07-02-ds-platform-prepilot-deploy-slice-design-en.md §4 (репозиторий DS, расчёт по живому API 2026-07)",
+        accessed: 2026-10-12,
+        confidence: high,
+      }
+    - {
+        item: "Timeweb S3, тариф 100 ГБ (сверх — 4 ₽ за ГБ; исходящий трафик 1,3 ₽ за ГБ сверх 100 ГБ)",
+        rub_month: 349,
+        url: "https://timeweb.cloud/services/s3-storage",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "Kinescope Super — видеохостинг и CDN (от 10 € в месяц + 0,03 € за ГБ)",
+        rub_month: 950,
+        url: "https://www.kinescope.com/pricing",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "домены платформы (.ru, продление 999 ₽ в год за домен, ×3)",
+        rub_month: 250,
+        url: "https://www.reg.ru/company/news/12857",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+  capex:
+    - {
+        item: "камера Sony FX30 body",
+        price_rub: 137900,
+        useful_life_months: 60,
+        url: "https://www.yarkiy.ru/products/sony-fx30-body-37493",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "камера Sony ZV-E10 II kit 16–50",
+        price_rub: 77500,
+        useful_life_months: 60,
+        url: "https://texno-pro.ru/catalog/foto/sony_foto/fotoapparat_sony_zv_e10_ii_kit_16_50mm_f_3_5_5_6_oss_black/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "микрофон Shure SM7B",
+        price_rub: 51890,
+        useful_life_months: 60,
+        url: "https://doctorhead.ru/product/shure_sm7db_black/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "микрофон Rode PodMic USB",
+        price_rub: 19490,
+        useful_life_months: 60,
+        url: "https://doctorhead.ru/brands/rode/products/pro-audio/mikrofony/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "аудиоинтерфейс Focusrite Scarlett 2i2 4th Gen",
+        price_rub: 20440,
+        useful_life_months: 36,
+        url: "https://doctorhead.ru/product/focusrite_scarlett_2i2_4th_gen/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "свет Godox SL60IIBi, комплект 3 шт.",
+        price_rub: 43100,
+        useful_life_months: 60,
+        url: "https://falcon-eyes.ru/catalog/svetodiodnye-led-paneli/osvetitel-svetodiodnyy-godox-sl60iibi/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "ноутбук для монтажа MacBook Pro 14 M5 16/512",
+        price_rub: 146400,
+        useful_life_months: 36,
+        url: "https://click-or-die.ru/2026/02/macbook-pro-kruto-podeshevel-aktualnyj-macbook-air-stoit-okolo-100-tysyach-rublej-vot-czeny-na-vse-kompyutery-apple-v-rossii/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: 'монитор LG 27UP850N-W 27" 4K',
+        price_rub: 36499,
+        useful_life_months: 36,
+        url: "https://www.dns-shop.ru/product/60046b551a42ed20/27-monitor-lg-27up850n-w-belyj/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+  useful_life_basis: "компьютеры и ноутбуки — 2-я амортизационная группа, 25–36 мес. (ОКОФ 320.26.20.11), берётся верх 36; видеокамеры — 3-я группа, 37–60 мес. (ОКОФ 330.26.70.13), берётся 60; микрофоны и свет — точная группа не найдена, по вышестоящему коду ОКОФ вероятно 3-я (60, low); в налоговом учёте имущество до 100 000 ₽ списывается сразу (ст. 256 НК РФ) — срок здесь управленческий"
+  useful_life_sources:
+    - url: https://nalog-nalog.ru/dontknows/k-kakomu-okof-i-amortizacionnoj-gruppe-otnositsya-kompyuter/
+      publisher: "nalog-nalog.ru — компьютеры: 2-я группа, 25–36 мес."
+      accessed: 2026-10-12
+    - url: https://www.consultant.ru/law/podborki/videokamera_okof/
+      publisher: "КонсультантПлюс — видеокамеры: ОКОФ 330.26.70.13, 3-я группа"
+      accessed: 2026-10-12
+    - url: https://www.consultant.ru/document/cons_doc_LAW_28165/
+      publisher: "НК РФ ст. 256 — амортизируемое имущество дороже 100 000 ₽"
+      accessed: 2026-10-12
+
+# ── Рыночные ориентиры цены продукта: для сверки себестоимости калькулятора ──────────────
+# Ключи — продукты ../calculator/products.yaml (+ «видеоподкаст»); «конгресс» и «сделка» вне.
+# rub — [min, max] цена производства под ключ у студии / агентства (sources kind: agency) или
+# derived — расчёт из других ориентиров. listener_price_rub — розничная цена для слушателя
+# (ориентир выручки, не себестоимости).
+market_references:
+  урок:
+    rub: [25000, 225000]
+    per_minute_rub: [550, 5000]
+    basis: "низ — только съёмка и монтаж (VideoDoska), верх — e-learning студия ≈ 5 000 ₽ за минуту × 45 (Метрафор: видеокурс до 30 мин от 150 000); 2D-анимация отдельно — от 120 000 ₽ за минуту"
+    sources:
+      - url: https://metrafor.ru/e-learning/
+        publisher: "Метрафор — видеокурс до 30 минут (лектор + тезисы + инфографика) от 150 000 ₽"
+        kind: agency
+        accessed: 2026-10-12
+      - url: https://video-doska.ru/semka-onlajn-kursov
+        publisher: "VideoDoska — съёмка курса до 1 ч от 10 000 ₽, до 3 ч от 25 000 ₽"
+        kind: agency
+        accessed: 2026-10-12
+      - url: https://www.ispring.ru/elearning-insights/byudzhet-na-onlajn-kurs
+        publisher: "iSpring — диктор 600–2 000 ₽ за минуту, минута анимации от 18 000 ₽"
+        accessed: 2026-10-12
+      - url: https://videonika.ru/ceny
+        publisher: "Videonika — 2D-анимация от 120 000 ₽ за минуту, 3D от 200 000 (видно в выдаче поиска)"
+        kind: agency
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: low,
+        why: "прайсы «от» без медицинской специфики; цена за минуту — пересчёт",
+      }
+  эпизод подкаста:
+    rub: [8500, 19000]
+    basis: "аудиоподкаст с полной обработкой в студии Москвы; только запись 3 000–7 000 ₽"
+    sources:
+      - url: https://resonantarts.com/blog/skolko-stoit-zapisat-podkast-v-studii-v-2026-godu/
+        publisher: "Resonant Arts — обзор рынка Москвы: аудиоподкаст с полной обработкой 8 500–19 000 ₽ за выпуск"
+        kind: agency
+        period: 2026-03-14
+        accessed: 2026-10-12
+      - url: https://castpoint.ru/montazh-podkasta
+        publisher: "Castpoint — монтаж от 6 000 ₽ за час аудио (видно в выдаче поиска)"
+        kind: agency
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: medium,
+        why: "свежий обзор 2026, цены сходятся с прайсами других студий",
+      }
+  видеоподкаст:
+    rub: [20000, 46000]
+    branded_rub: [25000, 400000]
+    basis: "студийный полный цикл за выпуск; брендированные выпуски агентств под ключ — до 400 000 (слова одной студии)"
+    sources:
+      - url: https://resonantarts.com/blog/skolko-stoit-zapisat-podkast-v-studii-v-2026-godu/
+        publisher: "Resonant Arts — видеоподкаст полный цикл 20 000–46 000 ₽ за выпуск"
+        kind: agency
+        period: 2026-03-14
+        accessed: 2026-10-12
+      - url: https://uzel.studio/
+        publisher: "Говорящий Узел (Воронеж) — видеоподкаст под ключ 35 000 ₽ (видно в выдаче поиска)"
+        kind: agency
+        accessed: 2026-10-12
+      - url: https://incrussia.ru/share/delat-v-kajf/
+        publisher: "Inc. Russia, интервью со студией — коммерческие выпуски 25–400 тыс. ₽ за эпизод (видно в выдаче поиска)"
+        kind: agency
+        period: 2026
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: medium,
+        why: "студийный цикл подтверждён двумя источниками; верх брендированных — одна студия",
+      }
+  вебинар:
+    rub: [100000, 350000]
+    basis: "собрано из прайсов трансляций (3 камеры + свет + группа 170 000 ₽) и медицинских конференций (от 350 000); открытых прайсов «вебинар НМО под ключ» и спонсорских ставок медпорталов нет — спонсорство идёт через образовательный грант"
+    sources:
+      - url: https://maps.yango.com/org/stream_park/184164966561/
+        publisher: "Stream Park — 3 камеры + свет + съёмочная группа 170 000 ₽ (единица не указана; видно в выдаче поиска)"
+        kind: agency
+        accessed: 2026-10-12
+      - url: https://www.mosevent.ru/services/medicinskie-konferencii/
+        publisher: "Mosevent — медицинские конференции от 350 000 ₽"
+        kind: agency
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: low,
+        why: "диапазон из прайсов трансляций и конференций, не вебинаров для врачей",
+      }
+  клуб:
+    rub: [20000, 100000]
+    derived: true
+    basis: "ПРОИЗВОДНАЯ: формат как видеоподкаст / малая трансляция (видеоподкаст 20–46 тыс., трансляция до 170 тыс.); прямых прайсов нет"
+    confidence: { level: low, why: "оценка по аналогии" }
+  практическая школа:
+    rub: [200000, 600000]
+    basis: "очные конференции для врачей без логистики спикеров: от 200–350 тыс. (Mosevent), региональная конференция ≈ 300 тыс. (Eventologia); спонсорский слот доклада 200–285 тыс."
+    sources:
+      - url: https://www.mosevent.ru/services/medicinskie-konferencii/
+        publisher: "Mosevent — от 350 000 ₽; в выдаче также от 200 000 ₽, ≈ 2 200 ₽ на участника при 150 участниках"
+        kind: agency
+        accessed: 2026-10-12
+      - url: https://eventologia.ru/blog/kak-organizovat-konferentsiyu-dlya-vrachej-i-sobrat-v-1-5-raza-bolshe-auditorii
+        publisher: "Eventologia — кейс региональной конференции для врачей ≈ 300 000 ₽ (видно в выдаче поиска)"
+        kind: agency
+        accessed: 2026-10-12
+      - url: https://tvmedexpert.ru/wp-content/uploads/2024/03/KP-pakety-uchastiya-min.pdf
+        publisher: "Спонсорский пакет «доклад 15 мин, 1 день, 1 город» — 285 000 ₽ (видно в выдаче поиска)"
+        period: 2024-03
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: low,
+        why: "конференции, а не практические школы; часть сумм — из выдачи поиска",
+      }
+  проектирование курса:
+    rub: [20000, 130000]
+    basis: "курс «текст + методика» от 20 000, сценарий от 30 000 (iSpring), комплексная SCORM-разработка от 130 000 (Система ДПО); оформление программы ПК 6 000 ₽ — документ, не проектирование"
+    sources:
+      - url: https://sistema-dpo.ru/programmes-and-cources/
+        publisher: "Система ДПО — программа ПК 6 000, ПП 12 000; курс текст + методика от 20 000; комплексная SCORM от 130 000 ₽"
+        kind: agency
+        accessed: 2026-10-12
+      - url: https://www.ispring.ru/elearning-insights/byudzhet-na-onlajn-kurs
+        publisher: "iSpring — сценарий от 30 тысяч; курс от 50 тысяч до нескольких миллионов"
+        accessed: 2026-10-12
+    confidence: { level: low, why: "прайс одного немедицинского поставщика" }
+  модуль:
+    rub: [150000, 1350000]
+    derived: true
+    basis: "ПРОИЗВОДНАЯ: 6 × урок, без скидки за объём"
+    confidence: { level: low, why: "расчёт по урокам" }
+  курс:
+    rub: [130000, 800000]
+    listener_price_rub: [5700, 32000]
+    basis: "e-learning курс 36 ч под ключ: SCORM от 130 000 (Система ДПО); Course Editor 150 000 / Storyline 300 000 / HTML5 800 000 (ЦРММ). Плата за оценку НМО (sovetnmo.ru) в открытом доступе не найдена; спонсорские цены не найдены. Риск: с 01.03.2026 дистанционные технологии в медицинском ДПО ограничены типовыми программами (видно в выдаче поиска, первоисточник не проверен)"
+    sources:
+      - url: https://crmm.ru/ceny/
+        publisher: "ЦРММ — от 150 000 / 300 000 / 800 000 ₽ (Course Editor / Storyline / HTML5)"
+        kind: agency
+        period: ≈ 2022
+        accessed: 2026-10-12
+      - url: https://edu.nmrc.ru/dpo/cost_of_education/
+        publisher: "НМИЦ ФПИ — ПК 36 ч ≈ 20 000–32 000 ₽ для слушателя (видно в выдаче поиска)"
+        accessed: 2026-10-12
+      - url: https://academydpo.org/nmo-obuchenie-online
+        publisher: "АНО ДПО АМО — 36 ч 8 990 ₽ для слушателя (видно в выдаче поиска)"
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: low,
+        why: "производство — общие e-learning прайсы; аккредитация и спонсорские цены не найдены",
+      }
+  специальность:
+    rub: [520000, 3200000]
+    listener_price_rub: [7999, 17568]
+    derived: true
+    basis: "ПРОИЗВОДНАЯ: ≈ 4 × курс 36 ч"
+    sources:
+      - url: https://medobr.com/seminar/
+        publisher: "АМО — 144-часовой курс 17 568 ₽ для слушателя (видно в выдаче поиска)"
+        accessed: 2026-10-12
+    confidence:
+      { level: low, why: "экстраполяция; прямых данных о производстве нет" }
+
+# ── Контакты с врачами: стоимость платного привлечения ───────────────────────────────────
+# paid_acquisition_cost_per_lead_rub — ₽ за регистрацию и за пришедшего участника при платном
+# привлечении (таргет, рассылки площадок). price_per_contact_by_audience_size — ₽ за контакт по
+# размеру аудитории специальности (число врачей в РФ). contact_types.weight — ценность контакта
+# относительно участника живого вебинара (= 1,0): цена контакта типа = цена по полосе × weight.
+# Медиакиты площадок для врачей («Врачи РФ», «Доктор на работе», Medvestnik, Remedium) публично
+# недоступны — уровни выведены из соседних аудиторий; форма зависимости обоснована в basis.
+doctor_contacts:
+  paid_acquisition_cost_per_lead_rub:
+    registration: [300, 1500]
+    attendee: [800, 4000]
+    basis: "ПРОИЗВОДНАЯ: регистрация провизоров на вебинар в VK Рекламе 170–320 ₽ (KPI ≤ 300); врачи — аудитория в 3–5 раз уже и дороже; регистрация доходит до участия в 15–40 % случаев; верхняя граница ниже визита медпреда (1–8 тыс. ₽ в 2017, × 1,8 ≈ 1,8–14 тыс.)"
+    sources:
+      - url: https://www.sostav.ru/blogs/252398/45232
+        publisher: "Sostav, кейс VK Рекламы — регистрация фармацевтов на вебинар подешевела с 320 до 170 ₽, KPI ≤ 300 ₽, конверсия в регистрацию 15 → 20 %"
+        period: 2023-12..2024-01
+        accessed: 2026-10-12
+      - url: https://pharmvestnik.ru/content/interviews/evgenij-smirnov-navicon-kak-tsifrovye-kanaly-snizhajut-rasxody-na-prodvizhenie-farmpreparatov.html
+        publisher: "Фармвестник / Navicon — личный визит медпреда к врачу от 1 до 8 тыс. ₽"
+        period: 2017-05
+        accessed: 2026-10-12
+      - url: https://medsprint.ru/blog/effektivnost-vebinarov-vrachej-kak-klinike-sobrat-polnyj-zal
+        publisher: "МедСпринт — регистрация на медицинский вебинар при таргете ≈ 120–1 200 ₽ (видно в выдаче поиска); 100 регистраций → 15 участников"
+        period: 2025-10
+        accessed: 2026-10-12
+      - url: https://vrachirf.ru/
+        publisher: "«Врачи РФ» — 794 235 врачей в базе, 327 436 на сайте; цены не опубликованы"
+        period: 2026
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: low,
+        why: "вывод из соседних аудиторий (провизоры) и потолка визита медпреда; прайсов площадок для врачей нет",
+      }
+  audience_size_sources:
+    - url: https://medvestnik.ru/content/news/v-rossii-za-god-rezko-snizilos-chislo-terapevtov-hirurgov-akusherov-i-oftalmologov.html
+      publisher: "Медвестник по сборнику Росстата «Здравоохранение в России 2025», 2024 год — все врачи 749,9 тыс.; терапевтический профиль 187,3; хирургический 82,9; педиатры 62,5; стоматологи 67,2; акушеры-гинекологи 42,3; неврологи 28,1; рентгенологи 24,8; офтальмологи 19,5; ЛОР 14,7; дерматовенерологи 11,5 тыс."
+      period: 2024
+      accessed: 2026-10-12
+    - url: https://vademec.ru/news/2023/05/23/nmits-endokrinologii-profilnykh-spetsialistov-ne-khvataet-v-55-regionakh/
+      publisher: "Vademecum — 6,5 тысячи эндокринологов (оценка Росстата)"
+      period: ≈ 2022
+      accessed: 2026-10-12
+  price_per_contact_by_audience_size:
+    - band: "< 5 тыс. врачей"
+      doctors: [0, 5000]
+      examples: [ревматологи, гастроэнтерологи, гематологи]
+      rub_per_contact: [2500, 6000]
+    - band: "5–20 тыс. врачей"
+      doctors: [5000, 20000]
+      examples:
+        [эндокринологи, кардиологи, офтальмологи, ЛОР, дерматовенерологи]
+      rub_per_contact: [1200, 3000]
+    - band: "20–60 тыс. врачей"
+      doctors: [20000, 60000]
+      examples: [неврологи, акушеры-гинекологи, рентгенологи]
+      rub_per_contact: [600, 1500]
+    - band: "> 60 тыс. врачей"
+      doctors: [60000, null]
+      examples: [терапевты, ВОП, хирурги, педиатры]
+      rub_per_contact: [300, 800]
+  price_per_contact_basis: "ПРОИЗВОДНАЯ: контакт = регистрация. В аукционной рекламе узкий таргет быстро исчерпывается — частота растёт, CPM сегмента в 2–4 раза выше, приходится докупать прямые каналы (рассылки площадок, медпред); шаг ≈ × 2 на полосу; нижняя полоса — регистрация провизоров/широкой аудитории 170–320 ₽, верх узкой полосы ниже визита медпреда. Публичного прайса с ценой по размеру специальности не найдено"
+  price_per_contact_confidence:
+    {
+      level: low,
+      why: "форма зависимости обоснована, уровни выведены; размеры аудиторий — Росстат (high)",
+    }
+  contact_types:
+    webinar_live:
+      label: "участник живого вебинара"
+      weight: 1.0
+      why: "живое внимание 45–90 мин; на медицинском вебинаре обычно ≤ 100 человек — самый дефицитный контакт"
+    series_view:
+      label: "просмотр серии уроков до конца"
+      weight: [0.6, 0.8]
+      why: "асинхронно, внимание сопоставимо, нет живого взаимодействия"
+    single_lesson_view:
+      label: "просмотр одного урока"
+      weight: [0.2, 0.3]
+      why: "видео легко набирает ≈ 1 000 просмотров против ≤ 100 участников вебинара — предложение в ≈ 10 раз шире"
+    podcast_live:
+      label: "прослушивание подкаста в эфире"
+      weight: [0.3, 0.5]
+      why: "только звук, внимание фоновое; медицинских бенчмарков по РФ нет"
+    sources:
+      - url: https://adindex.ru/publication/opinion/internet/2019/07/29/274141.phtml
+        publisher: "AdIndex — в медицинских вебинарах в среднем не более ста человек; видео — около тысячи просмотров"
+        period: 2019-07
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: low,
+        why: "публичных цен за участника, просмотр или прослушивание у медплощадок нет; веса — суждение",
+      }
+  gaps: "запросить медиакиты «Врачи РФ», «Доктор на работе», Medvestnik, Remedium, МедНео"

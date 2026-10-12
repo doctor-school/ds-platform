@@ -547,6 +547,30 @@ test("#2814: a VERIFY_EMAIL_CODE expiry that differs from the email copy is REJE
   }
 });
 
+test("#2814: a lifetime mismatch names the real remedy, never a provision.sh re-run", () => {
+  assert.throws(
+    () =>
+      assertCodeGeneratorConverged(
+        verifyGenerator("1800s"),
+        digits6,
+        3600,
+        "SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE",
+      ),
+    (e) =>
+      e instanceof IdpPolicyError &&
+      /provision\.sh keeps the live expiry, so re-running it cannot fix this/.test(
+        e.message,
+      ) &&
+      /PUT \/admin\/v1\/secretgenerators\/SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE with "expiry": "3600s"/.test(
+        e.message,
+      ) &&
+      /Default Settings → Secret Generator/.test(e.message) &&
+      /change VERIFY_EMAIL_CODE_LIFETIME_SECONDS in apps\/api\/src\/mailer\/code-emails\.ts/.test(
+        e.message,
+      ),
+  );
+});
+
 test("#2814: an expiry the deploy cannot read as seconds is REJECTED, never assumed equal", () => {
   assert.throws(
     () => assertCodeGeneratorConverged(verifyGenerator("1h"), digits6, 3600),

@@ -864,6 +864,7 @@ sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; IDP_BASE_URL=${IDP_BAS
         JSON.parse(generatorRaw),
         codeExpectation,
         codeExpectation.expirySeconds[type],
+        type,
       );
       console.log(
         `  ℹ prod IdP code generators @ ${IDP_BASE_URL}: ${formatCodeGenerator(type, verdict)}`,
@@ -873,8 +874,9 @@ sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; IDP_BASE_URL=${IDP_BAS
         `prod IdP code generator read-back REJECTED — ${IDP_ROLLBACK_HINT}:
   ${e.message}
 ` +
-          `  Re-run the converge by hand (infra/deploy/README.md → step 9); sign-in codes` +
-          ` would not match the shipped code input, or would not live as long as the email states (#2555, #2636, #2814).`,
+          `  A length/alphabet mismatch: re-run the converge by hand (infra/deploy/README.md → step 9),` +
+          ` or sign-in codes would not match the shipped code input (#2555, #2636). An expiry` +
+          ` mismatch: apply the remedy named above (#2814).`,
         { rollbackHint: true },
       );
     }

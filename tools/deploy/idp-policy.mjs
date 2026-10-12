@@ -455,6 +455,7 @@ export function resolveEmailedCodeExpectation({
  * @param {{length: number, alphabet: string}} expected from {@link resolveEmailedCodeExpectation}
  * @param {number} [expectedExpirySeconds] the lifetime the code email states
  *   ({@link parseCodeEmailLifetimes}); omitted ⇒ presence-only
+ * @param {string} [type] the generator type, named in a lifetime-mismatch remedy
  * @returns {{length: number, alphabet: string, expiry: string}}
  * @throws {IdpPolicyError}
  */
@@ -462,6 +463,7 @@ export function assertCodeGeneratorConverged(
   generatorJson,
   expected,
   expectedExpirySeconds,
+  type = "<generator type>",
 ) {
   const alphabet = CODE_ALPHABETS[expected?.alphabet];
   if (!alphabet) {
@@ -512,7 +514,13 @@ export function assertCodeGeneratorConverged(
       );
     } else if (Number(m[1]) !== expectedExpirySeconds) {
       problems.push(
-        `expiry=${expiry}, expected ${expectedExpirySeconds}s (the lifetime apps/api/src/mailer/code-emails.ts states in the email)`,
+        `expiry=${expiry}, expected ${expectedExpirySeconds}s (the lifetime apps/api/src/mailer/code-emails.ts states in the email).` +
+          " provision.sh keeps the live expiry, so re-running it cannot fix this." +
+          ` Remedy: set the expiry on the IdP — PUT /admin/v1/secretgenerators/${type}` +
+          ` with "expiry": "${expectedExpirySeconds}s" and the current length/alphabet` +
+          ` (or Console → Default Settings → Secret Generator → ${type});` +
+          ` or, if the lifetime is meant to change, change ${CODE_EMAIL_LIFETIME_CONSTANTS[type] ?? "the lifetime constant"}` +
+          " in apps/api/src/mailer/code-emails.ts and deploy that.",
       );
     }
   }

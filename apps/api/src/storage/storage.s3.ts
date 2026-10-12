@@ -127,7 +127,7 @@ export class S3ObjectStorage implements ObjectStorage {
     }
   }
 
-  async probe(): Promise<StorageProbeResult> {
+  async probe(signal?: AbortSignal): Promise<StorageProbeResult> {
     // A one-key listing proves reachability + credentials for the uploads
     // bucket without touching any object (002 EARS-3). Not HeadBucket: a HEAD
     // answer has no body, so the SDK cannot read the error code and a stale key
@@ -136,6 +136,7 @@ export class S3ObjectStorage implements ObjectStorage {
     try {
       await this.client.send(
         new ListObjectsV2Command({ Bucket: this.config.bucket, MaxKeys: 1 }),
+        signal ? { abortSignal: signal } : {},
       );
       return { ok: true };
     } catch (err) {

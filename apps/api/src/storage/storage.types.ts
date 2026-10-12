@@ -120,9 +120,10 @@ export interface ObjectStorage {
    * Bucket-level health probe (002 EARS-3): proves the store is reachable and
    * accepts the configured credentials for the uploads bucket. Never rejects —
    * a failure resolves `{ ok: false, reason }` with the
-   * {@link describeStorageFailure} reason.
+   * {@link describeStorageFailure} reason. `signal` aborts the in-flight
+   * request (the readiness monitor's probe timeout).
    */
-  probe(): Promise<StorageProbeResult>;
+  probe(signal?: AbortSignal): Promise<StorageProbeResult>;
 }
 
 /** Nest DI token for the {@link ObjectStorage} port. */

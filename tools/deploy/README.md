@@ -496,7 +496,9 @@ injected) and the release-check cases in `tools/staging/e2e-stage.test.mjs`.
 ## `pnpm deploy:smoke`
 
 Probes the public origins end to end over real TLS: `api.doctor.school`
-`/v1/health` (+ optional `--expect-sha` assertion) & `/v1/ready`,
+`/v1/health` (+ optional `--expect-sha` assertion) & `/v1/ready` (every check
+ok — postgres, pgvector, objectStorage; a 503 names each failing check, so a
+storage outage reads apart from a DB outage),
 `academy.doctor.school/`, `admin.doctor.school/`, `new.doctor.school/` (the
 doctor storefront, #1723), `id.doctor.school/ui/v2/login/loginname` (the login entry —
 the bare `/ui/v2/login` 404s per Caddy's sub-path routing), and cert

@@ -1,5 +1,4 @@
 import { Global, Logger, Module } from "@nestjs/common";
-import { ScheduleModule } from "@nestjs/schedule";
 import { loadEnv } from "../config/env.schema.js";
 import {
   ObjectStorageReadiness,
@@ -20,13 +19,13 @@ import { OBJECT_STORAGE } from "./storage.types.js";
  * port without importing this module explicitly.
  *
  * Also provides {@link ObjectStorageReadiness} — the cached bucket probe
- * `GET /v1/ready` reads (002 EARS-3, #2821). `ScheduleModule.forRoot()` supplies
- * its SchedulerRegistry (Nest de-duplicates the identical dynamic module the
- * auth module also imports).
+ * `GET /v1/ready` reads (002 EARS-3, #2821). Its SchedulerRegistry comes from
+ * the single global `ScheduleModule.forRoot()` in AuthModule — never import
+ * `forRoot()` here: each call is a distinct dynamic module, so a second one
+ * installs a second explorer and every `@Cron` job runs twice.
  */
 @Global()
 @Module({
-  imports: [ScheduleModule.forRoot()],
   providers: [
     {
       provide: STORAGE_READINESS_INTERVAL,

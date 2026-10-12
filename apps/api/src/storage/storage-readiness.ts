@@ -36,7 +36,8 @@ export interface StorageReadinessSinks {
  *
  * Overlap guard: a tick that fires while a probe is still in flight is skipped
  * (mirrors `ReconcileScheduler`); a hung probe resolves down after
- * {@link STORAGE_PROBE_TIMEOUT_MS} so the guard cannot wedge.
+ * {@link STORAGE_PROBE_TIMEOUT_MS} and its request is aborted, so neither the
+ * guard nor the transport can wedge.
  */
 @Injectable()
 export class ObjectStorageReadiness implements OnModuleInit, OnModuleDestroy {
@@ -94,19 +95,19 @@ export class ObjectStorageReadiness implements OnModuleInit, OnModuleDestroy {
 
   private async probeWithTimeout(): Promise<StorageProbeResult> {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const abort = new AbortController();
     const timeout = new Promise<StorageProbeResult>((resolve) => {
-      timer = setTimeout(
-        () =>
-          resolve({
-            ok: false,
-            reason: `probe timed out after ${STORAGE_PROBE_TIMEOUT_MS}ms`,
-          }),
-        STORAGE_PROBE_TIMEOUT_MS,
-      );
+      timer = setTimeout(() => {
+        abort.abort();
+        resolve({
+          ok: false,
+          reason: `probe timed out after ${STORAGE_PROBE_TIMEOUT_MS}ms`,
+        });
+      }, STORAGE_PROBE_TIMEOUT_MS);
     });
     try {
       return await Promise.race([
-        this.storage.probe().catch((err: unknown): StorageProbeResult => ({
+        this.storage.probe(abort.signal).catch((err: unknown): StorageProbeResult => ({
           ok: false,
           reason: err instanceof Error ? err.name : "probe failed",
         })),

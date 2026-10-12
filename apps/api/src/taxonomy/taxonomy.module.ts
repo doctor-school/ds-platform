@@ -87,7 +87,8 @@ import { EventKindsService } from "./event-kinds.service.js";
   // No `ScheduleModule.forRoot()` here: @nestjs/schedule's explorer scans the
   // WHOLE application for @Cron providers, and `AuthModule` already registers it
   // once. A second registration installs a second explorer, which re-registers
-  // every cron name and aborts the boot — verified while wiring this module.
+  // every @Cron method under a fresh name, so every job runs twice (pinned by
+  // the readiness e2e's single-ScheduleModule assertion).
   controllers: [
     ProjectsAdminController,
     ExpertsAdminController,

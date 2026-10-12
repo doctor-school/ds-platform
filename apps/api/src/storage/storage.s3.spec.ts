@@ -59,6 +59,17 @@ describe("002 EARS-3 object-storage probe + readable failures (#2821)", () => {
     });
   });
 
+  it("EARS-3: the probe forwards the caller's abort signal to the SDK request", async () => {
+    const send = vi
+      .spyOn(S3Client.prototype, "send")
+      .mockResolvedValue({} as never);
+    const controller = new AbortController();
+    await new S3ObjectStorage(config).probe(controller.signal);
+    expect(send.mock.calls[0]?.[1]).toEqual({
+      abortSignal: controller.signal,
+    });
+  });
+
   it("EARS-3: an accepted bucket listing resolves ok:true", async () => {
     vi.spyOn(S3Client.prototype, "send").mockResolvedValue({} as never);
     expect(await new S3ObjectStorage(config).probe()).toEqual({ ok: true });

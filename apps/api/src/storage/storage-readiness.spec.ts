@@ -163,4 +163,28 @@ describe("002 EARS-3 cached object-storage readiness (#2821)", () => {
     expect(out.warn).toHaveBeenCalledWith(expect.stringContaining("timed out"));
     monitor.onModuleDestroy();
   });
+
+  it("EARS-3: a timed-out probe is aborted, so a hung request does not outlive its tick", async () => {
+    vi.useFakeTimers();
+    let received: AbortSignal | undefined;
+    const storage = {
+      probe: (signal?: AbortSignal) => {
+        received = signal;
+        return new Promise<StorageProbeResult>(() => undefined);
+      },
+    } as unknown as ObjectStorage;
+    const monitor = new ObjectStorageReadiness(
+      storage,
+      60_000,
+      registryStub(),
+      sinks(),
+    );
+
+    const init = monitor.onModuleInit();
+    expect(received?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(STORAGE_PROBE_TIMEOUT_MS);
+    await init;
+    expect(received?.aborted).toBe(true);
+    monitor.onModuleDestroy();
+  });
 });

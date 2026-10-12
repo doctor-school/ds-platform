@@ -35,8 +35,11 @@ owned by the `@ds/schemas` SSOT (`ReadinessResponseSchema`).
   [`storage`](../storage/README.md) module refreshes it at startup and every
   60 s) — a request to this public endpoint never calls the store, and the
   store's failure reason goes to the logs only, never into the body (002
-  EARS-3, #2821). `GET /v1/health` stays liveness-only, so a storage outage never
-  fails a deploy health wait or rollback.
+  EARS-3, #2821). `GET /v1/health` stays liveness-only and never depends on
+  storage. `GET /v1/ready` is the deploy/rollback smoke gate
+  (`tools/deploy/smoke-prod.mjs`): a storage outage ends a deploy or rollback
+  red, naming the failing check (`objectStorage=down`), with no automatic
+  rollback.
 - **`ReadinessResponseDto`** (`readiness.dto.ts`) — the `createZodDto`-derived DTO
   over `ReadinessResponseSchema` from `@ds/schemas`
   (`packages/schemas/src/readiness/readiness.schema.ts`), so OpenAPI and runtime

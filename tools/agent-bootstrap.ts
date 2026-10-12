@@ -55,6 +55,7 @@ import {
   roadmapHygiene,
   roadmapHygieneWarnings,
 } from "./gh/lib/roadmap-taxonomy.mjs";
+import { unreviewedShowPrs } from "./gh/merge-gate.mjs";
 import {
   probeStageSlots,
   renderStageSlotSection,
@@ -360,6 +361,84 @@ async function ghPRs(): Promise<GhPRGroups> {
   } catch (e) {
     note("gh pr list", e);
     return { mine: [], others: [] };
+  }
+}
+
+// ── post-merge Show review (#2808) ──────────────────────────────────────────
+// A verified Show PR merges on green CI; its Mode (a) review runs after the
+// merge. This section is what keeps that review from being forgotten: a Show
+// PR stays listed until its verdict exists — there is no rolling window.
+//
+// The rule's effective start. PRs merged before it were under the old rule
+// (Show reviewed before merge) and owe nothing. Set when #2808 was finalised
+// (its rework commit, on top of origin/main 118493a0); a pre-rule Show PR
+// merged between this instant and #2808's landing carries its pre-merge
+// verdict pinned to the merged head, which `unreviewedShowPrs` already clears.
+export const SHOW_REVIEW_SINCE = "2026-10-12T10:19:42Z";
+/** `gh pr list --limit`; a full page is reported, never silently truncated. */
+export const SHOW_REVIEW_LIMIT = 100;
+
+export function showReviewSearchQuery(): string {
+  return `"Change-tier: show" in:body merged:>=${SHOW_REVIEW_SINCE.slice(0, 10)}`;
+}
+
+interface MergedPR {
+  number: number;
+  title: string;
+  mergedAt: string | null;
+}
+
+/** The search returned a full page: older Show PRs may be missing. */
+export function showReviewWarning(prs: unknown[] | null): Warn | null {
+  if (prs === null || prs.length < SHOW_REVIEW_LIMIT) return null;
+  return {
+    source: "gh pr list (merged show)",
+    message: `hit the ${SHOW_REVIEW_LIMIT}-row limit — the post-merge Show review list may be incomplete; raise SHOW_REVIEW_LIMIT in tools/agent-bootstrap.ts`,
+  };
+}
+
+/** `null` = the source could not be read (rendered as unavailable, not none). */
+export function renderShowReviewSection(prs: unknown[] | null): string[] {
+  const head = "## Show PRs awaiting post-merge Mode (a)";
+  if (prs === null)
+    return [head, "(unavailable — gh pr list failed; see Warnings)"];
+  const sinceMs = Date.parse(SHOW_REVIEW_SINCE);
+  const owing = (unreviewedShowPrs(prs) as MergedPR[]).filter(
+    (p) => Date.parse(p.mergedAt ?? "") >= sinceMs,
+  );
+  if (owing.length === 0)
+    return [head, `(none merged since ${SHOW_REVIEW_SINCE})`];
+  return [
+    head,
+    ...owing.map(
+      (p) =>
+        `- #${p.number} ${p.title} — merged ${(p.mergedAt ?? "").slice(0, 10)} · dispatch request-mode-a-review (post-merge)`,
+    ),
+  ];
+}
+
+async function ghMergedShowPRs(): Promise<unknown[] | null> {
+  try {
+    const { stdout } = await execa(
+      "gh",
+      [
+        "pr",
+        "list",
+        "--state",
+        "merged",
+        "--search",
+        showReviewSearchQuery(),
+        "--limit",
+        String(SHOW_REVIEW_LIMIT),
+        "--json",
+        "number,title,body,mergedAt,headRefOid,reviews,comments",
+      ],
+      { cwd: REPO_ROOT },
+    );
+    return JSON.parse(stdout) as unknown[];
+  } catch (e) {
+    note("gh pr list (merged show)", e);
+    return null;
   }
 }
 
@@ -704,6 +783,7 @@ async function main(): Promise<void> {
     syncProbe,
     realityProbe,
     stageSlots,
+    mergedShow,
   ] = await Promise.all([
     gitState(),
     ghIssues(["--assignee", "@me", "--label", "agent-working"]),
@@ -733,6 +813,8 @@ async function main(): Promise<void> {
     }),
     // Live staging slots + their Stage-B request status (#2233). Never throws.
     probeStageSlots(),
+    // Merged Show PRs owing their post-merge Mode (a) review (#2808).
+    ghMergedShowPRs(),
   ]);
   // The slot probe collects its own degrade reasons (unreachable box, a failing
   // `gh pr view`) instead of reaching into the module-level list; merge them so
@@ -963,6 +1045,11 @@ async function main(): Promise<void> {
       }
     }
   }
+  out.push("");
+
+  out.push(...renderShowReviewSection(mergedShow));
+  const showWarn = showReviewWarning(mergedShow);
+  if (showWarn) warnings.push(showWarn);
   out.push("");
 
   out.push("## Stage slots");

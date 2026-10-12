@@ -87,22 +87,22 @@ describe("change-tier classifier (#2584)", () => {
     ).toBe("ask");
   });
 
-  it("ship is an allowlist: server, route, auth, proxy and procedure paths never ship", () => {
+  it("ship is an allowlist: server, route, auth, proxy and procedure paths never ship (auth / route / action are ask, #2808)", () => {
     const expected: Record<string, "show" | "ask"> = {
       "apps/doctor/proxy.ts": "ask",
-      "packages/auth-flow/src/server/session.ts": "show",
-      "packages/auth-flow/src/server/auth-route-guard.ts": "show",
-      "packages/auth-flow/src/return-target.ts": "show",
-      "apps/portal/app/academy-partnership-action.ts": "show",
-      "packages/events-storefront/src/server/register-action.ts": "show",
-      "apps/admin/lib/admin-auth.ts": "show",
+      "packages/auth-flow/src/server/session.ts": "ask",
+      "packages/auth-flow/src/server/auth-route-guard.ts": "ask",
+      "packages/auth-flow/src/return-target.ts": "ask",
+      "apps/portal/app/academy-partnership-action.ts": "ask",
+      "packages/events-storefront/src/server/register-action.ts": "ask",
+      "apps/admin/lib/admin-auth.ts": "ask",
       "apps/docs/content/agent-discipline.md": "ask",
       "packages/congress-submissions/src/model/model.ts": "show",
       "apps/portal/app/foo/page.tsx": "show",
-      "apps/portal/app/foo/route.ts": "show",
+      "apps/portal/app/foo/route.ts": "ask",
       "apps/doctor/instrumentation.ts": "show",
       "packages/events-storefront/src/server/card.tsx": "show",
-      "apps/portal/lib/shell-auth.ts": "show",
+      "apps/portal/lib/shell-auth.ts": "ask",
     };
     for (const [path, minimum] of Object.entries(expected))
       expect(classifyChangeTier([mod(path)]).minimum, path).toBe(minimum);
@@ -112,7 +112,6 @@ describe("change-tier classifier (#2584)", () => {
     for (const path of [
       "packages/congress-submissions/src/copy.ts",
       "packages/congress-submissions/src/ui/submission-detail.tsx",
-      "packages/auth-flow/src/ui/login-form.tsx",
       "packages/events-storefront/src/storefront-copy.ts",
       "packages/events-storefront/src/copy/ru.ts",
       "apps/api/src/mailer/notice-emails.ts",
@@ -594,5 +593,52 @@ describe("#2807: change-tier guard reads .feature patches", () => {
     );
     expect(code).toBe(1);
     expect(stderr).toContain("scenario text");
+  });
+});
+
+describe("#2808: auth, server endpoints and server actions are Ask paths", () => {
+  const AUTH_SERVER = [
+    "packages/auth-flow/src/flow/login.ts",
+    "apps/portal/lib/auth/session.ts",
+    "apps/doctor/app/(auth)/login/page.tsx",
+    "apps/portal/app/api/auth/callback/route.ts",
+    "apps/portal/app/actions/register.ts",
+    "apps/admin/app/login/page.tsx",
+    "apps/portal/app/register/page.tsx",
+    "apps/admin/providers/auth-provider.ts",
+    "apps/admin/lib/admin-session-cache.ts",
+    "apps/portal/app/feed/route.ts",
+    "apps/admin/app/api/events/list.ts",
+    "apps/portal/lib/session-auth.ts",
+    "apps/portal/components/register-action.ts",
+    "apps/portal/components/submitAction.tsx",
+  ];
+
+  it.each(AUTH_SERVER)("%s forces minimum ask", (path) => {
+    expect(classifyChangeTier([mod(path)]).minimum).toBe("ask");
+  });
+
+  it("a plain UI route file (page/layout/loading/error) stays show", () => {
+    for (const path of [
+      "apps/portal/app/feed/page.tsx",
+      "apps/doctor/app/events/layout.tsx",
+      "apps/portal/app/feed/loading.tsx",
+      "apps/portal/app/feed/error.tsx",
+    ])
+      expect(classifyChangeTier([mod(path)]).minimum).toBe("show");
+  });
+
+  it("an interaction / transaction UI file is not a server action", () => {
+    expect(
+      classifyChangeTier([mod("packages/ui/src/interaction-states.tsx")])
+        .minimum,
+    ).not.toBe("ask");
+  });
+
+  it("a test under an auth / server path does not raise the tier", () => {
+    expect(
+      classifyChangeTier([mod("packages/auth-flow/src/flow/login.test.ts")])
+        .minimum,
+    ).toBe("ship");
   });
 });

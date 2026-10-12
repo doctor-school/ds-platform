@@ -73,12 +73,33 @@ export const API_COPY_ALLOWLIST: readonly string[] = [
   "apps/api/test/support/notification-subjects.ts",
 ];
 
+/** The portal/admin auth pages (`app/{login,register,verify,reset,mfa}/`):
+ * an Ask path (#2808) and environment-sensitive (#2699). */
+const AUTH_PAGE_RE =
+  /(?:^|\/)app\/(?:.*\/)?(?:login|register|verify|reset|mfa)\//;
+
 /** Ask areas: runtime code under these is ask; a test in them, or a
  * modified doc that follows the code, is not (#2807). */
 const AREA_ASK_PATH_RES: readonly RegExp[] = [
   /^packages\/(?:db|schemas|api-client)\//,
   /^apps\/api\//,
   /^apps\/docs\/content\/(?:specs|adr|skills)\//,
+  // #2808: auth, server endpoints and server actions — a verified Show merges
+  // before its review, so these must never reach Show. Plain UI route files
+  // (page/layout/loading/error) stay Show.
+  /^packages\/auth-flow\//,
+  /(?:^|\/)lib\/(?:.*\/)?[^/]*auth/i,
+  /(?:^|\/)app\/(?:.*\/)?\(auth\)\//,
+  AUTH_PAGE_RE,
+  /(?:^|\/)providers\/[^/]*auth/i,
+  /(?:^|\/)lib\/(?:.*\/)?[^/]*session[^/]*\.[cm]?[jt]sx?$/i,
+  /(?:^|\/)app\/(?:.*\/)?api\//,
+  /(?:^|\/)route\.[cm]?[jt]sx?$/,
+  /(?:^|\/)actions\//,
+  // `*action*` sources as a word (`register-action.ts`, `actions.ts`,
+  // `submitAction.tsx`), not `interaction` / `transaction`.
+  /(?:^|\/)(?:[^/]*[._-])?actions?[._-][^/]*$/i,
+  /(?:^|\/)[^/]*[a-z]Actions?(?:[A-Z._-][^/]*)?$/,
 ];
 
 /** Ask whatever the file is — CI, tooling, instructions, dependencies,
@@ -294,7 +315,7 @@ export function isNonRuntimePath(path: string): boolean {
  */
 const ENVIRONMENT_SENSITIVE_RES: readonly RegExp[] = [
   /(?:^|\/)lib\/(?:.*\/)?[^/]*auth/i,
-  /(?:^|\/)app\/(?:.*\/)?(?:login|register|verify|reset|mfa)\//,
+  AUTH_PAGE_RE,
   /(?:^|\/)(?:middleware|proxy)\.[^/]+$/,
   /^apps\/api\/drizzle\//,
   /^packages\/db\/src\/schema\//,

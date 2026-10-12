@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { describe, it } from "node:test";
 
-import { releaseCheckEnv, runStageMainCheck } from "./stage-main-check.mjs";
+import {
+  checkStageMainPrerequisites,
+  releaseCheckEnv,
+  runStageMainCheck,
+} from "./stage-main-check.mjs";
 
 /**
  * The stage `main` release check `pnpm deploy:prod` runs as a pre-flight step (#2701):
@@ -165,5 +169,66 @@ describe("runStageMainCheck", () => {
       /40-character/,
     );
     assert.equal(calls.length, 0);
+  });
+});
+
+describe("checkStageMainPrerequisites", () => {
+  // #2806: the deploy probes what the check needs in its first seconds, before
+  // the clean checkout, install and converge — never a spawn of those here.
+  const reachable = () => {
+    const calls = [];
+    return { calls, probeSsh: async (dest) => void calls.push(dest) };
+  };
+
+  it("passes when the password is set and the stage box answers over ssh", async () => {
+    const { calls, probeSsh } = reachable();
+    const result = await checkStageMainPrerequisites({
+      env: { STAGE_BASIC_AUTH_PASS: "s3cret" },
+      destination: "ds-stage-1",
+      probeSsh,
+    });
+    assert.deepEqual(result, { ok: true });
+    assert.deepEqual(calls, ["ds-stage-1"]);
+  });
+
+  it("refuses a missing STAGE_BASIC_AUTH_PASS, naming it and the fix", async () => {
+    const { probeSsh } = reachable();
+    const result = await checkStageMainPrerequisites({
+      env: {},
+      destination: "ds-stage-1",
+      probeSsh,
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /STAGE_BASIC_AUTH_PASS is not set/);
+    assert.match(result.reason, /Export it/);
+  });
+
+  it("refuses an unreachable stage box, naming the destination and the ssh error", async () => {
+    const result = await checkStageMainPrerequisites({
+      env: { STAGE_BASIC_AUTH_PASS: "s3cret" },
+      destination: "ds-stage-1",
+      probeSsh: async () => {
+        throw new Error(
+          "ssh capture on ds-stage-1 exited 255: ssh: connect to host 1.2.3.4 port 22: Connection timed out",
+        );
+      },
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /ds-stage-1/);
+    assert.match(result.reason, /Connection timed out/);
+    assert.match(result.reason, /DS_STAGE_SSH/);
+  });
+
+  it("names both missing prerequisites in one refusal", async () => {
+    const result = await checkStageMainPrerequisites({
+      env: { STAGE_BASIC_AUTH_PASS: "" },
+      destination: "ds-stage-1",
+      probeSsh: async () => {
+        throw new Error("ssh capture on ds-stage-1 aborted");
+      },
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /STAGE_BASIC_AUTH_PASS/);
+    assert.match(result.reason, /unreachable/);
   });
 });

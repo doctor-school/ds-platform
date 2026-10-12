@@ -23,15 +23,16 @@ import { readLiveSlots } from "./slot.mjs";
 export const STAGE_SLOT_PROBE_MS = 8000;
 
 /**
- * ssh options for THIS probe only. `pnpm bootstrap` runs on every SessionStart,
- * so an unreachable box must fail fast and non-interactively: without
+ * ssh options for a fast reachability probe of the box — this one and the deploy
+ * pre-flight (`tools/deploy/stage-main-check.mjs`, #2806). `pnpm bootstrap` runs on
+ * every SessionStart, so an unreachable box must fail fast and non-interactively: without
  * `ConnectTimeout` a firewalled box costs the TCP-connect default (~21 s on
  * Windows, up to ~130 s on Linux) and without `BatchMode` ssh can sit on a
  * passphrase/host-key prompt forever. The wall-clock bound below kills the child
  * on top of these — the options keep the common case quick, the kill keeps the
  * pathological one bounded.
  */
-const PROBE_SSH_OPTIONS = [
+export const PROBE_SSH_OPTIONS = [
   "-o",
   "ConnectTimeout=5",
   "-o",

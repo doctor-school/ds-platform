@@ -91,6 +91,8 @@ const AREA_ASK_PATH_RES: readonly RegExp[] = [
   /(?:^|\/)lib\/(?:.*\/)?[^/]*auth/i,
   /(?:^|\/)app\/(?:.*\/)?\(auth\)\//,
   AUTH_PAGE_RE,
+  /(?:^|\/)providers\/[^/]*auth/i,
+  /(?:^|\/)lib\/(?:.*\/)?[^/]*session[^/]*\.[cm]?[jt]sx?$/i,
   /(?:^|\/)app\/(?:.*\/)?api\//,
   /(?:^|\/)route\.[cm]?[jt]sx?$/,
   /(?:^|\/)actions\//,

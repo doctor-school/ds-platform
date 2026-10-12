@@ -605,6 +605,8 @@ describe("#2808: auth, server endpoints and server actions are Ask paths", () =>
     "apps/portal/app/actions/register.ts",
     "apps/admin/app/login/page.tsx",
     "apps/portal/app/register/page.tsx",
+    "apps/admin/providers/auth-provider.ts",
+    "apps/admin/lib/admin-session-cache.ts",
     "apps/portal/app/feed/route.ts",
     "apps/admin/app/api/events/list.ts",
     "apps/portal/lib/session-auth.ts",

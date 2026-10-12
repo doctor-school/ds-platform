@@ -12,6 +12,116 @@ Feature: Net-new web authentication producing a doctor_guest identity
   # origin; rate-limit, captcha, and sms-budget guards are active. Individual
   # executable scenarios assert their own concrete prerequisites and outcomes.
 
+  # Production amendment 2026-10-12 (#2449): confirmed phone in /account and SMS
+  # reset. SMS is read from the dev-stand sms-sink by recipient phone; both
+  # storefronts run the same scenarios (EARS-59, host-config diff only).
+
+  @EARS-47 @EARS-48 @EARS-57 @EARS-59 @happy @phone-confirmation
+  Scenario: A signed-in user confirms a phone from the profile
+    Given a signed-in user whose account has no phone
+    When the user opens "/account", enters "+7 999 123-45-67" and asks for a code
+    Then one SMS with a six-digit code is delivered to that number
+    And users.phone and users.phone_verified are still unchanged
+    When the user enters the code from the SMS
+    Then the profile shows the phone as confirmed
+    And users.phone holds the number and phone_verified is true
+    And a notice email without code, link or number is sent to the account email
+    And one "auth.phone.confirmed" audit row is appended
+
+  @EARS-48 @EARS-16 @failure @phone-confirmation
+  Scenario: A wrong, expired or reused phone code confirms nothing
+    Given a signed-in user who requested a phone code
+    When the user enters a wrong, an expired or an already-used code
+    Then the same generic failure is shown each time
+    And users.phone and phone_verified are unchanged and no notice email is sent
+
+  @EARS-50 @happy @phone-confirmation
+  Scenario: A congress participant sees the form's number prefilled
+    Given a signed-in user whose latest congress registration answers hold the contact phone "8 (999) 123-45-67"
+    When the user opens "/account"
+    Then the phone field is prefilled with "8 (999) 123-45-67" and is editable
+    And no SMS is sent and users.phone is still empty until the code is confirmed
+
+  @EARS-49 @EARS-47 @EARS-52 @EARS-57 @happy @phone-confirmation
+  Scenario: Changing a confirmed phone leaves no confirmed phone until the new one is confirmed
+    Given a signed-in user with the confirmed phone "+79991234567"
+    When the user enters "+79997654321" and asks for a code
+    Then users.phone and phone_verified are cleared and one "auth.phone.changed" audit row is appended
+    And SMS sign-in and SMS reset by "+79991234567" and by "+79997654321" find no account
+    And email sign-in still works
+    When the user enters the code sent to "+79997654321"
+    Then users.phone is "+79997654321" and phone_verified is true
+    And one "auth.phone.confirmed" audit row and one notice email are produced
+
+  @EARS-49 @EARS-58 @failure @phone-confirmation
+  Scenario: An abandoned change leaves the account with no confirmed phone
+    Given a signed-in user with the confirmed phone "+79991234567" who requested a code for "+79997654321" and never entered it
+    When the user signs in again by email
+    Then the profile shows the phone as awaiting confirmation and no account resolves from either number
+    And the user can request a code again, which restarts the flow
+
+  @EARS-47 @happy @phone-confirmation
+  Scenario: Requesting a code for the already-confirmed number is a no-op
+    Given a signed-in user with the confirmed phone "+79991234567"
+    When the user asks for a code for "+79991234567"
+    Then no SMS is sent and the confirmed phone is not displaced
+
+  @EARS-51 @failure @phone-confirmation
+  Scenario: A number confirmed on another account is refused in the profile
+    Given another account holds "+79990001122" as its confirmed phone
+    When a signed-in user asks for a code for "+79990001122"
+    Then the profile shows the specific message that the number is already confirmed on another account
+    And no SMS is sent and the SMS budget is not consumed for a send
+
+  @EARS-53 @EARS-12 @EARS-35 @happy @sms-reset
+  Scenario: Password reset by a confirmed phone delivers the code by SMS
+    Given an account with the confirmed phone "+79991234567" and a verified email
+    When a visitor requests a password reset with the identifier "+79991234567"
+    Then one SMS with a six-digit code is delivered to "+79991234567" and no email is sent
+    When the visitor enters the code and a policy-conforming new password
+    Then the password is set, all earlier sessions are revoked and the visitor is signed in
+    And the account's email verification state is unchanged
+
+  @EARS-53 @EARS-16 @EARS-56 @failure @sms-reset
+  Scenario: Reset by an unconfirmed or unknown phone is indistinguishable and sends nothing
+    Given a phone that is unknown, a phone only typed in a congress form, and a phone awaiting confirmation on the IdP
+    When a visitor requests a password reset with each
+    Then each response is identical to the confirmed-phone case in status, body and timing within 50 ms
+    And no SMS and no email is sent
+    And the unconfirmed-phone counter for flow "reset" increases once per request and no audit ledger row is written
+
+  @EARS-53 @EARS-58 @failure @sms-reset
+  Scenario: A mirror that still confirms a number the IdP no longer holds verified sends nothing
+    Given the mirror holds "+79991234567" as a confirmed phone of an account
+    And the IdP user of that account holds a different, unverified phone
+    When a visitor requests a password reset with "+79991234567"
+    Then the response is identical to the unknown-phone case in status, body and timing within 50 ms
+    And no SMS and no email is sent
+    When the mirror is next reconciled from the IdP
+    Then the account holds no confirmed phone in the mirror
+
+  @EARS-53 @happy @sms-reset
+  Scenario: Reset by email is unchanged for an account that also has a confirmed phone
+    Given an account with a confirmed phone and the email "owner@example.org"
+    When a visitor requests a password reset with "owner@example.org"
+    Then the code is mailed and no SMS is sent
+
+  @EARS-54 @EARS-55 @happy @hint
+  Scenario: The reset step and the hint tell the truth about the SMS
+    When a visitor types a phone into the identifier field of "/reset"
+    Then the static hint «SMS-код приходит только на номер, подтверждённый в профиле; иначе используйте почту» is shown
+    When the visitor asks for the code
+    Then the next step says that an SMS was sent only if the number is confirmed in the profile and offers the email way out
+    And typing an email into the field shows no hint
+
+  @EARS-55 @EARS-56 @happy @hint
+  Scenario: Sign-in under the SMS switch shows the hint and counts a request for an unconfirmed number
+    Given the visitor opens "/login" with the "По коду" method and selects «SMS»
+    Then the same static hint is shown, for every visitor alike
+    When the visitor requests an SMS code for a number that is not a confirmed account phone
+    Then the response is the usual enumeration-safe one and no SMS is sent
+    And the unconfirmed-phone counter for flow "signin" increases once
+
   @EARS-1 @EARS-20 @EARS-19 @happy @registration-before-confirmation
   Scenario: Register with email and password
     Given an Academy visitor with a unique never-registered email

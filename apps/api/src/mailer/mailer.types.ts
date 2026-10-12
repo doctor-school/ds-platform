@@ -123,6 +123,15 @@ export interface Mailer {
   sendAdminLockoutNotice(email: string): Promise<void>;
 
   /**
+   * 003 EARS-52: tell the account owner that a phone was confirmed on the
+   * account (added or changed) at `at` — a **security notice**, in the first
+   * class above: no code, link, button or number. The caller sends it off the
+   * response path; a rejection never alters the response (EARS-31).
+   * Implementations MUST reject an empty / blank / syntactically invalid email.
+   */
+  sendPhoneConfirmedNotice(email: string, at: Date): Promise<void>;
+
+  /**
    * 044 EARS-13: send the congress registration confirmation — a
    * **product notice**, in the first class above. It carries no code, no token
    * and nothing about the account beyond the one fact the recipient submitted

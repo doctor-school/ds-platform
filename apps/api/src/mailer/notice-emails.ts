@@ -28,6 +28,46 @@ export function adminLockoutMessage(): EmailMessage {
   });
 }
 
+/** 003 EARS-52: «12 октября 2026 г. в 12:05» — the confirmation instant, Moscow time. */
+function formatNoticeInstant(at: Date): string {
+  const date = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: MOSCOW_TIME_ZONE,
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(at);
+  const time = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: MOSCOW_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(at);
+  return `${date} в ${time}`;
+}
+
+/**
+ * 003 EARS-52: the security notice of a confirmed phone add or change — when,
+ * and the way out if it was not the owner; no code, link, button or number.
+ */
+export function phoneConfirmedNoticeMessage(at: Date): EmailMessage {
+  return composeEmail({
+    subject: "Doctor.School — в аккаунте подтверждён номер телефона",
+    preheader: "В аккаунте добавлен или изменён номер телефона",
+    intro:
+      "В вашем аккаунте Doctor.School добавлен или изменён номер телефона: " +
+      `${formatNoticeInstant(at)} по московскому времени.`,
+    paragraphs: [
+      "Номер подтверждён кодом из SMS. Теперь по нему можно входить по коду " +
+        "из SMS.",
+    ],
+    footer: [
+      "Если это были не вы, восстановите пароль на странице входа " +
+        "(«Забыли пароль?») — после смены пароля все сеансы входа завершатся.",
+      "Команда Doctor.School",
+    ],
+  });
+}
+
 /**
  * 046 «Letters» (owner 2026-10-06, #2634) — the congress letters carry no link,
  * button or URL. The way into the cabinet is told in text: the congress site's

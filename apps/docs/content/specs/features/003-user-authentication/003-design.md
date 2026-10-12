@@ -156,7 +156,7 @@ Sources are the Zitadel repository at tag **v4.17.3** (the version the dev-stand
 - a requested number lives, until confirmed, only on the Zitadel user as an _unverified_ human phone; `users.phone` and `users.phone_verified` are written by the confirm step (EARS-48), in the same request as the `/phone/verify` success and from the phone the IdP now holds verified, not left to the webhook;
 - a request for a different number while the account holds a confirmed phone **displaces** it in the same request: the BFF clears `users.phone` and `users.phone_verified` and appends `auth.phone.changed`, because the IdP no longer holds a verified phone. A request for the number already confirmed is a no-op;
 - every phone-identifier lookup used for a decision goes **through the mirror's confirmed phone** (`users.phone` + `phone_verified`), not through Zitadel's `phoneQuery` (`zitadel.idp.ts:2575-2593`, which also matches an unverified phone): password sign-in, SMS sign-in and reset by phone resolve a `sub` from the mirror first (EARS-58). Without this, an unverified number would make two Zitadel users answer to one phone and make `SMS OTP` / reset resolve ambiguously;
-- the mirror upsert is Zitadel-wins for `phone` (`user-mirror.service.ts:69-126`); it is amended (EARS-58, webhook and reconcile sweep alike) to write `phone`/`phone_verified` from the IdP when the IdP phone is verified and to **clear both** when the IdP user's phone is absent or not verified. The first half stops an unconfirmed number reaching `users.phone`; the second is the drift-healing direction: the EARS-47 displacement is two writes in two systems (Zitadel `POST /phone`, then the mirror clear), and a phone can also be changed outside the BFF (Zitadel console, admin API), so without the clear a failed second write would leave the mirror confirming P while Zitadel holds Q unverified;
+- the mirror upsert is Zitadel-wins for `phone` (`user-mirror.service.ts:69-126`); it is amended (EARS-58, webhook and reconcile sweep alike) to write `phone`/`phone_verified` from the IdP when the IdP phone is verified and to **clear both** when the IdP user's phone is absent or not verified. The first half stops an unconfirmed number reaching `users.phone`; the second is the drift-healing direction: the EARS-47 displacement is two writes in two systems (Zitadel `POST /phone`, then the mirror clear), and a phone can also be changed outside the BFF (Zitadel console, admin API), so without the clear a failed second write would leave the mirror confirming P while Zitadel holds Q unverified. The clear stops at the `users_email_or_phone` CHECK: an existing row is UPDATEd in place (a partial payload is never proposed as an INSERT tuple, which Postgres checks against the CHECK before ON CONFLICT), a row without an email keeps its number with `phone_verified = false` — resolving nothing, since every phone lookup keys on `phone_verified = true`, but still holding the `users.phone` UNIQUE slot — and a new account with neither an email nor a verified phone is not mirrored. The same bound applies when a `users.phone` UNIQUE conflict makes the sync treat a verified number as not confirmed (EARS-48);
 - the Zitadel notifier is not the same thing as the human phone: on `HumanPhoneChanged` its projection updates only `last_phone` and keeps the old `verified_phone` (`projection/user.go`). «The IdP no longer holds a verified phone» is true of the human phone; the notifier still keeps the old verified phone for the login OTP, and sends confirmation and reset SMS to `last_phone`. That is harmless behind the BFF gate (the OTP request itself resolves through the mirror's confirmed phone), and is exactly why the reset re-reads the IdP user before sending (next section);
 - there is no undo of an abandoned request. **Consequence:** an abandoned change of a confirmed phone leaves the account with no confirmed phone (email sign-in and reset unaffected; the user requests a code again). **Reason:** a store for the unconfirmed number plus compensating IdP writes would be a second source of truth for a rare edge case.
 
@@ -167,7 +167,7 @@ sequenceDiagram
     participant Z as Zitadel
     participant P as SMS provider chain (sms-aero-adapter → SMS Aero / sms-sink)
     U->>B: POST /v1/me/phone {phone}  (session)
-    B->>B: normalise E.164; mirror lookup: confirmed on another account? → refuse (EARS-51); same confirmed number → no-op
+    B->>B: normalise E.164; same confirmed number → no-op; EARS-13/14 limits; confirmed on another account? → drop the requester's own IdP phone (`DELETE /v2/users/{sub}/phone`) + displace its confirmed phone as below, answer `code_sent`, send nothing, write the number nowhere (EARS-51)
     B->>B: EARS-13 per account/IP, EARS-14 per phone/IP/ASN + daily budget
     B->>Z: POST /v2/users/{sub}/phone {phone, sendCode:{}}   (resend: /phone/resend)
     Z->>P: HTTP SMS webhook (VerifyPhone text, code, recipient = LastPhone)
@@ -185,6 +185,7 @@ sequenceDiagram
     else wrong / expired / not awaiting a code
         B-->>U: generic failure; EARS-13 counts; no write
     end
+    Note over B,Z: accepted but users.phone UNIQUE lost to another account → DELETE /v2/users/{sub}/phone, generic failure, no write (EARS-48); the mirror sync clears a phone UNIQUE conflict instead of failing
 ```
 
 ### Password reset by SMS
@@ -241,10 +242,10 @@ One Prometheus counter (`auth_sms_unconfirmed_phone_requests_total{flow="signin"
 ### Security notes
 
 - _Takeover via the typed number._ Closed by construction: the number is never an authenticator until a code sent to it has been entered by a session already signed in to the account; the unauthenticated 044 form only stores answers (rejected alternative, requirements).
-- _Phone squatting._ A user cannot confirm a number another account holds confirmed (EARS-51); an unconfirmed number authenticates nobody (EARS-58) and is replaced by the next request or confirmation.
+- _Phone squatting._ A user cannot confirm a number another account holds confirmed (EARS-51: no code is sent, so no confirm can succeed); an unconfirmed number authenticates nobody (EARS-58) and is replaced by the next request or confirmation.
 - _SMS pumping._ Same toll-fraud controls as SMS sign-in; confirmation is also behind a session, reset behind CAPTCHA and the budget.
 - _Account recovery via a stolen phone._ A SIM-swap holder can now reset the password of an account whose phone is confirmed. This is the accepted cost of the owner's decision; the compensating controls are the notice email on every add/change (EARS-52), the six-digit code's short life, EARS-13/15, the session revocation on reset (EARS-12), and email reset remaining available.
-- _Enumeration._ Anonymous surfaces are unchanged byte-for-byte whether a number is confirmed (EARS-53/55/56); the one disclosure (EARS-51) is on the authenticated surface and bounded by EARS-13/14.
+- _Enumeration._ Anonymous surfaces are unchanged byte-for-byte whether a number is confirmed (EARS-53/55/56); the authenticated phone surface answers a number confirmed elsewhere exactly like a free one (EARS-51) — the same answer, the same timing floor (`@TimingEqualized`, `PHONE_CODE_REQUEST_TIMING_FLOOR_MS`) and the same own-view effects (the requester's confirmed phone is displaced either way) — so it is no enumeration oracle either.
 
 ### Open items for the implementation slice (live-verify on the dev stand with `sms-sink`)
 

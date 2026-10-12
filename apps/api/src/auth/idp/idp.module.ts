@@ -12,6 +12,9 @@ import {
   type OtpChallengeStore,
 } from "./otp-challenge-store.types.js";
 import { ZitadelIdpClient } from "./zitadel.idp.js";
+import { DRIZZLE_DB } from "../../database/database.tokens.js";
+import { DrizzleConfirmedPhoneDirectory } from "./confirmed-phone.directory.js";
+import type { DrizzleHandle } from "@ds/db";
 
 /**
  * Binds the {@link IDP_CLIENT} port (design §2). The single place the concrete
@@ -59,6 +62,7 @@ import { ZitadelIdpClient } from "./zitadel.idp.js";
       useFactory: (
         otpChallengeStore: OtpChallengeStore,
         mailer: Mailer,
+        db: DrizzleHandle["db"],
       ): IdpClient => {
         const env = loadEnv();
         if (env.IDP_ISSUER && env.IDP_SERVICE_TOKEN) {
@@ -85,6 +89,9 @@ import { ZitadelIdpClient } from "./zitadel.idp.js";
               // the Zitadel-returned code to — the §13.3/§13.4 code-only
               // artifacts ride the shared MAILER binding.
               mailer,
+              // 003 EARS-58: a phone identifier resolves only through the
+              // mirror's confirmed phone.
+              confirmedPhones: new DrizzleConfirmedPhoneDirectory(db),
             },
             // #410: the shared cross-request OTP-challenge store — Redis-backed
             // under scale-out, so the login hop finds the challenge whichever
@@ -96,7 +103,7 @@ import { ZitadelIdpClient } from "./zitadel.idp.js";
         // the no-IdP dev-stand still delivers real code emails via the mailer.
         return new FakeIdpClient(mailer);
       },
-      inject: [OTP_CHALLENGE_STORE, MAILER],
+      inject: [OTP_CHALLENGE_STORE, MAILER, DRIZZLE_DB],
     },
   ],
   exports: [IDP_CLIENT],

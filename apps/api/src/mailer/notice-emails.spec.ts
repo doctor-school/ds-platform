@@ -6,6 +6,7 @@ import {
   endSentence,
   formatCongressEventDate,
   formatRevisionLastDay,
+  phoneConfirmedNoticeMessage,
 } from "./notice-emails.js";
 
 /**
@@ -290,5 +291,41 @@ describe("046 EARS-29, EARS-35: the committee decision and extension letters", (
     expect(formatRevisionLastDay(new Date("2027-02-19T21:00:00.000Z"))).toBe(
       "19.02.2027",
     );
+  });
+});
+
+/**
+ * 003 EARS-52 (#2449) — the phone-confirmed security notice: says a phone was
+ * added or changed and when, tells the owner what to do if it was not them,
+ * and carries no code, link, button or the number itself.
+ */
+describe("003 EARS-52 phone confirmed notice", () => {
+  const at = new Date("2026-10-12T09:05:00Z");
+  const message = phoneConfirmedNoticeMessage(at);
+
+  it("EARS-52: states that a phone was added or changed and when (Moscow time)", () => {
+    expect(message.subject).toBe(
+      "Doctor.School — в аккаунте подтверждён номер телефона",
+    );
+    expect(message.text).toContain(
+      "В вашем аккаунте Doctor.School добавлен или изменён номер телефона: " +
+        "12 октября 2026 г. в 12:05 по московскому времени.",
+    );
+  });
+
+  it("EARS-52: tells the owner to reset the password if it was not them, which ends every session", () => {
+    expect(message.text).toContain(
+      "Если это были не вы, восстановите пароль на странице входа " +
+        "(«Забыли пароль?») — после смены пароля все сеансы входа завершатся.",
+    );
+  });
+
+  it("EARS-52: carries no code, link, button or phone number", () => {
+    for (const part of [message.text, message.html]) {
+      expect(part).not.toMatch(/https?:\/\//);
+      expect(part).not.toMatch(/\+\d{6,}/);
+      expect(part).not.toMatch(/\b\d{6}\b/);
+    }
+    expect(message.html).not.toMatch(/href=|<a\b|<button\b/i);
   });
 });

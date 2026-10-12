@@ -276,9 +276,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         [email],
       );
       expect(rows[0]).toBeDefined();
+      // 003 EARS-58: the mirror holds an IdP phone only while the IdP holds
+      // it verified, so the payload carries the verified flag the IdP would.
       await app
         .get(UserMirrorService)
-        .upsert({ zitadelSub: rows[0]!.zitadel_sub, phone });
+        .upsert({
+          zitadelSub: rows[0]!.zitadel_sub,
+          phone,
+          phoneVerified: true,
+        });
 
       const registered = await app.inject({
         method: "POST",

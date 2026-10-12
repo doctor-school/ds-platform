@@ -7,6 +7,7 @@ import {
   IdpUnavailableError,
   type AdminAuthorityVerdict,
   type CreatedUser,
+  type ConfirmedPhoneDirectory,
   type CreateUserInput,
   type EmailCodeRegistration,
   type EmailCodeSubmission,
@@ -111,6 +112,12 @@ export interface ZitadelConfig {
    * variable for the in-flight send only and is never logged or persisted.
    */
   mailer?: Mailer | undefined;
+  /**
+   * 003 EARS-58: resolves a phone identifier to the account that holds it
+   * confirmed. Absent => no phone identifier resolves to any account (fail
+   * closed): an unverified IdP phone must never authenticate anyone.
+   */
+  confirmedPhones?: ConfirmedPhoneDirectory | undefined;
   /** Injected for tests; defaults to the global `fetch`. */
   fetchImpl?: FetchLike | undefined;
 }
@@ -671,6 +678,60 @@ export class ZitadelIdpClient implements IdpClient {
     }
   }
 
+  async setPhone(
+    sub: string,
+    phone: string,
+    delivery: "sms" | "none",
+  ): Promise<void> {
+    // 003 EARS-47 (design -> research a1): SetPhone replaces the stored phone
+    // at once, unverified, and creates a VERIFY_PHONE_CODE; `sendCode` hands it
+    // to the SMS notifier, `returnCode` keeps it inside Zitadel's response,
+    // which is dropped unread here.
+    let res: { ok: boolean; status: number };
+    try {
+      res = await this.fetchImpl(this.url(`/v2/users/${sub}/phone`), {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify(
+          delivery === "sms"
+            ? { phone, sendCode: {} }
+            : { phone, returnCode: {} },
+        ),
+      });
+    } catch (err) {
+      throw new IdpUnavailableError(
+        `zitadel set phone failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    if (!res.ok) {
+      throw new IdpUnavailableError(
+        `zitadel set phone failed: HTTP ${res.status}`,
+      );
+    }
+  }
+
+  async removePhone(sub: string): Promise<void> {
+    // 003 EARS-48/51: Zitadel v2 RemovePhone — `DELETE /v2/users/{id}/phone`.
+    // A user without a phone answers 404 (nothing to remove): the desired
+    // state already holds, so it is a success.
+    let res: { ok: boolean; status: number };
+    try {
+      res = await this.fetchImpl(this.url(`/v2/users/${sub}/phone`), {
+        method: "DELETE",
+        headers: this.headers(),
+      });
+    } catch (err) {
+      throw new IdpUnavailableError(
+        `zitadel remove phone failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    if (!res.ok && res.status !== 404) {
+      throw new IdpUnavailableError(
+        `zitadel remove phone failed: HTTP ${res.status}`,
+      );
+    }
+  }
+
   async verifyEmail(sub: string, code: string): Promise<boolean> {
     // Live wire-shape delta (#148, same bug class as the send): the verify hop
     // is `POST /v2/users/{id}/email/verify` — the merged `/email/_verify` also
@@ -759,12 +820,14 @@ export class ZitadelIdpClient implements IdpClient {
     // Mapping a specific locked-account error to `locked` is a refinement for
     // when this adapter is exercised against the live dev-stand instance (the
     // token-exchange paths below are still integration seams, design §11).
+    const userCheck = await this.signInUserCheck(identifier);
+    if (!userCheck) return { outcome: "rejected" };
     const res = await this.fetchImpl(this.url("/v2/sessions"), {
       method: "POST",
       headers: this.headers(),
       body: JSON.stringify({
         checks: {
-          user: { loginName: identifier },
+          user: userCheck,
           password: { password },
         },
       }),
@@ -1062,6 +1125,55 @@ export class ZitadelIdpClient implements IdpClient {
   }
 
   /**
+   * The Session v2 `user` check for a sign-in identifier: an email by its
+   * login name, a phone only as the account that holds it confirmed (003
+   * EARS-58) — `null` when no account does, so the caller rejects without an
+   * IdP hop.
+   */
+  private async signInUserCheck(
+    identifier: string,
+  ): Promise<{ loginName: string } | { userId: string } | null> {
+    if (!isPhoneIdentifier(identifier)) return { loginName: identifier };
+    const userId = await this.confirmedPhoneSubject(identifier);
+    return userId ? { userId } : null;
+  }
+
+  /** 003 EARS-58: the account holding `phone` confirmed, or `null` (also with no directory wired). */
+  private async confirmedPhoneSubject(phone: string): Promise<string | null> {
+    if (!this.config.confirmedPhones) return null;
+    return this.config.confirmedPhones.subjectFor(phone);
+  }
+
+  /**
+   * The User v2 search query a sign-in or reset identifier resolves through:
+   * an email by {@link identifierQuery}, a phone by the id of the account that
+   * holds it confirmed (003 EARS-58). `null` when no account holds the phone
+   * confirmed.
+   */
+  private async signInUserQuery(
+    identifier: string,
+  ): Promise<
+    | ReturnType<typeof identifierQuery>
+    | { inUserIdsQuery: { userIds: string[] } }
+    | null
+  > {
+    if (!isPhoneIdentifier(identifier)) return identifierQuery(identifier);
+    const userId = await this.confirmedPhoneSubject(identifier);
+    return userId ? { inUserIdsQuery: { userIds: [userId] } } : null;
+  }
+
+  /**
+   * Resolve a sign-in or reset identifier to a Zitadel `userId` — a phone only
+   * through its confirmed account (003 EARS-58) — or `null`.
+   */
+  private async resolveSignInUserId(
+    identifier: string,
+  ): Promise<string | null> {
+    if (!isPhoneIdentifier(identifier)) return this.resolveUserId(identifier);
+    return this.confirmedPhoneSubject(identifier);
+  }
+
+  /**
    * Resolve an identifier (email or phone) to a Zitadel `userId`, or `null` if no
    * user matches. Uses the User v2 search on the matching channel
    * ({@link identifierQuery} — email matched case-insensitively). Fails closed — any non-2xx or empty result is `null` — so the reset
@@ -1099,7 +1211,8 @@ export class ZitadelIdpClient implements IdpClient {
     emailVerified: boolean;
     email: string | undefined;
   } | null> {
-    const query = identifierQuery(identifier);
+    const query = await this.signInUserQuery(identifier);
+    if (!query) return null;
     const res = await this.fetchImpl(this.url("/v2/users"), {
       method: "POST",
       headers: this.headers(),
@@ -1236,7 +1349,7 @@ export class ZitadelIdpClient implements IdpClient {
     // from the reset flow sets the new password. A non-2xx (bad/expired code) or
     // an unknown identifier both resolve to `null` — indistinguishable, generic
     // (EARS-16). The IdP owns the password and the code check (design §2).
-    const userId = await this.resolveUserId(identifier);
+    const userId = await this.resolveSignInUserId(identifier);
     if (!userId) return null;
     const res = await this.fetchImpl(this.url(`/v2/users/${userId}/password`), {
       method: "POST",
@@ -1260,7 +1373,9 @@ export class ZitadelIdpClient implements IdpClient {
       headers: this.headers(),
       body: JSON.stringify({
         checks: {
-          user: { loginName: identifier },
+          user: isPhoneIdentifier(identifier)
+            ? { userId }
+            : { loginName: identifier },
           password: { password: newPassword },
         },
       }),
@@ -1344,7 +1459,7 @@ export class ZitadelIdpClient implements IdpClient {
       const userId =
         challenge === "otpEmail"
           ? user?.userId
-          : await this.resolveUserId(identifier);
+          : await this.resolveSignInUserId(identifier);
       if (!userId) return false;
       await this.ensureOtpFactor(userId, challenge);
       // 003 EARS-6/29: the email code returns to the BFF mailer (Zitadel sends
@@ -2581,6 +2696,11 @@ export class ZitadelIdpClient implements IdpClient {
  * silently found nobody), breaking the enumeration-safe "existing account"
  * branch (003 EARS-16, 044 EARS-7).
  */
+/** A phone identifier is `+`-prefixed E.164 (the split {@link identifierQuery} makes). */
+function isPhoneIdentifier(identifier: string): boolean {
+  return identifier.startsWith("+");
+}
+
 function identifierQuery(identifier: string):
   | { phoneQuery: { number: string } }
   | {

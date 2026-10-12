@@ -43,6 +43,13 @@ export function hashIdentifier(identifier: string, pepper: string): string {
     .digest("hex");
 }
 
+/** 003 EARS-57: the `auth.phone.*` wire ids (ADR-0001 §7.3 naming). */
+const PHONE_EVENT_WIRE_IDS = {
+  PhoneConfirmRequested: "auth.phone.confirm.requested",
+  PhoneConfirmed: "auth.phone.confirmed",
+  PhoneChanged: "auth.phone.changed",
+} as const;
+
 /** The ledger-row shape an event maps to, minus the generated `eventId`/`id`/`createdAt`. */
 type MappedRow = Pick<
   NewAuditLedgerRow,
@@ -205,6 +212,17 @@ export function toLedgerRow(
         sid: null,
         reason: null,
         metadata: { fields: event.fields },
+      };
+    case "PhoneConfirmRequested":
+    case "PhoneConfirmed":
+    case "PhoneChanged":
+      // 003 EARS-57: subject-keyed, no number (ADR-0001 §7, ADR-0003 §6).
+      return {
+        eventType: PHONE_EVENT_WIRE_IDS[event.type],
+        subjectId: event.sub,
+        sid: null,
+        reason: null,
+        metadata: {},
       };
 
     // ---- 011 admin tier (EARS-9) --------------------------------------------

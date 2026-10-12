@@ -199,7 +199,6 @@ test("#1997: the operator line names the length and every class flag", () => {
   );
 });
 
-
 // --- emailed/SMS code generators (#2636: six digits; #2555 epic #2552) -------
 // Every code a user receives — verify-email, password-reset, login OTP email and
 // SMS — is exactly six digits. The deploy reads all four generators back.
@@ -306,7 +305,10 @@ test("#2636: lower letters, symbols or missing digits are REJECTED", () => {
 
 test("#2555: a generator without an expiry or with a non-boolean flag is REJECTED", () => {
   const noExpiry = { ...digitsConverged.secretGenerator, expiry: undefined };
-  assert.throws(() => assertCodeGeneratorConverged(noExpiry, digits6), /expiry/);
+  assert.throws(
+    () => assertCodeGeneratorConverged(noExpiry, digits6),
+    /expiry/,
+  );
   assert.throws(
     () =>
       assertCodeGeneratorConverged(
@@ -318,7 +320,10 @@ test("#2555: a generator without an expiry or with a non-boolean flag is REJECTE
 });
 
 test("#2555: a non-object read-back is REJECTED", () => {
-  assert.throws(() => assertCodeGeneratorConverged(null, digits6), IdpPolicyError);
+  assert.throws(
+    () => assertCodeGeneratorConverged(null, digits6),
+    IdpPolicyError,
+  );
   assert.throws(
     () => assertCodeGeneratorConverged("<html>", digits6),
     IdpPolicyError,
@@ -375,6 +380,22 @@ test("#2636: a target with EMAILED_CODE_LENGTH converges all four generators to 
     alphabet: "digits",
     generators: EMAILED_CODE_GENERATOR_TYPES,
   });
+});
+
+test("003 EARS-47: the generators come from the target's EMAILED_CODE_GENERATORS list", () => {
+  const withPhone = provisionDigits.replace(
+    "SECRET_GENERATOR_TYPE_OTP_SMS)",
+    "SECRET_GENERATOR_TYPE_OTP_SMS SECRET_GENERATOR_TYPE_VERIFY_PHONE_CODE)",
+  );
+  assert.deepEqual(parseEmailedCodeShape(withPhone).generators, [
+    ...EMAILED_CODE_GENERATOR_TYPES,
+    "SECRET_GENERATOR_TYPE_VERIFY_PHONE_CODE",
+  ]);
+  // A digits target that names no list keeps the four of #2636.
+  assert.deepEqual(
+    parseEmailedCodeShape("EMAILED_CODE_LENGTH=6\n").generators,
+    EMAILED_CODE_GENERATOR_TYPES,
+  );
 });
 
 test("#2555: a pre-#2636 target (LOGIN_OTP_CODE_LENGTH) keeps the upper-alnum OTP pair", () => {

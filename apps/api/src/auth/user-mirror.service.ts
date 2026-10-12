@@ -16,6 +16,46 @@ export interface MirrorUpsert {
 }
 
 /**
+ * 003 EARS-58: the phone columns a mirror upsert writes. A phone is an account
+ * phone only while the IdP holds it verified, so an unverified or absent IdP
+ * phone clears both columns rather than leaving a stale confirmed number.
+ * `undefined` when the source carries no phone field at all (a partial
+ * webhook payload): the columns are then left as they are.
+ */
+export function mirrorPhoneFields(
+  input: MirrorUpsert,
+): { phone: string | null; phoneVerified: boolean } | undefined {
+  if (input.phone === undefined && input.phoneVerified === undefined) {
+    return undefined;
+  }
+  return input.phone && input.phoneVerified === true
+    ? { phone: input.phone, phoneVerified: true }
+    : { phone: null, phoneVerified: false };
+}
+
+/** The `users.phone` UNIQUE constraint (migration 0001). */
+const USERS_PHONE_UNIQUE = "users_phone_unique";
+
+/**
+ * 003 EARS-48/51: whether `err` (or a `cause` up its chain — drizzle wraps the
+ * pg error) is a UNIQUE violation of `users.phone`, as opposed to any other
+ * unique key (an email clash stays a real error).
+ */
+export function isPhoneUniqueViolation(err: unknown): boolean {
+  for (let e: unknown = err, depth = 0; e != null && depth < 5; depth++) {
+    if (
+      typeof e === "object" &&
+      (e as { code?: unknown }).code === "23505" &&
+      (e as { constraint?: unknown }).constraint === USERS_PHONE_UNIQUE
+    ) {
+      return true;
+    }
+    e = (e as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+/**
  * Which Zitadel-owned identity fields (`email`, `phone`, `email_verified`,
  * `phone_verified` — design §5, ADR-0001) the incoming upsert changes relative
  * to the current mirror row: the reconcile-divergence signal (#753). `role`,
@@ -24,26 +64,52 @@ export interface MirrorUpsert {
  * case-insensitively (the column is `citext`, so a case-only delta is not a real
  * divergence). Returns the canonical column names (not the values — PII-minimal).
  */
-function divergedIdentityFields(existing: User, input: MirrorUpsert): string[] {
+function divergedIdentityFields(
+  existing: User,
+  input: MirrorUpsert,
+  phone: PhoneColumns | undefined,
+): string[] {
   const changed: string[] = [];
   if (
     input.email !== undefined &&
     (existing.email ?? "").toLowerCase() !== input.email.toLowerCase()
   )
     changed.push("email");
-  if (input.phone !== undefined && (existing.phone ?? null) !== input.phone)
+  if (phone !== undefined && (existing.phone ?? null) !== phone.phone)
     changed.push("phone");
   if (
     input.emailVerified !== undefined &&
     existing.emailVerified !== input.emailVerified
   )
     changed.push("email_verified");
-  if (
-    input.phoneVerified !== undefined &&
-    existing.phoneVerified !== input.phoneVerified
-  )
+  if (phone !== undefined && existing.phoneVerified !== phone.phoneVerified)
     changed.push("phone_verified");
   return changed;
+}
+
+/** The `users.phone` / `users.phone_verified` pair a mirror write sets. */
+type PhoneColumns = { phone: string | null; phoneVerified: boolean };
+
+/**
+ * The phone columns a mirror write may actually set, given the row's email
+ * after the write. The `users_email_or_phone` CHECK keeps an identifier on
+ * every row (rows are retained, never deleted), so clearing the phone of a row
+ * without an email would erase its only identifier: such a row keeps its
+ * current number, unconfirmed (`phone_verified = false`, so it resolves no
+ * sign-in or reset — 003 EARS-58). A row that does not exist yet and would
+ * carry neither an email nor a confirmed phone has no identifier to mirror:
+ * `"skip"` — it is not a mirror candidate (as the identifier-less self-heal
+ * skip). `undefined` leaves the columns untouched.
+ */
+function retainedPhoneColumns(
+  existing: User | undefined,
+  email: string | null,
+  phone: PhoneColumns | undefined,
+): PhoneColumns | undefined | "skip" {
+  if (email !== null || phone?.phone) return phone;
+  if (!existing) return "skip";
+  if (phone === undefined) return undefined;
+  return { phone: existing.phone, phoneVerified: false };
 }
 
 /**
@@ -67,7 +133,8 @@ export class UserMirrorService {
    *
    * **Conflict-resolution policy (#753, design §11).** Zitadel is the identity
    * SoT, so the identity fields (`email`, `phone`, `email_verified`,
-   * `phone_verified`) are overwritten **Zitadel-wins**; `role` (the local authz
+   * `phone_verified`) are overwritten **Zitadel-wins** (the phone only as
+   * {@link mirrorPhoneFields} projects it, 003 EARS-58); `role` (the local authz
    * projection), `id`, and `created_at` are **mirror-owned** and preserved.
    * `deactivated_at` is cleared to null on every upsert — the caller only
    * upserts a user Zitadel currently reports **active**, so an upsert is the
@@ -89,10 +156,6 @@ export class UserMirrorService {
       .where(eq(users.zitadelSub, input.zitadelSub))
       .limit(1);
 
-    const changedIdentityFields = existing
-      ? divergedIdentityFields(existing, input)
-      : [];
-
     // `role` is intentionally NOT in the conflict `set`: a new row is granted
     // `doctor_guest` (via `values` below), but an existing row's role is
     // preserved on update so a reconcile/webhook pass never downgrades a staff
@@ -106,30 +169,64 @@ export class UserMirrorService {
       deactivatedAt: null,
     };
     if (input.email !== undefined) set["email"] = input.email;
-    if (input.phone !== undefined) set["phone"] = input.phone;
     if (input.emailVerified !== undefined)
       set["emailVerified"] = input.emailVerified;
-    if (input.phoneVerified !== undefined)
-      set["phoneVerified"] = input.phoneVerified;
+    const phone = mirrorPhoneFields(input);
+
+    // The row's email after this write — the identifier the CHECK falls back on.
+    const email = input.email ?? existing?.email ?? null;
 
     // 010 EARS-3/5 — attribute the mirror upsert to the request context when
     // present (an authenticated self-heal); a background reconcile/webhook pass
     // carries none and honestly degrades to db-direct (EARS-4).
-    await withRequestAuditContext(this.db, (tx) =>
-      tx
-        .insert(users)
-        .values({
-          zitadelSub: input.zitadelSub,
-          email: input.email,
-          phone: input.phone,
-          emailVerified: input.emailVerified ?? false,
-          phoneVerified: input.phoneVerified ?? false,
-          role: "doctor_guest",
-        })
-        .onConflictDoUpdate({ target: users.zitadelSub, set }),
-    );
-
-    return { changedIdentityFields };
+    //
+    // An existing row is UPDATEd in place: a partial payload (no email) must
+    // not be proposed as an INSERT tuple, because Postgres checks that tuple
+    // against `users_email_or_phone` before ON CONFLICT routes it to the
+    // update. Only a row that does not exist yet goes through INSERT … ON
+    // CONFLICT, which stays safe against a concurrent first insert.
+    const write = async (
+      wanted: PhoneColumns | undefined,
+    ): Promise<{ changedIdentityFields: string[] }> => {
+      const p = retainedPhoneColumns(existing, email, wanted);
+      if (p === "skip") return { changedIdentityFields: [] };
+      const values = p
+        ? { ...set, phone: p.phone, phoneVerified: p.phoneVerified }
+        : set;
+      await withRequestAuditContext(this.db, (tx) =>
+        existing
+          ? tx
+              .update(users)
+              .set(values)
+              .where(eq(users.zitadelSub, input.zitadelSub))
+          : tx
+              .insert(users)
+              .values({
+                zitadelSub: input.zitadelSub,
+                email: input.email,
+                phone: p?.phone ?? null,
+                emailVerified: input.emailVerified ?? false,
+                phoneVerified: p?.phoneVerified ?? false,
+                role: "doctor_guest",
+              })
+              .onConflictDoUpdate({ target: users.zitadelSub, set: values }),
+      );
+      return {
+        changedIdentityFields: existing
+          ? divergedIdentityFields(existing, input, p)
+          : [],
+      };
+    };
+    try {
+      return await write(phone);
+    } catch (err) {
+      // 003 EARS-48/51: a verified IdP phone another account already holds
+      // confirmed (a confirmation-race loser whose IdP clean-up did not land)
+      // is not this account's confirmed phone — clear it, never throw, so one
+      // conflicting number cannot stall the webhook or the sweep.
+      if (!phone?.phone || !isPhoneUniqueViolation(err)) throw err;
+      return await write({ phone: null, phoneVerified: false });
+    }
   }
 
   /**

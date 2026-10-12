@@ -266,10 +266,37 @@ function parseLengthConstant(provisionText, name) {
 }
 
 /**
+ * The generator types a provision.sh bash array (`NAME=(A B …)`) lists, or
+ * `null` when the target has no such array. The target commit decides which
+ * generators converge (003 EARS-47 added `VERIFY_PHONE_CODE`), so the deploy
+ * reads the list instead of pinning it.
+ *
+ * @param {string} provisionText
+ * @param {string} name
+ * @returns {string[] | null}
+ */
+function parseGeneratorList(provisionText, name) {
+  const match = provisionText.match(new RegExp(`^${name}=\\(([^)]*)\\)`, "m"));
+  if (!match) return null;
+  const types = match[1].split(/\s+/).filter(Boolean);
+  if (
+    types.length === 0 ||
+    types.some((t) => !/^SECRET_GENERATOR_TYPE_[A-Z_]+$/.test(t))
+  ) {
+    throw new IdpPolicyError(
+      `target provision.sh ${name} is not a list of SECRET_GENERATOR_TYPE_* literals —` +
+        " the deploy refuses to guess which generators converge.",
+    );
+  }
+  return types;
+}
+
+/**
  * Read the code shape `infra/dev-stand/idp/provision.sh` converges at the
  * deployed SHA. provision.sh runs from the TARGET commit, so only that commit's
  * step 8.septies decides which generators converge and to what alphabet:
- * - `EMAILED_CODE_LENGTH` (#2636+): all four generators, digits only;
+ * - `EMAILED_CODE_LENGTH` (#2636+): the generators its `EMAILED_CODE_GENERATORS`
+ *   lists (the four of #2636 when it lists none), digits only;
  * - `LOGIN_OTP_CODE_LENGTH` (#2555): the login OTP pair, upper letters + digits;
  * - neither (pre-#2555): nothing converges.
  *
@@ -284,15 +311,23 @@ export function parseEmailedCodeShape(provisionText) {
       "cannot read infra/dev-stand/idp/provision.sh at the target SHA — not a text body",
     );
   }
-  const digitsLength = parseLengthConstant(provisionText, "EMAILED_CODE_LENGTH");
+  const digitsLength = parseLengthConstant(
+    provisionText,
+    "EMAILED_CODE_LENGTH",
+  );
   if (digitsLength !== null) {
     return {
       length: digitsLength,
       alphabet: "digits",
-      generators: EMAILED_CODE_GENERATOR_TYPES,
+      generators:
+        parseGeneratorList(provisionText, "EMAILED_CODE_GENERATORS") ??
+        EMAILED_CODE_GENERATOR_TYPES,
     };
   }
-  const legacyLength = parseLengthConstant(provisionText, "LOGIN_OTP_CODE_LENGTH");
+  const legacyLength = parseLengthConstant(
+    provisionText,
+    "LOGIN_OTP_CODE_LENGTH",
+  );
   if (legacyLength !== null) {
     return {
       length: legacyLength,

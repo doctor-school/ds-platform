@@ -343,6 +343,7 @@ describe("AuthService.register — re-registration code mail (003 EARS-23)", () 
       sendVerificationCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendPasswordResetCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendAdminLockoutNotice: () => Promise.reject(new Error("smtp down")),
+      sendPhoneConfirmedNotice: () => Promise.reject(new Error("smtp down")),
       sendLoginCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendCongressRegistrationConfirmation: () =>
         Promise.reject(new Error("smtp down")),
@@ -1016,6 +1017,7 @@ describe("AuthService.requestLoginOtp — email unverified out-of-band recovery 
       sendVerificationCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendPasswordResetCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendAdminLockoutNotice: () => Promise.reject(new Error("smtp down")),
+      sendPhoneConfirmedNotice: () => Promise.reject(new Error("smtp down")),
       sendLoginCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendCongressRegistrationConfirmation: () =>
         Promise.reject(new Error("smtp down")),
@@ -1138,7 +1140,15 @@ describe("AuthService.completePasswordReset — proof-of-mailbox email verify (0
       sessions,
       {} as never, // smsBudget — unused
     );
-    return { service, idp, store, sessions, audit, mirrorFlips, sub: created.sub };
+    return {
+      service,
+      idp,
+      store,
+      sessions,
+      audit,
+      mirrorFlips,
+      sub: created.sub,
+    };
   }
 
   it("003 EARS-35: a completed reset on an UNVERIFIED account flips email_verified at the IdP + mirror and appends one auth.account.verified (channel email) row", async () => {

@@ -52,6 +52,16 @@
         "required": ["provider", "embedRef"],
         "type": "object"
       },
+      "ConfirmPhoneRequestDto": {
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "type": "string"
+          }
+        },
+        "required": ["code"],
+        "type": "object"
+      },
       "CongressAttendanceRequestDto": {
         "additionalProperties": false,
         "properties": {
@@ -4575,6 +4585,16 @@
         "required": ["email", "password", "consent"],
         "type": "object"
       },
+      "RequestPhoneCodeRequestDto": {
+        "properties": {
+          "phone": {
+            "maxLength": 32,
+            "type": "string"
+          }
+        },
+        "required": ["phone"],
+        "type": "object"
+      },
       "SetDisplayNameRequestDto": {
         "properties": {
           "displayName": {
@@ -8126,6 +8146,50 @@
           }
         },
         "tags": ["MyEvents"]
+      }
+    },
+    "/v1/me/phone": {
+      "post": {
+        "operationId": "PhoneController_request",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestPhoneCodeRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Phone"]
+      }
+    },
+    "/v1/me/phone/confirm": {
+      "post": {
+        "operationId": "PhoneController_confirm",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmPhoneRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Phone"]
       }
     },
     "/v1/me/profile": {

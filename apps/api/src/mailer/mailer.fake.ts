@@ -6,10 +6,7 @@ import {
   type CongressSubmissionReceiptRequest,
   type Mailer,
 } from "./mailer.types.js";
-import type {
-  CodeLifetime,
-  ReRegistrationCopyInput,
-} from "./code-emails.js";
+import type { CodeLifetime, ReRegistrationCopyInput } from "./code-emails.js";
 
 /**
  * In-memory {@link Mailer} — the unit-test double. Records every accepted send so
@@ -28,6 +25,8 @@ import type {
 export class FakeMailer implements Mailer {
   /** Lowercased recipients of every accepted 011 EARS-7 admin-lockout notice, in order. */
   readonly adminLockoutNotices: string[] = [];
+  /** 003 EARS-52: every phone-confirmed notice, recipient lower-cased. */
+  readonly phoneConfirmedNotices: { to: string; at: Date }[] = [];
   /** Every accepted §13.3 verification-code send (EARS-1/3/25), in order. */
   readonly verificationCodeEmails: Array<{ to: string; code: string }> = [];
   /** Every accepted §13.4 password-reset-code send (EARS-11), in order. */
@@ -94,6 +93,11 @@ export class FakeMailer implements Mailer {
     this.adminLockoutNotices.push(email.trim().toLowerCase());
   }
 
+  async sendPhoneConfirmedNotice(email: string, at: Date): Promise<void> {
+    assertSendableEmail(email);
+    this.phoneConfirmedNotices.push({ to: email.trim().toLowerCase(), at });
+  }
+
   async sendVerificationCodeEmail(email: string, code: string): Promise<void> {
     assertSendableEmail(email);
     assertSendableCode(code);
@@ -134,10 +138,7 @@ export class FakeMailer implements Mailer {
     });
   }
 
-  async sendPasswordResetCodeEmail(
-    email: string,
-    code: string,
-  ): Promise<void> {
+  async sendPasswordResetCodeEmail(email: string, code: string): Promise<void> {
     assertSendableEmail(email);
     assertSendableCode(code);
     if (this.nextCodeSendFailure) throw this.nextCodeSendFailure;

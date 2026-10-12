@@ -67,11 +67,13 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then no SMS is sent and the confirmed phone is not displaced
 
   @EARS-51 @failure @phone-confirmation
-  Scenario: A number confirmed on another account is refused in the profile
+  Scenario: A number confirmed on another account gets the ordinary answer and no SMS
     Given another account holds "+79990001122" as its confirmed phone
     When a signed-in user asks for a code for "+79990001122"
-    Then the profile shows the specific message that the number is already confirmed on another account
-    And no SMS is sent and the SMS budget is not consumed for a send
+    Then the response is the same as for a number confirmed nowhere
+    And no SMS is sent and the number is written to neither the requesting account nor its IdP user
+    And a confirmed phone the requesting account held is displaced exactly as for a free number
+    And a code submitted next fails with the generic wrong-code message
 
   @EARS-53 @EARS-12 @EARS-35 @happy @sms-reset
   Scenario: Password reset by a confirmed phone delivers the code by SMS

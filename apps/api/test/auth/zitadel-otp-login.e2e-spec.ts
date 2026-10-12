@@ -315,6 +315,10 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
   const providerDiagnostics: unknown[] = [];
   const createdEmails: string[] = [];
   const createdIds = new Map<string, string>();
+  // 003 EARS-58: the adapter resolves a phone identifier only through the
+  // confirmed-phone directory (the `users` mirror in the app). This spec drives
+  // the adapter without the mirror, so it records the phones it confirms here.
+  const confirmedPhones = new Map<string, string>();
   const diagnosticFile = process.env.OTP_DIAGNOSTIC_CASE_FILE;
   const evidence = {
     passed: false,
@@ -341,6 +345,10 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
         isEnabled: () => false,
       }),
       fetchImpl: diagnosticFetch(globalThis.fetch, providerDiagnostics),
+      confirmedPhones: {
+        subjectFor: (phone) =>
+          Promise.resolve(confirmedPhones.get(phone) ?? null),
+      },
       baseUrl: process.env.IDP_ISSUER!,
       serviceToken: process.env.IDP_SERVICE_TOKEN!,
       clientId: process.env.IDP_CLIENT_ID!,
@@ -572,6 +580,7 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     expect(verifyCode, "phone-verify SMS should reach the sink").toBeTruthy();
     const verified = await client.verifyPhone(created.sub, verifyCode!);
     expect(verified).toBe(true);
+    confirmedPhones.set(phone, created.sub);
     // Same bound on the way out: the challenge below only sends for a phone the
     // projection already reports verified.
     await untilProjected(

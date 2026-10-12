@@ -164,6 +164,17 @@ export interface CreatedUser {
   verificationCode?: string | undefined;
 }
 
+/**
+ * 003 EARS-58: the account that holds `phone` as its CONFIRMED phone (the
+ * `users` mirror's `phone` with `phone_verified`), or `null`. Every phone
+ * identifier the adapters resolve for sign-in or reset goes through this,
+ * never through the IdP's own phone search, which also matches unverified
+ * numbers.
+ */
+export interface ConfirmedPhoneDirectory {
+  subjectFor(phone: string): Promise<string | null>;
+}
+
 /** A Zitadel user as seen by the reconciliation sweep (EARS-19). */
 export interface IdpUser {
   sub: string;
@@ -438,8 +449,28 @@ export interface IdpClient {
    * decision the caller never reflects into the response.
    */
   resendEmailVerification(identifier: string): Promise<boolean>;
-  /** Trigger a Zitadel `otp_sms` verification code (EARS-2). */
+  /**
+   * Re-send the phone confirmation code for the number the IdP user already
+   * holds unverified (003 EARS-47 resend). Throws on a non-2xx.
+   */
   requestPhoneVerification(sub: string): Promise<void>;
+  /**
+   * 003 EARS-47: set `phone` on the IdP user as an UNVERIFIED human phone and
+   * have the IdP generate a confirmation code. `delivery: "sms"` hands the
+   * code to the IdP's SMS notifier; `"none"` stores the number and sends
+   * nothing (the EARS-33 synthetic-recipient suppression). Throws
+   * {@link IdpUnavailableError} on any IdP failure.
+   */
+  setPhone(sub: string, phone: string, delivery: "sms" | "none"): Promise<void>;
+  /**
+   * 003 EARS-48/51: drop the IdP user's phone, verified or awaiting its code.
+   * Used where the requester's own view must equal a displacement without the
+   * requested number ever being written (EARS-51), and by the loser of a
+   * confirmation race so the IdP never holds a verified number the mirror
+   * refused (EARS-48). An already phone-less user is a success. Throws
+   * {@link IdpUnavailableError} on any other IdP failure.
+   */
+  removePhone(sub: string): Promise<void>;
   /** Verify an email OTP code via Zitadel `otp_email` (EARS-3); `false` = invalid/expired. */
   verifyEmail(sub: string, code: string): Promise<boolean>;
   /**

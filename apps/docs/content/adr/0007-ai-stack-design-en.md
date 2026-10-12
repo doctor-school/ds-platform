@@ -99,6 +99,8 @@ The orchestrated iteration cycle (`do-feature-iteration` orchestrates these):
      or Mode (c) human review (AGENTS.md §4).
    - On positive verdict → `pnpm pr:land <N>` (`merge:gate` head-SHA check-runs poll → `gh pr merge <N> --squash --delete-branch`)
      (skill: merge-when-green).
+   - Verified `Change-tier: show` → merge on green CI; Mode (a) runs after the
+     merge, findings → follow-up Issues. Verified ship → no Mode (a).
 ```
 
 ### 2.3 Which harnesses follow this cycle

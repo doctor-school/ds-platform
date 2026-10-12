@@ -98,6 +98,8 @@ orchestrated iteration cycle (`do-feature-iteration` оркеструет эти
      или Mode (c) human review (AGENTS.md §4).
    - Положительный verdict → `pnpm pr:land <N>` (`merge:gate` — опрос check-runs по head SHA → `gh pr merge <N> --squash --delete-branch`)
      (skill: merge-when-green).
+   - Проверенный `Change-tier: show` → merge на зелёном CI; Mode (a) — после
+     merge, находки → follow-up Issues. Проверенный ship → без Mode (a).
 ```
 
 ### 2.3 Какие harness'ы проходят этот цикл

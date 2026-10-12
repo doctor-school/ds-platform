@@ -19,7 +19,8 @@ import {
   parseModeAExempt,
   prOwnDelta,
   splitDiffByFile,
-  verifyChangeTierShip,
+  unreviewedShowPrs,
+  verifyChangeTierMergeOnGreen,
   worktreeNumber,
 } from "../../gh/merge-gate.mjs";
 
@@ -745,7 +746,7 @@ describe("merge-gate hasMergeCommits() (#1865)", () => {
   });
 });
 
-describe("merge-gate verifyChangeTierShip() (#2584)", () => {
+describe("merge-gate verifyChangeTierMergeOnGreen() (#2584, #2808)", () => {
   const copyFile = {
     filename: "apps/doctor/messages/ru.json",
     status: "modified",
@@ -762,22 +763,23 @@ describe("merge-gate verifyChangeTierShip() (#2584)", () => {
 
   it("ship: a verified ship PR needs no Mode (a) verdict", () => {
     expect(
-      verifyChangeTierShip([copyFile], meta(shipBody, 1), head, head),
-    ).toEqual({ ok: true, files: 1, lines: 6 });
+      verifyChangeTierMergeOnGreen([copyFile], meta(shipBody, 1), head, head),
+    ).toEqual({ ok: true, tier: "ship", files: 1, lines: 6 });
   });
 
   it("ask: no declaration keeps the Mode (a) verdict requirement", () => {
-    expect(verifyChangeTierShip([copyFile], meta("", 1), head, head).ok).toBe(
-      false,
-    );
+    expect(
+      verifyChangeTierMergeOnGreen([copyFile], meta("", 1), head, head).ok,
+    ).toBe(false);
   });
 
   it("refuses an incomplete file set or a ship declaration its files do not allow", () => {
     expect(
-      verifyChangeTierShip([copyFile], meta(shipBody, 2), head, head).ok,
+      verifyChangeTierMergeOnGreen([copyFile], meta(shipBody, 2), head, head)
+        .ok,
     ).toBe(false);
     expect(
-      verifyChangeTierShip(
+      verifyChangeTierMergeOnGreen(
         [{ ...copyFile, filename: "packages/db/src/schema/users.ts" }],
         meta(shipBody, 1),
         head,
@@ -790,18 +792,19 @@ describe("merge-gate verifyChangeTierShip() (#2584)", () => {
     const moved = "b".repeat(40);
     // head moved between the metadata read and the file listing
     expect(
-      verifyChangeTierShip([copyFile], meta(shipBody, 1), head, moved),
+      verifyChangeTierMergeOnGreen([copyFile], meta(shipBody, 1), head, moved),
     ).toEqual({
       ok: false,
       reason: "changed-file set not bound to the merge head",
     });
     // metadata describes a different head than the one being merged
     expect(
-      verifyChangeTierShip([copyFile], meta(shipBody, 1), moved, moved).ok,
+      verifyChangeTierMergeOnGreen([copyFile], meta(shipBody, 1), moved, moved)
+        .ok,
     ).toBe(false);
     // the after-read failed
     expect(
-      verifyChangeTierShip([copyFile], meta(shipBody, 1), head, "").ok,
+      verifyChangeTierMergeOnGreen([copyFile], meta(shipBody, 1), head, "").ok,
     ).toBe(false);
   });
 
@@ -823,17 +826,23 @@ describe("merge-gate verifyChangeTierShip() (#2584)", () => {
 
   it("EARS-1: a test-only PR (apps/api/test + tag-only .feature) is verified without Mode (a)", () => {
     expect(
-      verifyChangeTierShip(
+      verifyChangeTierMergeOnGreen(
         [apiTest, feature("@@ -1 +1 @@\n-  @a\n+  @a @b")],
         meta(testOnlyBody, 2),
         head,
         head,
       ),
-    ).toEqual({ ok: true, files: 2, lines: 126, testOnly: true });
+    ).toEqual({
+      ok: true,
+      tier: "ship",
+      files: 2,
+      lines: 126,
+      testOnly: true,
+    });
   });
 
   it("EARS-1: a .feature scenario-text change keeps the Mode (a) requirement", () => {
-    const result = verifyChangeTierShip(
+    const result = verifyChangeTierMergeOnGreen(
       [apiTest, feature("@@ -1 +1 @@\n-    Given a\n+    Given b")],
       meta(testOnlyBody, 2),
       head,
@@ -846,9 +855,171 @@ describe("merge-gate verifyChangeTierShip() (#2584)", () => {
 
   it("EARS-1: a test-only PR that declares ask still needs the verdict", () => {
     expect(
-      verifyChangeTierShip([apiTest], meta("Change-tier: ask", 1), head, head)
-        .ok,
+      verifyChangeTierMergeOnGreen(
+        [apiTest],
+        meta("Change-tier: ask", 1),
+        head,
+        head,
+      ).ok,
     ).toBe(false);
+  });
+
+  // #2808: a verified Show PR merges on green CI; Mode (a) runs after merge.
+  const showBody = "Change-tier: show — a new empty state in the feed filter";
+  const libFile = {
+    filename: "apps/portal/lib/feed/filter.ts",
+    status: "modified",
+    additions: 12,
+    deletions: 2,
+  };
+
+  it("show: a verified show PR needs no pre-merge Mode (a) verdict", () => {
+    expect(
+      verifyChangeTierMergeOnGreen([libFile], meta(showBody, 1), head, head),
+    ).toEqual({ ok: true, tier: "show", files: 1, lines: 14 });
+  });
+
+  it("show: a ship-minimum PR declared show is verified as show", () => {
+    expect(
+      verifyChangeTierMergeOnGreen([copyFile], meta(showBody, 1), head, head),
+    ).toEqual({ ok: true, tier: "show", files: 1, lines: 6 });
+  });
+
+  it("show: a show declaration its files do not allow still needs the verdict", () => {
+    const result = verifyChangeTierMergeOnGreen(
+      [{ ...libFile, filename: "packages/db/src/schema/users.ts" }],
+      meta(showBody, 1),
+      head,
+      head,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain("declared show, minimum ask");
+  });
+
+  it("show: an incomplete or unbound file listing still needs the verdict", () => {
+    expect(
+      verifyChangeTierMergeOnGreen([libFile], meta(showBody, 2), head, head).ok,
+    ).toBe(false);
+    expect(
+      verifyChangeTierMergeOnGreen(
+        [libFile],
+        meta(showBody, 1),
+        head,
+        "b".repeat(40),
+      ).ok,
+    ).toBe(false);
+  });
+
+  it("show: a PR body with a placeholder show reason is ask and needs the verdict", () => {
+    expect(
+      verifyChangeTierMergeOnGreen(
+        [libFile],
+        meta("Change-tier: show — n/a", 1),
+        head,
+        head,
+      ).ok,
+    ).toBe(false);
+  });
+});
+
+describe("merge-gate unreviewedShowPrs() (#2808)", () => {
+  const head = "c".repeat(40);
+  const verdict = (v: string) =>
+    `## Mode (a) Review — PR #1\n\nVERDICT: ${v}\n\nfindings…`;
+  const pr = (over: Record<string, unknown> = {}) => ({
+    number: 1,
+    title: "feat: x",
+    body: "Change-tier: show — a new state in the feed",
+    mergedAt: "2026-10-10T10:00:00Z",
+    headRefOid: head,
+    reviews: [],
+    comments: [],
+    ...over,
+  });
+
+  it("lists a merged show PR with no Mode (a) verdict", () => {
+    expect(unreviewedShowPrs([pr()]).map((p) => p.number)).toEqual([1]);
+  });
+
+  it("ignores ship/ask declarations and a placeholder show reason", () => {
+    expect(
+      unreviewedShowPrs([
+        pr({ body: "Change-tier: ship — copy" }),
+        pr({ body: "Change-tier: ask — tooling" }),
+        pr({ body: "" }),
+        pr({ body: "Change-tier: show — tbd" }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("a Mode (a) review submitted after the merge clears it", () => {
+    expect(
+      unreviewedShowPrs([
+        pr({
+          reviews: [
+            {
+              body: verdict("REQUEST_CHANGES"),
+              submittedAt: "2026-10-10T12:00:00Z",
+              commit: { oid: head },
+            },
+          ],
+        }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("a Mode (a) verdict posted as a PR comment after the merge clears it", () => {
+    expect(
+      unreviewedShowPrs([
+        pr({
+          comments: [
+            { body: verdict("APPROVE"), createdAt: "2026-10-11T08:00:00Z" },
+          ],
+        }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("a pre-merge verdict pinned to the merged head clears it (an unverified show was reviewed before merge)", () => {
+    expect(
+      unreviewedShowPrs([
+        pr({
+          reviews: [
+            {
+              body: verdict("APPROVE"),
+              submittedAt: "2026-10-10T09:00:00Z",
+              commit: { oid: head },
+            },
+          ],
+        }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("a stale pre-merge verdict, a plain comment or a verdict-less review does not clear it", () => {
+    expect(
+      unreviewedShowPrs([
+        pr({
+          reviews: [
+            {
+              body: verdict("APPROVE"),
+              submittedAt: "2026-10-10T09:00:00Z",
+              commit: { oid: "d".repeat(40) },
+            },
+            {
+              body: "## Mode (a) Review\n\nno verdict line",
+              submittedAt: "2026-10-10T12:00:00Z",
+              commit: { oid: head },
+            },
+          ],
+          comments: [{ body: "LGTM", createdAt: "2026-10-10T12:00:00Z" }],
+        }),
+      ]).map((p) => p.number),
+    ).toEqual([1]);
+  });
+
+  it("skips an unmerged PR", () => {
+    expect(unreviewedShowPrs([pr({ mergedAt: null })])).toEqual([]);
   });
 });
 

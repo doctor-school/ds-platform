@@ -55,6 +55,7 @@ import {
   roadmapHygiene,
   roadmapHygieneWarnings,
 } from "./gh/lib/roadmap-taxonomy.mjs";
+import { unreviewedShowPrs } from "./gh/merge-gate.mjs";
 import {
   probeStageSlots,
   renderStageSlotSection,
@@ -360,6 +361,68 @@ async function ghPRs(): Promise<GhPRGroups> {
   } catch (e) {
     note("gh pr list", e);
     return { mine: [], others: [] };
+  }
+}
+
+// ── post-merge Show review (#2808) ──────────────────────────────────────────
+// A verified Show PR merges on green CI; its Mode (a) review runs after the
+// merge. This section is what keeps that review from being forgotten.
+export const SHOW_REVIEW_WINDOW_DAYS = 14;
+
+/** The `merged:>=` search bound for the window, as a UTC date. */
+export function showReviewSearchSince(nowMs: number, days: number): string {
+  return new Date(nowMs - days * 86_400_000).toISOString().slice(0, 10);
+}
+
+interface MergedPR {
+  number: number;
+  title: string;
+  mergedAt: string | null;
+}
+
+/** `null` = the source could not be read (rendered as unavailable, not none). */
+export function renderShowReviewSection(
+  prs: unknown[] | null,
+  days: number,
+): string[] {
+  const head = "## Show PRs awaiting post-merge Mode (a)";
+  if (prs === null)
+    return [head, "(unavailable — gh pr list failed; see Warnings)"];
+  const owing = unreviewedShowPrs(prs) as MergedPR[];
+  if (owing.length === 0)
+    return [head, `(none merged in the last ${days} days)`];
+  return [
+    head,
+    ...owing.map(
+      (p) =>
+        `- #${p.number} ${p.title} — merged ${(p.mergedAt ?? "").slice(0, 10)} · dispatch request-mode-a-review (post-merge)`,
+    ),
+  ];
+}
+
+async function ghMergedShowPRs(): Promise<unknown[] | null> {
+  const since = showReviewSearchSince(Date.now(), SHOW_REVIEW_WINDOW_DAYS);
+  try {
+    const { stdout } = await execa(
+      "gh",
+      [
+        "pr",
+        "list",
+        "--state",
+        "merged",
+        "--search",
+        `"Change-tier: show" in:body merged:>=${since}`,
+        "--limit",
+        "100",
+        "--json",
+        "number,title,body,mergedAt,headRefOid,reviews,comments",
+      ],
+      { cwd: REPO_ROOT },
+    );
+    return JSON.parse(stdout) as unknown[];
+  } catch (e) {
+    note("gh pr list (merged show)", e);
+    return null;
   }
 }
 
@@ -704,6 +767,7 @@ async function main(): Promise<void> {
     syncProbe,
     realityProbe,
     stageSlots,
+    mergedShow,
   ] = await Promise.all([
     gitState(),
     ghIssues(["--assignee", "@me", "--label", "agent-working"]),
@@ -733,6 +797,8 @@ async function main(): Promise<void> {
     }),
     // Live staging slots + their Stage-B request status (#2233). Never throws.
     probeStageSlots(),
+    // Merged Show PRs owing their post-merge Mode (a) review (#2808).
+    ghMergedShowPRs(),
   ]);
   // The slot probe collects its own degrade reasons (unreachable box, a failing
   // `gh pr view`) instead of reaching into the module-level list; merge them so
@@ -963,6 +1029,9 @@ async function main(): Promise<void> {
       }
     }
   }
+  out.push("");
+
+  out.push(...renderShowReviewSection(mergedShow, SHOW_REVIEW_WINDOW_DAYS));
   out.push("");
 
   out.push("## Stage slots");

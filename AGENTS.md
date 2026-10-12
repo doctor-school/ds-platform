@@ -78,7 +78,7 @@ Plane work-item (DSP-XXX / DSO-XXX) → first action after identifying kind: `In
 The §6 discipline gates still apply, run by the lead:
 
 - `surface-decision-debt` (inline) — mandatory before the result comment; output `[]` or a list.
-- `request-mode-a-review` (dispatch) — by change tier (`.claude/rules/change-tiers.md`): mandatory before merge for a Show/Ask PR touching runtime/product code or a CI-gating guard; a verified Ship PR needs none; pure docs / test-only / generated-regen PRs may merge on green CI, minus the carve-outs enumerated in that skill's §Scope (dispatch Mode (a) there even with no runtime code).
+- `request-mode-a-review` (dispatch) — by change tier (`.claude/rules/change-tiers.md`): mandatory before merge for an Ask PR (or an unverified Show declaration) touching runtime/product code or a CI-gating guard; after merge for a verified Show PR; a verified Ship PR needs none; pure docs / test-only / generated-regen PRs may merge on green CI, minus the carve-outs enumerated in that skill's §Scope (dispatch Mode (a) there even with no runtime code).
 - `run-iteration-end-checklist` is not dispatched (CI covers test/typecheck/lint/drift); its remaining items (module README, architecture/operations docs, glossary terms) are an inline self-check before opening the PR.
 
 ---
@@ -87,7 +87,7 @@ The §6 discipline gates still apply, run by the lead:
 
 Per ADR-0007 §2.10. Mode (a) — same-session subagent dispatch via `request-mode-a-review` (structured APPROVE / REQUEST_CHANGES verdict). Mode (b) — parallel Codex CLI session. Mode (c) — pure human review. LLM credentials live in the human's terminal, not CI; no automated reviewer-bot.
 
-**Merge gate.** Positive Mode (a)/(b) verdict + green CI suffices (a verified `Change-tier: ship` PR: green CI alone); human-merge not required (Mode (c) stays human). Close out from the MAIN tree, never from a worktree: the `ds-lander` agent runs `pnpm pr:land <N>` — the single entry point for the complete tail (the lead by hand only after resolving a reason the lander returned); `pnpm merge:when-green <N>` only when that tail is intentionally completed separately. Refusal (exit `4`), recovery and exceptions: repo-conventions → Branches; procedure: `request-mode-a-review` + `merge-when-green` (never `--auto`).
+**Merge gate.** Positive Mode (a)/(b) verdict + green CI suffices (a verified `Change-tier: ship` PR: green CI alone; a verified `show` PR: green CI, then Mode (a) on the merged PR, findings → follow-up Issues); human-merge not required (Mode (c) stays human). Close out from the MAIN tree, never from a worktree: the `ds-lander` agent runs `pnpm pr:land <N>` — the single entry point for the complete tail (the lead by hand only after resolving a reason the lander returned); `pnpm merge:when-green <N>` only when that tail is intentionally completed separately. Refusal (exit `4`), recovery and exceptions: repo-conventions → Branches; procedure: `request-mode-a-review` + `merge-when-green` (never `--auto`).
 
 ---
 

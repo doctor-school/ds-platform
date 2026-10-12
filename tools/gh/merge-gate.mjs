@@ -320,6 +320,13 @@ const MODE_A_HEADER_RE = /^## Mode \(a\) Review/m;
 /** …AND carries the mandatory structured verdict line. */
 const MODE_A_VERDICT_RE = /^VERDICT:\s*(APPROVE|REQUEST_CHANGES)\b/m;
 
+/** The Mode-a artifact shape (header + verdict line); its verdict word, or null. */
+export function modeAVerdictWord(rawBody) {
+  const body = normalizeReviewBody(rawBody);
+  if (!MODE_A_HEADER_RE.test(body)) return null;
+  return MODE_A_VERDICT_RE.exec(body)?.[1] ?? null;
+}
+
 /**
  * Classify the Mode-a verdict state for one PR head SHA (#992).
  *
@@ -353,8 +360,7 @@ const MODE_A_VERDICT_RE = /^VERDICT:\s*(APPROVE|REQUEST_CHANGES)\b/m;
 export function classifyModeAVerdict(reviews, headSha) {
   const modeA = (Array.isArray(reviews) ? reviews : []).flatMap((r) => {
     const body = normalizeReviewBody(r?.body);
-    if (!MODE_A_HEADER_RE.test(body)) return [];
-    const m = MODE_A_VERDICT_RE.exec(body);
+    const m = modeAVerdictWord(body);
     if (!m) return [];
     return [
       {
@@ -364,7 +370,7 @@ export function classifyModeAVerdict(reviews, headSha) {
           r?.state === "CHANGES_REQUESTED" ||
           /^VERDICT:\s*REQUEST_CHANGES/m.test(body)
             ? "REQUEST_CHANGES"
-            : m[1],
+            : m,
         commitId: r?.commit_id ?? null,
         submittedAt: r?.submitted_at ?? null,
       },
@@ -568,12 +574,19 @@ export function verifyModeAExemption(files, metadata, headSha, runGit = git) {
 /**
  * #2584: a Change-tier ship PR needs no Mode (a) verdict — re-proven on the
  * CURRENT REST file listing at merge time, with the same completeness rule as
- * the exemption path. Anything short of `effective === "ship"` keeps the
+ * the exemption path. #2808: a verified show PR also merges on green CI; its
+ * Mode (a) review runs after the merge (`unreviewedShowPrs` keeps it from
+ * being forgotten). Anything short of `effective` ship/show keeps the
  * head-pinned verdict requirement. #2807: a test-only PR is the test-only
  * sub-case of ship (declared `ship`); the REST listing's `patch` proves a
  * spec `.feature` edit left its scenario text unchanged.
  */
-export function verifyChangeTierShip(files, metadata, headSha, headAfter) {
+export function verifyChangeTierMergeOnGreen(
+  files,
+  metadata,
+  headSha,
+  headAfter,
+) {
   // The file listing is unpinned (REST `pulls/<n>/files` has no sha), so the
   // head is read before AND after it: both reads must equal the head being
   // merged, or the listing may describe a different commit.
@@ -590,7 +603,7 @@ export function verifyChangeTierShip(files, metadata, headSha, headAfter) {
     tierFiles,
     metadata.changedFiles,
   );
-  if (tier.effective !== "ship")
+  if (tier.effective !== "ship" && tier.effective !== "show")
     return {
       ok: false,
       reason: `declared ${tier.declared}, minimum ${tier.minimum}: ${tier.reasons.join("; ")}`,
@@ -601,10 +614,45 @@ export function verifyChangeTierShip(files, metadata, headSha, headAfter) {
   );
   return {
     ok: true,
+    tier: tier.effective,
     files: tierFiles.length,
     lines,
     ...(tier.testOnly ? { testOnly: true } : {}),
   };
+}
+
+const runMs = (iso) => {
+  const t = Date.parse(iso ?? "");
+  return Number.isFinite(t) ? t : null;
+};
+
+/**
+ * #2808: merged `Change-tier: show` PRs still owing their post-merge Mode (a)
+ * review. Input is the `gh pr list --json number,title,body,mergedAt,
+ * headRefOid,reviews,comments` shape. A PR is cleared by a Mode-a artifact
+ * (`modeAVerdictWord`, either verdict) posted after the merge — as a PR review
+ * or a PR comment — or by a review pinned to the merged head (an unverified
+ * show declaration was reviewed before merge).
+ */
+export function unreviewedShowPrs(prs) {
+  return (Array.isArray(prs) ? prs : []).filter((pr) => {
+    const mergedMs = runMs(pr?.mergedAt);
+    if (mergedMs === null) return false;
+    if (parseDeclaredTier(pr.body ?? "") !== "show") return false;
+    const reviewed = (pr.reviews ?? []).some((r) => {
+      if (!modeAVerdictWord(r?.body)) return false;
+      if (pr.headRefOid && r?.commit?.oid === pr.headRefOid) return true;
+      const at = runMs(r?.submittedAt);
+      return at !== null && at >= mergedMs;
+    });
+    if (reviewed) return false;
+    return !(pr.comments ?? []).some((c) => {
+      const at = runMs(c?.createdAt);
+      return (
+        Boolean(modeAVerdictWord(c?.body)) && at !== null && at >= mergedMs
+      );
+    });
+  });
 }
 
 /** Read the exact PR comparison blobs; filename-only bot claims are insufficient. */
@@ -889,10 +937,10 @@ async function main() {
   // needs a Mode-a APPROVE pinned (via the review's native commit_id) to THIS
   // head SHA. If the head moves mid-poll, step 4's head pin goes RED anyway,
   // so a verdict fresh here stays fresh for any green this run can emit.
-  // #2584: only a body that DECLARES ship pays for the file listing; every
-  // other PR (ask/show, or a declaration that does not verify) falls through
-  // to the head-pinned verdict path unchanged.
-  function changeTierShip() {
+  // #2584/#2808: only a body that DECLARES ship or show pays for the file
+  // listing; every other PR (ask, or a declaration that does not verify) falls
+  // through to the head-pinned verdict path unchanged.
+  function changeTierMergeOnGreen() {
     const bodyRes = gh([
       "pr",
       "view",
@@ -902,7 +950,8 @@ async function main() {
     ]);
     if (bodyRes.status !== 0) return false;
     const metadata = JSON.parse(bodyRes.stdout);
-    if (parseDeclaredTier(metadata.body ?? "") !== "ship") return false;
+    const declared = parseDeclaredTier(metadata.body ?? "");
+    if (declared !== "ship" && declared !== "show") return false;
     const filesRes = gh([
       "api",
       `repos/{owner}/{repo}/pulls/${prNumber}/files?per_page=100`,
@@ -920,20 +969,22 @@ async function main() {
       ".headRefOid",
     ]);
     const headAfter = afterRes.status === 0 ? afterRes.stdout.trim() : "";
-    const ship = verifyChangeTierShip(
+    const tier = verifyChangeTierMergeOnGreen(
       flattenApiPages(JSON.parse(filesRes.stdout)),
       metadata,
       sha,
       headAfter,
     );
-    if (!ship.ok) {
+    if (!tier.ok) {
       process.stdout.write(
-        `${TAG} Change-tier ship NOT verified for PR #${prNumber} (${ship.reason}) — Mode (a) verdict required.\n`,
+        `${TAG} Change-tier ${declared} NOT verified for PR #${prNumber} (${tier.reason}) — Mode (a) verdict required.\n`,
       );
       return false;
     }
     process.stdout.write(
-      `${TAG} Mode (a) not required — Change-tier ship verified (${ship.testOnly ? "test-only, " : ""}${ship.files} files, ${ship.lines} lines).\n`,
+      tier.tier === "show"
+        ? `${TAG} Pre-merge Mode (a) not required — Change-tier show verified (${tier.files} files, ${tier.lines} lines); dispatch the post-merge Mode (a) review on PR #${prNumber} after the merge.\n`
+        : `${TAG} Mode (a) not required — Change-tier ship verified (${tier.testOnly ? "test-only, " : ""}${tier.files} files, ${tier.lines} lines).\n`,
     );
     return true;
   }
@@ -969,7 +1020,7 @@ async function main() {
         `${TAG} MODE-A EXEMPT — verdict gate SKIPPED for PR #${prNumber}: ${modeAExempt.reason} ` +
           `(sanctioned classes only — AGENTS.md §3.8; this line is the audit record).\n`,
       );
-    } else if (changeTierShip()) {
+    } else if (changeTierMergeOnGreen()) {
       return;
     } else {
       const verdict = classifyModeAVerdict(fetchReviews(prNumber), sha);

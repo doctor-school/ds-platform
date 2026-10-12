@@ -633,9 +633,10 @@ export class RegistrationRepository {
 
   /**
    * 044 EARS-30 — the event-scoped «возможный дубль» subquery: one row per
-   * registration of the event with its marker ({@link possibleDuplicateOverScope}),
-   * the window running over the WHOLE event because nothing but the event
-   * scopes this subquery. The participant card and the roster list both join
+   * participant registration of the event with its marker
+   * ({@link possibleDuplicateOverScope}), the window running over the WHOLE
+   * event's participants because nothing but the event and #2456's
+   * participant rule scope this subquery — the same population the roster shows. The participant card and the roster list both join
    * it by id, so the card, the row and the EARS-31 filter can never disagree,
    * and no outer filter or page can change a marker.
    */
@@ -646,7 +647,14 @@ export class RegistrationRepository {
         possibleDuplicate: possibleDuplicateOverScope(),
       })
       .from(registrations)
-      .where(eq(registrations.eventId, eventId))
+      .where(
+        and(
+          eq(registrations.eventId, eventId),
+          // #2456 — a staff registration is never a roster row, so it never
+          // makes a participant a «возможный дубль» either.
+          isParticipant(registrations.userId),
+        ),
+      )
       .as("duplicates");
   }
 
@@ -904,10 +912,12 @@ export class RegistrationRepository {
         intakeOrigin: registrations.intakeOrigin,
         confirmationMailStatus: registrations.confirmationMailStatus,
         confirmationMailAt: registrations.confirmationMailAt,
-        possibleDuplicate: duplicates.possibleDuplicate,
+        // A staff registration has no row in the participant-only subquery;
+        // its card still opens, unmarked.
+        possibleDuplicate: sql<boolean>`coalesce(${duplicates.possibleDuplicate}, false)`,
       })
       .from(registrations)
-      .innerJoin(duplicates, eq(duplicates.id, registrations.id))
+      .leftJoin(duplicates, eq(duplicates.id, registrations.id))
       .leftJoin(users, eq(users.id, registrations.userId))
       .leftJoin(specialtiesMinzdrav, specialtyJoin)
       .where(registrationOfEvent(eventId, registrationId))

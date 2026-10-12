@@ -234,8 +234,10 @@ never a widening of the one above:
     congress consent rows (`consent_records`: purpose, version, captured-at,
     `paper` origin), `confirmationMail { status, at }`, the read-time
     `possibleDuplicate` (the SAME window expression as `findEventRoster`,
-    read from `eventDuplicates` — computed over the event and then narrowed to
-    the row, exactly as the roster list reads it) and, per configured
+    read from `eventDuplicates` — computed over the event's participants
+    (#2456: a staff account's registration never marks anyone) and then
+    narrowed to the row, exactly as the roster list reads it; a staff
+    registration's own card reads `false`) and, per configured
     congress day, the current mark (`null` = never marked) plus its `history`
     of changes.
   - **History = the 010 audit.** The first reader of `audit_ledger`: the

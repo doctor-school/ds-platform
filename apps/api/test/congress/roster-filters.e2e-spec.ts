@@ -626,5 +626,46 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect((await rosterRaw(query)).statusCode, query).toBe(400);
       }
     });
+
+    it("044 EARS-31.5: a phone shared only with a staff account's registration marks nobody — the roster never shows that row (#2456), so neither the list, the yes filter nor the card counts it", async () => {
+      // S signs up through the desk with A's phone, then its account is staff.
+      await deskEntry("S", {
+        surname: "Штатная",
+        workplace: "Doctor.School",
+        city: "Москва",
+        region: "Московская область",
+        contactPhone: "+7 (900) 200-00-00",
+        specialtyId: s1,
+        mail: "sent",
+        registeredAt: "2027-03-04T09:00:00.000Z",
+      });
+      const staffEmail = createdEmails[createdEmails.length - 1]!;
+      const aId = [...letterOf].find(([, l]) => l === "A")![0];
+      try {
+        await pool.query(
+          "UPDATE users SET role = 'platform_admin' WHERE email = $1",
+          [staffEmail],
+        );
+        expect(await marked("")).toEqual({
+          rows: ["A:false", "B:false", "C:false", "D:false"],
+          total: 4,
+        });
+        expect(await marked("possibleDuplicate=yes")).toEqual({
+          rows: [],
+          total: 0,
+        });
+        const card = await app.inject({
+          method: "GET",
+          url: `/v1/admin/events/${slug}/registrations/${aId}`,
+          headers: registrar,
+        });
+        expect(card.statusCode, card.body).toBe(200);
+        expect(
+          (card.json() as { possibleDuplicate?: unknown }).possibleDuplicate,
+        ).toBe(false);
+      } finally {
+        await deleteUserFixture(pool, "email", staffEmail);
+      }
+    });
   },
 );

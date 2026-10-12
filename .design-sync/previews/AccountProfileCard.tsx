@@ -1,4 +1,4 @@
-import { AccountProfileCard } from '@ds/design-system';
+import { AccountProfileCard, type AccountPhoneActions } from '@ds/design-system';
 
 const copy = {
   title: 'Личный кабинет',
@@ -15,6 +15,27 @@ const copy = {
   emailVerified: 'Подтверждена',
   phoneLabel: 'Телефон',
   phoneEmpty: 'Не указан',
+  phone: {
+    add: 'Добавить',
+    confirm: 'Подтвердить',
+    change: 'Изменить',
+    verified: 'подтверждён',
+    unconfirmedHelper: 'Не подтверждён — подтвердите, чтобы входить по SMS',
+    suggestedHelper: 'Из заявки на конгресс — подтвердите, чтобы входить по SMS',
+    confirmedNote: 'Телефон подтверждён. Теперь можно входить по коду из SMS',
+    inputLabel: 'Номер телефона',
+    placeholder: '+7…',
+    send: 'Получить код',
+    cancel: 'Отмена',
+    codeSentTo: 'Код отправлен по SMS на',
+    codeLabel: 'Код из SMS',
+    back: '← Изменить номер',
+    resend: 'Отправить снова',
+    resendCountdown: (seconds: number) => `Отправить снова · ${seconds} с`,
+    wrongCode: 'Неверный код',
+    throttled: 'Слишком много попыток. Попробуйте позже',
+    unavailable: 'Сервис временно недоступен — попробуйте ещё раз.',
+  },
   passwordLabel: 'Пароль',
   passwordChange: 'Изменить пароль',
   passwordHelper: 'Мы отправим ссылку для смены пароля',
@@ -25,7 +46,22 @@ const copy = {
   signOut: 'Выйти',
 };
 
+/* Preview transport: any number gets a code; 123456 confirms it. */
+let previewPhone = '';
+const phoneActions: AccountPhoneActions = {
+  requestCode: async (phone) => {
+    previewPhone = phone;
+    return 'code_sent';
+  },
+  confirm: async (code) => {
+    if (code !== '123456') throw new Error('invalid');
+    return previewPhone;
+  },
+  classifyError: () => 'invalid',
+};
+
 const handlers = {
+  phoneActions,
   onSaveDisplayName: async () => {},
   resolveSaveError: () => 'Не удалось сохранить имя. Попробуйте ещё раз.',
   onSignOut: () => {},
@@ -40,6 +76,7 @@ export const Filled = () => (
         phone: '+7 900 000-00-00',
         phoneVerified: true,
         displayName: 'Анна Петрова',
+        suggestedPhone: null,
       }}
       copy={copy}
       initials="АП"
@@ -60,6 +97,7 @@ export const EmptyIdentity = () => (
         phone: null,
         phoneVerified: null,
         displayName: null,
+        suggestedPhone: null,
       }}
       copy={copy}
       initials={null}
@@ -79,6 +117,7 @@ export const RowsHidden = () => (
         phone: '+7 900 000-00-00',
         phoneVerified: true,
         displayName: 'Анна Петрова',
+        suggestedPhone: null,
       }}
       copy={copy}
       initials="АП"

@@ -28,6 +28,7 @@ boxes:
         F-075,
         F-076,
         F-080,
+        F-102,
         F-105,
         F-108,
         F-112,
@@ -201,6 +202,11 @@ arrows:
     objects: [O-126]
     from: { boundary: I4 }
     to: { box: A4, side: I }
+  - id: I5
+    label: Просмотры, тесты, посещаемость, контакты врачей (данные платформы)
+    objects: [O-178, O-100, O-206, O-180]
+    from: { boundary: I5 }
+    to: { box: A5, side: I }
   # ---- Boundary controls ----
   - id: C1
     label: Закон о рекламе и маркировка
@@ -234,7 +240,7 @@ arrows:
     to: { box: A1, side: C }
   # ---- Boundary mechanisms (branches per «Роли и круги» of each block) ----
   - id: M1
-    label: Продуктовые команды
+    label: Продуктовая команда
     objects: [O-001, O-004, O-005, O-010, O-011, O-015, O-193]
     from: { boundary: M1 }
     to:
@@ -253,13 +259,7 @@ arrows:
     label: Пул медрецензентов
     objects: [O-009]
     from: { boundary: M3 }
-    to:
-      [
-        { box: A2, side: M },
-        { box: A3, side: M },
-        { box: A4, side: M },
-        { box: A6, side: M },
-      ]
+    to: [{ box: A2, side: M }, { box: A3, side: M }, { box: A4, side: M }]
   - id: M4
     label: Медиа-круг
     objects: [O-012, O-013]
@@ -272,6 +272,7 @@ arrows:
     to:
       [
         { box: A1, side: M },
+        { box: A2, side: M },
         { box: A3, side: M },
         { box: A4, side: M },
         { box: A5, side: M },
@@ -280,7 +281,7 @@ arrows:
     label: Ядро
     objects: [O-017, O-223, O-008]
     from: { boundary: M6 }
-    to: [{ box: A1, side: M }, { box: A6, side: M }]
+    to: { box: A6, side: M }
   - id: M7
     label: Платформа DS
     objects: [O-185, O-184, O-207, O-218]
@@ -342,9 +343,9 @@ arrows:
     from: { box: A4, side: O }
     to: { boundary: O1 }
   - id: a06
-    label: Метрики
-    objects: [O-100, O-176, O-178, O-180, O-206]
-    from: { box: A4, side: O }
+    label: Посещаемость офлайн-мероприятий
+    objects: [O-100]
+    from: { box: A3, side: O }
     to: { box: A5, side: I }
   - id: a07
     label: Сигнал неактуальности — актуализация
@@ -416,3 +417,18 @@ arrows:
     objects: [O-172, O-177]
     from: { box: A6, side: O }
     to: { boundary: O5 }
+  - id: a16
+    label: Загрузка и мощность команд
+    objects: [O-001, O-177]
+    from: { box: A6, side: O }
+    to: { box: A1, side: C }
+  - id: a17
+    label: Потребность в новой команде
+    objects: [O-001]
+    from: { box: A1, side: O }
+    to: { box: A6, side: I }
+  - id: a18
+    label: План выпусков Академии смыслов, приглашённые гости фармы
+    objects: [O-057, O-058, O-019]
+    from: { box: A1, side: O }
+    to: { box: A3, side: C }

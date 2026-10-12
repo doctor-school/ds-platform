@@ -1,0 +1,117 @@
+# IDEF0 decomposition A12 «Принять и квалифицировать запрос» (child of A1; format: FORMAT-ru.md).
+# Steps 4–6 of process block 1 (../process-to-be-ru.md): the pair Аккаунт + Продюсер per partner,
+# the product team on the kickoff call. Leaves carry a DRAFT effort for the owner's calibration.
+id: A12
+parent: A1
+title: Принять и квалифицировать запрос
+# Child boundary code → A1 arrow touching box A12 on that side.
+icom:
+  I1: I1
+  I2: I2
+  I3: a01
+  C1: C4
+  O1: a02
+  M1: M1
+  M2: M2
+  M3: M3
+boxes:
+  - id: A121
+    name: Принять запрос и отсечь барьерами
+    functions: [F-013, F-114, F-012]
+    mechanisms: [Аккаунт]
+    note: Шаги 4 и 6 — запрос или инициатива лидера, барьерные условия для мелких требовательных запросов.
+    leaf: true
+    effort:
+      role: Аккаунт
+      unit: запрос
+      hours_draft: [1, 3]
+      lead_days_draft: [1, 3]
+      lead_days_basis: "оценка аналитика"
+      driver: число входящих запросов; доля отсечённых барьерными условиями
+      basis: оценка аналитика
+  - id: A122
+    name: Провести стартовый звонок с партнёром
+    functions: [F-014]
+    mechanisms: [Продуктовая команда]
+    note: >-
+      Шаг 5: продуктовая команда вместе с парой аккаунт + продюсер выясняет потребности сторон и
+      пересечение интересов, включая бесплатные включения для лидеров и врачей (O-059).
+    leaf: true
+    effort:
+      role: Продуктовая команда
+      unit: запрос
+      hours_draft: [2, 6]
+      lead_days_draft: [2, 5]
+      lead_days_basis: "оценка аналитика; согласование времени звонка с партнёром внутри прохода"
+      driver: число квалифицированных запросов; число участников звонка со стороны команды
+      basis: оценка аналитика
+  - id: A123
+    name: Оценить запрос по составу и срокам
+    functions: []
+    mechanisms: [Продюсер]
+    note: >-
+      Новое: продюсер пары оценивает, что команда может произвести и к какому сроку, до КП — без
+      этого шага КП обещает то, чего нет в мощности.
+    leaf: true
+    effort:
+      role: Продюсер
+      unit: запрос
+      hours_draft: [0.5, 2]
+      lead_days_draft: [1, 2]
+      lead_days_basis: "оценка аналитика"
+      driver: число квалифицированных запросов; новый для команды формат
+      basis: оценка аналитика
+arrows:
+  - id: I1
+    label: Запросы фармы, техорга, лидеров мнений
+    objects: [O-019, O-067, O-021, O-022, O-121]
+    from: { boundary: I1 }
+    to: { box: A121, side: I }
+  - id: I2
+    label: Запрос на следующий цикл
+    objects: [O-109, O-205, O-179]
+    from: { boundary: I2 }
+    to: { box: A121, side: I }
+  - id: I3
+    label: Входящие запросы, целевой сегмент, презентация DS
+    objects: [O-067, O-182, O-068]
+    from: { boundary: I3 }
+    to: { box: A121, side: I }
+  - id: C1
+    label: Стандарты DS
+    objects: [O-141]
+    from: { boundary: C1 }
+    to:
+      - { box: A121, side: C }
+      - { box: A122, side: C }
+      - { box: A123, side: C }
+  - id: O1
+    label: Квалифицированный запрос, пересечение интересов
+    objects: [O-067, O-120, O-122]
+    from: { box: A123, side: O }
+    to: { boundary: O1 }
+  - id: M1
+    label: Аккаунт
+    objects: [O-015]
+    from: { boundary: M1 }
+    to: { box: A121, side: M }
+  - id: M2
+    label: Продюсер
+    objects: [O-004]
+    from: { boundary: M2 }
+    to: { box: A123, side: M }
+  - id: M3
+    label: Продуктовая команда
+    objects: [O-001]
+    from: { boundary: M3 }
+    to: { box: A122, side: M }
+  - id: a01
+    label: Принятый запрос
+    objects: [O-067]
+    from: { box: A121, side: O }
+    to: { box: A122, side: I }
+  - id: a02
+    label: Потребности сторон, пересечение интересов
+    objects: [O-120, O-121, O-122]
+    from: { box: A122, side: O }
+    to: { box: A123, side: I }

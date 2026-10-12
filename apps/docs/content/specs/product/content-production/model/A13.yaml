@@ -1,0 +1,111 @@
+# IDEF0 decomposition A13 «Сформировать КП и получить решение партнёра» (child of A1; format: FORMAT-ru.md).
+# Steps 7–11 of process block 1 (../process-to-be-ru.md): the pair Аккаунт + Продюсер per partner.
+# Leaves carry a DRAFT effort for the owner's calibration (effort-draft-ru.md).
+id: A13
+parent: A1
+title: Сформировать КП и получить решение партнёра
+# Child boundary code → A1 arrow touching box A13 on that side.
+icom:
+  I1: a02
+  C1: C1
+  C2: C3
+  C3: C4
+  O1: a03
+  M1: M1
+  M2: M2
+boxes:
+  - id: A131
+    name: Предложить варианты финансирования и слоты подкастов
+    functions: [F-005, F-075, F-076, F-080]
+    mechanisms: [Аккаунт]
+    note: >-
+      Шаги 7–8: 2–3 стандартных варианта финансирования и тип сделки; слот в подкасте или проект
+      серии — тот же стандартный договор.
+    leaf: true
+    effort:
+      role: Аккаунт
+      unit: КП
+      hours_draft: [2, 4]
+      lead_days_draft: [1, 3]
+      lead_days_basis: "оценка аналитика"
+      driver: канал продажи; число форматов в запросе
+      basis: "оценка аналитика; опора: 2–3 варианта финансирования устраивают 99 % клиентов (L3315)"
+  - id: A132
+    name: Рассчитать себестоимость и цену по калькулятору
+    functions: [F-108]
+    mechanisms: [Продюсер]
+    note: >-
+      Шаг 9: продюсер пары считает себестоимость и цену варианта из открытого калькулятора — состав
+      и сроки производства знает он; согласования с центром нет.
+    leaf: true
+    effort:
+      role: Продюсер
+      unit: КП
+      hours_draft: [1, 3]
+      lead_days_draft: [1, 2]
+      lead_days_basis: "оценка аналитика"
+      driver: число вариантов финансирования в КП; нестандартный состав продукта
+      basis: оценка аналитика
+  - id: A133
+    name: Подготовить КП и получить решение партнёра
+    functions: [F-004, F-116, F-006]
+    mechanisms: [Аккаунт]
+    note: >-
+      Шаги 10–11: КП под тип ЦА из каталога линейки; решение фармы (F-116, F-006) — внешний шаг,
+      часы DS — только сопровождение.
+    leaf: true
+    effort:
+      role: Аккаунт
+      unit: КП
+      hours_draft: [2, 6]
+      lead_days_draft: [3, 10]
+      lead_days_basis: "оценка аналитика; ожидание решения партнёра внутри прохода"
+      driver: канал продажи; длина цикла продажи против окна бюджета фармы
+      iterations: итерации КП
+      basis: "оценка аналитика; опора: 2–3 варианта финансирования устраивают 99 % клиентов (L3315)"
+arrows:
+  - id: I1
+    label: Квалифицированный запрос, пересечение интересов
+    objects: [O-067, O-120, O-122]
+    from: { boundary: I1 }
+    to: { box: A131, side: I }
+  - id: C1
+    label: Закон о рекламе, запрет прямого контакта
+    objects: [O-153, O-157, O-161]
+    from: { boundary: C1 }
+    to: [{ box: A131, side: C }, { box: A133, side: C }]
+  - id: C2
+    label: Бюджетный цикл фармы
+    objects: [O-133, O-205]
+    from: { boundary: C2 }
+    to: { box: A133, side: C }
+  - id: C3
+    label: Стандарты DS, калькулятор
+    objects: [O-141, O-172]
+    from: { boundary: C3 }
+    to: [{ box: A131, side: C }, { box: A132, side: C }]
+  - id: O1
+    label: Принятое КП, вариант финансирования, цена
+    objects: [O-069, O-165, O-135, O-129, O-130, O-131]
+    from: { box: A133, side: O }
+    to: { boundary: O1 }
+  - id: M1
+    label: Аккаунт
+    objects: [O-015]
+    from: { boundary: M1 }
+    to: [{ box: A131, side: M }, { box: A133, side: M }]
+  - id: M2
+    label: Продюсер
+    objects: [O-004]
+    from: { boundary: M2 }
+    to: { box: A132, side: M }
+  - id: a01
+    label: Варианты финансирования, формат
+    objects: [O-165, O-049]
+    from: { box: A131, side: O }
+    to: { box: A132, side: I }
+  - id: a02
+    label: Себестоимость и цена варианта
+    objects: [O-172, O-135]
+    from: { box: A132, side: O }
+    to: { box: A133, side: I }

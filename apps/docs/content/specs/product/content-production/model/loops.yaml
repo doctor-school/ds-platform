@@ -6,7 +6,7 @@
 # the approver's queue) and is counted (rounds − 1) times — never twice.
 loops:
   - name: итерации КП
-    leaves: [A13]
+    leaves: [A133]
     approver: фарма (партнёр)
     rounds_draft: [1, 3]
     wait_days_per_round_draft: [2, 5]
@@ -17,7 +17,7 @@ loops:
         step: Отправить КП с вариантами финансирования
         actor: Аккаунт
         kind: task
-        box: A13
+        box: A133
         next: s2
       - id: s2
         step: Ждать решения партнёра
@@ -37,7 +37,7 @@ loops:
     rounds_draft: [1, 4]
     wait_days_per_round_draft: [3, 10]
     exit_rule: Договор подписан; стандартный договор по шаблону DS — один круг, круги идут только у нестандартного.
-    basis: "оценка аналитика; опора: 80–90 % стандартных процедур (L3075)"
+    basis: "оценка аналитика; опора: 80–90 % стандартных процедур (L3075); число кругов у каждого клиента своё — поэтому диапазон, а не одно число (встреча 2026-10-07)"
     fragment:
       - id: s1
         step: Подготовить договор по шаблону DS

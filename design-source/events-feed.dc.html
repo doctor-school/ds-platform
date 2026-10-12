@@ -25,17 +25,23 @@
         <h1 style="margin:0;font-size:clamp(34px,4.6vw,56px);line-height:1;font-weight:800;letter-spacing:-.035em">{{ pageTitle }}</h1>
         <p style="margin:0;font-size:var(--font-size-base);font-weight:600;color:var(--color-primary-surface-soft)">{{ pageSub }}</p>
       </div>
+      <sc-if value="{{ headRow }}" hint-placeholder-val="{{ true }}">
       <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px 24px">
+        <sc-if value="{{ isFeed }}" hint-placeholder-val="{{ true }}">
         <x-import component-from-global-scope="DsDesignSystem.Tabs" value="{{ tense }}" on-value-change="{{ setTense }}" class-name="w-full layout:w-auto" hint-size="280px,48px">
           <x-import component-from-global-scope="DsDesignSystem.TabsList" class-name="w-full shadow-lg layout:w-auto" hint-size="280px,48px">
             <x-import component-from-global-scope="DsDesignSystem.TabsTrigger" value="past" hint-size="140px,44px">Прошедшие</x-import>
             <x-import component-from-global-scope="DsDesignSystem.TabsTrigger" value="upcoming" hint-size="140px,44px">Будущие</x-import>
           </x-import>
         </x-import>
+        </sc-if>
         <sc-if value="{{ isWide }}" hint-placeholder-val="{{ true }}">
-          <x-import component-from-global-scope="DsDesignSystem.Link" href="#" on-click="{{ switchView }}" tone="on-primary" variant="inline" class-name="font-bold" hint-size="180px,24px">{{ switchLabel }}</x-import>
+          <div style="margin-left:auto;display:flex">
+            <x-import component-from-global-scope="DsDesignSystem.Link" href="#" on-click="{{ switchView }}" tone="on-primary" variant="inline" class-name="font-bold" hint-size="180px,24px">{{ switchLabel }}</x-import>
+          </div>
         </sc-if>
       </div>
+      </sc-if>
     </div>
   </div>
 
@@ -335,10 +341,10 @@ class Component extends DCLogic {
     const firstDay = (mXs.filter(x => x.p.y === ym.y && x.p.m === ym.m).sort((a, b) => a.utc - b.utc)[0] || { p: { d: 1 } }).p.d;
     const mSel = s.mSel || (isNow ? 2 : firstDay);
     const prev = K.shiftMonth(ym, -1), next = K.shiftMonth(ym, 1);
-    const switchView = e => { if (e && e.preventDefault) e.preventDefault(); set({ view: month ? 'feed' : 'month', sheetOpen: false }); window.scrollTo(0, 0); };
+    const switchView = e => { if (e && e.preventDefault) e.preventDefault(); set(month ? { view: 'feed', sheetOpen: false } : { view: 'month', ym: K.monthOf(s.tense), selDay: null, mSel: null, focusKey: null, sheetOpen: false }); window.scrollTo(0, 0); };
     const liveList = P.live ? F0.live : [];
     return {
-      ready: true, isWide: wide, isNarrow: !wide, isFeed: !month, isMonth: month,
+      ready: true, isWide: wide, isNarrow: !wide, isFeed: !month, isMonth: month, headRow: !month || wide,
             shellHost: host, signedIn, dark: !!s.dark, toggleTheme: () => set({ dark: !s.dark }),
       pageTitle: host === 'doctor' ? 'События' : 'Расписание эфиров',
       pageSub: host === 'doctor' ? 'События по вашей специальности и смежным' : F0.headCount,

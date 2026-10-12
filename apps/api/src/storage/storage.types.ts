@@ -35,6 +35,51 @@ export class ObjectAlreadyExistsError extends Error {
   }
 }
 
+/**
+ * A store failure in a readable form (#2821). The AWS SDK surfaces a bodiless
+ * or message-less S3 error (a Timeweb `403 InvalidAccessKeyId`) as
+ * `err.message === "UnknownError"`, so services that log `err.message` showed
+ * nothing actionable. The adapter wraps every non-precondition failure in this
+ * type: `message` is the {@link describeStorageFailure} reason (SDK error name +
+ * HTTP status, e.g. `InvalidAccessKeyId (HTTP 403)`), the original error is the
+ * `cause`. The message never carries key material or a signed URL.
+ */
+export class ObjectStorageError extends Error {
+  constructor(reason: string, options?: { cause?: unknown }) {
+    super(reason, options);
+    this.name = "ObjectStorageError";
+  }
+}
+
+/**
+ * Render an S3/SDK failure as `<Name> (HTTP <status>)` — the one readable form
+ * shared by adapter errors and the readiness probe (002 EARS-3). A bodiless
+ * response (HEAD) leaves the SDK name numeric or absent, so only the status is
+ * kept; a transport failure (no HTTP status) keeps its name and system code.
+ */
+export function describeStorageFailure(err: unknown): string {
+  const e = (err ?? {}) as {
+    name?: unknown;
+    code?: unknown;
+    $metadata?: { httpStatusCode?: number };
+  };
+  const name =
+    typeof e.name === "string" && e.name !== "" && !/^\d+$/.test(e.name)
+      ? e.name
+      : null;
+  const status = e.$metadata?.httpStatusCode;
+  if (status !== undefined) {
+    return name && !["Unknown", "UnknownError", "Error"].includes(name)
+      ? `${name} (HTTP ${status})`
+      : `HTTP ${status}`;
+  }
+  const code = typeof e.code === "string" ? e.code : null;
+  return [name ?? "Error", code].filter(Boolean).join(" ");
+}
+
+/** Result of {@link ObjectStorage.probe}: reachable with valid credentials, or the readable reason it is not. */
+export type StorageProbeResult = { ok: true } | { ok: false; reason: string };
+
 export interface StoredObject {
   key: string;
   /** A browser-fetchable signed URL for the current object (config-derived, never hardcoded). */
@@ -71,6 +116,13 @@ export interface ObjectStorage {
    * never fail the supersede); deleting an absent key is not an error.
    */
   delete(key: string): Promise<void>;
+  /**
+   * Bucket-level health probe (002 EARS-3): proves the store is reachable and
+   * accepts the configured credentials for the uploads bucket. Never rejects —
+   * a failure resolves `{ ok: false, reason }` with the
+   * {@link describeStorageFailure} reason.
+   */
+  probe(): Promise<StorageProbeResult>;
 }
 
 /** Nest DI token for the {@link ObjectStorage} port. */

@@ -30,7 +30,7 @@ describe("Readiness (e2e)", () => {
     await app.close();
   });
 
-  it("EARS-1: GET /v1/ready returns 200 with status=ok and both checks ok when Postgres + pgvector are healthy", async () => {
+  it("EARS-1: GET /v1/ready returns 200 with status=ok and both checks ok when Postgres + pgvector + object storage are healthy", async () => {
     const res = await app.inject({ method: "GET", url: "/v1/ready" });
 
     expect(res.statusCode).toBe(200);
@@ -38,5 +38,6 @@ describe("Readiness (e2e)", () => {
     expect(body.status).toBe("ok");
     expect(body.checks.postgres).toBe("ok");
     expect(body.checks.pgvector).toBe("ok");
+    expect(body.checks.objectStorage).toBe("ok");
   });
 });

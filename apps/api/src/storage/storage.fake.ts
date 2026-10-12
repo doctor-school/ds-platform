@@ -2,6 +2,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import type {
   ObjectStorage,
   PutObjectInput,
+  StorageProbeResult,
   StoredObject,
 } from "./storage.types.js";
 import { ObjectAlreadyExistsError } from "./storage.types.js";
@@ -63,6 +64,11 @@ export class FakeObjectStorage implements ObjectStorage {
   delete(key: string): Promise<void> {
     this.objects.delete(key);
     return Promise.resolve();
+  }
+
+  /** The in-memory store is always reachable (002 EARS-3). */
+  probe(): Promise<StorageProbeResult> {
+    return Promise.resolve({ ok: true });
   }
 
   /**

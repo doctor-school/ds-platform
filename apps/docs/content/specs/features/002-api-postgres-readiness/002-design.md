@@ -123,6 +123,7 @@ export const ReadinessResponseSchema = z
       .object({
         postgres: CheckStatusSchema,
         pgvector: CheckStatusSchema,
+        objectStorage: CheckStatusSchema,
       })
       .strict(),
     timestamp: z.string().datetime({ offset: false }),
@@ -132,7 +133,7 @@ export const ReadinessResponseSchema = z
 export type ReadinessResponse = z.infer<typeof ReadinessResponseSchema>;
 ```
 
-`CheckStatusSchema` is exported as a building block — when Redis / MinIO / Centrifugo probes land, they reuse this enum and extend the `checks` shape inside their own spec.
+`CheckStatusSchema` is exported as a building block — `objectStorage` (EARS-3) reuses it; when Redis / Centrifugo probes land, they reuse this enum and extend the `checks` shape inside their own spec.
 
 ### 4.2 `packages/db/src/schema/idempotency-keys.ts`
 
@@ -311,10 +312,15 @@ import { Inject, Injectable } from "@nestjs/common";
 import type pg from "pg";
 import { type CheckStatus, type ReadinessResponse } from "@ds/schemas";
 import { DRIZZLE_POOL } from "../database/database.tokens.js";
+import { ObjectStorageReadiness } from "../storage/storage-readiness.js";
 
 @Injectable()
 export class ReadinessService {
-  constructor(@Inject(DRIZZLE_POOL) private readonly pool: pg.Pool) {}
+  constructor(
+    @Inject(DRIZZLE_POOL) private readonly pool: pg.Pool,
+    @Inject(ObjectStorageReadiness)
+    private readonly objectStorageReadiness: ObjectStorageReadiness,
+  ) {}
 
   async check(): Promise<ReadinessResponse> {
     const [pgResult, vecResult] = await Promise.allSettled([
@@ -332,17 +338,30 @@ export class ReadinessService {
         ? "ok"
         : "down";
 
+    // Cached (EARS-3) — the public endpoint never calls the store per request.
+    const objectStorage = this.objectStorageReadiness.status();
+
     const status: CheckStatus =
-      postgres === "ok" && pgvector === "ok" ? "ok" : "down";
+      postgres === "ok" && pgvector === "ok" && objectStorage === "ok"
+        ? "ok"
+        : "down";
 
     return {
       status,
-      checks: { postgres, pgvector },
+      checks: { postgres, pgvector, objectStorage },
       timestamp: new Date().toISOString(),
     };
   }
 }
 ```
+
+### 4.9a `apps/api/src/storage/storage-readiness.ts` — cached object-storage probe (EARS-3)
+
+`ObjectStorageReadiness` (provided and exported by the `@Global` `StorageModule`) calls the `ObjectStorage` port's `probe()` in `onModuleInit` (awaited, so the first `/v1/ready` already reflects the store) and then every `STORAGE_READINESS_INTERVAL_MS` (60 s) through a `SchedulerRegistry` interval that `onModuleDestroy` clears. A tick that fires while a probe is in flight is skipped; a probe unanswered after `STORAGE_PROBE_TIMEOUT_MS` (10 s) counts as down. The state starts `down` and changes only on a probe result; the WARN (`object storage is down: <reason>`) and LOG (`object storage recovered`) lines fire only on a transition, never per tick.
+
+- **S3 adapter probe** — a `ListObjectsV2` with `MaxKeys: 1` on the uploads bucket. Not `HeadBucket`: a HEAD answer has no body, so the SDK cannot read the store's error code and a stale key surfaces as `Unknown (HTTP 403)`; the listing's XML error carries `InvalidAccessKeyId`. Both need the same bucket-list grant. The fake answers `{ ok: true }`.
+- **Readable reason** — `describeStorageFailure(err)` renders `<SDK error name> (HTTP <status>)`; a nameless, numeric or `UnknownError` name keeps only `HTTP <status>`, a transport failure keeps its name and system code (`Error ECONNREFUSED`). The adapter's `put`/`delete` rethrow every non-precondition failure as `ObjectStorageError` with that message (original as `cause`), so the services' existing `err.message` logs carry it. The reason never reaches the `/v1/ready` body.
+- **Out of scope** — `GET /v1/health` stays liveness-only (compose healthchecks and the prod deploy's healthy wait and rollback read it), so a storage outage never fails a deploy.
 
 ### 4.10 `apps/api/src/readiness/readiness.controller.ts`
 
@@ -445,14 +464,15 @@ Adapted from local-dev-environment setup-design §9.2. The snapshot-then-migrate
 
 ## 8. Error handling
 
-| Failure mode                                  | Detection                                                | Response                                                                                                |
-| --------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Postgres unreachable (TCP refused, DNS fail)  | `pool.query('SELECT 1')` rejects                         | `checks.postgres='down'`, `status='down'`, HTTP 503, body conforms                                      |
-| Postgres query times out                      | `statement_timeout` exceeded → query rejects             | Same as above                                                                                           |
-| pgvector extension missing                    | `to_regtype('vector')` returns NULL (rows[0].ok===false) | `checks.pgvector='down'`, `status='down'`, HTTP 503, body conforms                                      |
-| Both fail simultaneously                      | Both `Promise.allSettled` entries rejected/falsy         | `checks.postgres='down'`, `checks.pgvector='down'`, `status='down'`, HTTP 503                           |
-| Pool exhausted (acquire timeout)              | `pool.query` rejects with acquire-timeout error          | Same as Postgres unreachable                                                                            |
-| Env validation fails (`DATABASE_URL` missing) | `loadEnv()` throws at module-factory time                | Process fails to boot — the readiness endpoint never serves; operator sees crash log (correct behavior) |
+| Failure mode                                  | Detection                                                  | Response                                                                                                |
+| --------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Postgres unreachable (TCP refused, DNS fail)  | `pool.query('SELECT 1')` rejects                           | `checks.postgres='down'`, `status='down'`, HTTP 503, body conforms                                      |
+| Postgres query times out                      | `statement_timeout` exceeded → query rejects               | Same as above                                                                                           |
+| pgvector extension missing                    | `to_regtype('vector')` returns NULL (rows[0].ok===false)   | `checks.pgvector='down'`, `status='down'`, HTTP 503, body conforms                                      |
+| Both fail simultaneously                      | Both `Promise.allSettled` entries rejected/falsy           | `checks.postgres='down'`, `checks.pgvector='down'`, `status='down'`, HTTP 503                           |
+| Object storage refuses or is unreachable      | Cached `probe()` resolves `{ ok: false, reason }` (EARS-3) | `checks.objectStorage='down'`, `status='down'`, HTTP 503; WARN with the reason on the transition only   |
+| Pool exhausted (acquire timeout)              | `pool.query` rejects with acquire-timeout error            | Same as Postgres unreachable                                                                            |
+| Env validation fails (`DATABASE_URL` missing) | `loadEnv()` throws at module-factory time                  | Process fails to boot — the readiness endpoint never serves; operator sees crash log (correct behavior) |
 
 No custom RFC 7807 problem-details filter — Nest's default exception filter passes the body verbatim, which is what the spec requires. A global RFC 7807 filter lands in a later spec.
 

@@ -8,6 +8,8 @@ export const ReadinessResponseSchema = z.strictObject({
   checks: z.strictObject({
     postgres: CheckStatusSchema,
     pgvector: CheckStatusSchema,
+    /** Cached object-storage probe (002 EARS-3); the failure reason is logged, never returned. */
+    objectStorage: CheckStatusSchema,
   }),
   timestamp: z.iso.datetime({ offset: false }),
 });

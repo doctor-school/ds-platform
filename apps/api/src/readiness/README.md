@@ -1,8 +1,8 @@
 # `readiness` — readiness probe endpoint
 
 The api's **readiness** probe: `GET /v1/ready` reports whether the process can
-actually serve traffic by exercising its critical downstream dependency — the
-database. Distinct from the [`health`](../health/README.md) liveness probe, which
+actually serve traffic by exercising its critical downstream dependencies — the
+database and object storage (002 EARS-1…3). Distinct from the [`health`](../health/README.md) liveness probe, which
 only says the process is up; readiness fails when a dependency is down so an
 orchestrator holds traffic off an instance that would error. The response shape is
 owned by the `@ds/schemas` SSOT (`ReadinessResponseSchema`).
@@ -30,7 +30,13 @@ owned by the `@ds/schemas` SSOT (`ReadinessResponseSchema`).
   [`database`](../database/README.md) module): `SELECT 1` for Postgres liveness
   and `to_regtype('vector')` for the **pgvector** extension (ADR-0003). The
   aggregate `status` is `ok` only when every check is `ok`; any failed or rejected
-  check yields `down` for that check and the whole probe.
+  check yields `down` for that check and the whole probe. `objectStorage` is read
+  from the **cached** `ObjectStorageReadiness` state (the
+  [`storage`](../storage/README.md) module refreshes it at startup and every
+  60 s) — a request to this public endpoint never calls the store, and the
+  store's failure reason goes to the logs only, never into the body (002
+  EARS-3, #2821). `GET /v1/health` stays liveness-only, so a storage outage never
+  fails a deploy health wait or rollback.
 - **`ReadinessResponseDto`** (`readiness.dto.ts`) — the `createZodDto`-derived DTO
   over `ReadinessResponseSchema` from `@ds/schemas`
   (`packages/schemas/src/readiness/readiness.schema.ts`), so OpenAPI and runtime

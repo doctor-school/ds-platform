@@ -189,6 +189,20 @@ listing controls when the named card is not on the first page. The separate 004
 empty-state test remains app-local; this journey does not claim the broader
 listing ordering/filtering or authentication scenarios.
 
+The 019 doctor events journeys (`steps/events-feed.steps.ts`, Issue #2256) run
+the `/events` feed of the doctor storefront from its golden data: the guest
+reading, the day groups and «Показать ещё», the compact month's day pick, the
+month view of the same page, the facet panel and its 390 px sheet, the URL
+round trip in a fresh context and through Back, «Прошедшие» with its count
+paging and recording link, and the «Идёт сейчас» block into the room (the
+signed-in `verified-cardiologist`, registered for `golden.events.live`) or to the
+event page (a guest). The only named facts are `golden.events.live` and the
+experts-audience `golden.events.upcoming`, which the doctor feed must never list
+(019 EARS-16); every other count, date and title is read from the slot. The
+fixture-tier states a slot cannot reach on demand — nothing live, a failed read,
+three live strips, the full 390 accessibility matrix — stay in
+`apps/doctor/e2e/events-*.spec.ts`.
+
 `Given the golden doctor "verified-cardiologist" is signed in` (§6.1). A feature
 file never carries an email or a password. `lib/golden.ts` is the one place a
 seed name becomes a real `@ds/db` golden account plus the env var holding its IdP

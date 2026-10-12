@@ -51,7 +51,7 @@ The feed is **fully readable by a guest** (REQ-20): the value is visible before 
 3. An offline card additionally carries the **city and the seat count**; a congress spans dates and may be hybrid.
 4. A click on a card opens the event page (`#d-event`, feature 020).
 
-**See the month (US-3):** on desktop a compact month stands beside the day feed and the month view carries «Сегодня» and the live marker; there is no «Неделя / Месяц» switch (F-019-2, owner 2026-08-26). The month as a page body is a view of the same page, reached by «Календарь на месяц →» and left by «← Лента событий» (superseded by 019 «Amendment — 2026-10-05»: one route, not a separate calendar page).
+**See the month (US-3):** on desktop a compact month stands beside the day feed and the month view carries «Сегодня» and the live marker; there is no «Неделя / Месяц» switch (F-019-2, owner 2026-08-26). The month as a page body is a view of the same page, reached by «Календарь на месяц →» and left by «← Лента событий» (superseded by 019 «Amendment — 2026-10-05»: one route, not a separate calendar page). The month view carries no tense tabs; the tense it was opened in stays in the URL (019 «Amendment — 2026-10-12», #2798).
 
 **Filter (US-6, US-7, US-8, US-9):**
 

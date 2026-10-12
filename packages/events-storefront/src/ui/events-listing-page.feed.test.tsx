@@ -1,5 +1,12 @@
 // @vitest-environment jsdom
-import { Fragment, Suspense, isValidElement, type ReactElement, type ReactNode } from "react";
+import {
+  Fragment,
+  Suspense,
+  isValidElement,
+  type ComponentProps,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -148,7 +155,7 @@ async function frame(
   const element = (await EventsListingPage({
     config,
     searchParams: Promise.resolve(query),
-  })) as ReactElement<{ children: ReactNode }>;
+  })) as ReactElement<ComponentProps<typeof FeedFrame>>;
   expect(element.type).toBe(FeedFrame);
   return element;
 }
@@ -208,6 +215,13 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
     mocks.cookie = "__Host-ds_session=s";
     const element = await frame(DOCTOR, { tense: "past" });
     expect(blocks(element).map((b) => b.block)).toEqual([FeedSection]);
+  });
+
+  it("NEW: the page hands its view to the frame and keeps the URL tense in the month view (#2798)", async () => {
+    const feed = (await frame(DOCTOR, { tense: "past" })).props;
+    expect(feed).toMatchObject({ view: "feed", tense: "past" });
+    const month = (await frame(DOCTOR, { view: "month", tense: "past" })).props;
+    expect(month).toMatchObject({ view: "month", tense: "past" });
   });
 
   it("NEW: feed read fails ⇒ the feed block shows the cause + «Повторить», the live block and «Мои события» still render", async () => {
@@ -418,13 +432,19 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
 });
 
 describe("<FeedFrame> — the head", () => {
-  function renderFrame(tense: "upcoming" | "past" = "upcoming") {
+  function renderFrame(
+    tense: "upcoming" | "past" = "upcoming",
+    view: "feed" | "month" = "feed",
+    headAction?: ReactNode,
+  ) {
     return render(
       <FeedFrame
         title="События"
         subline="События по вашей специальности и смежным"
         tense={tense}
+        view={view}
         hrefs={{ upcoming: "/events", past: "/events?tense=past" }}
+        headAction={headAction}
       >
         <p>лента</p>
       </FeedFrame>,
@@ -444,6 +464,27 @@ describe("<FeedFrame> — the head", () => {
     expect(screen.getByRole("tab", { name: "Будущие" })).toHaveAttribute("aria-selected", "true");
     await userEvent.click(screen.getByRole("tab", { name: "Прошедшие" }));
     expect(mocks.push).toHaveBeenCalledWith("/events?tense=past");
+  });
+
+  it("NEW: the month view carries no tense tabs; the tense stays the URL's and the content stays keyed by it (#2798)", () => {
+    renderFrame("past", "month", <a href="/events?tense=past">← Лента событий</a>);
+    expect(screen.queryByTestId("events-tense-tabs")).toBeNull();
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    // No tabs ⇒ no tab panel: no orphan `tabpanel` labelled by a missing tab.
+    expect(screen.queryAllByRole("tabpanel")).toHaveLength(0);
+    expect(screen.getByText("лента")).toBeInTheDocument();
+    // The head row holds only the view link, right-aligned, desktop-only.
+    const row = screen.getByTestId("events-head-row");
+    expect(row).toHaveClass("hidden", "lg:flex", "justify-end");
+    expect(within(row).getByRole("link", { name: "← Лента событий" })).toBeInTheDocument();
+  });
+
+  it("NEW: the feed view keeps the head row with the tense tabs on every width (#2798)", () => {
+    renderFrame("upcoming", "feed");
+    const row = screen.getByTestId("events-head-row");
+    expect(row).not.toHaveClass("hidden");
+    expect(within(row).getByTestId("events-tense-tabs")).toBeInTheDocument();
+    expect(screen.getByRole("tabpanel")).toHaveTextContent("лента");
   });
 
   it("NEW: no archive subtitle, tab or «Архив записей» block renders on either host", () => {

@@ -42,22 +42,29 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the phone field is prefilled with "8 (999) 123-45-67" and is editable
     And no SMS is sent and users.phone is still empty until the code is confirmed
 
-  @EARS-49 @EARS-52 @EARS-57 @happy @phone-confirmation
-  Scenario: Changing a confirmed phone keeps the old one until the new one is confirmed
+  @EARS-49 @EARS-47 @EARS-52 @EARS-57 @happy @phone-confirmation
+  Scenario: Changing a confirmed phone leaves no confirmed phone until the new one is confirmed
     Given a signed-in user with the confirmed phone "+79991234567"
     When the user enters "+79997654321" and asks for a code
-    Then SMS sign-in and SMS reset by "+79991234567" still work until the new code is entered
+    Then users.phone and phone_verified are cleared and one "auth.phone.changed" audit row is appended
+    And SMS sign-in and SMS reset by "+79991234567" and by "+79997654321" find no account
+    And email sign-in still works
     When the user enters the code sent to "+79997654321"
     Then users.phone is "+79997654321" and phone_verified is true
-    And "+79991234567" no longer resolves to the account
-    And one "auth.phone.changed" audit row and one notice email are produced
+    And one "auth.phone.confirmed" audit row and one notice email are produced
 
-  @EARS-58 @failure @phone-confirmation
-  Scenario: An abandoned change is undone and the old phone keeps working
+  @EARS-49 @EARS-58 @failure @phone-confirmation
+  Scenario: An abandoned change leaves the account with no confirmed phone
     Given a signed-in user with the confirmed phone "+79991234567" who requested a code for "+79997654321" and never entered it
-    When the pending record expires and the user makes the next authenticated request
-    Then the IdP phone is "+79991234567" and verified again
-    And no account resolves from "+79997654321"
+    When the user signs in again by email
+    Then the profile shows the phone as awaiting confirmation and no account resolves from either number
+    And the user can request a code again, which restarts the flow
+
+  @EARS-47 @happy @phone-confirmation
+  Scenario: Requesting a code for the already-confirmed number is a no-op
+    Given a signed-in user with the confirmed phone "+79991234567"
+    When the user asks for a code for "+79991234567"
+    Then no SMS is sent and the confirmed phone is not displaced
 
   @EARS-51 @failure @phone-confirmation
   Scenario: A number confirmed on another account is refused in the profile
@@ -77,7 +84,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   @EARS-53 @EARS-16 @EARS-56 @failure @sms-reset
   Scenario: Reset by an unconfirmed or unknown phone is indistinguishable and sends nothing
-    Given a phone that is unknown, a phone only typed in a congress form, and a phone pending confirmation
+    Given a phone that is unknown, a phone only typed in a congress form, and a phone awaiting confirmation on the IdP
     When a visitor requests a password reset with each
     Then each response is identical to the confirmed-phone case in status, body and timing within 50 ms
     And no SMS and no email is sent

@@ -151,36 +151,37 @@ Sources are the Zitadel repository at tag **v4.17.3** (the version the dev-stand
 
 **Chosen mechanism.** Both SMS flows use Zitadel's own notifier and the existing provider chain: confirmation = (a1)/(a2)/(a3); SMS reset = (b). No endpoint here is invented: each route and field is in the cited proto, and (a2)/(a3) are already called by the repo. **Fallback considered and not chosen:** `returnCode` for either flow plus a BFF-side send to the `sms-aero-adapter` URL. Cost: a second SMS client and credentials path in `apps/api`; the BFF would replicate the sink/real switch that today is Zitadel's active provider (so the dev stand could text a real number); the code would transit the BFF and need the EARS-30 scrub; and the adapter's contract (`contextInfo.recipientPhoneNumber`, `templateData.text`) would be forged by us. It is the answer only if a live probe shows the notifier path cannot be made to carry the code text.
 
-**Pending number (the one mismatch with the owner model).** The owner wants only a confirmed phone written to the account. Zitadel has no pending-phone state: a1 replaces the stored phone immediately (unverified) and resets verification. The BFF therefore carries the contract:
+**Unconfirmed number (the one mismatch with the owner model).** The owner wants only a confirmed phone written to the account. Zitadel has no pending-phone state: a1 replaces the stored phone immediately (unverified) and resets verification. The BFF therefore carries the contract, and deliberately keeps no state of its own for the unconfirmed number:
 
-- the typed number lives, until confirmed, in a **server-side pending record** (Redis, key = session `sub`, value = the E.164 number, TTL = the `VERIFY_PHONE_CODE` lifetime, never logged in clear) and in Zitadel as an _unverified_ human phone; `users.phone` and `users.phone_verified` are written only by the confirm step (EARS-48), in the same request as the `/phone/verify` success, not left to the webhook;
-- every phone-identifier lookup used for a decision goes **through the mirror's confirmed phone** (`users.phone` + `phone_verified`), not through Zitadel's `phoneQuery` (`zitadel.idp.ts:2575-2593`, which also matches an unverified phone): password sign-in, SMS sign-in and reset by phone resolve a `sub` from the mirror first (EARS-58). Without this, an unverified pending number would make two Zitadel users answer to one phone and make `SMS OTP` / reset resolve ambiguously;
-- the mirror upsert is Zitadel-wins for `phone` (`user-mirror.service.ts:69-126`); it is amended to write `phone`/`phone_verified` from the IdP **only when the IdP phone is verified** (EARS-58), otherwise it would copy the pending number onto `users.phone` through the webhook or the sweep;
-- an expired pending record is undone: if the account had a confirmed phone, set it back verified with `POST /v2/users/{id}/phone {phone: <previous>, isVerified: true}` (no code, no SMS; the number was proven earlier); if it had none, `DELETE /v2/users/{id}/phone` (`RemovePhone`, `user_service.proto` `RemovePhoneRequest`). The undo runs lazily on the account's next authenticated request and in the existing reconcile sweep (EARS-19); idempotent.
+- a requested number lives, until confirmed, only on the Zitadel user as an _unverified_ human phone; `users.phone` and `users.phone_verified` are written by the confirm step (EARS-48), in the same request as the `/phone/verify` success and from the phone the IdP now holds verified, not left to the webhook;
+- a request for a different number while the account holds a confirmed phone **displaces** it in the same request: the BFF clears `users.phone` and `users.phone_verified` and appends `auth.phone.changed`, because the IdP no longer holds a verified phone. A request for the number already confirmed is a no-op;
+- every phone-identifier lookup used for a decision goes **through the mirror's confirmed phone** (`users.phone` + `phone_verified`), not through Zitadel's `phoneQuery` (`zitadel.idp.ts:2575-2593`, which also matches an unverified phone): password sign-in, SMS sign-in and reset by phone resolve a `sub` from the mirror first (EARS-58). Without this, an unverified number would make two Zitadel users answer to one phone and make `SMS OTP` / reset resolve ambiguously;
+- the mirror upsert is Zitadel-wins for `phone` (`user-mirror.service.ts:69-126`); it is amended to write `phone`/`phone_verified` from the IdP **only when the IdP phone is verified** (EARS-58), otherwise it would copy the unconfirmed number onto `users.phone` through the webhook or the sweep;
+- there is no undo of an abandoned request. **Consequence:** an abandoned change of a confirmed phone leaves the account with no confirmed phone (email sign-in and reset unaffected; the user requests a code again). **Reason:** a store for the unconfirmed number plus compensating IdP writes would be a second source of truth for a rare edge case.
 
 ```mermaid
 sequenceDiagram
     participant U as /account (shared account-profile block)
     participant B as apps/api BFF
-    participant R as Redis (pending, budget)
     participant Z as Zitadel
     participant P as SMS provider chain (sms-aero-adapter → SMS Aero / sms-sink)
     U->>B: POST /v1/me/phone {phone}  (session)
-    B->>B: normalise E.164; mirror lookup: confirmed on another account? → refuse (EARS-51)
+    B->>B: normalise E.164; mirror lookup: confirmed on another account? → refuse (EARS-51); same confirmed number → no-op
     B->>B: EARS-13 per account/IP, EARS-14 per phone/IP/ASN + daily budget
-    B->>R: SET pending[sub] = phone, TTL = code lifetime
     B->>Z: POST /v2/users/{sub}/phone {phone, sendCode:{}}   (resend: /phone/resend)
     Z->>P: HTTP SMS webhook (VerifyPhone text, code, recipient = LastPhone)
+    opt the account held a different confirmed phone
+        B->>B: users.phone = null, phone_verified = false; audit auth.phone.changed
+    end
     B->>B: audit auth.phone.confirm.requested
     B-->>U: {status:"code_sent"}
     U->>B: POST /v1/me/phone/confirm {code}  (six digits)
-    B->>R: GET pending[sub]
     B->>Z: POST /v2/users/{sub}/phone/verify {verificationCode}
     alt accepted
-        B->>B: users.phone = pending, phone_verified = true; audit auth.phone.confirmed | auth.phone.changed
-        B->>R: DEL pending[sub]
+        B->>Z: read the user's now-verified phone
+        B->>B: users.phone = that phone, phone_verified = true; audit auth.phone.confirmed
         B-->>U: {status:"confirmed"} (+ fire-and-forget notice email, EARS-52)
-    else wrong / expired / no pending
+    else wrong / expired / not awaiting a code
         B-->>U: generic failure; EARS-13 counts; no write
     end
 ```
@@ -232,7 +233,7 @@ One Prometheus counter (`auth_sms_unconfirmed_phone_requests_total{flow="signin"
 ### Security notes
 
 - _Takeover via the typed number._ Closed by construction: the number is never an authenticator until a code sent to it has been entered by a session already signed in to the account; the unauthenticated 044 form only stores answers (rejected alternative, requirements).
-- _Phone squatting._ A user cannot confirm a number another account holds confirmed (EARS-51); an unconfirmed pending number authenticates nobody (EARS-58) and is undone on expiry.
+- _Phone squatting._ A user cannot confirm a number another account holds confirmed (EARS-51); an unconfirmed number authenticates nobody (EARS-58) and is replaced by the next request or confirmation.
 - _SMS pumping._ Same toll-fraud controls as SMS sign-in; confirmation is also behind a session, reset behind CAPTCHA and the budget.
 - _Account recovery via a stolen phone._ A SIM-swap holder can now reset the password of an account whose phone is confirmed. This is the accepted cost of the owner's decision; the compensating controls are the notice email on every add/change (EARS-52), the six-digit code's short life, EARS-13/15, the session revocation on reset (EARS-12), and email reset remaining available.
 - _Enumeration._ Anonymous surfaces are unchanged byte-for-byte whether a number is confirmed (EARS-53/55/56); the one disclosure (EARS-51) is on the authenticated surface and bounded by EARS-13/14.
@@ -240,8 +241,7 @@ One Prometheus counter (`auth_sms_unconfirmed_phone_requests_total{flow="signin"
 ### Open items for the implementation slice (live-verify on the dev stand with `sms-sink`)
 
 1. That the SMS-type `PasswordReset` webhook body carries the overridden text with the code and `contextInfo.recipientPhoneNumber` for a confirmed phone (source-verified, not yet run live).
-2. That `POST /v2/users/{id}/phone {phone, isVerified:true}` restores a previously confirmed number as the undo of EARS-58 and that `DELETE /v2/users/{id}/phone` removes an unverified one.
-3. The shipped `VERIFY_PHONE_CODE` default (expiry and shape), before the converge fixes the shape.
+2. The shipped `VERIFY_PHONE_CODE` default (expiry and shape), before the converge fixes the shape.
 
 ## 1. Architecture overview
 

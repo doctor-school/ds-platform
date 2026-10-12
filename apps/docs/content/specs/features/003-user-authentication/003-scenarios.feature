@@ -745,13 +745,15 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # one-slot unit contract and apps/portal/e2e/identifier-validation.e2e.spec.ts
     # blur/error copy checks; neither is this untouched live registration proof.
 
-  @EARS-37 @failure
+  @EARS-37 @failure @password-message-slot
   Scenario: The validation error replaces the hint in the one message slot
-    Given a visitor on the registration form
-    When the visitor submits a password that is too short
-    Then the validation error is shown in the field's single message slot
-    And the hint is no longer rendered in that slot
-    And the error names the same single rule as the hint
+    Given an Academy visitor captures the untouched registration password message and its single rule
+    When that visitor attempts the normal registration submit with a seven-character password
+    Then the same single associated password message becomes the alert naming the original rule without a coexisting hint, checklist or meter
+    And the message-slot refusal sends no registration POST and grants no private access
+    # NEW live hint-to-error identity coverage: password-message-slot.steps.ts.
+    # Retain PasswordField one-slot unit coverage, identifier-validation blur
+    # checks, and password-hint/password-refusal journeys; their triggers differ.
 
   @EARS-38 @happy
   Scenario Outline: Every password field carries a keyboard-operable reveal toggle

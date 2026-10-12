@@ -156,7 +156,8 @@ Sources are the Zitadel repository at tag **v4.17.3** (the version the dev-stand
 - a requested number lives, until confirmed, only on the Zitadel user as an _unverified_ human phone; `users.phone` and `users.phone_verified` are written by the confirm step (EARS-48), in the same request as the `/phone/verify` success and from the phone the IdP now holds verified, not left to the webhook;
 - a request for a different number while the account holds a confirmed phone **displaces** it in the same request: the BFF clears `users.phone` and `users.phone_verified` and appends `auth.phone.changed`, because the IdP no longer holds a verified phone. A request for the number already confirmed is a no-op;
 - every phone-identifier lookup used for a decision goes **through the mirror's confirmed phone** (`users.phone` + `phone_verified`), not through Zitadel's `phoneQuery` (`zitadel.idp.ts:2575-2593`, which also matches an unverified phone): password sign-in, SMS sign-in and reset by phone resolve a `sub` from the mirror first (EARS-58). Without this, an unverified number would make two Zitadel users answer to one phone and make `SMS OTP` / reset resolve ambiguously;
-- the mirror upsert is Zitadel-wins for `phone` (`user-mirror.service.ts:69-126`); it is amended to write `phone`/`phone_verified` from the IdP **only when the IdP phone is verified** (EARS-58), otherwise it would copy the unconfirmed number onto `users.phone` through the webhook or the sweep;
+- the mirror upsert is Zitadel-wins for `phone` (`user-mirror.service.ts:69-126`); it is amended (EARS-58, webhook and reconcile sweep alike) to write `phone`/`phone_verified` from the IdP when the IdP phone is verified and to **clear both** when the IdP user's phone is absent or not verified. The first half stops an unconfirmed number reaching `users.phone`; the second is the drift-healing direction: the EARS-47 displacement is two writes in two systems (Zitadel `POST /phone`, then the mirror clear), and a phone can also be changed outside the BFF (Zitadel console, admin API), so without the clear a failed second write would leave the mirror confirming P while Zitadel holds Q unverified;
+- the Zitadel notifier is not the same thing as the human phone: on `HumanPhoneChanged` its projection updates only `last_phone` and keeps the old `verified_phone` (`projection/user.go`). «The IdP no longer holds a verified phone» is true of the human phone; the notifier still keeps the old verified phone for the login OTP, and sends confirmation and reset SMS to `last_phone`. That is harmless behind the BFF gate (the OTP request itself resolves through the mirror's confirmed phone), and is exactly why the reset re-reads the IdP user before sending (next section);
 - there is no undo of an abandoned request. **Consequence:** an abandoned change of a confirmed phone leaves the account with no confirmed phone (email sign-in and reset unaffected; the user requests a code again). **Reason:** a store for the unconfirmed number plus compensating IdP writes would be a second source of truth for a rare edge case.
 
 ```mermaid
@@ -197,25 +198,32 @@ sequenceDiagram
     S->>B: POST /v1/auth/password/reset {identifier = phone}  (captcha, EARS-17)
     B->>B: EARS-13 limits; EARS-14 budget consumed BEFORE the lookup
     B->>B: mirror: users.phone = identifier AND phone_verified ?
-    alt confirmed account phone
+    opt mirror says confirmed
+        B->>Z: re-read the IdP user (immediately before sendLink)
+    end
+    alt mirror confirmed AND IdP phone verified AND equal to the identifier
         B->>Z: POST /v2/users/{sub}/password_reset {sendLink:{notificationType: NOTIFICATION_TYPE_SMS}}
         Z->>P: HTTP SMS webhook (passwordreset text with {{.Code}}, recipient = LastPhone)
         B->>B: audit auth.password.reset.requested (channel sms)
-    else unknown / unconfirmed / limit refusal
+    else unknown / unconfirmed / mirror-IdP mismatch / limit refusal
         B->>B: no call, no SMS, no email; counter(flow=reset) (EARS-56)
     end
     B-->>S: the one enumeration-safe response (EARS-16)
     S->>B: POST /v1/auth/password/reset/complete {identifier, code, newPassword}
     B->>Z: POST /v2/users/{sub}/password {newPassword, verificationCode}  (unchanged, EARS-12)
-    B->>B: no email_verified flip (the code proved the phone, not the mailbox)
+    B->>B: no email_verified flip (EARS-35 is a no-op here: a confirmed phone needs a session, a session needs a verified email, #2662)
 ```
+
+**Why the re-read.** Zitadel sends the reset SMS to the user's last phone, verified or not, so the mirror gate alone could send a reset code to an unconfirmed number Q whenever the mirror and the IdP disagree (a failed displacement write, a phone changed outside the BFF). The send therefore happens only when the freshly read IdP phone is verified and equal to the identifier; otherwise the identical enumeration-safe no-send branch. The re-read is one extra IdP call on the confirmed branch; its timing sits inside the EARS-16 budget, which the verification measures.
+
+**EARS-35 on this path.** The email-verified flip is a no-op by construction rather than a rule keyed on a channel: a confirmed phone can only be set from a session, a session requires a verified email (the sign-in refusal for an unverified email, #2662), so an account that can be reset by SMS already has a verified email. The completion request carries only an identifier and a code, so the BFF would otherwise have to remember the channel; with this reading it does not.
 
 The BFF never receives the SMS code, so §14's scrub and EARS-30 have nothing to hold for it. The email branch of §14 is untouched: an email identifier still uses `returnCode` and the mail chain, including for an account that also holds a confirmed phone.
 
 ### Provisioning (`infra/dev-stand/idp/provision.sh`, read back by `tools/deploy/idp-policy.mjs`)
 
 - **`VERIFY_PHONE_CODE`** joins the converged generators of step 8.septies (length 6, digits only, expiry read and written back unchanged), so the confirmation code has the product-wide shape (EARS-6/7/29 as amended by #2636). The shipped default shape is not assumed — the converge reads it back like the other four.
-- **Message texts.** `PUT /admin/v1/text/message/verifyphone/{ru,en}` and `/passwordreset/{ru,en}` with short branded SMS texts that carry only the code (`{{.Code}}`) and do not call it a button or a link, in the style of `verifysmsotp` (step 8.bis). The expiry is not interpolated by Zitadel for these types (the args carry only the code), so the SMS names no lifetime. The `passwordreset` override is safe only because Zitadel sends no reset email (mail uses `returnCode`); that dependency is recorded here so a future switch back to Zitadel-sent mail revisits it.
+- **Message texts.** `PUT /admin/v1/text/message/verifyphone/{ru,en}` and `/passwordreset/{ru,en}` with short branded SMS texts that carry only the code (`{{.Code}}`) and do not call it a button or a link, in the style of `verifysmsotp` (step 8.bis). The expiry is not interpolated by Zitadel for these types (the args carry only the code), so the SMS names no lifetime. The `passwordreset` override is safe for the BFF flows only because Zitadel sends no reset email (mail uses `returnCode`); that dependency is recorded here so a future switch back to Zitadel-sent mail revisits it. The Zitadel-hosted pages on the `id.` host (login, console reset) would also render this message type's `Text`: verify during the live check that no hosted reset flow is reachable by users, or accept the branded text there.
 - No new SMS provider, no new secret, no new adapter route.
 
 ### Limits and budget
@@ -242,6 +250,7 @@ One Prometheus counter (`auth_sms_unconfirmed_phone_requests_total{flow="signin"
 
 1. That the SMS-type `PasswordReset` webhook body carries the overridden text with the code and `contextInfo.recipientPhoneNumber` for a confirmed phone (source-verified, not yet run live).
 2. The shipped `VERIFY_PHONE_CODE` default (expiry and shape), before the converge fixes the shape.
+3. Count production `users.phone` rows (verified and unverified) before implementation: EARS-58 changes how a phone resolves for any existing phone holder, and today's phone-keyed reset emails the account email (`zitadel.idp.ts:1228-1230`). Record whether a backfill or cleanup is needed, or that the count is about zero.
 
 ## 1. Architecture overview
 

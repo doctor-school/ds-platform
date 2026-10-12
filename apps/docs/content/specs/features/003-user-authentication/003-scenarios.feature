@@ -16,7 +16,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
   # reset. SMS is read from the dev-stand sms-sink by recipient phone; both
   # storefronts run the same scenarios (EARS-59, host-config diff only).
 
-  @EARS-47 @EARS-48 @EARS-57 @happy @phone-confirmation
+  @EARS-47 @EARS-48 @EARS-57 @EARS-59 @happy @phone-confirmation
   Scenario: A signed-in user confirms a phone from the profile
     Given a signed-in user whose account has no phone
     When the user opens "/account", enters "+7 999 123-45-67" and asks for a code
@@ -75,12 +75,12 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   @EARS-53 @EARS-12 @EARS-35 @happy @sms-reset
   Scenario: Password reset by a confirmed phone delivers the code by SMS
-    Given an account with the confirmed phone "+79991234567" and an unverified email
+    Given an account with the confirmed phone "+79991234567" and a verified email
     When a visitor requests a password reset with the identifier "+79991234567"
     Then one SMS with a six-digit code is delivered to "+79991234567" and no email is sent
     When the visitor enters the code and a policy-conforming new password
     Then the password is set, all earlier sessions are revoked and the visitor is signed in
-    And the account's email stays unverified
+    And the account's email verification state is unchanged
 
   @EARS-53 @EARS-16 @EARS-56 @failure @sms-reset
   Scenario: Reset by an unconfirmed or unknown phone is indistinguishable and sends nothing
@@ -89,6 +89,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then each response is identical to the confirmed-phone case in status, body and timing within 50 ms
     And no SMS and no email is sent
     And the unconfirmed-phone counter for flow "reset" increases once per request and no audit ledger row is written
+
+  @EARS-53 @EARS-58 @failure @sms-reset
+  Scenario: A mirror that still confirms a number the IdP no longer holds verified sends nothing
+    Given the mirror holds "+79991234567" as a confirmed phone of an account
+    And the IdP user of that account holds a different, unverified phone
+    When a visitor requests a password reset with "+79991234567"
+    Then the response is identical to the unknown-phone case in status, body and timing within 50 ms
+    And no SMS and no email is sent
+    When the mirror is next reconciled from the IdP
+    Then the account holds no confirmed phone in the mirror
 
   @EARS-53 @happy @sms-reset
   Scenario: Reset by email is unchanged for an account that also has a confirmed phone

@@ -662,29 +662,14 @@ console.log(
 
 // Rate coverage (../rates/rates.yaml): every role string of the model — leaf effort.role, box
 // mechanisms, teams.yaml roles, «Роли и круги» and the closed sub-role list — has a rates.yaml
-// record, unless it is a tool or an aggregate label listed in NO_OWN_RATE; every rates.yaml record
+// record, unless it is a tool listed in NO_OWN_RATE (mechanism labels name one role each, so no
+// aggregate label needs an exemption); every rates.yaml record
 // names a model role and carries a dated source or `composite_of`.
 const NO_OWN_RATE = new Set([
   // tools and external costs, not roles
   "Платформа DS",
   "ИИ-инструменты",
   "Студия",
-  // aggregate mechanism labels of upper diagrams: each named role is rated by its own record
-  "Продуктовая команда — аккаунт, продюсер",
-  "Продуктовая команда — аккаунт, продюсер, методолог",
-  "Продуктовая команда — медредактор-сценарист, менеджер эксперта, продюсер, менеджер мероприятий",
-  "Продуктовая команда — методолог, продюсер, аккаунт, менеджеры экспертов",
-  "Продуктовая команда — продюсер, команда-владелец направления",
-  "Продуктовые команды",
-  "Продуктовые команды — найм, деление, СОП",
-  "Пул медрецензентов — по сигналу",
-  "Пул медрецензентов — политика независимости",
-  "Пул экспертов — амбассадор, эксперты",
-  "Пул экспертов — эксперты, спикеры",
-  "Сервисный круг — оператор платформы, режиссёр трансляции, поддержка",
-  "Сервисный круг — юрист, бухгалтер",
-  "Сервисный круг — юрист, оператор платформы, режиссёр трансляции, поддержка",
-  "Ядро — стандарты, рынок, калькулятор, коуч",
 ]);
 const rateRoles = new Set(asList(ratesDoc?.roles).map((record) => record.role));
 const modelRoles = new Set([
@@ -712,7 +697,7 @@ for (const team of teamsDoc?.teams ?? [])
 for (const [role, where] of needsRate)
   if (!rateRoles.has(role) && !NO_OWN_RATE.has(role))
     errors.push(
-      `${where}: role «${role}» has no rates.yaml record (add one, or list it in NO_OWN_RATE if it is a tool or an aggregate label)`,
+      `${where}: role «${role}» has no rates.yaml record (add one, or list it in NO_OWN_RATE if it is a tool)`,
     );
 for (const label of NO_OWN_RATE)
   if (!needsRate.has(label))

@@ -556,3 +556,22 @@ absence helper accepts the existing minimal `MailRequest` contract, allowing the
 native adapter without changing absence-check behavior. Run this selected case
 on the lead-selected stand; this test-only change requires no owner Stage-B
 request or new slot.
+
+### Unknown-address login-code request (003 EARS-34/16)
+
+`A login-email-code request for a nonexistent identifier is a silent no-op`
+compares a fresh visitor's unique unknown email with one newly owned account
+before and after its first real code sign-in. `steps/login-email-nonexistent.steps.ts`
+binds each actual request's exact identifier/channel body to the intended email,
+requires the same neutral `200`/`otp_sent` acknowledgement and six-digit code-entry
+controls in all three states, and first proves fresh addressed login-mail delivery
+for both existing-account observations. The canonical `assertNoAddressedMail`
+helper then observes a full 15-second window with no mail for the unknown address;
+that visitor obtains no private cookie, profile or session principal. Native
+no-challenge, no-audit/no-users/no-consent-write and deterministic triad timing
+assertions remain in the API/IdP tests named in the scenario. Trace-off fixtures,
+secret-safe inputs, fresh-mail helpers and strict CAPTCHA preparation are reused;
+cleanup revokes only the owned comparison session and closes both contexts.
+The golden verified EARS-6 journey remains distinct. Run this selected scenario
+on the lead-selected stand; this test-only change requires no owner Stage-B
+request or new slot.

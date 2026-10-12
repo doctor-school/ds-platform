@@ -350,13 +350,21 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # login mail, absent verification mail and acceptance, not native IdP reads
     # or statistical timing. Keep the golden verified EARS-6 journey distinct.
 
-  @EARS-34 @EARS-16 @failure
+  @EARS-34 @EARS-16 @failure @login-email-nonexistent
   Scenario: A login-email-code request for a nonexistent identifier is a silent no-op
-    Given an identifier that resolves to no account
-    When a visitor requests an email login code for that identifier
-    Then no otp_email challenge is armed and no email is sent
-    And no audit_ledger, users, or consent row is written
-    And the response is indistinguishable in status, body, and timing from the existing-account cases
+    Given a unique unknown Academy address and owned unverified and verified login-code observations
+    When the fresh Academy visitor requests an email login code for the unique unknown address
+    Then the unknown request matches both owned account states in neutral status, body, and six-digit code-entry controls
+    And no mail reaches the unique unknown address throughout the full 15-second delivery window
+    And the unknown code request grants no private browser session or profile access
+    # Retained native no-challenge/no-mail proof: apps/api/src/auth/idp/zitadel.idp.spec.ts
+    # EARS-34 unknown branch. apps/api/src/auth/auth.service.spec.ts requestLoginOtp
+    # EARS-34 owns no OtpSent audit and no users/consent DB write (explodingDb).
+    # apps/api/test/auth/login-otp.e2e-spec.ts EARS-34/16 owns byte-identical
+    # status/body and interleaved triad median timing within 50 ms (30 ms floor).
+    # The browser binds each real request to its intended email/channel and proves
+    # public UI, absent addressed mail and private access, without native reads or
+    # statistical timing probes. Keep the golden verified EARS-6 journey intact.
 
   @EARS-7 @EARS-14 @happy
   Scenario: Login with an SMS OTP code within the toll-fraud budget

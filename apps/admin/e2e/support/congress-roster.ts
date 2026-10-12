@@ -71,7 +71,10 @@ export async function registerDoctorThroughPlatform(
  * roster screen (the production desk route; origin `desk`, paper consent).
  * The phone is typed as given, so two entries can carry one phone in two
  * spellings (EARS-29/30 — the «возможный дубль» pair). Returns the desk
- * route's answer status (`accepted` / `existing`).
+ * route's answer status (`accepted` / `existing`). The specialty (a name of
+ * the Минздрав book; default the book's first entry), workplace and city (a
+ * directory place) default to one shape; the 044 EARS-23 filter spec varies
+ * them.
  */
 export async function addDeskParticipant(
   page: Page,
@@ -81,6 +84,9 @@ export async function addDeskParticipant(
     patronymic: string;
     email: string;
     phone: string;
+    specialty?: string;
+    workplace?: string;
+    city?: string;
   },
 ): Promise<"accepted" | "existing"> {
   await page.getByTestId("desk-entry-open").click();
@@ -91,18 +97,26 @@ export async function addDeskParticipant(
   await panel.getByTestId("desk-email").fill(person.email);
   await panel.getByTestId("desk-contactPhone").fill(person.phone);
   await page.getByTestId("desk-specialtyId").click();
-  await page.getByRole("listbox").getByRole("option").first().click();
+  if (person.specialty) {
+    await pickComboboxOption(
+      page,
+      "Поиск специальности",
+      person.specialty,
+      new RegExp(`^${person.specialty}$`),
+    );
+  } else {
+    await page.getByRole("listbox").getByRole("option").first().click();
+  }
   await expect(page.getByRole("listbox")).toHaveCount(0);
-  await panel.getByTestId("desk-workplace").fill("ГКБ №1");
+  await panel.getByTestId("desk-workplace").fill(person.workplace ?? "ГКБ №1");
   await page.getByTestId("desk-city").click();
-  await page
-    .getByRole("combobox", { name: "Поиск населённого пункта", exact: true })
-    .fill("Химки");
-  await page
-    .getByRole("listbox")
-    .getByRole("option", { name: /^Химки/ })
-    .first()
-    .click();
+  const city = person.city ?? "Химки";
+  await pickComboboxOption(
+    page,
+    "Поиск населённого пункта",
+    city,
+    new RegExp(`^${city}`),
+  );
   await expect(page.getByRole("listbox")).toHaveCount(0);
   const consent = panel.getByTestId("desk-paperConsent");
   await consent.locator("xpath=ancestor::label[1]").click();
@@ -120,4 +134,25 @@ export async function addDeskParticipant(
   const { status } = (await res.json()) as { status: "accepted" | "existing" };
   if (status === "accepted") await expect(panel).toHaveCount(0);
   return status;
+}
+
+/**
+ * Search an OPEN `Combobox` panel through its query box and pick the first
+ * option whose accessible name matches — the one way every 044 book selector
+ * (specialty, settlement, region) is driven.
+ */
+export async function pickComboboxOption(
+  page: Page,
+  searchLabel: string,
+  query: string,
+  option: RegExp,
+): Promise<void> {
+  await page
+    .getByRole("combobox", { name: searchLabel, exact: true })
+    .fill(query);
+  await page
+    .getByRole("listbox")
+    .getByRole("option", { name: option })
+    .first()
+    .click();
 }

@@ -167,6 +167,7 @@ export function RosterFiltersPanel({
           </span>
           <Input
             type="date"
+            className="min-w-0 flex-1"
             data-testid="roster-filter-registered-from"
             aria-label={t("congressRoster.filters.registeredFromLabel")}
             value={filters.registeredFrom}
@@ -178,6 +179,7 @@ export function RosterFiltersPanel({
           </span>
           <Input
             type="date"
+            className="min-w-0 flex-1"
             data-testid="roster-filter-registered-to"
             aria-label={t("congressRoster.filters.registeredToLabel")}
             value={filters.registeredTo}

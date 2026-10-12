@@ -200,14 +200,25 @@ export default function CongressRosterPage() {
   }, [attendanceFilter.day, searchParams, pathname, router]);
 
   // 044 EARS-23 — the column filters are read from the address on every render;
-  // any change returns to page 1.
+  // any change returns to page 1. The address is the ONE source of truth, and a
+  // change is applied to it as it stands at that moment (`window.location`, kept
+  // current synchronously by `history.replaceState`, which Next.js syncs into
+  // `useSearchParams`) — never to this render's copy, which a second change
+  // landing before the re-render (two dates typed back to back) would overwrite.
   const filters = rosterFiltersFromAddress(searchParams);
   const filtersQuery = rosterFiltersQuery(filters);
-  const changeFilters = (next: RosterColumnFilters) => {
-    setQuery({ ...query, page: 1 });
-    router.replace(rosterFiltersHref(pathname, searchParams.toString(), next), {
-      scroll: false,
-    });
+  const changeFilters = (
+    update: (current: RosterColumnFilters) => Partial<RosterColumnFilters>,
+  ) => {
+    const search = window.location.search;
+    const current = rosterFiltersFromAddress(new URLSearchParams(search));
+    const next = { ...current, ...update(current) };
+    setQuery((state) => ({ ...state, page: 1 }));
+    window.history.replaceState(
+      null,
+      "",
+      rosterFiltersHref(pathname, search, next),
+    );
   };
   const [specialtyLabel, setSpecialtyLabel] = useState<string | null>(null);
 
@@ -410,7 +421,7 @@ export default function CongressRosterPage() {
           key === "specialtyId" ? "specialty" : key,
           filterValueLabel(key, value),
         ),
-        onRemove: () => changeFilters({ ...filters, [key]: "" }),
+        onRemove: () => changeFilters(() => ({ [key]: "" })),
       })),
     ...(registeredRange
       ? [
@@ -425,7 +436,7 @@ export default function CongressRosterPage() {
                   : t("congressRoster.filters.rangeTo", registeredRange),
             ),
             onRemove: () =>
-              changeFilters({ ...filters, registeredFrom: "", registeredTo: "" }),
+              changeFilters(() => ({ registeredFrom: "", registeredTo: "" })),
           },
         ]
       : []),
@@ -515,7 +526,7 @@ export default function CongressRosterPage() {
             extraApplied={[...attendanceApplied, ...filtersApplied]}
             onResetExtra={() => {
               setAttendanceFilter(ATTENDANCE_FILTER_INITIAL);
-              changeFilters(ROSTER_FILTERS_EMPTY);
+              changeFilters(() => ROSTER_FILTERS_EMPTY);
             }}
             moreFilters={{
               label: t("congressRoster.filters.more.toggle"),

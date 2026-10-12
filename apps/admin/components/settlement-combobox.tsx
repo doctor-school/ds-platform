@@ -24,6 +24,10 @@ export const SETTLEMENT_ANY_VALUE = "__any__";
  *
  * `anyLabel` adds a leading «any» option while a value is chosen (a filter's
  * way back to «not applied»); it is reported as `null`.
+ *
+ * `freeText` (default on) is the desk form's «Нет в списке — указать «…»»
+ * option. A filter turns it off: the roster's «Город» filter is an equality
+ * on the directory value, so a typed place would only ever narrow to nothing.
  */
 export function SettlementCombobox({
   id,
@@ -32,6 +36,7 @@ export function SettlementCombobox({
   onValueChange,
   placeholder,
   anyLabel,
+  freeText = true,
   invalid,
   "aria-describedby": describedBy,
   ...slot
@@ -42,6 +47,7 @@ export function SettlementCombobox({
   onValueChange: (value: string | null) => void;
   placeholder: string;
   anyLabel?: string;
+  freeText?: boolean;
   invalid?: boolean;
   "aria-describedby"?: string;
 }) {
@@ -51,16 +57,17 @@ export function SettlementCombobox({
   const options = useMemo(() => {
     const found = settlementOptions(query);
     const typed = query.trim();
-    const free: ComboboxOption[] = typed
-      ? [
-          {
-            value: freeSettlementValue(typed),
-            label: t("congressRoster.deskEntry.fields.cityFree", {
-              name: typed,
-            }),
-          },
-        ]
-      : [];
+    const free: ComboboxOption[] =
+      freeText && typed
+        ? [
+            {
+              value: freeSettlementValue(typed),
+              label: t("congressRoster.deskEntry.fields.cityFree", {
+                name: typed,
+              }),
+            },
+          ]
+        : [];
     // The committed choice stays an option, so the closed control keeps
     // reading it while a new search narrows the list away from it.
     const current = value ? chosenOption(value) : null;
@@ -71,7 +78,7 @@ export function SettlementCombobox({
     const any: ComboboxOption[] =
       anyLabel && value ? [{ value: SETTLEMENT_ANY_VALUE, label: anyLabel }] : [];
     return [...any, ...kept, ...found, ...free];
-  }, [anyLabel, query, t, value]);
+  }, [anyLabel, freeText, query, t, value]);
 
   return (
     <Combobox

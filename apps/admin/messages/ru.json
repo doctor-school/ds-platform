@@ -1721,7 +1721,8 @@
       "chip": "{field}: {value}",
       "rangeBoth": "{from} – {to}",
       "rangeFrom": "с {from}",
-      "rangeTo": "по {to}"
+      "rangeTo": "по {to}",
+      "rangeInverted": "Дата «по» раньше даты «с»"
     },
     "errors": {
       "listFailed": "Не удалось загрузить реестр участников.",

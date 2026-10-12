@@ -289,6 +289,74 @@ test.describe("044 EARS-23 — the roster's column filters (F1)", () => {
     await expect(page).not.toHaveURL(/registeredFrom=/);
   });
 
+  test("044 EARS-23: an inverted date range keeps both typed days, names the error under «по» and applies only what is valid", async () => {
+    test.skip(!eventId, "depends on the event seeded above");
+    const page = desk;
+    await page.goto(`/events/${eventId}/roster`);
+    await toggle(page).click();
+    const from = page.getByLabel("Дата регистрации с");
+    const to = page.getByLabel("Дата регистрации по");
+    const today = mskDay();
+    const yesterday = mskDay(-1);
+
+    await from.fill(today);
+    await to.fill(yesterday);
+    // Both days stay where the registrar typed them; the error sits under «по».
+    await expect(from).toHaveValue(today);
+    await expect(to).toHaveValue(yesterday);
+    await expect(to).toHaveAttribute("aria-invalid", "true");
+    const rangeError = page.getByTestId("roster-filters").getByRole("alert");
+    await expect(rangeError).toHaveText(/Дата «по» раньше даты «с»/);
+    // Only the valid «с» is applied: the address and the chip say exactly that.
+    await expect(page).toHaveURL(new RegExp(`registeredFrom=${today}`));
+    await expect(page).not.toHaveURL(/registeredTo=/);
+    await expect(
+      chip(page, `Дата регистрации: с ${ruDay(today)}`),
+    ).toBeVisible();
+
+    // Correcting «по» applies the whole range and clears the error.
+    await to.fill(today);
+    await expect(page).toHaveURL(new RegExp(`registeredTo=${today}`));
+    await expect(
+      chip(page, `Дата регистрации: ${ruDay(today)} – ${ruDay(today)}`),
+    ).toBeVisible();
+    await expect(to).not.toHaveAttribute("aria-invalid", "true");
+    await expect(rangeError).toHaveCount(0);
+  });
+
+  test("044 EARS-23: «с» and «по» entered in quick succession are both applied", async () => {
+    test.skip(!eventId, "depends on the event seeded above");
+    const page = desk;
+    await page.goto(`/events/${eventId}/roster`);
+    await toggle(page).click();
+    const today = mskDay();
+    const yesterday = mskDay(-1);
+    // Back to back: the second day lands before the address has answered the
+    // first change (the drive typed them ~100 ms apart).
+    await page.getByLabel("Дата регистрации с").fill(yesterday);
+    await page.getByLabel("Дата регистрации по").fill(today);
+    await expect(
+      chip(page, `Дата регистрации: ${ruDay(yesterday)} – ${ruDay(today)}`),
+    ).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`registeredFrom=${yesterday}`));
+    await expect(page).toHaveURL(new RegExp(`registeredTo=${today}`));
+  });
+
+  test("044 EARS-23: the Город filter offers only directory places — never the desk form's free-text «Нет в списке»", async () => {
+    test.skip(!eventId, "depends on the event seeded above");
+    const page = desk;
+    await page.goto(`/events/${eventId}/roster`);
+    await toggle(page).click();
+    await page.getByTestId("roster-filter-city").click();
+    await page
+      .getByRole("combobox", { name: "Поиск населённого пункта", exact: true })
+      .fill("Химкиград");
+    await expect(
+      page.getByRole("option", { name: /Нет в списке/ }),
+    ).toHaveCount(0);
+    await page.keyboard.press("Escape");
+  });
+
   test("044 EARS-23: телефон rejects a digit-less term and accepts digits under the 8 → 7 rule; a hand-edited address value the route would refuse is dropped, never a 400 page", async () => {
     test.skip(!eventId, "depends on the event seeded above");
     const page = desk;
@@ -363,6 +431,13 @@ test.describe("044 EARS-23 — the roster's column filters (F1)", () => {
         .map((el) => el.outerHTML.slice(0, 80)),
     );
     expect(overflowing).toEqual([]);
+    // The date inputs hold their whole content — the calendar icon included.
+    for (const label of ["Дата регистрации с", "Дата регистрации по"]) {
+      const clipped = await panel
+        .getByLabel(label)
+        .evaluate((el) => el.scrollWidth > el.clientWidth);
+      expect(clipped, `${label} clips its content at 390`).toBe(false);
+    }
     await shot(page, "roster-filters-narrow");
     await page.setViewportSize({ width: 1440, height: 900 });
   });

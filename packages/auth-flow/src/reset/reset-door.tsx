@@ -28,7 +28,11 @@ import { completeReturnTarget } from "../client/return-completion";
 import { resolveAuthFlowCopy } from "../copy";
 import { withBoldDestination } from "../copy/destination";
 import { authErrorMessage } from "../errors";
-import { identifierFieldSchema, isPhoneIdentifier } from "../fields";
+import {
+  identifierFieldSchema,
+  isPhoneIdentifier,
+  looksLikePhoneInput,
+} from "../fields";
 import { makeResolver } from "../form-resolver";
 import type { AuthFlowHostConfig, AuthFlowResetCopy } from "../host-config";
 import { ResetGlyph } from "./reset-glyph";
@@ -331,9 +335,10 @@ function cardCopyOf(copy: AuthFlowResetCopy): PasswordRecoveryCardCopy {
     request: {
       identifierLabel: copy.identifierLabel,
       identifierPlaceholder: copy.identifierPlaceholder,
-      // 003 EARS-55 (b): static, read from the visitor's own input only.
+      // 003 EARS-55 (b): static, read from the visitor's own input only —
+      // shown from the first «+» or digit (canvas auth.dc.html:392).
       identifierHint: (identifier) =>
-        isPhoneIdentifier(identifier) ? copy.identifierPhoneHint : null,
+        looksLikePhoneInput(identifier) ? copy.identifierPhoneHint : null,
       submit: copy.submit,
     },
     complete: {

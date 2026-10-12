@@ -714,25 +714,29 @@ describe.each(HOSTS)("003 EARS-54/55 on the %s host", (_, config) => {
     );
   }
 
-  it("003 EARS-55: the hint shows while the identifier holds a phone, never for an email", async () => {
-    const user = userEvent.setup();
-    mount();
-    await screen.findByTestId("reset-request-submit");
-    const box = screen.getByLabelText(copy.identifierLabel);
+  // Canvas auth.dc.html:392 — the hint shows from the first «+» or digit.
+  it.each(["+", "+7", "8", PHONE, "+74951112233"])(
+    "003 EARS-55: the hint shows once the identifier starts like a phone (%j)",
+    async (typed) => {
+      const user = userEvent.setup();
+      mount();
+      await screen.findByTestId("reset-request-submit");
+      await user.type(screen.getByLabelText(copy.identifierLabel), typed);
+      expect(screen.getByText(copy.identifierPhoneHint)).toBeInTheDocument();
+    },
+  );
 
-    expect(screen.queryByText(copy.identifierPhoneHint)).toBeNull();
-    await user.type(box, IDENTIFIER);
-    expect(screen.queryByText(copy.identifierPhoneHint)).toBeNull();
-
-    await user.clear(box);
-    await user.type(box, PHONE);
-    expect(screen.getByText(copy.identifierPhoneHint)).toBeInTheDocument();
-
-    // Identical for any phone — the sentence reads nothing but the input.
-    await user.clear(box);
-    await user.type(box, "+74951112233");
-    expect(screen.getByText(copy.identifierPhoneHint)).toBeInTheDocument();
-  });
+  it.each(["a", IDENTIFIER, " "])(
+    "003 EARS-55: no hint while the identifier does not start like a phone (%j)",
+    async (typed) => {
+      const user = userEvent.setup();
+      mount();
+      await screen.findByTestId("reset-request-submit");
+      expect(screen.queryByText(copy.identifierPhoneHint)).toBeNull();
+      await user.type(screen.getByLabelText(copy.identifierLabel), typed);
+      expect(screen.queryByText(copy.identifierPhoneHint)).toBeNull();
+    },
+  );
 
   it("003 EARS-54: a phone's code step names SMS conditionally, the number bold as typed", async () => {
     const user = userEvent.setup();

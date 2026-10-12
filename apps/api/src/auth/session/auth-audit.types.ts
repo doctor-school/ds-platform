@@ -175,6 +175,12 @@ export type AuthAuditEvent =
   // sweep, not an HTTP route, so it is outside the high-stakes-route emission
   // registry (`test/authz/audit-emission-coverage.e2e-spec.ts`).
   | { type: "ReconcileDivergence"; sub: string; fields: string[] }
+  // 003 EARS-57 (#2449): the phone confirmation lifecycle, a new
+  // `auth.phone.*` class extending the ADR-0001 §7.3 list. Keyed by the
+  // opaque subject only — the number, confirmed or not, is never in the row.
+  | { type: "PhoneConfirmRequested"; sub: string }
+  | { type: "PhoneConfirmed"; sub: string }
+  | { type: "PhoneChanged"; sub: string }
   // ---- 011 admin tier (EARS-1/2/3/9/10) -------------------------------------
   // Every 011 row maps to a CANONICAL ADR-0001 design §7.3 wire id (011
   // requirements → Event Model → Events, normative) and carries
@@ -282,6 +288,9 @@ export const AUTH_AUDIT_EVENT_TYPES = [
   "AccountLocked",
   "IdentifierVerified",
   "ReconcileDivergence",
+  "PhoneConfirmRequested",
+  "PhoneConfirmed",
+  "PhoneChanged",
   "AdminPrimaryAuthSucceeded",
   "AdminPrimaryAuthFailed",
   "MfaEnrolled",

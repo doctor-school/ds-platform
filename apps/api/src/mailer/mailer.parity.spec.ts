@@ -9,6 +9,7 @@ import {
 } from "./code-emails.js";
 import {
   adminLockoutMessage,
+  phoneConfirmedNoticeMessage,
   congressConfirmationMessage,
   congressSubmissionDecisionMessage,
   congressSubmissionReceiptMessage,
@@ -36,6 +37,7 @@ describe("transactional HTML/plain-text content parity", () => {
       reRegistrationCodeEmail("482916", { lifetime: "5m", passwordKept: true }),
     ],
     ["admin-lockout", adminLockoutMessage()],
+    ["phone-confirmed", phoneConfirmedNoticeMessage(new Date())],
     [
       "congress-confirmation",
       congressConfirmationMessage({

@@ -127,6 +127,29 @@ describe("toLedgerRow identifier masking (#141 explicit threading)", () => {
   });
 });
 
+describe("003 EARS-57 phone confirmation events (#2449)", () => {
+  const mask = () => vi.fn((_id: string) => "NEVER");
+  it.each([
+    ["PhoneConfirmRequested", "auth.phone.confirm.requested"],
+    ["PhoneConfirmed", "auth.phone.confirmed"],
+    ["PhoneChanged", "auth.phone.changed"],
+  ] as const)(
+    "EARS-57: %s maps to %s, keyed by the subject, with no number in the row",
+    (type, wireId) => {
+      const m = mask();
+      const row = toLedgerRow({ type, sub: "sub-1" }, m);
+      expect(row).toEqual({
+        eventType: wireId,
+        subjectId: "sub-1",
+        sid: null,
+        reason: null,
+        metadata: {},
+      });
+      expect(m).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe("DrizzleAuthAuditLog fail-closed pepper (#141)", () => {
   // The writer resolves the pepper once at construction and must fail closed in
   // a non-test runtime when none is configured — masking with no secret would

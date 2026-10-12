@@ -1,6 +1,7 @@
 import { emailSender } from "./email-layout.js";
 import {
   adminLockoutMessage,
+  phoneConfirmedNoticeMessage,
   congressConfirmationMessage,
   type CongressSubmissionDecisionContent,
   congressSubmissionDecisionMessage,
@@ -185,6 +186,14 @@ export class SmtpMailer implements Mailer {
   async sendAdminLockoutNotice(email: string): Promise<void> {
     assertSendableEmail(email);
     await this.dispatch(email, adminLockoutMessage(), "admin-lockout notice");
+  }
+  async sendPhoneConfirmedNotice(email: string, at: Date): Promise<void> {
+    assertSendableEmail(email);
+    await this.dispatch(
+      email,
+      phoneConfirmedNoticeMessage(at),
+      "phone-confirmed notice",
+    );
   }
   async sendVerificationCodeEmail(email: string, code: string): Promise<void> {
     assertSendableEmail(email);

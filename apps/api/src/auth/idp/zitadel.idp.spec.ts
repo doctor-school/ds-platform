@@ -8,6 +8,7 @@ import {
   IdpInvalidArgumentError,
   IdpPasswordPolicyError,
   IdpUnavailableError,
+  type ConfirmedPhoneDirectory,
 } from "./idp.types.js";
 
 /**
@@ -101,6 +102,20 @@ const BASE_CONFIG = {
 };
 
 const ROLES_CLAIM = "urn:zitadel:iam:org:project:roles";
+
+/** 003 EARS-58: a confirmed-phone directory answering only for the given phones. */
+function confirmedPhones(
+  map: Record<string, string>,
+): ConfirmedPhoneDirectory & { lookups: string[] } {
+  const lookups: string[] = [];
+  return {
+    lookups,
+    subjectFor: (phone: string) => {
+      lookups.push(phone);
+      return Promise.resolve(map[phone] ?? null);
+    },
+  };
+}
 
 describe("ZitadelIdpClient OIDC session→token exchange", () => {
   it("EARS-8: completes authorize → link-session → token and parses roles[]/mfa from the id_token", async () => {
@@ -503,6 +518,7 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
       sendPasswordResetCodeEmail: () => Promise.resolve(),
       sendLoginCodeEmail: () => Promise.resolve(),
       sendAdminLockoutNotice: () => Promise.resolve(),
+      sendPhoneConfirmedNotice: () => Promise.resolve(),
       sendCongressRegistrationConfirmation: () => Promise.resolve(),
       sendCongressSubmissionReceipt: () => Promise.resolve(),
       sendCongressSubmissionDecision: () => Promise.resolve(),
@@ -846,15 +862,18 @@ describe("003 EARS-11/29 password-reset send wire shape (#910)", () => {
     return { fetchImpl, calls };
   }
 
-  it("003 EARS-16 (#2642): the reset's account lookup matches the email case-insensitively; the phone lookup is unchanged", async () => {
+  it("003 EARS-16 (#2642), EARS-58: the reset's account lookup matches the email case-insensitively and a phone only as its confirmed account", async () => {
     const { fetchImpl, calls } = resetFetch();
     const client = new ZitadelIdpClient({
       ...SEND_CONFIG,
       mailer: new FakeMailer(),
       fetchImpl,
+      confirmedPhones: confirmedPhones({ "+79001234567": "u-confirmed" }),
     });
     await client.requestPasswordReset("USER@DS.test");
     await client.requestPasswordReset("+79001234567");
+    // An unconfirmed phone resolves no account: no IdP search at all.
+    await client.requestPasswordReset("+79007654321");
     const searches = calls
       .filter((c) => c.url.endsWith("/v2/users"))
       .map((c) => JSON.parse(c.body ?? "{}"));
@@ -869,7 +888,7 @@ describe("003 EARS-11/29 password-reset send wire shape (#910)", () => {
           },
         ],
       },
-      { queries: [{ phoneQuery: { number: "+79001234567" } }] },
+      { queries: [{ inUserIdsQuery: { userIds: ["u-confirmed"] } }] },
     ]);
   });
 
@@ -1496,6 +1515,7 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
       ...BASE_CONFIG,
       mailer: new FakeMailer(),
       fetchImpl,
+      confirmedPhones: confirmedPhones({ "+15551230000": "otp-user-1" }),
     });
     await client.requestSmsOtp("+15551230000");
     const create = calls.find(
@@ -1513,6 +1533,7 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
       ...BASE_CONFIG,
       mailer: new FakeMailer(),
       fetchImpl,
+      confirmedPhones: confirmedPhones({ "+15551230000": "otp-user-1" }),
     });
     await client.requestSmsOtp("+15551230000");
     const factor = calls.find(
@@ -1639,6 +1660,7 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
       ...BASE_CONFIG,
       mailer: new FakeMailer(),
       fetchImpl,
+      confirmedPhones: confirmedPhones({ "+15551230000": "otp-user-2" }),
     });
     await client.requestSmsOtp("+15551230000");
     const session = await client.loginWithSmsOtp("+15551230000", "654321");
@@ -3183,5 +3205,109 @@ describe("ZitadelIdpClient.submitEmailCode wire shape (003 EARS-41/23)", () => {
       },
     ]);
     expect(calls.some((c) => c.url.endsWith("/email/resend"))).toBe(true);
+  });
+});
+
+describe("003 confirmed phone (#2449) — adapter wire shape", () => {
+  function recordingFetch(status = 200): {
+    fetchImpl: FetchLike;
+    calls: ScriptedCall[];
+  } {
+    const calls: ScriptedCall[] = [];
+    const fetchImpl: FetchLike = (url, init) => {
+      calls.push({
+        url,
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+      });
+      return Promise.resolve({
+        ok: status < 400,
+        status,
+        json: () => Promise.resolve({ sessionId: "s-1", sessionToken: "t-1" }),
+      });
+    };
+    return { fetchImpl, calls };
+  }
+
+  it("EARS-47: setPhone stores the number unverified and has Zitadel send the code — POST /v2/users/{id}/phone {phone, sendCode}", async () => {
+    const { fetchImpl, calls } = recordingFetch();
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    await client.setPhone("u-1", "+79991234567", "sms");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("http://idp.test:9080/v2/users/u-1/phone");
+    expect(calls[0]!.method).toBe("POST");
+    expect(JSON.parse(calls[0]!.body ?? "{}")).toEqual({
+      phone: "+79991234567",
+      sendCode: {},
+    });
+  });
+
+  it("EARS-47: a suppressed (synthetic) recipient is set with returnCode — nothing is sent", async () => {
+    const { fetchImpl, calls } = recordingFetch();
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    await client.setPhone("u-1", "+79991234567", "none");
+    expect(JSON.parse(calls[0]!.body ?? "{}")).toEqual({
+      phone: "+79991234567",
+      returnCode: {},
+    });
+  });
+
+  it("EARS-47: an IdP refusal of setPhone is an IdpUnavailableError", async () => {
+    const { fetchImpl } = recordingFetch(500);
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    await expect(
+      client.setPhone("u-1", "+79991234567", "sms"),
+    ).rejects.toBeInstanceOf(IdpUnavailableError);
+  });
+
+  it("EARS-58: password sign-in by a confirmed phone checks the confirmed account by id, never by the phone as a login name", async () => {
+    const { fetchImpl, calls } = recordingFetch();
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      fetchImpl,
+      confirmedPhones: confirmedPhones({ "+79991234567": "u-confirmed" }),
+    });
+    await client.passwordLogin("+79991234567", "pw");
+    const create = calls.find((c) => c.url.endsWith("/v2/sessions"));
+    expect(JSON.parse(create!.body ?? "{}")).toEqual({
+      checks: { user: { userId: "u-confirmed" }, password: { password: "pw" } },
+    });
+  });
+
+  it("EARS-58: password sign-in, SMS sign-in and reset completion by an unconfirmed phone resolve no account and reach no IdP endpoint", async () => {
+    const { fetchImpl, calls } = recordingFetch();
+    const directory = confirmedPhones({});
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      fetchImpl,
+      confirmedPhones: directory,
+    });
+    await expect(client.passwordLogin("+79997654321", "pw")).resolves.toEqual({
+      outcome: "rejected",
+    });
+    await client.requestSmsOtp("+79997654321");
+    await expect(
+      client.loginWithSmsOtp("+79997654321", "123456"),
+    ).resolves.toBeNull();
+    await expect(
+      client.completePasswordReset("+79997654321", "123456", "Aa1!aaaaaaaa"),
+    ).resolves.toBeNull();
+    expect(calls).toEqual([]);
+    expect(directory.lookups).toEqual([
+      "+79997654321",
+      "+79997654321",
+      "+79997654321",
+    ]);
+  });
+
+  it("EARS-58: with no confirmed-phone directory wired, a phone identifier resolves no account (fail closed)", async () => {
+    const { fetchImpl, calls } = recordingFetch();
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    await expect(client.passwordLogin("+79991234567", "pw")).resolves.toEqual({
+      outcome: "rejected",
+    });
+    await client.requestSmsOtp("+79991234567");
+    expect(calls).toEqual([]);
   });
 });

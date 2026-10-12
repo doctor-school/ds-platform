@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { MyDisplayName, MyProfile } from "@ds/schemas";
+import { normalisePhoneEntry } from "@ds/schemas";
 import { MeRepository } from "./me.repository.js";
 
 /**
@@ -63,12 +64,19 @@ export class MeService {
   async myProfile(sub: string): Promise<MyProfile> {
     const row = await this.repo.findProfileBySub(sub);
     if (!row || row.email === null) throw new UnknownSubjectError(sub);
+    // 003 EARS-50: the latest congress answer's phone as typed, unless it is
+    // already the account's confirmed phone.
+    const typed = await this.repo.findLatestRegistrationPhoneBySub(sub);
+    const confirmed = row.phoneVerified ? row.phone : null;
+    const suggestedPhone =
+      typed !== null && normalisePhoneEntry(typed) !== confirmed ? typed : null;
     return {
       email: row.email,
       emailVerified: row.emailVerified,
       phone: row.phone,
       phoneVerified: row.phone === null ? null : row.phoneVerified,
       displayName: row.displayName,
+      suggestedPhone,
     };
   }
 

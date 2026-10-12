@@ -16,6 +16,24 @@ export interface MirrorUpsert {
 }
 
 /**
+ * 003 EARS-58: the phone columns a mirror upsert writes. A phone is an account
+ * phone only while the IdP holds it verified, so an unverified or absent IdP
+ * phone clears both columns rather than leaving a stale confirmed number.
+ * `undefined` when the source carries no phone field at all (a partial
+ * webhook payload): the columns are then left as they are.
+ */
+export function mirrorPhoneFields(
+  input: MirrorUpsert,
+): { phone: string | null; phoneVerified: boolean } | undefined {
+  if (input.phone === undefined && input.phoneVerified === undefined) {
+    return undefined;
+  }
+  return input.phone && input.phoneVerified === true
+    ? { phone: input.phone, phoneVerified: true }
+    : { phone: null, phoneVerified: false };
+}
+
+/**
  * Which Zitadel-owned identity fields (`email`, `phone`, `email_verified`,
  * `phone_verified` — design §5, ADR-0001) the incoming upsert changes relative
  * to the current mirror row: the reconcile-divergence signal (#753). `role`,
@@ -26,22 +44,20 @@ export interface MirrorUpsert {
  */
 function divergedIdentityFields(existing: User, input: MirrorUpsert): string[] {
   const changed: string[] = [];
+  const phone = mirrorPhoneFields(input);
   if (
     input.email !== undefined &&
     (existing.email ?? "").toLowerCase() !== input.email.toLowerCase()
   )
     changed.push("email");
-  if (input.phone !== undefined && (existing.phone ?? null) !== input.phone)
+  if (phone !== undefined && (existing.phone ?? null) !== phone.phone)
     changed.push("phone");
   if (
     input.emailVerified !== undefined &&
     existing.emailVerified !== input.emailVerified
   )
     changed.push("email_verified");
-  if (
-    input.phoneVerified !== undefined &&
-    existing.phoneVerified !== input.phoneVerified
-  )
+  if (phone !== undefined && existing.phoneVerified !== phone.phoneVerified)
     changed.push("phone_verified");
   return changed;
 }
@@ -67,7 +83,8 @@ export class UserMirrorService {
    *
    * **Conflict-resolution policy (#753, design §11).** Zitadel is the identity
    * SoT, so the identity fields (`email`, `phone`, `email_verified`,
-   * `phone_verified`) are overwritten **Zitadel-wins**; `role` (the local authz
+   * `phone_verified`) are overwritten **Zitadel-wins** (the phone only as
+   * {@link mirrorPhoneFields} projects it, 003 EARS-58); `role` (the local authz
    * projection), `id`, and `created_at` are **mirror-owned** and preserved.
    * `deactivated_at` is cleared to null on every upsert — the caller only
    * upserts a user Zitadel currently reports **active**, so an upsert is the
@@ -106,11 +123,13 @@ export class UserMirrorService {
       deactivatedAt: null,
     };
     if (input.email !== undefined) set["email"] = input.email;
-    if (input.phone !== undefined) set["phone"] = input.phone;
     if (input.emailVerified !== undefined)
       set["emailVerified"] = input.emailVerified;
-    if (input.phoneVerified !== undefined)
-      set["phoneVerified"] = input.phoneVerified;
+    const phone = mirrorPhoneFields(input);
+    if (phone !== undefined) {
+      set["phone"] = phone.phone;
+      set["phoneVerified"] = phone.phoneVerified;
+    }
 
     // 010 EARS-3/5 — attribute the mirror upsert to the request context when
     // present (an authenticated self-heal); a background reconcile/webhook pass
@@ -121,9 +140,9 @@ export class UserMirrorService {
         .values({
           zitadelSub: input.zitadelSub,
           email: input.email,
-          phone: input.phone,
+          phone: phone?.phone ?? null,
           emailVerified: input.emailVerified ?? false,
-          phoneVerified: input.phoneVerified ?? false,
+          phoneVerified: phone?.phoneVerified ?? false,
           role: "doctor_guest",
         })
         .onConflictDoUpdate({ target: users.zitadelSub, set }),

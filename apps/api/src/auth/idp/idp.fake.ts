@@ -304,12 +304,39 @@ export class FakeIdpClient implements IdpClient {
     return true;
   }
 
-  requestPhoneVerification(_sub: string): Promise<void> {
-    // #202: registration is email-only, so the BFF never calls this at register.
-    // The method stays on the port for the future post-registration
-    // secondary-phone verification path; the fake is a no-op.
+  requestPhoneVerification(sub: string): Promise<void> {
+    // 003 EARS-47 resend: the real adapter throws when the user holds no phone.
+    const record = this.bySub.get(sub);
+    if (!record?.phone) {
+      return Promise.reject(new Error("fake: no phone awaiting a code"));
+    }
+    this.phoneCodeRequests.push({ sub, phone: record.phone, delivery: "sms" });
     return Promise.resolve();
   }
+
+  setPhone(sub: string, phone: string, delivery: "sms" | "none"): Promise<void> {
+    // 003 EARS-47: the number replaces the stored phone at once, unverified
+    // (Zitadel has no pending-phone state).
+    const record = this.bySub.get(sub);
+    if (!record) {
+      return Promise.reject(new IdpUnavailableError("fake: unknown sub"));
+    }
+    if (record.phone && this.byPhone.get(record.phone) === record) {
+      this.byPhone.delete(record.phone);
+    }
+    record.phone = phone;
+    record.phoneVerified = false;
+    if (!this.byPhone.has(phone)) this.byPhone.set(phone, record);
+    this.phoneCodeRequests.push({ sub, phone, delivery });
+    return Promise.resolve();
+  }
+
+  /** Test inspection: every phone-code request (set or resend), in order. */
+  readonly phoneCodeRequests: {
+    sub: string;
+    phone: string;
+    delivery: "sms" | "none";
+  }[] = [];
 
   verifyEmail(sub: string, code: string): Promise<boolean> {
     const record = this.bySub.get(sub);
@@ -332,7 +359,9 @@ export class FakeIdpClient implements IdpClient {
 
   verifyPhone(sub: string, code: string): Promise<boolean> {
     const record = this.bySub.get(sub);
-    if (!record || code !== FAKE_VALID_CODE) return Promise.resolve(false);
+    if (!record?.phone || record.phoneVerified || code !== FAKE_VALID_CODE) {
+      return Promise.resolve(false);
+    }
     record.phoneVerified = true;
     return Promise.resolve(true);
   }
@@ -343,7 +372,7 @@ export class FakeIdpClient implements IdpClient {
   ): Promise<PasswordLoginResult> {
     const record =
       this.byEmail.get(identifier.toLowerCase()) ??
-      this.byPhone.get(identifier);
+      this.confirmedPhoneRecord(identifier);
 
     // An existing account whose failure tally has reached the threshold is
     // soft-locked (EARS-15) — even a correct password is refused while locked,
@@ -785,9 +814,21 @@ export class FakeIdpClient implements IdpClient {
     return this.totpSecrets.get(sub)?.secret;
   }
 
+  /**
+   * 003 EARS-58 parity: a phone identifier names an account only while that
+   * account holds the phone verified — the rule the real adapter applies
+   * through the mirror's confirmed phone.
+   */
+  private confirmedPhoneRecord(phone: string): FakeRecord | undefined {
+    for (const record of this.bySub.values()) {
+      if (record.phone === phone && record.phoneVerified) return record;
+    }
+    return undefined;
+  }
+
   private findByIdentifier(identifier: string): FakeRecord | undefined {
     return (
-      this.byEmail.get(identifier.toLowerCase()) ?? this.byPhone.get(identifier)
+      this.byEmail.get(identifier.toLowerCase()) ?? this.confirmedPhoneRecord(identifier)
     );
   }
 
@@ -961,13 +1002,15 @@ export class FakeIdpClient implements IdpClient {
     const record = this.bySub.get(sub);
     if (!record) throw new Error(`attachPhone: unknown sub ${sub}`);
     record.phone = phone;
+    // A phone that signs in is a confirmed phone (003 EARS-58).
+    record.phoneVerified = true;
     this.byPhone.set(phone, record);
   }
 
   async requestPasswordReset(identifier: string): Promise<void> {
     const record =
       this.byEmail.get(identifier.toLowerCase()) ??
-      this.byPhone.get(identifier);
+      this.confirmedPhoneRecord(identifier);
     // A code is issued only for an existing identifier, but the resolution is
     // identical either way — an unknown identifier is a silent no-op, never a
     // throw, so the caller's response stays enumeration-safe (EARS-11/16).
@@ -996,7 +1039,7 @@ export class FakeIdpClient implements IdpClient {
   ): Promise<IdpSession | null> {
     const record =
       this.byEmail.get(identifier.toLowerCase()) ??
-      this.byPhone.get(identifier);
+      this.confirmedPhoneRecord(identifier);
     // Unknown identifier and invalid/expired code are indistinguishable (EARS-16).
     if (!record) return Promise.resolve(null);
     const expected = this.resetCodes.get(record.sub);

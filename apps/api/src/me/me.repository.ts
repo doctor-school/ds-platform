@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { DrizzleHandle } from "@ds/db";
-import { users } from "@ds/db";
-import { eq } from "drizzle-orm";
+import { registrations, users } from "@ds/db";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 
@@ -67,6 +67,23 @@ export class MeRepository {
       .where(eq(users.zitadelSub, sub))
       .limit(1);
     return row;
+  }
+
+  /**
+   * 003 EARS-50: the contact phone exactly as typed in the caller's LATEST
+   * congress registration answers (by registration time, any event), or
+   * `null` when none carries one. Keyed only on the caller's `sub`. Read-only.
+   */
+  async findLatestRegistrationPhoneBySub(sub: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ answers: registrations.answers })
+      .from(registrations)
+      .innerJoin(users, eq(users.id, registrations.userId))
+      .where(and(eq(users.zitadelSub, sub), isNotNull(registrations.answers)))
+      .orderBy(desc(registrations.registeredAt))
+      .limit(1);
+    const typed = row?.answers?.contactPhone;
+    return typeof typed === "string" && typed.trim() !== "" ? typed : null;
   }
 
   /**

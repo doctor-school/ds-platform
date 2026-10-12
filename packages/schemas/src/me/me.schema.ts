@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { E164 } from "../auth/auth.schema.js";
+import { normaliseContactPhone } from "../congress/contact-phone.js";
 
 // 006 — self-scoped display-name contracts (API SSOT, ADR-0002 §3, 006-design
 // §11). Framework-agnostic; `apps/api` wraps these with `createZodDto` at the
@@ -67,5 +69,67 @@ export const MyProfileSchema = z.object({
   phone: z.string().nullable(),
   phoneVerified: z.boolean().nullable(),
   displayName: z.string().nullable(),
+  /**
+   * 003 EARS-50 (#2449): the contact phone exactly as typed in the account's
+   * latest congress registration, to prefill the `/account` phone field —
+   * `null` without one, or when it is already the confirmed phone. A read
+   * only: never written, confirmed or texted by the read.
+   */
+  suggestedPhone: z.string().nullable(),
 });
 export type MyProfile = z.infer<typeof MyProfileSchema>;
+
+/**
+ * 003 EARS-47: a phone typed in `/account` as the E.164 the account would hold
+ * — the sign-in identifier mask's rule (a domestic `8…` becomes `+7…`,
+ * separators drop); `""` when it holds no digit.
+ */
+export function normalisePhoneEntry(typed: string): string {
+  return normaliseContactPhone(typed);
+}
+
+/**
+ * `POST /v1/me/phone` body (003 EARS-47): the number to confirm, as typed. The
+ * server normalises it with {@link normalisePhoneEntry}; a value that does not
+ * normalise to E.164 is refused here. Self-scoped: the account is the session.
+ */
+export const RequestPhoneCodeRequestSchema = z.object({
+  phone: z
+    .string()
+    .max(32)
+    .refine((v) => E164.test(normalisePhoneEntry(v)), {
+      message: "invalid phone",
+    }),
+});
+export type RequestPhoneCodeRequest = z.infer<
+  typeof RequestPhoneCodeRequestSchema
+>;
+
+/**
+ * `POST /v1/me/phone` answer (003 EARS-47): `code_sent` — a code went to the
+ * number (or was re-sent); `already_confirmed` — the number is the account's
+ * confirmed phone, nothing was sent (a no-op success).
+ */
+export const RequestPhoneCodeResponseSchema = z.object({
+  status: z.enum(["code_sent", "already_confirmed"]),
+});
+export type RequestPhoneCodeResponse = z.infer<
+  typeof RequestPhoneCodeResponseSchema
+>;
+
+/**
+ * `POST /v1/me/phone/confirm` body (003 EARS-48): the code from the SMS. Any
+ * string is accepted here; the server applies the six-digit rule (trimmed) as
+ * the one generic failure, like every other code step (EARS-41/16).
+ */
+export const ConfirmPhoneRequestSchema = z.object({
+  code: z.string().max(64),
+});
+export type ConfirmPhoneRequest = z.infer<typeof ConfirmPhoneRequestSchema>;
+
+/** `POST /v1/me/phone/confirm` success (003 EARS-48): the now-confirmed phone. */
+export const ConfirmPhoneResponseSchema = z.object({
+  status: z.literal("confirmed"),
+  phone: z.string(),
+});
+export type ConfirmPhoneResponse = z.infer<typeof ConfirmPhoneResponseSchema>;

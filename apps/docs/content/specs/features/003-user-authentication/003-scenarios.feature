@@ -318,20 +318,26 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the doctor's own profile is readable through the BFF
     And neither the login response nor JavaScript-readable browser stores expose access or refresh tokens
 
-  @EARS-34 @EARS-41 @EARS-16 @happy
+  @EARS-34 @EARS-41 @EARS-16 @happy @login-email-unverified
   Scenario: An unverified account signs in with the code from the sign-in mail
     # Production amendment 2026-10-02 (#2553): Zitadel cannot arm otp_email for an
     # unverified address, so the verification code travels in the same sign-in mail
     # and entering it verifies the address and signs the user in.
-    Given an existing doctor_guest account whose email is not yet verified
-    When the user requests an email login code for that identifier
-    Then no otp_email login challenge is armed for the unverified account
-    And the same code-only sign-in mail as for a verified account is sent, carrying the verification code
-    And the response is indistinguishable in status, body, and timing from the verified and nonexistent cases
-    And an otp.sent audit_ledger row is appended only because a code was issued
-    When the user enters that code on the six-cell code step
-    Then email_verified becomes true with one auth.account.verified audit_ledger row
-    And a BFF session is established with a __Host- cookie
+    Given a uniquely owned Academy doctor_guest account awaits email verification with its registration code unconsumed
+    When that unverified account requests an email sign-in code through the ordinary Academy code method
+    Then that unverified code request acknowledges only otp_sent and grants no private session or profile access
+    And fresh addressed code-only sign-in mail delivers six digits for that unverified account without a link
+    When that unverified account enters the fresh sign-in mail's six digits once on Academy's code step
+    Then Academy opens that same email-verified doctor_guest account with a secure host-only session and no readable auth tokens
+    # Retained native challenge proof: apps/api/src/auth/idp/zitadel.idp.spec.ts
+    # EARS-34 unverified branch arms no otp_email session-create challenge.
+    # apps/api/src/auth/auth.service.spec.ts requestLoginOtp EARS-34 owns
+    # issued-code-only OtpSent audit and no users/consent DB write (explodingDb).
+    # Its EARS-41 "an unverified account signs in with the code from the sign-in
+    # mail" owns exactly one IdentifierVerified/auth.account.verified event.
+    # apps/api/test/auth/login-otp.e2e-spec.ts EARS-34/16 owns byte-identical
+    # status/body and interleaved triad median timing within 50 ms (30 ms floor).
+    # Keep the distinct verified golden EARS-6 browser journey above intact.
 
   @EARS-34 @EARS-16 @happy
   Scenario: A login-email-code request for a verified account arms the challenge unchanged

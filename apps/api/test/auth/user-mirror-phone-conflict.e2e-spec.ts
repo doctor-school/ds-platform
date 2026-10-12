@@ -135,7 +135,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       }
     });
 
-    it("EARS-51: a phone-only account whose verified phone is confirmed elsewhere keeps its only identifier, unconfirmed — never thrown", async () => {
+    it("EARS-58: a mirror row without an email whose verified phone is confirmed elsewhere keeps its own number with phone_verified = false — never thrown", async () => {
       const sub = `${loser}-phone-only`;
       const own = `+999${String(Date.now() + 3).slice(-8)}`;
       try {
@@ -157,7 +157,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       }
     });
 
-    it("EARS-58: a phone-only account whose IdP phone is no longer verified keeps its number, unconfirmed", async () => {
+    it("EARS-58: a mirror row without an email whose IdP phone is no longer verified keeps its number with phone_verified = false", async () => {
       const sub = `${loser}-phone-only-unverified`;
       const own = `+999${String(Date.now() + 4).slice(-8)}`;
       try {
@@ -179,12 +179,17 @@ describe.skipIf(!process.env.DATABASE_URL)(
       }
     });
 
-    it("EARS-58: a new account with neither an email nor a confirmed phone is not mirrored — no row, never thrown", async () => {
+    it("EARS-58: a new account with neither an email nor a verified phone is not mirrored — no row, never thrown", async () => {
       const sub = `${loser}-no-identifier`;
       try {
         await expect(
           mirror.upsert({ zitadelSub: sub, phone, phoneVerified: false }),
         ).resolves.toEqual({ changedIdentityFields: [] });
+        expect(await row(sub)).toBeUndefined();
+        // Nor is one whose payload carries no phone fields at all.
+        await expect(mirror.upsert({ zitadelSub: sub })).resolves.toEqual({
+          changedIdentityFields: [],
+        });
         expect(await row(sub)).toBeUndefined();
       } finally {
         await deleteUserFixture(handle.pool, "zitadel_sub", sub);

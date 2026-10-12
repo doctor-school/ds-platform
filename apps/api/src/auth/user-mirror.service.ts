@@ -106,11 +106,10 @@ function retainedPhoneColumns(
   email: string | null,
   phone: PhoneColumns | undefined,
 ): PhoneColumns | undefined | "skip" {
-  if (phone === undefined || phone.phone !== null || email !== null) {
-    return phone;
-  }
-  if (existing?.phone) return { phone: existing.phone, phoneVerified: false };
-  return "skip";
+  if (email !== null || phone?.phone) return phone;
+  if (!existing) return "skip";
+  if (phone === undefined) return undefined;
+  return { phone: existing.phone, phoneVerified: false };
 }
 
 /**

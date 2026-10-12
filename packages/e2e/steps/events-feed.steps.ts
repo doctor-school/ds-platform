@@ -110,7 +110,12 @@ async function expectFacetsApplied(
 async function expectNoProjectOrCommerce(page: Page): Promise<void> {
   const text = await page.locator("main").innerText();
   expect(text, "«проект» in a doctor-facing string").not.toMatch(/проект/iu);
-  expect(text, "a price in roubles").not.toMatch(/₽|\bруб(\.|л)/iu);
+  // Same pattern as apps/doctor/e2e/events-purity.spec.ts ("rouble price"); a
+  // copy because packages/e2e must not import from an app. No `\b`: it is an
+  // ASCII word boundary and never matches before a Cyrillic letter.
+  expect(text, "a price in roubles").not.toMatch(
+    /₽|руб(\.|л|ей|ля)|(^|[^a-z])rub([^a-z]|$)/i,
+  );
   expect(text, "a cart, subscription or payment affordance").not.toMatch(
     /корзин|подписк|оплат|купить/iu,
   );
@@ -284,8 +289,11 @@ Then(
       await expect(card.getByRole("button")).toHaveCount(0);
       const href = await links.getAttribute("href");
       expect(href).toMatch(new RegExp(`^${host.eventsPath}/[^/?#]+$`));
+      await expect(links, "the card link is labelled").toHaveAccessibleName(
+        /\S/u,
+      );
       const title = (await links.innerText()).trim();
-      expect(title.length, "the card link is labelled").toBeGreaterThan(0);
+      expect(title.length, "the card link has a title").toBeGreaterThan(0);
       feedOf(world).card ??= { title, href: href! };
     }
   },
@@ -417,6 +425,14 @@ When(
     feedOf(world).groupsBeforeDay = await page
       .locator('section[id^="day-"]')
       .count();
+    feedOf(world).scrollBeforeDay = await page.evaluate(() => window.scrollY);
+    feedOf(world).groupTopsBeforeDay = await page
+      .locator('section[id^="day-"]')
+      .evaluateAll((nodes) =>
+        Object.fromEntries(
+          nodes.map((node) => [node.id, node.getBoundingClientRect().top]),
+        ),
+      );
     const picked = days.last();
     const label = (await picked.getAttribute("aria-label")) ?? "";
     await picked.click();
@@ -431,7 +447,20 @@ Then(
   async ({ page, world }) => {
     const day = feedOf(world).pickedDay;
     expect(day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    await expect(page.locator(`section[id="day-${day}"]`)).toBeInViewport();
+    const group = page.locator(`section[id="day-${day}"]`);
+    await expect(group).toBeInViewport();
+    // The feed body actually moved: the picked group rose, or (a group that
+    // was not rendered before) the page scrolled down to it.
+    const topBefore = feedOf(world).groupTopsBeforeDay?.[`day-${day}`];
+    if (topBefore === undefined) {
+      await expect
+        .poll(() => page.evaluate(() => window.scrollY))
+        .toBeGreaterThan(feedOf(world).scrollBeforeDay ?? 0);
+    } else {
+      await expect
+        .poll(async () => (await group.boundingBox())?.y ?? topBefore)
+        .toBeLessThan(topBefore);
+    }
     expect(
       await page.evaluate(
         () =>

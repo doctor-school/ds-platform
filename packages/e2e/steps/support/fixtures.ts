@@ -47,6 +47,9 @@ export interface EventsFeedWorld {
   pickedLabel?: string;
   /** The day groups the feed held before the day was picked. */
   groupsBeforeDay?: number;
+  /** Day-group top offsets and the scroll position before the day pick. */
+  groupTopsBeforeDay?: Record<string, number>;
+  scrollBeforeDay?: number;
   /** The past screen before «Показать ещё»: its card count and the step it promised. */
   pastBefore?: { cards: number; step: number; from: string | null };
   /** The horizon before «Показать ещё» on «Будущие». */

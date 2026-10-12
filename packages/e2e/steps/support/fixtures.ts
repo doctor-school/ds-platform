@@ -56,6 +56,20 @@ export interface EventsFeedWorld {
   horizonBefore?: { to: string | null; days: number };
   /** The same URL opened in a second, cookie-free browser context. */
   freshPage?: Page;
+  /** The name search no event matches (EARS-9). */
+  noMatchQuery?: string;
+  /** The Academy events screen opened beside the doctor one (EARS-18). */
+  academyPage?: Page;
+  /** What the admin editor made through the real admin (EARS-17). */
+  editor?: EditorWrites;
+}
+
+/** The 012 / 007 records an `@editor-write` scenario made, for its own cleanup. */
+export interface EditorWrites {
+  /** The editor's page, signed in on the admin origin in its own context. */
+  page: Page;
+  kind?: { title: string; detailUrl: string; retired: boolean };
+  event?: { id: string; title: string };
 }
 
 // playwright-bdd's bddgen detects the custom test instance by the

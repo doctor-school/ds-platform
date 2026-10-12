@@ -1,11 +1,22 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 import { golden } from "@ds/db/seed/golden";
 
-import type { HostConfig } from "../hosts.js";
 import {
+  ADMIN_ORIGIN,
+  createPublishedEvent,
+  createPublishedEventKind,
+  retireEventFromStorefronts,
+  retireEventKind,
+  signInAsAdmin,
+} from "../admin/index.js";
+import { baseUrlFor, hostById, type HostConfig } from "../hosts.js";
+import {
+  After,
+  Before,
   Given,
   Then,
   When,
+  type EditorWrites,
   type EventsFeedWorld,
   type StepWorld,
 } from "./support/fixtures.js";
@@ -891,5 +902,613 @@ Then(
     await expect(
       page.getByText(EXPERTS_UPCOMING.title, { exact: true }),
     ).toHaveCount(0);
+  },
+);
+
+// ── EARS-9: the empty and the failed reading ────────────────────────────────
+
+/** The empty reading of the feed block (019 EARS-9, canvas `emptyOf`). */
+function emptyFeed(page: Page): Locator {
+  return page.getByTestId("events-feed-empty");
+}
+
+/** `Поиск: «…»` — the name-search facet as the empty state names it. */
+function searchFacetLabel(query: string): string {
+  return `Поиск: «${query}»`;
+}
+
+When(
+  "the {word} opens «События» with the format «Онлайн» and a name search that no event matches",
+  async ({ page, host, world }, _actor: string) => {
+    // A token no event title carries; the screen says which facet emptied it.
+    const query = `нет-такого-события-${Date.now().toString(36)}`;
+    feedOf(world).noMatchQuery = query;
+    const search = new URLSearchParams({ format: "online", q: query });
+    await page.goto(`${host.eventsPath}?${search}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await settle(page);
+    await expect(emptyFeed(page)).toBeVisible();
+  },
+);
+
+function noMatchQueryOf(world: StepWorld): string {
+  const query = feedOf(world).noMatchQuery;
+  if (!query) throw new Error("No name search was applied before");
+  return query;
+}
+
+Then(
+  "the feed states that no event matches the name-search facet and names that facet",
+  async ({ page, world }) => {
+    const label = searchFacetLabel(noMatchQueryOf(world));
+    await expect(
+      emptyFeed(page).getByText(`Нет событий по фильтру «${label}»`, {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(page.getByTestId("events-feed")).toHaveCount(0);
+  },
+);
+
+Then(
+  "it states how many events the feed holds without that facet and offers to remove exactly that facet beside «Сбросить фильтры»",
+  async ({ page, world }) => {
+    const label = searchFacetLabel(noMatchQueryOf(world));
+    await expect(emptyFeed(page)).toContainText(
+      /Без этого фильтра найдётся \d+ событи[йея]\./u,
+    );
+    const widen = emptyFeed(page).getByRole("link", {
+      name: `Убрать фильтр «${label}»`,
+      exact: true,
+    });
+    await expect(widen).toBeVisible();
+    // Exactly that facet: the widening keeps the format and drops the search.
+    const target = new URL(
+      (await widen.getAttribute("href"))!,
+      "http://feed.invalid",
+    ).searchParams;
+    expect(target.getAll("format")).toEqual(["online"]);
+    expect(target.has("q")).toBe(false);
+    await expect(
+      emptyFeed(page).getByRole("link", {
+        name: "Сбросить фильтры",
+        exact: true,
+      }),
+    ).toBeVisible();
+  },
+);
+
+Then(
+  "the applied facets and the reset stay visible in the facet panel",
+  async ({ page }) => {
+    await expect(filterPanel(page)).toContainText(/Применено: \d+/u);
+    await expect(
+      filterPanel(page).getByRole("link", { name: "Сбросить", exact: true }),
+    ).toBeVisible();
+    await expect(
+      filterPanel(page)
+        .getByRole("group", { name: "Формат" })
+        .getByRole("button", { name: "Онлайн", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+  },
+);
+
+When(
+  "the {word} removes that facet from the empty state",
+  async ({ page, world }, _actor: string) => {
+    const label = searchFacetLabel(noMatchQueryOf(world));
+    await emptyFeed(page)
+      .getByRole("link", { name: `Убрать фильтр «${label}»`, exact: true })
+      .click();
+    await page.waitForURL((url) => !url.searchParams.has("q"));
+  },
+);
+
+Then(
+  "the feed lists events again with the format «Онлайн» still applied and no name search in the URL",
+  async ({ page }) => {
+    await expect(feedCards(page).first()).toBeVisible();
+    expect(params(page).getAll("format")).toEqual(["online"]);
+    expect(params(page).has("q")).toBe(false);
+    await expect(emptyFeed(page)).toHaveCount(0);
+  },
+);
+
+When(
+  "the {word} opens «События» from a horizon start that the events read refuses",
+  async ({ page, host }, _actor: string) => {
+    // A real refusal of the feed read alone: the live, month and facet reads
+    // carry no `from`, so only the feed block can fail.
+    await page.goto(`${host.eventsPath}?from=0001-01-01`, {
+      waitUntil: "domcontentloaded",
+    });
+    await settle(page);
+  },
+);
+
+Then(
+  "the day feed states the cause in Russian and offers «Повторить»",
+  async ({ page }) => {
+    const error = page.getByTestId("events-feed-error");
+    await expect(error).toBeVisible();
+    await expect(error).toContainText("Не удалось загрузить ленту событий");
+    await expect(
+      error.getByRole("button", { name: "Повторить", exact: true }),
+    ).toBeEnabled();
+    await expect(page.getByTestId("events-feed")).toHaveCount(0);
+  },
+);
+
+Then(
+  "the «Идёт сейчас» block, the compact month and the facet panel stay usable",
+  async ({ page }) => {
+    await expect(liveStrip(page)).toBeVisible();
+    await expect(
+      liveStrip(page).getByTestId("live-event-strip-action"),
+    ).toBeEnabled();
+
+    const month = page.getByTestId("events-compact-month");
+    const shown = await month.getAttribute("data-month");
+    await page.getByTestId("events-compact-month-next").click();
+    await expect(month).not.toHaveAttribute("data-month", shown ?? "");
+
+    const online = filterPanel(page)
+      .getByRole("group", { name: "Формат" })
+      .getByRole("button", { name: "Онлайн", exact: true });
+    await expect(online).toBeEnabled();
+    await expect(online).toHaveAttribute("aria-pressed", "false");
+  },
+);
+
+Then("no page-level error screen replaces the feed", async ({ page }) => {
+  await expect(page.getByTestId("storefront-shell")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "События", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByTestId("events-tense-tabs")).toBeVisible();
+  await expect(
+    page.getByText(/Application error|Internal Server Error/iu),
+  ).toHaveCount(0);
+});
+
+When(
+  "the {word} activates «Повторить»",
+  async ({ page, world }, _actor: string) => {
+    feedOf(world).history.push(pathAndQuery(page));
+    let documentLoads = 0;
+    page.on("load", () => (documentLoads += 1));
+    const reread = page.waitForResponse(
+      (res) => res.request().headers()["rsc"] === "1",
+    );
+    await page
+      .getByTestId("events-feed-error")
+      .getByRole("button", { name: "Повторить", exact: true })
+      .click();
+    await reread;
+    await settle(page);
+    expect(documentLoads, "the retry re-reads in place, no reload").toBe(0);
+  },
+);
+
+Then(
+  "the page re-reads in place, keeping the URL and the shell, and the day feed states the cause again",
+  async ({ page, world }) => {
+    expect(pathAndQuery(page)).toBe(feedOf(world).history.at(-1));
+    await expect(page.getByTestId("storefront-shell")).toBeVisible();
+    await expect(page.getByTestId("events-feed-error")).toContainText(
+      "Не удалось загрузить ленту событий",
+    );
+    await expect(liveStrip(page)).toBeVisible();
+  },
+);
+
+// ── EARS-15: one shared build in every rendering ────────────────────────────
+
+/** The first opaque background the first card paints. */
+async function cardBackground(page: Page): Promise<string> {
+  return feedCards(page)
+    .first()
+    .evaluate((card) => {
+      for (const node of [card, ...Array.from(card.querySelectorAll("*"))]) {
+        const color = getComputedStyle(node).backgroundColor;
+        if (color && color !== "rgba(0, 0, 0, 0)" && color !== "transparent") {
+          return color;
+        }
+      }
+      return "";
+    });
+}
+
+function isDarkClass(value: string | null): boolean {
+  return (value ?? "").split(/\s+/u).includes("dark");
+}
+
+/** Switch the theme the way a visitor does — the shell's own toggle. */
+async function setTheme(page: Page, dark: boolean): Promise<void> {
+  const html = page.locator("html");
+  if (isDarkClass(await html.getAttribute("class")) === dark) return;
+  await page.getByTestId("theme-toggle").filter({ visible: true }).first().click();
+  await expect
+    .poll(async () => isDarkClass(await html.getAttribute("class")))
+    .toBe(dark);
+}
+
+async function expectSharedComposition(page: Page): Promise<void> {
+  const order = await page
+    .locator("[data-feed-block]")
+    .evaluateAll((nodes) =>
+      nodes.map((node) => (node as HTMLElement).dataset.feedBlock),
+    );
+  expect(order).toEqual(["head", "live", "feed"]);
+  await expect(feedCards(page).first()).toBeVisible();
+  // Every event link of the feed sits inside the design-system card unit.
+  const outside = await page
+    .getByTestId("events-feed")
+    .locator(`a[href^="/events/"]`)
+    .evaluateAll(
+      (links) =>
+        links.filter((link) => link.closest("[data-webinar-card]") === null)
+          .length,
+    );
+  expect(outside, "an event link outside the design-system card").toBe(0);
+}
+
+When(
+  "the {word} opens «События» at 1440 and at 390 wide, in the light and in the dark theme",
+  async ({ page, host }, _actor: string) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openFeed(page, host.eventsPath);
+  },
+);
+
+Then(
+  "every rendering composes the shared events module, its cards being the design-system event card",
+  async ({ page }) => {
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const dark of [false, true]) {
+        await setTheme(page, dark);
+        await expectSharedComposition(page);
+      }
+    }
+    await setTheme(page, false);
+    await page.setViewportSize({ width: 1440, height: 900 });
+  },
+);
+
+Then(
+  "the facet panel is the shared panel: a side column at 1440 and a counted «Фильтры» sheet at 390",
+  async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(
+      filterPanel(page).getByRole("group", { name: "Формат" }),
+    ).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expect(page.getByTestId("events-column")).toBeHidden();
+    const open = page.getByTestId("events-filter-open");
+    await expect(open).toHaveText(/^Фильтры( \(\d+\))?$/u);
+    await open.click();
+    const sheet = page.getByTestId("events-filter-sheet");
+    await expect(sheet.getByRole("group", { name: "Формат" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+    await page.setViewportSize({ width: 1440, height: 900 });
+  },
+);
+
+Then(
+  "the dark theme repaints the cards through the theme tokens",
+  async ({ page }) => {
+    await setTheme(page, false);
+    const light = await cardBackground(page);
+    await setTheme(page, true);
+    const dark = await cardBackground(page);
+    expect(light, "the card paints a surface").not.toBe("");
+    expect(dark, "the dark theme changes the card surface").not.toBe(light);
+    await setTheme(page, false);
+  },
+);
+
+// ── EARS-17: the kind dictionary, written by an editor ──────────────────────
+
+Before({ tags: "@editor-write" }, async ({ $testInfo }) => {
+  // An editor write needs a stand whose data the run owns; the read-only slot
+  // run names the skip instead of writing into the shared golden slot.
+  $testInfo.skip(
+    !process.env.E2E_ADMIN_URL,
+    "@editor-write: E2E_ADMIN_URL names no admin origin this run owns",
+  );
+});
+
+After({ tags: "@editor-write" }, async ({ world }) => {
+  const editor = world.eventsFeed?.editor;
+  if (!editor) return;
+  try {
+    if (editor.event) {
+      await retireEventFromStorefronts(editor.page, editor.event.id);
+    }
+    if (editor.kind && !editor.kind.retired) {
+      await retireEventKind(editor.page, editor.kind.detailUrl);
+    }
+  } finally {
+    await editor.page.context().close();
+  }
+});
+
+interface PublishedKind {
+  page: Page;
+  kind: NonNullable<EditorWrites["kind"]>;
+  editor: EditorWrites;
+}
+
+function editorKindOf(world: StepWorld): PublishedKind {
+  const editor = feedOf(world).editor;
+  if (!editor?.kind) throw new Error("No kind was published by an editor");
+  return { page: editor.page, kind: editor.kind, editor };
+}
+
+Given(
+  "an editor publishes a new event kind with a long title in the admin",
+  async ({ browser, world }) => {
+    const context = await browser.newContext({
+      baseURL: ADMIN_ORIGIN,
+      locale: "ru-RU",
+    });
+    const page = await context.newPage();
+    const editor: EditorWrites = { page };
+    feedOf(world).editor = editor;
+    await signInAsAdmin(page);
+    // A long title, unique per run, so it wraps on the card and in the panel.
+    const title = `Клинический разбор с пациентом ${Date.now().toString(36)}`;
+    const detailUrl = await createPublishedEventKind(page, title, ["online"]);
+    editor.kind = { title, detailUrl, retired: false };
+  },
+);
+
+Given(
+  "the editor publishes a doctors-audience event of that kind starting within the hour",
+  async ({ world }) => {
+    const { page, kind, editor } = editorKindOf(world);
+    const title = `Разбор по новому типу ${Date.now().toString(36)}`;
+    const id = await createPublishedEvent(page, title, {
+      startsInMs: 45 * 60 * 1000,
+      kindTitle: kind.title,
+      audience: "doctors",
+    });
+    editor.event = { id, title };
+  },
+);
+
+Given("the editor retires that kind in the admin", async ({ world }) => {
+  const { page, kind } = editorKindOf(world);
+  await retireEventKind(page, kind.detailUrl);
+  kind.retired = true;
+});
+
+function kindFacet(page: Page): Locator {
+  return filterPanel(page).getByRole("group", { name: "Вид события" });
+}
+
+function editorEventOf(world: StepWorld): { title: string } {
+  const event = feedOf(world).editor?.event;
+  if (!event) throw new Error("No event was published by the editor");
+  return event;
+}
+
+Then("the kind facet offers the new kind", async ({ page, world }) => {
+  const { kind } = editorKindOf(world);
+  await expect(
+    kindFacet(page).getByRole("button", { name: kind.title, exact: true }),
+  ).toBeVisible();
+});
+
+/** No horizontal overflow: the box holds its own content. */
+async function expectNoOverflow(locator: Locator, what: string): Promise<void> {
+  const box = await locator.evaluate((node) => ({
+    scroll: node.scrollWidth,
+    client: node.clientWidth,
+  }));
+  expect(box.scroll, `${what} overflows horizontally`).toBeLessThanOrEqual(
+    box.client,
+  );
+}
+
+Then(
+  "that event's card carries the new kind's label without overflowing the card, the panel or the screen grid",
+  async ({ page, world }) => {
+    const { kind } = editorKindOf(world);
+    const card = feedCards(page).filter({ hasText: editorEventOf(world).title });
+    await expect(card).toHaveCount(1);
+    await expect(card).toContainText(kind.title);
+    await expectNoOverflow(card, "the card");
+    await expectNoOverflow(filterPanel(page), "the facet panel");
+    await expectNoOverflow(page.locator("html"), "the screen grid");
+  },
+);
+
+When(
+  "the {word} applies the new kind in the facet panel",
+  async ({ page, world }, _actor: string) => {
+    const { kind } = editorKindOf(world);
+    await kindFacet(page)
+      .getByRole("button", { name: kind.title, exact: true })
+      .click();
+    await page.waitForURL((url) => url.searchParams.has("kind"));
+    await expect(page.getByTestId("events-feed")).toBeVisible();
+  },
+);
+
+Then(
+  "the feed lists that event under the applied kind",
+  async ({ page, world }) => {
+    const { kind } = editorKindOf(world);
+    const cards = feedCards(page);
+    await expect(
+      cards.filter({ hasText: editorEventOf(world).title }),
+    ).toHaveCount(1);
+    const count = await cards.count();
+    for (let index = 0; index < count; index += 1) {
+      await expect(cards.nth(index)).toContainText(kind.title);
+    }
+  },
+);
+
+Then(
+  "the kind facet does not offer the retired kind",
+  async ({ page, world }) => {
+    const { kind } = editorKindOf(world);
+    await expect(kindFacet(page)).toBeVisible();
+    await expect(
+      filterPanel(page).getByRole("button", { name: kind.title, exact: true }),
+    ).toHaveCount(0);
+  },
+);
+
+// ── EARS-18: one module on both storefronts ─────────────────────────────────
+
+/** The accessible names of the facet groups a host's panel renders. */
+async function facetGroups(page: Page): Promise<string[]> {
+  const groups = filterPanel(page).getByRole("group");
+  const names: string[] = [];
+  const count = await groups.count();
+  for (let index = 0; index < count; index += 1) {
+    const group = groups.nth(index);
+    const label = await group.getAttribute("aria-label");
+    const labelledBy = await group.getAttribute("aria-labelledby");
+    const name =
+      label ??
+      (labelledBy
+        ? await page.locator(`[id="${labelledBy}"]`).first().innerText()
+        : "");
+    if (name.trim()) names.push(name.trim());
+  }
+  return names;
+}
+
+/** The event slugs a host's feed lists. */
+async function feedSlugs(page: Page, host: HostConfig): Promise<string[]> {
+  const prefix = `${host.eventsPath}/`;
+  const hrefs = await page
+    .getByTestId("events-feed")
+    .locator(`a[href^="${prefix}"]`)
+    .evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? ""));
+  return hrefs.map((href) => href.slice(prefix.length));
+}
+
+/** The shared module's structure, read the same way on either host. */
+async function moduleShape(page: Page) {
+  await expect(page.getByTestId("events-feed")).toBeVisible();
+  return {
+    tabs: await page
+      .getByTestId("events-tense-tabs")
+      .getByRole("tab")
+      .allInnerTexts(),
+    blocks: await page
+      .locator("[data-feed-block]")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => (node as HTMLElement).dataset.feedBlock),
+      ),
+    dayGroupsHoldCards: await page
+      .getByTestId("events-feed")
+      .locator('section[id^="day-"]')
+      .evaluateAll(
+        (sections) =>
+          sections.length > 0 &&
+          sections.every(
+            (section) => section.querySelector("[data-webinar-card]") !== null,
+          ),
+      ),
+    compactMonthInColumn: await page
+      .getByTestId("events-column")
+      .getByTestId("events-compact-month")
+      .isVisible(),
+    panelInColumn: await filterPanel(page).isVisible(),
+  };
+}
+
+When(
+  "the {word} opens the events screen on the doctor storefront and on the Academy",
+  async ({ page, context, host, world }, _actor: string) => {
+    await openFeed(page, host.eventsPath);
+    const academy = hostById("academy");
+    const academyPage = await context.newPage();
+    await academyPage.setViewportSize({ width: 1440, height: 900 });
+    await openFeed(academyPage, `${baseUrlFor(academy)}${academy.eventsPath}`);
+    feedOf(world).academyPage = academyPage;
+  },
+);
+
+function academyPageOf(world: StepWorld): Page {
+  const academyPage = feedOf(world).academyPage;
+  if (!academyPage) throw new Error("The Academy events screen was not opened");
+  return academyPage;
+}
+
+Then(
+  "both render the same shared module: the head with the tense tabs, the block order, day groups of design-system cards, the compact month and the facet panel in the column",
+  async ({ page, world }) => {
+    const doctor = await moduleShape(page);
+    const academy = await moduleShape(academyPageOf(world));
+    expect(doctor).toEqual({
+      tabs: ["Прошедшие", "Будущие"],
+      blocks: ["head", "live", "feed"],
+      dayGroupsHoldCards: true,
+      compactMonthInColumn: true,
+      panelInColumn: true,
+    });
+    expect(academy).toEqual(doctor);
+  },
+);
+
+Then(
+  "the head copy differs only as the «headerCopy» row cites",
+  async ({ page, world }) => {
+    const academyPage = academyPageOf(world);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "События", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("События по вашей специальности и смежным", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      academyPage.getByRole("heading", {
+        level: 1,
+        name: "Расписание эфиров",
+        exact: true,
+      }),
+    ).toBeVisible();
+    // The Academy line is its counts line (эфиры · школы); the doctor head has none.
+    await expect(
+      academyPage.getByTestId("events-feed-subline-counts"),
+    ).toBeVisible();
+    await expect(page.getByTestId("events-feed-subline-counts")).toHaveCount(0);
+  },
+);
+
+Then(
+  "the facet sets differ only as the «filterSet» row cites",
+  async ({ page, world }) => {
+    const doctorSet = ["Специальность", "Формат", "Вид события", "Город"];
+    const academySet = ["Проект", "Эксперт", "Тема"];
+    const doctor = await facetGroups(page);
+    const academy = await facetGroups(academyPageOf(world));
+    expect(doctor).toEqual(expect.arrayContaining(["Формат", "Вид события"]));
+    for (const name of doctor) expect(doctorSet, name).toContain(name);
+    expect(academy.length).toBeGreaterThan(0);
+    for (const name of academy) expect(academySet, name).toContain(name);
+  },
+);
+
+Then(
+  "the content sets differ as the «contentSet» row cites: no event is listed on both storefronts",
+  async ({ page, host, world }) => {
+    const doctor = await feedSlugs(page, host);
+    const academy = await feedSlugs(academyPageOf(world), hostById("academy"));
+    expect(doctor.length).toBeGreaterThan(0);
+    expect(academy.length).toBeGreaterThan(0);
+    expect(doctor.filter((slug) => academy.includes(slug))).toEqual([]);
   },
 );

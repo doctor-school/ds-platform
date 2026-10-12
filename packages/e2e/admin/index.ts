@@ -8,6 +8,7 @@
  */
 export * from "./admin-session";
 export * from "./event-classification";
+export * from "./event-kinds";
 export * from "./events";
 export * from "./sign-in";
 export * from "./totp";

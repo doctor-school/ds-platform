@@ -30,11 +30,17 @@ function mskInput(offsetMs: number): string {
  * @param options.startsInMs When the event starts, relative to now (default: a
  *   week ahead). A spec that opens the event `live` passes a start inside the
  *   air window, e.g. a few minutes ahead.
+ * @param options.kindTitle / options.audience The 012 classification
+ *   (default: the Academy «Эфир» for experts, {@link chooseEventClassification}).
  */
 export async function createPublishedEvent(
   page: Page,
   title: string,
-  options: { startsInMs?: number } = {},
+  options: {
+    startsInMs?: number;
+    kindTitle?: string;
+    audience?: "experts" | "doctors";
+  } = {},
 ): Promise<string> {
   await page.goto("/events/create");
   await expect(page.getByTestId("event-form")).toBeVisible();
@@ -49,7 +55,10 @@ export async function createPublishedEvent(
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF"),
   });
-  await chooseEventClassification(page);
+  await chooseEventClassification(page, {
+    ...(options.kindTitle ? { kindTitle: options.kindTitle } : {}),
+    ...(options.audience ? { audience: options.audience } : {}),
+  });
   await page.getByTestId("submit-event").click();
   await page.waitForURL(/\/events\/[0-9a-f-]{36}$/, { timeout: 20_000 });
   const id = page.url().split("/").pop()!;
@@ -68,6 +77,29 @@ export async function createPublishedEvent(
 export async function openEventLive(page: Page): Promise<void> {
   await page.getByTestId("action-open").click();
   await expect(page.getByTestId("state-live")).toBeVisible({
+    timeout: 20_000,
+  });
+}
+
+/**
+ * Take a PUBLISHED event off every storefront through the 007 lifecycle bar
+ * (published → live → ended → hidden) — the cleanup of a journey that made one.
+ */
+export async function retireEventFromStorefronts(
+  page: Page,
+  eventId: string,
+): Promise<void> {
+  await page.goto(`/events/${eventId}`);
+  await expect(page.getByTestId("state-published")).toBeVisible({
+    timeout: 20_000,
+  });
+  await openEventLive(page);
+  await page.getByTestId("action-close").click();
+  await expect(page.getByTestId("state-ended")).toBeVisible({
+    timeout: 20_000,
+  });
+  await page.getByTestId("action-hide").click();
+  await expect(page.getByTestId("state-hidden")).toBeVisible({
     timeout: 20_000,
   });
 }

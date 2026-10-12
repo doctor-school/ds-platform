@@ -311,6 +311,49 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await rows(`workplace=${enc("семёнов")}`)).toBe("D");
     });
 
+    it("044 EARS-23.18: ФИО and место работы treat «%» and «_» typed by the registrar as literals, never as wildcards", async () => {
+      // A gets a «_» in its surname and «%_» in its workplace; C gets values a
+      // wildcard reading of the same terms would ALSO match.
+      const ids = new Map(
+        [...letterOf].map(([id, letter]) => [letter, id] as const),
+      );
+      const a = ids.get("A");
+      const c = ids.get("C");
+      expect(a).toBeDefined();
+      expect(c).toBeDefined();
+      const { rows: before } = await pool.query<{
+        id: string;
+        answers: Record<string, unknown>;
+      }>("SELECT id, answers FROM registrations WHERE id = ANY($1::uuid[])", [
+        [a, c],
+      ]);
+      const patch = async (
+        id: string | undefined,
+        surname: string,
+        workplace: string,
+      ): Promise<void> => {
+        await pool.query(
+          `UPDATE registrations
+              SET answers = answers || jsonb_build_object('surname', $2::text, 'workplace', $3::text)
+            WHERE id = $1`,
+          [id, surname, workplace],
+        );
+      };
+      await patch(a, "Жукова_1", "ГКБ 50%_1");
+      await patch(c, "Жукова21", "ГКБ 50x1");
+      try {
+        expect(await rows(`name=${enc("Жукова_1")}`)).toBe("A");
+        expect(await rows(`workplace=${enc("50%_1")}`)).toBe("A");
+        expect(await rows(`workplace=${enc("50%")}`)).toBe("A");
+      } finally {
+        for (const row of before)
+          await pool.query("UPDATE registrations SET answers = $2 WHERE id = $1", [
+            row.id,
+            row.answers,
+          ]);
+      }
+    });
+
     it("044 EARS-23.3: email — a column EARS-37 moved to the card — still filters by a case-insensitive «contains»", async () => {
       expect(await rows(`email=${enc(`FLT${run}-B`)}`)).toBe("B");
       expect(await rows(`email=${enc(`flt${run}-`)}`)).toBe("ABCD");

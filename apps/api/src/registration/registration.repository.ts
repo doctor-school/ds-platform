@@ -176,15 +176,6 @@ function escapeLike(value: string): string {
 }
 
 /**
- * 044 EARS-22/23/36 — the phone cell as the digits of `normaliseContactPhone`
- * (without its `+`), computed in SQL: digits only, an 11-digit domestic `8…`
- * read as `7…`, at most 15 digits. The answers' stored normalised number is
- * preferred; a platform-origin row falls back to the account's `users.phone`,
- * which is NOT stored normalised — so the rule is applied here, and the phone
- * sort, the phone filter and the displayed number (normalised in the mapper)
- * all key the same value. Empty → NULL.
- */
-/**
  * 044 EARS-21/23 — the ONE phone-fragment rule of the roster, shared by the
  * main search's phone arm and the «Телефон» column filter, matched against a
  * digits-only key (`79001112233`).
@@ -215,6 +206,15 @@ function foldYo(term: string): string {
   return term.replace(/ё/g, "е").replace(/Ё/g, "Е");
 }
 
+/**
+ * 044 EARS-22/23/36 — the phone cell as the digits of `normaliseContactPhone`
+ * (without its `+`), computed in SQL: digits only, an 11-digit domestic `8…`
+ * read as `7…`, at most 15 digits. The answers' stored normalised number is
+ * preferred; a platform-origin row falls back to the account's `users.phone`,
+ * which is NOT stored normalised — so the rule is applied here, and the phone
+ * sort, the phone filter and the displayed number (normalised in the mapper)
+ * all key the same value. Empty → NULL.
+ */
 function normalisedPhoneDigits(
   phoneNormalised: SQL<string | null>,
   phone: SQL<string | null>,
@@ -756,7 +756,7 @@ export class RegistrationRepository {
     const containsFoldingYo = (cell: SQL, term: string | undefined): void => {
       if (!term) return;
       predicates.push(
-        sql`translate(coalesce(${cell}, ''), 'Ёё', 'Ее') ilike ${`%${escapeLike(foldYo(term))}%`} escape '\'`,
+        sql`translate(coalesce(${cell}, ''), 'Ёё', 'Ее') ilike ${`%${escapeLike(foldYo(term))}%`} escape '\\'`,
       );
     };
 

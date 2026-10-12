@@ -555,3 +555,23 @@ the verified golden EARS-6 browser journey remains distinct. Trace-off fixtures,
 strict CAPTCHA preparation and owned-session cleanup follow existing journeys.
 Run this selected case on the lead-selected stand; a test-only PR requires no
 owner Stage-B request or new slot.
+
+### Verified-account login-code request (003 EARS-34/16/41/8)
+
+`A login-email-code request for a verified account arms the challenge unchanged`
+registers and verifies a unique owned Academy account, reads its verified private
+identity, and signs out through the ordinary account control. After a real email
+code request, `steps/login-email-verified.steps.ts` requires exactly the neutral
+acknowledgement, the six-cell step and no private session or profile access. The
+canonical mail helper reads a fresh recipient-addressed login code;
+`assertNoVerificationMail` observes the full 15-second delivery horizon without
+accepting a separate verification mail or malformed Mailpit evidence. Entering
+those delivered digits must restore a fresh secure session and the same verified
+email and session subject. Native challenge and triad timing proof stay in the
+API/IdP tests named in the scenario, and the golden verified EARS-6 journey stays
+intact. Trace-off fixtures and secret-safe registration/mail/session helpers are
+reused; cleanup revokes only the owned session and closes its context. The mail
+absence helper accepts the existing minimal `MailRequest` contract, allowing the
+native adapter without changing absence-check behavior. Run this selected case
+on the lead-selected stand; this test-only change requires no owner Stage-B
+request or new slot.

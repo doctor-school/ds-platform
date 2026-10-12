@@ -19,7 +19,9 @@ academy.doctor.school {
 
 # Doctor storefront (Next.js standalone) — the public doctor-facing site (#1723).
 # TEMPORARY host: the root doctor.school cut-over waits on data migration and the
-# retirement of the old site (owner decision on #1430, 2026-08-26). Automatic ACME
+# retirement of the old site (owner decision on #1430, 2026-08-26); that cut-over
+# also changes Centrifugo client.allowed_origins (centrifugo/config.json — enforced
+# by tools/deploy/centrifugo-origins.test.mjs, #2791). Automatic ACME
 # over HTTP-01 like every other vhost — which means the Beget A-record
 # `new.doctor.school` → 77.233.220.222 MUST already resolve before the deploy that
 # adds this block, or issuance fails instead of producing a working vhost

@@ -513,6 +513,47 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(fieldOf(refused)).toContainEqual(["kindId"]);
     });
 
+    it("012 EARS-28: a retired kind is no longer offered by the doctor feed's kind facet, while the event that carries it keeps its kind label (019 EARS-17, #2830)", async () => {
+      const kind = await publishKind(await newKind(["online"]));
+      const event = await seedEvent({ audience: "doctors", kindId: kind.id });
+
+      async function readFeed() {
+        const res = await app.inject({
+          method: "GET",
+          url: "/v1/storefront/doctor/events?specialty=all",
+        });
+        expect(res.statusCode).toBe(200);
+        const body = res.json() as {
+          days: {
+            items: { id: string; kind: { slug: string; title: string } }[];
+          }[];
+          facets?: { kind: { slug: string }[] };
+        };
+        return {
+          card: body.days
+            .flatMap((d) => d.items)
+            .find((item) => item.id === event.id),
+          kindOptions: (body.facets?.kind ?? []).map((o) => o.slug),
+        };
+      }
+
+      // Published, the kind is a facet value of the feed that lists its event.
+      const before = await readFeed();
+      expect(before.kindOptions).toContain(kind.slug);
+
+      const { res } = await retireKind(kind);
+      expect(res.statusCode).toBe(200);
+
+      // Retired, it is no longer offered — the event stays listed with its
+      // retained kind label.
+      const after = await readFeed();
+      expect(after.kindOptions).not.toContain(kind.slug);
+      expect(after.card?.kind).toMatchObject({
+        slug: kind.slug,
+        title: kind.title,
+      });
+    });
+
     // ── EARS-26: the event's kind ────────────────────────────────────────
 
     it("012 EARS-26: an event write refuses a missing, unknown or draft kind with a field error and writes nothing", async () => {
@@ -671,7 +712,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       expect(named).toHaveLength(5);
       for (const entry of named) {
-        expect(seeded).toContain(entry.path.slice("allowedFormats.events.".length));
+        expect(seeded).toContain(
+          entry.path.slice("allowedFormats.events.".length),
+        );
       }
       const summary = problem.errors?.find((e) => e.path === "allowedFormats");
       expect(summary?.message).toContain("7 events");

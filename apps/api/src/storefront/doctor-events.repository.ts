@@ -192,7 +192,9 @@ export class DoctorEventsRepository {
    * feed predicate selects WITHOUT the kind facet: every 012 kind one of them
    * carries, with `count` = those events under the OTHER SQL facet (`format`).
    * The Academy option rule (014-design §9, `academyFacetOptions`): a kind no
-   * base event carries is not an option; a zero-yield one stays at `0`.
+   * base event carries is not an option; a zero-yield one stays at `0`. Only a
+   * published kind is an option (012 EARS-28): a retired one stays on its
+   * events' cards, never in the facet.
    * Ordered by title, then slug.
    */
   async findKindOptions(
@@ -215,7 +217,9 @@ export class DoctorEventsRepository {
       .select({ slug: eventKinds.slug, title: eventKinds.title, count })
       .from(events)
       .innerJoin(eventKinds, eq(eventKinds.id, events.kindId))
-      .where(and(...where))
+      // 012 EARS-28 / 019 EARS-17 — events keep a retired kind's reference,
+      // but only a published kind is offered as a facet value.
+      .where(and(...where, eq(eventKinds.status, "published")))
       .groupBy(eventKinds.id)
       .orderBy(asc(eventKinds.title), asc(eventKinds.slug));
     return rows.map((row) => ({

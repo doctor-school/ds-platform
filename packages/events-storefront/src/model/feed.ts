@@ -14,8 +14,8 @@ import type { DayAgendaRow, EventListItem } from "@ds/design-system/blocks";
 
 import type { FeedCopy } from "../copy/feed-copy";
 import { type EventsStorefrontHostConfig, eventPageHref } from "../host-config";
-import type { PluralNoun } from "./event-count";
-import { withoutFeedParam } from "./feed-url";
+import { type PluralNoun, formatEventCount } from "./event-count";
+import { pageHref, withoutFeedParam, withoutFeedQuery } from "./feed-url";
 import { isRecordingPlayable } from "./recording-cta";
 
 /** The feed's reading: «Будущие» or «Прошедшие» (019 LD-1, LD-13). */
@@ -351,88 +351,125 @@ export interface EmptyFeedState {
   readonly action: { readonly label: string; readonly href: string } | null;
 }
 
+/** The empty state of a feed with nothing to widen — no facet applied. */
+export function plainEmptyFeedState(noun: PluralNoun, copy: FeedCopy): EmptyFeedState {
+  return { title: copy.feed.empty(noun.many), description: "", action: null };
+}
+
+/** One applied condition the empty state can offer to drop. */
+interface EmptyFeedChip {
+  readonly label: string;
+  /** The page query without it — the widen read's query and the action's href. */
+  readonly without: RawQueryRecord;
+  /** The action's label when it is not «Убрать фильтр «…»». */
+  readonly widen?: string;
+  readonly specialty?: true;
+}
+
 /**
- * The empty feed (019 EARS-9, LD-9): with a facet applied it names the first one
- * in the canvas order (`events-feed-kit.js` `facetChips`) and links its removal;
- * an explicit specialty list offers the adjacent specialties instead.
+ * Counts the events of the query's tense, over its whole reach, under `without`
+ * — `null` when the read failed (that condition is then passed over).
  */
-export function emptyFeedState(
+export type WidenMatching = (without: RawQueryRecord) => Promise<number | null>;
+
+/**
+ * The empty feed (019 EARS-9, LD-9; canvas `events-feed-kit.js` `K.empty`): the
+ * applied conditions in the canvas `facetChips` order — the Academy topic, a
+ * picked specialty list, format, kind, city, НМО, project, expert, the search —
+ * each asked in turn how many events of the tense its removal finds; the first
+ * that finds any is named with that count and its removal offered (a picked
+ * specialty widens to the adjacent ones). When none does, the state says so
+ * and offers no widening. Facet values are named by the read's titles.
+ */
+export async function emptyFeedState(
   query: RawQueryRecord,
   {
     listing,
     noun,
     copy,
     titles = {},
+    matching,
   }: {
     listing: string;
     noun: PluralNoun;
     copy: FeedCopy;
     /** The read's facet options — a facet value is named by its title. */
     titles?: FeedFacetOptions;
+    matching: WidenMatching;
   },
-): EmptyFeedState {
+): Promise<EmptyFeedState> {
   const titleOf = (key: string, value: string) =>
     titles[key]?.find((option) => option.slug === value)?.title ?? value;
-  const remove = (key: string, value?: string) =>
-    withoutFeedParam(listing, query, key, value);
+  const chips: EmptyFeedChip[] = [];
+  const chipsOf = (key: string, label: (value: string) => string, widen?: string) => {
+    for (const value of rawQueryList(query[key]) ?? []) {
+      chips.push({
+        label: label(value),
+        without: withoutFeedQuery(query, key, value),
+        ...(widen ? { widen } : {}),
+      });
+    }
+  };
 
+  chipsOf("topic", (v) => `${copy.facet.topic}: ${titleOf("topic", v)}`, copy.feed.widenTopic);
   const specialty = rawQueryList(query.specialty);
   if (
     specialty !== undefined &&
     !(specialty.length === 1 && ["mine-and-adjacent", "all"].includes(specialty[0]!))
   ) {
-    return {
-      title: copy.feed.emptyByFacet(noun.many, copy.facet.specialty),
-      description: copy.feed.emptyByFacetBody,
-      action: { label: copy.feed.widenSpecialty, href: remove("specialty") },
-    };
-  }
-
-  const chips: { label: string; href: string }[] = [];
-  for (const value of rawQueryList(query.format) ?? []) {
-    const name =
-      copy.card.format[value as EventParticipationFormat] ?? value;
-    chips.push({ label: `${copy.facet.format}: ${name}`, href: remove("format", value) });
-  }
-  for (const value of rawQueryList(query.kind) ?? []) {
     chips.push({
-      label: `${copy.facet.kind}: ${titleOf("kind", value)}`,
-      href: remove("kind", value),
+      label: copy.facet.specialty,
+      without: withoutFeedQuery(query, "specialty"),
+      widen: copy.feed.widenSpecialty,
+      specialty: true,
     });
   }
-  for (const value of rawQueryList(query.city) ?? []) {
-    chips.push({ label: `${copy.facet.city}: ${value}`, href: remove("city", value) });
-  }
+  chipsOf(
+    "format",
+    (v) => `${copy.facet.format}: ${copy.card.format[v as EventParticipationFormat] ?? v}`,
+  );
+  chipsOf("kind", (v) => `${copy.facet.kind}: ${titleOf("kind", v)}`);
+  chipsOf("city", (v) => `${copy.facet.city}: ${v}`);
   if (rawQueryBoolean(query.nmo) === true) {
-    chips.push({ label: copy.facet.nmo, href: remove("nmo") });
+    chips.push({ label: copy.facet.nmo, without: withoutFeedQuery(query, "nmo") });
   }
-  for (const key of ["project", "expert", "topic"] as const) {
-    for (const value of rawQueryList(query[key]) ?? []) {
-      chips.push({
-        label: `${copy.facet[key]}: ${titleOf(key, value)}`,
-        href: remove(key, value),
-      });
-    }
-  }
+  chipsOf("project", (v) => `${copy.facet.project}: ${titleOf("project", v)}`);
+  chipsOf("expert", (v) => `${copy.facet.expert}: ${titleOf("expert", v)}`);
   const q = rawQueryScalar(query.q);
   if (q !== undefined) {
-    chips.push({ label: copy.facet.query(q), href: remove("q") });
+    chips.push({ label: copy.facet.query(q), without: withoutFeedQuery(query, "q") });
   }
 
-  const [first] = chips;
-  if (first) {
+  if (chips.length === 0) {
+    if (rawQueryBoolean(query.free) !== undefined) {
+      return {
+        title: copy.feed.emptyFiltered(noun.many),
+        description: copy.feed.emptyFilteredBody,
+        action: { label: copy.feed.resetFilters, href: withoutFeedParam(listing, query, "free") },
+      };
+    }
+    return plainEmptyFeedState(noun, copy);
+  }
+
+  // One widen read at a time, stopping at the first that finds events.
+  for (const chip of chips) {
+    const found = await matching(chip.without);
+    if (found === null || found <= 0) continue;
+    const count = formatEventCount(found, noun);
     return {
-      title: copy.feed.emptyByFacet(noun.many, first.label),
-      description: copy.feed.emptyByFacetBody,
-      action: { label: copy.feed.removeFacet(first.label), href: first.href },
+      title: copy.feed.emptyByFacet(noun.many, chip.label),
+      description: chip.specialty
+        ? copy.feed.widenSpecialtyCount(count)
+        : copy.feed.widenCount(count),
+      action: {
+        label: chip.widen ?? copy.feed.removeFacet(chip.label),
+        href: pageHref(listing, chip.without),
+      },
     };
   }
-  if (rawQueryBoolean(query.free) !== undefined) {
-    return {
-      title: copy.feed.emptyFiltered(noun.many),
-      description: copy.feed.emptyFilteredBody,
-      action: { label: copy.feed.resetFilters, href: remove("free") },
-    };
-  }
-  return { title: copy.feed.empty(noun.many), description: "", action: null };
+  return {
+    title: copy.feed.emptyFiltered(noun.many),
+    description: copy.feed.emptyFilteredBody,
+    action: null,
+  };
 }

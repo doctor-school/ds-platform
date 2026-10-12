@@ -309,6 +309,7 @@ export async function EventsListingPage({
                   query={raw}
                   feed={feed}
                   mine={mine}
+                  request={request}
                 />
               </Suspense>
             </>

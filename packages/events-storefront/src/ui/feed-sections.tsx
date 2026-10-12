@@ -1,5 +1,9 @@
 import { Skeleton } from "@ds/design-system/skeleton";
-import { type MyEventItem, type RawQueryRecord, rawQueryScalar } from "@ds/schemas";
+import {
+  type MyEventItem,
+  type RawQueryRecord,
+  rawQueryScalar,
+} from "@ds/schemas";
 
 import { FEED_COPY } from "../copy/feed-copy";
 import { eventNounOf } from "../copy/listing-copy";
@@ -7,12 +11,22 @@ import { type PluralNoun, formatEventCount } from "../model/event-count";
 import type { EventsStorefrontHostConfig } from "../host-config";
 import {
   type BlockRead,
+  type EmptyFeedState,
   type EventsFeedPage,
+  type FeedFacetOptions,
   emptyFeedState,
+  feedReadsEmpty,
+  plainEmptyFeedState,
   showMoreLabel,
 } from "../model/feed";
 import { feedTenseOf, showMoreHref } from "../model/feed-url";
-import { type ForwardedSession, fetchEventsLive, fetchMyEvents } from "../server";
+import {
+  type ForwardedSession,
+  type ReadRequest,
+  fetchEventsFeed,
+  fetchEventsLive,
+  fetchMyEvents,
+} from "../server";
 import { BlockError } from "./block-error";
 import { DayAnchorScroll } from "./day-anchor-scroll";
 import { FeedList } from "./feed-list";
@@ -33,6 +47,30 @@ export async function readMyEvents(
   } catch {
     return { ok: false };
   }
+}
+
+/**
+ * The empty state of either view (019 EARS-9, #2786): each applied condition in
+ * the canvas order is counted by a feed read of the same tense without it —
+ * one read at a time, stopping at the first that finds events; a failed read
+ * counts nothing for its condition. Made only for an empty reading.
+ */
+export function readEmptyFeedState(
+  config: EventsStorefrontHostConfig,
+  query: RawQueryRecord,
+  titles: FeedFacetOptions,
+  request: ReadRequest,
+): Promise<EmptyFeedState> {
+  return emptyFeedState(query, {
+    listing: config.routes.listing,
+    noun: eventNounOf(config.copy),
+    copy: FEED_COPY,
+    titles,
+    matching: async (without) => {
+      const read = await fetchEventsFeed(config, without, request);
+      return read.ok ? read.value.matching : null;
+    },
+  });
 }
 
 /**
@@ -169,11 +207,13 @@ export async function FeedSection({
   query,
   feed,
   mine,
+  request,
 }: {
   config: EventsStorefrontHostConfig;
   query: RawQueryRecord;
   feed: Promise<BlockRead<EventsFeedPage>>;
   mine: Promise<BlockRead<readonly MyEventItem[] | null>>;
+  request: ReadRequest;
 }) {
   const tense = feedTenseOf(query);
   const [read, registered] = await Promise.all([feed, mine]);
@@ -188,6 +228,9 @@ export async function FeedSection({
   }
   const page = read.value;
   const more = showMoreHref(config.routes.listing, query, page.horizon);
+  const empty = feedReadsEmpty(page)
+    ? await readEmptyFeedState(config, query, page.facetOptions, request)
+    : plainEmptyFeedState(eventNounOf(config.copy), FEED_COPY);
   return (
     <>
       <DayAnchorScroll day={rawQueryScalar(query.day) ?? null} />
@@ -206,12 +249,7 @@ export async function FeedSection({
             ? null
             : { href: more, label: showMoreLabel(page.nextBatch, page.remaining, FEED_COPY, tense) }
         }
-        empty={emptyFeedState(query, {
-          listing: config.routes.listing,
-          noun: eventNounOf(config.copy),
-          copy: FEED_COPY,
-          titles: page.facetOptions,
-        })}
+        empty={empty}
       />
     </>
   );

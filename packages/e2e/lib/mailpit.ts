@@ -307,6 +307,18 @@ export async function fetchRecoveryCode(
   afterIso: string,
   purpose: "register" | "reset" | "login",
 ): Promise<string> {
+  return (await fetchRecoveryMail(request, baseUrl, email, afterIso, purpose))
+    .code;
+}
+
+/** 003 EARS-23: inspect copy only on the same strictly bound delivered artifact. */
+export async function fetchRecoveryMail(
+  request: MailRequest,
+  baseUrl: string,
+  email: string,
+  afterIso: string,
+  purpose: "register" | "reset" | "login",
+): Promise<{ code: string; text: unknown; html: unknown }> {
   const suffix = {
     reset: RESET_SUBJECT,
     register: VERIFICATION_SUBJECT,
@@ -331,7 +343,12 @@ export async function fetchRecoveryCode(
         );
       // Detail exposes Date (sender header), not Created (inbox arrival);
       // freshness is established by the search result bound here by ID.
-      const message = (await readMailJson(detail)) as AddressedMail | null;
+      const message = (await readMailJson(detail)) as
+        | (AddressedMail & {
+            Text?: unknown;
+            HTML?: unknown;
+          })
+        | null;
       if (
         !message ||
         message.ID !== hit.ID ||
@@ -355,7 +372,7 @@ export async function fetchRecoveryCode(
         (purpose === "login" && !extractLoginCode(message.Subject!))
       )
         throw new Error("Mailpit code subject is malformed");
-      return code;
+      return { code, text: message.Text, html: message.HTML };
     }
     if (Date.now() >= deadline)
       throw new Error("No fresh addressed recovery code appeared in Mailpit");

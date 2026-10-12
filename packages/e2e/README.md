@@ -575,3 +575,22 @@ cleanup revokes only the owned comparison session and closes both contexts.
 The golden verified EARS-6 journey remains distinct. Run this selected scenario
 on the lead-selected stand; this test-only change requires no owner Stage-B
 request or new slot.
+
+### Abandoned registration replacement (003 EARS-23/41)
+
+`An abandoned registrant who registers again gets the new password, not the
+abandoned one` registers a unique owned Academy address without consuming its
+first confirmation, then submits the real form again with a distinct new
+password. `steps/registration-abandoned.steps.ts` binds both requests to that
+address, proves no private access before the code, and reads the fresh addressed
+re-registration artifact through `fetchRecoveryMail`. Both link-free bodies must
+carry the same six digits and say the entered password is saved after the code,
+without claiming the password is unchanged. One accepted code must open the same
+verified private identity and a secure host-only session at the account return
+target. Two independent guest contexts then prove the new password reaches that
+same subject and the abandoned password receives the actual generic rejection
+without private access. Traces remain off, only safe boolean evidence is asserted,
+and cleanup revokes the owned sessions and closes all owned contexts. The
+existing API/IdP replacement proof and broader app-local registration journeys
+remain intact. Run only this selected case on the lead-selected stand; this
+coverage change has no render surface and requires no Stage-B request or slot.

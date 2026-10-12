@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   assertNoVerificationMail,
   extractLoginCode,
+  fetchRecoveryCode,
+  fetchRecoveryMail,
   mailpitUrlFor,
   selectLoginMail,
 } from "./mailpit.js";
@@ -90,6 +92,102 @@ function verificationMailClient(
   };
 }
 afterEach(() => vi.useRealTimers());
+
+describe("fresh recovery-mail detail", () => {
+  const subject = "123456 — код для входа в Doctor.School";
+  function client(detail: Record<string, unknown>) {
+    return {
+      get: vi.fn(async (url: string) => ({
+        ok: () => true,
+        status: () => 200,
+        json: async () =>
+          url.includes("/message/")
+            ? detail
+            : {
+                messages_count: 3,
+                start: 0,
+                messages: [
+                  addressedMessage({
+                    ID: "stale",
+                    Subject: subject,
+                    Created: "2026-10-11T00:00:00Z",
+                  }),
+                  addressedMessage({
+                    ID: "foreign",
+                    Subject: subject,
+                    To: [{ Address: "other@example.test" }],
+                  }),
+                  addressedMessage({ Subject: subject }),
+                ],
+              },
+      })),
+    };
+  }
+
+  it("EARS-23: returns the code and both bodies from the exact fresh addressed re-registration mail", async () => {
+    const detail = {
+      ID: "fresh",
+      Subject: subject,
+      To: [{ Address: email }],
+      Text: "123456 typed password is saved after confirmation",
+      HTML: "<p>123456 typed password is saved after confirmation</p>",
+    };
+    const request = client(detail);
+    await expect(
+      fetchRecoveryMail(
+        request,
+        "https://mailpit.example.test",
+        email.toUpperCase(),
+        after,
+        "login",
+      ),
+    ).resolves.toEqual({
+      code: "123456",
+      text: detail.Text,
+      html: detail.HTML,
+    });
+    expect(request.get).toHaveBeenLastCalledWith(
+      "https://mailpit.example.test/api/v1/message/fresh",
+    );
+    await expect(
+      fetchRecoveryCode(
+        client(detail),
+        "https://mailpit.example.test",
+        email,
+        after,
+        "login",
+      ),
+    ).resolves.toBe("123456");
+  });
+
+  it.each([
+    { ID: "foreign" },
+    { Subject: "654321 — код для входа в Doctor.School" },
+    { To: [{ Address: "other@example.test" }] },
+  ])(
+    "EARS-23: rejects mismatched detail before returning code-bearing bodies %j",
+    async (override) => {
+      await expect(
+        fetchRecoveryMail(
+          client({
+            ID: "fresh",
+            Subject: subject,
+            To: [{ Address: email }],
+            Text: "code-bearing bytes",
+            HTML: "code-bearing bytes",
+            ...override,
+          }),
+          "https://mailpit.example.test",
+          email,
+          after,
+          "login",
+        ),
+      ).rejects.toThrow(
+        /^Mailpit code detail did not match its fresh addressed search result$/,
+      );
+    },
+  );
+});
 
 describe("verified-account login excludes verification mail", () => {
   it("EARS-34: permits login mail and ignores stale or differently addressed verification mail through the full delivery horizon", async () => {

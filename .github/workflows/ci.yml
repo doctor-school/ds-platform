@@ -546,7 +546,27 @@ jobs:
       - name: Shorten the CI IdP email-verification code lifetime
         env:
           VERIFY_EMAIL_CODE_TTL_S: "30"
-        run: echo "IDP_VERIFY_EMAIL_CODE_TTL_S=$VERIFY_EMAIL_CODE_TTL_S" >> "$GITHUB_ENV"
+        run: |
+          set -euo pipefail
+          generator=http://localhost:9080/admin/v1/secretgenerators/SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE
+          auth="authorization: Bearer $IDP_SERVICE_TOKEN"
+          body="$(curl -fsS -H "$auth" "$generator" | jq -c --arg exp "${VERIFY_EMAIL_CODE_TTL_S}s" '
+            .secretGenerator
+            | {length, expiry: $exp,
+               includeLowerLetters: (.includeLowerLetters // false),
+               includeUpperLetters: (.includeUpperLetters // false),
+               includeDigits: (.includeDigits // false),
+               includeSymbols: (.includeSymbols // false)}')"
+          curl -fsS -X PUT -H "$auth" -H 'content-type: application/json' -d "$body" "$generator" >/dev/null
+          for i in $(seq 1 30); do
+            live="$(curl -fsS -H "$auth" "$generator" | jq -r '.secretGenerator.expiry')"
+            if [ "$live" = "${VERIFY_EMAIL_CODE_TTL_S}s" ]; then
+              echo "IDP_VERIFY_EMAIL_CODE_TTL_S=$VERIFY_EMAIL_CODE_TTL_S" >> "$GITHUB_ENV"
+              echo "VERIFY_EMAIL_CODE expiry read back: $live"; exit 0
+            fi
+            echo "waiting for the generator read-back ($i/30, live $live)..."; sleep 2
+          done
+          echo "the VERIFY_EMAIL_CODE expiry never read back as ${VERIFY_EMAIL_CODE_TTL_S}s" >&2; exit 1
 
       # The JSON reporter runs ALONGSIDE the default one: the log stays readable
       # and `assert-e2e-ran` gets a machine-readable record of what actually ran.

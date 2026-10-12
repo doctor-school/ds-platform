@@ -54,7 +54,12 @@ displaced on the mirror) with no SMS and the taken number written nowhere
 1000 — `phone/phone-timing.ts`). A confirm that loses the `users.phone` UNIQUE
 race drops the number from its IdP user and answers like a wrong code; the
 mirror upsert (webhook / sweep / self-heal) likewise treats a phone UNIQUE
-conflict as «not confirmed» and clears it. Phone identifiers resolve to an
+conflict as «not confirmed» and clears it. The `users_email_or_phone` CHECK
+bounds that clearing: a row without an email keeps its number unconfirmed
+(`phone_verified = false`) rather than lose its only identifier, a new
+account with neither an email nor a confirmed phone is not mirrored, and an
+existing row is updated in place (a partial payload is never proposed as an
+INSERT tuple). Phone identifiers resolve to an
 account only through the confirmed phone of the mirror
 (`idp/confirmed-phone.directory.ts`, EARS-58).
 

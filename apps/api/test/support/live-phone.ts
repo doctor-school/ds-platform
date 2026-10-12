@@ -28,6 +28,8 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import { MAILER } from "../../src/mailer/mailer.types.js";
+import { SmtpMailer } from "../../src/mailer/smtp-mailer.js";
 
 /**
  * 003 EARS-47…52, 58 (#2449) live harness: the whole api against the
@@ -179,6 +181,21 @@ export async function liveHarness(): Promise<LiveHarness> {
       perAsnPerHour: 1_000_000,
       globalPerDay: 1_000_000,
     })
+    // The EARS-52 notice goes through the real BFF mailer into the dev-stand
+    // Mailpit intercept. CI provides no `MAILER_SMTP_*` (only `MAILPIT_URL`),
+    // so the env-built mailer would fail closed on its intercept host; wire
+    // the same intercept from `MAILPIT_URL`, as the sibling live specs do.
+    .overrideProvider(MAILER)
+    .useValue(
+      new SmtpMailer({
+        intercept: {
+          host: process.env.MAILER_SMTP_HOST ?? new URL(MAILPIT_BASE).hostname,
+          port: Number(process.env.MAILER_SMTP_PORT ?? 1025),
+          from: process.env.MAILER_SMTP_FROM ?? "noreply@doctor.school",
+        },
+        isEnabled: () => false,
+      }),
+    )
     // The reset request is captcha-gated; not under test here.
     .overrideProvider(BOT_PROTECTION)
     .useValue({

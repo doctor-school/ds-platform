@@ -96,5 +96,99 @@ describe.skipIf(!process.env.DATABASE_URL)(
         await deleteUserFixture(handle.pool, "zitadel_sub", fresh);
       }
     });
+
+    async function row(sub: string) {
+      const { rows } = await handle.pool.query<{
+        email: string | null;
+        phone: string | null;
+        phone_verified: boolean;
+      }>(
+        "SELECT email, phone, phone_verified FROM users WHERE zitadel_sub = $1",
+        [sub],
+      );
+      return rows[0];
+    }
+
+    it("EARS-58: a partial payload with only an unverified phone clears a confirmed phone on an existing account and keeps the row", async () => {
+      const sub = `${loser}-partial`;
+      const email = `${sub}@ds.test`;
+      const own = `+999${String(Date.now() + 2).slice(-8)}`;
+      try {
+        await mirror.upsert({
+          zitadelSub: sub,
+          email,
+          phone: own,
+          phoneVerified: true,
+        });
+        await expect(
+          mirror.upsert({ zitadelSub: sub, phone: own }),
+        ).resolves.toEqual({
+          changedIdentityFields: ["phone", "phone_verified"],
+        });
+        expect(await row(sub)).toEqual({
+          email,
+          phone: null,
+          phone_verified: false,
+        });
+      } finally {
+        await deleteUserFixture(handle.pool, "zitadel_sub", sub);
+      }
+    });
+
+    it("EARS-51: a phone-only account whose verified phone is confirmed elsewhere keeps its only identifier, unconfirmed — never thrown", async () => {
+      const sub = `${loser}-phone-only`;
+      const own = `+999${String(Date.now() + 3).slice(-8)}`;
+      try {
+        await mirror.upsert({
+          zitadelSub: sub,
+          phone: own,
+          phoneVerified: true,
+        });
+        await expect(
+          mirror.upsert({ zitadelSub: sub, phone, phoneVerified: true }),
+        ).resolves.toEqual({ changedIdentityFields: ["phone_verified"] });
+        expect(await row(sub)).toEqual({
+          email: null,
+          phone: own,
+          phone_verified: false,
+        });
+      } finally {
+        await deleteUserFixture(handle.pool, "zitadel_sub", sub);
+      }
+    });
+
+    it("EARS-58: a phone-only account whose IdP phone is no longer verified keeps its number, unconfirmed", async () => {
+      const sub = `${loser}-phone-only-unverified`;
+      const own = `+999${String(Date.now() + 4).slice(-8)}`;
+      try {
+        await mirror.upsert({
+          zitadelSub: sub,
+          phone: own,
+          phoneVerified: true,
+        });
+        await expect(
+          mirror.upsert({ zitadelSub: sub, phone: own, phoneVerified: false }),
+        ).resolves.toEqual({ changedIdentityFields: ["phone_verified"] });
+        expect(await row(sub)).toEqual({
+          email: null,
+          phone: own,
+          phone_verified: false,
+        });
+      } finally {
+        await deleteUserFixture(handle.pool, "zitadel_sub", sub);
+      }
+    });
+
+    it("EARS-58: a new account with neither an email nor a confirmed phone is not mirrored — no row, never thrown", async () => {
+      const sub = `${loser}-no-identifier`;
+      try {
+        await expect(
+          mirror.upsert({ zitadelSub: sub, phone, phoneVerified: false }),
+        ).resolves.toEqual({ changedIdentityFields: [] });
+        expect(await row(sub)).toBeUndefined();
+      } finally {
+        await deleteUserFixture(handle.pool, "zitadel_sub", sub);
+      }
+    });
   },
 );

@@ -64,9 +64,12 @@ export function isPhoneUniqueViolation(err: unknown): boolean {
  * case-insensitively (the column is `citext`, so a case-only delta is not a real
  * divergence). Returns the canonical column names (not the values — PII-minimal).
  */
-function divergedIdentityFields(existing: User, input: MirrorUpsert): string[] {
+function divergedIdentityFields(
+  existing: User,
+  input: MirrorUpsert,
+  phone: PhoneColumns | undefined,
+): string[] {
   const changed: string[] = [];
-  const phone = mirrorPhoneFields(input);
   if (
     input.email !== undefined &&
     (existing.email ?? "").toLowerCase() !== input.email.toLowerCase()
@@ -82,6 +85,32 @@ function divergedIdentityFields(existing: User, input: MirrorUpsert): string[] {
   if (phone !== undefined && existing.phoneVerified !== phone.phoneVerified)
     changed.push("phone_verified");
   return changed;
+}
+
+/** The `users.phone` / `users.phone_verified` pair a mirror write sets. */
+type PhoneColumns = { phone: string | null; phoneVerified: boolean };
+
+/**
+ * The phone columns a mirror write may actually set, given the row's email
+ * after the write. The `users_email_or_phone` CHECK keeps an identifier on
+ * every row (rows are retained, never deleted), so clearing the phone of a row
+ * without an email would erase its only identifier: such a row keeps its
+ * current number, unconfirmed (`phone_verified = false`, so it resolves no
+ * sign-in or reset — 003 EARS-58). A row that does not exist yet and would
+ * carry neither an email nor a confirmed phone has no identifier to mirror:
+ * `"skip"` — it is not a mirror candidate (as the identifier-less self-heal
+ * skip). `undefined` leaves the columns untouched.
+ */
+function retainedPhoneColumns(
+  existing: User | undefined,
+  email: string | null,
+  phone: PhoneColumns | undefined,
+): PhoneColumns | undefined | "skip" {
+  if (phone === undefined || phone.phone !== null || email !== null) {
+    return phone;
+  }
+  if (existing?.phone) return { phone: existing.phone, phoneVerified: false };
+  return "skip";
 }
 
 /**
@@ -128,10 +157,6 @@ export class UserMirrorService {
       .where(eq(users.zitadelSub, input.zitadelSub))
       .limit(1);
 
-    let changedIdentityFields = existing
-      ? divergedIdentityFields(existing, input)
-      : [];
-
     // `role` is intentionally NOT in the conflict `set`: a new row is granted
     // `doctor_guest` (via `values` below), but an existing row's role is
     // preserved on update so a reconcile/webhook pass never downgrades a staff
@@ -149,49 +174,60 @@ export class UserMirrorService {
       set["emailVerified"] = input.emailVerified;
     const phone = mirrorPhoneFields(input);
 
+    // The row's email after this write — the identifier the CHECK falls back on.
+    const email = input.email ?? existing?.email ?? null;
+
     // 010 EARS-3/5 — attribute the mirror upsert to the request context when
     // present (an authenticated self-heal); a background reconcile/webhook pass
     // carries none and honestly degrades to db-direct (EARS-4).
-    const write = (
-      p: { phone: string | null; phoneVerified: boolean } | undefined,
-    ) =>
-      withRequestAuditContext(this.db, (tx) =>
-        tx
-          .insert(users)
-          .values({
-            zitadelSub: input.zitadelSub,
-            email: input.email,
-            phone: p?.phone ?? null,
-            emailVerified: input.emailVerified ?? false,
-            phoneVerified: p?.phoneVerified ?? false,
-            role: "doctor_guest",
-          })
-          .onConflictDoUpdate({
-            target: users.zitadelSub,
-            set: p
-              ? { ...set, phone: p.phone, phoneVerified: p.phoneVerified }
-              : set,
-          }),
+    //
+    // An existing row is UPDATEd in place: a partial payload (no email) must
+    // not be proposed as an INSERT tuple, because Postgres checks that tuple
+    // against `users_email_or_phone` before ON CONFLICT routes it to the
+    // update. Only a row that does not exist yet goes through INSERT … ON
+    // CONFLICT, which stays safe against a concurrent first insert.
+    const write = async (
+      wanted: PhoneColumns | undefined,
+    ): Promise<{ changedIdentityFields: string[] }> => {
+      const p = retainedPhoneColumns(existing, email, wanted);
+      if (p === "skip") return { changedIdentityFields: [] };
+      const values = p
+        ? { ...set, phone: p.phone, phoneVerified: p.phoneVerified }
+        : set;
+      await withRequestAuditContext(this.db, (tx) =>
+        existing
+          ? tx
+              .update(users)
+              .set(values)
+              .where(eq(users.zitadelSub, input.zitadelSub))
+          : tx
+              .insert(users)
+              .values({
+                zitadelSub: input.zitadelSub,
+                email: input.email,
+                phone: p?.phone ?? null,
+                emailVerified: input.emailVerified ?? false,
+                phoneVerified: p?.phoneVerified ?? false,
+                role: "doctor_guest",
+              })
+              .onConflictDoUpdate({ target: users.zitadelSub, set: values }),
       );
+      return {
+        changedIdentityFields: existing
+          ? divergedIdentityFields(existing, input, p)
+          : [],
+      };
+    };
     try {
-      await write(phone);
+      return await write(phone);
     } catch (err) {
       // 003 EARS-48/51: a verified IdP phone another account already holds
       // confirmed (a confirmation-race loser whose IdP clean-up did not land)
       // is not this account's confirmed phone — clear it, never throw, so one
       // conflicting number cannot stall the webhook or the sweep.
       if (!phone?.phone || !isPhoneUniqueViolation(err)) throw err;
-      await write({ phone: null, phoneVerified: false });
-      changedIdentityFields = existing
-        ? divergedIdentityFields(existing, {
-            ...input,
-            phone: undefined,
-            phoneVerified: false,
-          })
-        : [];
+      return await write({ phone: null, phoneVerified: false });
     }
-
-    return { changedIdentityFields };
   }
 
   /**

@@ -38,6 +38,9 @@ export const REQUIRED_ENV = [
   "IDP_CLIENT_ID",
   "IDP_CLIENT_SECRET",
   "IDP_PROJECT_ID",
+  // #2764: published by the job only after the CI IdP reads back its short
+  // email-code lifetime; the 003 EARS-3 real-expiry spec is gated on it.
+  "IDP_VERIFY_EMAIL_CODE_TTL_S",
 ] as const;
 
 /**

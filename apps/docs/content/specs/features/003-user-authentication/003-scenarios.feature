@@ -272,24 +272,17 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # "003 EARS-1/41/10" code/auto-session assertions -> registration.steps.ts.
     # Keep that broader registration/confirmation/logout test intact.
 
-  @EARS-3 @EARS-13 @failure @email-confirmation @expired-email-confirmation
-  Scenario: Expired email verification code is rejected
-    Given the live email-verification generator lifetime has been read back for this run
-    And an Academy visitor with a unique never-registered email
-    When the visitor submits the Academy registration form with a policy-conforming password and accepted consent versions
-    Then the Academy code step has a fresh delivered confirmation code that remains unconsumed
-    When the fresh delivered confirmation code has aged through that complete real lifetime in the original tab
-    And the registrant enters that same delivered expired code once in the original Academy tab
-    Then Academy rejects that confirmation generically on the same verification step without navigation or private access
-    And the real expired refusal has exactly one masked failed-attempt record and leaves the account unverified
-    # Live proof: real elapsed IdP-generator TTL, same delivered code, browser 400,
-    # unchanged form/no private access, scoped read-only VerifyFailed ledger 0 -> 1.
-    # OTP attempt-limit accounting is separate retained HTTP boundary evidence:
-    # apps/api/test/auth/abuse-limits.e2e-spec.ts EARS-13 registration /verify
-    # admits exactly three refused submissions then 429. RateLimitGuard consumes
-    # before verify; AuthController refunds/resets only after successful verify.
-    # A ledger row alone does not prove a limiter debit; fake wrong-code API
-    # checks do not prove real expiry. Keep both evidence layers attributed.
+  # EARS-3 / EARS-13 expired email verification code: proven at the API layer,
+  # not in this browser suite — apps/api/test/auth/zitadel-email-code-expiry.e2e-spec.ts
+  # (CI api-e2e). The registration code the real Zitadel generator issued and the
+  # BFF mailer delivered is aged through that generator's live lifetime, read back
+  # from the IdP (the CI IdP carries a short lifetime; staging/production keep 3600s),
+  # then submitted unchanged: the same generic 400 as a wrong code, no session,
+  # exactly one masked auth.account.verify_failed row (0 -> 1), account unverified.
+  # A wrong code never stands in for the expired one; a sibling account's fresh
+  # code verifies as the control. The browser refusal UI for a refused code is the
+  # wrong-code scenario below. OTP attempt-limit accounting stays separate HTTP
+  # boundary evidence: apps/api/test/auth/abuse-limits.e2e-spec.ts EARS-13.
 
   @EARS-5 @EARS-8 @happy
   Scenario: Log in with password and establish a BFF session
@@ -929,7 +922,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the Academy code step has a fresh delivered confirmation code that remains unconsumed
     When the registrant enters a guaranteed different six-digit confirmation code once in the original Academy tab
     Then Academy rejects that confirmation generically on the same verification step without navigation or private access
-    # Wrong code only; expiry remains in "Expired email verification code is rejected".
+    # Wrong code only; real expiry: apps/api/test/auth/zitadel-email-code-expiry.e2e-spec.ts.
     # Old component mapping: packages/auth-flow/src/verify/verify-door.test.tsx
     # "003 EARS-16 / EARS-41: a refused code keeps the visitor on the step..."
     # -> EARS-39/41 registration.steps.ts live refusal; retain component coverage.

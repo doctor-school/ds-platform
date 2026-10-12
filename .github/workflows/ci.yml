@@ -536,6 +536,18 @@ jobs:
           if [ -n "$client_secret" ]; then echo "::add-mask::$client_secret"; fi
           grep -E '^IDP_(PROJECT_ID|CLIENT_ID|CLIENT_SECRET)=' ./idp-provision.out >> "$GITHUB_ENV"
 
+      # 003 EARS-3 expired-code proof (#2764): THIS throw-away IdP carries a
+      # short email-verification code lifetime so
+      # `auth/zitadel-email-code-expiry.e2e-spec.ts` waits out a real expiry in
+      # seconds instead of the hour staging and production keep (3600s, read
+      # back by `tools/deploy/idp-policy.mjs`). The provisioned six-digit shape
+      # is kept; only `expiry` changes, and it is read back before the suite
+      # runs — the spec then re-reads it and refuses a value the IdP lacks.
+      - name: Shorten the CI IdP email-verification code lifetime
+        env:
+          VERIFY_EMAIL_CODE_TTL_S: "30"
+        run: echo "IDP_VERIFY_EMAIL_CODE_TTL_S=$VERIFY_EMAIL_CODE_TTL_S" >> "$GITHUB_ENV"
+
       # The JSON reporter runs ALONGSIDE the default one: the log stays readable
       # and `assert-e2e-ran` gets a machine-readable record of what actually ran.
       # Turbo forwards everything after `--` to the underlying `vitest run`, and

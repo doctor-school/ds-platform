@@ -26,6 +26,7 @@ const FULL_ENV: Record<string, string> = {
   IDP_CLIENT_ID: "client",
   IDP_CLIENT_SECRET: "secret",
   IDP_PROJECT_ID: "project",
+  IDP_VERIFY_EMAIL_CODE_TTL_S: "30",
   // The tier does not stand these up — an empty value is how the guard sees
   // "unprovisioned", on both the Windows dev box and the Linux runner.
   CENTRIFUGO_URL: "",
@@ -73,7 +74,9 @@ describe("assert-no-skipped-e2e", () => {
   it("fails on an IDP-gated skip in a file that ALSO carries an unprovisioned gate", () => {
     const result = run("mixed-gate-file");
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("apps/api/test/me/display-name.e2e-spec.ts");
+    expect(result.stderr).toContain(
+      "apps/api/test/me/display-name.e2e-spec.ts",
+    );
     // Only the outer, IDP-gated test is unexplained: the inner Centrifugo-gated
     // one is exempt, and the exemption does not spread to the rest of the file.
     expect(result.stderr).toContain("1 skipped test(s)");
@@ -95,6 +98,12 @@ describe("assert-no-skipped-e2e", () => {
     expect(result.stderr).toContain("IDP_SERVICE_TOKEN");
   });
 
+  it("fails loudly when the CI IdP short code lifetime was not published (#2764)", () => {
+    const result = run("all-ran", { IDP_VERIFY_EMAIL_CODE_TTL_S: "" });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("IDP_VERIFY_EMAIL_CODE_TTL_S");
+  });
+
   it("fails when the report holds no api e2e test at all", () => {
     const result = run("no-e2e-ran");
     expect(result.code).toBe(1);
@@ -102,10 +111,14 @@ describe("assert-no-skipped-e2e", () => {
   });
 
   it("fails when the report file is absent", () => {
-    const result = runGuard(GUARD, caseDir("assert-no-skipped-e2e", "all-ran"), {
-      extraArgs: ["absent-report.json"],
-      env: FULL_ENV,
-    });
+    const result = runGuard(
+      GUARD,
+      caseDir("assert-no-skipped-e2e", "all-ran"),
+      {
+        extraArgs: ["absent-report.json"],
+        env: FULL_ENV,
+      },
+    );
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("could not read the vitest JSON report");
   });

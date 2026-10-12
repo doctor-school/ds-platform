@@ -36,6 +36,7 @@
         "IDP_REDIRECT_URI",
         "IDP_SCOPES",
         "IDP_WEBHOOK_SECRET",
+        "IDP_VERIFY_EMAIL_CODE_TTL_S",
         "MAILPIT_URL",
         "SMS_SINK_URL"
       ]

@@ -5,11 +5,13 @@ import { expect, test, type Page } from "@playwright/test";
  *
  * Every rendered state of the one events page (upcoming, past, month, empty,
  * filtered), for a guest and for a signed-in doctor, at 1440 and 390 px, in
- * light and dark, is scanned for every doctor-facing string of the 019 surface
- * (the page's `<main>`; the shell footer is 017's) — every text node in it (a
- * closed mobile sheet included, `script`/`style` excluded),
+ * light and dark, is scanned for every doctor-facing string of the 019
+ * surface — the page's `<main>` (the shell footer is 017's) and, at 390 px,
+ * the facet sheet opened from «Фильтры» (a closed Radix sheet is unmounted; an
+ * open one is portalled to `<body>`, outside `<main>`): every text node in
+ * them (`script`/`style` excluded, the CSS-hidden ≥1024 px column included),
  * every accessible-name / tooltip / placeholder attribute, the document title
- * and the meta description — plus every link target in it:
+ * and the meta description — plus every link target in them:
  *
  *  1. no Academy podcast episode, Academy / partner news item, project card or
  *     backstage entry — neither as copy nor as a link into those sections — and
@@ -19,8 +21,15 @@ import { expect, test, type Page } from "@playwright/test";
  *     glossary canon names the organisation «инвестор (организация)» /
  *     «первоинвестор», so «партнёр» is never the money-carrier;
  *  4. НМО only as a badge (the card's `data-event-nmo` chip — the fixture's
- *     evt-3 is accredited) and a facet — never a heading, the document title or
- *     the facet panel's first (primary) field.
+ *     evt-3 is accredited) and a facet (the `EventsFilter` panel) — never a
+ *     heading, the document title or the panel's first (primary) field — read
+ *     from the visible panel: the column at 1440, the opened sheet at 390.
+ *     The «Только с НМО» switch itself cannot render on today's contract:
+ *     `DoctorEventFacetOptionsSchema` is strict (`city`, `kind`) and the
+ *     storefront adapter parses the read with it, so an upstream `nmo` option
+ *     block fails the whole feed read (007 carries no НМО flag yet). The first
+ *     field is read from the real field list either way, so the rule holds the
+ *     day the contract names НМО.
  *
  * A podcast BROADCAST event is an event of this feed, so «подкаст» alone is
  * not noise; the Academy entity is the EPISODE, which is what the scan names.
@@ -108,93 +117,115 @@ type Scan = {
   headings: string[];
   nmoOutsideBadgeOrFacet: string[];
   nmoBadges: number;
-  primaryFacetFields: string[];
+  /** The visible facet panel's fields, in order — each field's whole text. */
+  panelFields: string[];
 };
 
-/** Every doctor-facing string, link target and НМО placement on the page. */
-async function scan(page: Page): Promise<Scan> {
-  return page.evaluate(() => {
-    const SKIP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE"]);
-    const FACET =
-      '[data-testid="events-column"], [data-testid="events-filter-sheet"], [role="region"][aria-label="Фильтры"]';
-    const strings: string[] = [];
-    const nmoOutside: string[] = [];
+/** The `EventsFilter` panel: `<section aria-label="Фильтры">` (events-filter.tsx). */
+const PANEL = 'section[aria-label="Фильтры"]';
+/** The facet sheet below 1024 px — mounted only while open, portalled to `<body>`. */
+const SHEET = '[data-testid="events-filter-sheet"]';
+const COLUMN = '[data-testid="events-column"]';
 
-    // The 019 surface is the page's <main>: the footer is the 017 shell's one
-    // sanctioned crossing to the Academy (017 EARS-12, LD-4), not this feature.
-    const root = document.querySelector("main");
-    if (!root) throw new Error("the events page renders no <main>");
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const parent = node.parentElement;
-      const text = node.textContent?.trim() ?? "";
-      if (!parent || SKIP.has(parent.tagName) || text === "") continue;
-      strings.push(text);
-      if (
-        /НМО/.test(text) &&
-        !parent.closest("[data-event-nmo]") &&
-        !parent.closest(FACET)
-      ) {
-        nmoOutside.push(text);
-      }
-    }
-    for (const element of Array.from(root.querySelectorAll("*"))) {
-      for (const name of [
-        "aria-label",
-        "aria-description",
-        "aria-roledescription",
-        "title",
-        "alt",
-        "placeholder",
-      ]) {
-        const value = element.getAttribute(name)?.trim();
-        if (!value) continue;
-        strings.push(value);
-        if (
-          /НМО/.test(value) &&
-          !element.closest("[data-event-nmo]") &&
-          !element.closest(FACET)
-        ) {
-          nmoOutside.push(value);
+/**
+ * Every doctor-facing string, link target and НМО placement of the 019
+ * surface; `panelRoot` names where the VISIBLE facet panel mounts.
+ */
+async function scan(page: Page, panelRoot: string): Promise<Scan> {
+  return page.evaluate(
+    ({ PANEL, SHEET, panelRoot }) => {
+      const SKIP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE"]);
+      const strings: string[] = [];
+      const nmoOutside: string[] = [];
+
+      // The 019 surface is the page's <main>: the footer is the 017 shell's one
+      // sanctioned crossing to the Academy (017 EARS-12, LD-4), not this
+      // feature. An open facet sheet is portalled outside it and is part of it.
+      const main = document.querySelector("main");
+      if (!main) throw new Error("the events page renders no <main>");
+      const sheet = document.querySelector(SHEET);
+      const roots = sheet ? [main, sheet] : [main];
+
+      for (const root of roots) {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const parent = node.parentElement;
+          const text = node.textContent?.trim() ?? "";
+          if (!parent || SKIP.has(parent.tagName) || text === "") continue;
+          strings.push(text);
+          if (
+            /НМО/.test(text) &&
+            !parent.closest("[data-event-nmo]") &&
+            !parent.closest(PANEL)
+          ) {
+            nmoOutside.push(text);
+          }
+        }
+        for (const element of Array.from(root.querySelectorAll("*"))) {
+          for (const name of [
+            "aria-label",
+            "aria-description",
+            "aria-roledescription",
+            "title",
+            "alt",
+            "placeholder",
+          ]) {
+            const value = element.getAttribute(name)?.trim();
+            if (!value) continue;
+            strings.push(value);
+            if (
+              /НМО/.test(value) &&
+              !element.closest("[data-event-nmo]") &&
+              !element.closest(PANEL)
+            ) {
+              nmoOutside.push(value);
+            }
+          }
         }
       }
-    }
-    strings.push(document.title);
-    const description = document
-      .querySelector('meta[name="description"]')
-      ?.getAttribute("content");
-    if (description) strings.push(description);
+      strings.push(document.title);
+      const description = document
+        .querySelector('meta[name="description"]')
+        ?.getAttribute("content");
+      if (description) strings.push(description);
 
-    const headings = [
-      document.title,
-      ...Array.from(
-        root.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]'),
-      ).map((heading) => (heading as HTMLElement).innerText ?? ""),
-    ];
+      const headings = [
+        document.title,
+        ...roots.flatMap((root) =>
+          Array.from(
+            root.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]'),
+          ).map((heading) => (heading.textContent ?? "").trim()),
+        ),
+      ];
 
-    // The facet panel's FIRST field — the screen's primary filter — read from
-    // every rendered panel, past its «Фильтры» header and applied-count line.
-    const primaryFacetFields = Array.from(root.querySelectorAll(FACET))
-      .map((panel) =>
-        ((panel as HTMLElement).innerText ?? "")
-          .split("\n")
-          .map((line) => line.trim())
-          .filter(Boolean)
-          .find((line) => !/^(Фильтры|Применено.*|Сбросить)$/.test(line)),
-      )
-      .filter((line): line is string => typeof line === "string");
+      // The visible panel's fields in order. The doctor `EventsFilter` is its
+      // optional «Фильтры» header, then ONE container whose children are the
+      // fields (query, specialty, format, kind, city, direction, «Только с
+      // НМО»); its first child is the screen's primary filter.
+      const panel = document.querySelector(`${panelRoot} ${PANEL}`);
+      if (!panel) throw new Error(`no facet panel under ${panelRoot}`);
+      const fields = panel.lastElementChild;
+      const panelFields = fields
+        ? Array.from(fields.children)
+            .map((field) => (field.textContent ?? "").trim())
+            .filter(Boolean)
+        : [];
 
-    return {
-      strings,
-      hrefs: Array.from(root.querySelectorAll("a[href]")).map(
-        (link) => link.getAttribute("href") ?? "",
-      ),
-      headings,
-      nmoOutsideBadgeOrFacet: nmoOutside,
-      nmoBadges: document.querySelectorAll("[data-event-nmo]").length,
-      primaryFacetFields,
-    };
-  });
+      return {
+        strings,
+        hrefs: roots.flatMap((root) =>
+          Array.from(root.querySelectorAll("a[href]")).map(
+            (link) => link.getAttribute("href") ?? "",
+          ),
+        ),
+        headings,
+        nmoOutsideBadgeOrFacet: nmoOutside,
+        nmoBadges: document.querySelectorAll("[data-event-nmo]").length,
+        panelFields,
+      };
+    },
+    { PANEL, SHEET, panelRoot },
+  );
 }
 
 test.afterEach(async ({ request }) => {
@@ -235,7 +266,19 @@ for (const state of STATES) {
           await expect(page.getByTestId(skeleton), where).toHaveCount(0);
         }
 
-        const read = await scan(page);
+        // Below 1024 px the column is display:none and the panel lives in the
+        // sheet: open it, so the panel read is the one the doctor sees.
+        const narrow = shot.size.width < 1024;
+        if (narrow) {
+          await page.getByTestId("events-filter-open").click();
+          await expect(page.locator(SHEET), where).toBeVisible();
+        }
+        // The panel streams in behind its own Suspense slot.
+        await expect(
+          page.locator(`${narrow ? SHEET : COLUMN} ${PANEL}`),
+          where,
+        ).toBeVisible();
+        const read = await scan(page, narrow ? SHEET : COLUMN);
 
         const hits = read.strings.flatMap((text) =>
           FORBIDDEN.filter(({ pattern }) => pattern.test(text)).map(
@@ -257,10 +300,17 @@ for (const state of STATES) {
           read.nmoOutsideBadgeOrFacet,
           `${where}: НМО outside a badge or a facet`,
         ).toEqual([]);
+        // The visible panel's FIRST field — the primary filter — is never НМО.
+        // Not vacuous: the read lands on the real field list (specialty,
+        // format, kind at least), so a НМО field placed first reads red.
         expect(
-          read.primaryFacetFields.filter((field) => NMO.test(field)),
+          read.panelFields.length,
+          `${where}: the panel's fields`,
+        ).toBeGreaterThanOrEqual(3);
+        expect(
+          read.panelFields[0],
           `${where}: НМО as the primary filter`,
-        ).toEqual([]);
+        ).not.toMatch(NMO);
 
         // The scan is not vacuous: the feed states render their cards, and the
         // accredited evt-3 shows НМО as its badge wherever it is served.

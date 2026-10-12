@@ -29,7 +29,8 @@ import { visible } from "./support/visible";
  *
  * `E2E_SHOT_DIR` opts into the evidence screenshots of the approved-non-canvas
  * source `feature-044-roster-filters-v1`: `roster-filters-closed`, `-open`,
- * `-applied` at 1440 and `-narrow` at 390, light and dark.
+ * `-applied`, `-date-error` (the inverted date range) at 1440 and `-narrow` at
+ * 390, light and dark.
  */
 const SHOT_DIR = process.env.E2E_SHOT_DIR;
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
@@ -313,6 +314,7 @@ test.describe("044 EARS-23 — the roster's column filters (F1)", () => {
     await expect(
       chip(page, `Дата регистрации: с ${ruDay(today)}`),
     ).toBeVisible();
+    await shot(page, "roster-filters-date-error");
 
     // Correcting «по» applies the whole range and clears the error.
     await to.fill(today);

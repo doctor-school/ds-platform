@@ -28,17 +28,7 @@ import {
   normaliseContactPhone,
   REGISTRABLE_EVENT_STATES,
 } from "@ds/schemas";
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  gte,
-  inArray,
-  or,
-  type SQL,
-  sql,
-} from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, or, type SQL, sql } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { isParticipant } from "../auth/staff-role.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
@@ -354,7 +344,10 @@ export class RegistrationRepository {
    * request is in flight. `FILTER` keeps it one index-backed pass over the
    * doctor's registrations.
    */
-  async countMyEvents(userId: string, cutoff: Date): Promise<MyEventsCounts> {
+  async countMyEvents(
+    userId: string,
+    cutoff: Date,
+  ): Promise<MyEventsCounts> {
     const [row] = await this.db
       .select({
         upcoming: sql<number>`count(*) FILTER (WHERE ${tabMembership("upcoming", cutoff)})::int`,
@@ -535,10 +528,12 @@ export class RegistrationRepository {
         email: r.email ?? null,
         registeredAt: r.registeredAt.toISOString(),
         confirmationMailStatus: r.confirmationMailStatus ?? null,
-        attendance: congressDays.map((day): CongressDayAttendance => ({
-          day,
-          present: marks.get(r.registrationId)?.has(day) ?? false,
-        })),
+        attendance: congressDays.map(
+          (day): CongressDayAttendance => ({
+            day,
+            present: marks.get(r.registrationId)?.has(day) ?? false,
+          }),
+        ),
       })),
       total: counted?.total ?? 0,
     };
@@ -573,17 +568,15 @@ export class RegistrationRepository {
     },
   ): SQL[] {
     const sort = query.sort ?? CONGRESS_ROSTER_SORT_DEFAULT.sort;
-    const dir = query.dir === "desc" ? sql.raw("desc") : sql.raw("asc");
+    const dir =
+      query.dir === "desc" ? sql.raw("desc") : sql.raw("asc");
     const russian = (cell: SQL | AnyPgColumn): SQL =>
       sql`${cell} collate "ru-x-icu"`;
     const tieBreak = [asc(registrations.registeredAt), asc(registrations.id)];
     let key: SQL;
     switch (sort) {
       case "registeredAt":
-        return [
-          sql`${registrations.registeredAt} ${dir}`,
-          asc(registrations.id),
-        ];
+        return [sql`${registrations.registeredAt} ${dir}`, asc(registrations.id)];
       case "fullName":
         key = russian(sql`nullif(${cells.fullName}, '')`);
         break;
@@ -628,9 +621,7 @@ export class RegistrationRepository {
          and ${registrationAttendance.day} = ${query.attendanceDay}
          and ${registrationAttendance.present} = true
     )`;
-    return query.present === "marked"
-      ? markedPresent
-      : sql`not ${markedPresent}`;
+    return query.present === "marked" ? markedPresent : sql`not ${markedPresent}`;
   }
 
   /** The days each of `registrationIds` is marked present on (EARS-34). */
@@ -776,11 +767,13 @@ export class RegistrationRepository {
         at: row.confirmationMailAt?.toISOString() ?? null,
       },
       possibleDuplicate: row.possibleDuplicate,
-      attendance: congressDays.map((day): CongressParticipantDay => ({
-        day,
-        present: currentByDay.get(day) ?? null,
-        history: history.get(day) ?? [],
-      })),
+      attendance: congressDays.map(
+        (day): CongressParticipantDay => ({
+          day,
+          present: currentByDay.get(day) ?? null,
+          history: history.get(day) ?? [],
+        }),
+      ),
     };
   }
 

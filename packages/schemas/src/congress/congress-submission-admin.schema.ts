@@ -47,7 +47,9 @@ export type CongressCommitteeStatus = z.infer<
  * `withdrawn` submission is final and offers nothing (EARS-28).
  */
 export const CONGRESS_COMMITTEE_TRANSITIONS: Readonly<
-  Partial<Record<CongressSubmissionStatus, readonly CongressCommitteeStatus[]>>
+  Partial<
+    Record<CongressSubmissionStatus, readonly CongressCommitteeStatus[]>
+  >
 > = {
   submitted: ["in_review", "accepted", "rejected", "needs_revision"],
   in_review: ["accepted", "rejected", "needs_revision"],
@@ -155,8 +157,9 @@ export type CongressSubmissionRegistrySort =
   (typeof CONGRESS_SUBMISSION_REGISTRY_SORTS)[number];
 
 /** The statuses the registry can list — every one but `draft` (EARS-27). */
-export const CongressRegistryStatusSchema =
-  CongressSubmissionStatusSchema.exclude(["draft"]);
+export const CongressRegistryStatusSchema = CongressSubmissionStatusSchema.exclude(
+  ["draft"],
+);
 
 /**
  * The registry query, parsed from the raw query string. Every filter composes
@@ -165,11 +168,7 @@ export const CongressRegistryStatusSchema =
 export const CongressSubmissionRegistryQuerySchema = z
   .object({
     /** A contains-search over the title and the author names. */
-    q: z
-      .string()
-      .trim()
-      .max(CONGRESS_SUBMISSION_REGISTRY_SEARCH_MAX)
-      .optional(),
+    q: z.string().trim().max(CONGRESS_SUBMISSION_REGISTRY_SEARCH_MAX).optional(),
     /** A contains-search over the submitter's full name and email. */
     submitter: z
       .string()

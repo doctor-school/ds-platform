@@ -502,4 +502,6 @@ context. Existing mocked profile, inline-edit and accessibility coverage remains
 intact. Run only this selected scenario on the lead-selected stand; this test-only
 change needs no owner Stage-B request or new slot. Its CAPTCHA preparation uses
 the explicit local-OFF route above only when the actual target and process flag
-qualify; registration, code acceptance and profile requests remain real.
+qualify; registration, code acceptance and profile requests remain real. Profile
+links are located within the page's main landmark, alongside the shared header's
+separate navigation links.

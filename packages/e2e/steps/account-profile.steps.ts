@@ -214,8 +214,11 @@ Then(
   'a link to "Мои события" and a sign-out action are present',
   async ({ page }) => {
     const owned = profile(page).page;
-    const events = owned.getByRole("link", { name: /Мои события/ });
+    const events = owned
+      .getByRole("main")
+      .getByRole("link", { name: /Мои события/ });
     await expect(events).toBeVisible();
+    await expect(events).toBeEnabled();
     await expect(events).toHaveAttribute("href", "/account/events");
     await expect(owned.getByTestId("logout")).toBeVisible();
     await expect(owned.getByTestId("logout")).toBeEnabled();

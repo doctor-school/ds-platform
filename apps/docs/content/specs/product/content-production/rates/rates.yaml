@@ -2038,3 +2038,406 @@ experts:
           why: "чисто производная; FMV-сетки компаний не публикуются",
         }
   gaps: "запросить FMV-сетку у дружественной фармкомпании и положение о почасовой оплате медвуза (Сеченовский университет, РНИМУ) 2025/26"
+
+# ── Внешние затраты: значения по умолчанию для ../calculator/products.yaml#externals ─────
+# Ключи совпадают с externals калькулятора; rub — на одну единицу per; market_rub — наблюдаемый
+# рынок для сверки. Курс пересчёта валютных цен — tools.fx.
+external_costs:
+  ai_generation:
+    per: урок
+    rub: 50000
+    basis: "значение аналитика по умолчанию: генерация медкадров и анимации урока (кредиты сервисов сверх подписок tools.opex_monthly и перегенерации). Подписки видеогенерации — 850–3 150 ₽ в месяц за место (Runway, Kling), но кредиты на 45-минутный урок с перегенерацией расходуются многократно"
+    sources:
+      - url: https://runway.com/pricing
+        publisher: "Runway — Standard 15 $, Pro 35 $ в месяц"
+        period: 2026
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: low,
+        why: "расход кредитов на урок не измерен; значение — суждение по умолчанию, владелец правит в калькуляторе",
+      }
+  voices_licences:
+    per: урок
+    rub: 50000
+    market_rub:
+      synthesis_per_minute: [1, 15]
+      studio_voice_per_minute: [400, 2000]
+    basis: "значение аналитика по умолчанию — верхний сценарий: 45 мин речи × ≈ 1 100 ₽ за минуту живого диктора ≈ 50 000 ₽. Синтез стоит 1–15 ₽ за минуту (SpeechKit, ElevenLabs) — при чистом синтезе затрата падает до ≈ 1 000 ₽ за урок плюс подписка"
+    sources:
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=диктор+озвучка"
+        publisher: "Яндекс Услуги — дикторы от 400 и 2 000 ₽ за минуту чистовой записи"
+        n: 174
+        period: 2026-10
+        accessed: 2026-10-12
+      - url: https://aistudio.yandex.ru/docs/ru/speechkit/pricing
+        publisher: "Yandex SpeechKit — 1 342 ₽ за 1 млн символов (≈ 0,6–1,3 ₽ за минуту речи, пересчёт ≈ 1 000 символов в минуту)"
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://elevenlabs.io/pricing
+        publisher: "ElevenLabs — Creator 22 $ (~121 мин), Pro 99 $ (~600 мин): ≈ 14–15 ₽ за минуту"
+        period: 2026
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: medium,
+        why: "цены за минуту подтверждены площадками и прайсами; выбор живой голос / синтез — решение владельца",
+      }
+  podcast_studio:
+    per: час записи
+    rub: 20000
+    market_rub: [3490, 14990]
+    basis: "значение аналитика по умолчанию — час записи вместе с работой студии над ним: «1 ч съёмки + 1 ч монтажа» 23 000–28 000 ₽ (Resonant Arts); голая аренда зала с камерами 3 490–14 990 ₽/ч. Калькулятор умножает на часы записи эпизода"
+    sources:
+      - url: https://resonantarts.com/studija_zvukozapisi/videopodcast/
+        publisher: "Resonant Arts — съёмка без монтажа 8 500 ₽ за 1-й час; 1 ч съёмки + 1 ч монтажа 23 000 / 28 000 ₽"
+        kind: agency
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://pro-stream.ru/podcasts/
+        publisher: "Pro-Stream — подкаст 1 / 2 / 3 камеры с оператором и режиссёрским переключением от 4 640 / 5 140 / 5 640 ₽/ч"
+        kind: agency
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://poslushaysuda.ru/
+        publisher: "Послушай сюда! — зал мини 4 990 ₽/ч; 2–4 камеры 7 990–11 990 ₽/ч, минимум 2 ч; абонемент 50 000 ₽ в месяц"
+        kind: agency
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://procast.moscow/
+        publisher: "ProCast — 7 990–14 990 ₽/ч; Podcastprosto 3 490–5 990 ₽/ч (видно в выдаче поиска)"
+        kind: agency
+        period: 2026
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: medium,
+        why: "много прайсов студий Москвы; 20 000 — час с постпродакшном, выше голой аренды",
+      }
+  podcast_speaker_fee:
+    per: эпизод
+    rub: 0
+    basis: "гость подкаста по умолчанию не получает гонорар (приглашённый эксперт выступает ради аудитории); платный гость — experts.grades[грейд].per_hour_rub × часы"
+    confidence: { level: low, why: "значение — политика DS, не рынок" }
+  event_venue_broadcast:
+    per: мероприятие
+    rub: 0
+    basis: "онлайн-трансляция идёт на собственной платформе DS (её стоимость — tools.platform_ds_monthly); для очного мероприятия площадку задают в калькуляторе"
+    confidence:
+      {
+        level: medium,
+        why: "собственная платформа; переменная стоимость трансляции ≈ трафик S3/CDN",
+      }
+  video_podcast:
+    per: эпизод
+    components:
+      multi_camera_crew:
+        rub: [15000, 45000]
+        unit: смена
+        basis: "оператор 15 000 ₽ за смену (прокат Kinozavod), 3 оператора ≈ 45 000; в студийном часе (podcast_studio) операторы уже включены"
+      director:
+        rub: [0, 40000]
+        unit: смена
+        basis: "в студийной ставке режиссёрское переключение включено (Pro-Stream); отдельная ставка режиссёра не найдена — 40 000 за день оператора-постановщика в рекламе (≈ 2020) — потолок"
+      grading_graphics:
+        rub: [8900, 21900]
+        unit: эпизод
+        basis: "отдельно не продаётся — входит в пакеты постпродакшна: «чистый монтаж» 8 900, «под ключ» 16 500, «+ рилс» 21 900 ₽ (Pro-Stream)"
+      cover:
+        rub: [1500, 5000]
+        unit: эпизод
+      clips:
+        rub_per_clip: [700, 2000]
+        clips_per_episode: [5, 10]
+        basis: "студия 700–1 300 ₽ за вертикальный ролик (Pro-Stream), 15 000 ₽ за 10 (Resonant Arts); фрилансер 2 000–8 000 ₽ (Sostav)"
+    sources:
+      - url: https://kinozavod.ru/personal/operator
+        publisher: "Kinozavod — оператор, 1 смена 15 000 ₽; 11 250–13 500 при 3–21+ сменах"
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://pro-stream.ru/podcasts/
+        publisher: "Pro-Stream — постпродакшн 8 900 / 16 500 / 21 900 ₽ за выпуск (цветокоррекция включена); рилс 700 / 1 300 ₽"
+        kind: agency
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://resonantarts.com/studija_zvukozapisi/videopodcast/
+        publisher: "Resonant Arts — монтаж Reels/Shorts 15 000 ₽ за 10 шт."
+        kind: agency
+        period: 2026
+        accessed: 2026-10-12
+      - url: https://www.sostav.ru/blogs/295126/113192
+        publisher: "Sostav — фрилансер 2 000–8 000 ₽ за ролик"
+        period: 2026-10-07
+        accessed: 2026-10-12
+      - url: https://quick-offer.ru/job/dizayner-dlya-youtube-kanala-93037
+        publisher: "Quick-offer — превью 500–2 500 ₽, обложка 1 500–5 000 ₽ (ставки из вакансии)"
+        accessed: 2026-10-12
+      - url: https://teletype.in/@pro_cinematics/S8tWEdNrm
+        publisher: "Pro Cinematics — оператор-постановщик в рекламе от 40 000 ₽ в день (≈ 2020)"
+        period: 2020
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: medium,
+        why: "прайсы студий Москвы 2026; режиссёр и графика отдельно не продаются — low для этих строк",
+      }
+
+# ── Инструменты: подписки, платформа DS, оборудование ────────────────────────────────────
+# opex_monthly — ₽ в месяц; per: seat — за место (× число пользователей), team — на студию.
+# capex — price_rub и useful_life_months (срок полезного использования; ежемесячная доля =
+# price_rub ÷ useful_life_months). Валютные цены пересчитаны по fx; оплата зарубежных сервисов из РФ
+# идёт через посредника — сверху payment_markup.
+tools:
+  fx:
+    usd_rub: 84.9048
+    eur_rub: 94.9745
+    source:
+      url: "https://www.cbr.ru/scripts/XML_daily.asp?date_req=10/10/2026"
+      publisher: "ЦБ РФ — официальный курс на 10.10.2026"
+      accessed: 2026-10-12
+  payment_markup:
+    default: 0.1
+    range: [0.05, 0.29]
+    basis: "Stripe не принимает карты российских банков — подписки OpenAI, Anthropic, Midjourney, Runway, Kling, ElevenLabs, CapCut, Adobe оплачиваются через посредника: ≈ 550 ₽ фиксировано за подписку 20 $ (≈ 26–29 %), от 50 000 ₽ — 10 %, от 100 000 ₽ — 5–7 %"
+    source:
+      url: https://vc.ru/services/2912049-kak-oplatit-chatgpt-v-rossii
+      publisher: "vc.ru — комиссии посредников за оплату зарубежных подписок"
+      period: 2026-05
+      accessed: 2026-10-12
+    confidence:
+      { level: medium, why: "один обзор; комиссии посредников различаются" }
+  opex_monthly:
+    - {
+        item: "ChatGPT Business, место (годовая оплата)",
+        per: seat,
+        rub_month: 1698,
+        usd: 20,
+        url: "https://lenz.io/c/openai-chatgpt-business-5-dollar-price-cut-2026-72b95dee",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "Claude Team Standard, место (годовая оплата)",
+        per: seat,
+        rub_month: 1698,
+        usd: 20,
+        url: "https://claude.com/pricing",
+        accessed: 2026-10-12,
+        confidence: high,
+      }
+    - {
+        item: "Midjourney Standard",
+        per: seat,
+        rub_month: 2547,
+        usd: 30,
+        url: "https://eesel.ai/blog/midjourney-pricing",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "Runway Pro",
+        per: seat,
+        rub_month: 2972,
+        usd: 35,
+        url: "https://runway.com/pricing",
+        accessed: 2026-10-12,
+        confidence: high,
+      }
+    - {
+        item: "Kling Pro",
+        per: seat,
+        rub_month: 3141,
+        usd: 37,
+        url: "https://eesel.ai/blog/kling-ai-pricing",
+        accessed: 2026-10-12,
+        confidence: low,
+      }
+    - {
+        item: "ElevenLabs Pro (~600 мин синтеза)",
+        per: team,
+        rub_month: 8406,
+        usd: 99,
+        url: "https://elevenlabs.io/pricing",
+        accessed: 2026-10-12,
+        confidence: high,
+      }
+    - {
+        item: "Adobe Creative Cloud Pro (бывший All Apps), годовой план",
+        per: seat,
+        rub_month: 5942,
+        usd: 69.99,
+        url: "https://www.thepricer.org/how-much-does-adobe-creative-cloud-cost/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "CapCut Pro",
+        per: seat,
+        rub_month: 1697,
+        usd: 19.99,
+        url: "https://vc.ru/services/2983864-kak-oplatit-capcut-pro-iz-rossii",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "Figma Professional, Full seat",
+        per: seat,
+        rub_month: 1358,
+        usd: 16,
+        url: "https://www.figma.com/pricing/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "Яндекс 360 «Основной», 1 ТБ",
+        per: seat,
+        rub_month: 549,
+        url: "https://net-admin.su/blog/tarifi-yandex-360-dlya-biznesa",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "Yandex Object Storage, стандартное хранение, за 1 ТБ",
+        per: team,
+        rub_month: 2433,
+        basis: "2,376 ₽ за ГБ в месяц × 1 024",
+        url: "https://yandex.cloud/ru/docs/storage/pricing",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "домен .ru, продление (Рег.ру), 999 ₽ в год",
+        per: team,
+        rub_month: 83,
+        url: "https://www.reg.ru/company/news/12857",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+  opex_one_off:
+    - {
+        item: "DaVinci Resolve Studio, бессрочная лицензия",
+        price_rub: 25047,
+        usd: 295,
+        url: "https://subger.com/ru/service/davinci-resolve-studio",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+  platform_ds_monthly:
+    - {
+        item: "Timeweb Cloud ru-3, 4 vCPU / 8 ГБ / 80 ГБ NVMe (prod, preset 4803) + IPv4",
+        rub_month: 1980,
+        url: "infra/deploy/terraform/variables.tf (репозиторий DS; цена живого Timeweb API на apply)",
+        accessed: 2026-10-12,
+        confidence: high,
+      }
+    - {
+        item: "Timeweb Cloud, 8 vCPU / 12 ГБ / 100 ГБ (stage, preset 4805) + IPv4",
+        rub_month: 3080,
+        url: "infra/deploy/terraform/variables.tf (репозиторий DS)",
+        accessed: 2026-10-12,
+        confidence: high,
+      }
+    - {
+        item: "весь prod-контур (2 VPS + NAT + S3)",
+        rub_month: [4400, 4650],
+        url: "apps/docs/content/specs/tech/2026-07-02-ds-platform-prepilot-deploy-slice-design-en.md §4 (репозиторий DS, расчёт по живому API 2026-07)",
+        accessed: 2026-10-12,
+        confidence: high,
+      }
+    - {
+        item: "Timeweb S3, тариф 100 ГБ (сверх — 4 ₽ за ГБ; исходящий трафик 1,3 ₽ за ГБ сверх 100 ГБ)",
+        rub_month: 349,
+        url: "https://timeweb.cloud/services/s3-storage",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "Kinescope Super — видеохостинг и CDN (от 10 € в месяц + 0,03 € за ГБ)",
+        rub_month: 950,
+        url: "https://www.kinescope.com/pricing",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "домены платформы (.ru, продление 999 ₽ в год за домен, ×3)",
+        rub_month: 250,
+        url: "https://www.reg.ru/company/news/12857",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+  capex:
+    - {
+        item: "камера Sony FX30 body",
+        price_rub: 137900,
+        useful_life_months: 60,
+        url: "https://www.yarkiy.ru/products/sony-fx30-body-37493",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "камера Sony ZV-E10 II kit 16–50",
+        price_rub: 77500,
+        useful_life_months: 60,
+        url: "https://texno-pro.ru/catalog/foto/sony_foto/fotoapparat_sony_zv_e10_ii_kit_16_50mm_f_3_5_5_6_oss_black/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "микрофон Shure SM7B",
+        price_rub: 51890,
+        useful_life_months: 60,
+        url: "https://doctorhead.ru/product/shure_sm7db_black/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "микрофон Rode PodMic USB",
+        price_rub: 19490,
+        useful_life_months: 60,
+        url: "https://doctorhead.ru/brands/rode/products/pro-audio/mikrofony/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "аудиоинтерфейс Focusrite Scarlett 2i2 4th Gen",
+        price_rub: 20440,
+        useful_life_months: 36,
+        url: "https://doctorhead.ru/product/focusrite_scarlett_2i2_4th_gen/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "свет Godox SL60IIBi, комплект 3 шт.",
+        price_rub: 43100,
+        useful_life_months: 60,
+        url: "https://falcon-eyes.ru/catalog/svetodiodnye-led-paneli/osvetitel-svetodiodnyy-godox-sl60iibi/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: "ноутбук для монтажа MacBook Pro 14 M5 16/512",
+        price_rub: 146400,
+        useful_life_months: 36,
+        url: "https://click-or-die.ru/2026/02/macbook-pro-kruto-podeshevel-aktualnyj-macbook-air-stoit-okolo-100-tysyach-rublej-vot-czeny-na-vse-kompyutery-apple-v-rossii/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+    - {
+        item: 'монитор LG 27UP850N-W 27" 4K',
+        price_rub: 36499,
+        useful_life_months: 36,
+        url: "https://www.dns-shop.ru/product/60046b551a42ed20/27-monitor-lg-27up850n-w-belyj/",
+        accessed: 2026-10-12,
+        confidence: medium,
+      }
+  useful_life_basis: "компьютеры и ноутбуки — 2-я амортизационная группа, 25–36 мес. (ОКОФ 320.26.20.11), берётся верх 36; видеокамеры — 3-я группа, 37–60 мес. (ОКОФ 330.26.70.13), берётся 60; микрофоны и свет — точная группа не найдена, по вышестоящему коду ОКОФ вероятно 3-я (60, low); в налоговом учёте имущество до 100 000 ₽ списывается сразу (ст. 256 НК РФ) — срок здесь управленческий"
+  useful_life_sources:
+    - url: https://nalog-nalog.ru/dontknows/k-kakomu-okof-i-amortizacionnoj-gruppe-otnositsya-kompyuter/
+      publisher: "nalog-nalog.ru — компьютеры: 2-я группа, 25–36 мес."
+      accessed: 2026-10-12
+    - url: https://www.consultant.ru/law/podborki/videokamera_okof/
+      publisher: "КонсультантПлюс — видеокамеры: ОКОФ 330.26.70.13, 3-я группа"
+      accessed: 2026-10-12
+    - url: https://www.consultant.ru/document/cons_doc_LAW_28165/
+      publisher: "НК РФ ст. 256 — амортизируемое имущество дороже 100 000 ₽"
+      accessed: 2026-10-12

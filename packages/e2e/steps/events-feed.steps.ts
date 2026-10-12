@@ -358,11 +358,14 @@ When(
 Then(
   "the doctor lands in the room of the golden doctors' broadcast",
   async ({ page, host }) => {
-    await expectLanding(
-      page,
-      `${eventPathOf(host, LIVE.slug)}/room`,
-      LIVE.title,
-    );
+    const room = `${eventPathOf(host, LIVE.slug)}/room`;
+    await page.waitForURL((url) => url.pathname === room);
+    // The room names the broadcast and its exit leads back to
+    // the event page — the room of THIS broadcast, not a fallback page.
+    await expect(page.getByRole("main")).toContainText(LIVE.title);
+    await expect(
+      page.getByRole("link", { name: "Выйти из комнаты", exact: true }),
+    ).toHaveAttribute("href", eventPathOf(host, LIVE.slug));
   },
 );
 
@@ -710,7 +713,6 @@ When(
     // 019 «Amendment — 2026-10-12»: the screen holds the 10 most recent past
     // events, a day shared with older ones shown whole.
     expect(cards, "the default past screen").toBeGreaterThanOrEqual(10);
-    expect(step).toBeLessThanOrEqual(10);
     feedOf(world).pastBefore = { cards, step, from: params(page).get("from") };
     await showMore(page, world);
   },
@@ -725,9 +727,8 @@ Then(
     const from = params(page).get("from");
     expect(from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     if (before.from) expect(from! < before.from).toBe(true);
-    expect(await feedCards(page).count()).toBeGreaterThanOrEqual(
-      before.cards + before.step,
-    );
+    // The first number of «Показать ещё K (осталось N)» is what the step adds.
+    expect(await feedCards(page).count()).toBe(before.cards + before.step);
   },
 );
 
@@ -741,9 +742,16 @@ When(
     for (let step = 0; (await watch.count()) === 0 && step < 10; step += 1) {
       await showMore(page, world);
     }
-    const link = watch.first();
+    const card = feedCards(page)
+      .filter({
+        has: page.getByRole("link", { name: "Смотреть запись", exact: true }),
+      })
+      .first();
+    const link = card.getByRole("link", {
+      name: "Смотреть запись",
+      exact: true,
+    });
     await expect(link).toBeVisible();
-    const card = feedCards(page).filter({ has: link }).first();
     const href = (await link.getAttribute("href"))!;
     const title = (await card.locator("h3").first().innerText()).trim();
     feedOf(world).card = { title, href };

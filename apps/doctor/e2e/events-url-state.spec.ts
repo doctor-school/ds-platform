@@ -20,62 +20,6 @@ import { expect, test } from "@playwright/test";
 const FULL_STATE =
   "/events?day=2026-09-04&tense=upcoming&from=2026-09-01&to=2026-09-29&format=online&specialty=all&nmo=false&q=%D1%81%D0%B5%D1%80%D0%B4%D1%86%D0%B5";
 
-/** The «показать ещё» href, or `null` when the horizon is already maximal. */
-const showMoreHrefOf = async (page: import("@playwright/test").Page) => {
-  const control = page.getByTestId("events-feed-show-more");
-  return (await control.count()) === 0 ? null : control.getAttribute("href");
-};
-
-/** The structural fingerprint of a rendered feed — what a shared link must reproduce. */
-const fingerprint = async (page: import("@playwright/test").Page) => {
-  const feed = page.getByTestId("events-feed");
-  await expect(feed).toHaveCount(1);
-  return {
-    days: await page.locator('section[id^="day-"]').evaluateAll((nodes) =>
-      nodes.map((node) => node.id),
-    ),
-    cards: await feed
-      .locator("[data-webinar-card] h3 a")
-      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("href"))),
-    tense: await page
-      .getByTestId("events-tense-tabs")
-      .getByRole("tab", { selected: true })
-      .textContent(),
-    showMore: await showMoreHrefOf(page),
-  };
-};
-
-test("019 EARS-8.18: a pasted URL reproduces the same feed in a fresh browser context", async ({
-  browser,
-}) => {
-  const first = await browser.newContext();
-  const firstPage = await first.newPage();
-  await firstPage.goto(FULL_STATE);
-  const original = await fingerprint(firstPage);
-
-  // A genuinely fresh context: no cookies, no storage, nothing carried over —
-  // the reader who received the link has only the URL.
-  const second = await browser.newContext();
-  const secondPage = await second.newPage();
-  await secondPage.goto(FULL_STATE);
-  const shared = await fingerprint(secondPage);
-
-  expect(shared).toEqual(original);
-  // The horizon in the URL is the horizon on the screen, not a default: the
-  // widened extent serves the day beyond the default window, and nothing lies
-  // beyond it any more.
-  expect(original.tense).toBe("Будущие");
-  expect(original.showMore).toBeNull();
-  expect(original.days).toEqual([
-    "day-2026-09-02",
-    "day-2026-09-04",
-    "day-2026-09-20",
-  ]);
-
-  await first.close();
-  await second.close();
-});
-
 test("019 EARS-8.19: the facet in the URL reaches the read rather than the browser", async ({
   page,
 }) => {

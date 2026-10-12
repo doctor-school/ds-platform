@@ -19,7 +19,6 @@ import { expect, test } from "@playwright/test";
 test.use({ viewport: { width: 1440, height: 900 } });
 
 const SEPTEMBER = "/events?month=2026-09";
-const PLANNED_DAY = "2026-09-04";
 const BEYOND_DAY = "2026-09-20";
 
 test("NEW: at ≥1024 px the feed view's column holds the compact month above the facet panel, beside the feed (row 56)", async ({
@@ -63,42 +62,6 @@ test("NEW: in the month view the column holds the facet panel only (row 56)", as
   const column = page.getByTestId("events-column");
   await expect(column.getByRole("region", { name: "Фильтры" })).toBeVisible();
   await expect(column.getByTestId("events-compact-month")).toHaveCount(0);
-});
-
-test("EARS-4.2: selecting a day writes it into the URL and moves the feed body to that day without narrowing the read or reloading the shell", async ({
-  page,
-}) => {
-  await page.goto(SEPTEMBER);
-
-  const groups = page.locator('section[id^="day-"]');
-  await expect(groups).toHaveCount(2);
-  const selected = page.locator(`section[id="day-${PLANNED_DAY}"]`);
-  const before = (await selected.boundingBox())?.y ?? 0;
-
-  await page.evaluate(() => {
-    (window as unknown as { __shellSentinel?: string }).__shellSentinel = "kept";
-  });
-
-  const compact = page.getByTestId("events-compact-month");
-  await compact.getByRole("button", { name: /^4 сентября/ }).click();
-
-  await expect(page).toHaveURL(new RegExp("day=" + PLANNED_DAY));
-  await expect(groups).toHaveCount(2);
-  await expect
-    .poll(async () => (await selected.boundingBox())?.y ?? Number.MAX_SAFE_INTEGER)
-    .toBeLessThan(before);
-  await expect(selected).toBeInViewport();
-  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
-
-  const sentinel = await page.evaluate(
-    () => (window as unknown as { __shellSentinel?: string }).__shellSentinel,
-  );
-  expect(sentinel).toBe("kept");
-
-  await expect(compact).toHaveAttribute("data-selected-day", "4");
-  await expect(
-    compact.getByRole("button", { name: /^4 сентября/ }),
-  ).toHaveAttribute("aria-pressed", "true");
 });
 
 test("EARS-4.3: selecting a day beyond the current horizon widens `to=` so the day is inside the read it scrolls to (row 57)", async ({

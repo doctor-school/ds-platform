@@ -142,3 +142,30 @@ export async function installCaptchaStub(
     });
   });
 }
+
+/** Prepare the journey's provider adapter before its first navigation (#2766). */
+export async function prepareCaptchaForJourney(
+  target: Routable,
+  baseURL: string,
+  botProtectionEnabled: boolean | undefined,
+): Promise<void> {
+  let url: URL | undefined;
+  try {
+    url = new URL(baseURL);
+  } catch {
+    url = undefined;
+  }
+  // URL normalizes IPv4 aliases and encoded hosts; require the literal host too.
+  const authority = baseURL.match(/^https?:\/\/([^/?#]+)/i)?.[1];
+  const literalHostname = authority?.replace(/:\d+$/, "").toLowerCase();
+  if (
+    botProtectionEnabled === false &&
+    url &&
+    (url.protocol === "http:" || url.protocol === "https:") &&
+    ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) &&
+    literalHostname === url.hostname
+  ) {
+    return;
+  }
+  await installCaptchaStub(target);
+}

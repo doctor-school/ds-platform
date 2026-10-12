@@ -1,7 +1,7 @@
 import { runInNewContext } from "node:vm";
 
 import type { BrowserContext, Page } from "@playwright/test";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   CaptchaTestTokenMissingError,
@@ -9,6 +9,7 @@ import {
   captchaTestTokenFromEnv,
   installCaptchaStub,
   isSmartCaptchaScriptUrl,
+  prepareCaptchaForJourney,
 } from "./captcha-stub.js";
 
 /**
@@ -199,5 +200,107 @@ describe("installCaptchaStub", () => {
     expect(fulfilled?.contentType).toContain("javascript");
     expect(fulfilled?.body).toContain(JSON.stringify(TOKEN));
     expect(fulfilled?.body).toContain('"cb"');
+  });
+});
+
+describe("prepareCaptchaForJourney", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  function target() {
+    return {
+      route: vi
+        .fn<Parameters<typeof installCaptchaStub>[0]["route"]>()
+        .mockResolvedValue(undefined),
+    };
+  }
+
+  it.each([
+    "http://localhost:3001",
+    "https://localhost",
+    "http://127.0.0.1:3001",
+    "https://127.0.0.1",
+    "http://[::1]:3001",
+    "https://[::1]",
+    "http://localhost:80",
+    "https://localhost:443",
+  ])(
+    "needs no token or provider route only for explicit local OFF: %s",
+    async (baseURL) => {
+      vi.stubEnv("E2E_CAPTCHA_TEST_TOKEN", undefined);
+      const local = target();
+      await expect(
+        prepareCaptchaForJourney(local, baseURL, false),
+      ).resolves.toBeUndefined();
+      expect(local.route).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([true, undefined, "false" as unknown as boolean])(
+    "retains the token requirement for a local target without boolean false: %s",
+    async (enabled) => {
+      vi.stubEnv("E2E_CAPTCHA_TEST_TOKEN", undefined);
+      const local = target();
+      await expect(
+        prepareCaptchaForJourney(local, "http://localhost:3001", enabled),
+      ).rejects.toThrow(CaptchaTestTokenMissingError);
+      expect(local.route).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    "https://pr-2778.stage.doctor.school",
+    "https://doctor.school",
+    "http://localhost.stage.doctor.school",
+    "https://127.0.0.1.example.test",
+    "http://localhost@stage.doctor.school",
+    "http://127.1",
+    "http://2130706433",
+    "http://0x7f000001",
+    "http://[0:0:0:0:0:0:0:1]",
+    "http://%6cocalhost",
+    "file://localhost/etc",
+    "localhost:3001",
+    "not-a-url",
+    "http://",
+    "http://localhost:bad",
+    "https://[::1",
+  ])(
+    "never omits the adapter on an external, near-loopback or malformed target: %s",
+    async (baseURL) => {
+      vi.stubEnv("E2E_CAPTCHA_TEST_TOKEN", undefined);
+      const other = target();
+      await expect(
+        prepareCaptchaForJourney(other, baseURL, false),
+      ).rejects.toThrow(CaptchaTestTokenMissingError);
+      expect(other.route).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still installs only the vendor adapter for stage with a valid exported token", async () => {
+    vi.stubEnv("E2E_CAPTCHA_TEST_TOKEN", TOKEN);
+    const stage = target();
+    await prepareCaptchaForJourney(
+      stage,
+      "https://pr-2778.stage.doctor.school",
+      false,
+    );
+    expect(stage.route).toHaveBeenCalledTimes(1);
+    const matcher = stage.route.mock.calls[0]![0];
+    expect(
+      matcher(new URL("https://smartcaptcha.cloud.yandex.ru/captcha.js")),
+    ).toBe(true);
+    expect(
+      matcher(new URL("https://pr-2778.stage.doctor.school/v1/auth/register")),
+    ).toBe(false);
+    expect(
+      matcher(new URL("https://pr-2778.stage.doctor.school/v1/me/profile")),
+    ).toBe(false);
+  });
+
+  it("leaves the original installCaptchaStub token requirement strict", async () => {
+    vi.stubEnv("E2E_CAPTCHA_TEST_TOKEN", undefined);
+    await expect(installCaptchaStub(target())).rejects.toThrow(
+      CaptchaTestTokenMissingError,
+    );
   });
 });

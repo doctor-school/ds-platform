@@ -222,6 +222,15 @@ import { installCaptchaStub } from "@ds/e2e/captcha-stub";
 await installCaptchaStub(page); // or a BrowserContext; before the first navigation
 ```
 
+`prepareCaptchaForJourney(target, baseURL, botProtectionEnabled)` retains that
+strict adapter by default. It omits the adapter only for a valid HTTP(S) URL
+whose literal hostname is exactly `localhost`, `127.0.0.1` or `[::1]` and an
+explicit boolean `false`; aliases, remote/stage URLs, malformed targets and
+missing/true flags retain the token requirement. The account-profile scenario
+passes Playwright's resolved `baseURL` and maps only the exact process value
+`BOT_PROTECTION_ENABLED=false` to OFF. No token is inferred or invented, and
+existing `installCaptchaStub` callers keep their strict behavior.
+
 The token comes from `E2E_CAPTCHA_TEST_TOKEN` (set by `pnpm e2e:stage` from the box,
 or exported by hand — `tools/staging/README.md` → «Driving captcha-gated auth on a
 slot»). Absent ⇒ `CaptchaTestTokenMissingError`, never a silent skip. No walk in this
@@ -491,4 +500,6 @@ visible page content, excluding API responses and hydration data. The trace-off
 auth fixture and secret-safe helpers are reused; cleanup closes only its owned
 context. Existing mocked profile, inline-edit and accessibility coverage remains
 intact. Run only this selected scenario on the lead-selected stand; this test-only
-change needs no owner Stage-B request or new slot.
+change needs no owner Stage-B request or new slot. Its CAPTCHA preparation uses
+the explicit local-OFF route above only when the actual target and process flag
+qualify; registration, code acceptance and profile requests remain real.

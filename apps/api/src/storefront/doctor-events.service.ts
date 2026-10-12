@@ -32,8 +32,8 @@ import {
   eventHorizonInstants,
   eventHorizonReachingFirstMatch,
   eventHorizonTenseReach,
-  resolveEventHorizon,
   resolveEventHorizonBeyond,
+  resolveEventHorizonFromData,
 } from "../events/event-horizon.js";
 import { EventsLiveService } from "../events/events-live.service.js";
 import { denseMonthlyCounts, tallyMonths } from "../events/monthly-counts.js";
@@ -109,7 +109,6 @@ export class DoctorEventsService {
     const today = doctorEventsFeedDayOf(now);
     const { query } = input;
 
-    const requested = resolveEventHorizon(query, today);
     const targeting = await this.resolveTargeting(
       query,
       input.specialtyReference,
@@ -129,6 +128,31 @@ export class DoctorEventsService {
           : UPCOMING_BROADCAST_STATES,
       order: query.tense === "past" ? "desc" : "asc",
     } as const;
+    // The feed predicate AND the card facets the window obeys — what the
+    // default «Прошедшие» screen counts (LD-2) and, #1803 + gate rows 30, 32,
+    // what the next bound and the remainder are asked of.
+    const listStartsIn = async (range: EventHorizonReach) => {
+      const rangeRows = await this.repository.findFeedRows({
+        ...tenseRead,
+        directionIds,
+        ...range,
+        kindSlugs: query.kind,
+        formats: query.format,
+        q: query.q,
+      });
+      return applyCardFacets(
+        rangeRows.map((row) => ({
+          ...cardFacetsOf(row),
+          startsAt: row.startsAt,
+        })),
+        query,
+      ).map((row) => row.startsAt);
+    };
+    const requested = await resolveEventHorizonFromData(
+      query,
+      today,
+      listStartsIn,
+    );
     const read = await this.repository.findFeedRows({
       ...tenseRead,
       directionIds,
@@ -149,31 +173,13 @@ export class DoctorEventsService {
     const filtered = applyCardFacets(cards, query);
 
     const days = groupByDay(rows, filtered);
-    // #1803 + gate rows 30, 32: the next bound («Будущие» `to`, «Прошедшие» an
-    // older `from`) and the remainder are asked of the SAME feed predicate AND
-    // the same card facets the window obeys — the one resolution both
-    // storefronts share.
+    // The next bound («Будущие» `to`, «Прошедшие» an older `from`) and the
+    // remainder — the one resolution both storefronts share.
     const beyond = await resolveEventHorizonBeyond(
       bounded.horizon,
       query.tense,
       today,
-      async (range) => {
-        const beyondRows = await this.repository.findFeedRows({
-          ...tenseRead,
-          directionIds,
-          ...range,
-          kindSlugs: query.kind,
-          formats: query.format,
-          q: query.q,
-        });
-        return applyCardFacets(
-          beyondRows.map((row) => ({
-            ...cardFacetsOf(row),
-            startsAt: row.startsAt,
-          })),
-          query,
-        ).map((row) => row.startsAt);
-      },
+      listStartsIn,
     );
 
     // #1973 — an empty default window under matches beyond opens on the

@@ -204,7 +204,7 @@ export async function FeedSection({
         showMore={
           more === null
             ? null
-            : { href: more, label: showMoreLabel(page.nextBatch, page.remaining, FEED_COPY) }
+            : { href: more, label: showMoreLabel(page.nextBatch, page.remaining, FEED_COPY, tense) }
         }
         empty={emptyFeedState(query, {
           listing: config.routes.listing,

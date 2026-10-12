@@ -120,9 +120,14 @@ export const PublicEventListingCountsSchema = z.object({
   /**
    * Distinct schools among the upcoming listing-eligible events — the «M школ»
    * half of the Academy feed subline «N эфиров · M школ» (019 / wave-2 gate
-   * §2.4 row 19).
+   * §2.4 row 19). The «Будущие» half; «Прошедшие» reads `pastSchools`.
    */
   upcomingSchools: z.number().int().nonnegative(),
+  /**
+   * Distinct schools among the past listing-eligible events — the «M школ» of
+   * the same subline on «Прошедшие», which counts the past tab (#2768).
+   */
+  pastSchools: z.number().int().nonnegative(),
 });
 export type PublicEventListingCounts = z.infer<
   typeof PublicEventListingCountsSchema

@@ -17,7 +17,10 @@ import type {
  */
 
 /** The Academy read `GET /v1/public/events?timeframe=…&from=&to=`. */
-export const adaptPublicEventListing: EventsStorefrontAdapter = (dto): EventsFeedPage => {
+export const adaptPublicEventListing: EventsStorefrontAdapter = (
+  dto,
+  { tense },
+): EventsFeedPage => {
   const page = PublicEventListingPageSchema.parse(dto);
   const cards = page.data.map(
     (card): EventsFeedCard => ({
@@ -48,6 +51,13 @@ export const adaptPublicEventListing: EventsStorefrontAdapter = (dto): EventsFee
   if (horizon === undefined) {
     throw new Error("The Academy feed read answered without its horizon");
   }
+  // The head subline counts the tab it heads (#2768): «Прошедшие» its past
+  // эфиры and their schools, «Будущие» the upcoming ones; a tab with none
+  // carries no summary, so no «0 эфиров · 0 школ» line renders.
+  const summary =
+    tense === "past"
+      ? { events: page.counts.past, schools: page.counts.pastSchools }
+      : { events: page.counts.upcoming, schools: page.counts.upcomingSchools };
   return {
     today: horizon.today,
     cards,
@@ -59,7 +69,7 @@ export const adaptPublicEventListing: EventsStorefrontAdapter = (dto): EventsFee
     },
     remaining: horizon.remaining,
     nextBatch: horizon.nextBatch,
-    summary: { events: page.counts.upcoming, schools: page.counts.upcomingSchools },
+    ...(summary.events > 0 ? { summary } : {}),
     facetOptions: page.facets ?? {},
     matching: cards.length + horizon.remaining,
   };

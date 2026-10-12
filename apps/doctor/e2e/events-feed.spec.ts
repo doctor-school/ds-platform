@@ -89,13 +89,18 @@ test("gate rows 29–31: «Прошедшие» groups by month newest first, wi
 }) => {
   await page.goto("/events?tense=past");
 
-  // Row 30: one month group for the two ended events of the window, newest first.
+  // Row 30 + LD-2: the default screen is the 10 most recent ended events, in
+  // one month group, newest first.
   const groups = page.locator('section[id^="day-"]');
   await expect(groups).toHaveCount(1);
   await expect(groups.nth(0)).toHaveAttribute("id", "day-2026-08");
   await expect(groups.nth(0)).toContainText("Август 2026");
   const titles = groups.nth(0).locator("[data-webinar-card] h3");
-  await expect(titles).toHaveText(["Событие past-recorded", "Событие past-no-cut"]);
+  await expect(titles).toHaveText([
+    "Событие past-recorded",
+    "Событие past-no-cut",
+    ...Array.from({ length: 8 }, (_unused, index) => `Событие past-fill-${8 - index}`),
+  ]);
 
   // Row 29: the past reading is the tense — no archive subtitle, tab or block.
   await expect(page.getByText("Архив записей")).toHaveCount(0);
@@ -122,10 +127,13 @@ test("gate rows 29–31: «Прошедшие» groups by month newest first, wi
   await expect(page.locator('[data-feed-block="live"]')).toHaveCount(0);
   await expect(page.locator('[data-feed-block="my-events"]')).toHaveCount(0);
 
-  // «Показать ещё» widens the past extent BACKWARD: `from` moves, `to` stays.
-  await page.getByTestId("events-feed-show-more").click();
+  // «Показать ещё 1 (осталось 1)» widens the past extent BACKWARD by the next
+  // (at most 10) older events: `from` moves to the oldest one's day, `to` stays.
+  const showMore = page.getByTestId("events-feed-show-more");
+  await expect(showMore).toHaveText("Показать ещё 1 (осталось 1)");
+  await showMore.click();
   await expect(page).toHaveURL(
-    /\/events\?tense=past&from=2026-07-21&to=2026-09-02$/,
+    /\/events\?tense=past&from=2026-07-30&to=2026-09-02$/,
   );
   await expect(groups).toHaveCount(2);
   await expect(groups.nth(1)).toHaveAttribute("id", "day-2026-07");

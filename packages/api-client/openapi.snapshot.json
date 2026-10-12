@@ -4105,6 +4105,11 @@
                 "minimum": 0,
                 "type": "integer"
               },
+              "pastSchools": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
               "upcoming": {
                 "maximum": 9007199254740991,
                 "minimum": 0,
@@ -4116,7 +4121,7 @@
                 "type": "integer"
               }
             },
-            "required": ["upcoming", "past", "upcomingSchools"],
+            "required": ["upcoming", "past", "upcomingSchools", "pastSchools"],
             "type": "object"
           },
           "data": {

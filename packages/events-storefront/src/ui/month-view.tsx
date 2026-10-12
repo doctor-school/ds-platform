@@ -13,7 +13,7 @@ import {
   emptyFeedState,
   pageTodayOf,
 } from "../model/feed";
-import { dayHref, monthHref } from "../model/feed-url";
+import { dayHref, feedTenseOf, monthHref } from "../model/feed-url";
 import {
   buildMonthGrid,
   formatMonthTitle,
@@ -21,7 +21,11 @@ import {
   shiftMonth,
   weekdayShortLabels,
 } from "../model/month-grid";
-import { defaultAgendaDay, pickerYearsOf } from "../model/month-view";
+import {
+  defaultAgendaDay,
+  defaultDisplayedMonth,
+  pickerYearsOf,
+} from "../model/month-view";
 import { type ReadRequest, fetchMonthCounts, fetchMonthEntries } from "../server";
 import { BlockError } from "./block-error";
 import { EmptyFeedBlock } from "./feed-list";
@@ -64,7 +68,11 @@ export async function MonthView({
   // grid's today and past days, «архив» and the day-href tense boundary.
   const read = await feed;
   const today = pageTodayOf(read);
-  const displayed = month ?? today.slice(0, 7);
+  // «Прошедшие» opens on its latest past event's month, «Будущие» on today's;
+  // so on «Прошедшие» «Сегодня» names today's month rather than the default.
+  const tense = feedTenseOf(raw);
+  const displayed = month ?? defaultDisplayedMonth(read, tense, today);
+  const todayMonth = tense === "past" ? today.slice(0, 7) : undefined;
   const at = (target: string | undefined) => monthHref(listing, raw, target);
   const year = Number(displayed.slice(0, 4));
   const years = Array.from(
@@ -115,7 +123,7 @@ export async function MonthView({
       </Button>
       <div className="hidden lg:flex">
         <Button asChild variant="outline">
-          <Link href={at(undefined)} data-testid="month-today">
+          <Link href={at(todayMonth)} data-testid="month-today">
             {t.todayButton}
           </Link>
         </Button>

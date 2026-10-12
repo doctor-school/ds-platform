@@ -33,7 +33,7 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
           { ...base, state: "published" },
           { ...base, id: "22222222-2222-4222-8222-222222222222", slug: "a-2", state: "live" },
         ],
-        counts: { upcoming: 30, past: 4, upcomingSchools: 3 },
+        counts: { upcoming: 30, past: 4, upcomingSchools: 3, pastSchools: 2 },
         pagination: { nextCursor: null, hasMore: true },
         horizon: { today: "2026-10-08", from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05", nextFrom: null, remaining: 28, nextBatch: 5 },
       },
@@ -65,7 +65,7 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
       adaptPublicEventListing(
         {
           data: [],
-          counts: { upcoming: 30, past: 4, upcomingSchools: 3 },
+          counts: { upcoming: 30, past: 4, upcomingSchools: 3, pastSchools: 2 },
           pagination: { nextCursor: "abc", hasMore: true },
         },
         { tense: "upcoming" },
@@ -73,17 +73,39 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
     ).toThrow();
   });
 
-  it("NEW: the Academy read's counts become the head summary — upcoming эфиры and their distinct schools (row 19)", () => {
-    const page = adaptPublicEventListing(
+  const summaryOf = (
+    tense: "upcoming" | "past",
+    counts: { upcoming: number; past: number; upcomingSchools: number; pastSchools: number },
+  ) =>
+    adaptPublicEventListing(
       {
         data: [],
-        counts: { upcoming: 30, past: 4, upcomingSchools: 3 },
+        counts,
         pagination: { nextCursor: null, hasMore: false },
         horizon: { today: "2026-10-08", from: "2026-10-08", to: "2026-10-22", nextTo: null, nextFrom: null, remaining: 0, nextBatch: 0 },
       },
-      { tense: "past" },
-    );
-    expect(page.summary).toEqual({ events: 30, schools: 3 });
+      { tense },
+    ).summary;
+
+  it("NEW: on «Будущие» the head summary counts upcoming эфиры and their distinct schools (row 19)", () => {
+    expect(
+      summaryOf("upcoming", { upcoming: 30, past: 4, upcomingSchools: 3, pastSchools: 2 }),
+    ).toEqual({ events: 30, schools: 3 });
+  });
+
+  it("NEW: on «Прошедшие» the head summary counts past эфиры and their distinct schools (#2768)", () => {
+    expect(
+      summaryOf("past", { upcoming: 30, past: 4, upcomingSchools: 3, pastSchools: 2 }),
+    ).toEqual({ events: 4, schools: 2 });
+  });
+
+  it("NEW: a tab with no events carries no head summary, so no subline renders (#2768)", () => {
+    expect(
+      summaryOf("past", { upcoming: 30, past: 0, upcomingSchools: 3, pastSchools: 0 }),
+    ).toBeUndefined();
+    expect(
+      summaryOf("upcoming", { upcoming: 0, past: 4, upcomingSchools: 0, pastSchools: 2 }),
+    ).toBeUndefined();
   });
 
   it("NEW: the Academy facet options reach the page model, and the matching count is the page plus the rest of the reach (rows 58, 60)", () => {
@@ -91,7 +113,7 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
     const page = adaptPublicEventListing(
       {
         data: [{ ...base, state: "published" }],
-        counts: { upcoming: 30, past: 4, upcomingSchools: 3 },
+        counts: { upcoming: 30, past: 4, upcomingSchools: 3, pastSchools: 2 },
         pagination: { nextCursor: null, hasMore: true },
         horizon: { today: "2026-10-08", from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05", nextFrom: null, remaining: 28, nextBatch: 5 },
         facets: options,
@@ -114,7 +136,7 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
     const page = adaptPublicEventListing(
       {
         data: [{ ...base, state: "ended", recording }],
-        counts: { upcoming: 0, past: 1, upcomingSchools: 0 },
+        counts: { upcoming: 0, past: 1, upcomingSchools: 0, pastSchools: 1 },
         pagination: { nextCursor: null, hasMore: false },
         horizon: { today: "2026-10-08", from: "2026-09-24", to: "2026-10-09", nextTo: null, nextFrom: "2026-09-10", remaining: 3, nextBatch: 2 },
       },

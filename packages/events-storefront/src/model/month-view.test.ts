@@ -5,6 +5,7 @@ import { buildMonthGrid } from "./month-grid";
 import {
   agendaDaysOf,
   defaultAgendaDay,
+  defaultDisplayedMonth,
   dotWeeksOf,
   gridWeeksOf,
   pickerYearsOf,
@@ -103,5 +104,32 @@ describe("the month view (rows 53–55)", () => {
     expect(months[9]!.href).toBeUndefined();
     expect(months[10]).toMatchObject({ note: "нет эфиров", muted: true, href: "/webinars?view=month&month=2026-11" });
     expect(months[0]!.note).toBe("архив");
+  });
+});
+
+describe("NEW: defaultDisplayedMonth — the month the view opens on without an explicit `month` (#2768)", () => {
+  const read = (startsAt: readonly string[]) =>
+    ({
+      ok: true,
+      value: { today, cards: startsAt.map((iso) => ({ startsAt: iso })) },
+    }) as unknown as Parameters<typeof defaultDisplayedMonth>[0];
+
+  it("«Прошедшие» opens on the month of the latest past event the (faceted) feed read holds", () => {
+    expect(
+      defaultDisplayedMonth(read(["2026-08-03T09:00:00.000Z", "2026-07-30T09:00:00.000Z"]), "past", today),
+    ).toBe("2026-08");
+  });
+
+  it("the latest event's month is the МСК month: 31 July 22:00 UTC is already August", () => {
+    expect(defaultDisplayedMonth(read(["2026-07-31T22:00:00.000Z"]), "past", today)).toBe("2026-08");
+  });
+
+  it("«Прошедшие» with no past event, or a failed read, opens on the current month", () => {
+    expect(defaultDisplayedMonth(read([]), "past", today)).toBe("2026-10");
+    expect(defaultDisplayedMonth({ ok: false }, "past", today)).toBe("2026-10");
+  });
+
+  it("«Будущие» keeps opening on the current month", () => {
+    expect(defaultDisplayedMonth(read(["2026-12-01T09:00:00.000Z"]), "upcoming", today)).toBe("2026-10");
   });
 });

@@ -7,9 +7,12 @@ import {
   EVENT_HORIZON_ROW_CAP,
   eventHorizonReachingFirstMatch,
   eventHorizonInstants,
+  EVENT_HORIZON_PAST_STEP,
   resolveEventHorizon,
   resolveEventHorizonBeyond,
+  resolveEventHorizonFromData,
   type EventHorizon,
+  type EventHorizonReach,
 } from "./event-horizon.js";
 
 /** A row starting at noon МСК of `day` (`YYYY-MM-DD`). */
@@ -137,7 +140,19 @@ async function readHorizon(
   today: string,
   query: { from?: string; to?: string },
 ) {
-  const requested = resolveEventHorizon({ tense, ...query }, today);
+  const listStartsIn = async (range: EventHorizonReach) =>
+    archive
+      .filter(
+        (row) =>
+          (range.fromInstant === null || row.startsAt >= range.fromInstant) &&
+          row.startsAt < range.toInstant,
+      )
+      .map((row) => row.startsAt);
+  const requested = await resolveEventHorizonFromData(
+    { tense, ...query },
+    today,
+    listStartsIn,
+  );
   const { fromInstant, toInstant } = eventHorizonInstants(requested);
   const inside = archive
     .filter((row) => row.startsAt >= fromInstant && row.startsAt < toInstant)
@@ -152,14 +167,7 @@ async function readHorizon(
     bounded.horizon,
     tense,
     today,
-    async (range) =>
-      archive
-        .filter(
-          (row) =>
-            (range.fromInstant === null || row.startsAt >= range.fromInstant) &&
-            row.startsAt < range.toInstant,
-        )
-        .map((row) => row.startsAt),
+    listStartsIn,
   );
   return {
     ...clampRequestedPastFrom(
@@ -269,5 +277,70 @@ describe("eventHorizonReachingFirstMatch — the default extent opens on the fir
     expect(eventHorizonReachingFirstMatch({ tense: "upcoming" }, 0, beyond({}))).toBeNull();
     expect(eventHorizonReachingFirstMatch({ tense: "upcoming", to: "2026-10-20" }, 0, some)).toBeNull();
     expect(eventHorizonReachingFirstMatch({ tense: "past", from: "2026-09-01" }, 0, some)).toBeNull();
+  });
+});
+
+describe("NEW: 019 LD-2 «Прошедшие» pages by a count step, not by days (#2768)", () => {
+  const today = "2026-10-08";
+  /** One event a day on each of the `days` days before today, oldest first. */
+  const dailyBefore = (days: number) =>
+    Array.from({ length: days }, (_, d) => at(addDoctorEventsFeedDays(today, d - days)));
+
+  it("the step is one constant of the read contract: 10 events", () => {
+    expect(EVENT_HORIZON_PAST_STEP).toBe(10);
+  });
+
+  it("the default «Прошедшие» screen is the 10 most recent past events, however old", async () => {
+    // One event every 9 days: a 14-day window would hold one or two.
+    const archive = Array.from({ length: 25 }, (_, d) =>
+      at(addDoctorEventsFeedDays(today, -9 * (d + 1))),
+    );
+    const page = await readHorizon(archive, "past", today, {});
+    expect(page.ids).toEqual(
+      archive.slice(0, 10).map((row) => row.id),
+    );
+    expect(page.from).toBe(addDoctorEventsFeedDays(today, -90));
+    expect(page.nextBatch).toBe(10);
+    expect(page.remaining).toBe(15);
+  });
+
+  it("each «Показать ещё» adds the next 10 older events; the last step adds the remainder", async () => {
+    const archive = dailyBefore(25);
+    let page = await readHorizon(archive, "past", today, {});
+    const screens = [page.ids.length];
+    const batches = [page.nextBatch];
+    while (page.nextFrom !== null) {
+      page = await readHorizon(archive, "past", today, {
+        from: page.nextFrom,
+        to: page.to,
+      });
+      screens.push(page.ids.length);
+      batches.push(page.nextBatch);
+    }
+    expect(screens).toEqual([10, 20, 25]);
+    expect(batches).toEqual([10, 5, 0]);
+    expect(page.remaining).toBe(0);
+  });
+
+  it("the extent is whole days: a day the 10th event falls on is shown whole", async () => {
+    // Nine single days, then a day holding three events.
+    const archive = [...rowsOn([addDoctorEventsFeedDays(today, -20)], 3), ...dailyBefore(9)];
+    const page = await readHorizon(archive, "past", today, {});
+    expect(page.ids).toHaveLength(12);
+    expect(page.remaining).toBe(0);
+  });
+
+  it("no past event: the default screen is empty and offers no «Показать ещё»", async () => {
+    const page = await readHorizon([at(addDoctorEventsFeedDays(today, 3))], "past", today, {});
+    expect(page.ids).toEqual([]);
+    expect(page.nextFrom).toBeNull();
+  });
+
+  it("«Будущие» keeps its day horizon", async () => {
+    expect(
+      await resolveEventHorizonFromData({ tense: "upcoming" }, today, async () => {
+        throw new Error("«Будущие» never reads the data to resolve its extent");
+      }),
+    ).toEqual(resolveEventHorizon({ tense: "upcoming" }, today));
   });
 });

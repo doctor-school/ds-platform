@@ -148,7 +148,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
         expect(res.statusCode).toBe(200);
         return (
           res.json() as {
-            counts: { upcoming: number; past: number; upcomingSchools: number };
+            counts: {
+              upcoming: number;
+              past: number;
+              upcomingSchools: number;
+              pastSchools: number;
+            };
           }
         ).counts;
       };
@@ -162,6 +167,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const after = await read();
       expect(after.upcoming - before.upcoming).toBe(3);
       expect(after.upcomingSchools - before.upcomingSchools).toBe(2);
+      // #2768 — «Прошедшие» counts its own schools: the ended event's school D.
+      expect(after.past - before.past).toBe(1);
+      expect(after.pastSchools - before.pastSchools).toBe(1);
     });
 
     it("EARS-11.1: when past events share a millisecond but differ in microseconds, the descending cursor shall not skip the row after the cutoff", async () => {

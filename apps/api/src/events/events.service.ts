@@ -50,10 +50,11 @@ import {
   clampRequestedPastFrom,
   EVENT_HORIZON_READ_ORDER,
   EVENT_HORIZON_ROW_CAP,
+  type EventHorizonReach,
   eventHorizonInstants,
   eventHorizonReachingFirstMatch,
-  resolveEventHorizon,
   resolveEventHorizonBeyond,
+  resolveEventHorizonFromData,
 } from "./event-horizon.js";
 import { EVENT_CURSOR_SHAPE } from "../taxonomy/public-event-cursor.js";
 
@@ -1260,9 +1261,19 @@ export class EventsService {
     if (horizonRead) {
       // Wave-2 gate §4.3 D10 — one today per read, echoed on the horizon.
       const today = doctorEventsFeedDayOf(now);
-      const requested = resolveEventHorizon(
+      // The listing predicate, every facet applied — what the default
+      // «Прошедшие» screen counts (LD-2) and «what lies beyond» is asked of.
+      const listStartsIn = (range: EventHorizonReach) =>
+        this.repo.listListingStartsIn(
+          query.timeframe,
+          query.timeframe === "past" ? null : cutoff,
+          range,
+          facets,
+        );
+      const requested = await resolveEventHorizonFromData(
         { tense: query.timeframe, from: query.from, to: query.to },
         today,
+        listStartsIn,
       );
       const window = eventHorizonInstants(requested);
       // Read from the moving edge, so the cap keeps the batch just asked for.
@@ -1297,13 +1308,7 @@ export class EventsService {
         bounded.horizon,
         query.timeframe,
         today,
-        (range) =>
-          this.repo.listListingStartsIn(
-            query.timeframe,
-            query.timeframe === "past" ? null : cutoff,
-            range,
-            facets,
-          ),
+        listStartsIn,
       );
       // #1973 — an empty default window under matches beyond opens on the
       // first match: the same read over the bound «Показать ещё» would name.

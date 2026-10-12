@@ -254,9 +254,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
         audience: "experts",
       });
 
-      // «Прошедшие»: three recording answers inside the default past window,
-      // one with no recording row at all, and one 30 days back — two steps
-      // past the 14-day default, so only a BACKWARD widening reaches it.
+      // «Прошедшие»: three recording answers in the last days, one with no
+      // recording row at all, and one 30 days back — older than a stated
+      // 14-day `from`, so from there only a BACKWARD widening reaches it.
       pastMontageEventId = await makeEvent({
         title: "Прошедший, смонтирован",
         startsAt: at(-3, 12),
@@ -338,7 +338,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         startsAt: at(50, 12),
         directionId: tenseDirection,
       });
-      // Beyond «Прошедшие» [−14, +1): one in the next step back, one far.
+      // Beyond a stated «Прошедшие» [−14, +1): one 20 days back, one far.
       pastStepId = await makeEvent({
         title: "20 дней назад",
         startsAt: at(-20, 12),
@@ -704,10 +704,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(past.today).toBe(doctorEventsFeedDayOf(new Date()));
     });
 
-    it("NEW: «Прошедшие» extends BACKWARD — `nextFrom` covers the nearest older event beyond the 14-day default (rows 30, 32)", async () => {
+    it("NEW: «Прошедшие» extends BACKWARD by a count step — from a stated `from`, `nextFrom` takes in the next (up to 10) older events, in whole days (rows 30, 32; LD-2)", async () => {
       const feed = await readFeed({
         specialtyCode: lonelyCode,
-        query: "?tense=past",
+        query: `?tense=past&from=${addDoctorEventsFeedDays(today, -14)}`,
       });
       expect(feed.from).toBe(addDoctorEventsFeedDays(today, -14));
       expect(feed.to).toBe(addDoctorEventsFeedDays(today, 1));
@@ -715,42 +715,38 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(ids).not.toContain(pastOldEventId);
       // The past extent never widens forward.
       expect(feed.nextTo).toBeNull();
-      // The −30 event lies 16 days before `from`: one step (−28) falls short,
-      // so the bound walks whole steps until it covers it.
-      expect(feed.nextFrom).toBe(addDoctorEventsFeedDays(today, -42));
-      // The −30 event and the −400 one lie beyond; the next step adds one.
+      // The −30 and −400 events lie beyond — fewer than the step of 10, so
+      // the next bound is the oldest one's day and the step adds both.
+      expect(feed.nextFrom).toBe(addDoctorEventsFeedDays(today, -400));
       expect(feed.remaining).toBe(2);
-      expect(feed.nextBatch).toBe(1);
+      expect(feed.nextBatch).toBe(2);
 
       const extended = await readFeed({
         specialtyCode: lonelyCode,
         query: `?tense=past&from=${feed.nextFrom!}&to=${feed.to}`,
       });
       expect(extended.from).toBe(feed.nextFrom);
-      expect(
-        extended.days.flatMap((day) => day.items.map((item) => item.id)),
-      ).toContain(pastOldEventId);
-      expect(extended.remaining).toBe(1);
+      const extendedIds = extended.days.flatMap((day) =>
+        day.items.map((item) => item.id),
+      );
+      expect(extendedIds).toContain(pastOldEventId);
+      expect(extendedIds).toContain(pastAncientEventId);
+      expect(extended.remaining).toBe(0);
     });
 
-    it("NEW: «Прошедшие» has no age floor — an event 400 days back is reached by repeated «Показать ещё» (row 32, 014 archive)", async () => {
+    it("NEW: 019 LD-2 — the default «Прошедшие» screen is the 10 most recent past events however old: with fewer, the 400-days-back archive event reads at once and nothing lies beyond (014 archive)", async () => {
       const first = await readFeed({
         specialtyCode: lonelyCode,
         query: "?tense=past",
       });
-      const idsOf = (feed: typeof first) =>
-        feed.days.flatMap((day) => day.items.map((item) => item.id));
-      expect(idsOf(first)).not.toContain(pastAncientEventId);
-      let extent = first;
-      while (extent.nextFrom) {
-        extent = await readFeed({
-          specialtyCode: lonelyCode,
-          query: `?tense=past&from=${extent.nextFrom}&to=${first.to}`,
-        });
-      }
-      expect(idsOf(extent)).toContain(pastAncientEventId);
-      expect(extent.remaining).toBe(0);
-      expect(extent.nextBatch).toBe(0);
+      const ids = first.days.flatMap((day) => day.items.map((item) => item.id));
+      expect(first.from).toBe(addDoctorEventsFeedDays(today, -400));
+      expect(first.to).toBe(addDoctorEventsFeedDays(today, 1));
+      expect(ids).toContain(pastOldEventId);
+      expect(ids).toContain(pastAncientEventId);
+      expect(first.nextFrom).toBeNull();
+      expect(first.remaining).toBe(0);
+      expect(first.nextBatch).toBe(0);
     });
 
     it("NEW: a hostile ancient past `from` is clamped to the earliest matching event's day — never to a year — and the recent days stay", async () => {
@@ -860,6 +856,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
         pastRawEventId,
         pastPreparingEventId,
         pastAbsentEventId,
+        pastOldEventId,
+        pastAncientEventId,
       ]);
     });
 
@@ -882,12 +880,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(widened.nextBatch).toBe(1);
       expect(widened.remaining).toBe(1);
 
+      // «Прошедшие» steps by count (LD-2): from a stated 14-day `from`, the
+      // two older events are fewer than the step of 10, so one step adds both.
       const past = await readFeed({
         specialtyCode: tenseCode,
-        query: "?tense=past",
+        query: `?tense=past&from=${addDoctorEventsFeedDays(today, -14)}`,
       });
       expect(past.remaining).toBe(2);
-      expect(past.nextBatch).toBe(1);
+      expect(past.nextBatch).toBe(2);
       const older = await readFeed({
         specialtyCode: tenseCode,
         query: `?tense=past&from=${past.nextFrom!}&to=${past.to}`,
@@ -896,7 +896,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         day.items.map((item) => item.id),
       );
       expect(olderIds).toContain(pastStepId);
-      expect(olderIds).not.toContain(pastFarId);
+      expect(olderIds).toContain(pastFarId);
       expect(older.totalCount - past.totalCount).toBe(past.nextBatch);
     });
 
@@ -976,9 +976,17 @@ describe.skipIf(!process.env.DATABASE_URL)(
         feed.days.flatMap((day) => day.items.map((item) => item.id));
 
       it("NEW: «Прошедшие» past the cap — every «Показать ещё» returns new events, the page stays within the cap, the walk reaches the oldest event and ends", async () => {
+        // «Прошедшие» steps by 10 events (LD-2): the walk starts a few steps
+        // short of the cap, from a stated `from` (two events a day).
+        const nearCap = doctorEventsFeedDayOf(
+          new Date(
+            at(-20, 12).getTime() -
+              (EVENT_HORIZON_ROW_CAP - 15) * 12 * 60 * 60_000,
+          ),
+        );
         let feed = await readFeed({
           specialtyCode: capCode,
-          query: "?tense=past",
+          query: `?tense=past&from=${nearCap}`,
         });
         let steps = 0;
         let crossed = false;

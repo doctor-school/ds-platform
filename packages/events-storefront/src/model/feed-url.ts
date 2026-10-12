@@ -223,9 +223,12 @@ export function monthHref(
 }
 
 /**
- * A tense's default extent as of `today` — the one horizon resolution of both
- * reads (`resolveEventHorizon`, apps/api): «Будущие» `[today, today + width)`,
- * «Прошедшие» `[today − width, tomorrow)`.
+ * A tense's default extent as of `today`, as far as the href can know it —
+ * the one horizon resolution of both reads (`resolveEventHorizonFromData`,
+ * apps/api): «Будущие» `[today, today + width)`. «Прошедшие» opens on the 10
+ * most recent past events (019 LD-2, «Amendment — 2026-10-12») — a `from` only
+ * the data knows — so its known extent is the empty `[tomorrow, tomorrow)`,
+ * and a day switched to is always written in by widening `from` back to it.
  */
 function defaultExtent(
   tense: FeedTense,
@@ -233,7 +236,7 @@ function defaultExtent(
 ): { from: string; to: string } {
   return tense === "past"
     ? {
-        from: addDoctorEventsFeedDays(today, -DOCTOR_EVENTS_FEED_HORIZON_DAYS),
+        from: addDoctorEventsFeedDays(today, 1),
         to: addDoctorEventsFeedDays(today, 1),
       }
     : {

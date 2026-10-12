@@ -9,10 +9,12 @@ import { expect, test } from "@playwright/test";
  *
  *   row 28 — the head's tense tabs, «Будущие» by default, the tense in the URL;
  *   rows 29–30 — «Прошедшие» groups by month newest first, no archive block;
- *   row 32 — «Показать ещё N из M» is offered from the bare `/webinars` and
- *            `?tense=past` and widens the extent in the URL (seeded
- *            `seed-005-upcoming-3` at +14 d, `seed-014-ended-month-ago` at
- *            −30 d, `seed-006-legacy-archived` at −400 d — no age floor);
+ *   row 32 — «Показать ещё N из M» is offered from the bare `/webinars`, and
+ *            «Показать ещё N (осталось M)» from `?tense=past` (10 past events
+ *            a step, 019 LD-2 «Amendment — 2026-10-12»); both widen the
+ *            extent in the URL (seeded `seed-005-upcoming-3` at +14 d,
+ *            `seed-014-ended-month-ago` at −30 d, `seed-006-legacy-archived`
+ *            at −400 d — no age floor);
  *   row 31 — a published recording reads «Запись · <length>» + «Смотреть запись»;
  *   row 43 — the live block renders an experts-audience live event
  *            (`E2E_WEBINAR_SLUG_LIVE`, default `seed-005-live`);
@@ -81,7 +83,7 @@ test.describe("the Academy feed view (wave-2 entry gate §2.4)", () => {
     await expect(page.locator('[data-feed-block="live"]')).toHaveCount(0);
   });
 
-  test("gate rows 31–32: the bare `?tense=past` offers «Показать ещё», which reaches a month-old recorded эфир and, step by step, the legacy archive", async ({
+  test("gate rows 31–32: the bare `?tense=past` offers «Показать ещё N (осталось M)», which reaches a month-old recorded эфир and, step by step, the legacy archive", async ({
     page,
   }) => {
     await page.goto("/webinars?tense=past", { waitUntil: "domcontentloaded" });
@@ -90,13 +92,21 @@ test.describe("the Academy feed view (wave-2 entry gate §2.4)", () => {
       hasText: "Итоги: остеоартрит коленного сустава",
     });
     await expect(page.getByTestId("events-feed")).toBeVisible();
-    await expect(monthAgo).toHaveCount(0);
 
+    // LD-2: the first screen is the 10 most recent past эфиры (more only when
+    // the 10th one's day holds more); each step adds the next 10.
+    await expect.poll(() => cards.count()).toBeGreaterThanOrEqual(10);
     const more = page.getByTestId("events-feed-show-more");
-    await expect(more).toHaveText(/^Показать ещё \d+ из \d+$/);
+    await expect(more).toHaveText(/^Показать ещё \d+ \(осталось \d+\)$/);
     await more.click();
     await expect(page).toHaveURL(/[?&]from=\d{4}-\d{2}-\d{2}/);
     await expect(page).toHaveURL(/[?&]to=\d{4}-\d{2}-\d{2}/);
+    for (let step = 0; step < 40; step += 1) {
+      if ((await monthAgo.count()) > 0) break;
+      const before = page.url();
+      await more.click();
+      await expect(page).not.toHaveURL(before);
+    }
     await expect(monthAgo).toHaveCount(1);
     await expect(monthAgo).toContainText("Запись · 1 ч 12 мин");
     await expect(

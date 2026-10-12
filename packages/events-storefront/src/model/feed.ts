@@ -234,17 +234,22 @@ export function buildFeedItems(
 }
 
 /**
- * «Показать ещё N из M» — N the events the next widening adds (the api's
- * `nextBatch`), M the remainder (`remaining`). The widening is a day step, not
- * a fixed page, so N is read off the data, never a page size.
+ * The «Показать ещё» label — N the events the next widening adds (the api's
+ * `nextBatch`), M the remainder beyond this screen (`remaining`). «Будущие»
+ * widens by a day step and reads «Показать ещё N из M»; «Прошедшие» steps by a
+ * count of events (019 LD-2, «Amendment — 2026-10-12») and reads «Показать ещё
+ * N (осталось M)». N is read off the data either way, never a page size.
  */
 export function showMoreLabel(
   nextBatch: number,
   remaining: number,
   copy: FeedCopy,
+  tense: FeedTense,
 ): string {
   if (remaining <= 0 || nextBatch <= 0) return copy.feed.showMore;
-  return copy.feed.showMoreOf(nextBatch, remaining);
+  return tense === "past"
+    ? copy.feed.showMorePast(nextBatch, remaining)
+    : copy.feed.showMoreOf(nextBatch, remaining);
 }
 
 export interface LiveStripProps {

@@ -314,7 +314,11 @@ export class FakeIdpClient implements IdpClient {
     return Promise.resolve();
   }
 
-  setPhone(sub: string, phone: string, delivery: "sms" | "none"): Promise<void> {
+  setPhone(
+    sub: string,
+    phone: string,
+    delivery: "sms" | "none",
+  ): Promise<void> {
     // 003 EARS-47: the number replaces the stored phone at once, unverified
     // (Zitadel has no pending-phone state).
     const record = this.bySub.get(sub);
@@ -328,6 +332,20 @@ export class FakeIdpClient implements IdpClient {
     record.phoneVerified = false;
     if (!this.byPhone.has(phone)) this.byPhone.set(phone, record);
     this.phoneCodeRequests.push({ sub, phone, delivery });
+    return Promise.resolve();
+  }
+
+  removePhone(sub: string): Promise<void> {
+    // 003 EARS-48/51: the phone is dropped, verified or awaiting its code.
+    const record = this.bySub.get(sub);
+    if (!record) {
+      return Promise.reject(new IdpUnavailableError("fake: unknown sub"));
+    }
+    if (record.phone && this.byPhone.get(record.phone) === record) {
+      this.byPhone.delete(record.phone);
+    }
+    record.phone = undefined;
+    record.phoneVerified = false;
     return Promise.resolve();
   }
 
@@ -828,7 +846,8 @@ export class FakeIdpClient implements IdpClient {
 
   private findByIdentifier(identifier: string): FakeRecord | undefined {
     return (
-      this.byEmail.get(identifier.toLowerCase()) ?? this.confirmedPhoneRecord(identifier)
+      this.byEmail.get(identifier.toLowerCase()) ??
+      this.confirmedPhoneRecord(identifier)
     );
   }
 

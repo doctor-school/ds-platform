@@ -202,6 +202,48 @@ describe("PhoneConfirmationService", () => {
     );
   });
 
+  it("EARS-51: a requester holding a confirmed phone loses it exactly as for a free number — IdP and mirror cleared, no SMS, the taken number written nowhere", async () => {
+    const free = setup();
+    free.confirmOn(SUB, Q);
+    await free.service.requestCode(SUB, P, CTX);
+
+    const taken = setup();
+    taken.confirmOn(SUB, Q);
+    taken.confirmOn(OTHER, P);
+    expect(await taken.service.requestCode(SUB, P, CTX)).toEqual({
+      status: "code_sent",
+    });
+
+    // The requester's own view (the mirror-backed profile) is the same either way.
+    expect(taken.mirror.accounts.get(SUB)).toEqual(
+      free.mirror.accounts.get(SUB),
+    );
+    expect(taken.mirror.accounts.get(SUB)).toMatchObject({
+      phone: null,
+      phoneVerified: false,
+    });
+    // The IdP no longer holds Q verified, and never receives P.
+    const idpUser = await taken.idp.getUser(SUB);
+    expect(idpUser?.phone).toBeUndefined();
+    expect(idpUser?.phoneVerified).toBe(false);
+    expect(taken.idp.phoneCodeRequests).toEqual([]);
+    expect(taken.types()).toContain("PhoneChanged");
+    // Q no longer signs in, as after a free-number request (EARS-58).
+    expect(await taken.idp.loginWithSmsOtp(Q, FAKE_VALID_CODE)).toBeNull();
+  });
+
+  it("EARS-51: a number still awaiting its code is dropped too, so its earlier code no longer confirms", async () => {
+    const { idp, mirror, service, confirmOn } = setup();
+    await service.requestCode(SUB, Q, CTX);
+    confirmOn(OTHER, P);
+    await service.requestCode(SUB, P, CTX);
+    expect((await idp.getUser(SUB))?.phone).toBeUndefined();
+    await expect(service.confirm(SUB, FAKE_VALID_CODE)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(mirror.accounts.get(SUB)?.phone).toBeNull();
+  });
+
   it("EARS-51: the elsewhere-confirmed request still spends the EARS-14 per-phone limit", async () => {
     const { service, confirmOn } = setup();
     confirmOn(OTHER, P);
@@ -211,8 +253,8 @@ describe("PhoneConfirmationService", () => {
     });
   });
 
-  it("EARS-48: a confirmation that loses the UNIQUE race writes nothing and answers like a wrong code", async () => {
-    const { mirror, mailer, service, types } = setup();
+  it("EARS-48: a confirmation that loses the UNIQUE race writes nothing, drops the number from the IdP user and answers like a wrong code", async () => {
+    const { idp, mirror, mailer, service, types } = setup();
     await service.requestCode(SUB, P, CTX);
     // Another account confirms P between our request and our confirm.
     const b = mirror.accounts.get(OTHER)!;
@@ -221,6 +263,8 @@ describe("PhoneConfirmationService", () => {
       BadRequestException,
     );
     expect(mirror.accounts.get(SUB)?.phone).toBeNull();
+    // The IdP never keeps a verified number the mirror refused.
+    expect((await idp.getUser(SUB))?.phone).toBeUndefined();
     expect(types()).not.toContain("PhoneConfirmed");
     expect(mailer.phoneConfirmedNotices).toEqual([]);
   });

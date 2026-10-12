@@ -6,10 +6,7 @@ import {
   type CongressSubmissionReceiptRequest,
   type Mailer,
 } from "./mailer.types.js";
-import type {
-  CodeLifetime,
-  ReRegistrationCopyInput,
-} from "./code-emails.js";
+import type { CodeLifetime, ReRegistrationCopyInput } from "./code-emails.js";
 
 /**
  * In-memory {@link Mailer} — the unit-test double. Records every accepted send so
@@ -141,10 +138,7 @@ export class FakeMailer implements Mailer {
     });
   }
 
-  async sendPasswordResetCodeEmail(
-    email: string,
-    code: string,
-  ): Promise<void> {
+  async sendPasswordResetCodeEmail(email: string, code: string): Promise<void> {
     assertSendableEmail(email);
     assertSendableCode(code);
     if (this.nextCodeSendFailure) throw this.nextCodeSendFailure;

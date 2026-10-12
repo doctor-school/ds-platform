@@ -346,7 +346,8 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
       }),
       fetchImpl: diagnosticFetch(globalThis.fetch, providerDiagnostics),
       confirmedPhones: {
-        subjectFor: (phone) => Promise.resolve(confirmedPhones.get(phone) ?? null),
+        subjectFor: (phone) =>
+          Promise.resolve(confirmedPhones.get(phone) ?? null),
       },
       baseUrl: process.env.IDP_ISSUER!,
       serviceToken: process.env.IDP_SERVICE_TOKEN!,

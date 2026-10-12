@@ -710,6 +710,28 @@ export class ZitadelIdpClient implements IdpClient {
     }
   }
 
+  async removePhone(sub: string): Promise<void> {
+    // 003 EARS-48/51: Zitadel v2 RemovePhone — `DELETE /v2/users/{id}/phone`.
+    // A user without a phone answers 404 (nothing to remove): the desired
+    // state already holds, so it is a success.
+    let res: { ok: boolean; status: number };
+    try {
+      res = await this.fetchImpl(this.url(`/v2/users/${sub}/phone`), {
+        method: "DELETE",
+        headers: this.headers(),
+      });
+    } catch (err) {
+      throw new IdpUnavailableError(
+        `zitadel remove phone failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    if (!res.ok && res.status !== 404) {
+      throw new IdpUnavailableError(
+        `zitadel remove phone failed: HTTP ${res.status}`,
+      );
+    }
+  }
+
   async verifyEmail(sub: string, code: string): Promise<boolean> {
     // Live wire-shape delta (#148, same bug class as the send): the verify hop
     // is `POST /v2/users/{id}/email/verify` — the merged `/email/_verify` also

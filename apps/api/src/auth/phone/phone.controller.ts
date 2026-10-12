@@ -20,7 +20,11 @@ import {
   RateLimitService,
 } from "../rate-limit/index.js";
 import { TimingEqualized } from "../timing/index.js";
-import { ConfirmPhoneRequestDto, RequestPhoneCodeRequestDto } from "./phone.dto.js";
+import {
+  ConfirmPhoneRequestDto,
+  RequestPhoneCodeRequestDto,
+} from "./phone.dto.js";
+import { readPhoneCodeRequestTimingFloorMs } from "./phone-timing.js";
 import {
   phoneAccountLimitKey,
   PhoneConfirmationService,
@@ -28,14 +32,6 @@ import {
 
 /** The account surface's principals (003 EARS-27 as amended by #2456). */
 const ACCOUNT_ROLES: Role[] = ["doctor_guest", "platform_admin"];
-
-/**
- * 003 EARS-51: the code request answers a number confirmed on another account
- * exactly like a free one, though that branch skips both IdP calls. The floor
- * sits above the IdP-bound branch (a user read plus a phone write) so the two
- * are indistinguishable by latency (EARS-16).
- */
-export const PHONE_CODE_REQUEST_TIMING_FLOOR_MS = 1000;
 
 /**
  * 003 EARS-47…52 (#2449): confirming a phone from `/account`.
@@ -59,7 +55,8 @@ export class PhoneController {
   @Post()
   @HttpCode(200)
   @RateLimited({ door: "sending" })
-  @TimingEqualized({ floorMs: PHONE_CODE_REQUEST_TIMING_FLOOR_MS })
+  // EARS-51/16: both branches padded to one configurable floor (phone-timing).
+  @TimingEqualized({ floorMs: readPhoneCodeRequestTimingFloorMs })
   @Authz({
     access: "authenticated",
     roles: ACCOUNT_ROLES,

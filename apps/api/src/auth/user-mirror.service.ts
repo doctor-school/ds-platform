@@ -33,6 +33,28 @@ export function mirrorPhoneFields(
     : { phone: null, phoneVerified: false };
 }
 
+/** The `users.phone` UNIQUE constraint (migration 0001). */
+const USERS_PHONE_UNIQUE = "users_phone_unique";
+
+/**
+ * 003 EARS-48/51: whether `err` (or a `cause` up its chain — drizzle wraps the
+ * pg error) is a UNIQUE violation of `users.phone`, as opposed to any other
+ * unique key (an email clash stays a real error).
+ */
+export function isPhoneUniqueViolation(err: unknown): boolean {
+  for (let e: unknown = err, depth = 0; e != null && depth < 5; depth++) {
+    if (
+      typeof e === "object" &&
+      (e as { code?: unknown }).code === "23505" &&
+      (e as { constraint?: unknown }).constraint === USERS_PHONE_UNIQUE
+    ) {
+      return true;
+    }
+    e = (e as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
 /**
  * Which Zitadel-owned identity fields (`email`, `phone`, `email_verified`,
  * `phone_verified` — design §5, ADR-0001) the incoming upsert changes relative
@@ -106,7 +128,7 @@ export class UserMirrorService {
       .where(eq(users.zitadelSub, input.zitadelSub))
       .limit(1);
 
-    const changedIdentityFields = existing
+    let changedIdentityFields = existing
       ? divergedIdentityFields(existing, input)
       : [];
 
@@ -126,27 +148,48 @@ export class UserMirrorService {
     if (input.emailVerified !== undefined)
       set["emailVerified"] = input.emailVerified;
     const phone = mirrorPhoneFields(input);
-    if (phone !== undefined) {
-      set["phone"] = phone.phone;
-      set["phoneVerified"] = phone.phoneVerified;
-    }
 
     // 010 EARS-3/5 — attribute the mirror upsert to the request context when
     // present (an authenticated self-heal); a background reconcile/webhook pass
     // carries none and honestly degrades to db-direct (EARS-4).
-    await withRequestAuditContext(this.db, (tx) =>
-      tx
-        .insert(users)
-        .values({
-          zitadelSub: input.zitadelSub,
-          email: input.email,
-          phone: phone?.phone ?? null,
-          emailVerified: input.emailVerified ?? false,
-          phoneVerified: phone?.phoneVerified ?? false,
-          role: "doctor_guest",
-        })
-        .onConflictDoUpdate({ target: users.zitadelSub, set }),
-    );
+    const write = (
+      p: { phone: string | null; phoneVerified: boolean } | undefined,
+    ) =>
+      withRequestAuditContext(this.db, (tx) =>
+        tx
+          .insert(users)
+          .values({
+            zitadelSub: input.zitadelSub,
+            email: input.email,
+            phone: p?.phone ?? null,
+            emailVerified: input.emailVerified ?? false,
+            phoneVerified: p?.phoneVerified ?? false,
+            role: "doctor_guest",
+          })
+          .onConflictDoUpdate({
+            target: users.zitadelSub,
+            set: p
+              ? { ...set, phone: p.phone, phoneVerified: p.phoneVerified }
+              : set,
+          }),
+      );
+    try {
+      await write(phone);
+    } catch (err) {
+      // 003 EARS-48/51: a verified IdP phone another account already holds
+      // confirmed (a confirmation-race loser whose IdP clean-up did not land)
+      // is not this account's confirmed phone — clear it, never throw, so one
+      // conflicting number cannot stall the webhook or the sweep.
+      if (!phone?.phone || !isPhoneUniqueViolation(err)) throw err;
+      await write({ phone: null, phoneVerified: false });
+      changedIdentityFields = existing
+        ? divergedIdentityFields(existing, {
+            ...input,
+            phone: undefined,
+            phoneVerified: false,
+          })
+        : [];
+    }
 
     return { changedIdentityFields };
   }

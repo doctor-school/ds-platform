@@ -28,7 +28,11 @@ import {
   GENERIC_UNAVAILABLE,
   issuedCode,
 } from "../auth.service.js";
-import { PHONE_MIRROR, type PhoneMirror } from "./phone-mirror.js";
+import {
+  PHONE_MIRROR,
+  type PhoneAccount,
+  type PhoneMirror,
+} from "./phone-mirror.js";
 
 /** The request-coupled inputs of an SMS send (EARS-14). */
 export interface PhoneRequestContext {
@@ -59,9 +63,11 @@ const throttled = (): HttpException =>
  *
  * EARS-51 (corrected 2026-10-12): a number already confirmed on ANOTHER account
  * is not refused — the request answers exactly like a free number (status,
- * body, timing under `@TimingEqualized`) but sends nothing and touches neither
- * the requester's IdP phone nor the mirror, so the surface is no oracle of
- * which numbers are registered; the confirm that follows fails generically.
+ * body, timing under `@TimingEqualized`) and leaves the requester's own view
+ * exactly as a free number would: a confirmed phone it held is displaced
+ * (IdP + mirror), a number awaiting its code is dropped. It sends no SMS and
+ * writes the taken number nowhere, so the surface is no oracle of which
+ * numbers are registered; the confirm that follows fails generically.
  */
 @Injectable()
 export class PhoneConfirmationService {
@@ -106,14 +112,18 @@ export class PhoneConfirmationService {
       throw throttled();
     }
 
-    const owner = await this.mirror.confirmedOwner(phone);
-    if (owner !== null && owner !== sub) {
-      // EARS-51: the same answer as a sent code, nothing sent, nothing written.
-      return { status: "code_sent" };
-    }
-
     const idpUser = await this.idp.getUser(sub);
     if (!idpUser) throw new ServiceUnavailableException(GENERIC_UNAVAILABLE);
+
+    const owner = await this.mirror.confirmedOwner(phone);
+    if (owner !== null && owner !== sub) {
+      // EARS-51: the same answer and the same own-view side effects as a free
+      // number — the requester's phone is dropped at the IdP and displaced on
+      // the mirror — but no SMS, and the taken number is written nowhere.
+      if (idpUser.phone) await this.dropIdpPhone(sub);
+      await this.displaceConfirmed(sub, account);
+      return { status: "code_sent" };
+    }
 
     if (idpUser.phone === phone && idpUser.phoneVerified) {
       // The IdP already holds it verified (the mirror lagged): heal the mirror.
@@ -140,12 +150,32 @@ export class PhoneConfirmationService {
 
     // EARS-47/49 displacement: the IdP no longer holds the old number
     // verified, so the mirror stops calling it confirmed in this request.
+    await this.displaceConfirmed(sub, account);
+    await this.audit.record({ type: "PhoneConfirmRequested", sub });
+    return { status: "code_sent" };
+  }
+
+  /** EARS-47/49/51: the mirror stops holding a displaced confirmed phone. */
+  private async displaceConfirmed(
+    sub: string,
+    account: PhoneAccount,
+  ): Promise<void> {
     if (account.phoneVerified && account.phone !== null) {
       await this.mirror.clearConfirmedPhone(sub);
       await this.audit.record({ type: "PhoneChanged", sub });
     }
-    await this.audit.record({ type: "PhoneConfirmRequested", sub });
-    return { status: "code_sent" };
+  }
+
+  /** Drop the IdP user's phone; an IdP failure is the generic unavailable. */
+  private async dropIdpPhone(sub: string): Promise<void> {
+    try {
+      await this.idp.removePhone(sub);
+    } catch (err) {
+      this.logger.warn(
+        `phone removal failed at the IdP: ${(err as Error).name}`,
+      );
+      throw new ServiceUnavailableException(GENERIC_UNAVAILABLE);
+    }
   }
 
   /** EARS-48: confirm the code; on success write the confirmed phone. */
@@ -170,8 +200,18 @@ export class PhoneConfirmationService {
     }
     const phone = idpUser.phone;
     // EARS-48/51: losing the UNIQUE race to another account's earlier
-    // confirmation writes nothing and answers like a wrong code.
+    // confirmation writes nothing and answers like a wrong code — and the
+    // number is dropped from this IdP user, so the IdP never holds a verified
+    // number the mirror refused. Should that removal fail, the mirror sync
+    // still treats the conflicting number as not confirmed (UserMirrorService).
     if ((await this.mirror.setConfirmedPhone(sub, phone)) === "taken") {
+      await this.idp
+        .removePhone(sub)
+        .catch((err: unknown) =>
+          this.logger.warn(
+            `race-loser phone removal failed at the IdP: ${(err as Error).name}`,
+          ),
+        );
       throw new BadRequestException(GENERIC_FAILURE);
     }
     await this.audit.record({ type: "PhoneConfirmed", sub });

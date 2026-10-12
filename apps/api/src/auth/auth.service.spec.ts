@@ -1140,7 +1140,15 @@ describe("AuthService.completePasswordReset — proof-of-mailbox email verify (0
       sessions,
       {} as never, // smsBudget — unused
     );
-    return { service, idp, store, sessions, audit, mirrorFlips, sub: created.sub };
+    return {
+      service,
+      idp,
+      store,
+      sessions,
+      audit,
+      mirrorFlips,
+      sub: created.sub,
+    };
   }
 
   it("003 EARS-35: a completed reset on an UNVERIFIED account flips email_verified at the IdP + mirror and appends one auth.account.verified (channel email) row", async () => {

@@ -77,6 +77,7 @@ const PROFILE: MyProfile = {
   phone: null,
   phoneVerified: null,
   displayName: "Анна Смирнова",
+  suggestedPhone: null,
 };
 
 beforeEach(() => {

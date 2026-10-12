@@ -3261,6 +3261,29 @@ describe("003 confirmed phone (#2449) — adapter wire shape", () => {
     ).rejects.toBeInstanceOf(IdpUnavailableError);
   });
 
+  it("EARS-51: removePhone drops the user's phone — DELETE /v2/users/{id}/phone", async () => {
+    const { fetchImpl, calls } = recordingFetch();
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    await client.removePhone("u-1");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("http://idp.test:9080/v2/users/u-1/phone");
+    expect(calls[0]!.method).toBe("DELETE");
+  });
+
+  it("EARS-51: removePhone on a user with no phone (404) is a success — the desired state holds", async () => {
+    const { fetchImpl } = recordingFetch(404);
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    await expect(client.removePhone("u-1")).resolves.toBeUndefined();
+  });
+
+  it("EARS-51: an IdP refusal of removePhone is an IdpUnavailableError", async () => {
+    const { fetchImpl } = recordingFetch(500);
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    await expect(client.removePhone("u-1")).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
+  });
+
   it("EARS-58: password sign-in by a confirmed phone checks the confirmed account by id, never by the phone as a login name", async () => {
     const { fetchImpl, calls } = recordingFetch();
     const client = new ZitadelIdpClient({

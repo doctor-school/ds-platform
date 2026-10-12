@@ -462,6 +462,15 @@ export interface IdpClient {
    * {@link IdpUnavailableError} on any IdP failure.
    */
   setPhone(sub: string, phone: string, delivery: "sms" | "none"): Promise<void>;
+  /**
+   * 003 EARS-48/51: drop the IdP user's phone, verified or awaiting its code.
+   * Used where the requester's own view must equal a displacement without the
+   * requested number ever being written (EARS-51), and by the loser of a
+   * confirmation race so the IdP never holds a verified number the mirror
+   * refused (EARS-48). An already phone-less user is a success. Throws
+   * {@link IdpUnavailableError} on any other IdP failure.
+   */
+  removePhone(sub: string): Promise<void>;
   /** Verify an email OTP code via Zitadel `otp_email` (EARS-3); `false` = invalid/expired. */
   verifyEmail(sub: string, code: string): Promise<boolean>;
   /**

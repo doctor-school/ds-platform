@@ -14,27 +14,27 @@ durable `audit_ledger` writer).
 
 ## What's here
 
-| Concern                                         | File                          | EARS                                 |
-| ----------------------------------------------- | ----------------------------- | ------------------------------------ |
-| Registration + verify routes                    | `auth.controller.ts`          | 1, 2, 3, 4, 19                       |
-| Login + session-read routes                     | `auth.controller.ts`          | 5, 8                                 |
-| Passwordless OTP-login routes                   | `auth.controller.ts`          | 6, 7, 8, 14, 44                      |
-| Refresh + logout routes                         | `auth.controller.ts`          | 9, 10                                |
-| Password-reset routes                           | `auth.controller.ts`          | 11, 12                               |
-| Cascade + login + OTP + reset orchestration     | `auth.service.ts`             | 1–7, 11, 12, 14, 16, 20              |
-| SMS toll-fraud budget                           | `sms-budget/`                 | 14                                   |
-| Phone confirmation from `/account` (`/v1/me/phone`) | `phone/`                  | 47–52, 57, 58                        |
-| Rate limiter (per-user/IP/ASN)                  | `rate-limit/`                 | 13                                   |
-| Timing equalization                             | `timing/`                     | 16                                   |
-| Login captcha-after-N policy                    | `login-challenge/`            | 17                                   |
-| Congress sign-in hand-off store (Redis, hashed) | `login-handoff/`              | 44 (minted by 044 EARS-39)           |
-| Durable audit_ledger writer                     | `session/auth-audit.*`        | 9, 10, 12, 15, 18                    |
-| `doctor_guest` mirror row                       | `user-mirror.service.ts`      | 3, 4, 19, 26                         |
-| Reconciliation sweep                            | `reconcile.service.ts`        | 19                                   |
-| Read-path mirror self-heal                      | `mirror-self-heal.service.ts` | 26                                   |
-| IdP port + adapters                             | `idp/`                        | (design §2)                          |
-| BFF session establish/refresh/logout/revoke-all | `session/`                    | 5, 8, 9, 10, 12                      |
-| Admin session tier (011)                        | `admin-session/`              | 011: 1, 2, 3, 5, 6, 7, 9, 10, 11, 13 |
+| Concern                                             | File                          | EARS                                 |
+| --------------------------------------------------- | ----------------------------- | ------------------------------------ |
+| Registration + verify routes                        | `auth.controller.ts`          | 1, 2, 3, 4, 19                       |
+| Login + session-read routes                         | `auth.controller.ts`          | 5, 8                                 |
+| Passwordless OTP-login routes                       | `auth.controller.ts`          | 6, 7, 8, 14, 44                      |
+| Refresh + logout routes                             | `auth.controller.ts`          | 9, 10                                |
+| Password-reset routes                               | `auth.controller.ts`          | 11, 12                               |
+| Cascade + login + OTP + reset orchestration         | `auth.service.ts`             | 1–7, 11, 12, 14, 16, 20              |
+| SMS toll-fraud budget                               | `sms-budget/`                 | 14                                   |
+| Phone confirmation from `/account` (`/v1/me/phone`) | `phone/`                      | 47–52, 57, 58                        |
+| Rate limiter (per-user/IP/ASN)                      | `rate-limit/`                 | 13                                   |
+| Timing equalization                                 | `timing/`                     | 16                                   |
+| Login captcha-after-N policy                        | `login-challenge/`            | 17                                   |
+| Congress sign-in hand-off store (Redis, hashed)     | `login-handoff/`              | 44 (minted by 044 EARS-39)           |
+| Durable audit_ledger writer                         | `session/auth-audit.*`        | 9, 10, 12, 15, 18                    |
+| `doctor_guest` mirror row                           | `user-mirror.service.ts`      | 3, 4, 19, 26                         |
+| Reconciliation sweep                                | `reconcile.service.ts`        | 19                                   |
+| Read-path mirror self-heal                          | `mirror-self-heal.service.ts` | 26                                   |
+| IdP port + adapters                                 | `idp/`                        | (design §2)                          |
+| BFF session establish/refresh/logout/revoke-all     | `session/`                    | 5, 8, 9, 10, 12                      |
+| Admin session tier (011)                            | `admin-session/`              | 011: 1, 2, 3, 5, 6, 7, 9, 10, 11, 13 |
 
 ## Phone confirmation (`phone/`, EARS-47…52, 57, 58 — #2449)
 
@@ -46,9 +46,17 @@ IdP user, unverified, and to send a six-digit code through its SMS notifier
 2026-10-12). Both routes are `authenticated` / `fast-path` / `high-stakes`;
 the request is an EARS-13 sending door with the EARS-14 SMS budget, the
 confirm a verification door. A number another account holds confirmed gets the
-ordinary `code_sent` answer with nothing sent (EARS-51), floored by
-`@TimingEqualized`. Phone identifiers resolve to an account only through the
-confirmed phone of the mirror (`idp/confirmed-phone.directory.ts`, EARS-58).
+ordinary `code_sent` answer and the same own-view effects as a free number (the
+requester's phone is dropped at the IdP, `DELETE /v2/users/{id}/phone`, and
+displaced on the mirror) with no SMS and the taken number written nowhere
+(EARS-51); both branches are floored by `@TimingEqualized` at
+`PHONE_CODE_REQUEST_TIMING_FLOOR_MS` (whole ms, read per request, default
+1000 — `phone/phone-timing.ts`). A confirm that loses the `users.phone` UNIQUE
+race drops the number from its IdP user and answers like a wrong code; the
+mirror upsert (webhook / sweep / self-heal) likewise treats a phone UNIQUE
+conflict as «not confirmed» and clears it. Phone identifiers resolve to an
+account only through the confirmed phone of the mirror
+(`idp/confirmed-phone.directory.ts`, EARS-58).
 
 ## Admin session tier (`admin-session/`, spec 011 — EARS-1/2/3/10)
 

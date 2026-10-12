@@ -87,7 +87,10 @@ export class MeService {
    * authenticated subject with no mirror row is refused (→ 401), never inventing
    * a row. Returns the caller's resulting `MyDisplayName`.
    */
-  async setDisplayName(sub: string, displayName: string): Promise<MyDisplayName> {
+  async setDisplayName(
+    sub: string,
+    displayName: string,
+  ): Promise<MyDisplayName> {
     const updated = await this.repo.setDisplayNameBySub(sub, displayName);
     if (updated === 0) throw new UnknownSubjectError(sub);
     return { displayName };

@@ -1780,6 +1780,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/phone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PhoneController_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/phone/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PhoneController_confirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/profile": {
         parameters: {
             query?: never;
@@ -2310,6 +2342,9 @@ export interface components {
             embedRef: string;
             /** @enum {string} */
             provider: "rutube" | "youtube" | "vk" | "cdnvideo";
+        };
+        ConfirmPhoneRequestDto: {
+            code: string;
         };
         CongressAttendanceRequestDto: {
             present: boolean;
@@ -3217,6 +3252,9 @@ export interface components {
             /** Format: email */
             email: string;
             password: string;
+        };
+        RequestPhoneCodeRequestDto: {
+            phone: string;
         };
         SetDisplayNameRequestDto: {
             displayName: string;
@@ -6100,6 +6138,48 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PhoneController_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestPhoneCodeRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PhoneController_confirm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmPhoneRequestDto"];
+            };
+        };
         responses: {
             200: {
                 headers: {

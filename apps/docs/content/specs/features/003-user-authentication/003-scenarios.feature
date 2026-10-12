@@ -71,7 +71,8 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Given another account holds "+79990001122" as its confirmed phone
     When a signed-in user asks for a code for "+79990001122"
     Then the response is the same as for a number confirmed nowhere
-    And no SMS is sent and the requesting account's phone is unchanged
+    And no SMS is sent and the number is written to neither the requesting account nor its IdP user
+    And a confirmed phone the requesting account held is displaced exactly as for a free number
     And a code submitted next fails with the generic wrong-code message
 
   @EARS-53 @EARS-12 @EARS-35 @happy @sms-reset

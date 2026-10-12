@@ -4082,6 +4082,7 @@ const FILLED_PROFILE: MyProfile = {
   phone: "+7 999 000-00-00",
   phoneVerified: true,
   displayName: "Анна Петрова",
+  suggestedPhone: null,
 };
 
 const SPARSE_PROFILE: MyProfile = {
@@ -4090,6 +4091,7 @@ const SPARSE_PROFILE: MyProfile = {
   phone: null,
   phoneVerified: null,
   displayName: null,
+  suggestedPhone: null,
 };
 
 const ACCOUNT_PROFILE_PROPS: PropRow[] = [

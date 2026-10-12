@@ -33,11 +33,30 @@ const SMS = "SECRET_GENERATOR_TYPE_OTP_SMS";
 /** A fresh instance: Zitadel's shipped defaults for the five generators. */
 function freshInstance() {
   return {
-    SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE: { length: 6, expiry: "3600s", includeUpperLetters: true, includeDigits: true },
-    SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE: { length: 6, expiry: "3600s", includeUpperLetters: true, includeDigits: true },
-    SECRET_GENERATOR_TYPE_OTP_EMAIL: { length: 8, expiry: "300s", includeDigits: true },
+    SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE: {
+      length: 6,
+      expiry: "3600s",
+      includeUpperLetters: true,
+      includeDigits: true,
+    },
+    SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE: {
+      length: 6,
+      expiry: "3600s",
+      includeUpperLetters: true,
+      includeDigits: true,
+    },
+    SECRET_GENERATOR_TYPE_OTP_EMAIL: {
+      length: 8,
+      expiry: "300s",
+      includeDigits: true,
+    },
     [SMS]: { length: 8, expiry: "300s", includeDigits: true },
-    SECRET_GENERATOR_TYPE_VERIFY_PHONE_CODE: { length: 6, expiry: "3600s", includeUpperLetters: true, includeDigits: true },
+    SECRET_GENERATOR_TYPE_VERIFY_PHONE_CODE: {
+      length: 6,
+      expiry: "3600s",
+      includeUpperLetters: true,
+      includeDigits: true,
+    },
   };
 }
 
@@ -74,7 +93,9 @@ async function provisionGenerators({ initial, lagReads = {}, applyAs = {} }) {
         const written = applyAs[type] ?? JSON.parse(body);
         store[type] = { ...written, sequence: instanceSequence };
         pendingLag[type] = lagReads[type] ?? 0;
-        res.end(JSON.stringify({ details: { sequence: String(instanceSequence) } }));
+        res.end(
+          JSON.stringify({ details: { sequence: String(instanceSequence) } }),
+        );
         return;
       }
       if ((pendingLag[type] ?? 0) > 0) pendingLag[type] -= 1;
@@ -82,7 +103,11 @@ async function provisionGenerators({ initial, lagReads = {}, applyAs = {} }) {
       const { sequence, ...row } = projection[type];
       res.end(
         JSON.stringify({
-          secretGenerator: { generatorType: type, details: { sequence: String(sequence) }, ...row },
+          secretGenerator: {
+            generatorType: type,
+            details: { sequence: String(sequence) },
+            ...row,
+          },
         }),
       );
     });
@@ -121,16 +146,25 @@ async function provisionGenerators({ initial, lagReads = {}, applyAs = {} }) {
 }
 
 test("#2752: a read-back that lags the write waits for the write's sequence, then verifies the shape", async () => {
-  const result = await provisionGenerators({ initial: freshInstance(), lagReads: { [SMS]: 2 } });
+  const result = await provisionGenerators({
+    initial: freshInstance(),
+    lagReads: { [SMS]: 2 },
+  });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /SUCCESS/);
   assert.equal(result.puts.length, 5);
-  assert.match(result.stderr, new RegExp(`${SMS}: read-back ok \\(6 digits, expiry 300s\\)`));
+  assert.match(
+    result.stderr,
+    new RegExp(`${SMS}: read-back ok \\(6 digits, expiry 300s\\)`),
+  );
   assert.doesNotMatch(result.stderr, /FATAL/);
 });
 
 test("#2752: a read model that never reaches the write's sequence fails as STALE, not as a mismatch", async () => {
-  const result = await provisionGenerators({ initial: freshInstance(), lagReads: { [SMS]: 1e9 } });
+  const result = await provisionGenerators({
+    initial: freshInstance(),
+    lagReads: { [SMS]: 1e9 },
+  });
   assert.equal(result.status, 1);
   assert.doesNotMatch(result.stdout, /SUCCESS/);
   assert.match(result.stderr, new RegExp(`FATAL: ${SMS} read-back is STALE`));
@@ -143,7 +177,10 @@ test("#2752: an applied write that left the wrong shape fails as did NOT converg
     applyAs: { [SMS]: { length: 8, expiry: "300s", includeDigits: true } },
   });
   assert.equal(result.status, 1);
-  assert.match(result.stderr, new RegExp(`FATAL: ${SMS} read-back did NOT converge`));
+  assert.match(
+    result.stderr,
+    new RegExp(`FATAL: ${SMS} read-back did NOT converge`),
+  );
   assert.doesNotMatch(result.stderr, /STALE/);
 });
 

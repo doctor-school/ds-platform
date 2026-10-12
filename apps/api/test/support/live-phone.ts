@@ -134,7 +134,9 @@ export async function mailsTo(
 export async function mailBody(
   id: string,
 ): Promise<{ Text: string; HTML: string }> {
-  return (await (await fetch(`${MAILPIT_BASE}/api/v1/message/${id}`)).json()) as {
+  return (await (
+    await fetch(`${MAILPIT_BASE}/api/v1/message/${id}`)
+  ).json()) as {
     Text: string;
     HTML: string;
   };
@@ -145,7 +147,9 @@ export interface LiveHarness {
   pool: pg.Pool;
   idp: IdpClient;
   /** A verified-email account with a password and a signed-in session. */
-  account(prefix: string): Promise<{ email: string; sub: string; headers: Record<string, string> }>;
+  account(
+    prefix: string,
+  ): Promise<{ email: string; sub: string; headers: Record<string, string> }>;
   requestCode(
     headers: Record<string, string>,
     phone: string,
@@ -154,7 +158,9 @@ export interface LiveHarness {
     headers: Record<string, string>,
     code: string,
   ): ReturnType<NestFastifyApplication["inject"]>;
-  passwordLogin(identifier: string): ReturnType<NestFastifyApplication["inject"]>;
+  passwordLogin(
+    identifier: string,
+  ): ReturnType<NestFastifyApplication["inject"]>;
   close(): Promise<void>;
 }
 
@@ -227,11 +233,19 @@ export async function liveHarness(): Promise<LiveHarness> {
       return {
         email,
         sub,
-        headers: { ...DEVICE, cookie: `${SESSION_COOKIE_NAME}=${cookie!.value}` },
+        headers: {
+          ...DEVICE,
+          cookie: `${SESSION_COOKIE_NAME}=${cookie!.value}`,
+        },
       };
     },
     requestCode: (headers, phone) =>
-      app.inject({ method: "POST", url: "/v1/me/phone", headers, payload: { phone } }),
+      app.inject({
+        method: "POST",
+        url: "/v1/me/phone",
+        headers,
+        payload: { phone },
+      }),
     confirm: (headers, code) =>
       app.inject({
         method: "POST",
@@ -246,7 +260,9 @@ export async function liveHarness(): Promise<LiveHarness> {
         await deleteUserFixture(pool, "email", email);
         await fetch(`${base}/v2/users/${sub}`, {
           method: "DELETE",
-          headers: { authorization: `Bearer ${process.env.IDP_SERVICE_TOKEN!}` },
+          headers: {
+            authorization: `Bearer ${process.env.IDP_SERVICE_TOKEN!}`,
+          },
         }).catch(() => undefined);
       }
       await app.close();

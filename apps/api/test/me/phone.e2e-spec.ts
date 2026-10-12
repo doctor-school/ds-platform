@@ -4,7 +4,7 @@ import {
   MyProfileSchema,
   RequestPhoneCodeResponseSchema,
 } from "@ds/schemas";
-import { PHONE_CODE_REQUEST_TIMING_FLOOR_MS } from "../../src/auth/phone/phone.controller.js";
+import { readPhoneCodeRequestTimingFloorMs } from "../../src/auth/phone/phone-timing.js";
 import {
   LIVE_PHONE,
   expectNoNewSms,
@@ -213,8 +213,9 @@ describe.skipIf(!LIVE_PHONE)("003 phone confirmation (live e2e)", () => {
       freeRes.headers["content-type"],
     );
     // Both answers are floored (EARS-16 timing).
-    expect(freeMs).toBeGreaterThanOrEqual(PHONE_CODE_REQUEST_TIMING_FLOOR_MS - 20);
-    expect(takenMs).toBeGreaterThanOrEqual(PHONE_CODE_REQUEST_TIMING_FLOOR_MS - 20);
+    const floorMs = readPhoneCodeRequestTimingFloorMs();
+    expect(freeMs).toBeGreaterThanOrEqual(floorMs - 20);
+    expect(takenMs).toBeGreaterThanOrEqual(floorMs - 20);
 
     await expectNoNewSms(taken, takenBefore);
     expect((await h.idp.getUser(b.sub))?.phone).toBe(bBefore?.phone);
@@ -226,6 +227,36 @@ describe.skipIf(!LIVE_PHONE)("003 phone confirmation (live e2e)", () => {
       message: "the request could not be completed",
     });
     // The owner keeps the number.
+    expect(await mirror(owner.sub)).toEqual({
+      phone: taken,
+      phone_verified: true,
+    });
+  }, 120_000);
+
+  it("EARS-51: a requester holding a confirmed phone loses it exactly as for a free number when it asks for a number confirmed elsewhere — no SMS, the taken number written nowhere", async () => {
+    const owner = await h.account("ph51dispown");
+    const taken = freshPhone();
+    await confirmPhone(owner.headers, taken);
+
+    const a = await h.account("ph51disp");
+    const own = freshPhone();
+    await confirmPhone(a.headers, own);
+    const takenBefore = await smsCount(taken);
+
+    expect((await h.requestCode(a.headers, taken)).statusCode).toBe(200);
+
+    // The same own view as the EARS-49 free-number displacement.
+    expect(await mirror(a.sub)).toEqual({ phone: null, phone_verified: false });
+    expect(await ledger(a.sub)).toEqual([
+      "auth.phone.confirm.requested",
+      "auth.phone.confirmed",
+      "auth.phone.changed",
+    ]);
+    expect((await h.passwordLogin(own)).statusCode).toBe(401);
+    expect((await h.passwordLogin(a.email)).statusCode).toBe(200);
+    // The IdP holds no phone for the requester — never the taken number.
+    expect((await h.idp.getUser(a.sub))?.phone).toBeUndefined();
+    await expectNoNewSms(taken, takenBefore);
     expect(await mirror(owner.sub)).toEqual({
       phone: taken,
       phone_verified: true,

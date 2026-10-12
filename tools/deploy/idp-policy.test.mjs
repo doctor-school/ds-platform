@@ -199,7 +199,6 @@ test("#1997: the operator line names the length and every class flag", () => {
   );
 });
 
-
 // --- emailed/SMS code generators (#2636: six digits; #2555 epic #2552) -------
 // Every code a user receives — verify-email, password-reset, login OTP email and
 // SMS — is exactly six digits. The deploy reads all four generators back.
@@ -306,7 +305,10 @@ test("#2636: lower letters, symbols or missing digits are REJECTED", () => {
 
 test("#2555: a generator without an expiry or with a non-boolean flag is REJECTED", () => {
   const noExpiry = { ...digitsConverged.secretGenerator, expiry: undefined };
-  assert.throws(() => assertCodeGeneratorConverged(noExpiry, digits6), /expiry/);
+  assert.throws(
+    () => assertCodeGeneratorConverged(noExpiry, digits6),
+    /expiry/,
+  );
   assert.throws(
     () =>
       assertCodeGeneratorConverged(
@@ -318,7 +320,10 @@ test("#2555: a generator without an expiry or with a non-boolean flag is REJECTE
 });
 
 test("#2555: a non-object read-back is REJECTED", () => {
-  assert.throws(() => assertCodeGeneratorConverged(null, digits6), IdpPolicyError);
+  assert.throws(
+    () => assertCodeGeneratorConverged(null, digits6),
+    IdpPolicyError,
+  );
   assert.throws(
     () => assertCodeGeneratorConverged("<html>", digits6),
     IdpPolicyError,

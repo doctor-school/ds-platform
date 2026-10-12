@@ -57,6 +57,7 @@ const profile: MyProfile = {
   phone: null,
   phoneVerified: null,
   displayName: "Анна Сергеева",
+  suggestedPhone: null,
 };
 
 function renderCard(

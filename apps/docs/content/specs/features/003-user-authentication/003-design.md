@@ -167,7 +167,7 @@ sequenceDiagram
     participant Z as Zitadel
     participant P as SMS provider chain (sms-aero-adapter → SMS Aero / sms-sink)
     U->>B: POST /v1/me/phone {phone}  (session)
-    B->>B: normalise E.164; same confirmed number → no-op; EARS-13/14 limits; confirmed on another account? → answer `code_sent`, send nothing, write nothing (EARS-51)
+    B->>B: normalise E.164; same confirmed number → no-op; EARS-13/14 limits; confirmed on another account? → drop the requester's own IdP phone (`DELETE /v2/users/{sub}/phone`) + displace its confirmed phone as below, answer `code_sent`, send nothing, write the number nowhere (EARS-51)
     B->>B: EARS-13 per account/IP, EARS-14 per phone/IP/ASN + daily budget
     B->>Z: POST /v2/users/{sub}/phone {phone, sendCode:{}}   (resend: /phone/resend)
     Z->>P: HTTP SMS webhook (VerifyPhone text, code, recipient = LastPhone)
@@ -185,6 +185,7 @@ sequenceDiagram
     else wrong / expired / not awaiting a code
         B-->>U: generic failure; EARS-13 counts; no write
     end
+    Note over B,Z: accepted but users.phone UNIQUE lost to another account → DELETE /v2/users/{sub}/phone, generic failure, no write (EARS-48); the mirror sync clears a phone UNIQUE conflict instead of failing
 ```
 
 ### Password reset by SMS
@@ -244,7 +245,7 @@ One Prometheus counter (`auth_sms_unconfirmed_phone_requests_total{flow="signin"
 - _Phone squatting._ A user cannot confirm a number another account holds confirmed (EARS-51: no code is sent, so no confirm can succeed); an unconfirmed number authenticates nobody (EARS-58) and is replaced by the next request or confirmation.
 - _SMS pumping._ Same toll-fraud controls as SMS sign-in; confirmation is also behind a session, reset behind CAPTCHA and the budget.
 - _Account recovery via a stolen phone._ A SIM-swap holder can now reset the password of an account whose phone is confirmed. This is the accepted cost of the owner's decision; the compensating controls are the notice email on every add/change (EARS-52), the six-digit code's short life, EARS-13/15, the session revocation on reset (EARS-12), and email reset remaining available.
-- _Enumeration._ Anonymous surfaces are unchanged byte-for-byte whether a number is confirmed (EARS-53/55/56); the authenticated phone surface answers a number confirmed elsewhere exactly like a free one (EARS-51), so it is no enumeration oracle either.
+- _Enumeration._ Anonymous surfaces are unchanged byte-for-byte whether a number is confirmed (EARS-53/55/56); the authenticated phone surface answers a number confirmed elsewhere exactly like a free one (EARS-51) — the same answer, the same timing floor (`@TimingEqualized`, `PHONE_CODE_REQUEST_TIMING_FLOOR_MS`) and the same own-view effects (the requester's confirmed phone is displaced either way) — so it is no enumeration oracle either.
 
 ### Open items for the implementation slice (live-verify on the dev stand with `sms-sink`)
 

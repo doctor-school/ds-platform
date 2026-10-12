@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { mirrorPhoneFields } from "./user-mirror.service.js";
+import {
+  isPhoneUniqueViolation,
+  mirrorPhoneFields,
+} from "./user-mirror.service.js";
 
 // 003 EARS-58 (#2449): the mirror upsert (webhook, reconcile sweep, self-heal)
 // holds a phone only while the IdP holds it verified, and clears both columns
@@ -38,5 +41,26 @@ describe("003 EARS-58 mirror phone projection", () => {
     expect(
       mirrorPhoneFields({ zitadelSub: "s", email: "a@b.test" }),
     ).toBeUndefined();
+  });
+});
+
+describe("003 EARS-48/51 phone UNIQUE conflict detection", () => {
+  it("EARS-51: a users.phone UNIQUE violation is recognised, also when wrapped as a cause", () => {
+    const pgErr = { code: "23505", constraint: "users_phone_unique" };
+    expect(isPhoneUniqueViolation(pgErr)).toBe(true);
+    expect(
+      isPhoneUniqueViolation(Object.assign(new Error("q"), { cause: pgErr })),
+    ).toBe(true);
+  });
+
+  it("EARS-51: any other unique key or error is not a phone conflict", () => {
+    expect(
+      isPhoneUniqueViolation({
+        code: "23505",
+        constraint: "users_email_unique",
+      }),
+    ).toBe(false);
+    expect(isPhoneUniqueViolation(new Error("boom"))).toBe(false);
+    expect(isPhoneUniqueViolation(undefined)).toBe(false);
   });
 });

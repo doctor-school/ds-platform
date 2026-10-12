@@ -47,6 +47,7 @@ const row: CongressRosterRow = {
   // 09:00 МСК == 06:00Z.
   registeredAt: "2026-11-20T06:00:00.000Z",
   confirmationMailStatus: "sent",
+  possibleDuplicate: false,
   attendance: [],
 };
 

@@ -1078,6 +1078,9 @@
                     }
                   ]
                 },
+                "possibleDuplicate": {
+                  "type": "boolean"
+                },
                 "region": {
                   "anyOf": [
                     {
@@ -1130,6 +1133,7 @@
                 "email",
                 "registeredAt",
                 "confirmationMailStatus",
+                "possibleDuplicate",
                 "attendance"
               ],
               "type": "object"
@@ -6665,6 +6669,15 @@
             "name": "idOrSlug",
             "required": true,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "possibleDuplicate",
+            "required": false,
+            "schema": {
+              "enum": ["yes", "no"],
               "type": "string"
             }
           },

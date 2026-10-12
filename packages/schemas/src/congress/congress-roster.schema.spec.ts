@@ -33,6 +33,7 @@ const ROW = {
   email: "a@ds.test",
   registeredAt: "2026-11-01T07:00:00.000Z",
   confirmationMailStatus: "sent" as const,
+  possibleDuplicate: false,
   attendance: [
     { day: "2027-04-23", present: true },
     { day: "2027-04-24", present: false },
@@ -385,6 +386,35 @@ describe("044 EARS-23 — the roster filters on the list query", () => {
       expect(
         CongressRosterQuerySchema.safeParse({ registeredFrom: bad }).success,
         bad,
+      ).toBe(false);
+    }
+  });
+});
+
+describe("044 EARS-31 — «возможный дубль» on the roster contract", () => {
+  it("044 EARS-31.5: the query takes possibleDuplicate as yes or no; absent is no filter, anything else is refused", () => {
+    expect(CongressRosterQuerySchema.parse({}).possibleDuplicate).toBeUndefined();
+    for (const possibleDuplicate of ["yes", "no"]) {
+      expect(
+        CongressRosterQuerySchema.parse({ possibleDuplicate }),
+      ).toMatchObject({ possibleDuplicate });
+    }
+    for (const bad of ["true", "false", "maybe", ""]) {
+      expect(
+        CongressRosterQuerySchema.safeParse({ possibleDuplicate: bad }).success,
+        bad,
+      ).toBe(false);
+    }
+  });
+
+  it("044 EARS-31.6: every row carries the marker as a boolean — never missing, never null", () => {
+    expect(
+      CongressRosterRowSchema.parse({ ...ROW, possibleDuplicate: true })
+        .possibleDuplicate,
+    ).toBe(true);
+    for (const possibleDuplicate of [undefined, null, "yes"]) {
+      expect(
+        CongressRosterRowSchema.safeParse({ ...ROW, possibleDuplicate }).success,
       ).toBe(false);
     }
   });

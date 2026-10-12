@@ -10,6 +10,7 @@ import type pg from "pg";
 import {
   CongressDeskRegistrationResponseSchema,
   CongressRosterListSchema,
+  normaliseContactPhone,
 } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
@@ -43,6 +44,11 @@ import { eventClassificationSql } from "../setup/event-classification.js";
  *   B   | Ёлкина Анна   | Клиника Здоровье | казань    | Республика Татарстан | 8 (900) 000-00-00  | S2    | failed | 02.03 00:00:00
  *   C   | абрамова Анна | НИИ кардиологии  | МОСКВА    | московская область   | +7 900 100-00-00   | —     | none   | 02.03 23:59:59
  *   D   | Елкина Анна   | ГКБ №15          | Ярославль | Ярославская область  | +7 (900) 050-00-00 | S1    | sent   | 03.03 00:00:00
+ *
+ * 044 EARS-31 (V-19) — the «возможный дубль» marker on the row and its yes/no
+ * filter — reuses the same four rows: {@link withDuplicatePair} makes A and C
+ * share one contact phone typed two ways and turns B and D into answer-less
+ * platform-origin rows, restoring every row afterwards.
  *
  * Runs against the dev-stand Postgres + the fake IdP; skips when DATABASE_URL or
  * IDP_ISSUER is absent so the shared CI unit job stays green.
@@ -490,6 +496,135 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(page.items.map((r) => letterOf.get(r.registrationId))).toEqual([
         "D",
       ]);
+    });
+
+    /**
+     * 044 EARS-31 fixture — A and C share one contact phone, typed «+7 916 …»
+     * and «8 (916) …» (one normalised key, EARS-29); B and D carry NO answers
+     * payload (platform origin, EARS-16), so their NULL keys would partition
+     * together without the EARS-30 guard. Every row is restored afterwards.
+     */
+    async function withDuplicatePair(body: () => Promise<void>): Promise<void> {
+      const ids = new Map(
+        [...letterOf].map(([id, letter]) => [letter, id] as const),
+      );
+      const [a, b, c, d] = ["A", "B", "C", "D"].map((l) => ids.get(l));
+      const { rows: before } = await pool.query<{
+        id: string;
+        answers: Record<string, unknown> | null;
+      }>("SELECT id, answers FROM registrations WHERE id = ANY($1::uuid[])", [
+        [a, b, c, d],
+      ]);
+      expect(before).toHaveLength(4);
+      const typePhone = async (id: string | undefined, typed: string) => {
+        await pool.query(
+          `UPDATE registrations
+              SET answers = answers || jsonb_build_object(
+                    'contactPhone', $2::text,
+                    'contactPhoneNormalised', $3::text)
+            WHERE id = $1`,
+          [id, typed, normaliseContactPhone(typed)],
+        );
+      };
+      await typePhone(a, "+7 916 123-45-67");
+      await typePhone(c, "8 (916) 123-45-67");
+      await pool.query(
+        "UPDATE registrations SET answers = NULL WHERE id = ANY($1::uuid[])",
+        [[b, d]],
+      );
+      try {
+        await body();
+      } finally {
+        for (const row of before)
+          await pool.query("UPDATE registrations SET answers = $2 WHERE id = $1", [
+            row.id,
+            row.answers,
+          ]);
+      }
+    }
+
+    /** The page for `query` as «letter:marker» pairs plus the total. */
+    async function marked(
+      query: string,
+    ): Promise<{ rows: string[]; total: number }> {
+      const res = await rosterRaw(query);
+      expect(res.statusCode, `${query}: ${res.body}`).toBe(200);
+      const page = CongressRosterListSchema.parse(res.json());
+      return {
+        rows: page.items.map(
+          (r) =>
+            `${letterOf.get(r.registrationId)}:${
+              (r as { possibleDuplicate?: unknown }).possibleDuplicate
+            }`,
+        ),
+        total: page.total,
+      };
+    }
+
+    it("044 EARS-31.1: every roster row carries the «возможный дубль» marker — true on both rows sharing a phone typed differently, false otherwise and on an answer-less platform row", async () => {
+      await withDuplicatePair(async () => {
+        expect(await marked("")).toEqual({
+          rows: ["A:true", "B:false", "C:true", "D:false"],
+          total: 4,
+        });
+      });
+      // Distinct phones mark nobody.
+      expect((await marked("")).rows).toEqual([
+        "A:false",
+        "B:false",
+        "C:false",
+        "D:false",
+      ]);
+    });
+
+    it("044 EARS-31.2: possibleDuplicate=yes returns exactly the marked rows, =no exactly the rest, and the total counts the filtered set", async () => {
+      await withDuplicatePair(async () => {
+        expect(await marked("possibleDuplicate=yes")).toEqual({
+          rows: ["A:true", "C:true"],
+          total: 2,
+        });
+        expect(await marked("possibleDuplicate=no")).toEqual({
+          rows: ["B:false", "D:false"],
+          total: 2,
+        });
+      });
+    });
+
+    it("044 EARS-31.3: the marker is derived over the whole event, never the filtered page — a ФИО filter leaving one of the pair keeps it marked; the filter composes with search, sort and page", async () => {
+      await withDuplicatePair(async () => {
+        // Only A survives the ФИО filter; its partner C is filtered out, and A
+        // is still a possible duplicate — under either filter value.
+        expect(
+          await marked(`possibleDuplicate=yes&name=${enc("Жукова")}`),
+        ).toEqual({ rows: ["A:true"], total: 1 });
+        expect(
+          await marked(`possibleDuplicate=no&name=${enc("Жукова")}`),
+        ).toEqual({ rows: [], total: 0 });
+        expect(await marked(`name=${enc("Жукова")}`)).toEqual({
+          rows: ["A:true"],
+          total: 1,
+        });
+        // ФИО descending over the marked pair is Жукова (A), абрамова (C);
+        // page 2 of size 1 is C.
+        expect(
+          await marked(
+            `possibleDuplicate=yes&q=${enc("анна")}&sort=fullName&dir=desc&page=2&pageSize=1`,
+          ),
+        ).toEqual({ rows: ["C:true"], total: 2 });
+        expect(
+          await marked(`possibleDuplicate=yes&city=${enc("москва")}&mailStatus=none`),
+        ).toEqual({ rows: ["C:true"], total: 1 });
+      });
+    });
+
+    it("044 EARS-31.4: a possibleDuplicate value other than yes or no is refused", async () => {
+      for (const query of [
+        "possibleDuplicate=true",
+        "possibleDuplicate=maybe",
+        "possibleDuplicate=",
+      ]) {
+        expect((await rosterRaw(query)).statusCode, query).toBe(400);
+      }
     });
   },
 );

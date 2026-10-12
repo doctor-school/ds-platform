@@ -94,8 +94,15 @@ never a widening of the one above:
   paged page of the registrar's desk roster. Its query state is the
   `AdminDataList` baseline (`q`, `page`, `pageSize`), the EARS-34 presence
   filter (`attendanceDay` + `present`), the EARS-22 sort (`sort` + `dir`) and
-  the EARS-23 per-column filters; the «возможный дубль» marker on this row is
-  EARS-30/EARS-31 and is not here.
+  the EARS-23 per-column filters and the EARS-31 `possibleDuplicate` filter.
+  Each row carries the EARS-30 `possibleDuplicate` marker.
+- «Возможный дубль» (EARS-30/EARS-31): the marker comes from
+  `eventDuplicates(eventId)` — the event-scoped subquery the participant card
+  joins too — joined by registration id, so the window counts ALL of the
+  event's registrations before the search, the filters, the sort and the page
+  apply; a filter that hides one row of a sharing pair never unmarks the other.
+  `possibleDuplicate=yes` / `no` is one more conjunct over that joined marker
+  (any other value is a 400); absent, no filter.
 - The filters (EARS-23), each one more conjunct of the WHERE the count shares,
   each over the same cell expression the row projects: `name`, `workplace`,
   `email` — case-insensitive «contains»; `phone` — «contains» on digits
@@ -227,7 +234,8 @@ never a widening of the one above:
     congress consent rows (`consent_records`: purpose, version, captured-at,
     `paper` origin), `confirmationMail { status, at }`, the read-time
     `possibleDuplicate` (the SAME window expression as `findEventRoster`,
-    computed over the event and then narrowed to the row) and, per configured
+    read from `eventDuplicates` — computed over the event and then narrowed to
+    the row, exactly as the roster list reads it) and, per configured
     congress day, the current mark (`null` = never marked) plus its `history`
     of changes.
   - **History = the 010 audit.** The first reader of `audit_ledger`: the

@@ -18,6 +18,7 @@ import {
   CongressRosterListSchema,
   CongressRosterQuerySchema,
   CONGRESS_ROSTER_MAIL_STATUS_FILTERS,
+  CONGRESS_ROSTER_POSSIBLE_DUPLICATE_FILTERS,
   CONGRESS_ROSTER_PAGE_SIZE_MAX,
   CONGRESS_ROSTER_SEARCH_MAX,
   CONGRESS_ROSTER_SORT_KEYS,
@@ -176,6 +177,11 @@ export class EventRosterAdminController {
     required: false,
     type: String,
     format: "date",
+  })
+  @ApiQuery({
+    name: "possibleDuplicate",
+    required: false,
+    enum: [...CONGRESS_ROSTER_POSSIBLE_DUPLICATE_FILTERS],
   })
   @ApiOkResponse({ type: CongressRosterListDto })
   // `audit: low-stakes` — a read that writes no domain state owes no terminal

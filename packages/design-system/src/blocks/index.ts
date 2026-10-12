@@ -144,6 +144,10 @@ export type {
   DataTableRecordColumn,
   DataTableAlign,
   DataTableOverflow,
+  DataTableSort,
+  DataTableSortAction,
+  DataTableSortDirection,
+  DataTableSortSelect,
 } from "./data-table";
 export {
   Pagination,

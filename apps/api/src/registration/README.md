@@ -91,10 +91,19 @@ never a widening of the one above:
 
 - `GET /v1/admin/events/:idOrSlug/roster`
   (`EventRosterAdminController` → `RegistrationService.eventRosterPage`) — one
-  paged page of the registrar's desk roster. Its query state is exactly the
-  `AdminDataList` baseline (`q`, `page`, `pageSize`); sorting and per-column
-  filters are EARS-22/EARS-23 and the «возможный дубль» marker on this row is
-  EARS-30/EARS-31, none of them here.
+  paged page of the registrar's desk roster. Its query state is the
+  `AdminDataList` baseline (`q`, `page`, `pageSize`), the EARS-34 presence
+  filter (`attendanceDay` + `present`) and the EARS-22 sort (`sort` + `dir`);
+  per-column filters are EARS-23 and the «возможный дубль» marker on this row
+  is EARS-30/EARS-31, neither of them here.
+- The sort (EARS-22 narrowed by EARS-37) takes one key of `fullName`,
+  `specialty`, `city`, `phone`, `registeredAt`, `presence` in `asc`/`desc`;
+  absent, the order is `registered_at ASC, id ASC` as before. Text keys order
+  under the ICU Russian collation (`ru-x-icu`: case-insensitive, «ё» beside
+  «е»), empty cells last in both directions; the phone by its normalised
+  digits; `presence` by the `attendanceDay` mark and only with that day (400
+  otherwise). Every key is tie-broken by registration date and id, so paging
+  is deterministic.
 - The row carries the answers the registrar identifies a person by — ФИО,
   specialty NAME (resolved through `specialties_minzdrav`, EARS-25), место
   работы, город, область, телефон as typed (EARS-29), email, `registeredAt` and

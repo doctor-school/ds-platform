@@ -147,10 +147,13 @@ const TableRow = React.forwardRef<
   HTMLTableRowElement,
   React.HTMLAttributes<HTMLTableRowElement>
 >(({ className, ...props }, ref) => (
+  // No colour transition: a row's hover / pressed tint is instant (owner
+  // Stage-B, #2757) — a fade reads as lag, and a cell painting over the row
+  // switches in the same frame only when neither of them animates.
   <tr
     ref={ref}
     className={cn(
-      "border-b border-hairline transition-colors last:border-0",
+      "border-b border-hairline last:border-0",
       className,
     )}
     {...props}

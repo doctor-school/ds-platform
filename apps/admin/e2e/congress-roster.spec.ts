@@ -7,6 +7,7 @@ import {
   signInAsAdmin,
 } from "@ds/e2e/admin-events";
 import { registerDoctorThroughPlatform } from "./support/congress-roster";
+import { expectRosterFits } from "./support/roster-fit";
 import { visible } from "./support/visible";
 
 /**
@@ -275,5 +276,178 @@ test.describe("044 EARS-21 — the congress roster in admin", () => {
         `card ${key} stays empty`,
       ).toHaveText("");
     }
+  });
+
+  test("044 EARS-22: the roster sorts server-side by ФИО and by registration time in both directions, in the address, back to page 1", async ({
+    page,
+    browser,
+  }) => {
+    test.skip(!eventId, "depends on the event seeded by EARS-21");
+    test.setTimeout(180_000);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await signInAsAdmin(page);
+    // Registered LAST, sorted SECOND by name — so the name order and the
+    // registration order tell apart on the first rows.
+    const latest = "Аксёнова Ольга Петровна";
+    const slug = await eventSlugFromRoster(page, eventId);
+    await registerDoctorThroughPlatform(browser, slug, latest);
+    const total = PEOPLE.length + FILLERS.length + 1;
+
+    await page.goto(`/events/${eventId}/roster`);
+    await expect(page.getByTestId("roster-total")).toHaveText(
+      `Найдено: ${total}`,
+    );
+    const table = page.getByTestId("roster-table");
+    const header = (name: string) =>
+      table.getByRole("button", { name, exact: true });
+    // `has` is resolved INSIDE each <th>, so the inner locator is page-rooted.
+    const headerCell = (name: string) =>
+      table
+        .locator("thead th")
+        .filter({ has: page.getByRole("button", { name, exact: true }) });
+
+    // Default: registration date ascending, announced on its header; № is
+    // a counter with no sort control; every other visible column is one.
+    await expect(headerCell("Дата регистрации")).toHaveAttribute(
+      "aria-sort",
+      "ascending",
+    );
+    for (const name of ["ФИО", "Специальность", "Город", "Телефон"]) {
+      await expect(headerCell(name)).toHaveAttribute("aria-sort", "none");
+    }
+    await expect(
+      table.locator("thead th").first().locator("button"),
+    ).toHaveCount(0);
+    await expect(
+      table.locator("thead th").last().locator("button"),
+    ).toHaveCount(0);
+    await expect(nameCells(page).first()).toHaveText(PEOPLE[0]!);
+    await shot(page, "roster-sort-default");
+    // Every header with its arrow on one line; the date-time whole (#2316).
+    await expectRosterFits(page, table);
+
+    // A sort change returns to page 1.
+    await page.getByRole("button", { name: "Вперёд" }).click();
+    await expect(visible(page.getByTestId("roster-page"))).toHaveText(
+      "Страница 2 из 2",
+    );
+    await header("ФИО").click();
+    await expect(visible(page.getByTestId("roster-page"))).toHaveText(
+      "Страница 1 из 2",
+    );
+    await expect(page).toHaveURL(/[?&]sort=fullName&dir=asc/);
+    await expect(headerCell("ФИО")).toHaveAttribute("aria-sort", "ascending");
+    await expect(headerCell("Дата регистрации")).toHaveAttribute(
+      "aria-sort",
+      "none",
+    );
+    await expect(nameCells(page).nth(0)).toHaveText(PEOPLE[0]!);
+    await expect(nameCells(page).nth(1)).toHaveText(latest);
+    await expect(nameCells(page).nth(2)).toHaveText(PEOPLE[1]!);
+    await shot(page, "roster-sort-name-asc");
+
+    // The second click reverses; the header's title names the next click.
+    await expect(header("ФИО")).toHaveAttribute(
+      "title",
+      "Сортировать по убыванию",
+    );
+    await header("ФИО").click();
+    await expect(page).toHaveURL(/[?&]sort=fullName&dir=desc/);
+    await expect(headerCell("ФИО")).toHaveAttribute("aria-sort", "descending");
+    await expect(nameCells(page).first()).toHaveText(FILLERS.at(-1)!);
+
+    // The third click resets to the default order and takes the sort out of
+    // the address (owner Stage-B, #2757: «непонятно, как отключить сортировку»).
+    await expect(header("ФИО")).toHaveAttribute("title", "Сбросить сортировку");
+    await header("ФИО").click();
+    await expect(page).not.toHaveURL(/[?&](sort|dir)=/);
+    await expect(headerCell("ФИО")).toHaveAttribute("aria-sort", "none");
+    await expect(headerCell("Дата регистрации")).toHaveAttribute(
+      "aria-sort",
+      "ascending",
+    );
+    await expect(nameCells(page).first()).toHaveText(PEOPLE[0]!);
+
+    // Another header replaces the sort, ascending first; the default column
+    // toggles, and from descending its next click is the reset.
+    await header("Город").click();
+    await expect(page).toHaveURL(/[?&]sort=city&dir=asc/);
+    await expect(header("Дата регистрации")).toHaveAttribute(
+      "title",
+      "Сортировать по возрастанию",
+    );
+    await header("Дата регистрации").click();
+    await expect(page).not.toHaveURL(/[?&](sort|dir)=/);
+    await expect(headerCell("Город")).toHaveAttribute("aria-sort", "none");
+    await expect(nameCells(page).first()).toHaveText(PEOPLE[0]!);
+    await expect(header("Дата регистрации")).toHaveAttribute(
+      "title",
+      "Сортировать по убыванию",
+    );
+    await header("Дата регистрации").click();
+    await expect(page).toHaveURL(/[?&]sort=registeredAt&dir=desc/);
+    await expect(nameCells(page).first()).toHaveText(latest);
+    await shot(page, "roster-sort-date-desc");
+    await expect(header("Дата регистрации")).toHaveAttribute(
+      "title",
+      "Сбросить сортировку",
+    );
+    await header("Дата регистрации").click();
+    await expect(page).not.toHaveURL(/[?&](sort|dir)=/);
+    await expect(nameCells(page).first()).toHaveText(PEOPLE[0]!);
+    await header("Дата регистрации").click();
+    await expect(page).toHaveURL(/[?&]sort=registeredAt&dir=desc/);
+
+    // The hover tint is instant on the row and on its sorted cell — no colour
+    // transition on either — so a pointer moving row to row repaints both in
+    // the same frame (owner Stage-B, #2757: the sorted cell lagged, then the
+    // 150ms fade itself read as lag).
+    const timing = await table
+      .locator("tbody tr")
+      .first()
+      .evaluate((row) => {
+        const cell = row.querySelectorAll("td")[5]!;
+        const durations = (element: Element) =>
+          getComputedStyle(element)
+            .transitionDuration.split(",")
+            .map((value) => value.trim());
+        return {
+          sorted: cell.className.includes("bg-table-sorted"),
+          row: durations(row),
+          cell: durations(cell),
+        };
+      });
+    expect(timing.sorted).toBe(true);
+    expect(timing.row.every((value) => value === "0s")).toBe(true);
+    expect(timing.cell.every((value) => value === "0s")).toBe(true);
+
+    // The address carries it: a reload keeps the order.
+    await page.reload();
+    await expect(headerCell("Дата регистрации")).toHaveAttribute(
+      "aria-sort",
+      "descending",
+    );
+    await expect(nameCells(page).first()).toHaveText(latest);
+
+    // Below md the rows are cards with no headers: the same sort is the
+    // «Сортировка» select.
+    await page.setViewportSize({ width: 390, height: 844 });
+    const select = visible(page.getByRole("combobox", { name: "Сортировка" }));
+    await expect(select).toHaveValue("registeredAt:desc");
+    await expect(select.locator("option[value='registeredAt:asc']")).toHaveText(
+      "По умолчанию — Дата регистрации, старые сверху",
+    );
+    await select.selectOption("fullName:asc");
+    await expect(page).toHaveURL(/[?&]sort=fullName&dir=asc/);
+    const cardNames = visible(
+      page
+        .getByTestId("roster-table")
+        .locator("[data-testid='roster-cell-fullName']"),
+    );
+    await expect(cardNames.first()).toHaveText(PEOPLE[0]!);
+    await shot(page, "roster-sort-select-narrow");
+    // Picking the default option takes the sort out of the address.
+    await select.selectOption("registeredAt:asc");
+    await expect(page).not.toHaveURL(/[?&](sort|dir)=/);
   });
 });

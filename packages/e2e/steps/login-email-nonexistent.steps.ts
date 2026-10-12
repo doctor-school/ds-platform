@@ -121,13 +121,17 @@ async function requestThroughAcademy(
   await expect(code).toBeVisible();
   await expect(code).toHaveAttribute("maxlength", "6");
   await expect(code).toHaveAttribute("inputmode", "numeric");
+  await expect(code).toHaveAttribute("aria-invalid", "false");
   expect((await code.inputValue()) === "", "code is not submitted").toBe(true);
   await expect(page.getByTestId("otp-verify")).toBeVisible();
   await expect(page.getByTestId("otp-change-method")).toBeVisible();
   await expect(page.getByTestId("otp-change-method")).toBeEnabled();
   await expect(page.getByTestId("otp-resend")).toBeVisible();
   await expect(page.getByTestId("otp-identifier")).toHaveCount(0);
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  // Scope excludes Next's empty route announcer outside the authentication door.
+  await expect(page.getByTestId("login-screen").getByRole("alert")).toHaveCount(
+    0,
+  );
   return {
     requestedAt,
     status: captured.response.status(),

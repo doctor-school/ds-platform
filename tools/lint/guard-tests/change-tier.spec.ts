@@ -381,6 +381,39 @@ describe("#2807: test-only class, docs follow the code, wider Ship allowlist", (
     }
   });
 
+  it("EARS-1: a tag edit touching an @host: tag selects CI projects — ask", () => {
+    for (const patch of [
+      "@@ -9 +9 @@\n-  @EARS-1 @happy\n+  @EARS-1 @happy @host:doctor",
+      "@@ -9 +9 @@\n-  @EARS-1 @host:academy\n+  @EARS-1",
+      "@@ -9 +9 @@\n-  @EARS-1 @host:academy\n+  @EARS-1 @host:doctor",
+    ])
+      expect(classifyChangeTier([feature(patch)]).minimum, patch).toBe("ask");
+    expect(
+      classifyChangeTier([
+        feature(
+          "@@ -9 +9 @@\n-  @EARS-1 @host:academy\n+  @EARS-1 @EARS-2 @host:academy",
+        ),
+      ]).testOnly,
+    ).toBe(true);
+  });
+
+  it("EARS-1: `# language:` and `#` lines inside a doc string are not comments — ask", () => {
+    for (const patch of [
+      "@@ -1 +1 @@\n-# language: en\n+# language: ru",
+      '@@ -20,4 +20,4 @@\n     """\n-    # heading\n+    # other heading\n     """',
+      '@@ -20,3 +20,3 @@\n     """\n     body\n-    # heading\n+    # other heading',
+      '@@ -19,4 +19,4 @@\n     Given the mail body\n     """\n-    # heading\n+    # other heading',
+    ])
+      expect(classifyChangeTier([feature(patch)]).minimum, patch).toBe("ask");
+    expect(
+      classifyChangeTier([
+        feature(
+          '@@ -19,6 +19,7 @@\n     Given the mail body\n     """\n     body\n     """\n+    # a real comment',
+        ),
+      ]).testOnly,
+    ).toBe(true);
+  });
+
   it("EARS-1: a spec .feature without a patch, or added, stays ask (text unproven / new spec)", () => {
     expect(classifyChangeTier([feature()]).minimum).toBe("ask");
     expect(classifyChangeTier([feature(TAG_ONLY_PATCH, "added")]).minimum).toBe(
@@ -407,12 +440,21 @@ describe("#2807: test-only class, docs follow the code, wider Ship allowlist", (
     expect(result.testOnly ?? false).toBe(false);
   });
 
-  it("EARS-2: a modified spec / ADR / skill doc follows the code's tier", () => {
+  it("EARS-2: a modified ADR or skill alongside code still forces ask", () => {
+    for (const path of [
+      "apps/docs/content/adr/0013-x.md",
+      "apps/docs/content/skills/x/SKILL.md",
+    ]) {
+      const result = classifyChangeTier([copy, mod(path)]);
+      expect(result.minimum, path).toBe("ask");
+      expect(result.reasons, path).toContain(`ask path: ${path}`);
+    }
+  });
+
+  it("EARS-2: a modified spec doc follows the code's tier", () => {
     for (const path of [
       "apps/docs/content/specs/features/001-x/001-design.md",
       "apps/docs/content/specs/features/001-x/001-requirements.md",
-      "apps/docs/content/adr/0013-x.md",
-      "apps/docs/content/skills/x/SKILL.md",
     ]) {
       expect(classifyChangeTier([copy, mod(path, 60, 40)]).minimum, path).toBe(
         "ship",

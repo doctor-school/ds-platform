@@ -116,31 +116,74 @@ function isPlainRepoDoc(path: string): boolean {
   return PLAIN_REPO_DOC_RE.test(path) && !/(?:^|\/)design-source\//.test(path);
 }
 
-/** #2807: a spec / ADR / skill doc that, when modified, follows the code. */
-function isProcedureAreaDoc(path: string): boolean {
-  return /^apps\/docs\/content\/(?:specs|adr|skills)\/.+\.mdx?$/.test(path);
+/** #2807: a spec doc that, when modified, follows the code. ADRs and skills
+ * are decisions / procedures: they keep forcing ask. */
+function isSpecDoc(path: string): boolean {
+  return /^apps\/docs\/content\/specs\/.+\.mdx?$/.test(path);
 }
 
 function isSpecFeature(path: string): boolean {
   return /^apps\/docs\/content\/specs\/.+\.feature$/.test(path);
 }
 
+const DOC_STRING_RE = /^(?:"""|```)/;
+const STEP_RE = /^(?:Given|When|Then|And|But|\*)(?:\s|$)/;
+
+/**
+ * Whether a hunk starts inside a Gherkin doc string: its first visible
+ * delimiter opens one when the line before it is a step; `null` = cannot tell
+ * (the delimiter is the hunk's first non-blank line).
+ */
+function hunkStartsInDocString(hunk: string[]): boolean | null {
+  const texts = hunk.map((line) => line.slice(1).trim());
+  const first = texts.findIndex((text) => DOC_STRING_RE.test(text));
+  if (first === -1) return false;
+  const before = texts.slice(0, first).filter((text) => text !== "");
+  if (!before.length) return null;
+  return !STEP_RE.test(before[before.length - 1]);
+}
+
+function hostTags(lines: string[]): string {
+  return lines
+    .flatMap((line) => line.slice(1).match(/@host:\S+/g) ?? [])
+    .sort()
+    .join(" ");
+}
+
 /**
  * #2807: a spec `.feature` hunk binds steps (tags, comments, blank lines) or
- * changes the spec (Feature / Scenario / step / table text). No patch = the
- * text is unproven = a spec change.
+ * changes the spec (Feature / Scenario / step / table / doc-string text, the
+ * `# language:` header, or an `@host:` tag, which selects the CI projects).
+ * No patch = the text is unproven = a spec change.
  */
 export function featurePatchChangesScenarioText(patch?: string): boolean {
   if (typeof patch !== "string" || !patch.length) return true;
-  return patch.split(/\r?\n/).some((line) => {
-    // REST patches carry hunks only, no `---`/`+++` file headers.
-    if (!/^[+-]/.test(line)) return false;
-    const text = line.slice(1).trim();
-    return !(
-      text === "" ||
-      text.startsWith("#") ||
-      /^(?:@\S+\s*)+$/.test(text)
-    );
+  // REST patches carry hunks only, no `---`/`+++` file headers.
+  const lines = patch.split(/\r?\n/);
+  const removed = lines.filter((line) => line.startsWith("-"));
+  const added = lines.filter((line) => line.startsWith("+"));
+  if (hostTags(removed) !== hostTags(added)) return true;
+  const hunks: string[][] = [];
+  for (const line of lines)
+    if (line.startsWith("@@")) hunks.push([]);
+    else if (hunks.length) hunks[hunks.length - 1].push(line);
+  if (!hunks.length) return true;
+  return hunks.some((hunk) => {
+    let inside = hunkStartsInDocString(hunk);
+    for (const line of hunk) {
+      const text = line.slice(1).trim();
+      const changed = /^[+-]/.test(line);
+      if (changed) {
+        if (inside !== false) return true;
+        const binding =
+          text === "" ||
+          (text.startsWith("#") && !/^#\s*language\s*:/i.test(text)) ||
+          /^(?:@\S+\s*)+$/.test(text);
+        if (!binding) return true;
+      }
+      if (DOC_STRING_RE.test(text) && inside !== null) inside = !inside;
+    }
+    return false;
   });
 }
 
@@ -308,11 +351,11 @@ export function classifyChangeTier(
         show.push(`${file.status || "unknown-status"} file: ${file.path}`);
       continue;
     }
-    // #2807: a modified spec / ADR / skill doc follows the code's tier.
+    // #2807: a modified spec doc follows the code's tier.
     if (
       file.status === "modified" &&
       !file.previousPath &&
-      isProcedureAreaDoc(file.path)
+      isSpecDoc(file.path)
     ) {
       docs.push(file.path);
       continue;
@@ -332,9 +375,7 @@ export function classifyChangeTier(
       `${lines} changed lines in non-test files (ship cap ${SHIP_LINE_CAP})`,
     );
   if (docs.length && !code)
-    ask.push(
-      `spec / ADR / skill change with no code to follow: ${docs.join(", ")}`,
-    );
+    ask.push(`spec change with no code to follow: ${docs.join(", ")}`);
   if (ask.length) return { minimum: "ask", reasons: ask };
   if (show.length) return { minimum: "show", reasons: show };
   if (!code && !docs.length)

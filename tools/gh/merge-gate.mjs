@@ -569,7 +569,9 @@ export function verifyModeAExemption(files, metadata, headSha, runGit = git) {
  * #2584: a Change-tier ship PR needs no Mode (a) verdict — re-proven on the
  * CURRENT REST file listing at merge time, with the same completeness rule as
  * the exemption path. Anything short of `effective === "ship"` keeps the
- * head-pinned verdict requirement.
+ * head-pinned verdict requirement. #2807: a test-only PR is the test-only
+ * sub-case of ship (declared `ship`); the REST listing's `patch` proves a
+ * spec `.feature` edit left its scenario text unchanged.
  */
 export function verifyChangeTierShip(files, metadata, headSha, headAfter) {
   // The file listing is unpinned (REST `pulls/<n>/files` has no sha), so the
@@ -597,7 +599,12 @@ export function verifyChangeTierShip(files, metadata, headSha, headAfter) {
     (sum, file) => sum + file.additions + file.deletions,
     0,
   );
-  return { ok: true, files: tierFiles.length, lines };
+  return {
+    ok: true,
+    files: tierFiles.length,
+    lines,
+    ...(tier.testOnly ? { testOnly: true } : {}),
+  };
 }
 
 /** Read the exact PR comparison blobs; filename-only bot claims are insufficient. */
@@ -926,7 +933,7 @@ async function main() {
       return false;
     }
     process.stdout.write(
-      `${TAG} Mode (a) not required — Change-tier ship verified (${ship.files} files, ${ship.lines} lines).\n`,
+      `${TAG} Mode (a) not required — Change-tier ship verified (${ship.testOnly ? "test-only, " : ""}${ship.files} files, ${ship.lines} lines).\n`,
     );
     return true;
   }

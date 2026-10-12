@@ -4,7 +4,8 @@
  *   ship — small reversible presentational change (allowlisted UI / copy /
  *          email / product-doc paths only): no Mode (a) reviewer, no
  *          ui-parity evidence, Stage-B = the owner's head-pinned chat
- *          decision (no live URL).
+ *          decision (no live URL). A PR that changes only tests (#2807) is
+ *          the test-only sub-case of ship: same declaration, no Mode (a).
  *   show — Mode (a) review and ui-parity as for every PR; a Stage-B GO may
  *          cite a PR evidence capture instead of a live staging URL.
  *   ask  — the full procedure, unchanged.
@@ -34,11 +35,16 @@ export interface ChangeTierFile {
   deletions: number;
   /** Rename source, when the listing reports one. */
   previousPath?: string;
+  /** Unified-diff hunks (REST `pulls/<n>/files`): proves a spec `.feature`
+   * edit left the scenario text alone (#2807). */
+  patch?: string;
 }
 
 export interface ChangeTierClassification {
   minimum: ChangeTier;
   reasons: string[];
+  /** #2807: every changed file is a test — ship without Mode (a). */
+  testOnly?: boolean;
 }
 
 export interface ResolvedTier {
@@ -47,6 +53,8 @@ export interface ResolvedTier {
   /** `declared` when it is at or above `minimum`; `null` = BLOCK. */
   effective: ChangeTier | null;
   reasons: string[];
+  /** #2807: the test-only sub-case of ship. */
+  testOnly?: boolean;
 }
 
 const ORDER: Record<ChangeTier, number> = { ship: 0, show: 1, ask: 2 };
@@ -65,12 +73,19 @@ export const API_COPY_ALLOWLIST: readonly string[] = [
   "apps/api/test/support/notification-subjects.ts",
 ];
 
-const ASK_PATH_RES: readonly RegExp[] = [
+/** Ask areas: runtime code under these is ask; a test in them, or a
+ * modified doc that follows the code, is not (#2807). */
+const AREA_ASK_PATH_RES: readonly RegExp[] = [
   /^packages\/(?:db|schemas|api-client)\//,
   /^apps\/api\//,
+  /^apps\/docs\/content\/(?:specs|adr|skills)\//,
+];
+
+/** Ask whatever the file is — CI, tooling, instructions, dependencies,
+ * config: no test or doc exemption lowers these (#2807). */
+const STRUCTURAL_ASK_PATH_RES: readonly RegExp[] = [
   /^(?:infra|tools|\.github|\.claude|\.codex|scripts)\//,
   /(?:^|\/)design-source\//,
-  /^apps\/docs\/content\/(?:specs|adr|skills)\//,
   /^(?:AGENTS|CLAUDE)\.md$/,
   /(?:^|\/)package\.json$/,
   /^(?:pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json)$/,
@@ -93,6 +108,107 @@ const COPY_MODULE_RE =
 const PRODUCT_DOC_RE = /^apps\/docs\/content\/.+\.mdx?$/;
 const PROCEDURE_DOC_RE =
   /^apps\/docs\/content\/(?:(?:specs|adr|skills)\/|agent-discipline\.md$)/;
+/** #2807: the debt ledger and package / module READMEs are plain docs. */
+const PLAIN_REPO_DOC_RE =
+  /^(?:DEBT\.md|(?:apps|packages)\/(?!docs\/content\/)(?:[^/]+\/)+README\.md)$/;
+
+function isPlainRepoDoc(path: string): boolean {
+  return PLAIN_REPO_DOC_RE.test(path) && !/(?:^|\/)design-source\//.test(path);
+}
+
+/** #2807: a spec doc that, when modified, follows the code. ADRs and skills
+ * are decisions / procedures: they keep forcing ask. */
+function isSpecDoc(path: string): boolean {
+  return /^apps\/docs\/content\/specs\/.+\.mdx?$/.test(path);
+}
+
+function isSpecFeature(path: string): boolean {
+  return /^apps\/docs\/content\/specs\/.+\.feature$/.test(path);
+}
+
+const DOC_STRING_RE = /^(?:"""|```)/;
+const STEP_RE = /^(?:Given|When|Then|And|But|\*)(?:\s|$)/;
+
+/**
+ * Whether a hunk starts inside a Gherkin doc string: its first visible
+ * delimiter opens one when the line before it is a step; `null` = cannot tell
+ * (the delimiter is the hunk's first non-blank line).
+ */
+function hunkStartsInDocString(hunk: string[]): boolean | null {
+  const texts = hunk.map((line) => line.slice(1).trim());
+  const first = texts.findIndex((text) => DOC_STRING_RE.test(text));
+  if (first === -1) return false;
+  const before = texts.slice(0, first).filter((text) => text !== "");
+  if (!before.length) return null;
+  return !STEP_RE.test(before[before.length - 1]);
+}
+
+function hostTags(line: string): string {
+  return (line.slice(1).match(/@host:\S+/g) ?? []).sort().join(" ");
+}
+
+/**
+ * A run of removed then added lines (one change block) keeps `@host:` only
+ * when its tag lines pair up in order with the same host set per line; a
+ * host tag moved to another scenario lands in another block and fails here.
+ */
+function hostTagsChanged(lines: string[]): boolean {
+  const isTagLine = (line: string) =>
+    /^(?:@\S+\s*)+$/.test(line.slice(1).trim());
+  let removed: string[] = [];
+  let added: string[] = [];
+  const blockChanged = () => {
+    const a = removed.filter(isTagLine).map(hostTags);
+    const b = added.filter(isTagLine).map(hostTags);
+    removed = [];
+    added = [];
+    if (a.length !== b.length) return [...a, ...b].some((tags) => tags !== "");
+    return a.some((tags, i) => tags !== b[i]);
+  };
+  for (const line of lines) {
+    if (line.startsWith("-")) {
+      if (added.length && blockChanged()) return true;
+      removed.push(line);
+    } else if (line.startsWith("+")) added.push(line);
+    else if (blockChanged()) return true;
+  }
+  return blockChanged();
+}
+
+/**
+ * #2807: a spec `.feature` hunk binds steps (tags, comments, blank lines) or
+ * changes the spec (Feature / Scenario / step / table / doc-string text, the
+ * `# language:` header, or an `@host:` tag, which selects the CI projects).
+ * No patch = the text is unproven = a spec change.
+ */
+export function featurePatchChangesScenarioText(patch?: string): boolean {
+  if (typeof patch !== "string" || !patch.length) return true;
+  // REST patches carry hunks only, no `---`/`+++` file headers.
+  const lines = patch.split(/\r?\n/);
+  if (hostTagsChanged(lines)) return true;
+  const hunks: string[][] = [];
+  for (const line of lines)
+    if (line.startsWith("@@")) hunks.push([]);
+    else if (hunks.length) hunks[hunks.length - 1].push(line);
+  if (!hunks.length) return true;
+  return hunks.some((hunk) => {
+    let inside = hunkStartsInDocString(hunk);
+    for (const line of hunk) {
+      const text = line.slice(1).trim();
+      const changed = /^[+-]/.test(line);
+      if (changed) {
+        if (inside !== false) return true;
+        const binding =
+          text === "" ||
+          (text.startsWith("#") && !/^#\s*language\s*:/i.test(text)) ||
+          /^(?:@\S+\s*)+$/.test(text);
+        if (!binding) return true;
+      }
+      if (DOC_STRING_RE.test(text) && inside !== null) inside = !inside;
+    }
+    return false;
+  });
+}
 
 /**
  * UI-shaped files that still carry server, routing or auth behaviour: never
@@ -120,6 +236,7 @@ function isServerOrRoutePath(path: string): boolean {
 /** A non-test, non-changeset path that may change under ship. */
 export function isShipPath(path: string): boolean {
   if (API_COPY_ALLOWLIST.includes(path)) return true;
+  if (isPlainRepoDoc(path)) return true;
   if (PRODUCT_DOC_RE.test(path)) return !PROCEDURE_DOC_RE.test(path);
   if (isServerOrRoutePath(path)) return false;
   return isCopyModule(path) || isUiSourcePath(path);
@@ -195,10 +312,22 @@ export function isEnvironmentSensitivePath(path: string): boolean {
   );
 }
 
+function isStructuralAskPath(path: string): boolean {
+  if (isUiEvidencePath(path)) return false;
+  return STRUCTURAL_ASK_PATH_RES.some((re) => re.test(path));
+}
+
 export function isAskPath(path: string): boolean {
   if (API_COPY_ALLOWLIST.includes(path)) return false;
-  if (isUiEvidencePath(path)) return false;
-  return ASK_PATH_RES.some((re) => re.test(path));
+  if (isPlainRepoDoc(path)) return false;
+  if (isStructuralAskPath(path)) return true;
+  return AREA_ASK_PATH_RES.some((re) => re.test(path));
+}
+
+/** #2807: test sources for the tier — `isTestPath` plus the API e2e tree
+ * (`apps/api/test/**` support files). Stage-B routing keeps `isTestPath`. */
+function isTierTestPath(path: string): boolean {
+  return isTestPath(path) || /^apps\/api\/test\//.test(path);
 }
 
 export function classifyChangeTier(
@@ -216,21 +345,48 @@ export function classifyChangeTier(
     };
   const ask: string[] = [];
   const show: string[] = [];
+  const docs: string[] = [];
+  let code = 0;
   let lines = 0;
   for (const file of files) {
-    for (const path of [file.path, file.previousPath].filter(
+    const paths = [file.path, file.previousPath].filter(
       (p): p is string => typeof p === "string" && p.length > 0,
-    ))
-      if (isAskPath(path)) ask.push(`ask path: ${path}`);
-    const exempt =
-      isTestPath(file.path) ||
-      isChangesetPath(file.path) ||
-      isUiEvidencePath(file.path);
+    );
+    const structural = paths.filter(isStructuralAskPath);
+    for (const path of structural) ask.push(`ask path: ${path}`);
+    // #2807: a spec `.feature` is a test while its scenario text is unchanged.
+    if (paths.some(isSpecFeature)) {
+      if (file.status !== "modified" || file.previousPath)
+        ask.push(
+          `${file.status || "unknown-status"} spec scenario file: ${file.path}`,
+        );
+      else if (featurePatchChangesScenarioText(file.patch))
+        ask.push(
+          `spec scenario text changed (or no patch to prove it unchanged): ${file.path}`,
+        );
+      continue;
+    }
+    const exempt = paths.every(
+      (p) => isTierTestPath(p) || isChangesetPath(p) || isUiEvidencePath(p),
+    );
     if (exempt) {
       if (file.status !== "modified" && file.status !== "added")
         show.push(`${file.status || "unknown-status"} file: ${file.path}`);
       continue;
     }
+    // #2807: a modified spec doc follows the code's tier.
+    if (
+      file.status === "modified" &&
+      !file.previousPath &&
+      isSpecDoc(file.path)
+    ) {
+      docs.push(file.path);
+      continue;
+    }
+    code += 1;
+    for (const path of paths)
+      if (!structural.includes(path) && isAskPath(path))
+        ask.push(`ask path: ${path}`);
     if (file.status !== "modified")
       show.push(`${file.status || "unknown-status"} file: ${file.path}`);
     if (!isShipPath(file.path))
@@ -241,8 +397,16 @@ export function classifyChangeTier(
     show.push(
       `${lines} changed lines in non-test files (ship cap ${SHIP_LINE_CAP})`,
     );
+  if (docs.length && !code)
+    ask.push(`spec change with no code to follow: ${docs.join(", ")}`);
   if (ask.length) return { minimum: "ask", reasons: ask };
   if (show.length) return { minimum: "show", reasons: show };
+  if (!code && !docs.length)
+    return {
+      minimum: "ship",
+      testOnly: true,
+      reasons: [`test-only: ${files.length} test file(s)`],
+    };
   return {
     minimum: "ship",
     reasons: [`${files.length} modified file(s), ${lines} line(s)`],
@@ -270,12 +434,16 @@ export function resolveTier(
   expectedCount?: number,
 ): ResolvedTier {
   const declared = parseDeclaredTier(prBody);
-  const { minimum, reasons } = classifyChangeTier(files, expectedCount);
+  const { minimum, reasons, testOnly } = classifyChangeTier(
+    files,
+    expectedCount,
+  );
   return {
     declared,
     minimum,
     effective: ORDER[declared] >= ORDER[minimum] ? declared : null,
     reasons,
+    ...(testOnly ? { testOnly } : {}),
   };
 }
 
@@ -296,6 +464,7 @@ export function normalizeTierFiles(
       ...(typeof previous === "string" && previous
         ? { previousPath: previous }
         : {}),
+      ...(typeof file.patch === "string" ? { patch: file.patch } : {}),
     };
   });
 }

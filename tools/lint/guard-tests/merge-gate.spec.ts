@@ -804,6 +804,52 @@ describe("merge-gate verifyChangeTierShip() (#2584)", () => {
       verifyChangeTierShip([copyFile], meta(shipBody, 1), head, "").ok,
     ).toBe(false);
   });
+
+  // #2807: the test-only sub-case of ship merges on green CI without Mode (a).
+  const testOnlyBody = "Change-tier: ship — test-only: binds the 003 steps";
+  const feature = (patch: string) => ({
+    filename: "apps/docs/content/specs/features/003-x/003-scenarios.feature",
+    status: "modified",
+    additions: 1,
+    deletions: 1,
+    patch,
+  });
+  const apiTest = {
+    filename: "apps/api/test/auth/login-otp.e2e-spec.ts",
+    status: "modified",
+    additions: 120,
+    deletions: 4,
+  };
+
+  it("EARS-1: a test-only PR (apps/api/test + tag-only .feature) is verified without Mode (a)", () => {
+    expect(
+      verifyChangeTierShip(
+        [apiTest, feature("@@ -1 +1 @@\n-  @a\n+  @a @b")],
+        meta(testOnlyBody, 2),
+        head,
+        head,
+      ),
+    ).toEqual({ ok: true, files: 2, lines: 126, testOnly: true });
+  });
+
+  it("EARS-1: a .feature scenario-text change keeps the Mode (a) requirement", () => {
+    const result = verifyChangeTierShip(
+      [apiTest, feature("@@ -1 +1 @@\n-    Given a\n+    Given b")],
+      meta(testOnlyBody, 2),
+      head,
+      head,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain("minimum ask");
+    expect(result.reason).toContain("scenario text");
+  });
+
+  it("EARS-1: a test-only PR that declares ask still needs the verdict", () => {
+    expect(
+      verifyChangeTierShip([apiTest], meta("Change-tier: ask", 1), head, head)
+        .ok,
+    ).toBe(false);
+  });
 });
 
 describe("#2699: splitDiffByFile — a PR's own per-file patches, comparable across a rebase", () => {

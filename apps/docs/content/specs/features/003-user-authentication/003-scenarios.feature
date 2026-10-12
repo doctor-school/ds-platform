@@ -525,12 +525,15 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And a link to "Мои события" and a sign-out action are present
     And no raw session claim (sub, roles array, raw mfa boolean) appears anywhere in the page
 
-  @EARS-28 @happy
+  @EARS-28 @happy @host:academy @inline-display-name-edit
   Scenario: Inline display-name edit persists through the existing endpoint
-    Given an authenticated doctor_guest user on the /account page
-    When the user edits the display name inline and confirms
-    Then the new value is persisted via the existing PUT /v1/me/display-name
-    And the rendered display name and avatar initials reflect the new value
+    Given a uniquely registered verified Academy account is on its own account page for inline name editing
+    When the owned user edits the display name inline and confirms the new value
+    Then the ordinary inline edit succeeds through the existing authenticated display-name PUT endpoint
+    And a real account document reload and fresh profile read preserve that owned identity's name and avatar initials
+    # NEW real persistence proof: display-name-edit.steps.ts. Retain mocked
+    # trimming, Enter/Escape, header and accessibility coverage; an optimistic
+    # render alone does not prove persistence after a real document reload.
 
   @EARS-29 @happy
   Scenario: The verification code email is composed and sent by the BFF mailer, code-only

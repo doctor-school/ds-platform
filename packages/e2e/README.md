@@ -505,3 +505,22 @@ the explicit local-OFF route above only when the actual target and process flag
 qualify; registration, code acceptance and profile requests remain real. Profile
 links are located within the page's main landmark, alongside the shared header's
 separate navigation links.
+
+### Inline display-name persistence (003 EARS-28)
+
+`Inline display-name edit persists through the existing endpoint` registers a
+separate unique owned Academy account, accepts its fresh addressed code and
+proves the secure session and the same verified profile with no phone. Through
+the ordinary account controls, `steps/display-name-edit.steps.ts` edits and
+confirms the name, observes exactly one authenticated display-name PUT with the
+expected body and successful response, and checks the rendered name and initials.
+A real document reload must trigger a new profile GET; a further no-store read
+proves the same identity and saved name before the rendered name and initials
+are checked again. A purely optimistic render cannot satisfy this scenario.
+The trace-off auth fixture and secret-safe registration/session helpers remain
+in use; CAPTCHA preparation reuses the explicit local-OFF route above only for
+a qualifying target and process flag. Cleanup revokes only this owned session
+and closes its context. Existing mocked trimming, Enter/Escape, header and
+accessibility coverage remains intact. Run this selected scenario on the
+lead-selected stand; this test-only change requires no owner Stage-B request or
+new slot.

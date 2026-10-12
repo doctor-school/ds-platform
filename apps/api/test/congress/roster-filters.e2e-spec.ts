@@ -663,6 +663,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(
           (card.json() as { possibleDuplicate?: unknown }).possibleDuplicate,
         ).toBe(false);
+        // The staff registration has no row in the participant-only
+        // subquery; its own card still opens (left join), unmarked (coalesce).
+        const sId = [...letterOf].find(([, l]) => l === "S")![0];
+        const staffCard = await app.inject({
+          method: "GET",
+          url: `/v1/admin/events/${slug}/registrations/${sId}`,
+          headers: registrar,
+        });
+        expect(staffCard.statusCode, staffCard.body).toBe(200);
+        expect(
+          (staffCard.json() as { possibleDuplicate?: unknown })
+            .possibleDuplicate,
+        ).toBe(false);
       } finally {
         await deleteUserFixture(pool, "email", staffEmail);
       }

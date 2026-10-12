@@ -506,9 +506,9 @@ export class RegistrationRepository {
    * that a page boundary is stable when two rows share an instant. The per-column
    * filters are EARS-23 ({@link rosterColumnFilterPredicates}). The «возможный
    * дубль» marker (EARS-30) and its yes/no filter (EARS-31) read
-   * {@link eventDuplicates}, joined by id: the marker is computed over ALL of
-   * the event's registrations BEFORE the search, the filters, the sort and the
-   * page apply, so a filter that hides one row of a sharing pair never unmarks
+   * {@link eventDuplicates}, joined by id: the marker is computed over the
+   * event's participant registrations (#2456: a staff account's registration
+   * marks nobody) BEFORE the search, the filters, the sort and the page apply, so a filter that hides one row of a sharing pair never unmarks
    * the other.
    */
   async findEventRosterPage(
@@ -636,8 +636,8 @@ export class RegistrationRepository {
    * participant registration of the event with its marker
    * ({@link possibleDuplicateOverScope}), the window running over the WHOLE
    * event's participants because nothing but the event and #2456's
-   * participant rule scope this subquery — the same population the roster shows. The participant card and the roster list both join
-   * it by id, so the card, the row and the EARS-31 filter can never disagree,
+   * participant rule scope this subquery — the same population the roster
+   * shows. The participant card and the roster list both join it by id, so the card, the row and the EARS-31 filter can never disagree,
    * and no outer filter or page can change a marker.
    */
   private eventDuplicates(eventId: string) {
@@ -877,8 +877,10 @@ export class RegistrationRepository {
    *   roster's own definitions; the name parts are the answers alone (the
    *   account has only a display name, which `fullName` already falls back to).
    * - «возможный дубль» is {@link possibleDuplicateOverScope} computed over the
-   *   event's rows in a subquery, THEN narrowed to this registration — the
-   *   window has to see the whole event to count a shared phone.
+   *   event's participant registrations in a subquery (#2456: a staff
+   *   account's registration marks nobody), THEN narrowed to this registration
+   *   — the window has to see every participant of the event to count a shared
+   *   phone.
    * - Consents are the participant's congress sign-up consent rows.
    * - Attendance is the current `registration_attendance` value per configured
    *   day (`null` = never marked) plus the day's 010 audit history

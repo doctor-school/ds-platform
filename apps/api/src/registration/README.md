@@ -98,8 +98,9 @@ never a widening of the one above:
   Each row carries the EARS-30 `possibleDuplicate` marker.
 - «Возможный дубль» (EARS-30/EARS-31): the marker comes from
   `eventDuplicates(eventId)` — the event-scoped subquery the participant card
-  joins too — joined by registration id, so the window counts ALL of the
-  event's registrations before the search, the filters, the sort and the page
+  joins too — joined by registration id, so the window counts the event's
+  participant registrations (#2456: a staff account's registration marks
+  nobody) before the search, the filters, the sort and the page
   apply; a filter that hides one row of a sharing pair never unmarks the other.
   `possibleDuplicate=yes` / `no` is one more conjunct over that joined marker
   (any other value is a 400); absent, no filter.

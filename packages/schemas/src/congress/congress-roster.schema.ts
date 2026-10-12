@@ -23,7 +23,8 @@ import { MskCalendarDaySchema } from "./congress-intake-settings.schema.js";
  * `dir`), the EARS-23 per-column filters and the EARS-31 «возможный дубль»
  * yes/no filter. The row carries the EARS-30 marker as `possibleDuplicate`, the
  * same read-time derivation the PII-free `EventRosterEntry` and the participant
- * card read, computed over the whole event — never over the filtered page.
+ * card read, computed over the event's participant registrations — never over
+ * the filtered page.
  */
 
 /** Upper bound on the instant-search term — the same 160 the 007 admin list uses. */
@@ -193,7 +194,8 @@ export const CongressRosterQuerySchema = z
     registeredTo: MskCalendarDaySchema.optional(),
     /**
      * 044 EARS-31 — возможный дубль: `yes` / `no` over the EARS-30 marker,
-     * which is derived over ALL of the event's registrations, so a row keeps
+     * which is derived over the event's participant registrations (#2456: a
+     * staff account's registration marks nobody), so a row keeps
      * its marker whatever the other filters leave on the page.
      */
     possibleDuplicate: CongressRosterPossibleDuplicateFilterSchema.optional(),
@@ -253,8 +255,9 @@ export const CongressRosterRowSchema = z.object({
   confirmationMailStatus: z.enum(["sent", "failed"]).nullable(),
   /**
    * 044 EARS-30/EARS-31 — «возможный дубль»: two or more of the event's
-   * registrations share this row's normalised contact phone. Derived at read
-   * time over the whole event, never stored; `false` for a row with no answers.
+   * participant registrations share this row's normalised contact phone
+   * (#2456: a staff account's registration marks nobody). Derived at read
+   * time, never stored; `false` for a row with no answers.
    */
   possibleDuplicate: z.boolean(),
   /**

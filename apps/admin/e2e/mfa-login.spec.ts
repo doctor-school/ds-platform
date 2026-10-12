@@ -152,4 +152,48 @@ test.describe("011 EARS-6/7 — TOTP challenge on admin login (browser)", () => 
     await page.goto("/events");
     await expect(page).toHaveURL(/\/mfa\/challenge/);
   });
+
+  test("EARS-6: a session dropped by a network change is recovered through the TOTP challenge", async ({
+    page,
+  }) => {
+    // Prod 2026-10-12 (#2822): a VPN toggle moved an admin's IP/24, the session
+    // was rejected (`fingerprint_mismatch`), and the way back in is password +
+    // challenge. The session is bound to User-Agent + IP/24 + Accept-Language
+    // (`computeFingerprint`, apps/api/src/auth/session/session.cookie.ts); a
+    // browser cannot move its own IP, so the User-Agent stands in for the same
+    // fingerprint input.
+    const { email, password } = await bootstrapAdminSession(ORIGIN);
+    const secret = await enrolOnce(page, { email, password });
+
+    const userAgent = await page.evaluate(() => navigator.userAgent);
+    await page
+      .context()
+      .setExtraHTTPHeaders({ "user-agent": `${userAgent} network-changed` });
+
+    // The old session no longer opens admin…
+    const dropped = await page.evaluate(async () => {
+      const res = await fetch("/v1/admin/events", { credentials: "include" });
+      return res.status;
+    });
+    expect(dropped).toBe(401);
+
+    // …the password leads to the CHALLENGE (the factor survives the drop, so no
+    // re-enrollment and no new secret)…
+    await signIn(page, { email, password });
+    await page.waitForURL(/\/mfa\/challenge/, { timeout: 20_000 });
+    await expect(page.getByTestId("mfa-qr")).toHaveCount(0);
+
+    // …and the code from the authenticator enrolled before the drop admits, in
+    // the NEXT window (the enrollment burned the current one; EARS-6 replay).
+    await page
+      .getByTestId("mfa-challenge-form")
+      .getByRole("textbox")
+      .fill(totpCode(secret, Date.now() + STEP_MS));
+    await page.waitForURL(/\/events/, { timeout: 20_000 });
+    const admitted = await page.evaluate(async () => {
+      const res = await fetch("/v1/admin/events", { credentials: "include" });
+      return res.status;
+    });
+    expect(admitted).toBe(200);
+  });
 });

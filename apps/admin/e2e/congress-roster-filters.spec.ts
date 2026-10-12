@@ -100,6 +100,10 @@ async function setPalette(page: Page, palette: "light" | "dark") {
     const luminance = (r * 299 + g * 587 + b * 114) / 1000;
     return mode === "dark" ? luminance < 128 : luminance >= 128;
   }, palette);
+  // `transition-colors` controls repaint over a beat — capture the settled look.
+  await page.evaluate(() =>
+    Promise.all(document.getAnimations().map((a) => a.finished)),
+  );
 }
 
 async function shot(page: Page, name: string): Promise<void> {

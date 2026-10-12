@@ -143,11 +143,36 @@ function hunkStartsInDocString(hunk: string[]): boolean | null {
   return !STEP_RE.test(before[before.length - 1]);
 }
 
-function hostTags(lines: string[]): string {
-  return lines
-    .flatMap((line) => line.slice(1).match(/@host:\S+/g) ?? [])
-    .sort()
-    .join(" ");
+function hostTags(line: string): string {
+  return (line.slice(1).match(/@host:\S+/g) ?? []).sort().join(" ");
+}
+
+/**
+ * A run of removed then added lines (one change block) keeps `@host:` only
+ * when its tag lines pair up in order with the same host set per line; a
+ * host tag moved to another scenario lands in another block and fails here.
+ */
+function hostTagsChanged(lines: string[]): boolean {
+  const isTagLine = (line: string) =>
+    /^(?:@\S+\s*)+$/.test(line.slice(1).trim());
+  let removed: string[] = [];
+  let added: string[] = [];
+  const blockChanged = () => {
+    const a = removed.filter(isTagLine).map(hostTags);
+    const b = added.filter(isTagLine).map(hostTags);
+    removed = [];
+    added = [];
+    if (a.length !== b.length) return [...a, ...b].some((tags) => tags !== "");
+    return a.some((tags, i) => tags !== b[i]);
+  };
+  for (const line of lines) {
+    if (line.startsWith("-")) {
+      if (added.length && blockChanged()) return true;
+      removed.push(line);
+    } else if (line.startsWith("+")) added.push(line);
+    else if (blockChanged()) return true;
+  }
+  return blockChanged();
 }
 
 /**
@@ -160,9 +185,7 @@ export function featurePatchChangesScenarioText(patch?: string): boolean {
   if (typeof patch !== "string" || !patch.length) return true;
   // REST patches carry hunks only, no `---`/`+++` file headers.
   const lines = patch.split(/\r?\n/);
-  const removed = lines.filter((line) => line.startsWith("-"));
-  const added = lines.filter((line) => line.startsWith("+"));
-  if (hostTags(removed) !== hostTags(added)) return true;
+  if (hostTagsChanged(lines)) return true;
   const hunks: string[][] = [];
   for (const line of lines)
     if (line.startsWith("@@")) hunks.push([]);

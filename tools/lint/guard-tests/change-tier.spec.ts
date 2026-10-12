@@ -386,12 +386,14 @@ describe("#2807: test-only class, docs follow the code, wider Ship allowlist", (
       "@@ -9 +9 @@\n-  @EARS-1 @happy\n+  @EARS-1 @happy @host:doctor",
       "@@ -9 +9 @@\n-  @EARS-1 @host:academy\n+  @EARS-1",
       "@@ -9 +9 @@\n-  @EARS-1 @host:academy\n+  @EARS-1 @host:doctor",
+      // moved from one scenario to another: the patch-wide set is unchanged
+      "@@ -9,3 +9,3 @@\n-  @EARS-1 @host:admin\n+  @EARS-1\n   Scenario: One\n@@ -20,3 +20,3 @@\n-  @EARS-2\n+  @EARS-2 @host:admin\n   Scenario: Two",
     ])
       expect(classifyChangeTier([feature(patch)]).minimum, patch).toBe("ask");
     expect(
       classifyChangeTier([
         feature(
-          "@@ -9 +9 @@\n-  @EARS-1 @host:academy\n+  @EARS-1 @EARS-2 @host:academy",
+          "@@ -9 +9 @@\n-  @EARS-1 @host:doctor @host:academy\n+  @host:academy @EARS-1 @EARS-2 @host:doctor",
         ),
       ]).testOnly,
     ).toBe(true);

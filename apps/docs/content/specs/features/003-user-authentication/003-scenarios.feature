@@ -514,7 +514,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the response is the same generic 401 as the other /v1/me/* reads
     And no profile data is disclosed
 
-  @EARS-28 @happy
+  @EARS-28 @happy @browser @account-profile-surface
   Scenario: The /account page renders the profile surface instead of raw claims
     Given an authenticated doctor_guest user with a verified email and no attached phone
     When the user opens the /account page

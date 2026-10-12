@@ -222,6 +222,15 @@ import { installCaptchaStub } from "@ds/e2e/captcha-stub";
 await installCaptchaStub(page); // or a BrowserContext; before the first navigation
 ```
 
+`prepareCaptchaForJourney(target, baseURL, botProtectionEnabled)` retains that
+strict adapter by default. It omits the adapter only for a valid HTTP(S) URL
+whose literal hostname is exactly `localhost`, `127.0.0.1` or `[::1]` and an
+explicit boolean `false`; aliases, remote/stage URLs, malformed targets and
+missing/true flags retain the token requirement. The account-profile scenario
+passes Playwright's resolved `baseURL` and maps only the exact process value
+`BOT_PROTECTION_ENABLED=false` to OFF. No token is inferred or invented, and
+existing `installCaptchaStub` callers keep their strict behavior.
+
 The token comes from `E2E_CAPTCHA_TEST_TOKEN` (set by `pnpm e2e:stage` from the box,
 or exported by hand — `tools/staging/README.md` → «Driving captcha-gated auth on a
 slot»). Absent ⇒ `CaptchaTestTokenMissingError`, never a silent skip. No walk in this
@@ -476,3 +485,23 @@ owner Stage-B request or new slot:
 ```sh
 pnpm e2e:stage main --project academy --grep "The held registration password is never persisted anywhere"
 ```
+
+### Account profile surface (003 EARS-28)
+
+`The /account page renders the profile surface instead of raw claims` registers
+one unique owned Academy account, accepts its fresh addressed confirmation code,
+and proves the secure session and its own verified profile with no attached phone.
+`steps/account-profile.steps.ts` prepares a known name through the existing
+authenticated display-name PUT, then checks the rendered name/initials, inline
+edit affordance, verified email, explicit no-phone state, my-events link and
+sign-out control. A real change-password click opens the existing reset form
+carrying `/account`; it submits no reset or logout. Raw claims are checked against
+visible page content, excluding API responses and hydration data. The trace-off
+auth fixture and secret-safe helpers are reused; cleanup closes only its owned
+context. Existing mocked profile, inline-edit and accessibility coverage remains
+intact. Run only this selected scenario on the lead-selected stand; this test-only
+change needs no owner Stage-B request or new slot. Its CAPTCHA preparation uses
+the explicit local-OFF route above only when the actual target and process flag
+qualify; registration, code acceptance and profile requests remain real. Profile
+links are located within the page's main landmark, alongside the shared header's
+separate navigation links.

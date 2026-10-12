@@ -2441,3 +2441,169 @@ tools:
     - url: https://www.consultant.ru/document/cons_doc_LAW_28165/
       publisher: "НК РФ ст. 256 — амортизируемое имущество дороже 100 000 ₽"
       accessed: 2026-10-12
+
+# ── Рыночные ориентиры цены продукта: для сверки себестоимости калькулятора ──────────────
+# Ключи — продукты ../calculator/products.yaml (+ «видеоподкаст»); «конгресс» и «сделка» вне.
+# rub — [min, max] цена производства под ключ у студии / агентства (sources kind: agency) или
+# derived — расчёт из других ориентиров. listener_price_rub — розничная цена для слушателя
+# (ориентир выручки, не себестоимости).
+market_references:
+  урок:
+    rub: [25000, 225000]
+    per_minute_rub: [550, 5000]
+    basis: "низ — только съёмка и монтаж (VideoDoska), верх — e-learning студия ≈ 5 000 ₽ за минуту × 45 (Метрафор: видеокурс до 30 мин от 150 000); 2D-анимация отдельно — от 120 000 ₽ за минуту"
+    sources:
+      - url: https://metrafor.ru/e-learning/
+        publisher: "Метрафор — видеокурс до 30 минут (лектор + тезисы + инфографика) от 150 000 ₽"
+        kind: agency
+        accessed: 2026-10-12
+      - url: https://video-doska.ru/semka-onlajn-kursov
+        publisher: "VideoDoska — съёмка курса до 1 ч от 10 000 ₽, до 3 ч от 25 000 ₽"
+        kind: agency
+        accessed: 2026-10-12
+      - url: https://www.ispring.ru/elearning-insights/byudzhet-na-onlajn-kurs
+        publisher: "iSpring — диктор 600–2 000 ₽ за минуту, минута анимации от 18 000 ₽"
+        accessed: 2026-10-12
+      - url: https://videonika.ru/ceny
+        publisher: "Videonika — 2D-анимация от 120 000 ₽ за минуту, 3D от 200 000 (видно в выдаче поиска)"
+        kind: agency
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: low,
+        why: "прайсы «от» без медицинской специфики; цена за минуту — пересчёт",
+      }
+  эпизод подкаста:
+    rub: [8500, 19000]
+    basis: "аудиоподкаст с полной обработкой в студии Москвы; только запись 3 000–7 000 ₽"
+    sources:
+      - url: https://resonantarts.com/blog/skolko-stoit-zapisat-podkast-v-studii-v-2026-godu/
+        publisher: "Resonant Arts — обзор рынка Москвы: аудиоподкаст с полной обработкой 8 500–19 000 ₽ за выпуск"
+        kind: agency
+        period: 2026-03-14
+        accessed: 2026-10-12
+      - url: https://castpoint.ru/montazh-podkasta
+        publisher: "Castpoint — монтаж от 6 000 ₽ за час аудио (видно в выдаче поиска)"
+        kind: agency
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: medium,
+        why: "свежий обзор 2026, цены сходятся с прайсами других студий",
+      }
+  видеоподкаст:
+    rub: [20000, 46000]
+    branded_rub: [25000, 400000]
+    basis: "студийный полный цикл за выпуск; брендированные выпуски агентств под ключ — до 400 000 (слова одной студии)"
+    sources:
+      - url: https://resonantarts.com/blog/skolko-stoit-zapisat-podkast-v-studii-v-2026-godu/
+        publisher: "Resonant Arts — видеоподкаст полный цикл 20 000–46 000 ₽ за выпуск"
+        kind: agency
+        period: 2026-03-14
+        accessed: 2026-10-12
+      - url: https://uzel.studio/
+        publisher: "Говорящий Узел (Воронеж) — видеоподкаст под ключ 35 000 ₽ (видно в выдаче поиска)"
+        kind: agency
+        accessed: 2026-10-12
+      - url: https://incrussia.ru/share/delat-v-kajf/
+        publisher: "Inc. Russia, интервью со студией — коммерческие выпуски 25–400 тыс. ₽ за эпизод (видно в выдаче поиска)"
+        kind: agency
+        period: 2026
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: medium,
+        why: "студийный цикл подтверждён двумя источниками; верх брендированных — одна студия",
+      }
+  вебинар:
+    rub: [100000, 350000]
+    basis: "собрано из прайсов трансляций (3 камеры + свет + группа 170 000 ₽) и медицинских конференций (от 350 000); открытых прайсов «вебинар НМО под ключ» и спонсорских ставок медпорталов нет — спонсорство идёт через образовательный грант"
+    sources:
+      - url: https://maps.yango.com/org/stream_park/184164966561/
+        publisher: "Stream Park — 3 камеры + свет + съёмочная группа 170 000 ₽ (единица не указана; видно в выдаче поиска)"
+        kind: agency
+        accessed: 2026-10-12
+      - url: https://www.mosevent.ru/services/medicinskie-konferencii/
+        publisher: "Mosevent — медицинские конференции от 350 000 ₽"
+        kind: agency
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: low,
+        why: "диапазон из прайсов трансляций и конференций, не вебинаров для врачей",
+      }
+  клуб:
+    rub: [20000, 100000]
+    derived: true
+    basis: "ПРОИЗВОДНАЯ: формат как видеоподкаст / малая трансляция (видеоподкаст 20–46 тыс., трансляция до 170 тыс.); прямых прайсов нет"
+    confidence: { level: low, why: "оценка по аналогии" }
+  практическая школа:
+    rub: [200000, 600000]
+    basis: "очные конференции для врачей без логистики спикеров: от 200–350 тыс. (Mosevent), региональная конференция ≈ 300 тыс. (Eventologia); спонсорский слот доклада 200–285 тыс."
+    sources:
+      - url: https://www.mosevent.ru/services/medicinskie-konferencii/
+        publisher: "Mosevent — от 350 000 ₽; в выдаче также от 200 000 ₽, ≈ 2 200 ₽ на участника при 150 участниках"
+        kind: agency
+        accessed: 2026-10-12
+      - url: https://eventologia.ru/blog/kak-organizovat-konferentsiyu-dlya-vrachej-i-sobrat-v-1-5-raza-bolshe-auditorii
+        publisher: "Eventologia — кейс региональной конференции для врачей ≈ 300 000 ₽ (видно в выдаче поиска)"
+        kind: agency
+        accessed: 2026-10-12
+      - url: https://tvmedexpert.ru/wp-content/uploads/2024/03/KP-pakety-uchastiya-min.pdf
+        publisher: "Спонсорский пакет «доклад 15 мин, 1 день, 1 город» — 285 000 ₽ (видно в выдаче поиска)"
+        period: 2024-03
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: low,
+        why: "конференции, а не практические школы; часть сумм — из выдачи поиска",
+      }
+  проектирование курса:
+    rub: [20000, 130000]
+    basis: "курс «текст + методика» от 20 000, сценарий от 30 000 (iSpring), комплексная SCORM-разработка от 130 000 (Система ДПО); оформление программы ПК 6 000 ₽ — документ, не проектирование"
+    sources:
+      - url: https://sistema-dpo.ru/programmes-and-cources/
+        publisher: "Система ДПО — программа ПК 6 000, ПП 12 000; курс текст + методика от 20 000; комплексная SCORM от 130 000 ₽"
+        kind: agency
+        accessed: 2026-10-12
+      - url: https://www.ispring.ru/elearning-insights/byudzhet-na-onlajn-kurs
+        publisher: "iSpring — сценарий от 30 тысяч; курс от 50 тысяч до нескольких миллионов"
+        accessed: 2026-10-12
+    confidence: { level: low, why: "прайс одного немедицинского поставщика" }
+  модуль:
+    rub: [150000, 1350000]
+    derived: true
+    basis: "ПРОИЗВОДНАЯ: 6 × урок, без скидки за объём"
+    confidence: { level: low, why: "расчёт по урокам" }
+  курс:
+    rub: [130000, 800000]
+    listener_price_rub: [5700, 32000]
+    basis: "e-learning курс 36 ч под ключ: SCORM от 130 000 (Система ДПО); Course Editor 150 000 / Storyline 300 000 / HTML5 800 000 (ЦРММ). Плата за оценку НМО (sovetnmo.ru) в открытом доступе не найдена; спонсорские цены не найдены. Риск: с 01.03.2026 дистанционные технологии в медицинском ДПО ограничены типовыми программами (видно в выдаче поиска, первоисточник не проверен)"
+    sources:
+      - url: https://crmm.ru/ceny/
+        publisher: "ЦРММ — от 150 000 / 300 000 / 800 000 ₽ (Course Editor / Storyline / HTML5)"
+        kind: agency
+        period: ≈ 2022
+        accessed: 2026-10-12
+      - url: https://edu.nmrc.ru/dpo/cost_of_education/
+        publisher: "НМИЦ ФПИ — ПК 36 ч ≈ 20 000–32 000 ₽ для слушателя (видно в выдаче поиска)"
+        accessed: 2026-10-12
+      - url: https://academydpo.org/nmo-obuchenie-online
+        publisher: "АНО ДПО АМО — 36 ч 8 990 ₽ для слушателя (видно в выдаче поиска)"
+        accessed: 2026-10-12
+    confidence:
+      {
+        level: low,
+        why: "производство — общие e-learning прайсы; аккредитация и спонсорские цены не найдены",
+      }
+  специальность:
+    rub: [520000, 3200000]
+    listener_price_rub: [7999, 17568]
+    derived: true
+    basis: "ПРОИЗВОДНАЯ: ≈ 4 × курс 36 ч"
+    sources:
+      - url: https://medobr.com/seminar/
+        publisher: "АМО — 144-часовой курс 17 568 ₽ для слушателя (видно в выдаче поиска)"
+        accessed: 2026-10-12
+    confidence:
+      { level: low, why: "экстраполяция; прямых данных о производстве нет" }

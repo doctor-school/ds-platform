@@ -896,10 +896,10 @@ export class RegistrationRepository {
    * because a registrar typing a phone fragment must not be able to turn the
    * search into a wildcard that matches the whole event.
    *
-   * The phone is the one cell where a literal «contains» is not enough: the row
-   * renders the number exactly as it was typed (EARS-29), so `+7 (900) 111-22-33`
-   * would be invisible to a registrar typing `89001112233`. The normalised value
-   * EARS-29 stores beside it exists for exactly that comparison, so a term that
+   * The phone is the one cell where a literal «contains» is not enough: the
+   * search cell is the typed text (EARS-29), so `+7 (900) 111-22-33` would be
+   * invisible to a registrar typing `89001112233`. The normalised value EARS-29
+   * stores beside it is what the row displays (EARS-36), so a term that
    * normalises to a phone of its own is ALSO matched against it, under the same
    * `8 → 7` and punctuation rules the intake applied to the stored value — which
    * is what makes the two comparable at all.

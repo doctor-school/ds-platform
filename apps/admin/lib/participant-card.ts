@@ -25,8 +25,8 @@ export type ParticipantCardField =
   | "registeredAt";
 
 /**
- * The card's text facts as display strings. The phone is the one the
- * participant typed (EARS-29), never a normalised form; a field the
+ * The card's text facts as display strings. The phone is formatted from the
+ * normalised value so one number reads one way everywhere (044 EARS-36); a field the
  * registration does not carry (EARS-16) renders EMPTY — never a placeholder the
  * registrar could mistake for data.
  */

@@ -21,7 +21,7 @@ const CARD = {
   workplace: "ГКБ №1",
   city: "Москва",
   region: "Москва",
-  phone: "+7 (900) 111-22-33",
+  phone: "+79001112233",
   email: "maria@example.test",
   registeredAt: "2027-03-01T10:00:00.000Z",
   intakeOrigin: "desk",

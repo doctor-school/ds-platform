@@ -497,7 +497,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(row.specialtyName).toBe(specialty.name);
     });
 
-    it("044 EARS-18.5.5: …the телефон cell as the participant typed it", async () => {
+    it("044 EARS-18.5.5: …the телефон cell as the normalised E.164 value (EARS-36)", async () => {
       const page = await search("444-55-66");
       expect(page.total).toBe(1);
       // The search matches the typed text; the row carries the normalised value (EARS-36).

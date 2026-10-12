@@ -3,11 +3,11 @@
  * normalisation and the possible-duplicate derivation»).
  *
  * The congress form is filled by participants, not by the platform, so the same
- * number arrives written five different ways. The normalised form exists for
- * ONE job: letting two submissions of the same event be compared, which is what
- * the read-time «возможный дубль» marker of EARS-30 is derived from. It is a
- * comparison key, never a replacement for what the participant typed — the
- * answers keep both (`CongressSignUpAnswersSchema`), and neither value ever
+ * number arrives written five different ways. The normalised form is the
+ * comparison key of the read-time «возможный дубль» marker (EARS-30) and the
+ * only phone value the admin displays, so one number reads one way (EARS-36).
+ * The answers still keep what the participant typed beside it
+ * (`CongressSignUpAnswersSchema`), and neither value ever
  * reaches `users.phone` (UNIQUE, a login identifier).
  *
  * The rule is deliberately the SAME one the client-side input mask already

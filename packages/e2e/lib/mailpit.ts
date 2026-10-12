@@ -94,6 +94,7 @@ export async function fetchLoginCode(
 }
 
 const RESET_SUBJECT = " — код сброса пароля Doctor.School";
+const VERIFICATION_SUBJECT = " — код подтверждения Doctor.School";
 const DELIVERY_WINDOW_MS = 15_000;
 interface AddressedMail extends MailSummary {
   To: { Address: string }[];
@@ -268,6 +269,36 @@ export async function assertNoAddressedMail(
   }
 }
 
+/** 003 EARS-34: exclude verification mail while allowing the sign-in delivery. */
+export async function assertNoVerificationMail(
+  request: MailRequest,
+  baseUrl: string,
+  email: string,
+  afterIso: string,
+): Promise<void> {
+  const deadline = Date.now() + DELIVERY_WINDOW_MS;
+  while (true) {
+    const messages = await freshAddressedMail(
+      request,
+      baseUrl,
+      email,
+      afterIso,
+    );
+    if (messages.some((message) => typeof message.Subject !== "string"))
+      throw new Error("Invalid Mailpit search payload");
+    if (
+      messages.some((message) =>
+        message.Subject!.endsWith(VERIFICATION_SUBJECT),
+      )
+    )
+      throw new Error(
+        "Unexpected verification mail after verified login-code request",
+      );
+    if (Date.now() >= deadline) return;
+    await wait(Math.min(500, deadline - Date.now()));
+  }
+}
+
 /** 003 EARS-12: codes stay in memory and must belong to the exact fresh delivery. */
 export async function fetchRecoveryCode(
   request: MailRequest,
@@ -278,7 +309,7 @@ export async function fetchRecoveryCode(
 ): Promise<string> {
   const suffix = {
     reset: RESET_SUBJECT,
-    register: " — код подтверждения Doctor.School",
+    register: VERIFICATION_SUBJECT,
     login: ` — ${LOGIN_SUBJECT}`,
   }[purpose];
   const deadline = Date.now() + DELIVERY_WINDOW_MS;

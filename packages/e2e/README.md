@@ -383,6 +383,21 @@ needs no CAPTCHA test token.
 pnpm e2e:stage main --project academy --grep "The single password rule is visible before submission"
 ```
 
+### Password message replacement (003 EARS-37)
+
+`The validation error replaces the hint in the one message slot` captures the
+untouched Academy password field's `aria-describedby`, message ID and single
+minimum-length rule, then attempts a normal registration submit with seven
+characters. `steps/password-message-slot.steps.ts` requires the original message
+element to remain connected as its helper ID becomes the error ID, associated
+with that one live alert naming the original rule, with no
+coexisting hint, checklist or meter. It also requires zero registration POSTs
+and no private session or profile access. The auth fixture keeps traces off;
+the scenario creates no account and needs no CAPTCHA test token. Existing
+PasswordField unit, identifier-validation blur, initial-hint and short-password
+refusal coverage remains intact. Run the selected scenario on the lead-selected
+stand; this test-only change requires no owner Stage-B request or new slot.
+
 ### Sign-in method switching (003 EARS-43)
 
 `The typed address survives a switch between the sign-in methods` drives the

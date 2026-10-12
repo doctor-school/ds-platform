@@ -178,14 +178,17 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the original password still signs in and the submitted one does not
     And the display name is written only if the account had none
 
-  @EARS-23 @EARS-41 @happy
+  @EARS-23 @EARS-41 @happy @registration-abandoned
   Scenario: An abandoned registrant who registers again gets the new password, not the abandoned one
-    Given an unverified account for "late@example.org" created by a registration with password "first-pass"
-    When a visitor submits the registration form for "late@example.org" with password "second-pass"
-    Then the mail says the password entered will be saved after the code, not that it is unchanged
-    When the visitor enters the code from that mail on the code step
-    Then email_verified becomes true and a BFF session is established
-    And "second-pass" signs in and "first-pass" does not
+    Given a uniquely owned Academy account remains unverified after registration with an abandoned password
+    When the abandoned registrant submits the real Academy registration form again for the same address with a distinct new password
+    Then the fresh addressed re-registration mail says the entered password will be saved after the code and never says it is unchanged
+    When the abandoned registrant enters that delivered re-registration code once in the requesting Academy tab
+    Then that code opens the same email-verified Academy account with a secure BFF session and the account return target
+    And independent guest browsers can sign into that same account with the new password but receive only the generic refusal for the abandoned password
+    # NEW browser credential-replacement proof: registration-abandoned.steps.ts.
+    # Retain apps/api/src/auth/auth.service.spec.ts EARS-23/41 and the IdP
+    # password-replacement tests; broader registration/confirmation journeys stay.
 
   @EARS-41 @failure
   Scenario: A password set before verification does not survive the owner's first code

@@ -51,7 +51,7 @@ The feed is **fully readable by a guest** (REQ-20): the value is visible before 
 3. An offline card additionally carries the **city and the seat count**; a congress spans dates and may be hybrid.
 4. A click on a card opens the event page (`#d-event`, feature 020).
 
-**See the month (US-3):** the month grid stands beside the day feed, with «Сегодня» and the live marker; there is no view switch (F-019-2, owner 2026-08-26). The month as a page body is the dedicated calendar page (EARS-5).
+**See the month (US-3):** the month grid stands beside the day feed, with «Сегодня» and the live marker; there is no view switch (F-019-2, owner 2026-08-26). The month as a page body is a view of the same page, reached by «Календарь на месяц →» and left by «← Лента событий» (superseded by 019 «Amendment — 2026-10-05»: one route, not a separate calendar page).
 
 **Filter (US-6, US-7, US-8, US-9):**
 
@@ -85,7 +85,7 @@ The feed is **fully readable by a guest** (REQ-20): the value is visible before 
 - Cost is expressed **only in Pul attention points**, never in roubles, and zero cost reads as «бесплатно для врача»; there is no subscription and no cart (REQ-48, NG-5 / CON-16). Partner-funded content carries only its **legal advertising marking** — who funds an event is never surfaced as interface copy.
 - НМО is a **badge and a facet**, never the screen's headline or its primary filter (NG-1); Academy media noise — podcasts, Academy news — does not enter this feed (NG-2).
 - The feed, calendar, card, archive slice, facet panel, live-state resolution and room-entry policy are **one shared cross-front capability**; 019 adds no private copies, no listing mechanics and no live-state machine of its own (D-3, REQ-137).
-- The screen works at 1440 and 390 in both themes, and meets the platform accessibility bar for a public surface — facets are real controls with visible state, cards are real links; there is no view switch to operate.
+- The screen works at 1440 and 390 in both themes, and meets the platform accessibility bar for a public surface — facets are real controls with visible state, cards are real links, and the feed/month view link («Календарь на месяц →» / «← Лента событий») is keyboard-operable.
 
 ## Out of scope
 

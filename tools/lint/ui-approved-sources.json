@@ -221,6 +221,7 @@
         "apps/admin/messages/ru.json",
         "packages/design-system/src/blocks/data-table.tsx",
         "packages/design-system/src/blocks/index.ts",
+        "packages/design-system/src/blocks/table.tsx",
         "packages/design-system/src/styles/tokens.css",
         "packages/design-system/tokens/semantic.dark.json",
         "packages/design-system/tokens/semantic.json"

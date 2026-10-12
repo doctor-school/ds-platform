@@ -62,8 +62,9 @@ import {
  * toggles), and the header's `title` (`sortActionLabel`) says what the next click
  * does. The body cells of the
  * sorted column sit on the faint `table-sorted` surface (the header keeps no fill)
- * and change colour on the row's own transition, so a hover moving row to row
- * repaints the sorted cell in the same frame as the rest of the row;
+ * and, like the row, switch the hover / pressed tint instantly (no colour
+ * transition), so a hover moving row to row repaints the sorted cell in the same
+ * frame as the rest of the row;
  * `headerDetail` stacks a smaller qualifier under a header title. Below `md` the cards
  * have no headers, so `sortSelect` renders a «Сортировка» select (field × direction)
  * over the same contract. The block orders nothing itself: the rows arrive already
@@ -410,9 +411,9 @@ export function DataTable<Row>({
   const sortedCell = (sortKey: string | undefined) =>
     sortKey && sort && onSortChange && sort.key === sortKey
       ? cn(
-          // The row's own `transition-colors` (`TableRow`): a cell on another
-          // timing would repaint a frame apart from the row it belongs to.
-          "bg-table-sorted transition-colors",
+          // No transition, like `TableRow`: the tint is instant on both, so the
+          // cell never repaints a frame apart from the row it belongs to.
+          "bg-table-sorted",
           clickable &&
             "group-hover/row:bg-tint group-has-[:active]/row:bg-tint-pressed group-focus-within/row:bg-tint",
         )

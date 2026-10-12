@@ -672,7 +672,7 @@ describe("<DataTable> sortable columns (044 EARS-22)", () => {
     expect(cell.className).toContain("group-focus-within/row:bg-tint");
   });
 
-  it("044 EARS-22: a shaded cell changes colour on the row's own transition, so the hovered row and its sorted cell switch in the same frame", () => {
+  it("044 EARS-22: the hover / pressed tint of a row and its sorted cell is instant — no colour transition, so both switch in the same frame", () => {
     renderTable({
       columns: SORTABLE,
       sort: { key: "count", direction: "asc" },
@@ -683,12 +683,11 @@ describe("<DataTable> sortable columns (044 EARS-22)", () => {
       element
         .getAttribute("class")!
         .split(/\s+/)
-        .filter((token) => /^(transition|duration-|ease-|delay-)/.test(token))
-        .sort();
+        .filter((token) => /(^|:)(transition|duration-|ease-|delay-)/.test(token));
     const cell = first(bodyCells(2));
     const row = cell.closest("tr")!;
-    expect(transitions(row)).not.toEqual([]);
-    expect(transitions(cell)).toEqual(transitions(row));
+    expect(transitions(row)).toEqual([]);
+    expect(transitions(cell)).toEqual([]);
   });
 
   it("044 EARS-22: a table with no sort props shades no body cell", () => {

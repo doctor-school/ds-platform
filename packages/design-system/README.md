@@ -275,7 +275,8 @@ defects — a `min-h-*` reserved blank line on a message (K-1), a duplicate
   `title` («Сортировать по убыванию», «Сбросить сортировку»).
   The body cells of the sorted column sit on the faint `table-sorted` surface at
   rest (the header keeps no fill; a clickable row's hover / pressed tint wins over
-  it) and carry the row's own `transition-colors`, so the sorted cell of a hovered
+  it). `TableRow` and the sorted cells carry no colour transition: the hover /
+  pressed tint is instant (owner Stage-B, #2757), so the sorted cell of a hovered
   row repaints in the same frame as the row — never a beat behind it. A column's optional `headerDetail` is a smaller second line under its title
   (one label «title · detail» for the button name, the card term and the select).
   The sort button follows the column's `align`. Below `md` the cards have no

@@ -398,31 +398,28 @@ test.describe("044 EARS-21 — the congress roster in admin", () => {
     await header("Дата регистрации").click();
     await expect(page).toHaveURL(/[?&]sort=registeredAt&dir=desc/);
 
-    // The sorted column's cells change colour on the row's own transition, so
-    // a pointer moving row to row repaints the sorted cell in the same frame
-    // as the rest of its row (owner Stage-B, #2757: the sorted cell lagged).
+    // The hover tint is instant on the row and on its sorted cell — no colour
+    // transition on either — so a pointer moving row to row repaints both in
+    // the same frame (owner Stage-B, #2757: the sorted cell lagged, then the
+    // 150ms fade itself read as lag).
     const timing = await table
       .locator("tbody tr")
       .first()
       .evaluate((row) => {
         const cell = row.querySelectorAll("td")[5]!;
-        const of = (element: Element) => {
-          const style = getComputedStyle(element);
-          return [
-            style.transitionProperty,
-            style.transitionDuration,
-            style.transitionTimingFunction,
-            style.transitionDelay,
-          ].join(" | ");
-        };
+        const durations = (element: Element) =>
+          getComputedStyle(element)
+            .transitionDuration.split(",")
+            .map((value) => value.trim());
         return {
           sorted: cell.className.includes("bg-table-sorted"),
-          row: of(row),
-          cell: of(cell),
+          row: durations(row),
+          cell: durations(cell),
         };
       });
     expect(timing.sorted).toBe(true);
-    expect(timing.cell).toBe(timing.row);
+    expect(timing.row.every((value) => value === "0s")).toBe(true);
+    expect(timing.cell.every((value) => value === "0s")).toBe(true);
 
     // The address carries it: a reload keeps the order.
     await page.reload();

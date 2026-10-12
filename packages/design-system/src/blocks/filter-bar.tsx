@@ -295,6 +295,31 @@ export function FilterBar({
   const [panelOpen, setPanelOpen] = React.useState(
     moreFilters?.defaultOpen ?? false,
   );
+
+  // A removed chip takes its button out of the DOM; the focus would fall to
+  // <body> and a keyboard operator would lose their place. It moves to the next
+  // chip, else the previous one, else the «Все фильтры» toggle, else the search
+  // field — once the host has actually dropped the chip (its removal may land a
+  // render later, e.g. through the address).
+  const chipRefs = React.useRef(new Map<string, HTMLButtonElement>());
+  const toggleRef = React.useRef<HTMLButtonElement>(null);
+  const searchRef = React.useRef<HTMLInputElement>(null);
+  const pendingFocus = React.useRef<{
+    removed: string;
+    next: string | undefined;
+    previous: string | undefined;
+  } | null>(null);
+  React.useLayoutEffect(() => {
+    const pending = pendingFocus.current;
+    if (!pending || applied.some((item) => item.id === pending.removed)) return;
+    pendingFocus.current = null;
+    const target =
+      (pending.next && chipRefs.current.get(pending.next)) ||
+      (pending.previous && chipRefs.current.get(pending.previous)) ||
+      toggleRef.current ||
+      searchRef.current;
+    target?.focus();
+  });
   const {
     draft,
     change: onSearchChange,
@@ -346,6 +371,7 @@ export function FilterBar({
             <Label htmlFor={searchId}>{search.label}</Label>
             <div className="relative">
               <Input
+                ref={searchRef}
                 id={searchId}
                 type="search"
                 value={draft}
@@ -370,6 +396,7 @@ export function FilterBar({
 
         {moreFilters ? (
           <Button
+            ref={toggleRef}
             type="button"
             variant="secondary"
             aria-expanded={panelOpen}
@@ -429,11 +456,22 @@ export function FilterBar({
               {appliedLabel}
             </span>
           ) : null}
-          {applied.map((item) => (
+          {applied.map((item, index) => (
             <FilterChip
               key={item.id}
+              ref={(node) => {
+                if (node) chipRefs.current.set(item.id, node);
+                else chipRefs.current.delete(item.id);
+              }}
               selected
-              onClick={item.onRemove}
+              onClick={() => {
+                pendingFocus.current = {
+                  removed: item.id,
+                  next: applied[index + 1]?.id,
+                  previous: applied[index - 1]?.id,
+                };
+                item.onRemove();
+              }}
               aria-label={
                 removeFilterLabel
                   ? `${removeFilterLabel}: ${item.label}`

@@ -1,4 +1,5 @@
 import type * as React from "react";
+import { useState } from "react";
 import {
   render,
   screen,
@@ -244,6 +245,69 @@ describe("<FilterBar>", () => {
     await userEvent.click(chip);
     expect(onRemove).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Показывать снятые" })).toBeInTheDocument();
+  });
+
+  describe("keyboard removal keeps the focus in the bar (044 EARS-23)", () => {
+    function Harness({
+      initial,
+      withMore,
+    }: {
+      initial: string[];
+      withMore?: boolean;
+    }) {
+      const [ids, setIds] = useState(initial);
+      return (
+        <FilterBar
+          applyMode="instant"
+          label="Фильтры списка"
+          resetLabel="Сбросить всё"
+          onResetAll={() => setIds([])}
+          search={{ value: "", onCommit: vi.fn(), label: "Поиск" }}
+          applied={ids.map((id) => ({
+            id,
+            label: `Фильтр ${id}`,
+            onRemove: () =>
+              setIds((current) => current.filter((x) => x !== id)),
+          }))}
+          {...(withMore
+            ? {
+                moreFilters: {
+                  label: "Все фильтры",
+                  appliedCount: ids.length,
+                  appliedCountLabel: (count: number) => `применено: ${count}`,
+                  heading: "Фильтры",
+                  children: null,
+                },
+              }
+            : {})}
+        />
+      );
+    }
+
+    const removeWithKeyboard = async (name: string) => {
+      screen.getByRole("button", { name }).focus();
+      await userEvent.keyboard("{Enter}");
+    };
+
+    it("moves the focus to the NEXT chip, else the previous one", async () => {
+      render(<Harness initial={["a", "b", "c"]} withMore />);
+      await removeWithKeyboard("Фильтр b");
+      expect(screen.getByRole("button", { name: "Фильтр c" })).toHaveFocus();
+      await removeWithKeyboard("Фильтр c");
+      expect(screen.getByRole("button", { name: "Фильтр a" })).toHaveFocus();
+    });
+
+    it("moves the focus to the «Все фильтры» toggle when the last chip goes", async () => {
+      render(<Harness initial={["a"]} withMore />);
+      await removeWithKeyboard("Фильтр a");
+      expect(screen.getByRole("button", { name: /Все фильтры/ })).toHaveFocus();
+    });
+
+    it("moves the focus to the search field on a bar without the toggle", async () => {
+      render(<Harness initial={["a"]} />);
+      await removeWithKeyboard("Фильтр a");
+      expect(screen.getByRole("searchbox", { name: "Поиск" })).toHaveFocus();
+    });
   });
 
   it("names each chip VERB-FIRST so the control says it removes the filter", () => {

@@ -399,7 +399,7 @@ Then(
         expect(
           Object.keys(refusal).length === 3 &&
             refusal.statusCode === 401 &&
-            refusal.message === "the request could not be completed" &&
+            refusal.message === "invalid credentials" &&
             refusal.error === "Unauthorized",
           "generic credential rejection body",
         ).toBe(true);

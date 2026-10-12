@@ -627,7 +627,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       }
     });
 
-    it("044 EARS-31.5: a phone shared only with a staff account's registration marks nobody — the roster never shows that row (#2456), so neither the list, the yes filter nor the card counts it", async () => {
+    it("044 EARS-31.7: a phone shared only with a staff account's registration marks nobody — the roster never shows that row (#2456), so neither the list, the yes filter nor the card counts it", async () => {
       // S signs up through the desk with A's phone, then its account is staff.
       await deskEntry("S", {
         surname: "Штатная",

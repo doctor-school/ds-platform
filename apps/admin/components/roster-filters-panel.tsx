@@ -9,7 +9,10 @@ import {
   FilterBarTextField,
   type ComboboxOption,
 } from "@ds/design-system/blocks";
-import { CONGRESS_ROSTER_MAIL_STATUS_FILTERS } from "@ds/schemas";
+import {
+  CONGRESS_ROSTER_MAIL_STATUS_FILTERS,
+  CONGRESS_ROSTER_POSSIBLE_DUPLICATE_FILTERS,
+} from "@ds/schemas";
 import { SettlementCombobox } from "@/components/settlement-combobox";
 import { SpecialtyCombobox } from "@/components/specialty-combobox";
 import type { RosterColumnFilters } from "@/lib/congress-roster";
@@ -24,7 +27,8 @@ const REGION_ANY_VALUE = "__any__";
 /**
  * 044 EARS-23 — the controls of the roster's «Все фильтры» panel (owner layout
  * F1, #2316), laid on the `FilterBar` panel grid: ФИО · Место работы · Город ·
- * Регион / Телефон · Email · Специальность · Статус письма / Дата регистрации.
+ * Регион / Телефон · Email · Специальность · Статус письма / Возможный дубль
+ * (EARS-31) · Дата регистрации.
  * Text filters commit on the bar's debounce; the books (город, регион,
  * специальность) are searchable selectors over the same directories the desk
  * entry uses (owner refinement); everything else applies on change.
@@ -188,6 +192,31 @@ export function RosterFiltersPanel({
           {CONGRESS_ROSTER_MAIL_STATUS_FILTERS.map((status) => (
             <option key={status} value={status}>
               {t(`congressRoster.filters.mailStatus.${status}`)}
+            </option>
+          ))}
+        </NativeSelect>
+      </div>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <Label htmlFor="roster-filter-duplicate">
+          {t("congressRoster.participantCard.possibleDuplicate")}
+        </Label>
+        <NativeSelect
+          id="roster-filter-duplicate"
+          data-testid="roster-filter-duplicate"
+          value={filters.possibleDuplicate}
+          onChange={(event) =>
+            set(
+              "possibleDuplicate",
+              event.target.value as RosterColumnFilters["possibleDuplicate"],
+            )
+          }
+        >
+          <option value="">
+            {t("congressRoster.filters.possibleDuplicate.any")}
+          </option>
+          {CONGRESS_ROSTER_POSSIBLE_DUPLICATE_FILTERS.map((value) => (
+            <option key={value} value={value}>
+              {t(`congressRoster.filters.possibleDuplicate.${value}`)}
             </option>
           ))}
         </NativeSelect>

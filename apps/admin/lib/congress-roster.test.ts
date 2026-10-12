@@ -364,6 +364,7 @@ describe("044 EARS-23 roster column filters", () => {
       mailStatus: "failed",
       registeredFrom: "2026-10-01",
       registeredTo: "2026-10-15",
+      possibleDuplicate: "",
     });
     expect(
       rosterFiltersFromAddress(
@@ -489,5 +490,50 @@ describe("044 EARS-23 roster column filters", () => {
       rosterRegisteredRange({ ...ROSTER_FILTERS_EMPTY, registeredFrom: "2026-10-01" }),
     ).toEqual({ from: "01.10.2026", to: "" });
     expect(rosterRegisteredRange(ROSTER_FILTERS_EMPTY)).toBeNull();
+  });
+});
+
+describe("044 EARS-31 roster possible-duplicate filter", () => {
+  it("044 EARS-31: reads «возможный дубль» from the address as yes or no; any other value is dropped as not applied", () => {
+    expect(
+      rosterFiltersFromAddress(new URLSearchParams("possibleDuplicate=yes")),
+    ).toEqual({ ...ROSTER_FILTERS_EMPTY, possibleDuplicate: "yes" });
+    expect(
+      rosterFiltersFromAddress(new URLSearchParams("possibleDuplicate=%20no%20")),
+    ).toEqual({ ...ROSTER_FILTERS_EMPTY, possibleDuplicate: "no" });
+    for (const bad of ["true", "maybe", "", "YES"]) {
+      expect(
+        rosterFiltersFromAddress(
+          new URLSearchParams(`possibleDuplicate=${bad}`),
+        ),
+        bad,
+      ).toEqual(ROSTER_FILTERS_EMPTY);
+    }
+  });
+
+  it("044 EARS-31: writes the filter into the address, sends it to the route and counts it on the toggle badge", () => {
+    const filters = { ...ROSTER_FILTERS_EMPTY, possibleDuplicate: "yes" as const };
+    expect(rosterFiltersHref("/events/e1/roster", "sort=city", filters)).toBe(
+      "/events/e1/roster?sort=city&possibleDuplicate=yes",
+    );
+    expect(
+      rosterFiltersHref(
+        "/events/e1/roster",
+        "possibleDuplicate=no",
+        ROSTER_FILTERS_EMPTY,
+      ),
+    ).toBe("/events/e1/roster");
+    expect(rosterFiltersQuery(filters)).toEqual({ possibleDuplicate: "yes" });
+    expect(
+      rosterFiltersQuery({
+        ...ROSTER_FILTERS_EMPTY,
+        possibleDuplicate: "no",
+        mailStatus: "sent",
+      }),
+    ).toEqual({ possibleDuplicate: "no", mailStatus: "sent" });
+    expect(rosterFiltersAppliedCount(filters)).toBe(1);
+    expect(
+      rosterFiltersAppliedCount({ ...filters, mailStatus: "failed" }),
+    ).toBe(2);
   });
 });

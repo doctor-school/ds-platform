@@ -237,6 +237,31 @@
         "https://github.com/doctor-school/ds-platform/issues/2316#issuecomment-6077817101"
       ]
     },
+    "feature-044-roster-filters-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/events/[id]/roster/page.tsx",
+        "apps/admin/components/admin-data-list.tsx",
+        "apps/admin/components/desk-registration-form.tsx",
+        "apps/admin/components/roster-filters-panel.tsx",
+        "apps/admin/components/settlement-combobox.tsx",
+        "apps/admin/components/specialty-combobox.tsx",
+        "apps/admin/messages/ru.json",
+        "apps/showcase/app/blocks/blocks-view.tsx",
+        "packages/design-system/src/blocks/filter-bar.tsx",
+        "packages/design-system/src/blocks/index.ts",
+        "packages/design-system/src/primitives/badge.tsx"
+      ],
+      "states": [
+        "roster-filters-closed",
+        "roster-filters-open",
+        "roster-filters-applied",
+        "roster-filters-narrow"
+      ],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/2316#issuecomment-6077817101"
+      ]
+    },
     "admin-event-and-direction-pages-v1": {
       "evidenceProfiles": ["responsive-web"],
       "surfacePaths": [

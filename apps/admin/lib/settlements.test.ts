@@ -4,6 +4,7 @@ import {
   freeSettlementValue,
   resolveSettlement,
   settlementOptions,
+  settlementRegions,
 } from "./settlements";
 
 describe("044 EARS-35 desk entry — the settlement directory", () => {
@@ -67,5 +68,16 @@ describe("044 EARS-35 desk entry — the settlement directory", () => {
   it("EARS-35: an unknown option value resolves to nothing", () => {
     expect(resolveSettlement("dir:999999")).toBeNull();
     expect(resolveSettlement(freeSettlementValue("   "))).toBeNull();
+  });
+});
+
+describe("044 EARS-23 roster filter — the region book", () => {
+  it("044 EARS-23: offers every directory region once, in Russian order", () => {
+    const regions = settlementRegions();
+    expect(new Set(regions).size).toBe(regions.length);
+    expect(regions).toContain("Московская область");
+    expect([...regions].sort((a, b) => a.localeCompare(b, "ru"))).toEqual(
+      regions,
+    );
   });
 });

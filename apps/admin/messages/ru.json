@@ -1683,7 +1683,46 @@
         "any": "Все",
         "marked": "Присутствовал",
         "unmarked": "Не отмечен"
-      }
+      },
+      "more": {
+        "toggle": "Все фильтры",
+        "appliedCount": "применено: {count}",
+        "heading": "Фильтры по данным участника",
+        "hint": "Применяются сразу · Место работы, регион, email и письмо — поля из карточки участника"
+      },
+      "columns": {
+        "name": "ФИО",
+        "workplace": "Место работы",
+        "city": "Город",
+        "region": "Регион",
+        "phone": "Телефон",
+        "email": "Email",
+        "specialty": "Специальность",
+        "mailStatus": "Статус письма",
+        "registered": "Дата регистрации"
+      },
+      "placeholders": {
+        "contains": "Содержит…",
+        "phone": "Цифры номера…",
+        "specialtyAny": "Любая",
+        "placeAny": "Любой"
+      },
+      "regionSearch": "Поиск региона",
+      "mailStatus": {
+        "any": "Любой",
+        "sent": "Отправлено",
+        "failed": "Не доставлено",
+        "none": "Не отправлялось"
+      },
+      "registeredFrom": "с",
+      "registeredTo": "по",
+      "registeredFromLabel": "Дата регистрации с",
+      "registeredToLabel": "Дата регистрации по",
+      "chip": "{field}: {value}",
+      "rangeBoth": "{from} – {to}",
+      "rangeFrom": "с {from}",
+      "rangeTo": "по {to}",
+      "rangeInverted": "Дата «по» раньше даты «с»"
     },
     "errors": {
       "listFailed": "Не удалось загрузить реестр участников.",

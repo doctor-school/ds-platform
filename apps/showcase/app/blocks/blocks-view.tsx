@@ -24,6 +24,7 @@ import {
   EventProgrammeSection,
   EventPageKicker,
   FilterBar,
+  FilterBarTextField,
   FormActions,
   FormDerivedNote,
   FormFieldGroup,
@@ -3162,7 +3163,107 @@ const FILTER_BAR_PROPS: PropRow[] = [
     description:
       "A query is in flight — the field carries the busy cue, never a frozen list.",
   },
+  {
+    name: "moreFilters",
+    type: "{ label · appliedCount · appliedCountLabel · heading · hint · children · defaultOpen }",
+    required: false,
+    description:
+      "Opt-in «Все фильтры» toggle (count badge, aria-expanded/controls) expanding a 4-column panel inside the same bar; «Сбросить всё» then sits beside the chips. FilterBarTextField is its debounced text control.",
+  },
 ];
+
+/**
+ * 044 EARS-23 (F1) — the `moreFilters` panel over the same real book: a debounced
+ * text filter and a select inside the panel, each applied value a chip, the
+ * toggle badged with how many panel filters are on.
+ */
+function FilterBarMoreFiltersPreview() {
+  const [parent, setParent] = useState("");
+  const [status, setStatus] = useState<"" | DirectionBookRow["status"]>("");
+  const needle = parent.trim().toLocaleLowerCase();
+  const found = DIRECTION_BOOK.filter(
+    (row) =>
+      (needle === "" || row.parent.toLocaleLowerCase().includes(needle)) &&
+      (status === "" || row.status === status),
+  );
+  const applied = [
+    ...(needle
+      ? [
+          {
+            id: "parent",
+            label: `Раздел: ${parent.trim()}`,
+            onRemove: () => setParent(""),
+          },
+        ]
+      : []),
+    ...(status
+      ? [
+          {
+            id: "status",
+            label: `Статус: ${status === "draft" ? "черновик" : "опубликовано"}`,
+            onRemove: () => setStatus(""),
+          },
+        ]
+      : []),
+  ];
+  return (
+    <div className="w-full rounded-lg border border-border bg-muted p-8">
+      <FilterBar
+        applyMode="instant"
+        label="Фильтры направлений"
+        search={{
+          value: "",
+          onCommit: () => {},
+          label: "Поиск по названию",
+          placeholder: "Например, кардиология",
+        }}
+        applied={applied}
+        appliedLabel="Выбрано:"
+        removeFilterLabel="Убрать фильтр"
+        onResetAll={() => {
+          setParent("");
+          setStatus("");
+        }}
+        resetLabel="Сбросить всё"
+        resultCount={`Найдено ${found.length} из ${DIRECTION_BOOK.length}`}
+        busyLabel="Идёт поиск"
+        moreFilters={{
+          label: "Все фильтры",
+          appliedCount: applied.length,
+          appliedCountLabel: (count) => `применено: ${count}`,
+          heading: "Фильтры по данным направления",
+          hint: "Применяются сразу",
+          defaultOpen: true,
+          children: (
+            <>
+              <FilterBarTextField
+                label="Раздел"
+                value={parent}
+                onCommit={setParent}
+                placeholder="Содержит…"
+                busyLabel="Идёт поиск…"
+              />
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <Label htmlFor="showcase-more-status">Статус</Label>
+                <NativeSelect
+                  id="showcase-more-status"
+                  value={status}
+                  onChange={(event) =>
+                    setStatus(event.target.value as typeof status)
+                  }
+                >
+                  <option value="">Любой</option>
+                  <option value="published">Опубликовано</option>
+                  <option value="draft">Черновик</option>
+                </NativeSelect>
+              </div>
+            </>
+          ),
+        }}
+      />
+    </div>
+  );
+}
 
 /**
  * The live preview filters a REAL book, not a hardcoded pair of numbers: the readout
@@ -3226,7 +3327,7 @@ function FilterBarSection() {
   return (
     <BlockSection
       title="FilterBar"
-      exportsLine="FilterBar — props: applyMode · label · search · children · applied/appliedLabel · removeFilterLabel · onResetAll/resetLabel · resultCount · isBusy/busyLabel · submitLabel/onSubmit (batch only)"
+      exportsLine="FilterBar — props: applyMode · label · search · children · applied/appliedLabel · removeFilterLabel · onResetAll/resetLabel · resultCount · isBusy/busyLabel · submitLabel/onSubmit (batch only) · moreFilters; FilterBarTextField"
     >
       <p className="text-sm text-muted-foreground">
         Instant apply (owner pick): typing narrows the list after a ~400ms pause
@@ -3282,6 +3383,9 @@ function FilterBarSection() {
             ) : null}
           </ul>
         </div>
+      </SubRow>
+      <SubRow label="Preview — moreFilters («Все фильтры», 044 F1), live">
+        <FilterBarMoreFiltersPreview />
       </SubRow>
       <SubRow label="Slots / props">
         <PropsTable rows={FILTER_BAR_PROPS} />

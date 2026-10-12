@@ -310,3 +310,82 @@ describe("044 EARS-22 — the roster sort on the list query", () => {
     ).toMatchObject({ sort: "presence", dir: "desc", attendanceDay: "2027-04-24" });
   });
 });
+
+describe("044 EARS-23 — the roster filters on the list query", () => {
+  it("044 EARS-23.11: every filter is optional and the text ones are trimmed; a blank text filter is no filter", () => {
+    expect(CongressRosterQuerySchema.parse({})).not.toHaveProperty("name");
+    expect(
+      CongressRosterQuerySchema.parse({
+        name: "  Иванова ",
+        workplace: " ГКБ ",
+        email: " a@b ",
+        phone: " 8 900 ",
+        city: " Москва ",
+        region: " Московская область ",
+      }),
+    ).toMatchObject({
+      name: "Иванова",
+      workplace: "ГКБ",
+      email: "a@b",
+      phone: "8 900",
+      city: "Москва",
+      region: "Московская область",
+    });
+    expect(CongressRosterQuerySchema.parse({ name: "   " })).toMatchObject({
+      name: "",
+    });
+    expect(
+      CongressRosterQuerySchema.safeParse({
+        name: "x".repeat(CONGRESS_ROSTER_SEARCH_MAX + 1),
+      }).success,
+    ).toBe(false);
+  });
+
+  it("044 EARS-23.12: a phone filter must carry at least one digit", () => {
+    expect(CongressRosterQuerySchema.safeParse({ phone: "abc" }).success).toBe(
+      false,
+    );
+    expect(CongressRosterQuerySchema.safeParse({ phone: "+7" }).success).toBe(
+      true,
+    );
+  });
+
+  it("044 EARS-23.13: specialtyId is a directory uuid; mailStatus is sent, failed or none", () => {
+    expect(
+      CongressRosterQuerySchema.safeParse({ specialtyId: "cardiology" }).success,
+    ).toBe(false);
+    for (const mailStatus of ["sent", "failed", "none"]) {
+      expect(CongressRosterQuerySchema.parse({ mailStatus })).toMatchObject({
+        mailStatus,
+      });
+    }
+    expect(
+      CongressRosterQuerySchema.safeParse({ mailStatus: "pending" }).success,
+    ).toBe(false);
+  });
+
+  it("044 EARS-23.14: the registration range is two ISO calendar days, either end optional, and from after to is refused", () => {
+    expect(
+      CongressRosterQuerySchema.parse({
+        registeredFrom: "2027-03-02",
+        registeredTo: "2027-03-02",
+      }),
+    ).toMatchObject({ registeredFrom: "2027-03-02", registeredTo: "2027-03-02" });
+    expect(
+      CongressRosterQuerySchema.safeParse({ registeredTo: "2027-03-01" })
+        .success,
+    ).toBe(true);
+    const inverted = CongressRosterQuerySchema.safeParse({
+      registeredFrom: "2027-03-03",
+      registeredTo: "2027-03-02",
+    });
+    expect(inverted.success).toBe(false);
+    expect(inverted.error?.issues[0]?.path).toEqual(["registeredTo"]);
+    for (const bad of ["03.03.2027", "2027-02-30", "2027-03-02T00:00:00Z"]) {
+      expect(
+        CongressRosterQuerySchema.safeParse({ registeredFrom: bad }).success,
+        bad,
+      ).toBe(false);
+    }
+  });
+});

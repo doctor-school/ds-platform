@@ -132,6 +132,19 @@ export function settlementOption(value: string): ComboboxOption | null {
   return item ? toOption(item, index) : null;
 }
 
+let regionsCache: string[] | null = null;
+
+/**
+ * 044 EARS-23 — the roster's «Регион» filter book: every region of the same
+ * directory once, in Russian order (the route matches the stored text exactly).
+ */
+export function settlementRegions(): string[] {
+  if (regionsCache) return regionsCache;
+  const { regions } = directory as SettlementDirectory;
+  regionsCache = [...new Set(regions)].sort((a, b) => a.localeCompare(b, "ru"));
+  return regionsCache;
+}
+
 /** What the form holds once a settlement option is committed. */
 export interface SettlementResolution {
   city: string;

@@ -4837,12 +4837,22 @@ export interface operations {
         parameters: {
             query?: {
                 attendanceDay?: string;
+                city?: string;
                 dir?: "asc" | "desc";
+                email?: string;
+                mailStatus?: "sent" | "failed" | "none";
+                name?: string;
                 page?: number;
                 pageSize?: number;
+                phone?: string;
                 present?: "marked" | "unmarked";
                 q?: string;
+                region?: string;
+                registeredFrom?: string;
+                registeredTo?: string;
                 sort?: "fullName" | "specialty" | "city" | "phone" | "registeredAt" | "presence";
+                specialtyId?: string;
+                workplace?: string;
             };
             header?: never;
             path: {

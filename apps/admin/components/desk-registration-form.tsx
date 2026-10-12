@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useForm, type UseFormReturn } from "react-hook-form";
 import { useCustomMutation } from "@refinedev/core";
@@ -24,11 +24,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@ds/design-system/sheet";
-import {
-  Combobox,
-  FormSection,
-  type ComboboxOption,
-} from "@ds/design-system/blocks";
+import { FormSection } from "@ds/design-system/blocks";
 import {
   Form,
   FormControl,
@@ -42,8 +38,9 @@ import {
   CongressDeskRegistrationResponseSchema,
   type CongressDeskRegistrationRequest,
 } from "@ds/schemas";
+import { SettlementCombobox } from "@/components/settlement-combobox";
+import { SpecialtyCombobox } from "@/components/specialty-combobox";
 import { deskEntryFailure } from "@/lib/congress-roster";
-import { fetchSpecialtySearchPage } from "@/lib/desk-entry-references";
 import {
   DeskRegistrationFormSchema,
   type DeskRegistrationFormFields,
@@ -52,12 +49,9 @@ import {
   freeSettlementText,
   freeSettlementValue,
   resolveSettlement,
-  settlementOption,
-  settlementOptions,
   type SettlementResolution,
 } from "@/lib/settlements";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
-import { useServerCombobox } from "@/lib/use-server-combobox";
 import { congressRosterUrl } from "@/providers/data-provider";
 
 type DeskForm = UseFormReturn<DeskRegistrationFormFields>;
@@ -424,10 +418,9 @@ export function DeskRegistrationForm({
 }
 
 /**
- * «Специальность» — the closed book, searched on the server. Mounted with the
- * panel body, so the book is read when the panel opens (the first, empty
- * search), and each typing pause sends one `?q=` narrowing through the shared
- * server-combobox hook. The value is the specialty id.
+ * «Специальность» — the shared `SpecialtyCombobox`. Mounted with the panel
+ * body, so the book is read when the panel opens; its failure is the panel's
+ * line (beside the other refusals), so it is reported up rather than drawn here.
  */
 function SpecialtyField({
   form,
@@ -437,20 +430,6 @@ function SpecialtyField({
   onBookFailed: (failed: boolean) => void;
 }) {
   const t = useTranslations();
-  const fetchPage = useCallback(
-    ({ q }: { q: string }) => fetchSpecialtySearchPage({ q }),
-    [],
-  );
-  const selectedId = form.watch("specialtyId");
-  const specialties = useServerCombobox({
-    fetchPage,
-    toOption: (entry) => ({ id: entry.id, label: entry.name }),
-    selectedId: selectedId || null,
-  });
-  // The book failure is the panel's line (beside the other refusals), so it is
-  // reported up rather than drawn here.
-  const failed = specialties.isError;
-  useEffect(() => onBookFailed(failed), [failed, onBookFailed]);
 
   return (
     <FormField
@@ -462,29 +441,19 @@ function SpecialtyField({
             {t("congressRoster.deskEntry.fields.specialty")}
           </FormLabel>
           <FormControl ref={field.ref}>
-            <Combobox
+            <SpecialtyCombobox
               id="desk-specialtyId"
-              data-testid="desk-specialtyId"
-              options={specialties.options}
+              testId="desk-specialtyId"
               value={field.value || null}
               onValueChange={(id) => {
-                specialties.select(id);
-                field.onChange(id);
+                field.onChange(id ?? "");
                 field.onBlur();
               }}
-              onSearchChange={specialties.search}
-              placeholder={
-                specialties.isLoading && specialties.options.length === 0
-                  ? t("congressRoster.deskEntry.fields.specialtyLoading")
-                  : t("congressRoster.deskEntry.fields.specialtyPlaceholder")
-              }
-              searchLabel={t("congressRoster.deskEntry.fields.specialtySearch")}
-              searchPlaceholder={t(
-                "congressRoster.deskEntry.fields.specialtySearchPlaceholder",
+              placeholder={t(
+                "congressRoster.deskEntry.fields.specialtyPlaceholder",
               )}
-              emptyLabel={t("congressRoster.deskEntry.fields.referenceEmpty")}
-              showSearch
               invalid={fieldState.invalid}
+              onBookFailed={onBookFailed}
             />
           </FormControl>
           <FormMessage>
@@ -506,36 +475,13 @@ function SpecialtyField({
  */
 function SettlementFields({ form }: { form: DeskForm }) {
   const t = useTranslations();
-  const [query, setQuery] = useState("");
   const [choice, setChoice] = useState<string | null>(null);
   const [resolution, setResolution] = useState<SettlementResolution | null>(
     null,
   );
 
-  const options = useMemo(() => {
-    const found = settlementOptions(query);
-    const typed = query.trim();
-    const free: ComboboxOption[] = typed
-      ? [
-          {
-            value: freeSettlementValue(typed),
-            label: t("congressRoster.deskEntry.fields.cityFree", {
-              name: typed,
-            }),
-          },
-        ]
-      : [];
-    // The committed choice stays an option, so the closed control keeps
-    // reading it while a new search narrows the list away from it.
-    const current = choice ? chosenOption(choice) : null;
-    const kept =
-      current && !found.some((option) => option.value === current.value)
-        ? [current]
-        : [];
-    return [...kept, ...found, ...free];
-  }, [choice, query, t]);
-
-  function commit(value: string) {
+  function commit(value: string | null) {
+    if (value === null) return;
     const next = resolveSettlement(value);
     if (!next) return;
     // A typed place is kept in the spelling the form stores (the directory's,
@@ -570,22 +516,14 @@ function SettlementFields({ form }: { form: DeskForm }) {
               {t("congressRoster.deskEntry.fields.city")}
             </FormLabel>
             <FormControl ref={field.ref}>
-              <Combobox
+              <SettlementCombobox
                 id="desk-city"
-                data-testid="desk-city"
-                options={options}
+                testId="desk-city"
                 value={choice}
                 onValueChange={commit}
-                onSearchChange={setQuery}
                 placeholder={t(
                   "congressRoster.deskEntry.fields.cityPlaceholder",
                 )}
-                searchLabel={t("congressRoster.deskEntry.fields.citySearch")}
-                searchPlaceholder={t(
-                  "congressRoster.deskEntry.fields.cityPlaceholder",
-                )}
-                emptyLabel={t("congressRoster.deskEntry.fields.referenceEmpty")}
-                showSearch
                 invalid={fieldState.invalid}
               />
             </FormControl>
@@ -642,11 +580,4 @@ function SettlementFields({ form }: { form: DeskForm }) {
       </p>
     </>
   );
-}
-
-/** The option a committed value reads as: its directory entry, or the typed text. */
-function chosenOption(value: string): ComboboxOption | null {
-  const free = freeSettlementText(value);
-  if (free !== null) return { value, label: free };
-  return settlementOption(value);
 }

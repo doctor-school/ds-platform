@@ -25,10 +25,24 @@ import {
   type MyEventItem,
   type MyEventsCounts,
   type MyEventsTab,
+  mskClosingInstantAfterLastDay,
+  mskDayStartInstant,
   normaliseContactPhone,
   REGISTRABLE_EVENT_STATES,
 } from "@ds/schemas";
-import { and, asc, desc, eq, gte, inArray, or, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { isParticipant } from "../auth/staff-role.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
@@ -150,6 +164,62 @@ function registrationCells() {
     city: sql<string | null>`nullif(${registrations.answers}->>'city', '')`,
     region: sql<string | null>`nullif(${registrations.answers}->>'region', '')`,
   };
+}
+
+/**
+ * A caller's term as a literal inside a LIKE pattern: `%`, `_` and the escape
+ * character itself are escaped (paired with `escape '\\'` at the use site), so a
+ * registrar's fragment never turns into a wildcard matching the whole event.
+ */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+/**
+ * 044 EARS-21/23 — the ONE phone-fragment rule of the roster, shared by the
+ * main search's phone arm and the «Телефон» column filter, matched against a
+ * digits-only key (`79001112233`).
+ *
+ * The term goes through the intake's own `normaliseContactPhone` (a full
+ * 11-digit `8…` becomes `7…`) and its leading `+` is dropped, so a FRAGMENT
+ * matches anywhere in the digits: a registrar typing `9001112` means those
+ * digits anywhere in the number. A shorter fragment that starts with the
+ * domestic `8` (`8 900`, `8 (900) 05`) is the START of a domestically written
+ * number, so it ALSO matches a number beginning with `7` + the rest — the same
+ * `8 → 7` rewrite, applied where a fragment can carry it: at the front.
+ * No digit → `undefined` (nothing to match).
+ */
+function phoneFragmentPredicate(
+  digitsKey: SQL,
+  term: string,
+): SQL | undefined {
+  const digits = normaliseContactPhone(term).replace(/^\+/, "");
+  if (!digits) return undefined;
+  const anywhere = sql`${digitsKey} like ${`%${digits}%`}`;
+  return digits.startsWith("8") && digits.length < 11
+    ? or(anywhere, sql`${digitsKey} like ${`7${digits.slice(1)}%`}`)
+    : anywhere;
+}
+
+/** «ё» folded to «е» (either case) — hand-written names and workplaces. */
+function foldYo(term: string): string {
+  return term.replace(/ё/g, "е").replace(/Ё/g, "Е");
+}
+
+/**
+ * 044 EARS-22/23/36 — the phone cell as the digits of `normaliseContactPhone`
+ * (without its `+`), computed in SQL: digits only, an 11-digit domestic `8…`
+ * read as `7…`, at most 15 digits. The answers' stored normalised number is
+ * preferred; a platform-origin row falls back to the account's `users.phone`,
+ * which is NOT stored normalised — so the rule is applied here, and the phone
+ * sort, the phone filter and the displayed number (normalised in the mapper)
+ * all key the same value. Empty → NULL.
+ */
+function normalisedPhoneDigits(
+  phoneNormalised: SQL<string | null>,
+  phone: SQL<string | null>,
+): SQL<string | null> {
+  return sql<string | null>`nullif(left(regexp_replace(regexp_replace(coalesce(${phoneNormalised}, ${phone}, ''), '[^0-9]', '', 'g'), '^8([0-9]{10})$', '7\\1'), 15), '')`;
 }
 
 /** The `specialties_minzdrav` join by the id the answers carry (EARS-25). */
@@ -433,9 +503,9 @@ export class RegistrationRepository {
    *
    * The order is the EARS-22 sort ({@link rosterOrderBy}); without one it is
    * the `registered_at ASC` the read model has always had, tie-broken by `id` so
-   * that a page boundary is stable when two rows share an instant. Per-column
-   * filters are EARS-23, and the «возможный дубль» marker is EARS-30/EARS-31 —
-   * neither is here.
+   * that a page boundary is stable when two rows share an instant. The per-column
+   * filters are EARS-23 ({@link rosterColumnFilterPredicates}); the «возможный
+   * дубль» marker is EARS-30/EARS-31 and is not here.
    */
   async findEventRosterPage(
     eventId: string,
@@ -472,6 +542,15 @@ export class RegistrationRepository {
         phoneNormalised,
       ),
       this.rosterAttendancePredicate(query),
+      ...this.rosterColumnFilterPredicates(query, {
+        fullName,
+        email,
+        phone,
+        phoneNormalised,
+        workplace,
+        city,
+        region,
+      }),
     );
 
     const pageSize = query.pageSize;
@@ -587,7 +666,7 @@ export class RegistrationRepository {
         key = russian(cells.city);
         break;
       case "phone":
-        key = sql`nullif(regexp_replace(coalesce(${cells.phoneNormalised}, ${cells.phone}), '[^0-9]', '', 'g'), '')`;
+        key = normalisedPhoneDigits(cells.phoneNormalised, cells.phone);
         break;
       case "presence":
         key = sql`exists (
@@ -622,6 +701,105 @@ export class RegistrationRepository {
          and ${registrationAttendance.present} = true
     )`;
     return query.present === "marked" ? markedPresent : sql`not ${markedPresent}`;
+  }
+
+  /**
+   * 044 EARS-23 — the per-column filters, one conjunct each, so they compose
+   * with each other, the search, the presence filter, the paging and the count
+   * by construction. Every filter reads the SAME cell expression the row
+   * projects ({@link registrationCells}, the specialty join), so a filter never
+   * disagrees with what the row — or the card — shows.
+   *
+   * - ФИО, место работы, email: case-insensitive «contains», the caller's
+   *   wildcards escaped; ФИО and место работы fold «ё» to «е» on both sides.
+   * - телефон: «contains» on digits against the normalised number (the
+   *   account's own number for a platform-origin row), both sides under the
+   *   intake's own `8 → 7` rule ({@link normalisedPhoneDigits}, also the
+   *   EARS-22 phone sort key), so the filter matches what the row displays;
+   *   the term follows the main search's {@link phoneFragmentPredicate}.
+   * - город / область: case-insensitive EQUALITY with the directory value the
+   *   admin's searchable selector offers (#2316 owner refinement); a stored
+   *   value outside the directory is simply never offered.
+   * - специальность: the resolved `specialties_minzdrav` id.
+   * - статус письма: the EARS-27 outcome, `none` = never attempted (null).
+   * - дата регистрации: an inclusive range of Moscow calendar days, `to`
+   *   covering its whole day (up to 00:00 Moscow of the next day, exclusive).
+   */
+  private rosterColumnFilterPredicates(
+    query: CongressRosterQuery,
+    cells: {
+      fullName: SQL<string>;
+      email: SQL<string | null>;
+      phone: SQL<string | null>;
+      phoneNormalised: SQL<string | null>;
+      workplace: SQL<string | null>;
+      city: SQL<string | null>;
+      region: SQL<string | null>;
+    },
+  ): SQL[] {
+    const predicates: SQL[] = [];
+    const contains = (cell: SQL, term: string | undefined): void => {
+      if (!term) return;
+      predicates.push(
+        sql`coalesce(${cell}, '') ilike ${`%${escapeLike(term)}%`} escape '\\'`,
+      );
+    };
+    const equalsIgnoringCase = (cell: SQL, term: string | undefined): void => {
+      if (!term) return;
+      predicates.push(
+        sql`trim(coalesce(${cell}, '')) ilike ${escapeLike(term)} escape '\\'`,
+      );
+    };
+
+    // ФИО and место работы are written by hand: «Фёдоров» and «Федоров» are
+    // one name, so «ё» folds to «е» on both sides of the comparison.
+    const containsFoldingYo = (cell: SQL, term: string | undefined): void => {
+      if (!term) return;
+      predicates.push(
+        sql`translate(coalesce(${cell}, ''), 'Ёё', 'Ее') ilike ${`%${escapeLike(foldYo(term))}%`} escape '\\'`,
+      );
+    };
+
+    containsFoldingYo(cells.fullName, query.name);
+    containsFoldingYo(cells.workplace, query.workplace);
+    contains(cells.email, query.email);
+    equalsIgnoringCase(cells.city, query.city);
+    equalsIgnoringCase(cells.region, query.region);
+
+    if (query.phone) {
+      const phone = phoneFragmentPredicate(
+        sql`coalesce(${normalisedPhoneDigits(cells.phoneNormalised, cells.phone)}, '')`,
+        query.phone,
+      );
+      if (phone) predicates.push(phone);
+    }
+    if (query.specialtyId !== undefined) {
+      predicates.push(eq(specialtiesMinzdrav.id, query.specialtyId));
+    }
+    if (query.mailStatus !== undefined) {
+      predicates.push(
+        query.mailStatus === "none"
+          ? isNull(registrations.confirmationMailStatus)
+          : eq(registrations.confirmationMailStatus, query.mailStatus),
+      );
+    }
+    if (query.registeredFrom !== undefined) {
+      predicates.push(
+        gte(
+          registrations.registeredAt,
+          mskDayStartInstant(query.registeredFrom),
+        ),
+      );
+    }
+    if (query.registeredTo !== undefined) {
+      predicates.push(
+        lt(
+          registrations.registeredAt,
+          mskClosingInstantAfterLastDay(query.registeredTo),
+        ),
+      );
+    }
+    return predicates;
   }
 
   /** The days each of `registrationIds` is marked present on (EARS-34). */
@@ -911,25 +1089,21 @@ export class RegistrationRepository {
   ): SQL | undefined {
     const term = q?.trim();
     if (!term) return undefined;
-    const escape = (value: string): string =>
-      value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+    const escape = escapeLike;
     const blob = sql.join(
       Object.values(cells).map((cell) => sql`coalesce(${cell}, '')`),
       sql`, `,
     );
     const text = sql`concat_ws(' ', ${blob}) ilike ${`%${escape(term)}%`} escape '\\'`;
 
-    // The leading `+` is dropped so a FRAGMENT matches too: the stored key is
-    // `+79001112233`, and a registrar typing `9001112` means those digits
-    // anywhere in the number, not a number that starts with them.
-    const digits = normaliseContactPhone(term).replace(/^\+/, "");
     // Four digits is the shortest run that is plausibly a phone fragment rather
     // than a house number inside an address the text arm already covers.
-    if (digits.length < 4) return text;
-    return or(
-      text,
-      sql`coalesce(${phoneNormalised}, '') like ${`%${escape(digits)}%`} escape '\\'`,
+    if (term.replace(/\D/g, "").length < 4) return text;
+    const phone = phoneFragmentPredicate(
+      sql`ltrim(coalesce(${phoneNormalised}, ''), '+')`,
+      term,
     );
+    return phone ? or(text, phone) : text;
   }
 
   /**

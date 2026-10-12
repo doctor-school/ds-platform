@@ -145,8 +145,11 @@ export type CongressSignUpSubmittedAnswers = Omit<
  * in it is a writer bug and not a stale client. It differs from the request in
  * exactly three ways, each of them a decision:
  *
- *  - the phone is kept TWICE (EARS-29) — as typed, and normalised for the
- *    read-time «возможный дубль» derivation of EARS-30;
+ *  - the phone is kept TWICE (EARS-29) — as typed, and normalised: the
+ *    normalised value is the comparison key of the read-time «возможный дубль»
+ *    derivation (EARS-30) and of the roster's phone search, sort and filter
+ *    (EARS-21/22/23), and its single format is what the admin displays
+ *    (EARS-36);
  *  - the consent acceptance is absent: consent is evidenced by its own
  *    append-only `consent_records` row with the server-stamped version
  *    (EARS-9), and a boolean copy here would be a second, weaker record of the

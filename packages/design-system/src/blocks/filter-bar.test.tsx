@@ -1,4 +1,5 @@
 import type * as React from "react";
+import { useState } from "react";
 import {
   render,
   screen,
@@ -9,7 +10,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FilterBar } from "./filter-bar";
+import { FilterBar, FilterBarTextField } from "./filter-bar";
 
 afterEach(cleanup);
 
@@ -246,6 +247,69 @@ describe("<FilterBar>", () => {
     expect(screen.getByRole("button", { name: "Показывать снятые" })).toBeInTheDocument();
   });
 
+  describe("keyboard removal keeps the focus in the bar (044 EARS-23)", () => {
+    function Harness({
+      initial,
+      withMore,
+    }: {
+      initial: string[];
+      withMore?: boolean;
+    }) {
+      const [ids, setIds] = useState(initial);
+      return (
+        <FilterBar
+          applyMode="instant"
+          label="Фильтры списка"
+          resetLabel="Сбросить всё"
+          onResetAll={() => setIds([])}
+          search={{ value: "", onCommit: vi.fn(), label: "Поиск" }}
+          applied={ids.map((id) => ({
+            id,
+            label: `Фильтр ${id}`,
+            onRemove: () =>
+              setIds((current) => current.filter((x) => x !== id)),
+          }))}
+          {...(withMore
+            ? {
+                moreFilters: {
+                  label: "Все фильтры",
+                  appliedCount: ids.length,
+                  appliedCountLabel: (count: number) => `применено: ${count}`,
+                  heading: "Фильтры",
+                  children: null,
+                },
+              }
+            : {})}
+        />
+      );
+    }
+
+    const removeWithKeyboard = async (name: string) => {
+      screen.getByRole("button", { name }).focus();
+      await userEvent.keyboard("{Enter}");
+    };
+
+    it("moves the focus to the NEXT chip, else the previous one", async () => {
+      render(<Harness initial={["a", "b", "c"]} withMore />);
+      await removeWithKeyboard("Фильтр b");
+      expect(screen.getByRole("button", { name: "Фильтр c" })).toHaveFocus();
+      await removeWithKeyboard("Фильтр c");
+      expect(screen.getByRole("button", { name: "Фильтр a" })).toHaveFocus();
+    });
+
+    it("moves the focus to the «Все фильтры» toggle when the last chip goes", async () => {
+      render(<Harness initial={["a"]} withMore />);
+      await removeWithKeyboard("Фильтр a");
+      expect(screen.getByRole("button", { name: /Все фильтры/ })).toHaveFocus();
+    });
+
+    it("moves the focus to the search field on a bar without the toggle", async () => {
+      render(<Harness initial={["a"]} />);
+      await removeWithKeyboard("Фильтр a");
+      expect(screen.getByRole("searchbox", { name: "Поиск" })).toHaveFocus();
+    });
+  });
+
   it("names each chip VERB-FIRST so the control says it removes the filter", () => {
     renderBar({
       removeFilterLabel: "Убрать фильтр",
@@ -281,5 +345,137 @@ describe("<FilterBar>", () => {
     expect(
       screen.getByRole("button", { name: "Состояние" }),
     ).toBeInTheDocument();
+  });
+  describe("moreFilters — the opt-in «Все фильтры» panel (044 EARS-23, F1)", () => {
+    const more = (
+      props: Partial<NonNullable<React.ComponentProps<typeof FilterBar>["moreFilters"]>> = {},
+    ) => ({
+      label: "Все фильтры",
+      appliedCount: 0,
+      appliedCountLabel: (count: number) => `применено: ${count}`,
+      heading: "Фильтры по данным участника",
+      hint: "Применяются сразу",
+      children: <label>ФИО<input /></label>,
+      ...props,
+    });
+
+    it("renders no toggle at all on a bar that does not opt in", () => {
+      renderBar();
+      expect(
+        screen.queryByRole("button", { name: /Все фильтры/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("starts closed: the toggle says so and controls a hidden panel", () => {
+      renderBar({ moreFilters: more() });
+      const toggle = screen.getByRole("button", { name: /Все фильтры/ });
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      const panel = document.getElementById(
+        toggle.getAttribute("aria-controls") ?? "",
+      );
+      expect(panel).not.toBeNull();
+      expect(panel).not.toBeVisible();
+    });
+
+    it("opens the panel inside the same bar, with its heading and hint, and closes it again", async () => {
+      const user = userEvent.setup();
+      renderBar({ moreFilters: more() });
+      const toggle = screen.getByRole("button", { name: /Все фильтры/ });
+      await user.click(toggle);
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      const region = screen.getByRole("region", { name: "Фильтры списка" });
+      const panel = screen.getByRole("group", {
+        name: "Фильтры по данным участника",
+      });
+      expect(region).toContainElement(panel);
+      expect(panel).toBeVisible();
+      expect(screen.getByText("Применяются сразу")).toBeInTheDocument();
+      expect(screen.getByLabelText("ФИО")).toBeInTheDocument();
+      await user.click(toggle);
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      expect(panel).not.toBeVisible();
+    });
+
+    it("toggles from the keyboard (Enter and Space on the focused button)", async () => {
+      const user = userEvent.setup();
+      renderBar({ moreFilters: more() });
+      const toggle = screen.getByRole("button", { name: /Все фильтры/ });
+      toggle.focus();
+      await user.keyboard("{Enter}");
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      await user.keyboard(" ");
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+    });
+
+    it("badges the number of applied panel filters and names it, only while there is one", () => {
+      const { rerender } = renderBar({ moreFilters: more({ appliedCount: 0 }) });
+      expect(screen.queryByText("0")).not.toBeInTheDocument();
+      rerender(
+        <FilterBar
+          applyMode="instant"
+          label="Фильтры списка"
+          resetLabel="Сбросить всё"
+          moreFilters={more({ appliedCount: 2 })}
+        />,
+      );
+      expect(screen.getByText("2")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Все фильтры, применено: 2" }),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps «Сбросить всё» beside the chips it clears", () => {
+      renderBar({
+        moreFilters: more({ appliedCount: 1 }),
+        applied: [{ id: "a", label: "Город: Химки", onRemove: vi.fn() }],
+        appliedLabel: "Выбрано:",
+        onResetAll: vi.fn(),
+      });
+      const reset = screen.getByRole("button", { name: "Сбросить всё" });
+      const chip = screen.getByRole("button", { name: "Город: Химки" });
+      expect(reset.parentElement).toBe(chip.parentElement);
+    });
+  });
+
+  describe("<FilterBarTextField> — a panel text filter on the bar's instant model", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("commits once after the inactivity window, with the busy cue meanwhile", () => {
+      const onCommit = vi.fn();
+      render(
+        <FilterBarTextField
+          label="Место работы"
+          value=""
+          onCommit={onCommit}
+          busyLabel="Идёт поиск…"
+        />,
+      );
+      const field = screen.getByLabelText("Место работы");
+      fireEvent.change(field, { target: { value: "Г" } });
+      fireEvent.change(field, { target: { value: "ГКБ" } });
+      expect(onCommit).not.toHaveBeenCalled();
+      expect(field).toHaveAttribute("aria-busy", "true");
+      expect(screen.getByText("Идёт поиск…")).toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(onCommit).toHaveBeenCalledTimes(1);
+      expect(onCommit).toHaveBeenCalledWith("ГКБ");
+      expect(field).not.toHaveAttribute("aria-busy");
+    });
+
+    it("follows an external value change (a chip removed, «Сбросить всё»)", () => {
+      const { rerender } = render(
+        <FilterBarTextField label="ФИО" value="Иван" onCommit={vi.fn()} />,
+      );
+      expect(screen.getByLabelText("ФИО")).toHaveValue("Иван");
+      rerender(<FilterBarTextField label="ФИО" value="" onCommit={vi.fn()} />);
+      expect(screen.getByLabelText("ФИО")).toHaveValue("");
+    });
   });
 });

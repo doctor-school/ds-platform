@@ -93,9 +93,19 @@ never a widening of the one above:
   (`EventRosterAdminController` → `RegistrationService.eventRosterPage`) — one
   paged page of the registrar's desk roster. Its query state is the
   `AdminDataList` baseline (`q`, `page`, `pageSize`), the EARS-34 presence
-  filter (`attendanceDay` + `present`) and the EARS-22 sort (`sort` + `dir`);
-  per-column filters are EARS-23 and the «возможный дубль» marker on this row
-  is EARS-30/EARS-31, neither of them here.
+  filter (`attendanceDay` + `present`), the EARS-22 sort (`sort` + `dir`) and
+  the EARS-23 per-column filters; the «возможный дубль» marker on this row is
+  EARS-30/EARS-31 and is not here.
+- The filters (EARS-23), each one more conjunct of the WHERE the count shares,
+  each over the same cell expression the row projects: `name`, `workplace`,
+  `email` — case-insensitive «contains»; `phone` — «contains» on digits
+  against the normalised number, the term normalised under the intake's
+  `8 → 7` rule (a term without a digit is a 400); `city`, `region` —
+  case-insensitive equality with the directory value the admin selector offers;
+  `specialtyId` — the resolved `specialties_minzdrav` id; `mailStatus` —
+  `sent` / `failed` / `none` (never attempted); `registeredFrom` /
+  `registeredTo` — inclusive Moscow calendar days (`YYYY-MM-DD`), from after to
+  is a 400.
 - The sort (EARS-22 narrowed by EARS-37) takes one key of `fullName`,
   `specialty`, `city`, `phone`, `registeredAt`, `presence` in `asc`/`desc`;
   absent, the order is `registered_at ASC, id ASC` as before. Text keys order

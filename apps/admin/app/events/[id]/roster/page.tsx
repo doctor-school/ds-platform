@@ -35,9 +35,18 @@ import {
   rosterSortKeyOf,
   rosterSortQuery,
   ROSTER_SORT_DEFAULT,
+  rosterFiltersAppliedCount,
+  rosterFiltersFromAddress,
+  rosterFiltersHref,
+  rosterFiltersQuery,
+  rosterRegisteredRange,
+  ROSTER_FILTERS_EMPTY,
   type AttendanceFilter,
   type CongressRosterCells,
+  type RosterColumnFilters,
+  type RosterFilterKey,
 } from "@/lib/congress-roster";
+import { RosterFiltersPanel } from "@/components/roster-filters-panel";
 import {
   PARTICIPANT_CARD_PARAM,
   participantCardHref,
@@ -74,8 +83,14 @@ import { congressRosterUrl } from "@/providers/data-provider";
  * `createHref`. A `?q=` in the address seeds the search. Columns follow EARS-37
  * (№, ФИО, специальность, город, телефон, дата регистрации, присутствие); the
  * table's record column (always first in `DataTable`) is the № counter, so ФИО
- * is the first declared column and the order reads №, ФИО, … exactly. Column
- * filters (EARS-23) and print (EARS-26) are their own handlers.
+ * is the first declared column and the order reads №, ФИО, … exactly. Print
+ * (EARS-26) is its own handler.
+ *
+ * EARS-23 — the per-column filters (owner layout F1, #2316): the `FilterBar`
+ * «Все фильтры» panel inside the same bar, every filter in the address under
+ * the route's own param names (`lib/congress-roster.ts`), composing with the
+ * search, the presence filter and the sort; each applied filter is a chip, and
+ * any change returns to page 1.
  *
  * EARS-22/EARS-37 — the server sort (owner Stage-A pick S1, #2316). Every
  * visible column but № is a sort header of `DataTable`; «Присутствие» sorts by
@@ -184,6 +199,29 @@ export default function CongressRosterPage() {
     }
   }, [attendanceFilter.day, searchParams, pathname, router]);
 
+  // 044 EARS-23 — the column filters are read from the address on every render;
+  // any change returns to page 1. The address is the ONE source of truth, and a
+  // change is applied to it as it stands at that moment (`window.location`, kept
+  // current synchronously by `history.replaceState`, which Next.js syncs into
+  // `useSearchParams`) — never to this render's copy, which a second change
+  // landing before the re-render (two dates typed back to back) would overwrite.
+  const filters = rosterFiltersFromAddress(searchParams);
+  const filtersQuery = rosterFiltersQuery(filters);
+  const changeFilters = (
+    update: (current: RosterColumnFilters) => Partial<RosterColumnFilters>,
+  ) => {
+    const search = window.location.search;
+    const current = rosterFiltersFromAddress(new URLSearchParams(search));
+    const next = { ...current, ...update(current) };
+    setQuery((state) => ({ ...state, page: 1 }));
+    window.history.replaceState(
+      null,
+      "",
+      rosterFiltersHref(pathname, search, next),
+    );
+  };
+  const [specialtyLabel, setSpecialtyLabel] = useState<string | null>(null);
+
   const { query: request } = useCustom<CongressRosterList>({
     url: congressRosterUrl.list(eventId, {
       q: query.q,
@@ -191,6 +229,7 @@ export default function CongressRosterPage() {
       pageSize: query.pageSize,
       ...attendanceFilterQuery(attendanceFilter),
       ...rosterSortQuery(sort),
+      ...filtersQuery,
     }),
     method: "get",
   });
@@ -357,6 +396,51 @@ export default function CongressRosterPage() {
         },
       ]
     : [];
+  const filterChip = (field: string, value: string) =>
+    t("congressRoster.filters.chip", {
+      field: t(`congressRoster.filters.columns.${field}`),
+      value,
+    });
+  const filterValueLabel = (key: RosterFilterKey, value: string): string => {
+    switch (key) {
+      case "specialtyId":
+        return specialtyLabel ?? "…";
+      case "mailStatus":
+        return t(`congressRoster.filters.mailStatus.${value}`);
+      default:
+        return value;
+    }
+  };
+  const registeredRange = rosterRegisteredRange(filters);
+  const filtersApplied = [
+    ...(Object.entries(filtersQuery) as [RosterFilterKey, string][])
+      .filter(([key]) => key !== "registeredFrom" && key !== "registeredTo")
+      .map(([key, value]) => ({
+        id: `filter-${key}`,
+        label: filterChip(
+          key === "specialtyId" ? "specialty" : key,
+          filterValueLabel(key, value),
+        ),
+        onRemove: () => changeFilters(() => ({ [key]: "" })),
+      })),
+    ...(registeredRange
+      ? [
+          {
+            id: "filter-registered",
+            label: filterChip(
+              "registered",
+              registeredRange.from && registeredRange.to
+                ? t("congressRoster.filters.rangeBoth", registeredRange)
+                : registeredRange.from
+                  ? t("congressRoster.filters.rangeFrom", registeredRange)
+                  : t("congressRoster.filters.rangeTo", registeredRange),
+            ),
+            onRemove: () =>
+              changeFilters(() => ({ registeredFrom: "", registeredTo: "" })),
+          },
+        ]
+      : []),
+  ];
   const mayEnter = access
     ? canAccessResource(access, "congress-roster", { id: eventId })
     : false;
@@ -434,12 +518,31 @@ export default function CongressRosterPage() {
             searchable
             searchLabel={t("congressRoster.filters.search")}
             searchPlaceholder={t("congressRoster.filters.searchPlaceholder")}
-            // A registration has no lifecycle to filter by; the per-column
-            // filters are EARS-23, not this handler. The presence filter
-            // (EARS-34) rides `extraFilters`.
+            // A registration has no lifecycle to filter by. The presence filter
+            // (EARS-34) rides `extraFilters`; the column filters (EARS-23) the
+            // `moreFilters` panel. Both clear in one step on «Сбросить всё».
             filterable={false}
             extraFilters={attendanceFilters}
-            extraApplied={attendanceApplied}
+            extraApplied={[...attendanceApplied, ...filtersApplied]}
+            onResetExtra={() => {
+              setAttendanceFilter(ATTENDANCE_FILTER_INITIAL);
+              changeFilters(() => ROSTER_FILTERS_EMPTY);
+            }}
+            moreFilters={{
+              label: t("congressRoster.filters.more.toggle"),
+              appliedCount: rosterFiltersAppliedCount(filters),
+              appliedCountLabel: (count) =>
+                t("congressRoster.filters.more.appliedCount", { count }),
+              heading: t("congressRoster.filters.more.heading"),
+              hint: t("congressRoster.filters.more.hint"),
+              children: (
+                <RosterFiltersPanel
+                  filters={filters}
+                  onChange={changeFilters}
+                  onSpecialtyLabel={setSpecialtyLabel}
+                />
+              ),
+            }}
             caption={t("congressRoster.tableCaption")}
             record={{
               header: t("congressRoster.columns.number"),

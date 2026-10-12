@@ -183,7 +183,7 @@ Feature: 044 — Congress sign-up
     When they open the roster
     # Production amendment 2026-09-25 (#2377): the column order on the next line is the baseline; EARS-37 replaces it — see «The registrar reads the reduced roster and opens a card».
     Then the roster lists registrations with pagination and instant search, in the column order №, ФИО, специальность, место работы, город, область, телефон, email, дата регистрации, статус письма
-    When they filter a text column by contains-search, специальность by a select and дата регистрации by a range
+    When they filter ФИО, место работы and email by contains-search, телефон by its digits so that «8 900 …» finds the row typed «+7 900 …», город, область and специальность by a searchable directory selector, статус письма by a select, and дата регистрации by an inclusive range of Moscow calendar days
     And they sort by ФИО and then by дата регистрации, in both directions
     Then the server returns the filtered, sorted page
 

@@ -53,6 +53,11 @@ const badgeVariants = cva(
         // (DEBT.md, PR #1971), so no window is baked in here.
         updated: "bg-tint px-2 py-1 text-tint-foreground",
         label: "bg-tint px-2.5 py-1.5 text-tint-foreground",
+        // 044 EARS-23 (F1, #2316): the applied-filter tally on the FilterBar's
+        // «Все фильтры» toggle — a filled `primary-action` square so the digit
+        // reads as a count against the secondary button it sits in.
+        count:
+          "bg-primary-action px-1.5 py-0.5 tabular-nums text-primary-foreground",
         speaker: "bg-tint px-2.5 py-1.5 text-tint-foreground",
       },
     },

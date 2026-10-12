@@ -79,3 +79,17 @@ describe("Badge — updated variant (028 EARS-11)", () => {
     expect(container.textContent ?? "").not.toMatch(/\d/);
   });
 });
+
+/**
+ * 044 EARS-23 (#2317, F1) — the applied-filter tally on the FilterBar's
+ * «Все фильтры» toggle: a filled action square, inert (the toggle names it).
+ */
+describe("Badge — count variant (044 EARS-23)", () => {
+  it("044 EARS-23: renders the tally on the filled primary-action square", () => {
+    render(<Badge variant="count">2</Badge>);
+    const badge = screen.getByText("2");
+
+    expect(badge).toHaveClass("bg-primary-action", "text-primary-foreground");
+    expect(badge).not.toHaveAttribute("role");
+  });
+});

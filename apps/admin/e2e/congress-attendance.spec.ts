@@ -282,7 +282,9 @@ test.describe("044 EARS-34 — attendance per congress day on the roster", () =>
     });
     // S1-3: «Присутствие» over a smaller «день 23.04», one sort button.
     await expect(presence).toBeVisible();
-    await expect(presence.getByText("день 23.04", { exact: true })).toBeVisible();
+    await expect(
+      presence.getByText("день 23.04", { exact: true }),
+    ).toBeVisible();
     await expectRosterFits(desk, table);
     await presence.click();
     await expect(desk).toHaveURL(/[?&]sort=presence&dir=asc/);
@@ -297,9 +299,9 @@ test.describe("044 EARS-34 — attendance per congress day on the roster", () =>
     await expect(desk).toHaveURL(/[?&]sort=presence&dir=desc/);
     await expect(nameCells(desk).last()).toHaveText(OTHERS[1]!);
 
-    // The day cleared: the sort falls back to the default, address included.
+    // The day cleared: the sort falls back to the default — out of the address.
     await desk.getByTestId("roster-attendance-day").selectOption("");
-    await expect(desk).toHaveURL(/[?&]sort=registeredAt&dir=asc/);
+    await expect(desk).not.toHaveURL(/[?&](sort|dir)=/);
     await expect(
       table.locator("thead th").last().locator("button"),
     ).toHaveCount(0);
@@ -311,7 +313,7 @@ test.describe("044 EARS-34 — attendance per congress day on the roster", () =>
     await presence.click();
     await expect(desk).toHaveURL(/[?&]sort=presence&dir=asc/);
     await desk.reload();
-    await expect(desk).toHaveURL(/[?&]sort=registeredAt&dir=asc/);
+    await expect(desk).not.toHaveURL(/[?&](sort|dir)=/);
     await expect(nameCells(desk)).toHaveText([MARKED, ...OTHERS]);
   });
 

@@ -11,6 +11,7 @@ import {
   type DataTableColumn,
   type DataTableRecordColumn,
   type DataTableSort,
+  type DataTableSortAction,
   type DataTableSortSelect,
 } from "@ds/design-system/blocks";
 import {
@@ -46,7 +47,8 @@ import {
  *   • a list that passes `query.sort` gets the server-sort headers of `DataTable`
  *     (044 EARS-22): its columns opt in by `sortKey`, a sort change goes through
  *     `onQueryChange` with the page reset to 1, and below `md` `sortSelect`
- *     offers the same sort as a «Сортировка» select. A list without `sort` is
+ *     offers the same sort as a «Сортировка» select; with `defaultSort` a third
+ *     header click returns to the list's own order. A list without `sort` is
  *     unchanged.
  */
 
@@ -103,6 +105,8 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   rowHref,
   onRowClick,
   sortSelect,
+  defaultSort,
+  sortActionLabel,
   emptyTitle,
   emptyDescription,
   testId,
@@ -169,6 +173,10 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   onRowClick?: (row: Row) => void;
   /** The below-`md` «Сортировка» select copy, for a list that passes `query.sort`. */
   sortSelect?: DataTableSortSelect;
+  /** The list's own order — a descending header's next click returns to it. */
+  defaultSort?: DataTableSort;
+  /** A sort header's `title`: what its next click does. */
+  sortActionLabel?: (action: DataTableSortAction) => string;
   emptyTitle: string;
   emptyDescription: string;
   testId: string;
@@ -346,6 +354,8 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
               : undefined
           }
           sortSelect={sortSelect}
+          defaultSort={defaultSort}
+          sortActionLabel={sortActionLabel}
           isLoading={isLoading}
           error={
             error ? (

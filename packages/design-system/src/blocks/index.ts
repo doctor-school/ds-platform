@@ -145,6 +145,7 @@ export type {
   DataTableAlign,
   DataTableOverflow,
   DataTableSort,
+  DataTableSortAction,
   DataTableSortDirection,
   DataTableSortSelect,
 } from "./data-table";

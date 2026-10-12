@@ -165,16 +165,36 @@ export function rosterSortAddressIsStale(
   );
 }
 
-/** The address with `sort` written in, the rest of the query (card, search) kept. */
+/** The roster's own order — registration date, oldest first. */
+export function isRosterSortDefault(sort: {
+  key: string;
+  direction: string;
+}): boolean {
+  return (
+    sort.key === ROSTER_SORT_DEFAULT.key &&
+    sort.direction === ROSTER_SORT_DEFAULT.direction
+  );
+}
+
+/**
+ * The address with `sort` written in, the rest of the query (card, search) kept;
+ * the default order (the header's «Сбросить сортировку») takes it out instead.
+ */
 export function rosterSortHref(
   pathname: string,
   search: string,
   sort: { key: string; direction: CongressRosterSortDir },
 ): string {
   const params = new URLSearchParams(search);
-  params.set(ROSTER_SORT_PARAM, sort.key);
-  params.set(ROSTER_DIR_PARAM, sort.direction);
-  return `${pathname}?${params.toString()}`;
+  if (isRosterSortDefault(sort)) {
+    params.delete(ROSTER_SORT_PARAM);
+    params.delete(ROSTER_DIR_PARAM);
+  } else {
+    params.set(ROSTER_SORT_PARAM, sort.key);
+    params.set(ROSTER_DIR_PARAM, sort.direction);
+  }
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
 }
 
 /** The GET params the sort owes the roster route. */

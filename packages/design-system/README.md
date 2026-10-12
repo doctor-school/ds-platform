@@ -268,10 +268,15 @@ defects — a `min-h-*` reserved blank line on a message (K-1), a duplicate
   `sortKey`; the table is controlled through `sort` + `onSortChange`. Every sortable
   header always shows the muted double arrow, the active one a single direction
   arrow in the AA-safe `primary-action` accent; first click ascending, a click on
-  the active header reverses, another header replaces — one sort, never cleared.
+  the active header reverses, another header replaces — one sort at a time. With
+  `defaultSort` the header is the tri-state cycle (owner Stage-B, #2757): a third
+  click on a descending column returns to the default order (the default column
+  toggles), and `sortActionLabel` puts what the next click does on the button's
+  `title` («Сортировать по убыванию», «Сбросить сортировку»).
   The body cells of the sorted column sit on the faint `table-sorted` surface at
   rest (the header keeps no fill; a clickable row's hover / pressed tint wins over
-  it). A column's optional `headerDetail` is a smaller second line under its title
+  it) and carry the row's own `transition-colors`, so the sorted cell of a hovered
+  row repaints in the same frame as the row — never a beat behind it. A column's optional `headerDetail` is a smaller second line under its title
   (one label «title · detail» for the button name, the card term and the select).
   The sort button follows the column's `align`. Below `md` the cards have no
   headers, so `sortSelect` renders a «Сортировка» `NativeSelect` (column ×

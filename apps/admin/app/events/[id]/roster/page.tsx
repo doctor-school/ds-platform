@@ -28,6 +28,7 @@ import {
   congressDayShortLabel,
   congressRosterCells,
   congressRosterRowNumber,
+  isRosterSortDefault,
   rosterSortAddressIsStale,
   rosterSortFromAddress,
   rosterSortHref,
@@ -81,7 +82,9 @@ import { congressRosterUrl } from "@/providers/data-provider";
  * the chosen congress day's mark, so it is a sort header only while a day is
  * chosen. One sort is always active — registration date ascending until the
  * operator picks another — and it lives in the address (`?sort=&dir=`), so a
- * sorted roster is linkable; any sort change returns to page 1. Below `md` the
+ * sorted roster is linkable; any sort change returns to page 1. A header cycles
+ * ascending → descending → the default order (owner Stage-B, #2757), which takes
+ * the sort out of the address; the header's title says what the next click does. Below `md` the
  * same sort is the «Сортировка» select over the record cards.
  *
  * EARS-36 — a row click (or Enter on the row's focused control) opens the
@@ -472,13 +475,22 @@ export default function CongressRosterPage() {
             sortSelect={{
               label: t("congressRoster.sort.label"),
               optionLabel: (column, direction) =>
-                t("congressRoster.sort.option", {
-                  column: column.header,
-                  order: t(
-                    `congressRoster.sort.order.${sortOrderKind(column.key)}.${direction}`,
-                  ),
-                }),
+                t(
+                  isRosterSortDefault({ key: column.key, direction })
+                    ? "congressRoster.sort.defaultOption"
+                    : "congressRoster.sort.option",
+                  {
+                    column: column.header,
+                    order: t(
+                      `congressRoster.sort.order.${sortOrderKind(column.key)}.${direction}`,
+                    ),
+                  },
+                ),
             }}
+            defaultSort={ROSTER_SORT_DEFAULT}
+            sortActionLabel={(action) =>
+              t(`congressRoster.sort.action.${action}`)
+            }
             emptyTitle={t("congressRoster.empty")}
             emptyDescription={t("congressRoster.emptyDescription")}
             testId="roster"

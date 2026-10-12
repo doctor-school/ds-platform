@@ -56,8 +56,14 @@ import {
  * every sortable header always shows a muted double arrow, the active one shows a
  * single direction arrow in the `primary-action` accent; the first click asks for
  * ascending, a click on the active column reverses it, and another header replaces
- * it — there is always exactly one sort, never a cleared one. The body cells of the
- * sorted column sit on the faint `table-sorted` surface (the header keeps no fill);
+ * it — there is always exactly one sort. With a `defaultSort` the header is the
+ * tri-state cycle of admin tables (owner Stage-B, #2757): a third click on a
+ * descending column returns to the default order (the default column itself just
+ * toggles), and the header's `title` (`sortActionLabel`) says what the next click
+ * does. The body cells of the
+ * sorted column sit on the faint `table-sorted` surface (the header keeps no fill)
+ * and change colour on the row's own transition, so a hover moving row to row
+ * repaints the sorted cell in the same frame as the rest of the row;
  * `headerDetail` stacks a smaller qualifier under a header title. Below `md` the cards
  * have no headers, so `sortSelect` renders a «Сортировка» select (field × direction)
  * over the same contract. The block orders nothing itself: the rows arrive already
@@ -116,6 +122,9 @@ export interface DataTableColumn<Row> {
 }
 
 export type DataTableSortDirection = "asc" | "desc";
+
+/** What a click on a sort header does next — the copy of its `title`. */
+export type DataTableSortAction = DataTableSortDirection | "reset";
 
 /** The one active server sort (EARS-22): a column's `sortKey` and a direction. */
 export interface DataTableSort {
@@ -179,6 +188,14 @@ export interface DataTableProps<Row> {
   sort?: DataTableSort;
   /** Called with the sort a header click / the select asks for. */
   onSortChange?: (next: DataTableSort) => void;
+  /**
+   * The list's own order. Supplied = the tri-state header cycle: a click on a
+   * descending column asks for this sort back («Сбросить сортировку»).
+   * Omitted = a header only toggles ascending ↔ descending.
+   */
+  defaultSort?: DataTableSort;
+  /** The sort header's `title` — what its next click does (app-supplied copy). */
+  sortActionLabel?: (action: DataTableSortAction) => string;
   /** Renders the below-`md` «Сортировка» select over the sortable columns. */
   sortSelect?: DataTableSortSelect;
   className?: string;
@@ -220,6 +237,26 @@ function SortIcon({ state }: { state: DataTableSortDirection | "none" }) {
       ))}
     </svg>
   );
+}
+
+/**
+ * The sort a click on `sortKey`'s header asks for: an inactive column → ascending,
+ * ascending → descending, descending → the `defaultSort` (or ascending without
+ * one). The default column toggles, since its "back to default" is ascending.
+ */
+function nextSort(
+  sort: DataTableSort,
+  sortKey: string,
+  defaultSort: DataTableSort | undefined,
+): DataTableSort {
+  if (sort.key !== sortKey) return { key: sortKey, direction: "asc" };
+  if (sort.direction === "asc") return { key: sortKey, direction: "desc" };
+  if (defaultSort && defaultSort.key !== sortKey) return defaultSort;
+  return { key: sortKey, direction: "asc" };
+}
+
+function sameSort(a: DataTableSort, b: DataTableSort | undefined): boolean {
+  return Boolean(b && a.key === b.key && a.direction === b.direction);
 }
 
 const alignClass = (align: DataTableAlign | undefined) =>
@@ -268,6 +305,8 @@ export function DataTable<Row>({
   pagination,
   sort,
   onSortChange,
+  defaultSort,
+  sortActionLabel,
   sortSelect,
   className,
 }: DataTableProps<Row>) {
@@ -328,6 +367,12 @@ export function DataTable<Row>({
         </TableHead>
       );
     }
+    const next = nextSort(sort, sortKey, defaultSort);
+    // «Reset» only for the click that leaves a chosen sort for the default.
+    const action: DataTableSortAction =
+      active && sameSort(next, defaultSort) && !sameSort(sort, defaultSort)
+        ? "reset"
+        : next.direction;
     return (
       <TableHead
         key={key}
@@ -339,12 +384,9 @@ export function DataTable<Row>({
           // Two stacked lines would read as «titledetail»; the name stays the
           // one label the visible text spells.
           aria-label={detail ? headerText(header, detail) : undefined}
-          onClick={() =>
-            onSortChange({
-              key: sortKey,
-              direction: active && sort.direction === "asc" ? "desc" : "asc",
-            })
-          }
+          // A name-from-content button: the title is its description.
+          title={sortActionLabel?.(action)}
+          onClick={() => onSortChange(next)}
           className={cn(
             "flex w-full items-center gap-1.5 px-3.5 py-3 font-extrabold uppercase tracking-tight hover:bg-tint focus-visible:shadow-focus focus-visible:outline-none",
             align === "end"
@@ -368,7 +410,9 @@ export function DataTable<Row>({
   const sortedCell = (sortKey: string | undefined) =>
     sortKey && sort && onSortChange && sort.key === sortKey
       ? cn(
-          "bg-table-sorted",
+          // The row's own `transition-colors` (`TableRow`): a cell on another
+          // timing would repaint a frame apart from the row it belongs to.
+          "bg-table-sorted transition-colors",
           clickable &&
             "group-hover/row:bg-tint group-has-[:active]/row:bg-tint-pressed group-focus-within/row:bg-tint",
         )

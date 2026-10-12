@@ -11,6 +11,8 @@ import {
   deskEntryFailure,
   rosterSortAddressIsStale,
   rosterSortFromAddress,
+  isRosterSortDefault,
+  ROSTER_SORT_DEFAULT,
   rosterSortHref,
   rosterSortKeyOf,
   rosterSortQuery,
@@ -274,6 +276,34 @@ describe("044 EARS-22 server sort state", () => {
         direction: "desc",
       }),
     ).toBe("/events/e1/roster?q=%D0%98&registration=r1&sort=phone&dir=desc");
+  });
+
+  it("EARS-22: going back to the default order takes the sort out of the address, keeping the rest of the query", () => {
+    expect(
+      rosterSortHref(
+        "/events/e1/roster",
+        "q=%D0%98&sort=phone&dir=desc&registration=r1",
+        ROSTER_SORT_DEFAULT,
+      ),
+    ).toBe("/events/e1/roster?q=%D0%98&registration=r1");
+    expect(
+      rosterSortHref("/events/e1/roster", "sort=city&dir=desc", {
+        key: "registeredAt",
+        direction: "asc",
+      }),
+    ).toBe("/events/e1/roster");
+  });
+
+  it("EARS-22: only registration date ascending is the default order", () => {
+    expect(isRosterSortDefault({ key: "registeredAt", direction: "asc" })).toBe(
+      true,
+    );
+    expect(
+      isRosterSortDefault({ key: "registeredAt", direction: "desc" }),
+    ).toBe(false);
+    expect(isRosterSortDefault({ key: "fullName", direction: "asc" })).toBe(
+      false,
+    );
   });
 
   it("EARS-22: the visible columns map onto the route's sort keys; № carries none, presence only with a day", () => {

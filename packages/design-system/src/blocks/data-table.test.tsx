@@ -60,6 +60,28 @@ const COLUMNS: DataTableColumn<Row>[] = [
   },
 ];
 
+/** The harness table as an element, for `rerender` with new props. */
+function tableElement(props: Partial<DataTableProps<Row>> = {}) {
+  return (
+    <DataTable<Row>
+      caption="Направления"
+      record={{
+        header: "Направление",
+        width: "40%",
+        title: (row) => row.title,
+        context: (row) => `Код: ${row.id}`,
+        label: (row) => `Открыть «${row.title}»`,
+      }}
+      columns={COLUMNS}
+      rows={ROWS}
+      getRowKey={(row) => row.id}
+      emptyNoRecords={{ title: "Направлений пока нет" }}
+      emptyNoResults={{ title: "Ничего не найдено" }}
+      {...props}
+    />
+  );
+}
+
 function renderTable(props: Partial<DataTableProps<Row>> = {}) {
   return render(
     <DataTable<Row>
@@ -417,6 +439,112 @@ describe("<DataTable> sortable columns (044 EARS-22)", () => {
     });
   });
 
+  it("044 EARS-22: with a default sort, a non-default header cycles ascending → descending → back to the default order", async () => {
+    const user = userEvent.setup();
+    const onSortChange = vi.fn();
+    const props = {
+      columns: SORTABLE,
+      defaultSort: { key: "count", direction: "asc" } as const,
+      onSortChange,
+    };
+    const { rerender } = renderTable({
+      ...props,
+      sort: { key: "count", direction: "asc" },
+    });
+    const parent = () =>
+      screen.getByRole("button", { name: "Родительское направление" });
+    await user.click(parent());
+    expect(onSortChange).toHaveBeenLastCalledWith({
+      key: "parent",
+      direction: "asc",
+    });
+    rerender(
+      tableElement({ ...props, sort: { key: "parent", direction: "asc" } }),
+    );
+    await user.click(parent());
+    expect(onSortChange).toHaveBeenLastCalledWith({
+      key: "parent",
+      direction: "desc",
+    });
+    rerender(
+      tableElement({ ...props, sort: { key: "parent", direction: "desc" } }),
+    );
+    await user.click(parent());
+    expect(onSortChange).toHaveBeenLastCalledWith({
+      key: "count",
+      direction: "asc",
+    });
+  });
+
+  it("044 EARS-22: the default column itself toggles ascending ↔ descending, its third click returning to the default", async () => {
+    const user = userEvent.setup();
+    const onSortChange = vi.fn();
+    const props = {
+      columns: SORTABLE,
+      defaultSort: { key: "count", direction: "asc" } as const,
+      onSortChange,
+    };
+    const { rerender } = renderTable({
+      ...props,
+      sort: { key: "count", direction: "asc" },
+    });
+    const count = () => screen.getByRole("button", { name: "Материалов" });
+    await user.click(count());
+    expect(onSortChange).toHaveBeenLastCalledWith({
+      key: "count",
+      direction: "desc",
+    });
+    rerender(
+      tableElement({ ...props, sort: { key: "count", direction: "desc" } }),
+    );
+    await user.click(count());
+    expect(onSortChange).toHaveBeenLastCalledWith({
+      key: "count",
+      direction: "asc",
+    });
+  });
+
+  it("044 EARS-22: every sort header's title says what its next click does — sort ascending, descending, or reset", () => {
+    const sortActionLabel = (action: "asc" | "desc" | "reset") =>
+      ({
+        asc: "Сортировать по возрастанию",
+        desc: "Сортировать по убыванию",
+        reset: "Сбросить сортировку",
+      })[action];
+    const props = {
+      columns: SORTABLE,
+      defaultSort: { key: "count", direction: "asc" } as const,
+      onSortChange: () => {},
+      sortActionLabel,
+    };
+    const { rerender } = renderTable({
+      ...props,
+      sort: { key: "count", direction: "asc" },
+    });
+    const title = (name: string) =>
+      screen.getByRole("button", { name }).getAttribute("title");
+    expect(title("Родительское направление")).toBe(
+      "Сортировать по возрастанию",
+    );
+    expect(title("Материалов")).toBe("Сортировать по убыванию");
+    rerender(
+      tableElement({ ...props, sort: { key: "parent", direction: "asc" } }),
+    );
+    expect(title("Родительское направление")).toBe("Сортировать по убыванию");
+    rerender(
+      tableElement({ ...props, sort: { key: "parent", direction: "desc" } }),
+    );
+    expect(title("Родительское направление")).toBe("Сбросить сортировку");
+    rerender(
+      tableElement({ ...props, sort: { key: "count", direction: "desc" } }),
+    );
+    expect(title("Материалов")).toBe("Сбросить сортировку");
+    // The title is the description; the accessible name stays the header.
+    expect(
+      screen.getByRole("button", { name: "Материалов" }),
+    ).toHaveAccessibleDescription("Сбросить сортировку");
+  });
+
   it("044 EARS-22: the header button is keyboard-operable", async () => {
     const user = userEvent.setup();
     const onSortChange = vi.fn();
@@ -544,6 +672,25 @@ describe("<DataTable> sortable columns (044 EARS-22)", () => {
     expect(cell.className).toContain("group-focus-within/row:bg-tint");
   });
 
+  it("044 EARS-22: a shaded cell changes colour on the row's own transition, so the hovered row and its sorted cell switch in the same frame", () => {
+    renderTable({
+      columns: SORTABLE,
+      sort: { key: "count", direction: "asc" },
+      onSortChange: () => {},
+      onRowClick: () => {},
+    });
+    const transitions = (element: Element) =>
+      element
+        .getAttribute("class")!
+        .split(/\s+/)
+        .filter((token) => /^(transition|duration-|ease-|delay-)/.test(token))
+        .sort();
+    const cell = first(bodyCells(2));
+    const row = cell.closest("tr")!;
+    expect(transitions(row)).not.toEqual([]);
+    expect(transitions(cell)).toEqual(transitions(row));
+  });
+
   it("044 EARS-22: a table with no sort props shades no body cell", () => {
     renderTable({ columns: SORTABLE });
     for (const index of [0, 1, 2]) {
@@ -553,10 +700,7 @@ describe("<DataTable> sortable columns (044 EARS-22)", () => {
 
   it("044 EARS-22: a header detail is a second, smaller line inside the same sort button, which reads «header · detail»", () => {
     renderTable({
-      columns: [
-        SORTABLE[0]!,
-        { ...SORTABLE[1]!, headerDetail: "день 23.04" },
-      ],
+      columns: [SORTABLE[0]!, { ...SORTABLE[1]!, headerDetail: "день 23.04" }],
       sort: { key: "count", direction: "asc" },
       onSortChange: () => {},
     });

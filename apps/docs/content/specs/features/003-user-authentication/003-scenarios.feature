@@ -178,6 +178,19 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the original password still signs in and the submitted one does not
     And the display name is written only if the account had none
 
+  @EARS-23 @EARS-41 @happy @registration-verified-password
+  Scenario: Academy verified re-registration preserves the original password and display name
+    Given a uniquely owned verified Academy password holder has saved an original display name and logged out
+    When an independent Academy guest re-registers that verified address with a distinct password and the account return target
+    Then fresh addressed mail says already registered and password unchanged in both complete bodies with an unconsumed six-digit code
+    When that guest enters the delivered verified re-registration code once in its requesting Academy tab
+    Then that code opens the same verified account and original name with a fresh secure session at the account return target without password replay
+    And independent guests sign into that same named account with the original password while the submitted replacement gets only generic refusal and no private access
+    # Academy projection: registration-verified-password.steps.ts; its form has
+    # no registration display-name field. Retain the broader scenario above and
+    # auth.service.spec.ts / zitadel.idp.spec.ts EARS-23 fill-only-empty/name and
+    # verified-credential preservation proof plus app-local auth journeys.
+
   @EARS-23 @EARS-41 @happy @registration-abandoned
   Scenario: An abandoned registrant who registers again gets the new password, not the abandoned one
     Given a uniquely owned Academy account remains unverified after registration with an abandoned password

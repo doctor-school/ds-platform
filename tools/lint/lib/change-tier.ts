@@ -270,14 +270,33 @@ export function isShipPath(path: string): boolean {
  * so it is not a test source.
  */
 function isE2eRunnerScript(path: string): boolean {
-  return /(?:^|\/)e2e\/(?:.*\/)?(?:bin\/.+|run-[^/]+)$/.test(path);
+  return /(?:^|\/)e2e\/(?:.*\/)?(?:bin\/.+|run-[^/]+|tsconfig[^/]*\.json)$/.test(
+    path,
+  );
 }
+
+/**
+ * #2819: run-selection modules — the `e2e/` files that
+ * `packages/e2e/playwright.config.ts` and `packages/e2e/bin/*` import at
+ * runtime: the Playwright projects (`hosts.ts`) and the per-project tag
+ * expression + bddgen host-tag gate (`lib/host-tags.ts`). They choose what CI
+ * runs, so they are not test sources. The tier sees paths only, so the set is
+ * named here and pinned to the real import graph by `change-tier.spec.ts`.
+ */
+export const E2E_RUN_SELECTION_MODULES: readonly string[] = [
+  "packages/e2e/hosts.ts",
+  "packages/e2e/lib/host-tags.ts",
+];
 
 /** Test sources: excluded from the ship size cap and may be added. */
 export function isTestPath(path: string): boolean {
   if (/\.(?:test|spec|e2e-spec)\.[cm]?[jt]sx?$|(?:^|\/)__tests__\//.test(path))
     return true;
-  return /(?:^|\/)e2e\//.test(path) && !isE2eRunnerScript(path);
+  return (
+    /(?:^|\/)e2e\//.test(path) &&
+    !isE2eRunnerScript(path) &&
+    !E2E_RUN_SELECTION_MODULES.includes(path)
+  );
 }
 
 function isChangesetPath(path: string): boolean {

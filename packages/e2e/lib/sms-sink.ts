@@ -9,10 +9,12 @@ import { randomInt } from "node:crypto";
  * `GET /api/messages?to=<phone>&after=<iso>&event=<substr>` newest-first. The
  * suite reads the REAL delivered code there — never from an api response.
  *
- * The root is `E2E_SMS_SINK_URL` and nothing else. The stage box runs a sink too
- * (`infra/deploy/compose/stg-infra/compose.yml`), but its Caddy publishes only
- * Mailpit, so a slot run has no root to read and the `@sms-reset` scenarios
- * name their skip (`steps/password-reset-sms.steps.ts`) instead of guessing one.
+ * The root is `E2E_SMS_SINK_URL` and nothing else; without it the `@sms-reset`
+ * scenarios name their skip (`steps/password-reset-sms.steps.ts`) instead of
+ * guessing one. On the stage box the sink's GET read API is published behind
+ * the stand gate (`infra/deploy/compose/stg-infra/Caddyfile`, #2878) and
+ * `tools/staging/e2e-stage.mjs` sets the root, so the read carries the stand's
+ * basic-auth pair (`E2E_HTTP_USER` / `E2E_HTTP_PASS`) the way Mailpit's does.
  */
 export function smsSinkUrl(): string | null {
   const root = process.env.E2E_SMS_SINK_URL?.trim();
@@ -70,10 +72,22 @@ export async function smsSinkMessages(
   afterIso: string,
   event?: string,
 ): Promise<SinkMessage[]> {
+  const user = process.env.E2E_HTTP_USER ?? "";
+  const password = process.env.E2E_HTTP_PASS ?? "";
   const response = await fetch(
     `${root}/api/messages?to=${encodeURIComponent(phone)}` +
       `&after=${encodeURIComponent(afterIso)}` +
       (event ? `&event=${encodeURIComponent(event)}` : ""),
+    {
+      headers:
+        user && password
+          ? {
+              authorization: `Basic ${Buffer.from(`${user}:${password}`).toString("base64")}`,
+            }
+          : {},
+      // A redirect would carry the pair to wherever it points.
+      redirect: "error",
+    },
   );
   if (!response.ok)
     throw new Error(`SMS sink answered HTTP ${response.status}`);

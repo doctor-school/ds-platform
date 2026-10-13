@@ -728,10 +728,10 @@ budget (3 SMS an hour) on the second run and is answered with no SMS once an
 earlier run's account holds it confirmed (EARS-51).
 
 The SMS sink root is `E2E_SMS_SINK_URL`; unset, every `@sms-reset` scenario
-skips with a named reason. The stage box runs a sink but its Caddy publishes
-only Mailpit, so a slot run skips these scenarios (stage publishes no sink yet —
-#2878); run them on a local dev stand
-(`E2E_SMS_SINK_URL=http://<stand host>:8090`). The sibling `@sms-reset`
+skips with a named reason. A stage slot run sets it to the box's gated sink
+read API (`https://sms-sink.<base domain>`, `tools/staging/e2e-stage.mjs`, #2878)
+and the read carries the stand's `E2E_HTTP_USER` / `E2E_HTTP_PASS` pair; on a
+local dev stand use `E2E_SMS_SINK_URL=http://<stand host>:8090`. The sibling `@sms-reset`
 scenarios — the indistinguishable unknown/unconfirmed-phone answer with its
 50 ms timing clause, EARS-56 counter and absent ledger row, the mirror/IdP
 mismatch, and the email reset of a phone-holding account — are not bound here;

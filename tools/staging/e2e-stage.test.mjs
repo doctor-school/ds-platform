@@ -90,8 +90,19 @@ describe("slotE2eEnv", () => {
         E2E_DOCTOR_URL: "https://doctor-main.stage.doctor.school",
         E2E_HTTP_USER: "stage",
         E2E_HTTP_PASS: "s3cret",
+        E2E_SMS_SINK_URL: "https://sms-sink.stage.doctor.school",
       },
     );
+  });
+
+  it("hands every slot the one shared SMS sink host, so @sms-reset runs instead of skipping (#2878)", () => {
+    const env = slotE2eEnv({
+      slot: "pr-7",
+      baseDomain: "stage.doctor.school",
+      user: "stage",
+      password: "x",
+    });
+    assert.equal(env.E2E_SMS_SINK_URL, "https://sms-sink.stage.doctor.school");
   });
 
   it("points the portal env at the `academy-` host, never at a `portal-` one", () => {

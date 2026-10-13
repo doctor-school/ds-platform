@@ -139,7 +139,8 @@ async function settledMailbox(
 
 Before({ tags: "@sms-reset" }, async ({ $testInfo }) => {
   // The stage box runs a sink but publishes only Mailpit, so a slot run cannot
-  // read the delivered SMS; it names the skip rather than faking the code.
+  // read the delivered SMS (stage publishes no sink yet — #2878); it names the
+  // skip rather than faking the code.
   $testInfo.skip(
     smsSinkUrl() === null,
     "@sms-reset: E2E_SMS_SINK_URL names no SMS sink this run can read",
@@ -275,6 +276,9 @@ Then(
     );
     expect(delivered, "exactly one SMS after the request").toHaveLength(1);
     expect(resetSmsCode(delivered[0]!), "it is the reset code").toBe(
+      state.code,
+    );
+    expect(delivered[0]!.body, "the delivered text carries the code").toContain(
       state.code,
     );
   },

@@ -247,27 +247,35 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       When the visitor applies the new kind in the facet panel
       Then the feed lists that event under the applied kind
 
-    @EARS-17 @failure @editor-write
-    Scenario: A kind an editor retires is no longer offered
+    # Read under «Amendment — 2026-10-13 — a retired kind stays a filter value».
+    @EARS-17 @EARS-7 @edge @editor-write
+    Scenario: A kind an editor retires stays a filter value while its events are in the reading
       Given an editor publishes a new event kind with a long title in the admin
       And the editor publishes a doctors-audience event of that kind starting within the hour
       And the editor retires that kind in the admin
       And a visitor with no account
       And the viewport is 1440 wide
       When the visitor opens «События»
-      Then the kind facet does not offer the retired kind
+      Then the kind facet offers the retired kind
+      When the visitor applies the retired kind in the facet panel
+      Then the feed lists that event under the applied kind
 
     # The run narrows the feed by name to its own events, so the kind facet counts exactly
-    # the kinds this run published — the golden kinds are neither counted nor touched.
-    @EARS-17 @happy @editor-write
-    Scenario: The kind facet and the card label hold 9 and then 3 published kinds at both breakpoints
+    # the kinds this run's listed events carry — the golden kinds are neither counted nor
+    # touched. Read under «Amendment — 2026-10-13 — a retired kind stays a filter value»:
+    # retiring a kind keeps it offered while its events are listed.
+    @EARS-17 @EARS-7 @happy @editor-write
+    Scenario: The kind facet and the card label hold 9 and then 3 kinds at both breakpoints
       Given an editor publishes 9 new event kinds in the admin, each carried by a doctors-audience event of this run starting within the hour
       And a visitor with no account
       When the visitor opens «События» narrowed by name to this run's events
-      Then at 1440 and at 390 wide the kind facet holds exactly the 9 published kinds, and every card holds its kind label, without breaking the panel, the card or the screen grid
+      Then at 1440 and at 390 wide the kind facet holds exactly the 9 kinds of this run's listed events, and every card holds its kind label, without breaking the panel, the card or the screen grid
       When the editor retires 6 of those kinds in the admin
       And the visitor opens «События» narrowed by name to this run's events
-      Then at 1440 and at 390 wide the kind facet holds exactly the 3 published kinds, and every card holds its kind label, without breaking the panel, the card or the screen grid
+      Then at 1440 and at 390 wide the kind facet holds exactly the 9 kinds of this run's listed events, and every card holds its kind label, without breaking the panel, the card or the screen grid
+      When the editor takes the events of the retired kinds off the storefronts in the admin
+      And the visitor opens «События» narrowed by name to this run's events
+      Then at 1440 and at 390 wide the kind facet holds exactly the 3 kinds of this run's listed events, and every card holds its kind label, without breaking the panel, the card or the screen grid
 
     @EARS-18 @happy
     Scenario: Both storefronts mount one events module and differ only in the cited rows

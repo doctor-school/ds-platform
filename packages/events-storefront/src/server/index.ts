@@ -12,6 +12,7 @@ export { fetchParticipationCta } from "./participation-cta";
 export { type MyEventsResult, fetchMyEvents } from "./my-events";
 export {
   type ReadRequest,
+  fetchEventKindTitles,
   fetchEventsFeed,
   fetchEventsLive,
   fetchMonthCounts,

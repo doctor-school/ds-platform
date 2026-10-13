@@ -399,6 +399,71 @@ describe("EventsFilter — the doctor facet set (EARS-7, filterSet)", () => {
     expect(screen.queryByText(/ghost-id/)).not.toBeInTheDocument();
   });
 
+  it("EARS-7.1: an applied kind the reading does not offer stays a selected chip after the offered ones, under the name the host gives it", () => {
+    renderPanel({
+      options: {
+        ...OPTIONS,
+        appliedNames: { kind: [{ id: "master", label: "Мастер-класс" }] },
+      },
+      applied: { ...EMPTY, kind: ["webinar", "master"] },
+    });
+    const kinds = within(group("Вид события")).getAllByRole("button");
+    expect(kinds.map((chip) => chip.textContent)).toEqual([
+      "Вебинар",
+      "Конгресс",
+      "Встреча клуба",
+      "Мастер-класс",
+    ]);
+    expect(kinds[3]).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Применено: 2")).toBeInTheDocument();
+  });
+
+  it("EARS-7.1: the block carries no copy of its own for an applied chip value: one the host does not name is shown by its value, never hidden while it counts", () => {
+    renderPanel({ applied: { ...EMPTY, kind: ["master"] } });
+    expect(
+      within(group("Вид события")).getByRole("button", {
+        name: "master",
+        pressed: true,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Применено: 1")).toBeInTheDocument();
+  });
+
+  it("EARS-7.1: removing an applied kind the reading does not offer drops it from the applied set", async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderPanel({
+      options: {
+        ...OPTIONS,
+        appliedNames: { kind: [{ id: "master", label: "Мастер-класс" }] },
+      },
+      applied: { ...EMPTY, kind: ["webinar", "master"] },
+    });
+    await user.click(
+      within(group("Вид события")).getByRole("button", {
+        name: "Мастер-класс",
+      }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith({ ...EMPTY, kind: ["webinar"] });
+  });
+
+  it("EARS-7.1: the kind facet stays while an applied kind is set even when the read offers no kind at all", () => {
+    renderPanel({
+      options: {
+        ...OPTIONS,
+        kind: [],
+        appliedNames: { kind: [{ id: "master", label: "Мастер-класс" }] },
+      },
+      applied: { ...EMPTY, kind: ["master"] },
+    });
+    expect(
+      within(group("Вид события")).getByRole("button", {
+        name: "Мастер-класс",
+        pressed: true,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Применено: 1")).toBeInTheDocument();
+  });
+
   it("EARS-7.1: the НМО switch label is bold, as the canvas draws it", () => {
     renderPanel();
     expect(screen.getByText("Только с НМО").closest("label")).toHaveClass(

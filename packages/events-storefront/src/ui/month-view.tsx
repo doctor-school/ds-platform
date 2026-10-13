@@ -5,7 +5,11 @@ import type { MonthBroadcastEntry, RawQueryRecord } from "@ds/schemas";
 
 import { LISTING_COPY, eventNounOf } from "../copy/listing-copy";
 import { type EventsStorefrontHostConfig, eventPageHref } from "../host-config";
-import { type SpecialtyChoice, hasAppliedFacets } from "../model/facets";
+import {
+  type KindTitle,
+  type SpecialtyChoice,
+  hasAppliedFacets,
+} from "../model/facets";
 import {
   type BlockRead,
   type EventsFeedHorizon,
@@ -38,7 +42,11 @@ import type {
   EventsBlockRetryInput,
 } from "./events-block-retry";
 import { EmptyFeedBlock } from "./feed-list";
-import { type SpecialtyBook, readEmptyFeedState } from "./feed-sections";
+import {
+  type KindBook,
+  type SpecialtyBook,
+  readEmptyFeedState,
+} from "./feed-sections";
 import {
   MonthCalendarDesktop,
   type MonthHrefs,
@@ -67,6 +75,7 @@ export async function MonthView({
   month,
   feed,
   specialties,
+  kinds,
   request,
   retry,
 }: {
@@ -76,6 +85,8 @@ export async function MonthView({
   feed: Promise<BlockRead<EventsFeedPage>>;
   /** The specialty book — read only to name a picked specialty in the empty state. */
   specialties: Promise<readonly SpecialtyChoice[]>;
+  /** The kind dictionary — names an applied kind the read does not offer in the empty state (019 EARS-7). */
+  kinds: Promise<readonly KindTitle[]>;
   request: ReadRequest;
   /** The host's block retry: the failed grid's «Повторить» re-runs the month read alone. */
   retry: EventsBlockRetryAction;
@@ -163,6 +174,7 @@ export async function MonthView({
     defaultScopeEmpty: read.ok && read.value.defaultScopeEmpty === true,
     entries,
     specialties: () => specialties,
+    kinds: () => kinds,
     request,
     retry,
   });
@@ -193,6 +205,7 @@ export async function MonthGridBlock({
   defaultScopeEmpty,
   entries,
   specialties,
+  kinds,
   request,
   retry,
 }: {
@@ -211,6 +224,8 @@ export async function MonthGridBlock({
   entries: BlockRead<MonthBroadcastEntry[]>;
   /** The specialty book, read only when the empty state names a specialty. */
   specialties: SpecialtyBook;
+  /** The kind dictionary, read only when the empty state names an applied kind. */
+  kinds: KindBook;
   request: ReadRequest;
   retry: EventsBlockRetryAction;
 }) {
@@ -232,6 +247,7 @@ export async function MonthGridBlock({
           raw,
           facetOptions,
           specialties,
+          kinds,
           request,
           defaultScopeEmpty,
         )

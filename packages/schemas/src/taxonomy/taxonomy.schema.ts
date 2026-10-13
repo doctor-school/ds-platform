@@ -637,8 +637,10 @@ export const PublicEventKindSchema = EventKindRefSchema;
 export type PublicEventKind = z.infer<typeof PublicEventKindSchema>;
 
 /**
- * `GET /v1/public/event-kinds` — every published, non-retired kind, ordered by
- * title. A small editorial dictionary, so one unpaged list.
+ * `GET /v1/public/event-kinds` — every published or retired kind, ordered by
+ * title, so a retired kind keeps its name wherever the storefront names it
+ * (Amendment — 2026-10-13); never a draft, and no status is exposed. A small
+ * editorial dictionary, so one unpaged list.
  */
 export const PublicEventKindListSchema = z
   .object({ data: z.array(PublicEventKindSchema) })

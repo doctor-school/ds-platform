@@ -68,8 +68,13 @@ function useFacetSource({
   const recovered = useRecoveredFeedRead();
   if (recovered === null)
     return { options, optionBlock, recoveredMatching: null, defaultScopeEmpty };
+  // The retried read re-derives the offered values; the names of applied
+  // values it does not offer (the kind dictionary) are the page's (EARS-7).
+  const derived = filterOptionsOf(filterSet, recovered.facetOptions, specialties);
   return {
-    options: filterOptionsOf(filterSet, recovered.facetOptions, specialties),
+    options: options.appliedNames
+      ? { ...derived, appliedNames: options.appliedNames }
+      : derived,
     optionBlock: recovered.facetOptions,
     recoveredMatching: recovered.matching,
     defaultScopeEmpty: recovered.defaultScopeEmpty === true,

@@ -1,0 +1,7 @@
+---
+"@ds/api": major
+"@ds/design-system": minor
+"@ds/events-storefront": major
+---
+
+012 EARS-28 / 019 EARS-7, EARS-17 (Amendment — 2026-10-13, owner decision «Даже если вид снят с публикации, это не повод его исключать из фильтров.»): a retired event kind stays a storefront filter value. `@ds/api`: `GET /v1/public/event-kinds` now serves published and retired kinds (same `{ id, slug, title }`, no status, never a draft), and the doctor feed's kind facet offers a retired kind under its title while its events are in the reading — breaking for any consumer that read the list as «published only». `@ds/design-system`: `EventsFilterOptions` gains the optional `appliedNames`, so an applied «Формат» / «Вид события» value the reading does not offer stays a selected, removable chip under the name the host gives it. Behaviour change for a host that passes no `appliedNames`: such an applied value is now drawn as a chip labelled by its raw id (before: no chip, yet counted), and a chip facet with no options now renders while it has an applied value. `@ds/events-storefront`: an applied kind is always named by its title from the public dictionary (panel and empty state); a kind slug the dictionary does not carry is dropped before any read, like a format outside the fixed set; adds `fetchEventKindTitles` (`null` on a failed read), `KindTitle`, `withKnownKinds`; `FacetColumn`, `FeedSection` and `MonthView` take the required `kinds` dictionary.

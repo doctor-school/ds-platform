@@ -1976,10 +1976,13 @@ const EVENTS_FILTER_PAGE = 20;
 function EventsFilterDemo({
   host,
   initial,
+  appliedNames,
   showHeader,
 }: {
   host: EventsFilterHost;
   initial?: Partial<AppliedFacets>;
+  /** Names the host gives applied values the reading does not offer. */
+  appliedNames?: EventsFilterOptions["appliedNames"];
   showHeader?: boolean;
 }) {
   const [applied, setApplied] = useState<AppliedFacets>({
@@ -2004,6 +2007,7 @@ function EventsFilterDemo({
     host === "doctor"
       ? {
           ...base,
+          ...(appliedNames ? { appliedNames } : {}),
           city: [
             ...(base.city ?? []).filter((o) => applied.city.includes(o.id)),
             ...cityPool.slice(0, EVENTS_FILTER_PAGE * cityPages),
@@ -2082,6 +2086,17 @@ function EventsFilterSection() {
                 direction: ["arthro"],
                 nmoOnly: true,
               }}
+            />
+          )}
+        />
+      </SubRow>
+      <SubRow label='host="doctor" — an applied kind with no event in this reading (e.g. a retired kind): a selected chip under its own title after the offered ones, removable, counted'>
+        <ThemePair
+          render={() => (
+            <EventsFilterDemo
+              host="doctor"
+              initial={{ kind: ["webinar", "lecture"] }}
+              appliedNames={{ kind: [{ id: "lecture", label: "Лекция" }] }}
             />
           )}
         />

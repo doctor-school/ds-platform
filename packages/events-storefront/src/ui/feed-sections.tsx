@@ -2,6 +2,7 @@ import { Skeleton } from "@ds/design-system/skeleton";
 import {
   type MyEventItem,
   type RawQueryRecord,
+  rawQueryList,
   rawQueryScalar,
 } from "@ds/schemas";
 
@@ -20,6 +21,7 @@ import {
   showMoreLabel,
 } from "../model/feed";
 import {
+  type KindTitle,
   type SpecialtyChoice,
   type SpecialtyScopeKind,
   specialtyScopeKindOf,
@@ -68,22 +70,31 @@ export async function readMyEvents(
 export type SpecialtyBook = () => Promise<readonly SpecialtyChoice[]>;
 
 /**
+ * The kind dictionary, read on demand: only an empty state under an applied
+ * kind reads it — it names a kind the read does not offer (019 EARS-7).
+ */
+export type KindBook = () => Promise<readonly KindTitle[]>;
+
+/**
  * The empty state of either view (019 EARS-9, #2786): each applied condition in
  * the canvas order is counted by a feed read of the same tense without it —
  * one read at a time, stopping at the first that finds events; a failed read
  * counts nothing for its condition. A picked specialty is named from the
- * specialty book. Made only for an empty reading.
+ * specialty book, an applied kind the read does not offer from the kind
+ * dictionary (019 EARS-7). Made only for an empty reading.
  */
 export async function readEmptyFeedState(
   config: EventsStorefrontHostConfig,
   query: RawQueryRecord,
   titles: FeedFacetOptions,
   specialties: SpecialtyBook,
+  kinds: KindBook,
   request: ReadRequest,
   /** The page read's 019 LD-9 fact — this visitor's default scope. */
   defaultScopeEmpty = false,
 ): Promise<EmptyFeedState> {
   const book = await specialties();
+  const kindBook = (rawQueryList(query.kind) ?? []).length > 0 ? await kinds() : [];
   return emptyFeedState(query, {
     defaultScopeEmpty,
     listing: config.routes.listing,
@@ -91,6 +102,7 @@ export async function readEmptyFeedState(
     copy: FEED_COPY,
     filterSet: config.filterSet,
     titles,
+    kinds: kindBook,
     specialtyName: (code) => book.find((choice) => choice.code === code)?.name,
     matching: async (without) => {
       const read = await fetchEventsFeed(config, without, request);
@@ -284,6 +296,7 @@ export async function FeedSection({
   feed,
   mine,
   specialties,
+  kinds,
   request,
   retry,
 }: {
@@ -293,6 +306,8 @@ export async function FeedSection({
   mine: Promise<BlockRead<readonly MyEventItem[] | null>>;
   /** The specialty book — read only to name a picked specialty in the empty state. */
   specialties: Promise<readonly SpecialtyChoice[]>;
+  /** The kind dictionary — names an applied kind the read does not offer in the empty state (019 EARS-7). */
+  kinds: Promise<readonly KindTitle[]>;
   request: ReadRequest;
   /** The host's block retry: the failed feed's «Повторить» re-runs the feed read alone. */
   retry: EventsBlockRetryAction;
@@ -307,6 +322,7 @@ export async function FeedSection({
         ? registered.value.map((event) => event.slug)
         : [],
     specialties: () => specialties,
+    kinds: () => kinds,
     request,
     retry,
   });
@@ -323,6 +339,7 @@ export async function FeedBlock({
   read,
   registeredSlugs,
   specialties,
+  kinds,
   request,
   retry,
 }: {
@@ -331,6 +348,7 @@ export async function FeedBlock({
   read: BlockRead<EventsFeedPage>;
   registeredSlugs: readonly string[];
   specialties: SpecialtyBook;
+  kinds: KindBook;
   request: ReadRequest;
   retry: EventsBlockRetryAction;
 }) {
@@ -360,6 +378,7 @@ export async function FeedBlock({
         query,
         page.facetOptions,
         specialties,
+        kinds,
         request,
         page.defaultScopeEmpty === true,
       )

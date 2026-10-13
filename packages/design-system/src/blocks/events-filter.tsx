@@ -159,6 +159,13 @@ export interface EventsFilterOptions {
   project?: EventsFilterOption[];
   expert?: EventsFilterOption[];
   topic?: EventsFilterOption[];
+  /**
+   * Names of applied «Формат» / «Вид события» values the facet does not offer
+   * in this reading (a kind with no event under the current tense or scope).
+   * Such a value stays a selected chip under this name (019 EARS-7); the host
+   * names every value it applies, so the value itself is only a last resort.
+   */
+  appliedNames?: { format?: EventsFilterOption[]; kind?: EventsFilterOption[] };
 }
 
 /** The facets realised as a Combobox + removable chips. */
@@ -401,13 +408,22 @@ function ChipFacet({
   label,
   options,
   values,
+  names,
   onToggle,
 }: {
   label: string;
   options: EventsFilterOption[];
   values: string[];
+  /** Names of applied values `options` does not carry. */
+  names: EventsFilterOption[];
   onToggle: (id: string) => void;
 }) {
+  // An applied value the facet does not offer stays a selected chip after
+  // the offered ones, so every applied value «Применено: N» counts is on
+  // screen and removable (019 EARS-7).
+  const unoffered = values.filter(
+    (id) => !options.some((option) => option.id === id),
+  );
   return (
     <div role="group" aria-label={label} className="flex flex-col gap-3">
       <FacetCaption>{label}</FacetCaption>
@@ -419,6 +435,11 @@ function ChipFacet({
             onClick={() => onToggle(option.id)}
           >
             {option.label}
+          </FilterChip>
+        ))}
+        {unoffered.map((id) => (
+          <FilterChip key={id} selected onClick={() => onToggle(id)}>
+            {names.find((name) => name.id === id)?.label ?? id}
           </FilterChip>
         ))}
       </div>
@@ -550,13 +571,15 @@ export function EventsFilter({
 
   const chipFacet = (facet: "format" | "kind") => {
     const label = labels[facet];
-    const list = options[facet];
-    if (!label || !list || list.length === 0) return null;
+    const list = options[facet] ?? [];
+    const values = applied[facet];
+    if (!label || (list.length === 0 && values.length === 0)) return null;
     return (
       <ChipFacet
         label={label}
         options={list}
-        values={applied[facet]}
+        values={values}
+        names={options.appliedNames?.[facet] ?? []}
         onToggle={(id) =>
           onChange({ ...applied, [facet]: toggle(applied[facet], id) })
         }

@@ -3,11 +3,20 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { permanentRedirect } from "next/navigation";
 import { Link as DsLink } from "@ds/design-system/link";
-import { type RawQueryRecord, rawQueryScalar } from "@ds/schemas";
+import {
+  type RawQueryRecord,
+  rawQueryList,
+  rawQueryScalar,
+} from "@ds/schemas";
 
 import { LISTING_COPY, eventNounOf } from "../copy/listing-copy";
 import type { EventsStorefrontHostConfig } from "../host-config";
-import { type SpecialtyChoice, filterOptionsOf } from "../model/facets";
+import {
+  type KindTitle,
+  type SpecialtyChoice,
+  filterOptionsOf,
+  withKnownKinds,
+} from "../model/facets";
 import {
   type BlockRead,
   type EventsFeedPage,
@@ -32,6 +41,7 @@ import {
 import { dotWeeksOf } from "../model/month-view";
 import {
   type ReadRequest,
+  fetchEventKindTitles,
   fetchEventsFeed,
   fetchMonthEntries,
   fetchSpecialtyChoices,
@@ -64,14 +74,19 @@ interface PanelInput {
   raw: RawQueryRecord;
   feed: FeedRead;
   specialties: Promise<SpecialtyChoice[]>;
+  /** The kind dictionary — read only while the URL applies a kind. */
+  kinds: Promise<KindTitle[]>;
 }
 
-/** The page's facet options and labels: the feed read's option block + the specialty book. */
-async function panelOptions({ config, feed, specialties }: PanelInput) {
-  const [read, book] = await Promise.all([feed, specialties]);
+/**
+ * The page's facet options and labels: the feed read's option block, the
+ * specialty book and the kind dictionary.
+ */
+async function panelOptions({ config, feed, specialties, kinds }: PanelInput) {
+  const [read, book, kindBook] = await Promise.all([feed, specialties, kinds]);
   const block = read.ok ? read.value.facetOptions : {};
   return {
-    options: filterOptionsOf(config.filterSet, block, book),
+    options: filterOptionsOf(config.filterSet, block, book, kindBook),
     optionBlock: block,
     specialties: book,
     // 019 LD-9: the read fell back to every specialty, and the panel shows it.
@@ -201,10 +216,20 @@ export async function EventsListingPage({
    */
   retry: EventsBlockRetryAction;
 }) {
-  const raw = await searchParams;
+  const requested = await searchParams;
   const listing = config.routes.listing;
-  const canonical = canonicalFeedRedirect(listing, raw);
+  const canonical = canonicalFeedRedirect(listing, requested);
   if (canonical !== null) permanentRedirect(canonical);
+  // The kind dictionary (published and retired kinds) is read only while the
+  // URL applies a kind: it names an applied kind the read does not offer, and
+  // a slug it does not carry is dropped before any read, like a format outside
+  // the fixed set (019 EARS-7, 012 Amendment — 2026-10-13).
+  const kindBook =
+    config.filterSet === "doctor" &&
+    (rawQueryList(requested.kind) ?? []).length > 0
+      ? await fetchEventKindTitles()
+      : null;
+  const raw = withKnownKinds(requested, kindBook);
 
   const view = pageViewOf(raw);
   const tense = feedTenseOf(raw);
@@ -218,6 +243,7 @@ export async function EventsListingPage({
     config.filterSet === "doctor"
       ? fetchSpecialtyChoices()
       : Promise.resolve([]);
+  const kinds: Promise<KindTitle[]> = Promise.resolve(kindBook ?? []);
   const mine = readMyEvents(config.contentSet.myEventsPath, session);
 
   const switchHref = viewHref(
@@ -228,7 +254,7 @@ export async function EventsListingPage({
   const switchLabel =
     view === "month" ? LISTING_COPY.view.toFeed : LISTING_COPY.view.toMonth;
   const { subline } = config.headerCopy;
-  const panel: PanelInput = { config, raw, feed, specialties };
+  const panel: PanelInput = { config, raw, feed, specialties, kinds };
 
   // A failed feed read recovered by the day feed's «Повторить» fills what the
   // page derives from it — facets, «Показать N», the subline (EARS-9, #2832).
@@ -311,6 +337,7 @@ export async function EventsListingPage({
                   month={pageMonthOf(raw)}
                   feed={feed}
                   specialties={specialties}
+                  kinds={kinds}
                   request={request}
                   retry={retry}
                 />
@@ -338,6 +365,7 @@ export async function EventsListingPage({
                     feed={feed}
                     mine={mine}
                     specialties={specialties}
+                    kinds={kinds}
                     request={request}
                     retry={retry}
                   />

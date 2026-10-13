@@ -218,7 +218,10 @@ whose retire already landed). The 3/9 scenario publishes 9 kinds, each carried b
 one event whose title holds a per-run token, opens the feed narrowed by that token
 (`q`), so the kind facet counts exactly this run's kinds, checks the panel, the
 sheet and every card at 1440 and 390 by layout (option count, boxes inside the
-panel/sheet/viewport, no horizontal overflow), then retires 6 and checks the 3. On
+panel/sheet/viewport, no horizontal overflow), then retires 6 and checks that all 9
+are still offered (a retired kind stays a filter value while its events are listed —
+019 «Amendment — 2026-10-13»), then takes those 6 kinds' events off the storefronts
+and checks the 3. On
 a local stand the api runs with bot protection off and the slot's test-runner
 `RATE_LIMIT_*` ceilings (`infra/deploy/compose/slot/compose.yml`); otherwise the
 admin sign-ins of a whole-feature run trip the per-IP auth window.

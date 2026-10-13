@@ -1636,6 +1636,7 @@ After({ tags: "@editor-write" }, async ({ world }) => {
       );
     }
     for (const event of editor.run?.events ?? []) {
+      if (event.hidden) continue;
       await attempt(`event ${event.id}`, () =>
         retireEventFromStorefronts(editor.page, event.id),
       );
@@ -1713,7 +1714,10 @@ function editorEventOf(world: StepWorld): { title: string } {
   return event;
 }
 
-Then("the kind facet offers the new kind", async ({ page, world }) => {
+// «new» right after the publish; «retired» after the editor retired it — 019
+// «Amendment — 2026-10-13»: a retired kind stays offered while its events are in
+// the reading.
+Then("the kind facet offers the new/retired kind", async ({ page, world }) => {
   const { kind } = editorKindOf(world);
   await expect(
     kindFacet(page).getByRole("button", { name: kind.title, exact: true }),
@@ -1747,7 +1751,7 @@ Then(
 );
 
 When(
-  "the {word} applies the new kind in the facet panel",
+  "the {word} applies the new/retired kind in the facet panel",
   async ({ page, world }, _actor: string) => {
     const { kind } = editorKindOf(world);
     await kindFacet(page)
@@ -1770,17 +1774,6 @@ Then(
     for (let index = 0; index < count; index += 1) {
       await expect(cards.nth(index)).toContainText(kind.title);
     }
-  },
-);
-
-Then(
-  "the kind facet does not offer the retired kind",
-  async ({ page, world }) => {
-    const { kind } = editorKindOf(world);
-    await expect(kindFacet(page)).toBeVisible();
-    await expect(
-      filterPanel(page).getByRole("button", { name: kind.title, exact: true }),
-    ).toHaveCount(0);
   },
 );
 
@@ -1863,6 +1856,21 @@ When(
 );
 
 When(
+  "the editor takes the events of the retired kinds off the storefronts in the admin",
+  async ({ world }) => {
+    const { page, run } = kindSetOf(world);
+    const retired = new Set(
+      run.kinds.filter((kind) => kind.retired).map((kind) => kind.title),
+    );
+    for (const event of run.events) {
+      if (event.hidden || !retired.has(event.kindTitle)) continue;
+      await retireEventFromStorefronts(page, event.id);
+      event.hidden = true;
+    }
+  },
+);
+
+When(
   "the {word} opens «События» narrowed by name to this run's events",
   async ({ page, host, world }, _actor: string) => {
     const { run } = kindSetOf(world);
@@ -1880,7 +1888,7 @@ async function boxOf(locator: Locator, what: string) {
 }
 
 /**
- * The kind facet group holds exactly the published kinds: one button per kind,
+ * The kind facet group holds exactly the given kinds: one button per kind,
  * every one inside the panel's width, with no horizontal overflow of the panel.
  */
 async function expectKindFacetHolds(
@@ -1891,7 +1899,7 @@ async function expectKindFacetHolds(
   const group = panel.getByRole("group", { name: "Вид события" });
   await expect(group, `${what}: the kind facet`).toBeVisible();
   const buttons = group.getByRole("button");
-  await expect(buttons, `${what}: one option per published kind`).toHaveCount(
+  await expect(buttons, `${what}: one option per kind in the reading`).toHaveCount(
     kinds.length,
   );
   for (const title of kinds) {
@@ -1922,7 +1930,8 @@ async function expectCardsHoldTheirKinds(
   what: string,
 ): Promise<void> {
   const cards = feedCards(page);
-  for (const event of run.events) {
+  const listed = run.events.filter((event) => !event.hidden);
+  for (const event of listed) {
     const card = cards.filter({ hasText: event.title });
     await expect(card, `${what}: the card of «${event.title}»`).toHaveCount(1);
     await expect(card).toContainText(event.kindTitle);
@@ -1938,18 +1947,24 @@ async function expectCardsHoldTheirKinds(
     ).toBeLessThanOrEqual(page.viewportSize()!.width + 0.5);
   }
   await expect(cards, `${what}: only this run's events are listed`).toHaveCount(
-    run.events.length,
+    listed.length,
   );
   await expectNoOverflow(page.locator("html"), `${what}: the screen grid`);
 }
 
 Then(
-  "at 1440 and at 390 wide the kind facet holds exactly the {int} published kinds, and every card holds its kind label, without breaking the panel, the card or the screen grid",
+  "at 1440 and at 390 wide the kind facet holds exactly the {int} kinds of this run's listed events, and every card holds its kind label, without breaking the panel, the card or the screen grid",
   async ({ page, world }, count: number) => {
     const { run } = kindSetOf(world);
-    const kinds = run.kinds
-      .filter((kind) => !kind.retired)
-      .map((kind) => kind.title);
+    // 019 «Amendment — 2026-10-13»: the facet offers every kind — published or
+    // retired — that a listed event carries, and only those.
+    const kinds = [
+      ...new Set(
+        run.events
+          .filter((event) => !event.hidden)
+          .map((event) => event.kindTitle),
+      ),
+    ];
     expect(kinds).toHaveLength(count);
 
     await page.setViewportSize({ width: 1440, height: 900 });

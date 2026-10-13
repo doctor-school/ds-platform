@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   fetchEventsLive: vi.fn(),
   fetchMyEvents: vi.fn(),
   fetchSpecialtyChoices: vi.fn(),
+  fetchEventKindTitles: vi.fn(),
   fetchMonthEntries: vi.fn(),
   fetchMonthCounts: vi.fn(),
 }));
@@ -43,6 +44,7 @@ vi.mock("../server", async (importOriginal) => ({
   fetchEventsLive: mocks.fetchEventsLive,
   fetchMyEvents: mocks.fetchMyEvents,
   fetchSpecialtyChoices: mocks.fetchSpecialtyChoices,
+  fetchEventKindTitles: mocks.fetchEventKindTitles,
   fetchMonthEntries: mocks.fetchMonthEntries,
   fetchMonthCounts: mocks.fetchMonthCounts,
 }));
@@ -154,6 +156,7 @@ const EMPTY_PAGE: EventsFeedPage = {
   remaining: 0,
   matching: 0,
 };
+const NO_KINDS = Promise.resolve([]);
 
 afterEach(cleanup);
 beforeEach(() => {
@@ -163,6 +166,7 @@ beforeEach(() => {
   mocks.fetchEventsLive.mockResolvedValue({ ok: true, value: [] });
   mocks.fetchEventsFeed.mockResolvedValue({ ok: true, value: PAGE });
   mocks.fetchSpecialtyChoices.mockResolvedValue([]);
+  mocks.fetchEventKindTitles.mockResolvedValue([]);
 });
 
 /** The FeedFrame element the one page returns in its feed view, inside the page's feed-read scope (#2832). */
@@ -211,6 +215,50 @@ function blocks(element: ReactElement<{ children: ReactNode }>) {
 }
 
 describe("<EventsListingPage> — the feed view of both storefronts", () => {
+  it("EARS-7: the kind dictionary is read only while the doctor URL applies a kind", async () => {
+    await frame(DOCTOR);
+    expect(mocks.fetchEventKindTitles).not.toHaveBeenCalled();
+    await frame(DOCTOR, { kind: "master-klass" });
+    expect(mocks.fetchEventKindTitles).toHaveBeenCalledTimes(1);
+  });
+
+  it("EARS-7: an applied kind no published or retired kind carries is dropped before any read, like an unknown format; a retired one is kept", async () => {
+    mocks.fetchEventKindTitles.mockResolvedValue([
+      { slug: "master-klass", title: "Мастер-класс" },
+    ]);
+    await frame(DOCTOR, { kind: "ghost", q: "сон" });
+    const [, read] = mocks.fetchEventsFeed.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(read).toEqual({ q: "сон" });
+
+    mocks.fetchEventsFeed.mockClear();
+    await frame(DOCTOR, { kind: "master-klass" });
+    const [, kept] = mocks.fetchEventsFeed.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(kept).toEqual({ kind: "master-klass" });
+  });
+
+  it("EARS-7: a failed kind-dictionary read drops no applied kind", async () => {
+    mocks.fetchEventKindTitles.mockResolvedValue(null);
+    await frame(DOCTOR, { kind: "master-klass" });
+    const [, read] = mocks.fetchEventsFeed.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(read).toEqual({ kind: "master-klass" });
+  });
+
+  it("EARS-7: an applied retired kind with no event in this reading is a selected chip under its own title on the panel", async () => {
+    render(
+      await FacetColumn({
+        config: DOCTOR,
+        raw: { kind: ["master-klass"] },
+        feed: Promise.resolve({ ok: true, value: PAGE }),
+        specialties: Promise.resolve([]),
+        kinds: Promise.resolve([{ slug: "master-klass", title: "Мастер-класс" }]),
+      }),
+    );
+    const kinds = within(screen.getByRole("group", { name: "Вид события" }));
+    expect(kinds.getByRole("button", { name: "Мастер-класс", pressed: true })).toBeInTheDocument();
+    expect(screen.queryByText("master-klass")).not.toBeInTheDocument();
+    expect(screen.getByText("Применено: 1")).toBeInTheDocument();
+  });
+
   it.each([
     ["doctor", DOCTOR],
     ["Academy", ACADEMY],
@@ -274,6 +322,7 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
           feed: Promise.resolve({ ok: false as const }),
           mine,
           specialties: NO_SPECIALTIES,
+          kinds: NO_KINDS,
           request: REQUEST,
           retry: RETRY,
         })}
@@ -305,6 +354,7 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
         feed: Promise.resolve({ ok: true as const, value: PAGE }),
         mine: Promise.resolve({ ok: true, value: null }),
         specialties: NO_SPECIALTIES,
+        kinds: NO_KINDS,
         request: REQUEST,
         retry: RETRY,
       }),
@@ -408,6 +458,7 @@ describe("the doctor's default «Моя и смежные» is empty (019 EARS-9
       raw,
       feed: Promise.resolve({ ok: true as const, value: page }),
       specialties: NO_SPECIALTIES,
+      kinds: NO_KINDS,
     });
 
   it("EARS-9: the default feed opens with «Все специальности» selected as this visitor's default — not counted, nothing to reset", async () => {
@@ -441,6 +492,7 @@ describe("the doctor's default «Моя и смежные» is empty (019 EARS-9
         raw: {},
         feed: Promise.resolve({ ok: true as const, value: FALLBACK_PAGE }),
         specialties: NO_SPECIALTIES,
+        kinds: NO_KINDS,
       }),
     );
     expect(screen.getByTestId("events-filter-open")).toHaveTextContent(
@@ -595,6 +647,7 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
         }),
         mine: Promise.resolve({ ok: true, value: null }),
         specialties: NO_SPECIALTIES,
+        kinds: NO_KINDS,
         request: REQUEST,
         retry: RETRY,
       }),
@@ -636,6 +689,7 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
         specialties: Promise.resolve([
           { code: "neurology", name: "Неврология" },
         ]),
+        kinds: NO_KINDS,
         request: REQUEST,
         retry: RETRY,
       }),
@@ -650,6 +704,25 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
     ]);
   });
 
+  it("EARS-7: an empty doctor feed under a kind the read does not offer (a retired kind with no event in this reading) names it by the kind dictionary, never by its raw slug", async () => {
+    mocks.fetchEventsFeed.mockResolvedValueOnce({ ok: true, value: { ...EMPTY_PAGE, matching: 5 } });
+    render(
+      await FeedSection({
+        config: DOCTOR,
+        query: { kind: "vebinar" },
+        feed: Promise.resolve({ ok: true as const, value: EMPTY_PAGE }),
+        mine: Promise.resolve({ ok: true, value: null }),
+        specialties: NO_SPECIALTIES,
+        kinds: Promise.resolve([{ slug: "vebinar", title: "Вебинар" }]),
+        request: REQUEST,
+        retry: RETRY,
+      }),
+    );
+    const empty = screen.getByTestId("events-feed-empty");
+    expect(empty).toHaveTextContent("Нет событий по фильтру «Вид события: Вебинар»");
+    expect(empty).not.toHaveTextContent("vebinar");
+  });
+
   it("EARS-9: a non-empty feed makes no widen read", async () => {
     render(
       await FeedSection({
@@ -658,6 +731,7 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
         feed: Promise.resolve({ ok: true as const, value: PAGE }),
         mine: Promise.resolve({ ok: true, value: null }),
         specialties: NO_SPECIALTIES,
+        kinds: NO_KINDS,
         request: REQUEST,
         retry: RETRY,
       }),
@@ -683,6 +757,7 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
           value: { ...EMPTY_PAGE, facetOptions: TOPICS },
         }),
         specialties: NO_SPECIALTIES,
+        kinds: NO_KINDS,
         request: REQUEST,
         retry: RETRY,
       }),
@@ -719,6 +794,7 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
           month: "2026-10",
           feed: Promise.resolve({ ok: true as const, value: EMPTY_PAGE }),
           specialties: NO_SPECIALTIES,
+          kinds: NO_KINDS,
           request: REQUEST,
           retry: RETRY,
         }),

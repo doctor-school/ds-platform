@@ -123,6 +123,7 @@ const ACTION_REQUEST = {
   forwardedFor: "10.0.0.1",
 };
 const NO_SPECIALTIES = Promise.resolve([]);
+const NO_KINDS = Promise.resolve([]);
 
 /** The reads a retry must leave alone, by name. */
 const READS = () => ({
@@ -241,6 +242,7 @@ describe("«Повторить» in a failed block (#2832)", () => {
         month: "2026-10",
         feed: Promise.resolve({ ok: true as const, value: PAGE }),
         specialties: NO_SPECIALTIES,
+        kinds: NO_KINDS,
         request: REQUEST,
         retry: action,
       }),
@@ -284,6 +286,7 @@ describe("«Повторить» in a failed block (#2832)", () => {
         month: "2026-10",
         feed: Promise.resolve({ ok: true as const, value: PAGE }),
         specialties: NO_SPECIALTIES,
+        kinds: NO_KINDS,
         request: REQUEST,
         retry: action,
       }),
@@ -327,6 +330,7 @@ describe("«Повторить» in a failed block (#2832)", () => {
           feed: Promise.resolve({ ok: false as const }),
           mine,
           specialties: NO_SPECIALTIES,
+          kinds: NO_KINDS,
           request: REQUEST,
           retry: action,
         })}
@@ -355,12 +359,7 @@ describe("«Повторить» in a failed block (#2832)", () => {
   it("EARS-9: a recovered day feed fills what the page derives from the feed read — «Вид события», the subline — from the retried read, with no other read", async () => {
     const action = hostAction();
     const failed = Promise.resolve({ ok: false as const });
-    const panel = {
-      config: DOCTOR,
-      raw: {},
-      feed: failed,
-      specialties: NO_SPECIALTIES,
-    };
+    const panel = { config: DOCTOR, raw: {}, feed: failed, specialties: NO_SPECIALTIES, kinds: NO_KINDS };
     render(
       <FeedReadScope>
         {await CountedSubline({
@@ -375,6 +374,7 @@ describe("«Повторить» in a failed block (#2832)", () => {
           feed: failed,
           mine: Promise.resolve({ ok: true as const, value: null }),
           specialties: NO_SPECIALTIES,
+          kinds: NO_KINDS,
           request: REQUEST,
           retry: action,
         })}
@@ -432,6 +432,7 @@ describe("«Повторить» in a failed block (#2832)", () => {
           raw: {},
           feed: failed,
           specialties: NO_SPECIALTIES,
+          kinds: NO_KINDS,
         })}
         {await FeedSection({
           config: DOCTOR,
@@ -439,6 +440,7 @@ describe("«Повторить» in a failed block (#2832)", () => {
           feed: failed,
           mine: Promise.resolve({ ok: true as const, value: null }),
           specialties: NO_SPECIALTIES,
+          kinds: NO_KINDS,
           request: REQUEST,
           retry: action,
         })}
@@ -468,15 +470,43 @@ describe("«Повторить» in a failed block (#2832)", () => {
     );
   });
 
+  it("EARS-7/9: a recovered panel keeps the title of an applied kind the retried read does not offer", async () => {
+    const action = hostAction();
+    const failed = Promise.resolve({ ok: false as const });
+    const raw = { kind: ["master-klass"] };
+    const kinds = Promise.resolve([{ slug: "master-klass", title: "Мастер-класс" }]);
+    render(
+      <FeedReadScope>
+        {await FacetColumn({ config: DOCTOR, raw, feed: failed, specialties: NO_SPECIALTIES, kinds })}
+        {await FeedSection({
+          config: DOCTOR,
+          query: raw,
+          feed: failed,
+          mine: Promise.resolve({ ok: true as const, value: null }),
+          specialties: NO_SPECIALTIES,
+          kinds,
+          request: REQUEST,
+          retry: action,
+        })}
+      </FeedReadScope>,
+    );
+    vi.clearAllMocks();
+    mocks.fetchEventsFeed.mockResolvedValue({
+      ok: true,
+      value: { ...PAGE, facetOptions: { kind: [{ slug: "webinar", title: "Вебинар", count: 3 }] } },
+    });
+    await userEvent.click(
+      within(screen.getByTestId("events-feed-error")).getByRole("button", { name: "Повторить" }),
+    );
+    expect(await screen.findByTestId("events-feed")).toBeInTheDocument();
+    const kind = await screen.findByRole("group", { name: "Вид события" });
+    expect(within(kind).getByRole("button", { name: "Мастер-класс", pressed: true })).toBeInTheDocument();
+  });
+
   it("EARS-9: a page the server renders again drops the recovered feed read for its own", async () => {
     const action = hostAction();
     const failed = Promise.resolve({ ok: false as const });
-    const panel = {
-      config: DOCTOR,
-      raw: {},
-      feed: failed,
-      specialties: NO_SPECIALTIES,
-    };
+    const panel = { config: DOCTOR, raw: {}, feed: failed, specialties: NO_SPECIALTIES, kinds: NO_KINDS };
     const page = async () => (
       <FeedReadScope>
         {await FacetColumn(panel)}
@@ -486,6 +516,7 @@ describe("«Повторить» in a failed block (#2832)", () => {
           feed: failed,
           mine: Promise.resolve({ ok: true as const, value: null }),
           specialties: NO_SPECIALTIES,
+          kinds: NO_KINDS,
           request: REQUEST,
           retry: action,
         })}

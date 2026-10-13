@@ -395,9 +395,13 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
         kind: ["lecture"],
         nmo: "true",
       },
-      { ...DOCTOR_EMPTY, matching: reads(4).matching },
+      {
+        ...DOCTOR_EMPTY,
+        kinds: [{ slug: "lecture", title: "Лекция" }],
+        matching: reads(4).matching,
+      },
     );
-    expect(state.widen?.label).toBe("Убрать фильтр «Вид события: lecture»");
+    expect(state.widen?.label).toBe("Убрать фильтр «Вид события: Лекция»");
     expect(state.reset).toEqual({
       label: "Сбросить фильтры",
       href: "/events?view=month&month=2026-11&tense=past",
@@ -633,6 +637,20 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
       },
     );
     expect(state.title).toBe("Нет событий по фильтру «Вид события: Лекция»");
+  });
+
+  it("EARS-7: an applied kind the read does not offer (a retired kind with no event in this reading) is named by the kind dictionary, never by its raw slug", async () => {
+    const state = await emptyFeedState(
+      { kind: ["vebinar"] },
+      {
+        ...DOCTOR_EMPTY,
+        titles: {},
+        kinds: [{ slug: "vebinar", title: "Вебинар" }],
+        matching: reads(2).matching,
+      },
+    );
+    expect(state.title).toBe("Нет событий по фильтру «Вид события: Вебинар»");
+    expect(state.widen?.label).toBe("Убрать фильтр «Вид события: Вебинар»");
   });
 
   it("EARS-9: no facet ⇒ the plain empty feed, no action, no widen read", async () => {

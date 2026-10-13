@@ -36,11 +36,12 @@ const HORIZON_KEYS = ["from", "to"] as const;
 
 /**
  * The codec's entries without the values the codec defaults to — the canonical
- * URL states only what differs from the default reading.
+ * URL states only what differs from the default reading. `specialty` has no
+ * entry: an absent scope is the server-resolved default (019 LD-9), and an
+ * explicit «Моя и смежные» is a scope of its own that the URL keeps.
  */
 const DEFAULTS: Readonly<Record<string, string>> = {
   tense: "upcoming",
-  specialty: "mine-and-adjacent",
 };
 function codecEntries(raw: RawQueryRecord): EventListingQueryEntry[] {
   return EVENTS_PAGE_QUERY_CODEC.reencode(raw).filter(

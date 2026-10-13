@@ -276,10 +276,23 @@ export function eventHorizonTenseReach(
   horizon: EventHorizon,
   tense: "upcoming" | "past",
 ): EventHorizonReach {
-  const window = eventHorizonInstants(horizon);
   return tense === "past"
-    ? { fromInstant: null, toInstant: window.toInstant }
-    : { fromInstant: window.fromInstant, toInstant: servedEndInstant() };
+    ? { fromInstant: null, toInstant: eventHorizonInstants(horizon).toInstant }
+    : eventHorizonUpcomingReach(horizon.from);
+}
+
+/**
+ * Everything «Будущие» can reach from a day on: every event from `from`
+ * 00:00 МСК to the end of the served years — the upcoming arm of
+ * {@link eventHorizonTenseReach}. From today, it is what the default
+ * «Будущие» feed can ever list (019 LD-9: the emptiness test of the
+ * visitor's default scope).
+ */
+export function eventHorizonUpcomingReach(from: string): EventHorizonReach {
+  return {
+    fromInstant: eventHorizonInstants({ from, to: from }).fromInstant,
+    toInstant: servedEndInstant(),
+  };
 }
 
 /**

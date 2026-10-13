@@ -34,7 +34,7 @@ The feed is **fully readable by a guest** (REQ-20): the value is visible before 
 - **US-6** — As a **doctor**, I narrow the feed by the facets that matter to me — format, kind, specialty, city, НМО, availability — and the applied facets stay visible with a way to reset them.
 - **US-7** — As a **doctor on a phone**, the facet panel collapses into a «Фильтры» control with a count of what is applied, and the feed stays readable at 390.
 - **US-8** — As a **doctor**, when nothing matches I am told **which condition emptied the screen** and offered a weaker one («все специальности» instead of «моя и смежные») — never a blank page.
-- **US-9** — As a **doctor in a rare specialty**, when my specialty has nothing yet the screen offers the **nearest events in adjacent areas** instead of an empty state.
+- **US-9** — As a **doctor in a rare specialty**, when neither my specialty nor its adjacent areas have anything yet the feed opens on **all specialties** instead of an empty screen.
 - **US-10** — As a **doctor**, I see **how many colleagues have already signed up** on a card («уже записались 37 ортопедов»), because that is the strongest signal that an эфир is worth my evening.
 - **US-11** — As a **doctor**, I switch to «Прошедшие» and reach the **recording and the materials** of something I missed, and can take the discussion into the community.
 - **US-12** — As a **signed-in doctor**, a short «Мои события» block reminds me what I am signed up for — including a congress ticket — and links me into my personal cabinet for the full list.
@@ -57,7 +57,7 @@ The feed is **fully readable by a guest** (REQ-20): the value is visible before 
 
 1. The tense is the tabs in the page head, not a facet. The facet panel carries the doctor's set: format (online / offline / hybrid), kind (an open list editors extend), specialty (default «моя и смежные», changeable), city for offline, «только с НМО», direction, name search. There is no «бесплатно по Pul» facet — owner 2026-10-01: «"бесплатно по Pul" - это можно убрать, они все будут бесплатными для врачей».
 2. Applied facets stay visible with a reset; at 390 the panel collapses behind «Фильтры» with a count.
-3. An empty result names the condition that emptied it and proposes weakening it; an empty **specialty** offers adjacent areas instead.
+3. An empty result names the condition that emptied it and proposes weakening it; an empty **«Моя и смежные»** (my specialty and its adjacent areas) opens the feed on all specialties instead.
 
 **Right now (US-2):** while an эфир is live, the live strip shows LIVE, the title and the presence count. A registered doctor enters the room (feature 006); a doctor who is not registered goes to the event page — never straight into the room. With no live эфир the strip is absent and leaves no hole in the grid.
 
@@ -78,7 +78,7 @@ The feed is **fully readable by a guest** (REQ-20): the value is visible before 
 - A **live эфир is surfaced on the screen** with its presence count; the action leads into the room only for a registered doctor and to the event page otherwise. With nothing live the block is absent, not empty (REQ-137).
 - The **facet panel is the shared `events-filter` unit**, carries the full REQ-138 set, keeps applied facets visible with a reset, and collapses behind a counted «Фильтры» control on mobile.
 - The panel is **specified and designed in its three fill states** — wave 1, intermediate (format + kind added), full set — and moving between them does not break the screen grid (**D-1**).
-- An empty result is **never a blank screen**: it names which condition emptied it and offers a concrete way to weaken it; an empty specialty offers adjacent areas.
+- An empty result is **never a blank screen**: it names which condition emptied it and offers a concrete way to weaken it; an empty «Моя и смежные» opens the feed on all specialties.
 - A card states **how many colleagues have already signed up** (REQ-38).
 - «Прошедшие» leads to the **recording and materials** where they exist (feature 014) and offers the community discussion.
 - «Мои события» is a **short cut with a link to `#d-lk`** and is absent for a guest (**D-2**).

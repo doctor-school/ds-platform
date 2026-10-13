@@ -46,13 +46,15 @@ describe("019 EARS-12 — the doctor-feed registration return target", () => {
   it("019 EARS-12.2: the minted target is the codec's own key order with resume LAST", () => {
     expect(mintDoctorEventsFeedReturnTarget(FEED_QUERY, "kardio-forum")).toBe(
       "/events?day=2026-09-10&tense=upcoming&format=online&format=hybrid" +
-        "&specialty=mine-and-adjacent&resume=kardio-forum",
+        "&resume=kardio-forum",
     );
   });
 
   it("019 EARS-12.3: an empty feed query mints the codec's defaults, not an empty query", () => {
+    // `specialty` stays absent: the return lands on the default scope, which
+    // the server resolves again (019 LD-9).
     expect(mintDoctorEventsFeedReturnTarget({}, "kardio-forum")).toBe(
-      "/events?tense=upcoming&specialty=mine-and-adjacent&resume=kardio-forum",
+      "/events?tense=upcoming&resume=kardio-forum",
     );
   });
 

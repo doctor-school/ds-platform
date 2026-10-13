@@ -10,7 +10,10 @@ import {
   useState,
 } from "react";
 
+import type { RawQueryRecord } from "@ds/schemas";
+
 import { type PluralNoun, formatEventCount } from "../model/event-count";
+import { type SpecialtyScopeKind, specialtyScopeKindOf } from "../model/facets";
 import type { EventsFeedSummary, FeedFacetOptions } from "../model/feed";
 
 /**
@@ -22,6 +25,8 @@ export interface RecoveredFeedReadValue {
   readonly facetOptions: FeedFacetOptions;
   readonly matching: number;
   readonly summary?: EventsFeedSummary | undefined;
+  /** 019 LD-9 — the read fell back to every specialty (the visitor's default scope is empty). */
+  readonly defaultScopeEmpty?: boolean | undefined;
 }
 
 type Scope = {
@@ -107,6 +112,23 @@ export function RecoveredSubline({
 }
 
 /**
+ * The scoped subline of a page whose feed read failed (019 LD-9, #2871): the
+ * line of the scope the URL names, or with none the visitor's default — known
+ * once the feed's «Повторить» recovers the read.
+ */
+export function RecoveredScopedSubline({
+  raw,
+  byScope,
+}: {
+  raw: RawQueryRecord;
+  byScope: Record<SpecialtyScopeKind, string>;
+}) {
+  const defaultScopeEmpty = useRecoveredFeedRead()?.defaultScopeEmpty === true;
+  const scope = specialtyScopeKindOf(raw, { defaultScopeEmpty });
+  return <span data-testid="events-feed-subline-scope">{byScope[scope]}</span>;
+}
+
+/**
  * Rendered by a day-feed retry that read the feed: hands the retried read to
  * the page's {@link FeedReadScope}.
  */
@@ -114,10 +136,11 @@ export function RecoveredFeedRead({
   facetOptions,
   matching,
   summary,
+  defaultScopeEmpty,
 }: RecoveredFeedReadValue) {
   const publish = useContext(FeedReadContext)?.publish;
   useEffect(() => {
-    publish?.({ facetOptions, matching, summary });
-  }, [publish, facetOptions, matching, summary]);
+    publish?.({ facetOptions, matching, summary, defaultScopeEmpty });
+  }, [publish, facetOptions, matching, summary, defaultScopeEmpty]);
   return null;
 }

@@ -53,7 +53,8 @@ describe("019 EARS-4 doctor events month contract", () => {
     expect(parsed.data.nmo).toBe(true);
     expect(parsed.data.free).toBe(false);
     expect(parsed.data.q).toBe("кардио");
-    expect(parsed.data.specialty).toBe("mine-and-adjacent");
+    // An absent scope stays absent: the server resolves the default (019 LD-9).
+    expect(parsed.data.specialty).toBeUndefined();
   });
 
   it("EARS-4.2: leaves the month absent so the server, not the client, names the current one", () => {
@@ -61,7 +62,7 @@ describe("019 EARS-4 doctor events month contract", () => {
     expect(parsed.success).toBe(true);
     if (!parsed.success) return;
     expect(parsed.data.month).toBeUndefined();
-    expect(parsed.data.specialty).toBe("mine-and-adjacent");
+    expect(parsed.data.specialty).toBeUndefined();
   });
 
   it("EARS-4.3: refuses a malformed month rather than guessing one", () => {

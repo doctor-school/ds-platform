@@ -15,8 +15,9 @@
 //
 //   every one of the 118 `RAZDEL_I_NAMES` resolves to at least one PUBLISHED
 //   direction, and that direction carries at least one upcoming published эфир
-//   — with exactly one named exception, {@link GOLDEN_EMPTY_SPECIALTY} (#2836),
-//   which resolves to a published direction that carries no эфиры on purpose.
+//   — with two named exceptions, {@link GOLDEN_EMPTY_SPECIALTY} (#2836) and
+//   {@link GOLDEN_EMPTY_SCOPE_SPECIALTY} (#2871), each of which resolves to a
+//   published direction that carries no эфиры on purpose.
 //
 // The first half of that invariant is why {@link GOLDEN_DIRECTIONS} is a
 // PARTITION: each of the 118 official specialties appears under exactly one
@@ -451,14 +452,45 @@ export const GOLDEN_EMPTY_DIRECTION: GoldenDirectionSpec = {
 };
 
 /**
+ * #2871 — the one specialty whose default «Моя и смежные» is empty: its own
+ * direction AND every direction its managed adjacency leads to carry no эфиры.
+ *
+ * 019 LD-9 / EARS-9 opens the feed on «Все специальности» exactly when the
+ * default «Моя и смежные» read (own plus adjacent directions) has no upcoming
+ * эфир. {@link GOLDEN_EMPTY_SPECIALTY} does NOT fire it — its adjacency leads
+ * to directions with эфиры, so «Остеопатия» stays on «Моя и смежные». So a
+ * second real book name — outside the fourteen the volume titles name — moved
+ * out of «Реабилитация и физиотерапия» the same way: the old link retired, a
+ * published direction of its own linked, appended after
+ * {@link GOLDEN_EMPTY_DIRECTION}, and its only adjacency
+ * ({@link GOLDEN_EMPTY_SCOPE_DIRECTION_ADJACENCY}) leads to «Остеопатия», which
+ * carries no эфиры either. The same stale-partition note applies.
+ */
+export const GOLDEN_EMPTY_SCOPE_SPECIALTY = "Мануальная терапия";
+
+/** The direction {@link GOLDEN_EMPTY_SCOPE_SPECIALTY} was partitioned under. */
+export const GOLDEN_EMPTY_SCOPE_SPECIALTY_FORMER_DIRECTION = "rehabilitation";
+
+/** The published direction with no эфиры whose adjacency carries none either. */
+export const GOLDEN_EMPTY_SCOPE_DIRECTION: GoldenDirectionSpec = {
+  slug: "manual-therapy",
+  title: "Мануальная терапия",
+  status: "published",
+  specialties: [GOLDEN_EMPTY_SCOPE_SPECIALTY],
+};
+
+/**
  * Every direction the golden seed writes, in ordinal order: the partition's
  * published directions, then the draft and retired ones, then the published
- * {@link GOLDEN_EMPTY_DIRECTION} — appended last (#2836) so no earlier id moves.
+ * {@link GOLDEN_EMPTY_DIRECTION} (#2836) and
+ * {@link GOLDEN_EMPTY_SCOPE_DIRECTION} (#2871) — appended last so no earlier id
+ * moves.
  */
 export const GOLDEN_DIRECTIONS: readonly GoldenDirectionSpec[] = [
   ...GOLDEN_PUBLISHED_DIRECTIONS,
   ...GOLDEN_UNPUBLISHED_DIRECTIONS,
   GOLDEN_EMPTY_DIRECTION,
+  GOLDEN_EMPTY_SCOPE_DIRECTION,
 ];
 
 /**
@@ -610,6 +642,15 @@ export const GOLDEN_EMPTY_DIRECTION_ADJACENCY: readonly GoldenAdjacencyEdge[] =
     e("osteopathy", "neurology", "interdisciplinary", 72),
     e("osteopathy", "traumatology", "related", 68),
   ];
+
+/**
+ * #2871 — the managed adjacency of {@link GOLDEN_EMPTY_SCOPE_DIRECTION}: one
+ * edge, to «Остеопатия», which carries no эфиры — so the default «Моя и
+ * смежные» of {@link GOLDEN_EMPTY_SCOPE_SPECIALTY} is empty. Seeded after
+ * {@link GOLDEN_EMPTY_DIRECTION_ADJACENCY}, so no earlier edge moves.
+ */
+export const GOLDEN_EMPTY_SCOPE_DIRECTION_ADJACENCY: readonly GoldenAdjacencyEdge[] =
+  [e("manual-therapy", "osteopathy", "related", 80)];
 
 /**
  * Edges the editor has since withdrawn.

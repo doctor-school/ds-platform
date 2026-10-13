@@ -26,13 +26,23 @@ import {
   defaultDisplayedMonth,
   pickerYearsOf,
 } from "../model/month-view";
-import { type ReadRequest, fetchMonthCounts, fetchMonthEntries } from "../server";
+import {
+  type ReadRequest,
+  fetchMonthCounts,
+  fetchMonthEntries,
+} from "../server";
 import { BlockError } from "./block-error";
 import { BlockRetry } from "./block-retry";
-import type { EventsBlockRetryAction, EventsBlockRetryInput } from "./events-block-retry";
+import type {
+  EventsBlockRetryAction,
+  EventsBlockRetryInput,
+} from "./events-block-retry";
 import { EmptyFeedBlock } from "./feed-list";
 import { type SpecialtyBook, readEmptyFeedState } from "./feed-sections";
-import { MonthCalendarDesktop, type MonthHrefs } from "./month-calendar-desktop";
+import {
+  MonthCalendarDesktop,
+  type MonthHrefs,
+} from "./month-calendar-desktop";
 import { MonthCalendarMobile } from "./month-calendar-mobile";
 
 /**
@@ -84,9 +94,8 @@ export async function MonthView({
   const todayMonth = tense === "past" ? today.slice(0, 7) : undefined;
   const at = (target: string | undefined) => monthHref(listing, raw, target);
   const year = Number(displayed.slice(0, 4));
-  const years = Array.from(
-    { length: PICKER_YEAR_RADIUS * 2 + 1 },
-    (_, i) => String(year - PICKER_YEAR_RADIUS + i),
+  const years = Array.from({ length: PICKER_YEAR_RADIUS * 2 + 1 }, (_, i) =>
+    String(year - PICKER_YEAR_RADIUS + i),
   );
 
   const [entries, counts] = await Promise.all([
@@ -113,8 +122,12 @@ export async function MonthView({
           pickerLabel={t.pickerLabel}
           initialYear={String(year)}
           years={pickerYearsOf(counts, displayed, noun, at, today)}
-          prevYearHref={at(shiftMonth(displayed, -12 * (PICKER_YEAR_RADIUS + 1)))}
-          nextYearHref={at(shiftMonth(displayed, 12 * (PICKER_YEAR_RADIUS + 1)))}
+          prevYearHref={at(
+            shiftMonth(displayed, -12 * (PICKER_YEAR_RADIUS + 1)),
+          )}
+          nextYearHref={at(
+            shiftMonth(displayed, 12 * (PICKER_YEAR_RADIUS + 1)),
+          )}
           prevYearLabel={t.prevYear}
           nextYearLabel={t.nextYear}
         />
@@ -147,6 +160,7 @@ export async function MonthView({
     today,
     horizon: read.ok ? read.value.horizon : undefined,
     facetOptions: read.ok ? read.value.facetOptions : {},
+    defaultScopeEmpty: read.ok && read.value.defaultScopeEmpty === true,
     entries,
     specialties: () => specialties,
     request,
@@ -176,6 +190,7 @@ export async function MonthGridBlock({
   today,
   horizon,
   facetOptions,
+  defaultScopeEmpty,
   entries,
   specialties,
   request,
@@ -191,6 +206,8 @@ export async function MonthGridBlock({
   horizon: EventsFeedHorizon | undefined;
   /** The feed read's facet titles — the empty state names a facet by them. */
   facetOptions: FeedFacetOptions;
+  /** 019 LD-9 — the feed read fell back to every specialty: the absent scope is «Все специальности». */
+  defaultScopeEmpty: boolean;
   entries: BlockRead<MonthBroadcastEntry[]>;
   /** The specialty book, read only when the empty state names a specialty. */
   specialties: SpecialtyBook;
@@ -207,8 +224,17 @@ export async function MonthGridBlock({
   // An empty month under a facet offers the feed's widening, counted over the
   // tense's whole reach (the canvas rule), its facets named by the read's titles.
   const empty =
-    entries.ok && entries.value.length === 0 && hasAppliedFacets(raw, config.filterSet)
-      ? await readEmptyFeedState(config, raw, facetOptions, specialties, request)
+    entries.ok &&
+    entries.value.length === 0 &&
+    hasAppliedFacets(raw, config.filterSet, { defaultScopeEmpty })
+      ? await readEmptyFeedState(
+          config,
+          raw,
+          facetOptions,
+          specialties,
+          request,
+          defaultScopeEmpty,
+        )
       : null;
 
   return (() => {
@@ -220,6 +246,7 @@ export async function MonthGridBlock({
         today,
         ...(horizon === undefined ? {} : { horizon }),
         facetOptions,
+        defaultScopeEmpty,
       };
       return (
         <BlockRetry retry={retry.bind(null, input)}>
@@ -234,7 +261,11 @@ export async function MonthGridBlock({
     if (empty !== null) {
       return <EmptyFeedBlock testId="events-month-empty" empty={empty} />;
     }
-    const grid = buildMonthGrid({ month: displayed, entries: entries.value, today });
+    const grid = buildMonthGrid({
+      month: displayed,
+      entries: entries.value,
+      today,
+    });
     const hrefs: MonthHrefs = {
       event: Object.fromEntries(
         entries.value.map((e) => [e.slug, eventPageHref(config, e.slug)]),
@@ -244,7 +275,12 @@ export async function MonthGridBlock({
           .flat()
           .flatMap((cell) =>
             cell.inMonth && cell.isoDay !== null
-              ? [[cell.isoDay, dayHref(listing, raw, cell.isoDay, horizon, today)]]
+              ? [
+                  [
+                    cell.isoDay,
+                    dayHref(listing, raw, cell.isoDay, horizon, today),
+                  ],
+                ]
               : [],
           ),
       ),
@@ -258,10 +294,22 @@ export async function MonthGridBlock({
             grid={grid}
             hrefs={hrefs}
             liveLabel={t.liveLabel}
-            legend={{ live: t.legendLive, planned: t.legendPlanned, past: t.legendPast }}
-            nextMonthLink={{ href: at(next), label: t.nextMonthLink(formatMonthTitle(next)) }}
+            legend={{
+              live: t.legendLive,
+              planned: t.legendPlanned,
+              past: t.legendPast,
+            }}
+            nextMonthLink={{
+              href: at(next),
+              label: t.nextMonthLink(formatMonthTitle(next)),
+            }}
             {...(isMonthFuture(displayed, today)
-              ? { prevMonthLink: { href: at(prev), label: t.prevMonthLink(formatMonthTitle(prev)) } }
+              ? {
+                  prevMonthLink: {
+                    href: at(prev),
+                    label: t.prevMonthLink(formatMonthTitle(prev)),
+                  },
+                }
               : {})}
           />
         </div>

@@ -1,6 +1,7 @@
 import type { EventsFilterHost } from "@ds/design-system/blocks";
 
 import type { PluralNoun } from "./model/event-count";
+import type { SpecialtyScopeKind } from "./model/facets";
 import type { EventsStorefrontAdapter } from "./model/feed";
 
 /**
@@ -40,12 +41,17 @@ export type EventsStorefrontHostConfig = {
   filterSet: EventsFilterHost;
   /**
    * The page head (gate row 19, 019 `headerCopy`). The subline is either fixed
-   * copy, or the counted form «N <eventNoun> · M <schoolNoun>» over the read's
-   * upcoming events and their distinct schools — the host states the nouns only.
+   * copy, the counted form «N <eventNoun> · M <schoolNoun>» over the read's
+   * upcoming events and their distinct schools — the host states the nouns
+   * only — or one line per applied specialty scope (019 LD-9, #2871): the
+   * package selects the line, the host states the three.
    */
   headerCopy: {
     title: string;
-    subline: string | { schoolNoun: PluralNoun };
+    subline:
+      | string
+      | { schoolNoun: PluralNoun }
+      | { byScope: Record<SpecialtyScopeKind, string> };
   };
   /** Deep-partial copy overrides (gate row 5). */
   copy?: {

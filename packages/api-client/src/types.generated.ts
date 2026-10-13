@@ -2856,6 +2856,8 @@ export interface components {
             remaining: number;
             targeting: {
                 adjacentDirectionIds: string[];
+                /** @default false */
+                defaultScopeEmpty: boolean;
                 directionIds: string[];
                 /** @enum {string} */
                 mode: "targeted" | "general" | "all";
@@ -2889,6 +2891,8 @@ export interface components {
             month: string;
             targeting: {
                 adjacentDirectionIds: string[];
+                /** @default false */
+                defaultScopeEmpty: boolean;
                 directionIds: string[];
                 /** @enum {string} */
                 mode: "targeted" | "general" | "all";

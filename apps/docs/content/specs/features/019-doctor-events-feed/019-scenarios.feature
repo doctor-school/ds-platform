@@ -171,6 +171,30 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       And the «Идёт сейчас» block above the feed carries the golden doctors' broadcast with its live marker and title
 
     @EARS-9 @happy
+    Scenario: A specialty whose «Моя и смежные» has no events opens the feed on every specialty
+      Given a visitor with no account
+      And the visitor has chosen the golden specialty whose «Моя и смежные» has no events
+      And the viewport is 1440 wide
+      When the visitor opens «События»
+      Then the facet panel shows the specialty scope «Все специальности» selected as the default and states no applied count
+      And the URL carries no specialty facet and the panel offers no «Сбросить»
+      And the feed lists events of other specialties
+      When the visitor picks the specialty scope «Моя и смежные» in the facet panel
+      Then the URL carries the specialty scope «Моя и смежные» and the panel shows it selected and counted with «Сбросить»
+      When the visitor applies the format «Онлайн» in the facet panel while the feed is empty
+      Then the URL keeps the specialty scope «Моя и смежные» beside the format «Онлайн» and the panel states «Применено: 2»
+
+    @EARS-9 @happy
+    Scenario: A specialty with no events of its own whose adjacent areas have events stays on «Моя и смежные»
+      Given a visitor with no account
+      And the visitor has chosen the golden specialty with no events of its own
+      And the viewport is 1440 wide
+      When the visitor opens «События»
+      Then the facet panel shows the specialty scope «Моя и смежные» selected as the default and states no applied count
+      And the URL carries no specialty facet and the panel offers no «Сбросить»
+      And the feed lists events of the adjacent areas
+
+    @EARS-9 @happy
     Scenario: A facet result that matches nothing names the facet whose removal finds events
       Given a visitor with no account
       And the viewport is 1440 wide
@@ -424,14 +448,6 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       When a rendered feed with applied facets is reloaded
       Then the facets are lost and the URL does not describe the screen
       And the build fails review
-
-    @EARS-9 @happy
-    Scenario: An empty specialty offers the adjacent areas instead
-      Given a doctor whose specialty has no events at all
-      When the doctor opens «События» with no facets applied
-      Then the screen states that the specialty has nothing yet
-      And it offers the nearest events of the adjacent directions from the managed relation
-      And the wording differs from the empty-facet statement
 
     @EARS-10 @happy
     # Read under 019 «Amendment — 2026-10-06»: the past card offers the recording only; the materials live on the recording's page.

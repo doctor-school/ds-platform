@@ -27,6 +27,7 @@ import {
   type EventParticipationFormat,
   MONTH_BROADCAST_STATES,
   type PublicEventFacetOption,
+  UPCOMING_BROADCAST_STATES,
 } from "@ds/schemas";
 
 /** A lifecycle set a feed read selects — one tense's, or the month grid's. */
@@ -35,6 +36,7 @@ export type DoctorFeedStates =
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { eventsOnActiveDirections } from "../events/event-direction-restriction.js";
 import { countEventSignUps } from "../events/event-sign-ups.js";
+import type { EventHorizonReach } from "../events/event-horizon.js";
 
 type Db = DrizzleHandle["db"];
 
@@ -227,6 +229,39 @@ export class DoctorEventsRepository {
       title: row.title,
       count: Number(row.count),
     }));
+  }
+
+  /**
+   * 019 LD-9 / EARS-9 — whether the «Будущие» feed would list any event on
+   * these directions over `reach` (from today on): the feed's ONE predicate
+   * ({@link feedWhere}) with no facet applied, asked for one row. The test
+   * behind the default scope's fall-back to every specialty — the same
+   * states, audience, record-status, start range and managed-direction
+   * restriction the feed reads, so a past-dated event still `published` is
+   * not «upcoming» here either.
+   */
+  async hasUpcomingEventOn(
+    directionIds: string[],
+    reach: EventHorizonReach,
+  ): Promise<boolean> {
+    if (directionIds.length === 0) return false;
+    const rows = await this.db
+      .select({ id: events.id })
+      .from(events)
+      .where(
+        and(
+          ...this.feedWhere({
+            states: UPCOMING_BROADCAST_STATES,
+            order: "asc",
+            directionIds,
+            ...reach,
+            kindSlugs: [],
+            formats: [],
+          }),
+        ),
+      )
+      .limit(1);
+    return rows.length > 0;
   }
 
   async findFeedRows(filters: DoctorFeedFilters): Promise<DoctorFeedRow[]> {

@@ -309,16 +309,29 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(plainEventId).not.toBe(unreachableEventId);
     });
 
-    it("EARS-4.5: keeps «пусто по специальности» distinct from «пусто по фасетам»", async () => {
-      // Empty by SPECIALTY: the rare specialty reaches its own direction and no
-      // adjacency rows — an honest targeted read with nothing in it.
+    it("EARS-4.5: an empty specialty falls back to every specialty, while «пусто по фасетам» stays targeted (019 LD-9)", async () => {
+      // Empty by SPECIALTY: the rare specialty's own direction holds no
+      // upcoming event and it has no adjacent one, so its default «Моя и
+      // смежные» is empty and falls back to every specialty —
+      // the same targeting the feed of the default screen resolves.
       const bySpecialty = await readMonth({
         specialtyCode: lonelyCode,
         query: `?month=${fixtureMonth}`,
       });
-      expect(bySpecialty.targeting.mode).toBe("targeted");
-      expect(bySpecialty.targeting.adjacentDirectionIds).toEqual([]);
-      expect(bySpecialty.days.every((day) => day.count === 0)).toBe(true);
+      expect(bySpecialty.targeting.mode).toBe("all");
+      expect(bySpecialty.targeting.defaultScopeEmpty).toBe(true);
+
+      // An explicit «Моя и смежные» wins over the fall-back: the honest
+      // targeted read with nothing in it — still reporting the visitor's empty
+      // default scope, which describes the visitor, not the query.
+      const explicit = await readMonth({
+        specialtyCode: lonelyCode,
+        query: `?month=${fixtureMonth}&specialty=mine-and-adjacent`,
+      });
+      expect(explicit.targeting.mode).toBe("targeted");
+      expect(explicit.targeting.defaultScopeEmpty).toBe(true);
+      expect(explicit.targeting.adjacentDirectionIds).toEqual([]);
+      expect(explicit.days.every((day) => day.count === 0)).toBe(true);
 
       // Empty by FACETS: the same targeting that DOES carry events, narrowed by
       // a name search nothing matches. The two renders are told apart by

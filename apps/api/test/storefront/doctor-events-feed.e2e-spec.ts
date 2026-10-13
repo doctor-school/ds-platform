@@ -56,6 +56,25 @@ describe.skipIf(!process.env.DATABASE_URL)(
     let lonelyFarEventId = "";
     /** The adjacency-less direction (the facet-narrowed «показать ещё» case). */
     let lonelyDirectionId = "";
+    /**
+     * EARS-9 / LD-9 — a specialty whose own direction holds no upcoming event
+     * (only an ended one), adjacent to the event-carrying `own` direction: its
+     * default «Моя и смежные» read is NOT empty.
+     */
+    let ownEmptyAdjacentCarryingCode = "";
+    /**
+     * EARS-9 / LD-9 — a specialty whose own direction AND its adjacent one hold
+     * no upcoming event (only ended ones): its default «Моя и смежные» read is
+     * empty.
+     */
+    let emptyScopeCode = "";
+    /**
+     * EARS-9 / LD-9 — a specialty whose own direction AND its adjacent one hold
+     * only past-dated events still in `published` (an offline event never
+     * leaves it): nothing the «Будущие» feed reads, so its default
+     * «Моя и смежные» is empty.
+     */
+    let staleScopeCode = "";
     let expertsEventId = "";
     /** «Прошедшие» fixtures on the adjacency-less direction (gate rows 10/30/31/32). */
     let pastMontageEventId = "";
@@ -349,6 +368,71 @@ describe.skipIf(!process.env.DATABASE_URL)(
         startsAt: at(-50, 12),
         directionId: tenseDirection,
         state: "ended",
+      });
+
+      // EARS-9 / LD-9 — a specialty no managed row links yet (so nothing the
+      // stand already holds reaches it), given one direction of its own whose
+      // only event has ended, adjacent to `own`.
+      const unlinked = await pool.query<{ id: string; code: string }>(
+        `SELECT s.id, s.code FROM specialties_minzdrav s
+          WHERE s.is_other = false
+            AND NOT EXISTS (SELECT 1 FROM direction_specialties ds WHERE ds.specialty_minzdrav_id = s.id)
+          ORDER BY s.code LIMIT 3`,
+      );
+      const [ownEmptySpecialty, emptyScopeSpecialty, staleScopeSpecialty] =
+        unlinked.rows;
+      ownEmptyAdjacentCarryingCode = ownEmptySpecialty!.code;
+      const emptyDirection = await makeDirection("Пустая специальность");
+      await linkSpecialty(emptyDirection, ownEmptySpecialty!.id);
+      await makeEdge(emptyDirection, own);
+      await makeEvent({
+        title: "Прошедшее в пустой специальности",
+        startsAt: at(-3, 12),
+        directionId: emptyDirection,
+        state: "ended",
+      });
+
+      // The empty default scope: own direction and its adjacent one carry only
+      // ended events, so «Моя и смежные» has nothing upcoming.
+      emptyScopeCode = emptyScopeSpecialty!.code;
+      const emptyScopeDirection = await makeDirection("Пустая область");
+      const emptyScopeAdjacent = await makeDirection("Пустая смежная область");
+      await linkSpecialty(emptyScopeDirection, emptyScopeSpecialty!.id);
+      await makeEdge(emptyScopeDirection, emptyScopeAdjacent);
+      await makeEvent({
+        title: "Прошедшее в пустой области",
+        startsAt: at(-3, 12),
+        directionId: emptyScopeDirection,
+        state: "ended",
+      });
+      await makeEvent({
+        title: "Прошедшее в пустой смежной области",
+        startsAt: at(-2, 12),
+        directionId: emptyScopeAdjacent,
+        state: "ended",
+      });
+
+      // A scope whose events are all dated before today yet still `published`
+      // — the «Будущие» feed reads from today 00:00 МСК, so none of them is
+      // upcoming for it.
+      staleScopeCode = staleScopeSpecialty!.code;
+      const staleScopeDirection = await makeDirection("Устаревшая область");
+      const staleScopeAdjacent = await makeDirection(
+        "Устаревшая смежная область",
+      );
+      await linkSpecialty(staleScopeDirection, staleScopeSpecialty!.id);
+      await makeEdge(staleScopeDirection, staleScopeAdjacent);
+      await makeEvent({
+        title: "Прошедший конгресс, всё ещё опубликован",
+        startsAt: at(-4, 12),
+        directionId: staleScopeDirection,
+        state: "published",
+      });
+      await makeEvent({
+        title: "Несостоявшийся эфир в смежной области",
+        startsAt: at(-1, 12),
+        directionId: staleScopeAdjacent,
+        state: "published",
       });
     }, 60_000);
 
@@ -764,6 +848,85 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // reachable, so the control stays offered and its target covers it.
       expect(feed.nextTo).not.toBeNull();
       expect(feed.nextTo! > addDoctorEventsFeedDays(today, 40)).toBe(true);
+    });
+
+    it("EARS-9.2: a doctor whose default «Моя и смежные» has no upcoming event opens on every specialty — the default scope falls back to «Все специальности»", async () => {
+      const feed = await readFeed({ specialtyCode: emptyScopeCode });
+
+      expect(feed.targeting.mode).toBe("all");
+      expect(feed.targeting.defaultScopeEmpty).toBe(true);
+      expect(feed.targeting.specialtyReference).toBe(emptyScopeCode);
+      expect(feed.targeting.directionIds).toEqual([]);
+      const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
+      // Every specialty's events — ones no relation of the visitor reaches.
+      expect(ids).toContain(ownEventId);
+      expect(ids).toContain(unreachableEventId);
+      expect(ids).toContain(lonelyEventId);
+
+      // The month read of the same default screen falls back the same way.
+      const month = await app.inject({
+        method: "GET",
+        url: "/v1/storefront/doctor/events/month",
+        headers: {
+          cookie: `${SPECIALTY_CHOICE_COOKIE_NAME}=${encodeURIComponent(emptyScopeCode)}`,
+        },
+      });
+      expect(month.statusCode).toBe(200);
+      const grid = month.json() as {
+        targeting: { mode: string; defaultScopeEmpty: boolean };
+      };
+      expect(grid.targeting.mode).toBe("all");
+      expect(grid.targeting.defaultScopeEmpty).toBe(true);
+    });
+
+    it("EARS-9.3: an explicit scope in the URL wins over the fallback — «Моя и смежные» reads the empty scope — and every read still reports the visitor's empty default scope", async () => {
+      const mine = await readFeed({
+        specialtyCode: emptyScopeCode,
+        query: "?specialty=mine-and-adjacent",
+      });
+      expect(mine.targeting.mode).toBe("targeted");
+      // The fact describes the visitor, not the query: the page's default for
+      // this visitor stays «Все специальности», so the explicit pick is counted.
+      expect(mine.targeting.defaultScopeEmpty).toBe(true);
+      expect(mine.totalCount).toBe(0);
+
+      const all = await readFeed({
+        specialtyCode: emptyScopeCode,
+        query: "?specialty=all",
+      });
+      expect(all.targeting.mode).toBe("all");
+      expect(all.targeting.defaultScopeEmpty).toBe(true);
+    });
+
+    it("EARS-9.4: an empty own specialty whose adjacent areas carry upcoming events keeps the default «Моя и смежные»", async () => {
+      const feed = await readFeed({
+        specialtyCode: ownEmptyAdjacentCarryingCode,
+      });
+      expect(feed.targeting.mode).toBe("targeted");
+      expect(feed.targeting.defaultScopeEmpty).toBe(false);
+      const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
+      expect(ids).toContain(ownEventId);
+      expect(ids).not.toContain(unreachableEventId);
+    });
+
+    it("EARS-9.6: a default scope whose only events are dated before today, though still published, is empty — the feed falls back to «Все специальности»", async () => {
+      const feed = await readFeed({ specialtyCode: staleScopeCode });
+
+      expect(feed.targeting.mode).toBe("all");
+      expect(feed.targeting.defaultScopeEmpty).toBe(true);
+      expect(feed.targeting.specialtyReference).toBe(staleScopeCode);
+    });
+
+    it("EARS-9.5: a specialty with upcoming events of its own keeps the default «Моя и смежные», whatever scope the URL names", async () => {
+      const feed = await readFeed({ specialtyCode: adjacentCarryingCode });
+      expect(feed.targeting.mode).toBe("targeted");
+      expect(feed.targeting.defaultScopeEmpty).toBe(false);
+      const all = await readFeed({
+        specialtyCode: adjacentCarryingCode,
+        query: "?specialty=all",
+      });
+      expect(all.targeting.mode).toBe("all");
+      expect(all.targeting.defaultScopeEmpty).toBe(false);
     });
 
     it("D10: every feed read carries the api's today (МСК), whatever extent the URL echoes", async () => {

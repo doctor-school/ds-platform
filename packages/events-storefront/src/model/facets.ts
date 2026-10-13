@@ -20,21 +20,67 @@ import { FACET_KEYS, pageHref } from "./feed-url";
 const SPECIALTY_MODES = ["mine-and-adjacent", "all"] as const;
 
 /**
+ * What the feed read says about the default specialty scope (019 LD-9): with
+ * `defaultScopeEmpty` — reported on every read, whatever scope the URL names —
+ * this visitor's default is «Все специальности».
+ */
+export interface SpecialtyDefault {
+  readonly defaultScopeEmpty?: boolean;
+}
+
+/** The specialty scope this visitor reads with nothing applied (019 LD-9). */
+export function defaultSpecialtyScopeOf({
+  defaultScopeEmpty = false,
+}: SpecialtyDefault = {}): "mine-and-adjacent" | "all" {
+  return defaultScopeEmpty ? "all" : "mine-and-adjacent";
+}
+
+/** Which specialty scope the page applies — the key of a scoped head subline. */
+export type SpecialtyScopeKind = "mineAndAdjacent" | "all" | "picked";
+
+/**
+ * The specialty scope the page applies (019 LD-9, #2871): a URL naming no
+ * scope reads as the visitor's default — «Все специальности» when their
+ * «Моя и смежные» is empty — an explicit scope as itself, and picked
+ * specialties as `picked`. The head subline follows it.
+ */
+export function specialtyScopeKindOf(
+  raw: RawQueryRecord,
+  specialtyDefault: SpecialtyDefault = {},
+): SpecialtyScopeKind {
+  const { specialtyScope } = appliedFacetsOf(
+    raw,
+    undefined,
+    specialtyDefault,
+  );
+  if (specialtyScope === "all") return "all";
+  if (specialtyScope === "mine-and-adjacent") return "mineAndAdjacent";
+  return "picked";
+}
+
+/**
  * The URL's facets as the panel's `AppliedFacets` (gate rows 58, 59): the
  * panel is presentational, the URL is the state (019 LD-1). A picked
  * specialty is named from `specialtyLabel` (the specialty read), else by its id.
+ * A URL naming no scope reads as the default — «Моя и смежные», or
+ * «Все специальности» when the doctor's «Моя и смежные» is empty (LD-9).
  */
 export function appliedFacetsOf(
   raw: RawQueryRecord,
   specialtyLabel: (id: string) => string | undefined = () => undefined,
+  { defaultScopeEmpty = false }: SpecialtyDefault = {},
 ): AppliedFacets {
   const list = (key: string) => rawQueryList(raw[key]) ?? [];
   const specialty = list("specialty");
   const mode = specialty.length === 1 ? specialty[0] : undefined;
   const specialtyScope: AppliedFacets["specialtyScope"] =
-    specialty.length === 0 || mode === "mine-and-adjacent"
-      ? "mine-and-adjacent"
-      : mode === "all"
+    specialty.length === 0
+      ? defaultScopeEmpty
+        ? "all"
+        : "mine-and-adjacent"
+      : mode === "mine-and-adjacent"
+        ? "mine-and-adjacent"
+        : mode === "all"
         ? "all"
         : specialty
             .filter((id) => !(SPECIALTY_MODES as readonly string[]).includes(id))
@@ -57,12 +103,16 @@ export function appliedFacetsOf(
  * The page's query with the host set's facets replaced by `applied` (row 58):
  * the view, the month and the tense stay; the extent and the day reset — a new
  * facet is a new reading. Removing the last picked specialty returns the scope
- * to «Моя и смежные», the default (row 59).
+ * to the visitor's default scope (row 59, LD-9), which is left unwritten:
+ * «Моя и смежные», or «Все специальности» when the doctor's «Моя и смежные»
+ * is empty — then «Моя и смежные» is written and kept across later facet clicks,
+ * so the fall-back does not take it back (LD-9).
  */
 export function withAppliedFacets(
   raw: RawQueryRecord,
   applied: AppliedFacets,
   filterSet: EventsFilterHost,
+  { defaultScopeEmpty = false }: SpecialtyDefault = {},
 ): RawQueryRecord {
   const next: RawQueryRecord = { ...raw, day: undefined, from: undefined, to: undefined };
   for (const key of FACET_KEYS[filterSet]) next[key] = undefined;
@@ -79,8 +129,11 @@ export function withAppliedFacets(
   set("kind", applied.kind);
   set("city", applied.city);
   const scope = applied.specialtyScope;
-  if (scope === "all") next.specialty = "all";
-  else if (Array.isArray(scope)) set("specialty", scope.map((ref) => ref.id));
+  if (scope === "all") {
+    if (!defaultScopeEmpty) next.specialty = "all";
+  } else if (scope === "mine-and-adjacent") {
+    if (defaultScopeEmpty) next.specialty = "mine-and-adjacent";
+  } else if (Array.isArray(scope)) set("specialty", scope.map((ref) => ref.id));
   if (applied.nmoOnly) next.nmo = "true";
   const q = applied.query.trim();
   if (q.length > 0) next.q = q;
@@ -167,14 +220,21 @@ export function resetFacetsHref(
 
 /**
  * Whether the page's URL applies any facet of the host's set — read through
- * the codec, so a default (`specialty=mine-and-adjacent`) or malformed value
- * applies nothing.
+ * the codec, so a malformed value applies nothing, and neither does an
+ * explicit default scope of this visitor (019 LD-9): «Моя и смежные», or
+ * «Все специальности» when the doctor's «Моя и смежные» is empty.
  */
 export function hasAppliedFacets(
   raw: RawQueryRecord,
   filterSet: EventsFilterHost,
+  scopeDefault: SpecialtyDefault = {},
 ): boolean {
+  const applied: RawQueryRecord = { ...raw };
+  const specialty = rawQueryList(raw.specialty);
+  if (specialty?.length === 1 && specialty[0] === defaultSpecialtyScopeOf(scopeDefault)) {
+    applied.specialty = undefined;
+  }
   const cleared: RawQueryRecord = { ...raw };
   for (const key of FACET_KEYS[filterSet]) cleared[key] = undefined;
-  return pageHref("/", raw) !== pageHref("/", cleared);
+  return pageHref("/", applied) !== pageHref("/", cleared);
 }

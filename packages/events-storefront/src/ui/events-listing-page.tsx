@@ -50,6 +50,7 @@ import {
   LiveSkeleton,
   MyEventsSection,
   MyEventsSkeleton,
+  ScopedSubline,
   SkeletonSlot,
   readMyEvents,
 } from "./feed-sections";
@@ -73,6 +74,8 @@ async function panelOptions({ config, feed, specialties }: PanelInput) {
     options: filterOptionsOf(config.filterSet, block, book),
     optionBlock: block,
     specialties: book,
+    // 019 LD-9: the read fell back to every specialty, and the panel shows it.
+    defaultScopeEmpty: read.ok && read.value.defaultScopeEmpty === true,
   };
 }
 
@@ -236,6 +239,12 @@ export async function EventsListingPage({
         subline={
           typeof subline === "string" ? (
             subline
+          ) : "byScope" in subline ? (
+            <Suspense
+              fallback={<SkeletonSlot className="inline-block h-4 w-48" />}
+            >
+              <ScopedSubline feed={feed} raw={raw} byScope={subline.byScope} />
+            </Suspense>
           ) : (
             <Suspense
               fallback={<SkeletonSlot className="inline-block h-4 w-48" />}

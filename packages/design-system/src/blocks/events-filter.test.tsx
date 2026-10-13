@@ -304,6 +304,26 @@ describe("EventsFilter — the doctor facet set (EARS-7, filterSet)", () => {
     });
   });
 
+  it("EARS-9: removing the last picked specialty returns to the visitor's default scope «Все специальности» (019 LD-9)", async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderPanel({
+      defaultSpecialtyScope: "all",
+      applied: {
+        ...EMPTY,
+        specialtyScope: [{ id: "traumatology", label: "Травматология" }],
+      },
+    });
+    await user.click(
+      within(group("Специальность")).getByRole("button", {
+        name: "Убрать: Травматология",
+      }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...EMPTY,
+      specialtyScope: "all",
+    });
+  });
+
   it("EARS-7.1: the combobox never offers a value that is already picked", async () => {
     const user = userEvent.setup();
     renderPanel({ applied: { ...EMPTY, city: ["kazan"] } });
@@ -549,6 +569,40 @@ describe("EventsFilter — header, applied count and reset (EARS-7)", () => {
     expect(countAppliedFacets(applied, "doctor")).toBe(2);
     expect(countAppliedFacets(applied, "academy")).toBe(3);
     expect(countAppliedFacets(EMPTY, "doctor")).toBe(0);
+  });
+
+  it("EARS-9: when «Все специальности» is the visitor's default scope it is not counted (019 LD-9)", () => {
+    const all: AppliedFacets = { ...EMPTY, specialtyScope: "all" };
+    expect(countAppliedFacets(all, "doctor")).toBe(1);
+    expect(
+      countAppliedFacets(all, "doctor", { defaultSpecialtyScope: "all" }),
+    ).toBe(0);
+    expect(
+      countAppliedFacets({ ...all, nmoOnly: true }, "doctor", {
+        defaultSpecialtyScope: "all",
+      }),
+    ).toBe(1);
+    // Under that default, «Моя и смежные» is a narrowing the visitor applied.
+    expect(
+      countAppliedFacets(
+        { ...EMPTY, specialtyScope: "mine-and-adjacent" },
+        "doctor",
+        { defaultSpecialtyScope: "all" },
+      ),
+    ).toBe(1);
+  });
+
+  it("EARS-9: the default «Все специальности» renders selected with no «Применено» and no «Сбросить» (019 LD-9)", () => {
+    renderPanel({
+      applied: { ...EMPTY, specialtyScope: "all" },
+      defaultSpecialtyScope: "all",
+      resetHref: "/events",
+    });
+    expect(
+      screen.getByRole("button", { name: "Все специальности" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText(/Применено/)).toBeNull();
+    expect(screen.queryByRole("link", { name: "Сбросить" })).toBeNull();
   });
 
   it("EARS-7.4: «Сбросить» runs onReset when something is applied", async () => {

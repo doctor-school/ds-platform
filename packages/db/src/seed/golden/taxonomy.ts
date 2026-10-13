@@ -14,7 +14,9 @@
 // is stronger than «some directions exist»:
 //
 //   every one of the 118 `RAZDEL_I_NAMES` resolves to at least one PUBLISHED
-//   direction, and that direction carries at least one upcoming published эфир.
+//   direction, and that direction carries at least one upcoming published эфир
+//   — with exactly one named exception, {@link GOLDEN_EMPTY_SPECIALTY} (#2836),
+//   which resolves to a published direction that carries no эфиры on purpose.
 //
 // The first half of that invariant is why {@link GOLDEN_DIRECTIONS} is a
 // PARTITION: each of the 118 official specialties appears under exactly one
@@ -428,6 +430,12 @@ export const GOLDEN_UNPUBLISHED_DIRECTIONS: readonly GoldenDirectionSpec[] = [
  * array is the event walk's modulus and the ordinals of every row after it, so
  * it is appended LAST to {@link GOLDEN_DIRECTIONS} instead — no row seeded
  * before it changes id or pairing.
+ *
+ * For the same reason the partition literal still lists the specialty under
+ * «Реабилитация и физиотерапия», so {@link publishedDirectionIndexOfSpecialty}
+ * answers rehabilitation for it while the ACTIVE link points to `osteopathy`.
+ * That lookup only classifies volume эфиры by the specialty in their title, and
+ * no title names this specialty, so the stale answer is never read.
  */
 export const GOLDEN_EMPTY_SPECIALTY = "Остеопатия";
 
@@ -442,7 +450,11 @@ export const GOLDEN_EMPTY_DIRECTION: GoldenDirectionSpec = {
   specialties: [GOLDEN_EMPTY_SPECIALTY],
 };
 
-/** Every direction the golden seed writes, published ones first. */
+/**
+ * Every direction the golden seed writes, in ordinal order: the partition's
+ * published directions, then the draft and retired ones, then the published
+ * {@link GOLDEN_EMPTY_DIRECTION} — appended last (#2836) so no earlier id moves.
+ */
 export const GOLDEN_DIRECTIONS: readonly GoldenDirectionSpec[] = [
   ...GOLDEN_PUBLISHED_DIRECTIONS,
   ...GOLDEN_UNPUBLISHED_DIRECTIONS,
@@ -592,11 +604,12 @@ export const GOLDEN_ADJACENCY: readonly GoldenAdjacencyEdge[] = [
  * whose specialty has nothing yet is led instead. Seeded AFTER the retired edges,
  * so the ordinals of every edge above stay where they were.
  */
-export const GOLDEN_EMPTY_DIRECTION_ADJACENCY: readonly GoldenAdjacencyEdge[] = [
-  e("osteopathy", "rehabilitation", "related", 86),
-  e("osteopathy", "neurology", "interdisciplinary", 72),
-  e("osteopathy", "traumatology", "related", 68),
-];
+export const GOLDEN_EMPTY_DIRECTION_ADJACENCY: readonly GoldenAdjacencyEdge[] =
+  [
+    e("osteopathy", "rehabilitation", "related", 86),
+    e("osteopathy", "neurology", "interdisciplinary", 72),
+    e("osteopathy", "traumatology", "related", 68),
+  ];
 
 /**
  * Edges the editor has since withdrawn.

@@ -38,8 +38,17 @@ import {
 // Not named `view`: Prettier reflows `view` templates by HTML whitespace rules, while htm drops
 // whitespace that contains a line break — a reflow would glue words. Joins across lines use ${" "}.
 const view = htm.bind(React.createElement);
-const { useState, useMemo, useEffect, useRef, useContext, createContext } =
-  React;
+const {
+  useState,
+  useMemo,
+  useEffect,
+  useRef,
+  useContext,
+  useCallback,
+  useDeferredValue,
+  memo,
+  createContext,
+} = React;
 
 const CUSTOM = "своя сборка";
 const STORE = "ds-content-calculator";
@@ -679,8 +688,12 @@ function NumberEdit({ value, base, label, nullable, onChange, slots, wide }) {
   }`;
 }
 
-/** One editable model value, addressed by its override key; edited values are marked. */
-function Field({ k, base, label, options, slots, wide }) {
+/**
+ * One editable model value, addressed by its override key; edited values are marked.
+ * The unit sits next to the value; the reset slot is always reserved so an edit never moves
+ * the controls after it.
+ */
+function Field({ k, base, label, options, slots, wide, unit }) {
   const c = useContext(Ctx);
   const edited = Object.hasOwn(c.ov, k);
   const value = edited ? c.ov[k] : base;
@@ -715,20 +728,43 @@ function Field({ k, base, label, options, slots, wide }) {
                 : c.set(k, v)}
           />`
     }
-    ${
-      edited
-        ? view`<span class="mark" aria-hidden="true">●</span
-            ><button
+    ${unit ? view`<span class="unit">${unit}</span>` : null}
+    <span class="tail"
+      >${
+        edited
+          ? view`<button
               class="link"
+              title=${`вернуть значение модели: ${shape(base)}`}
               aria-label=${`сбросить ${label}; в модели: ${shape(base)}`}
               onClick=${() => c.reset(k)}
             >
               ↺
             </button>`
-        : null
-    }
+          : null
+      }</span
+    >
   </span>`;
 }
+
+/** One form row: a label column, the control with its unit, and a help line under it. */
+function Row({ label, help, children, testid }) {
+  return view`<div class="frow" data-testid=${testid}>
+    <div class="flabel">${label}</div>
+    <div class="fctl">
+      ${children}${help ? view`<div class="fhelp">${help}</div>` : null}
+    </div>
+  </div>`;
+}
+
+/** Russian plural: plural(5, ["счёт", "счёта", "счетов"]) → «счетов». */
+const plural = (n, [one, few, many]) => {
+  const a = Math.abs(n) % 100;
+  const b = a % 10;
+  if (a > 10 && a < 20) return many;
+  if (b === 1) return one;
+  if (b >= 2 && b <= 4) return few;
+  return many;
+};
 
 function LeafHours({ id }) {
   const c = useContext(Ctx);
@@ -1037,6 +1073,15 @@ function ExpertsDrill({ r, model, ctx }) {
     amount=${rub(experts.reduce((a, role) => a + r.direct.byRole[role].cost, 0))}
   >
     <table>
+      <thead>
+        <tr>
+          <th>Роль</th>
+          <th><${Term} t="грейд эксперта">Грейд эксперта<//></th>
+          <th class="num">часы</th>
+          <th class="num">ставка</th>
+          <th class="num">сумма</th>
+        </tr>
+      </thead>
       <tbody>
         ${experts.map((role) => {
           const rate = roleHourlyCost(model, role, ctx);
@@ -1044,7 +1089,7 @@ function ExpertsDrill({ r, model, ctx }) {
           return view`<tr key=${role}>
             <td>${role}</td>
             <td>
-              <${Term} t="грейд эксперта">грейд<//>${" "}<${Field}
+              <${Field}
                 k=${`var:${v}`}
                 base=${c.base.vars[v]}
                 label=${`грейд эксперта ${role}`}
@@ -1368,7 +1413,18 @@ function metricsOf(r) {
   };
 }
 
-function Kpi({ label, term, value, base, fmt, dfmt, lead, testid, hint }) {
+function Kpi({
+  label,
+  term,
+  value,
+  base,
+  fmt,
+  dfmt,
+  lead,
+  primary,
+  testid,
+  hint,
+}) {
   const prev = useRef(value);
   const [flash, setFlash] = useState(0);
   useEffect(() => {
@@ -1378,8 +1434,8 @@ function Kpi({ label, term, value, base, fmt, dfmt, lead, testid, hint }) {
     }
   }, [value]);
   const delta = fin(value) && fin(base) ? value - base : null;
-  return view`<div class=${`kpi${lead ? " lead" : ""}`} data-testid=${testid}>
-    <div class="label"><${Term} t=${term}>${label}<//>${hint ? view` <span class="hint">${hint}</span>` : null}</div>
+  return view`<div class=${`kpi${lead ? " lead" : ""}${primary ? " primary" : ""}`} data-testid=${testid}>
+    <div class="label"><${Term} t=${term}>${label}<//>${hint ? view`${" "}<span class="hint">${hint}</span>` : null}</div>
     <div class=${flash ? "value flash" : "value"} key=${flash}>${fmt(value)}</div>
     <div class="delta">
       ${
@@ -1400,9 +1456,9 @@ function KpiBar({ r, base, baseNote, onRemember, onForget, remembered }) {
   const be = (v) =>
     v == null ? "не достигается" : `${f0.format(Math.ceil(v))} контактов`;
   return view`<section class="kpibar" data-testid="kpi">
-    <${Kpi} label="Себестоимость" term="себестоимость" value=${m.cost} base=${b.cost} fmt=${rub} dfmt=${dRub} testid="kpi-cost" />
-    <${Kpi} label="Цена" term="цена" value=${m.price} base=${b.price} fmt=${rub} dfmt=${dRub} lead=${mode === "fixed"} testid="kpi-price" />
-    <${Kpi} label="Прибыль" term="прибыль" value=${m.profit} base=${b.profit} fmt=${rub} dfmt=${dRub} testid="kpi-profit" />
+    <${Kpi} label="Себестоимость" term="себестоимость" value=${m.cost} base=${b.cost} fmt=${rub} dfmt=${dRub} primary=${true} testid="kpi-cost" />
+    <${Kpi} label="Цена" term="цена" value=${m.price} base=${b.price} fmt=${rub} dfmt=${dRub} lead=${mode === "fixed"} primary=${true} testid="kpi-price" />
+    <${Kpi} label="Прибыль" term="прибыль" value=${m.profit} base=${b.profit} fmt=${rub} dfmt=${dRub} primary=${true} testid="kpi-profit" />
     <${Kpi} label="Наценка" hint="прибыль ÷ себест." term="наценка" value=${m.markup} base=${b.markup} fmt=${pct} dfmt=${dPct} lead=${mode === "markup"} testid="kpi-markup" />
     <${Kpi} label="Маржа" hint="прибыль ÷ цена" term="маржа" value=${m.margin} base=${b.margin} fmt=${pct} dfmt=${dPct} lead=${mode === "margin"} testid="kpi-margin" />
     <${Kpi} label="Множитель" term="множитель" value=${m.multiplier} base=${b.multiplier} fmt=${(v) => (fin(v) ? `× ${f2.format(v)}` : "—")} dfmt=${dNum} lead=${mode === "multiplier"} testid="kpi-multiplier" />
@@ -1410,10 +1466,10 @@ function KpiBar({ r, base, baseNote, onRemember, onForget, remembered }) {
     <${Kpi} label="Безубыточность" term="безубыточность" value=${m.breakEven} base=${b.breakEven} fmt=${be} dfmt=${(v) => `${sign(v)}${f0.format(Math.abs(v))}`} testid="kpi-break-even" />
     <div class="kpi baseline">
       <div class="label"><${Term} t="база">База сравнения<//></div>
-      <div class="small">${baseNote}</div>
+      <div class="small" title=${baseNote}>${baseNote}</div>
       <div class="toolbar">
-        <button onClick=${onRemember} data-testid="remember-base">Запомнить как базу</button>
-        ${remembered ? view`<button class="link" onClick=${onForget}>к модели без правок</button>` : null}
+        <button onClick=${onRemember} title="запомнить текущие цифры как базу сравнения" data-testid="remember-base">Запомнить</button>
+        ${remembered ? view`<button class="link" title="сравнивать с моделью без правок" onClick=${onForget}>забыть</button>` : null}
       </div>
     </div>
   </section>`;
@@ -1713,7 +1769,8 @@ function Matrix({ model, productName, ctx, setCtx }) {
                   >
                     <button class="cell" onClick=${() => setCtx({ grade: c.g, course: c.k })}>
                       <span>цена ${rub(c.price)}</span>
-                      <span class="small muted">себест. ${rub(c.cost)} · маржа ${pct(c.margin)}</span>
+                      <span class="small muted">себест. ${rub(c.cost)}</span>
+                      <span class="small muted">маржа ${pct(c.margin)}</span>
                     </button>
                   </td>`,
               )}
@@ -1724,7 +1781,14 @@ function Matrix({ model, productName, ctx, setCtx }) {
   </div>`;
 }
 
-function Drivers({ r, base, model, productName, ctx, setCtx }) {
+const Drivers = memo(function Drivers({
+  r,
+  base,
+  model,
+  productName,
+  ctx,
+  setCtx,
+}) {
   const [metric, setMetric] = useState(() => store.get("tornado", "price"));
   useEffect(() => store.set("tornado", metric), [metric]);
   const sens = useMemo(() => {
@@ -1745,7 +1809,7 @@ function Drivers({ r, base, model, productName, ctx, setCtx }) {
   return view`<section class="card" data-testid="drivers">
     <h2>Что двигает цену</h2>
     <div class="toolbar">
-      <span class="small muted"><${Term} t="торнадо">Торнадо<//> по:</span>
+      <span class="unit"><${Term} t="торнадо">Торнадо<//> по</span>
       <span class="seg" role="group" aria-label="метрика торнадо">
         ${[
           ["price", "цене"],
@@ -1772,7 +1836,7 @@ function Drivers({ r, base, model, productName, ctx, setCtx }) {
     <${Matrix} model=${model} productName=${productName} ctx=${ctx} setCtx=${setCtx} />
     <p class="small muted">Клик по ячейке переключает грейд и ход работы.</p>
   </section>`;
-}
+});
 
 // ── Price, contacts, market ──
 
@@ -1821,7 +1885,7 @@ function PriceValue({ mode, value, onChange }) {
         onChange(fromInput(mode, v));
       }}
     />
-    <span class="muted">${mode === "multiplier" ? "×" : mode === "fixed" ? "₽" : "%"}</span>
+    <span class="unit">${mode === "multiplier" ? "×" : mode === "fixed" ? "₽" : "%"}</span>
     ${problem ? view`<span class="err small">не применено: ${problem}</span>` : null}
   </span>`;
 }
@@ -1840,23 +1904,26 @@ function PriceBlock({ r, productName, model }) {
   const pc = p.pricePerContact;
   return view`<section class="card" data-testid="price">
     <h2><${Term} t="цена">Цена<//></h2>
-    <div class="toolbar">
-      <span class="small muted"><${Term} t="ведущий способ">Задаю цену через<//>:</span>
-      <span class="seg" role="group" aria-label="ведущий способ цены">
-        ${PRICE_MODES.map(
-          (m) =>
-            view`<button key=${m} aria-pressed=${p.mode === m} data-testid=${`price-mode-${m}`} onClick=${() => setMode(m, p.derived[m])}>
-              ${PRICE_MODE_LABEL[m]}
-            </button>`,
-        )}
-      </span>
-      <${PriceValue} mode=${p.mode} value=${p.value} onChange=${(v) => setMode(p.mode, v)} />
-      ${
-        own
-          ? view`<button class="link" onClick=${() => setMode(null)}>↺ как для всех продуктов</button>`
-          : view`<span class="small muted">— общее значение для всех продуктов (вкладка «Переменные»)</span>`
-      }
+    <div class="form">
+      <${Row} label=${view`<${Term} t="ведущий способ">Задаю цену через<//>`}>
+        <span class="seg" role="group" aria-label="ведущий способ цены">
+          ${PRICE_MODES.map(
+            (m) =>
+              view`<button key=${m} aria-pressed=${p.mode === m} data-testid=${`price-mode-${m}`} onClick=${() => setMode(m, p.derived[m])}>
+                ${PRICE_MODE_LABEL[m]}
+              </button>`,
+          )}
+        </span>
+      <//>
+      <${Row}
+        label=${PRICE_MODE_LABEL[p.mode]}
+        help=${own ? "своё значение этого продукта" : "общее значение для всех продуктов — вкладка «Переменные»"}
+      >
+        <${PriceValue} mode=${p.mode} value=${p.value} onChange=${(v) => setMode(p.mode, v)} />
+        ${own ? view`<button class="link" onClick=${() => setMode(null)}>↺ как для всех продуктов</button>` : null}
+      <//>
     </div>
+    <h3>Что получается</h3>
     <table class="derived">
       <tbody>
         <tr>
@@ -1895,17 +1962,30 @@ function PriceBlock({ r, productName, model }) {
         </tr>
       </tbody>
     </table>
-    ${p.flags.length ? view`<ul class="flags">${p.flags.map((f) => view`<li key=${f}>${f}</li>`)}</ul>` : null}
+    <div class="flagslot">
+      ${
+        p.flags.length
+          ? view`<details class="flagbox" data-testid="price-flags">
+              <summary>${`Предупреждения по цене: ${p.flags.length}`}</summary>
+              <ul class="flags">${p.flags.map((f) => view`<li key=${f}>${f}</li>`)}</ul>
+            </details>`
+          : view`<div class="small muted flagline">Предупреждений по цене нет.</div>`
+      }
+    </div>
     <h3><${Term} t="рыночный ориентир">Рыночный ориентир<//> и <${Term} t="золотая цена">золотая цена<//></h3>
-    <div class="toolbar">
-      <span>рынок, ₽:</span>
-      <${Field} k=${`market:${productName}`} base=${c.base.marketRefs[productName]?.rub ?? null} label="рыночный ориентир" wide=${true} />
-      <span><${Term} t="потолок бюджета">потолок бюджета<//>, ₽:</span>
-      <${Field} k="var:budget_cap" base=${c.base.vars.budget_cap} label="потолок бюджета спонсора" wide=${true} />
-      <${Field} k="var:budget_cap_mode" base=${c.base.vars.budget_cap_mode} label="вид потолка" options=${VAR_OPTIONS.budget_cap_mode} />
+    <div class="form">
+      <${Row} label=${view`<${Term} t="рыночный ориентир">Рынок<//>, мин – макс`} help="пусто — у продукта нет ориентира">
+        <${Field} k=${`market:${productName}`} base=${c.base.marketRefs[productName]?.rub ?? null} label="рыночный ориентир" wide=${true} unit="₽" />
+      <//>
+      <${Row} label=${view`<${Term} t="потолок бюджета">Потолок бюджета<//>`} help="пусто — потолка нет">
+        <${Field} k="var:budget_cap" base=${c.base.vars.budget_cap} label="потолок бюджета спонсора" wide=${true} unit="₽" />
+        <${Field} k="var:budget_cap_mode" base=${c.base.vars.budget_cap_mode} label="вид потолка" options=${VAR_OPTIONS.budget_cap_mode} />
+      <//>
       ${
         c.model.vars.budget_cap_mode === "tiered"
-          ? view`<span>скидка сверх потолка</span><${Field} k="var:budget_tier_discount" base=${c.base.vars.budget_tier_discount} label="скидка сверх потолка" />`
+          ? view`<${Row} label="Скидка сверх потолка" help="доля скидки на контакты сверх потолка">
+              <${Field} k="var:budget_tier_discount" base=${c.base.vars.budget_tier_discount} label="скидка сверх потолка" />
+            <//>`
           : null
       }
     </div>
@@ -1946,14 +2026,18 @@ function ContactsBlock({ r, inputs }) {
           : view`<span class="muted">У продукта нет оплаты за контакты — цена целиком аванс.</span>`
       }
     </p>
-    <div class="toolbar">
-      <span>контакты мало / план / много:</span>
-      <${Field} k="var:contacts" base=${c.base.vars.contacts} label="контакты" slots=${["мало", "план", "много"]} />
-      <span>цена контакта, ₽:</span>
-      <${Field} k="var:price_per_contact" base=${c.base.vars.price_per_contact} label="цена контакта" />
-      <span>аудитория, врачей:</span>
-      <${Field} k="var:audience_doctors" base=${c.base.vars.audience_doctors} label="размер аудитории" wide=${true} />
+    <div class="form">
+      <${Row} label="Контакты: мало – план – много">
+        <${Field} k="var:contacts" base=${c.base.vars.contacts} label="контакты" slots=${["мало", "план", "много"]} unit="контактов" />
+      <//>
+      <${Row} label=${view`<${Term} t="цена контакта">Цена контакта<//>`} help="пусто — середина полосы аудитории × вес типа контакта">
+        <${Field} k="var:price_per_contact" base=${c.base.vars.price_per_contact} label="цена контакта" unit="₽" />
+      <//>
+      <${Row} label="Аудитория специальности" help="выбирает полосу цены контакта">
+        <${Field} k="var:audience_doctors" base=${c.base.vars.audience_doctors} label="размер аудитории" wide=${true} unit="врачей" />
+      <//>
     </div>
+    <h3>Исходы</h3>
     <div class="scroll">
       <table data-testid="outcomes">
         <thead>
@@ -2001,18 +2085,24 @@ function ContactsBlock({ r, inputs }) {
         </tbody>
       </table>
     </div>
-    <p>
-      <${Term} t="безубыточность">Безубыточность<//>:${" "}
-      <b data-testid="break-even"
-        >${p.breakEvenContacts == null ? "не достигается" : `${f0.format(Math.ceil(p.breakEvenContacts))} контактов`}</b
-      >.${" "}
-      <${Term} t="период счетов">Счета<//>:${" "}
-      <${Field} k="var:billing_period" base=${c.base.vars.billing_period} label="период счетов" options=${VAR_OPTIONS.billing_period} />
-      ${" "}— срок ${f1.format(p.billing.leadMonths)} мес., ${p.billing.invoices} счёт(а) по${" "}
-      ${rub(p.billing.perInvoice)} при плане.${" "}
-      <${Term} t="авторская доля">Авторская доля<//>${" "}
-      <${Field} k="var:author_share" base=${c.base.vars.author_share} label="авторская доля" />
-    </p>
+    <h3>Оплата</h3>
+    <div class="form">
+      <${Row} label=${view`<${Term} t="безубыточность">Безубыточность<//>`}>
+        <b class="value-out" data-testid="break-even"
+          >${p.breakEvenContacts == null ? "не достигается" : `${f0.format(Math.ceil(p.breakEvenContacts))} контактов`}</b
+        >
+      <//>
+      <${Row}
+        label=${view`<${Term} t="период счетов">Счета<//>`}
+        help=${`срок ${f1.format(p.billing.leadMonths)} мес. · ${p.billing.invoices} ${plural(p.billing.invoices, ["счёт", "счёта", "счетов"])} по ${rub(p.billing.perInvoice)} при плане`}
+        testid="billing"
+      >
+        <${Field} k="var:billing_period" base=${c.base.vars.billing_period} label="период счетов" options=${VAR_OPTIONS.billing_period} />
+      <//>
+      <${Row} label=${view`<${Term} t="авторская доля">Авторская доля<//>`} help="доля маржи автору курса: 0,1 — 10 %; распределение прибыли, не себестоимость">
+        <${Field} k="var:author_share" base=${c.base.vars.author_share} label="авторская доля" unit="доли маржи" />
+      <//>
+    </div>
   </section>`;
 }
 
@@ -2020,27 +2110,39 @@ function ContactsBlock({ r, inputs }) {
 function ProductOptions({ productName }) {
   const c = useContext(Ctx);
   const nested = nestedProducts(c.base, productName);
-  return view`<div class="toolbar" data-testid="product-options">
+  const on = !!c.model.vars.extended_campaign;
+  return view`<div class="form" data-testid="product-options">
     ${
       nested.has("видеоподкаст")
-        ? view`<span><${Term} t="продакшн видеоподкаста">Продакшн видеоподкаста<//>:</span>
+        ? view`<${Row}
+            label=${view`<${Term} t="продакшн видеоподкаста">Продакшн видеоподкаста<//>`}
+            help="своя команда — свои часы монтажа и студия; подрядчик — компоненты подрядчика и аренда студии"
+          >
             <${Field}
               k="var:video_podcast_production"
               base=${c.base.vars.video_podcast_production}
               label="продакшн видеоподкаста"
               options=${VAR_OPTIONS.video_podcast_production}
-            />`
+            />
+          <//>`
         : null
     }
-    <label class="edit">
-      <input
-        type="checkbox"
-        checked=${!!c.model.vars.extended_campaign}
-        data-testid="extended-campaign"
-        onChange=${(e) => (e.target.checked ? c.set("var:extended_campaign", true) : c.reset("var:extended_campaign"))}
-      />
-      <${Term} t="расширенная кампания">Расширенная кампания продвижения<//>
-    </label>
+    <${Row} label="Опция пакета">
+      <label class="switch">
+        <input
+          type="checkbox"
+          checked=${on}
+          data-testid="extended-campaign"
+          onChange=${(e) => (e.target.checked ? c.set("var:extended_campaign", true) : c.reset("var:extended_campaign"))}
+        />
+        <span class="switch-title"
+          ><${Term} t="расширенная кампания">Расширенная кампания продвижения<//></span
+        >
+        <span class="fhelp"
+          >${`${on ? "Включена: в себестоимости" : "Выключена. Если включить, в себестоимость войдёт"} внешняя затрата «платное привлечение врачей» — стоимость привлечения контакта × контакты плана.`}</span
+        >
+      </label>
+    <//>
   </div>`;
 }
 
@@ -2062,11 +2164,25 @@ function BudgetPanel({ r, model, ctx }) {
     <h2>
       Бюджет по статьям ${edited ? view`<span class="badge">изменено ${edited}</span>` : null}
     </h2>
-    <p class="small muted">
+    <p class="section-note">
       <${Term} t="масштаб статьи">Масштаб статьи<//>: 100 % — как в модели.
       Ползунок для грубой оценки, поле — для точной суммы статьи в этой единице.
     </p>
     <table class="budget">
+      <colgroup>
+        <col class="c-name" />
+        <col class="c-slider" />
+        <col class="c-pct" />
+        <col class="c-sum" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Статья</th>
+          <th>Масштаб</th>
+          <th class="num"></th>
+          <th class="num">Сумма в единице</th>
+        </tr>
+      </thead>
       <tbody>
         ${ARTICLES.map((a) => {
           const k = `scale:${a}`;
@@ -2075,9 +2191,10 @@ function BudgetPanel({ r, model, ctx }) {
           const unit = scale ? amount / scale : 0;
           const set = (v) =>
             Math.abs(v - 1) < 1e-9 ? c.reset(k) : c.set(k, v);
+          const edited = Object.hasOwn(c.ov, k);
           return view`<tr key=${a}>
             <td>${ARTICLE_LABELS[a]}</td>
-            <td class="slider">
+            <td>
               <input
                 type="range"
                 min="0.3"
@@ -2090,17 +2207,18 @@ function BudgetPanel({ r, model, ctx }) {
                 onInput=${(e) => set(Number(e.target.value))}
                 onChange=${(e) => set(Number(e.target.value))}
               />
-              <span class="num small">${pct(scale)}</span>
             </td>
+            <td class="pct">${pct(scale)}</td>
             <td class="num">
               <${RubEdit}
                 value=${amount}
                 disabled=${!unit}
+                edited=${edited}
                 label=${`сумма статьи ${ARTICLE_LABELS[a]}`}
                 onChange=${(v) => unit && set(v / unit)}
+                onReset=${() => c.reset(k)}
               />
             </td>
-            <td>${Object.hasOwn(c.ov, k) ? view`<button class="link" onClick=${() => c.reset(k)}>↺</button>` : null}</td>
           </tr>`;
         })}
       </tbody>
@@ -2110,9 +2228,11 @@ function BudgetPanel({ r, model, ctx }) {
       !fit
         ? null
         : fit.fits
-          ? view`<p class="ok" data-testid="budget-fit">Да: ни одна ставка не ниже рыночного минимума своего грейда.</p>`
-          : view`<div data-testid="budget-fit">
-              <p class="warn">Нельзя купить ниже рынка:</p>
+          ? view`<p class="ok fit" data-testid="budget-fit">Да: ни одна ставка не ниже рыночного минимума своего грейда.</p>`
+          : view`<details class="fit" data-testid="budget-fit">
+              <summary class="warn">
+                ${`Нет: ${fit.below.length} ${plural(fit.below.length, ["ставка", "ставки", "ставок"])} ниже рыночного минимума грейда — список`}
+              </summary>
               <ul>
                 ${fit.below.map(
                   (b) =>
@@ -2123,7 +2243,7 @@ function BudgetPanel({ r, model, ctx }) {
                     </li>`,
                 )}
               </ul>
-            </div>`
+            </details>`
     }
     ${
       r.golden.band
@@ -2136,17 +2256,18 @@ function BudgetPanel({ r, model, ctx }) {
   </section>`;
 }
 
-function RubEdit({ value, onChange, label, disabled }) {
+function RubEdit({ value, onChange, label, disabled, edited, onReset }) {
   const [text, setText] = useState(() => (fin(value) ? f0.format(value) : ""));
   const [focus, setFocus] = useState(false);
   useEffect(() => {
     if (!focus) setText(fin(value) ? f0.format(value) : "");
   }, [value, focus]);
-  return view`<span class="edit"
+  return view`<span class=${`edit${edited ? " edited" : ""}`}
     ><input
       class="wide"
       inputmode="decimal"
       aria-label=${label}
+      title=${disabled ? "статьи нет в этой единице — сумму задать нельзя" : undefined}
       disabled=${disabled}
       value=${text}
       onFocus=${() => setFocus(true)}
@@ -2156,7 +2277,14 @@ function RubEdit({ value, onChange, label, disabled }) {
         const v = parseNum(e.target.value);
         if (fin(v) && v >= 0) onChange(v);
       }}
-    /><span class="muted">₽</span></span
+    /><span class="unit">₽</span
+    ><span class="tail"
+      >${
+        edited && onReset
+          ? view`<button class="link" aria-label=${`сбросить: ${label}`} title="вернуть 100 %" onClick=${onReset}>↺</button>`
+          : null
+      }</span
+    ></span
   >`;
 }
 
@@ -2169,36 +2297,43 @@ function PeriodPanel({ plan, model }) {
   const sumOf = (k) => rows.reduce((a, x) => a + x[k], 0);
   const teamRows = model.teamRoles.map((m) => m.role);
   return view`<div data-testid="period">
-    <p>
-      <b><${Term} t="план месяца">План месяца команды: чем занята<//></b>
-      ${" "}— ${Object.entries(plan.sold)
-        .map(([p, n]) => `${f2.format(n)} × ${p}`)
-        .join(
-          ", ",
-        )}${plan.bottleneck ? view` (<${Term} t="узкое место">узкое место<//> — ${plan.bottleneck})` : ""}.
-    </p>
+    <div class="facts">
+      <div class="fact">
+        <div class="fact-label"><${Term} t="план месяца">План месяца команды: чем занята<//></div>
+        <div class="fact-value">
+          ${Object.entries(plan.sold)
+            .map(([p, n]) => `${f2.format(n)} × ${p}`)
+            .join(", ")}
+        </div>
+      </div>
+      <div class="fact">
+        <div class="fact-label"><${Term} t="узкое место">Узкое место плана<//></div>
+        <div class="fact-value">${plan.bottleneck ?? "—"}</div>
+      </div>
+    </div>
     <p class="small muted">
       Этот план не меняет состав выбранного продукта. Он задаёт две ставки на
       прямой час: накладные (пул месяца ÷ прямые часы плана) и простой штата
       (свободное оплаченное время ÷ те же часы). Загрузите команду другим
       продуктом или числом команд — изменятся только эти две строки.
     </p>
-    <p>
-      Команд:${" "}<${Field}
-        k="var:teams"
-        base=${c.base.vars.teams}
-        label="число команд"
-      />, загрузка продуктом${" "}<${Field}
-        k="var:plan_mix"
-        base=${c.base.vars.plan_mix}
-        label="продукт плана"
-        options=${Object.keys(c.base.products)
-          .filter((p) => p !== CUSTOM)
-          .map((p) => [p, p])}
-      />${" "}на полную мощность.
-    </p>
+    <div class="form">
+      <${Row} label="Число команд">
+        <${Field} k="var:teams" base=${c.base.vars.teams} label="число команд" unit="команд" />
+      <//>
+      <${Row} label="Загрузка продуктом" help="команда делает этот продукт на полную мощность">
+        <${Field}
+          k="var:plan_mix"
+          base=${c.base.vars.plan_mix}
+          label="продукт плана"
+          options=${Object.keys(c.base.products)
+            .filter((p) => p !== CUSTOM)
+            .map((p) => [p, p])}
+        />
+      <//>
+    </div>
     <div class="scroll">
-      <table>
+      <table class="nowrap-first">
         <thead>
           <tr>
             <th>Роль</th>
@@ -2822,18 +2957,25 @@ function CustomBuilder({ custom, setCustom, products }) {
     <h2>Своя сборка</h2>
     <div class="scroll">
       <table>
+        <thead>
+          <tr>
+            <th>Единица</th>
+            <th>Количество</th>
+            <th></th>
+          </tr>
+        </thead>
         <tbody>
           ${custom.items.map(
             (it, i) =>
               view`<tr key=${i}>
-                <td>
+                <th scope="row">
                   <select aria-label=${`единица ${i + 1}`} value=${it.product} onChange=${(e) => update(i, { product: e.target.value })}>
                     ${choices.map((p) => view`<option key=${p} value=${p}>${products[p].name}</option>`)}
                   </select>
-                </td>
+                </th>
                 <td>
                   <span class="edit"
-                    >×
+                    ><span class="unit">×</span>
                     <input
                       inputmode="decimal"
                       aria-label=${`количество ${i + 1}`}
@@ -2854,11 +2996,16 @@ function CustomBuilder({ custom, setCustom, products }) {
         </tbody>
       </table>
     </div>
-    <div class="toolbar" style=${{ marginTop: 8 }}>
+    <div class="toolbar" style=${{ margin: "8px 0 16px" }}>
       <button onClick=${() => setCustom({ ...custom, items: [...custom.items, { product: choices[0], qty: 1 }] })}>+ единица</button>
+    </div>
+    <div class="form">
+      <${Row}
+        label="Сделок по сборке"
+        help=${view`сделка — <${Term} t="КП">КП<//>, договор, отчётные этапы и закрытие (продукт «сделка»); 0 — без неё`}
+      >
       <span class="edit"
-        >сделок по сборке:
-        <input
+        ><input
           inputmode="decimal"
           aria-label="сделок по сборке"
           value=${showNum(custom.deals)}
@@ -2870,7 +3017,7 @@ function CustomBuilder({ custom, setCustom, products }) {
             });
           }}
       /></span>
-      <span class="small muted">сделка — <${Term} t="КП">КП<//>, договор, отчётные этапы и закрытие (продукт «сделка»); 0 — без неё</span>
+      <//>
     </div>
   </section>`;
 }
@@ -2924,7 +3071,10 @@ function App({ inputs }) {
       return { ...DEFAULT_CTX };
     }
   });
-  const setCtx = (patch) => setCtxState((x) => ({ ...x, ...patch }));
+  const setCtx = useCallback(
+    (patch) => setCtxState((x) => ({ ...x, ...patch })),
+    [],
+  );
   const [overrides, setOverrides] = useState(() => {
     const o = store.get("overrides", {});
     return isPlainObject(o) ? o : {};
@@ -3005,6 +3155,29 @@ function App({ inputs }) {
   const baseNote = remembered
     ? `запомнена ${remembered.at} (${GRADE_LABELS[remembered.ctx.grade]}, ${COURSE_LABELS[remembered.ctx.course]})`
     : "модель без правок при тех же грейде и ходе работы";
+  // The charts recompute the model dozens of times (tornado, matrix, break-even): they follow a
+  // dragged slider in a deferred render, so the slider and the key numbers stay instant.
+  const heavy = useMemo(
+    () => ({ r, model, base: baseline }),
+    [r, model, baseline],
+  );
+  const lazy = useDeferredValue(heavy);
+  const charts = lazy.r && lazy.model ? lazy : heavy;
+  // Sticky offsets follow the real height of the top bar (it wraps on narrow screens).
+  const topRef = useRef(null);
+  useEffect(() => {
+    const el = topRef.current;
+    const Observer = window.ResizeObserver;
+    if (!el || !Observer) return undefined;
+    const ro = new Observer(() =>
+      document.documentElement.style.setProperty(
+        "--top-h",
+        `${el.offsetHeight}px`,
+      ),
+    );
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const importFile = (file) => {
     if (!file) return;
@@ -3044,14 +3217,18 @@ function App({ inputs }) {
 
   return view`<${Ctx.Provider} value=${ctxValue}>
     <${TipLayer} />
+    <div class="top" ref=${topRef}>
     <header>
       <h1>Себестоимость и цена</h1>
-      <select aria-label="продукт" value=${productName} onChange=${(e) => setProduct(e.target.value)} data-testid="product">
-        ${productNames.map((p) => view`<option key=${p} value=${p}>${inputs.products.products[p].name}</option>`)}
-        <option value=${CUSTOM}>Своя сборка…</option>
-      </select>
-      <span class="ctl"
-        ><${Term} t="грейд">Грейд<//>
+      <label class="group">
+        <span class="glabel">Продукт</span>
+        <select aria-label="продукт" value=${productName} onChange=${(e) => setProduct(e.target.value)} data-testid="product">
+          ${productNames.map((p) => view`<option key=${p} value=${p}>${inputs.products.products[p].name}</option>`)}
+          <option value=${CUSTOM}>Своя сборка…</option>
+        </select>
+      </label>
+      <span class="group"
+        ><span class="glabel"><${Term} t="грейд">Грейд<//></span>
         <${Seg}
           label="грейд"
           testid="grade"
@@ -3059,8 +3236,8 @@ function App({ inputs }) {
           onChange=${(g) => setCtx({ grade: g })}
           options=${[...GRADES, GRADE_MIX].map((g) => [g, GRADE_LABELS[g]])}
       /></span>
-      <span class="ctl"
-        ><${Term} t="ход работы">Ход работы<//>
+      <span class="group"
+        ><span class="glabel"><${Term} t="ход работы">Ход работы<//></span>
         <${Seg}
           label="ход работы"
           testid="course"
@@ -3068,16 +3245,35 @@ function App({ inputs }) {
           onChange=${(k) => setCtx({ course: k })}
           options=${COURSES.map((k) => [k, COURSE_LABELS[k]])}
       /></span>
-      <span class="spacer"></span>
-      <span class="toolbar">
-        ${count ? view`<span class="badge" data-testid="edits-count">правок: ${count}</span>` : null}
-        <input
-          aria-label="пометка к правкам"
-          placeholder="пометка к правкам"
-          value=${note}
-          onChange=${(e) => setNote(e.target.value)}
-          class="note"
-        />
+    </header>
+    ${
+      r
+        ? view`<${KpiBar}
+            r=${r}
+            base=${baseline}
+            baseNote=${baseNote}
+            remembered=${!!remembered}
+            onRemember=${remember}
+            onForget=${() => setSnapshot(null)}
+          />`
+        : null
+    }
+    </div>
+    <div class="wrap">
+      <section class="editsbar">
+      <div class="toolbar">
+        ${count ? view`<span class="badge" data-testid="edits-count">правок: ${count}</span>` : view`<span class="small muted">Правок нет — всё как в модели.</span>`}
+        <span class="spacer"></span>
+        <label class="group">
+          <span class="glabel">Пометка</span>
+          <input
+            aria-label="пометка к правкам"
+            placeholder="к файлу правок"
+            value=${note}
+            onChange=${(e) => setNote(e.target.value)}
+            class="note"
+          />
+        </label>
         <button onClick=${() => download(overrides, note)}>Скачать правки</button>
         <label>
           <button onClick=${(e) => e.currentTarget.nextElementSibling.click()}>Загрузить правки</button>
@@ -3093,26 +3289,13 @@ function App({ inputs }) {
           />
         </label>
         <button disabled=${!count} onClick=${() => setOverrides({})}>Сбросить всё</button>
-      </span>
-    </header>
-    ${
-      r
-        ? view`<${KpiBar}
-            r=${r}
-            base=${baseline}
-            baseNote=${baseNote}
-            remembered=${!!remembered}
-            onRemember=${remember}
-            onForget=${() => setSnapshot(null)}
-          />`
-        : null
-    }
-    <div class="wrap">
-      <p class="small muted" style=${{ margin: 0 }}>
+      </div>
+      <p class="small muted intro">
         Правки хранятся в этом браузере. В YAML модели их переносит ведущий
         PR-ом — передайте ему файл «Скачать правки». Подчёркнутые пунктиром
         термины объясняются при наведении и при переходе клавишей Tab.
       </p>
+      </section>
       ${
         [...errors, planError, importError].filter(Boolean).length
           ? view`<div class="errbox" data-testid="errors">
@@ -3125,29 +3308,50 @@ function App({ inputs }) {
       ${productName === CUSTOM ? view`<${CustomBuilder} custom=${custom} setCustom=${setCustom} products=${inputs.products.products} />` : null}
       ${
         r && plan
-          ? view`<section class="card facts" data-testid="headline">
-                <span><${Term} t="мощность">Мощность одной команды<//>: <b>${
-                  r.capacity.perMonth == null
-                    ? "—"
-                    : `${n2(r.capacity.perMonth)} ${productName === CUSTOM ? "сборки" : "ед."} в месяц`
-                }</b>${r.capacity.bottleneck ? view`, <${Term} t="узкое место">узкое место<//> — <b>${r.capacity.bottleneck}</b>` : null}</span>
-                <span><${Term} t="срок">Срок<//>: <b>${
-                  r.leadDays == null
-                    ? "не считается (у продукта нет цепочки срока)"
-                    : `${f1.format(r.leadDays)} раб. дн. ≈ ${f1.format(r.leadDays / model.vars.working_days_per_month)} мес.`
-                }</b></span>
-                <span><${Term} t="прямые часы">Прямые часы<//>: <b>${hrs(r.direct.hours)}</b></span>
-                <span>«<${Term} t="по загрузке">По загрузке<//>»: <b data-testid="total-by-load">${rub(r.total.byLoad)}</b></span>
-                <span>«<${Term} t="с полным фондом оплаты">С полным фондом оплаты<//>»: <b data-testid="total-full-payroll">${rub(r.total.fullPayroll)}</b></span>
-                <${ProductOptions} productName=${productName} />
-                ${
-                  r.flags.length
-                    ? view`<details class="flagbox" data-testid="flags">
-                        <summary>Флаги расчёта: ${r.flags.length}</summary>
-                        <ul class="flags">${r.flags.map((f) => view`<li key=${f}>${f}</li>`)}</ul>
-                      </details>`
-                    : view`<span class="small muted">Флагов нет.</span>`
-                }
+          ? view`<section class="card" data-testid="headline">
+                <div class="facts">
+                  <div class="fact">
+                    <div class="fact-label"><${Term} t="мощность">Мощность одной команды<//></div>
+                    <div class="fact-value">${
+                      r.capacity.perMonth == null
+                        ? "—"
+                        : `${n2(r.capacity.perMonth)} ${productName === CUSTOM ? "сборки" : "ед."} в месяц`
+                    }</div>
+                    ${r.capacity.bottleneck ? view`<div class="fact-sub"><${Term} t="узкое место">Узкое место<//>: ${r.capacity.bottleneck}</div>` : null}
+                  </div>
+                  <div class="fact">
+                    <div class="fact-label"><${Term} t="срок">Срок<//></div>
+                    <div class="fact-value">${
+                      r.leadDays == null
+                        ? "не считается"
+                        : `${f1.format(r.leadDays)} раб. дн. ≈ ${f1.format(r.leadDays / model.vars.working_days_per_month)} мес.`
+                    }</div>
+                    ${r.leadDays == null ? view`<div class="fact-sub">у продукта нет цепочки срока</div>` : null}
+                  </div>
+                  <div class="fact">
+                    <div class="fact-label"><${Term} t="прямые часы">Прямые часы<//></div>
+                    <div class="fact-value">${hrs(r.direct.hours)}</div>
+                  </div>
+                  <div class="fact">
+                    <div class="fact-label">Себестоимость «<${Term} t="по загрузке">по загрузке<//>»</div>
+                    <div class="fact-value" data-testid="total-by-load">${rub(r.total.byLoad)}</div>
+                  </div>
+                  <div class="fact">
+                    <div class="fact-label">Себестоимость «<${Term} t="с полным фондом оплаты">с полным фондом оплаты<//>»</div>
+                    <div class="fact-value" data-testid="total-full-payroll">${rub(r.total.fullPayroll)}</div>
+                  </div>
+                </div>
+                <div class="headline-foot">
+                  <${ProductOptions} productName=${productName} />
+                  ${
+                    r.flags.length
+                      ? view`<details class="flagbox" data-testid="flags">
+                          <summary>Флаги расчёта: ${r.flags.length}</summary>
+                          <ul class="flags">${r.flags.map((f) => view`<li key=${f}>${f}</li>`)}</ul>
+                        </details>`
+                      : view`<span class="small muted">Флагов нет.</span>`
+                  }
+                </div>
               </section>
               <div class="cols2">
                 <div class="col">
@@ -3156,7 +3360,7 @@ function App({ inputs }) {
                   <${BudgetPanel} r=${r} model=${model} ctx=${ctx} />
                 </div>
                 <div class="col sticky">
-                  <${Drivers} r=${r} base=${baseline} model=${model} productName=${productName} ctx=${ctx} setCtx=${setCtx} />
+                  <${Drivers} r=${charts.r} base=${charts.base} model=${charts.model} productName=${productName} ctx=${ctx} setCtx=${setCtx} />
                 </div>
               </div>
               <${Breakdown} r=${r} plan=${plan} model=${model} ctx=${ctx} />

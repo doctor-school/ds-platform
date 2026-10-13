@@ -2878,7 +2878,7 @@ export interface components {
                         state: "montage" | "raw-only" | "preparing";
                     };
                     seatsLeft?: number;
-                    signUpCount: number;
+                    signUpCount: number | null;
                     slug: string;
                     source: string;
                     speaker: string;
@@ -3226,7 +3226,7 @@ export interface components {
                     title: string;
                 };
                 school: string;
-                signUpCount: number;
+                signUpCount: number | null;
                 slug: string;
                 speakers: {
                     name: string;
@@ -3257,7 +3257,7 @@ export interface components {
                     state: "montage" | "raw-only" | "preparing";
                 };
                 school: string;
-                signUpCount: number;
+                signUpCount: number | null;
                 slug: string;
                 speakers: {
                     name: string;
@@ -3362,7 +3362,7 @@ export interface components {
                 title: string;
             };
             school: string;
-            signUpCount: number;
+            signUpCount: number | null;
             slug: string;
             speakers: {
                 name: string;

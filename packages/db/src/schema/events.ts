@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
   index,
@@ -144,6 +145,14 @@ export const events = pgTable(
      * projects yet would be the untracked seam F-22 forbids.
      */
     seatsLeft: integer("seats_left"),
+    /**
+     * 007 EARS-12 / 019 EARS-19 (#2913) — «Скрыть число записавшихся». A plain
+     * authored display attribute (not lifecycle visibility, EARS-9): while it
+     * is `true` every public card read serves `signUpCount: null`, so the
+     * number never reaches a client to be hidden there. `false` is the default
+     * and the back-fill — every existing event shows its count today.
+     */
+    hideSignUpCount: boolean("hide_sign_up_count").notNull().default(false),
     /**
      * #1593 — the optimistic-concurrency version of the event aggregate, the
      * same column `event_recordings` and every versioned taxonomy row already

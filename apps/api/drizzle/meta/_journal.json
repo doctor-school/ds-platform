@@ -337,6 +337,13 @@
       "when": 1791446010245,
       "tag": "0047_congress_program_committee_role",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1791890118776,
+      "tag": "0048_events_hide_sign_up_count",
+      "breakpoints": true
     }
   ]
 }

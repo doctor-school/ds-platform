@@ -68,6 +68,8 @@ export interface DoctorFeedRow {
   participationFormat: EventParticipationFormat;
   /** 012 EARS-28 — the event's kind, read from the dictionary. */
   kind: EventKindRef;
+  /** 007 EARS-12 / 019 EARS-19 (#2913) — the card serves no registrant count. */
+  hideSignUpCount: boolean;
 }
 
 /**
@@ -85,6 +87,7 @@ const FEED_ROW_COLUMNS = {
   state: events.state,
   participationFormat: events.participationFormat,
   kind: { id: eventKinds.id, slug: eventKinds.slug, title: eventKinds.title },
+  hideSignUpCount: events.hideSignUpCount,
 };
 
 /**

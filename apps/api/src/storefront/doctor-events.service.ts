@@ -625,7 +625,11 @@ export class DoctorEventsService {
     const [speakers, projectTitles, signUps, recordings] = await Promise.all([
       this.repository.findLeadSpeakers(ids),
       this.repository.findProjectTitles(ids),
-      this.repository.countSignUps(ids),
+      // 019 EARS-19 (#2913) — an event whose operator hid the count is not
+      // counted at all; its card serves `null`, never a number hidden later.
+      this.repository.countSignUps(
+        rows.filter((row) => !row.hideSignUpCount).map((row) => row.id),
+      ),
       // The batch form — ONE statement for the whole page, never per card.
       this.recordings.resolveRecordingProjections(endedIds),
     ]);
@@ -650,7 +654,7 @@ export class DoctorEventsService {
       speaker: speakers.get(row.id) ?? "",
       // The published project the event belongs to; `school` until linked.
       source: projectTitles.get(row.id) ?? row.school,
-      signUpCount: signUps.get(row.id) ?? 0,
+      signUpCount: row.hideSignUpCount ? null : (signUps.get(row.id) ?? 0),
       // 014 EARS-26 (#1741): `in_archive` is the legacy machine's «this эфир
       // happened and its recording is published» — the same fact `ended` carries
       // on the platform machine — so it projects to the SAME `recorded` card.

@@ -85,6 +85,17 @@ describe("buildFeedItems — the one card projection of both hosts", () => {
     expect(past?.signUpLabel).toBeUndefined();
   });
 
+  it("019 EARS-19: a hidden registrant count (`null`) hands the card no count and no label — no «0», no empty line", () => {
+    const [upcoming, live] = build([
+      card({ id: "a", signUpCount: null }),
+      card({ id: "b", state: "live", signUpCount: null }),
+    ]);
+    for (const item of [upcoming, live]) {
+      expect(item?.signUpCount).toBeUndefined();
+      expect(item?.signUpLabel).toBeUndefined();
+    }
+  });
+
   it("NEW: absent nmo / city / seats ⇒ no chip; seatsLeft 0 ⇒ «мест не осталось»", () => {
     const [bare, full] = build([
       card({ id: "a" }),

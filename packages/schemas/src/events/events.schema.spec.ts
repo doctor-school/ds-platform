@@ -272,6 +272,31 @@ describe("007 events schema", () => {
       expect(parsed.participationFormat).toBe("online");
     });
 
+    it("007 EARS-12: create carries the boolean «Скрыть число записавшихся», default off", () => {
+      expect(CreateEventRequestSchema.parse(base).hideSignUpCount).toBe(false);
+      expect(
+        CreateEventRequestSchema.parse({ ...base, hideSignUpCount: true })
+          .hideSignUpCount,
+      ).toBe(true);
+      expect(
+        CreateEventRequestSchema.safeParse({ ...base, hideSignUpCount: "yes" })
+          .success,
+      ).toBe(false);
+    });
+
+    it("007 EARS-12: update sets the option only when the key is present — an omitted key leaves it", () => {
+      expect(UpdateEventRequestSchema.parse({})).not.toHaveProperty(
+        "hideSignUpCount",
+      );
+      expect(
+        UpdateEventRequestSchema.parse({ hideSignUpCount: false })
+          .hideSignUpCount,
+      ).toBe(false);
+      expect(
+        UpdateEventRequestSchema.safeParse({ hideSignUpCount: null }).success,
+      ).toBe(false);
+    });
+
     it("012 EARS-26: create requires exactly one kind id — missing or non-uuid is refused", () => {
       const { kindId: _omit, ...withoutKind } = base;
       expect(CreateEventRequestSchema.safeParse(withoutKind).success).toBe(false);

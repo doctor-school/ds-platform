@@ -506,6 +506,32 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(ids).not.toContain(expertsEventId);
     });
 
+    it("019 EARS-19: while an event's «Скрыть число записавшихся» is on, its feed card serves `signUpCount: null`; a neighbour with the option off keeps its number", async () => {
+      // Flip the option on an existing fixture for this read only, so the
+      // shared fixture set (and every count-paging case) stays as seeded.
+      await pool.query(
+        "UPDATE events SET hide_sign_up_count = true WHERE id = $1",
+        [ownEventId],
+      );
+      try {
+        const feed = await readFeed({
+          specialtyCode: adjacentCarryingCode,
+          query: "?specialty=all",
+        });
+        const cards = feed.days.flatMap((day) => day.items);
+        const hidden = cards.find((card) => card.id === ownEventId);
+        const shown = cards.find((card) => card.id === secondOwnEventId);
+        expect(hidden).toBeDefined();
+        expect(hidden?.signUpCount).toBeNull();
+        expect(typeof shown?.signUpCount).toBe("number");
+      } finally {
+        await pool.query(
+          "UPDATE events SET hide_sign_up_count = false WHERE id = $1",
+          [ownEventId],
+        );
+      }
+    });
+
     it("EARS-3.2: a specialty with no adjacency rows yields no adjacent items", async () => {
       const feed = await readFeed({ specialtyCode: lonelyCode });
 

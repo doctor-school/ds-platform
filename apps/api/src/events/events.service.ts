@@ -569,6 +569,8 @@ export class EventsService {
       kindId: input.kindId,
       participationFormat: input.participationFormat,
       audience: input.audience,
+      // 007 EARS-12 (#2913) — «Скрыть число записавшихся», default off.
+      hideSignUpCount: input.hideSignUpCount,
     });
 
     return this.toDetail(aggregate);
@@ -650,6 +652,7 @@ export class EventsService {
         | "kindId"
         | "participationFormat"
         | "audience"
+        | "hideSignUpCount"
       >
     > = {};
     // 012 EARS-26 / EARS-29 — the repository re-checks the EFFECTIVE pair.
@@ -657,6 +660,9 @@ export class EventsService {
     if (input.participationFormat !== undefined)
       patch.participationFormat = input.participationFormat;
     if (input.audience !== undefined) patch.audience = input.audience;
+    // 007 EARS-12 (#2913) — an omitted key leaves the option as it is.
+    if (input.hideSignUpCount !== undefined)
+      patch.hideSignUpCount = input.hideSignUpCount;
     if (input.title !== undefined) patch.title = input.title;
     if (input.school !== undefined) patch.school = input.school;
     if (input.startsAtMsk !== undefined)
@@ -1410,7 +1416,9 @@ export class EventsService {
    * for the whole page — never one query per card: the speakers (012 EARS-8,
    * the merged resolver's result mapped, not re-merged — 012-design §5.2), the
    * 012 kinds (wave-2 gate D3) and the colleagues' sign-up count (A2), the
-   * same count the doctor card carries.
+   * same count the doctor card carries. An event whose «Скрыть число
+   * записавшихся» option is on (019 EARS-19, #2913) is not counted at all and
+   * serves `signUpCount: null` — the number never reaches the client.
    */
   private async toUpcomingCards(
     rows: EventAggregate[],
@@ -1419,7 +1427,11 @@ export class EventsService {
     const [speakers, kinds, signUps] = await Promise.all([
       this.speakerProjection.resolveMany(ids),
       this.repo.findKinds(rows.map((row) => row.event.kindId)),
-      this.repo.countSignUps(ids),
+      this.repo.countSignUps(
+        rows
+          .filter((row) => !row.event.hideSignUpCount)
+          .map((row) => row.event.id),
+      ),
     ]);
     return rows.map((row) => {
       const kind = kinds.get(row.event.kindId);
@@ -1434,7 +1446,7 @@ export class EventsService {
         row,
         speakers.get(row.event.id) ?? [],
         kind,
-        signUps.get(row.event.id) ?? 0,
+        row.event.hideSignUpCount ? null : (signUps.get(row.event.id) ?? 0),
       );
     });
   }
@@ -1494,7 +1506,7 @@ export class EventsService {
     a: EventAggregate,
     merged: PublicEventPageSpeaker[],
     kind: EventKindProjection,
-    signUpCount: number,
+    signUpCount: number | null,
   ): UpcomingBroadcastCard {
     const e = a.event;
     return {
@@ -1594,6 +1606,8 @@ export class EventsService {
       ),
       recordingExpectedBy: e.recordingExpectedBy,
       ...kindFields(e, (await this.repo.findKinds([e.kindId])).get(e.kindId)),
+      // 007 EARS-12 (#2913) — the option's own state; never the count itself.
+      hideSignUpCount: e.hideSignUpCount,
       // #1593 — the validator the `ETag` carries, on the body too so a client
       // holding a parsed detail can re-derive it without retaining a header.
       version: e.version,

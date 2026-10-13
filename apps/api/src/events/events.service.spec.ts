@@ -57,6 +57,8 @@ function baseEvent(programPdfRef: string | null): Event {
     kindId: KIND.id,
     audience: "doctors",
     seatsLeft: null,
+    // 007 EARS-12 (#2913) — the registrant count is shown (the default).
+    hideSignUpCount: false,
     liveAt: null,
     // 014 (#1339) — the operator's recording-readiness date; unset here.
     recordingExpectedBy: null,

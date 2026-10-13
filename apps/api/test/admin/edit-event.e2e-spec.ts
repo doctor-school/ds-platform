@@ -404,6 +404,61 @@ describe.skipIf(
     );
   });
 
+  it("007 EARS-12: «Скрыть число записавшихся» defaults off on create, is set by create and update, survives an edit that omits it, and the detail read returns its state — never a registrant count", async () => {
+    const cookie = await session(uniqueEmail("admin"), "platform_admin");
+    const detail = async (id: string) => {
+      const res = await app.inject({
+        method: "GET",
+        url: `/v1/admin/events/${id}`,
+        headers: { ...device, ...authHeaders(cookie) },
+      });
+      expect(res.statusCode).toBe(200);
+      return res.json() as Record<string, unknown>;
+    };
+    const patch = async (id: string, payload: Record<string, unknown>) => {
+      const edit = multipartBody({ payload: JSON.stringify(payload) });
+      const res = await app.inject({
+        method: "PATCH",
+        url: `/v1/admin/events/${id}`,
+        headers: admHeaders(cookie, edit.contentType),
+        payload: edit.body,
+      });
+      expect(res.statusCode).toBe(200);
+      return res.json() as Record<string, unknown>;
+    };
+
+    // Default off.
+    const plain = await createEvent(cookie);
+    expect(plain.hideSignUpCount).toBe(false);
+    expect((await detail(plain.id as string)).hideSignUpCount).toBe(false);
+
+    // Set on create.
+    const hidden = await createEvent(cookie, { hideSignUpCount: true });
+    const id = hidden.id as string;
+    expect(hidden.hideSignUpCount).toBe(true);
+    const read = await detail(id);
+    expect(read.hideSignUpCount).toBe(true);
+    // The admin read carries the option's own state only (007 design).
+    expect("signUpCount" in read).toBe(false);
+
+    // An edit that omits the key leaves it; an explicit value moves it.
+    expect((await patch(id, { title: "Без счётчика" })).hideSignUpCount).toBe(
+      true,
+    );
+    expect((await patch(id, { hideSignUpCount: false })).hideSignUpCount).toBe(
+      false,
+    );
+    expect((await detail(id)).hideSignUpCount).toBe(false);
+    expect((await patch(id, { hideSignUpCount: true })).hideSignUpCount).toBe(
+      true,
+    );
+    const { rows } = await pool.query<{ hide_sign_up_count: boolean }>(
+      "SELECT hide_sign_up_count FROM events WHERE id = $1",
+      [id],
+    );
+    expect(rows[0]?.hide_sign_up_count).toBe(true);
+  });
+
   it("EARS-2: an edit to a hidden event is refused (409) — editing is a pre-hide action", async () => {
     const cookie = await session(uniqueEmail("admin"), "platform_admin");
     const created = await createEvent(cookie);

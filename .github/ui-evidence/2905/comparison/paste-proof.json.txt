@@ -1,0 +1,680 @@
+{
+  "pairs": [
+    {
+      "name": "academy-registration-desktop-light",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-registration-desktop-light-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        396,
+        185
+      ],
+      "rightRect": [
+        420,
+        80,
+        800,
+        185
+      ],
+      "sourceRgbSha256": [
+        "32e291b06e621d5b76dd8b3012d894f4ba416c2d62cb015e9e6a4c69e5b6e532",
+        "2558dfdbc602912d8c6e0fbe687e6b182f5dc2c94e48642149006a6a7faa8598"
+      ],
+      "pairCropRgbSha256": [
+        "32e291b06e621d5b76dd8b3012d894f4ba416c2d62cb015e9e6a4c69e5b6e532",
+        "2558dfdbc602912d8c6e0fbe687e6b182f5dc2c94e48642149006a6a7faa8598"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "academy-registration-desktop-dark",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-registration-desktop-dark-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        396,
+        185
+      ],
+      "rightRect": [
+        420,
+        80,
+        800,
+        185
+      ],
+      "sourceRgbSha256": [
+        "2057c99045aa7a44dcb409a5df7fcc0eff58dba5aa2d538431a49017480de4e1",
+        "b1bcd558135267086784408ae84af5ad768c466862eebaba4c306d5464595a58"
+      ],
+      "pairCropRgbSha256": [
+        "2057c99045aa7a44dcb409a5df7fcc0eff58dba5aa2d538431a49017480de4e1",
+        "b1bcd558135267086784408ae84af5ad768c466862eebaba4c306d5464595a58"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "academy-registration-mobile-light",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-registration-mobile-light-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        338,
+        185
+      ],
+      "rightRect": [
+        362,
+        80,
+        684,
+        185
+      ],
+      "sourceRgbSha256": [
+        "935eaa934fb5016cbbcacdbb3314ad23af6f88c255d172ca07289de3c8adcf46",
+        "a91533e99abe731576b068e462a342e16839c3fb3557dd8fa4df93e8c5037f53"
+      ],
+      "pairCropRgbSha256": [
+        "935eaa934fb5016cbbcacdbb3314ad23af6f88c255d172ca07289de3c8adcf46",
+        "a91533e99abe731576b068e462a342e16839c3fb3557dd8fa4df93e8c5037f53"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "academy-registration-mobile-dark",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-registration-mobile-dark-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        338,
+        185
+      ],
+      "rightRect": [
+        362,
+        80,
+        684,
+        185
+      ],
+      "sourceRgbSha256": [
+        "57bb237621c005566e1e13ab6bbe326381672f69b8810357543dc5d4541ad944",
+        "5a2e98010524ddb9fb5d28ec86ef67f4683f122295014740d993901973a5853c"
+      ],
+      "pairCropRgbSha256": [
+        "57bb237621c005566e1e13ab6bbe326381672f69b8810357543dc5d4541ad944",
+        "5a2e98010524ddb9fb5d28ec86ef67f4683f122295014740d993901973a5853c"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "academy-password-login-desktop-light",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-password-login-desktop-light-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        396,
+        162
+      ],
+      "rightRect": [
+        420,
+        80,
+        800,
+        162
+      ],
+      "sourceRgbSha256": [
+        "5d770f50589973e298df9c2493df0284b8573bd79a25339281cdf35a8a08cf37",
+        "fed601a61e9704af6637dc4ff0c030360a50e8e84f2d46c0ffef4c9cb62fc8a8"
+      ],
+      "pairCropRgbSha256": [
+        "5d770f50589973e298df9c2493df0284b8573bd79a25339281cdf35a8a08cf37",
+        "fed601a61e9704af6637dc4ff0c030360a50e8e84f2d46c0ffef4c9cb62fc8a8"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "academy-password-login-desktop-dark",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-password-login-desktop-dark-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        396,
+        162
+      ],
+      "rightRect": [
+        420,
+        80,
+        800,
+        162
+      ],
+      "sourceRgbSha256": [
+        "3818496c1c1e4755442bd547cf4fcd8a823edd3d328c5d86d8a701e1d5054306",
+        "fc58269fd01493db5e6df7c9ad8f08c45416138baaf95879e917ea147189b680"
+      ],
+      "pairCropRgbSha256": [
+        "3818496c1c1e4755442bd547cf4fcd8a823edd3d328c5d86d8a701e1d5054306",
+        "fc58269fd01493db5e6df7c9ad8f08c45416138baaf95879e917ea147189b680"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "academy-password-login-mobile-light",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-password-login-mobile-light-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        338,
+        162
+      ],
+      "rightRect": [
+        362,
+        80,
+        684,
+        162
+      ],
+      "sourceRgbSha256": [
+        "da59f8d56acb33b70154b8dff27452c54032a85f6e51bee3a0d6f35e08ab95c9",
+        "aa81c6a9d9f02a60d2f87efb9d62760b32c0ad639ff357e2ab541eebef7a757a"
+      ],
+      "pairCropRgbSha256": [
+        "da59f8d56acb33b70154b8dff27452c54032a85f6e51bee3a0d6f35e08ab95c9",
+        "aa81c6a9d9f02a60d2f87efb9d62760b32c0ad639ff357e2ab541eebef7a757a"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "academy-password-login-mobile-dark",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-password-login-mobile-dark-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        338,
+        162
+      ],
+      "rightRect": [
+        362,
+        80,
+        684,
+        162
+      ],
+      "sourceRgbSha256": [
+        "5b6e7e920837e04f3c9b862d1b5ea1a3386928a62c3cf08aa7b4ef8b31f0d8a5",
+        "3f66e3b08152b83bf7beb52602be7397e210e7ea3b1ca9a246c4a4d766c9c42c"
+      ],
+      "pairCropRgbSha256": [
+        "5b6e7e920837e04f3c9b862d1b5ea1a3386928a62c3cf08aa7b4ef8b31f0d8a5",
+        "3f66e3b08152b83bf7beb52602be7397e210e7ea3b1ca9a246c4a4d766c9c42c"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "academy-reset-complete-desktop-light",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-reset-complete-desktop-light-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        396,
+        185
+      ],
+      "rightRect": [
+        420,
+        80,
+        800,
+        185
+      ],
+      "sourceRgbSha256": [
+        "ad60a08d3d5e5d98aa0d863a0084cd7a6f4ab95e300bc27661fd42d8f520c750",
+        "5ea7f134a2f61ca58242a483676246f4077bd4fa9828b75b61fd9aace71a98b7"
+      ],
+      "pairCropRgbSha256": [
+        "ad60a08d3d5e5d98aa0d863a0084cd7a6f4ab95e300bc27661fd42d8f520c750",
+        "5ea7f134a2f61ca58242a483676246f4077bd4fa9828b75b61fd9aace71a98b7"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "academy-reset-complete-desktop-dark",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-reset-complete-desktop-dark-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        396,
+        185
+      ],
+      "rightRect": [
+        420,
+        80,
+        800,
+        185
+      ],
+      "sourceRgbSha256": [
+        "250ad513f7be51bdc12325e33cc5823e87bdbb360cc2518361219743d61d6ad5",
+        "283d12a3ef7ba7c599597f62d87b81d5732bf11d936e1238859af99a88114afb"
+      ],
+      "pairCropRgbSha256": [
+        "250ad513f7be51bdc12325e33cc5823e87bdbb360cc2518361219743d61d6ad5",
+        "283d12a3ef7ba7c599597f62d87b81d5732bf11d936e1238859af99a88114afb"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "academy-reset-complete-mobile-light",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-reset-complete-mobile-light-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        338,
+        185
+      ],
+      "rightRect": [
+        362,
+        80,
+        684,
+        185
+      ],
+      "sourceRgbSha256": [
+        "685ca046d978e5887d7102bd3ac3e180a9f9e337fc1077040ad8300b63b8c046",
+        "bb2de8844c2f207ee874183e4c4178c42e8ccc2d4cbdb22162a5edd7a7589e47"
+      ],
+      "pairCropRgbSha256": [
+        "685ca046d978e5887d7102bd3ac3e180a9f9e337fc1077040ad8300b63b8c046",
+        "bb2de8844c2f207ee874183e4c4178c42e8ccc2d4cbdb22162a5edd7a7589e47"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "academy-reset-complete-mobile-dark",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-reset-complete-mobile-dark-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        338,
+        185
+      ],
+      "rightRect": [
+        362,
+        80,
+        684,
+        185
+      ],
+      "sourceRgbSha256": [
+        "a39bb7d25520973c6fa65202d8b35d238eab5e186a011419db29771dd2172b0c",
+        "06449066f33aad5c0acd9489218e5e43f0951aab9e9723c09c33cddd7e243736"
+      ],
+      "pairCropRgbSha256": [
+        "a39bb7d25520973c6fa65202d8b35d238eab5e186a011419db29771dd2172b0c",
+        "06449066f33aad5c0acd9489218e5e43f0951aab9e9723c09c33cddd7e243736"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "doctor-registration-desktop-light",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-registration-desktop-light-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        396,
+        185
+      ],
+      "rightRect": [
+        420,
+        80,
+        800,
+        185
+      ],
+      "sourceRgbSha256": [
+        "830679d40d1de18bf7867ffe747a1346bc6f779a2269a166a4255a47da461c21",
+        "cd5e26254694d7857d4748e87c66af925cee53da9f861160d9e04eb46da6516a"
+      ],
+      "pairCropRgbSha256": [
+        "830679d40d1de18bf7867ffe747a1346bc6f779a2269a166a4255a47da461c21",
+        "cd5e26254694d7857d4748e87c66af925cee53da9f861160d9e04eb46da6516a"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "doctor-registration-desktop-dark",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-registration-desktop-dark-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        396,
+        185
+      ],
+      "rightRect": [
+        420,
+        80,
+        800,
+        185
+      ],
+      "sourceRgbSha256": [
+        "b0c4e3a0f6a9aa6ce2db88b724c10bc979d17b3e6e857d72aca8042bdc7c9f37",
+        "64278c48db1e6968a1d9589d2a77e7b757e54743568fc53c40b1cd415d61d420"
+      ],
+      "pairCropRgbSha256": [
+        "b0c4e3a0f6a9aa6ce2db88b724c10bc979d17b3e6e857d72aca8042bdc7c9f37",
+        "64278c48db1e6968a1d9589d2a77e7b757e54743568fc53c40b1cd415d61d420"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "doctor-registration-mobile-light",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-registration-mobile-light-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        338,
+        185
+      ],
+      "rightRect": [
+        362,
+        80,
+        684,
+        185
+      ],
+      "sourceRgbSha256": [
+        "2ed21e502cb4f4165ca20fbde4f103d29c577bea1bcb2245223e3c341a877edc",
+        "9b0f784858b46c9438f2f16eae19c07e4270db02821f284427a52ab98b835994"
+      ],
+      "pairCropRgbSha256": [
+        "2ed21e502cb4f4165ca20fbde4f103d29c577bea1bcb2245223e3c341a877edc",
+        "9b0f784858b46c9438f2f16eae19c07e4270db02821f284427a52ab98b835994"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "doctor-registration-mobile-dark",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-registration-mobile-dark-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        338,
+        185
+      ],
+      "rightRect": [
+        362,
+        80,
+        684,
+        185
+      ],
+      "sourceRgbSha256": [
+        "6317e7ab004db6e9830840b7e7928c8ba962a3fb5dde76978e499bdc7d6db420",
+        "ae107a8bed21a95da4025dc376d154744dc9eb961e242b28d1eaf95b441582ca"
+      ],
+      "pairCropRgbSha256": [
+        "6317e7ab004db6e9830840b7e7928c8ba962a3fb5dde76978e499bdc7d6db420",
+        "ae107a8bed21a95da4025dc376d154744dc9eb961e242b28d1eaf95b441582ca"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "doctor-password-login-desktop-light",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-password-login-desktop-light-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        396,
+        162
+      ],
+      "rightRect": [
+        420,
+        80,
+        800,
+        162
+      ],
+      "sourceRgbSha256": [
+        "5d770f50589973e298df9c2493df0284b8573bd79a25339281cdf35a8a08cf37",
+        "fed601a61e9704af6637dc4ff0c030360a50e8e84f2d46c0ffef4c9cb62fc8a8"
+      ],
+      "pairCropRgbSha256": [
+        "5d770f50589973e298df9c2493df0284b8573bd79a25339281cdf35a8a08cf37",
+        "fed601a61e9704af6637dc4ff0c030360a50e8e84f2d46c0ffef4c9cb62fc8a8"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "doctor-password-login-desktop-dark",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-password-login-desktop-dark-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        396,
+        162
+      ],
+      "rightRect": [
+        420,
+        80,
+        800,
+        162
+      ],
+      "sourceRgbSha256": [
+        "3818496c1c1e4755442bd547cf4fcd8a823edd3d328c5d86d8a701e1d5054306",
+        "fc58269fd01493db5e6df7c9ad8f08c45416138baaf95879e917ea147189b680"
+      ],
+      "pairCropRgbSha256": [
+        "3818496c1c1e4755442bd547cf4fcd8a823edd3d328c5d86d8a701e1d5054306",
+        "fc58269fd01493db5e6df7c9ad8f08c45416138baaf95879e917ea147189b680"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "doctor-password-login-mobile-light",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-password-login-mobile-light-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        338,
+        162
+      ],
+      "rightRect": [
+        362,
+        80,
+        684,
+        162
+      ],
+      "sourceRgbSha256": [
+        "da59f8d56acb33b70154b8dff27452c54032a85f6e51bee3a0d6f35e08ab95c9",
+        "aa81c6a9d9f02a60d2f87efb9d62760b32c0ad639ff357e2ab541eebef7a757a"
+      ],
+      "pairCropRgbSha256": [
+        "da59f8d56acb33b70154b8dff27452c54032a85f6e51bee3a0d6f35e08ab95c9",
+        "aa81c6a9d9f02a60d2f87efb9d62760b32c0ad639ff357e2ab541eebef7a757a"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "doctor-password-login-mobile-dark",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-password-login-mobile-dark-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        338,
+        162
+      ],
+      "rightRect": [
+        362,
+        80,
+        684,
+        162
+      ],
+      "sourceRgbSha256": [
+        "5b6e7e920837e04f3c9b862d1b5ea1a3386928a62c3cf08aa7b4ef8b31f0d8a5",
+        "3f66e3b08152b83bf7beb52602be7397e210e7ea3b1ca9a246c4a4d766c9c42c"
+      ],
+      "pairCropRgbSha256": [
+        "5b6e7e920837e04f3c9b862d1b5ea1a3386928a62c3cf08aa7b4ef8b31f0d8a5",
+        "3f66e3b08152b83bf7beb52602be7397e210e7ea3b1ca9a246c4a4d766c9c42c"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "doctor-reset-complete-desktop-light",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-reset-complete-desktop-light-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        396,
+        185
+      ],
+      "rightRect": [
+        420,
+        80,
+        800,
+        185
+      ],
+      "sourceRgbSha256": [
+        "ad60a08d3d5e5d98aa0d863a0084cd7a6f4ab95e300bc27661fd42d8f520c750",
+        "5ea7f134a2f61ca58242a483676246f4077bd4fa9828b75b61fd9aace71a98b7"
+      ],
+      "pairCropRgbSha256": [
+        "ad60a08d3d5e5d98aa0d863a0084cd7a6f4ab95e300bc27661fd42d8f520c750",
+        "5ea7f134a2f61ca58242a483676246f4077bd4fa9828b75b61fd9aace71a98b7"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "doctor-reset-complete-desktop-dark",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-reset-complete-desktop-dark-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        396,
+        185
+      ],
+      "rightRect": [
+        420,
+        80,
+        800,
+        185
+      ],
+      "sourceRgbSha256": [
+        "250ad513f7be51bdc12325e33cc5823e87bdbb360cc2518361219743d61d6ad5",
+        "283d12a3ef7ba7c599597f62d87b81d5732bf11d936e1238859af99a88114afb"
+      ],
+      "pairCropRgbSha256": [
+        "250ad513f7be51bdc12325e33cc5823e87bdbb360cc2518361219743d61d6ad5",
+        "283d12a3ef7ba7c599597f62d87b81d5732bf11d936e1238859af99a88114afb"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "doctor-reset-complete-mobile-light",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-reset-complete-mobile-light-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        338,
+        185
+      ],
+      "rightRect": [
+        362,
+        80,
+        684,
+        185
+      ],
+      "sourceRgbSha256": [
+        "685ca046d978e5887d7102bd3ac3e180a9f9e337fc1077040ad8300b63b8c046",
+        "bb2de8844c2f207ee874183e4c4178c42e8ccc2d4cbdb22162a5edd7a7589e47"
+      ],
+      "pairCropRgbSha256": [
+        "685ca046d978e5887d7102bd3ac3e180a9f9e337fc1077040ad8300b63b8c046",
+        "bb2de8844c2f207ee874183e4c4178c42e8ccc2d4cbdb22162a5edd7a7589e47"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    },
+    {
+      "name": "doctor-reset-complete-mobile-dark",
+      "pair": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-reset-complete-mobile-dark-caret-before-after.png",
+      "leftRect": [
+        16,
+        80,
+        338,
+        185
+      ],
+      "rightRect": [
+        362,
+        80,
+        684,
+        185
+      ],
+      "sourceRgbSha256": [
+        "a39bb7d25520973c6fa65202d8b35d238eab5e186a011419db29771dd2172b0c",
+        "06449066f33aad5c0acd9489218e5e43f0951aab9e9723c09c33cddd7e243736"
+      ],
+      "pairCropRgbSha256": [
+        "a39bb7d25520973c6fa65202d8b35d238eab5e186a011419db29771dd2172b0c",
+        "06449066f33aad5c0acd9489218e5e43f0951aab9e9723c09c33cddd7e243736"
+      ],
+      "sourcePixelsIdentical": true,
+      "captionBottomY": 74,
+      "appPixelsStartY": 80,
+      "captionsOutsidePixels": true
+    }
+  ],
+  "pairCount": 24,
+  "allAppPixelsIdentical": true,
+  "allCaptionsOutsidePixels": true,
+  "imagesChanged": false
+}

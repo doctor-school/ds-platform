@@ -1,0 +1,962 @@
+{
+  "status": "NARROW NATURAL-ENDPOINT OBSERVATION COMPLETE; originals and immediate differences retained",
+  "sourceBefore": "59ba49768494c1dd54cd8f3a86ca38e745dfb1e5",
+  "sourceAfter": "213baf7c68cc8f2018da92c4746bb8287e8e486e",
+  "sourceTokenCssIdentity": [
+    {
+      "file": "packages/design-system/tokens/component.json",
+      "beforeSha256": "957f9ee4a0f108346c7e0ea75ffdfbb0a47a3a22d84525fa4ed74c631f9941c3",
+      "afterSha256": "957f9ee4a0f108346c7e0ea75ffdfbb0a47a3a22d84525fa4ed74c631f9941c3",
+      "identical": true
+    },
+    {
+      "file": "packages/design-system/tokens/primitive.json",
+      "beforeSha256": "fed6b31ff8c3b221d2ecc9e64df050f9df5e53a069a9a39c71e0ae193482077d",
+      "afterSha256": "fed6b31ff8c3b221d2ecc9e64df050f9df5e53a069a9a39c71e0ae193482077d",
+      "identical": true
+    },
+    {
+      "file": "packages/design-system/tokens/semantic.dark.json",
+      "beforeSha256": "2f69b3ce9fdd5ead9bc0add4f3ab98b4d2b05ff1f85dee049906f5d9524b2963",
+      "afterSha256": "2f69b3ce9fdd5ead9bc0add4f3ab98b4d2b05ff1f85dee049906f5d9524b2963",
+      "identical": true
+    },
+    {
+      "file": "packages/design-system/tokens/semantic.json",
+      "beforeSha256": "2201f5833369160c53e49aeeec0f132e581e2727ec1b6892baa15a1feeb2f086",
+      "afterSha256": "2201f5833369160c53e49aeeec0f132e581e2727ec1b6892baa15a1feeb2f086",
+      "identical": true
+    },
+    {
+      "file": "packages/design-system/src/styles/tokens.css",
+      "beforeSha256": "1387a6d0138c82dc779204cc057e28d245a36a93c3e870b7fb74586e560b96f1",
+      "afterSha256": "1387a6d0138c82dc779204cc057e28d245a36a93c3e870b7fb74586e560b96f1",
+      "identical": true
+    },
+    {
+      "file": "packages/design-system/src/styles/globals.css",
+      "beforeSha256": "bb2846ba360ea76fa33c019a4e419853d2d368eeed61e31e5812561e135da013",
+      "afterSha256": "bb2846ba360ea76fa33c019a4e419853d2d368eeed61e31e5812561e135da013",
+      "identical": true
+    },
+    {
+      "file": "packages/design-system/src/primitives/input.tsx",
+      "beforeSha256": "e2f3cc5ffb9ea1f172115e7bed1d090196c96e668be53da51fa25b058974bdf6",
+      "afterSha256": "e2f3cc5ffb9ea1f172115e7bed1d090196c96e668be53da51fa25b058974bdf6",
+      "identical": true
+    },
+    {
+      "file": "packages/design-system/src/primitives/form.tsx",
+      "beforeSha256": "44d90c5e400018fa0943e39846417d7fbae9caedcc70793d26ecf1abe3d9dda9",
+      "afterSha256": "44d90c5e400018fa0943e39846417d7fbae9caedcc70793d26ecf1abe3d9dda9",
+      "identical": true
+    }
+  ],
+  "sourceIdentityAllEqual": true,
+  "currentCompiledTransitionDeclaration": [
+    {
+      "file": "C:\\Users\\sidor\\repos\\ds-platform\\.claude\\worktrees\\2250\\apps\\portal\\.next\\standalone\\apps\\portal\\.next\\static\\chunks\\3vkqom25ta9m2.css",
+      "defaultDuration": ".15s",
+      "defaultTimingFunction": "cubic-bezier(.4, 0, .2, 1)"
+    },
+    {
+      "file": "C:\\Users\\sidor\\repos\\ds-platform\\.claude\\worktrees\\2250\\apps\\portal\\.next\\standalone\\apps\\portal\\.next\\static\\chunks\\3vkqom25ta9m2.css",
+      "rule": ".transition-colors{transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}"
+    },
+    {
+      "file": "C:\\Users\\sidor\\repos\\ds-platform\\.claude\\worktrees\\2250\\apps\\portal\\.next\\static\\chunks\\3vkqom25ta9m2.css",
+      "defaultDuration": ".15s",
+      "defaultTimingFunction": "cubic-bezier(.4, 0, .2, 1)"
+    },
+    {
+      "file": "C:\\Users\\sidor\\repos\\ds-platform\\.claude\\worktrees\\2250\\apps\\portal\\.next\\static\\chunks\\3vkqom25ta9m2.css",
+      "rule": ".transition-colors{transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}"
+    }
+  ],
+  "nativeDiagnosticExit": 0,
+  "diagnosticRows": 8,
+  "passes": 8,
+  "failures": 0,
+  "rows": [
+    {
+      "name": "academy-registration-desktop-light",
+      "transitionProperty": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+      "transitionDuration": "0.15s",
+      "reducedMotion": false,
+      "immediateCss": "rgb(107, 177, 247)",
+      "immediateRgba": [
+        107,
+        177,
+        247,
+        255
+      ],
+      "naturallySettledCss": "rgb(200, 30, 30)",
+      "naturallySettledRgba": [
+        200,
+        30,
+        30,
+        255
+      ],
+      "declaredTokenCss": "#c81e1e",
+      "declaredTokenRgba": [
+        200,
+        30,
+        30,
+        255
+      ],
+      "matchesDeclaredTarget": true,
+      "noAnimationRunningAtEnd": true,
+      "series": [
+        {
+          "atMs": 0,
+          "borderColor": "rgb(107, 177, 247)",
+          "backgroundColor": "rgb(255, 255, 255)",
+          "invalid": "true",
+          "focused": false,
+          "animations": [
+            {
+              "property": "background-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-bottom-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-left-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-right-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-top-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            }
+          ]
+        },
+        {
+          "atMs": 153.3999999910593,
+          "borderColor": "rgb(200, 30, 30)",
+          "backgroundColor": "rgb(253, 236, 236)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 169.5,
+          "borderColor": "rgb(200, 30, 30)",
+          "backgroundColor": "rgb(253, 236, 236)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 186.59999999403954,
+          "borderColor": "rgb(200, 30, 30)",
+          "backgroundColor": "rgb(253, 236, 236)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 202.79999999701977,
+          "borderColor": "rgb(200, 30, 30)",
+          "backgroundColor": "rgb(253, 236, 236)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        }
+      ],
+      "settledCrop": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\invalid-border-diagnostic-1233\\academy-registration-desktop-light-naturally-settled-invalid.png",
+      "settledCropSha256": "d773b1f57d56c1d3a52679baf45744c528c72cae09bb544f50218cdf99e7074c"
+    },
+    {
+      "name": "academy-registration-desktop-dark",
+      "transitionProperty": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+      "transitionDuration": "0.15s",
+      "reducedMotion": false,
+      "immediateCss": "rgb(107, 177, 247)",
+      "immediateRgba": [
+        107,
+        177,
+        247,
+        255
+      ],
+      "naturallySettledCss": "rgb(225, 85, 85)",
+      "naturallySettledRgba": [
+        225,
+        85,
+        85,
+        255
+      ],
+      "declaredTokenCss": "#e15555",
+      "declaredTokenRgba": [
+        225,
+        85,
+        85,
+        255
+      ],
+      "matchesDeclaredTarget": true,
+      "noAnimationRunningAtEnd": true,
+      "series": [
+        {
+          "atMs": 0,
+          "borderColor": "rgb(107, 177, 247)",
+          "backgroundColor": "oklab(0.209999 -0.00684231 -0.0187881)",
+          "invalid": "true",
+          "focused": false,
+          "animations": [
+            {
+              "property": "background-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-bottom-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-left-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-right-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-top-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            }
+          ]
+        },
+        {
+          "atMs": 168.09999999403954,
+          "borderColor": "rgb(225, 85, 85)",
+          "backgroundColor": "rgb(58, 20, 20)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 184.3999999910593,
+          "borderColor": "rgb(225, 85, 85)",
+          "backgroundColor": "rgb(58, 20, 20)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 202.5,
+          "borderColor": "rgb(225, 85, 85)",
+          "backgroundColor": "rgb(58, 20, 20)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 218,
+          "borderColor": "rgb(225, 85, 85)",
+          "backgroundColor": "rgb(58, 20, 20)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        }
+      ],
+      "settledCrop": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\invalid-border-diagnostic-1233\\academy-registration-desktop-dark-naturally-settled-invalid.png",
+      "settledCropSha256": "8a339dc2b95a8a27cef08a554f9b2bc5c8ac3c15b033fce0be80260fdaacd743"
+    },
+    {
+      "name": "academy-reset-complete-desktop-light",
+      "transitionProperty": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+      "transitionDuration": "0.15s",
+      "reducedMotion": false,
+      "immediateCss": "rgb(107, 177, 247)",
+      "immediateRgba": [
+        107,
+        177,
+        247,
+        255
+      ],
+      "naturallySettledCss": "rgb(200, 30, 30)",
+      "naturallySettledRgba": [
+        200,
+        30,
+        30,
+        255
+      ],
+      "declaredTokenCss": "#c81e1e",
+      "declaredTokenRgba": [
+        200,
+        30,
+        30,
+        255
+      ],
+      "matchesDeclaredTarget": true,
+      "noAnimationRunningAtEnd": true,
+      "series": [
+        {
+          "atMs": 0,
+          "borderColor": "rgb(107, 177, 247)",
+          "backgroundColor": "rgb(255, 255, 255)",
+          "invalid": "true",
+          "focused": false,
+          "animations": [
+            {
+              "property": "background-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-bottom-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-left-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-right-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-top-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            }
+          ]
+        },
+        {
+          "atMs": 161.79999999701977,
+          "borderColor": "rgb(200, 30, 30)",
+          "backgroundColor": "rgb(253, 236, 236)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 178.40000000596046,
+          "borderColor": "rgb(200, 30, 30)",
+          "backgroundColor": "rgb(253, 236, 236)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 194.5,
+          "borderColor": "rgb(200, 30, 30)",
+          "backgroundColor": "rgb(253, 236, 236)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 211.70000000298023,
+          "borderColor": "rgb(200, 30, 30)",
+          "backgroundColor": "rgb(253, 236, 236)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        }
+      ],
+      "settledCrop": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\invalid-border-diagnostic-1233\\academy-reset-complete-desktop-light-naturally-settled-invalid.png",
+      "settledCropSha256": "27554d13afbf7b687aa6ad242056c31b450d5efc2268ddf98c7c214715c60e9b"
+    },
+    {
+      "name": "academy-reset-complete-desktop-dark",
+      "transitionProperty": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+      "transitionDuration": "0.15s",
+      "reducedMotion": false,
+      "immediateCss": "rgb(107, 177, 247)",
+      "immediateRgba": [
+        107,
+        177,
+        247,
+        255
+      ],
+      "naturallySettledCss": "rgb(225, 85, 85)",
+      "naturallySettledRgba": [
+        225,
+        85,
+        85,
+        255
+      ],
+      "declaredTokenCss": "#e15555",
+      "declaredTokenRgba": [
+        225,
+        85,
+        85,
+        255
+      ],
+      "matchesDeclaredTarget": true,
+      "noAnimationRunningAtEnd": true,
+      "series": [
+        {
+          "atMs": 0,
+          "borderColor": "rgb(107, 177, 247)",
+          "backgroundColor": "oklab(0.209999 -0.00684231 -0.0187881)",
+          "invalid": "true",
+          "focused": false,
+          "animations": [
+            {
+              "property": "background-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-bottom-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-left-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-right-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-top-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            }
+          ]
+        },
+        {
+          "atMs": 161.09999999403954,
+          "borderColor": "rgb(225, 85, 85)",
+          "backgroundColor": "rgb(58, 20, 20)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 178.3999999910593,
+          "borderColor": "rgb(225, 85, 85)",
+          "backgroundColor": "rgb(58, 20, 20)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 193.79999999701977,
+          "borderColor": "rgb(225, 85, 85)",
+          "backgroundColor": "rgb(58, 20, 20)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 210.29999999701977,
+          "borderColor": "rgb(225, 85, 85)",
+          "backgroundColor": "rgb(58, 20, 20)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        }
+      ],
+      "settledCrop": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\invalid-border-diagnostic-1233\\academy-reset-complete-desktop-dark-naturally-settled-invalid.png",
+      "settledCropSha256": "818963b581da61b3ffc3a97e192ba520199594db952054edc0ea6471a962575a"
+    },
+    {
+      "name": "doctor-registration-desktop-light",
+      "transitionProperty": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+      "transitionDuration": "0.15s",
+      "reducedMotion": false,
+      "immediateCss": "rgb(107, 177, 247)",
+      "immediateRgba": [
+        107,
+        177,
+        247,
+        255
+      ],
+      "naturallySettledCss": "rgb(200, 30, 30)",
+      "naturallySettledRgba": [
+        200,
+        30,
+        30,
+        255
+      ],
+      "declaredTokenCss": "#c81e1e",
+      "declaredTokenRgba": [
+        200,
+        30,
+        30,
+        255
+      ],
+      "matchesDeclaredTarget": true,
+      "noAnimationRunningAtEnd": true,
+      "series": [
+        {
+          "atMs": 0,
+          "borderColor": "rgb(110, 172, 240)",
+          "backgroundColor": "rgb(255, 254, 254)",
+          "invalid": "true",
+          "focused": false,
+          "animations": [
+            {
+              "property": "background-color",
+              "playState": "running",
+              "currentTime": 16.71800000489032,
+              "progress": 0.033030765000803194,
+              "duration": 150
+            },
+            {
+              "property": "border-bottom-color",
+              "playState": "running",
+              "currentTime": 16.71800000489032,
+              "progress": 0.033030765000803194,
+              "duration": 150
+            },
+            {
+              "property": "border-left-color",
+              "playState": "running",
+              "currentTime": 16.71800000489032,
+              "progress": 0.033030765000803194,
+              "duration": 150
+            },
+            {
+              "property": "border-right-color",
+              "playState": "running",
+              "currentTime": 16.71800000489032,
+              "progress": 0.033030765000803194,
+              "duration": 150
+            },
+            {
+              "property": "border-top-color",
+              "playState": "running",
+              "currentTime": 16.71800000489032,
+              "progress": 0.033030765000803194,
+              "duration": 150
+            }
+          ]
+        },
+        {
+          "atMs": 148.8999999910593,
+          "borderColor": "rgb(200, 30, 30)",
+          "backgroundColor": "rgb(253, 236, 236)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 166.5,
+          "borderColor": "rgb(200, 30, 30)",
+          "backgroundColor": "rgb(253, 236, 236)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 182.5,
+          "borderColor": "rgb(200, 30, 30)",
+          "backgroundColor": "rgb(253, 236, 236)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 199.19999998807907,
+          "borderColor": "rgb(200, 30, 30)",
+          "backgroundColor": "rgb(253, 236, 236)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        }
+      ],
+      "settledCrop": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\invalid-border-diagnostic-1233\\doctor-registration-desktop-light-naturally-settled-invalid.png",
+      "settledCropSha256": "f78e424c534de0142ee8f468ea4576ab7fbb3668d08f169851a44cc37b75f7e1"
+    },
+    {
+      "name": "doctor-registration-desktop-dark",
+      "transitionProperty": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+      "transitionDuration": "0.15s",
+      "reducedMotion": false,
+      "immediateCss": "rgb(107, 177, 247)",
+      "immediateRgba": [
+        107,
+        177,
+        247,
+        255
+      ],
+      "naturallySettledCss": "rgb(225, 85, 85)",
+      "naturallySettledRgba": [
+        225,
+        85,
+        85,
+        255
+      ],
+      "declaredTokenCss": "#e15555",
+      "declaredTokenRgba": [
+        225,
+        85,
+        85,
+        255
+      ],
+      "matchesDeclaredTarget": true,
+      "noAnimationRunningAtEnd": true,
+      "series": [
+        {
+          "atMs": 0,
+          "borderColor": "rgb(107, 177, 247)",
+          "backgroundColor": "oklab(0.209999 -0.00684231 -0.0187881)",
+          "invalid": "true",
+          "focused": false,
+          "animations": [
+            {
+              "property": "background-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-bottom-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-left-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-right-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-top-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            }
+          ]
+        },
+        {
+          "atMs": 150.3999999910593,
+          "borderColor": "rgb(225, 85, 85)",
+          "backgroundColor": "rgb(58, 20, 20)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 167.69999998807907,
+          "borderColor": "rgb(225, 85, 85)",
+          "backgroundColor": "rgb(58, 20, 20)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 183.79999999701977,
+          "borderColor": "rgb(225, 85, 85)",
+          "backgroundColor": "rgb(58, 20, 20)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 200.79999999701977,
+          "borderColor": "rgb(225, 85, 85)",
+          "backgroundColor": "rgb(58, 20, 20)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        }
+      ],
+      "settledCrop": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\invalid-border-diagnostic-1233\\doctor-registration-desktop-dark-naturally-settled-invalid.png",
+      "settledCropSha256": "0a5d767270fa640413cd2195eebc2ef534d5301a9454dfc0e7c7ea9b52db61aa"
+    },
+    {
+      "name": "doctor-reset-complete-desktop-light",
+      "transitionProperty": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+      "transitionDuration": "0.15s",
+      "reducedMotion": false,
+      "immediateCss": "rgb(107, 177, 247)",
+      "immediateRgba": [
+        107,
+        177,
+        247,
+        255
+      ],
+      "naturallySettledCss": "rgb(200, 30, 30)",
+      "naturallySettledRgba": [
+        200,
+        30,
+        30,
+        255
+      ],
+      "declaredTokenCss": "#c81e1e",
+      "declaredTokenRgba": [
+        200,
+        30,
+        30,
+        255
+      ],
+      "matchesDeclaredTarget": true,
+      "noAnimationRunningAtEnd": true,
+      "series": [
+        {
+          "atMs": 0,
+          "borderColor": "rgb(107, 177, 247)",
+          "backgroundColor": "rgb(255, 255, 255)",
+          "invalid": "true",
+          "focused": false,
+          "animations": [
+            {
+              "property": "background-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-bottom-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-left-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-right-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-top-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            }
+          ]
+        },
+        {
+          "atMs": 160.8999999910593,
+          "borderColor": "rgb(200, 30, 30)",
+          "backgroundColor": "rgb(253, 236, 236)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 178,
+          "borderColor": "rgb(200, 30, 30)",
+          "backgroundColor": "rgb(253, 236, 236)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 194.19999998807907,
+          "borderColor": "rgb(200, 30, 30)",
+          "backgroundColor": "rgb(253, 236, 236)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 211.79999999701977,
+          "borderColor": "rgb(200, 30, 30)",
+          "backgroundColor": "rgb(253, 236, 236)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        }
+      ],
+      "settledCrop": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\invalid-border-diagnostic-1233\\doctor-reset-complete-desktop-light-naturally-settled-invalid.png",
+      "settledCropSha256": "27554d13afbf7b687aa6ad242056c31b450d5efc2268ddf98c7c214715c60e9b"
+    },
+    {
+      "name": "doctor-reset-complete-desktop-dark",
+      "transitionProperty": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+      "transitionDuration": "0.15s",
+      "reducedMotion": false,
+      "immediateCss": "rgb(107, 177, 247)",
+      "immediateRgba": [
+        107,
+        177,
+        247,
+        255
+      ],
+      "naturallySettledCss": "rgb(225, 85, 85)",
+      "naturallySettledRgba": [
+        225,
+        85,
+        85,
+        255
+      ],
+      "declaredTokenCss": "#e15555",
+      "declaredTokenRgba": [
+        225,
+        85,
+        85,
+        255
+      ],
+      "matchesDeclaredTarget": true,
+      "noAnimationRunningAtEnd": true,
+      "series": [
+        {
+          "atMs": 0,
+          "borderColor": "rgb(107, 177, 247)",
+          "backgroundColor": "oklab(0.209999 -0.00684231 -0.0187881)",
+          "invalid": "true",
+          "focused": false,
+          "animations": [
+            {
+              "property": "background-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-bottom-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-left-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-right-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            },
+            {
+              "property": "border-top-color",
+              "playState": "running",
+              "currentTime": 0,
+              "progress": 0,
+              "duration": 150
+            }
+          ]
+        },
+        {
+          "atMs": 161.5,
+          "borderColor": "rgb(225, 85, 85)",
+          "backgroundColor": "rgb(58, 20, 20)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 178.90000000596046,
+          "borderColor": "rgb(225, 85, 85)",
+          "backgroundColor": "rgb(58, 20, 20)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 195,
+          "borderColor": "rgb(225, 85, 85)",
+          "backgroundColor": "rgb(58, 20, 20)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        },
+        {
+          "atMs": 211.1000000089407,
+          "borderColor": "rgb(225, 85, 85)",
+          "backgroundColor": "rgb(58, 20, 20)",
+          "invalid": "true",
+          "focused": false,
+          "animations": []
+        }
+      ],
+      "settledCrop": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\invalid-border-diagnostic-1233\\doctor-reset-complete-desktop-dark-naturally-settled-invalid.png",
+      "settledCropSha256": "818963b581da61b3ffc3a97e192ba520199594db952054edc0ea6471a962575a"
+    }
+  ],
+  "originalFinalRows": 24,
+  "originalFinal24And288PngsUnchanged": true,
+  "originalImmediateInvalidDifferences": 16,
+  "existingOriginalInvalidPngSamplesSame": 0,
+  "old59SettledBrowserNotRun": true,
+  "conclusion": "Observed A transitions naturally complete to declared destructive token in all eight representative registration/reset desktop rows. Immutable59/A Input/Form/tokens/global CSS are byte-identical. This supports the unchanged declared endpoint and directly observes natural A transition completion, while preserving original immediate metrics/PNG differences; it is not an observed old59 settled-browser comparison or new mobile/login settled run.",
+  "browserClosed": true,
+  "browserLeaseReleased": true
+}

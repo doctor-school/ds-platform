@@ -491,8 +491,10 @@ forwards native APIs unchanged and restores them before reload; assertions expos
 only counts and boolean projections, with cookie comparison retaining a digest.
 Existing three-surface keyboard reveal coverage and PasswordField value/caret/
 no-change unit invariants remain. The guest never submits registration, and
-cleanup closes only its owned context. This delivery has no render surface and
-needs no owner Stage-B request or new slot:
+cleanup closes only its owned context. The case also guards the shared
+PasswordField caret restoration. The PR records the full auth-canvas comparison
+and the lead's behavioral-only Stage-B certification, with real browser runs
+and unchanged-render captures:
 
 ```sh
 pnpm e2e:stage <slot> --project academy --grep "Revealing a password has no side effect and never survives a reload"

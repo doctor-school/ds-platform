@@ -278,6 +278,30 @@
         "https://github.com/doctor-school/ds-platform/issues/2328#issuecomment-6126073287"
       ]
     },
+    "feature-047-staff-access-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/access/page.tsx",
+        "apps/admin/components/staff-access-grant-form.tsx",
+        "apps/admin/app/mfa/challenge/page.tsx",
+        "apps/admin/messages/ru.json",
+        "apps/admin/lib/admin-access.ts"
+      ],
+      "states": [
+        "staff-access-nav",
+        "staff-access-list",
+        "staff-access-grant-form",
+        "staff-access-temp-password",
+        "staff-access-existing-account",
+        "staff-access-refused",
+        "staff-access-refused-unverified",
+        "staff-access-step-up"
+      ],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/2901#issuecomment-6141610486",
+        "https://github.com/doctor-school/ds-platform/issues/2901#issuecomment-6143413707"
+      ]
+    },
     "admin-event-and-direction-pages-v1": {
       "evidenceProfiles": ["responsive-web"],
       "surfacePaths": [

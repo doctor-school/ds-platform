@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { fetchEventsFeed, fetchEventsLive } from "./events-feed";
+import { fetchEventKindTitles, fetchEventsFeed, fetchEventsLive } from "./events-feed";
 
 const page = { today: "2026-10-08", cards: [], horizon: { from: "a", to: "b", nextTo: null, nextFrom: null }, remaining: 0, nextBatch: 0, facetOptions: {}, matching: 0 };
 const contentSet = {
@@ -60,5 +60,25 @@ describe("fetchEventsLive", () => {
     expect(
       await fetchEventsLive("/v1/public/events/live", { cookie: "", userAgent: "", acceptLanguage: "", forwardedFor: "" }, bad as unknown as typeof fetch),
     ).toEqual({ ok: false });
+  });
+});
+
+describe("fetchEventKindTitles", () => {
+  it("EARS-7: reads the published kind dictionary as slug → title", async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json({
+        data: [{ id: "00460046-0000-4000-8000-000000000005", slug: "master-klass", title: "Мастер-класс" }],
+      }),
+    );
+    expect(await fetchEventKindTitles(fetchImpl as unknown as typeof fetch)).toEqual([
+      { slug: "master-klass", title: "Мастер-класс" },
+    ]);
+    const [url] = fetchImpl.mock.calls[0] as unknown as [string];
+    expect(url).toMatch(/\/v1\/public\/event-kinds$/);
+  });
+
+  it("EARS-7: a failed dictionary read names nothing, never a thrown page", async () => {
+    const fetchImpl = vi.fn(async () => new Response("", { status: 503 }));
+    expect(await fetchEventKindTitles(fetchImpl as unknown as typeof fetch)).toEqual([]);
   });
 });

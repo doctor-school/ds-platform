@@ -142,6 +142,12 @@ export function withAppliedFacets(
   return next;
 }
 
+/** A published event kind's URL value and name (012 EARS-28 dictionary). */
+export interface KindTitle {
+  readonly slug: string;
+  readonly title: string;
+}
+
 /** A specialty the doctor specialty combobox offers — its URL value and name. */
 export interface SpecialtyChoice {
   readonly code: string;
@@ -154,12 +160,14 @@ export interface SpecialtyChoice {
  * feed read's own option block, the doctor format from its fixed value set,
  * the doctor specialties from the specialty book. A facet the read names no
  * option for is left out, so the panel drops it (a doctor city, while no
- * event carries one).
+ * event carries one). The kind dictionary names an applied kind the read does
+ * not offer under this reading, so its chip keeps its name (019 EARS-7).
  */
 export function filterOptionsOf(
   filterSet: EventsFilterHost,
   read: FeedFacetOptions,
   specialties: readonly SpecialtyChoice[],
+  kinds: readonly KindTitle[] = [],
 ): EventsFilterOptions {
   const named = (key: string): EventsFilterOption[] | undefined => {
     const list = read[key] ?? [];
@@ -187,6 +195,11 @@ export function filterOptionsOf(
     specialties.map((choice) => ({ id: choice.code, label: choice.name })),
   );
   put("city", named("city"));
+  if (kinds.length > 0) {
+    options.appliedNames = {
+      kind: kinds.map((kind) => ({ id: kind.slug, label: kind.title })),
+    };
+  }
   return options;
 }
 

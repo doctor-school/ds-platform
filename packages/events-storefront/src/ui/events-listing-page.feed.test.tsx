@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   fetchEventsLive: vi.fn(),
   fetchMyEvents: vi.fn(),
   fetchSpecialtyChoices: vi.fn(),
+  fetchEventKindTitles: vi.fn(),
   fetchMonthEntries: vi.fn(),
   fetchMonthCounts: vi.fn(),
 }));
@@ -43,6 +44,7 @@ vi.mock("../server", async (importOriginal) => ({
   fetchEventsLive: mocks.fetchEventsLive,
   fetchMyEvents: mocks.fetchMyEvents,
   fetchSpecialtyChoices: mocks.fetchSpecialtyChoices,
+  fetchEventKindTitles: mocks.fetchEventKindTitles,
   fetchMonthEntries: mocks.fetchMonthEntries,
   fetchMonthCounts: mocks.fetchMonthCounts,
 }));
@@ -163,6 +165,7 @@ beforeEach(() => {
   mocks.fetchEventsLive.mockResolvedValue({ ok: true, value: [] });
   mocks.fetchEventsFeed.mockResolvedValue({ ok: true, value: PAGE });
   mocks.fetchSpecialtyChoices.mockResolvedValue([]);
+  mocks.fetchEventKindTitles.mockResolvedValue([]);
 });
 
 /** The FeedFrame element the one page returns in its feed view, inside the page's feed-read scope (#2832). */
@@ -211,6 +214,29 @@ function blocks(element: ReactElement<{ children: ReactNode }>) {
 }
 
 describe("<EventsListingPage> — the feed view of both storefronts", () => {
+  it("EARS-7: the kind dictionary is read only while the doctor URL applies a kind", async () => {
+    await frame(DOCTOR);
+    expect(mocks.fetchEventKindTitles).not.toHaveBeenCalled();
+    await frame(DOCTOR, { kind: "master-klass" });
+    expect(mocks.fetchEventKindTitles).toHaveBeenCalledTimes(1);
+  });
+
+  it("EARS-7: an applied kind the read does not offer keeps its dictionary name on the panel; a withdrawn one reads «Больше не проводится»", async () => {
+    render(
+      await FacetColumn({
+        config: DOCTOR,
+        raw: { kind: ["master-klass", "retired-kind"] },
+        feed: Promise.resolve({ ok: true, value: PAGE }),
+        specialties: Promise.resolve([]),
+        kinds: Promise.resolve([{ slug: "master-klass", title: "Мастер-класс" }]),
+      }),
+    );
+    const kinds = within(screen.getByRole("group", { name: "Вид события" }));
+    expect(kinds.getByRole("button", { name: "Мастер-класс", pressed: true })).toBeInTheDocument();
+    expect(kinds.getByRole("button", { name: "Больше не проводится", pressed: true })).toBeInTheDocument();
+    expect(screen.getByText("Применено: 2")).toBeInTheDocument();
+  });
+
   it.each([
     ["doctor", DOCTOR],
     ["Academy", ACADEMY],

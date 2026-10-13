@@ -414,6 +414,23 @@ describe("EventsFilter — the doctor facet set (EARS-7, filterSet)", () => {
     expect(screen.getByText("Применено: 2")).toBeInTheDocument();
   });
 
+  it("EARS-7.1: an applied kind with no event in this reading keeps its own name when the host knows it", () => {
+    renderPanel({
+      options: {
+        ...OPTIONS,
+        appliedNames: { kind: [{ id: "master", label: "Мастер-класс" }] },
+      },
+      applied: { ...EMPTY, kind: ["master", "retired-kind"] },
+    });
+    const kinds = within(group("Вид события")).getAllByRole("button", {
+      pressed: true,
+    });
+    expect(kinds.map((chip) => chip.textContent)).toEqual([
+      "Мастер-класс",
+      "Больше не проводится",
+    ]);
+  });
+
   it("EARS-7.1: removing an applied kind the host no longer offers drops it from the applied set", async () => {
     const user = userEvent.setup();
     const { onChange } = renderPanel({

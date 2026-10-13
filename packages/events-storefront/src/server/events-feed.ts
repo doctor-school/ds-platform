@@ -5,12 +5,13 @@ import {
   type MonthBroadcastEntry,
   type MonthlyEventCount,
   MonthlyEventCountsSchema,
+  PublicEventKindListSchema,
   type RawQueryRecord,
   SpecialtyBookSchema,
 } from "@ds/schemas";
 
 import type { EventsStorefrontHostConfig } from "../host-config";
-import type { SpecialtyChoice } from "../model/facets";
+import type { KindTitle, SpecialtyChoice } from "../model/facets";
 import type { BlockRead, EventsFeedPage } from "../model/feed";
 import { feedReadQuery, feedTenseOf, monthReadQuery } from "../model/feed-url";
 import { type ForwardedSession, forwardedHeaders } from "./registration-state";
@@ -181,6 +182,28 @@ export async function fetchSpecialtyChoices(
     return book.entries
       .filter((entry) => !entry.isOther)
       .map((entry) => ({ code: entry.code, name: entry.name }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The published event-kind dictionary (012 EARS-28) — the name of an applied
+ * kind the feed read does not offer under the current reading (019 EARS-7).
+ * A kind missing here is withdrawn; a failed read names nothing.
+ */
+export async function fetchEventKindTitles(
+  fetchImpl: typeof fetch = fetch,
+): Promise<KindTitle[]> {
+  try {
+    const res = await fetchImpl(`${API_BASE}/v1/public/event-kinds`, {
+      headers: { accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    return PublicEventKindListSchema.parse(await res.json()).data.map(
+      ({ slug, title }) => ({ slug, title }),
+    );
   } catch {
     return [];
   }

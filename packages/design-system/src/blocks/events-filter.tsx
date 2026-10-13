@@ -159,6 +159,13 @@ export interface EventsFilterOptions {
   project?: EventsFilterOption[];
   expert?: EventsFilterOption[];
   topic?: EventsFilterOption[];
+  /**
+   * Names of applied «Формат» / «Вид события» values the facet does not offer
+   * in this reading (a kind with no event under the current tense or scope).
+   * Such a value stays a selected chip under this name; one the host cannot
+   * name reads `labels.unavailableOption` (019 EARS-7).
+   */
+  appliedNames?: { format?: EventsFilterOption[]; kind?: EventsFilterOption[] };
 }
 
 /** The facets realised as a Combobox + removable chips. */
@@ -198,10 +205,10 @@ export interface EventsFilterLabels {
   /** Verb prefix of a removable chip's accessible name («Убрать» → «Убрать: Казань»). */
   removeFacet: string;
   /**
-   * The chip of an applied «Формат» / «Вид события» value the host no longer
-   * offers (a kind withdrawn from the dictionary after the link was shared):
-   * the value stays visible and removable, named by this copy — never by its
-   * raw id (019 EARS-7).
+   * The chip of an applied «Формат» / «Вид события» value the host cannot name
+   * (a kind withdrawn from the dictionary after the link was shared): the
+   * value stays visible and removable, named by this copy — never by its raw
+   * id (019 EARS-7).
    */
   unavailableOption: string;
   /** Strings every Combobox facet shares. */
@@ -408,17 +415,20 @@ function ChipFacet({
   label,
   options,
   values,
+  names,
   unavailableLabel,
   onToggle,
 }: {
   label: string;
   options: EventsFilterOption[];
   values: string[];
-  /** The label of an applied value `options` does not carry. */
+  /** Names of applied values `options` does not carry. */
+  names: EventsFilterOption[];
+  /** The label of an applied value neither `options` nor `names` carries. */
   unavailableLabel: string;
   onToggle: (id: string) => void;
 }) {
-  // An applied value the host no longer offers stays a selected chip after
+  // An applied value the facet does not offer stays a selected chip after
   // the offered ones, so every applied value «Применено: N» counts is on
   // screen and removable (019 EARS-7).
   const unavailable = values.filter(
@@ -439,7 +449,7 @@ function ChipFacet({
         ))}
         {unavailable.map((id) => (
           <FilterChip key={id} selected onClick={() => onToggle(id)}>
-            {unavailableLabel}
+            {names.find((name) => name.id === id)?.label ?? unavailableLabel}
           </FilterChip>
         ))}
       </div>
@@ -579,6 +589,7 @@ export function EventsFilter({
         label={label}
         options={list}
         values={values}
+        names={options.appliedNames?.[facet] ?? []}
         unavailableLabel={labels.unavailableOption}
         onToggle={(id) =>
           onChange({ ...applied, [facet]: toggle(applied[facet], id) })

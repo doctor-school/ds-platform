@@ -32,6 +32,17 @@ describe("the facet panel's options (rows 58, 59, D9)", () => {
     expect(academy.specialty).toBeUndefined();
   });
 
+  it("EARS-7: the kind dictionary names an applied kind the read does not offer", () => {
+    const doctor = filterOptionsOf("doctor", { kind, city: [] }, [], [
+      { slug: "master-klass", title: "Мастер-класс" },
+    ]);
+    expect(doctor.kind).toEqual([{ id: "lecture", label: "Лекция" }]);
+    expect(doctor.appliedNames).toEqual({
+      kind: [{ id: "master-klass", label: "Мастер-класс" }],
+    });
+    expect(filterOptionsOf("doctor", { kind, city: [] }, []).appliedNames).toBeUndefined();
+  });
+
   it("NEW: a city option is offered once the read names one", () => {
     const doctor = filterOptionsOf("doctor", { city: [{ slug: "Казань", title: "Казань", count: 1 }] }, []);
     expect(doctor.city).toEqual([{ id: "Казань", label: "Казань" }]);

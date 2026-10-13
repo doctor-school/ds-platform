@@ -37,10 +37,60 @@ import {
  * no client-local paging engine exists.
  */
 
-/** `YYYY-MM-DD` — a calendar day in МСК, the unit both the horizon and the grouping use. */
-export const DoctorEventsFeedDaySchema = z
+/**
+ * The calendar years a doctor events read serves — `day`/`from`/`to`, `month`
+ * and the counts `year` alike (#2831). A well-shaped value outside them (or an
+ * impossible day such as `2026-02-31`) is a 400 at the boundary: the horizon
+ * and month arithmetic downstream would otherwise roll into an Invalid Date or
+ * a year past 9999 and answer 500 (019 EARS-8.17).
+ */
+export const DOCTOR_EVENTS_QUERY_YEAR_MIN = 1900;
+export const DOCTOR_EVENTS_QUERY_YEAR_MAX = 2999;
+
+/** Whether a calendar year lies in the served range. */
+export function isDoctorEventsQueryYear(year: number): boolean {
+  return (
+    Number.isInteger(year) &&
+    year >= DOCTOR_EVENTS_QUERY_YEAR_MIN &&
+    year <= DOCTOR_EVENTS_QUERY_YEAR_MAX
+  );
+}
+
+/**
+ * The `YYYY-MM-DD` SHAPE alone. The events PAGE URL keeps it — a page whose
+ * `from` is a refused day still renders, and the feed block alone reports the
+ * read's 400 (019 EARS-9, #1530) — and so does every RESPONSE day: a horizon
+ * the api resolves one day past a served edge (`to` after
+ * `from=2999-12-31`, `from` before `to=1900-01-01`) is an honest echo, so the
+ * refusal stays at the request boundary. Every read REQUEST parses
+ * {@link DoctorEventsFeedDaySchema}.
+ */
+export const DoctorEventsFeedDayShapeSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "expected an ISO calendar day (YYYY-MM-DD)");
+
+/** Whether a well-shaped ISO day is a real calendar day in the served years. */
+function isServedCalendarDay(day: string): boolean {
+  const [year, month, date] = day.split("-").map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  if (!isDoctorEventsQueryYear(year)) return false;
+  const parsed = new Date(Date.UTC(year, month - 1, date));
+  // Round-trip: `2026-02-31` rolls into March, so it does not come back equal.
+  return (
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === date
+  );
+}
+
+/** `YYYY-MM-DD` — a calendar day in МСК, the unit both the horizon and the grouping use. */
+export const DoctorEventsFeedDaySchema = DoctorEventsFeedDayShapeSchema.refine(
+  isServedCalendarDay,
+  "expected a real calendar day within the served years",
+);
 
 export const DoctorEventsFeedTenseSchema = z.enum(["upcoming", "past"]);
 export type DoctorEventsFeedTense = z.infer<typeof DoctorEventsFeedTenseSchema>;
@@ -68,7 +118,12 @@ export const DOCTOR_EVENTS_FEED_HORIZON_STEP_DAYS = 14;
  * falls on is shown whole.
  */
 export const DOCTOR_EVENTS_FEED_PAST_STEP_EVENTS = 10;
-/** The widest horizon a single read will serve; a wider `to` is clamped, never rejected. */
+/**
+ * The widest horizon a single read will serve; a wider `to` within the served
+ * years is clamped, not rejected. A `to` outside them
+ * ({@link DOCTOR_EVENTS_QUERY_YEAR_MIN}–{@link DOCTOR_EVENTS_QUERY_YEAR_MAX})
+ * is a 400 (019 EARS-8.17).
+ */
 export const DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS = 365;
 
 export const DoctorEventsFeedQuerySchema = z
@@ -103,7 +158,7 @@ export type DoctorEventsFeedQuery = z.infer<typeof DoctorEventsFeedQuerySchema>;
 /** One day heading with the events that fall under it. A day with no events is not emitted. */
 export const DoctorEventDayGroupSchema = z
   .object({
-    day: DoctorEventsFeedDaySchema,
+    day: DoctorEventsFeedDayShapeSchema,
     /** Pre-formatted Russian heading — one rendering rule for every host. */
     label: z.string().min(1),
     items: z.array(DoctorEventCardSchema).min(1),
@@ -160,10 +215,10 @@ export const DoctorEventsFeedSchema = z
      * «Сегодня», the day-href tense boundary), never from the device clock or
      * the URL-echoed extent.
      */
-    today: DoctorEventsFeedDaySchema,
+    today: DoctorEventsFeedDayShapeSchema,
     /** The applied horizon, echoed so the client never has to re-derive it. */
-    from: DoctorEventsFeedDaySchema,
-    to: DoctorEventsFeedDaySchema,
+    from: DoctorEventsFeedDayShapeSchema,
+    to: DoctorEventsFeedDayShapeSchema,
     days: z.array(DoctorEventDayGroupSchema),
     totalCount: z.number().int().nonnegative(),
     /**
@@ -171,14 +226,14 @@ export const DoctorEventsFeedSchema = z
      * nothing lies past the window or the horizon is already maximal. Always
      * `null` on «Прошедшие», whose extent widens backward ({@link nextFrom}).
      */
-    nextTo: DoctorEventsFeedDaySchema.nullable(),
+    nextTo: DoctorEventsFeedDayShapeSchema.nullable(),
     /**
      * «Прошедшие»: the older `from` «показать ещё» writes into the URL; `null`
      * when nothing older lies within the widest horizon. Always `null` on
      * «Будущие». One codec: the past extent moves its `from`, the upcoming
      * extent its `to` — the same two URL keys.
      */
-    nextFrom: DoctorEventsFeedDaySchema.nullable(),
+    nextFrom: DoctorEventsFeedDayShapeSchema.nullable(),
     /**
      * The matching events beyond the current extent that further «показать
      * ещё» steps can still reach (within the widest horizon) — the M of

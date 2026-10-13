@@ -30,10 +30,12 @@ export interface EventHorizon {
  * ({@link resolveEventHorizonFromData}); the one-horizon-width-before-today
  * `from` here is only the archive-is-empty extent.
  *
- * Only «Будущие» has a widest horizon: a hand-edited `to` past it is CLAMPED
- * rather than rejected — a hand-edited URL degrades to the widest honest read,
- * never to a 400. «Прошедшие» is the archive and has NO age floor (014 reaches
- * every past event): any older `from` is honoured as written.
+ * Only «Будущие» has a widest horizon: a hand-edited `to` past it but within
+ * the served years is CLAMPED rather than rejected — it degrades to the widest
+ * honest read. «Прошедшие» is the archive and has no age floor inside the
+ * served years (014 reaches every past event): an older `from` is honoured as
+ * written. A bound outside `DOCTOR_EVENTS_QUERY_YEAR_MIN`–`_MAX` (1900–2999)
+ * never reaches here: the read codec refuses it with a 400 (019 EARS-8.17).
  */
 export function resolveEventHorizon(
   query: {

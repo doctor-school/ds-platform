@@ -3,8 +3,9 @@ import { z } from "zod";
 import { SlugSchema } from "../taxonomy/taxonomy.schema.js";
 import { DoctorEventFormatSchema } from "./doctor-event-card.schema.js";
 import {
-  DoctorEventsFeedDaySchema,
+  DoctorEventsFeedDayShapeSchema,
   DoctorEventsFeedSpecialtyModeSchema,
+  isDoctorEventsQueryYear,
   DoctorEventsFeedTargetingSchema,
   type DoctorEventsFeedQuery,
   parseDoctorEventsFeedQuery,
@@ -50,10 +51,17 @@ import { MonthBroadcastEntrySchema, YEAR_PARAM } from "./events.schema.js";
  * problem. No second discriminator vocabulary is invented for the grid.
  */
 
-/** `YYYY-MM` — a calendar month in МСК. */
+/**
+ * `YYYY-MM` — a calendar month in МСК, its year in the served range (#2831):
+ * `9999-12` would roll the exclusive upper bound into year 10000.
+ */
 export const DoctorEventsMonthSchema = z
   .string()
-  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "expected an ISO month (YYYY-MM)");
+  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "expected an ISO month (YYYY-MM)")
+  .refine(
+    (month) => isDoctorEventsQueryYear(Number(month.slice(0, 4))),
+    "expected a month within the served years",
+  );
 
 /**
  * The month query: the feed's facet subset plus `month`. `.strict()` guards the
@@ -90,7 +98,7 @@ export type DoctorEventsMonthQuery = z.infer<
 /** One cell of the grid. `count` is the number of feed cards that fall on `date`. */
 export const DoctorEventsMonthDaySchema = z
   .object({
-    date: DoctorEventsFeedDaySchema,
+    date: DoctorEventsFeedDayShapeSchema,
     count: z.number().int().nonnegative(),
     /** The live marker of EARS-4 — the same lifecycle state the feed's card carries, never a start-time guess. */
     hasLive: z.boolean(),
@@ -102,7 +110,7 @@ export const DoctorEventsMonthGridSchema = z
   .object({
     month: DoctorEventsMonthSchema,
     /** «Сегодня» — the МСК calendar day, so the marker cannot drift with the reader's device clock. */
-    today: DoctorEventsFeedDaySchema,
+    today: DoctorEventsFeedDayShapeSchema,
     /** EVERY day of `month`, ascending — the host fills nothing in. */
     days: z.array(DoctorEventsMonthDaySchema).min(28),
     /**
@@ -127,7 +135,15 @@ export type DoctorEventsMonthGrid = z.infer<typeof DoctorEventsMonthGridSchema>;
  */
 export const DoctorEventsMonthCountsQuerySchema =
   DoctorEventsMonthQuerySchema.omit({ month: true })
-    .extend({ year: z.string().regex(YEAR_PARAM, "expected a year (YYYY)") })
+    .extend({
+      year: z
+        .string()
+        .regex(YEAR_PARAM, "expected a year (YYYY)")
+        .refine(
+          (year) => isDoctorEventsQueryYear(Number(year)),
+          "expected a year within the served years",
+        ),
+    })
     .strict();
 export type DoctorEventsMonthCountsQuery = z.infer<
   typeof DoctorEventsMonthCountsQuerySchema

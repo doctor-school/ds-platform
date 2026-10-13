@@ -35,7 +35,9 @@ import {
   PRICE_MODES,
 } from "./compute.mjs";
 
-const html = htm.bind(React.createElement);
+// Not named `view`: Prettier reflows `view` templates by HTML whitespace rules, while htm drops
+// whitespace that contains a line break — a reflow would glue words. Joins across lines use ${" "}.
+const view = htm.bind(React.createElement);
 const { useState, useMemo, useEffect, useRef, useContext, createContext } =
   React;
 
@@ -122,7 +124,8 @@ const GLOSSARY = {
     "Взнос на страхование от несчастных случаев и профзаболеваний — начисляется сверх основных взносов.",
   МСП: "Малый и средний бизнес: льготный режим взносов — пониженная ставка с части зарплаты выше 1,5 МРОТ.",
   gross: "Зарплата до вычета НДФЛ («грязными»), ₽ в месяц.",
-  премия: "Премия — доля к gross; облагается взносами, поэтому прибавляется до взносов.",
+  премия:
+    "Премия — доля к gross; облагается взносами, поэтому прибавляется до взносов.",
   взносы:
     "Страховые взносы работодателя: общий режим — ставка до базы 2 979 000 ₽ в год, сверху 15,1 %; или режим МСП.",
   делитель:
@@ -145,10 +148,12 @@ const GLOSSARY = {
     "Подпроцесс, который в схеме ещё не раскрыт: его часы неизвестны, строка «не задано» и флаг.",
   эксперт:
     "Внешний врач-эксперт: гонорар за час по грейду эксперта (врач, к.м.н., д.м.н., лидер мнений).",
-  "грейд эксперта": "Учёная степень или статус эксперта — задаёт ставку его часа.",
+  "грейд эксперта":
+    "Учёная степень или статус эксперта — задаёт ставку его часа.",
   "узкое место":
     "Роль, которая первой упирается в свои часы и ограничивает мощность команды.",
-  мощность: "Сколько единиц продукта одна команда делает в месяц при полной загрузке.",
+  мощность:
+    "Сколько единиц продукта одна команда делает в месяц при полной загрузке.",
   срок: "Срок единицы по цепочке операций, в рабочих днях.",
   "прямые часы":
     "Часы операций, которые относятся к этой единице (без накладных, резерва и простоя).",
@@ -177,7 +182,8 @@ const GLOSSARY = {
     "Штат или внештатно (самозанятый, ИП, ГПХ): штат оплачивается месяцем, внештатный исполнитель — за часы.",
   "продакшн видеоподкаста":
     "Своя команда — свои часы монтажа, обложек и клипов и студийный час с работой студии. Подрядчик — пять компонентов подрядчика вместо этих часов и голая аренда студии.",
-  "период счетов": "Как часто выставляются счета за срок производства: раз в месяц или в квартал.",
+  "период счетов":
+    "Как часто выставляются счета за срок производства: раз в месяц или в квартал.",
   КП: "Коммерческое предложение.",
   база: "Снимок метрик, с которым сравниваются текущие: модель без правок или запомненный кнопкой «Запомнить как базу».",
 };
@@ -208,7 +214,8 @@ const fin = (v) => typeof v === "number" && Number.isFinite(v);
 const f0 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 const f1 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 const f2 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
-const rub = (v) => (v == null ? "не задано" : fin(v) ? `${f0.format(v)} ₽` : "—");
+const rub = (v) =>
+  v == null ? "не задано" : fin(v) ? `${f0.format(v)} ₽` : "—";
 const hrs = (v) => (fin(v) ? `${f1.format(v)} ч` : "—");
 const n2 = (v) => (fin(v) ? f2.format(v) : "—");
 const pct = (v) => (fin(v) ? `${f1.format(v * 100)} %` : "—");
@@ -312,7 +319,9 @@ function baseValue(model, key) {
       const loop = model.loops.get(name);
       if (!loop) return undefined;
       return loop.rounds_from
-        ? COURSES.map((k) => loopRounds(model, name, { ...DEFAULT_CTX, course: k }))
+        ? COURSES.map((k) =>
+            loopRounds(model, name, { ...DEFAULT_CTX, course: k }),
+          )
         : loop.rounds_draft;
     }
     case "wait":
@@ -360,7 +369,11 @@ function rangeProblem(values) {
 function normaliseEdit(model, key, value) {
   const base = baseValue(model, key);
   if (base === undefined) return { value };
-  if (typeof base === "string" || typeof base === "boolean" || (base === null && typeof value === "string"))
+  if (
+    typeof base === "string" ||
+    typeof base === "boolean" ||
+    (base === null && typeof value === "string")
+  )
     return typeof value === typeof base || value === null || base === null
       ? { value }
       : { error: "ожидается значение из списка" };
@@ -491,11 +504,17 @@ function describer(model, inputs) {
     const [kind, id, field] = key.split(":");
     if (kind === "var" && VAR_OPTIONS[id])
       return VAR_OPTIONS[id].find(([k]) => k === (v ?? ""))?.[1] ?? shape(v);
-    if (kind === "engage") return v == null ? "как в модели" : ENGAGEMENT_LABELS[v] ?? v;
-    if (kind === "grade") return v == null ? "грейд команды" : GRADE_LABELS[v] ?? v;
+    if (kind === "engage")
+      return v == null ? "как в модели" : (ENGAGEMENT_LABELS[v] ?? v);
+    if (kind === "grade")
+      return v == null ? "грейд команды" : (GRADE_LABELS[v] ?? v);
     if (kind === "scale") return pct(v);
     if (kind === "price")
-      return field === "markup" || field === "margin" ? pct(v) : field === "fixed" ? rub(v) : `× ${n2(v)}`;
+      return field === "markup" || field === "margin"
+        ? pct(v)
+        : field === "fixed"
+          ? rub(v)
+          : `× ${n2(v)}`;
     return v == null ? "не задано" : `${shape(v)}${UNIT[kind] ?? ""}`;
   };
   return { name, value, varLabel };
@@ -528,7 +547,7 @@ const slotsOf = (value, n) =>
 function Term({ t, children }) {
   const text = GLOSSARY[t];
   if (!text) return children ?? t;
-  return html`<span class="term" tabindex="0" data-tip=${text}
+  return view`<span class="term" tabindex="0" data-tip=${text}
     >${children ?? t}</span
   >`;
 }
@@ -588,7 +607,7 @@ function TipLayer() {
       window.removeEventListener("scroll", scrolled, true);
     };
   }, []);
-  return html`<div
+  return view`<div
     id="term-tip"
     role="tooltip"
     class="tiplayer"
@@ -639,9 +658,9 @@ function NumberEdit({ value, base, label, nullable, onChange, slots, wide }) {
     const out = n === 1 ? vals[0] : vals.every((v) => v === null) ? null : vals;
     if (JSON.stringify(out) !== sig) onChange(out);
   };
-  return html`${text.map(
+  return view`${text.map(
     (t, i) =>
-      html`${i ? html`<span class="muted">–</span>` : null}<input
+      view`${i ? view`<span class="muted">–</span>` : null}<input
           key=${i}
           inputmode="decimal"
           class=${`${problem ? "bad" : ""}${wide ? " wide" : ""}`}
@@ -653,7 +672,7 @@ function NumberEdit({ value, base, label, nullable, onChange, slots, wide }) {
         />`,
   )}${
     problem
-      ? html`<span class="err small" data-testid="field-problem"
+      ? view`<span class="err small" data-testid="field-problem"
           >не применено: ${problem}</span
         >`
       : null
@@ -666,23 +685,24 @@ function Field({ k, base, label, options, slots, wide }) {
   const edited = Object.hasOwn(c.ov, k);
   const value = edited ? c.ov[k] : base;
   const choose = (v) => {
-    const next = v === "" ? null : v === "true" ? true : v === "false" ? false : v;
+    const next =
+      v === "" ? null : v === "true" ? true : v === "false" ? false : v;
     if (JSON.stringify(next) === JSON.stringify(base ?? null)) c.reset(k);
     else c.set(k, next);
   };
-  return html`<span class=${`edit${edited ? " edited" : ""}`}>
+  return view`<span class=${`edit${edited ? " edited" : ""}`}>
     ${
       options
-        ? html`<select
+        ? view`<select
             aria-label=${label}
             value=${value == null ? "" : String(value)}
             onChange=${(e) => choose(e.target.value)}
           >
             ${options.map(
-              ([v, name]) => html`<option key=${v} value=${v}>${name}</option>`,
+              ([v, name]) => view`<option key=${v} value=${v}>${name}</option>`,
             )}
           </select>`
-        : html`<${NumberEdit}
+        : view`<${NumberEdit}
             value=${value}
             base=${base}
             label=${label}
@@ -697,7 +717,7 @@ function Field({ k, base, label, options, slots, wide }) {
     }
     ${
       edited
-        ? html`<span class="mark" aria-hidden="true">●</span
+        ? view`<span class="mark" aria-hidden="true">●</span
             ><button
               class="link"
               aria-label=${`сбросить ${label}; в модели: ${shape(base)}`}
@@ -712,7 +732,7 @@ function Field({ k, base, label, options, slots, wide }) {
 
 function LeafHours({ id }) {
   const c = useContext(Ctx);
-  return html`<${Field}
+  return view`<${Field}
     k=${`leaf:${id}`}
     base=${c.base.leaves.get(id).hours}
     label=${`часы за проход ${id}`}
@@ -722,8 +742,8 @@ function LeafHours({ id }) {
 function LeafRef({ id }) {
   const c = useContext(Ctx);
   const leaf = c.model.leaves.get(id);
-  if (!leaf) return html`<span class="id">${id}</span>`;
-  return html`<a
+  if (!leaf) return view`<span class="id">${id}</span>`;
+  return view`<a
       class="id"
       href=${`../viewer/#${encodeURIComponent(leaf.diagram)}`}
       target="_blank"
@@ -737,12 +757,12 @@ function LeafRef({ id }) {
 function TrailTable({ lines, showRole = true, showSum = true }) {
   const totalH = lines.reduce((a, l) => a + (l.hours ?? 0), 0);
   const totalC = lines.reduce((a, l) => a + (l.cost ?? 0), 0);
-  return html`<div class="scroll">
+  return view`<div class="scroll">
     <table>
       <thead>
         <tr>
           <th><${Term} t="операция">Операция<//></th>
-          ${showRole ? html`<th>Роль</th>` : null}
+          ${showRole ? view`<th>Роль</th>` : null}
           <th>ч за проход × <${Term} t="круги">круги<//> × кол-во</th>
           <th class="num">часы</th>
           <th class="num"><${Term} t="₽/ч">₽/ч<//></th>
@@ -752,9 +772,9 @@ function TrailTable({ lines, showRole = true, showSum = true }) {
       <tbody>
         ${lines.map(
           (l, i) =>
-            html`<tr key=${i}>
+            view`<tr key=${i}>
               <td><${LeafRef} id=${l.leaf} /></td>
-              ${showRole ? html`<td>${l.role}</td>` : null}
+              ${showRole ? view`<td>${l.role}</td>` : null}
               <td>
                 <${LeafHours} id=${l.leaf} />
                 <div class="small">
@@ -766,7 +786,7 @@ function TrailTable({ lines, showRole = true, showSum = true }) {
                 ${
                   l.hourlyCost == null
                     ? l.flags?.includes("сдельно")
-                      ? html`<${Term} t="сдельно">сдельно<//>`
+                      ? view`<${Term} t="сдельно">сдельно<//>`
                       : "не задана"
                     : rub(l.hourlyCost)
                 }
@@ -776,7 +796,7 @@ function TrailTable({ lines, showRole = true, showSum = true }) {
         )}
         ${
           showSum
-            ? html`<tr class="sum">
+            ? view`<tr class="sum">
                 <td colspan=${showRole ? 3 : 2}>Сумма</td>
                 <td class="num">${hrs(totalH)}</td>
                 <td></td>
@@ -790,7 +810,7 @@ function TrailTable({ lines, showRole = true, showSum = true }) {
 }
 
 function Drill({ name, amount, children, open = false, testid }) {
-  return html`<details open=${open} data-testid=${testid}>
+  return view`<details open=${open} data-testid=${testid}>
     <summary>
       <span class="name">${name}</span><span class="amount">${amount}</span>
     </summary>
@@ -800,7 +820,7 @@ function Drill({ name, amount, children, open = false, testid }) {
 
 /** The team circle's direct hours cut per member role — freelance members at their own hour. */
 function CircleMembers({ circle }) {
-  return html`<div class="scroll">
+  return view`<div class="scroll">
     <p class="small muted">
       Часы круга делятся между участниками по FTE; внештатный участник — по
       своему часу.
@@ -818,7 +838,7 @@ function CircleMembers({ circle }) {
       <tbody>
         ${circle.members.map(
           (m) =>
-            html`<tr key=${m.role}>
+            view`<tr key=${m.role}>
               <td>${m.role}</td>
               <td>
                 ${ENGAGEMENT_LABELS[m.engagement] ?? m.engagement}
@@ -855,9 +875,9 @@ function DirectDrill({ r, model }) {
   const roles = Object.entries(r.direct.byRole).sort(
     (a, b) => b[1].cost - a[1].cost,
   );
-  return html`<${Drill}
+  return view`<${Drill}
     testid="drill-direct"
-    name=${html`<b>Прямые затраты</b> <span class="muted small"
+    name=${view`<b>Прямые затраты</b> <span class="muted small"
         ><${Term} t="прямые часы">${hrs(r.direct.hours)}<//></span
       >`}
     amount=${rub(r.direct.cost)}
@@ -865,10 +885,10 @@ function DirectDrill({ r, model }) {
     <${Drill} name="По ролям" amount="" testid="direct-by-role">
       ${roles.map(
         ([role, v]) =>
-          html`<${Drill}
+          view`<${Drill}
             key=${role}
-            name=${html`${role}${" "}<span class="muted small"
-                >${hrs(v.hours)} ·
+            name=${view`${role}${" "}<span class="muted small"
+                >${hrs(v.hours)} ·${" "}
                 ${
                   r.direct.circle?.role === role
                     ? "круг"
@@ -879,7 +899,7 @@ function DirectDrill({ r, model }) {
           >
             ${
               r.direct.circle?.role === role
-                ? html`<${CircleMembers} circle=${r.direct.circle} />`
+                ? view`<${CircleMembers} circle=${r.direct.circle} />`
                 : null
             }
             <${TrailTable}
@@ -890,7 +910,7 @@ function DirectDrill({ r, model }) {
       )}
     <//>
     <${Drill}
-      name=${html`По <${Term} t="функции схемы">функциям схемы<//>`}
+      name=${view`По <${Term} t="функции схемы">функциям схемы<//>`}
       amount=""
       testid="direct-by-function"
     >
@@ -898,9 +918,9 @@ function DirectDrill({ r, model }) {
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(
           ([fn, lines]) =>
-            html`<${Drill}
+            view`<${Drill}
               key=${fn}
-              name=${html`<span class="id">${fn}</span> ${titles.get(fn) ?? ""}${" "}<span
+              name=${view`<span class="id">${fn}</span> ${titles.get(fn) ?? ""}${" "}<span
                   class="muted small"
                   >${hrs(lines.reduce((a, l) => a + l.hours, 0))}</span
                 >`}
@@ -917,10 +937,10 @@ function DirectDrill({ r, model }) {
     >
       ${[...groups].map(
         ([key, lines]) =>
-          html`<${Drill}
+          view`<${Drill}
             key=${key}
-            name=${html`${key}${" "}<span class="muted small"
-                >× ${n2(qty.get(key))} ·
+            name=${view`${key}${" "}<span class="muted small"
+                >× ${n2(qty.get(key))} ·${" "}
                 ${hrs(lines.reduce((a, l) => a + l.hours, 0))}</span
               >`}
             amount=${rub(lines.reduce((a, l) => a + (l.cost ?? 0), 0))}
@@ -950,19 +970,21 @@ function StaffHourDrill({ r, model, ctx }) {
     .filter((h) => h.full != null);
   if (!roles.length) return null;
   const mode =
-    model.vars.contributions_mode === "msp_priority" ? "режим МСП" : "общий режим";
-  return html`<${Drill}
+    model.vars.contributions_mode === "msp_priority"
+      ? "режим МСП"
+      : "общий режим";
+  return view`<${Drill}
     testid="drill-staff-hour"
-    name=${html`<b><${Term} t="час штата">Час штата<//></b>${" "}<span class="muted small"
+    name=${view`<b><${Term} t="час штата">Час штата<//></b>${" "}<span class="muted small"
         >как считается ставка штатных ролей</span
       >`}
     amount=""
   >
     <p class="small muted">
-      <${Term} t="gross">gross<//> → + <${Term} t="премия">премия<//>
-      ${pct(model.vars.bonus_share)} → + <${Term} t="взносы">взносы<//>
-      (${mode}) → ÷ <${Term} t="делитель">${n2(model.vars.paid_hours_per_month)} ч<//>
-      → + <${Term} t="прочие расходы">прочие расходы<//>
+      <${Term} t="gross">gross<//> → + <${Term} t="премия">премия<//>${" "}
+      ${pct(model.vars.bonus_share)} → + <${Term} t="взносы">взносы<//>${" "}
+      (${mode}) → ÷ <${Term} t="делитель">${n2(model.vars.paid_hours_per_month)} ч<//>${" "}
+      → + <${Term} t="прочие расходы">прочие расходы<//>${" "}
       ${rub(model.vars.staff_other_costs_rub_month)} в месяц ÷ те же часы = час
       → × масштаб ФОТ ${pct(model.scale.payroll)} = полный час.
     </p>
@@ -983,7 +1005,7 @@ function StaffHourDrill({ r, model, ctx }) {
         <tbody>
           ${roles.map(
             (h) =>
-              html`<tr key=${h.role}>
+              view`<tr key=${h.role}>
                 <td>
                   ${h.role}
                   <span class="muted small">· ${GRADE_LABELS[h.grade] ?? h.grade}</span>
@@ -1009,9 +1031,9 @@ function ExpertsDrill({ r, model, ctx }) {
     (role) => model.config.expert_roles?.[role],
   );
   if (!experts.length) return null;
-  return html`<${Drill}
+  return view`<${Drill}
     testid="drill-experts"
-    name=${html`<b><${Term} t="эксперт">Эксперты<//></b>`}
+    name=${view`<b><${Term} t="эксперт">Эксперты<//></b>`}
     amount=${rub(experts.reduce((a, role) => a + r.direct.byRole[role].cost, 0))}
   >
     <table>
@@ -1019,7 +1041,7 @@ function ExpertsDrill({ r, model, ctx }) {
         ${experts.map((role) => {
           const rate = roleHourlyCost(model, role, ctx);
           const v = model.config.expert_roles[role];
-          return html`<tr key=${role}>
+          return view`<tr key=${role}>
             <td>${role}</td>
             <td>
               <${Term} t="грейд эксперта">грейд<//>${" "}<${Field}
@@ -1045,17 +1067,17 @@ function ExpertsDrill({ r, model, ctx }) {
 
 function OverheadDrill({ r, plan }) {
   const own = r.trail.filter((l) => l.class === "overhead");
-  return html`<${Drill}
+  return view`<${Drill}
     testid="drill-overhead"
-    name=${html`<b><${Term} t="накладные">Накладные<//></b>`}
+    name=${view`<b><${Term} t="накладные">Накладные<//></b>`}
     amount=${rub(r.overhead.cost)}
   >
     <p>
-      ${rub(r.overhead.perDirectHour)} на прямой час × ${hrs(r.direct.hours)}
+      ${rub(r.overhead.perDirectHour)} на прямой час × ${hrs(r.direct.hours)}${" "}
       прямых часов = ${rub(r.overhead.cost)}.
     </p>
     <p class="small muted">
-      Ставка накладных = пул месяца плана ${rub(plan.poolCost)} ÷
+      Ставка накладных = пул месяца плана ${rub(plan.poolCost)} ÷${" "}
       ${hrs(plan.directHours)} прямых часов плана. Чем занята команда в месяц —
       вкладка «План месяца команды».
     </p>
@@ -1074,7 +1096,7 @@ function OverheadDrill({ r, plan }) {
           <tbody>
             ${plan.poolLines.map(
               (l, i) =>
-                html`<tr key=${i}>
+                view`<tr key=${i}>
                   <td><${LeafRef} id=${l.leaf} /></td>
                   <td>${l.role}</td>
                   <td>${l.source}</td>
@@ -1088,7 +1110,7 @@ function OverheadDrill({ r, plan }) {
     <//>
     ${
       own.length
-        ? html`<${Drill}
+        ? view`<${Drill}
             name="Накладные операции самой единицы (входят в пул через план)"
             amount=${hrs(r.overhead.ownHours)}
           >
@@ -1102,9 +1124,9 @@ function OverheadDrill({ r, plan }) {
 function ReserveDrill({ r, model, ctx }) {
   const v = (name) => n2(pick(model.vars[name], COURSE_LEVEL[ctx.course]));
   const cfg = model.config.update_reserve;
-  return html`<${Drill}
+  return view`<${Drill}
     testid="drill-reserve"
-    name=${html`<b><${Term} t="резерв актуализации">Резерв актуализации<//></b>${" "}<span
+    name=${view`<b><${Term} t="резерв актуализации">Резерв актуализации<//></b>${" "}<span
         class="muted small"
         >${hrs(r.reserve.hours)}</span
       >`}
@@ -1113,7 +1135,7 @@ function ReserveDrill({ r, model, ctx }) {
     <p>
       На каждую единицу с линией выпуска: сигналов ${v("signals_per_unit")} ×
       операция ${cfg.signal_leaf} + доля затронутых ${v("affected_share")} ×
-      (операции ${cfg.affected_leaves.join(", ")} + доля пересборки
+      (операции ${cfg.affected_leaves.join(", ")} + доля пересборки${" "}
       ${v("rebuild_share")} × прямые часы линии единицы), × ставки ролей; сумма
       по всем единицам продукта.
     </p>
@@ -1121,9 +1143,9 @@ function ReserveDrill({ r, model, ctx }) {
 }
 
 function IdleDrill({ r, plan }) {
-  return html`<${Drill}
+  return view`<${Drill}
     testid="drill-idle"
-    name=${html`<b><${Term} t="неиспользованная мощность">Неиспользованная мощность штата<//></b>${" "}<span
+    name=${view`<b><${Term} t="неиспользованная мощность">Неиспользованная мощность штата<//></b>${" "}<span
         class="muted small"
         >только в итоге «с полным фондом оплаты»</span
       >`}
@@ -1134,8 +1156,8 @@ function IdleDrill({ r, plan }) {
       часов = ${rub(r.idle.cost)}.
     </p>
     <p class="small muted">
-      Ставка = свободное оплаченное время штата за месяц плана
-      ${rub(plan.idle.cost)} (${hrs(plan.idle.hours)}) ÷
+      Ставка = свободное оплаченное время штата за месяц плана${" "}
+      ${rub(plan.idle.cost)} (${hrs(plan.idle.hours)}) ÷${" "}
       ${hrs(plan.directHours)} прямых часов плана. Состав по ролям — вкладка
       «План месяца команды».
     </p>
@@ -1150,13 +1172,13 @@ function ToolsDrill({ r, plan }) {
     platform: "платформа DS",
     capex: "оборудование (в месяц срока службы)",
   };
-  return html`<${Drill}
+  return view`<${Drill}
     testid="drill-tools"
-    name=${html`<b><${Term} t="пул инструментов">Инструменты и инфраструктура<//></b>`}
+    name=${view`<b><${Term} t="пул инструментов">Инструменты и инфраструктура<//></b>`}
     amount=${rub(r.tools.cost)}
   >
     <p>
-      Пул месяца ${rub(t.total)} (ИИ ${rub(t.ai)}, прочее ${rub(t.other)}) ÷
+      Пул месяца ${rub(t.total)} (ИИ ${rub(t.ai)}, прочее ${rub(t.other)}) ÷${" "}
       ${hrs(plan.directHours)} прямых часов плана = ${rub(t.perDirectHour)} на
       прямой час × ${hrs(r.direct.hours)} = ${rub(r.tools.cost)}.
     </p>
@@ -1178,7 +1200,7 @@ function ToolsDrill({ r, plan }) {
           <tbody>
             ${t.items.map(
               (i) =>
-                html`<tr key=${i.item}>
+                view`<tr key=${i.item}>
                   <td>${i.item}</td>
                   <td>${GROUP[i.group]}</td>
                   <td>${ARTICLE_LABELS[i.article]}</td>
@@ -1199,14 +1221,14 @@ function ExternalsDrill({ r }) {
     : r.externals.every((e) => e.cost == null)
       ? "не задано"
       : rub(set);
-  return html`<${Drill}
+  return view`<${Drill}
     testid="drill-externals"
-    name=${html`<b><${Term} t="внешние затраты">Внешние затраты<//></b>`}
+    name=${view`<b><${Term} t="внешние затраты">Внешние затраты<//></b>`}
     amount=${amount}
   >
     ${
       r.externals.length
-        ? html`<div class="scroll">
+        ? view`<div class="scroll">
             <table>
               <thead>
                 <tr>
@@ -1219,7 +1241,7 @@ function ExternalsDrill({ r }) {
               <tbody>
                 ${r.externals.map(
                   (e) =>
-                    html`<tr key=${e.id}>
+                    view`<tr key=${e.id}>
                       <td>
                         ${e.name} <span class="muted small">на ${e.per}</span>
                       </td>
@@ -1227,18 +1249,18 @@ function ExternalsDrill({ r }) {
                       <td>
                         ${
                           e.id === "extended_campaign"
-                            ? html`<${Field}
+                            ? view`<${Field}
                                 k="var:campaign_cost_per_contact"
                                 base=${null}
                                 label="стоимость привлечения контакта"
                               />`
-                            : html`<${ExternalField} id=${e.id} />`
+                            : view`<${ExternalField} id=${e.id} />`
                         }
                       </td>
                       <td class="num">
                         ${
                           e.cost == null
-                            ? html`<span class="err"
+                            ? view`<span class="err"
                                 >не задано — не входит в итог</span
                               >`
                             : rub(e.cost)
@@ -1249,20 +1271,20 @@ function ExternalsDrill({ r }) {
               </tbody>
             </table>
           </div>`
-        : html`<p class="muted">У продукта нет внешних затрат.</p>`
+        : view`<p class="muted">У продукта нет внешних затрат.</p>`
     }
     ${
       r.pending.length
-        ? html`<${Drill}
+        ? view`<${Drill}
             testid="drill-pending"
-            name=${html`<${Term} t="чёрный ящик">Чёрные ящики<//> — не задано`}
+            name=${view`<${Term} t="чёрный ящик">Чёрные ящики<//> — не задано`}
             amount=${`${r.pending.length} шт.`}
           >
             <ul class="small">
               ${r.pending.map(
                 (p, i) =>
-                  html`<li key=${i}>
-                    <span class="id">${p.leaf}</span> ${p.boxName} ×
+                  view`<li key=${i}>
+                    <span class="id">${p.leaf}</span> ${p.boxName} ×${" "}
                     ${n2(p.qty)} — ${p.name}
                   </li>`,
               )}
@@ -1276,8 +1298,8 @@ function ExternalsDrill({ r }) {
 function ExternalField({ id }) {
   const c = useContext(Ctx);
   const e = c.base.externals[id];
-  if (!e) return html`<span class="muted">—</span>`;
-  return html`<${Field}
+  if (!e) return view`<span class="muted">—</span>`;
+  return view`<${Field}
     k=${`external:${id}`}
     base=${e.rub}
     label=${`внешняя затрата ${e.name}`}
@@ -1285,7 +1307,7 @@ function ExternalField({ id }) {
 }
 
 function Breakdown({ r, plan, model, ctx }) {
-  return html`<section class="card" data-testid="breakdown">
+  return view`<section class="card" data-testid="breakdown">
     <h2>Из чего складывается <${Term} t="себестоимость">себестоимость<//></h2>
     <${DirectDrill} r=${r} model=${model} />
     <${StaffHourDrill} r=${r} model=${model} ctx=${ctx} />
@@ -1295,7 +1317,7 @@ function Breakdown({ r, plan, model, ctx }) {
     <${ExternalsDrill} r=${r} />
     <${ToolsDrill} r=${r} plan=${plan} />
     <${Drill}
-      name=${html`<b>Итог «<${Term} t="по загрузке">по загрузке<//>»</b>`}
+      name=${view`<b>Итог «<${Term} t="по загрузке">по загрузке<//>»</b>`}
       amount=${rub(r.total.byLoad)}
       testid="sum-by-load"
     >
@@ -1307,7 +1329,7 @@ function Breakdown({ r, plan, model, ctx }) {
     <//>
     <${IdleDrill} r=${r} plan=${plan} />
     <${Drill}
-      name=${html`<b>Итог «<${Term} t="с полным фондом оплаты">с полным фондом оплаты<//>»</b>`}
+      name=${view`<b>Итог «<${Term} t="с полным фондом оплаты">с полным фондом оплаты<//>»</b>`}
       amount=${rub(r.total.fullPayroll)}
     >
       <p>${rub(r.total.byLoad)} + ${rub(r.idle.cost)}</p>
@@ -1317,7 +1339,7 @@ function Breakdown({ r, plan, model, ctx }) {
         <tbody>
           ${ARTICLES.map(
             (a) =>
-              html`<tr key=${a}>
+              view`<tr key=${a}>
                 <td>${ARTICLE_LABELS[a]}</td>
                 <td class="num">${rub(r.articles[a])}</td>
               </tr>`,
@@ -1356,8 +1378,8 @@ function Kpi({ label, term, value, base, fmt, dfmt, lead, testid, hint }) {
     }
   }, [value]);
   const delta = fin(value) && fin(base) ? value - base : null;
-  return html`<div class=${`kpi${lead ? " lead" : ""}`} data-testid=${testid}>
-    <div class="label"><${Term} t=${term}>${label}<//>${hint ? html` <span class="hint">${hint}</span>` : null}</div>
+  return view`<div class=${`kpi${lead ? " lead" : ""}`} data-testid=${testid}>
+    <div class="label"><${Term} t=${term}>${label}<//>${hint ? view` <span class="hint">${hint}</span>` : null}</div>
     <div class=${flash ? "value flash" : "value"} key=${flash}>${fmt(value)}</div>
     <div class="delta">
       ${
@@ -1377,7 +1399,7 @@ function KpiBar({ r, base, baseNote, onRemember, onForget, remembered }) {
   const mode = r.price.mode;
   const be = (v) =>
     v == null ? "не достигается" : `${f0.format(Math.ceil(v))} контактов`;
-  return html`<section class="kpibar" data-testid="kpi">
+  return view`<section class="kpibar" data-testid="kpi">
     <${Kpi} label="Себестоимость" term="себестоимость" value=${m.cost} base=${b.cost} fmt=${rub} dfmt=${dRub} testid="kpi-cost" />
     <${Kpi} label="Цена" term="цена" value=${m.price} base=${b.price} fmt=${rub} dfmt=${dRub} lead=${mode === "fixed"} testid="kpi-price" />
     <${Kpi} label="Прибыль" term="прибыль" value=${m.profit} base=${b.profit} fmt=${rub} dfmt=${dRub} testid="kpi-profit" />
@@ -1391,7 +1413,7 @@ function KpiBar({ r, base, baseNote, onRemember, onForget, remembered }) {
       <div class="small">${baseNote}</div>
       <div class="toolbar">
         <button onClick=${onRemember} data-testid="remember-base">Запомнить как базу</button>
-        ${remembered ? html`<button class="link" onClick=${onForget}>к модели без правок</button>` : null}
+        ${remembered ? view`<button class="link" onClick=${onForget}>к модели без правок</button>` : null}
       </div>
     </div>
   </section>`;
@@ -1432,17 +1454,17 @@ function GoldenBand({ r }) {
   const x = (v) => L + ((R - L) * v) / top;
   const H = 70 + marks.length * 16;
   const sorted = [...marks].sort((a, b) => a.v - b.v);
-  return html`<figure class="chart" data-testid="chart-golden">
+  return view`<figure class="chart" data-testid="chart-golden">
     <svg viewBox=${`0 0 ${W} ${H}`} role="img" aria-label="Золотая цена: полоса, цена, рынок и потолок бюджета">
-      ${mk ? html`<rect x=${x(mk.min)} y="20" width=${Math.max(1, x(mk.max) - x(mk.min))} height="10" class="c-market" />` : null}
+      ${mk ? view`<rect x=${x(mk.min)} y="20" width=${Math.max(1, x(mk.max) - x(mk.min))} height="10" class="c-market" />` : null}
       ${
         g.band
-          ? html`<rect x=${x(g.band[0])} y="34" width=${Math.max(1, x(g.band[1]) - x(g.band[0]))} height="14" class="c-band" />`
+          ? view`<rect x=${x(g.band[0])} y="34" width=${Math.max(1, x(g.band[1]) - x(g.band[0]))} height="14" class="c-band" />`
           : null
       }
       <line x1=${L} x2=${R} y1="52" y2="52" class="axis" />
       ${[0, 0.25, 0.5, 0.75, 1].map(
-        (t) => html`<g key=${t}>
+        (t) => view`<g key=${t}>
           <line x1=${x(top * t)} x2=${x(top * t)} y1="52" y2="56" class="axis" />
           <text x=${x(top * t)} y="66" class="tick" text-anchor=${t === 0 ? "start" : t === 1 ? "end" : "middle"}>${short(top * t)}</text>
         </g>`,
@@ -1450,7 +1472,7 @@ function GoldenBand({ r }) {
       ${sorted.map((m, i) => {
         const y = 80 + i * 16;
         const anchor = x(m.v) > W * 0.7 ? "end" : "start";
-        return html`<g key=${m.label}>
+        return view`<g key=${m.label}>
           <line x1=${x(m.v)} x2=${x(m.v)} y1="16" y2=${y - 10} class=${`mark ${m.cls}`} />
           <text x=${x(m.v) + (anchor === "end" ? -4 : 4)} y=${y - 2} text-anchor=${anchor} class=${`lbl ${m.cls}`}>${m.label}: ${rub(m.v)}</text>
         </g>`;
@@ -1459,13 +1481,13 @@ function GoldenBand({ r }) {
     <figcaption class="small muted">
       ${
         g.band
-          ? html`Полоса <${Term} t="золотая цена">золотой цены<//>: ${rub(g.band[0])} – ${rub(g.band[1])};
-              цена ${g.priceInBand ? html`<b class="ok">в полосе</b>` : html`<b class="err">вне полосы</b>`}.`
+          ? view`Полоса <${Term} t="золотая цена">золотой цены<//>: ${rub(g.band[0])} – ${rub(g.band[1])};
+              цена ${g.priceInBand ? view`<b class="ok">в полосе</b>` : view`<b class="err">вне полосы</b>`}.`
           : g.max == null
             ? "Верхней границы нет: нет рыночного ориентира и потолка бюджета."
-            : html`<b class="err">Полосы нет:</b> себестоимость ${rub(g.min)} выше потолка ${rub(g.max)} — продукт дороже рынка или бюджета.`
+            : view`<b class="err">Полосы нет:</b> себестоимость ${rub(g.min)} выше потолка ${rub(g.max)} — продукт дороже рынка или бюджета.`
       }
-      Серая полоса — рыночный ориентир, зелёная — золотая цена.
+      ${" "}Серая полоса — рыночный ориентир, зелёная — золотая цена.
     </figcaption>
   </figure>`;
 }
@@ -1488,21 +1510,32 @@ function Tornado({ sens, metric }) {
   const x = (v) => L + ((R - L) * (v - (min - pad))) / (max - min + 2 * pad);
   const rowH = 26;
   const H = rows.length * rowH + 34;
-  return html`<svg viewBox=${`0 0 ${W} ${H}`} role="img" aria-label="Что двигает цену: торнадо" data-testid="chart-tornado">
+  return view`<svg viewBox=${`0 0 ${W} ${H}`} role="img" aria-label="Что двигает цену: торнадо" data-testid="chart-tornado">
     ${rows.map((d, i) => {
       const y = 8 + i * rowH;
       const segs = [
         { v: d.lo, cls: "c-low" },
         { v: d.hi, cls: "c-high" },
       ];
-      return html`<g key=${d.id}>
-        <text x=${LW} y=${y + 14} text-anchor="end" class="lbl">${d.label}</text>
+      return view`<g key=${d.id}>
+        <text
+          x=${LW}
+          y=${y + 14}
+          text-anchor="end"
+          class="lbl"
+          textLength=${d.label.length > 44 ? LW - 4 : undefined}
+          lengthAdjust="spacingAndGlyphs"
+          >${d.label}</text
+        >
         ${segs.map(
-          (s, j) => html`<rect key=${j} x=${Math.min(x(base), x(s.v))} y=${y + 3} width=${Math.max(1, Math.abs(x(s.v) - x(base)))} height=${rowH - 8} class=${s.cls} />`,
+          (s, j) =>
+            view`<rect key=${j} x=${Math.min(x(base), x(s.v))} y=${y + 3} width=${Math.max(1, Math.abs(x(s.v) - x(base)))} height=${rowH - 8} class=${s.cls} />`,
         )}
         <text x=${Math.max(x(d.lo), x(d.hi)) + 4} y=${y + 14} class="tick">${short(Math.max(d.lo, d.hi))}</text>
         <text x=${Math.min(x(d.lo), x(d.hi)) - 4} y=${y + 14} text-anchor="end" class="tick">${
-          Math.min(x(d.lo), x(d.hi)) - 4 > LW + 40 ? short(Math.min(d.lo, d.hi)) : ""
+          Math.min(x(d.lo), x(d.hi)) - 4 > LW + 40
+            ? short(Math.min(d.lo, d.hi))
+            : ""
         }</text>
       </g>`;
     })}
@@ -1525,13 +1558,15 @@ function BreakEven({ r, series }) {
   const B = 200;
   const x = (v) => L + ((R - L) * v) / top;
   const y = (v) => B - ((B - T) * v) / ymax;
-  const path = series.map((s, i) => `${i ? "L" : "M"}${x(s.contacts)},${y(s.revenue)}`).join(" ");
+  const path = series
+    .map((s, i) => `${i ? "L" : "M"}${x(s.contacts)},${y(s.revenue)}`)
+    .join(" ");
   const be = p.breakEvenContacts;
   const ticks = [0, 0.25, 0.5, 0.75, 1];
-  return html`<figure class="chart" data-testid="chart-break-even">
+  return view`<figure class="chart" data-testid="chart-break-even">
     <svg viewBox=${`0 0 ${W} 240`} role="img" aria-label="Безубыточность по контактам">
       ${ticks.map(
-        (t) => html`<g key=${t}>
+        (t) => view`<g key=${t}>
           <line x1=${L} x2=${R} y1=${y(ymax * t)} y2=${y(ymax * t)} class="grid" />
           <text x=${L - 6} y=${y(ymax * t) + 4} text-anchor="end" class="tick">${short(ymax * t)}</text>
           <text x=${x(top * t)} y=${B + 16} text-anchor="middle" class="tick">${f0.format(top * t)}</text>
@@ -1539,19 +1574,24 @@ function BreakEven({ r, series }) {
       )}
       ${["low", "plan", "high"].map((k) =>
         p.contacts[k] <= top
-          ? html`<g key=${k}>
+          ? view`<g key=${k}>
               <line x1=${x(p.contacts[k])} x2=${x(p.contacts[k])} y1=${T} y2=${B} class="mark m-market" />
-              <text x=${x(p.contacts[k]) + 3} y=${T + 10} class="tick">${{ low: "мало", plan: "план", high: "много" }[k]}</text>
+              <text
+                x=${x(p.contacts[k]) > R - 48 ? x(p.contacts[k]) - 3 : x(p.contacts[k]) + 3}
+                y=${T + 10}
+                text-anchor=${x(p.contacts[k]) > R - 48 ? "end" : "start"}
+                class="tick"
+              >${{ low: "мало", plan: "план", high: "много" }[k]}</text>
             </g>`
           : null,
       )}
-      ${cap != null && cap <= ymax ? html`<line x1=${L} x2=${R} y1=${y(cap)} y2=${y(cap)} class="mark m-cap" /><text x=${R} y=${y(cap) - 4} text-anchor="end" class="lbl m-cap">потолок бюджета ${rub(cap)}</text>` : null}
+      ${cap != null && cap <= ymax ? view`<line x1=${L} x2=${R} y1=${y(cap)} y2=${y(cap)} class="mark m-cap" /><text x=${R} y=${y(cap) - 4} text-anchor="end" class="lbl m-cap">потолок бюджета ${rub(cap)}</text>` : null}
       <line x1=${L} x2=${R} y1=${y(p.cost)} y2=${y(p.cost)} class="line-cost" />
       <text x=${L + 4} y=${y(p.cost) - 4} class="lbl m-cost">себестоимость ${rub(p.cost)}</text>
       <path d=${path} class="line-revenue" />
       ${
         be != null && be <= top
-          ? html`<circle cx=${x(be)} cy=${y(p.cost)} r="5" class="dot" />`
+          ? view`<circle cx=${x(be)} cy=${y(p.cost)} r="5" class="dot" />`
           : null
       }
       <line x1=${L} x2=${R} y1=${B} y2=${B} class="axis" />
@@ -1560,7 +1600,7 @@ function BreakEven({ r, series }) {
     <figcaption class="small">
       <b>${be == null ? "Безубыточность не достигается" : `Безубыточность: ${f0.format(Math.ceil(be))} контактов`}</b>
       <span class="muted">
-        — синяя линия: выручка = аванс ${rub(p.advance)} + контакты ×
+        ${" "}— синяя линия: выручка = аванс ${rub(p.advance)} + контакты ×${" "}
         ${rub(p.pricePerContact.value ?? 0)}; серая — себестоимость.</span
       >
     </figcaption>
@@ -1578,7 +1618,9 @@ function CostVsMargin({ r, base }) {
     { k: "idle", label: "простой штата", v: q.idle.cost },
   ];
   const parts = seg(r);
-  const before = base ? Object.fromEntries(seg(base).map((s) => [s.k, s.v])) : {};
+  const before = base
+    ? Object.fromEntries(seg(base).map((s) => [s.k, s.v]))
+    : {};
   const profit = r.price.price - r.price.cost;
   const cap = r.price.budgetCap.value;
   const mk = r.market;
@@ -1594,34 +1636,36 @@ function CostVsMargin({ r, base }) {
     acc += s.v;
     return { ...s, x0: r0, x1: acc };
   });
-  return html`<figure class="chart" data-testid="chart-cost-margin">
+  return view`<figure class="chart" data-testid="chart-cost-margin">
     <svg viewBox=${`0 0 ${W} 96`} role="img" aria-label="Себестоимость и маржа на одной оси">
       ${rects.map(
-        (s, i) => html`<rect key=${s.k} x=${x(s.x0)} y="18" width=${Math.max(0, x(s.x1) - x(s.x0))} height="26" class=${`seg seg${i}`} />`,
+        (s, i) =>
+          view`<rect key=${s.k} x=${x(s.x0)} y="18" width=${Math.max(0, x(s.x1) - x(s.x0))} height="26" class=${`seg seg${i}`} />`,
       )}
       ${
         profit >= 0
-          ? html`<rect x=${x(r.price.cost)} y="18" width=${Math.max(0, x(r.price.price) - x(r.price.cost))} height="26" class="c-profit" />`
-          : html`<rect x=${x(r.price.price)} y="46" width=${x(r.price.cost) - x(r.price.price)} height="6" class="c-loss" />`
+          ? view`<rect x=${x(r.price.cost)} y="18" width=${Math.max(0, x(r.price.price) - x(r.price.cost))} height="26" class="c-profit" />`
+          : view`<rect x=${x(r.price.price)} y="46" width=${x(r.price.cost) - x(r.price.price)} height="6" class="c-loss" />`
       }
-      ${mk ? html`<rect x=${x(mk.min)} y="8" width=${Math.max(1, x(mk.max) - x(mk.min))} height="6" class="c-market" />` : null}
-      ${cap != null ? html`<line x1=${x(cap)} x2=${x(cap)} y1="4" y2="58" class="mark m-cap" />` : null}
+      ${mk ? view`<rect x=${x(mk.min)} y="8" width=${Math.max(1, x(mk.max) - x(mk.min))} height="6" class="c-market" />` : null}
+      ${cap != null ? view`<line x1=${x(cap)} x2=${x(cap)} y1="4" y2="58" class="mark m-cap" />` : null}
       <line x1=${x(r.price.price)} x2=${x(r.price.price)} y1="12" y2="58" class="mark m-price" />
       <line x1=${L} x2=${R} y1="60" y2="60" class="axis" />
       ${[0, 0.5, 1].map(
-        (t) => html`<text key=${t} x=${x(top * t)} y="76" class="tick" text-anchor=${t === 0 ? "start" : t === 1 ? "end" : "middle"}>${short(top * t)} ₽</text>`,
+        (t) =>
+          view`<text key=${t} x=${x(top * t)} y="76" class="tick" text-anchor=${t === 0 ? "start" : t === 1 ? "end" : "middle"}>${short(top * t)} ₽</text>`,
       )}
     </svg>
     <ul class="legend">
       ${rects.map((s, i) => {
         const d = before[s.k] != null ? s.v - before[s.k] : 0;
-        return html`<li key=${s.k}><i class=${`seg seg${i}`}></i>${s.label} ${rub(s.v)}${
-          Math.abs(d) > 0.5 ? html` <b class="delta">${dRub(d)}</b>` : null
+        return view`<li key=${s.k}><i class=${`seg seg${i}`}></i>${s.label} ${rub(s.v)}${
+          Math.abs(d) > 0.5 ? view` <b class="delta">${dRub(d)}</b>` : null
         }</li>`;
       })}
       <li><i class=${profit >= 0 ? "c-profit" : "c-loss"}></i>${profit >= 0 ? "прибыль" : "убыток"} ${rub(profit)}</li>
-      ${mk ? html`<li><i class="c-market"></i>рынок ${rub(mk.min)} – ${rub(mk.max)}</li>` : null}
-      ${cap != null ? html`<li><i class="m-cap-key"></i>потолок бюджета ${rub(cap)}</li>` : null}
+      ${mk ? view`<li><i class="c-market"></i>рынок ${rub(mk.min)} – ${rub(mk.max)}</li>` : null}
+      ${cap != null ? view`<li><i class="m-cap-key"></i>потолок бюджета ${rub(cap)}</li>` : null}
     </ul>
   </figure>`;
 }
@@ -1634,7 +1678,13 @@ function Matrix({ model, productName, ctx, setCtx }) {
         COURSES.map((k) => {
           try {
             const p = priceProduct(model, productName, { grade: g, course: k });
-            return { g, k, cost: p.cost, price: p.price, margin: p.derived.margin };
+            return {
+              g,
+              k,
+              cost: p.cost,
+              price: p.price,
+              margin: p.derived.margin,
+            };
           } catch {
             return { g, k, cost: null, price: null, margin: null };
           }
@@ -1642,22 +1692,22 @@ function Matrix({ model, productName, ctx, setCtx }) {
       ),
     [model, productName],
   );
-  return html`<div class="scroll">
+  return view`<div class="scroll">
     <table class="matrix" data-testid="matrix">
       <thead>
         <tr>
           <th><${Term} t="грейд">Грейд<//> \\ <${Term} t="ход работы">ход работы<//></th>
-          ${COURSES.map((k) => html`<th key=${k}>${COURSE_LABELS[k]}</th>`)}
+          ${COURSES.map((k) => view`<th key=${k}>${COURSE_LABELS[k]}</th>`)}
         </tr>
       </thead>
       <tbody>
         ${cells.map(
           (row, i) =>
-            html`<tr key=${GRADES[i]}>
+            view`<tr key=${GRADES[i]}>
               <th><${Term} t=${GRADES[i]}>${GRADE_LABELS[GRADES[i]]}<//></th>
               ${row.map(
                 (c) =>
-                  html`<td
+                  view`<td
                     key=${c.k}
                     class=${ctx.grade === c.g && ctx.course === c.k ? "current" : ""}
                   >
@@ -1692,7 +1742,7 @@ function Drivers({ r, base, model, productName, ctx, setCtx }) {
     }
   }, [model, productName, ctx]);
   const step = model.vars.sensitivity_step;
-  return html`<section class="card" data-testid="drivers">
+  return view`<section class="card" data-testid="drivers">
     <h2>Что двигает цену</h2>
     <div class="toolbar">
       <span class="small muted"><${Term} t="торнадо">Торнадо<//> по:</span>
@@ -1702,11 +1752,11 @@ function Drivers({ r, base, model, productName, ctx, setCtx }) {
           ["cost", "себестоимости"],
         ].map(
           ([k, name]) =>
-            html`<button key=${k} aria-pressed=${metric === k} onClick=${() => setMetric(k)}>${name}</button>`,
+            view`<button key=${k} aria-pressed=${metric === k} onClick=${() => setMetric(k)}>${name}</button>`,
         )}
       </span>
     </div>
-    ${sens ? html`<${Tornado} sens=${sens} metric=${metric} />` : html`<p class="err">Чувствительность не посчитана.</p>`}
+    ${sens ? view`<${Tornado} sens=${sens} metric=${metric} />` : view`<p class="err">Чувствительность не посчитана.</p>`}
     <p class="small muted">
       Каждый драйвер меняется отдельно, остальные — как сейчас. Грейд и ход
       работы — свои крайние значения; статьи затрат — ±${pct(step)} к масштабу
@@ -1717,7 +1767,7 @@ function Drivers({ r, base, model, productName, ctx, setCtx }) {
     <h3>Себестоимость и маржа</h3>
     <${CostVsMargin} r=${r} base=${base} />
     <h3><${Term} t="безубыточность">Безубыточность<//> по контактам</h3>
-    ${series ? html`<${BreakEven} r=${r} series=${series} />` : null}
+    ${series ? view`<${BreakEven} r=${r} series=${series} />` : null}
     <h3>Матрица «Грейд» × «Ход работы»</h3>
     <${Matrix} model=${model} productName=${productName} ctx=${ctx} setCtx=${setCtx} />
     <p class="small muted">Клик по ячейке переключает грейд и ход работы.</p>
@@ -1735,7 +1785,8 @@ const toInput = (mode, v) =>
       : mode === "multiplier"
         ? showNum(Math.round(v * 100) / 100)
         : showNum(Math.round(v));
-const fromInput = (mode, v) => (mode === "markup" || mode === "margin" ? v / 100 : v);
+const fromInput = (mode, v) =>
+  mode === "markup" || mode === "margin" ? v / 100 : v;
 
 function PriceValue({ mode, value, onChange }) {
   const [text, setText] = useState(() => toInput(mode, value));
@@ -1754,7 +1805,7 @@ function PriceValue({ mode, value, onChange }) {
         : parsed < 0 && mode !== "markup"
           ? "отрицательное значение"
           : null;
-  return html`<span class="edit">
+  return view`<span class="edit">
     <input
       class=${`wide${problem ? " bad" : ""}`}
       inputmode="decimal"
@@ -1771,7 +1822,7 @@ function PriceValue({ mode, value, onChange }) {
       }}
     />
     <span class="muted">${mode === "multiplier" ? "×" : mode === "fixed" ? "₽" : "%"}</span>
-    ${problem ? html`<span class="err small">не применено: ${problem}</span>` : null}
+    ${problem ? view`<span class="err small">не применено: ${problem}</span>` : null}
   </span>`;
 }
 
@@ -1787,14 +1838,14 @@ function PriceBlock({ r, productName, model }) {
       ),
     );
   const pc = p.pricePerContact;
-  return html`<section class="card" data-testid="price">
+  return view`<section class="card" data-testid="price">
     <h2><${Term} t="цена">Цена<//></h2>
     <div class="toolbar">
       <span class="small muted"><${Term} t="ведущий способ">Задаю цену через<//>:</span>
       <span class="seg" role="group" aria-label="ведущий способ цены">
         ${PRICE_MODES.map(
           (m) =>
-            html`<button key=${m} aria-pressed=${p.mode === m} data-testid=${`price-mode-${m}`} onClick=${() => setMode(m, p.derived[m])}>
+            view`<button key=${m} aria-pressed=${p.mode === m} data-testid=${`price-mode-${m}`} onClick=${() => setMode(m, p.derived[m])}>
               ${PRICE_MODE_LABEL[m]}
             </button>`,
         )}
@@ -1802,8 +1853,8 @@ function PriceBlock({ r, productName, model }) {
       <${PriceValue} mode=${p.mode} value=${p.value} onChange=${(v) => setMode(p.mode, v)} />
       ${
         own
-          ? html`<button class="link" onClick=${() => setMode(null)}>↺ как для всех продуктов</button>`
-          : html`<span class="small muted">— общее значение для всех продуктов (вкладка «Переменные»)</span>`
+          ? view`<button class="link" onClick=${() => setMode(null)}>↺ как для всех продуктов</button>`
+          : view`<span class="small muted">— общее значение для всех продуктов (вкладка «Переменные»)</span>`
       }
     </div>
     <table class="derived">
@@ -1817,8 +1868,8 @@ function PriceBlock({ r, productName, model }) {
           <td><${Term} t="цена">Цена<//></td>
           <td class="num"><b>${rub(p.price)}</b></td>
           <td class="small muted">
-            = <${Term} t="аванс">аванс<//> ${rub(p.advance)} (${pct(p.advanceShare)}) +
-            <${Term} t="результат">результат<//>: план ${f0.format(p.contacts.plan)} контактов ×
+            = <${Term} t="аванс">аванс<//> ${rub(p.advance)} (${pct(p.advanceShare)}) +${" "}
+            <${Term} t="результат">результат<//>: план ${f0.format(p.contacts.plan)} контактов ×${" "}
             ${rub(pc.value ?? 0)} = ${rub(p.resultAtPlan)}
           </td>
         </tr>
@@ -1844,7 +1895,7 @@ function PriceBlock({ r, productName, model }) {
         </tr>
       </tbody>
     </table>
-    ${p.flags.length ? html`<ul class="flags">${p.flags.map((f) => html`<li key=${f}>${f}</li>`)}</ul>` : null}
+    ${p.flags.length ? view`<ul class="flags">${p.flags.map((f) => view`<li key=${f}>${f}</li>`)}</ul>` : null}
     <h3><${Term} t="рыночный ориентир">Рыночный ориентир<//> и <${Term} t="золотая цена">золотая цена<//></h3>
     <div class="toolbar">
       <span>рынок, ₽:</span>
@@ -1854,21 +1905,21 @@ function PriceBlock({ r, productName, model }) {
       <${Field} k="var:budget_cap_mode" base=${c.base.vars.budget_cap_mode} label="вид потолка" options=${VAR_OPTIONS.budget_cap_mode} />
       ${
         c.model.vars.budget_cap_mode === "tiered"
-          ? html`<span>скидка сверх потолка</span><${Field} k="var:budget_tier_discount" base=${c.base.vars.budget_tier_discount} label="скидка сверх потолка" />`
+          ? view`<span>скидка сверх потолка</span><${Field} k="var:budget_tier_discount" base=${c.base.vars.budget_tier_discount} label="скидка сверх потолка" />`
           : null
       }
     </div>
     ${
       r.market
-        ? html`<p data-testid="market-gap">
+        ? view`<p data-testid="market-gap">
             <${Term} t="разрыв с рынком">Разрыв с серединой рынка<//> ${rub(r.market.mid)}:
             себестоимость <span class=${r.market.costFlag ? "gap-flag" : ""}>${sign(r.market.costGap)}${pct(Math.abs(r.market.costGap))}</span>
-            (${r.market.costPosition}), цена
+            ${" "}(${r.market.costPosition}), цена${" "}
             <span class=${r.market.priceFlag ? "gap-flag" : ""}>${sign(r.market.priceGap)}${pct(Math.abs(r.market.priceGap))}</span>
-            (${r.market.pricePosition}).
+            ${" "}(${r.market.pricePosition}).${" "}
             <span class="small muted">Порог выделения ${pct(r.market.threshold)}.</span>
           </p>`
-        : html`<p class="small muted">У продукта нет рыночного ориентира — задайте мин и макс.</p>`
+        : view`<p class="small muted">У продукта нет рыночного ориентира — задайте мин и макс.</p>`
     }
     <${GoldenBand} r=${r} />
   </section>`;
@@ -1878,19 +1929,21 @@ function ContactsBlock({ r, inputs }) {
   const c = useContext(Ctx);
   const p = r.price;
   const pc = p.pricePerContact;
-  const type = pc.type ? inputs.rates.doctor_contacts.contact_types[pc.type] : null;
+  const type = pc.type
+    ? inputs.rates.doctor_contacts.contact_types[pc.type]
+    : null;
   const cap = p.budgetCap.value;
-  return html`<section class="card" data-testid="contacts">
+  return view`<section class="card" data-testid="contacts">
     <h2><${Term} t="контакт">Контакты<//> и выручка</h2>
     <p>
       ${
         type
-          ? html`<${Term} t="тип контакта">Тип контакта<//>: <b>${type.label}</b>.
-              <${Term} t="цена контакта">Цена контакта<//> <b>${rub(pc.value)}</b>
+          ? view`<${Term} t="тип контакта">Тип контакта<//>: <b>${type.label}</b>.
+              ${" "}<${Term} t="цена контакта">Цена контакта<//> <b>${rub(pc.value)}</b>${" "}
               <span class="small muted"
                 >${pc.source}${pc.band ? ` · полоса «${pc.band}» ${rub(pc.bandRub)} × вес ${n2(pc.weight)}` : ""}</span
               >`
-          : html`<span class="muted">У продукта нет оплаты за контакты — цена целиком аванс.</span>`
+          : view`<span class="muted">У продукта нет оплаты за контакты — цена целиком аванс.</span>`
       }
     </p>
     <div class="toolbar">
@@ -1914,40 +1967,50 @@ function ContactsBlock({ r, inputs }) {
         <tbody>
           ${[
             ["контактов", (o) => f0.format(o.contacts)],
-            ["цена за контакт для спонсора", (o) => (o.contacts ? rub(o.revenue / o.contacts) : "—")],
-            ["выручка", (o) => rub(o.revenue)],
-            ["прибыль", (o) => html`<span class=${o.margin < 0 ? "err" : ""}>${rub(o.margin)}</span>`],
-            ["маржа", (o) => pct(o.marginShare)],
-            [html`<${Term} t="авторская доля">авторская доля<//>`, (o) => rub(o.authorShare)],
             [
-              html`<${Term} t="потолок бюджета">потолок бюджета<//>`,
+              "цена за контакт для спонсора",
+              (o) => (o.contacts ? rub(o.revenue / o.contacts) : "—"),
+            ],
+            ["выручка", (o) => rub(o.revenue)],
+            [
+              "прибыль",
+              (o) =>
+                view`<span class=${o.margin < 0 ? "err" : ""}>${rub(o.margin)}</span>`,
+            ],
+            ["маржа", (o) => pct(o.marginShare)],
+            [
+              view`<${Term} t="авторская доля">авторская доля<//>`,
+              (o) => rub(o.authorShare),
+            ],
+            [
+              view`<${Term} t="потолок бюджета">потолок бюджета<//>`,
               (o) =>
                 cap == null
                   ? "нет"
                   : p.advance + o.contacts * (pc.value ?? 0) > cap
-                    ? html`<span class="warn">упёрлись в потолок</span>`
-                    : html`<span class="ok">влезает</span>`,
+                    ? view`<span class="warn">упёрлись в потолок</span>`
+                    : view`<span class="ok">влезает</span>`,
             ],
           ].map(
             ([label, f], i) =>
-              html`<tr key=${i}>
+              view`<tr key=${i}>
                 <td>${label}</td>
-                ${["low", "plan", "high"].map((k) => html`<td key=${k} class="num">${f(p.outcomes[k])}</td>`)}
+                ${["low", "plan", "high"].map((k) => view`<td key=${k} class="num">${f(p.outcomes[k])}</td>`)}
               </tr>`,
           )}
         </tbody>
       </table>
     </div>
     <p>
-      <${Term} t="безубыточность">Безубыточность<//>:
+      <${Term} t="безубыточность">Безубыточность<//>:${" "}
       <b data-testid="break-even"
         >${p.breakEvenContacts == null ? "не достигается" : `${f0.format(Math.ceil(p.breakEvenContacts))} контактов`}</b
-      >.
-      <${Term} t="период счетов">Счета<//>:
+      >.${" "}
+      <${Term} t="период счетов">Счета<//>:${" "}
       <${Field} k="var:billing_period" base=${c.base.vars.billing_period} label="период счетов" options=${VAR_OPTIONS.billing_period} />
-      — срок ${f1.format(p.billing.leadMonths)} мес., ${p.billing.invoices} счёт(а) по
-      ${rub(p.billing.perInvoice)} при плане.
-      <${Term} t="авторская доля">Авторская доля<//>
+      ${" "}— срок ${f1.format(p.billing.leadMonths)} мес., ${p.billing.invoices} счёт(а) по${" "}
+      ${rub(p.billing.perInvoice)} при плане.${" "}
+      <${Term} t="авторская доля">Авторская доля<//>${" "}
       <${Field} k="var:author_share" base=${c.base.vars.author_share} label="авторская доля" />
     </p>
   </section>`;
@@ -1957,10 +2020,10 @@ function ContactsBlock({ r, inputs }) {
 function ProductOptions({ productName }) {
   const c = useContext(Ctx);
   const nested = nestedProducts(c.base, productName);
-  return html`<div class="toolbar" data-testid="product-options">
+  return view`<div class="toolbar" data-testid="product-options">
     ${
       nested.has("видеоподкаст")
-        ? html`<span><${Term} t="продакшн видеоподкаста">Продакшн видеоподкаста<//>:</span>
+        ? view`<span><${Term} t="продакшн видеоподкаста">Продакшн видеоподкаста<//>:</span>
             <${Field}
               k="var:video_podcast_production"
               base=${c.base.vars.video_podcast_production}
@@ -1992,10 +2055,12 @@ function BudgetPanel({ r, model, ctx }) {
       return null;
     }
   }, [model, ctx]);
-  const edited = ARTICLES.filter((a) => Object.hasOwn(c.ov, `scale:${a}`)).length;
-  return html`<section class="card" data-testid="budget">
+  const edited = ARTICLES.filter((a) =>
+    Object.hasOwn(c.ov, `scale:${a}`),
+  ).length;
+  return view`<section class="card" data-testid="budget">
     <h2>
-      Бюджет по статьям ${edited ? html`<span class="badge">изменено ${edited}</span>` : null}
+      Бюджет по статьям ${edited ? view`<span class="badge">изменено ${edited}</span>` : null}
     </h2>
     <p class="small muted">
       <${Term} t="масштаб статьи">Масштаб статьи<//>: 100 % — как в модели.
@@ -2008,8 +2073,9 @@ function BudgetPanel({ r, model, ctx }) {
           const scale = model.scale[a];
           const amount = r.articles[a];
           const unit = scale ? amount / scale : 0;
-          const set = (v) => (Math.abs(v - 1) < 1e-9 ? c.reset(k) : c.set(k, v));
-          return html`<tr key=${a}>
+          const set = (v) =>
+            Math.abs(v - 1) < 1e-9 ? c.reset(k) : c.set(k, v);
+          return view`<tr key=${a}>
             <td>${ARTICLE_LABELS[a]}</td>
             <td class="slider">
               <input
@@ -2034,7 +2100,7 @@ function BudgetPanel({ r, model, ctx }) {
                 onChange=${(v) => unit && set(v / unit)}
               />
             </td>
-            <td>${Object.hasOwn(c.ov, k) ? html`<button class="link" onClick=${() => c.reset(k)}>↺</button>` : null}</td>
+            <td>${Object.hasOwn(c.ov, k) ? view`<button class="link" onClick=${() => c.reset(k)}>↺</button>` : null}</td>
           </tr>`;
         })}
       </tbody>
@@ -2044,15 +2110,15 @@ function BudgetPanel({ r, model, ctx }) {
       !fit
         ? null
         : fit.fits
-          ? html`<p class="ok" data-testid="budget-fit">Да: ни одна ставка не ниже рыночного минимума своего грейда.</p>`
-          : html`<div data-testid="budget-fit">
+          ? view`<p class="ok" data-testid="budget-fit">Да: ни одна ставка не ниже рыночного минимума своего грейда.</p>`
+          : view`<div data-testid="budget-fit">
               <p class="warn">Нельзя купить ниже рынка:</p>
               <ul>
                 ${fit.below.map(
                   (b) =>
-                    html`<li key=${`${b.role}|${b.article}`}>
-                      ${b.role} (${GRADE_LABELS[b.grade] ?? b.grade}): ${rub(b.value)}
-                      ${b.article === "payroll" ? "в месяц" : "за час"} &lt; рыночного минимума
+                    view`<li key=${`${b.role}|${b.article}`}>
+                      ${b.role} (${GRADE_LABELS[b.grade] ?? b.grade}): ${rub(b.value)}${" "}
+                      ${b.article === "payroll" ? "в месяц" : "за час"} &lt; рыночного минимума${" "}
                       ${rub(b.floor)}
                     </li>`,
                 )}
@@ -2061,8 +2127,8 @@ function BudgetPanel({ r, model, ctx }) {
     }
     ${
       r.golden.band
-        ? html`<p class="small">
-            <${Term} t="золотая цена">Золотая цена<//>: ${rub(r.golden.band[0])} –
+        ? view`<p class="small">
+            <${Term} t="золотая цена">Золотая цена<//>: ${rub(r.golden.band[0])} –${" "}
             ${rub(r.golden.band[1])}.
           </p>`
         : null
@@ -2076,7 +2142,7 @@ function RubEdit({ value, onChange, label, disabled }) {
   useEffect(() => {
     if (!focus) setText(fin(value) ? f0.format(value) : "");
   }, [value, focus]);
-  return html`<span class="edit"
+  return view`<span class="edit"
     ><input
       class="wide"
       inputmode="decimal"
@@ -2102,12 +2168,14 @@ function PeriodPanel({ plan, model }) {
   const contracted = rows.some((x) => x.contractorHours > 0);
   const sumOf = (k) => rows.reduce((a, x) => a + x[k], 0);
   const teamRows = model.teamRoles.map((m) => m.role);
-  return html`<div data-testid="period">
+  return view`<div data-testid="period">
     <p>
       <b><${Term} t="план месяца">План месяца команды: чем занята<//></b>
-      — ${Object.entries(plan.sold)
+      ${" "}— ${Object.entries(plan.sold)
         .map(([p, n]) => `${f2.format(n)} × ${p}`)
-        .join(", ")}${plan.bottleneck ? html` (<${Term} t="узкое место">узкое место<//> — ${plan.bottleneck})` : ""}.
+        .join(
+          ", ",
+        )}${plan.bottleneck ? view` (<${Term} t="узкое место">узкое место<//> — ${plan.bottleneck})` : ""}.
     </p>
     <p class="small muted">
       Этот план не меняет состав выбранного продукта. Он задаёт две ставки на
@@ -2138,7 +2206,7 @@ function PeriodPanel({ plan, model }) {
             <th class="num">оплачено</th>
             <th class="num">непроизв.</th>
             <th class="num">загружено</th>
-            ${contracted ? html`<th class="num">подряд</th>` : null}
+            ${contracted ? view`<th class="num">подряд</th>` : null}
             <th class="num">свободно</th>
             <th class="num">₽/ч штата</th>
             <th class="num">свободно, ₽</th>
@@ -2149,22 +2217,22 @@ function PeriodPanel({ plan, model }) {
           ${teamRows.map((role) => {
             const x = rows.find((y) => y.role === role);
             const base = c.base.teamRoles.find((m) => m.role === role)?.fte;
-            return html`<tr key=${role}>
+            return view`<tr key=${role}>
               <td>${role}</td>
               <td>
                 <${Field} k=${`fte:${role}`} base=${base} label=${`FTE ${role}`} />
               </td>
               ${
                 x
-                  ? html`<td class="num">${hrs(x.paidHours)}</td>
+                  ? view`<td class="num">${hrs(x.paidHours)}</td>
                       <td class="num">${hrs(x.nonProduction)}</td>
                       <td class="num">${hrs(x.loaded)}</td>
-                      ${contracted ? html`<td class="num">${hrs(x.contractorHours)}</td>` : null}
+                      ${contracted ? view`<td class="num">${hrs(x.contractorHours)}</td>` : null}
                       <td class="num">${hrs(x.idleHours)}</td>
                       <td class="num">${rub(x.ownHourlyCost)}</td>
                       <td class="num">${rub(x.idleCost)}</td>
                       <td class="num">${rub(x.payroll)}</td>`
-                  : html`<td colspan=${contracted ? 8 : 7} class="muted small">
+                  : view`<td colspan=${contracted ? 8 : 7} class="muted small">
                       не в штате (${ENGAGEMENT_LABELS[roleEngagement(model, role)]}) —
                       оплата за часы, в ФОТ и простой не входит
                     </td>`
@@ -2176,7 +2244,7 @@ function PeriodPanel({ plan, model }) {
             <td class="num">${hrs(sumOf("paidHours"))}</td>
             <td class="num">${hrs(sumOf("nonProduction"))}</td>
             <td class="num">${hrs(sumOf("loaded"))}</td>
-            ${contracted ? html`<td class="num">${hrs(sumOf("contractorHours"))}</td>` : null}
+            ${contracted ? view`<td class="num">${hrs(sumOf("contractorHours"))}</td>` : null}
             <td class="num">${hrs(plan.idle.hours)}</td>
             <td></td>
             <td class="num" data-testid="period-idle">${rub(plan.idle.cost)}</td>
@@ -2194,7 +2262,7 @@ function PeriodPanel({ plan, model }) {
 
 function LoopsPanel({ ctx }) {
   const c = useContext(Ctx);
-  return html`<div class="scroll">
+  return view`<div class="scroll">
     <table>
       <thead>
         <tr>
@@ -2208,9 +2276,11 @@ function LoopsPanel({ ctx }) {
       <tbody>
         ${[...c.base.loops.values()].map((loop) => {
           const derived = loop.rounds_from
-            ? COURSES.map((k) => loopRounds(c.base, loop.name, { ...DEFAULT_CTX, course: k }))
+            ? COURSES.map((k) =>
+                loopRounds(c.base, loop.name, { ...DEFAULT_CTX, course: k }),
+              )
             : null;
-          return html`<tr key=${loop.name}>
+          return view`<tr key=${loop.name}>
             <td>
               ${loop.name}
               <div class="small muted">операции ${(loop.leaves ?? []).join(", ")}</div>
@@ -2225,7 +2295,7 @@ function LoopsPanel({ ctx }) {
               />
               ${
                 derived
-                  ? html`<div class="small muted">
+                  ? view`<div class="small muted">
                       выводится из петель ${loop.rounds_from.plus_extra_rounds_of.join(", ")}
                     </div>`
                   : null
@@ -2254,7 +2324,8 @@ function contractorBase(rec, grade) {
   const h = rec.hourly_rub;
   if (!Array.isArray(h)) return null;
   const [lo, hi] = h;
-  if (lo != null && hi != null) return g === "junior" ? lo : g === "senior" ? hi : (lo + hi) / 2;
+  if (lo != null && hi != null)
+    return g === "junior" ? lo : g === "senior" ? hi : (lo + hi) / 2;
   return lo ?? hi ?? null;
 }
 
@@ -2262,18 +2333,18 @@ function RatesPanel({ ctx, roles }) {
   const c = useContext(Ctx);
   const region = c.model.vars.region;
   const expert = (role) => !!c.base.config.expert_roles?.[role];
-  return html`<div>
+  return view`<div>
     <div class="toolbar" data-testid="engagement-presets">
       <span><${Term} t="форма привлечения">Форма привлечения<//> всех ролей:</span>
       ${Object.entries(PRESET_LABEL).map(
         ([k, name]) =>
-          html`<button key=${k} data-testid=${`preset-${k}`} onClick=${() => c.patch(engagementPreset(c.base, k))}>${name}</button>`,
+          view`<button key=${k} data-testid=${`preset-${k}`} onClick=${() => c.patch(engagementPreset(c.base, k))}>${name}</button>`,
       )}
     </div>
     <p class="small muted">
       Час штата = (gross + премия + взносы + прочие расходы) ÷ оплачиваемые
       часы; внештатный час = середина диапазона грейда × (1 + надбавка формы
-      договора). «Калибровка ₽/ч» заменяет расчёт целиком. Регион ставок:
+      договора). «Калибровка ₽/ч» заменяет расчёт целиком. Регион ставок:${" "}
       ${VAR_OPTIONS.region.find(([k]) => k === region)?.[1] ?? region}.
     </p>
     <div class="scroll">
@@ -2297,7 +2368,7 @@ function RatesPanel({ ctx, roles }) {
               const hour = staffHour(c.base, rec.role, ctx);
               const model = roleEngagement(c.base, rec.role);
               const composite = !!rec.composite_of;
-              return html`<tr key=${rec.role}>
+              return view`<tr key=${rec.role}>
                 <td>
                   ${rec.role}
                   <div class="small muted">${rate.basis}</div>
@@ -2305,8 +2376,8 @@ function RatesPanel({ ctx, roles }) {
                 <td>
                   ${
                     composite
-                      ? html`<span class="muted small">по участникам</span>`
-                      : html`<${Field}
+                      ? view`<span class="muted small">по участникам</span>`
+                      : view`<${Field}
                           k=${`engage:${rec.role}`}
                           base=${null}
                           label=${`форма привлечения ${rec.role}`}
@@ -2318,7 +2389,7 @@ function RatesPanel({ ctx, roles }) {
                   ${
                     composite
                       ? null
-                      : html`<${Field}
+                      : view`<${Field}
                           k=${`grade:${rec.role}`}
                           base=${null}
                           label=${`грейд ${rec.role}`}
@@ -2329,24 +2400,27 @@ function RatesPanel({ ctx, roles }) {
                 <td>
                   ${
                     hour.full != null && !composite
-                      ? html`<${Field}
+                      ? view`<${Field}
                           k=${`rate:${rec.role}:monthly`}
                           base=${Math.round(hour.gross)}
                           label=${`зарплата ${rec.role}, все грейды`}
                           wide=${true}
                         />`
-                      : html`<span class="muted">—</span>`
+                      : view`<span class="muted">—</span>`
                   }
                 </td>
                 <td>
                   ${
-                    contractorBase(rec, c.model.roleGrade[rec.role] ?? ctx.grade) != null && !composite
-                      ? html`<${Field}
+                    contractorBase(
+                      rec,
+                      c.model.roleGrade[rec.role] ?? ctx.grade,
+                    ) != null && !composite
+                      ? view`<${Field}
                           k=${`rate:${rec.role}:hourly`}
                           base=${contractorBase(rec, c.model.roleGrade[rec.role] ?? ctx.grade)}
                           label=${`внештатный час ${rec.role}, все грейды`}
                         />`
-                      : html`<span class="muted">—</span>`
+                      : view`<span class="muted">—</span>`
                   }
                 </td>
                 <td>
@@ -2367,7 +2441,7 @@ function RatesPanel({ ctx, roles }) {
 function ExpertsPanel() {
   const c = useContext(Ctx);
   const roles = Object.entries(c.base.config.expert_roles ?? {});
-  return html`<div class="scroll" data-testid="experts">
+  return view`<div class="scroll" data-testid="experts">
     <table>
       <thead>
         <tr><th>Роль</th><th><${Term} t="грейд эксперта">Грейд эксперта<//></th></tr>
@@ -2375,7 +2449,7 @@ function ExpertsPanel() {
       <tbody>
         ${roles.map(
           ([role, v]) =>
-            html`<tr key=${role}>
+            view`<tr key=${role}>
               <td>${role}<div class="small muted">${c.describe.varLabel(v)}</div></td>
               <td>
                 <${Field} k=${`var:${v}`} base=${c.base.vars[v]} label=${`грейд ${role}`} options=${Object.keys(c.base.experts.grades).map((g) => [g, g])} />
@@ -2391,7 +2465,7 @@ function ExpertsPanel() {
       <tbody>
         ${Object.entries(c.base.experts.grades).map(
           ([g, def]) =>
-            html`<tr key=${g}>
+            view`<tr key=${g}>
               <td>${g}</td>
               <td><${Field} k=${`expert:${g}`} base=${def.per_hour_rub} label=${`час эксперта ${g}`} /></td>
             </tr>`,
@@ -2436,9 +2510,11 @@ function VariablesPanel({ inputs, only, skip = [] }) {
     ...inputs.teams.capacity_variables,
     ...inputs.products.variables,
   };
-  const names = (only ?? Object.keys(c.base.vars)).filter((n) => !skip.includes(n));
+  const names = (only ?? Object.keys(c.base.vars)).filter(
+    (n) => !skip.includes(n),
+  );
   const experts = Object.keys(c.base.experts.grades).map((g) => [g, g]);
-  return html`<div class="scroll">
+  return view`<div class="scroll">
     <table>
       <thead>
         <tr>
@@ -2457,7 +2533,7 @@ function VariablesPanel({ inputs, only, skip = [] }) {
               : name.startsWith("expert_grade_")
                 ? experts
                 : VAR_OPTIONS[name];
-          return html`<tr key=${name}>
+          return view`<tr key=${name}>
             <td>
               ${c.describe.varLabel(name)}
               <div class="small muted">${described[name]?.unit ?? "доля к зарплате"}</div>
@@ -2465,10 +2541,10 @@ function VariablesPanel({ inputs, only, skip = [] }) {
             <td>
               ${
                 isPlainObject(base)
-                  ? html`<span class="small">${Object.entries(base)
+                  ? view`<span class="small">${Object.entries(base)
                       .map(([k, v]) => `${k} ${n2(v)}`)
                       .join(" · ")}</span>`
-                  : html`<${Field}
+                  : view`<${Field}
                       k=${`var:${name}`}
                       base=${base}
                       label=${c.describe.varLabel(name)}
@@ -2496,11 +2572,13 @@ function ParamsPanel({ productName }) {
   const rows = [];
   for (const p of nestedProducts(c.base, productName))
     if (p !== CUSTOM)
-      for (const [name, def] of Object.entries(c.base.products[p].parameters ?? {}))
+      for (const [name, def] of Object.entries(
+        c.base.products[p].parameters ?? {},
+      ))
         rows.push({ p, name, def });
   if (!rows.length)
-    return html`<p class="muted">У продукта и его единиц нет параметров.</p>`;
-  return html`<div class="scroll">
+    return view`<p class="muted">У продукта и его единиц нет параметров.</p>`;
+  return view`<div class="scroll">
     <table>
       <thead>
         <tr>
@@ -2512,7 +2590,7 @@ function ParamsPanel({ productName }) {
       <tbody>
         ${rows.map(
           ({ p, name, def }) =>
-            html`<tr key=${`${p}|${name}`}>
+            view`<tr key=${`${p}|${name}`}>
               <td>${c.base.products[p].name ?? p}</td>
               <td>
                 ${name.replaceAll("_", " ")}
@@ -2530,7 +2608,7 @@ function ParamsPanel({ productName }) {
 
 function ExternalsPanel() {
   const c = useContext(Ctx);
-  return html`<div class="scroll">
+  return view`<div class="scroll">
     <table>
       <thead>
         <tr>
@@ -2541,7 +2619,7 @@ function ExternalsPanel() {
       <tbody>
         ${Object.entries(c.base.externals).map(
           ([id, e]) =>
-            html`<tr key=${id}>
+            view`<tr key=${id}>
               <td>
                 ${e.name} <span class="muted small">на ${e.per ?? "—"}</span>
                 <div class="small muted">${e.basis ?? ""}</div>
@@ -2557,8 +2635,9 @@ function ExternalsPanel() {
 function LeavesPanel({ r }) {
   const seen = new Map();
   for (const l of r.trail)
-    if (l.leaf && l.class !== "pending" && !seen.has(l.leaf)) seen.set(l.leaf, l);
-  return html`<div class="scroll">
+    if (l.leaf && l.class !== "pending" && !seen.has(l.leaf))
+      seen.set(l.leaf, l);
+  return view`<div class="scroll">
     <table>
       <thead>
         <tr>
@@ -2571,7 +2650,7 @@ function LeavesPanel({ r }) {
       <tbody>
         ${[...seen.values()].map(
           (l) =>
-            html`<tr key=${l.leaf}>
+            view`<tr key=${l.leaf}>
               <td><${LeafRef} id=${l.leaf} /></td>
               <td>${l.role}</td>
               <td>${CLASS_NAME[l.class]}</td>
@@ -2586,12 +2665,13 @@ function LeavesPanel({ r }) {
 function EditsPanel() {
   const c = useContext(Ctx);
   const keys = Object.keys(c.ov);
-  if (!keys.length) return html`<p class="muted">Правок нет — всё по модели.</p>`;
-  return html`<table>
+  if (!keys.length)
+    return view`<p class="muted">Правок нет — всё по модели.</p>`;
+  return view`<table>
     <tbody>
       ${keys.map(
         (k) =>
-          html`<tr key=${k}>
+          view`<tr key=${k}>
             <td>${c.describe.name(k)}</td>
             <td>${c.describe.value(k, c.ov[k])}</td>
             <td>
@@ -2628,10 +2708,16 @@ function tabOf(key) {
   if (["leaf", "lead", "piece"].includes(kind)) return "leaves";
   if (["loop", "wait"].includes(kind)) return "loops";
   if (["rate", "engage", "grade"].includes(kind)) return "rates";
-  if (kind === "expert" || (kind === "var" && name.startsWith("expert_grade_"))) return "experts";
+  if (kind === "expert" || (kind === "var" && name.startsWith("expert_grade_")))
+    return "experts";
   if (kind === "param") return "params";
   if (kind === "external") return "externals";
-  if (kind === "fte" || kind === "plan" || (kind === "var" && ["teams", "plan_mix"].includes(name))) return "period";
+  if (
+    kind === "fte" ||
+    kind === "plan" ||
+    (kind === "var" && ["teams", "plan_mix"].includes(name))
+  )
+    return "period";
   if (kind === "var" && TOOL_VARS.includes(name)) return "tools";
   if (kind === "var" && PRICE_VARS.includes(name)) return "price";
   if (kind === "var") return "vars";
@@ -2667,40 +2753,48 @@ function Calibration({ r, plan, model, inputs, productName, ctx }) {
     return set;
   }, [r, plan, model]);
   const counts = {};
-  for (const k of Object.keys(c.ov)) counts[tabOf(k)] = (counts[tabOf(k)] ?? 0) + 1;
+  for (const k of Object.keys(c.ov))
+    counts[tabOf(k)] = (counts[tabOf(k)] ?? 0) + 1;
   const total = Object.keys(c.ov).length;
   const resetTab = () =>
-    c.patch(Object.fromEntries(Object.keys(c.ov).filter((k) => tabOf(k) === tab).map((k) => [k, undefined])));
+    c.patch(
+      Object.fromEntries(
+        Object.keys(c.ov)
+          .filter((k) => tabOf(k) === tab)
+          .map((k) => [k, undefined]),
+      ),
+    );
   const panel = {
-    period: () => html`<${PeriodPanel} plan=${plan} model=${model} />`,
-    rates: () => html`<${RatesPanel} ctx=${ctx} roles=${roles} />`,
-    experts: () => html`<${ExpertsPanel} />`,
-    leaves: () => html`<${LeavesPanel} r=${r} />`,
-    loops: () => html`<${LoopsPanel} ctx=${ctx} />`,
-    params: () => html`<${ParamsPanel} productName=${productName} />`,
-    externals: () => html`<${ExternalsPanel} />`,
-    tools: () => html`<${VariablesPanel} inputs=${inputs} only=${TOOL_VARS} />`,
-    price: () => html`<${VariablesPanel} inputs=${inputs} only=${PRICE_VARS} />`,
+    period: () => view`<${PeriodPanel} plan=${plan} model=${model} />`,
+    rates: () => view`<${RatesPanel} ctx=${ctx} roles=${roles} />`,
+    experts: () => view`<${ExpertsPanel} />`,
+    leaves: () => view`<${LeavesPanel} r=${r} />`,
+    loops: () => view`<${LoopsPanel} ctx=${ctx} />`,
+    params: () => view`<${ParamsPanel} productName=${productName} />`,
+    externals: () => view`<${ExternalsPanel} />`,
+    tools: () => view`<${VariablesPanel} inputs=${inputs} only=${TOOL_VARS} />`,
+    price: () =>
+      view`<${VariablesPanel} inputs=${inputs} only=${PRICE_VARS} />`,
     vars: () =>
-      html`<${VariablesPanel}
+      view`<${VariablesPanel}
         inputs=${inputs}
         skip=${[...TOOL_VARS, ...PRICE_VARS, "teams", "plan_mix", ...Object.values(c.base.config.expert_roles ?? {})]}
       />`,
-    edits: () => html`<${EditsPanel} />`,
+    edits: () => view`<${EditsPanel} />`,
   }[tab];
-  return html`<section class="card" data-testid="calibration">
+  return view`<section class="card" data-testid="calibration">
     <h2>Детали и точечные правки</h2>
     <div class="tabs" role="tablist">
       ${TABS.map(
         ([id, name]) =>
-          html`<button key=${id} role="tab" aria-selected=${tab === id} onClick=${() => setTab(id)}>
+          view`<button key=${id} role="tab" aria-selected=${tab === id} onClick=${() => setTab(id)}>
             ${name}${
               id === "edits"
                 ? total
                   ? ` (${total})`
                   : ""
                 : counts[id]
-                  ? html` <span class="badge">изменено ${counts[id]}</span>`
+                  ? view` <span class="badge">изменено ${counts[id]}</span>`
                   : null
             }
           </button>`,
@@ -2708,7 +2802,7 @@ function Calibration({ r, plan, model, inputs, productName, ctx }) {
     </div>
     ${
       tab !== "edits" && counts[tab]
-        ? html`<p><button onClick=${resetTab}>↺ Сбросить правки этой вкладки (${counts[tab]})</button></p>`
+        ? view`<p><button onClick=${resetTab}>↺ Сбросить правки этой вкладки (${counts[tab]})</button></p>`
         : null
     }
     ${panel()}
@@ -2716,23 +2810,25 @@ function Calibration({ r, plan, model, inputs, productName, ctx }) {
 }
 
 function CustomBuilder({ custom, setCustom, products }) {
-  const choices = Object.keys(products).filter((p) => p !== CUSTOM && p !== "сделка");
+  const choices = Object.keys(products).filter(
+    (p) => p !== CUSTOM && p !== "сделка",
+  );
   const update = (i, patch) =>
     setCustom({
       ...custom,
       items: custom.items.map((it, j) => (j === i ? { ...it, ...patch } : it)),
     });
-  return html`<section class="card" data-testid="custom">
+  return view`<section class="card" data-testid="custom">
     <h2>Своя сборка</h2>
     <div class="scroll">
       <table>
         <tbody>
           ${custom.items.map(
             (it, i) =>
-              html`<tr key=${i}>
+              view`<tr key=${i}>
                 <td>
                   <select aria-label=${`единица ${i + 1}`} value=${it.product} onChange=${(e) => update(i, { product: e.target.value })}>
-                    ${choices.map((p) => html`<option key=${p} value=${p}>${products[p].name}</option>`)}
+                    ${choices.map((p) => view`<option key=${p} value=${p}>${products[p].name}</option>`)}
                   </select>
                 </td>
                 <td>
@@ -2744,7 +2840,9 @@ function CustomBuilder({ custom, setCustom, products }) {
                       value=${showNum(it.qty)}
                       onChange=${(e) => {
                         const v = parseNum(e.target.value);
-                        update(i, { qty: v == null || v === undefined ? 0 : v });
+                        update(i, {
+                          qty: v == null || v === undefined ? 0 : v,
+                        });
                       }}
                   /></span>
                 </td>
@@ -2766,7 +2864,10 @@ function CustomBuilder({ custom, setCustom, products }) {
           value=${showNum(custom.deals)}
           onChange=${(e) => {
             const v = parseNum(e.target.value);
-            setCustom({ ...custom, deals: v == null || v === undefined ? 0 : v });
+            setCustom({
+              ...custom,
+              deals: v == null || v === undefined ? 0 : v,
+            });
           }}
       /></span>
       <span class="small muted">сделка — <${Term} t="КП">КП<//>, договор, отчётные этапы и закрытие (продукт «сделка»); 0 — без неё</span>
@@ -2784,8 +2885,14 @@ const DEFAULT_CUSTOM = {
 
 function download(overrides, note) {
   const date = new Date().toISOString().slice(0, 10);
-  const body = JSON.stringify({ base: `${date}${note ? ` — ${note}` : ""}`, overrides }, null, 2);
-  const url = URL.createObjectURL(new Blob([body], { type: "application/json" }));
+  const body = JSON.stringify(
+    { base: `${date}${note ? ` — ${note}` : ""}`, overrides },
+    null,
+    2,
+  );
+  const url = URL.createObjectURL(
+    new Blob([body], { type: "application/json" }),
+  );
   const a = document.createElement("a");
   a.href = url;
   a.download = `правки-калькулятора-${date}.json`;
@@ -2796,10 +2903,10 @@ function download(overrides, note) {
 }
 
 function Seg({ label, value, options, onChange, testid }) {
-  return html`<span class="seg" role="group" aria-label=${label} data-testid=${testid}>
+  return view`<span class="seg" role="group" aria-label=${label} data-testid=${testid}>
     ${options.map(
       ([v, name]) =>
-        html`<button key=${v} aria-pressed=${value === v} onClick=${() => onChange(v)}>${name}</button>`,
+        view`<button key=${v} aria-pressed=${value === v} onClick=${() => onChange(v)}>${name}</button>`,
     )}
   </span>`;
 }
@@ -2905,12 +3012,20 @@ function App({ inputs }) {
     reader.onload = () => {
       try {
         const data = JSON.parse(String(reader.result));
-        if (!isPlainObject(data?.overrides)) throw new Error("в файле нет раздела правок (overrides)");
-        const { clean, errors: refused } = normaliseEdits(full, base, data.overrides, describe.name);
+        if (!isPlainObject(data?.overrides))
+          throw new Error("в файле нет раздела правок (overrides)");
+        const { clean, errors: refused } = normaliseEdits(
+          full,
+          base,
+          data.overrides,
+          describe.name,
+        );
         setOverrides(clean);
         setImportError(refused.length ? refused.join("; ") : null);
       } catch (error) {
-        setImportError(`файл правок не прочитан: ${error instanceof SyntaxError ? "это не JSON" : error.message}`);
+        setImportError(
+          `файл правок не прочитан: ${error instanceof SyntaxError ? "это не JSON" : error.message}`,
+        );
       }
     };
     reader.readAsText(file);
@@ -2920,16 +3035,19 @@ function App({ inputs }) {
     setSnapshot({
       product: productName,
       ctx,
-      at: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
+      at: new Date().toLocaleTimeString("ru-RU", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
       result: snapshotOf(r),
     });
 
-  return html`<${Ctx.Provider} value=${ctxValue}>
+  return view`<${Ctx.Provider} value=${ctxValue}>
     <${TipLayer} />
     <header>
       <h1>Себестоимость и цена</h1>
       <select aria-label="продукт" value=${productName} onChange=${(e) => setProduct(e.target.value)} data-testid="product">
-        ${productNames.map((p) => html`<option key=${p} value=${p}>${inputs.products.products[p].name}</option>`)}
+        ${productNames.map((p) => view`<option key=${p} value=${p}>${inputs.products.products[p].name}</option>`)}
         <option value=${CUSTOM}>Своя сборка…</option>
       </select>
       <span class="ctl"
@@ -2952,7 +3070,7 @@ function App({ inputs }) {
       /></span>
       <span class="spacer"></span>
       <span class="toolbar">
-        ${count ? html`<span class="badge" data-testid="edits-count">правок: ${count}</span>` : null}
+        ${count ? view`<span class="badge" data-testid="edits-count">правок: ${count}</span>` : null}
         <input
           aria-label="пометка к правкам"
           placeholder="пометка к правкам"
@@ -2979,7 +3097,7 @@ function App({ inputs }) {
     </header>
     ${
       r
-        ? html`<${KpiBar}
+        ? view`<${KpiBar}
             r=${r}
             base=${baseline}
             baseNote=${baseNote}
@@ -2997,22 +3115,22 @@ function App({ inputs }) {
       </p>
       ${
         [...errors, planError, importError].filter(Boolean).length
-          ? html`<div class="errbox" data-testid="errors">
+          ? view`<div class="errbox" data-testid="errors">
               ${[...errors, planError, importError]
                 .filter(Boolean)
-                .map((e) => html`<div key=${e}>${e}</div>`)}
+                .map((e) => view`<div key=${e}>${e}</div>`)}
             </div>`
           : null
       }
-      ${productName === CUSTOM ? html`<${CustomBuilder} custom=${custom} setCustom=${setCustom} products=${inputs.products.products} />` : null}
+      ${productName === CUSTOM ? view`<${CustomBuilder} custom=${custom} setCustom=${setCustom} products=${inputs.products.products} />` : null}
       ${
         r && plan
-          ? html`<section class="card facts" data-testid="headline">
+          ? view`<section class="card facts" data-testid="headline">
                 <span><${Term} t="мощность">Мощность одной команды<//>: <b>${
                   r.capacity.perMonth == null
                     ? "—"
                     : `${n2(r.capacity.perMonth)} ${productName === CUSTOM ? "сборки" : "ед."} в месяц`
-                }</b>${r.capacity.bottleneck ? html`, <${Term} t="узкое место">узкое место<//> — <b>${r.capacity.bottleneck}</b>` : null}</span>
+                }</b>${r.capacity.bottleneck ? view`, <${Term} t="узкое место">узкое место<//> — <b>${r.capacity.bottleneck}</b>` : null}</span>
                 <span><${Term} t="срок">Срок<//>: <b>${
                   r.leadDays == null
                     ? "не считается (у продукта нет цепочки срока)"
@@ -3024,11 +3142,11 @@ function App({ inputs }) {
                 <${ProductOptions} productName=${productName} />
                 ${
                   r.flags.length
-                    ? html`<details class="flagbox" data-testid="flags">
+                    ? view`<details class="flagbox" data-testid="flags">
                         <summary>Флаги расчёта: ${r.flags.length}</summary>
-                        <ul class="flags">${r.flags.map((f) => html`<li key=${f}>${f}</li>`)}</ul>
+                        <ul class="flags">${r.flags.map((f) => view`<li key=${f}>${f}</li>`)}</ul>
                       </details>`
-                    : html`<span class="small muted">Флагов нет.</span>`
+                    : view`<span class="small muted">Флагов нет.</span>`
                 }
               </section>
               <div class="cols2">
@@ -3050,7 +3168,7 @@ function App({ inputs }) {
                 productName=${productName}
                 ctx=${ctx}
               />`
-          : html`<section class="card">
+          : view`<section class="card">
               <p>Расчёт не выполнен — см. ошибку выше. Сбросьте последнюю правку или все правки.</p>
               <${EditsPanel} />
             </section>`
@@ -3062,8 +3180,12 @@ function App({ inputs }) {
 /** Stored ctx of an older page (a scenario string) or garbage → the default grade and course. */
 function normalizeStored(value) {
   if (!isPlainObject(value)) return { ...DEFAULT_CTX };
-  const grade = [...GRADES, GRADE_MIX].includes(value.grade) ? value.grade : DEFAULT_CTX.grade;
-  const course = COURSES.includes(value.course) ? value.course : DEFAULT_CTX.course;
+  const grade = [...GRADES, GRADE_MIX].includes(value.grade)
+    ? value.grade
+    : DEFAULT_CTX.grade;
+  const course = COURSES.includes(value.course)
+    ? value.course
+    : DEFAULT_CTX.course;
   return { grade, course };
 }
 
@@ -3096,7 +3218,7 @@ class Boundary extends React.Component {
   }
   render() {
     if (!this.state.error) return this.props.children;
-    return html`<div class="wrap">
+    return view`<div class="wrap">
       <div class="errbox">Страница не смогла показать расчёт: ${String(this.state.error.message)}</div>
       <p>
         <button
@@ -3116,13 +3238,18 @@ class Boundary extends React.Component {
 const root = createRoot(document.getElementById("root"));
 loadInputs(async (path) => {
   const response = await fetch(new URL(`../${path}`, import.meta.url));
-  if (!response.ok) throw new Error(`файл ${path} не получен — сервер ответил HTTP ${response.status}`);
+  if (!response.ok)
+    throw new Error(
+      `файл ${path} не получен — сервер ответил HTTP ${response.status}`,
+    );
   return response.text();
 }, parseYaml)
-  .then((inputs) => root.render(html`<${Boundary}><${App} inputs=${inputs} /><//>`))
+  .then((inputs) =>
+    root.render(view`<${Boundary}><${App} inputs=${inputs} /><//>`),
+  )
   .catch((error) =>
     root.render(
-      html`<p class="err" style=${{ padding: 16 }}>
+      view`<p class="err" style=${{ padding: 16 }}>
         Не удалось загрузить модель: ${String(error?.message ?? error)}
       </p>`,
     ),

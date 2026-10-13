@@ -613,6 +613,20 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the BFF mailer sends the branded code-only reset email with no link or button
     And the user completes the reset by typing the code on the /reset screen
 
+  @EARS-29 @EARS-12 @happy @password-reset-mail
+  Scenario: Academy receives the code-only password-reset mail and completes the real reset
+    Given a uniquely registered verified Academy account is owned for a reset-mail journey with its original password
+    When that owned account requests a reset through the real Academy form with the account return target
+    Then the fresh recipient-bound reset mail has a leading six-digit code matching both complete branded bodies and footer
+    And both complete reset-mail bodies state the real one-hour lifetime and already-open requesting-tab instruction without any navigation
+    When a different six-digit reset code is generically refused without private access or changing that owned account's password
+    And the owned requester confirms the rejected reset digits are cleared and submits the delivered mail code once with a distinct valid new password
+    Then the reset opens that same verified account at its return target and only the new password signs in from an independent guest
+    # This Academy projection observes received mail and a real reset journey.
+    # Retain the broader provider-returnCode/no-native-mail case above and its
+    # native wire proof in apps/api/src/auth/idp/zitadel.idp.spec.ts:895.
+    # Reset/session ownership remains in apps/api/test/auth/password-reset.e2e-spec.ts.
+
   @EARS-29 @EARS-34 @happy
   Scenario: Unverified-account sign-in receives the sign-in code mail
     Given an existing account has an unverified email

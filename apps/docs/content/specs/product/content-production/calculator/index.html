@@ -70,12 +70,25 @@
         --num-wide-w: 116px;
         --label-w: 12rem;
         --top-h: 0px;
+        /* what the sticky top bar covers; 0 where the bar is not sticky (narrow screens) */
+        --sticky-offset: var(--top-h);
       }
       * {
         box-sizing: border-box;
       }
       html {
         scrollbar-gutter: stable;
+      }
+      /* anything scrolled to (a heading, a focused control) stops below the sticky bar, never under it */
+      .card,
+      .card h2,
+      .card h3,
+      .card summary,
+      input,
+      select,
+      textarea,
+      button {
+        scroll-margin-top: calc(var(--sticky-offset) + var(--s3));
       }
       html,
       body {
@@ -96,8 +109,10 @@
         position: sticky;
         top: 0;
         z-index: 5;
+        width: 100%;
         background: var(--panel);
-        box-shadow: 0 1px 0 var(--rule);
+        border-bottom: 1px solid var(--rule);
+        box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
       }
       header {
         display: flex;
@@ -631,8 +646,10 @@
         font-size: var(--fs-xs);
         color: var(--muted);
       }
-      .kpi .label .hint {
-        font-size: 11px;
+      .kpi .value .unit {
+        font-size: var(--fs-xs);
+        font-weight: 500;
+        color: var(--muted);
       }
       .kpi .value {
         font-size: var(--fs-md);
@@ -722,8 +739,12 @@
       }
       table.derived .line {
         white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+      }
+      /* the result formula wraps instead of truncating; two lines are always reserved, so the row
+         keeps its height whatever the numbers */
+      table.derived .line.two {
+        white-space: normal;
+        height: 3em;
       }
       table.derived tr.lead td {
         background: var(--accent-soft);
@@ -970,8 +991,20 @@
         .top {
           position: static;
         }
+        :root {
+          --sticky-offset: 0px;
+        }
+        /* nine tiles in two balanced rows instead of a full row and an orphan pair */
+        .kpibar {
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+        }
         .wrap {
           padding: var(--s4);
+        }
+      }
+      @media (max-width: 700px) {
+        .kpibar {
+          grid-template-columns: repeat(auto-fit, minmax(124px, 1fr));
         }
       }
     </style>

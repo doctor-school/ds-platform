@@ -553,9 +553,10 @@ const slotsOf = (value, n) =>
   );
 
 /** A term with its glossary text: a styled tooltip on hover and keyboard focus (see TipLayer). */
-function Term({ t, children }) {
-  const text = GLOSSARY[t];
-  if (!text) return children ?? t;
+function Term({ t, children, extra }) {
+  const def = GLOSSARY[t];
+  if (!def) return children ?? t;
+  const text = extra ? `${def} (${extra})` : def;
   return view`<span class="term" tabindex="0" data-tip=${text}
     >${children ?? t}</span
   >`;
@@ -1434,9 +1435,11 @@ function Kpi({
     }
   }, [value]);
   const delta = fin(value) && fin(base) ? value - base : null;
+  // The unit is set smaller than the number, so the widest value fits a tile untruncated.
+  const [num, unit] = splitUnit(fmt(value));
   return view`<div class=${`kpi${lead ? " lead" : ""}${primary ? " primary" : ""}`} data-testid=${testid}>
-    <div class="label"><${Term} t=${term}>${label}<//>${hint ? view`${" "}<span class="hint">${hint}</span>` : null}</div>
-    <div class=${flash ? "value flash" : "value"} key=${flash}>${fmt(value)}</div>
+    <div class="label"><${Term} t=${term} extra=${hint}>${label}<//></div>
+    <div class=${flash ? "value flash" : "value"} key=${flash}>${num}${unit ? view`${" "}<span class="unit">${unit}</span>` : null}</div>
     <div class="delta">
       ${
         delta == null
@@ -1447,6 +1450,14 @@ function Kpi({
       }
     </div>
   </div>`;
+}
+
+/** "656 442 ₽" → ["656 442", "₽"]; "не достигается" → ["—", "не достигается"]. */
+function splitUnit(text) {
+  const s = String(text);
+  const m = /^(.*\d)\s(₽|%|контактов)$/.exec(s);
+  if (m) return [m[1], m[2]];
+  return /\d/.test(s) || s === "—" ? [s, null] : ["—", s];
 }
 
 function KpiBar({ r, base, baseNote, onRemember, onForget, remembered }) {
@@ -1462,11 +1473,11 @@ function KpiBar({ r, base, baseNote, onRemember, onForget, remembered }) {
     <${Kpi} label="Наценка" hint="прибыль ÷ себест." term="наценка" value=${m.markup} base=${b.markup} fmt=${pct} dfmt=${dPct} lead=${mode === "markup"} testid="kpi-markup" />
     <${Kpi} label="Маржа" hint="прибыль ÷ цена" term="маржа" value=${m.margin} base=${b.margin} fmt=${pct} dfmt=${dPct} lead=${mode === "margin"} testid="kpi-margin" />
     <${Kpi} label="Множитель" term="множитель" value=${m.multiplier} base=${b.multiplier} fmt=${(v) => (fin(v) ? `× ${f2.format(v)}` : "—")} dfmt=${dNum} lead=${mode === "multiplier"} testid="kpi-multiplier" />
-    <${Kpi} label="Цена за контакт (план)" term="контакт" value=${m.perContact} base=${b.perContact} fmt=${(v) => (v == null ? "нет контактов" : rub(v))} dfmt=${dRub} testid="kpi-per-contact" />
+    <${Kpi} label="Цена контакта" hint="цена за контакт для спонсора при плановом числе контактов" term="контакт" value=${m.perContact} base=${b.perContact} fmt=${(v) => (v == null ? "нет контактов" : rub(v))} dfmt=${dRub} testid="kpi-per-contact" />
     <${Kpi} label="Безубыточность" term="безубыточность" value=${m.breakEven} base=${b.breakEven} fmt=${be} dfmt=${(v) => `${sign(v)}${f0.format(Math.abs(v))}`} testid="kpi-break-even" />
     <div class="kpi baseline">
       <div class="label"><${Term} t="база">База сравнения<//></div>
-      <div class="small" title=${baseNote}>${baseNote}</div>
+      <div class="small" title=${baseNote}>${remembered ? `запомнена ${remembered.at}` : "без правок"}</div>
       <div class="toolbar">
         <button onClick=${onRemember} title="запомнить текущие цифры как базу сравнения" data-testid="remember-base">Запомнить</button>
         ${remembered ? view`<button class="link" title="сравнивать с моделью без правок" onClick=${onForget}>забыть</button>` : null}
@@ -1938,7 +1949,7 @@ function PriceBlock({ r, productName, model }) {
             <div class="line">
               = <${Term} t="аванс">аванс<//> ${rub(p.advance)} (${pct(p.advanceShare)})
             </div>
-            <div class="line">
+            <div class="line two">
               + <${Term} t="результат">результат<//>:${" "}
               ${`${f0.format(p.contacts.plan)} контактов × ${rub(pc.value ?? 0)} = ${rub(p.resultAtPlan)}`}
             </div>
@@ -3256,7 +3267,7 @@ function App({ inputs }) {
             r=${r}
             base=${baseline}
             baseNote=${baseNote}
-            remembered=${!!remembered}
+            remembered=${remembered}
             onRemember=${remember}
             onForget=${() => setSnapshot(null)}
           />`

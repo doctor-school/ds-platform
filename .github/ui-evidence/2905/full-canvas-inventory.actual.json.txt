@@ -1,0 +1,2139 @@
+{
+  "preparedAtUtc": "2026-10-13T12:07:30.711Z",
+  "status": "ACTUAL FINAL COMPARISON; NOT OWNER GO OR INDEPENDENT REVIEW",
+  "repairSourceSha": "213baf7c68cc8f2018da92c4746bb8287e8e486e",
+  "finalRuntimeSha": "213baf7c68cc8f2018da92c4746bb8287e8e486e",
+  "finalRootLease": "root-final-caret-20261013-1216",
+  "canvasBaseSha": "59ba49768494c1dd54cd8f3a86ca38e745dfb1e5",
+  "canvasSource": "design-source/auth.dc.html",
+  "canvasSha256": "0a48f029dec14ce30ea4e1b9eed91f275a88a52d418a53f269ab086ce1d996a6",
+  "modes": {
+    "hostProp": {
+      "values": [
+        "Академия",
+        "витрина врача"
+      ],
+      "sourceLine": 303
+    },
+    "screens": [
+      {
+        "screen": "login",
+        "loginTab": "password"
+      },
+      {
+        "screen": "register"
+      },
+      {
+        "screen": "reset",
+        "resetStage": "complete"
+      }
+    ],
+    "dark": [
+      false,
+      true
+    ],
+    "errorProp": "нет",
+    "showPw": [
+      false,
+      true
+    ],
+    "partnerLink": false,
+    "returnCtx": false,
+    "resetIdentifier": "unique unregistered email",
+    "validation": "real touched-field blur; not an invented error-prop mode"
+  },
+  "screens": [
+    {
+      "host": "academy",
+      "surface": "registration",
+      "profiles": [
+        "desktop-light",
+        "desktop-dark",
+        "mobile-light",
+        "mobile-dark"
+      ],
+      "inventory": [
+        {
+          "id": "page-background",
+          "label": "Page background / responsive split grid",
+          "canvasLine": 12,
+          "sourceText": "<div style=\"--tint:{{ tint }};--tint-fg:{{ tintFg }};--btn-hover:{{ btnHover }};--border:{{ border }};--primary:{{ accent }};--elev:{{ shadowSm }};min-height:100vh;background:{{ page }};display:flex;flex-direction:column\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "form-column",
+          "label": "Form column order/padding/sizing",
+          "canvasLine": 38,
+          "sourceText": "<div style=\"order:2;display:flex;flex-direction:column;padding:clamp(24px,4vw,48px) clamp(16px,4vw,40px);background:{{ page }};min-width:0\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "mobile-logo-light",
+          "label": "Mobile colour logo",
+          "canvasLine": 39,
+          "sourceText": "<sc-if value=\"{{ showFormLogoLight }}\" hint-placeholder-val=\"{{ false }}\"><img src=\"assets/ds-logo-color.svg\" alt=\"Doctor.School\" style=\"height:30px;align-self:flex-start;display:block\"></sc-if>",
+          "applicability": "both hosts; mobile/light",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "mobile-logo-dark",
+          "label": "Mobile white logo",
+          "canvasLine": 40,
+          "sourceText": "<sc-if value=\"{{ showFormLogoDark }}\" hint-placeholder-val=\"{{ false }}\"><img src=\"assets/ds-logo-white.svg\" alt=\"Doctor.School\" style=\"height:30px;align-self:flex-start;display:block\"></sc-if>",
+          "applicability": "both hosts; mobile/dark",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-frame",
+          "label": "Auth card frame/border/shadow/inset",
+          "canvasLine": 52,
+          "sourceText": "<div style=\"width:100%;max-width:440px;background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(24px,4vw,36px);box-sizing:border-box\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-icon",
+          "label": "Per-screen icon plate",
+          "canvasLine": 61,
+          "sourceText": "<span style=\"width:52px;height:52px;background:{{ tint }};color:{{ accent }};display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px\">{{ screenIcon }}</span>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-title",
+          "label": "Per-screen h1",
+          "canvasLine": 62,
+          "sourceText": "<h1 style=\"margin:0;font-size:26px;font-weight:800;letter-spacing:-.025em;color:{{ ink }};line-height:1.15\">{{ title }}</h1>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-description",
+          "label": "Per-screen description",
+          "canvasLine": 63,
+          "sourceText": "<p style=\"margin:10px 0 24px;font-size:14px;line-height:1.55;color:{{ inkMuted }}\">{{ description }}</p>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "desktop-brand-panel",
+          "label": "Blue desktop brand panel",
+          "canvasLine": 280,
+          "sourceText": "<div style=\"order:1;background:{{ headerBg }};padding:clamp(40px,4vw,64px);display:flex;flex-direction:column;color:#fff\">",
+          "applicability": "both hosts; desktop",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "desktop-white-logo",
+          "label": "Desktop white brand logo",
+          "canvasLine": 281,
+          "sourceText": "<img src=\"assets/ds-logo-white.svg\" alt=\"\" style=\"height:40px;align-self:flex-start;display:block\">",
+          "applicability": "both hosts; desktop",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-eyebrow",
+          "label": "Host-specific brand eyebrow",
+          "canvasLine": 292,
+          "sourceText": "<div style=\"font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD\">{{ brandEyebrow }}</div>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-headline",
+          "label": "Host-specific brand headline",
+          "canvasLine": 293,
+          "sourceText": "<h2 style=\"margin:0;font-size:clamp(30px,3.4vw,46px);line-height:1.05;font-weight:800;letter-spacing:-.035em;color:#fff;max-width:16ch\">{{ brandHeadline }}</h2>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-subcopy",
+          "label": "Host-specific brand subcopy",
+          "canvasLine": 294,
+          "sourceText": "<p style=\"margin:0;font-size:17px;line-height:1.55;color:#D3E8FD;max-width:38ch\">{{ brandSubcopy }}</p>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-footer",
+          "label": "Host-specific brand footer",
+          "canvasLine": 297,
+          "sourceText": "<div style=\"font-size:13px;font-weight:600;color:rgba(255,255,255,.85)\">{{ brandFooter }}</div>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "captcha-disclosure",
+          "label": "Yandex SmartCaptcha disclosure and policy link",
+          "canvasLine": 274,
+          "sourceText": "<p style=\"margin:14px 0 0;width:100%;max-width:440px;font-size:12px;line-height:1.5;color:{{ inkFaint }}\">Форма защищена Yandex SmartCaptcha. <a href=\"#\" style=\"color:{{ linkColor }};font-weight:700\">Условия обработки данных.</a></p>",
+          "applicability": "canvas draws it; actual local bot-protection-OFF environment may omit it; disclose real applicability",
+          "interaction": "link render/source comparison; no fake widget or provider challenge claim",
+          "finalComparison": "ENVIRONMENT APPLICABILITY: canvas disclosure inventoried; local bot-protection OFF omits it in baseline and final. No delta or production/provider-challenge acceptance claimed"
+        },
+        {
+          "id": "register-email-label",
+          "label": "Email label",
+          "canvasLine": 155,
+          "sourceText": "<label style=\"{{ fRegEmail.labelStyle }}\">{{ fRegEmail.label }}</label>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "register-email-input",
+          "label": "Email input/placeholder",
+          "canvasLine": 156,
+          "sourceText": "<input type=\"email\" value=\"{{ fRegEmail.value }}\" onChange=\"{{ fRegEmail.onChange }}\" onBlur=\"{{ fRegEmail.onBlur }}\" placeholder=\"{{ fRegEmail.placeholder }}\" style=\"{{ fRegEmail.inputStyle }}\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "register-email-error",
+          "label": "Email error slot",
+          "canvasLine": 157,
+          "sourceText": "<div style=\"{{ fRegEmail.errStyle }}\">⚠ {{ fRegEmail.error }}</div>",
+          "applicability": "conditional actual validation; not forced for caret proof",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "N/A in selected captured mode: source condition inactive; no manufactured interaction/error claim"
+        },
+        {
+          "id": "register-password-label",
+          "label": "New-password label",
+          "canvasLine": 160,
+          "sourceText": "<label style=\"{{ fRegPw.labelStyle }}\">{{ fRegPw.label }}</label>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH label copy,12px/700 and neutral tone; baseline→final geometry unchanged. MISMATCH inherited label-to-input gap10px versus canvas mkField margin7px; canonical researched FormItem gap2.5 retained under existing DS/literal rule"
+        },
+        {
+          "id": "register-password-wrapper",
+          "label": "Relative new-password control wrapper",
+          "canvasLine": 161,
+          "sourceText": "<div style=\"position:relative\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH canonical existing DS wrapper/gutter and baseline→final geometry/style; exact canvas-literal gap/style applicability disclosed separately, no global pixel-equality claim"
+        },
+        {
+          "id": "register-password-input",
+          "label": "New-password input with 96px right gutter",
+          "canvasLine": 162,
+          "sourceText": "<input type=\"{{ pwType }}\" value=\"{{ fRegPw.value }}\" onChange=\"{{ fRegPw.onChange }}\" onBlur=\"{{ fRegPw.onBlur }}\" style=\"{{ fRegPw.inputStyle }};padding-right:96px\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "masked/rest, public value, focus/caret, reveal/remask, keyboard range; selected real registration reload",
+          "finalComparison": "MATCH measured existing DS resting contract and baseline→final resting copy/geometry/style; real field states passed in every profile. Immediate invalid-borderColor differences are explicitly disclosed; no hidden style approval claimed"
+        },
+        {
+          "id": "register-password-reveal",
+          "label": "Registration show/hide button",
+          "canvasLine": 163,
+          "sourceText": "<button onClick=\"{{ togglePw }}\" type=\"button\" aria-label=\"{{ pwToggleAria }}\" data-link style=\"text-underline-offset:4px;position:absolute;top:0;right:0;height:100%;padding:0 14px;background:transparent;border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:800;color:{{ linkColor }}\">{{ pwToggle }}</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "following source button at line163; hover/down/Tab/Space/Enter/state semantics",
+          "finalComparison": "MISMATCH inherited canvas offset4px vs actualauto and pressopacity.8 vs actual1; MATCH localized state/name/controls, hover underline and keyboard ring; MATCH EARS-38 real pointer caret4→4/value/focus and keyboard2–7"
+        },
+        {
+          "id": "register-password-helper",
+          "label": "Minimum-length helper",
+          "canvasLine": 165,
+          "sourceText": "<div style=\"{{ fRegPwHint }}\">Не менее 8 символов.</div>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH measured existing DS resting contract and baseline→final resting copy/geometry/style; real field states passed in every profile. Immediate invalid-borderColor differences are explicitly disclosed; no hidden style approval claimed"
+        },
+        {
+          "id": "register-password-error",
+          "label": "Shared password error slot",
+          "canvasLine": 166,
+          "sourceText": "<div style=\"{{ fRegPw.errStyle }}\">⚠ {{ fRegPw.error }}</div>",
+          "applicability": "actual short-creation-password blur",
+          "interaction": "one slot helper↔error swap; no submit",
+          "finalComparison": "MATCH actual single role=alert slot, error copy/label/message geometry and semantics; input computed-borderColor differs in16 immediate-blur snapshots (only scalar difference), stable endpoint not separately observed; separate narrow A registration/reset desktop diagnostic observes natural settled token in8/8,59/A declared CSS/token identity equal; original16 differences retained"
+        },
+        {
+          "id": "register-terms",
+          "label": "Terms/privacy consent paragraph",
+          "canvasLine": 203,
+          "sourceText": "<p style=\"margin:0;font-size:12px;line-height:1.55;color:{{ inkFaint }}\">Продолжая, вы соглашаетесь с условиями использования и политикой конфиденциальности.</p>",
+          "applicability": "both hosts; Academy has this flat paragraph, not an invented checkbox",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "register-submit",
+          "label": "Создать аккаунт primary submit",
+          "canvasLine": 204,
+          "sourceText": "<button onClick=\"{{ submit }}\" data-btn=\"primary\" aria-busy=\"{{ primaryBusyAttr }}\" style=\"{{ primaryBtn }}\">{{ regBtnLabel }}</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "render only; never register or authenticate",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "register-existing-account",
+          "label": "Уже есть аккаунт? Войти link",
+          "canvasLine": 218,
+          "sourceText": "<button onClick=\"{{ goLogin }}\" data-link style=\"{{ linkBtn }}\">Уже есть аккаунт? Войти</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "untouched link render; selected reload proves reveal resets",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        }
+      ],
+      "finalComparison": "Actual final images inspected in four profiles; field metrics have zero baseline→final deltas; see element-level extent/mismatches"
+    },
+    {
+      "host": "academy",
+      "surface": "password-login",
+      "profiles": [
+        "desktop-light",
+        "desktop-dark",
+        "mobile-light",
+        "mobile-dark"
+      ],
+      "inventory": [
+        {
+          "id": "page-background",
+          "label": "Page background / responsive split grid",
+          "canvasLine": 12,
+          "sourceText": "<div style=\"--tint:{{ tint }};--tint-fg:{{ tintFg }};--btn-hover:{{ btnHover }};--border:{{ border }};--primary:{{ accent }};--elev:{{ shadowSm }};min-height:100vh;background:{{ page }};display:flex;flex-direction:column\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "form-column",
+          "label": "Form column order/padding/sizing",
+          "canvasLine": 38,
+          "sourceText": "<div style=\"order:2;display:flex;flex-direction:column;padding:clamp(24px,4vw,48px) clamp(16px,4vw,40px);background:{{ page }};min-width:0\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "mobile-logo-light",
+          "label": "Mobile colour logo",
+          "canvasLine": 39,
+          "sourceText": "<sc-if value=\"{{ showFormLogoLight }}\" hint-placeholder-val=\"{{ false }}\"><img src=\"assets/ds-logo-color.svg\" alt=\"Doctor.School\" style=\"height:30px;align-self:flex-start;display:block\"></sc-if>",
+          "applicability": "both hosts; mobile/light",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "mobile-logo-dark",
+          "label": "Mobile white logo",
+          "canvasLine": 40,
+          "sourceText": "<sc-if value=\"{{ showFormLogoDark }}\" hint-placeholder-val=\"{{ false }}\"><img src=\"assets/ds-logo-white.svg\" alt=\"Doctor.School\" style=\"height:30px;align-self:flex-start;display:block\"></sc-if>",
+          "applicability": "both hosts; mobile/dark",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-frame",
+          "label": "Auth card frame/border/shadow/inset",
+          "canvasLine": 52,
+          "sourceText": "<div style=\"width:100%;max-width:440px;background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(24px,4vw,36px);box-sizing:border-box\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-icon",
+          "label": "Per-screen icon plate",
+          "canvasLine": 61,
+          "sourceText": "<span style=\"width:52px;height:52px;background:{{ tint }};color:{{ accent }};display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px\">{{ screenIcon }}</span>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-title",
+          "label": "Per-screen h1",
+          "canvasLine": 62,
+          "sourceText": "<h1 style=\"margin:0;font-size:26px;font-weight:800;letter-spacing:-.025em;color:{{ ink }};line-height:1.15\">{{ title }}</h1>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-description",
+          "label": "Per-screen description",
+          "canvasLine": 63,
+          "sourceText": "<p style=\"margin:10px 0 24px;font-size:14px;line-height:1.55;color:{{ inkMuted }}\">{{ description }}</p>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "desktop-brand-panel",
+          "label": "Blue desktop brand panel",
+          "canvasLine": 280,
+          "sourceText": "<div style=\"order:1;background:{{ headerBg }};padding:clamp(40px,4vw,64px);display:flex;flex-direction:column;color:#fff\">",
+          "applicability": "both hosts; desktop",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "desktop-white-logo",
+          "label": "Desktop white brand logo",
+          "canvasLine": 281,
+          "sourceText": "<img src=\"assets/ds-logo-white.svg\" alt=\"\" style=\"height:40px;align-self:flex-start;display:block\">",
+          "applicability": "both hosts; desktop",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-eyebrow",
+          "label": "Host-specific brand eyebrow",
+          "canvasLine": 292,
+          "sourceText": "<div style=\"font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD\">{{ brandEyebrow }}</div>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-headline",
+          "label": "Host-specific brand headline",
+          "canvasLine": 293,
+          "sourceText": "<h2 style=\"margin:0;font-size:clamp(30px,3.4vw,46px);line-height:1.05;font-weight:800;letter-spacing:-.035em;color:#fff;max-width:16ch\">{{ brandHeadline }}</h2>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-subcopy",
+          "label": "Host-specific brand subcopy",
+          "canvasLine": 294,
+          "sourceText": "<p style=\"margin:0;font-size:17px;line-height:1.55;color:#D3E8FD;max-width:38ch\">{{ brandSubcopy }}</p>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-footer",
+          "label": "Host-specific brand footer",
+          "canvasLine": 297,
+          "sourceText": "<div style=\"font-size:13px;font-weight:600;color:rgba(255,255,255,.85)\">{{ brandFooter }}</div>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "captcha-disclosure",
+          "label": "Yandex SmartCaptcha disclosure and policy link",
+          "canvasLine": 274,
+          "sourceText": "<p style=\"margin:14px 0 0;width:100%;max-width:440px;font-size:12px;line-height:1.5;color:{{ inkFaint }}\">Форма защищена Yandex SmartCaptcha. <a href=\"#\" style=\"color:{{ linkColor }};font-weight:700\">Условия обработки данных.</a></p>",
+          "applicability": "canvas draws it; actual local bot-protection-OFF environment may omit it; disclose real applicability",
+          "interaction": "link render/source comparison; no fake widget or provider challenge claim",
+          "finalComparison": "ENVIRONMENT APPLICABILITY: canvas disclosure inventoried; local bot-protection OFF omits it in baseline and final. No delta or production/provider-challenge acceptance claimed"
+        },
+        {
+          "id": "login-method-kicker",
+          "label": "Способ входа label",
+          "canvasLine": 92,
+          "sourceText": "<div style=\"font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:8px\">Способ входа</div>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "login-method-frame",
+          "label": "Password/OTP segmented frame",
+          "canvasLine": 93,
+          "sourceText": "<div style=\"display:grid;grid-template-columns:1fr 1fr;border:2px solid {{ border }};margin-bottom:22px\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "login-password-tab",
+          "label": "Пароль method button",
+          "canvasLine": 94,
+          "sourceText": "<button onClick=\"{{ tabPw }}\" data-tab=\"{{ tabPwOn }}\" style=\"{{ tabPwStyle }}\">Пароль</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "password method selected; no new OTP journey claim",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "login-otp-tab",
+          "label": "По коду method button",
+          "canvasLine": 95,
+          "sourceText": "<button onClick=\"{{ tabOtp }}\" data-tab=\"{{ tabOtpOn }}\" style=\"{{ tabOtpStyle }}\">По коду</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "offered inactive method; this PasswordField scope does not submit OTP",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "login-identifier-label",
+          "label": "Identifier label",
+          "canvasLine": 102,
+          "sourceText": "<label style=\"{{ fLoginId.labelStyle }}\">{{ fLoginId.label }}</label>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "login-identifier-input",
+          "label": "Identifier input/placeholder",
+          "canvasLine": 103,
+          "sourceText": "<input type=\"text\" value=\"{{ fLoginId.value }}\" onChange=\"{{ fLoginId.onChange }}\" onBlur=\"{{ fLoginId.onBlur }}\" placeholder=\"{{ fLoginId.placeholder }}\" style=\"{{ fLoginId.inputStyle }}\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "login-identifier-error",
+          "label": "Identifier error slot",
+          "canvasLine": 104,
+          "sourceText": "<div style=\"{{ fLoginId.errStyle }}\">⚠ {{ fLoginId.error }}</div>",
+          "applicability": "conditional actual validation; not forced for caret proof",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "N/A in selected captured mode: source condition inactive; no manufactured interaction/error claim"
+        },
+        {
+          "id": "login-password-label",
+          "label": "Current-password label",
+          "canvasLine": 107,
+          "sourceText": "<label style=\"{{ fLoginPw.labelStyle }}\">{{ fLoginPw.label }}</label>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH label copy,12px/700 and neutral tone; baseline→final geometry unchanged. MISMATCH inherited label-to-input gap10px versus canvas mkField margin7px; canonical researched FormItem gap2.5 retained under existing DS/literal rule"
+        },
+        {
+          "id": "login-password-wrapper",
+          "label": "Current-password relative control wrapper",
+          "canvasLine": 108,
+          "sourceText": "<div style=\"position:relative\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH canonical existing DS wrapper/gutter and baseline→final geometry/style; exact canvas-literal gap/style applicability disclosed separately, no global pixel-equality claim"
+        },
+        {
+          "id": "login-password-input",
+          "label": "Current-password input with 96px right gutter",
+          "canvasLine": 109,
+          "sourceText": "<input type=\"{{ pwType }}\" value=\"{{ fLoginPw.value }}\" onChange=\"{{ fLoginPw.onChange }}\" onBlur=\"{{ fLoginPw.onBlur }}\" style=\"{{ fLoginPw.inputStyle }};padding-right:96px\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "masked/rest, public value, focus/caret, reveal/remask, keyboard range",
+          "finalComparison": "MATCH measured existing DS resting contract and baseline→final resting copy/geometry/style; real field states passed in every profile. Immediate invalid-borderColor differences are explicitly disclosed; no hidden style approval claimed"
+        },
+        {
+          "id": "login-password-reveal",
+          "label": "Current-password show/hide button",
+          "canvasLine": 110,
+          "sourceText": "<button onClick=\"{{ togglePw }}\" type=\"button\" aria-label=\"{{ pwToggleAria }}\" data-link style=\"text-underline-offset:4px;position:absolute;top:0;right:0;height:100%;padding:0 14px;background:transparent;border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:800;color:{{ linkColor }}\">{{ pwToggle }}</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "hover, real pointer-down, pointer reveal/remask, Tab ring, Space/Enter, aria state/name/controls",
+          "finalComparison": "MISMATCH inherited canvas offset4px vs actualauto and pressopacity.8 vs actual1; MATCH localized state/name/controls, hover underline and keyboard ring; MATCH EARS-38 real pointer caret4→4/value/focus and keyboard2–7"
+        },
+        {
+          "id": "login-password-error",
+          "label": "Current-password error/no creation helper",
+          "canvasLine": 112,
+          "sourceText": "<div style=\"{{ fLoginPw.errStyle }}\">⚠ {{ fLoginPw.error }}</div>",
+          "applicability": "required empty-current-password blur; no length rule invented",
+          "interaction": "actual single role=alert slot driven",
+          "finalComparison": "MATCH actual single role=alert slot, error copy/label/message geometry and semantics; input computed-borderColor differs in16 immediate-blur snapshots (only scalar difference), stable endpoint not separately observed; separate narrow A registration/reset desktop diagnostic observes natural settled token in8/8,59/A declared CSS/token identity equal; original16 differences retained"
+        },
+        {
+          "id": "login-submit",
+          "label": "Войти primary submit",
+          "canvasLine": 114,
+          "sourceText": "<button onClick=\"{{ submit }}\" data-btn=\"primary\" aria-busy=\"{{ primaryBusyAttr }}\" style=\"{{ primaryBtn }}\">{{ loginBtnLabel }}</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "render only; deliberately never submit any credential",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "login-create-account",
+          "label": "Создать аккаунт link",
+          "canvasLine": 146,
+          "sourceText": "<button onClick=\"{{ goRegister }}\" data-link style=\"{{ linkBtn }}\">Создать аккаунт</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "real navigation driven to registration in separate fresh contexts",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "login-forgot-password",
+          "label": "Забыли пароль? link",
+          "canvasLine": 147,
+          "sourceText": "<button onClick=\"{{ goReset }}\" data-link style=\"{{ linkBtn }}\">Забыли пароль?</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "real navigation driven to reset request, then real neutral reset prerequisite",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        }
+      ],
+      "finalComparison": "Actual final images inspected in four profiles; field metrics have zero baseline→final deltas; see element-level extent/mismatches"
+    },
+    {
+      "host": "academy",
+      "surface": "reset-complete",
+      "profiles": [
+        "desktop-light",
+        "desktop-dark",
+        "mobile-light",
+        "mobile-dark"
+      ],
+      "inventory": [
+        {
+          "id": "page-background",
+          "label": "Page background / responsive split grid",
+          "canvasLine": 12,
+          "sourceText": "<div style=\"--tint:{{ tint }};--tint-fg:{{ tintFg }};--btn-hover:{{ btnHover }};--border:{{ border }};--primary:{{ accent }};--elev:{{ shadowSm }};min-height:100vh;background:{{ page }};display:flex;flex-direction:column\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "form-column",
+          "label": "Form column order/padding/sizing",
+          "canvasLine": 38,
+          "sourceText": "<div style=\"order:2;display:flex;flex-direction:column;padding:clamp(24px,4vw,48px) clamp(16px,4vw,40px);background:{{ page }};min-width:0\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "mobile-logo-light",
+          "label": "Mobile colour logo",
+          "canvasLine": 39,
+          "sourceText": "<sc-if value=\"{{ showFormLogoLight }}\" hint-placeholder-val=\"{{ false }}\"><img src=\"assets/ds-logo-color.svg\" alt=\"Doctor.School\" style=\"height:30px;align-self:flex-start;display:block\"></sc-if>",
+          "applicability": "both hosts; mobile/light",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "mobile-logo-dark",
+          "label": "Mobile white logo",
+          "canvasLine": 40,
+          "sourceText": "<sc-if value=\"{{ showFormLogoDark }}\" hint-placeholder-val=\"{{ false }}\"><img src=\"assets/ds-logo-white.svg\" alt=\"Doctor.School\" style=\"height:30px;align-self:flex-start;display:block\"></sc-if>",
+          "applicability": "both hosts; mobile/dark",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-frame",
+          "label": "Auth card frame/border/shadow/inset",
+          "canvasLine": 52,
+          "sourceText": "<div style=\"width:100%;max-width:440px;background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(24px,4vw,36px);box-sizing:border-box\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-icon",
+          "label": "Per-screen icon plate",
+          "canvasLine": 61,
+          "sourceText": "<span style=\"width:52px;height:52px;background:{{ tint }};color:{{ accent }};display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px\">{{ screenIcon }}</span>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-title",
+          "label": "Per-screen h1",
+          "canvasLine": 62,
+          "sourceText": "<h1 style=\"margin:0;font-size:26px;font-weight:800;letter-spacing:-.025em;color:{{ ink }};line-height:1.15\">{{ title }}</h1>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-description",
+          "label": "Per-screen description",
+          "canvasLine": 63,
+          "sourceText": "<p style=\"margin:10px 0 24px;font-size:14px;line-height:1.55;color:{{ inkMuted }}\">{{ description }}</p>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "desktop-brand-panel",
+          "label": "Blue desktop brand panel",
+          "canvasLine": 280,
+          "sourceText": "<div style=\"order:1;background:{{ headerBg }};padding:clamp(40px,4vw,64px);display:flex;flex-direction:column;color:#fff\">",
+          "applicability": "both hosts; desktop",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "desktop-white-logo",
+          "label": "Desktop white brand logo",
+          "canvasLine": 281,
+          "sourceText": "<img src=\"assets/ds-logo-white.svg\" alt=\"\" style=\"height:40px;align-self:flex-start;display:block\">",
+          "applicability": "both hosts; desktop",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-eyebrow",
+          "label": "Host-specific brand eyebrow",
+          "canvasLine": 292,
+          "sourceText": "<div style=\"font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD\">{{ brandEyebrow }}</div>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-headline",
+          "label": "Host-specific brand headline",
+          "canvasLine": 293,
+          "sourceText": "<h2 style=\"margin:0;font-size:clamp(30px,3.4vw,46px);line-height:1.05;font-weight:800;letter-spacing:-.035em;color:#fff;max-width:16ch\">{{ brandHeadline }}</h2>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-subcopy",
+          "label": "Host-specific brand subcopy",
+          "canvasLine": 294,
+          "sourceText": "<p style=\"margin:0;font-size:17px;line-height:1.55;color:#D3E8FD;max-width:38ch\">{{ brandSubcopy }}</p>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-footer",
+          "label": "Host-specific brand footer",
+          "canvasLine": 297,
+          "sourceText": "<div style=\"font-size:13px;font-weight:600;color:rgba(255,255,255,.85)\">{{ brandFooter }}</div>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "captcha-disclosure",
+          "label": "Yandex SmartCaptcha disclosure and policy link",
+          "canvasLine": 274,
+          "sourceText": "<p style=\"margin:14px 0 0;width:100%;max-width:440px;font-size:12px;line-height:1.5;color:{{ inkFaint }}\">Форма защищена Yandex SmartCaptcha. <a href=\"#\" style=\"color:{{ linkColor }};font-weight:700\">Условия обработки данных.</a></p>",
+          "applicability": "canvas draws it; actual local bot-protection-OFF environment may omit it; disclose real applicability",
+          "interaction": "link render/source comparison; no fake widget or provider challenge claim",
+          "finalComparison": "ENVIRONMENT APPLICABILITY: canvas disclosure inventoried; local bot-protection OFF omits it in baseline and final. No delta or production/provider-challenge acceptance claimed"
+        },
+        {
+          "id": "reset-no-sms-link",
+          "label": "Не пришло SMS? e-mail fallback",
+          "canvasLine": 240,
+          "sourceText": "<button onClick=\"{{ resetViaEmail }}\" data-link style=\"{{ linkBtn }};align-self:flex-start;padding:0;margin-top:-10px;text-align:left\">Не пришло SMS? Сбросьте пароль по e-mail</button>",
+          "applicability": "phone reset only; inactive in unique-email capture mode",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "N/A in selected captured mode: source condition inactive; no manufactured interaction/error claim"
+        },
+        {
+          "id": "reset-code-label",
+          "label": "Код из сообщения label",
+          "canvasLine": 243,
+          "sourceText": "<label style=\"display:block;font-size:12px;font-weight:700;color:{{ ink }};margin-bottom:10px\">Код из сообщения</label>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "reset-code-cells",
+          "label": "Six code cells",
+          "canvasLine": 245,
+          "sourceText": "<sc-for list=\"{{ codeSlots }}\" as=\"c\" hint-placeholder-count=\"6\"><input id=\"{{ c.id }}\" maxlength=\"1\" inputmode=\"numeric\" pattern=\"[0-9]*\" autocapitalize=\"off\" autocorrect=\"off\" spellcheck=\"false\" autocomplete=\"one-time-code\" value=\"{{ c.value }}\" onChange=\"{{ c.onChange }}\" onKeyDown=\"{{ c.onKeyDown }}\" onPaste=\"{{ c.onPaste }}\" style=\"{{ c.style }}\"></sc-for>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "real mounted empty code step; no code obtained/entered/submitted",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "reset-code-helper",
+          "label": "Code lifetime helper",
+          "canvasLine": 247,
+          "sourceText": "<div style=\"font-size:12px;font-weight:600;color:{{ inkFaint }};margin-top:7px\">{{ resetCodeHint }}</div>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "reset-password-label",
+          "label": "Новый пароль label",
+          "canvasLine": 250,
+          "sourceText": "<label style=\"{{ fResetPw.labelStyle }}\">{{ fResetPw.label }}</label>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH label copy,12px/700 and neutral tone; baseline→final geometry unchanged. MISMATCH inherited label-to-input gap10px versus canvas mkField margin7px; canonical researched FormItem gap2.5 retained under existing DS/literal rule"
+        },
+        {
+          "id": "reset-password-wrapper",
+          "label": "Relative new-password control wrapper",
+          "canvasLine": 251,
+          "sourceText": "<div style=\"position:relative\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH canonical existing DS wrapper/gutter and baseline→final geometry/style; exact canvas-literal gap/style applicability disclosed separately, no global pixel-equality claim"
+        },
+        {
+          "id": "reset-password-input",
+          "label": "Reset new-password input with 96px gutter",
+          "canvasLine": 252,
+          "sourceText": "<input type=\"{{ pwType }}\" value=\"{{ fResetPw.value }}\" onChange=\"{{ fResetPw.onChange }}\" onBlur=\"{{ fResetPw.onBlur }}\" style=\"{{ fResetPw.inputStyle }};padding-right:96px\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "masked/rest, public value, focus/caret, reveal/remask, keyboard range",
+          "finalComparison": "MATCH measured existing DS resting contract and baseline→final resting copy/geometry/style; real field states passed in every profile. Immediate invalid-borderColor differences are explicitly disclosed; no hidden style approval claimed"
+        },
+        {
+          "id": "reset-password-reveal",
+          "label": "Reset show/hide button",
+          "canvasLine": 253,
+          "sourceText": "<button onClick=\"{{ togglePw }}\" type=\"button\" aria-label=\"{{ pwToggleAria }}\" data-link style=\"text-underline-offset:4px;position:absolute;top:0;right:0;height:100%;padding:0 14px;background:transparent;border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:800;color:{{ linkColor }}\">{{ pwToggle }}</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "following concrete source button at line253; hover/down/Tab/Space/Enter/state semantics",
+          "finalComparison": "MISMATCH inherited canvas offset4px vs actualauto and pressopacity.8 vs actual1; MATCH localized state/name/controls, hover underline and keyboard ring; MATCH EARS-38 real pointer caret4→4/value/focus and keyboard2–7"
+        },
+        {
+          "id": "reset-password-helper",
+          "label": "Minimum-length helper",
+          "canvasLine": 255,
+          "sourceText": "<div style=\"{{ fResetPwHint }}\">Не менее 8 символов.</div>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH measured existing DS resting contract and baseline→final resting copy/geometry/style; real field states passed in every profile. Immediate invalid-borderColor differences are explicitly disclosed; no hidden style approval claimed"
+        },
+        {
+          "id": "reset-password-error",
+          "label": "Shared password error slot",
+          "canvasLine": 256,
+          "sourceText": "<div style=\"{{ fResetPw.errStyle }}\">⚠ {{ fResetPw.error }}</div>",
+          "applicability": "actual short-creation-password blur",
+          "interaction": "one slot helper↔error swap; no submit",
+          "finalComparison": "MATCH actual single role=alert slot, error copy/label/message geometry and semantics; input computed-borderColor differs in16 immediate-blur snapshots (only scalar difference), stable endpoint not separately observed; separate narrow A registration/reset desktop diagnostic observes natural settled token in8/8,59/A declared CSS/token identity equal; original16 differences retained"
+        },
+        {
+          "id": "reset-submit",
+          "label": "Задать новый пароль primary submit",
+          "canvasLine": 258,
+          "sourceText": "<button onClick=\"{{ submit }}\" data-btn=\"primary\" aria-busy=\"{{ primaryBusyAttr }}\" style=\"{{ primaryBtn }}\">{{ resetPwBtnLabel }}</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "render only; never complete reset or authenticate",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "reset-restart",
+          "label": "Начать заново ghost control",
+          "canvasLine": 260,
+          "sourceText": "<button onClick=\"{{ resetRestart }}\" data-ghost style=\"--tint:{{ tint }};--tint-fg:{{ tintFg }};font:inherit;font-size:13px;font-weight:700;color:{{ ink }};background:transparent;border:0;cursor:pointer;padding:6px 8px;margin:-6px 0\">Начать заново</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "untouched render; no restart/resend reset side effect",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "reset-resend",
+          "label": "Отправить снова countdown control",
+          "canvasLine": 261,
+          "sourceText": "<button onClick=\"{{ resend }}\" data-link style=\"{{ resendStyle }}\">{{ resendLabel }}</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "real countdown-disabled state rendered; no resend command",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "reset-resend-note",
+          "label": "Enumeration-neutral resend note",
+          "canvasLine": 264,
+          "sourceText": "<p style=\"margin:0;font-size:12.5px;line-height:1.5;color:{{ inkMuted }}\">Если для <b style=\"overflow-wrap:anywhere\">{{ maskedDest }}</b> есть аккаунт, мы повторно отправили код.</p>",
+          "applicability": "notice=true conditional; inactive because no resend sent",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "N/A in selected captured mode: source condition inactive; no manufactured interaction/error claim"
+        },
+        {
+          "id": "reset-back-login",
+          "label": "Вернуться ко входу link",
+          "canvasLine": 269,
+          "sourceText": "<button onClick=\"{{ goLogin }}\" data-link style=\"{{ linkBtn }}\">← Вернуться ко входу</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "untouched link render only",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        }
+      ],
+      "finalComparison": "Actual final images inspected in four profiles; field metrics have zero baseline→final deltas; see element-level extent/mismatches"
+    },
+    {
+      "host": "doctor",
+      "surface": "registration",
+      "profiles": [
+        "desktop-light",
+        "desktop-dark",
+        "mobile-light",
+        "mobile-dark"
+      ],
+      "inventory": [
+        {
+          "id": "page-background",
+          "label": "Page background / responsive split grid",
+          "canvasLine": 12,
+          "sourceText": "<div style=\"--tint:{{ tint }};--tint-fg:{{ tintFg }};--btn-hover:{{ btnHover }};--border:{{ border }};--primary:{{ accent }};--elev:{{ shadowSm }};min-height:100vh;background:{{ page }};display:flex;flex-direction:column\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "form-column",
+          "label": "Form column order/padding/sizing",
+          "canvasLine": 38,
+          "sourceText": "<div style=\"order:2;display:flex;flex-direction:column;padding:clamp(24px,4vw,48px) clamp(16px,4vw,40px);background:{{ page }};min-width:0\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "mobile-logo-light",
+          "label": "Mobile colour logo",
+          "canvasLine": 39,
+          "sourceText": "<sc-if value=\"{{ showFormLogoLight }}\" hint-placeholder-val=\"{{ false }}\"><img src=\"assets/ds-logo-color.svg\" alt=\"Doctor.School\" style=\"height:30px;align-self:flex-start;display:block\"></sc-if>",
+          "applicability": "both hosts; mobile/light",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "mobile-logo-dark",
+          "label": "Mobile white logo",
+          "canvasLine": 40,
+          "sourceText": "<sc-if value=\"{{ showFormLogoDark }}\" hint-placeholder-val=\"{{ false }}\"><img src=\"assets/ds-logo-white.svg\" alt=\"Doctor.School\" style=\"height:30px;align-self:flex-start;display:block\"></sc-if>",
+          "applicability": "both hosts; mobile/dark",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-frame",
+          "label": "Auth card frame/border/shadow/inset",
+          "canvasLine": 52,
+          "sourceText": "<div style=\"width:100%;max-width:440px;background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(24px,4vw,36px);box-sizing:border-box\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-icon",
+          "label": "Per-screen icon plate",
+          "canvasLine": 61,
+          "sourceText": "<span style=\"width:52px;height:52px;background:{{ tint }};color:{{ accent }};display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px\">{{ screenIcon }}</span>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-title",
+          "label": "Per-screen h1",
+          "canvasLine": 62,
+          "sourceText": "<h1 style=\"margin:0;font-size:26px;font-weight:800;letter-spacing:-.025em;color:{{ ink }};line-height:1.15\">{{ title }}</h1>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-description",
+          "label": "Per-screen description",
+          "canvasLine": 63,
+          "sourceText": "<p style=\"margin:10px 0 24px;font-size:14px;line-height:1.55;color:{{ inkMuted }}\">{{ description }}</p>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "desktop-brand-panel",
+          "label": "Blue desktop brand panel",
+          "canvasLine": 280,
+          "sourceText": "<div style=\"order:1;background:{{ headerBg }};padding:clamp(40px,4vw,64px);display:flex;flex-direction:column;color:#fff\">",
+          "applicability": "both hosts; desktop",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "desktop-white-logo",
+          "label": "Desktop white brand logo",
+          "canvasLine": 281,
+          "sourceText": "<img src=\"assets/ds-logo-white.svg\" alt=\"\" style=\"height:40px;align-self:flex-start;display:block\">",
+          "applicability": "both hosts; desktop",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-eyebrow",
+          "label": "Host-specific brand eyebrow",
+          "canvasLine": 292,
+          "sourceText": "<div style=\"font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD\">{{ brandEyebrow }}</div>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-headline",
+          "label": "Host-specific brand headline",
+          "canvasLine": 293,
+          "sourceText": "<h2 style=\"margin:0;font-size:clamp(30px,3.4vw,46px);line-height:1.05;font-weight:800;letter-spacing:-.035em;color:#fff;max-width:16ch\">{{ brandHeadline }}</h2>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-subcopy",
+          "label": "Host-specific brand subcopy",
+          "canvasLine": 294,
+          "sourceText": "<p style=\"margin:0;font-size:17px;line-height:1.55;color:#D3E8FD;max-width:38ch\">{{ brandSubcopy }}</p>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-footer",
+          "label": "Host-specific brand footer",
+          "canvasLine": 297,
+          "sourceText": "<div style=\"font-size:13px;font-weight:600;color:rgba(255,255,255,.85)\">{{ brandFooter }}</div>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "captcha-disclosure",
+          "label": "Yandex SmartCaptcha disclosure and policy link",
+          "canvasLine": 274,
+          "sourceText": "<p style=\"margin:14px 0 0;width:100%;max-width:440px;font-size:12px;line-height:1.5;color:{{ inkFaint }}\">Форма защищена Yandex SmartCaptcha. <a href=\"#\" style=\"color:{{ linkColor }};font-weight:700\">Условия обработки данных.</a></p>",
+          "applicability": "canvas draws it; actual local bot-protection-OFF environment may omit it; disclose real applicability",
+          "interaction": "link render/source comparison; no fake widget or provider challenge claim",
+          "finalComparison": "ENVIRONMENT APPLICABILITY: canvas disclosure inventoried; local bot-protection OFF omits it in baseline and final. No delta or production/provider-challenge acceptance claimed"
+        },
+        {
+          "id": "register-email-label",
+          "label": "Email label",
+          "canvasLine": 155,
+          "sourceText": "<label style=\"{{ fRegEmail.labelStyle }}\">{{ fRegEmail.label }}</label>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "register-email-input",
+          "label": "Email input/placeholder",
+          "canvasLine": 156,
+          "sourceText": "<input type=\"email\" value=\"{{ fRegEmail.value }}\" onChange=\"{{ fRegEmail.onChange }}\" onBlur=\"{{ fRegEmail.onBlur }}\" placeholder=\"{{ fRegEmail.placeholder }}\" style=\"{{ fRegEmail.inputStyle }}\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "register-email-error",
+          "label": "Email error slot",
+          "canvasLine": 157,
+          "sourceText": "<div style=\"{{ fRegEmail.errStyle }}\">⚠ {{ fRegEmail.error }}</div>",
+          "applicability": "conditional actual validation; not forced for caret proof",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "N/A in selected captured mode: source condition inactive; no manufactured interaction/error claim"
+        },
+        {
+          "id": "register-password-label",
+          "label": "New-password label",
+          "canvasLine": 160,
+          "sourceText": "<label style=\"{{ fRegPw.labelStyle }}\">{{ fRegPw.label }}</label>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH label copy,12px/700 and neutral tone; baseline→final geometry unchanged. MISMATCH inherited label-to-input gap10px versus canvas mkField margin7px; canonical researched FormItem gap2.5 retained under existing DS/literal rule"
+        },
+        {
+          "id": "register-password-wrapper",
+          "label": "Relative new-password control wrapper",
+          "canvasLine": 161,
+          "sourceText": "<div style=\"position:relative\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH canonical existing DS wrapper/gutter and baseline→final geometry/style; exact canvas-literal gap/style applicability disclosed separately, no global pixel-equality claim"
+        },
+        {
+          "id": "register-password-input",
+          "label": "New-password input with 96px right gutter",
+          "canvasLine": 162,
+          "sourceText": "<input type=\"{{ pwType }}\" value=\"{{ fRegPw.value }}\" onChange=\"{{ fRegPw.onChange }}\" onBlur=\"{{ fRegPw.onBlur }}\" style=\"{{ fRegPw.inputStyle }};padding-right:96px\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "masked/rest, public value, focus/caret, reveal/remask, keyboard range; selected real registration reload",
+          "finalComparison": "MATCH measured existing DS resting contract and baseline→final resting copy/geometry/style; real field states passed in every profile. Immediate invalid-borderColor differences are explicitly disclosed; no hidden style approval claimed"
+        },
+        {
+          "id": "register-password-reveal",
+          "label": "Registration show/hide button",
+          "canvasLine": 163,
+          "sourceText": "<button onClick=\"{{ togglePw }}\" type=\"button\" aria-label=\"{{ pwToggleAria }}\" data-link style=\"text-underline-offset:4px;position:absolute;top:0;right:0;height:100%;padding:0 14px;background:transparent;border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:800;color:{{ linkColor }}\">{{ pwToggle }}</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "following source button at line163; hover/down/Tab/Space/Enter/state semantics",
+          "finalComparison": "MISMATCH inherited canvas offset4px vs actualauto and pressopacity.8 vs actual1; MATCH localized state/name/controls, hover underline and keyboard ring; MATCH EARS-38 real pointer caret4→4/value/focus and keyboard2–7"
+        },
+        {
+          "id": "register-password-helper",
+          "label": "Minimum-length helper",
+          "canvasLine": 165,
+          "sourceText": "<div style=\"{{ fRegPwHint }}\">Не менее 8 символов.</div>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH measured existing DS resting contract and baseline→final resting copy/geometry/style; real field states passed in every profile. Immediate invalid-borderColor differences are explicitly disclosed; no hidden style approval claimed"
+        },
+        {
+          "id": "register-password-error",
+          "label": "Shared password error slot",
+          "canvasLine": 166,
+          "sourceText": "<div style=\"{{ fRegPw.errStyle }}\">⚠ {{ fRegPw.error }}</div>",
+          "applicability": "actual short-creation-password blur",
+          "interaction": "one slot helper↔error swap; no submit",
+          "finalComparison": "MATCH actual single role=alert slot, error copy/label/message geometry and semantics; input computed-borderColor differs in16 immediate-blur snapshots (only scalar difference), stable endpoint not separately observed; separate narrow A registration/reset desktop diagnostic observes natural settled token in8/8,59/A declared CSS/token identity equal; original16 differences retained"
+        },
+        {
+          "id": "doctor-promo-label",
+          "label": "Промокод — если есть label",
+          "canvasLine": 172,
+          "sourceText": "<label style=\"{{ fPromo.labelStyle }}\">{{ fPromo.label }}</label>",
+          "applicability": "Doctor only",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "doctor-promo-input",
+          "label": "Optional promo input",
+          "canvasLine": 173,
+          "sourceText": "<input type=\"text\" value=\"{{ fPromo.value }}\" onChange=\"{{ fPromo.onChange }}\" onBlur=\"{{ fPromo.onBlur }}\" placeholder=\"{{ fPromo.placeholder }}\" style=\"{{ fPromo.inputStyle }}\">",
+          "applicability": "Doctor only",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "doctor-partner-link-note",
+          "label": "Partner-link promo note",
+          "canvasLine": 175,
+          "sourceText": "<div style=\"display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12px;font-weight:700;color:{{ tintFg }};background:{{ tint }};padding:8px 10px\">Регистрация по ссылке партнёра — промокод подставлен автоматически.</div>",
+          "applicability": "Doctor only; partnerLink=true conditional, inactive in selected capture mode",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "N/A in selected captured mode: source condition inactive; no manufactured interaction/error claim"
+        },
+        {
+          "id": "doctor-access-frame",
+          "label": "Access conditions frame/kicker",
+          "canvasLine": 183,
+          "sourceText": "<div style=\"font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}\">Условия доступа</div>",
+          "applicability": "Doctor only",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "doctor-med-check",
+          "label": "Medical-worker declaration control",
+          "canvasLine": 185,
+          "sourceText": "<button onClick=\"{{ cbMed.onClick }}\" aria-pressed=\"{{ cbMed.on }}\" data-check style=\"{{ cbMed.boxStyle }}\">{{ cbMed.mark }}</button>",
+          "applicability": "Doctor only",
+          "interaction": "untouched resting render only; no registration submit",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "doctor-med-label",
+          "label": "Medical-worker declaration text",
+          "canvasLine": 187,
+          "sourceText": "<div style=\"font-size:13.5px;font-weight:700;color:{{ ink }};line-height:1.4\">Я являюсь медицинским работником</div>",
+          "applicability": "Doctor only",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "doctor-med-helper",
+          "label": "Medical-worker statutory helper",
+          "canvasLine": 188,
+          "sourceText": "<div style=\"font-size:12px;line-height:1.5;color:{{ inkFaint }};margin-top:4px\">Требование закона: часть материалов доступна только медицинским работникам.</div>",
+          "applicability": "Doctor only",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "doctor-med-error",
+          "label": "Medical-worker missing-declaration error",
+          "canvasLine": 189,
+          "sourceText": "<div style=\"{{ cbMed.errStyle }}\">⚠ Отметьте, что вы медицинский работник — без этого регистрация невозможна.</div>",
+          "applicability": "Doctor only; submit-dependent inactive state, no fabricated error",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "N/A in selected captured mode: source condition inactive; no manufactured interaction/error claim"
+        },
+        {
+          "id": "doctor-partner-check",
+          "label": "Partner-consent control",
+          "canvasLine": 193,
+          "sourceText": "<button onClick=\"{{ cbPartner.onClick }}\" aria-pressed=\"{{ cbPartner.on }}\" data-check style=\"{{ cbPartner.boxStyle }}\">{{ cbPartner.mark }}</button>",
+          "applicability": "Doctor only",
+          "interaction": "untouched resting render only; no registration submit",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "doctor-partner-label",
+          "label": "Partner-consent text",
+          "canvasLine": 195,
+          "sourceText": "<div style=\"font-size:13.5px;font-weight:700;color:{{ ink }};line-height:1.4\">Согласие на передачу данных партнёрам платформы</div>",
+          "applicability": "Doctor only",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "doctor-partner-helper",
+          "label": "Partner-consent helper",
+          "canvasLine": 196,
+          "sourceText": "<div style=\"font-size:12px;line-height:1.5;color:{{ inkFaint }};margin-top:4px\">Это условие бесплатного для врача обучения: без согласия часть материалов недоступна.</div>",
+          "applicability": "Doctor only",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "doctor-partner-error",
+          "label": "Partner-consent required error",
+          "canvasLine": 197,
+          "sourceText": "<div style=\"{{ cbPartner.errStyle }}\">⚠ Отметьте согласие на передачу данных партнёрам — без него регистрация невозможна.</div>",
+          "applicability": "Doctor only; submit-dependent inactive state, no fabricated error",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "N/A in selected captured mode: source condition inactive; no manufactured interaction/error claim"
+        },
+        {
+          "id": "register-terms",
+          "label": "Terms/privacy consent paragraph",
+          "canvasLine": 203,
+          "sourceText": "<p style=\"margin:0;font-size:12px;line-height:1.55;color:{{ inkFaint }}\">Продолжая, вы соглашаетесь с условиями использования и политикой конфиденциальности.</p>",
+          "applicability": "both hosts; Academy has this flat paragraph, not an invented checkbox",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "register-submit",
+          "label": "Создать аккаунт primary submit",
+          "canvasLine": 204,
+          "sourceText": "<button onClick=\"{{ submit }}\" data-btn=\"primary\" aria-busy=\"{{ primaryBusyAttr }}\" style=\"{{ primaryBtn }}\">{{ regBtnLabel }}</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "render only; never register or authenticate",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "doctor-mailing-check",
+          "label": "Optional mailing control",
+          "canvasLine": 209,
+          "sourceText": "<button onClick=\"{{ cbMail.onClick }}\" aria-pressed=\"{{ cbMail.on }}\" data-check style=\"{{ cbMail.boxStyle }}\">{{ cbMail.mark }}</button>",
+          "applicability": "Doctor only",
+          "interaction": "untouched resting render only",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "doctor-mailing-label",
+          "label": "Optional mailing label",
+          "canvasLine": 211,
+          "sourceText": "<div style=\"font-size:13.5px;font-weight:700;color:{{ ink }};line-height:1.4\">Полезные письма о новых эфирах</div>",
+          "applicability": "Doctor only",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "doctor-mailing-helper",
+          "label": "Optional mailing helper",
+          "canvasLine": 212,
+          "sourceText": "<div style=\"font-size:12px;line-height:1.5;color:{{ inkFaint }};margin-top:4px\">И другие уведомления о релевантных для Вас событиях. Отписаться можно в любой момент.</div>",
+          "applicability": "Doctor only",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "register-existing-account",
+          "label": "Уже есть аккаунт? Войти link",
+          "canvasLine": 218,
+          "sourceText": "<button onClick=\"{{ goLogin }}\" data-link style=\"{{ linkBtn }}\">Уже есть аккаунт? Войти</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "untouched link render; selected reload proves reveal resets",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        }
+      ],
+      "finalComparison": "Actual final images inspected in four profiles; field metrics have zero baseline→final deltas; see element-level extent/mismatches"
+    },
+    {
+      "host": "doctor",
+      "surface": "password-login",
+      "profiles": [
+        "desktop-light",
+        "desktop-dark",
+        "mobile-light",
+        "mobile-dark"
+      ],
+      "inventory": [
+        {
+          "id": "page-background",
+          "label": "Page background / responsive split grid",
+          "canvasLine": 12,
+          "sourceText": "<div style=\"--tint:{{ tint }};--tint-fg:{{ tintFg }};--btn-hover:{{ btnHover }};--border:{{ border }};--primary:{{ accent }};--elev:{{ shadowSm }};min-height:100vh;background:{{ page }};display:flex;flex-direction:column\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "form-column",
+          "label": "Form column order/padding/sizing",
+          "canvasLine": 38,
+          "sourceText": "<div style=\"order:2;display:flex;flex-direction:column;padding:clamp(24px,4vw,48px) clamp(16px,4vw,40px);background:{{ page }};min-width:0\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "mobile-logo-light",
+          "label": "Mobile colour logo",
+          "canvasLine": 39,
+          "sourceText": "<sc-if value=\"{{ showFormLogoLight }}\" hint-placeholder-val=\"{{ false }}\"><img src=\"assets/ds-logo-color.svg\" alt=\"Doctor.School\" style=\"height:30px;align-self:flex-start;display:block\"></sc-if>",
+          "applicability": "both hosts; mobile/light",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "mobile-logo-dark",
+          "label": "Mobile white logo",
+          "canvasLine": 40,
+          "sourceText": "<sc-if value=\"{{ showFormLogoDark }}\" hint-placeholder-val=\"{{ false }}\"><img src=\"assets/ds-logo-white.svg\" alt=\"Doctor.School\" style=\"height:30px;align-self:flex-start;display:block\"></sc-if>",
+          "applicability": "both hosts; mobile/dark",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-frame",
+          "label": "Auth card frame/border/shadow/inset",
+          "canvasLine": 52,
+          "sourceText": "<div style=\"width:100%;max-width:440px;background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(24px,4vw,36px);box-sizing:border-box\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-icon",
+          "label": "Per-screen icon plate",
+          "canvasLine": 61,
+          "sourceText": "<span style=\"width:52px;height:52px;background:{{ tint }};color:{{ accent }};display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px\">{{ screenIcon }}</span>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-title",
+          "label": "Per-screen h1",
+          "canvasLine": 62,
+          "sourceText": "<h1 style=\"margin:0;font-size:26px;font-weight:800;letter-spacing:-.025em;color:{{ ink }};line-height:1.15\">{{ title }}</h1>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-description",
+          "label": "Per-screen description",
+          "canvasLine": 63,
+          "sourceText": "<p style=\"margin:10px 0 24px;font-size:14px;line-height:1.55;color:{{ inkMuted }}\">{{ description }}</p>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "desktop-brand-panel",
+          "label": "Blue desktop brand panel",
+          "canvasLine": 280,
+          "sourceText": "<div style=\"order:1;background:{{ headerBg }};padding:clamp(40px,4vw,64px);display:flex;flex-direction:column;color:#fff\">",
+          "applicability": "both hosts; desktop",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "desktop-white-logo",
+          "label": "Desktop white brand logo",
+          "canvasLine": 281,
+          "sourceText": "<img src=\"assets/ds-logo-white.svg\" alt=\"\" style=\"height:40px;align-self:flex-start;display:block\">",
+          "applicability": "both hosts; desktop",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-eyebrow",
+          "label": "Host-specific brand eyebrow",
+          "canvasLine": 292,
+          "sourceText": "<div style=\"font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD\">{{ brandEyebrow }}</div>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-headline",
+          "label": "Host-specific brand headline",
+          "canvasLine": 293,
+          "sourceText": "<h2 style=\"margin:0;font-size:clamp(30px,3.4vw,46px);line-height:1.05;font-weight:800;letter-spacing:-.035em;color:#fff;max-width:16ch\">{{ brandHeadline }}</h2>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-subcopy",
+          "label": "Host-specific brand subcopy",
+          "canvasLine": 294,
+          "sourceText": "<p style=\"margin:0;font-size:17px;line-height:1.55;color:#D3E8FD;max-width:38ch\">{{ brandSubcopy }}</p>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-footer",
+          "label": "Host-specific brand footer",
+          "canvasLine": 297,
+          "sourceText": "<div style=\"font-size:13px;font-weight:600;color:rgba(255,255,255,.85)\">{{ brandFooter }}</div>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "captcha-disclosure",
+          "label": "Yandex SmartCaptcha disclosure and policy link",
+          "canvasLine": 274,
+          "sourceText": "<p style=\"margin:14px 0 0;width:100%;max-width:440px;font-size:12px;line-height:1.5;color:{{ inkFaint }}\">Форма защищена Yandex SmartCaptcha. <a href=\"#\" style=\"color:{{ linkColor }};font-weight:700\">Условия обработки данных.</a></p>",
+          "applicability": "canvas draws it; actual local bot-protection-OFF environment may omit it; disclose real applicability",
+          "interaction": "link render/source comparison; no fake widget or provider challenge claim",
+          "finalComparison": "ENVIRONMENT APPLICABILITY: canvas disclosure inventoried; local bot-protection OFF omits it in baseline and final. No delta or production/provider-challenge acceptance claimed"
+        },
+        {
+          "id": "login-method-kicker",
+          "label": "Способ входа label",
+          "canvasLine": 92,
+          "sourceText": "<div style=\"font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:8px\">Способ входа</div>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "login-method-frame",
+          "label": "Password/OTP segmented frame",
+          "canvasLine": 93,
+          "sourceText": "<div style=\"display:grid;grid-template-columns:1fr 1fr;border:2px solid {{ border }};margin-bottom:22px\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "login-password-tab",
+          "label": "Пароль method button",
+          "canvasLine": 94,
+          "sourceText": "<button onClick=\"{{ tabPw }}\" data-tab=\"{{ tabPwOn }}\" style=\"{{ tabPwStyle }}\">Пароль</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "password method selected; no new OTP journey claim",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "login-otp-tab",
+          "label": "По коду method button",
+          "canvasLine": 95,
+          "sourceText": "<button onClick=\"{{ tabOtp }}\" data-tab=\"{{ tabOtpOn }}\" style=\"{{ tabOtpStyle }}\">По коду</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "offered inactive method; this PasswordField scope does not submit OTP",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "login-identifier-label",
+          "label": "Identifier label",
+          "canvasLine": 102,
+          "sourceText": "<label style=\"{{ fLoginId.labelStyle }}\">{{ fLoginId.label }}</label>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "login-identifier-input",
+          "label": "Identifier input/placeholder",
+          "canvasLine": 103,
+          "sourceText": "<input type=\"text\" value=\"{{ fLoginId.value }}\" onChange=\"{{ fLoginId.onChange }}\" onBlur=\"{{ fLoginId.onBlur }}\" placeholder=\"{{ fLoginId.placeholder }}\" style=\"{{ fLoginId.inputStyle }}\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "login-identifier-error",
+          "label": "Identifier error slot",
+          "canvasLine": 104,
+          "sourceText": "<div style=\"{{ fLoginId.errStyle }}\">⚠ {{ fLoginId.error }}</div>",
+          "applicability": "conditional actual validation; not forced for caret proof",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "N/A in selected captured mode: source condition inactive; no manufactured interaction/error claim"
+        },
+        {
+          "id": "login-password-label",
+          "label": "Current-password label",
+          "canvasLine": 107,
+          "sourceText": "<label style=\"{{ fLoginPw.labelStyle }}\">{{ fLoginPw.label }}</label>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH label copy,12px/700 and neutral tone; baseline→final geometry unchanged. MISMATCH inherited label-to-input gap10px versus canvas mkField margin7px; canonical researched FormItem gap2.5 retained under existing DS/literal rule"
+        },
+        {
+          "id": "login-password-wrapper",
+          "label": "Current-password relative control wrapper",
+          "canvasLine": 108,
+          "sourceText": "<div style=\"position:relative\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH canonical existing DS wrapper/gutter and baseline→final geometry/style; exact canvas-literal gap/style applicability disclosed separately, no global pixel-equality claim"
+        },
+        {
+          "id": "login-password-input",
+          "label": "Current-password input with 96px right gutter",
+          "canvasLine": 109,
+          "sourceText": "<input type=\"{{ pwType }}\" value=\"{{ fLoginPw.value }}\" onChange=\"{{ fLoginPw.onChange }}\" onBlur=\"{{ fLoginPw.onBlur }}\" style=\"{{ fLoginPw.inputStyle }};padding-right:96px\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "masked/rest, public value, focus/caret, reveal/remask, keyboard range",
+          "finalComparison": "MATCH measured existing DS resting contract and baseline→final resting copy/geometry/style; real field states passed in every profile. Immediate invalid-borderColor differences are explicitly disclosed; no hidden style approval claimed"
+        },
+        {
+          "id": "login-password-reveal",
+          "label": "Current-password show/hide button",
+          "canvasLine": 110,
+          "sourceText": "<button onClick=\"{{ togglePw }}\" type=\"button\" aria-label=\"{{ pwToggleAria }}\" data-link style=\"text-underline-offset:4px;position:absolute;top:0;right:0;height:100%;padding:0 14px;background:transparent;border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:800;color:{{ linkColor }}\">{{ pwToggle }}</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "hover, real pointer-down, pointer reveal/remask, Tab ring, Space/Enter, aria state/name/controls",
+          "finalComparison": "MISMATCH inherited canvas offset4px vs actualauto and pressopacity.8 vs actual1; MATCH localized state/name/controls, hover underline and keyboard ring; MATCH EARS-38 real pointer caret4→4/value/focus and keyboard2–7"
+        },
+        {
+          "id": "login-password-error",
+          "label": "Current-password error/no creation helper",
+          "canvasLine": 112,
+          "sourceText": "<div style=\"{{ fLoginPw.errStyle }}\">⚠ {{ fLoginPw.error }}</div>",
+          "applicability": "required empty-current-password blur; no length rule invented",
+          "interaction": "actual single role=alert slot driven",
+          "finalComparison": "MATCH actual single role=alert slot, error copy/label/message geometry and semantics; input computed-borderColor differs in16 immediate-blur snapshots (only scalar difference), stable endpoint not separately observed; separate narrow A registration/reset desktop diagnostic observes natural settled token in8/8,59/A declared CSS/token identity equal; original16 differences retained"
+        },
+        {
+          "id": "login-submit",
+          "label": "Войти primary submit",
+          "canvasLine": 114,
+          "sourceText": "<button onClick=\"{{ submit }}\" data-btn=\"primary\" aria-busy=\"{{ primaryBusyAttr }}\" style=\"{{ primaryBtn }}\">{{ loginBtnLabel }}</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "render only; deliberately never submit any credential",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "login-create-account",
+          "label": "Создать аккаунт link",
+          "canvasLine": 146,
+          "sourceText": "<button onClick=\"{{ goRegister }}\" data-link style=\"{{ linkBtn }}\">Создать аккаунт</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "real navigation driven to registration in separate fresh contexts",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "login-forgot-password",
+          "label": "Забыли пароль? link",
+          "canvasLine": 147,
+          "sourceText": "<button onClick=\"{{ goReset }}\" data-link style=\"{{ linkBtn }}\">Забыли пароль?</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "real navigation driven to reset request, then real neutral reset prerequisite",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        }
+      ],
+      "finalComparison": "Actual final images inspected in four profiles; field metrics have zero baseline→final deltas; see element-level extent/mismatches"
+    },
+    {
+      "host": "doctor",
+      "surface": "reset-complete",
+      "profiles": [
+        "desktop-light",
+        "desktop-dark",
+        "mobile-light",
+        "mobile-dark"
+      ],
+      "inventory": [
+        {
+          "id": "page-background",
+          "label": "Page background / responsive split grid",
+          "canvasLine": 12,
+          "sourceText": "<div style=\"--tint:{{ tint }};--tint-fg:{{ tintFg }};--btn-hover:{{ btnHover }};--border:{{ border }};--primary:{{ accent }};--elev:{{ shadowSm }};min-height:100vh;background:{{ page }};display:flex;flex-direction:column\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "form-column",
+          "label": "Form column order/padding/sizing",
+          "canvasLine": 38,
+          "sourceText": "<div style=\"order:2;display:flex;flex-direction:column;padding:clamp(24px,4vw,48px) clamp(16px,4vw,40px);background:{{ page }};min-width:0\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "mobile-logo-light",
+          "label": "Mobile colour logo",
+          "canvasLine": 39,
+          "sourceText": "<sc-if value=\"{{ showFormLogoLight }}\" hint-placeholder-val=\"{{ false }}\"><img src=\"assets/ds-logo-color.svg\" alt=\"Doctor.School\" style=\"height:30px;align-self:flex-start;display:block\"></sc-if>",
+          "applicability": "both hosts; mobile/light",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "mobile-logo-dark",
+          "label": "Mobile white logo",
+          "canvasLine": 40,
+          "sourceText": "<sc-if value=\"{{ showFormLogoDark }}\" hint-placeholder-val=\"{{ false }}\"><img src=\"assets/ds-logo-white.svg\" alt=\"Doctor.School\" style=\"height:30px;align-self:flex-start;display:block\"></sc-if>",
+          "applicability": "both hosts; mobile/dark",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-frame",
+          "label": "Auth card frame/border/shadow/inset",
+          "canvasLine": 52,
+          "sourceText": "<div style=\"width:100%;max-width:440px;background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(24px,4vw,36px);box-sizing:border-box\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-icon",
+          "label": "Per-screen icon plate",
+          "canvasLine": 61,
+          "sourceText": "<span style=\"width:52px;height:52px;background:{{ tint }};color:{{ accent }};display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px\">{{ screenIcon }}</span>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-title",
+          "label": "Per-screen h1",
+          "canvasLine": 62,
+          "sourceText": "<h1 style=\"margin:0;font-size:26px;font-weight:800;letter-spacing:-.025em;color:{{ ink }};line-height:1.15\">{{ title }}</h1>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "card-description",
+          "label": "Per-screen description",
+          "canvasLine": 63,
+          "sourceText": "<p style=\"margin:10px 0 24px;font-size:14px;line-height:1.55;color:{{ inkMuted }}\">{{ description }}</p>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "desktop-brand-panel",
+          "label": "Blue desktop brand panel",
+          "canvasLine": 280,
+          "sourceText": "<div style=\"order:1;background:{{ headerBg }};padding:clamp(40px,4vw,64px);display:flex;flex-direction:column;color:#fff\">",
+          "applicability": "both hosts; desktop",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "desktop-white-logo",
+          "label": "Desktop white brand logo",
+          "canvasLine": 281,
+          "sourceText": "<img src=\"assets/ds-logo-white.svg\" alt=\"\" style=\"height:40px;align-self:flex-start;display:block\">",
+          "applicability": "both hosts; desktop",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-eyebrow",
+          "label": "Host-specific brand eyebrow",
+          "canvasLine": 292,
+          "sourceText": "<div style=\"font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD\">{{ brandEyebrow }}</div>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-headline",
+          "label": "Host-specific brand headline",
+          "canvasLine": 293,
+          "sourceText": "<h2 style=\"margin:0;font-size:clamp(30px,3.4vw,46px);line-height:1.05;font-weight:800;letter-spacing:-.035em;color:#fff;max-width:16ch\">{{ brandHeadline }}</h2>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-subcopy",
+          "label": "Host-specific brand subcopy",
+          "canvasLine": 294,
+          "sourceText": "<p style=\"margin:0;font-size:17px;line-height:1.55;color:#D3E8FD;max-width:38ch\">{{ brandSubcopy }}</p>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "brand-footer",
+          "label": "Host-specific brand footer",
+          "canvasLine": 297,
+          "sourceText": "<div style=\"font-size:13px;font-weight:600;color:rgba(255,255,255,.85)\">{{ brandFooter }}</div>",
+          "applicability": "desktop Academy/Doctor have distinct source copy",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "captcha-disclosure",
+          "label": "Yandex SmartCaptcha disclosure and policy link",
+          "canvasLine": 274,
+          "sourceText": "<p style=\"margin:14px 0 0;width:100%;max-width:440px;font-size:12px;line-height:1.5;color:{{ inkFaint }}\">Форма защищена Yandex SmartCaptcha. <a href=\"#\" style=\"color:{{ linkColor }};font-weight:700\">Условия обработки данных.</a></p>",
+          "applicability": "canvas draws it; actual local bot-protection-OFF environment may omit it; disclose real applicability",
+          "interaction": "link render/source comparison; no fake widget or provider challenge claim",
+          "finalComparison": "ENVIRONMENT APPLICABILITY: canvas disclosure inventoried; local bot-protection OFF omits it in baseline and final. No delta or production/provider-challenge acceptance claimed"
+        },
+        {
+          "id": "reset-no-sms-link",
+          "label": "Не пришло SMS? e-mail fallback",
+          "canvasLine": 240,
+          "sourceText": "<button onClick=\"{{ resetViaEmail }}\" data-link style=\"{{ linkBtn }};align-self:flex-start;padding:0;margin-top:-10px;text-align:left\">Не пришло SMS? Сбросьте пароль по e-mail</button>",
+          "applicability": "phone reset only; inactive in unique-email capture mode",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "N/A in selected captured mode: source condition inactive; no manufactured interaction/error claim"
+        },
+        {
+          "id": "reset-code-label",
+          "label": "Код из сообщения label",
+          "canvasLine": 243,
+          "sourceText": "<label style=\"display:block;font-size:12px;font-weight:700;color:{{ ink }};margin-bottom:10px\">Код из сообщения</label>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "reset-code-cells",
+          "label": "Six code cells",
+          "canvasLine": 245,
+          "sourceText": "<sc-for list=\"{{ codeSlots }}\" as=\"c\" hint-placeholder-count=\"6\"><input id=\"{{ c.id }}\" maxlength=\"1\" inputmode=\"numeric\" pattern=\"[0-9]*\" autocapitalize=\"off\" autocorrect=\"off\" spellcheck=\"false\" autocomplete=\"one-time-code\" value=\"{{ c.value }}\" onChange=\"{{ c.onChange }}\" onKeyDown=\"{{ c.onKeyDown }}\" onPaste=\"{{ c.onPaste }}\" style=\"{{ c.style }}\"></sc-for>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "real mounted empty code step; no code obtained/entered/submitted",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "reset-code-helper",
+          "label": "Code lifetime helper",
+          "canvasLine": 247,
+          "sourceText": "<div style=\"font-size:12px;font-weight:600;color:{{ inkFaint }};margin-top:7px\">{{ resetCodeHint }}</div>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "reset-password-label",
+          "label": "Новый пароль label",
+          "canvasLine": 250,
+          "sourceText": "<label style=\"{{ fResetPw.labelStyle }}\">{{ fResetPw.label }}</label>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH label copy,12px/700 and neutral tone; baseline→final geometry unchanged. MISMATCH inherited label-to-input gap10px versus canvas mkField margin7px; canonical researched FormItem gap2.5 retained under existing DS/literal rule"
+        },
+        {
+          "id": "reset-password-wrapper",
+          "label": "Relative new-password control wrapper",
+          "canvasLine": 251,
+          "sourceText": "<div style=\"position:relative\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH canonical existing DS wrapper/gutter and baseline→final geometry/style; exact canvas-literal gap/style applicability disclosed separately, no global pixel-equality claim"
+        },
+        {
+          "id": "reset-password-input",
+          "label": "Reset new-password input with 96px gutter",
+          "canvasLine": 252,
+          "sourceText": "<input type=\"{{ pwType }}\" value=\"{{ fResetPw.value }}\" onChange=\"{{ fResetPw.onChange }}\" onBlur=\"{{ fResetPw.onBlur }}\" style=\"{{ fResetPw.inputStyle }};padding-right:96px\">",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "masked/rest, public value, focus/caret, reveal/remask, keyboard range",
+          "finalComparison": "MATCH measured existing DS resting contract and baseline→final resting copy/geometry/style; real field states passed in every profile. Immediate invalid-borderColor differences are explicitly disclosed; no hidden style approval claimed"
+        },
+        {
+          "id": "reset-password-reveal",
+          "label": "Reset show/hide button",
+          "canvasLine": 253,
+          "sourceText": "<button onClick=\"{{ togglePw }}\" type=\"button\" aria-label=\"{{ pwToggleAria }}\" data-link style=\"text-underline-offset:4px;position:absolute;top:0;right:0;height:100%;padding:0 14px;background:transparent;border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:800;color:{{ linkColor }}\">{{ pwToggle }}</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "following concrete source button at line253; hover/down/Tab/Space/Enter/state semantics",
+          "finalComparison": "MISMATCH inherited canvas offset4px vs actualauto and pressopacity.8 vs actual1; MATCH localized state/name/controls, hover underline and keyboard ring; MATCH EARS-38 real pointer caret4→4/value/focus and keyboard2–7"
+        },
+        {
+          "id": "reset-password-helper",
+          "label": "Minimum-length helper",
+          "canvasLine": 255,
+          "sourceText": "<div style=\"{{ fResetPwHint }}\">Не менее 8 символов.</div>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "MATCH measured existing DS resting contract and baseline→final resting copy/geometry/style; real field states passed in every profile. Immediate invalid-borderColor differences are explicitly disclosed; no hidden style approval claimed"
+        },
+        {
+          "id": "reset-password-error",
+          "label": "Shared password error slot",
+          "canvasLine": 256,
+          "sourceText": "<div style=\"{{ fResetPw.errStyle }}\">⚠ {{ fResetPw.error }}</div>",
+          "applicability": "actual short-creation-password blur",
+          "interaction": "one slot helper↔error swap; no submit",
+          "finalComparison": "MATCH actual single role=alert slot, error copy/label/message geometry and semantics; input computed-borderColor differs in16 immediate-blur snapshots (only scalar difference), stable endpoint not separately observed; separate narrow A registration/reset desktop diagnostic observes natural settled token in8/8,59/A declared CSS/token identity equal; original16 differences retained"
+        },
+        {
+          "id": "reset-submit",
+          "label": "Задать новый пароль primary submit",
+          "canvasLine": 258,
+          "sourceText": "<button onClick=\"{{ submit }}\" data-btn=\"primary\" aria-busy=\"{{ primaryBusyAttr }}\" style=\"{{ primaryBtn }}\">{{ resetPwBtnLabel }}</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "render only; never complete reset or authenticate",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "reset-restart",
+          "label": "Начать заново ghost control",
+          "canvasLine": 260,
+          "sourceText": "<button onClick=\"{{ resetRestart }}\" data-ghost style=\"--tint:{{ tint }};--tint-fg:{{ tintFg }};font:inherit;font-size:13px;font-weight:700;color:{{ ink }};background:transparent;border:0;cursor:pointer;padding:6px 8px;margin:-6px 0\">Начать заново</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "untouched render; no restart/resend reset side effect",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "reset-resend",
+          "label": "Отправить снова countdown control",
+          "canvasLine": 261,
+          "sourceText": "<button onClick=\"{{ resend }}\" data-link style=\"{{ resendStyle }}\">{{ resendLabel }}</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "real countdown-disabled state rendered; no resend command",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        },
+        {
+          "id": "reset-resend-note",
+          "label": "Enumeration-neutral resend note",
+          "canvasLine": 264,
+          "sourceText": "<p style=\"margin:0;font-size:12.5px;line-height:1.5;color:{{ inkMuted }}\">Если для <b style=\"overflow-wrap:anywhere\">{{ maskedDest }}</b> есть аккаунт, мы повторно отправили код.</p>",
+          "applicability": "notice=true conditional; inactive because no resend sent",
+          "interaction": "static render; final comparison PENDING",
+          "finalComparison": "N/A in selected captured mode: source condition inactive; no manufactured interaction/error claim"
+        },
+        {
+          "id": "reset-back-login",
+          "label": "Вернуться ко входу link",
+          "canvasLine": 269,
+          "sourceText": "<button onClick=\"{{ goLogin }}\" data-link style=\"{{ linkBtn }}\">← Вернуться ко входу</button>",
+          "applicability": "both hosts; every selected profile",
+          "interaction": "untouched link render only",
+          "finalComparison": "MATCH observed selected-mode presence/composition/copy in final fullpage eyes-on; unchanged relative to baseline. Untouched surrounding interactive behavior is not newly claimed from static images"
+        }
+      ],
+      "finalComparison": "Actual final images inspected in four profiles; field metrics have zero baseline→final deltas; see element-level extent/mismatches"
+    }
+  ],
+  "excludedBranches": [
+    {
+      "branch": "Design preview toolbar",
+      "reason": "host/screen/theme/error/reset-id/demo controls at source lines14–31 belong to canvas preview, not app product chrome; no product-control match claimed"
+    },
+    {
+      "branch": "Return context event card",
+      "reason": "conditional returnCtx; false in selected captured modes; do not claim a driven gated-event journey"
+    },
+    {
+      "branch": "OTP login request/confirmation",
+      "reason": "inactive loginTab branch in selected password-login mode; unrelated selected scenario coverage is owned by root"
+    },
+    {
+      "branch": "Registration email confirmation",
+      "reason": "screen=verify not one of the three PasswordField screens; no registration/code submit"
+    },
+    {
+      "branch": "Reset request",
+      "reason": "real unique-unregistered request driven only as complete-step prerequisite; request form is unmounted in captured resetStage=complete"
+    },
+    {
+      "branch": "Operation error/busy/success",
+      "reason": "no credential/code submission; these source branches are inventoried, but no synthetic DOM or fake network state is injected"
+    }
+  ],
+  "styleDisclosure": {
+    "underline": {
+      "canvas": "4px literal inline on concrete reveal buttons110/163/253",
+      "baseline": "auto24/24",
+      "ruleApplicability": "A size literal differs from an existing canonical DS primitive. The documented canvas-literal rule supports keeping the DS primitive and disclosing the source literal as a canvas defect for its next redraw; this is an instruction-based interpretation, not a found owner approval. Final unchanged-style readback remains PENDING."
+    },
+    "pressed": {
+      "canvas": "[data-link]:active opacity .8; concrete buttons carry data-link",
+      "baseline": "actual pointer-down opacity1 on24/24",
+      "ruleApplicability": "Real inherited primitive/canvas state mismatch. Opacity alone is not a colour/size literal, and no exact approval for this alternate press treatment was found. Do not silently call it an approved canvas defect; preserve mismatch with scoped product reason (canonical primitive retained while approved EARS-38 caret behavior is restored). Independent reviewer applies the rule/interaction contract; no stylefix/newIssue here."
+    },
+    "ownerApprovalForExactDifferences": "NOT FOUND in bounded known-artifact lookup; no GO claimed"
+  },
+  "reviewerBinding": "Review must repeat exact source/modes/responsive-web/artifacts and element comparison on final head; this draft never asserts match or GO.",
+  "browserClosed": true,
+  "browserLeaseReleased": true,
+  "metricsDeltaCounts": {
+    "restingDelta": 0,
+    "hoverDelta": 0,
+    "pressedDelta": 0,
+    "keyboardFocusDelta": 0,
+    "invalidDelta": 16
+  },
+  "invalidDeltaExtent": {
+    "rows": 16,
+    "onlyInputComputedBorderColor": true,
+    "sampling": "immediate after actual blur; stable endpoint not separately observed; no further browser retry",
+    "interpretation": "isolated computed-borderColor timing difference is retained as observed; no generic invalid-style-equality claim"
+  },
+  "fieldScalarMeasurements": [
+    {
+      "name": "academy-registration-desktop-light",
+      "profile": "desktop-light",
+      "labelToInputGapPx": 10,
+      "inputBackground": "rgb(255, 255, 255)",
+      "hintWeight": "600",
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "academy-registration-desktop-dark",
+      "profile": "desktop-dark",
+      "labelToInputGapPx": 10,
+      "inputBackground": "lab(8.31655 -1.66735 -6.92635)",
+      "hintWeight": "600",
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "academy-registration-mobile-light",
+      "profile": "mobile-light",
+      "labelToInputGapPx": 10,
+      "inputBackground": "rgb(255, 255, 255)",
+      "hintWeight": "600",
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "academy-registration-mobile-dark",
+      "profile": "mobile-dark",
+      "labelToInputGapPx": 10,
+      "inputBackground": "lab(8.31655 -1.66735 -6.92635)",
+      "hintWeight": "600",
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "academy-password-login-desktop-light",
+      "profile": "desktop-light",
+      "labelToInputGapPx": 10,
+      "inputBackground": "rgb(255, 255, 255)",
+      "hintWeight": null,
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "academy-password-login-desktop-dark",
+      "profile": "desktop-dark",
+      "labelToInputGapPx": 10,
+      "inputBackground": "lab(8.31655 -1.66735 -6.92635)",
+      "hintWeight": null,
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "academy-password-login-mobile-light",
+      "profile": "mobile-light",
+      "labelToInputGapPx": 10,
+      "inputBackground": "rgb(255, 255, 255)",
+      "hintWeight": null,
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "academy-password-login-mobile-dark",
+      "profile": "mobile-dark",
+      "labelToInputGapPx": 10,
+      "inputBackground": "lab(8.31655 -1.66735 -6.92635)",
+      "hintWeight": null,
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "academy-reset-complete-desktop-light",
+      "profile": "desktop-light",
+      "labelToInputGapPx": 10,
+      "inputBackground": "rgb(255, 255, 255)",
+      "hintWeight": "600",
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "academy-reset-complete-desktop-dark",
+      "profile": "desktop-dark",
+      "labelToInputGapPx": 10,
+      "inputBackground": "lab(8.31655 -1.66735 -6.92635)",
+      "hintWeight": "600",
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "academy-reset-complete-mobile-light",
+      "profile": "mobile-light",
+      "labelToInputGapPx": 10,
+      "inputBackground": "rgb(255, 255, 255)",
+      "hintWeight": "600",
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "academy-reset-complete-mobile-dark",
+      "profile": "mobile-dark",
+      "labelToInputGapPx": 10,
+      "inputBackground": "lab(8.31655 -1.66735 -6.92635)",
+      "hintWeight": "600",
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "doctor-registration-desktop-light",
+      "profile": "desktop-light",
+      "labelToInputGapPx": 10,
+      "inputBackground": "rgb(255, 255, 255)",
+      "hintWeight": "600",
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "doctor-registration-desktop-dark",
+      "profile": "desktop-dark",
+      "labelToInputGapPx": 10,
+      "inputBackground": "lab(8.31655 -1.66735 -6.92635)",
+      "hintWeight": "600",
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "doctor-registration-mobile-light",
+      "profile": "mobile-light",
+      "labelToInputGapPx": 10,
+      "inputBackground": "rgb(255, 255, 255)",
+      "hintWeight": "600",
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "doctor-registration-mobile-dark",
+      "profile": "mobile-dark",
+      "labelToInputGapPx": 10,
+      "inputBackground": "lab(8.31655 -1.66735 -6.92635)",
+      "hintWeight": "600",
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "doctor-password-login-desktop-light",
+      "profile": "desktop-light",
+      "labelToInputGapPx": 10,
+      "inputBackground": "rgb(255, 255, 255)",
+      "hintWeight": null,
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "doctor-password-login-desktop-dark",
+      "profile": "desktop-dark",
+      "labelToInputGapPx": 10,
+      "inputBackground": "lab(8.31655 -1.66735 -6.92635)",
+      "hintWeight": null,
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "doctor-password-login-mobile-light",
+      "profile": "mobile-light",
+      "labelToInputGapPx": 10,
+      "inputBackground": "rgb(255, 255, 255)",
+      "hintWeight": null,
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "doctor-password-login-mobile-dark",
+      "profile": "mobile-dark",
+      "labelToInputGapPx": 10,
+      "inputBackground": "lab(8.31655 -1.66735 -6.92635)",
+      "hintWeight": null,
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "doctor-reset-complete-desktop-light",
+      "profile": "desktop-light",
+      "labelToInputGapPx": 10,
+      "inputBackground": "rgb(255, 255, 255)",
+      "hintWeight": "600",
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "doctor-reset-complete-desktop-dark",
+      "profile": "desktop-dark",
+      "labelToInputGapPx": 10,
+      "inputBackground": "lab(8.31655 -1.66735 -6.92635)",
+      "hintWeight": "600",
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "doctor-reset-complete-mobile-light",
+      "profile": "mobile-light",
+      "labelToInputGapPx": 10,
+      "inputBackground": "rgb(255, 255, 255)",
+      "hintWeight": "600",
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    },
+    {
+      "name": "doctor-reset-complete-mobile-dark",
+      "profile": "mobile-dark",
+      "labelToInputGapPx": 10,
+      "inputBackground": "lab(8.31655 -1.66735 -6.92635)",
+      "hintWeight": "600",
+      "errorWeight": "700",
+      "revealUnderlineOffset": "auto",
+      "pressedOpacity": "1"
+    }
+  ],
+  "delegateEyesOn": {
+    "finalFullpages": 24,
+    "contactSheets": 6,
+    "inspectedAtUtc": "2026-10-13T12:27:44.623Z",
+    "leadOwnFinalEyesOnStillRequired": true
+  },
+  "invalidBorderResolution": {
+    "artifact": "invalid-border-resolution.json",
+    "diagnosticRows": 8,
+    "observedSourceSha": "213baf7c68cc8f2018da92c4746bb8287e8e486e",
+    "settledTargetMatches": 8,
+    "sourceTokenCssIdentityAllEqual": true,
+    "originalImmediateDeltasRetained": 16,
+    "originalFilesUnchanged": true,
+    "old59SettledBrowserNotRun": true
+  }
+}

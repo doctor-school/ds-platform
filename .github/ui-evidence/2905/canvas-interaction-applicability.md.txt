@@ -1,0 +1,51 @@
+# BASE59 PasswordField interaction applicability
+
+Reference source: exact `59ba49768494c1dd54cd8f3a86ca38e745dfb1e5:design-source/auth.dc.html`
+bytes copied by git-show, SHA-256
+`0a48f029dec14ce30ea4e1b9eed91f275a88a52d418a53f269ab086ce1d996a6`.
+Readback matches the immutable base manifest. No browser was launched for this
+re-check and no source, style, DOM, Issue or runtime was changed.
+
+## Element-to-selector relationship
+
+The password reveal button is defined directly beside each mkField password
+input. The same button occurs at canvas line 110 (password login), line 163
+(registration), and line 253 (reset-complete). Every one carries BOTH `data-link`
+and the literal inline style `text-underline-offset:4px`:
+
+```html
+<button onClick="{{ togglePw }}" type="button" aria-label="{{ pwToggleAria }}" data-link style="text-underline-offset:4px;position:absolute;top:0;right:0;height:100%;padding:0 14px;background:transparent;border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:800;color:{{ linkColor }}">{{ pwToggle }}</button>
+```
+
+The canvas line 10 selector is:
+
+```css
+[data-link]:active,button[style*="text-underline-offset:4px"]:active{opacity:.8!important}
+```
+
+Its FIRST selector matches those three concrete buttons because each carries
+`data-link`. No inference from a generic anchor rule or dependence on serialized
+inline-style formatting is needed. The inline `text-underline-offset:4px`
+applies directly to each button; the offset is visible when its underline is
+driven on hover/focus.
+
+## Actual baseline implementation and observations
+
+The immutable baseline primitive `password-field.tsx` line 160 uses:
+
+```tsx
+className="absolute inset-y-0 right-0 flex w-20 items-center justify-end pr-3 bg-transparent text-xs font-extrabold text-primary-action hover:underline focus-visible:shadow-focus focus-visible:outline-none"
+```
+
+The rendered implementation button has no `data-link` attribute and this class
+has neither a 4px underline offset nor the opacity press rule. The actual
+baseline browser probes in `baseline/results.json` observed `textUnderlineOffset:
+auto` (rest/hover/focus) and `opacity: 1` during REAL pointer-down. Hover underline
+and the keyboard focus ring were driven and observed.
+
+Therefore both reported differences are REAL reference mismatches for this
+specific password-reveal element: offset auto versus canvas 4px; pressed opacity
+1 versus canvas .8. They are not generic-rule assumptions. They pre-exist the
+caret fix, and this verifier has not claimed that they were independently approved
+or that fixing caret resolves them. The lead owns their disclosure/applicability
+and any later routing; no style fix or new task is authored here.

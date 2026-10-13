@@ -1,0 +1,2618 @@
+{
+  "baselineSourceSha": "59ba49768494c1dd54cd8f3a86ca38e745dfb1e5",
+  "finalSourceSha": "213baf7c68cc8f2018da92c4746bb8287e8e486e",
+  "finalRuntimeSha": "213baf7c68cc8f2018da92c4746bb8287e8e486e",
+  "canvasHash": "0a48f029dec14ce30ea4e1b9eed91f275a88a52d418a53f269ab086ce1d996a6",
+  "originalPngCount": 288,
+  "originalPngs": [
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-desktop-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-desktop-dark-caret-masked.png",
+      "bytes": 2517,
+      "sha256": "b0ece09cbeb3175ba6251de799a0904eee59b4904b50e9317de400a96e62d330",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-desktop-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-desktop-dark-caret-revealed.png",
+      "bytes": 4217,
+      "sha256": "e00ae749bbd292900f99cdd08e55c3b40dd653a85139a670e8f52a6bf3d61538",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-desktop-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-desktop-dark-fullpage.png",
+      "bytes": 67740,
+      "sha256": "e72a54613d93730ee52c7006f7e4ac728e79f50dfd68ef5060e3da4db1d42d5d",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-desktop-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-desktop-dark-invalid.png",
+      "bytes": 4058,
+      "sha256": "fdb62623959399061649b37755110d17eded87e6b290f40441517ce08751fc0e",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-desktop-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-desktop-dark-keyboard-focus.png",
+      "bytes": 2533,
+      "sha256": "85e0806fd05729a5e67bd2de05237c981f349607322627d02d52325234d4b4f9",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-desktop-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-desktop-dark-pointer-pressed.png",
+      "bytes": 2534,
+      "sha256": "9e9114d01a25df8b417233f01c9f366592363168401cb0a9372c6c4e3b1f2add",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-desktop-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-desktop-light-caret-masked.png",
+      "bytes": 2512,
+      "sha256": "1b71c2dd7e5619770c24038b8e0a4a65fa83eb4bd4cb38e201c09179dedeb4e5",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-desktop-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-desktop-light-caret-revealed.png",
+      "bytes": 4154,
+      "sha256": "0579af9505fd6ea0ebe7ca9b02344e5818f6a0df3d6b28785783854d7952dab9",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-desktop-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-desktop-light-fullpage.png",
+      "bytes": 67295,
+      "sha256": "45824715c2d68aa61faa47d3b39564d9babc6d634f1195072739048151a2a938",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-desktop-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-desktop-light-invalid.png",
+      "bytes": 4062,
+      "sha256": "3e2f3c82bd874b55d1380236388757e208c635230010168d99837043b77a6bd2",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-desktop-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-desktop-light-keyboard-focus.png",
+      "bytes": 2522,
+      "sha256": "52a4c36410c98ef9202aa807008ca040b78686f2fde9c8ac5c1c321f07589cb0",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-desktop-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-desktop-light-pointer-pressed.png",
+      "bytes": 2517,
+      "sha256": "3f7a1367f23115cb2b7106a2308d330844956ea9d1d8cec6d149889bb850cc5a",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-mobile-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-mobile-dark-caret-masked.png",
+      "bytes": 2463,
+      "sha256": "b7f29591730f30da1bf943ee52464e0488dde587c97515299adb4d9bd0464a12",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-mobile-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-mobile-dark-caret-revealed.png",
+      "bytes": 4151,
+      "sha256": "541ea9db1277c1e1ecc2aba900397361c896abd9457b73060dcd9a222583b0c1",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-mobile-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-mobile-dark-fullpage.png",
+      "bytes": 29032,
+      "sha256": "f643ed46b4271435bd60d8bf1fb4bf15e90bd675869a7edb87628c3305e7055a",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-mobile-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-mobile-dark-invalid.png",
+      "bytes": 4015,
+      "sha256": "b72ff622fa36876c3767d77bebac30a3888c26dd3c2ff7f5ba546c0725ca4313",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-mobile-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-mobile-dark-keyboard-focus.png",
+      "bytes": 2484,
+      "sha256": "ac92918268c9dce0e274be261d645ca0d7d609c414bf35d6e4dd537190f351ba",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-mobile-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-mobile-dark-pointer-pressed.png",
+      "bytes": 2479,
+      "sha256": "95cb4a2ef888813199656dce7d14c35b2c272c5a5bb2b5813c132613e2bf8a04",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-mobile-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-mobile-light-caret-masked.png",
+      "bytes": 2455,
+      "sha256": "798d73d956f8d952bd6da9fc6bbf2a58155c5f230071be5f37a95f7d6798402a",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-mobile-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-mobile-light-caret-revealed.png",
+      "bytes": 4099,
+      "sha256": "d81b4eae501603c84c5ebc8b8945c84f1b4abdfe506b24ab0b5602e9faeb5c37",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-mobile-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-mobile-light-fullpage.png",
+      "bytes": 28752,
+      "sha256": "0e11d27689da4bd2295b851ffad1caac57491789b2cd2e81d43e31c82aa6ab77",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-mobile-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-mobile-light-invalid.png",
+      "bytes": 4014,
+      "sha256": "2baf18b97f98ccbe4012833e47e6c9ee6f36bf558edf0aaee22d20208d9a3952",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-mobile-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-mobile-light-keyboard-focus.png",
+      "bytes": 2467,
+      "sha256": "11fd0841639a7c1bf5b26581ed4e77cda5a68d5136b313eeee0de14f0ebd9870",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-password-login-mobile-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-password-login-mobile-light-pointer-pressed.png",
+      "bytes": 2456,
+      "sha256": "9068a448470c38dd673165114edb5997e8a4da6c6a6c1dace63b9e0a7d053d8b",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-desktop-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-desktop-dark-caret-masked.png",
+      "bytes": 4527,
+      "sha256": "d169c37735c2209e9372084bcc13844588f476370a71c2ba8a657e71ec82973a",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-desktop-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-desktop-dark-caret-revealed.png",
+      "bytes": 6188,
+      "sha256": "03bf960fafceb8e84cbb5ea2decb532cd5ed1ac39c5b63ff27c5b62779650264",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-desktop-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-desktop-dark-fullpage.png",
+      "bytes": 75589,
+      "sha256": "87cc687fa25a43b49c99d9b50f583c177b677211804b6fae30fae54c8d1d129e",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-desktop-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-desktop-dark-invalid.png",
+      "bytes": 4700,
+      "sha256": "19b8e9197b337af8c653d8acba11e7b1750c0b212f297ceedd16b481e7d02076",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-desktop-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-desktop-dark-keyboard-focus.png",
+      "bytes": 4542,
+      "sha256": "eaf99ab500688cefb35ad11cda5910b6d4e05483af26cff530a083880b7c6c18",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-desktop-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-desktop-dark-pointer-pressed.png",
+      "bytes": 4539,
+      "sha256": "17fba3c9da6b25f58920d095582b1208bb7ad3c442d8c705af9ae6d1e2676d9c",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-desktop-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-desktop-light-caret-masked.png",
+      "bytes": 4498,
+      "sha256": "14fb5ab6979aaf32a7297c03c9f223cd22f5a63ea80df29b6e9a4a3b1380e130",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-desktop-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-desktop-light-caret-revealed.png",
+      "bytes": 6153,
+      "sha256": "720a6c6590020f45754185382525238c6ef7c376dfcf7f0a6cbdaba65b7a7b0b",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-desktop-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-desktop-light-fullpage.png",
+      "bytes": 74998,
+      "sha256": "60016ec957d4a1f53dd1beee85400a52e326ab79b36c462b1f1c9ccf93ae977c",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-desktop-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-desktop-light-invalid.png",
+      "bytes": 4678,
+      "sha256": "6e353bf08e5fde28b3602cb9842b49a8c56a5d065a32a78c3975154b3197840e",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-desktop-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-desktop-light-keyboard-focus.png",
+      "bytes": 4517,
+      "sha256": "402716d12902336d61aedb4af2d268e0be617ca2cfd082e723276c413be808de",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-desktop-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-desktop-light-pointer-pressed.png",
+      "bytes": 4509,
+      "sha256": "3d76e32af8036918363aabb6a88e657fa46eaff670f7039b7941f0c76c3dd01c",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-mobile-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-mobile-dark-caret-masked.png",
+      "bytes": 4460,
+      "sha256": "00f2eb246f83c6ed47039c5a7de1812be7197433a79579e3a98664bae0046676",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-mobile-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-mobile-dark-caret-revealed.png",
+      "bytes": 6120,
+      "sha256": "f8b64019a1d34e78aa6ead741bab886fb9ae78d09a376861ee40d9e5f9ce669b",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-mobile-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-mobile-dark-fullpage.png",
+      "bytes": 35451,
+      "sha256": "055deb9886a7b45ba11231a2433a3a3ceaa72c5857b1f51de5c3376d6b97aa1f",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-mobile-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-mobile-dark-invalid.png",
+      "bytes": 4592,
+      "sha256": "53761441d447edcdca0dec9eab3749b9140302aac9a8a2e16877d4fd5a403609",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-mobile-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-mobile-dark-keyboard-focus.png",
+      "bytes": 4479,
+      "sha256": "18243bb18826d28839383e8008d33b92d78c37f70a7c63d75b0aff5bacca349c",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-mobile-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-mobile-dark-pointer-pressed.png",
+      "bytes": 4475,
+      "sha256": "2e5e6f536df2631d2c5428cdca6eb7bb366e398bb998a28b98d105c7cade5cf2",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-mobile-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-mobile-light-caret-masked.png",
+      "bytes": 4437,
+      "sha256": "a376e8aafd536e0b110ed16edb5fef7afe5c5d94ca275c8cec1fb2ee0f864231",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-mobile-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-mobile-light-caret-revealed.png",
+      "bytes": 6096,
+      "sha256": "fb739d6d6bcc61f59b33600e63e23b12ec227fd6a2676645bce036b84ba411b5",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-mobile-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-mobile-light-fullpage.png",
+      "bytes": 35191,
+      "sha256": "0b5310978503d63f45df13c8a6819590560083c5c4ac1abb51629144a8ae271d",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-mobile-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-mobile-light-invalid.png",
+      "bytes": 4563,
+      "sha256": "f9ba8b09458e6acc484ea1a649737bae915e93135416dc92af4d5ca5294a958a",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-mobile-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-mobile-light-keyboard-focus.png",
+      "bytes": 4458,
+      "sha256": "4bf7f6b5c2d1f153fa6b086d0d96f25fb3950b70b57de06b8c91625173f6d657",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-registration-mobile-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-registration-mobile-light-pointer-pressed.png",
+      "bytes": 4445,
+      "sha256": "68d91f09d108f7b044578dcc95443719cc66270bdd60ba74c15415a98ad16b9b",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-desktop-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-desktop-dark-caret-masked.png",
+      "bytes": 5014,
+      "sha256": "4a9d0207cd6a8c28ccde32503e5835204f644760269c5b1cc65505f472d742c2",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-desktop-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-desktop-dark-caret-revealed.png",
+      "bytes": 6663,
+      "sha256": "e2168081758d15b076b6ee2085dfa4880032548dec0159d58c6d30c95a2b823c",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-desktop-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-desktop-dark-fullpage.png",
+      "bytes": 71501,
+      "sha256": "298719eb942cd0ab9674e4c019a15ce60f0867925cb7d750483807fcd32f4b5a",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-desktop-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-desktop-dark-invalid.png",
+      "bytes": 5191,
+      "sha256": "85dd74573170cea8511eb93d5742fc56496691c0ae17bbef0fc5ffb537032d4f",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-desktop-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-desktop-dark-keyboard-focus.png",
+      "bytes": 5033,
+      "sha256": "1d5773d3ebcc60b7550f0cb6e04aac7b45648e7b56594f7965b7e804c1bde754",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-desktop-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-desktop-dark-pointer-pressed.png",
+      "bytes": 5028,
+      "sha256": "44a7fcf9a8f0c705176ae4852034716d60c8539d87d760f7665977723d76dda3",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-desktop-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-desktop-light-caret-masked.png",
+      "bytes": 4941,
+      "sha256": "c19a5609f1a7e0bef70c031b2c5f6af59d579073b9fe9d5253e7f46ddd1e53f4",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-desktop-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-desktop-light-caret-revealed.png",
+      "bytes": 6586,
+      "sha256": "b62ce8298b9d042c2d40aab5422ab48902a966d714d4cba454dc5b2913767a13",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-desktop-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-desktop-light-fullpage.png",
+      "bytes": 71072,
+      "sha256": "b4af3008f61c5e1b4601ebc41193f80c6de7387361090c014553fab957154d58",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-desktop-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-desktop-light-invalid.png",
+      "bytes": 5123,
+      "sha256": "1db1272b06fed5152ebf1a9fd9b72a6acb1fc7f58984b91c4920870b5f00de21",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-desktop-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-desktop-light-keyboard-focus.png",
+      "bytes": 4964,
+      "sha256": "fdcc8d1078c13e24810bb11e39717ae49886a5f9a9f59d0d8a356975fe7fe7c0",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-desktop-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-desktop-light-pointer-pressed.png",
+      "bytes": 4950,
+      "sha256": "708fa9f27afae79de7c2862f7013fabfd5cdc52722b2588705ebe0bc320c5a82",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-mobile-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-mobile-dark-caret-masked.png",
+      "bytes": 5002,
+      "sha256": "2e6211b9f137907e166918e7bf7385578f7e575eaec3cb3891107a9c3a9f2aea",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-mobile-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-mobile-dark-caret-revealed.png",
+      "bytes": 6697,
+      "sha256": "53a408d5d8445881d3e0f25601dfe40ede9ddad7b355e3e17f312e9acac85cff",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-mobile-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-mobile-dark-fullpage.png",
+      "bytes": 33826,
+      "sha256": "d7f2ff8925049ccff708acb3f75c76195c94f73781b1e47cb0f69a0c48ede039",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-mobile-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-mobile-dark-invalid.png",
+      "bytes": 5154,
+      "sha256": "ae0fca4bd677cf426281a6f23494c093b68f6db825a776dbf738f2111256a592",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-mobile-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-mobile-dark-keyboard-focus.png",
+      "bytes": 5021,
+      "sha256": "4be0f78bdabd69ac2aea6e0b3b692c978d8c93706291267e285eb44512040acb",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-mobile-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-mobile-dark-pointer-pressed.png",
+      "bytes": 5016,
+      "sha256": "5f4f65bf91ed995ff54dc769e84c281d2bab9ed351f7858b9cee759127fa7ce6",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-mobile-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-mobile-light-caret-masked.png",
+      "bytes": 4961,
+      "sha256": "aa94df2daf425b6f65e0dd91a01b034fa530f80c5d060c98defb650f63e00c8b",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-mobile-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-mobile-light-caret-revealed.png",
+      "bytes": 6617,
+      "sha256": "5276ac72e9c0dc7926a7aaba5837ef573c01b9a3d2bb7ae204bac469486b2aee",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-mobile-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-mobile-light-fullpage.png",
+      "bytes": 33490,
+      "sha256": "dbbdccb890232b22f586bd5903419ae5e00beca2cd06e7b9ae0886043f101a68",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-mobile-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-mobile-light-invalid.png",
+      "bytes": 5082,
+      "sha256": "97b1522d3cf07a15b149c761c387383c5a174fee291e5c7fa45e440bdef3ec76",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-mobile-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-mobile-light-keyboard-focus.png",
+      "bytes": 4973,
+      "sha256": "f3a88a37ec99948d54963856ce843a040b667b64ad759cf6105d267a47d3e87c",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "academy-reset-complete-mobile-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\academy-reset-complete-mobile-light-pointer-pressed.png",
+      "bytes": 4963,
+      "sha256": "1d7d86eae6f7e5d1f7730893b486c3dae38700a93fe62390eb39a007768a0b1f",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-desktop-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-desktop-dark-caret-masked.png",
+      "bytes": 2517,
+      "sha256": "b0ece09cbeb3175ba6251de799a0904eee59b4904b50e9317de400a96e62d330",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-desktop-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-desktop-dark-caret-revealed.png",
+      "bytes": 4217,
+      "sha256": "e00ae749bbd292900f99cdd08e55c3b40dd653a85139a670e8f52a6bf3d61538",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-desktop-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-desktop-dark-fullpage.png",
+      "bytes": 69704,
+      "sha256": "9198bb7ef10470955ce52b91e2395a7096170296b73e8df5fb0b6cfb31e6594b",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-desktop-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-desktop-dark-invalid.png",
+      "bytes": 4058,
+      "sha256": "75b192f6599df2d86d2613f13293560df84260519e9dafeda90ef161878ed11a",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-desktop-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-desktop-dark-keyboard-focus.png",
+      "bytes": 2533,
+      "sha256": "c0bfdd9a378ca667523f6a823e4a0e083c866a134d8c12994d25709875144375",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-desktop-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-desktop-dark-pointer-pressed.png",
+      "bytes": 2534,
+      "sha256": "9e9114d01a25df8b417233f01c9f366592363168401cb0a9372c6c4e3b1f2add",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-desktop-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-desktop-light-caret-masked.png",
+      "bytes": 2512,
+      "sha256": "1b71c2dd7e5619770c24038b8e0a4a65fa83eb4bd4cb38e201c09179dedeb4e5",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-desktop-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-desktop-light-caret-revealed.png",
+      "bytes": 4154,
+      "sha256": "0579af9505fd6ea0ebe7ca9b02344e5818f6a0df3d6b28785783854d7952dab9",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-desktop-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-desktop-light-fullpage.png",
+      "bytes": 69385,
+      "sha256": "ebe8f6c13feaf5106a17d424235022e30e6d317051c4b4f3bb07e360425563f8",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-desktop-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-desktop-light-invalid.png",
+      "bytes": 4062,
+      "sha256": "3e2f3c82bd874b55d1380236388757e208c635230010168d99837043b77a6bd2",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-desktop-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-desktop-light-keyboard-focus.png",
+      "bytes": 2522,
+      "sha256": "52a4c36410c98ef9202aa807008ca040b78686f2fde9c8ac5c1c321f07589cb0",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-desktop-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-desktop-light-pointer-pressed.png",
+      "bytes": 2517,
+      "sha256": "3f7a1367f23115cb2b7106a2308d330844956ea9d1d8cec6d149889bb850cc5a",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-mobile-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-mobile-dark-caret-masked.png",
+      "bytes": 2463,
+      "sha256": "b7f29591730f30da1bf943ee52464e0488dde587c97515299adb4d9bd0464a12",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-mobile-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-mobile-dark-caret-revealed.png",
+      "bytes": 4151,
+      "sha256": "541ea9db1277c1e1ecc2aba900397361c896abd9457b73060dcd9a222583b0c1",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-mobile-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-mobile-dark-fullpage.png",
+      "bytes": 29062,
+      "sha256": "faa4343190a855cae179f6f79e93ac07c2de08a8059e9bf91b633fff9885a215",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-mobile-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-mobile-dark-invalid.png",
+      "bytes": 4015,
+      "sha256": "c8af89bb64547b379eb86e53ba608c2d297821dee00d3c957009672ca55b9894",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-mobile-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-mobile-dark-keyboard-focus.png",
+      "bytes": 2479,
+      "sha256": "71684aaba9308862e2c905f775ca6cb20130990cecaec51c375d9a3463408e05",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-mobile-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-mobile-dark-pointer-pressed.png",
+      "bytes": 2477,
+      "sha256": "7f071ba5ae6f2650f83612455565a45dd253778f3b780fe33360cab185e956f5",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-mobile-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-mobile-light-caret-masked.png",
+      "bytes": 2455,
+      "sha256": "798d73d956f8d952bd6da9fc6bbf2a58155c5f230071be5f37a95f7d6798402a",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-mobile-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-mobile-light-caret-revealed.png",
+      "bytes": 4099,
+      "sha256": "d81b4eae501603c84c5ebc8b8945c84f1b4abdfe506b24ab0b5602e9faeb5c37",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-mobile-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-mobile-light-fullpage.png",
+      "bytes": 28752,
+      "sha256": "afe54cc1450c438a0baa63cefba10e4ea9871170756989a5c04a055b9a9da978",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-mobile-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-mobile-light-invalid.png",
+      "bytes": 4016,
+      "sha256": "d837d8b795c15c80805815b8608ef841fb4394854f779e42338a0635578ed33f",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-mobile-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-mobile-light-keyboard-focus.png",
+      "bytes": 2467,
+      "sha256": "11fd0841639a7c1bf5b26581ed4e77cda5a68d5136b313eeee0de14f0ebd9870",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-password-login-mobile-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-password-login-mobile-light-pointer-pressed.png",
+      "bytes": 2456,
+      "sha256": "9068a448470c38dd673165114edb5997e8a4da6c6a6c1dace63b9e0a7d053d8b",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-desktop-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-desktop-dark-caret-masked.png",
+      "bytes": 4492,
+      "sha256": "3b002cf98e4467e43a09d8cb7569cc3e871d70b839f3a7980f367ffeb47ba03f",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-desktop-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-desktop-dark-caret-revealed.png",
+      "bytes": 6201,
+      "sha256": "3682186350197d60d99d2e453e84f5cf5755d0aabd36d9bd1f23c3b5b66c3050",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-desktop-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-desktop-dark-fullpage.png",
+      "bytes": 114508,
+      "sha256": "88b285b638a58c7664374b6e853d2fd5d863de0c0f50c570ae048a45f73a6184",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-desktop-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-desktop-dark-invalid.png",
+      "bytes": 4682,
+      "sha256": "7e53bfd3452a118b946b6cdd12259006da0243d1c45ec488d5439e7a43023065",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-desktop-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-desktop-dark-keyboard-focus.png",
+      "bytes": 4508,
+      "sha256": "c7853ec4b97925a3625478fe90f4ba28959075d93ba0754e09cc13da489c5028",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-desktop-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-desktop-dark-pointer-pressed.png",
+      "bytes": 4508,
+      "sha256": "a606023cdaf631158e5bdfc56f8c05ab9198ede3ef18cddb08a6f7a504378083",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-desktop-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-desktop-light-caret-masked.png",
+      "bytes": 4502,
+      "sha256": "6c861ec2d8d0d783cf70e40979e2758d049373e92abcc7a3fdd9e3a944e9d50a",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-desktop-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-desktop-light-caret-revealed.png",
+      "bytes": 6152,
+      "sha256": "5ba400d7642de737ab8cb0597129aea55286ed79f9f01cbdcf0ddcccf9d40354",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-desktop-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-desktop-light-fullpage.png",
+      "bytes": 113414,
+      "sha256": "9e50d8d0ad912de52d96e9dbd56eb8b973e3edd7877edf2d94ed728e54e64eb3",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-desktop-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-desktop-light-invalid.png",
+      "bytes": 4656,
+      "sha256": "9c55be72b2ea50800ac05346feecc48d50eade8aba5b1c0745dd4b9b21227f4a",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-desktop-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-desktop-light-keyboard-focus.png",
+      "bytes": 4512,
+      "sha256": "81bf59b425abd3064efcb4b54cacdb6318d45a0cc1f3ebd723cc563090e69ba2",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-desktop-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-desktop-light-pointer-pressed.png",
+      "bytes": 4510,
+      "sha256": "6931cb57f70fee09bab2ce1b775a260f8a132c692248c74315d87fde4eae37be",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-mobile-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-mobile-dark-caret-masked.png",
+      "bytes": 4418,
+      "sha256": "451bcd1d378da21f9cd0c1a76e4335305c600e919c70f229136ccee7c9a61920",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-mobile-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-mobile-dark-caret-revealed.png",
+      "bytes": 6132,
+      "sha256": "ff364c41d857fe4497b2a5f5aa28af821a342a8e40a96a7c44de8a99374e9707",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-mobile-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-mobile-dark-fullpage.png",
+      "bytes": 70574,
+      "sha256": "351355b537cdccfa6f43671baa8d1308e7b2689d2be7beff57b5684298efa9da",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-mobile-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-mobile-dark-invalid.png",
+      "bytes": 4565,
+      "sha256": "c59e980c8d9e2e20ad5c89fed57cf2149749945ae69c867a11159656bda64ffd",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-mobile-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-mobile-dark-keyboard-focus.png",
+      "bytes": 4434,
+      "sha256": "36fcf75b338d2d6d90ff127c8002a23b0728a304af259683805bca2f28eea4c2",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-mobile-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-mobile-dark-pointer-pressed.png",
+      "bytes": 4432,
+      "sha256": "69d8c6d3fbf7d1730c1aa67a39c2d654875d097f19228afdfbd82bd5fe945109",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-mobile-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-mobile-light-caret-masked.png",
+      "bytes": 4429,
+      "sha256": "e3389ac02b9e391ff6ae1c1f3d6af07b86bc086a0a379ebb811a8b7cef68e065",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-mobile-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-mobile-light-caret-revealed.png",
+      "bytes": 6082,
+      "sha256": "19432a3c99e198ebe93d3245e16502cd376a70998002c7c27ba8ba7906be3090",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-mobile-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-mobile-light-fullpage.png",
+      "bytes": 70101,
+      "sha256": "3af84c02bbd78165d78590a965216b2998f322c29d428b06931e22eee19f1622",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-mobile-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-mobile-light-invalid.png",
+      "bytes": 4541,
+      "sha256": "73a9469ab788cdbf1120376de4e59e107aec8b6a1d7f9429e9d7b4417c0948b1",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-mobile-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-mobile-light-keyboard-focus.png",
+      "bytes": 4440,
+      "sha256": "e5377345a2809253bfe2e23edf223021cbb222c9b27e239191eddb6c485a30f8",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-registration-mobile-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-registration-mobile-light-pointer-pressed.png",
+      "bytes": 4430,
+      "sha256": "7321a017b497d542086910bb46c148d592ff0ac0c715953f21d073a944c08d06",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-desktop-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-desktop-dark-caret-masked.png",
+      "bytes": 5014,
+      "sha256": "4a9d0207cd6a8c28ccde32503e5835204f644760269c5b1cc65505f472d742c2",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-desktop-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-desktop-dark-caret-revealed.png",
+      "bytes": 6663,
+      "sha256": "e2168081758d15b076b6ee2085dfa4880032548dec0159d58c6d30c95a2b823c",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-desktop-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-desktop-dark-fullpage.png",
+      "bytes": 73753,
+      "sha256": "1eefdcd05bfc634f1682a8ba5e188352a0d060558912ed8ccc3d756ccd10e2da",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-desktop-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-desktop-dark-invalid.png",
+      "bytes": 5192,
+      "sha256": "d7416230bc103ce4434d2107e379345cc0bd78f67b14e8ece3351275740090c4",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-desktop-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-desktop-dark-keyboard-focus.png",
+      "bytes": 5031,
+      "sha256": "21b300718bbf340c590c134424752355dc224d51e1d5802edb963adb585832bb",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-desktop-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-desktop-dark-pointer-pressed.png",
+      "bytes": 5027,
+      "sha256": "f4b90467c41f552e4b7c88db9fd565a29f5e34cfbbaff4429ae7c2be1bf107b9",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-desktop-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-desktop-light-caret-masked.png",
+      "bytes": 4941,
+      "sha256": "c19a5609f1a7e0bef70c031b2c5f6af59d579073b9fe9d5253e7f46ddd1e53f4",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-desktop-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-desktop-light-caret-revealed.png",
+      "bytes": 6586,
+      "sha256": "b62ce8298b9d042c2d40aab5422ab48902a966d714d4cba454dc5b2913767a13",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-desktop-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-desktop-light-fullpage.png",
+      "bytes": 73243,
+      "sha256": "12f855764e17804a31dc4461b6aadda671cd9d8444eda743638229958a6eb457",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-desktop-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-desktop-light-invalid.png",
+      "bytes": 5123,
+      "sha256": "1db1272b06fed5152ebf1a9fd9b72a6acb1fc7f58984b91c4920870b5f00de21",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-desktop-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-desktop-light-keyboard-focus.png",
+      "bytes": 4964,
+      "sha256": "fdcc8d1078c13e24810bb11e39717ae49886a5f9a9f59d0d8a356975fe7fe7c0",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-desktop-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-desktop-light-pointer-pressed.png",
+      "bytes": 4951,
+      "sha256": "4075288259441c0422b6b145660c2db2d8ee8f4dc2c9c48fc25225e24747f1f4",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-mobile-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-mobile-dark-caret-masked.png",
+      "bytes": 5002,
+      "sha256": "2e6211b9f137907e166918e7bf7385578f7e575eaec3cb3891107a9c3a9f2aea",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-mobile-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-mobile-dark-caret-revealed.png",
+      "bytes": 6697,
+      "sha256": "53a408d5d8445881d3e0f25601dfe40ede9ddad7b355e3e17f312e9acac85cff",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-mobile-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-mobile-dark-fullpage.png",
+      "bytes": 33828,
+      "sha256": "992ff72ff740af160456a9a21f4ce2e67c500c8c36ee568b2907fc677014a5d4",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-mobile-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-mobile-dark-invalid.png",
+      "bytes": 5154,
+      "sha256": "ae0fca4bd677cf426281a6f23494c093b68f6db825a776dbf738f2111256a592",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-mobile-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-mobile-dark-keyboard-focus.png",
+      "bytes": 5021,
+      "sha256": "4be0f78bdabd69ac2aea6e0b3b692c978d8c93706291267e285eb44512040acb",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-mobile-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-mobile-dark-pointer-pressed.png",
+      "bytes": 5018,
+      "sha256": "1ab2e80952ff453cb1cdab0d081b817d5eaed5d17e8f963659ececf83e461bee",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-mobile-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-mobile-light-caret-masked.png",
+      "bytes": 4961,
+      "sha256": "aa94df2daf425b6f65e0dd91a01b034fa530f80c5d060c98defb650f63e00c8b",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-mobile-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-mobile-light-caret-revealed.png",
+      "bytes": 6617,
+      "sha256": "5276ac72e9c0dc7926a7aaba5837ef573c01b9a3d2bb7ae204bac469486b2aee",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-mobile-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-mobile-light-fullpage.png",
+      "bytes": 33490,
+      "sha256": "91c3d509914d38a90de758a7af905e335deb0804900eb3f31e779a9bf9e92e6a",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-mobile-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-mobile-light-invalid.png",
+      "bytes": 5083,
+      "sha256": "e6e391f315b92c15c37fbe7dfc62760197d89811e5101dd684aa1a84c7e8977c",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-mobile-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-mobile-light-keyboard-focus.png",
+      "bytes": 4975,
+      "sha256": "f55df42dad4f36726ab5efe5c8d4d75f77ba9845d8c18aa3a2ca1d2505694d6a",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "baseline",
+      "name": "doctor-reset-complete-mobile-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline\\doctor-reset-complete-mobile-light-pointer-pressed.png",
+      "bytes": 4964,
+      "sha256": "0fa3d981d077c380a9815162546ffe2c175ebf5de854253f4b1fcee97ff45e4f",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-desktop-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-desktop-dark-caret-masked.png",
+      "bytes": 2526,
+      "sha256": "2a069cb425f7a8ec489e34be0a7c4358946ffbfd0666da5f712120db3db8363f",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-desktop-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-desktop-dark-caret-revealed.png",
+      "bytes": 4212,
+      "sha256": "fed3f33c4e139de9a01daba97f19bd247431afe9ba72f91904abea91faf19750",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-desktop-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-desktop-dark-fullpage.png",
+      "bytes": 67740,
+      "sha256": "e72a54613d93730ee52c7006f7e4ac728e79f50dfd68ef5060e3da4db1d42d5d",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-desktop-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-desktop-dark-invalid.png",
+      "bytes": 4066,
+      "sha256": "76e378802070559c951b7e368a05c18482c1aa73ff1f28bda68134dd361f2bfb",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-desktop-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-desktop-dark-keyboard-focus.png",
+      "bytes": 2533,
+      "sha256": "c0bfdd9a378ca667523f6a823e4a0e083c866a134d8c12994d25709875144375",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-desktop-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-desktop-dark-pointer-pressed.png",
+      "bytes": 2535,
+      "sha256": "53c93a87b7101f7acb745a3321996162ad2d0939671926008aba32b7edd4fc94",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-desktop-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-desktop-light-caret-masked.png",
+      "bytes": 2513,
+      "sha256": "a1a1b08cd4d405abdddfc700252af1c72a7c89042b3417c6177782315ee96cc8",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-desktop-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-desktop-light-caret-revealed.png",
+      "bytes": 4152,
+      "sha256": "835495684bb04bcafbbad0588fd01cc16c960caa2e50badefbd64de44a9cadaf",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-desktop-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-desktop-light-fullpage.png",
+      "bytes": 67295,
+      "sha256": "45824715c2d68aa61faa47d3b39564d9babc6d634f1195072739048151a2a938",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-desktop-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-desktop-light-invalid.png",
+      "bytes": 4062,
+      "sha256": "6cb1df4360e2d13ba8774453c66a1bb213202ada463b596d1b82f6c672fd2f68",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-desktop-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-desktop-light-keyboard-focus.png",
+      "bytes": 2522,
+      "sha256": "52a4c36410c98ef9202aa807008ca040b78686f2fde9c8ac5c1c321f07589cb0",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-desktop-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-desktop-light-pointer-pressed.png",
+      "bytes": 2517,
+      "sha256": "e5a404d7be319a6debbe659143dd6ded1b9d032e797ed404452c1cf03c56a7dd",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-mobile-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-mobile-dark-caret-masked.png",
+      "bytes": 2471,
+      "sha256": "af4559034ea7140867d77e1499c43cc759911199fd81475aa09c65ae0d16ad81",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-mobile-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-mobile-dark-caret-revealed.png",
+      "bytes": 4149,
+      "sha256": "c06c0d21fde5bb0942bc10f65c4af82174a6a869bc1a0ea2ed9fe520fd8a5215",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-mobile-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-mobile-dark-fullpage.png",
+      "bytes": 29032,
+      "sha256": "f643ed46b4271435bd60d8bf1fb4bf15e90bd675869a7edb87628c3305e7055a",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-mobile-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-mobile-dark-invalid.png",
+      "bytes": 4017,
+      "sha256": "ec334180de07e2faa249d2663ef8d154fabe1d24e9cfc4637bb042e616f07a70",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-mobile-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-mobile-dark-keyboard-focus.png",
+      "bytes": 2479,
+      "sha256": "71684aaba9308862e2c905f775ca6cb20130990cecaec51c375d9a3463408e05",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-mobile-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-mobile-dark-pointer-pressed.png",
+      "bytes": 2478,
+      "sha256": "994e1adc1f7317c53bab6db159508e793da78f7ac269a7bfde3a0cc1ab2514de",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-mobile-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-mobile-light-caret-masked.png",
+      "bytes": 2453,
+      "sha256": "01a1abee80046d951db1583cb4a97fa65850178fcf04918a63b5e728965c1ef5",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-mobile-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-mobile-light-caret-revealed.png",
+      "bytes": 4095,
+      "sha256": "33af62f208344cc425c2c6bd94adba301d94a161a5b018491b4a28efd6e44310",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-mobile-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-mobile-light-fullpage.png",
+      "bytes": 28752,
+      "sha256": "0e11d27689da4bd2295b851ffad1caac57491789b2cd2e81d43e31c82aa6ab77",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-mobile-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-mobile-light-invalid.png",
+      "bytes": 4015,
+      "sha256": "8c459ea984344de3e652158cadb99c46f9ab7aa29201a1bd2cf9966a3e5284f1",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-mobile-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-mobile-light-keyboard-focus.png",
+      "bytes": 2465,
+      "sha256": "5be43edcfeaa59bb077412d0a87e31e4943845a566f4e2ada637c02aa1705c25",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-password-login-mobile-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-password-login-mobile-light-pointer-pressed.png",
+      "bytes": 2456,
+      "sha256": "e78de9b1f34e59a161557b59d69082166f14dcd74f94e412a25d463a52881f18",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-desktop-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-desktop-dark-caret-masked.png",
+      "bytes": 4535,
+      "sha256": "af432cfa21a1da59d670fc328246bd0dec785af66ad5f9cb20a8ee715ff82875",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-desktop-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-desktop-dark-caret-revealed.png",
+      "bytes": 6179,
+      "sha256": "bbafeb2f1d0b89d69ac0a8e0f1aaf7755df2401db90eff7e618be29382146a0e",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-desktop-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-desktop-dark-fullpage.png",
+      "bytes": 75589,
+      "sha256": "87cc687fa25a43b49c99d9b50f583c177b677211804b6fae30fae54c8d1d129e",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-desktop-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-desktop-dark-invalid.png",
+      "bytes": 4699,
+      "sha256": "f9fdf467331e33ffad932f83b8d0dd428cb8a082323c69ac461bd1885d1d927d",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-desktop-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-desktop-dark-keyboard-focus.png",
+      "bytes": 4542,
+      "sha256": "eaf99ab500688cefb35ad11cda5910b6d4e05483af26cff530a083880b7c6c18",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-desktop-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-desktop-dark-pointer-pressed.png",
+      "bytes": 4541,
+      "sha256": "e09cdb6c37ce2c66004f06f0d9588866ab159d39b50a7710e84140aeb0ed862a",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-desktop-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-desktop-light-caret-masked.png",
+      "bytes": 4503,
+      "sha256": "cbccac477186c1103fcd7a4fb91adcb25e5bc1e2ed1518ba0d542e01e91fbe65",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-desktop-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-desktop-light-caret-revealed.png",
+      "bytes": 6153,
+      "sha256": "46971e5eab4520d279902a7ee3c3bd12be186e011789ed7196ae33e5c5eb8960",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-desktop-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-desktop-light-fullpage.png",
+      "bytes": 74998,
+      "sha256": "60016ec957d4a1f53dd1beee85400a52e326ab79b36c462b1f1c9ccf93ae977c",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-desktop-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-desktop-light-invalid.png",
+      "bytes": 4681,
+      "sha256": "048dfa75215bde0a8e17e1c9545a4b9c50fcbdc1980a7030e7a3aefe7269d2ad",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-desktop-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-desktop-light-keyboard-focus.png",
+      "bytes": 4522,
+      "sha256": "3f8ef846f83792b31981d78026a6315c9e7e1e10705aa79ae8e01d86a8c618d7",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-desktop-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-desktop-light-pointer-pressed.png",
+      "bytes": 4509,
+      "sha256": "3d76e32af8036918363aabb6a88e657fa46eaff670f7039b7941f0c76c3dd01c",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-mobile-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-mobile-dark-caret-masked.png",
+      "bytes": 4467,
+      "sha256": "460c89240523e1a435fa8fbf30bbe76f724662cbd101b76d72843a7e47e46aec",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-mobile-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-mobile-dark-caret-revealed.png",
+      "bytes": 6113,
+      "sha256": "6c5e1ea946145fe778f798f4638a4db40c017e17bc5f44a810879033a9e758aa",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-mobile-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-mobile-dark-fullpage.png",
+      "bytes": 35451,
+      "sha256": "055deb9886a7b45ba11231a2433a3a3ceaa72c5857b1f51de5c3376d6b97aa1f",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-mobile-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-mobile-dark-invalid.png",
+      "bytes": 4588,
+      "sha256": "6c67e7244358e8d7377fe44172c8e474a67cf48210ccad567d65d3d919e6459f",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-mobile-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-mobile-dark-keyboard-focus.png",
+      "bytes": 4479,
+      "sha256": "1a570d8c5fa270e582c5cc46b30a2efac73e915f3119135420af1c6ef0b453bd",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-mobile-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-mobile-dark-pointer-pressed.png",
+      "bytes": 4475,
+      "sha256": "2e5e6f536df2631d2c5428cdca6eb7bb366e398bb998a28b98d105c7cade5cf2",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-mobile-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-mobile-light-caret-masked.png",
+      "bytes": 4442,
+      "sha256": "455cd82a43558f16e69923a584128778b2cd440f30c39a9c1e8d09c177f9f6fc",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-mobile-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-mobile-light-caret-revealed.png",
+      "bytes": 6096,
+      "sha256": "5ec4a4fb129c380ab01f37626f4e06c29b903c5b29e8c273030261ae11fa2d21",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-mobile-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-mobile-light-fullpage.png",
+      "bytes": 35191,
+      "sha256": "0b5310978503d63f45df13c8a6819590560083c5c4ac1abb51629144a8ae271d",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-mobile-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-mobile-light-invalid.png",
+      "bytes": 4571,
+      "sha256": "7f1ecf26aac43bab8f8bd686812cdaf3d58117835770af3134ed73c094691fdc",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-mobile-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-mobile-light-keyboard-focus.png",
+      "bytes": 4457,
+      "sha256": "24f6b931993a44ac11ad71961247a29028c4783a894cee00697c59bb08539741",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-registration-mobile-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-registration-mobile-light-pointer-pressed.png",
+      "bytes": 4445,
+      "sha256": "cc2cb0c9a5d33bd397a40201b65c494ddb30aa4b71441d24de2db107eac3e6b1",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-desktop-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-desktop-dark-caret-masked.png",
+      "bytes": 5023,
+      "sha256": "6bb7656337ff3ea1ee40feb0afc7b5c735a6a2b3b2b8ddc400acc856ae9047a4",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-desktop-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-desktop-dark-caret-revealed.png",
+      "bytes": 6651,
+      "sha256": "f5e9da761b829b1a226f7acba8ec411a9e6041747e3f483fe670ffa3f2ed19cb",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-desktop-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-desktop-dark-fullpage.png",
+      "bytes": 71557,
+      "sha256": "f2043cc548ea8639efa4e2c055b04abb10319054bad312156a9177ec6ade895f",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-desktop-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-desktop-dark-invalid.png",
+      "bytes": 5191,
+      "sha256": "85dd74573170cea8511eb93d5742fc56496691c0ae17bbef0fc5ffb537032d4f",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-desktop-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-desktop-dark-keyboard-focus.png",
+      "bytes": 5033,
+      "sha256": "1d5773d3ebcc60b7550f0cb6e04aac7b45648e7b56594f7965b7e804c1bde754",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-desktop-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-desktop-dark-pointer-pressed.png",
+      "bytes": 5026,
+      "sha256": "3db68b772edc5ed7fc1839f06e96bd7836ead05cdd6c447b5a326461779d72c7",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-desktop-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-desktop-light-caret-masked.png",
+      "bytes": 4946,
+      "sha256": "e71e0ef99741f13ac896bb7fdbc3aeaa9cb2632cc5e8d4a81c1f655acea17b8d",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-desktop-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-desktop-light-caret-revealed.png",
+      "bytes": 6587,
+      "sha256": "e4d50d3f7cc270e5e743b46381103029a99d0548ea4b7bf882139f11ad5a5a0a",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-desktop-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-desktop-light-fullpage.png",
+      "bytes": 71054,
+      "sha256": "ec85136a3cf7008045e1e93f4604f73dce811c45249611502ee7c3b37a88cc4d",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-desktop-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-desktop-light-invalid.png",
+      "bytes": 5123,
+      "sha256": "b5b0c7da8926c6c211423dd148da99a52550c8569bb99c7be2d7e77f6555c56c",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-desktop-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-desktop-light-keyboard-focus.png",
+      "bytes": 4964,
+      "sha256": "fdcc8d1078c13e24810bb11e39717ae49886a5f9a9f59d0d8a356975fe7fe7c0",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-desktop-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-desktop-light-pointer-pressed.png",
+      "bytes": 4949,
+      "sha256": "5aeda7f5e52f9000a2377f1c84eea76261bf042e2dfd5446c00650fabbdf2e69",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-mobile-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-mobile-dark-caret-masked.png",
+      "bytes": 5009,
+      "sha256": "b3705b6e094dc64b4a501c5446e6e0e446c9d45123224b01ee8a1b3034a803ef",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-mobile-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-mobile-dark-caret-revealed.png",
+      "bytes": 6689,
+      "sha256": "bc9b7e487362bc030a078d79df6b1c8f6b6b712931a0a5b0fdaa2d06a65678ea",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-mobile-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-mobile-dark-fullpage.png",
+      "bytes": 33828,
+      "sha256": "082a424c373a868ac1ba2f75f16c57b4cd2eeb1ec8cc38451b5c4ac6eb7be95b",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-mobile-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-mobile-dark-invalid.png",
+      "bytes": 5149,
+      "sha256": "daf96ec74270892d8143226a92ba189fd67653c1c1c54d251ddfe2f5354f2e2d",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-mobile-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-mobile-dark-keyboard-focus.png",
+      "bytes": 5021,
+      "sha256": "4be0f78bdabd69ac2aea6e0b3b692c978d8c93706291267e285eb44512040acb",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-mobile-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-mobile-dark-pointer-pressed.png",
+      "bytes": 5018,
+      "sha256": "1ab2e80952ff453cb1cdab0d081b817d5eaed5d17e8f963659ececf83e461bee",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-mobile-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-mobile-light-caret-masked.png",
+      "bytes": 4962,
+      "sha256": "264b0a77bd9bd2e409b3657b53ec391f72b406bf0ec3c9aaa5bf25f55b4b416d",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-mobile-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-mobile-light-caret-revealed.png",
+      "bytes": 6616,
+      "sha256": "d3943fb42f83778df99dc54632bd2028bed87a0d95d0b2ad5504d8179f37c549",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-mobile-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-mobile-light-fullpage.png",
+      "bytes": 33489,
+      "sha256": "f19fda156af425fb396c43b31067ae3f58af18145e710e030b9f5d2a50eeeb03",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-mobile-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-mobile-light-invalid.png",
+      "bytes": 5077,
+      "sha256": "7000b5a9a31fe9ba61c4a05c6def8637b902ac33af3a3fd9cb8e526aa81059d6",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-mobile-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-mobile-light-keyboard-focus.png",
+      "bytes": 4973,
+      "sha256": "f3a88a37ec99948d54963856ce843a040b667b64ad759cf6105d267a47d3e87c",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "academy-reset-complete-mobile-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\academy-reset-complete-mobile-light-pointer-pressed.png",
+      "bytes": 4963,
+      "sha256": "0d60d536498f58299266748c2066666fd085da18eb9e31a332c87dfaee0473aa",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-desktop-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-desktop-dark-caret-masked.png",
+      "bytes": 2526,
+      "sha256": "2a069cb425f7a8ec489e34be0a7c4358946ffbfd0666da5f712120db3db8363f",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-desktop-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-desktop-dark-caret-revealed.png",
+      "bytes": 4212,
+      "sha256": "fed3f33c4e139de9a01daba97f19bd247431afe9ba72f91904abea91faf19750",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-desktop-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-desktop-dark-fullpage.png",
+      "bytes": 69704,
+      "sha256": "9198bb7ef10470955ce52b91e2395a7096170296b73e8df5fb0b6cfb31e6594b",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-desktop-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-desktop-dark-invalid.png",
+      "bytes": 4066,
+      "sha256": "76e378802070559c951b7e368a05c18482c1aa73ff1f28bda68134dd361f2bfb",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-desktop-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-desktop-dark-keyboard-focus.png",
+      "bytes": 2533,
+      "sha256": "c0bfdd9a378ca667523f6a823e4a0e083c866a134d8c12994d25709875144375",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-desktop-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-desktop-dark-pointer-pressed.png",
+      "bytes": 2533,
+      "sha256": "869f08784e7d81ea96326f06668cef9d3bb0a2c4d772eac2110ee8535009d3bc",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-desktop-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-desktop-light-caret-masked.png",
+      "bytes": 2513,
+      "sha256": "a1a1b08cd4d405abdddfc700252af1c72a7c89042b3417c6177782315ee96cc8",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-desktop-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-desktop-light-caret-revealed.png",
+      "bytes": 4152,
+      "sha256": "835495684bb04bcafbbad0588fd01cc16c960caa2e50badefbd64de44a9cadaf",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-desktop-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-desktop-light-fullpage.png",
+      "bytes": 69385,
+      "sha256": "ebe8f6c13feaf5106a17d424235022e30e6d317051c4b4f3bb07e360425563f8",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-desktop-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-desktop-light-invalid.png",
+      "bytes": 4062,
+      "sha256": "6cb1df4360e2d13ba8774453c66a1bb213202ada463b596d1b82f6c672fd2f68",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-desktop-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-desktop-light-keyboard-focus.png",
+      "bytes": 2522,
+      "sha256": "52a4c36410c98ef9202aa807008ca040b78686f2fde9c8ac5c1c321f07589cb0",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-desktop-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-desktop-light-pointer-pressed.png",
+      "bytes": 2517,
+      "sha256": "8b164fbcda5b1d7aba9fba81827485b16d55ba287784e5dcebe8abc90f9be430",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-mobile-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-mobile-dark-caret-masked.png",
+      "bytes": 2471,
+      "sha256": "af4559034ea7140867d77e1499c43cc759911199fd81475aa09c65ae0d16ad81",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-mobile-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-mobile-dark-caret-revealed.png",
+      "bytes": 4149,
+      "sha256": "c06c0d21fde5bb0942bc10f65c4af82174a6a869bc1a0ea2ed9fe520fd8a5215",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-mobile-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-mobile-dark-fullpage.png",
+      "bytes": 29062,
+      "sha256": "faa4343190a855cae179f6f79e93ac07c2de08a8059e9bf91b633fff9885a215",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-mobile-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-mobile-dark-invalid.png",
+      "bytes": 4015,
+      "sha256": "c8af89bb64547b379eb86e53ba608c2d297821dee00d3c957009672ca55b9894",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-mobile-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-mobile-dark-keyboard-focus.png",
+      "bytes": 2479,
+      "sha256": "71684aaba9308862e2c905f775ca6cb20130990cecaec51c375d9a3463408e05",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-mobile-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-mobile-dark-pointer-pressed.png",
+      "bytes": 2479,
+      "sha256": "26db0a7c9f4fd889d17609b56d07130743fcbe0f98b9cded875c284027923a99",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-mobile-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-mobile-light-caret-masked.png",
+      "bytes": 2453,
+      "sha256": "01a1abee80046d951db1583cb4a97fa65850178fcf04918a63b5e728965c1ef5",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-mobile-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-mobile-light-caret-revealed.png",
+      "bytes": 4095,
+      "sha256": "33af62f208344cc425c2c6bd94adba301d94a161a5b018491b4a28efd6e44310",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-mobile-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-mobile-light-fullpage.png",
+      "bytes": 28752,
+      "sha256": "afe54cc1450c438a0baa63cefba10e4ea9871170756989a5c04a055b9a9da978",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-mobile-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-mobile-light-invalid.png",
+      "bytes": 4019,
+      "sha256": "24348a1baf421c30769f42b3f740efd34a0d99ec94c96da9d60a653c8fc69def",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-mobile-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-mobile-light-keyboard-focus.png",
+      "bytes": 2465,
+      "sha256": "5be43edcfeaa59bb077412d0a87e31e4943845a566f4e2ada637c02aa1705c25",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-password-login-mobile-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-password-login-mobile-light-pointer-pressed.png",
+      "bytes": 2456,
+      "sha256": "9df7dee5288d77aee449cc9662ca53dcbe69ee19030dfd6f15c48d77cc7d07fd",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-desktop-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-desktop-dark-caret-masked.png",
+      "bytes": 4501,
+      "sha256": "0eacc92341b3f378739605a060762cc92612a4dd690688d7308b508f2b1fc758",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-desktop-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-desktop-dark-caret-revealed.png",
+      "bytes": 6195,
+      "sha256": "0ecd739353e90da4b97d45621ae5f817a35fa9d7149d624dd74e7d505192e935",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-desktop-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-desktop-dark-fullpage.png",
+      "bytes": 114508,
+      "sha256": "88b285b638a58c7664374b6e853d2fd5d863de0c0f50c570ae048a45f73a6184",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-desktop-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-desktop-dark-invalid.png",
+      "bytes": 4686,
+      "sha256": "51907fe3de5fcffbd7fc98250e46eafd15448ed9fcf612df1dfaeab0febc7ab4",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-desktop-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-desktop-dark-keyboard-focus.png",
+      "bytes": 4509,
+      "sha256": "4cd25cfee1263b27512b436be96912430a69e591590814ce274b6fef8f878c01",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-desktop-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-desktop-dark-pointer-pressed.png",
+      "bytes": 4510,
+      "sha256": "05ddcb02bf7a813a19247c957b4c4c7d5dffd01530cec18a1af287f4014409d0",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-desktop-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-desktop-light-caret-masked.png",
+      "bytes": 4503,
+      "sha256": "abfadf87627d4e1380b32e13ce78cbe177637e7caa02565060c3a2081b0ff0ed",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-desktop-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-desktop-light-caret-revealed.png",
+      "bytes": 6153,
+      "sha256": "4e7c4cd5d7ede3b5ed5d02220a76a6e5023d036c95e5dd0823e33f723b7492e0",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-desktop-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-desktop-light-fullpage.png",
+      "bytes": 113414,
+      "sha256": "9e50d8d0ad912de52d96e9dbd56eb8b973e3edd7877edf2d94ed728e54e64eb3",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-desktop-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-desktop-light-invalid.png",
+      "bytes": 4658,
+      "sha256": "3a1eb50c76fd7b276f2f142f529ab70daa36bbc309f5c892943f155a9798fa55",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-desktop-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-desktop-light-keyboard-focus.png",
+      "bytes": 4517,
+      "sha256": "c1c33f86078b0ddc5e22e161d744a32db167b32b5d454a8d3658dc2642e04683",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-desktop-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-desktop-light-pointer-pressed.png",
+      "bytes": 4509,
+      "sha256": "7e86d1c00ae9a1e72e861a3dd89c05fb378f3ad9bc07e7a5daa3b7077a7922f8",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-mobile-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-mobile-dark-caret-masked.png",
+      "bytes": 4425,
+      "sha256": "1e75c0de914c87a0dc684de75ae9233d03d03bb080d768a63ff8518269864ddc",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-mobile-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-mobile-dark-caret-revealed.png",
+      "bytes": 6128,
+      "sha256": "a61a79c628742fe3816ffbd0319dfe846a7c110aea15a59757f20d71c7f22668",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-mobile-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-mobile-dark-fullpage.png",
+      "bytes": 70574,
+      "sha256": "351355b537cdccfa6f43671baa8d1308e7b2689d2be7beff57b5684298efa9da",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-mobile-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-mobile-dark-invalid.png",
+      "bytes": 4568,
+      "sha256": "cb176415718ad5bd4ee3c84d1600e6bd86c9bb12f0151dbaf951be5775743d44",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-mobile-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-mobile-dark-keyboard-focus.png",
+      "bytes": 4434,
+      "sha256": "36fcf75b338d2d6d90ff127c8002a23b0728a304af259683805bca2f28eea4c2",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-mobile-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-mobile-dark-pointer-pressed.png",
+      "bytes": 4433,
+      "sha256": "4509915cdbaac2a51e6dea919bce747d8f71efbb4212b6cfe99df3089e44e53e",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-mobile-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-mobile-light-caret-masked.png",
+      "bytes": 4429,
+      "sha256": "b8a814c0dfaec62a6fca5eb7e863c26f8173297b624320bd90103401a2832529",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-mobile-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-mobile-light-caret-revealed.png",
+      "bytes": 6081,
+      "sha256": "6adf907a1497ba3eb54f90f719b0bcd5204f915dd13fb946c912c088bd39abb3",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-mobile-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-mobile-light-fullpage.png",
+      "bytes": 70101,
+      "sha256": "3af84c02bbd78165d78590a965216b2998f322c29d428b06931e22eee19f1622",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-mobile-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-mobile-light-invalid.png",
+      "bytes": 4547,
+      "sha256": "e4fb1f4297e76047443979022985843d54213e39d22c0a699790cd7f1d228164",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-mobile-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-mobile-light-keyboard-focus.png",
+      "bytes": 4440,
+      "sha256": "e5377345a2809253bfe2e23edf223021cbb222c9b27e239191eddb6c485a30f8",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-registration-mobile-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-registration-mobile-light-pointer-pressed.png",
+      "bytes": 4430,
+      "sha256": "7321a017b497d542086910bb46c148d592ff0ac0c715953f21d073a944c08d06",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-desktop-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-desktop-dark-caret-masked.png",
+      "bytes": 5023,
+      "sha256": "6bb7656337ff3ea1ee40feb0afc7b5c735a6a2b3b2b8ddc400acc856ae9047a4",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-desktop-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-desktop-dark-caret-revealed.png",
+      "bytes": 6651,
+      "sha256": "f5e9da761b829b1a226f7acba8ec411a9e6041747e3f483fe670ffa3f2ed19cb",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-desktop-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-desktop-dark-fullpage.png",
+      "bytes": 73723,
+      "sha256": "372fa310ff569f7a9043e2dc7478b7ca5869dfd1f1781402b751e7eecd8f44bd",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-desktop-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-desktop-dark-invalid.png",
+      "bytes": 5190,
+      "sha256": "787ba4223545e6bd165ab74e4f932d684b2641c694684b22364124729482b247",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-desktop-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-desktop-dark-keyboard-focus.png",
+      "bytes": 5033,
+      "sha256": "1d5773d3ebcc60b7550f0cb6e04aac7b45648e7b56594f7965b7e804c1bde754",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-desktop-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-desktop-dark-pointer-pressed.png",
+      "bytes": 5027,
+      "sha256": "6fc36c1365b272b4fc1acf1cddc1cb0e482e71aa51dd5ec8e9a2ed83248432f6",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-desktop-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-desktop-light-caret-masked.png",
+      "bytes": 4946,
+      "sha256": "e71e0ef99741f13ac896bb7fdbc3aeaa9cb2632cc5e8d4a81c1f655acea17b8d",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-desktop-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-desktop-light-caret-revealed.png",
+      "bytes": 6587,
+      "sha256": "e4d50d3f7cc270e5e743b46381103029a99d0548ea4b7bf882139f11ad5a5a0a",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-desktop-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-desktop-light-fullpage.png",
+      "bytes": 73254,
+      "sha256": "92410efbb31f4b46800393392b63079dac62cfdb5b964bc6c147a9719ee0f957",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-desktop-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-desktop-light-invalid.png",
+      "bytes": 5123,
+      "sha256": "5fe23c44ce602c9c6a9e074616ba4adbb4ec2383e97086f99a77ed58aef16aac",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-desktop-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-desktop-light-keyboard-focus.png",
+      "bytes": 4964,
+      "sha256": "fdcc8d1078c13e24810bb11e39717ae49886a5f9a9f59d0d8a356975fe7fe7c0",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-desktop-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-desktop-light-pointer-pressed.png",
+      "bytes": 4951,
+      "sha256": "4075288259441c0422b6b145660c2db2d8ee8f4dc2c9c48fc25225e24747f1f4",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-mobile-dark-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-mobile-dark-caret-masked.png",
+      "bytes": 5009,
+      "sha256": "b3705b6e094dc64b4a501c5446e6e0e446c9d45123224b01ee8a1b3034a803ef",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-mobile-dark-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-mobile-dark-caret-revealed.png",
+      "bytes": 6689,
+      "sha256": "bc9b7e487362bc030a078d79df6b1c8f6b6b712931a0a5b0fdaa2d06a65678ea",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-mobile-dark-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-mobile-dark-fullpage.png",
+      "bytes": 33767,
+      "sha256": "71471828b524bc4a52f141c60d9c6e3db43b613ef512e60fd8a5107a9881c297",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-mobile-dark-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-mobile-dark-invalid.png",
+      "bytes": 5153,
+      "sha256": "2abaca2d8695366b31ae58a28dbd13ee1afc08f8691449baa54ac0a5406d440f",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-mobile-dark-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-mobile-dark-keyboard-focus.png",
+      "bytes": 5021,
+      "sha256": "4be0f78bdabd69ac2aea6e0b3b692c978d8c93706291267e285eb44512040acb",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-mobile-dark-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-mobile-dark-pointer-pressed.png",
+      "bytes": 5018,
+      "sha256": "1ab2e80952ff453cb1cdab0d081b817d5eaed5d17e8f963659ececf83e461bee",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-mobile-light-caret-masked.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-mobile-light-caret-masked.png",
+      "bytes": 4962,
+      "sha256": "264b0a77bd9bd2e409b3657b53ec391f72b406bf0ec3c9aaa5bf25f55b4b416d",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-mobile-light-caret-revealed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-mobile-light-caret-revealed.png",
+      "bytes": 6616,
+      "sha256": "d3943fb42f83778df99dc54632bd2028bed87a0d95d0b2ad5504d8179f37c549",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-mobile-light-fullpage.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-mobile-light-fullpage.png",
+      "bytes": 33489,
+      "sha256": "7f942a5694bc34ced5a694023481111072dbad167b43ab76b6c76f7b697e490c",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-mobile-light-invalid.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-mobile-light-invalid.png",
+      "bytes": 5076,
+      "sha256": "5e9f30a695419969c09d9663ba1e1e07fdf61a77e94ff3a558891e7f99f720f1",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-mobile-light-keyboard-focus.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-mobile-light-keyboard-focus.png",
+      "bytes": 4973,
+      "sha256": "f3a88a37ec99948d54963856ce843a040b667b64ad759cf6105d267a47d3e87c",
+      "appPixelsRetouched": false
+    },
+    {
+      "phase": "final",
+      "name": "doctor-reset-complete-mobile-light-pointer-pressed.png",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final\\doctor-reset-complete-mobile-light-pointer-pressed.png",
+      "bytes": 4964,
+      "sha256": "0fa3d981d077c380a9815162546ffe2c175ebf5de854253f4b1fcee97ff45e4f",
+      "appPixelsRetouched": false
+    }
+  ],
+  "contactSheets": [
+    {
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline-contact-sheets\\academy-registration-four-profiles-unscaled.png",
+      "sha256": "e1583b7b69d5505d8003446c14973a4031d7929eb675f91f740ee77c0acb20b5",
+      "unscaled": true
+    },
+    {
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline-contact-sheets\\academy-password-login-four-profiles-unscaled.png",
+      "sha256": "ef09cfe0b2551a00488ae09995a62e5f99ea6241547e4e706b792474d9d99248",
+      "unscaled": true
+    },
+    {
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline-contact-sheets\\academy-reset-complete-four-profiles-unscaled.png",
+      "sha256": "e01dd737ab602e710b6fdebcd3f2d4772d23f2852547fa62fbfbf86999a458e5",
+      "unscaled": true
+    },
+    {
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline-contact-sheets\\doctor-registration-four-profiles-unscaled.png",
+      "sha256": "9f8f08590eb8c1c2a1625fbc85dca292192deff247903c35cbacbeb81659a571",
+      "unscaled": true
+    },
+    {
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline-contact-sheets\\doctor-password-login-four-profiles-unscaled.png",
+      "sha256": "af56471e29cdc1a9b42a72840bd6109cbb36c797eab5e6ea5435bb46b90c6659",
+      "unscaled": true
+    },
+    {
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\baseline-contact-sheets\\doctor-reset-complete-four-profiles-unscaled.png",
+      "sha256": "11422c7e8d94513ff1f23b309ab9286e5ffeb69818ab47e9d8e9e1d641bf4014",
+      "unscaled": true
+    },
+    {
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final-contact-sheets\\academy-registration-four-profiles-unscaled.png",
+      "sha256": "975d55cd5759c13d7dad37f003550c085c4c153e972d0820a30472cac4bbf896",
+      "unscaled": true
+    },
+    {
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final-contact-sheets\\academy-password-login-four-profiles-unscaled.png",
+      "sha256": "7ff040b46e623b30a7adb56bf76b8fcd9f231bf9f6192acc9ea7731d03ffabd1",
+      "unscaled": true
+    },
+    {
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final-contact-sheets\\academy-reset-complete-four-profiles-unscaled.png",
+      "sha256": "8a0ab0ea1eb55b19f44b419690d9b15f63ca47fccb0351f56732ec1744a4690a",
+      "unscaled": true
+    },
+    {
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final-contact-sheets\\doctor-registration-four-profiles-unscaled.png",
+      "sha256": "9d04dd2f1333e3b19667a7c1a0eba5e210b5f1ed6ce0911adbc11318307cd374",
+      "unscaled": true
+    },
+    {
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final-contact-sheets\\doctor-password-login-four-profiles-unscaled.png",
+      "sha256": "b66fa7a58173dfcbbeb0515f97a870dc6f36b75f236d8177c9e9a9560fe4bfdd",
+      "unscaled": true
+    },
+    {
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\final-contact-sheets\\doctor-reset-complete-four-profiles-unscaled.png",
+      "sha256": "cb7ad20918031e3485c1a24b5970e7b3e893415df6d9b7e58e304abfabe59af9",
+      "unscaled": true
+    }
+  ],
+  "pairs": [
+    {
+      "name": "academy-registration-desktop-light",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-registration-desktop-light-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "4bc8e8ccfd1398a2bd37b402c547a3afaafed5f0bee19b53577a4892454355ad",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "academy-registration-desktop-dark",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-registration-desktop-dark-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "07e6566ede997028243db06d8c9637d7966fe58146cac058d6b1e510614a05e2",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "academy-registration-mobile-light",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-registration-mobile-light-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "2b9d3f4c7f40cf12bddda3418cc383ea1b35ad71b910da9870999acf354a2389",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "academy-registration-mobile-dark",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-registration-mobile-dark-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "280c418678fed966179e1e5b994a3e33f09b2ed9d38465f9fdab11387162060a",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "academy-password-login-desktop-light",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-password-login-desktop-light-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "30b9f98c17268edbf3f2290e23be9c6399969e9664868cf14494a08c74c6176f",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "academy-password-login-desktop-dark",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-password-login-desktop-dark-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "192c075ed27c008736d81184c44a8c4f8ff89140b58f303966a7376f3230651d",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "academy-password-login-mobile-light",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-password-login-mobile-light-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "d25849359467d6b0f558e6edc2fa237dc5beadd6bc23be98f8b5b9690a5f4db3",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "academy-password-login-mobile-dark",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-password-login-mobile-dark-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "3dcd65c6d82f96a0f5ce8e34a3966987e4fa8ef459b9befa86df657cf7effee8",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "academy-reset-complete-desktop-light",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-reset-complete-desktop-light-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "705bce7658a117a8e73fc84d1e92925326f3f6ddb786cc15f9ef3bc1d2ca0f13",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "academy-reset-complete-desktop-dark",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-reset-complete-desktop-dark-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "61fc2a7d55e5f524b86e1f1ba1acd319006bc9734423b340ab6fc698d084e7c9",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "academy-reset-complete-mobile-light",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-reset-complete-mobile-light-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "15459b92e00b1f507f48100da8899705ed142b96b5d3d9f91a80dacf726daaae",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "academy-reset-complete-mobile-dark",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\academy-reset-complete-mobile-dark-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "36d177551628c6c4ac78de4a19d6438b063b2b0a7156a9b68e78fb82397124c4",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "doctor-registration-desktop-light",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-registration-desktop-light-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "fd7ebc0eac1597c134c91ddffb7f639560350236c3acf63bb94a4e7f89b64c60",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "doctor-registration-desktop-dark",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-registration-desktop-dark-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "b76f8783d0aee63d7fdde3cdcb82787b5207744ed4119090c9b6788b197ba4f4",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "doctor-registration-mobile-light",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-registration-mobile-light-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "d154e0cef3a1ec88f449c1eb4588ba6a0c3ccac6e604c0eb308f4aea221812ce",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "doctor-registration-mobile-dark",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-registration-mobile-dark-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "e60262b3eda46c7e479d10fc0cb0f6c138ec7400e9f7e94d9b784efe555d418b",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "doctor-password-login-desktop-light",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-password-login-desktop-light-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "fa5338f3e3192b02f580cac2e511f4aa46e854092263dd0d4df6712f063f8f87",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "doctor-password-login-desktop-dark",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-password-login-desktop-dark-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "40e95bcb02e35ee79680da6cdd9b2acb2dbad4ed17fbe5a4f1979f8750252aed",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "doctor-password-login-mobile-light",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-password-login-mobile-light-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "8530122a9605e83c294edc9cf17fe235020a77da44943166c7b8bef424efa0a3",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "doctor-password-login-mobile-dark",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-password-login-mobile-dark-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "78a24914d5e9f1fe6c3877f845c8277208eccd24238704ff021d9261eaa7d53d",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "doctor-reset-complete-desktop-light",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-reset-complete-desktop-light-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "fd9fd600767d472076cbfb3a51ebbf4ae80971739812c132b0ad731af35e45cb",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "doctor-reset-complete-desktop-dark",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-reset-complete-desktop-dark-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "d6116edc02677915bd7e48b8d76a52a92155c624305e8d44328ecbc91c6693ab",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "doctor-reset-complete-mobile-light",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-reset-complete-mobile-light-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "e12305c4de877effa84aa0fc07db7e3ec259fd73120af368a234909be71f289f",
+      "appPixelsRetouched": false
+    },
+    {
+      "name": "doctor-reset-complete-mobile-dark",
+      "path": "C:\\Users\\sidor\\AppData\\Local\\Temp\\ds-auth-next-triple-20261013e\\ui-caret-verification\\comparison\\doctor-reset-complete-mobile-dark-caret-before-after.png",
+      "before": 0,
+      "after": 4,
+      "inputFocusRetained": true,
+      "valuePreserved": true,
+      "sha256": "8e7807be7425a6e23d9ee17f559cfa61047ac2d0ee01faf27a10ef682b81100a",
+      "appPixelsRetouched": false
+    }
+  ],
+  "fullpageOriginalHashesMatchContactIndexes": true
+}

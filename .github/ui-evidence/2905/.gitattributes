@@ -1,0 +1,2 @@
+# Immutable source snapshots retain their approved bytes, including line endings.
+*.txt -text

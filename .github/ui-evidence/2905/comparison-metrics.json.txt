@@ -1,0 +1,417 @@
+{
+  "baseSourceSha": "59ba49768494c1dd54cd8f3a86ca38e745dfb1e5",
+  "finalSourceSha": "213baf7c68cc8f2018da92c4746bb8287e8e486e",
+  "canvasBaseSha": "59ba49768494c1dd54cd8f3a86ca38e745dfb1e5",
+  "canvasSha256": "0a48f029dec14ce30ea4e1b9eed91f275a88a52d418a53f269ab086ce1d996a6",
+  "rows": [
+    {
+      "name": "academy-registration-desktop-light",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.296818 -0.0127018 -0.0347198)",
+          "after": "oklab(0.37244 -0.0178056 -0.0485968)"
+        }
+      ],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "academy-registration-desktop-dark",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "academy-registration-mobile-light",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.296811 -0.0127013 -0.0347185)",
+          "after": "oklab(0.372452 -0.0178064 -0.048599)"
+        }
+      ],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "academy-registration-mobile-dark",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [
+        {
+          "path": "input.css.borderColor",
+          "before": "rgb(231, 242, 254)",
+          "after": "rgb(210, 231, 253)"
+        }
+      ],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "academy-password-login-desktop-light",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.372452 -0.0178064 -0.048599)",
+          "after": "oklab(0.372393 -0.0178025 -0.0485882)"
+        }
+      ],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "academy-password-login-desktop-dark",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [
+        {
+          "path": "input.css.borderColor",
+          "before": "rgb(231, 242, 254)",
+          "after": "rgb(210, 231, 253)"
+        }
+      ],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "academy-password-login-mobile-light",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.261592 -0.00342666 -0.0225502)",
+          "after": "oklab(0.37782 -0.0112701 -0.0438778)"
+        }
+      ],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "academy-password-login-mobile-dark",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [
+        {
+          "path": "input.css.borderColor",
+          "before": "rgb(254, 254, 255)",
+          "after": "oklab(0.91947 -0.0136772 -0.0343315)"
+        }
+      ],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "academy-reset-complete-desktop-light",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "academy-reset-complete-desktop-dark",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "academy-reset-complete-mobile-light",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.372241 -0.0177922 -0.0485603)",
+          "after": "oklab(0.372452 -0.0178064 -0.048599)"
+        }
+      ],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "academy-reset-complete-mobile-dark",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "doctor-registration-desktop-light",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.26161 -0.00341474 -0.0225426)",
+          "after": "oklab(0.37783 -0.0112726 -0.0438812)"
+        }
+      ],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "doctor-registration-desktop-dark",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [
+        {
+          "path": "input.css.borderColor",
+          "before": "rgb(231, 242, 254)",
+          "after": "rgb(210, 231, 253)"
+        }
+      ],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "doctor-registration-mobile-light",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.372452 -0.0178064 -0.048599)",
+          "after": "oklab(0.372393 -0.0178025 -0.0485882)"
+        }
+      ],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "doctor-registration-mobile-dark",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "doctor-password-login-desktop-light",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "doctor-password-login-desktop-dark",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "doctor-password-login-mobile-light",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.296818 -0.0127018 -0.0347198)",
+          "after": "oklab(0.372452 -0.0178064 -0.048599)"
+        }
+      ],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "doctor-password-login-mobile-dark",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "doctor-reset-complete-desktop-light",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.372452 -0.0178064 -0.048599)",
+          "after": "oklab(0.372194 -0.017789 -0.0485517)"
+        }
+      ],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "doctor-reset-complete-desktop-dark",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [
+        {
+          "path": "input.css.borderColor",
+          "before": "rgb(231, 242, 254)",
+          "after": "rgb(175, 213, 251)"
+        }
+      ],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "doctor-reset-complete-mobile-light",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.296776 -0.012699 -0.0347122)",
+          "after": "oklab(0.499298 -0.0263674 -0.0718758)"
+        }
+      ],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    },
+    {
+      "name": "doctor-reset-complete-mobile-dark",
+      "restingDelta": [],
+      "hoverDelta": [],
+      "pressedDelta": [],
+      "keyboardFocusDelta": [],
+      "invalidDelta": [
+        {
+          "path": "input.css.borderColor",
+          "before": "rgb(210, 231, 253)",
+          "after": "rgb(175, 213, 251)"
+        }
+      ],
+      "canvasMismatchBefore": [],
+      "canvasMismatchAfter": [],
+      "actualPointerCaretBefore": 0,
+      "actualPointerCaretAfter": 4,
+      "finalCaretPass": true
+    }
+  ],
+  "note": "Metric/copy deltas are observations, not a substitute for fullpage eyes-on comparison or owner approval. Any existing canvas mismatch is disclosed for root/reviewer judgment."
+}

@@ -1,0 +1,49 @@
+{
+  "sourceSha": "213baf7c68cc8f2018da92c4746bb8287e8e486e",
+  "runtimeSha": "213baf7c68cc8f2018da92c4746bb8287e8e486e",
+  "canvasHash": "0a48f029dec14ce30ea4e1b9eed91f275a88a52d418a53f269ab086ce1d996a6",
+  "nativeFinalExit": 0,
+  "finalRows": 24,
+  "finalPasses": 24,
+  "failures": 0,
+  "pointerBeforeAfter": "4→4",
+  "baselinePointerBeforeAfter": "4→0",
+  "keyboardRange": "2–7 retained24/24",
+  "metricDeltaCounts": {
+    "restingDelta": 0,
+    "hoverDelta": 0,
+    "pressedDelta": 0,
+    "keyboardFocusDelta": 0,
+    "invalidDelta": 16
+  },
+  "originalPngCount": 288,
+  "finalContactSheets": 6,
+  "caretPairs": 24,
+  "allContextsPagesBrowserClosed": true,
+  "browserLeaseReleased": true,
+  "delegateViewedAllFinalFullpages": true,
+  "leadOwnFinalEyesOnRequired": true,
+  "selectedPair": "comparison/academy-registration-desktop-light-caret-before-after.png",
+  "artifactManifestSha256": "7f8881f69957352f9e333fbc90073a95ab2f1678bacd863a05c773aa6d068368",
+  "invalidBorderResolution": {
+    "nativeExit": 0,
+    "rows": 8,
+    "passes": 8,
+    "failures": 0,
+    "lightRgba": [
+      200,
+      30,
+      30,
+      255
+    ],
+    "darkRgba": [
+      225,
+      85,
+      85,
+      255
+    ],
+    "sourceIdentityAllEqual": true,
+    "originalImmediateDeltasRetained": 16,
+    "old59SettledBrowserNotRun": true
+  }
+}

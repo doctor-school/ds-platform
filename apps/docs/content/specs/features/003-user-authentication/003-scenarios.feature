@@ -960,12 +960,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
       | reset-complete |
       | password login |
 
-  @EARS-38 @failure
+  @EARS-38 @failure @password-reveal-reload
   Scenario: Revealing a password has no side effect and never survives a reload
-    Given a visitor has revealed the password on the registration form
-    When the page is reloaded
-    Then the password field is masked again
-    And revealing emitted no network request, log entry, or storage write
+    Given a clean Academy guest has entered an owned password on the ready registration form with the account return target
+    When the ready guest reveals that password during a bounded side-effect observation
+    Then that reveal preserves the value and caret without a request, log or browser persistence write and grants no private access
+    When that revealed registration document is really hard reloaded
+    Then the new registration document masks the password and restores the unpressed show action without private access
+    # NEW real reveal-action/reload coverage: password-reveal-reload.steps.ts.
+    # Retain the preceding three-surface keyboard outline and PasswordField unit
+    # invariants; this case owns only the side-effect and hard-reload trigger.
 
   @EARS-39 @EARS-41 @happy @cold-email-confirmation
   Scenario: A cold verification step still signs in by the code

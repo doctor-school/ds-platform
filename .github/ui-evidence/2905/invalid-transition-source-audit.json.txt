@@ -1,0 +1,615 @@
+{
+  "sourceBefore": "59ba49768494c1dd54cd8f3a86ca38e745dfb1e5",
+  "sourceAfter": "213baf7c68cc8f2018da92c4746bb8287e8e486e",
+  "sourceDiff": {
+    "inputSame": true,
+    "formSame": true
+  },
+  "sourceExcerpts": {
+    "59ba49768494c1dd54cd8f3a86ca38e745dfb1e5": {
+      "packages/design-system/src/primitives/input.tsx": [
+        {
+          "line": 18,
+          "text": " * the source's `border-color:#6BB1F7; box-shadow:0 0 0 3px …`)."
+        },
+        {
+          "line": 21,
+          "text": " * border-border : border-hairline`), NOT a pure-CSS `:placeholder-shown` rule — a"
+        },
+        {
+          "line": 26,
+          "text": " * higher-specificity state variants (`focus-visible:`, `disabled:`, `aria-invalid:`)"
+        },
+        {
+          "line": 31,
+          "text": " * `aria-invalid`. The success cell (source §07) is the mirror — a green `success`"
+        },
+        {
+          "line": 46,
+          "text": "        \"border-header-hairline bg-transparent font-semibold text-header-foreground placeholder:text-header-foreground focus-visible:border-header-foreground\","
+        },
+        {
+          "line": 77,
+          "text": "          \"flex h-11 w-full border-2 bg-card px-3.5 py-3 text-sm text-foreground transition-colors\","
+        },
+        {
+          "line": 80,
+          "text": "          filled ? \"border-border\" : \"border-hairline\","
+        },
+        {
+          "line": 81,
+          "text": "          \"file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground\","
+        },
+        {
+          "line": 82,
+          "text": "          \"focus-visible:border-ring focus-visible:shadow-focus focus-visible:outline-none\","
+        },
+        {
+          "line": 83,
+          "text": "          \"disabled:cursor-not-allowed disabled:border-hairline disabled:bg-muted disabled:text-muted-foreground\","
+        },
+        {
+          "line": 84,
+          "text": "          \"data-[success=true]:border-success data-[success=true]:bg-success-tint\","
+        },
+        {
+          "line": 85,
+          "text": "          \"aria-invalid:border-destructive-text aria-invalid:bg-destructive-tint\","
+        }
+      ],
+      "packages/design-system/src/primitives/form.tsx": [
+        {
+          "line": 15,
+          "text": " * wiring (`aria-describedby`, `aria-invalid`, id linkage) is derived once in"
+        },
+        {
+          "line": 80,
+          "text": "            control's `interactiveBase` `focus-visible:ring-2 ring-offset-2`"
+        },
+        {
+          "line": 124,
+          "text": "      aria-invalid={!!error}"
+        },
+        {
+          "line": 172,
+          "text": "// one `danger`), like the `Checkbox` invalid box; `destructive` stays the"
+        },
+        {
+          "line": 175,
+          "text": "  \"border-2 border-destructive-text bg-destructive-tint px-3.5 py-3 text-caption font-bold leading-notice text-foreground\";"
+        },
+        {
+          "line": 230,
+          "text": " * alike. The field's invalidity is carried by the input border + this message,"
+        },
+        {
+          "line": 238,
+          "text": " *    by default, replaced in place by the destructive error when invalid;"
+        },
+        {
+          "line": 374,
+          "text": "  /** The invalid control id. The summary renders a native `#id` field link. */"
+        },
+        {
+          "line": 411,
+          "text": "        \"border-2 border-destructive bg-background p-4\","
+        },
+        {
+          "line": 412,
+          "text": "        \"focus-visible:outline-none focus-visible:shadow-focus\","
+        }
+      ]
+    },
+    "213baf7c68cc8f2018da92c4746bb8287e8e486e": {
+      "packages/design-system/src/primitives/input.tsx": [
+        {
+          "line": 18,
+          "text": " * the source's `border-color:#6BB1F7; box-shadow:0 0 0 3px …`)."
+        },
+        {
+          "line": 21,
+          "text": " * border-border : border-hairline`), NOT a pure-CSS `:placeholder-shown` rule — a"
+        },
+        {
+          "line": 26,
+          "text": " * higher-specificity state variants (`focus-visible:`, `disabled:`, `aria-invalid:`)"
+        },
+        {
+          "line": 31,
+          "text": " * `aria-invalid`. The success cell (source §07) is the mirror — a green `success`"
+        },
+        {
+          "line": 46,
+          "text": "        \"border-header-hairline bg-transparent font-semibold text-header-foreground placeholder:text-header-foreground focus-visible:border-header-foreground\","
+        },
+        {
+          "line": 77,
+          "text": "          \"flex h-11 w-full border-2 bg-card px-3.5 py-3 text-sm text-foreground transition-colors\","
+        },
+        {
+          "line": 80,
+          "text": "          filled ? \"border-border\" : \"border-hairline\","
+        },
+        {
+          "line": 81,
+          "text": "          \"file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground\","
+        },
+        {
+          "line": 82,
+          "text": "          \"focus-visible:border-ring focus-visible:shadow-focus focus-visible:outline-none\","
+        },
+        {
+          "line": 83,
+          "text": "          \"disabled:cursor-not-allowed disabled:border-hairline disabled:bg-muted disabled:text-muted-foreground\","
+        },
+        {
+          "line": 84,
+          "text": "          \"data-[success=true]:border-success data-[success=true]:bg-success-tint\","
+        },
+        {
+          "line": 85,
+          "text": "          \"aria-invalid:border-destructive-text aria-invalid:bg-destructive-tint\","
+        }
+      ],
+      "packages/design-system/src/primitives/form.tsx": [
+        {
+          "line": 15,
+          "text": " * wiring (`aria-describedby`, `aria-invalid`, id linkage) is derived once in"
+        },
+        {
+          "line": 80,
+          "text": "            control's `interactiveBase` `focus-visible:ring-2 ring-offset-2`"
+        },
+        {
+          "line": 124,
+          "text": "      aria-invalid={!!error}"
+        },
+        {
+          "line": 172,
+          "text": "// one `danger`), like the `Checkbox` invalid box; `destructive` stays the"
+        },
+        {
+          "line": 175,
+          "text": "  \"border-2 border-destructive-text bg-destructive-tint px-3.5 py-3 text-caption font-bold leading-notice text-foreground\";"
+        },
+        {
+          "line": 230,
+          "text": " * alike. The field's invalidity is carried by the input border + this message,"
+        },
+        {
+          "line": 238,
+          "text": " *    by default, replaced in place by the destructive error when invalid;"
+        },
+        {
+          "line": 374,
+          "text": "  /** The invalid control id. The summary renders a native `#id` field link. */"
+        },
+        {
+          "line": 411,
+          "text": "        \"border-2 border-destructive bg-background p-4\","
+        },
+        {
+          "line": 412,
+          "text": "        \"focus-visible:outline-none focus-visible:shadow-focus\","
+        }
+      ]
+    }
+  },
+  "servedCssRules": [
+    {
+      "file": "C:\\Users\\sidor\\repos\\ds-platform\\.claude\\worktrees\\2250\\apps\\portal\\.next\\standalone\\apps\\portal\\.next\\static\\chunks\\2-8yu9rpaa675.css",
+      "rules": []
+    },
+    {
+      "file": "C:\\Users\\sidor\\repos\\ds-platform\\.claude\\worktrees\\2250\\apps\\portal\\.next\\standalone\\apps\\portal\\.next\\static\\chunks\\232586w0y1fur.css",
+      "rules": []
+    },
+    {
+      "file": "C:\\Users\\sidor\\repos\\ds-platform\\.claude\\worktrees\\2250\\apps\\portal\\.next\\standalone\\apps\\portal\\.next\\static\\chunks\\3vkqom25ta9m2.css",
+      "rules": [
+        ":root,:host{--font-sans:var(--font-family-sans);--color-blue-300:#90c5ff;--color-blue-700:#1447e6;--color-neutral-900:#171717;--color-black:#000;--color-white:#fff;--spacing:.25rem;--breakpoint-lg:64rem;--container-sm:24rem;--container-md:28rem;--container-lg:32rem;--container-xl:36rem;--container-2xl:42rem;--container-3xl:48rem;--text-xs--line-height:calc(1 / .75);--text-sm--line-height:calc(1.25 / .875);--text-base--line-height:calc(1.5 / 1);--text-lg--line-height:calc(1.75 / 1.125);--text-xl--line-height:calc(1.75 / 1.25);--text-2xl--line-height:calc(2 / 1.5);--text-3xl--line-height:calc(2.25 / 1.875);--text-4xl--line-height:calc(2.5 / 2.25);--text-5xl:3rem;--text-5xl--line-height:1;--text-6xl:3.75rem;--text-6xl--line-height:1;--text-9xl:8rem;--text-9xl--line-height:1;--font-weight-normal:var(--font-weight-normal);--font-weight-medium:var(--font-weight-medium);--font-weight-semibold:var(--font-weight-semibold);--font-weight-bold:var(--font-weight-bold);--font-weight-extrabold:var(--font-weight-extrabold);--tracking-tighter:-.05em;--tracking-tight:-.025em;--tracking-normal:0em;--tracking-wide:.025em;--tracking-wider:.05em;--tracking-widest:.1em;--shadow-sm:var(--shadow-sm);--shadow-md:var(--shadow-md);--shadow-lg:var(--shadow-lg);--ease-out:cubic-bezier(0, 0, .2, 1);--animate-spin:spin 1s linear infinite;--aspect-video:16 / 9;--default-transition-duration:.15s;--default-transition-timing-function:cubic-bezier(.4, 0, .2, 1);--default-font-family:var(--font-family-sans);--default-mono-font-family:var(--font-family-mono);--color-accent:var(--color-accent);--color-background:var(--color-background);--color-foreground:var(--color-foreground);--color-section:var(--color-section);--color-calendar-muted:var(--color-calendar-muted);--color-table-sorted:var(--color-table-sorted);--color-card:var(--color-card);--color-card-foreground:var(--color-card-foreground);--color-primary:var(--color-primary);--color-primary-foreground:var(--color-primary-foreground);--color-primary-action:var(--color-primary-action);--color-primary-hover:var(--color-primary-hover);--color-primary-pressed:var(--color-primary-pressed);--color-primary-surface:var(--color-primary-surface);--color-primary-surface-foreground:var(--color-primary-surface-foreground);--color-primary-surface-muted:var(--color-primary-surface-muted);--color-primary-surface-soft:var(--color-primary-surface-soft);--color-primary-surface-footer:var(--color-primary-surface-footer);--color-secondary:var(--color-secondary);--color-secondary-foreground:var(--color-secondary-foreground);--color-muted:var(--color-muted);--color-muted-foreground:var(--color-muted-foreground);--color-faint:var(--color-faint);--color-muted-2:var(--color-muted-2);--color-accent-foreground:var(--color-accent-foreground);--color-tint:var(--color-tint);--color-tint-pressed:var(--color-tint-pressed);--color-tint-foreground:var(--color-tint-foreground);--color-info:var(--color-info);--color-chip-border:var(--color-chip-border);--color-header:var(--color-header);--color-header-foreground:var(--color-header-foreground);--color-header-chip-foreground:var(--color-header-chip-foreground);--color-header-chip-shadow:var(--color-header-chip-shadow);--color-header-hairline:var(--color-header-hairline);--color-header-topbar:var(--color-header-topbar);--color-header-topbar-foreground:var(--color-header-topbar-foreground);--color-footer-wordmark:var(--color-footer-wordmark);--color-hero:var(--color-hero);--color-hero-foreground:var(--color-hero-foreground);--color-hero-muted:var(--color-hero-muted);--color-success:var(--color-success);--color-success-foreground:var(--color-success-foreground);--color-success-text:var(--color-success-text);--color-success-tint:var(--color-success-tint);--color-warning:var(--color-warning);--color-warning-foreground:var(--color-warning-foreground);--color-warning-tint:var(--color-warning-tint);--color-destructive:var(--color-destructive);--color-destructive-foreground:var(--color-destructive-foreground);--color-destructive-text:var(--color-destructive-text);--color-destructive-tint:var(--color-destructive-tint);--color-live:var(--color-live);--color-live-foreground:var(--color-live-foreground);--color-border:var(--color-border);--color-hairline:var(--color-hairline);--color-input:var(--color-input);--color-ring:var(--color-ring);--color-elevation:var(--color-elevation);--color-elevation-soft:var(--color-elevation-soft);--spacing-gutter:var(--space-gutter);--container-content:var(--container-content);--container-calendar:var(--container-calendar);--container-search:var(--container-search);--container-panel-headline:var(--container-panel-headline);--container-panel-lead:var(--container-panel-lead);--container-panel-assurance:var(--container-panel-assurance);--container-zone-label:var(--container-zone-label);--container-auth:var(--container-auth);--shadow-base:var(--shadow-base);--shadow-live:var(--shadow-live);--shadow-focus:var(--shadow-focus);--shadow-focus-inset:var(--shadow-focus-inset);--shadow-btn:var(--shadow-btn);--shadow-btn-hover:var(--shadow-btn-hover);--shadow-btn-focus:var(--shadow-btn-focus);--shadow-header-chip:var(--shadow-header-chip);--shadow-header-chip-hover:var(--shadow-header-chip-hover);--shadow-ghost:var(--shadow-ghost);--shadow-ghost-hover:var(--shadow-ghost-hover);--shadow-ghost-focus:var(--shadow-ghost-focus);--breakpoint-layout:56.3125rem}",
+        "*,:before,:after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}",
+        ".transition{transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to,opacity,box-shadow,transform,translate,scale,rotate,filter,-webkit-backdrop-filter,backdrop-filter,display,content-visibility,overlay,pointer-events;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}",
+        ".transition-all{transition-property:all;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}",
+        ".transition-colors{transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}",
+        ".transition-transform{transition-property:transform,translate,scale,rotate;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}",
+        ".duration-200{--tw-duration:.2s;transition-duration:.2s}",
+        ".duration-1000{--tw-duration:1s;transition-duration:1s}"
+      ]
+    },
+    {
+      "file": "C:\\Users\\sidor\\repos\\ds-platform\\.claude\\worktrees\\2250\\apps\\portal\\.next\\standalone\\apps\\portal\\.next\\static\\chunks\\43pa1bhrvgk6v.css",
+      "rules": []
+    },
+    {
+      "file": "C:\\Users\\sidor\\repos\\ds-platform\\.claude\\worktrees\\2250\\apps\\portal\\.next\\static\\chunks\\2-8yu9rpaa675.css",
+      "rules": []
+    },
+    {
+      "file": "C:\\Users\\sidor\\repos\\ds-platform\\.claude\\worktrees\\2250\\apps\\portal\\.next\\static\\chunks\\232586w0y1fur.css",
+      "rules": []
+    },
+    {
+      "file": "C:\\Users\\sidor\\repos\\ds-platform\\.claude\\worktrees\\2250\\apps\\portal\\.next\\static\\chunks\\3vkqom25ta9m2.css",
+      "rules": [
+        ":root,:host{--font-sans:var(--font-family-sans);--color-blue-300:#90c5ff;--color-blue-700:#1447e6;--color-neutral-900:#171717;--color-black:#000;--color-white:#fff;--spacing:.25rem;--breakpoint-lg:64rem;--container-sm:24rem;--container-md:28rem;--container-lg:32rem;--container-xl:36rem;--container-2xl:42rem;--container-3xl:48rem;--text-xs--line-height:calc(1 / .75);--text-sm--line-height:calc(1.25 / .875);--text-base--line-height:calc(1.5 / 1);--text-lg--line-height:calc(1.75 / 1.125);--text-xl--line-height:calc(1.75 / 1.25);--text-2xl--line-height:calc(2 / 1.5);--text-3xl--line-height:calc(2.25 / 1.875);--text-4xl--line-height:calc(2.5 / 2.25);--text-5xl:3rem;--text-5xl--line-height:1;--text-6xl:3.75rem;--text-6xl--line-height:1;--text-9xl:8rem;--text-9xl--line-height:1;--font-weight-normal:var(--font-weight-normal);--font-weight-medium:var(--font-weight-medium);--font-weight-semibold:var(--font-weight-semibold);--font-weight-bold:var(--font-weight-bold);--font-weight-extrabold:var(--font-weight-extrabold);--tracking-tighter:-.05em;--tracking-tight:-.025em;--tracking-normal:0em;--tracking-wide:.025em;--tracking-wider:.05em;--tracking-widest:.1em;--shadow-sm:var(--shadow-sm);--shadow-md:var(--shadow-md);--shadow-lg:var(--shadow-lg);--ease-out:cubic-bezier(0, 0, .2, 1);--animate-spin:spin 1s linear infinite;--aspect-video:16 / 9;--default-transition-duration:.15s;--default-transition-timing-function:cubic-bezier(.4, 0, .2, 1);--default-font-family:var(--font-family-sans);--default-mono-font-family:var(--font-family-mono);--color-accent:var(--color-accent);--color-background:var(--color-background);--color-foreground:var(--color-foreground);--color-section:var(--color-section);--color-calendar-muted:var(--color-calendar-muted);--color-table-sorted:var(--color-table-sorted);--color-card:var(--color-card);--color-card-foreground:var(--color-card-foreground);--color-primary:var(--color-primary);--color-primary-foreground:var(--color-primary-foreground);--color-primary-action:var(--color-primary-action);--color-primary-hover:var(--color-primary-hover);--color-primary-pressed:var(--color-primary-pressed);--color-primary-surface:var(--color-primary-surface);--color-primary-surface-foreground:var(--color-primary-surface-foreground);--color-primary-surface-muted:var(--color-primary-surface-muted);--color-primary-surface-soft:var(--color-primary-surface-soft);--color-primary-surface-footer:var(--color-primary-surface-footer);--color-secondary:var(--color-secondary);--color-secondary-foreground:var(--color-secondary-foreground);--color-muted:var(--color-muted);--color-muted-foreground:var(--color-muted-foreground);--color-faint:var(--color-faint);--color-muted-2:var(--color-muted-2);--color-accent-foreground:var(--color-accent-foreground);--color-tint:var(--color-tint);--color-tint-pressed:var(--color-tint-pressed);--color-tint-foreground:var(--color-tint-foreground);--color-info:var(--color-info);--color-chip-border:var(--color-chip-border);--color-header:var(--color-header);--color-header-foreground:var(--color-header-foreground);--color-header-chip-foreground:var(--color-header-chip-foreground);--color-header-chip-shadow:var(--color-header-chip-shadow);--color-header-hairline:var(--color-header-hairline);--color-header-topbar:var(--color-header-topbar);--color-header-topbar-foreground:var(--color-header-topbar-foreground);--color-footer-wordmark:var(--color-footer-wordmark);--color-hero:var(--color-hero);--color-hero-foreground:var(--color-hero-foreground);--color-hero-muted:var(--color-hero-muted);--color-success:var(--color-success);--color-success-foreground:var(--color-success-foreground);--color-success-text:var(--color-success-text);--color-success-tint:var(--color-success-tint);--color-warning:var(--color-warning);--color-warning-foreground:var(--color-warning-foreground);--color-warning-tint:var(--color-warning-tint);--color-destructive:var(--color-destructive);--color-destructive-foreground:var(--color-destructive-foreground);--color-destructive-text:var(--color-destructive-text);--color-destructive-tint:var(--color-destructive-tint);--color-live:var(--color-live);--color-live-foreground:var(--color-live-foreground);--color-border:var(--color-border);--color-hairline:var(--color-hairline);--color-input:var(--color-input);--color-ring:var(--color-ring);--color-elevation:var(--color-elevation);--color-elevation-soft:var(--color-elevation-soft);--spacing-gutter:var(--space-gutter);--container-content:var(--container-content);--container-calendar:var(--container-calendar);--container-search:var(--container-search);--container-panel-headline:var(--container-panel-headline);--container-panel-lead:var(--container-panel-lead);--container-panel-assurance:var(--container-panel-assurance);--container-zone-label:var(--container-zone-label);--container-auth:var(--container-auth);--shadow-base:var(--shadow-base);--shadow-live:var(--shadow-live);--shadow-focus:var(--shadow-focus);--shadow-focus-inset:var(--shadow-focus-inset);--shadow-btn:var(--shadow-btn);--shadow-btn-hover:var(--shadow-btn-hover);--shadow-btn-focus:var(--shadow-btn-focus);--shadow-header-chip:var(--shadow-header-chip);--shadow-header-chip-hover:var(--shadow-header-chip-hover);--shadow-ghost:var(--shadow-ghost);--shadow-ghost-hover:var(--shadow-ghost-hover);--shadow-ghost-focus:var(--shadow-ghost-focus);--breakpoint-layout:56.3125rem}",
+        "*,:before,:after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}",
+        ".transition{transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to,opacity,box-shadow,transform,translate,scale,rotate,filter,-webkit-backdrop-filter,backdrop-filter,display,content-visibility,overlay,pointer-events;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}",
+        ".transition-all{transition-property:all;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}",
+        ".transition-colors{transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}",
+        ".transition-transform{transition-property:transform,translate,scale,rotate;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}",
+        ".duration-200{--tw-duration:.2s;transition-duration:.2s}",
+        ".duration-1000{--tw-duration:1s;transition-duration:1s}"
+      ]
+    },
+    {
+      "file": "C:\\Users\\sidor\\repos\\ds-platform\\.claude\\worktrees\\2250\\apps\\portal\\.next\\static\\chunks\\43pa1bhrvgk6v.css",
+      "rules": []
+    }
+  ],
+  "captureOrder": [
+    "inputSecret short creation / empty current",
+    "input.focus",
+    "keyboard Tab (real blur)",
+    "styles(): locator evaluate immediately reads aria-invalid/message/computed styles",
+    "screenshot(): cropOf geometry then screenshot; caret initial, mask synthetic strong destination, no animations option set (default allow)"
+  ],
+  "animationHandling": "No disable/fast-forward/style mutation/timer correction. Existing screenshot timing is later than immediate metric; later does not prove settled endpoint.",
+  "invalidDeltaRows": [
+    {
+      "name": "academy-registration-desktop-light",
+      "deltas": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.296818 -0.0127018 -0.0347198)",
+          "after": "oklab(0.37244 -0.0178056 -0.0485968)",
+          "beforeDerivedSrgbRgba": [
+            30,
+            46,
+            63,
+            1
+          ],
+          "afterDerivedSrgbRgba": [
+            42,
+            66,
+            91,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "academy-registration-mobile-light",
+      "deltas": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.296811 -0.0127013 -0.0347185)",
+          "after": "oklab(0.372452 -0.0178064 -0.048599)",
+          "beforeDerivedSrgbRgba": [
+            30,
+            46,
+            63,
+            1
+          ],
+          "afterDerivedSrgbRgba": [
+            42,
+            66,
+            91,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "academy-registration-mobile-dark",
+      "deltas": [
+        {
+          "path": "input.css.borderColor",
+          "before": "rgb(231, 242, 254)",
+          "after": "rgb(210, 231, 253)",
+          "beforeDerivedSrgbRgba": [
+            231,
+            242,
+            254,
+            1
+          ],
+          "afterDerivedSrgbRgba": [
+            210,
+            231,
+            253,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "academy-password-login-desktop-light",
+      "deltas": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.372452 -0.0178064 -0.048599)",
+          "after": "oklab(0.372393 -0.0178025 -0.0485882)",
+          "beforeDerivedSrgbRgba": [
+            42,
+            66,
+            91,
+            1
+          ],
+          "afterDerivedSrgbRgba": [
+            42,
+            66,
+            91,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "academy-password-login-desktop-dark",
+      "deltas": [
+        {
+          "path": "input.css.borderColor",
+          "before": "rgb(231, 242, 254)",
+          "after": "rgb(210, 231, 253)",
+          "beforeDerivedSrgbRgba": [
+            231,
+            242,
+            254,
+            1
+          ],
+          "afterDerivedSrgbRgba": [
+            210,
+            231,
+            253,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "academy-password-login-mobile-light",
+      "deltas": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.261592 -0.00342666 -0.0225502)",
+          "after": "oklab(0.37782 -0.0112701 -0.0438778)",
+          "beforeDerivedSrgbRgba": [
+            30,
+            37,
+            48,
+            1
+          ],
+          "afterDerivedSrgbRgba": [
+            50,
+            67,
+            90,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "academy-password-login-mobile-dark",
+      "deltas": [
+        {
+          "path": "input.css.borderColor",
+          "before": "rgb(254, 254, 255)",
+          "after": "oklab(0.91947 -0.0136772 -0.0343315)",
+          "beforeDerivedSrgbRgba": [
+            254,
+            254,
+            255,
+            1
+          ],
+          "afterDerivedSrgbRgba": [
+            210,
+            231,
+            253,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "academy-reset-complete-mobile-light",
+      "deltas": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.372241 -0.0177922 -0.0485603)",
+          "after": "oklab(0.372452 -0.0178064 -0.048599)",
+          "beforeDerivedSrgbRgba": [
+            42,
+            66,
+            91,
+            1
+          ],
+          "afterDerivedSrgbRgba": [
+            42,
+            66,
+            91,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "doctor-registration-desktop-light",
+      "deltas": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.26161 -0.00341474 -0.0225426)",
+          "after": "oklab(0.37783 -0.0112726 -0.0438812)",
+          "beforeDerivedSrgbRgba": [
+            30,
+            37,
+            48,
+            1
+          ],
+          "afterDerivedSrgbRgba": [
+            50,
+            67,
+            90,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "doctor-registration-desktop-dark",
+      "deltas": [
+        {
+          "path": "input.css.borderColor",
+          "before": "rgb(231, 242, 254)",
+          "after": "rgb(210, 231, 253)",
+          "beforeDerivedSrgbRgba": [
+            231,
+            242,
+            254,
+            1
+          ],
+          "afterDerivedSrgbRgba": [
+            210,
+            231,
+            253,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "doctor-registration-mobile-light",
+      "deltas": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.372452 -0.0178064 -0.048599)",
+          "after": "oklab(0.372393 -0.0178025 -0.0485882)",
+          "beforeDerivedSrgbRgba": [
+            42,
+            66,
+            91,
+            1
+          ],
+          "afterDerivedSrgbRgba": [
+            42,
+            66,
+            91,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "doctor-password-login-mobile-light",
+      "deltas": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.296818 -0.0127018 -0.0347198)",
+          "after": "oklab(0.372452 -0.0178064 -0.048599)",
+          "beforeDerivedSrgbRgba": [
+            30,
+            46,
+            63,
+            1
+          ],
+          "afterDerivedSrgbRgba": [
+            42,
+            66,
+            91,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "doctor-reset-complete-desktop-light",
+      "deltas": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.372452 -0.0178064 -0.048599)",
+          "after": "oklab(0.372194 -0.017789 -0.0485517)",
+          "beforeDerivedSrgbRgba": [
+            42,
+            66,
+            91,
+            1
+          ],
+          "afterDerivedSrgbRgba": [
+            42,
+            66,
+            91,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "doctor-reset-complete-desktop-dark",
+      "deltas": [
+        {
+          "path": "input.css.borderColor",
+          "before": "rgb(231, 242, 254)",
+          "after": "rgb(175, 213, 251)",
+          "beforeDerivedSrgbRgba": [
+            231,
+            242,
+            254,
+            1
+          ],
+          "afterDerivedSrgbRgba": [
+            175,
+            213,
+            251,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "doctor-reset-complete-mobile-light",
+      "deltas": [
+        {
+          "path": "input.css.borderColor",
+          "before": "oklab(0.296776 -0.012699 -0.0347122)",
+          "after": "oklab(0.499298 -0.0263674 -0.0718758)",
+          "beforeDerivedSrgbRgba": [
+            30,
+            46,
+            63,
+            1
+          ],
+          "afterDerivedSrgbRgba": [
+            64,
+            102,
+            141,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "doctor-reset-complete-mobile-dark",
+      "deltas": [
+        {
+          "path": "input.css.borderColor",
+          "before": "rgb(210, 231, 253)",
+          "after": "rgb(175, 213, 251)",
+          "beforeDerivedSrgbRgba": [
+            210,
+            231,
+            253,
+            1
+          ],
+          "afterDerivedSrgbRgba": [
+            175,
+            213,
+            251,
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "derivedRgbaNote": "RGBA values derived from recorded CSS rgb/OKLab via standard sRGB transfer; original CSS values remain authoritative, conversion is not a new browser observation.",
+  "settledEndpointObserved": false,
+  "browserLaunched": false
+}

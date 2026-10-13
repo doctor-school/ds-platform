@@ -473,6 +473,33 @@ access, reuse the auth fixtures and secret-safe registration helpers, and close
 their owned contexts before snapshots. The existing primitive and app-local
 backend-free tests remain as separate coverage.
 
+### Password reveal side effects and reload (003 EARS-38)
+
+`Revealing a password has no side effect and never survives a reload` opens a
+clean Academy registration form with the `/account` return target, enters one
+owned unsubmitted password and selects a caret range. After readiness it brackets
+the actual reveal with a 500ms observation of all requests, console/browser logs,
+local/session storage mutations, cookie writes and history writes. The action
+must preserve the value/caret, issue no observed side effect and grant no private
+session or profile access. A cache-bypassing real document reload must restore the
+masked field and unpressed localized show action; a document marker proves this
+was a new document rather than a client route update.
+
+`steps/password-reveal-reload.steps.ts` uses the existing secret-safe input and
+absent-private-access helpers with the trace-off auth fixture. The narrow observer
+forwards native APIs unchanged and restores them before reload; assertions expose
+only counts and boolean projections, with cookie comparison retaining a digest.
+Existing three-surface keyboard reveal coverage and PasswordField value/caret/
+no-change unit invariants remain. The guest never submits registration, and
+cleanup closes only its owned context. The case also guards the shared
+PasswordField caret restoration. The PR records the full auth-canvas comparison
+and the lead's behavioral-only Stage-B certification, with real browser runs
+and unchanged-render captures:
+
+```sh
+pnpm e2e:stage <slot> --project academy --grep "Revealing a password has no side effect and never survives a reload"
+```
+
 ### Cold email confirmation (003 EARS-39/41)
 
 `A cold verification step still signs in by the code` registers a unique owned

@@ -1,0 +1,98 @@
+﻿{
+    "codeA":  "213baf7c68cc8f2018da92c4746bb8287e8e486e",
+    "codeAPrime":  "5ce22eda3218bfe01ff0c36bfdc246df07c118d1",
+    "baseAPrime":  "b473f509f36242136d92aa92018fc96e3bf486a4",
+    "clean":  true,
+    "comparisons":  [
+                        {
+                            "path":  "apps/api/src",
+                            "codeAOid":  "9847b03d18fe49c9fb18d5f7ee9a48339b60d756",
+                            "codeAPrimeOid":  "9847b03d18fe49c9fb18d5f7ee9a48339b60d756",
+                            "equal":  true
+                        },
+                        {
+                            "path":  "apps/portal",
+                            "codeAOid":  "8561523e1e86106fde8781391ca82d01e1d653af",
+                            "codeAPrimeOid":  "8561523e1e86106fde8781391ca82d01e1d653af",
+                            "equal":  true
+                        },
+                        {
+                            "path":  "apps/doctor",
+                            "codeAOid":  "21f67b5c9b8d0ff2ea69b1f91f3252f56077eb07",
+                            "codeAPrimeOid":  "21f67b5c9b8d0ff2ea69b1f91f3252f56077eb07",
+                            "equal":  true
+                        },
+                        {
+                            "path":  "packages/design-system/src",
+                            "codeAOid":  "186c467e64dd947e8ab50e22f6b63650f567feb0",
+                            "codeAPrimeOid":  "186c467e64dd947e8ab50e22f6b63650f567feb0",
+                            "equal":  true
+                        },
+                        {
+                            "path":  "packages/auth-flow/src",
+                            "codeAOid":  "47ab5745c19c4a19afb010ce3addaf70c0542123",
+                            "codeAPrimeOid":  "47ab5745c19c4a19afb010ce3addaf70c0542123",
+                            "equal":  true
+                        },
+                        {
+                            "path":  "packages/schemas",
+                            "codeAOid":  "9d95a74582b622003d4f24d625143b9550a9c316",
+                            "codeAPrimeOid":  "9d95a74582b622003d4f24d625143b9550a9c316",
+                            "equal":  true
+                        },
+                        {
+                            "path":  "packages/db",
+                            "codeAOid":  "65f327f22f41863e760eaeb789e17f0e756de4cb",
+                            "codeAPrimeOid":  "65f327f22f41863e760eaeb789e17f0e756de4cb",
+                            "equal":  true
+                        },
+                        {
+                            "path":  "packages/api-client",
+                            "codeAOid":  "b28aeaf836d82be34a1ba6c3f1082a6aa613dd7d",
+                            "codeAPrimeOid":  "b28aeaf836d82be34a1ba6c3f1082a6aa613dd7d",
+                            "equal":  true
+                        },
+                        {
+                            "path":  "design-source/auth.dc.html",
+                            "codeAOid":  "df5a86e23eee576482c7c69497624aefd2290dcd",
+                            "codeAPrimeOid":  "df5a86e23eee576482c7c69497624aefd2290dcd",
+                            "equal":  true
+                        },
+                        {
+                            "path":  "design-source/manifest.json",
+                            "codeAOid":  "409cdc34008414373dcccb7be18f28ff202fd573",
+                            "codeAPrimeOid":  "409cdc34008414373dcccb7be18f28ff202fd573",
+                            "equal":  true
+                        },
+                        {
+                            "path":  "package.json",
+                            "codeAOid":  "35b70cb51e1173655350933ece38a0032f0809fd",
+                            "codeAPrimeOid":  "35b70cb51e1173655350933ece38a0032f0809fd",
+                            "equal":  true
+                        },
+                        {
+                            "path":  "pnpm-lock.yaml",
+                            "codeAOid":  "624044cec17fceacc916776397bb5ba05a75378a",
+                            "codeAPrimeOid":  "624044cec17fceacc916776397bb5ba05a75378a",
+                            "equal":  true
+                        },
+                        {
+                            "path":  "pnpm-workspace.yaml",
+                            "codeAOid":  "c1d0d4c173608047d45755516e87ce8010d3eb9d",
+                            "codeAPrimeOid":  "c1d0d4c173608047d45755516e87ce8010d3eb9d",
+                            "equal":  true
+                        },
+                        {
+                            "path":  "tsconfig.base.json",
+                            "codeAOid":  "f2f75423c62ddab189990ee6e584ecc6e0f32118",
+                            "codeAPrimeOid":  "f2f75423c62ddab189990ee6e584ecc6e0f32118",
+                            "equal":  true
+                        },
+                        {
+                            "path":  "packages/e2e/steps/password-reveal-reload.steps.ts",
+                            "codeAOid":  "eb32cbe8b40d31925a44a67f007a72d8b7e85b93",
+                            "codeAPrimeOid":  "eb32cbe8b40d31925a44a67f007a72d8b7e85b93",
+                            "equal":  true
+                        }
+                    ]
+}

@@ -65,10 +65,11 @@ export function IdentifierField<T extends FieldValues>({
           onChange={field.onChange}
         />
       </FormControl>
+      <FormMessage />
+      {/* After the error, as the canvas draws it (auth.dc.html, /reset). */}
       {description ? (
         <FormDescription className="-mt-0.5 text-xs">{description}</FormDescription>
       ) : null}
-      <FormMessage />
     </FormItem>
   );
 }

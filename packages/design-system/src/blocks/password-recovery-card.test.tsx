@@ -78,6 +78,7 @@ function setup(
     resendError?: React.ReactNode;
     notice?: React.ReactNode;
     resendNonce?: number;
+    requestResolver?: Resolver<PasswordRecoveryRequestValues>;
   } = {},
 ) {
   return render(
@@ -88,7 +89,9 @@ function setup(
       links={{ login: "/login" }}
       icon={<span data-testid="glyph" />}
       request={{
-        resolver: passthrough<PasswordRecoveryRequestValues>(),
+        resolver:
+          overrides.requestResolver ??
+          passthrough<PasswordRecoveryRequestValues>(),
         onSubmit: overrides.onRequest ?? vi.fn(),
         error: overrides.requestError,
         captchaSlot: <div data-testid="request-captcha" />,
@@ -373,5 +376,24 @@ describe("003 EARS-55 <PasswordRecoveryCard> identifier hint slot", () => {
     expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(hint.id);
     fireEvent.change(box, { target: { value: "doc@example.com" } });
     expect(screen.queryByText("copy.request.identifierHint")).toBeNull();
+  });
+
+  it("003 EARS-55: with a field error the hint stays under it, as the canvas draws it", async () => {
+    setup({
+      requestResolver: async () => ({
+        values: {},
+        errors: { identifier: { type: "host", message: "host-field-error" } },
+      }),
+    });
+    const box = screen.getByLabelText("copy.request.identifierLabel");
+    fireEvent.change(box, { target: { value: "+7" } });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("reset-request-submit"));
+    });
+    const error = await screen.findByText("host-field-error");
+    const hint = screen.getByText("copy.request.identifierHint");
+    expect(
+      error.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });

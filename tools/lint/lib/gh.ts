@@ -15,11 +15,13 @@
  *   File naming (mirrors the subcommand):
  *     gh pr view <n>    → <dir>/pr-view-<n>.json
  *     gh issue view <n> → <dir>/issue-view-<n>.json
+ *     PR file pages    → <dir>/pr-files-<n>.json (REST --paginate --slurp shape)
  *   A missing/invalid fixture file resolves to `{ ok: false }`, matching the
  *   real CLI's failure path so the guard's fail-closed branch is testable too.
  *
- * Inert in production: when `LINT_GH_FIXTURE_DIR` is unset the real `gh` runs
- * exactly as the inlined calls did before.
+ * Inert in production: when `LINT_GH_FIXTURE_DIR` is unset the real `gh` runs.
+ * A files projection uses the canonical paginated REST listing, exact count and
+ * distinct path validation, then rereads the head before any guard can exempt it.
  *
  * The accessor returns a discriminated result rather than throwing or logging,
  * so each guard keeps its own TAG-prefixed diagnostics and control flow.
@@ -27,6 +29,8 @@
 import { execa } from "execa";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { flattenApiPages } from "../../gh/merge-gate.mjs";
+import { normalizeTierFiles } from "./change-tier";
 
 export type GhResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -81,38 +85,136 @@ export async function ghViewJson<T>(
   liveBody = false,
 ): Promise<GhResult<T>> {
   const fixtureDir = process.env.LINT_GH_FIXTURE_DIR;
-  if (fixtureDir) {
-    const file = resolve(fixtureDir, `${kind}-view-${number}.json`);
-    try {
-      return {
-        ok: true,
-        data: liveBody
-          ? (JSON.parse(readFileSync(file, "utf8")) as T)
-          : withEventBody(
-              kind,
-              number,
-              fields,
-              JSON.parse(readFileSync(file, "utf8")) as T,
-            ),
-      };
-    } catch (e) {
-      return {
-        ok: false,
-        error: `fixture ${kind}-view-${number}.json unavailable: ${(e as Error).message.split("\n")[0]}`,
-      };
+  const needsFiles =
+    kind === "pr" &&
+    fields.split(",").some((field) => field.trim() === "files");
+  const viewFields = needsFiles
+    ? [
+        ...new Set([
+          ...fields.split(",").map((field) => field.trim()),
+          "changedFiles",
+          "headRefOid",
+        ]),
+      ].join(",")
+    : fields;
+  const readView = async (
+    projection: string,
+  ): Promise<Record<string, unknown>> => {
+    if (fixtureDir) {
+      const file = resolve(fixtureDir, `${kind}-view-${number}.json`);
+      try {
+        return JSON.parse(readFileSync(file, "utf8")) as Record<
+          string,
+          unknown
+        >;
+      } catch (e) {
+        throw new Error(
+          `fixture ${kind}-view-${number}.json unavailable: ${(e as Error).message.split("\n")[0]}`,
+          { cause: e },
+        );
+      }
     }
-  }
-  try {
     const { stdout } = await execa(
       "gh",
-      [kind, "view", String(number), "--json", fields],
+      [kind, "view", String(number), "--json", projection],
       { cwd },
     );
+    return JSON.parse(stdout) as Record<string, unknown>;
+  };
+  try {
+    const data = await readView(viewFields);
+    if (needsFiles) {
+      const head = data.headRefOid;
+      const count = data.changedFiles;
+      if (typeof head !== "string" || !/^[a-f0-9]{40}$/i.test(head))
+        throw new Error(
+          "Missing or invalid PR head for changed-file enumeration",
+        );
+      if (
+        typeof count !== "number" ||
+        !Number.isSafeInteger(count) ||
+        count < 0
+      )
+        throw new Error("Missing or invalid PR changedFiles count");
+      const raw = fixtureDir
+        ? readFileSync(resolve(fixtureDir, `pr-files-${number}.json`), "utf8")
+        : (
+            await execa(
+              "gh",
+              [
+                "api",
+                `repos/{owner}/{repo}/pulls/${number}/files?per_page=100`,
+                "--paginate",
+                "--slurp",
+              ],
+              { cwd },
+            )
+          ).stdout;
+      const pages = JSON.parse(raw) as unknown;
+      const rows: unknown[] = flattenApiPages(pages);
+      if (
+        !Array.isArray(pages) ||
+        !pages.length ||
+        pages.some(
+          (page, index) =>
+            page.length > 100 ||
+            (index < pages.length - 1 && page.length !== 100),
+        )
+      )
+        throw new Error("Incomplete or oversized GitHub changed-file page");
+      const paths = new Set<string>();
+      const validPath = (value: unknown): value is string =>
+        typeof value === "string" &&
+        !!value.trim() &&
+        !value.startsWith("/") &&
+        !/[:\\]/.test(value) &&
+        ![...value].some((character) => character.charCodeAt(0) < 32) &&
+        value
+          .split("/")
+          .every(
+            (segment) => segment !== "" && segment !== "." && segment !== "..",
+          );
+      for (const row of rows) {
+        if (!row || typeof row !== "object" || Array.isArray(row))
+          throw new Error("Malformed GitHub changed-file row");
+        const file = row as Record<string, unknown>;
+        const path = file.path ?? file.filename;
+        if (!validPath(path))
+          throw new Error("Missing or invalid changed-file path");
+        if (paths.has(path))
+          throw new Error("Duplicate GitHub changed-file path");
+        paths.add(path);
+        const previous = file.previousPath ?? file.previous_filename;
+        if (previous !== undefined && !validPath(previous))
+          throw new Error("Invalid renamed-file source path");
+        if (
+          String(file.status ?? file.changeType ?? "").toLowerCase() ===
+            "renamed" &&
+          previous === undefined
+        )
+          throw new Error("Missing renamed-file source path");
+      }
+      if (rows.length !== count || paths.size !== count)
+        throw new Error(
+          `Incomplete changed-file set: expected ${count}, received ${rows.length} distinct ${paths.size}`,
+        );
+      const after = await readView("headRefOid");
+      if (after.headRefOid !== head)
+        throw new Error("Changed-file set is not bound to the current PR head");
+      const rawFiles = rows as Record<string, unknown>[];
+      const normalized = normalizeTierFiles(rawFiles);
+      data.files = normalized.map((file, index) => ({
+        ...rawFiles[index],
+        ...file,
+        changeType:
+          file.status === "removed" ? "DELETED" : file.status?.toUpperCase(),
+      }));
+    }
     return {
       ok: true,
       data: liveBody
-        ? (JSON.parse(stdout) as T)
-        : withEventBody(kind, number, fields, JSON.parse(stdout) as T),
+        ? (data as T)
+        : withEventBody(kind, number, fields, data as T),
     };
   } catch (e) {
     return { ok: false, error: (e as Error).message.split("\n")[0] };

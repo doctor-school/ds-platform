@@ -186,6 +186,24 @@ describe("boundEventHorizonRows — one horizon response stays bounded (wave-2 g
       boundEventHorizonRows(horizon, "upcoming", [...rows].reverse()),
     ).toEqual({ horizon, rows });
   });
+
+  it("echoes the extent as its two days only — a resolved horizon's `heldBack` never rides into the strict response envelope (#2908)", () => {
+    const resolved = { from: "2026-10-01", to: "2026-10-15", heldBack: 2 };
+    const within = boundEventHorizonRows(resolved, "upcoming", [
+      at("2026-10-02"),
+    ]);
+    expect(within.horizon).toStrictEqual({
+      from: "2026-10-01",
+      to: "2026-10-15",
+    });
+    const read = rowsOn(["2026-10-01", "2026-10-02"], 300).reverse();
+    const capped = boundEventHorizonRows(
+      resolved,
+      "upcoming",
+      read.slice(0, EVENT_HORIZON_ROW_CAP + 1),
+    );
+    expect(Object.keys(capped.horizon).sort()).toEqual(["from", "to"]);
+  });
 });
 
 /**

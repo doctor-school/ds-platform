@@ -227,6 +227,17 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(ahead.data.map((card) => card.id)).toContain(far.id);
     });
 
+    it("EARS-3: the `count` in the address reaches the read — `count=1` answers exactly the nearest event and offers the rest (019 LD-2, #2908)", async () => {
+      const whole = await page(
+        `timeframe=upcoming&from=${today}&to=2999-12-31`,
+      );
+      expect(whole.data.length).toBeGreaterThan(1);
+      const one = await page(`timeframe=upcoming&from=${today}&count=1`);
+      expect(one.data.map((card) => card.id)).toEqual([whole.data[0]!.id]);
+      expect(one.horizon?.remaining).toBe(whole.data.length - 1);
+      expect(one.horizon?.nextCount).toBe(1 + one.horizon!.nextBatch);
+    });
+
     it("NEW: a hand-edited far `to` is answered as written — «Будущие» has no far bound — and echoed clamped to the day after the latest matching event; nothing more is offered", async () => {
       const body = await page(`timeframe=upcoming&from=${today}&to=2999-12-31`);
       expect(body.data.map((card) => card.id)).toContain(far.id);

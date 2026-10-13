@@ -259,8 +259,13 @@ export function boundEventHorizonRows<T extends { startsAt: Date }>(
   tense: "upcoming" | "past",
   rows: readonly T[],
 ): { horizon: EventHorizon; rows: T[] } {
+  // The extent leaves as its two days only: a {@link ResolvedEventHorizon}'s
+  // `heldBack` is the read's own bookkeeping, never part of the envelope.
   if (rows.length <= EVENT_HORIZON_ROW_CAP) {
-    return { horizon, rows: [...rows].reverse() };
+    return {
+      horizon: { from: horizon.from, to: horizon.to },
+      rows: [...rows].reverse(),
+    };
   }
   const cutDay = doctorEventsFeedDayOf(rows[EVENT_HORIZON_ROW_CAP]!.startsAt);
   const capped = rows.slice(0, EVENT_HORIZON_ROW_CAP);

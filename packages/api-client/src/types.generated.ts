@@ -6295,6 +6295,7 @@ export interface operations {
     EventsPublicController_list: {
         parameters: {
             query?: {
+                count?: number;
                 cursor?: string;
                 expert?: string[];
                 from?: string;

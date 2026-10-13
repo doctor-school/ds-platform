@@ -137,6 +137,7 @@ export class EventsPublicController {
   @ApiQuery({ name: "cursor", required: false, type: String })
   @ApiQuery({ name: "from", required: false, type: String })
   @ApiQuery({ name: "to", required: false, type: String })
+  @ApiQuery({ name: "count", required: false, type: Number })
   @ApiQuery({ name: "project", required: false, isArray: true, type: String })
   @ApiQuery({ name: "expert", required: false, isArray: true, type: String })
   @ApiQuery({ name: "topic", required: false, isArray: true, type: String })
@@ -170,19 +171,26 @@ export class EventsPublicController {
     @Query("cursor") cursor?: string,
     @Query("from") from?: string,
     @Query("to") to?: string,
+    @Query("count") count?: string,
   ): Promise<
     UpcomingBroadcastCard[] | MonthBroadcastEntry[] | PublicEventListingPage
   > {
     // A horizon without a timeframe is a malformed listing query (400), never
     // a silent fall-through to the legacy bare read.
     const facets = parseFacets(raw);
-    if (timeframe !== undefined || from !== undefined || to !== undefined) {
+    if (
+      timeframe !== undefined ||
+      from !== undefined ||
+      to !== undefined ||
+      count !== undefined
+    ) {
       const parsed = PublicEventListingQuerySchema.safeParse({
         timeframe,
         limit,
         cursor,
         from,
         to,
+        count,
         ...facets,
       });
       if (!parsed.success) {

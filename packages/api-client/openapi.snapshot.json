@@ -8427,6 +8427,14 @@
           },
           {
             "in": "query",
+            "name": "count",
+            "required": false,
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
             "name": "topic",
             "required": false,
             "schema": {

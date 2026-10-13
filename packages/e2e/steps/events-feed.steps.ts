@@ -1242,6 +1242,8 @@ Then(
     const retry = retryOf(world);
     expect(retry.actions, "one block-retry action").toBe(1);
     expect(retry.pageReads, "no route refresh, no reload").toBe(0);
+    // The month view does not mount «Идёт сейчас» today, so this guards a
+    // future mount: a month-grid retry must never re-read the live block.
     expect(retry.liveReads, "«Идёт сейчас» is not re-read").toBe(0);
     // The action answers the month grid alone — nothing the feed read or the
     // live read renders rides it.

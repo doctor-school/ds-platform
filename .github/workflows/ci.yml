@@ -786,12 +786,11 @@ jobs:
       #
       # Exclusions live in `.lycheeignore` (repo root), one rationale comment per
       # entry. Note in particular the LAST entry there: this repo's OWN
-      # `github.com/doctor-school/ds-platform/…` URLs are excluded, because the
-      # repo is private — lychee 404s them on the plain request and only recovers
-      # via ~433 authenticated GitHub-API calls per run, on an hourly budget it
-      # shares with every other run and every agent `gh` call. That made a BLOCK
-      # gate depend on a resource it cannot reserve (#1268). Links to anywhere
-      # else, including inside the generated CHANGELOG.md files, are still checked.
+      # `github.com/doctor-school/ds-platform/…` URLs are excluded, so this BLOCK
+      # gate does not depend on several hundred github.com requests per run
+      # (#1268; current evidence and re-inclusion question: #2860). Links to
+      # anywhere else, including inside the generated CHANGELOG.md files, are
+      # still checked.
       #
       # `.lycheeignore` holds URL regexes, so it cannot exclude an INPUT file.
       # Input exclusions are `--exclude-path` regexes here instead: the lint-guard

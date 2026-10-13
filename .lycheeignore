@@ -65,64 +65,36 @@ design-source/support\.js
 # file:// links and reports false File-not-found errors (#514).
 ^file://.*/design-source/.*$
 
-# THIS repository's own URLs (github.com/doctor-school/ds-platform/…): 1179
-# occurrences / 433 unique across the tree — changesets-generated commit +
-# PR links in every CHANGELOG.md, and Issue/PR/milestone citations in specs,
-# ADRs, READMEs and DEBT.md. Excluded because the guard cannot check them
-# DETERMINISTICALLY, not because any of them is known to be wrong. Note that
-# "they all resolve" was never established either: while they were in scope
-# lychee reported them OK WITHOUT resolving them (step 2 below).
+# THIS repository's own URLs (github.com/doctor-school/ds-platform/…): 3277
+# occurrences / 858 unique across the tree (2026-10-13) — changesets-generated
+# commit + PR links in every CHANGELOG.md, and Issue/PR/milestone citations in
+# specs, ADRs, READMEs and DEBT.md. Excluded so the guard's verdict does not
+# depend on several hundred requests to github.com per run; none of these
+# links is known to be wrong, and none is verified by CI while excluded.
 #
-# Mechanism (#1268, evidenced on runs 31870093022 green / 31870189259 red,
-# 14 minutes apart on the IDENTICAL tree at 036cb9bf):
-#   1. The repo is PRIVATE, so lychee's ordinary unauthenticated HTTP request
-#      gets 404 for every one of these URLs — always, in every run. GitHub
-#      hides private resources as 404, never 401. Reproduced by hand:
-#      `curl -o /dev/null -w '%{http_code}' <url>` = 404 for /issues/660,
-#      /pull/1215 and a CHANGELOG commit SHA that all provably exist.
-#   2. lychee then RETRIES each failed github.com URL through the authenticated
-#      GitHub API using the workflow's GITHUB_TOKEN. That fallback is the only
-#      reason these links have ever been green: ~433 extra API requests per run.
-#      It never VERIFIED them: in lychee v0.24.2 (lychee-lib/src/checker/github.rs)
-#      `check_github` short-circuits on a private repository —
-#        if let Some(true) = repo.private { return Status::Ok(StatusCode::OK) }
-#      — returning OK as soon as the API confirms the REPO exists, without ever
-#      resolving the Issue / PR / commit the URL names. A green run therefore
-#      proved only "the repo is there and the budget held".
-#   3. lycheeverse/lychee v0.24.2, lychee-lib/src/checker/website.rs, discards
-#      the fallback's own error and re-reports the ORIGINAL status:
-#        if status.is_success() { return status; }
-#        if let Ok(github_uri) = GithubUri::try_from(uri) {
-#            let status = self.check_github(github_uri).await;
-#            if status.is_success() { return status; }
-#        }
-#      So the moment the API fallback fails for ANY reason — rate limiting is
-#      the only cause that varies between two runs of one tree — every self-URL
-#      reports as a bare `Rejected status code: 404 Not Found`. The red LOOKS
-#      like ~1100 broken links; it is one exhausted request budget.
+# Live behaviour (#2860, unauthenticated `curl -s -o /dev/null -w
+# '%{http_code}' <url>`, 2026-10-13): the repository is public and its pages
+# answer without credentials — repo root, /pull/1215, a CHANGELOG commit
+# (/commit/4e48d2a9…), /commit/bc22c2c4 and /blob/main/AGENTS.md = 200;
+# /issues/660 = 302 to /pull/660 (GitHub's Issue→PR redirect); 39 of a 40-URL
+# sample of the unique set = 200, the 40th = 302. A wrong reference fails
+# plainly: /issues/999999 = 404, and the raw form of a missing file = 404. In
+# lychee v0.24.2 (lychee-lib/src/checker/website.rs) a successful plain
+# request returns at once, so a valid self-URL never reaches the GitHub-API
+# fallback that spends the workflow token's hourly budget.
 #
-# The budget is shared and hourly (GITHUB_TOKEN: 1000 req/h/repository), and it
-# is consumed by every other workflow run AND every agent `gh` call in the repo
-# (CLAUDE.md § Subagent context economy makes the same point about the 5000/h
-# token). A merge wave — 8 CI runs in the 40 minutes before the red — spends
-# ~433 of it per run on nothing but re-verifying our own history. So the guard's
-# greenness depended on a resource it cannot reserve, and the cost grows
-# monotonically with repo history: this fails MORE often over time, not less.
-#
-# Rejected alternatives: a PAT with a 5000/h budget only moves the cliff (same
-# per-run cost, same shared pool, plus a secret to manage); lychee-action's
-# `cache` input makes a cold branch pay the full 433 again, i.e. rarer, not
-# deterministic. Ignoring `**/CHANGELOG.md` wholesale was rejected as strictly
-# worse — it would also stop checking the third-party links those files carry.
-#
-# COVERAGE NARROWED — the gap is pre-existing, this exclusion only makes it
-# visible: links pointing at this repo's own Issues / PRs / commits / milestones
-# are not verified by CI. They were not verified BEFORE either — the private-repo
-# short-circuit in step 2 reported them OK without resolving them — so a wrong
-# self-reference (a typo'd Issue number, a commit SHA that never existed) was
-# already uncaught. What the exclusion changes is the run's determinism and its
-# API cost, not the coverage. Every link to anywhere else — in CHANGELOG.md files
-# included — is still checked. Tracked in DEBT.md.
+# What keeping the exclusion still buys is determinism and run cost: each run
+# would send one github.com HTML request per unique self-URL (858 today,
+# growing with every CHANGELOG entry) from GitHub-hosted runner IPs, and
+# github.com has already answered that runner with transient HTTP 503s on
+# this same job (PR #2743, PR #2833 — the blob-view half was moved to
+# raw.githubusercontent.com by #2747). A self-URL that hits a 503 or a
+# rate limit and then fails the API fallback is reported with its ORIGINAL
+# status (website.rs: the fallback's own error is discarded), so one bad
+# minute on github.com would read as broken links on a BLOCK gate. Whether
+# to re-include self-URLs — whole, or only the offline-checkable commit half
+# (`git cat-file -t <sha>` on the full checkout) — is an owner decision
+# recorded on #2860; the coverage gap is tracked in DEBT.md.
 ^https://github\.com/doctor-school/ds-platform($|/.*$)
 # The same self-URLs in their raw form: the markdown-links step remaps every
 # `github.com/…/blob/<ref>/<path>` citation to `raw.githubusercontent.com`

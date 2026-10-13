@@ -31,6 +31,12 @@ export function BlockError({
       `BlockError «${testId}» has no retry: pass onRetry or render it inside a BlockRetry`,
     );
   }
+  // A retry in flight keeps the control readable: the native `disabled` state
+  // (and the Button's `loading`, which sets it) dims an outline control to
+  // `opacity-40` with `muted-2` ink on a `hairline` border — near-invisible on
+  // the error card. The press is marked busy and ignored instead, so a second
+  // press never runs a second read.
+  const pending = onRetry === undefined && boundary?.pending === true;
   return (
     <div data-testid={testId}>
       <EmptyState
@@ -40,8 +46,9 @@ export function BlockError({
         action={
           <Button
             variant="outline"
-            disabled={onRetry === undefined && boundary?.pending === true}
-            onClick={retry}
+            aria-busy={pending || undefined}
+            aria-disabled={pending || undefined}
+            onClick={pending ? undefined : retry}
           >
             {FEED_COPY.retry}
           </Button>

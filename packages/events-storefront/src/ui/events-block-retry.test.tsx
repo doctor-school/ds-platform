@@ -397,6 +397,33 @@ describe("«Повторить» in a failed block (#2832)", () => {
     expect(screen.getByTestId("events-feed-error")).toBeInTheDocument();
   });
 
+  it("EARS-9: a retry in flight keeps «Повторить» readable, marks it busy and ignores a second press", async () => {
+    let answer: (block: ReactNode) => void = () => {};
+    const retry = vi.fn(
+      () =>
+        new Promise<ReactNode>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    render(
+      <BlockRetry retry={retry}>
+        <BlockError title="Не удалось" description="Причина" testId="block-error" />
+      </BlockRetry>,
+    );
+    const button = screen.getByRole("button", { name: "Повторить" });
+    await userEvent.click(button);
+    await vi.waitFor(() => expect(button).toHaveAttribute("aria-busy", "true"));
+    // Not the native disabled state — that dims the control near-invisible on
+    // the error card; the pending press stays a readable, busy control.
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(button);
+    expect(retry).toHaveBeenCalledTimes(1);
+
+    answer(<p>Блок загружен</p>);
+    expect(await screen.findByText("Блок загружен")).toBeInTheDocument();
+  });
+
   it("EARS-9: an action that cannot be reached leaves the block's cause and its «Повторить» in place", async () => {
     const retry = vi.fn(async (): Promise<ReactNode> => {
       throw new Error("offline");

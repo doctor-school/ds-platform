@@ -17,6 +17,10 @@ import {
   type IdpClient,
 } from "../idp/idp.types.js";
 import {
+  AUTH_AUDIT,
+  type AuthAuditLog,
+} from "../session/auth-audit.types.js";
+import {
   AdminAuthorityException,
   type AdminAuthorityErrorCode,
 } from "./admin-authority.problem.js";
@@ -73,6 +77,7 @@ export class AdminAuthorityGuard implements CanActivate {
   // whole class under that runtime — the hazard `AdminSessionAuthHook` documents.
   constructor(
     @Inject(IDP_CLIENT) private readonly idp: IdpClient,
+    @Inject(AUTH_AUDIT) private readonly audit: AuthAuditLog,
     private readonly reflector: Reflector,
     private readonly adminSessions: AdminSessionService,
   ) {}
@@ -94,6 +99,11 @@ export class AdminAuthorityGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<{
       user?: AdminSessionPrincipal;
+      method?: string;
+      url?: string;
+      ip?: string;
+      headers?: Record<string, string | string[] | undefined>;
+      routeOptions?: { url?: string };
     }>();
     const principal = request?.user;
     // No admin principal ⇒ no session record to revalidate. `AuthzGuard` would
@@ -142,6 +152,17 @@ export class AdminAuthorityGuard implements CanActivate {
         typeof verifiedAtMs !== "number" ||
         Date.now() - verifiedAtMs > STEP_UP_MAX_AGE_MS;
       if (stale) {
+        // 047 EARS-8: every step-up refusal is on the record, naming the refused
+        // route as the re-elevation's `endpoint` (ADR-0001 §10 — every step-up
+        // attempt is audited). Written before the throw; nothing else happened.
+        const userAgent = request.headers?.["user-agent"];
+        await this.audit.record({
+          type: "StepUpRequested",
+          sub: record.sub,
+          endpoint: `${request.method ?? ""} ${routePathOf(request)}`,
+          ip: request.ip ?? null,
+          ua: typeof userAgent === "string" ? userAgent : null,
+        });
         throw new AdminAuthorityException("STEP_UP_REQUIRED", STEP_UP_URL);
       }
     }
@@ -208,3 +229,20 @@ const REVOKED_CODE: Readonly<
   "event-registrar": "EVENT_REGISTRAR_REQUIRED",
   "congress-program-committee": "PROGRAM_COMMITTEE_REQUIRED",
 };
+
+/**
+ * 047 EARS-8: the refused route as the `@Authz` registry names it — the
+ * registered route pattern (`/v1/admin/staff-access/grants`, `:id` kept), so a
+ * `auth.step_up.requested` row and the re-verification's `endpoint` agree.
+ * Falls back to the raw path without its query string.
+ */
+function routePathOf(request: {
+  url?: string;
+  routeOptions?: { url?: string };
+}): string {
+  const pattern = request.routeOptions?.url;
+  if (pattern) return pattern;
+  const raw = request.url ?? "";
+  const q = raw.indexOf("?");
+  return q === -1 ? raw : raw.slice(0, q);
+}

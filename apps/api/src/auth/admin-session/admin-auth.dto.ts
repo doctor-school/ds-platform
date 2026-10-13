@@ -3,6 +3,7 @@ import {
   AdminFactorRemovalRequestSchema,
   AdminLoginRequestSchema,
   AdminMfaCodeRequestSchema,
+  AdminMfaReverifyRequestSchema,
 } from "@ds/schemas";
 
 // nestjs-zod DTO at the I/O boundary (ADR-0002 §3). The schema is the SSOT in
@@ -29,4 +30,9 @@ export class AdminMfaCodeRequestDto extends createZodDto(
  */
 export class AdminFactorRemovalRequestDto extends createZodDto(
   AdminFactorRemovalRequestSchema,
+) {}
+
+/** 047 EARS-8 — body of `POST /v1/admin/auth/mfa/reverify`. */
+export class AdminMfaReverifyRequestDto extends createZodDto(
+  AdminMfaReverifyRequestSchema,
 ) {}

@@ -60,28 +60,35 @@ sequenceDiagram
     UI->>API: POST grants {email, fullName, role, eventId?}
     API->>API: guards: platform_admin, live revalidation, step-up ≤30 min
     API->>DB: validate event, registrar binding elsewhere
-    API->>IdP: find user by email, read grant, has password?
+    API->>IdP: find user by email, read grant, has password?, email verified?
     API->>DB: binding row, latest auth.role.* row
     API->>API: complete? → 409, nothing changed
     opt no account
         API->>IdP: CreateUser (email verified, profile from ФИО, no password)
     end
+    opt existing account, email not verified
+        API->>IdP: SetPassword(unshown random) if it has one
+        API->>API: end every portal and admin session of the account
+    end
     opt role not in the grant
         API->>IdP: PUT grant roleKeys ∪ {role} (or CreateAuthorization {doctor_guest, role})
     end
     API->>DB: tx: upsert users mirror, insert binding if absent, auth.role.granted if not latest
-    opt no password
+    opt no password, or email not verified
         API->>IdP: SetPassword(temp, changeRequired=false)
+    end
+    opt email not verified
+        API->>IdP: mark email verified
     end
     API-->>UI: 201 {row, temporaryPassword?}
     UI->>UI: one-time password dialog with copy
 ```
 
 - **Validation first** (EARS-3), before any write: Zod shape; event required exactly for the two event-bound roles and existing; `event-registrar` refused when the person already has a registrar binding to another event; refused when the grant is complete («Completeness and retry»). The completeness read is the IdP user search, grant read and `hasPassword` plus two indexed DB reads — cheap for a few dozen staff rows.
-- **Write order.** (1) create the account when none exists; (2) add the role to the IdP grant when absent; (3) one DB transaction — mirror, binding, audit; (4) the temporary password when the account has none. Every step checks its own state first, so a repeat skips it. The authoritative IdP change precedes the audit row (EARS-9), and the password is last so that a password is only ever set by a request that then answers `201` with it: a failure at (4) leaves the account without a password, and the repeat sets one and shows it.
-- **Existing account** (EARS-4) — found by email through the IdP (the mirror may lack a row for an operator-created account). The role is added with `PUT /management/v1/users/{userId}/grants/{grantId}` carrying the union of the current `roleKeys` and the new role; a `POST` would answer `409` for a user who already holds a grant (proven on stage 2026-10-13). An account with no grant at all (rare: an IdP user never granted) gets `CreateAuthorization {doctor_guest, role}`. The profile name is not touched.
+- **Write order.** (1) create the account when none exists; (2) add the role to the IdP grant when absent; (3) one DB transaction — mirror, binding, audit; (4) the temporary password when the account has none or its email is unverified, then the email marked verified. Every step checks its own state first, so a repeat skips it. The authoritative IdP change precedes the audit row (EARS-9), and the password is last so that a password is only ever set by a request that then answers `201` with it: a failure at (4) leaves the account without a password, and the repeat sets one and shows it.
+- **Existing account** (EARS-4) — found by email through the IdP (the mirror may lack a row for an operator-created account). The role is added with `PUT /management/v1/users/{userId}/grants/{grantId}` carrying the union of the current `roleKeys` and the new role; a `POST` would answer `409` for a user who already holds a grant (proven on stage 2026-10-13). An account with no grant at all (rare: an IdP user never granted) gets `CreateAuthorization {doctor_guest, role}`. The profile name is not touched. Only an account whose email is **verified** counts as the person's own: anyone can register (003) or submit the congress form (044) with a staff member's address before the grant, and that account's password and sessions belong to whoever did it. So an existing account with an unverified email is closed to its current holder before the role reaches it: any password it has is replaced by an unshown random one, and every session ends — portal sessions through the 003 EARS-41 «revoke before verification» primitive, which covers the doctor storefront too since both hosts share the one portal session store; admin sessions through the 011 force-logout, one `auth.session.terminated` each. It then takes the EARS-6 path: the shown temporary password is set at (4) and the email is marked verified last — the administrator vouches for the address they typed, as for a new account — so an interrupted grant stays unverified and its repeat replaces and shows the password again. An unanswered user read is an IdP fault (`503`), never «unverified». Pending admin sign-ins are not indexed by subject and are not ended; none can exist for an account without a staff role, and the replaced password stops any new one.
 - **New account** (EARS-5) — `CreateUser` on the existing adapter path with `credential: "none"` and the submitted profile (the 044 EARS-4 passwordless variant), email `isVerified: true` (the administrator vouches for the address, as the runbook does), then `CreateAuthorization {doctor_guest, role}`. **ФИО** is one field; it is split on the first whitespace into `familyName` (first word) and `givenName` (the rest — name and patronymic), and requires at least two words; `displayName` and the mirror `display_name` are the full string as typed. No consent row and no declaration are written: staff accounts are not doctor registrations (021 EARS-4/5).
-- **Temporary password** (EARS-6) for any account that has no password (`hasPassword`, already in the adapter) — a new account, or an existing passwordless one (a 044 congress account made into a committee member cannot sign in to the admin without a password). An existing account with a password keeps it and the response carries none. Generation follows the runbook rule: 16 characters from an unambiguous alphabet (no `0 O o 1 l I`), upper, lower and digit, one symbol from `-_!@#%` not at either end, from `crypto.randomInt`. `changeRequired: false` because the admin sign-in has no forced-change step (runbook step 4). The password exists in the request scope and the `201` body only: no log line, no audit field, no DB column; the response is `no-store`. Handing it over is the administrator's act (Scope → Out).
+- **Temporary password** (EARS-6) for any account that has no password (`hasPassword`, already in the adapter) — a new account, or an existing passwordless one (a 044 congress account made into a committee member cannot sign in to the admin without a password) — and for an existing account whose email is unverified (EARS-4). An existing account with a verified email and a password keeps it and the response carries none. Generation follows the runbook rule: 16 characters from an unambiguous alphabet (no `0 O o 1 l I`), upper, lower and digit, one symbol from `-_!@#%` not at either end, from `crypto.randomInt`. `changeRequired: false` because the admin sign-in has no forced-change step (runbook step 4). The password exists in the request scope and the `201` body only: no log line, no audit field, no DB column; the response is `no-store`. Handing it over is the administrator's act (Scope → Out).
 - **Mirror, binding and audit** — one DB transaction under `withRequestAuditContext`: upsert the `users` row (`zitadel_sub`, email, `email_verified`, `display_name` on create; `role` = `mirrorRoleFromClaims` of the new role set), insert the `event_role_grants` row when absent, append `auth.role.granted` when it is not already the latest row. The 010 trigger records the binding row with the administrator as the actor.
 - **Partial failure.** A failure at (2) leaves the account without the role; at (3), the person holds the role in the IdP with no binding and no audit row — an event-bound role with no binding is refused everywhere but the session endpoints (044 EARS-38 / 046 EARS-26, fail-closed) and the list shows it with an empty event; at (4), an account without a password, which cannot sign in. In each case the administrator sees the error and repeats the same grant, which finishes it. A role newly added to a person takes effect at their next admin sign-in (the session record holds the roles of its sign-in); an added event of a role already held takes effect on the next request, because bindings are read per request.
 
@@ -139,6 +146,7 @@ Grant and revoke declare `stepUp: true`, and ADR-0001 §10 applies as written: t
 | grant update `PUT /management/v1/users/{userId}/grants/{grantId}` `{roleKeys}`           | new — the shape the runbook uses on prod                         |
 | project grant search by project and role keys                                            | new — wire shape to be proven on the dev-stand before it ships   |
 | `hasPassword`, `SetPassword`                                                             | exist (003 EARS-41)                                              |
+| user read (`getUser`, email verified), `markEmailVerified`                               | exist (003)                                                      |
 | TOTP check for a signed-in user (`checkTotpCode`)                                        | exists (011 EARS-13)                                             |
 
 Each new call is pinned by an adapter test on the wire shape proven live on the dev-stand (verification V-8), the rule `getProjectRoles` documents: a quiet `200` with a different shape must fail a test, not empty a list.

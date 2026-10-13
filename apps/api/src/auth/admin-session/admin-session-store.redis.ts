@@ -103,6 +103,22 @@ export class RedisAdminSessionStore implements AdminSessionStore {
     await this.redis.del(indexKey);
     return revoked;
   }
+
+  async markMfaVerified(sid: string, atMs: number): Promise<boolean> {
+    const record = await this.get(sid);
+    if (!record) return false;
+    // The TTL is recomputed from the record's own unchanged `expiresAtMs`, so the
+    // session still ends when it would have; `XX` refuses the write if a
+    // force-logout deleted the key between the read and here.
+    const written = await this.redis.set(
+      `${ADMIN_SESSION_PREFIX}${sid}`,
+      JSON.stringify({ ...record, mfaVerifiedAtMs: atMs }),
+      "EX",
+      ttlSecondsUntil(record.expiresAtMs),
+      "XX",
+    );
+    return written !== null;
+  }
 }
 
 /**

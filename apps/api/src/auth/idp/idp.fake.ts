@@ -11,6 +11,8 @@ import {
   type EmailCodeTrigger,
   type EmailLoginOutcome,
   type IdpClient,
+  type IdpProjectGrant,
+  type IdpProjectGrantHolder,
   type IdpRefreshResult,
   type IdpSession,
   type IdpTokens,
@@ -58,6 +60,8 @@ interface FakeRecord {
   active: boolean;
   /** The BFF forwards the password to the IdP at create; the fake keeps it so the password check (EARS-5) is exercised. Never stored by `apps/api` itself (design §2). */
   password?: string | undefined;
+  /** 047 EARS-5: the profile display name the create carried, if any. */
+  displayName?: string | undefined;
 }
 
 /**
@@ -209,9 +213,16 @@ export class FakeIdpClient implements IdpClient {
       sub,
       email,
       phone,
-      emailVerified: false,
+      // 047 EARS-5: an administrator-vouched staff address is created verified,
+      // exactly as the real adapter sends `isVerified: true`.
+      emailVerified: input.credential === "none" && input.emailVerified === true,
       phoneVerified: false,
       active: true,
+      displayName:
+        input.credential === "none"
+          ? (input.profile.displayName ??
+            `${input.profile.givenName} ${input.profile.familyName}`)
+          : undefined,
       // 044 EARS-4 fake/real parity: a `credential: "none"` create stores NO
       // credential, exactly as the real adapter omits `human.password` from the
       // wire body. The record therefore cannot satisfy `passwordLogin` (which
@@ -509,13 +520,88 @@ export class FakeIdpClient implements IdpClient {
    * no-op, mirroring Zitadel's ALREADY_EXISTS). After this the sub's exchanged /
    * refreshed token claims carry `roleKey`; before any grant they are empty.
    */
-  grantProjectRole(sub: string, roleKey: string): Promise<void> {
+  grantProjectRole(
+    sub: string,
+    roleKey: string | readonly string[],
+  ): Promise<void> {
     let roles = this.grants.get(sub);
     if (!roles) {
       roles = new Set<string>();
       this.grants.set(sub, roles);
     }
-    roles.add(roleKey);
+    for (const key of typeof roleKey === "string" ? [roleKey] : roleKey) {
+      roles.add(key);
+    }
+    return Promise.resolve();
+  }
+
+  /**
+   * 047 — the fake's grant id for `sub`: one grant per user and project, as in
+   * Zitadel, so the id is derived from the subject.
+   */
+  private grantIdOf(sub: string): string {
+    return `fake-grant-${sub}`;
+  }
+
+  getProjectGrant(sub: string): Promise<IdpProjectGrant | null> {
+    const roles = this.grants.get(sub);
+    if (!roles || roles.size === 0) return Promise.resolve(null);
+    return Promise.resolve({ grantId: this.grantIdOf(sub), roleKeys: [...roles] });
+  }
+
+  updateProjectGrantRoles(
+    sub: string,
+    grantId: string,
+    roleKeys: readonly string[],
+  ): Promise<void> {
+    // Real-adapter parity: the PUT addresses an EXISTING grant; a wrong id or a
+    // user with no grant is a refused write, never an implicit create.
+    const roles = this.grants.get(sub);
+    if (!roles || roles.size === 0 || grantId !== this.grantIdOf(sub)) {
+      return Promise.reject(
+        new IdpUnavailableError("fake: no such user grant to update"),
+      );
+    }
+    this.grants.set(sub, new Set(roleKeys));
+    return Promise.resolve();
+  }
+
+  listProjectGrantsWithRoles(
+    roleKeys: readonly string[],
+  ): Promise<IdpProjectGrantHolder[]> {
+    const holders: IdpProjectGrantHolder[] = [];
+    for (const [sub, roles] of this.grants) {
+      if (!roleKeys.some((key) => roles.has(key))) continue;
+      const record = this.bySub.get(sub);
+      holders.push({
+        grantId: this.grantIdOf(sub),
+        sub,
+        roleKeys: [...roles],
+        email: record?.email,
+        displayName: record?.displayName,
+      });
+    }
+    return Promise.resolve(holders);
+  }
+
+  findUserByEmail(email: string): Promise<string | null> {
+    return Promise.resolve(this.byEmail.get(email.toLowerCase())?.sub ?? null);
+  }
+
+  userHasPassword(sub: string): Promise<boolean> {
+    const record = this.bySub.get(sub);
+    if (!record) {
+      return Promise.reject(new IdpUnavailableError("fake: unknown sub"));
+    }
+    return Promise.resolve(record.password !== undefined);
+  }
+
+  setUserPassword(sub: string, password: string): Promise<void> {
+    const record = this.bySub.get(sub);
+    if (!record) {
+      return Promise.reject(new IdpUnavailableError("fake: unknown sub"));
+    }
+    record.password = password;
     return Promise.resolve();
   }
 

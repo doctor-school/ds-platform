@@ -76,6 +76,9 @@ const REGISTRAR_ALLOW_SET: ReadonlySet<string> = new Set([
   "POST /v1/admin/auth/mfa/verify",
   "GET /v1/admin/auth/session",
   "POST /v1/admin/auth/logout",
+  // 047 EARS-8 — re-verifying one's own second factor in the session (any staff
+  // role, per 047-design §Fresh second factor); it changes no grant.
+  "POST /v1/admin/auth/mfa/reverify",
 ]);
 
 /** The allow-set members that must be REAL routes, or the sweep proves nothing. */
@@ -87,6 +90,7 @@ const SESSION_HOLD_ROUTES = [
   "POST /v1/admin/auth/mfa/verify",
   "GET /v1/admin/auth/session",
   "POST /v1/admin/auth/logout",
+  "POST /v1/admin/auth/mfa/reverify",
 ];
 
 const MUTATING = /^(POST|PATCH|PUT|DELETE) /;

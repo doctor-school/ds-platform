@@ -313,6 +313,52 @@ export function toLedgerRow(
         reason: null,
         metadata: { by_admin: event.byAdmin, tier: ADMIN_TIER },
       };
+    case "RoleGranted":
+      // 047 EARS-9: `auth.role.granted` with the §7.3 fields — `user_id` is the
+      // subject, `role`, `by_admin` the acting administrator, `ts` the row's
+      // `created_at`; `event_id` rides the metadata for an event-bound role (the
+      // within-a-class idiom `tier` uses). The temporary password is absent from
+      // the event SHAPE, so no edit to this mapper can leak it into a row.
+      return {
+        eventType: "auth.role.granted",
+        subjectId: event.sub,
+        sid: null,
+        reason: null,
+        metadata: {
+          role: event.role,
+          by_admin: event.byAdmin,
+          ...(event.eventId === null ? {} : { event_id: event.eventId }),
+          tier: ADMIN_TIER,
+        },
+      };
+    case "StepUpRequested":
+    case "StepUpSucceeded":
+    case "StepUpFailed":
+      // 047 EARS-8 / ADR-0001 §10: the step-up trail. The admin tier holds no
+      // `acr` claim, so `acr_before` / `acr_after` record the session's
+      // elevation state: stale before every attempt, fresh only after an
+      // accepted code.
+      return {
+        eventType:
+          event.type === "StepUpRequested"
+            ? "auth.step_up.requested"
+            : event.type === "StepUpSucceeded"
+              ? "auth.step_up.succeeded"
+              : "auth.step_up.failed",
+        subjectId: event.sub,
+        sid: null,
+        reason: null,
+        metadata: {
+          endpoint: event.endpoint,
+          acr_before: "mfa-stale",
+          acr_after:
+            event.type === "StepUpSucceeded" ? "mfa-fresh" : "mfa-stale",
+          mfa_method: "totp",
+          ip: event.ip,
+          ua: event.ua,
+          tier: ADMIN_TIER,
+        },
+      };
     case "LockoutTriggered":
       // EARS-7: the admin-tier soft-lock. Shares 003's canonical
       // `auth.lockout.triggered` id; `reason: "mfa_attempts"` is what separates a

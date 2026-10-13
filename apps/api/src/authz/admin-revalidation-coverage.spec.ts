@@ -41,6 +41,10 @@ const REVALIDATION_EXEMPT: Readonly<Record<string, string>> = {
   "POST /v1/admin/auth/mfa/verify":
     "pending-auth step-up/verify step — the session is completed BY this call",
 
+  "POST /v1/admin/auth/mfa/reverify":
+    "047 step-up re-verification — proves possession of the factor and changes no " +
+    "grant; the stepUp route the operator then retries revalidates live before it acts",
+
   // ---- Logout: availability outranks revalidation.
   "POST /v1/admin/auth/logout":
     "refusing a logout during an IdP outage would strand the operator signed in; " +

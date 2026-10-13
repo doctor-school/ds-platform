@@ -18,6 +18,8 @@ import {
   type IdpRefreshResult,
   type IdpSession,
   type IdpTokens,
+  type IdpProjectGrant,
+  type IdpProjectGrantHolder,
   type IdpUser,
   isPhoneIdentifier,
   type PasswordLoginResult,
@@ -363,7 +365,8 @@ export class ZitadelIdpClient implements IdpClient {
       (input.email ? (input.email.split("@")[0] ?? "doctor") : "doctor");
     const familyName = submittedProfile?.familyName ?? "guest";
     const displayName = submittedProfile
-      ? `${submittedProfile.givenName} ${submittedProfile.familyName}`
+      ? (submittedProfile.displayName ??
+        `${submittedProfile.givenName} ${submittedProfile.familyName}`)
       : (input.email ?? input.phone);
     const human: Record<string, unknown> = {
       profile: {
@@ -387,7 +390,15 @@ export class ZitadelIdpClient implements IdpClient {
     // delivered code. Confirmed live on CreateUser: `returnCode: {}` ⇒ the
     // response carries `emailCode` and Mailpit receives no auto-send. Same
     // directive on the phone object for the symmetric phone case.
-    if (input.email) human["email"] = { email: input.email, returnCode: {} };
+    // 047 EARS-5: an administrator-vouched staff address is created verified
+    // and generates no code; every other create proves the address by a code.
+    const emailVerified =
+      input.credential === "none" && input.emailVerified === true;
+    if (input.email) {
+      human["email"] = emailVerified
+        ? { email: input.email, isVerified: true }
+        : { email: input.email, returnCode: {} };
+    }
     if (input.phone) human["phone"] = { phone: input.phone, returnCode: {} };
 
     let orgId: string;
@@ -1954,7 +1965,11 @@ export class ZitadelIdpClient implements IdpClient {
    * webhook + sweep are idempotent backstops that re-grant). Absent `projectId`
    * fails closed, consistent with the other OIDC-config-gated paths.
    */
-  async grantProjectRole(sub: string, roleKey: string): Promise<void> {
+  async grantProjectRole(
+    sub: string,
+    roleKey: string | readonly string[],
+  ): Promise<void> {
+    const roleKeys = typeof roleKey === "string" ? [roleKey] : [...roleKey];
     if (!this.config.projectId) {
       throw new Error(
         "zitadel project config (IDP_PROJECT_ID) is not set; cannot grant the project role (design §3/§5, #157)",
@@ -1972,7 +1987,7 @@ export class ZitadelIdpClient implements IdpClient {
           userId: sub,
           projectId: this.config.projectId,
           organizationId: orgId,
-          roleKeys: [roleKey],
+          roleKeys,
         }),
       },
     );
@@ -2037,6 +2052,118 @@ export class ZitadelIdpClient implements IdpClient {
    * already broken.
    */
   async getProjectRoles(sub: string): Promise<string[]> {
+    const grants = await this.searchProjectGrants([
+      { userIdQuery: { userId: sub } },
+    ]);
+    return grants.flatMap((grant) => grant.roleKeys ?? []);
+  }
+
+  /**
+   * 047 EARS-4: this project's grant of `sub` with its id — the same user-grant
+   * search {@link getProjectRoles} reads (wire shape proven live in #1194:
+   * `result[].id` is the grant id, `roleKeys` its keys), returning the id the
+   * grant update addresses. Zitadel keeps one grant per user and project, so the
+   * first project-scoped hit is the whole answer.
+   */
+  async getProjectGrant(sub: string): Promise<IdpProjectGrant | null> {
+    const grants = await this.searchProjectGrants([
+      { userIdQuery: { userId: sub } },
+    ]);
+    const grant = grants[0];
+    if (!grant) return null;
+    if (!grant.id) {
+      throw new IdpUnavailableError(
+        "zitadel user-grant read returned a grant without an id",
+      );
+    }
+    return { grantId: grant.id, roleKeys: grant.roleKeys ?? [] };
+  }
+
+  /**
+   * 047 EARS-4/7: rewrite the role keys of an existing user grant —
+   * `PUT /management/v1/users/{userId}/grants/{grantId}` with `{ roleKeys }`,
+   * the full set (Zitadel replaces it). This is the call the admin-onboarding
+   * runbook uses on prod; a CreateAuthorization for a user who already holds a
+   * grant answers `409` (stage, 2026-10-13). Org-scoped like the grant search,
+   * so the write lands on the grant the read found. Fails loudly.
+   */
+  async updateProjectGrantRoles(
+    sub: string,
+    grantId: string,
+    roleKeys: readonly string[],
+  ): Promise<void> {
+    const orgId = await this.resolveOrgId();
+    let res: Awaited<ReturnType<FetchLike>>;
+    try {
+      res = await this.fetchImpl(
+        this.url(
+          `/management/v1/users/${encodeURIComponent(sub)}/grants/${encodeURIComponent(grantId)}`,
+        ),
+        {
+          method: "PUT",
+          headers: { ...this.headers(), "x-zitadel-orgid": orgId },
+          body: JSON.stringify({ roleKeys: [...roleKeys] }),
+        },
+      );
+    } catch (cause) {
+      throw new IdpUnavailableError(
+        `zitadel user-grant update failed: ${(cause as Error).message}`,
+      );
+    }
+    if (!res.ok) {
+      throw new IdpUnavailableError(
+        `zitadel user-grant update failed: HTTP ${res.status}`,
+      );
+    }
+  }
+
+  /**
+   * 047 EARS-2: every grant on this project carrying one of `roleKeys`. One
+   * user-grant search per role key — `projectIdQuery` AND `roleKeyQuery`
+   * (`TEXT_QUERY_METHOD_EQUALS`) — rather than one project-wide search, which
+   * would page through every `doctor_guest` grant of the participant
+   * population. Hits are merged by grant id (a person holding two staff roles
+   * is one grant). The holder's `email` / `displayName` ride the management-v1
+   * grant projection and fill the list when the `users` mirror lacks a row.
+   */
+  async listProjectGrantsWithRoles(
+    roleKeys: readonly string[],
+  ): Promise<IdpProjectGrantHolder[]> {
+    const byId = new Map<string, IdpProjectGrantHolder>();
+    for (const roleKey of roleKeys) {
+      const grants = await this.searchProjectGrants([
+        { projectIdQuery: { projectId: this.config.projectId } },
+        { roleKeyQuery: { roleKey, method: "TEXT_QUERY_METHOD_EQUALS" } },
+      ], USER_GRANT_SEARCH_LIMIT);
+      for (const grant of grants) {
+        if (!grant.id || !grant.userId) {
+          throw new IdpUnavailableError(
+            "zitadel user-grant search returned a grant without an id or user",
+          );
+        }
+        byId.set(grant.id, {
+          grantId: grant.id,
+          sub: grant.userId,
+          roleKeys: grant.roleKeys ?? [],
+          email: grant.email || undefined,
+          displayName: grant.displayName || undefined,
+        });
+      }
+    }
+    return [...byId.values()];
+  }
+
+  /**
+   * The management-v1 user-grant search every grant read shares
+   * (`POST /management/v1/users/grants/_search`, org-scoped by
+   * `x-zitadel-orgid`), filtered to this deployment's project. Wire shape and
+   * the reasons for the org header and for staying on management-v1:
+   * {@link getProjectRoles}. Every fault throws {@link IdpUnavailableError}.
+   */
+  private async searchProjectGrants(
+    queries: Record<string, unknown>[],
+    limit?: number,
+  ): Promise<ZitadelUserGrant[]> {
     if (!this.config.projectId) {
       throw new IdpUnavailableError(
         "zitadel project config (IDP_PROJECT_ID) is not set; cannot read the project roles",
@@ -2052,9 +2179,9 @@ export class ZitadelIdpClient implements IdpClient {
         {
           method: "POST",
           headers: { ...this.headers(), "x-zitadel-orgid": orgId },
-          body: JSON.stringify({
-            queries: [{ userIdQuery: { userId: sub } }],
-          }),
+          body: JSON.stringify(
+            limit === undefined ? { queries } : { query: { limit }, queries },
+          ),
         },
       );
     } catch (cause) {
@@ -2067,12 +2194,65 @@ export class ZitadelIdpClient implements IdpClient {
         `zitadel user-grant read failed: HTTP ${res.status}`,
       );
     }
-    const data = (await res.json()) as {
-      result?: Array<{ projectId?: string; roleKeys?: string[] }>;
-    };
-    return (data.result ?? [])
-      .filter((grant) => grant.projectId === this.config.projectId)
-      .flatMap((grant) => grant.roleKeys ?? []);
+    const data = (await res.json()) as { result?: ZitadelUserGrant[] };
+    return (data.result ?? []).filter(
+      (grant) => grant.projectId === this.config.projectId,
+    );
+  }
+
+  /**
+   * 047 EARS-4: the subject holding `email`, through the same User v2 search the
+   * reset paths use ({@link resolveUserId}) — but failing LOUDLY, because the
+   * caller creates an account on `null` and an outage read as «nobody» would
+   * create a second account for an existing person.
+   */
+  async findUserByEmail(email: string): Promise<string | null> {
+    let res: Awaited<ReturnType<FetchLike>>;
+    try {
+      res = await this.fetchImpl(this.url("/v2/users"), {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({ queries: [identifierQuery(email)] }),
+      });
+    } catch (cause) {
+      throw new IdpUnavailableError(
+        `zitadel user search failed: ${(cause as Error).message}`,
+      );
+    }
+    if (!res.ok) {
+      throw new IdpUnavailableError(
+        `zitadel user search failed: HTTP ${res.status}`,
+      );
+    }
+    const data = (await res.json()) as { result?: Array<{ userId?: string }> };
+    return data.result?.[0]?.userId ?? null;
+  }
+
+  /** 047 EARS-6: {@link hasPassword}, failing loudly instead of to `null`. */
+  async userHasPassword(sub: string): Promise<boolean> {
+    const held = await this.hasPassword(sub);
+    if (held === null) {
+      throw new IdpUnavailableError(
+        "zitadel authentication-methods read failed",
+      );
+    }
+    return held;
+  }
+
+  /**
+   * 047 EARS-6: SetPassword without a forced change ({@link setPassword}),
+   * failing loudly. Neither the password nor the response body is logged.
+   */
+  async setUserPassword(sub: string, password: string): Promise<void> {
+    let ok: boolean;
+    try {
+      ok = await this.setPassword(sub, password);
+    } catch (cause) {
+      throw new IdpUnavailableError(
+        `zitadel set password failed: ${(cause as Error).message}`,
+      );
+    }
+    if (!ok) throw new IdpUnavailableError("zitadel set password failed");
   }
 
   /**
@@ -2755,6 +2935,19 @@ export class ZitadelIdpClient implements IdpClient {
  * silently found nobody), breaking the enumeration-safe "existing account"
  * branch (003 EARS-16, 044 EARS-7).
  */
+
+/** The page size of a user-grant search — far above the few dozen staff grants. */
+const USER_GRANT_SEARCH_LIMIT = 1000;
+
+/** One management-v1 user grant as the grant search returns it (#1194, 047). */
+interface ZitadelUserGrant {
+  id?: string;
+  userId?: string;
+  projectId?: string;
+  roleKeys?: string[];
+  email?: string;
+  displayName?: string;
+}
 
 function identifierQuery(identifier: string):
   | { phoneQuery: { number: string } }

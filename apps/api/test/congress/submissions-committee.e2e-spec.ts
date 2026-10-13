@@ -75,6 +75,8 @@ const COMMITTEE_ALLOW_SET: ReadonlySet<string> = new Set([
   "POST /v1/admin/auth/mfa/verify",
   "GET /v1/admin/auth/session",
   "POST /v1/admin/auth/logout",
+  // 047 EARS-8 — in-session re-verification of one's own second factor.
+  "POST /v1/admin/auth/mfa/reverify",
 ]);
 const SESSION_HOLD = new Set(
   [...COMMITTEE_ALLOW_SET].filter((e) => e.includes("/auth/")),

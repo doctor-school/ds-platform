@@ -131,8 +131,13 @@ export interface AuthzMeta {
  */
 export const STEP_UP_MAX_AGE_MS = 30 * 60 * 1000;
 
-/** #1304: where an operator re-elevates when a `stepUp` route finds no fresh MFA. */
-export const STEP_UP_URL = "/v1/admin/auth/mfa/verify";
+/**
+ * #1304 / 047 EARS-8: where an operator re-elevates when a `stepUp` route finds
+ * no fresh MFA — the admin code screen in its re-verify mode, an admin-app path
+ * on the admin origin. The screen submits to `POST /v1/admin/auth/mfa/reverify`,
+ * which refreshes the CURRENT session's second-factor time.
+ */
+export const STEP_UP_URL = "/mfa/challenge?mode=reverify";
 
 /** Nest metadata key the decorator writes and the guard/gate/generator read. */
 export const AUTHZ_KEY = "ds:authz";

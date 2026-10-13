@@ -3456,3 +3456,238 @@ describe("ZitadelIdpClient — reset code by SMS (003 EARS-53/56)", () => {
     await expect(client.requestSmsPasswordReset(PHONE)).resolves.toBe("failed");
   });
 });
+
+describe("ZitadelIdpClient 047 staff-access calls wire shape (V-8)", () => {
+  const BASE = "http://idp.test:9080";
+  const CONFIG = {
+    baseUrl: BASE,
+    serviceToken: "svc-token",
+    projectId: "proj-1",
+    orgId: "org-1",
+  };
+
+  /** A fetch double answering by URL suffix and recording every hop. */
+  function routedFetch(
+    routes: Record<
+      string,
+      { ok?: boolean; status?: number; json?: unknown; throws?: boolean }
+    >,
+  ): { fetchImpl: FetchLike; calls: ScriptedCall[] } {
+    const calls: ScriptedCall[] = [];
+    const fetchImpl: FetchLike = (url, init) => {
+      calls.push({
+        url,
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+      });
+      const key = Object.keys(routes).find((k) => url.endsWith(k));
+      const route = key ? routes[key]! : { ok: false, status: 404 };
+      if (route.throws) return Promise.reject(new Error("ECONNREFUSED"));
+      return Promise.resolve({
+        ok: route.ok ?? true,
+        status: route.status ?? 200,
+        json: () => Promise.resolve(route.json ?? {}),
+      });
+    };
+    return { fetchImpl, calls };
+  }
+
+  function client(fetchImpl: FetchLike): ZitadelIdpClient {
+    return new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+  }
+
+  it("047 EARS-4: getProjectGrant returns this project's grant id and role keys from the user-grant search", async () => {
+    const { fetchImpl, calls } = routedFetch({
+      "/management/v1/users/grants/_search": {
+        json: {
+          result: [
+            { id: "g-other", projectId: "other", roleKeys: ["platform_admin"] },
+            {
+              id: "g-1",
+              userId: "u-1",
+              projectId: "proj-1",
+              roleKeys: ["doctor_guest"],
+            },
+          ],
+        },
+      },
+    });
+    await expect(client(fetchImpl).getProjectGrant("u-1")).resolves.toEqual({
+      grantId: "g-1",
+      roleKeys: ["doctor_guest"],
+    });
+    expect(calls[0]!.headers["x-zitadel-orgid"]).toBe("org-1");
+    expect(JSON.parse(calls[0]!.body ?? "{}")).toEqual({
+      queries: [{ userIdQuery: { userId: "u-1" } }],
+    });
+  });
+
+  it("047 EARS-4: getProjectGrant answers null with no grant and fails loud on a grant without an id", async () => {
+    const none = routedFetch({
+      "/management/v1/users/grants/_search": { json: { result: [] } },
+    });
+    await expect(client(none.fetchImpl).getProjectGrant("u-1")).resolves.toBeNull();
+    const noId = routedFetch({
+      "/management/v1/users/grants/_search": {
+        json: { result: [{ projectId: "proj-1", roleKeys: ["doctor_guest"] }] },
+      },
+    });
+    await expect(client(noId.fetchImpl).getProjectGrant("u-1")).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
+  });
+
+  it("047 EARS-4: updateProjectGrantRoles PUTs the full role-key set to the grant, org-scoped, and fails loud on a non-2xx", async () => {
+    const { fetchImpl, calls } = routedFetch({
+      "/management/v1/users/u-1/grants/g-1": {},
+    });
+    await client(fetchImpl).updateProjectGrantRoles("u-1", "g-1", [
+      "doctor_guest",
+      "event-registrar",
+    ]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe(`${BASE}/management/v1/users/u-1/grants/g-1`);
+    expect(calls[0]!.method).toBe("PUT");
+    expect(calls[0]!.headers["x-zitadel-orgid"]).toBe("org-1");
+    expect(JSON.parse(calls[0]!.body ?? "{}")).toEqual({
+      roleKeys: ["doctor_guest", "event-registrar"],
+    });
+
+    const refused = routedFetch({
+      "/management/v1/users/u-1/grants/g-1": { ok: false, status: 409 },
+    });
+    await expect(
+      client(refused.fetchImpl).updateProjectGrantRoles("u-1", "g-1", ["doctor_guest"]),
+    ).rejects.toBeInstanceOf(IdpUnavailableError);
+  });
+
+  it("047 EARS-2: listProjectGrantsWithRoles searches once per role key by project and role, merging hits by grant id", async () => {
+    const { fetchImpl, calls } = routedFetch({
+      "/management/v1/users/grants/_search": {
+        json: {
+          result: [
+            {
+              id: "g-1",
+              userId: "u-1",
+              projectId: "proj-1",
+              roleKeys: ["doctor_guest", "platform_admin", "event-registrar"],
+              email: "a@ds.test",
+              displayName: "Иванова Анна",
+            },
+          ],
+        },
+      },
+    });
+    await expect(
+      client(fetchImpl).listProjectGrantsWithRoles(["platform_admin", "event-registrar"]),
+    ).resolves.toEqual([
+      {
+        grantId: "g-1",
+        sub: "u-1",
+        roleKeys: ["doctor_guest", "platform_admin", "event-registrar"],
+        email: "a@ds.test",
+        displayName: "Иванова Анна",
+      },
+    ]);
+    expect(calls).toHaveLength(2);
+    const bodies = calls.map(
+      (c) =>
+        JSON.parse(c.body ?? "{}") as {
+          query: { limit: number };
+          queries: Record<string, { roleKey?: string }>[];
+        },
+    );
+    expect(bodies[0]!.queries).toEqual([
+      { projectIdQuery: { projectId: "proj-1" } },
+      {
+        roleKeyQuery: {
+          roleKey: "platform_admin",
+          method: "TEXT_QUERY_METHOD_EQUALS",
+        },
+      },
+    ]);
+    expect(bodies[1]!.queries[1]!["roleKeyQuery"]!.roleKey).toBe("event-registrar");
+    expect(bodies[0]!.query.limit).toBeGreaterThan(0);
+  });
+
+  it("047 EARS-4: findUserByEmail returns the subject, null for nobody, and fails loud on a fault, never nobody on an outage", async () => {
+    const found = routedFetch({
+      "/v2/users": { json: { result: [{ userId: "u-7" }] } },
+    });
+    await expect(client(found.fetchImpl).findUserByEmail("staff@ds.test")).resolves.toBe(
+      "u-7",
+    );
+    expect(found.calls[0]!.method).toBe("POST");
+    expect(found.calls[0]!.url).toBe(`${BASE}/v2/users`);
+    expect(found.calls[0]!.body).toContain("staff@ds.test");
+
+    const nobody = routedFetch({ "/v2/users": { json: { result: [] } } });
+    await expect(
+      client(nobody.fetchImpl).findUserByEmail("staff@ds.test"),
+    ).resolves.toBeNull();
+
+    const down = routedFetch({ "/v2/users": { ok: false, status: 503 } });
+    await expect(
+      client(down.fetchImpl).findUserByEmail("staff@ds.test"),
+    ).rejects.toBeInstanceOf(IdpUnavailableError);
+    const unreachable = routedFetch({ "/v2/users": { throws: true } });
+    await expect(
+      client(unreachable.fetchImpl).findUserByEmail("staff@ds.test"),
+    ).rejects.toBeInstanceOf(IdpUnavailableError);
+  });
+
+  it("047 EARS-6: userHasPassword reads the authentication methods and fails loud when it cannot", async () => {
+    const held = routedFetch({
+      "/v2/users/u-1/authentication_methods": {
+        json: { authMethodTypes: ["AUTHENTICATION_METHOD_TYPE_PASSWORD"] },
+      },
+    });
+    await expect(client(held.fetchImpl).userHasPassword("u-1")).resolves.toBe(true);
+    const down = routedFetch({
+      "/v2/users/u-1/authentication_methods": { ok: false, status: 500 },
+    });
+    await expect(client(down.fetchImpl).userHasPassword("u-1")).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
+  });
+
+  it("047 EARS-6: setUserPassword fails loud on a refused set", async () => {
+    const refused = routedFetch({
+      "/v2/users/u-1/password": { ok: false, status: 400 },
+    });
+    await expect(
+      client(refused.fetchImpl).setUserPassword("u-1", "Aa1!aaaaaaaaaaaa"),
+    ).rejects.toBeInstanceOf(IdpUnavailableError);
+  });
+
+  it("047 EARS-5: a passwordless create with emailVerified sends the address verified, no returnCode, and the full-name displayName", async () => {
+    const { fetchImpl, calls } = routedFetch({
+      "/v2/users/new": { status: 201, json: { id: "u-new" } },
+    });
+    await client(fetchImpl).createUser({
+      email: "staff@ds.test",
+      credential: "none",
+      profile: {
+        familyName: "Иванова",
+        givenName: "Анна Сергеевна",
+        displayName: "Иванова Анна Сергеевна",
+      },
+      emailVerified: true,
+    });
+    const create = calls.find((c) => c.url.endsWith("/v2/users/new"))!;
+    const body = JSON.parse(create.body ?? "{}") as {
+      human: { email: unknown; password?: unknown; profile: unknown };
+    };
+    expect(body.human.email).toEqual({
+      email: "staff@ds.test",
+      isVerified: true,
+    });
+    expect(body.human.password).toBeUndefined();
+    expect(body.human.profile).toEqual({
+      familyName: "Иванова",
+      givenName: "Анна Сергеевна",
+      displayName: "Иванова Анна Сергеевна",
+    });
+  });
+});

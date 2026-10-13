@@ -1,6 +1,7 @@
 import { Logger, Module } from "@nestjs/common";
-import { APP_GUARD } from "@nestjs/core";
+import { APP_GUARD, DiscoveryModule } from "@nestjs/core";
 import { EventGrantPolicy } from "../../authz/event-grant.policy.js";
+import { StepUpRoutes } from "../../authz/step-up-routes.js";
 import { Redis } from "ioredis";
 import { loadEnv } from "../../config/env.schema.js";
 import { MailerModule } from "../../mailer/mailer.module.js";
@@ -54,7 +55,13 @@ import { AdminUsersController } from "./admin-users.controller.js";
   // explicitly (their body carries no identifier, so the guard's decorator pass
   // cannot key it); `MailerModule` for the §7 lockout notification, which the BFF
   // owes because the TOTP-attempt lock is its own counter, not Zitadel's.
-  imports: [IdpModule, SessionModule, RateLimitModule, MailerModule],
+  imports: [
+    IdpModule,
+    SessionModule,
+    RateLimitModule,
+    MailerModule,
+    DiscoveryModule,
+  ],
   // `AdminUsersController` carries the EARS-13 factor-removal route, which acts
   // on ANOTHER admin's account and therefore lives under `/v1/admin/users/:id`
   // rather than the caller-scoped `/v1/admin/auth` namespace.
@@ -63,6 +70,8 @@ import { AdminUsersController } from "./admin-users.controller.js";
     // 044 EARS-38: `GET /v1/admin/auth/session` projects the principal's event
     // bindings (stateless; reads `event_role_grants` via the @Global DRIZZLE_DB).
     EventGrantPolicy,
+    // 047 EARS-8: the `stepUp` route set `mfa/reverify` validates against.
+    StepUpRoutes,
     {
       provide: ADMIN_SESSION_STORE,
       useFactory: (): AdminSessionStore => {

@@ -470,7 +470,7 @@ describe("«Повторить» in a failed block (#2832)", () => {
     );
   });
 
-  it("EARS-9, EARS-7: a recovered panel keeps the title of an applied kind the retried read does not offer", async () => {
+  it("EARS-7/9: a recovered panel keeps the title of an applied kind the retried read does not offer", async () => {
     const action = hostAction();
     const failed = Promise.resolve({ ok: false as const });
     const raw = { kind: ["master-klass"] };

@@ -13,7 +13,7 @@ Requirements: [`047-requirements-en.md`](./047-requirements-en.md) · Builds on:
 
 - **Admin route** `apps/admin/app/access/page.tsx` («Доступы»), added to `ADMIN_SECTION_NAV` in `apps/admin/lib/admin-access.ts` after the existing sections. `ADMIN_SECTION_NAV` is drawn only for `full` access (`platform_admin`), so a registrar or committee member never sees the link, and `canAccessPath` already refuses the route for them. The chrome is a projection; the API refusal (EARS-1) is the authority.
 - **API module** `apps/api/src/staff-access/` — controller, service, repository; the IdP calls go through the existing `IdpClient` port (`apps/api/src/auth/idp/idp.types.ts`) with new methods on `ZitadelIdpClient` and the fake.
-- **Contract** `packages/schemas/src/admin/staff-access.ts` — `GRANTABLE_STAFF_ROLES` (`platform_admin`, `event-registrar`, `congress-program-committee`, `pd_officer`), the list row, the grant request and response, the revoke request. The API and the admin form read the same list, so a future role is one edit.
+- **Contract** `packages/schemas/src/admin/staff-access.ts` — `GRANTABLE_STAFF_ROLES` (`platform_admin`, `event-registrar`, `congress-program-committee`), the list row, the grant request and response, the revoke request. The API and the admin form read the same list, so a future role is one edit.
 - No new table. The coarse role stays in the Zitadel project grant, the event binding in `event_role_grants` (ADR-0001 §1).
 
 ## Endpoints
@@ -32,7 +32,7 @@ The authority for «who holds a staff role» is the Zitadel project grant, not t
 
 1. one IdP read of every project grant whose `roleKeys` intersect `GRANTABLE_STAFF_ROLES` (user-grant search scoped to the project, see «IdP calls»);
 2. one DB read of `users` (by `zitadel_sub`) for ФИО (`display_name`) and email, and of `event_role_grants` joined to `events` for the bindings;
-3. expansion to rows: one row per (person, role) for `platform_admin` / `pd_officer`, one row per (person, role, event) for the event-bound roles. An event-bound role in the IdP grant with no binding row is listed with an empty event, so a half-finished grant is visible and revocable.
+3. expansion to rows: one row per (person, role) for `platform_admin`, one row per (person, role, event) for the event-bound roles. An event-bound role in the IdP grant with no binding row is listed with an empty event, so a half-finished grant is visible and revocable.
 
 An IdP fault on the list read is a `503` the admin shows with «Повторить», never an empty list.
 
@@ -71,7 +71,7 @@ sequenceDiagram
 
 1. Refuse when `userId` is the caller and `role` is `platform_admin` (no self-lockout; the last administrator therefore can never remove themselves).
 2. DB transaction: delete the `event_role_grants` row for an event-bound role; append `auth.role.revoked`.
-3. IdP: when the person has no remaining binding of that role (or for `platform_admin` / `pd_officer`), `PUT` the grant with `roleKeys` minus the role — `doctor_guest` and the other roles stay.
+3. IdP: when the person has no remaining binding of that role (or for `platform_admin`), `PUT` the grant with `roleKeys` minus the role — `doctor_guest` and the other roles stay.
 4. Sessions: `AdminSessionService.forceLogout(sub)` (011 EARS-10, `auth.session.terminated` reason `force` per session), plus a new `PendingAuthStore.deleteBySub(sub)` with a `sub → refs` index mirroring the session store, so a sign-in that passed the password step before the revocation cannot mint a session from its 5-minute role snapshot.
 5. Mirror `users.role` re-projected from the remaining roles.
 
@@ -104,9 +104,9 @@ Grant and revoke reuse the production step-up check and add no route of their ow
 
 Each new call is pinned by an adapter test on the wire shape proven live on the dev-stand (verification V-8), the rule `getProjectRoles` documents: a quiet `200` with a different shape must fail a test, not empty a list.
 
-## `pd_officer`
+## `pd_officer` not grantable yet
 
-`pd_officer` is granted, listed and revoked like the others. It is not in `MFA_REQUIRED_BY_ROLE`, so it opens no admin session by itself, and no admin route admits it alone today; its reach is the ADR-0009 surfaces when they exist. Granted to a platform administrator it adds that reach on top. 047 does not change the MFA policy: adding `pd_officer` there is the change of the feature that first gives it a screen.
+`pd_officer` is left out of `GRANTABLE_STAFF_ROLES` (owner, 2026-10-13): it is not in `MFA_REQUIRED_BY_ROLE` and no admin route admits it, so a grant would open nothing. When the personal-data screens (ADR-0009) exist, that feature adds it to the MFA policy and to `GRANTABLE_STAFF_ROLES`, and it joins this section with no new spec for the section.
 
 ## UI composition
 
@@ -117,7 +117,7 @@ From `@ds/design-system`, on the existing admin chrome:
 - **One-time password** — `Dialog` with the password in a read-only field, a copy `Button`, and the line that it is shown once; closing it ends the display.
 - **Revoke** — `AlertDialog` naming the person, role and event, «Отозвать» / «Отмена».
 
-RU role labels: «Администратор платформы», «Администратор Конгресса», «Программный комитет», «Ответственный за ПДн». Final copy and layout are decided at Stage A.
+RU role labels: «Администратор платформы», «Администратор Конгресса», «Программный комитет». Final copy and layout are decided at Stage A.
 
 ## Delivery slices
 

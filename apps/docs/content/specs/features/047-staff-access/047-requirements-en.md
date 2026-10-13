@@ -34,7 +34,7 @@ lang: en
 
 - The admin section «Доступы» in `apps/admin`: the staff list, the grant form and the revoke action, built from `@ds/design-system`.
 - The staff-access endpoints in `apps/api` and their Zod contract in `packages/schemas`.
-- Grantable roles: `platform_admin`, `event-registrar` («Администратор Конгресса»), `congress-program-committee` («Программный комитет»), `pd_officer`. The two event-bound roles keep their binding rules over `event_role_grants` (044 EARS-38, 046 EARS-26).
+- Grantable roles: `platform_admin`, `event-registrar` («Администратор Конгресса»), `congress-program-committee` («Программный комитет»). The two event-bound roles keep their binding rules over `event_role_grants` (044 EARS-38, 046 EARS-26).
 - Staff account creation in Zitadel and its `users` mirror row, with a system-generated temporary password.
 - A fresh second factor for grant and revoke (ADR-0001 §10) through the production step-up check: a stale factor refuses the action with `401 STEP_UP_REQUIRED` and the admin sends the administrator to sign in again through the existing login and TOTP challenge; no new route or dialog.
 - Revocation closes access at once, open admin sessions included. This supersedes #2420 for these roles; the offboarding section of `apps/docs/content/operations/admin-onboarding.md` is rewritten to the section.
@@ -42,6 +42,7 @@ lang: en
 ### Out of scope
 
 - `congress-partner` — retired (#2438).
+- `pd_officer` — not grantable until the personal-data screens (ADR-0009) exist; it then joins this section as a change to the grantable-role list, without a new spec for the section.
 - Roles from the ADR-0001 catalogue that do not exist yet (`expert`, `moderator`, `support`, …): each joins the section when it exists, as a change to the grantable-role list.
 - A set-password link, a forced password change, a password-reset feature for staff, or delivery of the temporary password by the system (email, chat): the administrator hands it over.
 - Editing a staff member's name or email, deactivating or deleting an account, resetting a second factor (011 EARS-13 stays the factor-reset path).
@@ -51,7 +52,7 @@ lang: en
 
 - The coarse role is a Zitadel project-role grant; Zitadel keeps one grant per user and project carrying a `roleKeys` array. A second create on an account that already holds a grant answers `409` (proven on stage 2026-10-13), so a role is added by updating the existing grant (`PUT /management/v1/users/{userId}/grants/{grantId}`), never by creating a second one.
 - The event binding is a row of `event_role_grants` (`packages/db/src/schema/event-role-grants.ts`): one `event-registrar` row per user (partial unique index), one `congress-program-committee` row per user and event.
-- The admin origin admits a principal only through the `role → mfa_required` policy (`apps/api/src/auth/admin-session/mfa-policy.ts`); `platform_admin`, `event-registrar` and `congress-program-committee` are in it, `pd_officer` is not (see `047-design.md`, «`pd_officer`»).
+- The admin origin admits a principal only through the `role → mfa_required` policy (`apps/api/src/auth/admin-session/mfa-policy.ts`); every grantable role is in it.
 - An admin session copies the roles into a server-side record at sign-in (`admin-session.service.ts`); a pending sign-in holds a role snapshot for 5 minutes. Revocation must end both.
 - Staff accounts are not doctor registrations: 021 EARS-4/EARS-5 (consents and declarations) do not apply to them.
 - The staff account keeps the visitor role `doctor_guest` as its base grant (the onboarding runbook, step 5; `apps/api/src/auth/staff-role.ts`).
@@ -59,7 +60,7 @@ lang: en
 ## Prior decisions
 
 - Product-owner decisions (chat 2026-10-13, Issue #2378), binding for this spec:
-  - One section «Доступы» for every staff role; the four roles above are granted now. «Да, все четыре.»
+  - One section «Доступы» for every staff role; the three roles above are granted now; `pd_officer` waits for the personal-data screens: «Да, убираем».
   - A new account gets a temporary password, no new set-password function: «новых функций не надо мудрить, упрощаем тут. Можно просто временный пароль задавать. С учётом наличия 2FA это норм».
 - Lead decisions (from ADR-0001 and the live mechanism, recorded on #2378): only `platform_admin` sees and uses the section; the form is email, full name, role and the event for an event-bound role; an existing account gets the role added, otherwise the account is created without doctor-registration consents; «Отозвать» closes access at once, open sessions included.
 - ADR-0001 §1, §8 — the coarse role lives in the IdP grant, the resource binding in platform data; staff accounts are created by the operator, never self-registered.
@@ -81,7 +82,7 @@ lang: en
 ## EARS requirements
 
 - **EARS-1** — THE SYSTEM SHALL show the section «Доступы» in the admin navigation and serve it, and its endpoints, only to a principal holding `platform_admin`; every staff-access endpoint SHALL declare `roles: [platform_admin]` with `revalidate: "live"`, and a principal without `platform_admin` SHALL be refused server-side.
-- **EARS-2** — WHEN a platform administrator opens «Доступы», THE SYSTEM SHALL list every account holding a grantable role, one row per person, role and event, with the columns ФИО, email, роль and мероприятие (empty for `platform_admin` and `pd_officer`), and a «Отозвать» action on each row, on the `AdminDataList` composition.
+- **EARS-2** — WHEN a platform administrator opens «Доступы», THE SYSTEM SHALL list every account holding a grantable role, one row per person, role and event, with the columns ФИО, email, роль and мероприятие (empty for `platform_admin`), and a «Отозвать» action on each row, on the `AdminDataList` composition.
 - **EARS-3** — WHEN a platform administrator submits the grant form — email, ФИО, role, and the event when the role is `event-registrar` or `congress-program-committee` — THE SYSTEM SHALL refuse, with the reason shown at the form and nothing changed: a missing or malformed field; an event for a role that takes none; an `event-registrar` grant for a person already bound to another event (044 EARS-38); a role, or a role and event, the person already holds.
 - **EARS-4** — WHEN the grant names the email of an existing account, THE SYSTEM SHALL add the role to that account's existing project grant, keeping `doctor_guest` and every other role it holds and leaving its name and password unchanged, and SHALL write the event binding row for an event-bound role.
 - **EARS-5** — WHEN the grant names an email no account holds, THE SYSTEM SHALL create the staff account — a Zitadel human user with the email marked verified and the name from ФИО, a project grant of `doctor_guest` and the granted role, and its `users` mirror row — and SHALL write the event binding row for an event-bound role, recording no doctor-registration consent or declaration.
@@ -104,7 +105,7 @@ lang: en
 
 | #    | Type                     | What it proves                                                                                                                                                                                                                                                                                                                                                         |
 | ---- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| V-1  | Vitest e2e — `apps/api`  | A `platform_admin` reads the list; a registrar, a committee member and a `pd_officer`-only principal are refused on every staff-access endpoint; the matrix rows carry `revalidate: live` and the writes `step_up: true` (EARS-1, EARS-2).                                                                                                                             |
+| V-1  | Vitest e2e — `apps/api`  | A `platform_admin` reads the list; a registrar and a committee member are refused on every staff-access endpoint; the matrix rows carry `revalidate: live` and the writes `step_up: true` (EARS-1, EARS-2).                                                                                                                                                            |
 | V-2  | Vitest e2e — `apps/api`  | Grant refusals: missing email, event on `platform_admin`, no event on `event-registrar`, a registrar already bound elsewhere, a duplicate role and a duplicate committee event — each refused, no IdP write, no row (EARS-3).                                                                                                                                          |
 | V-3  | Vitest e2e — `apps/api`  | Existing account with `doctor_guest`: the grant updates its existing grant to `doctor_guest` + the role (no create call), writes the binding, leaves its password untouched and returns no password; an existing account without a password gets one (EARS-4, EARS-6).                                                                                                 |
 | V-4  | Vitest e2e — `apps/api`  | Unknown email: a verified human user with the ФИО name, a grant of `doctor_guest` + the role and a `users` row are created, no `consent_records` row; the response carries the temporary password once, the audit and logs do not (EARS-5, EARS-6).                                                                                                                    |

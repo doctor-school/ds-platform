@@ -7,6 +7,7 @@ import {
   PASSWORD_RESET_CODE_LIFETIME_SECONDS,
   VERIFY_EMAIL_CODE_LIFETIME_SECONDS,
   passwordResetCodeEmail,
+  reRegistrationCodeEmail,
   verificationCodeEmail,
 } from "./code-emails.js";
 
@@ -128,4 +129,31 @@ describe("#2814 code lifetime — one source for the copy and the deploy check",
       codeLifetimeLine(VERIFY_EMAIL_CODE_LIFETIME_SECONDS),
     );
   });
+});
+
+// #2171: every code-mail branch, not only verify/reset, is link-free — the
+// sign-in code (verified 5 min / unverified 1 h) and the re-registration code
+// (003 EARS-23, both password branches) keep the visitor in the requesting tab.
+describe("#2171 every code email is link-free", () => {
+  const branches = [
+    ["sign-in, verified (5 min)", loginCodeEmail(CODE, "5m")],
+    ["sign-in, unverified (1 h)", loginCodeEmail(CODE, "1h")],
+    [
+      "re-registration, password kept",
+      reRegistrationCodeEmail(CODE, { lifetime: "5m", passwordKept: true }),
+    ],
+    [
+      "re-registration, no password",
+      reRegistrationCodeEmail(CODE, { lifetime: "1h", passwordKept: false }),
+    ],
+  ] as const;
+
+  for (const [name, msg] of branches) {
+    it(`003 EARS-29: ${name} — no <a> element and no URL in html or text`, () => {
+      expect(msg.html.toLowerCase()).not.toMatch(/<a[\s>]/);
+      expect(msg.html).not.toMatch(/https?:\/\//);
+      expect(msg.text).not.toMatch(/https?:\/\//);
+      expect(msg.html).toContain(`<strong>${CODE}</strong>`);
+    });
+  }
 });

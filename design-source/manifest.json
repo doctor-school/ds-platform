@@ -122,10 +122,10 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "auth.dc.html": {
-      "sha256": "4a0cdff5b3f2e6eb6c4527656be85e2b581012ec1aaa4f90f3edfffef20cb845",
-      "pulledAt": "2026-10-12T04:19:58.228Z",
+      "sha256": "0a48f029dec14ce30ea4e1b9eed91f275a88a52d418a53f269ab086ce1d996a6",
+      "pulledAt": "2026-10-13T06:23:25.133Z",
       "remotePath": null,
-      "note": "#2449 Stage A: owner redraw 2026-10-12 (rev 2) — unconfirmed state, no number-taken error, reset-by-email link"
+      "note": "#2882 lead text edit 2026-10-13: no password placeholder, code lifetime line (owner-approved F6 text), no-break «Эл. почта» (#2862)"
     },
     "doctor-cabinet.dc.html": {
       "sha256": "767892897620823bbf623c3a7b9e63a790e1a422725646997003eee47b7bb915",

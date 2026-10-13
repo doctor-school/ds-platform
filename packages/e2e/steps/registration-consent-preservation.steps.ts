@@ -149,6 +149,8 @@ Given(
         apiBaseUrl: process.env.E2E_API_URL ?? "",
         databaseUrl: process.env.E2E_AUTH_DATABASE_URL ?? "",
         expectedDatabase: process.env.E2E_AUTH_DATABASE_NAME ?? "",
+        expectedDatabaseHost: process.env.E2E_AUTH_DATABASE_HOST ?? "",
+        expectedDatabasePort: Number(process.env.E2E_AUTH_DATABASE_PORT),
       },
       priorCookies: [],
       authPosts: [],

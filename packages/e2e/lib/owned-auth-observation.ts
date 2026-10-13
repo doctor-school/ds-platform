@@ -7,6 +7,8 @@ export interface OwnedAuthContour {
   apiBaseUrl: string;
   databaseUrl: string;
   expectedDatabase: string;
+  expectedDatabaseHost: string;
+  expectedDatabasePort: number;
 }
 export interface OwnedAuthFixture {
   email: string;
@@ -40,10 +42,14 @@ function validateTarget(contour: OwnedAuthContour): void {
     const academy = new URL(contour.academyBaseUrl);
     const api = new URL(contour.apiBaseUrl);
     const database = new URL(contour.databaseUrl);
-    for (const origin of [academy, api]) {
+    for (const [origin, supplied] of [
+      [academy, contour.academyBaseUrl],
+      [api, contour.apiBaseUrl],
+    ] as const) {
       if (
         !["http:", "https:"].includes(origin.protocol) ||
         !["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname) ||
+        origin.origin !== supplied.replace(/\/$/, "") ||
         origin.username ||
         origin.password ||
         !origin.port ||
@@ -58,9 +64,16 @@ function validateTarget(contour: OwnedAuthContour): void {
       academy.protocol !== api.protocol ||
       academy.port === api.port ||
       !/^ds_dev_[1-9][0-9]*$/.test(contour.expectedDatabase) ||
+      !/^(?:[a-z0-9][a-z0-9.-]*|\[[a-f0-9:]+\])$/.test(
+        contour.expectedDatabaseHost,
+      ) ||
+      /(?:^|\.)doctor\.school$/.test(contour.expectedDatabaseHost) ||
+      !Number.isSafeInteger(contour.expectedDatabasePort) ||
+      contour.expectedDatabasePort < 1 ||
+      contour.expectedDatabasePort > 65535 ||
       !["postgres:", "postgresql:"].includes(database.protocol) ||
-      database.hostname !== academy.hostname ||
-      !database.port ||
+      database.hostname !== contour.expectedDatabaseHost ||
+      database.port !== String(contour.expectedDatabasePort) ||
       database.pathname !== `/${contour.expectedDatabase}` ||
       database.search ||
       database.hash
@@ -105,7 +118,13 @@ function validTimestamp(value: unknown): value is string {
     /^(\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?\+00$/.exec(
       value,
     );
-  if (!match || +match[2]! > 23 || +match[3]! > 59 || +match[4]! > 59)
+  if (
+    !match ||
+    +match[1]!.slice(0, 4) === 0 ||
+    +match[2]! > 23 ||
+    +match[3]! > 59 ||
+    +match[4]! > 59
+  )
     return false;
   const date = new Date(`${match[1]}T00:00:00Z`);
   return (

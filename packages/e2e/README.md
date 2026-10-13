@@ -723,7 +723,8 @@ total consent count, purpose, version, full PostgreSQL timestamp and relevant
 user mirror fields before submission, before code acceptance and after it.
 `lib/owned-auth-observation.ts` uses the public `@ds/db` pool in a read-only
 transaction; it accepts only consistent literal local Academy/API origins and
-an explicitly named isolated `ds_dev_<issue>` database, verifying
+an explicitly named isolated `ds_dev_<issue>` database on the trusted host and
+port from the actual runtime recipe, verifying
 `current_database()` before the data read. Fixture prefix, UUID, normalized
 email, session subject and observed profile ID bind every consent read.
 The same helper's `readOwnedUserCount` supplies a scalar total-users count for
@@ -731,8 +732,12 @@ the phone-only refusal journey on the serialized isolated database; it deliberat
 does not filter by the control fixture's email. Malformed rows and connection,
 cleanup or ledger failures fail closed without retaining secret diagnostics.
 
-The lead supplies `E2E_API_URL`, `E2E_AUTH_DATABASE_URL` and
-`E2E_AUTH_DATABASE_NAME` from the actual owned contour. When supplied, the absolute
+The lead supplies `E2E_API_URL`, `E2E_AUTH_DATABASE_URL`,
+`E2E_AUTH_DATABASE_NAME`, `E2E_AUTH_DATABASE_HOST` and `E2E_AUTH_DATABASE_PORT`
+from the actual owned runtime recipe; PostgreSQL may be on its LAN host while
+Academy/API remain local. The observer refuses any DB host or port that differs
+from that trusted binding, as well as production/shared database targets.
+When supplied, the absolute
 `E2E_STAND_COMMAND_LOG` receives only operation, database and read-only completion
 metadata with `nativeExit: null` for the JavaScript SQL call; browser command exits
 are recorded separately by the lead. The existing `consent-refusal.ts` staging

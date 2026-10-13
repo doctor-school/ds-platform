@@ -22,6 +22,8 @@ const contour: OwnedAuthContour = {
   apiBaseUrl: "http://localhost:3000",
   databaseUrl: "postgresql://ds:synthetic-password@localhost:5432/ds_dev_2250",
   expectedDatabase: "ds_dev_2250",
+  expectedDatabaseHost: "localhost",
+  expectedDatabasePort: 5432,
 };
 const fixture = {
   email: "consent-2856-12345678-1234-4234-8234-123456789abc@example.test",
@@ -106,6 +108,14 @@ describe("owned auth observation", () => {
     { academyBaseUrl: "https://academy.doctor.school" },
     { apiBaseUrl: "http://127.0.0.1:3000" },
     { apiBaseUrl: "http://localhost:3001" },
+    { expectedDatabaseHost: "foreign.local" },
+    { expectedDatabasePort: 5433 },
+    {
+      academyBaseUrl: "http://127.1:3001",
+      apiBaseUrl: "http://127.1:3000",
+      databaseUrl: "postgresql://ds:secret@127.0.0.1:5432/ds_dev_2250",
+      expectedDatabaseHost: "127.0.0.1",
+    },
   ])(
     "EARS-23: rejects unsafe or mismatched DB/contours before opening a pool %#",
     async (patch) => {
@@ -150,6 +160,7 @@ describe("owned auth observation", () => {
       [{ ...consentRow, version: "secret@example.org" }],
       [{ ...consentRow, captured_at: "not-a-timestamp" }],
       [{ ...consentRow, captured_at: "2026-02-30 01:45:09+00" }],
+      [{ ...consentRow, captured_at: "0000-01-01 01:45:09+00" }],
       [{ ...consentRow, profile_id: "00000000-1234-4234-8234-123456789abc" }],
       [{ ...consentRow, email_matches: false }],
       [{ ...consentRow, email_verified: "true" }],
@@ -173,6 +184,22 @@ describe("owned auth observation", () => {
     expect(
       mocked.query.mock.calls.find(([sql]) => sql.includes("count(*)")),
     ).toEqual(["SELECT count(*)::text AS count FROM users"]);
+  });
+  it("EARS-23: accepts the trusted remote dev-stand recipe target while the Academy/API stay local", async () => {
+    const actual = {
+      ...contour,
+      databaseUrl:
+        "postgresql://ds:synthetic-password@truenas.local:5432/ds_dev_2250",
+      expectedDatabaseHost: "truenas.local",
+      expectedDatabasePort: 5432,
+    };
+    expect((await readOwnedConsentSnapshot(actual, fixture)).consentCount).toBe(
+      1,
+    );
+    expect(mocked.create).toHaveBeenCalledWith(actual.databaseUrl, {
+      max: 1,
+      statement_timeout: 5000,
+    });
   });
   it.each(
     [

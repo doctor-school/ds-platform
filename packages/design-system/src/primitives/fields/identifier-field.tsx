@@ -2,8 +2,16 @@
 
 import type { ControllerRenderProps, FieldValues } from "react-hook-form";
 
+import type * as React from "react";
+
 import { Input } from "../input";
-import { FormControl, FormItem, FormLabel, FormMessage } from "../form";
+import {
+  FormControl,
+  FormDescription,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "../form";
 
 /**
  * `<IdentifierField>` (#197) — the email-OR-phone *union* box. This is the fifth
@@ -32,6 +40,7 @@ export function IdentifierField<T extends FieldValues>({
   label,
   placeholder,
   testId,
+  description,
 }: {
   field: ControllerRenderProps<T>;
   /** Field label (app-supplied, localized). */
@@ -40,6 +49,8 @@ export function IdentifierField<T extends FieldValues>({
   placeholder?: string;
   /** Optional `data-testid` for the input (the e2e relies on stable test ids). */
   testId?: string;
+  /** Optional hint under the box, announced with it (`aria-describedby`). */
+  description?: React.ReactNode;
 }) {
   return (
     <FormItem>
@@ -54,6 +65,9 @@ export function IdentifierField<T extends FieldValues>({
           onChange={field.onChange}
         />
       </FormControl>
+      {description ? (
+        <FormDescription className="-mt-0.5 text-xs">{description}</FormDescription>
+      ) : null}
       <FormMessage />
     </FormItem>
   );

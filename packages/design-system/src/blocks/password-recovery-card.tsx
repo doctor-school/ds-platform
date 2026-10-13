@@ -313,17 +313,12 @@ function RecoveryRequestForm({
               field={field}
               label={copy.identifierLabel}
               placeholder={copy.identifierPlaceholder}
+              // Canvas 229–231: muted small ink 8px under the field, above the button
+              // (`-mt-0.5` in the field takes its 10px row gap to 8px).
+              description={identifierHint}
             />
           )}
         />
-        {identifierHint ? (
-          // Canvas 229–231: muted small ink under the field, above the button.
-          // `-mt-2` pulls it to the canvas 8px under the control out of the
-          // form's `space-y-4` rhythm.
-          <p className="-mt-2 text-xs text-muted-foreground">
-            {identifierHint}
-          </p>
-        ) : null}
         {captchaSlot}
         <Button
           type="submit"

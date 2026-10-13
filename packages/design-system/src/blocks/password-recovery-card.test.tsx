@@ -368,6 +368,9 @@ describe("003 EARS-55 <PasswordRecoveryCard> identifier hint slot", () => {
     fireEvent.change(box, { target: { value: "+79991234567" } });
     const hint = screen.getByText("copy.request.identifierHint");
     expect(hint).toHaveClass("text-xs", "text-muted-foreground");
+    // The hint is announced with the field it explains.
+    expect(hint.id).not.toBe("");
+    expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(hint.id);
     fireEvent.change(box, { target: { value: "doc@example.com" } });
     expect(screen.queryByText("copy.request.identifierHint")).toBeNull();
   });

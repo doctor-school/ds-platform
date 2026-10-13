@@ -546,6 +546,8 @@ function OtpLogin({
     defaultValues: { identifier: initialIdentifier, channel },
   });
   useCarriedIdentifier(requestForm.watch, onIdentifierChange);
+  const smsHintId = React.useId();
+  const showSmsHint = channel === "sms" && Boolean(copy.channelSmsHint);
 
   return (
     <div className="space-y-4" aria-label={copy.formLabel}>
@@ -571,6 +573,7 @@ function OtpLogin({
                 className="flex gap-2"
                 role="radiogroup"
                 aria-label={copy.channelGroupLabel}
+                aria-describedby={showSmsHint ? smsHintId : undefined}
               >
                 {channels.map((c) => (
                   <Button
@@ -595,8 +598,8 @@ function OtpLogin({
                   </Button>
                 ))}
               </div>
-              {channel === "sms" && copy.channelSmsHint ? (
-                <p className="text-xs text-muted-foreground">
+              {showSmsHint ? (
+                <p id={smsHintId} className="text-xs text-muted-foreground">
                   {copy.channelSmsHint}
                 </p>
               ) : null}

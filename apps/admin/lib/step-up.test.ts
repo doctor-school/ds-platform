@@ -96,6 +96,36 @@ describe("047 EARS-8 step-up — the console keeps the request across the code s
     expect(reverifyReturnTo(null)).toBe("/events");
   });
 
+  it("047 EARS-8: a return path that a URL parser would turn off-origin is refused; a valid one comes back normalised", () => {
+    for (const hostile of [
+      "/\t/evil.com",
+      "/\n/evil.com",
+      "/\r/evil.com",
+      "/%09/evil.com",
+      "/\\evil.com",
+      "//evil.com",
+      "https://evil.com",
+      "javascript:alert(1)",
+      "",
+    ]) {
+      expect(reverifyReturnTo(hostile)).toBe("/events");
+      expect(stepUpChallengeHref(hostile, "/access", "POST /x")).toBeNull();
+      expect(
+        stepUpChallengeHref("/mfa/challenge?mode=reverify", hostile, "POST /x"),
+      ).toBeNull();
+    }
+    expect(reverifyReturnTo("/access?x=1")).toBe("/access?x=1");
+    expect(reverifyReturnTo("/access?x=1#top")).toBe("/access?x=1#top");
+    const href = stepUpChallengeHref(
+      "/mfa/challenge?mode=reverify",
+      "/access?x=1",
+      "POST /x",
+    );
+    expect(
+      new URL(href!, "http://admin.test").searchParams.get("returnTo"),
+    ).toBe("/access?x=1");
+  });
+
   it("047 EARS-8: the saved request is read back once, for its own path only", () => {
     const storage = memoryStorage();
     expect(saveStepUpRequest(storage, REQUEST)).toBe(true);

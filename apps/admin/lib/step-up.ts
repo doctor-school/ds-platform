@@ -39,9 +39,7 @@ export interface SavedStepUpRequest {
 const FALLBACK_RETURN = "/events";
 
 /** A `401 STEP_UP_REQUIRED` refusal carrying the code screen to go to. */
-export function isStepUpRequired(
-  error: unknown,
-): error is {
+export function isStepUpRequired(error: unknown): error is {
   statusCode: 401;
   errorCode: "STEP_UP_REQUIRED";
   stepUpUrl: string;
@@ -60,33 +58,73 @@ export function isStepUpRequired(
   );
 }
 
-/** A same-origin admin path: one leading `/`, never `//` or `/\` (a host). */
-function isAdminPath(value: string): boolean {
-  return /^\/(?![/\\])/.test(value);
+/** A fixed base the candidate paths are resolved against — never a real origin. */
+const ADMIN_BASE_ORIGIN = "http://admin.invalid";
+
+/** ASCII control characters (incl. tab/LF/CR, which URL parsers strip) or a backslash. */
+function hasUnsafePathChars(value: string): boolean {
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    if (code <= 0x1f || code === 0x7f || char === "\\") return true;
+  }
+  return false;
+}
+
+/**
+ * The normalised same-origin admin path of `raw` — `pathname + search + hash`
+ * of the PARSED URL, never the raw string — or `null`.
+ *
+ * A prefix check on the raw string is not enough: the WHATWG parser strips
+ * tab/LF/CR, so `/\t/evil.com` reads as `//evil.com`, a host. So the candidate
+ * is refused outright when it (or its percent-decoded form) carries a control
+ * character or a backslash, then resolved against a fixed base and accepted
+ * only when it stays on that origin and its path does not begin with `//`.
+ */
+export function adminPathOf(raw: string | null | undefined): string | null {
+  if (typeof raw !== "string" || !raw.startsWith("/")) return null;
+  if (hasUnsafePathChars(raw)) return null;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+  if (hasUnsafePathChars(decoded) || decoded.startsWith("//")) return null;
+  let url: URL;
+  try {
+    url = new URL(raw, ADMIN_BASE_ORIGIN);
+  } catch {
+    return null;
+  }
+  if (url.origin !== ADMIN_BASE_ORIGIN) return null;
+  const path = `${url.pathname}${url.search}${url.hash}`;
+  return path.startsWith("/") && !path.startsWith("//") ? path : null;
 }
 
 /**
  * The code screen to send the operator to: the server's `stepUpUrl` plus the
  * page to return to and the refused endpoint the re-verification names (the API
  * records it on the `auth.step_up.*` row and accepts only a `stepUp` route).
- * `null` for a `stepUpUrl` that is not an admin path — never followed off-origin.
+ * `null` when either the `stepUpUrl` or the return path is not a same-origin
+ * admin path — never followed off-origin.
  */
 export function stepUpChallengeHref(
   stepUpUrl: string,
   returnTo: string,
   endpoint: string,
 ): string | null {
-  if (!isAdminPath(stepUpUrl)) return null;
-  const url = new URL(stepUpUrl, "http://admin.invalid");
-  if (url.origin !== "http://admin.invalid") return null;
-  url.searchParams.set("returnTo", returnTo);
+  const challenge = adminPathOf(stepUpUrl);
+  const back = adminPathOf(returnTo);
+  if (challenge === null || back === null) return null;
+  const url = new URL(challenge, ADMIN_BASE_ORIGIN);
+  url.searchParams.set("returnTo", back);
   url.searchParams.set("endpoint", endpoint);
   return `${url.pathname}${url.search}`;
 }
 
-/** The re-verify screen's `returnTo`, accepted only as an admin path. */
+/** The re-verify screen's `returnTo`, normalised, accepted only as an admin path. */
 export function reverifyReturnTo(raw: string | null): string {
-  return raw !== null && isAdminPath(raw) ? raw : FALLBACK_RETURN;
+  return adminPathOf(raw) ?? FALLBACK_RETURN;
 }
 
 /** Save the refused request; `false` when there is no usable storage. */

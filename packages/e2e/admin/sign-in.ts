@@ -32,7 +32,9 @@ import { totpCode } from "./totp";
  *   boundary for a fresh one rather than replaying a burnt code.
  *
  * Behaviour is otherwise identical to the copies it replaces: it lands on
- * `/events` with a real `platform_admin` session, or throws.
+ * `/events` with a real `platform_admin` session, or throws. It resolves the
+ * TOTP secret it enrolled, so a spec can answer a later code prompt of the same
+ * account — the 047 step-up re-verification.
  */
 export const ADMIN_ORIGIN =
   process.env.E2E_ADMIN_URL ?? "http://localhost:3200";
@@ -53,7 +55,7 @@ const STEP_MS = 30_000;
 export async function signInAsAdmin(
   page: Page,
   credentials?: BootstrapResult,
-): Promise<void> {
+): Promise<string> {
   const { email, password } =
     credentials ?? (await bootstrapAdminSession(ADMIN_ORIGIN));
 
@@ -97,7 +99,7 @@ export async function signInAsAdmin(
       // The hop the local copies left unguarded: the role projection lags the
       // grant, so a login inside that window lands back on `/login` instead.
       await page.waitForURL(/\/events/, { timeout: 20_000 });
-      return;
+      return secret;
     } catch (error) {
       if (attempt === ATTEMPTS - 1) throw error;
       /* the platform_admin role projection lags the grant — retry */

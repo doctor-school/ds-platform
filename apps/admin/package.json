@@ -43,6 +43,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "ioredis": "^6.0.0",
     "pg": "^8.23.0",
     "playwright-bdd": "^9.2.1",
     "postcss": "^8.5.28",

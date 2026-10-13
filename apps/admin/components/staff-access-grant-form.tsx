@@ -526,6 +526,9 @@ function EventCombobox({
 
   return (
     <Combobox
+      {...slot}
+      // After the slot: the label's `htmlFor` names this id, so FormControl's
+      // generated id must not replace it.
       id="staff-access-event"
       data-testid="staff-access-event"
       options={options}
@@ -555,7 +558,6 @@ function EventCombobox({
       emptyLabel={t("staffAccess.grant.fields.eventEmpty")}
       showSearch
       invalid={invalid}
-      {...slot}
     />
   );
 }

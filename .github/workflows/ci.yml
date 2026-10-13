@@ -1496,12 +1496,32 @@ jobs:
       # admin (required at request time; it refuses to render without it) and the
       # Playwright steps that assert that link read ONE value.
       ACADEMY_PUBLIC_ORIGIN: http://localhost:3001
+      # 047 — the admin session store, as in production
+      # (infra/deploy/compose/data-prod/compose.yml `redis`) and on stage: with
+      # REDIS_URL the api runs RedisAdminSessionStore, so every admin flow here
+      # signs in on the store prod uses. Job-level so the api and the Playwright
+      # steps read ONE value — the 047 step-up flow ages the operator's second
+      # factor in that store (apps/admin/e2e/support/staff-access.ts).
+      REDIS_URL: redis://localhost:6379
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+
+      # ─ session store ─ the production image (data-prod compose `redis`).
+      - name: Start Redis
+        run: docker run -d --name ds-redis --network host redis:7-alpine
+      - name: Wait for Redis to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec ds-redis redis-cli ping | grep -q PONG; then
+              echo "Redis is ready"; exit 0
+            fi
+            echo "waiting for Redis ($i/30)..."; sleep 1
+          done
+          echo "Redis did not become ready in time"; docker logs ds-redis; exit 1
 
       # ─ data layer ─ same SSOT image the `api-e2e` job builds (#369).
       - name: Build the data-layer Postgres image (pgvector + pg_partman)
@@ -1710,7 +1730,7 @@ jobs:
         if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
         run: pnpm --filter @ds/admin test:axe
 
-      # ─ failure forensics ─ four processes, so a bare red step says nothing.
+      # ─ failure forensics ─ five processes, so a bare red step says nothing.
       - name: Dump the service logs
         if: failure()
         run: |
@@ -1718,6 +1738,7 @@ jobs:
           echo '::group::admin'; tail -n 400 admin.log || true; echo '::endgroup::'
           echo '::group::idp'; docker logs --tail 400 ds-idp || true; echo '::endgroup::'
           echo '::group::postgres'; docker logs --tail 200 ds-postgres || true; echo '::endgroup::'
+          echo '::group::redis'; docker logs --tail 100 ds-redis || true; echo '::endgroup::'
       - name: Upload the Playwright artifacts
         if: failure()
         uses: actions/upload-artifact@v7

@@ -857,3 +857,35 @@ provider HTTP or internal SMTP observation claim. Broader app-local registration
 and confirmation journeys remain intact. Run this selected case on the
 lead-selected stand; this coverage change has no render surface and requires no
 owner Stage-B request or slot.
+
+### Password-reset mail artifact (003 EARS-29/12)
+
+`Academy receives the code-only password-reset mail and completes the real reset`
+creates one uniquely owned verified account through actual Academy registration
+and its delivered verification code. `steps/password-reset-mail.steps.ts` opens
+an independent guest `/reset` form with `/account` carried as the return target,
+submits that exact owned identifier, captures the recipient message-ID checkpoint
+and reads strictly fresh reset-purpose complete HTML/plain-text details through
+canonical `fetchRecoveryMail`. The subject leads with the six numeric digits
+that both bodies carry. The complete branded layout and footer include the
+actual 3600-second lifetime and instruction to use the already-open requesting
+tab; neither body contains a link, button or navigation URL in any block.
+
+A guaranteed different six-digit code is generically rejected without private
+access, and an independent sign-in proves the original password still works.
+The requester observes that refusal automatically cleared the rejected digits
+and focused the first code cell, then submits the delivered code once with a
+distinct valid password. Reset completion opens
+the same verified account at `/account` with a secure BFF session. Independent
+guest sign-ins prove the new password succeeds and the old password receives a
+generic 401 with no private access. Assertions project secrets to booleans,
+traces stay off, and cleanup revokes only owned sessions and closes all owned
+contexts even on failure.
+
+This browser proof covers the received artifact and real reset, not provider
+HTTP or internal SMTP. The broader `The password-reset code email is BFF-sent
+and link-free` scenario and native returnCode/no-native-mail wire tests in
+`apps/api/src/auth/idp/zitadel.idp.spec.ts:895` remain retained, as do native
+reset/session tests in `apps/api/test/auth/password-reset.e2e-spec.ts`. Run the
+single `@password-reset-mail` Academy case on the lead-selected stand; this test
+coverage change has no render surface and needs no owner Stage-B request or slot.

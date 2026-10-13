@@ -431,6 +431,222 @@ Then(
   },
 );
 
+// ── EARS-6 under «Amendment — 2026-10-13»: the strip reads the applied filters ─
+//
+// #2907: the strip reads the specialty scope and the facets the feed below it
+// reads, on the server render and on every refresh. The guest's remembered
+// specialty is chosen through the real 017 guest command, and the golden
+// doctors' broadcast (Кардиология, kind «Вебинар») is the one live эфир.
+
+/** A specialty whose «моя и смежные» reaches no golden live doctors' эфир. */
+const UNREACHED_SPECIALTY = "Мануальная терапия";
+/** The kind the golden doctors' broadcast carries (`SEED_EVENT_KINDS.vebinar`). */
+const LIVE_KIND = "Вебинар";
+/** The doctor storefront's live read, through the host's own `/v1/*` proxy. */
+const DOCTOR_LIVE_READ = "/v1/storefront/doctor/events/live";
+/** A window flag a full page load would wipe — the «without a reload» proof. */
+const NO_RELOAD_FLAG = "__e2eLiveScopeNoReload";
+
+function liveBlock(page: Page): Locator {
+  return page.getByTestId("events-live-block");
+}
+
+function specialtyFacet(page: Page): Locator {
+  return filterPanel(page).getByRole("group", { name: "Специальность" });
+}
+
+async function readLiveInPage(page: Page, query: string): Promise<string[]> {
+  return page.evaluate(async (url) => {
+    const res = await fetch(url, {
+      credentials: "include",
+      headers: { accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`live read ${url} answered ${res.status}`);
+    return ((await res.json()) as { slug: string }[]).map((s) => s.slug);
+  }, `${DOCTOR_LIVE_READ}${query}`);
+}
+
+async function expectNotReloaded(page: Page): Promise<void> {
+  expect(
+    await page.evaluate(
+      (flag) => (window as unknown as Record<string, unknown>)[flag] === true,
+      NO_RELOAD_FLAG,
+    ),
+    "the page was not reloaded",
+  ).toBe(true);
+}
+
+/** Apply a facet change and wait for the page to answer it in place. */
+async function changeFacet(
+  page: Page,
+  act: () => Promise<void>,
+  urlMatches: (url: URL) => boolean,
+): Promise<void> {
+  await act();
+  await page.waitForURL(urlMatches);
+  await settle(page);
+  await expect(page.getByTestId("events-feed")).toBeVisible();
+}
+
+Given(
+  "a visitor with no account whose remembered specialty reaches no live event",
+  async ({ page, context, host }) => {
+    await context.clearCookies();
+    await page.goto(host.eventsPath, { waitUntil: "domcontentloaded" });
+    // The real 017 guest command: the api writes the `__Host-` cookie itself.
+    const chosen = await page.evaluate(async (name) => {
+      const search = await fetch(
+        `/v1/public/specialties/search?q=${encodeURIComponent(name)}`,
+        { headers: { accept: "application/json" } },
+      );
+      const { entries } = (await search.json()) as {
+        entries: { code: string; name: string }[];
+      };
+      const entry = entries.find((item) => item.name === name);
+      if (!entry) throw new Error(`no specialty «${name}» in the book`);
+      const res = await fetch("/v1/public/specialty-choice", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          "idempotency-key": crypto.randomUUID(),
+        },
+        body: JSON.stringify({ specialty: entry.code }),
+      });
+      return res.status;
+    }, UNREACHED_SPECIALTY);
+    expect(chosen, "the guest specialty choice is accepted").toBe(200);
+    expect(
+      await readLiveInPage(page, ""),
+      `«моя и смежные» over «${UNREACHED_SPECIALTY}» reaches no live эфир`,
+    ).toEqual([]);
+  },
+);
+
+Given(
+  "feature 006 reports an open room for an event of another specialty",
+  async ({ page }) => {
+    expect(await readLiveInPage(page, "?specialty=all")).toContain(LIVE.slug);
+  },
+);
+
+When(
+  "the {word} opens «События» under «Моя и смежные»",
+  async ({ page, host }, _actor: string) => {
+    await openFeed(page, host.eventsPath);
+    await expect(
+      specialtyFacet(page).getByRole("button", { name: "Моя и смежные" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await page.evaluate((flag) => {
+      (window as unknown as Record<string, unknown>)[flag] = true;
+    }, NO_RELOAD_FLAG);
+  },
+);
+
+Then("no «Идёт сейчас» container exists in the DOM", async ({ page }) => {
+  await expect(page.getByTestId("events-live-skeleton")).toHaveCount(0);
+  await expect(liveBlock(page)).toHaveCount(0);
+  await expect(page.locator('[data-feed-block="live"]')).toHaveCount(0);
+});
+
+Then("the block stays absent across its next refresh", async ({ page }) => {
+  // The block's own interval read (EVENTS_LIVE_REFRESH_SECONDS), not a reload.
+  const refresh = await page.waitForResponse(
+    (res) =>
+      new URL(res.url()).pathname === DOCTOR_LIVE_READ &&
+      res.request().resourceType() === "fetch",
+    { timeout: 60_000 },
+  );
+  expect(refresh.status()).toBe(200);
+  expect(await refresh.json()).toEqual([]);
+  await expect(liveBlock(page)).toHaveCount(0);
+  await expectNotReloaded(page);
+});
+
+When(
+  /^the (\w+) switches the specialty scope to «(.+)»$/u,
+  async ({ page }, _actor: string, scope: string) => {
+    await changeFacet(
+      page,
+      () =>
+        specialtyFacet(page)
+          .getByRole("button", { name: scope, exact: true })
+          .click(),
+      (url) =>
+        scope === "Все специальности"
+          ? url.searchParams.get("specialty") === "all"
+          : !url.searchParams.has("specialty"),
+    );
+    await expect(
+      specialtyFacet(page).getByRole("button", { name: scope, exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+  },
+);
+
+Then(
+  "the «Идёт сейчас» block carries that event without a page reload",
+  async ({ page }) => {
+    await expect(liveBlock(page)).toBeVisible();
+    await expect(liveStrip(page)).toHaveCount(1);
+    await expectNotReloaded(page);
+  },
+);
+
+Then(
+  "every event the feed marks «В ЭФИРЕ» is present in the block",
+  async ({ page }) => {
+    const liveCards = feedCards(page).filter({ hasText: "В эфире" });
+    const count = await liveCards.count();
+    for (let index = 0; index < count; index += 1) {
+      const href = await liveCards
+        .nth(index)
+        .locator('a[href^="/events/"]')
+        .first()
+        .getAttribute("href");
+      expect(href, "a live card links its event page").toBeTruthy();
+      await expect(
+        liveBlock(page).locator(`a[href^="${href}"]`).first(),
+        `the live card ${href} is in the strip`,
+      ).toBeVisible();
+    }
+  },
+);
+
+When(
+  "the {word} applies a kind that event does not carry",
+  async ({ page }, _actor: string) => {
+    const kinds = filterPanel(page)
+      .getByRole("group", { name: "Вид события" })
+      .getByRole("button");
+    const other = kinds.filter({ hasNotText: LIVE_KIND }).first();
+    await expect(other).toBeVisible();
+    await changeFacet(
+      page,
+      () => other.click(),
+      (url) => url.searchParams.getAll("kind").length === 1,
+    );
+    await expect(other).toHaveAttribute("aria-pressed", "true");
+  },
+);
+
+When("the {word} clears the kind facet", async ({ page }, _actor: string) => {
+  const picked = filterPanel(page)
+    .getByRole("group", { name: "Вид события" })
+    .locator('button[aria-pressed="true"]');
+  await expect(picked).toHaveCount(1);
+  await changeFacet(
+    page,
+    () => picked.click(),
+    (url) => !url.searchParams.has("kind"),
+  );
+});
+
+Then("the page was not reloaded", async ({ page }) => {
+  await expectNotReloaded(page);
+});
+
 // ── EARS-4 / EARS-8: the compact month ──────────────────────────────────────
 
 Then(

@@ -55,11 +55,10 @@ Feature: 047 — Staff access
     Then the revocation is refused
 
   @EARS-8
-  Scenario: A stale second factor is confirmed by the authenticator code
+  Scenario: A stale second factor sends the administrator to sign in again
     Given the administrator's second factor was verified 31 minutes ago
     When the administrator submits a grant
-    Then the admin asks for the code from the authenticator app
-    When the administrator enters a wrong code
-    Then the grant is not done
-    When the administrator enters the current code
-    Then the grant is repeated with the entered form and completes
+    Then the grant is refused and nothing changes
+    And the shell lands on "/login" showing "Вход для администраторов"
+    When the administrator signs in again with the password and the app code and repeats the grant
+    Then the grant completes

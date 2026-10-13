@@ -1,6 +1,6 @@
 ---
 title: "047 — Staff access (Design)"
-description: "Where the «Доступы» section lives, its authorization, the grant and revoke cascades over the Zitadel project grant and event_role_grants, the temporary password, session closure on revoke, the step-up re-elevation, the audit rows, the IdP calls and their live proof, and the delivery slices with the Stage-A gate."
+description: "Where the «Доступы» section lives, its authorization, the grant and revoke cascades over the Zitadel project grant and event_role_grants, the temporary password, session closure on revoke, the fresh-second-factor refusal, the audit rows, the IdP calls and their live proof, and the delivery slices with the Stage-A gate."
 slug: 047-staff-access
 lang: en
 ---
@@ -23,7 +23,6 @@ Requirements: [`047-requirements-en.md`](./047-requirements-en.md) · Builds on:
 | `GET /v1/admin/staff-access`              | `roles: [platform_admin]`, `revalidate: "live"`, read                                                                                         |
 | `POST /v1/admin/staff-access/grants`      | `roles: [platform_admin]`, `revalidate: "live"`, `stepUp: true`, `audit: high-stakes`, CSRF double-submit; response `Cache-Control: no-store` |
 | `POST /v1/admin/staff-access/revocations` | `roles: [platform_admin]`, `revalidate: "live"`, `stepUp: true`, `audit: high-stakes`, CSRF double-submit; body `{ userId, role, eventId? }`  |
-| `POST /v1/admin/auth/step-up`             | `access: authenticated` (any admin session), `audit: high-stakes`, rate-limited and timing-equalized like 011 `mfa/verify`; body `{ code }`   |
 
 Revocation is a `POST` of a revocation command rather than a `DELETE` with a body: the row identity is a triple with an optional event, and a command body keeps it in one validated Zod object.
 
@@ -78,13 +77,14 @@ sequenceDiagram
 
 All admin sessions of the person end, even when they keep other staff roles: the session record is a role snapshot, and ending it is the one way to make the revocation exact. They sign in again with what remains. This closes #2420 for these roles; the runbook «Offboarding» section is rewritten to «Отозвать» in the same slice.
 
-## Step-up re-elevation (EARS-8)
+## Fresh second factor (EARS-8)
 
-The guard half of ADR-0001 §10 runs in production (#1304): `AdminAuthorityGuard` refuses a `stepUp` route when the session's `mfaVerifiedAtMs` is older than 30 minutes, with `401 STEP_UP_REQUIRED` and `stepUpUrl`. What is missing is the way back: `STEP_UP_URL` points at 011 `mfa/verify`, a pending-auth route that refuses a caller who already holds a session, and the admin does not intercept the error. Grant and revoke are the first step-up routes an operator will reach more than 30 minutes after signing in, so 047 builds the minimal return path:
+Grant and revoke reuse the production step-up check and add no route of their own. `AdminAuthorityGuard` (#1304, ADR-0001 §10) already refuses a `stepUp` route when the session's `mfaVerifiedAtMs` is older than 30 minutes, with `401 STEP_UP_REQUIRED` and nothing changed; both staff-access writes declare `stepUp`.
 
-- `POST /v1/admin/auth/step-up {code}` verifies the code against the caller's registered TOTP factor (the 011 `checkTotpCode` path, same lockout budget, same uniform refusal) and sets `mfaVerifiedAtMs = now` on the session record. `STEP_UP_URL` points to it. Each attempt writes `auth.step_up.requested` / `succeeded` / `failed`, the class ADR-0001 §10 registers.
-- The admin data provider maps `401 STEP_UP_REQUIRED` to a dialog «Подтвердите действие» with one «Код из приложения» field (`InputOTP`), posts the code, and on success repeats the original request; the form state is kept. `503 IDP_REVALIDATION_UNAVAILABLE` shows retry, a `403 …_REQUIRED` shows no-access (ADR-0001 §10).
-- #1198 (build the step-up mechanism, graduate the 011 factor-removal route) keeps the graduation of `DELETE /v1/admin/users/:id/mfa`; it is `blocked_by` this slice, which delivers the re-elevation it needs.
+- The way back is the existing admin sign-in: the admin data provider maps `401 STEP_UP_REQUIRED` to a sign-out and a redirect to `/login` with return to `/access`; the administrator signs in with password and the TOTP challenge (011), which sets a fresh `mfaVerifiedAtMs` and satisfies ADR-0001 §10, and repeats the action. The entered form is not kept.
+- `STEP_UP_URL` is repointed from 011 `mfa/verify` (a pending-auth route that refuses a caller who already holds a session) to the admin sign-in, so the error names the path the admin takes — a constant change, not a new function.
+- `503 IDP_REVALIDATION_UNAVAILABLE` shows retry, a `403 …_REQUIRED` shows no-access (ADR-0001 §10).
+- 047 builds no in-session re-elevation route, so it has no dependency on #1198; that Issue keeps its own scope.
 
 ## Audit (EARS-9)
 
@@ -116,16 +116,14 @@ From `@ds/design-system`, on the existing admin chrome:
 - **Grant form** — `Dialog` with `Form` + `Input` (email, ФИО), `NativeSelect` (role, RU labels), `Combobox` (event, shown only for the two event-bound roles; events by title and date, newest first); server refusals shown at the field or as a form `Alert`.
 - **One-time password** — `Dialog` with the password in a read-only field, a copy `Button`, and the line that it is shown once; closing it ends the display.
 - **Revoke** — `AlertDialog` naming the person, role and event, «Отозвать» / «Отмена».
-- **Step-up** — `Dialog` with `InputOTP`.
 
 RU role labels: «Администратор платформы», «Администратор Конгресса», «Программный комитет», «Ответственный за ПДн». Final copy and layout are decided at Stage A.
 
 ## Delivery slices
 
-| Slice                   | EARS                          | Depends on                                                                           |
-| ----------------------- | ----------------------------- | ------------------------------------------------------------------------------------ |
-| Step-up re-elevation    | EARS-8                        | —                                                                                    |
-| Section, list and grant | EARS-1…EARS-6, EARS-9 (grant) | step-up (the grant route is `stepUp`; the form must recover from `STEP_UP_REQUIRED`) |
-| Revoke                  | EARS-7, EARS-9 (revoke)       | section and list (the action lives in the list's rows)                               |
+| Slice                   | EARS                                  | Depends on                                             |
+| ----------------------- | ------------------------------------- | ------------------------------------------------------ |
+| Section, list and grant | EARS-1…EARS-6, EARS-8, EARS-9 (grant) | —                                                      |
+| Revoke                  | EARS-7, EARS-8, EARS-9 (revoke)       | section and list (the action lives in the list's rows) |
 
-Every slice ships its UI with its backend (F-22). **Stage-A gate:** the «Доступы» list, the grant form, the one-time password dialog, the revoke confirmation and the step-up dialog need an approved design before their UI is implemented (`build-ui-from-design-system`); the backend half of each slice may proceed in the same PR before the UI half lands.
+Every slice ships its UI with its backend (F-22). **Stage-A gate:** the «Доступы» list, the grant form, the one-time password dialog, and the revoke confirmation need an approved design before their UI is implemented (`build-ui-from-design-system`); the backend half of each slice may proceed in the same PR before the UI half lands.

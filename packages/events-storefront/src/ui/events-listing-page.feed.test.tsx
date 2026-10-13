@@ -184,7 +184,9 @@ async function frame(
     config,
     searchParams: Promise.resolve(query),
     retry: RETRY,
-  })) as ReactElement<{ children: ReactElement<ComponentProps<typeof FeedFrame>> }>;
+  })) as ReactElement<{
+    children: ReactElement<ComponentProps<typeof FeedFrame>>;
+  }>;
   expect(scope.type).toBe(FeedReadScope);
   const element = scope.props.children;
   expect(element.type).toBe(FeedFrame);
@@ -984,7 +986,9 @@ describe("<LiveBlock> — «Идёт сейчас» (gate rows 43–44)", () => 
     });
     const liveHref = mocks.fetchEventsLive.mock.calls[0]?.[0] as string;
     const query = new URL(liveHref, "http://x").searchParams;
-    expect(liveHref.startsWith("/v1/storefront/doctor/events/live?")).toBe(true);
+    expect(liveHref.startsWith("/v1/storefront/doctor/events/live?")).toBe(
+      true,
+    );
     expect(query.getAll("kind")).toEqual(["efir"]);
     expect(query.getAll("format")).toEqual(["offline"]);
     expect(query.get("specialty")).toBe("all");
@@ -1003,8 +1007,36 @@ describe("<LiveBlock> — «Идёт сейчас» (gate rows 43–44)", () => 
     );
   });
 
+  it("019 EARS-6: the Academy strip reads the Academy's applied facets by the same rule — one core, no host divergence (#2907)", async () => {
+    await LiveSection({
+      config: ACADEMY,
+      raw: {
+        project: "orthobio",
+        expert: "ivanov",
+        topic: "prp",
+        timeframe: "upcoming",
+        view: "feed",
+      },
+      session: SESSION,
+      request: REQUEST,
+    });
+    const liveHref = mocks.fetchEventsLive.mock.calls[0]?.[0] as string;
+    const query = new URL(liveHref, "http://x").searchParams;
+    expect(liveHref.startsWith("/v1/public/events/live?")).toBe(true);
+    expect(query.getAll("project")).toEqual(["orthobio"]);
+    expect(query.getAll("expert")).toEqual(["ivanov"]);
+    expect(query.getAll("topic")).toEqual(["prp"]);
+    expect(query.has("timeframe")).toBe(false);
+    expect(query.has("view")).toBe(false);
+  });
+
   it("019 EARS-6: the default scope states no query, so the strip reads «моя и смежные» like the feed", async () => {
-    await LiveSection({ config: DOCTOR, raw: {}, session: SESSION, request: REQUEST });
+    await LiveSection({
+      config: DOCTOR,
+      raw: {},
+      session: SESSION,
+      request: REQUEST,
+    });
     expect(mocks.fetchEventsLive.mock.calls[0]?.[0]).toBe(
       "/v1/storefront/doctor/events/live",
     );

@@ -250,7 +250,8 @@ export class EventsPublicController {
 
   /**
    * Wave-2 entry gate §4.3 D5 — `GET /v1/public/events/live`, the Academy's
-   * «Идёт сейчас»: every `experts` эфир running now, earliest first, `[]` when
+   * «Идёт сейчас»: every `experts` эфир running now under the applied Academy
+   * facets (`project` / `expert` / `topic`, #2907), earliest first, `[]` when
    * none (019 EARS-6). The twin of `GET /v1/storefront/doctor/events/live` over
    * the ONE live resolution ({@link EventsLiveService}), handed this host's
    * audience and route table — the href is the room for a registered viewer and
@@ -262,6 +263,9 @@ export class EventsPublicController {
    * closes. MUST be declared BEFORE `:idOrSlug`.
    */
   @Get("live")
+  @ApiQuery({ name: "project", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "expert", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "topic", required: false, isArray: true, type: String })
   @ApiOkResponse({ type: EventLiveStripDto, isArray: true })
   @Public()
   @Header("Cache-Control", "private, no-store")
@@ -271,13 +275,20 @@ export class EventsPublicController {
     audit: "none",
     tests: ["EARS-6"],
   })
-  live(@Req() req: FastifyRequest): Promise<EventsLiveRead> {
+  live(
+    @Req() req: FastifyRequest,
+    @Query() raw: Record<string, RawQueryValue>,
+  ): Promise<EventsLiveRead> {
+    // 019 EARS-6 (#2907): the strip follows the Academy feed's applied facets,
+    // decoded by the same codec; a malformed facet is a 400 before any read.
+    const academyFacets = parseFacets(raw);
     const sub = (req as { user?: { sub?: string } }).user?.sub;
     return this.liveEvents.live({
       audience: "experts",
       directionIds: null,
       routes: ACADEMY_ROUTES,
       sub,
+      academyFacets,
     });
   }
 

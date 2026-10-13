@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type {
+  AcademyEventFacets,
   EventAudience,
   EventLiveStrip,
   EventsLiveRead,
@@ -79,10 +80,16 @@ export class EventsLiveService {
      * its feed predicate keeps (019 EARS-6, #2907); absent = no facet narrows.
      */
     onlyEventIds?: ReadonlySet<string> | undefined;
+    /**
+     * The Academy storefront's applied facets (019 EARS-6, #2907), narrowed
+     * by the listing's own facet predicate; absent = no facet narrows.
+     */
+    academyFacets?: AcademyEventFacets | undefined;
   }): Promise<EventsLiveRead> {
     const rows = await this.repository.findLiveRows({
       audience: input.audience,
       directionIds: input.directionIds,
+      academyFacets: input.academyFacets,
     });
     const kept =
       input.onlyEventIds === undefined

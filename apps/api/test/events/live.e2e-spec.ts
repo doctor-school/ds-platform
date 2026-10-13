@@ -54,6 +54,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     let expertsLater = { id: "", slug: "" };
     let doctorsLive = { id: "", slug: "" };
     let registeredSession = "";
+    const projectIds: string[] = [];
+    const projectSlug = `alive-project-${randomUUID().slice(0, 8)}`;
+    const idleProjectSlug = `alive-idle-${randomUUID().slice(0, 8)}`;
 
     const makeEvent = async (input: {
       title: string;
@@ -171,6 +174,20 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       expect(reg.statusCode).toBe(200);
 
+      // 019 EARS-6 amendment (#2907): the Academy facets the strip follows —
+      // one project carries the first experts эфир, the idle one carries none.
+      for (const slug of [projectSlug, idleProjectSlug]) {
+        const project = await pool.query<{ id: string }>(
+          "INSERT INTO projects (slug, kind, title, description, default_audience, status, first_published_at) VALUES ($1, 'school', $2, 'Идёт сейчас', 'experts', 'published', now()) RETURNING id",
+          [slug, `Проект ${slug}`],
+        );
+        projectIds.push(project.rows[0]!.id);
+      }
+      await pool.query(
+        "INSERT INTO event_projects (id, event_id, project_id, status) VALUES ($1, $2, $3, 'active')",
+        [randomUUID(), expertsLive.id, projectIds[0]],
+      );
+
       for (const event of [expertsLive, expertsLater, doctorsLive]) {
         await setState(event.id, "live");
       }
@@ -178,6 +195,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterAll(async () => {
       for (const id of eventIds) await deleteEventFixture(pool, id);
+      for (const id of projectIds) {
+        await pool.query("DELETE FROM event_projects WHERE project_id = $1", [
+          id,
+        ]);
+        await pool.query("DELETE FROM projects WHERE id = $1", [id]);
+      }
       for (const email of createdEmails) {
         await deleteUserFixture(pool, "email", email);
       }
@@ -234,6 +257,22 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       } finally {
         await setState(expertsLater.id, "live");
       }
+    });
+
+    it("EARS-6: the Academy read follows the applied Academy facets — a project facet keeps only the live эфиры it carries", async () => {
+      const { list } = await read(
+        `/v1/public/events/live?project=${projectSlug}`,
+      );
+      const ids = list.map((strip) => strip.eventId);
+      expect(ids).toContain(expertsLive.id);
+      expect(ids).not.toContain(expertsLater.id);
+    });
+
+    it("EARS-6: a facet no live эфир carries leaves the Academy read empty, so no strip sits over the feed's empty state", async () => {
+      const { list } = await read(
+        `/v1/public/events/live?project=${idleProjectSlug}`,
+      );
+      expect(list).toEqual([]);
     });
   },
 );

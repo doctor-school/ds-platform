@@ -20,3 +20,8 @@ remembered-specialty relay cookie like the feed read (breaking signature
 change); `LiveSection` takes the page's `raw` query and `request`; the server
 render and the client refresh read the one href built by `liveReadHref`, the
 block is keyed by it, and a new server answer replaces the held one.
+
+The Academy strip follows the Academy's applied facets by the same rule:
+`GET /v1/public/events/live` takes `project`, `expert` and `topic`, decoded by
+the Academy facet codec and narrowed by the listing's own facet predicate, and
+`liveReadHref` carries each host's facet keys.

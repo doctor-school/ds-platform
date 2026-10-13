@@ -6420,7 +6420,11 @@ export interface operations {
     };
     EventsPublicController_live: {
         parameters: {
-            query?: never;
+            query?: {
+                expert?: string[];
+                project?: string[];
+                topic?: string[];
+            };
             header?: never;
             path?: never;
             cookie?: never;

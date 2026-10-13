@@ -361,7 +361,39 @@ test("2661-5: external costs default from rates.yaml external_costs; studio × r
   );
 });
 
-test("2661-5: видеоподкаст carries the rates.yaml video_podcast components as its own external lines", () => {
+const VP_CONTRACTOR = { "var:video_podcast_production": "contractor" };
+
+test("2661-5: видеоподкаст «своя команда» (default) — own operation hours A3252/A3253 + studio hour, no component lines", () => {
+  assert.equal(model.vars.video_podcast_production, "own");
+  const u = unitCost(model, "видеоподкаст", U);
+  assert.ok(!u.externals.some((e) => e.id.startsWith("video_podcast_")));
+  assert.ok(!u.externals.some((e) => e.id === "podcast_studio_bare"));
+  const studio = u.externals.find((e) => e.id === "podcast_studio");
+  assert.equal(studio.rub, inputs.rates.external_costs.podcast_studio.rub);
+  const leaves = productHours(model, "видеоподкаст", U).lines.map((l) => l.leaf);
+  for (const leaf of ["A3252", "A3253"]) assert.ok(leaves.includes(leaf), leaf);
+});
+
+test("2661-5: видеоподкаст «подрядчик» — five components replace A3252/A3253 hours, studio at the bare-rental middle", () => {
+  const m = buildModel(inputs, VP_CONTRACTOR);
+  const leaves = productHours(m, "видеоподкаст", U).lines.map((l) => l.leaf);
+  for (const leaf of ["A3252", "A3253"]) assert.ok(!leaves.includes(leaf), leaf);
+  for (const leaf of ["A3241", "A3243", "A3251"]) assert.ok(leaves.includes(leaf), leaf);
+  const u = unitCost(m, "видеоподкаст", U);
+  assert.ok(!u.externals.some((e) => e.id === "podcast_studio"));
+  const bare = u.externals.find((e) => e.id === "podcast_studio_bare");
+  near(bare.rub, mid(inputs.rates.external_costs.podcast_studio.market_rub), 1e-9);
+  near(
+    bare.qty,
+    productHours(m, "видеоподкаст", U).lines.find((l) => l.leaf === "A3243").hours,
+    1e-9,
+  );
+  // the audio episode keeps its own studio hour in both modes
+  assert.ok(unitCost(m, "эпизод подкаста", U).externals.some((e) => e.id === "podcast_studio"));
+  assert.throws(() => buildModel(inputs, { "var:video_podcast_production": "x" }), /video_podcast_production/);
+});
+
+test("2661-5: видеоподкаст «подрядчик» carries the rates.yaml video_podcast components as its own external lines", () => {
   const vp = inputs.rates.external_costs.video_podcast;
   const c = vp.components;
   const expected = {
@@ -371,7 +403,8 @@ test("2661-5: видеоподкаст carries the rates.yaml video_podcast comp
     video_podcast_cover: mid(c.cover.rub),
     video_podcast_clips: mid(c.clips.rub_per_clip) * mid(c.clips.clips_per_episode),
   };
-  const lines = unitCost(model, "видеоподкаст", U).externals;
+  const contractor = buildModel(inputs, VP_CONTRACTOR);
+  const lines = unitCost(contractor, "видеоподкаст", U).externals;
   for (const [id, rub] of Object.entries(expected)) {
     const line = lines.find((e) => e.id === id);
     assert.ok(line, `видеоподкаст has no external line ${id}`);
@@ -384,12 +417,42 @@ test("2661-5: видеоподкаст carries the rates.yaml video_podcast comp
   const episode = unitCost(model, "эпизод подкаста", U).externals;
   assert.ok(!episode.some((e) => e.id.startsWith("video_podcast_")));
   // a component is editable like any external
-  const edited = unitCost(buildModel(inputs, { "external:video_podcast_cover": 0 }), "видеоподкаст", U);
+  const edited = unitCost(
+    buildModel(inputs, { ...VP_CONTRACTOR, "external:video_podcast_cover": 0 }),
+    "видеоподкаст",
+    U,
+  );
   near(
-    unitCost(model, "видеоподкаст", U).total.byLoad - edited.total.byLoad,
+    unitCost(contractor, "видеоподкаст", U).total.byLoad - edited.total.byLoad,
     expected.video_podcast_cover,
     1e-6,
   );
+});
+
+test("2661-2: «Продуктовая команда» hours are exposed per member role, freelance members included", () => {
+  const m = buildModel(inputs, { "engage:Аккаунт": "npd" });
+  const u = unitCost(m, "курс", U);
+  const circle = u.direct.circle;
+  assert.equal(circle.role, "Продуктовая команда");
+  const H = u.direct.byRole["Продуктовая команда"].hours;
+  near(circle.hours, H, 1e-9);
+  const account = circle.members.find((x) => x.role === "Аккаунт");
+  assert.equal(account.engagement, "npd");
+  assert.equal(account.article, "contractors");
+  const rate = roleHourlyCost(m, "Аккаунт", U).value;
+  near(account.cost, account.hours * rate, 1e-6);
+  near(
+    circle.members.reduce((a, x) => a + x.hours, 0),
+    H,
+    1e-9,
+  );
+  near(
+    circle.members.reduce((a, x) => a + x.cost, 0),
+    u.direct.byRole["Продуктовая команда"].cost,
+    1e-6,
+  );
+  // a product without circle lines has no circle block
+  assert.equal(unitCost(m, "урок", U).direct.circle, null);
 });
 
 test("2661-5: a black box (decomposition: pending) is a «не задано: подпроцесс не раскрыт» line", () => {

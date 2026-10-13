@@ -195,6 +195,12 @@ export function buildModel(inputs, overrides = {}) {
       externals[id] = { ...e, rub, per: g?.per ?? null };
       continue;
     }
+    if (e.market_of) {
+      const of = src.rates.external_costs?.[e.market_of];
+      const band = of?.market_rub;
+      externals[id] = { ...e, rub: band ? middle(band) : null, per: of?.per ?? null };
+      continue;
+    }
     const cost = src.rates.external_costs?.[id];
     externals[id] = { ...e, rub: cost?.rub ?? null, per: cost?.per ?? null };
   }
@@ -312,10 +318,14 @@ function applyOverride(model, key, value) {
       }
       return;
     }
-    case "var":
+    case "var": {
       need(name in model.vars ? true : null, "variable");
+      const options = model.config.variables?.[name]?.options;
+      if (options && !options.includes(value))
+        throw new Error(`override ${key}: ${name} is one of ${options.join("|")}`);
       model.vars[name] = value;
       return;
+    }
     case "param":
       need(model.params[name], "product");
       need(field in model.params[name] ? true : null, "parameter");
@@ -757,12 +767,17 @@ function paramValue(model, productName, qty, ctx) {
   return value;
 }
 
+/** A product line with `when: { variable: value }` counts only while every variable has that value. */
+const applies = (model, line) =>
+  Object.entries(line.when ?? {}).every(([name, value]) => model.vars[name] === value);
+
 function expand(model, productName, ctx, visit, qty = 1, path = []) {
   const p = model.products[productName];
   if (!p) throw new Error(`unknown product «${productName}»`);
   const here = [...path, productName];
   visit({ product: productName, qty, path: here });
   for (const item of p.items) {
+    if (!applies(model, item)) continue;
     const n =
       paramValue(model, productName, item.qty ?? 1, ctx) *
       product((item.per ?? []).map((k) => paramValue(model, productName, k, ctx)));
@@ -894,6 +909,38 @@ function splitCircle(model, byRole) {
     for (const m of model.teamRoles) add(out, m.role, (shared * fteOf(m)) / total);
   }
   return out;
+}
+
+/**
+ * Direct hours and cost of the team circle cut per member role (composite_of, FTE weights as in its
+ * rate): the cost share of a member is its weight × its hour, so the members add up to the circle line
+ * and a freelance member shows at its own contractor hour.
+ */
+function circleMembers(model, line, ctx) {
+  if (!line) return null;
+  const weights = Object.fromEntries(model.teamRoles.map((m) => [m.role, fteOf(m)]));
+  const parts = (model.rates.get(TEAM_CIRCLE)?.composite_of ?? [])
+    .map((role) => ({ role, w: weights[role] ?? 1, r: roleHourlyCost(model, role, ctx) }))
+    .filter((p) => p.r.value != null);
+  const W = sum(parts.map((p) => p.w));
+  const money = sum(parts.map((p) => p.w * p.r.value));
+  return {
+    role: TEAM_CIRCLE,
+    hours: line.hours,
+    cost: line.cost,
+    members: parts.map((p) => {
+      const hours = (line.hours * p.w) / W;
+      const cost = money ? (line.cost * p.w * p.r.value) / money : 0;
+      return {
+        role: p.role,
+        engagement: p.r.engagement,
+        article: p.r.article,
+        hours,
+        hourlyCost: hours ? cost / hours : p.r.value,
+        cost,
+      };
+    }),
+  };
 }
 
 function teamHours(model, productName, ctx) {
@@ -1197,6 +1244,7 @@ export function unitCost(model, productName, ctx) {
         addAll(reserve.byArticle, r.byArticle, node.qty);
       }
       for (const e of normExternals(p.externals)) {
+        if (!applies(model, e)) continue;
         const factor = e.hours_of
           ? sum(
               productHours(model, node.product, c)
@@ -1287,7 +1335,12 @@ export function unitCost(model, productName, ctx) {
     return {
       product: productName,
       ctx: c,
-      direct: { hours: directHours, cost: directCost, byRole },
+      direct: {
+        hours: directHours,
+        cost: directCost,
+        byRole,
+        circle: circleMembers(model, byRole[TEAM_CIRCLE], c),
+      },
       overhead: {
         cost: overheadCost,
         perDirectHour: plan.overheadPerDirectHour,

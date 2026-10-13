@@ -34,6 +34,12 @@ variables:
     draft: 0
     unit: доля часов подролей медиа-круга во внешнем пуле подрядчиков
     basis: "решение В3 — пики сверх обязательства уходят во внешний пул; долю задаёт владелец (rates-ru.md, «Форма привлечения»), по умолчанию — весь объём в штате"
+  video_podcast_production:
+    label: Продакшн видеоподкаста
+    draft: own
+    options: [own, contractor]
+    unit: "own — своя команда: часы операций A3252, A3253 и студийный час с работой студии; contractor — подрядчик: пять компонентов rates.yaml external_costs.video_podcast вместо часов A3252, A3253 и голая аренда студии"
+    basis: "решение лида по #2661: компоненты подрядчика и свои часы монтажа, обложек и клипов — одна и та же работа, вместе они считались дважды"
   # Стоимость часа штата. null — значение по умолчанию из ../rates/rates.yaml (деньги живут там).
   contributions_mode:
     label: Режим страховых взносов
@@ -277,7 +283,9 @@ update_reserve:
 # Внешние затраты: названия здесь, рубли — ../rates/rates.yaml external_costs (тот же ключ), правка —
 # override `external:<id>`. Нет значения — «не задано»: калькулятор не считает его нулём. В продукте
 # `{ id, hours_of: [лист] }` — затрата на час: × часы этих листов единицы. Гонорары спикеров здесь не
-# появляются: часы A3241 и A339 — операции продуктов, цена — грейд эксперта × часы.
+# появляются: часы A3241 и A339 — операции продуктов, цена — грейд эксперта × часы. `market_of: <id>` —
+# рубли из середины rates.yaml external_costs.<id>.market_rub. `when: { переменная: значение }` у строки
+# продукта (операции или внешней затраты) — строка входит, только когда переменная равна значению.
 externals:
   ai_generation:
     name: ИИ-генерация медкадров и анимации
@@ -288,6 +296,10 @@ externals:
   podcast_studio:
     name: Студия записи подкаста
     basis: "model/A32.yaml, A324: студия — внешняя затрата, цена за час записи (операторы и режиссёрское переключение студии включены)"
+  podcast_studio_bare:
+    name: "Студия видеоподкаста: аренда зала с камерами"
+    market_of: podcast_studio
+    basis: "rates.yaml external_costs.podcast_studio.market_rub — голая аренда зала с камерами, середина диапазона; операторы и режиссёр — отдельные компоненты подрядчика"
   video_podcast_crew:
     name: "Видеоподкаст: операторы нескольких камер"
     component: video_podcast.multi_camera_crew
@@ -396,7 +408,7 @@ products:
   видеоподкаст:
     name: Видеоподкаст (эпизод на несколько камер)
     contact_type: podcast_live
-    basis: "model/A324.yaml и A325.yaml: эпизод подкаста + съёмка на несколько камер A3243, монтаж с цветокоррекцией и графикой A3252, обложки и клипы A3253; студия — за часы съёмки A3243; компоненты rates.yaml external_costs.video_podcast (операторы, режиссёр, цветокоррекция и графика, обложка, клипы) — внешние строки эпизода"
+    basis: "model/A324.yaml и A325.yaml: эпизод подкаста + съёмка на несколько камер A3243, монтаж с цветокоррекцией и графикой A3252, обложки и клипы A3253; студия — за часы съёмки A3243. Переменная video_podcast_production: own — свои часы A3252, A3253 и студийный час с работой студии; contractor — компоненты rates.yaml external_costs.video_podcast (операторы, режиссёр, цветокоррекция и графика, обложка, клипы) вместо часов A3252, A3253 и голая аренда студии за те же часы"
     reserve_line: A32
     items:
       - { leaf: A321 }
@@ -405,15 +417,39 @@ products:
       - { leaf: A3241 }
       - { leaf: A3243 }
       - { leaf: A3251 }
-      - { leaf: A3252 }
-      - { leaf: A3253 }
+      - { leaf: A3252, when: { video_podcast_production: own } }
+      - { leaf: A3253, when: { video_podcast_production: own } }
     externals:
-      - { id: podcast_studio, hours_of: [A3243] }
-      - video_podcast_crew
-      - video_podcast_director
-      - video_podcast_grading
-      - video_podcast_cover
-      - video_podcast_clips
+      - {
+          id: podcast_studio,
+          hours_of: [A3243],
+          when: { video_podcast_production: own },
+        }
+      - {
+          id: podcast_studio_bare,
+          hours_of: [A3243],
+          when: { video_podcast_production: contractor },
+        }
+      - {
+          id: video_podcast_crew,
+          when: { video_podcast_production: contractor },
+        }
+      - {
+          id: video_podcast_director,
+          when: { video_podcast_production: contractor },
+        }
+      - {
+          id: video_podcast_grading,
+          when: { video_podcast_production: contractor },
+        }
+      - {
+          id: video_podcast_cover,
+          when: { video_podcast_production: contractor },
+        }
+      - {
+          id: video_podcast_clips,
+          when: { video_podcast_production: contractor },
+        }
     lead:
       chain: { seq: [A321, A322, A323, A3243, { par: [A3252, A3253] }, A3251] }
       basis: capacity-ru.md, «Срок единицы»

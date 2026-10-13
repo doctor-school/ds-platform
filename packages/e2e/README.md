@@ -674,3 +674,34 @@ inputs and strict CAPTCHA preparation remain in use, and cleanup closes only the
 owned context. Existing API suppression, enumeration and timing tests remain
 intact. Run only this selected case on the lead-selected stand; this coverage
 change has no render surface and requires no Stage-B request or slot.
+
+### SMS password reset (003 EARS-53/12/35)
+
+`Password reset by a confirmed phone delivers the code by SMS` registers a unique
+owned Academy account through the real form, confirms a fresh `+7999…` number
+through the real `/account` phone row with the code the stand's SMS sink
+received, then requests a reset at `/reset` with that number.
+`steps/password-reset-sms.steps.ts` reads the reset code from the sink's
+`user.human.password.code.added` event (`lib/sms-sink.ts`, structured
+`args.code`, never an api response), proves exactly one SMS after the request
+and no new addressed mail over the 15-second horizon against the mailbox settled
+after the EARS-52 phone notice, completes the reset through the form, and checks
+the fresh secure session, the revoked earlier session, new-password sign-in,
+old-password refusal and the unchanged `emailVerified`/confirmed phone. The
+number is fresh per run because a fixed one exhausts the EARS-14 per-phone
+budget (3 SMS an hour) on the second run and is answered with no SMS once an
+earlier run's account holds it confirmed (EARS-51).
+
+The SMS sink root is `E2E_SMS_SINK_URL`; unset, every `@sms-reset` scenario
+skips with a named reason. The stage box runs a sink but its Caddy publishes
+only Mailpit, so a slot run skips these scenarios; run them on a local dev stand
+(`E2E_SMS_SINK_URL=http://<stand host>:8090`). The sibling `@sms-reset`
+scenarios — the indistinguishable unknown/unconfirmed-phone answer with its
+50 ms timing clause, EARS-56 counter and absent ledger row, the mirror/IdP
+mismatch, and the email reset of a phone-holding account — are not bound here;
+their api e2e coverage is `apps/api/test/auth/password-reset.e2e-spec.ts` (fake
+IdP: response/timing parity, no SMS/mail, no ledger row, the email path) and
+`apps/api/test/me/phone*.e2e-spec.ts` / `user-mirror-phone-conflict.e2e-spec.ts`
+(EARS-58 confirmed-only resolution and mirror clearing).
+This coverage change has no render surface and requires no Stage-B request or
+slot.

@@ -77,9 +77,9 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   @EARS-53 @EARS-12 @EARS-35 @happy @sms-reset
   Scenario: Password reset by a confirmed phone delivers the code by SMS
-    Given an account with the confirmed phone "+79991234567" and a verified email
-    When a visitor requests a password reset with the identifier "+79991234567"
-    Then one SMS with a six-digit code is delivered to "+79991234567" and no email is sent
+    Given an account with a unique confirmed phone and a verified email
+    When a visitor requests a password reset with that confirmed phone as the identifier
+    Then one SMS with a six-digit code is delivered to that phone and no email is sent
     When the visitor enters the code and a policy-conforming new password
     Then the password is set, all earlier sessions are revoked and the visitor is signed in
     And the account's email verification state is unchanged

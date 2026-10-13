@@ -720,10 +720,16 @@
       table.derived td.num {
         width: 9.5rem;
       }
+      table.derived .line {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
       table.derived tr.lead td {
         background: var(--accent-soft);
       }
       .gap-flag {
+        white-space: nowrap;
         color: var(--hl);
         font-weight: 700;
         background: #fdecea;
@@ -764,6 +770,7 @@
         border-top: 0;
         padding: 0;
         margin: 0;
+        max-width: none;
       }
       .fit > summary {
         white-space: nowrap;

@@ -1935,9 +1935,13 @@ function PriceBlock({ r, productName, model }) {
           <td><${Term} t="цена">Цена<//></td>
           <td class="num"><b>${rub(p.price)}</b></td>
           <td class="small muted">
-            = <${Term} t="аванс">аванс<//> ${rub(p.advance)} (${pct(p.advanceShare)}) +${" "}
-            <${Term} t="результат">результат<//>: план ${f0.format(p.contacts.plan)} контактов ×${" "}
-            ${rub(pc.value ?? 0)} = ${rub(p.resultAtPlan)}
+            <div class="line">
+              = <${Term} t="аванс">аванс<//> ${rub(p.advance)} (${pct(p.advanceShare)})
+            </div>
+            <div class="line">
+              + <${Term} t="результат">результат<//>:${" "}
+              ${`${f0.format(p.contacts.plan)} контактов × ${rub(pc.value ?? 0)} = ${rub(p.resultAtPlan)}`}
+            </div>
           </td>
         </tr>
         <tr>

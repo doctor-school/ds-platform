@@ -299,6 +299,11 @@ When(
       (await rejected.response.headerValue("set-cookie")) ?? "",
       state,
     );
+    await inputSecret(codeField, "");
+    expect(
+      (await codeField.inputValue()) === "",
+      "registrant clears refused digits before entering the delivered code",
+    ).toBe(true);
     const acceptedPending = captureResponse(state.page, "/v1/auth/verify");
     await inputSecret(codeField, state.code);
     state.accepted = await acceptedPending;

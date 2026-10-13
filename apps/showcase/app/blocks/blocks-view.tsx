@@ -1092,6 +1092,8 @@ function NeutralLoginCard({
   return (
     <div className="w-full max-w-sm">
       <LoginCard
+        // A specimen among many: the code step takes no caret here (#2881).
+        autoFocusCode={false}
         copy={LOGIN_CARD_COPY}
         links={{ register: "#", reset: "#" }}
         icon={<LockGlyph className="text-tint-foreground" />}
@@ -1472,6 +1474,8 @@ function NeutralPasswordRecoveryCard({
   return (
     <div className="w-full max-w-sm">
       <PasswordRecoveryCard
+        // A specimen among many: the code step takes no caret here (#2881).
+        autoFocusCode={false}
         copy={PASSWORD_RECOVERY_COPY}
         stage={stage}
         identifier={stage === "request" ? "" : "you@example.com"}
@@ -1689,6 +1693,8 @@ function NeutralEmailConfirmCard({
   return (
     <div className="w-full max-w-sm">
       <EmailConfirmCard
+        // A specimen among many: the code step takes no caret here (#2881).
+        autoFocusCode={false}
         copy={EMAIL_CONFIRM_COPY}
         email="you@example.com"
         destination="you@example.com"
@@ -1944,10 +1950,9 @@ function OtpFocusScreenSection() {
         The ONE code step (003 EARS-42): sign-in by code and the
         post-registration confirmation both draw it inside their card, whose
         heading and «sent to {"<address>"}» line name the channel. It renders
-        only six digit cells, the accepted-code row, the primary, the
-        back + resend(cooldown) row and the after-resend notice — no channel
-        switch, no secondary links. Every visible string is an app-supplied
-        prop.
+        only six digit cells, the accepted-code row, the primary, the back +
+        resend(cooldown) row and the after-resend notice — no channel switch, no
+        secondary links. Every visible string is an app-supplied prop.
       </p>
 
       <SubRow label="Preview">

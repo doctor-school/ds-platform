@@ -1,5 +1,6 @@
+import type * as React from "react";
 import { useForm, type ControllerRenderProps } from "react-hook-form";
-import { render, screen, cleanup } from "@testing-library/react";
+import { act, render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +9,10 @@ import { Form, FormField } from "../form";
 import { OtpField } from "./otp-field";
 
 afterEach(cleanup);
+
+/** jsdom dispatches focus/selection events on a 0 ms timer — let them land before unmount. */
+const drainSelectionEvents = () =>
+  act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
 
 /**
  * Regression harness for #212 / #211. Drives `<OtpField>` exactly
@@ -28,18 +33,29 @@ function SlottedHarness({
   charset = "numeric",
   onValue,
   onComplete,
+  rejection,
+  required,
+  autoFocus,
 }: {
   length: number;
   charset?: "alphanumeric" | "numeric";
   onValue?: (v: string) => void;
   onComplete?: () => void;
+  rejection?: React.ReactNode;
+  /** A field message for an empty code, validated on touch as the auth forms do. */
+  required?: string;
+  autoFocus?: boolean;
 }) {
-  const form = useForm<{ code: string }>({ defaultValues: { code: "" } });
+  const form = useForm<{ code: string }>({
+    mode: "onTouched",
+    defaultValues: { code: "" },
+  });
   return (
     <Form {...form}>
       <FormField
         control={form.control}
         name="code"
+        {...(required ? { rules: { required } } : {})}
         render={({ field }) => {
           onValue?.(field.value ?? "");
           return (
@@ -49,6 +65,8 @@ function SlottedHarness({
               charset={charset}
               label="Code"
               onComplete={onComplete}
+              rejection={rejection}
+              {...(autoFocus !== undefined ? { autoFocus } : {})}
             />
           );
         }}
@@ -251,7 +269,9 @@ describe("OtpField variant=slotted", () => {
     // not the nondeterministic symptom.
     const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
     const { unmount } = render(<SlottedHarness length={6} />);
-    const pwmIntervals = setIntervalSpy.mock.calls.filter(([, ms]) => ms === 1000);
+    const pwmIntervals = setIntervalSpy.mock.calls.filter(
+      ([, ms]) => ms === 1000,
+    );
     unmount();
     setIntervalSpy.mockRestore();
     expect(pwmIntervals).toHaveLength(0);
@@ -268,5 +288,120 @@ describe("OtpField variant=slotted", () => {
     expect(onComplete).not.toHaveBeenCalled();
     await user.keyboard("8");
     expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it("003 EARS-22 (#2881): a new rejection empties every cell and puts the caret back in the first", async () => {
+    const user = userEvent.setup();
+    let latest = "";
+    const { rerender } = render(
+      <SlottedHarness length={6} onValue={(v) => (latest = v)} />,
+    );
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    await user.click(input);
+    await user.keyboard("482913");
+    expect(latest).toBe("482913");
+    input.blur();
+
+    rerender(
+      <SlottedHarness
+        length={6}
+        onValue={(v) => (latest = v)}
+        rejection="refused"
+      />,
+    );
+
+    expect(latest).toBe("");
+    expect(input).toHaveValue("");
+    expect(input).toHaveFocus();
+    expect(input.selectionStart).toBe(0);
+    await drainSelectionEvents();
+  });
+
+  it("003 EARS-22 (#2881): a rejection already standing at mount leaves the cells alone", async () => {
+    const user = userEvent.setup();
+    let latest = "";
+    const { rerender } = render(
+      <SlottedHarness
+        length={6}
+        onValue={(v) => (latest = v)}
+        rejection="refused"
+      />,
+    );
+    const input = screen.getByRole("textbox");
+    await user.click(input);
+    await user.keyboard("48");
+    // The same refusal re-rendered is not a new one.
+    rerender(
+      <SlottedHarness
+        length={6}
+        onValue={(v) => (latest = v)}
+        rejection="refused"
+      />,
+    );
+    expect(latest).toBe("48");
+    await drainSelectionEvents();
+  });
+
+  it("003 EARS-22 (#2881): the emptied cells draw no field message of their own — the refusal is the only error", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <SlottedHarness length={6} required="copy.enterCode" />,
+    );
+    const input = screen.getByRole("textbox");
+    await user.click(input);
+    await user.keyboard("482913");
+    await user.tab();
+
+    rerender(
+      <SlottedHarness
+        length={6}
+        required="copy.enterCode"
+        rejection="refused"
+      />,
+    );
+
+    // Validation settles asynchronously — let it land before looking.
+    await drainSelectionEvents();
+    expect(input).toHaveValue("");
+    expect(screen.queryByText("copy.enterCode")).not.toBeInTheDocument();
+  });
+
+  it("003 EARS-22 (#2881): a code step that appears puts the caret in the first cell, its focus ring drawn", async () => {
+    const { container } = render(<SlottedHarness length={6} autoFocus />);
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+
+    expect(input).toHaveFocus();
+    expect(input.selectionStart).toBe(0);
+    await drainSelectionEvents();
+    const firstCell = container.querySelector(
+      "[data-input-otp-container] > div > div",
+    );
+    expect(firstCell?.className).toMatch(/(^|\s)shadow-focus(\s|$)/);
+  });
+
+  it("003 EARS-22 (#2881): the step takes the caret once — a re-render never pulls it back", async () => {
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    try {
+      const { rerender } = render(<SlottedHarness length={6} autoFocus />);
+      const input = screen.getByRole("textbox");
+      expect(input).toHaveFocus();
+
+      outside.focus();
+      rerender(
+        <SlottedHarness length={6} autoFocus required="copy.enterCode" />,
+      );
+
+      expect(outside).toHaveFocus();
+      await drainSelectionEvents();
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("003 EARS-22 (#2881): without autoFocus the field never takes the caret on its own", async () => {
+    render(<SlottedHarness length={6} />);
+    expect(screen.getByRole("textbox")).not.toHaveFocus();
+    await drainSelectionEvents();
   });
 });

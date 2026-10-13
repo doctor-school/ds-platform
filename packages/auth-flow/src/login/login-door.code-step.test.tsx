@@ -35,6 +35,7 @@ vi.mock("@ds/events-storefront/client", async (importOriginal) => ({
   registerForEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
+import { AuthError } from "../client/auth-client";
 import { resolveAuthFlowCopy } from "../copy";
 import type { AuthFlowHostConfig } from "../host-config";
 import {
@@ -176,7 +177,8 @@ describe("003 EARS-42: sign-in by code shows the one code step", () => {
   it.each(HOSTS)(
     "003 EARS-42 (#2607): on %s two addresses typed in turn read apart on the step, and a long one wraps inside the column",
     async (_host, config) => {
-      const LONG = "anna.konstantinova-rozhdestvenskaya.cardiology@regional-clinical-hospital.example.ru";
+      const LONG =
+        "anna.konstantinova-rozhdestvenskaya.cardiology@regional-clinical-hospital.example.ru";
       const user = await sendEmailCode(config);
       expect(screen.getByText(EMAIL).tagName).toBe("STRONG");
 
@@ -216,4 +218,63 @@ describe("003 EARS-42: sign-in by code shows the one code step", () => {
       vi.useRealTimers();
     }
   });
+
+  it.each(HOSTS)(
+    "003 EARS-22 (#2881): on %s the caret is in the first code cell once the code is sent",
+    async (_host, config) => {
+      await sendEmailCode(config);
+      const input = screen.getByRole("textbox") as HTMLInputElement;
+      await waitFor(() => expect(input).toHaveFocus());
+      expect(input.selectionStart).toBe(0);
+    },
+  );
+
+  it.each(HOSTS)(
+    "003 EARS-22 (#2881): on %s a wrong code after a failed resend is sent once — the confirm button cannot send it again",
+    async (_host, config) => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        const user = userEvent.setup({
+          advanceTimers: vi.advanceTimersByTime,
+        });
+        render(<LoginDoor config={config} landing="/" />);
+        await user.click(screen.getByTestId("login-method-otp"));
+        await user.type(screen.getByLabelText(COPY.otp.emailLabel), EMAIL);
+        await user.click(screen.getByTestId("otp-send"));
+        await screen.findByTestId("otp-verify");
+
+        // The resend fails (429) — its sentence takes the one plate.
+        requestOtp.mockRejectedValueOnce(
+          new AuthError(429, "too many requests", "RATE_LIMITED"),
+        );
+        act(() => vi.advanceTimersByTime(60_000));
+        await user.click(screen.getByTestId("otp-resend"));
+        await waitFor(() => expect(requestOtp).toHaveBeenCalledTimes(2));
+        const resendSentence = (await screen.findByRole("alert")).textContent;
+
+        // A wrong code then auto-submits and is refused.
+        loginWithOtp.mockRejectedValueOnce(
+          new AuthError(400, "invalid code", "INVALID_CODE"),
+        );
+        await user.click(screen.getByRole("textbox"));
+        await user.keyboard("111111");
+        await waitFor(() => expect(loginWithOtp).toHaveBeenCalledTimes(1));
+
+        // The refusal replaces the stale resend sentence and empties the cells…
+        await waitFor(() =>
+          expect(screen.getByRole("alert").textContent).not.toBe(
+            resendSentence,
+          ),
+        );
+        await waitFor(() =>
+          expect(screen.getByRole("textbox")).toHaveValue(""),
+        );
+        // …so the confirm button sends nothing a second time.
+        await user.click(screen.getByTestId("otp-verify"));
+        expect(loginWithOtp).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 });

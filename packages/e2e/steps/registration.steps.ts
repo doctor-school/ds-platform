@@ -242,6 +242,24 @@ Then(
       ),
       "same browser cannot read private profile",
     ).toBe(401);
+    // #2881 — the refused code leaves the cells and the caret returns to the
+    // first, so the confirm button cannot send it a second time.
+    const cells = state.page.locator('input[autocomplete="one-time-code"]');
+    await expect(cells, "refused code emptied from the cells").toHaveValue("");
+    await expect(cells, "caret back in the first cell").toBeFocused();
+    const resent = state.page
+      .waitForRequest(
+        (request) =>
+          new URL(request.url()).pathname === "/v1/auth/verify" &&
+          request.method() === "POST",
+        { timeout: 2_000 },
+      )
+      .then(
+        () => true,
+        () => false,
+      );
+    await state.page.getByTestId("verify-submit").click();
+    expect(await resent, "the refused code is not sent again").toBe(false);
     expect(
       state.verificationRequests,
       "one automatic confirmation request",

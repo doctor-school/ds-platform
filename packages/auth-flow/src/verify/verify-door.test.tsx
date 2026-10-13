@@ -286,7 +286,9 @@ describe("003 /verify dual-affordance + resend (#227/#267)", () => {
     // Canvas 81-83 — one sentence for either address, naming the address
     // exactly as typed (#2607) and nothing about whether it has an account.
     expect(first).toBe("Мы отправили новый код на doc-registered@example.com.");
-    expect(second).toBe("Мы отправили новый код на dan-never-seen@example.com.");
+    expect(second).toBe(
+      "Мы отправили новый код на dan-never-seen@example.com.",
+    );
   });
 
   it("003 EARS-3: auto-submits the fixed-length code (no manual click) and confirms it", async () => {
@@ -491,7 +493,12 @@ describe("003 EARS-41: one submission — the code, with the held values while t
     setPendingRegistration({
       identifier: "someone-else@example.com",
       registration: REGISTRATION,
-      form: { email: "someone-else@example.com", password: PASSWORD, promoCode: "", consents: {} },
+      form: {
+        email: "someone-else@example.com",
+        password: PASSWORD,
+        promoCode: "",
+        consents: {},
+      },
     });
     await enterCode({ email: EMAIL });
 
@@ -658,5 +665,30 @@ describe("021 EARS-2: the return-context plate on the confirmation step", () => 
   it("021 EARS-3: no plate supplied, no frame rendered", async () => {
     await mountSettled();
     expect(screen.queryByTestId("registration-return-context")).toBeNull();
+  });
+});
+
+describe("#2881 /verify: only a server refusal empties the code", () => {
+  it("003 EARS-22 (#2881): an incomplete code on Enter keeps the typed digits", async () => {
+    const user = userEvent.setup();
+    await mountSettled();
+    const input = screen.getByRole("textbox");
+    await user.click(input);
+    await user.keyboard("482");
+    await user.keyboard("{Enter}");
+
+    // The client-side rule speaks on the plate; nothing reached the server.
+    expect(await screen.findByTestId("verify-error")).not.toBeEmptyDOMElement();
+    expect(h.verify).not.toHaveBeenCalled();
+    expect(input).toHaveValue("482");
+  });
+});
+
+describe("#2881 /verify: the step opens with the caret in the code", () => {
+  it("003 EARS-22 (#2881): on arrival after registration the first code cell has the caret", async () => {
+    await mountSettled();
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    await waitFor(() => expect(input).toHaveFocus());
+    expect(input.selectionStart).toBe(0);
   });
 });

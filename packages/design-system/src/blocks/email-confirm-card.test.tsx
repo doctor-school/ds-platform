@@ -5,6 +5,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -72,6 +73,14 @@ function setup(overrides: Parameters<typeof props>[0] = {}) {
 }
 
 afterEach(cleanup);
+
+/** jsdom dispatches focus/selection events on a 0 ms timer — let them land before unmount. */
+const drainSelectionEvents = () =>
+  act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+
+// #2881 — the code step takes the caret when it appears, so every mount of it
+// queues jsdom's focus/selection events; they land before the unmount.
+afterEach(drainSelectionEvents);
 
 describe("<EmailConfirmCard>", () => {
   it("renders every visible string from the copy prop, with the title as the page h1", () => {
@@ -283,7 +292,9 @@ describe("<EmailConfirmCard> canvas code step", () => {
     vi.useFakeTimers();
     try {
       render(
-        <EmailConfirmCard {...props({ testIds: { returnContext: "plate" } })} />,
+        <EmailConfirmCard
+          {...props({ testIds: { returnContext: "plate" } })}
+        />,
       );
       expect(screen.queryByTestId("plate")).toBeNull();
 
@@ -306,5 +317,97 @@ describe("<EmailConfirmCard> canvas code step", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+/**
+ * #2881 — the host as `/verify` runs it: the plate is cleared when a code is
+ * sent, and a refusal comes back as an already-localized string.
+ */
+function RefusingHost({ onSubmit }: { onSubmit: (code: string) => void }) {
+  const [error, setError] = React.useState<string | null>(null);
+  return (
+    <EmailConfirmCard
+      {...props({
+        error,
+        onSubmit: async (values) => {
+          setError(null);
+          onSubmit(values.code);
+          await Promise.resolve();
+          setError("copy.refused");
+        },
+      })}
+    />
+  );
+}
+
+describe("#2881 <EmailConfirmCard> a refused code", () => {
+  it("003 EARS-22: a typed code reaches the host once; the refusal empties the cells, refocuses the first and keeps the plate", async () => {
+    const sent: string[] = [];
+    render(<RefusingHost onSubmit={(code) => sent.push(code)} />);
+    const user = userEvent.setup();
+    const input = screen.getByRole("textbox");
+    await user.click(input);
+    await user.keyboard("482913");
+
+    expect(await screen.findByTestId("verify-error")).toHaveTextContent(
+      "copy.refused",
+    );
+    expect(input).toHaveValue("");
+    expect(input).toHaveFocus();
+
+    // The confirm button no longer carries the refused code.
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("verify-submit"));
+    });
+    expect(sent.filter((code) => code === "482913")).toHaveLength(1);
+    await drainSelectionEvents();
+  });
+});
+
+describe("#2881 <EmailConfirmCard> an incomplete code", () => {
+  it("003 EARS-22 (#2881): an incomplete code on Enter keeps the typed digits; a later server refusal still empties them", async () => {
+    function InvalidThenRefusingHost() {
+      const [error, setError] = React.useState<string | null>(null);
+      return (
+        <EmailConfirmCard
+          {...props({
+            error,
+            // The host's six-digit rule (the `@ds/schemas` SSOT in the doors).
+            resolver: async (values) =>
+              /^\d{6}$/.test(values.code)
+                ? { values, errors: {} }
+                : {
+                    values: {},
+                    errors: { code: { type: "length", message: "six" } },
+                  },
+            onInvalid: () => setError("copy.invalid"),
+            onSubmit: async () => {
+              setError(null);
+              await Promise.resolve();
+              setError("copy.refused");
+            },
+          })}
+        />
+      );
+    }
+    render(<InvalidThenRefusingHost />);
+    const user = userEvent.setup();
+    const input = screen.getByRole("textbox");
+    await user.click(input);
+    await user.keyboard("482");
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByTestId("verify-error")).toHaveTextContent(
+      "copy.invalid",
+    );
+    expect(input).toHaveValue("482");
+
+    await user.keyboard("913");
+    expect(await screen.findByTestId("verify-error")).toHaveTextContent(
+      "copy.refused",
+    );
+    await waitFor(() => expect(input).toHaveValue(""));
+    await drainSelectionEvents();
   });
 });

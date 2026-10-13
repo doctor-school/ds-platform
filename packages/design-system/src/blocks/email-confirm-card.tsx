@@ -75,7 +75,10 @@ export interface EmailConfirmCardProps {
   /** App-owned RHF resolver (localized messages + the `@ds/schemas` SSOT). */
   resolver: Resolver<EmailConfirmValues>;
   /** Awaited by RHF, so it drives `isSubmitting`. Transport + routing are the host's. */
-  onSubmit: (values: EmailConfirmValues) => Promise<void> | void;
+  onSubmit: (
+    values: EmailConfirmValues,
+    event?: React.BaseSyntheticEvent,
+  ) => Promise<void> | void;
   /** A submit blocked by validation (#904): the host decides the message. */
   onInvalid?: (() => void) | undefined;
   /** Already-localized code error. */
@@ -96,6 +99,12 @@ export interface EmailConfirmCardProps {
    * registration door carries. Absent → NOTHING renders (EARS-3 honest-empty).
    */
   returnContextSlot?: React.ReactNode | undefined;
+  /**
+   * The code step puts the caret in its first cell when it appears (003
+   * EARS-22, #2881) — the code is the step's purpose. Defaults to `true`; only
+   * a catalog that draws the step as a specimen beside others turns it off.
+   */
+  autoFocusCode?: boolean | undefined;
 }
 
 /** The block's addressable parts — see `EMAIL_CONFIRM_TEST_IDS` for the shipped ids. */
@@ -140,6 +149,7 @@ export function EmailConfirmCard({
   resendCooldownSeconds = EMAIL_CONFIRM_RESEND_COOLDOWN_SECONDS,
   testIds,
   returnContextSlot,
+  autoFocusCode = true,
 }: EmailConfirmCardProps) {
   const form = useForm<EmailConfirmValues>({
     resolver,
@@ -169,7 +179,20 @@ export function EmailConfirmCard({
   // #175 — auto-submit on the sixth character, guarded against a double call.
   // #2469 — an accepted code is spent: once the host reports acceptance no
   // path (a click, Enter, a re-typed or pasted code) submits it again.
-  const handleSubmit = form.handleSubmit(onSubmit, onInvalid);
+  // #2881 — only a SERVER refusal of a sent code empties the cells: a submit
+  // the client rule blocked sent nothing, so the host's sentence for it is
+  // kept off the field's `rejection` and the typed digits stay.
+  const [blockedByRule, setBlockedByRule] = React.useState(false);
+  const handleSubmit = form.handleSubmit(
+    (values, event) => {
+      setBlockedByRule(false);
+      return onSubmit(values, event);
+    },
+    () => {
+      setBlockedByRule(true);
+      onInvalid?.();
+    },
+  );
   const submit = React.useCallback(
     (event?: React.BaseSyntheticEvent) => {
       if (succeeded) {
@@ -224,6 +247,8 @@ export function EmailConfirmCard({
               succeeded={succeeded}
               succeededLabel={copy.codeAccepted}
               notice={resend.notice}
+              rejection={blockedByRule ? null : error}
+              autoFocus={autoFocusCode}
               onComplete={onComplete}
               onSubmit={submit}
               onResend={resend.onResend}

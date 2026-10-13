@@ -445,6 +445,11 @@ export function LoginDoor({
   }
 
   async function onOtpVerify(values: LoginCardOtpVerifyValues) {
+    // The one plate says the failure of the operation just performed (canvas
+    // 53-56): a submitted code withdraws a stale resend / captcha sentence, so
+    // its own refusal reaches the plate and empties the cells (#2881).
+    setOtpRequestError(null);
+    setOtpCaptchaError(null);
     setOtpVerifyError(null);
     try {
       // Mapped field-by-field, not cast: the block's structural values type and

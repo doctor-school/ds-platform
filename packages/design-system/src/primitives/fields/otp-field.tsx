@@ -1,6 +1,11 @@
 "use client";
 
-import type { ControllerRenderProps, FieldValues } from "react-hook-form";
+import * as React from "react";
+import {
+  useFormContext,
+  type ControllerRenderProps,
+  type FieldValues,
+} from "react-hook-form";
 
 import { FormControl, FormItem, FormLabel, FormMessage } from "../form";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "../input-otp";
@@ -34,6 +39,24 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "../input-otp";
  * caller's `onComplete` is responsible for the `isSubmitting` guard (it already
  * holds the RHF form), so a double network call cannot fire if completion races a
  * manual click / Enter — identical to the pre-#197 inline logic.
+ *
+ * Refused code (#2881): a typed code reaches the server exactly once. When the
+ * caller reports a NEW refusal through `rejection`, the field empties every
+ * cell and puts the caret back in the first — so neither the confirm button
+ * nor Enter can send the refused code again, and the next digit typed starts a
+ * fresh code. The refusal itself stays wherever the caller draws it; the field
+ * is RESET (value, touched and error), not set to "", so the emptied cells draw
+ * no «enter the code» message of their own beside it. The value
+ * seen last is compared, not a first-run flag (StrictMode runs the mount effect
+ * twice): a refusal already standing at mount, or re-rendered unchanged, is not
+ * a new one.
+ *
+ * Step focus (#2881): with `autoFocus` the caret lands in the first cell when
+ * the field MOUNTS — the moment a code step appears — so the visitor types the
+ * code without reaching for it, and the active cell draws its focus ring. Read
+ * at mount only: a re-render never pulls the caret back from wherever the
+ * visitor moved it. Off by default, so a field that is not its page's purpose
+ * (a catalog specimen, a settings form) never takes the caret on its own.
  */
 const digitsOnly = (raw: string) => raw.replace(/\D/g, "");
 
@@ -58,6 +81,8 @@ export function OtpField<T extends FieldValues>({
   label,
   charset,
   onComplete,
+  rejection,
+  autoFocus = false,
 }: {
   field: ControllerRenderProps<T>;
   /** Fixed code length — 6 for every mailed/texted code, the TOTP length for admin MFA. */
@@ -80,13 +105,59 @@ export function OtpField<T extends FieldValues>({
    * that wants manual-only submit can omit it.
    */
   onComplete?: (() => void) | undefined;
+  /**
+   * The caller's refusal of the submitted code (its already-localized error).
+   * Each new non-empty value empties the cells and refocuses the first (#2881).
+   */
+  rejection?: React.ReactNode;
+  /**
+   * Put the caret in the first cell when the field mounts — set by the code
+   * steps, whose purpose is this field (#2881). Read at mount only.
+   */
+  autoFocus?: boolean;
 }) {
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+  const { resetField } = useFormContext<T>();
+  const { ref: fieldRef, name } = field;
+  const bindInput = React.useCallback(
+    (element: HTMLInputElement | null) => {
+      inputRef.current = element;
+      fieldRef(element);
+    },
+    [fieldRef],
+  );
+
+  /** The caret into the first cell — on the step's appearance and on each refusal. */
+  const caretToFirstCell = React.useCallback(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.focus();
+    input.setSelectionRange(0, 0);
+  }, []);
+
+  React.useEffect(() => {
+    if (autoFocus) caretToFirstCell();
+    // Mount only (#2881): the step's appearance, never a later re-render.
+  }, []);
+
+  const seenRejection = React.useRef(rejection);
+  React.useEffect(() => {
+    if (seenRejection.current === rejection) return;
+    seenRejection.current = rejection;
+    if (rejection === null || rejection === undefined || rejection === false)
+      return;
+    resetField(name);
+    caretToFirstCell();
+    // Keyed only on the refusal — the field handles are stable per render.
+  }, [rejection]);
+
   return (
     <FormItem>
       <FormLabel>{label}</FormLabel>
       <FormControl>
         <InputOTP
           {...field}
+          ref={bindInput}
           maxLength={length}
           autoComplete="one-time-code"
           // #1110: the mobile keyboard the widget requests — the digit keypad for

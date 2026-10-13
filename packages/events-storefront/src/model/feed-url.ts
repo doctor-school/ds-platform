@@ -157,6 +157,30 @@ export function feedReadQuery(
 }
 
 /**
+ * The scope keys of each host's set — the part of the facets the «Идёт сейчас»
+ * read takes (019 EARS-6, #2907). The doctor strip follows the APPLIED
+ * specialty scope, the same one the feed reads; the Academy has no scope facet,
+ * so its strip reads the bare path.
+ */
+const LIVE_SCOPE_KEYS: Readonly<Record<EventsFilterHost, readonly string[]>> = {
+  doctor: ["specialty"],
+  academy: [],
+};
+
+/**
+ * The «Идёт сейчас» read's href — the server render and the browser's refresh
+ * both read THIS, so the strip can never answer a different scope than the one
+ * it was painted with. The default scope stays unstated, as in every href.
+ */
+export function liveReadHref(
+  livePath: string,
+  raw: RawQueryRecord,
+  filterSet: EventsFilterHost,
+): string {
+  return href(livePath, onlyKeys(codecEntries(raw), LIVE_SCOPE_KEYS[filterSet]));
+}
+
+/**
  * A month READ's query (row 54): the month (or the counts' year) and the host
  * set's facets — the month view and the picker narrow as the feed does.
  */

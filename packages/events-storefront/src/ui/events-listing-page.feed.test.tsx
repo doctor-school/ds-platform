@@ -7,7 +7,13 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -314,7 +320,12 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
     });
     render(
       <>
-        {await LiveSection({ config: DOCTOR, session: SESSION })}
+        {await LiveSection({
+          config: DOCTOR,
+          raw: {},
+          session: SESSION,
+          request: REQUEST,
+        })}
         {await MyEventsSection({ config: DOCTOR, mine, retry: RETRY })}
         {await FeedSection({
           config: DOCTOR,
@@ -928,6 +939,66 @@ describe("<LiveBlock> — «Идёт сейчас» (gate rows 43–44)", () => 
     );
     expect(await screen.findByText("Эфир 1")).toBeInTheDocument();
     fetchSpy.mockRestore();
+  });
+
+  it("019 EARS-6: the server render and the refresh read the SAME applied scope (#2907)", async () => {
+    mocks.fetchEventsLive.mockResolvedValue({ ok: true, value: [strip(1)] });
+    const element = (await LiveSection({
+      config: DOCTOR,
+      raw: { specialty: "all", format: "online" },
+      session: SESSION,
+      request: REQUEST,
+    })) as ReactElement<{ livePath: string }>;
+    const scoped = "/v1/storefront/doctor/events/live?specialty=all";
+    expect(mocks.fetchEventsLive).toHaveBeenCalledWith(
+      scoped,
+      DOCTOR,
+      SESSION,
+      REQUEST,
+    );
+    expect(element.props.livePath).toBe(scoped);
+    // Keyed by the scope: a scope toggle re-mounts the block on the new scope.
+    expect(element.key).toBe(scoped);
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("[]", { status: 200 }));
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    render(element);
+    document.dispatchEvent(new Event("visibilitychange"));
+    await waitFor(() =>
+      expect(fetchSpy).toHaveBeenCalledWith(
+        scoped,
+        expect.objectContaining({ credentials: "include" }),
+      ),
+    );
+    fetchSpy.mockRestore();
+  });
+
+  it("019 EARS-6: the default scope states no query, so the strip reads «моя и смежные» like the feed", async () => {
+    await LiveSection({ config: DOCTOR, raw: {}, session: SESSION, request: REQUEST });
+    expect(mocks.fetchEventsLive.mock.calls[0]?.[0]).toBe(
+      "/v1/storefront/doctor/events/live",
+    );
+  });
+
+  it("019 EARS-6: a new server answer re-syncs the mounted strip without a reload", () => {
+    const { rerender } = render(
+      <LiveBlock
+        initial={{ ok: true, value: [strip(1)] }}
+        livePath="/v1/storefront/doctor/events/live?specialty=all"
+        routes={ROUTES}
+      />,
+    );
+    expect(screen.getByTestId("events-live-block")).toHaveTextContent("Эфир 1");
+    rerender(
+      <LiveBlock
+        initial={{ ok: true, value: [] }}
+        livePath="/v1/storefront/doctor/events/live?specialty=all"
+        routes={ROUTES}
+      />,
+    );
+    expect(screen.queryByTestId("events-live-block")).toBeNull();
   });
 
   it("019 EARS-6: nothing live ⇒ no block in the tree", () => {

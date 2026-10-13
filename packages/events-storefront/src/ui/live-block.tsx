@@ -21,7 +21,10 @@ import { useViewerZone } from "./use-viewer-zone";
  * read paints first; the block then re-reads the SAME path on a bounded interval
  * and when the tab becomes visible, so it clears itself when the эфир ends. It
  * never derives liveness, never clears on a failed poll (the last answer stays),
- * and renders nothing when nothing is live.
+ * and renders nothing when nothing is live. `livePath` is the read under the
+ * page's applied scope (`liveReadHref`, #2907); a fresh server answer — a new
+ * render of the page — replaces the held one, so the strip never keeps a stale
+ * scope's answer.
  */
 export function LiveBlock({
   initial,
@@ -33,6 +36,11 @@ export function LiveBlock({
   routes: Pick<EventsStorefrontHostConfig["routes"], "eventPage">;
 }) {
   const [read, setRead] = useState(initial);
+  const [painted, setPainted] = useState(initial);
+  if (painted !== initial) {
+    setPainted(initial);
+    setRead(initial);
+  }
   const viewerZone = useViewerZone();
 
   const refresh = useCallback(async () => {

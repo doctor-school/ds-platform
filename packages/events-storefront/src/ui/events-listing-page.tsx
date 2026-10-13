@@ -346,7 +346,12 @@ export async function EventsListingPage({
               <>
                 {tense === "upcoming" ? (
                   <Suspense fallback={<LiveSkeleton />}>
-                    <LiveSection config={config} session={session} />
+                    <LiveSection
+                      config={config}
+                      raw={raw}
+                      session={session}
+                      request={request}
+                    />
                   </Suspense>
                 ) : null}
                 {tense === "upcoming" && session.cookie !== "" ? (

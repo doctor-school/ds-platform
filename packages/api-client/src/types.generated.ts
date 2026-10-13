@@ -6752,7 +6752,9 @@ export interface operations {
     };
     DoctorEventsPublicController_live: {
         parameters: {
-            query?: never;
+            query?: {
+                specialty?: string[];
+            };
             header: {
                 cookie: string;
             };

@@ -379,23 +379,29 @@ export class DoctorEventsService {
    * §4.2, D5). The selection, the entry policy and the counts are the shared
    * {@link EventsLiveService}'s; this method contributes the doctor's own
    * inputs — the `doctors` audience and the SAME targeting the feed resolves
-   * («моя и смежные» over the remembered specialty; none chosen ⇒ untargeted).
+   * under the page's APPLIED scope (019 «Amendment — 2026-10-13», #2907):
+   * «моя и смежные» over the remembered specialty (none chosen ⇒ untargeted),
+   * `all`, or an explicit pick — so an эфир badged live in the feed below is
+   * never missing from the strip, and the strip never shows one the feed hides.
    */
   async live(input: {
+    /** The applied specialty scope — the feed read's own `specialty` value. */
+    query: Pick<DoctorEventsFeedQuery, "specialty">;
     /** The remembered specialty of the 017 anonymous session; `null` degrades to the untargeted read. */
     specialtyReference: string | null;
     /** The calling host's route table — the only host-specific thing in this read. */
     routes: ParticipationRoutes;
     /** The authenticated subject, absent for a guest. */
     sub?: string | undefined;
+    now?: Date;
   }): Promise<EventsLiveRead> {
-    // The strip reads «моя и смежные» whatever scope the page applies — the
-    // LD-9 fall-back to every specialty included, like any applied scope. It
-    // never reports the visitor's default-scope emptiness, so it skips that
-    // probe.
-    const targeting = await this.resolveScope(
-      "mine-and-adjacent",
+    // The strip follows the scope the feed below EFFECTIVELY reads — the
+    // LD-9 fall-back to every specialty included (019 «Amendment —
+    // 2026-10-13», #2907), so it runs the feed's own targeting resolution.
+    const targeting = await this.resolveTargeting(
+      input.query,
       input.specialtyReference,
+      doctorEventsFeedDayOf(input.now ?? new Date()),
     );
     return this.liveEvents.live({
       audience: "doctors",

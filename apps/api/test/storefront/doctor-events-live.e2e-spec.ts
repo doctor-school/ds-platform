@@ -181,10 +181,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const readLiveList = async (input: {
       specialtyCode?: string;
       session?: string;
+      /** The applied scope's query string, as the page's feed read states it. */
+      scope?: string;
     }) => {
       const response = await app.inject({
         method: "GET",
-        url: "/v1/storefront/doctor/events/live",
+        url: `/v1/storefront/doctor/events/live${input.scope ? `?${input.scope}` : ""}`,
         headers: headersFor(input),
       });
       expect(response.statusCode).toBe(200);
@@ -359,6 +361,36 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // specialty resolves to its OWN эфир, never the first one's.
       const otherStrip = await readLive({ specialtyCode: otherCode });
       expect(otherStrip.title).toBe("Идущий эфир по ревматологии");
+    });
+
+    it("019 EARS-6: a guest with a remembered specialty reads the APPLIED scope — «моя и смежные» with no targeted эфир is empty, «все» shows every live эфир (#2907)", async () => {
+      // The feed's default scope: nothing live reaches this specialty.
+      expect(await readLiveList({ specialtyCode: unreachedCode })).toEqual([]);
+      expect(
+        await readLiveList({
+          specialtyCode: unreachedCode,
+          scope: "specialty=mine-and-adjacent",
+        }),
+      ).toEqual([]);
+      // «Все специальности»: the strip follows the feed and shows both эфиры.
+      const all = await readLiveList({
+        specialtyCode: unreachedCode,
+        scope: "specialty=all",
+      });
+      expect(all.map((strip) => strip.eventId)).toContain(liveEventId);
+      expect(all.map((strip) => strip.title)).toContain(
+        "Идущий эфир по ревматологии",
+      );
+    });
+
+    it("019 EARS-6: an explicit specialty pick narrows the strip to THAT specialty, not the remembered one (#2907)", async () => {
+      const picked = await readLiveList({
+        specialtyCode: ownCode,
+        scope: `specialty=${encodeURIComponent(otherCode)}`,
+      });
+      expect(picked.map((strip) => strip.title)).toEqual([
+        "Идущий эфир по ревматологии",
+      ]);
     });
 
     it("NEW: several targeted эфиры running at once are each a strip, earliest start first (wave-2 gate row 44)", async () => {

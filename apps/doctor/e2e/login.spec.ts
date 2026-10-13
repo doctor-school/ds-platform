@@ -25,6 +25,9 @@ import { test, expect, type Page } from "@playwright/test";
 const WRONG_PASSWORD_COPY =
   "Не удалось войти. Проверьте данные и попробуйте снова.";
 
+/** The RU generic the host maps a refused sign-in code to (`@ds/auth-flow/errors`). */
+const WRONG_CODE_COPY = "Код не подошёл. Проверьте его или запросите новый.";
+
 const MOBILE = { width: 390, height: 844 };
 const DESKTOP = { width: 1280, height: 900 };
 
@@ -273,6 +276,74 @@ test("003 EARS-7: a phone reaches the sign-in code step, as on the Academy", asy
   expect(sent).toEqual([
     expect.objectContaining({ identifier: "+79991234567", channel: "sms" }),
   ]);
+});
+
+/**
+ * #2881 — a typed code reaches the server once. The shared code step drew the
+ * refusal but kept the six digits in the cells, so the re-enabled confirm
+ * button sent the same refused code again (#1331 drive: two `verify 400`).
+ * The refusal is fulfilled at the network edge with the api's real 400 body.
+ */
+test("003 EARS-22: a refused sign-in code empties the cells and is never sent again", async ({
+  page,
+}) => {
+  await page.setViewportSize(MOBILE);
+  await page.route("**/v1/auth/login/otp/request", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ status: "otp_sent" }),
+    }),
+  );
+  const verified: unknown[] = [];
+  await page.route("**/v1/auth/login/otp", async (route) => {
+    verified.push(route.request().postDataJSON());
+    await route.fulfill({
+      status: 400,
+      contentType: "application/json",
+      body: JSON.stringify({ statusCode: 400, message: "Bad Request" }),
+    });
+  });
+
+  await page.goto("/login");
+  await page.getByTestId("login-method-otp").click();
+  await page.getByTestId("otp-identifier").fill("doctor@clinic.ru");
+  await page.getByTestId("otp-send").click();
+  await expect(page.getByTestId("otp-verify")).toBeVisible();
+
+  const cells = page.locator('input[autocomplete="one-time-code"]');
+  await cells.click();
+  await page.keyboard.type("482913");
+
+  const refusal = page
+    .getByTestId("login-screen")
+    .getByRole("alert")
+    .filter({ hasText: WRONG_CODE_COPY });
+  await expect(refusal).toBeVisible();
+  // The emptied cells draw no «enter the code» message beside the refusal.
+  await expect(page.getByTestId("login-screen").getByRole("alert")).toHaveCount(
+    1,
+  );
+  await expect(cells).toHaveValue("");
+  await expect(cells).toBeFocused();
+  expect(verified).toEqual([expect.objectContaining({ code: "482913" })]);
+
+  // The confirm button and Enter no longer hold the refused code: no second
+  // verify request leaves the page within a generous window.
+  const resent = page
+    .waitForRequest((request) => request.url().endsWith("/v1/auth/login/otp"), {
+      timeout: 2_000,
+    })
+    .then(
+      () => true,
+      () => false,
+    );
+  await page.getByTestId("otp-verify").click();
+  await page.keyboard.press("Enter");
+  expect(await resent, "the refused code is not sent again").toBe(false);
+  await expect(refusal).toBeVisible();
+  expect(verified).toHaveLength(1);
+  await expect(page).toHaveURL(/\/login$/);
 });
 
 /**

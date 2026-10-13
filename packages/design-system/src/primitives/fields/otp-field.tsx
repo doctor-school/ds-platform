@@ -1,7 +1,11 @@
 "use client";
 
 import * as React from "react";
-import type { ControllerRenderProps, FieldValues } from "react-hook-form";
+import {
+  useFormContext,
+  type ControllerRenderProps,
+  type FieldValues,
+} from "react-hook-form";
 
 import { FormControl, FormItem, FormLabel, FormMessage } from "../form";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "../input-otp";
@@ -40,7 +44,9 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "../input-otp";
  * caller reports a NEW refusal through `rejection`, the field empties every
  * cell and puts the caret back in the first — so neither the confirm button
  * nor Enter can send the refused code again, and the next digit typed starts a
- * fresh code. The refusal itself stays wherever the caller draws it. The value
+ * fresh code. The refusal itself stays wherever the caller draws it; the field
+ * is RESET (value, touched and error), not set to "", so the emptied cells draw
+ * no «enter the code» message of their own beside it. The value
  * seen last is compared, not a first-run flag (StrictMode runs the mount effect
  * twice): a refusal already standing at mount, or re-rendered unchanged, is not
  * a new one.
@@ -98,7 +104,8 @@ export function OtpField<T extends FieldValues>({
   rejection?: React.ReactNode;
 }) {
   const inputRef = React.useRef<HTMLInputElement | null>(null);
-  const { ref: fieldRef, onChange: fieldOnChange } = field;
+  const { resetField } = useFormContext<T>();
+  const { ref: fieldRef, name } = field;
   const bindInput = React.useCallback(
     (element: HTMLInputElement | null) => {
       inputRef.current = element;
@@ -113,7 +120,7 @@ export function OtpField<T extends FieldValues>({
     seenRejection.current = rejection;
     if (rejection === null || rejection === undefined || rejection === false)
       return;
-    fieldOnChange("");
+    resetField(name);
     const input = inputRef.current;
     if (!input) return;
     input.focus();

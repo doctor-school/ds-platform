@@ -34,19 +34,26 @@ function SlottedHarness({
   onValue,
   onComplete,
   rejection,
+  required,
 }: {
   length: number;
   charset?: "alphanumeric" | "numeric";
   onValue?: (v: string) => void;
   onComplete?: () => void;
   rejection?: React.ReactNode;
+  /** A field message for an empty code, validated on touch as the auth forms do. */
+  required?: string;
 }) {
-  const form = useForm<{ code: string }>({ defaultValues: { code: "" } });
+  const form = useForm<{ code: string }>({
+    mode: "onTouched",
+    defaultValues: { code: "" },
+  });
   return (
     <Form {...form}>
       <FormField
         control={form.control}
         name="code"
+        {...(required ? { rules: { required } } : {})}
         render={({ field }) => {
           onValue?.(field.value ?? "");
           return (
@@ -329,4 +336,29 @@ describe("OtpField variant=slotted", () => {
     expect(latest).toBe("48");
     await drainSelectionEvents();
   });
+
+  it("003 EARS-22 (#2881): the emptied cells draw no field message of their own — the refusal is the only error", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <SlottedHarness length={6} required="copy.enterCode" />,
+    );
+    const input = screen.getByRole("textbox");
+    await user.click(input);
+    await user.keyboard("482913");
+    await user.tab();
+
+    rerender(
+      <SlottedHarness
+        length={6}
+        required="copy.enterCode"
+        rejection="refused"
+      />,
+    );
+
+    // Validation settles asynchronously — let it land before looking.
+    await drainSelectionEvents();
+    expect(input).toHaveValue("");
+    expect(screen.queryByText("copy.enterCode")).not.toBeInTheDocument();
+  });
 });
+

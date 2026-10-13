@@ -1047,12 +1047,20 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     When the public kind list is read
     Then the new kind is listed as id, slug and title
 
-  @EARS-28 @failure
-  Scenario: A retired kind is no longer offered
+  # Read under «Amendment — 2026-10-13 — a retired kind stays a storefront filter value».
+  @EARS-28 @EARS-26 @edge
+  Scenario: A retired kind stays in the public kind list and leaves only the event form
     Given the admin retires a kind through the signed lifecycle-impact preview
     When the public kind list and the event-form kind selector are read
-    Then the retired kind is offered by neither
+    Then the public kind list still names the retired kind as id, slug and title
+    And the event-form kind selector no longer offers it
     And the events that carry it keep their kind reference
+
+  @EARS-28 @failure
+  Scenario: A draft kind never reaches the public kind list
+    Given the admin creates an event kind and leaves it a draft
+    When the public kind list is read
+    Then the draft kind is not listed
 
   @EARS-29 @happy
   Scenario: The audience alone places an event on one storefront

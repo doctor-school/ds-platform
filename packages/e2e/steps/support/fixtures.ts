@@ -91,7 +91,8 @@ export interface EditorWrites {
   run?: {
     token: string;
     kinds: { title: string; detailUrl: string; retired: boolean }[];
-    events: { id: string; title: string; kindTitle: string }[];
+    /** `hidden` once the scenario itself took the event off the storefronts. */
+    events: { id: string; title: string; kindTitle: string; hidden?: boolean }[];
   };
 }
 

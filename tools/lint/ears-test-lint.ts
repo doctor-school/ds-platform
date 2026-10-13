@@ -124,9 +124,11 @@ const FEATURE_SCOPE_RE = /['"`](\d{3})\s+EARS-\d/g;
 const SPEC_FEATURE_RE = /specs\/features\/(\d+)-/;
 // In spec prose, a feature-qualified id run: `NNN EARS-a`, `NNN (EARS-a`,
 // `feature-NNN EARS-a`, continued by `/EARS-b`, `/b`, `, EARS-b` or ` / EARS-b`;
-// or the RU postfix form `EARS-a фичи NNN`.
+// or the RU postfix form `EARS-a фичи NNN`. The `(?<![#\d])` lookbehind keeps an
+// Issue/PR number (`#510 (EARS-12)`) out; a matched `NNN` is still only a candidate
+// — extractSpecIds blanks the span only for a real feature other than the citer.
 const CROSS_REF_RE =
-  /\b(?:feature-)?(\d{3})\s*\(?\s*EARS-\d+(?:\.\d+)*(?:\s*(?:\/|,)\s*(?:EARS-)?\d+(?:\.\d+)*)*|\bEARS-\d+(?:\.\d+)*\s+фичи\s+(\d{3})\b/g;
+  /(?<![#\d])\b(?:feature-)?(\d{3})\s*\(?\s*EARS-\d+(?:\.\d+)*(?:\s*(?:\/|,)\s*(?:EARS-)?\d+(?:\.\d+)*)*|\bEARS-\d+(?:\.\d+)*\s+фичи\s+(\d{3})\b/g;
 
 interface Deferral {
   issue: number;
@@ -214,19 +216,25 @@ function parseDeferralKey(key: string): { feature: string | null; id: string } {
  * A cross-reference to ANOTHER feature's ids — `003 EARS-21`, `003 (EARS-21)`,
  * `feature-003 EARS-21`, `003 EARS-43/EARS-44` — is that spec's requirement, not
  * this one's, so it is blanked before the scan; under `feature:id` keying it would
- * otherwise charge the citing spec with an id it never declares.
+ * otherwise charge the citing spec with an id it never declares. Only a number in
+ * `knownFeatures` that differs from the citing spec's own counts as such a
+ * reference — an HTTP status (`500 (EARS-13.10)`), the spec's own prefix or a
+ * not-yet-specced feature number leaves the id declared.
  */
 async function extractSpecIds(
   file: string,
   feature: string | null,
+  knownFeatures: ReadonlySet<string>,
 ): Promise<Set<string>> {
   const ids = new Set<string>();
   try {
     const raw = await readFile(file, "utf8");
     const text = raw.replace(
       CROSS_REF_RE,
-      (span, pre?: string, post?: string) =>
-        (pre ?? post) === feature ? span : "",
+      (span, pre?: string, post?: string) => {
+        const cited = pre ?? post ?? "";
+        return cited !== feature && knownFeatures.has(cited) ? "" : span;
+      },
     );
     for (const m of text.matchAll(EARS_ID_RE)) ids.add(m[0]);
   } catch (e) {
@@ -294,12 +302,16 @@ async function main(): Promise<void> {
     { feature: string | null; id: string; files: string[] }
   >();
   const specIdSet = new Set<string>();
+  // Collected before extraction: blanking a cross-reference needs the full set.
   const knownFeatures = new Set<string>();
+  for (const f of specFiles) {
+    const feature = specFeature(relative(REPO_ROOT, f));
+    if (feature) knownFeatures.add(feature);
+  }
   for (const f of specFiles) {
     const rel = relative(REPO_ROOT, f);
     const feature = specFeature(rel);
-    if (feature) knownFeatures.add(feature);
-    for (const id of await extractSpecIds(f, feature)) {
+    for (const id of await extractSpecIds(f, feature, knownFeatures)) {
       specIdSet.add(id);
       const key = feature ? `${feature}:${id}` : id;
       const req = specReqs.get(key) ?? { feature, id, files: [] };

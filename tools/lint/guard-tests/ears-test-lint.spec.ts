@@ -26,6 +26,9 @@ import { caseDir, runGuard as runGuardRaw } from "./run-guard";
  * prefix in its titles (absent → feature-agnostic, the legacy default):
  *   - cross-spec-collision : a 007-scoped `EARS-4` test neither covers nor stales
  *     003's separately-numbered `EARS-4` deferral.
+ *   - cross-reference / own-reference : prose citing ANOTHER known feature's id
+ *     is not a declaration; a spec's own id behind a status, Issue, own or
+ *     unknown feature number stays declared.
  */
 const GUARD = "ears-test-lint.ts";
 const dir = (name: string) => caseDir("ears-test", name);
@@ -158,6 +161,18 @@ describe("ears-test-lint", () => {
     const { code, stdout } = runGuard(GUARD, dir("cross-reference"));
     expect(code).toBe(0);
     expect(stdout).not.toContain("WARN");
+    expect(stdout).toContain("no orphans");
+  });
+
+  // #2874 — only a REAL, FOREIGN feature number makes a span a cross-reference. A
+  // spec's own ids stay declared behind an HTTP status (`500 (EARS-2)`), an Issue
+  // number (`#2874 EARS-3`, `#510 (EARS-4)`), its own prefix (`004 EARS-5`, RU
+  // `EARS-7 фичи 004`) or a not-yet-specced feature number (`025 (EARS-6)`).
+  it("own-reference: a spec's own ids after a status, Issue, own or unknown feature number stay declared → exit 0", () => {
+    const { code, stdout } = runGuard(GUARD, dir("own-reference"));
+    expect(code).toBe(0);
+    expect(stdout).not.toContain("WARN");
+    expect(stdout).not.toContain("Orphan");
     expect(stdout).toContain("no orphans");
   });
 

@@ -10,8 +10,8 @@
 # head carries the tense tabs «Прошедшие | Будущие» («Будущие» by default), and the
 # compact month and the facet panel sit in a sticky column at 1024 px and wider.
 # Read under «— 2026-10-06» (no card action, no guest band), «— 2026-10-08» (the
-# colleagues' count on upcoming and live cards only) and «— 2026-10-12» (both
-# tenses page by ten events).
+# colleagues' count on upcoming and live cards only), «— 2026-10-12» («Прошедшие»
+# pages by ten events) and «— 2026-10-13» («Будущие» page by ten events too).
 # Route-level scenarios tagged EARS-2/3/4/7/8/9 are integration obligations of
 # EARS-1 / #1516. Their predecessor Issues prove route-independent components,
 # the API contract, query state, or state matrix and do not publish `/events`.

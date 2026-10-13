@@ -238,7 +238,7 @@ const addDays = (day, days) => {
 };
 
 /**
- * The real `pastStepFrom` (apps/api `event-horizon.ts`): the `from` that takes
+ * Mirrors the real `stepBound` (apps/api `event-horizon.ts`) on «Прошедшие»: the `from` that takes
  * in the next `PAST_STEP_EVENTS` fixture events older than `bound` — the day
  * of the step's last (oldest) one, whole days; `null` when none lies before it.
  */

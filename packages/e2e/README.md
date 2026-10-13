@@ -220,6 +220,21 @@ seed name becomes a real `@ds/db` golden account plus the env var holding its Id
 password (`DS_GOLDEN_PASSWORD_DOCTOR_*` — the seed never invents a password). A
 mistyped name fails loudly with the accepted names listed.
 
+**Parallel workers (#2805).** The suite runs `fullyParallel` on `E2E_WORKERS`
+workers (default 4, at most `GOLDEN_WORKER_POOL_SIZE` = 6 — more is refused when
+the config loads). Each worker signs in as its OWN golden account: steps and walks
+resolve a seed name through `lib/worker-golden.ts`, which picks
+`golden.workerPool.<seed>[testInfo.parallelIndex]` (worker 0 = the catalogue
+account, workers 1–5 = `golden.doctor.verified.w<n>@example.test`, all with the
+same `DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED`). A logout, a reset request or a sign-in
+code in one worker therefore never reaches another worker's session or inbox read.
+Every other journey registers its own `randomUUID` account or only reads, and the
+per-IP auth limit is already lifted on every stage slot (#2684). The derived
+navigation walk signs the doctor in once per worker and host and reuses that
+session's cookies for the remaining items (the login itself is covered by its own
+scenarios, which keep their per-scenario UI sign-in). Run serially for debugging
+with `E2E_WORKERS=1`.
+
 The sign-in adds no auth primitive: it drives the host's real login surface the
 way the shipped 008 shell journey does (`apps/portal/e2e/steps/shell.steps.ts`).
 It lives in `lib/sign-in.ts` and is the package's ONE login path — the Gherkin

@@ -62,13 +62,26 @@ accounts are provisioned by the box's `infra/dev-stand/idp` converge; the seed
 asserts they exist by requiring their subject ids in the environment and refuses
 to run otherwise, naming every missing variable at once.
 
-| Catalogue key      | Username                                | `users.role`     | Email verified | MFA at IdP | Subject id                        | Password                               |
-| ------------------ | --------------------------------------- | ---------------- | -------------- | ---------- | --------------------------------- | -------------------------------------- |
-| `doctorUnverified` | `golden.doctor.unverified@example.test` | `doctor_guest`   | no             | no         | `DS_GOLDEN_SUB_DOCTOR_UNVERIFIED` | `DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED` |
-| `doctorVerified`   | `golden.doctor.verified@example.test`   | `doctor_guest`   | yes            | no         | `DS_GOLDEN_SUB_DOCTOR_VERIFIED`   | `DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED`   |
-| `doctorMfa`        | `golden.doctor.mfa@example.test`        | `doctor_guest`   | yes            | yes        | `DS_GOLDEN_SUB_DOCTOR_MFA`        | `DS_GOLDEN_PASSWORD_DOCTOR_MFA`        |
-| `doctorDeleted`    | `golden.doctor.deleted@example.test`    | `doctor_guest`   | yes            | no         | `DS_GOLDEN_SUB_DOCTOR_DELETED`    | `DS_GOLDEN_PASSWORD_DOCTOR_DELETED`    |
-| `admin`            | `golden.admin@example.test`             | `platform_admin` | yes            | yes        | `DS_GOLDEN_SUB_ADMIN`             | `DS_GOLDEN_PASSWORD_ADMIN`             |
+| Catalogue key           | Username                                        | `users.role`     | Email verified | MFA at IdP | Subject id                                 | Password                                      |
+| ----------------------- | ----------------------------------------------- | ---------------- | -------------- | ---------- | ------------------------------------------ | --------------------------------------------- |
+| `doctorUnverified`      | `golden.doctor.unverified@example.test`         | `doctor_guest`   | no             | no         | `DS_GOLDEN_SUB_DOCTOR_UNVERIFIED`          | `DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED`        |
+| `doctorVerified`        | `golden.doctor.verified@example.test`           | `doctor_guest`   | yes            | no         | `DS_GOLDEN_SUB_DOCTOR_VERIFIED`            | `DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED`          |
+| `doctorMfa`             | `golden.doctor.mfa@example.test`                | `doctor_guest`   | yes            | yes        | `DS_GOLDEN_SUB_DOCTOR_MFA`                 | `DS_GOLDEN_PASSWORD_DOCTOR_MFA`               |
+| `doctorDeleted`         | `golden.doctor.deleted@example.test`            | `doctor_guest`   | yes            | no         | `DS_GOLDEN_SUB_DOCTOR_DELETED`             | `DS_GOLDEN_PASSWORD_DOCTOR_DELETED`           |
+| `admin`                 | `golden.admin@example.test`                     | `platform_admin` | yes            | yes        | `DS_GOLDEN_SUB_ADMIN`                      | `DS_GOLDEN_PASSWORD_ADMIN`                    |
+| `doctorVerifiedW1`…`W5` | `golden.doctor.verified.w1@example.test` … `w5` | `doctor_guest`   | yes            | no         | `DS_GOLDEN_SUB_DOCTOR_VERIFIED_W1` … `_W5` | `DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED` (shared) |
+
+**Worker pool (#2805).** The regression suite runs on parallel Playwright workers,
+and a golden account two workers sign in as at once is shared state (one worker's
+logout revokes the other's session; one worker's reset request or sign-in code
+lands in the other's inbox read). So the one golden doctor scenarios sign in as,
+`doctorVerified`, exists once per worker: worker 0 is the account itself, workers
+1–5 are `doctorVerifiedW1`…`W5` (`GOLDEN_WORKER_POOL_SIZE = 6` in `ids.ts`,
+`golden.workerPool.verifiedCardiologist[parallelIndex]`). Each copy carries the
+original's role, verified state, specialty, consents and four registrations, and
+signs in with the SAME password variable — the pool adds subjects, never secrets.
+`doctorMfa` and `admin` are not pooled: their second factor is enrolled in the
+owner's authenticator, so no automated worker signs in as them.
 
 Values live in the box environment only; nothing here is committed. The seed
 reads the subject columns; the password variables are the scenario runner's

@@ -125,6 +125,66 @@ export const GOLDEN_IDP_ACCOUNTS: readonly GoldenIdpAccount[] = Object.freeze([
     subjectEnvVar: "DS_GOLDEN_SUB_ADMIN",
     passwordEnvVar: "DS_GOLDEN_PASSWORD_ADMIN",
   }),
+  // #2805 — the worker pool of `doctorVerified` (`GOLDEN_WORKER_POOL_SIZE` in
+  // `ids.ts`): one account per parallel Playwright worker beyond worker 0. Each
+  // shares the verified doctor's PASSWORD env var — no new secret — and has its
+  // own subject. Literal entries on purpose: `tools/staging/idp.test.mjs` parses
+  // this block to prove the staging mirror has not drifted.
+  Object.freeze({
+    key: "doctorVerifiedW1" as GoldenAccountKey,
+    username: "golden.doctor.verified.w1@example.test",
+    role: "doctor_guest" as const,
+    roleKeys: ["doctor_guest"] as const,
+    emailVerified: true,
+    mfaEnrolled: false,
+    idpAccountExpected: true,
+    subjectEnvVar: "DS_GOLDEN_SUB_DOCTOR_VERIFIED_W1",
+    passwordEnvVar: "DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED",
+  }),
+  Object.freeze({
+    key: "doctorVerifiedW2" as GoldenAccountKey,
+    username: "golden.doctor.verified.w2@example.test",
+    role: "doctor_guest" as const,
+    roleKeys: ["doctor_guest"] as const,
+    emailVerified: true,
+    mfaEnrolled: false,
+    idpAccountExpected: true,
+    subjectEnvVar: "DS_GOLDEN_SUB_DOCTOR_VERIFIED_W2",
+    passwordEnvVar: "DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED",
+  }),
+  Object.freeze({
+    key: "doctorVerifiedW3" as GoldenAccountKey,
+    username: "golden.doctor.verified.w3@example.test",
+    role: "doctor_guest" as const,
+    roleKeys: ["doctor_guest"] as const,
+    emailVerified: true,
+    mfaEnrolled: false,
+    idpAccountExpected: true,
+    subjectEnvVar: "DS_GOLDEN_SUB_DOCTOR_VERIFIED_W3",
+    passwordEnvVar: "DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED",
+  }),
+  Object.freeze({
+    key: "doctorVerifiedW4" as GoldenAccountKey,
+    username: "golden.doctor.verified.w4@example.test",
+    role: "doctor_guest" as const,
+    roleKeys: ["doctor_guest"] as const,
+    emailVerified: true,
+    mfaEnrolled: false,
+    idpAccountExpected: true,
+    subjectEnvVar: "DS_GOLDEN_SUB_DOCTOR_VERIFIED_W4",
+    passwordEnvVar: "DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED",
+  }),
+  Object.freeze({
+    key: "doctorVerifiedW5" as GoldenAccountKey,
+    username: "golden.doctor.verified.w5@example.test",
+    role: "doctor_guest" as const,
+    roleKeys: ["doctor_guest"] as const,
+    emailVerified: true,
+    mfaEnrolled: false,
+    idpAccountExpected: true,
+    subjectEnvVar: "DS_GOLDEN_SUB_DOCTOR_VERIFIED_W5",
+    passwordEnvVar: "DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED",
+  }),
 ]);
 
 /** Raised when the golden accounts are not provisioned — the seed must abort. */

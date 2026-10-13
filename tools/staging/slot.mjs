@@ -1006,7 +1006,7 @@ export function slotBucketRemoveCommand(slot) {
  * production's compose interpolates. There is no per-slot tag family any more, so
  * there is nothing else for the compose file to resolve an image from.
  *
- * `goldenSubjects` are the five `DS_GOLDEN_SUB_*` ids `reset-identities` wrote to
+ * `goldenSubjects` are every `DS_GOLDEN_SUB_*` id `reset-identities` wrote to
  * {@link GOLDEN_SUBJECTS_PATH}. They are merged here rather than left to a human,
  * because `seed:golden` resolves them inside the slot's own container and aborts
  * without them. Missing ⇒ a REFUSAL naming `ds-slot reset-identities`, never a blank
@@ -1242,7 +1242,7 @@ export function resetIdentitiesLogLine({ slot, actor, now = new Date() }) {
  * `reset-identities <slot>` — the golden fixture put back the way the scenarios expect.
  *
  * The IdP half (create/delete/password/verify at the shared Zitadel) happens in the
- * `idp` effect BEFORE this plan is built, because its output — the five subject ids —
+ * `idp` effect BEFORE this plan is built, because its output — every golden subject id —
  * is this plan's input. What is left is the box-local half, and its order is the point:
  *
  * 1. write the tool-owned `DS_GOLDEN_SUB_*` file (0644, non-secret: opaque ids, never

@@ -120,6 +120,17 @@ export class GoldenDatasetError extends Error {
 }
 
 /**
+ * #2805 — the verified doctor's registrations, as the shape each worker-pool copy
+ * repeats (event + offset). Kept beside the named rows' own offsets below.
+ */
+const VERIFIED_REGISTRATION_TEMPLATE = [
+  { eventId: golden.events.upcoming.id, registeredAt: { days: -10 } },
+  { eventId: golden.events.live.id, registeredAt: { days: -5 } },
+  { eventId: golden.events.academyLive.id, registeredAt: { days: -5 } },
+  { eventId: golden.events.pastWithRecording.id, registeredAt: { days: -40 } },
+] as const;
+
+/**
  * Builds every golden row for the resolved «now» (see `now.ts`).
  *
  * Deterministic in both arguments: the same `now` and the same subject map
@@ -151,6 +162,9 @@ export function buildGoldenDataset(
 
   const doctors = golden.doctors;
   const admin = golden.admins.platform;
+  // #2805 — the pool copies of the verified doctor (index 0 is the original,
+  // already a named row above), so each parallel worker signs in as its own.
+  const verifiedPool = golden.workerPool.verifiedCardiologist.slice(1);
 
   // #2213 — the volume half. APPENDED after every named row, never interleaved:
   // the catalogue rows keep their ids, their offsets and their position, so a
@@ -194,6 +208,16 @@ export function buildGoldenDataset(
       created,
       updated: created,
     }),
+    // #2805 — the worker pool: a verified doctor per parallel worker, mirrored
+    // exactly like the original (same role, same verified state, same dates).
+    ...verifiedPool.map((copy) =>
+      mirrorUser(copy, subjectOf(copy.key), {
+        role: accountOf(copy.key).role,
+        emailVerified: true,
+        created,
+        updated: at({ days: -30 }),
+      }),
+    ),
     ...volume.users,
   ];
 
@@ -531,6 +555,21 @@ export function buildGoldenDataset(
       registeredAt: at({ days: -40 }),
       recordStatus: "active",
     },
+    // #2805 — every pool copy holds the verified doctor's four registrations, so
+    // a worker's «Мои события», live room and recording paths see what worker 0
+    // sees. Ordinals 100 + 10·n + k stay in the named range and clear of 1..5.
+    ...verifiedPool.flatMap((copy, poolIndex) =>
+      VERIFIED_REGISTRATION_TEMPLATE.map((template, k) => ({
+        id: goldenUuid(
+          GOLDEN_GROUP.registrations,
+          100 + 10 * (poolIndex + 1) + k,
+        ),
+        userId: copy.id,
+        eventId: template.eventId,
+        registeredAt: at(template.registeredAt),
+        recordStatus: "active" as const,
+      })),
+    ),
     ...volume.registrations,
   ];
 
@@ -570,6 +609,7 @@ export function buildGoldenDataset(
     doctors.verifiedCardiologist,
     doctors.mfaEnrolled,
     doctors.deleted,
+    ...verifiedPool,
   ];
   const consentRecords: NewConsentRecord[] = [
     ...consentBearers.flatMap((doctor, doctorIndex) =>
@@ -602,6 +642,13 @@ export function buildGoldenDataset(
       createdAt: created,
       updatedAt: created,
     },
+    ...verifiedPool.map((copy, poolIndex) => ({
+      id: goldenUuid(GOLDEN_GROUP.doctorSpecialties, 3 + poolIndex),
+      doctorId: copy.id,
+      specialtyName: copy.specialtyName,
+      createdAt: created,
+      updatedAt: created,
+    })),
     ...volume.doctorSpecialties,
   ];
 

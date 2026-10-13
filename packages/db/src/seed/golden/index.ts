@@ -14,6 +14,7 @@ export {
 export {
   GOLDEN_ACCOUNT_KEYS,
   GOLDEN_GROUP,
+  GOLDEN_WORKER_POOL_SIZE,
   golden,
   goldenUuid,
   isGoldenUuid,

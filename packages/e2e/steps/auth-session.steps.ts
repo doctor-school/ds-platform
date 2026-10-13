@@ -8,9 +8,10 @@ import {
 
 import { installCaptchaStub } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
-import { goldenDoctorPassword, resolveGoldenDoctor } from "../lib/golden.js";
+import { goldenDoctorPassword } from "../lib/golden.js";
 import { fetchLoginCode, mailpitUrlFor } from "../lib/mailpit.js";
 import { signInGoldenDoctor } from "../lib/sign-in.js";
+import { resolveWorkerGoldenDoctor } from "../lib/worker-golden.js";
 import { Given, Then, When, type StepWorld } from "./support/fixtures.js";
 
 const SEED = "verified-cardiologist";
@@ -33,7 +34,7 @@ async function submitDeliveredEmailCode(
   request: APIRequestContext,
   world: StepWorld,
 ): Promise<void> {
-  const doctor = resolveGoldenDoctor(SEED);
+  const doctor = resolveWorkerGoldenDoctor(SEED);
   await page.getByTestId("otp-identifier").fill(doctor.email);
   const requestedAt = new Date().toISOString();
   const requestResponse = page.waitForResponse(
@@ -62,14 +63,14 @@ Given(
   'the golden doctor "verified-cardiologist" is available for password sign-in',
   async () => {
     // Resolve the named seeded identity and require its provisioned IdP password.
-    goldenDoctorPassword(resolveGoldenDoctor(SEED));
+    goldenDoctorPassword(resolveWorkerGoldenDoctor(SEED));
   },
 );
 
 Given(
   'the golden doctor "verified-cardiologist" has a verified email for code sign-in',
   async () => {
-    expect(resolveGoldenDoctor(SEED).email).toBeTruthy();
+    expect(resolveWorkerGoldenDoctor(SEED).email).toBeTruthy();
   },
 );
 
@@ -135,7 +136,7 @@ Then(
     ).toBe(true);
     await expect(page).toHaveURL(`${world.hostBaseUrl}/account`);
     await expect(page.getByTestId("profile-email")).toHaveText(
-      resolveGoldenDoctor(world.signedInAs ?? "").email,
+      resolveWorkerGoldenDoctor(world.signedInAs ?? "").email,
     );
   },
 );
@@ -179,7 +180,7 @@ Then(
 Then(
   "the doctor's own profile is readable through the BFF",
   async ({ page, world }) => {
-    const doctor = resolveGoldenDoctor(world.signedInAs ?? "");
+    const doctor = resolveWorkerGoldenDoctor(world.signedInAs ?? "");
     // The BFF binds the session to the browser fingerprint. A Playwright API
     // request does not carry that fingerprint even when its cookie jar is shared.
     const profileResponse = await page.evaluate(async () => {
@@ -243,7 +244,7 @@ When(
   "that doctor submits a wrong password through the Academy password form",
   async ({ page, world }) => {
     expect(world.host.id).toBe("academy");
-    const doctor = resolveGoldenDoctor(SEED);
+    const doctor = resolveWorkerGoldenDoctor(SEED);
     await page.goto(`${world.hostBaseUrl}${world.host.loginPath}`, {
       waitUntil: "load",
     });
@@ -312,7 +313,7 @@ Given(
     expect(world.host.id).toBe("academy");
     await page.goto(`${world.hostBaseUrl}/account`);
     await expect(page.getByTestId("profile-email")).toHaveText(
-      resolveGoldenDoctor(world.signedInAs ?? "").email,
+      resolveWorkerGoldenDoctor(world.signedInAs ?? "").email,
     );
     const session = (await page.context().cookies()).find(
       (cookie) => cookie.name === SESSION_COOKIE,

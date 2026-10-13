@@ -94,9 +94,9 @@ import {
 /**
  * First ordinal the volume half may use, in every group.
  *
- * The named catalogue's highest ordinal is 33 (`consent_records`). A four-digit
- * floor leaves the catalogue room to grow by three orders of magnitude before
- * the two halves could ever meet, and it makes «is this a volume row?» a
+ * The named catalogue's highest ordinal is 153 (`registrations` of the #2805
+ * worker pool, `100 + 10·n + k`). A four-digit floor leaves the catalogue room
+ * to grow before the two halves could ever meet, and it makes «is this a volume row?» a
  * question the tests can answer from the id alone.
  */
 export const GOLDEN_VOLUME_ORDINAL_BASE = 1000;

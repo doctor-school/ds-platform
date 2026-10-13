@@ -202,7 +202,8 @@ describe("#2063 golden IdP preconditions", () => {
   it("never carries a credential value, only the variable that holds it", () => {
     for (const account of GOLDEN_IDP_ACCOUNTS) {
       expect(account.passwordEnvVar).toMatch(/^DS_GOLDEN_PASSWORD_[A-Z_]+$/);
-      expect(account.subjectEnvVar).toMatch(/^DS_GOLDEN_SUB_[A-Z_]+$/);
+      // Digits allowed for the #2805 worker pool (`…_VERIFIED_W1`).
+      expect(account.subjectEnvVar).toMatch(/^DS_GOLDEN_SUB_[A-Z0-9_]+$/);
     }
   });
 });
@@ -2231,11 +2232,20 @@ describe("#2213 golden volume content and media", () => {
   }, 30_000);
 });
 
-function collectIds(node: unknown, out: string[] = []): string[] {
+function collectIds(
+  node: unknown,
+  out: string[] = [],
+  // #2805 — `golden.workerPool.verifiedCardiologist[0]` IS
+  // `golden.doctors.verifiedCardiologist` (the same frozen object): one identity
+  // reached by two paths is an alias, not a collision, so each object counts once.
+  seen: WeakSet<object> = new WeakSet(),
+): string[] {
   if (node && typeof node === "object") {
+    if (seen.has(node)) return out;
+    seen.add(node);
     for (const [key, value] of Object.entries(node)) {
       if (key === "id" && typeof value === "string") out.push(value);
-      else collectIds(value, out);
+      else collectIds(value, out, seen);
     }
   }
   return out;

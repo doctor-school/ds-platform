@@ -1,5 +1,6 @@
+import type * as React from "react";
 import { useForm, type ControllerRenderProps } from "react-hook-form";
-import { render, screen, cleanup } from "@testing-library/react";
+import { act, render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +9,10 @@ import { Form, FormField } from "../form";
 import { OtpField } from "./otp-field";
 
 afterEach(cleanup);
+
+/** jsdom dispatches focus/selection events on a 0 ms timer — let them land before unmount. */
+const drainSelectionEvents = () =>
+  act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
 
 /**
  * Regression harness for #212 / #211. Drives `<OtpField>` exactly
@@ -28,11 +33,13 @@ function SlottedHarness({
   charset = "numeric",
   onValue,
   onComplete,
+  rejection,
 }: {
   length: number;
   charset?: "alphanumeric" | "numeric";
   onValue?: (v: string) => void;
   onComplete?: () => void;
+  rejection?: React.ReactNode;
 }) {
   const form = useForm<{ code: string }>({ defaultValues: { code: "" } });
   return (
@@ -49,6 +56,7 @@ function SlottedHarness({
               charset={charset}
               label="Code"
               onComplete={onComplete}
+              rejection={rejection}
             />
           );
         }}
@@ -268,5 +276,57 @@ describe("OtpField variant=slotted", () => {
     expect(onComplete).not.toHaveBeenCalled();
     await user.keyboard("8");
     expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it("003 EARS-22 (#2881): a new rejection empties every cell and puts the caret back in the first", async () => {
+    const user = userEvent.setup();
+    let latest = "";
+    const { rerender } = render(
+      <SlottedHarness length={6} onValue={(v) => (latest = v)} />,
+    );
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    await user.click(input);
+    await user.keyboard("482913");
+    expect(latest).toBe("482913");
+    input.blur();
+
+    rerender(
+      <SlottedHarness
+        length={6}
+        onValue={(v) => (latest = v)}
+        rejection="refused"
+      />,
+    );
+
+    expect(latest).toBe("");
+    expect(input).toHaveValue("");
+    expect(input).toHaveFocus();
+    expect(input.selectionStart).toBe(0);
+    await drainSelectionEvents();
+  });
+
+  it("003 EARS-22 (#2881): a rejection already standing at mount leaves the cells alone", async () => {
+    const user = userEvent.setup();
+    let latest = "";
+    const { rerender } = render(
+      <SlottedHarness
+        length={6}
+        onValue={(v) => (latest = v)}
+        rejection="refused"
+      />,
+    );
+    const input = screen.getByRole("textbox");
+    await user.click(input);
+    await user.keyboard("48");
+    // The same refusal re-rendered is not a new one.
+    rerender(
+      <SlottedHarness
+        length={6}
+        onValue={(v) => (latest = v)}
+        rejection="refused"
+      />,
+    );
+    expect(latest).toBe("48");
+    await drainSelectionEvents();
   });
 });

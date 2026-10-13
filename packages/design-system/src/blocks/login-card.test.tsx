@@ -6,6 +6,7 @@ import {
   render,
   screen,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FieldValues, Resolver } from "react-hook-form";
 
@@ -95,6 +96,7 @@ function setup(
     onChangeMethod?: () => void;
     onMethodChange?: (method: LoginCardMethod) => void;
     passwordError?: React.ReactNode;
+    screenError?: React.ReactNode;
     sentIdentifier?: string | null;
     resendNonce?: number;
     defaultMethod?: LoginCardMethod;
@@ -134,6 +136,7 @@ function Card(
         ...(overrides.channels ? { channels: overrides.channels } : {}),
         sentIdentifier: overrides.sentIdentifier ?? null,
         resendNonce: overrides.resendNonce ?? 0,
+        screenError: overrides.screenError,
         captchaSlot: <div data-testid="otp-captcha" />,
         onRequest: overrides.onRequest ?? vi.fn(),
         onResend: overrides.onResend ?? vi.fn(),
@@ -145,6 +148,10 @@ function Card(
 }
 
 afterEach(cleanup);
+
+/** jsdom dispatches focus/selection events on a 0 ms timer — let them land before unmount. */
+const drainSelectionEvents = () =>
+  act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
 
 describe("<LoginCard>", () => {
   it("renders every visible string from the copy prop, with the title as the page h1", () => {
@@ -602,3 +609,42 @@ describe("003 EARS-55 <LoginCard> SMS hint slot", () => {
     expect(screen.queryByText("copy.otp.channelSmsHint")).toBeNull();
   });
 });
+
+describe("#2881 <LoginCard> a refused sign-in code", () => {
+  it("003 EARS-22: the refusal empties the cells and refocuses the first, so the confirm button cannot send that code again", async () => {
+    const onVerify = vi.fn();
+    const { rerender } = setup({
+      sentIdentifier: "doc@example.com",
+      onVerify,
+    });
+    const user = userEvent.setup();
+    const input = screen.getByRole("textbox");
+    await user.click(input);
+    await user.keyboard("482913");
+    expect(onVerify).toHaveBeenCalledTimes(1);
+    expect(onVerify).toHaveBeenLastCalledWith(
+      expect.objectContaining({ code: "482913" }),
+    );
+    input.blur();
+
+    rerender(
+      <Card
+        sentIdentifier="doc@example.com"
+        onVerify={onVerify}
+        screenError="copy.refused"
+      />,
+    );
+
+    expect(screen.getByText("copy.refused")).toBeInTheDocument();
+    expect(input).toHaveValue("");
+    expect(input).toHaveFocus();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("otp-verify"));
+    });
+    expect(
+      onVerify.mock.calls.filter(([values]) => values.code === "482913"),
+    ).toHaveLength(1);
+    await drainSelectionEvents();
+  });
+});
+

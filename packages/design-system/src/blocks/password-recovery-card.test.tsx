@@ -81,7 +81,14 @@ function setup(
     requestResolver?: Resolver<PasswordRecoveryRequestValues>;
   } = {},
 ) {
-  return render(
+  return render(<Recovery {...overrides} />);
+}
+
+/** The card under test — a component so a test can rerender it with new props. */
+function Recovery(
+  overrides: Parameters<typeof setup>[0] & object,
+): React.ReactElement {
+  return (
     <PasswordRecoveryCard
       copy={copy}
       stage={overrides.stage ?? "request"}
@@ -107,11 +114,15 @@ function setup(
         notice: overrides.notice,
         captchaSlot: <div data-testid="resend-captcha" />,
       }}
-    />,
+    />
   );
 }
 
 afterEach(cleanup);
+
+/** jsdom dispatches focus/selection events on a 0 ms timer — let them land before unmount. */
+const drainSelectionEvents = () =>
+  act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
 
 describe("<PasswordRecoveryCard>", () => {
   it("renders every visible string from the copy prop, with the title as the page h1", () => {
@@ -397,3 +408,38 @@ describe("003 EARS-55 <PasswordRecoveryCard> identifier hint slot", () => {
     ).toBeTruthy();
   });
 });
+
+describe("#2881 <PasswordRecoveryCard> a refused reset code", () => {
+  it("003 EARS-22: the refusal empties the code cells and refocuses the first; the new password stays", async () => {
+    const onComplete = vi.fn();
+    const { rerender } = setup({
+      stage: "complete",
+      identifier: "doc@example.com",
+      onComplete,
+    });
+    const code = screen.getByLabelText("copy.complete.codeLabel");
+    const password = screen.getByLabelText("copy.complete.newPasswordLabel");
+    fireEvent.change(code, { target: { value: "482913" } });
+    fireEvent.change(password, { target: { value: "Str0ng!pass" } });
+    await act(async () => {
+      fireEvent.submit(code.closest("form")!);
+    });
+    expect(onComplete).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <Recovery
+        stage="complete"
+        identifier="doc@example.com"
+        onComplete={onComplete}
+        completeError="copy.refused"
+      />,
+    );
+
+    expect(screen.getByTestId("reset-error")).toHaveTextContent("copy.refused");
+    expect(code).toHaveValue("");
+    expect(code).toHaveFocus();
+    expect(password).toHaveValue("Str0ng!pass");
+    await drainSelectionEvents();
+  });
+});
+

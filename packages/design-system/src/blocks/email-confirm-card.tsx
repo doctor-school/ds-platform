@@ -224,6 +224,7 @@ export function EmailConfirmCard({
               succeeded={succeeded}
               succeededLabel={copy.codeAccepted}
               notice={resend.notice}
+              rejection={error}
               onComplete={onComplete}
               onSubmit={submit}
               onResend={resend.onResend}

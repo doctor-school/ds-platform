@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import type { ControllerRenderProps, FieldValues } from "react-hook-form";
 
 import { FormControl, FormItem, FormLabel, FormMessage } from "../form";
@@ -34,6 +35,15 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "../input-otp";
  * caller's `onComplete` is responsible for the `isSubmitting` guard (it already
  * holds the RHF form), so a double network call cannot fire if completion races a
  * manual click / Enter — identical to the pre-#197 inline logic.
+ *
+ * Refused code (#2881): a typed code reaches the server exactly once. When the
+ * caller reports a NEW refusal through `rejection`, the field empties every
+ * cell and puts the caret back in the first — so neither the confirm button
+ * nor Enter can send the refused code again, and the next digit typed starts a
+ * fresh code. The refusal itself stays wherever the caller draws it. The value
+ * seen last is compared, not a first-run flag (StrictMode runs the mount effect
+ * twice): a refusal already standing at mount, or re-rendered unchanged, is not
+ * a new one.
  */
 const digitsOnly = (raw: string) => raw.replace(/\D/g, "");
 
@@ -58,6 +68,7 @@ export function OtpField<T extends FieldValues>({
   label,
   charset,
   onComplete,
+  rejection,
 }: {
   field: ControllerRenderProps<T>;
   /** Fixed code length — 6 for every mailed/texted code, the TOTP length for admin MFA. */
@@ -80,13 +91,43 @@ export function OtpField<T extends FieldValues>({
    * that wants manual-only submit can omit it.
    */
   onComplete?: (() => void) | undefined;
+  /**
+   * The caller's refusal of the submitted code (its already-localized error).
+   * Each new non-empty value empties the cells and refocuses the first (#2881).
+   */
+  rejection?: React.ReactNode;
 }) {
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+  const { ref: fieldRef, onChange: fieldOnChange } = field;
+  const bindInput = React.useCallback(
+    (element: HTMLInputElement | null) => {
+      inputRef.current = element;
+      fieldRef(element);
+    },
+    [fieldRef],
+  );
+
+  const seenRejection = React.useRef(rejection);
+  React.useEffect(() => {
+    if (seenRejection.current === rejection) return;
+    seenRejection.current = rejection;
+    if (rejection === null || rejection === undefined || rejection === false)
+      return;
+    fieldOnChange("");
+    const input = inputRef.current;
+    if (!input) return;
+    input.focus();
+    input.setSelectionRange(0, 0);
+    // Keyed only on the refusal — the field handles are stable per render.
+  }, [rejection]);
+
   return (
     <FormItem>
       <FormLabel>{label}</FormLabel>
       <FormControl>
         <InputOTP
           {...field}
+          ref={bindInput}
           maxLength={length}
           autoComplete="one-time-code"
           // #1110: the mobile keyboard the widget requests — the digit keypad for

@@ -350,6 +350,7 @@ function RecoveryCompleteForm({
   cooldownSeconds,
   resolver,
   onSubmit,
+  error,
   resendPending = false,
   resendNonce,
   onResend,
@@ -419,6 +420,9 @@ function RecoveryCompleteForm({
               length={otpLength}
               charset="numeric"
               label={copy.codeLabel}
+              // #2881 — a refused code is emptied so it is never sent again;
+              // the new password is kept.
+              rejection={error}
             />
           )}
         />

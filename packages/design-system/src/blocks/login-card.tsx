@@ -515,6 +515,7 @@ function OtpLogin({
   verifyResolver,
   sentIdentifier,
   resendNonce,
+  screenError,
   channels,
   channel,
   onChannelChange,
@@ -678,6 +679,7 @@ function OtpLogin({
             captchaSlot={captchaSlot}
             cooldownSeconds={resendCooldownSeconds}
             resendNonce={resendNonce}
+            rejection={screenError}
             onVerify={onVerify}
             onResend={() => onResend({ identifier: sentIdentifier, channel })}
             onChangeMethod={onChangeMethod}
@@ -708,6 +710,7 @@ function OtpVerifyForm({
   captchaSlot,
   cooldownSeconds,
   resendNonce,
+  rejection,
   onVerify,
   onResend,
   onChangeMethod,
@@ -720,6 +723,8 @@ function OtpVerifyForm({
   captchaSlot?: React.ReactNode;
   cooldownSeconds: number;
   resendNonce: number;
+  /** The focus screen's refusal — a new one clears the typed code (#2881). */
+  rejection?: React.ReactNode;
   onVerify: (values: LoginCardOtpVerifyValues) => Promise<void> | void;
   onResend: () => void;
   onChangeMethod: () => void;
@@ -775,6 +780,7 @@ function OtpVerifyForm({
             resendNonce={resendNonce}
             isSubmitting={verifyForm.formState.isSubmitting}
             notice={resent ? copy.resentTo(identifier) : null}
+            rejection={rejection}
             onComplete={onCodeComplete}
             onSubmit={submit}
             onResend={onResend}

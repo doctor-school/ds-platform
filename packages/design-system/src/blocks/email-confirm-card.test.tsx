@@ -73,6 +73,10 @@ function setup(overrides: Parameters<typeof props>[0] = {}) {
 
 afterEach(cleanup);
 
+/** jsdom dispatches focus/selection events on a 0 ms timer — let them land before unmount. */
+const drainSelectionEvents = () =>
+  act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+
 describe("<EmailConfirmCard>", () => {
   it("renders every visible string from the copy prop, with the title as the page h1", () => {
     setup();
@@ -308,3 +312,49 @@ describe("<EmailConfirmCard> canvas code step", () => {
     }
   });
 });
+
+/**
+ * #2881 — the host as `/verify` runs it: the plate is cleared when a code is
+ * sent, and a refusal comes back as an already-localized string.
+ */
+function RefusingHost({ onSubmit }: { onSubmit: (code: string) => void }) {
+  const [error, setError] = React.useState<string | null>(null);
+  return (
+    <EmailConfirmCard
+      {...props({
+        error,
+        onSubmit: async (values) => {
+          setError(null);
+          onSubmit(values.code);
+          await Promise.resolve();
+          setError("copy.refused");
+        },
+      })}
+    />
+  );
+}
+
+describe("#2881 <EmailConfirmCard> a refused code", () => {
+  it("003 EARS-22: a typed code reaches the host once; the refusal empties the cells, refocuses the first and keeps the plate", async () => {
+    const sent: string[] = [];
+    render(<RefusingHost onSubmit={(code) => sent.push(code)} />);
+    const user = userEvent.setup();
+    const input = screen.getByRole("textbox");
+    await user.click(input);
+    await user.keyboard("482913");
+
+    expect(await screen.findByTestId("verify-error")).toHaveTextContent(
+      "copy.refused",
+    );
+    expect(input).toHaveValue("");
+    expect(input).toHaveFocus();
+
+    // The confirm button no longer carries the refused code.
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("verify-submit"));
+    });
+    expect(sent.filter((code) => code === "482913")).toHaveLength(1);
+    await drainSelectionEvents();
+  });
+});
+

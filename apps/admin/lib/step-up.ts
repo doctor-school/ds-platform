@@ -11,6 +11,22 @@
  * request once and sends it again. Neither body carries a secret (the temporary
  * password exists only in a grant RESPONSE), so `sessionStorage` is a fit place.
  *
+ * The replay is bound and bounded, because a privileged action sent on its own
+ * must be the one this administrator just confirmed with a code:
+ * - **bound to the admin session** — the saved request carries the session's
+ *   CSRF token (`__Host-ds_admin_csrf`, minted per session at sign-in and already
+ *   readable by the console), and only the same session gets it back; a request
+ *   saved under another session — another administrator signed in in this tab —
+ *   is discarded;
+ * - **only after a confirmed code** — the code screen marks the confirmation once
+ *   `mfa/reverify` answers `200` ({@link markStepUpConfirmed}); without a mark
+ *   newer than the saved request (an abandoned code screen, a later plain visit
+ *   to the section) the request is discarded, never sent;
+ * - **within {@link STEP_UP_REPLAY_TTL_MS}**, shorter than the 30-minute step-up
+ *   window;
+ * - **cleared on sign-out** — `authProvider.logout`, which the 401 path also
+ *   runs ({@link clearStepUpRequest}).
+ *
  * Storage is optional: blocked or cleared, nothing is saved, the screen opens as
  * usual on return and the administrator repeats the action — inside the fresh
  * 30-minute window, so it asks for no code.
@@ -18,6 +34,24 @@
 
 /** The one key the pending request lives under. */
 export const STEP_UP_STORAGE_KEY = "ds-admin:step-up-request";
+
+/** The one-shot mark the code screen leaves after a successful re-verification. */
+export const STEP_UP_CONFIRMED_KEY = "ds-admin:step-up-confirmed";
+
+/**
+ * How long a saved request may wait for its code — well inside the 30-minute
+ * step-up window (ADR-0001 §10), long enough to open the authenticator.
+ */
+export const STEP_UP_REPLAY_TTL_MS = 10 * 60_000;
+
+/**
+ * Who is asking and when: `owner` is the current admin session's binding (its
+ * CSRF token, `adminCsrfToken()`), `null` when no session is readable.
+ */
+export interface StepUpReplayScope {
+  owner: string | null;
+  now: number;
+}
 
 /** The `Storage` subset this module touches — `window.sessionStorage` fits it. */
 export interface StepUpStorage {
@@ -33,6 +67,12 @@ export interface SavedStepUpRequest {
   body: unknown;
   /** What the screen needs to restore the form beside the body (labels, …). */
   context: Record<string, unknown>;
+}
+
+/** The saved request as stored: bound to its session and stamped with its time. */
+export interface BoundStepUpRequest extends SavedStepUpRequest {
+  owner: string;
+  savedAt: number;
 }
 
 /** Where a re-verification lands when no valid return path came with it. */
@@ -127,52 +167,107 @@ export function reverifyReturnTo(raw: string | null): string {
   return adminPathOf(raw) ?? FALLBACK_RETURN;
 }
 
-/** Save the refused request; `false` when there is no usable storage. */
+/**
+ * Save the refused request, bound to the current session; `false` when there is
+ * no usable storage or no session to bind it to. A confirmation left from an
+ * earlier code is dropped, so only a code entered after this save counts.
+ */
 export function saveStepUpRequest(
   storage: StepUpStorage | null,
   request: SavedStepUpRequest,
+  scope: StepUpReplayScope,
 ): boolean {
-  if (!storage) return false;
+  if (!storage || !scope.owner) return false;
+  const bound: BoundStepUpRequest = {
+    ...request,
+    owner: scope.owner,
+    savedAt: scope.now,
+  };
   try {
-    storage.setItem(STEP_UP_STORAGE_KEY, JSON.stringify(request));
+    storage.removeItem(STEP_UP_CONFIRMED_KEY);
+    storage.setItem(STEP_UP_STORAGE_KEY, JSON.stringify(bound));
     return true;
   } catch {
     return false;
   }
 }
 
+/** The code screen, after `mfa/reverify` answered `200`: the code is confirmed. */
+export function markStepUpConfirmed(
+  storage: StepUpStorage | null,
+  now: number,
+): void {
+  if (!storage) return;
+  try {
+    storage.setItem(STEP_UP_CONFIRMED_KEY, JSON.stringify({ at: now }));
+  } catch {
+    // No storage: nothing was saved either, so there is nothing to replay.
+  }
+}
+
+/** Sign-out: drop the saved request and its confirmation. */
+export function clearStepUpRequest(storage: StepUpStorage | null): void {
+  if (!storage) return;
+  try {
+    storage.removeItem(STEP_UP_STORAGE_KEY);
+    storage.removeItem(STEP_UP_CONFIRMED_KEY);
+  } catch {
+    // Blocked storage holds nothing to clear.
+  }
+}
+
+function parsed(raw: string | null): unknown {
+  if (raw === null) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function isBoundRequest(value: unknown): value is BoundStepUpRequest {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Partial<BoundStepUpRequest>;
+  return (
+    v.method === "POST" &&
+    typeof v.path === "string" &&
+    typeof v.owner === "string" &&
+    typeof v.savedAt === "number"
+  );
+}
+
 /**
- * Read the saved request for `path` and remove it, so it is sent again once.
- * A request saved for another path stays for its own screen.
+ * The saved request for `path`, read once — or `null`. It comes back only for
+ * the session that saved it, after a code confirmed since it was saved, within
+ * {@link STEP_UP_REPLAY_TTL_MS}; any other saved request for `path` is
+ * discarded together with the confirmation. A request saved for another path
+ * stays for its own screen.
  */
 export function takeStepUpRequest(
   storage: StepUpStorage | null,
   path: string,
-): SavedStepUpRequest | null {
+  scope: StepUpReplayScope,
+): BoundStepUpRequest | null {
   if (!storage) return null;
   try {
     const raw = storage.getItem(STEP_UP_STORAGE_KEY);
     if (raw === null) return null;
-    let saved: unknown;
-    try {
-      saved = JSON.parse(raw);
-    } catch {
-      storage.removeItem(STEP_UP_STORAGE_KEY);
-      return null;
-    }
-    if (
-      typeof saved !== "object" ||
-      saved === null ||
-      (saved as { method?: unknown }).method !== "POST" ||
-      typeof (saved as { path?: unknown }).path !== "string"
-    ) {
-      storage.removeItem(STEP_UP_STORAGE_KEY);
-      return null;
-    }
-    if ((saved as SavedStepUpRequest).path !== path) return null;
-    storage.removeItem(STEP_UP_STORAGE_KEY);
-    const request = saved as SavedStepUpRequest;
-    return { ...request, context: request.context ?? {} };
+    const saved = parsed(raw);
+    if (isBoundRequest(saved) && saved.path !== path) return null;
+    const confirmed = parsed(storage.getItem(STEP_UP_CONFIRMED_KEY)) as {
+      at?: unknown;
+    } | null;
+    clearStepUpRequest(storage);
+    if (!isBoundRequest(saved)) return null;
+    const confirmedAt =
+      typeof confirmed?.at === "number" ? confirmed.at : Number.NaN;
+    const replayable =
+      scope.owner !== null &&
+      saved.owner === scope.owner &&
+      confirmedAt >= saved.savedAt &&
+      confirmedAt <= scope.now &&
+      scope.now - saved.savedAt <= STEP_UP_REPLAY_TTL_MS;
+    return replayable ? { ...saved, context: saved.context ?? {} } : null;
   } catch {
     return null;
   }

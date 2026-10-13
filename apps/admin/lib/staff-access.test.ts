@@ -180,6 +180,15 @@ describe("047 EARS-3/4/5/6 grant answers", () => {
     ).toEqual({ kind: "unverified" });
   });
 
+  it("047 EARS-3: an email several accounts share is its own refusal", () => {
+    expect(
+      grantRefusal(
+        { statusCode: 409, errorCode: "STAFF_GRANT_EMAIL_AMBIGUOUS" },
+        context,
+      ),
+    ).toEqual({ kind: "ambiguous" });
+  });
+
   it("047 EARS-3: a registrar bound elsewhere is named with the event it is bound to", () => {
     expect(
       grantRefusal(

@@ -4,6 +4,7 @@ import type { AuthProvider } from "@refinedev/core";
 import { adminLogin, adminLogout, readAdminAuthState } from "@/lib/admin-auth";
 import { clearAdminSession } from "@/lib/admin-session-cache";
 import { loginFailureMessage } from "@/lib/login-failure";
+import { browserStepUpStorage, clearStepUpRequest } from "@/lib/step-up";
 
 /**
  * Refine auth provider over the **011 admin session tier**.
@@ -79,6 +80,9 @@ export const authProvider: AuthProvider = {
     // 044 EARS-20: the cached session read (nav + `can`) belongs to the principal
     // who just left; the next sign-in in this tab re-reads its own.
     clearAdminSession();
+    // 047 EARS-8: a grant the step-up interrupted belongs to this session only;
+    // it is never sent under the next one (the 401 path signs out through here).
+    clearStepUpRequest(browserStepUpStorage());
     return { success: true, redirectTo: LOGIN_PATH };
   },
 

@@ -50,6 +50,7 @@ import {
   saveStepUpRequest,
   stepUpChallengeHref,
 } from "@/lib/step-up";
+import { adminCsrfToken } from "@/lib/admin-auth";
 import { useServerCombobox } from "@/lib/use-server-combobox";
 import type { SlotProps } from "@/components/combobox-slot-props";
 
@@ -181,12 +182,16 @@ export function StaffAccessGrantForm({
               STAFF_ACCESS_GRANT_ENDPOINT,
             );
             if (href) {
-              saveStepUpRequest(browserStepUpStorage(), {
-                method: "POST",
-                path: STAFF_ACCESS_GRANTS_PATH,
-                body,
-                context: { fields: values, eventLabel },
-              });
+              saveStepUpRequest(
+                browserStepUpStorage(),
+                {
+                  method: "POST",
+                  path: STAFF_ACCESS_GRANTS_PATH,
+                  body,
+                  context: { fields: values, eventLabel },
+                },
+                { owner: adminCsrfToken(), now: Date.now() },
+              );
               router.push(href);
               return;
             }
@@ -215,6 +220,8 @@ export function StaffAccessGrantForm({
     switch (value.kind) {
       case "unverified":
         return t("staffAccess.grant.errors.unverified");
+      case "ambiguous":
+        return t("staffAccess.grant.errors.ambiguous");
       case "alreadyComplete":
         return t("staffAccess.grant.errors.alreadyComplete");
       case "boundElsewhere":

@@ -24,6 +24,7 @@ import {
   type GrantFormFields,
   type StaffAccessCells,
 } from "@/lib/staff-access";
+import { adminCsrfToken } from "@/lib/admin-auth";
 import { browserStepUpStorage, takeStepUpRequest } from "@/lib/step-up";
 import { useAdminAccess } from "@/lib/use-admin-access";
 
@@ -42,7 +43,9 @@ import { useAdminAccess } from "@/lib/use-admin-access";
  * «Выдать доступ» opens the grant panel (`StaffAccessGrantForm`). A grant the
  * step-up interrupted (047 EARS-8) comes back here from the code screen: the
  * saved request is read once on load and handed to the panel, which restores
- * the entered values and sends it again.
+ * the entered values and sends it again — only for the session that saved it,
+ * after a confirmed code and within the replay window (`lib/step-up.ts`); any
+ * other saved request is discarded.
  *
  * The per-row «Отозвать» belongs to the revocation slice (#2902); no row action
  * is drawn until it works.
@@ -58,6 +61,7 @@ export default function StaffAccessPage() {
     const saved = takeStepUpRequest(
       browserStepUpStorage(),
       STAFF_ACCESS_GRANTS_PATH,
+      { owner: adminCsrfToken(), now: Date.now() },
     );
     const fields = saved?.context.fields as
       Partial<GrantFormFields> | undefined;

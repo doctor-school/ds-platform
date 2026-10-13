@@ -61,6 +61,19 @@ export class IdpInvalidArgumentError extends Error {
 }
 
 /**
+ * 047 EARS-3 — more than one IdP account holds the email an administrator's
+ * read looked up. The IdP does not enforce email uniqueness across users, so
+ * picking one would act on whichever came first; the caller refuses instead
+ * (`STAFF_GRANT_EMAIL_AMBIGUOUS`) with nothing changed.
+ */
+export class IdpAmbiguousEmailError extends Error {
+  constructor(message = "more than one IdP account holds this email") {
+    super(message);
+    this.name = "IdpAmbiguousEmailError";
+  }
+}
+
+/**
  * The IdP could not be reached or returned a genuine **infra fault** (5xx /
  * network) (#202) — transient and not the caller's fault. The service maps this
  * to a 503 "service temporarily unavailable" (the project's actionable-errors
@@ -738,7 +751,10 @@ export interface IdpClient {
    * missing project config) is a real fault and throws, so it surfaces loudly
    * rather than silently leaving a registered user un-authorized.
    */
-  grantProjectRole(sub: string, roleKey: string | readonly string[]): Promise<void>;
+  grantProjectRole(
+    sub: string,
+    roleKey: string | readonly string[],
+  ): Promise<void>;
   /**
    * 011 EARS-13: the Zitadel **project roles** `sub` currently holds.
    *
@@ -793,7 +809,8 @@ export interface IdpClient {
    * `null` when no account holds it. Unlike the reset-path lookups, which fail
    * closed to `null` for enumeration safety, this one is an administrator's
    * read and fails LOUDLY: reading «no account» on an outage would create a
-   * second account for an existing person.
+   * second account for an existing person. More than one account on the email
+   * is {@link IdpAmbiguousEmailError}, never the first of them.
    */
   findUserByEmail(email: string): Promise<string | null>;
   /**

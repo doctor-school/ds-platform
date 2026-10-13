@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Logger } from "@nestjs/common";
 import type { Mailer } from "../../mailer/mailer.types.js";
 import {
+  IdpAmbiguousEmailError,
   IdpInvalidArgumentError,
   IdpPasswordPolicyError,
   IdpUnavailableError,
@@ -2232,7 +2233,9 @@ export class ZitadelIdpClient implements IdpClient {
    * 047 EARS-4: the subject holding `email`, through the same User v2 search the
    * reset paths use ({@link resolveUserId}) — but failing LOUDLY, because the
    * caller creates an account on `null` and an outage read as «nobody» would
-   * create a second account for an existing person.
+   * create a second account for an existing person. Zitadel does not keep
+   * emails unique across users, so more than one account on the address is
+   * {@link IdpAmbiguousEmailError} — never the first hit (047 EARS-3).
    */
   async findUserByEmail(email: string): Promise<string | null> {
     let res: Awaited<ReturnType<FetchLike>>;
@@ -2253,7 +2256,14 @@ export class ZitadelIdpClient implements IdpClient {
       );
     }
     const data = (await res.json()) as { result?: Array<{ userId?: string }> };
-    return data.result?.[0]?.userId ?? null;
+    const subs = new Set(
+      (data.result ?? [])
+        .map((user) => user.userId)
+        .filter((id): id is string => typeof id === "string" && id !== ""),
+    );
+    if (subs.size > 1) throw new IdpAmbiguousEmailError();
+    const [sub] = subs;
+    return sub ?? null;
   }
 
   /** 047 EARS-6: {@link hasPassword}, failing loudly instead of to `null`. */

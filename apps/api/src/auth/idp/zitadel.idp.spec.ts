@@ -5,6 +5,7 @@ import { ZitadelIdpClient } from "./zitadel.idp.js";
 import { FakeMailer } from "../../mailer/mailer.fake.js";
 import { InMemoryOtpChallengeStore } from "./otp-challenge-store.fake.js";
 import {
+  IdpAmbiguousEmailError,
   IdpInvalidArgumentError,
   IdpPasswordPolicyError,
   IdpUnavailableError,
@@ -3676,6 +3677,26 @@ describe("ZitadelIdpClient 047 staff-access calls wire shape (V-8)", () => {
     await expect(
       client(unreachable.fetchImpl).findUserByEmail("staff@ds.test"),
     ).rejects.toBeInstanceOf(IdpUnavailableError);
+  });
+
+  it("047 EARS-3: findUserByEmail refuses an email that more than one account holds instead of picking the first", async () => {
+    const two = routedFetch({
+      "/v2/users": {
+        json: { result: [{ userId: "u-7" }, { userId: "u-8" }] },
+      },
+    });
+    await expect(
+      client(two.fetchImpl).findUserByEmail("staff@ds.test"),
+    ).rejects.toBeInstanceOf(IdpAmbiguousEmailError);
+    // The same account listed twice is still one account.
+    const repeated = routedFetch({
+      "/v2/users": {
+        json: { result: [{ userId: "u-7" }, { userId: "u-7" }] },
+      },
+    });
+    await expect(
+      client(repeated.fetchImpl).findUserByEmail("staff@ds.test"),
+    ).resolves.toBe("u-7");
   });
 
   it("047 EARS-6: userHasPassword reads the authentication methods and fails loud when it cannot", async () => {

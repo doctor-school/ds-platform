@@ -151,6 +151,7 @@ export function grantOutcome(data: unknown): GrantOutcome | null {
 export type GrantRefusal =
   | { kind: "stepUp"; stepUpUrl: string }
   | { kind: "unverified" }
+  | { kind: "ambiguous" }
   | { kind: "alreadyComplete" }
   /** The event the person is bound to, read off the loaded list when it holds it. */
   | { kind: "boundElsewhere"; eventTitle: string | null }
@@ -179,6 +180,8 @@ export function grantRefusal(
   switch (errorCode) {
     case "STAFF_GRANT_EMAIL_UNVERIFIED":
       return { kind: "unverified" };
+    case "STAFF_GRANT_EMAIL_AMBIGUOUS":
+      return { kind: "ambiguous" };
     case "GRANT_ALREADY_COMPLETE":
       return { kind: "alreadyComplete" };
     case "EVENT_NOT_FOUND":

@@ -10,6 +10,7 @@ import {
 import {
   DOCTOR_GUEST_ROLE,
   IDP_CLIENT,
+  IdpAmbiguousEmailError,
   IdpUnavailableError,
   type IdpClient,
   type IdpProjectGrant,
@@ -29,7 +30,8 @@ export type StaffAccessRefusalCode =
   | "EVENT_NOT_FOUND"
   | "REGISTRAR_BOUND_ELSEWHERE"
   | "GRANT_ALREADY_COMPLETE"
-  | "STAFF_GRANT_EMAIL_UNVERIFIED";
+  | "STAFF_GRANT_EMAIL_UNVERIFIED"
+  | "STAFF_GRANT_EMAIL_AMBIGUOUS";
 
 const REFUSALS: Record<
   StaffAccessRefusalCode,
@@ -50,6 +52,10 @@ const REFUSALS: Record<
   STAFF_GRANT_EMAIL_UNVERIFIED: {
     status: HttpStatus.CONFLICT,
     message: "the email of this account is not verified",
+  },
+  STAFF_GRANT_EMAIL_AMBIGUOUS: {
+    status: HttpStatus.CONFLICT,
+    message: "more than one account holds this email",
   },
 };
 
@@ -147,6 +153,22 @@ export class StaffAccessService {
   }
 
   /**
+   * EARS-3 — the one account holding `email`, or `null`. The IdP does not keep
+   * emails unique; when more than one account holds it, acting on any of them
+   * would be a guess, so the grant is refused before any write.
+   */
+  private async subOfEmail(email: string): Promise<string | null> {
+    try {
+      return await this.idp.findUserByEmail(email);
+    } catch (error) {
+      if (error instanceof IdpAmbiguousEmailError) {
+        throw new StaffAccessRefusal("STAFF_GRANT_EMAIL_AMBIGUOUS");
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Whether the account's email is verified at the IdP. `getUser` answers
    * `null` on a provider hiccup; that must not read as «unverified» — it would
    * refuse a grant the account qualifies for — so it fails loud as an IdP
@@ -194,7 +216,7 @@ export class StaffAccessService {
     }
 
     // ---- Completeness read: IdP user, grant and password; mirror; bindings.
-    let sub = await this.idp.findUserByEmail(input.email);
+    let sub = await this.subOfEmail(input.email);
     let grant: IdpProjectGrant | null = null;
     let hasPassword = false;
     if (sub) {

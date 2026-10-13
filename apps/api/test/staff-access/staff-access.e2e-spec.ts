@@ -677,6 +677,41 @@ describe.skipIf(!process.env.DATABASE_URL)(
       ).toEqual(["auth.role.granted"]);
     });
 
+    it("047 EARS-3: an email that more than one IdP account holds is refused with STAFF_GRANT_EMAIL_AMBIGUOUS and nothing changes — no IdP write, no binding, no ledger row", async () => {
+      const admin = await enrolledStaff("adm", "platform_admin");
+      const eventId = await insertEvent("Конгресс 047 — общая почта");
+      const email = uniqueEmail("shared");
+      // The IdP does not keep emails unique: two accounts on one address.
+      const first = `shared-a-${randomUUID()}`;
+      const second = `shared-b-${randomUUID()}`;
+      fake.seedUser({ sub: first, email });
+      fake.seedUser({ sub: second, email });
+      fake.setIdentity(first, { emailVerified: true });
+      fake.setIdentity(second, { emailVerified: true });
+      const since = await dbNow();
+      const spies = [...idpWriteSpies(), vi.spyOn(fake, "markEmailVerified")];
+
+      const refused = await grant(admin, {
+        email,
+        fullName: "Общая Почта",
+        role: "congress-program-committee",
+        eventId,
+      });
+      expect(refused.statusCode).toBe(409);
+      expect(refused.json()).toMatchObject({
+        statusCode: 409,
+        errorCode: "STAFF_GRANT_EMAIL_AMBIGUOUS",
+      });
+      expect(refused.json()).not.toHaveProperty("temporaryPassword");
+      for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+      expect(fake.grantedRoles(first)).toEqual([]);
+      expect(fake.grantedRoles(second)).toEqual([]);
+      expect(await bindingsOf(email)).toEqual([]);
+      expect(await roleRows(first, since)).toHaveLength(0);
+      expect(await roleRows(second, since)).toHaveLength(0);
+      vi.restoreAllMocks();
+    });
+
     it("047 EARS-3: two concurrent grants for one email are serialized — one completes, the other is refused as complete, and the shown password signs in", async () => {
       const admin = await enrolledStaff("adm", "platform_admin");
       const email = uniqueEmail("race");

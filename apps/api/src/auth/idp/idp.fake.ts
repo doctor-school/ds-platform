@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Mailer } from "../../mailer/mailer.types.js";
 import {
+  IdpAmbiguousEmailError,
   IdpInvalidArgumentError,
   IdpUnavailableError,
   type AdminAuthorityVerdict,
@@ -215,7 +216,8 @@ export class FakeIdpClient implements IdpClient {
       phone,
       // 047 EARS-5: an administrator-vouched staff address is created verified,
       // exactly as the real adapter sends `isVerified: true`.
-      emailVerified: input.credential === "none" && input.emailVerified === true,
+      emailVerified:
+        input.credential === "none" && input.emailVerified === true,
       phoneVerified: false,
       active: true,
       displayName:
@@ -546,7 +548,10 @@ export class FakeIdpClient implements IdpClient {
   getProjectGrant(sub: string): Promise<IdpProjectGrant | null> {
     const roles = this.grants.get(sub);
     if (!roles || roles.size === 0) return Promise.resolve(null);
-    return Promise.resolve({ grantId: this.grantIdOf(sub), roleKeys: [...roles] });
+    return Promise.resolve({
+      grantId: this.grantIdOf(sub),
+      roleKeys: [...roles],
+    });
   }
 
   updateProjectGrantRoles(
@@ -584,8 +589,20 @@ export class FakeIdpClient implements IdpClient {
     return Promise.resolve(holders);
   }
 
+  /**
+   * Like Zitadel, the fake does not keep emails unique across accounts (two
+   * {@link seedUser} calls may share one): every account holding the email is
+   * counted, and more than one is {@link IdpAmbiguousEmailError}.
+   */
   findUserByEmail(email: string): Promise<string | null> {
-    return Promise.resolve(this.byEmail.get(email.toLowerCase())?.sub ?? null);
+    const wanted = email.toLowerCase();
+    const holders = [...this.bySub.values()].filter(
+      (record) => record.email === wanted,
+    );
+    if (holders.length > 1) {
+      return Promise.reject(new IdpAmbiguousEmailError());
+    }
+    return Promise.resolve(holders[0]?.sub ?? null);
   }
 
   userHasPassword(sub: string): Promise<boolean> {

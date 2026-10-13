@@ -20,7 +20,11 @@ import {
   reverifyMfa,
   verifyMfaChallenge,
 } from "@/lib/admin-auth";
-import { reverifyReturnTo } from "@/lib/step-up";
+import {
+  browserStepUpStorage,
+  markStepUpConfirmed,
+  reverifyReturnTo,
+} from "@/lib/step-up";
 import {
   mfaFailurePresentation,
   type MfaFailurePresentation,
@@ -138,6 +142,8 @@ export default function MfaChallengePage() {
       // LD-1: the verify response carried `__Host-ds_admin_session` — the login
       // is complete in place, so this is a navigation, not a second sign-in.
       // Re-verify: the same session is fresh again; back to the refused action.
+      // 047 EARS-8: the confirmed code is what lets the saved request go out.
+      if (reverify) markStepUpConfirmed(browserStepUpStorage(), Date.now());
       router.replace(reverify ? returnTo : "/events");
     },
     [endpoint, form, returnTo, reverify, router, submitting],

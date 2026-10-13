@@ -76,13 +76,27 @@ function refusal(res: Response): {
  * request, which is the correct fail-closed answer.
  */
 export function adminCsrfHeaders(): Record<string, string> {
-  if (typeof document === "undefined") return {};
+  const token = adminCsrfToken();
+  return token ? { [ADMIN_CSRF_HEADER]: token } : {};
+}
+
+/**
+ * The current admin session's CSRF token — minted per session at sign-in — or
+ * `null` when none is readable. Besides the double-submit header it binds a
+ * step-up request saved by this session to this session (047 EARS-8,
+ * `lib/step-up.ts`).
+ */
+export function adminCsrfToken(): string | null {
+  if (typeof document === "undefined") return null;
   const match = new RegExp(`(?:^|; )${ADMIN_CSRF_COOKIE_NAME}=([^;]*)`).exec(
     document.cookie,
   );
-  return match?.[1]
-    ? { [ADMIN_CSRF_HEADER]: decodeURIComponent(match[1]) }
-    : {};
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
 }
 
 /**

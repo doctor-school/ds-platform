@@ -113,3 +113,28 @@ describe("authProvider.onError — which refusal ends the session", () => {
     ).resolves.toEqual({});
   });
 });
+
+describe("authProvider.logout — 047 EARS-8 step-up replay", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    globalThis.fetch = originalFetch;
+  });
+
+  it("047 EARS-8: sign-out (and the 401 path, which signs out through it) clears a saved step-up request and its confirmation", async () => {
+    const data = new Map<string, string>([
+      ["ds-admin:step-up-request", "{}"],
+      ["ds-admin:step-up-confirmed", "{}"],
+      ["unrelated", "kept"],
+    ]);
+    vi.stubGlobal("window", {
+      sessionStorage: {
+        getItem: (key: string) => data.get(key) ?? null,
+        setItem: (key: string, value: string) => void data.set(key, value),
+        removeItem: (key: string) => void data.delete(key),
+      },
+    });
+    respondWith(200, {});
+    expect(await authProvider.logout!({})).toMatchObject({ success: true });
+    expect([...data.keys()]).toEqual(["unrelated"]);
+  });
+});

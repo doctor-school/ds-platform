@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  STEP_UP_REPLAY_TTL_MS,
+  clearStepUpRequest,
   isStepUpRequired,
+  markStepUpConfirmed,
   reverifyReturnTo,
   saveStepUpRequest,
   stepUpChallengeHref,
@@ -126,25 +129,116 @@ describe("047 EARS-8 step-up — the console keeps the request across the code s
     ).toBe("/access?x=1");
   });
 
-  it("047 EARS-8: the saved request is read back once, for its own path only", () => {
-    const storage = memoryStorage();
-    expect(saveStepUpRequest(storage, REQUEST)).toBe(true);
+  const OWNER = "csrf-session-a";
+  const T0 = 1_760_000_000_000;
+  const saved = (owner = OWNER, at = T0) =>
+    saveStepUpRequest(memory, REQUEST, { owner, now: at });
+  let memory = memoryStorage();
+  const fresh = () => {
+    memory = memoryStorage();
+    return memory;
+  };
+
+  it("047 EARS-8: the saved request comes back once — for the same admin session, after a confirmed code, within the window — and for its own path only", () => {
+    fresh();
+    expect(saved()).toBe(true);
+    markStepUpConfirmed(memory, T0 + 30_000);
+    const scope = { owner: OWNER, now: T0 + 31_000 };
     expect(
-      takeStepUpRequest(storage, "/v1/admin/staff-access/revocations"),
+      takeStepUpRequest(memory, "/v1/admin/staff-access/revocations", scope),
     ).toBeNull();
-    expect(takeStepUpRequest(storage, REQUEST.path)).toEqual(REQUEST);
-    expect(takeStepUpRequest(storage, REQUEST.path)).toBeNull();
-    expect(storage.data.size).toBe(0);
+    expect(takeStepUpRequest(memory, REQUEST.path, scope)).toMatchObject(
+      REQUEST,
+    );
+    expect(takeStepUpRequest(memory, REQUEST.path, scope)).toBeNull();
+    expect(memory.data.size).toBe(0);
+  });
+
+  it("047 EARS-8: without a confirmed code the saved request is discarded, not sent — an abandoned code screen never replays", () => {
+    fresh();
+    saved();
+    expect(
+      takeStepUpRequest(memory, REQUEST.path, {
+        owner: OWNER,
+        now: T0 + 5_000,
+      }),
+    ).toBeNull();
+    expect(memory.data.size).toBe(0);
+  });
+
+  it("047 EARS-8: a request saved by another admin session is discarded, even after a confirmed code", () => {
+    fresh();
+    saved("csrf-session-a");
+    markStepUpConfirmed(memory, T0 + 10_000);
+    expect(
+      takeStepUpRequest(memory, REQUEST.path, {
+        owner: "csrf-session-b",
+        now: T0 + 11_000,
+      }),
+    ).toBeNull();
+    expect(memory.data.size).toBe(0);
+  });
+
+  it("047 EARS-8: no session to bind to — nothing is saved, and nothing is replayed to an unknown session", () => {
+    fresh();
+    expect(saveStepUpRequest(memory, REQUEST, { owner: null, now: T0 })).toBe(
+      false,
+    );
+    expect(memory.data.size).toBe(0);
+    saved();
+    markStepUpConfirmed(memory, T0 + 1_000);
+    expect(
+      takeStepUpRequest(memory, REQUEST.path, { owner: null, now: T0 + 2_000 }),
+    ).toBeNull();
+    expect(memory.data.size).toBe(0);
+  });
+
+  it("047 EARS-8: a request older than the replay window is discarded", () => {
+    fresh();
+    saved();
+    const late = T0 + STEP_UP_REPLAY_TTL_MS + 1;
+    markStepUpConfirmed(memory, late - 1_000);
+    expect(
+      takeStepUpRequest(memory, REQUEST.path, { owner: OWNER, now: late }),
+    ).toBeNull();
+    expect(memory.data.size).toBe(0);
+    expect(STEP_UP_REPLAY_TTL_MS).toBeLessThanOrEqual(30 * 60_000);
+  });
+
+  it("047 EARS-8: a confirmation older than the saved request does not count for it", () => {
+    fresh();
+    markStepUpConfirmed(memory, T0 - 60_000);
+    saved();
+    expect(
+      takeStepUpRequest(memory, REQUEST.path, {
+        owner: OWNER,
+        now: T0 + 1_000,
+      }),
+    ).toBeNull();
+    expect(memory.data.size).toBe(0);
+  });
+
+  it("047 EARS-8: sign-out clears the saved request and its confirmation", () => {
+    fresh();
+    saved();
+    markStepUpConfirmed(memory, T0 + 1_000);
+    clearStepUpRequest(memory);
+    expect(memory.data.size).toBe(0);
+    clearStepUpRequest(null);
+    clearStepUpRequest(throwingStorage);
   });
 
   it("047 EARS-8: blocked or corrupt storage keeps nothing and never throws", () => {
-    expect(saveStepUpRequest(throwingStorage, REQUEST)).toBe(false);
-    expect(takeStepUpRequest(throwingStorage, REQUEST.path)).toBeNull();
-    expect(saveStepUpRequest(null, REQUEST)).toBe(false);
-    expect(takeStepUpRequest(null, REQUEST.path)).toBeNull();
+    const scope = { owner: OWNER, now: T0 };
+    expect(saveStepUpRequest(throwingStorage, REQUEST, scope)).toBe(false);
+    expect(takeStepUpRequest(throwingStorage, REQUEST.path, scope)).toBeNull();
+    expect(saveStepUpRequest(null, REQUEST, scope)).toBe(false);
+    expect(takeStepUpRequest(null, REQUEST.path, scope)).toBeNull();
+    markStepUpConfirmed(null, T0);
+    markStepUpConfirmed(throwingStorage, T0);
     const storage = memoryStorage();
     storage.data.set("ds-admin:step-up-request", "{not json");
-    expect(takeStepUpRequest(storage, REQUEST.path)).toBeNull();
+    expect(takeStepUpRequest(storage, REQUEST.path, scope)).toBeNull();
     expect(storage.data.size).toBe(0);
   });
 });

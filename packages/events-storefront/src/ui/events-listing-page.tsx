@@ -35,6 +35,7 @@ import {
   fetchMonthEntries,
   fetchSpecialtyChoices,
   forwardedSessionFrom,
+  readRequestFrom,
 } from "../server";
 import { CompactMonth } from "./compact-month";
 import { FacetPanel, FacetSheet } from "./facet-panel";
@@ -50,6 +51,7 @@ import {
   SkeletonSlot,
   readMyEvents,
 } from "./feed-sections";
+import type { EventsBlockRetryAction } from "./events-block-retry";
 import { MonthView } from "./month-view";
 
 type FeedRead = Promise<BlockRead<EventsFeedPage>>;
@@ -182,9 +184,16 @@ export function MonthSkeleton() {
 export async function EventsListingPage({
   config,
   searchParams,
+  retry,
 }: {
   config: EventsStorefrontHostConfig;
   searchParams: Promise<RawQueryRecord>;
+  /**
+   * The host's block-retry server action (019 EARS-9, #2832): the host's
+   * `"use server"` module answers `renderEventsBlock(<its config>, <itself>, input)`.
+   * A failed block's «Повторить» calls it for that block alone.
+   */
+  retry: EventsBlockRetryAction;
 }) {
   const raw = await searchParams;
   const listing = config.routes.listing;
@@ -195,10 +204,7 @@ export async function EventsListingPage({
   const tense = feedTenseOf(raw);
   const requestHeaders = await headers();
   const session = forwardedSessionFrom(requestHeaders);
-  const request: ReadRequest = {
-    cookie: requestHeaders.get("cookie") ?? "",
-    forwardedFor: requestHeaders.get("x-forwarded-for") ?? "",
-  };
+  const request = readRequestFrom(requestHeaders);
   // One feed read serves the day feed, the counted subline, the facet
   // options and the sheet's «Показать N» — in either view.
   const feed = fetchEventsFeed(config, raw, request);
@@ -291,6 +297,7 @@ export async function EventsListingPage({
                 feed={feed}
                 specialties={specialties}
                 request={request}
+                retry={retry}
               />
             </Suspense>
           ) : (
@@ -302,7 +309,7 @@ export async function EventsListingPage({
               ) : null}
               {tense === "upcoming" && session.cookie !== "" ? (
                 <Suspense fallback={<MyEventsSkeleton />}>
-                  <MyEventsSection config={config} mine={mine} />
+                  <MyEventsSection config={config} mine={mine} retry={retry} />
                 </Suspense>
               ) : null}
               <Suspense fallback={<FeedSkeleton />}>
@@ -313,6 +320,7 @@ export async function EventsListingPage({
                   mine={mine}
                   specialties={specialties}
                   request={request}
+                  retry={retry}
                 />
               </Suspense>
             </>

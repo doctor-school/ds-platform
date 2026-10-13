@@ -12,7 +12,8 @@
     "./adapters": "./src/adapters.ts",
     "./my-events": "./src/ui/my-events-route.tsx",
     "./host-config": "./src/host-config.ts",
-    "./server": "./src/server/index.ts"
+    "./server": "./src/server/index.ts",
+    "./retry": "./src/ui/events-block-retry.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -21,7 +22,8 @@
   },
   "dependencies": {
     "@ds/design-system": "workspace:*",
-    "@ds/schemas": "workspace:*"
+    "@ds/schemas": "workspace:*",
+    "zod": "4.4.3"
   },
   "peerDependencies": {
     "next": "^16.0.0",

@@ -1,12 +1,18 @@
 import Link from "next/link";
 import { MonthPicker } from "@ds/design-system/blocks";
 import { Button } from "@ds/design-system/button";
-import type { RawQueryRecord } from "@ds/schemas";
+import type { MonthBroadcastEntry, RawQueryRecord } from "@ds/schemas";
 
 import { LISTING_COPY, eventNounOf } from "../copy/listing-copy";
 import { type EventsStorefrontHostConfig, eventPageHref } from "../host-config";
 import { type SpecialtyChoice, hasAppliedFacets } from "../model/facets";
-import { type BlockRead, type EventsFeedPage, pageTodayOf } from "../model/feed";
+import {
+  type BlockRead,
+  type EventsFeedHorizon,
+  type EventsFeedPage,
+  type FeedFacetOptions,
+  pageTodayOf,
+} from "../model/feed";
 import { dayHref, feedTenseOf, monthHref } from "../model/feed-url";
 import {
   buildMonthGrid,
@@ -22,8 +28,10 @@ import {
 } from "../model/month-view";
 import { type ReadRequest, fetchMonthCounts, fetchMonthEntries } from "../server";
 import { BlockError } from "./block-error";
+import { BlockRetry } from "./block-retry";
+import type { EventsBlockRetryAction, EventsBlockRetryInput } from "./events-block-retry";
 import { EmptyFeedBlock } from "./feed-list";
-import { readEmptyFeedState } from "./feed-sections";
+import { type SpecialtyBook, readEmptyFeedState } from "./feed-sections";
 import { MonthCalendarDesktop, type MonthHrefs } from "./month-calendar-desktop";
 import { MonthCalendarMobile } from "./month-calendar-mobile";
 
@@ -50,6 +58,7 @@ export async function MonthView({
   feed,
   specialties,
   request,
+  retry,
 }: {
   config: EventsStorefrontHostConfig;
   raw: RawQueryRecord;
@@ -58,6 +67,8 @@ export async function MonthView({
   /** The specialty book — read only to name a picked specialty in the empty state. */
   specialties: Promise<readonly SpecialtyChoice[]>;
   request: ReadRequest;
+  /** The host's block retry: the failed grid's «Повторить» re-runs the month read alone. */
+  retry: EventsBlockRetryAction;
 }) {
   const t = LISTING_COPY.month;
   const noun = eventNounOf(config.copy);
@@ -129,34 +140,101 @@ export async function MonthView({
     </div>
   );
 
+  const body = await MonthGridBlock({
+    config,
+    raw,
+    month: displayed,
+    today,
+    horizon: read.ok ? read.value.horizon : undefined,
+    facetOptions: read.ok ? read.value.facetOptions : {},
+    entries,
+    specialties: () => specialties,
+    request,
+    retry,
+  });
+
+  return (
+    <section className="flex flex-col gap-7" data-testid="events-month-view">
+      {nav}
+      {body}
+    </section>
+  );
+}
+
+/**
+ * The month view's grid — the one block of the month view its «Повторить»
+ * re-renders (019 EARS-9, #2832): the displayed month's entries as the pill
+ * grid (≥1024 px) and the dot grid (below), the block's own failure with its
+ * retry, or the empty-by-filter offer. Everything it takes from the page's
+ * feed read (today, the served extent, the facet titles) arrives as data, so a
+ * retry re-runs the month read alone.
+ */
+export async function MonthGridBlock({
+  config,
+  raw,
+  month: displayed,
+  today,
+  horizon,
+  facetOptions,
+  entries,
+  specialties,
+  request,
+  retry,
+}: {
+  config: EventsStorefrontHostConfig;
+  raw: RawQueryRecord;
+  /** The displayed month, `YYYY-MM`. */
+  month: string;
+  /** The page's one today (D10), `YYYY-MM-DD`. */
+  today: string;
+  /** The feed read's served extent; absent when that read failed. */
+  horizon: EventsFeedHorizon | undefined;
+  /** The feed read's facet titles — the empty state names a facet by them. */
+  facetOptions: FeedFacetOptions;
+  entries: BlockRead<MonthBroadcastEntry[]>;
+  /** The specialty book, read only when the empty state names a specialty. */
+  specialties: SpecialtyBook;
+  request: ReadRequest;
+  retry: EventsBlockRetryAction;
+}) {
+  const t = LISTING_COPY.month;
+  const noun = eventNounOf(config.copy);
+  const listing = config.routes.listing;
+  const at = (target: string | undefined) => monthHref(listing, raw, target);
+  const prev = shiftMonth(displayed, -1);
+  const next = shiftMonth(displayed, 1);
+
   // An empty month under a facet offers the feed's widening, counted over the
   // tense's whole reach (the canvas rule), its facets named by the read's titles.
   const empty =
     entries.ok && entries.value.length === 0 && hasAppliedFacets(raw, config.filterSet)
-      ? await readEmptyFeedState(
-          config,
-          raw,
-          read.ok ? read.value.facetOptions : {},
-          specialties,
-          request,
-        )
+      ? await readEmptyFeedState(config, raw, facetOptions, specialties, request)
       : null;
 
-  const body = (() => {
+  return (() => {
     if (!entries.ok) {
+      const input: EventsBlockRetryInput = {
+        block: "month",
+        raw,
+        month: displayed,
+        today,
+        ...(horizon === undefined ? {} : { horizon }),
+        facetOptions,
+      };
       return (
-        <BlockError
-          title={t.errorTitle}
-          description={t.errorBody}
-          testId="events-month-error"
-        />
+        <BlockRetry retry={retry.bind(null, input)}>
+          <BlockError
+            title={t.errorTitle}
+            description={t.errorBody}
+            testId="events-month-error"
+          />
+        </BlockRetry>
       );
     }
     if (empty !== null) {
       return <EmptyFeedBlock testId="events-month-empty" empty={empty} />;
     }
     const grid = buildMonthGrid({ month: displayed, entries: entries.value, today });
-    const horizon = read.ok ? read.value.horizon : undefined;
     const hrefs: MonthHrefs = {
       event: Object.fromEntries(
         entries.value.map((e) => [e.slug, eventPageHref(config, e.slug)]),
@@ -199,11 +277,4 @@ export async function MonthView({
       </>
     );
   })();
-
-  return (
-    <section className="flex flex-col gap-7" data-testid="events-month-view">
-      {nav}
-      {body}
-    </section>
-  );
 }

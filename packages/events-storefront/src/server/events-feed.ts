@@ -87,6 +87,17 @@ export async function fetchEventsLive(
 }
 
 export type ReadRequest = { readonly cookie: string; readonly forwardedFor: string };
+
+/**
+ * What every feed-page read forwards from the incoming request — the page
+ * render's or a block retry's (#2832): its cookie and the client address.
+ */
+export function readRequestFrom(headers: Headers): ReadRequest {
+  return {
+    cookie: headers.get("cookie") ?? "",
+    forwardedFor: headers.get("x-forwarded-for") ?? "",
+  };
+}
 type ReadConfig = Pick<EventsStorefrontHostConfig, "contentSet" | "filterSet">;
 
 async function readJson<T>(

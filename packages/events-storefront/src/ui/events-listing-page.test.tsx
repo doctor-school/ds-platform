@@ -51,6 +51,8 @@ const CONFIG = {
   },
 } satisfies EventsStorefrontHostConfig;
 
+const RETRY = vi.fn(async (): Promise<ReactNode> => null);
+
 type AnyElement = ReactElement<Record<string, unknown>>;
 
 /** Every element of the rendered tree (props + children, depth-first). */
@@ -69,6 +71,7 @@ async function render(params: Record<string, string>) {
     (await EventsListingPage({
       config: CONFIG,
       searchParams: Promise.resolve(params),
+      retry: RETRY,
     })) as ReactNode,
   );
 }

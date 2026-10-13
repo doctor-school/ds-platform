@@ -93,9 +93,57 @@ export const GOLDEN_ACCOUNT_KEYS = [
   "doctorMfa",
   "doctorDeleted",
   "admin",
+  // #2805 — the worker pool of `doctorVerified` (see `GOLDEN_WORKER_POOL_SIZE`).
+  "doctorVerifiedW1",
+  "doctorVerifiedW2",
+  "doctorVerifiedW3",
+  "doctorVerifiedW4",
+  "doctorVerifiedW5",
 ] as const;
 
 export type GoldenAccountKey = (typeof GOLDEN_ACCOUNT_KEYS)[number];
+
+/**
+ * #2805 — how many Playwright workers the regression suite may run at once.
+ *
+ * The suite runs on parallel workers, and a golden account that two workers sign
+ * in as at the same time is shared state: one worker's logout revokes the other's
+ * session, one worker's password-reset request arms a challenge the other's code
+ * sign-in reads past. So every golden doctor a scenario SIGNS IN AS exists once
+ * per worker: worker 0 is the catalogue account itself, workers 1..N-1 are its
+ * pool copies below — same role, same specialty, same registrations, the same
+ * password env var (no new secret), their own address and IdP subject. A run with
+ * more workers than this ceiling fails loudly in `packages/e2e/lib/golden.ts`
+ * rather than letting two workers share an account.
+ *
+ * Only `verifiedCardiologist` is pooled: it is the one golden doctor any scenario
+ * or walk signs in as. `mfaEnrolled` and `admin` carry a second factor enrolled in
+ * the owner's authenticator (no automation can sign in as them), `unverified` is
+ * named by no scenario and `deleted` has no IdP account at all.
+ */
+export const GOLDEN_WORKER_POOL_SIZE = 6;
+
+/** The default doctor of the regression suite: verified, one primary specialty. */
+const VERIFIED_CARDIOLOGIST = Object.freeze({
+  key: "doctorVerified" as GoldenAccountKey,
+  id: goldenUuid(GOLDEN_GROUP.users, 2),
+  email: "golden.doctor.verified@example.test",
+  displayName: "Ковалёв Игорь Петрович",
+  specialtyName: "Кардиология",
+});
+
+/** Worker `n`'s copy of the verified doctor (n ≥ 1; worker 0 is the original). */
+function verifiedCardiologistCopy(worker: number) {
+  return Object.freeze({
+    key: `doctorVerifiedW${worker}` as GoldenAccountKey,
+    // Ordinal 100 + n: inside the named range (< GOLDEN_VOLUME_ORDINAL_BASE) and
+    // clear of the five named users.
+    id: goldenUuid(GOLDEN_GROUP.users, 100 + worker),
+    email: `golden.doctor.verified.w${worker}@example.test`,
+    displayName: VERIFIED_CARDIOLOGIST.displayName,
+    specialtyName: VERIFIED_CARDIOLOGIST.specialtyName,
+  });
+}
 
 /**
  * The published catalogue. Read it, never re-derive an id or a slug by hand.
@@ -110,13 +158,7 @@ export const golden = Object.freeze({
       displayName: "Голубева Анна Сергеевна",
     }),
     /** The default doctor of the regression suite: verified, one primary specialty. */
-    verifiedCardiologist: Object.freeze({
-      key: "doctorVerified" as GoldenAccountKey,
-      id: goldenUuid(GOLDEN_GROUP.users, 2),
-      email: "golden.doctor.verified@example.test",
-      displayName: "Ковалёв Игорь Петрович",
-      specialtyName: "Кардиология",
-    }),
+    verifiedCardiologist: VERIFIED_CARDIOLOGIST,
     /** Verified AND enrolled in a second factor at the IdP (see `idp.ts`). */
     mfaEnrolled: Object.freeze({
       key: "doctorMfa" as GoldenAccountKey,
@@ -132,6 +174,19 @@ export const golden = Object.freeze({
       email: "golden.doctor.deleted@example.test",
       displayName: "Тихонов Павел Юрьевич",
     }),
+  }),
+  /**
+   * #2805 — per-worker accounts, indexed by Playwright `parallelIndex`:
+   * `[0]` is the catalogue account, `[n]` its pool copy (see
+   * `GOLDEN_WORKER_POOL_SIZE`).
+   */
+  workerPool: Object.freeze({
+    verifiedCardiologist: Object.freeze([
+      VERIFIED_CARDIOLOGIST,
+      ...Array.from({ length: GOLDEN_WORKER_POOL_SIZE - 1 }, (_, i) =>
+        verifiedCardiologistCopy(i + 1),
+      ),
+    ]),
   }),
   admins: Object.freeze({
     platform: Object.freeze({

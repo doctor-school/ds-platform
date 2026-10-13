@@ -330,7 +330,9 @@ With neither route resolvable the command refuses, naming both.
 
 ## `reset-identities <slot>` — the golden accounts on the shared IdP
 
-The golden dataset's four live accounts (two doctors, the MFA doctor, the admin) and the
+The golden dataset's live accounts (two doctors, the MFA doctor, the admin, and the #2805
+worker pool `golden.doctor.verified.w1…w5@example.test`, which reuses
+`DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED`) and the
 soft-deleted doctor live on the SHARED stage Zitadel, not per slot, and nothing else
 provisions them — without this command `slot up` refuses at its `seed:golden` one-shot.
 One run does four things, in order (plus the agent admin, below):
@@ -346,7 +348,8 @@ One run does four things, in order (plus the agent admin, below):
    silence — an admin who signs in without `platform_admin` fails the walkthrough exactly
    the way a broken login does. Every step is probe-then-act and a failing
    act is a hard failure: there is no blanket tolerated-failure flag in this path.
-2. **Write the subjects.** All five `DS_GOLDEN_SUB_*` are written idempotently to
+2. **Write the subjects.** Every `DS_GOLDEN_SUB_*` (the five named accounts and the
+   worker pool's `…_VERIFIED_W1`…`_W5`) is written idempotently to
    `/etc/ds-platform/golden-subjects.env` (root, 0644 — opaque ids, not secrets), and
    `renderSlotEnv` merges that file into every rendered slot env, so `seed:golden`
    resolves them with no human step. Rendering a slot env before this command has ever

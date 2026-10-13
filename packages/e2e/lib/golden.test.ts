@@ -34,4 +34,35 @@ describe("resolveGoldenDoctor", () => {
       /verified-cardiologist/,
     );
   });
+
+  // #2805 — parallel workers each sign in as their own account.
+  it("gives every parallel worker its own verified doctor with the shared password variable", () => {
+    const accounts = [0, 1, 2, 3, 4, 5].map((worker) =>
+      resolveGoldenDoctor("verified-cardiologist", worker),
+    );
+    expect(new Set(accounts.map((a) => a.email)).size).toBe(6);
+    expect(new Set(accounts.map((a) => a.id)).size).toBe(6);
+    expect(accounts[0]!.email).toBe("golden.doctor.verified@example.test");
+    expect(accounts[3]!.email).toBe("golden.doctor.verified.w3@example.test");
+    expect(accounts[3]!.key).toBe("doctorVerifiedW3");
+    for (const account of accounts) {
+      expect(account.passwordEnvVar).toBe("DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED");
+      expect(account.displayName).toBe(accounts[0]!.displayName);
+    }
+  });
+
+  it("refuses a worker beyond the pool instead of sharing an account", () => {
+    expect(() => resolveGoldenDoctor("verified-cardiologist", 6)).toThrow(
+      /exceeds the golden worker pool/,
+    );
+  });
+
+  it("refuses an unpooled seed on any worker but 0", () => {
+    expect(resolveGoldenDoctor("mfa-enrolled", 0).email).toBe(
+      "golden.doctor.mfa@example.test",
+    );
+    expect(() => resolveGoldenDoctor("mfa-enrolled", 1)).toThrow(
+      /has no worker pool/,
+    );
+  });
 });

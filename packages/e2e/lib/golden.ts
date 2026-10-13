@@ -1,5 +1,6 @@
 import {
   GOLDEN_IDP_ACCOUNTS,
+  GOLDEN_WORKER_POOL_SIZE,
   golden,
   type GoldenAccountKey,
 } from "@ds/db/seed/golden";
@@ -49,14 +50,28 @@ export class GoldenSeedError extends Error {
   }
 }
 
-/** seed name → the catalogue entry it denotes. */
+/** The fields of a catalogue doctor this registry reads. */
+interface CatalogueDoctor {
+  readonly key: GoldenAccountKey;
+  readonly id: string;
+  readonly email: string;
+  readonly displayName: string;
+}
+
+/**
+ * seed name → the account each parallel worker signs in as, indexed by
+ * Playwright `parallelIndex` (#2805). A pooled seed lists one account per worker
+ * (`golden.workerPool`, worker 0 = the catalogue account); an unpooled seed lists
+ * only its catalogue account, so any worker but 0 naming it fails loudly instead
+ * of sharing one account across workers.
+ */
 const CATALOGUE: Readonly<
-  Record<GoldenDoctorSeedName, (typeof golden.doctors)[keyof typeof golden.doctors]>
+  Record<GoldenDoctorSeedName, readonly CatalogueDoctor[]>
 > = Object.freeze({
-  unverified: golden.doctors.unverified,
-  "verified-cardiologist": golden.doctors.verifiedCardiologist,
-  "mfa-enrolled": golden.doctors.mfaEnrolled,
-  deleted: golden.doctors.deleted,
+  unverified: [golden.doctors.unverified],
+  "verified-cardiologist": golden.workerPool.verifiedCardiologist,
+  "mfa-enrolled": [golden.doctors.mfaEnrolled],
+  deleted: [golden.doctors.deleted],
 });
 
 function passwordEnvVarFor(key: GoldenAccountKey): string {
@@ -69,12 +84,38 @@ function passwordEnvVarFor(key: GoldenAccountKey): string {
   return account.passwordEnvVar;
 }
 
-/** Resolve a feature file's seed name into the golden doctor it names. */
-export function resolveGoldenDoctor(seedName: string): GoldenDoctor {
-  const entry = CATALOGUE[seedName as GoldenDoctorSeedName];
-  if (!entry) {
+/**
+ * Resolve a feature file's seed name into the golden doctor it names, for the
+ * worker `worker` (Playwright `testInfo.parallelIndex`; 0 outside a parallel
+ * run). Each worker gets its OWN account, so a logout, a password-reset request
+ * or a code sign-in in one worker never reaches another worker's session (#2805).
+ */
+export function resolveGoldenDoctor(
+  seedName: string,
+  worker = 0,
+): GoldenDoctor {
+  const pool = CATALOGUE[seedName as GoldenDoctorSeedName];
+  if (!pool) {
     throw new GoldenSeedError(
       `unknown golden doctor seed name "${seedName}". Accepted: ${GOLDEN_DOCTOR_SEED_NAMES.join(", ")}.`,
+    );
+  }
+  if (!Number.isInteger(worker) || worker < 0) {
+    throw new GoldenSeedError(
+      `worker index must be a non-negative integer, got ${worker}.`,
+    );
+  }
+  if (worker >= GOLDEN_WORKER_POOL_SIZE) {
+    throw new GoldenSeedError(
+      `worker ${worker} exceeds the golden worker pool (${GOLDEN_WORKER_POOL_SIZE} accounts per pooled seed). ` +
+        `Run with at most ${GOLDEN_WORKER_POOL_SIZE} workers, or grow GOLDEN_WORKER_POOL_SIZE and its catalogue entries in @ds/db.`,
+    );
+  }
+  const entry = pool[worker];
+  if (!entry) {
+    throw new GoldenSeedError(
+      `golden doctor "${seedName}" has no worker pool, so worker ${worker} would share it with worker 0. ` +
+        `Pool it in @ds/db (golden.workerPool) before a parallel scenario signs in as it.`,
     );
   }
   return Object.freeze({

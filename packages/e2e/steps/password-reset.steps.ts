@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
 import { installCaptchaStub } from "../lib/captcha-stub.js";
-import { resolveGoldenDoctor } from "../lib/golden.js";
+import { resolveWorkerGoldenDoctor } from "../lib/worker-golden.js";
 import {
   assertNoAddressedMail,
   mailpitUrlFor,
@@ -23,7 +23,7 @@ When(
     await installCaptchaStub(page);
     const results: ResetObservation[] = [];
     for (const email of [
-      resolveGoldenDoctor("verified-cardiologist").email,
+      resolveWorkerGoldenDoctor("verified-cardiologist").email,
       `reset-2643-${randomUUID()}@example.test`,
     ]) {
       await page.goto(`${world.hostBaseUrl}/reset`, { waitUntil: "load" });

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { Page } from "@playwright/test";
+import type { BrowserContext, Page } from "@playwright/test";
 
 import {
   HOSTS,
@@ -11,6 +11,16 @@ import {
 import { itemsFor, landingEvidence } from "../navigation-model.js";
 import type { NavigationItem } from "../navigation-model.js";
 import { signInGoldenDoctor } from "../lib/sign-in.js";
+
+/**
+ * #2805 — the signed-in doctor's cookies per host, for THIS worker process only
+ * (module state lives in one worker), so a worker reuses its own pool account's
+ * session and never another worker's.
+ */
+const workerSessions = new Map<
+  string,
+  Awaited<ReturnType<BrowserContext["storageState"]>>["cookies"]
+>();
 
 /**
  * The DERIVED NAVIGATION WALK — staging/regression-contour tech spec §6.3, first
@@ -122,8 +132,24 @@ for (const hostId of HOST_IDS) {
     const doctorItems = itemsFor(model, "doctor");
     if (doctorItems.length > 0) {
       test.describe("signed in", () => {
+        // #2805 — sign in ONCE per worker and host, then hand every later item
+        // the session cookies of that sign-in. The flow under test here is the
+        // chrome link, not the login (the login has its own scenarios, which keep
+        // the UI sign-in per scenario), and each worker signs in as its own pool
+        // account, so no other worker can revoke this session. A session that
+        // stopped working sends the item to the login surface, which the
+        // pathname assertion below reports as red — reuse never hides a failure.
         test.beforeEach(async ({ page }) => {
+          const cookies = workerSessions.get(hostId);
+          if (cookies) {
+            await page.context().addCookies(cookies);
+            return;
+          }
           await signInGoldenDoctor(page, host, WALK_DOCTOR, baseUrlFor(host));
+          workerSessions.set(
+            hostId,
+            (await page.context().storageState()).cookies,
+          );
         });
 
         for (const item of doctorItems) {

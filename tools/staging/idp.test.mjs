@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import {
   GOLDEN_IDP_ACCOUNTS,
+  GOLDEN_PASSWORD_ENV_VARS,
   GOLDEN_SUBJECT_ENV_VARS,
   IdpError,
   convergeGoldenIdentities,
@@ -222,12 +223,33 @@ test("an app the shared project does not carry is a hard failure, never a create
   );
 });
 
+// Every account the IdP must hold: the four named live accounts plus the #2805
+// worker pool. Derived, so growing the pool never edits a count here.
+const LIVE_ACCOUNT_COUNT = GOLDEN_IDP_ACCOUNTS.filter((account) => account.idpAccountExpected).length;
+
+test("the catalogue holds the four named live accounts and the #2805 worker pool", () => {
+  assert.equal(LIVE_ACCOUNT_COUNT, 4 + 5);
+  const pool = GOLDEN_IDP_ACCOUNTS.filter((account) => /^doctorVerifiedW\d$/.test(account.key));
+  assert.equal(pool.length, 5);
+  assert.ok(pool.every((account) => account.passwordEnvVar === "DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED"));
+  assert.equal(new Set(GOLDEN_SUBJECT_ENV_VARS).size, GOLDEN_SUBJECT_ENV_VARS.length);
+});
+
+test("the password names are distinct although the pool reuses one", () => {
+  assert.deepEqual(GOLDEN_PASSWORD_ENV_VARS, [
+    "DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED",
+    "DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED",
+    "DS_GOLDEN_PASSWORD_DOCTOR_MFA",
+    "DS_GOLDEN_PASSWORD_ADMIN",
+  ]);
+});
+
 test("a fresh box plans a create for every expected golden account", () => {
   const { steps, subjects } = planGoldenIdentities({
     accounts: GOLDEN_IDP_ACCOUNTS,
     existing: {},
   });
-  assert.equal(steps.filter((step) => step.op === "create").length, 4);
+  assert.equal(steps.filter((step) => step.op === "create").length, LIVE_ACCOUNT_COUNT);
   assert.equal(
     steps.filter((step) => step.op === "delete").length,
     0,
@@ -250,7 +272,7 @@ test("a converged box plans no creates and still sets every password", () => {
   });
   assert.equal(steps.filter((step) => step.op === "create").length, 0);
   assert.equal(steps.filter((step) => step.op === "delete").length, 0);
-  assert.equal(steps.filter((step) => step.op === "set-password").length, 4);
+  assert.equal(steps.filter((step) => step.op === "set-password").length, LIVE_ACCOUNT_COUNT);
   assert.equal(steps.filter((step) => step.op === "verify-email").length, 0);
   assert.equal(subjects.DS_GOLDEN_SUB_ADMIN, "id-admin");
 });
@@ -288,7 +310,7 @@ test("a created account is always granted its catalogue role", () => {
   const grants = steps.filter((step) => step.op === "ensure-grant");
   // One per expected account, never for the soft-deleted doctor, and always as an
   // ADD (`grantId: null`) because a freshly minted user holds no authorization.
-  assert.equal(grants.length, 4);
+  assert.equal(grants.length, LIVE_ACCOUNT_COUNT);
   assert.ok(grants.every((step) => step.grantId === null));
   assert.deepEqual(
     grants.find((step) => step.username.includes("admin")).roleKeys,
@@ -422,10 +444,10 @@ test("a converge creates the absent accounts and collects every subject", async 
   });
   assert.equal(subjects.DS_GOLDEN_SUB_ADMIN, "new-id");
   assert.match(subjects.DS_GOLDEN_SUB_DOCTOR_DELETED, /^golden-deleted-/);
-  assert.equal(calls.filter((call) => call.key === "POST /v2/users/new").length, 4);
+  assert.equal(calls.filter((call) => call.key === "POST /v2/users/new").length, LIVE_ACCOUNT_COUNT);
   // Every created account is granted, and the admin's grant carries its own role.
   const grants = calls.filter((call) => call.key === "POST /management/v1/users/new-id/grants");
-  assert.equal(grants.length, 4);
+  assert.equal(grants.length, LIVE_ACCOUNT_COUNT);
   assert.ok(grants.some((call) => call.body.roleKeys.includes("platform_admin")));
   assert.ok(grants.every((call) => call.body.projectId === "p1"));
   // Neither the PAT nor any password may reach the log.

@@ -2,8 +2,9 @@ import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import type { HostConfig } from "../hosts.js";
-import { goldenDoctorPassword, resolveGoldenDoctor } from "./golden.js";
+import { goldenDoctorPassword } from "./golden.js";
 import type { GoldenDoctor } from "./golden.js";
+import { resolveWorkerGoldenDoctor } from "./worker-golden.js";
 
 /**
  * The query parameter a NOT-yet-hydrated login `<form>` puts in the address bar
@@ -73,7 +74,7 @@ export async function signInGoldenDoctor(
   seedName: string,
   baseUrl?: string,
 ): Promise<GoldenDoctor> {
-  const doctor = resolveGoldenDoctor(seedName);
+  const doctor = resolveWorkerGoldenDoctor(seedName);
   const password = goldenDoctorPassword(doctor);
 
   await page.goto(`${baseUrl ?? ""}${host.loginPath}`, { waitUntil: "load" });

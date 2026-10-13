@@ -10,7 +10,7 @@
  *    the whole `renderIdpRedirectUris(registry, baseDomain)` output, unioned with the
  *    URIs `provision.sh` pinned through `IDP_REDIRECT_URIS` / `IDP_POST_LOGOUT_URIS`.
  *
- * 2. **Golden identities.** The five accounts of `packages/db/src/seed/golden/idp.ts`
+ * 2. **Golden identities.** The accounts (five named + the #2805 worker pool) of `packages/db/src/seed/golden/idp.ts`
  *    are the fixture every regression scenario signs in as. `reset-identities`
  *    guarantees their existence, their password and their email-verified state.
  *
@@ -44,7 +44,7 @@ export class IdpError extends Error {
 export const IDP_PAT_FILE = "/etc/ds-platform/idp-bootstrap-pat.txt";
 
 /**
- * Tool-owned, NON-secret: the five golden subject ids `seed:golden` needs.
+ * Tool-owned, NON-secret: every golden subject id `seed:golden` needs.
  *
  * Subjects are opaque Zitadel ids, not credentials, so they live in their own
  * 0644 file rather than in the root-0700 secret set (`stage.env`) — which keeps
@@ -133,19 +133,83 @@ export const GOLDEN_IDP_ACCOUNTS = Object.freeze([
     subjectEnvVar: "DS_GOLDEN_SUB_ADMIN",
     passwordEnvVar: "DS_GOLDEN_PASSWORD_ADMIN",
   }),
+  // #2805 — the worker pool of `doctorVerified` (`GOLDEN_WORKER_POOL_SIZE` in
+  // `ids.ts`): one account per parallel Playwright worker beyond worker 0. Each
+  // shares the verified doctor's PASSWORD env var — no new secret — and has its
+  // own subject.
+  Object.freeze({
+    key: "doctorVerifiedW1",
+    username: "golden.doctor.verified.w1@example.test",
+    role: "doctor_guest",
+    roleKeys: ["doctor_guest"],
+    emailVerified: true,
+    mfaEnrolled: false,
+    idpAccountExpected: true,
+    subjectEnvVar: "DS_GOLDEN_SUB_DOCTOR_VERIFIED_W1",
+    passwordEnvVar: "DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED",
+  }),
+  Object.freeze({
+    key: "doctorVerifiedW2",
+    username: "golden.doctor.verified.w2@example.test",
+    role: "doctor_guest",
+    roleKeys: ["doctor_guest"],
+    emailVerified: true,
+    mfaEnrolled: false,
+    idpAccountExpected: true,
+    subjectEnvVar: "DS_GOLDEN_SUB_DOCTOR_VERIFIED_W2",
+    passwordEnvVar: "DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED",
+  }),
+  Object.freeze({
+    key: "doctorVerifiedW3",
+    username: "golden.doctor.verified.w3@example.test",
+    role: "doctor_guest",
+    roleKeys: ["doctor_guest"],
+    emailVerified: true,
+    mfaEnrolled: false,
+    idpAccountExpected: true,
+    subjectEnvVar: "DS_GOLDEN_SUB_DOCTOR_VERIFIED_W3",
+    passwordEnvVar: "DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED",
+  }),
+  Object.freeze({
+    key: "doctorVerifiedW4",
+    username: "golden.doctor.verified.w4@example.test",
+    role: "doctor_guest",
+    roleKeys: ["doctor_guest"],
+    emailVerified: true,
+    mfaEnrolled: false,
+    idpAccountExpected: true,
+    subjectEnvVar: "DS_GOLDEN_SUB_DOCTOR_VERIFIED_W4",
+    passwordEnvVar: "DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED",
+  }),
+  Object.freeze({
+    key: "doctorVerifiedW5",
+    username: "golden.doctor.verified.w5@example.test",
+    role: "doctor_guest",
+    roleKeys: ["doctor_guest"],
+    emailVerified: true,
+    mfaEnrolled: false,
+    idpAccountExpected: true,
+    subjectEnvVar: "DS_GOLDEN_SUB_DOCTOR_VERIFIED_W5",
+    passwordEnvVar: "DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED",
+  }),
 ]);
 
-/** The five `DS_GOLDEN_SUB_*` names, in catalogue order. */
+/** Every `DS_GOLDEN_SUB_*` name — the five named accounts and the #2805 worker pool — in catalogue order. */
 export const GOLDEN_SUBJECT_ENV_VARS = Object.freeze(
   GOLDEN_IDP_ACCOUNTS.map((account) => account.subjectEnvVar),
 );
 
-/** The five `DS_GOLDEN_PASSWORD_*` names, in catalogue order. */
-export const GOLDEN_PASSWORD_ENV_VARS = Object.freeze(
-  GOLDEN_IDP_ACCOUNTS.filter((account) => account.idpAccountExpected).map(
-    (account) => account.passwordEnvVar,
+/**
+ * The distinct `DS_GOLDEN_PASSWORD_*` names of the live accounts, in catalogue order.
+ * Distinct, because the #2805 worker pool reuses the verified doctor's variable.
+ */
+export const GOLDEN_PASSWORD_ENV_VARS = Object.freeze([
+  ...new Set(
+    GOLDEN_IDP_ACCOUNTS.filter((account) => account.idpAccountExpected).map(
+      (account) => account.passwordEnvVar,
+    ),
   ),
-);
+]);
 
 // --- pure plans --------------------------------------------------------------
 
@@ -362,7 +426,7 @@ export function renderGoldenSubjectsEnv(subjects) {
   return lines.join("\n");
 }
 
-/** The same file, read back. Unknown names are ignored; the five are required. */
+/** The same file, read back. Unknown names are ignored; every catalogue name is required. */
 export function parseGoldenSubjectsEnv(text) {
   const subjects = {};
   for (const line of String(text ?? "").split(/\r?\n/)) {
@@ -596,10 +660,14 @@ export async function convergeGoldenIdentities({
 }) {
   // Fail BEFORE the first write: a converge that creates two accounts and then dies
   // on a missing password leaves a half-built fixture behind.
-  const missing = accounts
-    .filter((account) => account.idpAccountExpected)
-    .map((account) => account.passwordEnvVar)
-    .filter((name) => !passwords[name]);
+  const missing = [
+    ...new Set(
+      accounts
+        .filter((account) => account.idpAccountExpected)
+        .map((account) => account.passwordEnvVar)
+        .filter((name) => !passwords[name]),
+    ),
+  ];
   if (missing.length) {
     throw new IdpError(
       `missing golden password(s): ${missing.join(", ")} — they are owner-placed in ` +

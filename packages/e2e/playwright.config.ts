@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import { GOLDEN_WORKER_POOL_SIZE } from "@ds/db/seed/golden";
 import { defineConfig, devices } from "@playwright/test";
 import { defineBddConfig } from "playwright-bdd";
 
@@ -87,6 +88,32 @@ const httpCredentials =
       }
     : undefined;
 
+/**
+ * ── Parallel workers (#2805) ─────────────────────────────────────────────────
+ * The suite runs `fullyParallel` on `E2E_WORKERS` workers (default 4). What made
+ * it serial was the SHARED golden account: two workers signed in as one golden
+ * doctor would revoke each other's session on logout and read each other's
+ * sign-in mail. Now every worker signs in as its own account of the golden worker
+ * pool (`golden.workerPool` in `@ds/db`, resolved by `parallelIndex` in
+ * `lib/worker-golden.ts`); every other journey already registers its own
+ * `randomUUID` account (`lib/owned-registration.ts`) or only reads. The pool is
+ * finite, so a worker count beyond it is refused HERE, before any test runs,
+ * rather than letting two workers share an account. The per-IP auth limit that
+ * parallel sign-ins would trip is already lifted on every stage slot
+ * (`infra/deploy/compose/slot/compose.yml`, #2684) and in CI.
+ */
+const workers = Number(process.env.E2E_WORKERS ?? 4);
+if (
+  !Number.isInteger(workers) ||
+  workers < 1 ||
+  workers > GOLDEN_WORKER_POOL_SIZE
+) {
+  throw new Error(
+    `E2E_WORKERS=${process.env.E2E_WORKERS} — the suite runs on 1..${GOLDEN_WORKER_POOL_SIZE} workers, ` +
+      `one golden worker-pool account each (GOLDEN_WORKER_POOL_SIZE in @ds/db).`,
+  );
+}
+
 const FEATURES = "../../apps/docs/content/specs/features/*/*-scenarios.feature";
 const STEPS = ["steps/**/*.ts"];
 
@@ -107,10 +134,9 @@ const academyTestDir = testDirFor("academy", tagExpressionFor("academy"));
 const doctorTestDir = testDirFor("doctor", tagExpressionFor("doctor"));
 
 export default defineConfig({
-  // Serial: the scenarios sign in as SHARED golden accounts on a shared slot, so
-  // parallel workers would race on one session.
-  fullyParallel: false,
-  workers: 1,
+  // Parallel: one golden worker-pool account per worker (see `workers` above).
+  fullyParallel: true,
+  workers,
   forbidOnly: !!process.env.CI,
   ...(grep ? { grep } : {}),
   retries: 0,

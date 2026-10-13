@@ -15,7 +15,10 @@ export type EventKindFormat = "online" | "offline" | "hybrid";
  * The design-system checkbox is `sr-only` behind its painted box, so the
  * wrapping label is the click target, as a mouse uses it.
  */
-async function toggleFormat(page: Page, format: EventKindFormat): Promise<void> {
+async function toggleFormat(
+  page: Page,
+  format: EventKindFormat,
+): Promise<void> {
   await page
     .getByTestId(`event-kind-format-${format}`)
     .locator("xpath=ancestor::label[1]")
@@ -59,4 +62,22 @@ export async function retireEventKind(
     "Снято с публикации",
     { timeout: 20_000 },
   );
+}
+
+/**
+ * The cleanup form of {@link retireEventKind}: retire the kind at `detailUrl`
+ * only while its detail does not already read it retired. A scenario that failed after
+ * sending a retire may have landed it without seeing the answer, and then the
+ * detail offers «restore», not «retire» — waiting for the retire control there
+ * would spend the cleanup's whole budget on one kind.
+ */
+export async function ensureEventKindRetired(
+  page: Page,
+  detailUrl: string,
+): Promise<void> {
+  await page.goto(detailUrl);
+  const status = page.getByTestId("event-kind-status");
+  await expect(status).toBeVisible({ timeout: 20_000 });
+  if ((await status.innerText()).trim() === "Снято с публикации") return;
+  await retireEventKind(page, detailUrl);
 }

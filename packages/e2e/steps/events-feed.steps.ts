@@ -438,8 +438,14 @@ Then(
 // specialty is chosen through the real 017 guest command, and the golden
 // doctors' broadcast (Кардиология, kind «Вебинар») is the one live эфир.
 
-/** A specialty whose «моя и смежные» reaches no golden live doctors' эфир. */
-const UNREACHED_SPECIALTY = "Мануальная терапия";
+/**
+ * A specialty whose «моя и смежные» reaches no golden live doctors' эфир yet
+ * is not empty: its adjacency carries upcoming эфиры, so the default scope
+ * stays «Моя и смежные» rather than falling back to every specialty (019
+ * LD-9) — {@link GOLDEN_EMPTY_SCOPE_SPECIALTY} would open on «Все
+ * специальности» and show the strip.
+ */
+const UNREACHED_SPECIALTY = GOLDEN_EMPTY_SPECIALTY;
 /** The kind the golden doctors' broadcast carries (`SEED_EVENT_KINDS.vebinar`). */
 const LIVE_KIND = "Вебинар";
 /** The doctor storefront's live read, through the host's own `/v1/*` proxy. */
@@ -2115,9 +2121,10 @@ async function expectKindFacetHolds(
   const group = panel.getByRole("group", { name: "Вид события" });
   await expect(group, `${what}: the kind facet`).toBeVisible();
   const buttons = group.getByRole("button");
-  await expect(buttons, `${what}: one option per kind in the reading`).toHaveCount(
-    kinds.length,
-  );
+  await expect(
+    buttons,
+    `${what}: one option per kind in the reading`,
+  ).toHaveCount(kinds.length);
   for (const title of kinds) {
     await expect(
       group.getByRole("button", { name: title, exact: true }),

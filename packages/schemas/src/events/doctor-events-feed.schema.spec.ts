@@ -16,7 +16,7 @@ describe("doctor events feed — the api's today (D10)", () => {
     to: "2026-10-22",
     days: [],
     totalCount: 0,
-    nextTo: null,
+    nextCount: null,
     nextFrom: null,
     remaining: 0,
     nextBatch: 0,
@@ -86,7 +86,7 @@ describe("019 EARS-8.17 doctor events feed — the served calendar days (#2831)"
       to: `${DOCTOR_EVENTS_QUERY_YEAR_MAX + 1}-01-01`,
       days: [],
       totalCount: 0,
-      nextTo: null,
+      nextCount: null,
       nextFrom: `${DOCTOR_EVENTS_QUERY_YEAR_MIN - 1}-12-31`,
       remaining: 0,
       nextBatch: 0,
@@ -103,9 +103,26 @@ describe("019 EARS-8.17 doctor events feed — the served calendar days (#2831)"
         ...feed,
         from: `${DOCTOR_EVENTS_QUERY_YEAR_MIN - 1}-12-31`,
         to: `${DOCTOR_EVENTS_QUERY_YEAR_MIN}-01-01`,
-        nextTo: `${DOCTOR_EVENTS_QUERY_YEAR_MAX + 1}-01-15`,
+        nextCount: 20,
       }).success,
     ).toBe(true);
+  });
+
+  it("019 EARS-3: «Будущие»'s `count` cursor round-trips through the page codec and the read codec; a malformed one is a 400 at the read (#2908)", () => {
+    const entries = EVENTS_PAGE_QUERY_CODEC.reencode({
+      from: "2026-10-08",
+      count: "20",
+    });
+    expect(
+      entries.filter(([key]) => key === "from" || key === "count"),
+    ).toEqual([
+      ["from", "2026-10-08"],
+      ["count", "20"],
+    ]);
+    const read = parseDoctorEventsFeedQuery({ count: "20" });
+    expect(read.success && read.data.count).toBe(20);
+    expect(parseDoctorEventsFeedQuery({ count: "0" }).success).toBe(false);
+    expect(parseDoctorEventsFeedQuery({ count: "ten" }).success).toBe(false);
   });
 
   it("019 EARS-9: the page URL keeps a refused day for the read to refuse", () => {

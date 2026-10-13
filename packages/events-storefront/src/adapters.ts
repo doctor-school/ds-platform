@@ -64,7 +64,7 @@ export const adaptPublicEventListing: EventsStorefrontAdapter = (
     horizon: {
       from: horizon.from,
       to: horizon.to,
-      nextTo: horizon.nextTo,
+      nextCount: horizon.nextCount,
       nextFrom: horizon.nextFrom,
     },
     remaining: horizon.remaining,
@@ -111,7 +111,7 @@ export const adaptDoctorEventsFeed: EventsStorefrontAdapter = (dto) => {
     horizon: {
       from: feed.from,
       to: feed.to,
-      nextTo: feed.nextTo,
+      nextCount: feed.nextCount,
       nextFrom: feed.nextFrom,
     },
     remaining: feed.remaining,

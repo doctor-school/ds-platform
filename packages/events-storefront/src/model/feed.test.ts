@@ -257,6 +257,15 @@ describe("showMoreLabel", () => {
     expect(showMoreLabel(5, 5, FEED_COPY)).toBe("Показать ещё 5 (осталось 5)");
     expect(showMoreLabel(0, 0, FEED_COPY)).toBe("Показать ещё");
   });
+
+  it("EARS-3: N is exactly what the step adds — 10 out of 184, never the 10th event's whole day; 11 remaining are one last step (#2908)", () => {
+    expect(showMoreLabel(10, 184, FEED_COPY)).toBe(
+      "Показать ещё 10 (осталось 184)",
+    );
+    expect(showMoreLabel(11, 11, FEED_COPY)).toBe(
+      "Показать ещё 11 (осталось 11)",
+    );
+  });
 });
 
 describe("liveStripView — 019 EARS-6 «Идёт сейчас»", () => {
@@ -670,7 +679,7 @@ describe("the page's one today (wave-2 gate §4.3 D10)", () => {
     horizon: {
       from: "2026-10-05",
       to: "2026-11-02",
-      nextTo: null,
+      nextCount: null,
       nextFrom: null,
     },
     remaining: 0,

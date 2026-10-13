@@ -43,7 +43,7 @@ const EventsBlockRetryInputSchema = z.discriminatedUnion("block", [
       .object({
         from: z.string(),
         to: z.string(),
-        nextTo: z.string().nullable(),
+        nextCount: z.number().int().positive().nullable(),
         nextFrom: z.string().nullable(),
       })
       .optional(),

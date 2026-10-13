@@ -32,7 +32,7 @@ export const FACET_KEYS: Readonly<Record<EventsFilterHost, readonly string[]>> =
   };
 
 /** The horizon keys a feed read takes besides the facets. */
-const HORIZON_KEYS = ["from", "to"] as const;
+const HORIZON_KEYS = ["from", "to", "count"] as const;
 
 /**
  * The codec's entries without the values the codec defaults to — the canonical
@@ -99,26 +99,40 @@ export function tenseHref(
     tense: tense === "past" ? "past" : undefined,
     from: undefined,
     to: undefined,
+    count: undefined,
     day: undefined,
   };
   return href(listing, codecEntries(next));
 }
 
 /**
- * «Показать ещё» — the same reading over a wider extent: «Будущие» widens `to`
- * to the read's `nextTo`, «Прошедшие» widens `from` back to `nextFrom` (D2).
- * `null` when nothing lies beyond in the reading's direction.
+ * «Показать ещё» — the same reading over a wider extent: «Будущие» grows to
+ * the read's `nextCount` events from `from` (a count, so a step adds exactly
+ * its events even inside a day), «Прошедшие» widens `from` back to `nextFrom`
+ * (D2). `null` when nothing lies beyond in the reading's direction.
  */
 export function showMoreHref(
   listing: string,
   raw: RawQueryRecord,
   horizon: EventsFeedHorizon,
 ): string | null {
-  const past = feedTenseOf(raw) === "past";
-  const from = past ? horizon.nextFrom : horizon.from;
-  const to = past ? horizon.to : horizon.nextTo;
-  if (from === null || to === null) return null;
-  return href(listing, codecEntries({ ...raw, from, to }));
+  if (feedTenseOf(raw) === "past") {
+    if (horizon.nextFrom === null) return null;
+    return href(
+      listing,
+      codecEntries({ ...raw, from: horizon.nextFrom, to: horizon.to }),
+    );
+  }
+  if (horizon.nextCount === null) return null;
+  return href(
+    listing,
+    codecEntries({
+      ...raw,
+      from: horizon.from,
+      to: undefined,
+      count: String(horizon.nextCount),
+    }),
+  );
 }
 
 /** The page query with one facet removed. */
@@ -216,6 +230,7 @@ export function viewHref(
       day: undefined,
       from: undefined,
       to: undefined,
+      count: undefined,
     }),
   );
 }
@@ -267,7 +282,9 @@ function defaultExtent(
  * the default one. A tense switch drops it for the other tense's default
  * extent. A day the extent does not hold widens it in the tense's direction so
  * the day is inside the read: «Будущие» widens the exclusive `to` to the day
- * after it, «Прошедшие» widens `from` back to it. With the tense unchanged and
+ * after it — its last day too, which a `count` step may hold only in part
+ * (019 LD-2) — and drops the `count`; «Прошедшие» widens `from` back to it.
+ * With the tense unchanged and
  * no served extent known the href never invents one.
  */
 export function dayHref(
@@ -281,11 +298,19 @@ export function dayHref(
   const tense: FeedTense = date < today ? "past" : "upcoming";
   const switched = tense !== current;
   const extent = switched ? defaultExtent(tense, today) : horizon;
+  // «Будущие»'s last day may continue past its `count` (019 LD-2), so a
+  // click on it, too, takes the whole day in.
+  const lastDay =
+    extent === undefined ? undefined : addDoctorEventsFeedDays(extent.to, -1);
   const widen =
     extent === undefined
       ? {}
-      : tense === "upcoming" && date >= extent.to
-        ? { from: extent.from, to: addDoctorEventsFeedDays(date, 1) }
+      : tense === "upcoming" && date >= lastDay!
+        ? {
+            from: extent.from,
+            to: addDoctorEventsFeedDays(date, 1),
+            count: undefined,
+          }
         : tense === "past" && date < extent.from
           ? { from: date, to: extent.to }
           : {};
@@ -294,7 +319,7 @@ export function dayHref(
     codecEntries({
       ...raw,
       tense: tense === "past" ? "past" : undefined,
-      ...(switched ? { from: undefined, to: undefined } : {}),
+      ...(switched ? { from: undefined, to: undefined, count: undefined } : {}),
       ...widen,
       view: undefined,
       day: date,

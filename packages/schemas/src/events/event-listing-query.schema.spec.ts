@@ -198,6 +198,7 @@ describe("019 EARS-8 event listing query codec", () => {
         "tense",
         "from",
         "to",
+        "count",
         "format",
         "kind",
         "specialty",

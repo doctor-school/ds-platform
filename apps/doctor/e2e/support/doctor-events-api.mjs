@@ -14,11 +14,13 @@ import { createServer } from "node:http";
  * against the real database.
  *
  * The horizon walk is modelled the way the real service behaves (019 LD-2,
- * `event-horizon.ts`): «Будущие» pages by a COUNT of events in whole days — a
- * read with no explicit `to` holds the nearest step of matching events and its
- * `to` is the day after the step's last one; `nextTo` takes in the next step
- * the same way; a read that already carries every fixture event gets
- * `nextTo: null`, because there is nothing left to walk to (#1803).
+ * `event-horizon.ts`): «Будущие» pages by an exact COUNT of events — a read
+ * with no explicit `to` holds the `count` nearest matching events (by default
+ * the step of 10, all of them when 11 or fewer match) and its `to` is the day
+ * after the last one; `nextCount` is the events on screen plus the next step
+ * (10, or all that remain when 11 or fewer do); a read that already carries
+ * every fixture event gets `nextCount: null`, because there is nothing left to
+ * walk to (#1803).
  */
 const port = Number(process.env.DOCTOR_EVENTS_FAKE_API_PORT ?? 3214);
 
@@ -255,19 +257,12 @@ const itemCount = (days) =>
   days.reduce((sum, group) => sum + group.items.length, 0);
 
 /**
- * The real `stepBound` for «Будущие» (apps/api `event-horizon.ts`): the `to`
- * that takes in the next `UPCOMING_STEP_EVENTS` fixture events at or after
- * `bound` — the day AFTER the step's last one, whole days; `null` when none
- * lies there.
+ * The real `eventHorizonStepSize` (apps/api `event-horizon.ts`): a «Будущие»
+ * step adds exactly `UPCOMING_STEP_EVENTS`, or all that remain when they are
+ * one more at most — never a one-event tail.
  */
-function upcomingStepTo(bound, days = ALL_DAYS) {
-  const starts = days
-    .filter((group) => group.day >= bound)
-    .flatMap((group) => group.items.map(() => group.day))
-    .sort();
-  if (starts.length === 0) return null;
-  return addDays(starts[Math.min(UPCOMING_STEP_EVENTS, starts.length) - 1], 1);
-}
+const upcomingStepSize = (remaining) =>
+  remaining <= UPCOMING_STEP_EVENTS + 1 ? remaining : UPCOMING_STEP_EVENTS;
 
 function monthDays() {
   return Array.from({ length: 30 }, (_unused, index) => {
@@ -516,7 +511,7 @@ const server = createServer((request, response) => {
         to,
         days,
         totalCount: itemCount(days),
-        nextTo: null,
+        nextCount: null,
         nextFrom,
         remaining: itemCount(PAST_DAYS.filter((group) => group.day < from)),
         // N of «Показать ещё N (осталось M)»: the events the next step adds.
@@ -550,27 +545,46 @@ const server = createServer((request, response) => {
       items: group.items.filter((item) => matchesFacets(item, url)),
     }));
     const from = url.searchParams.get("from") ?? DEFAULT_FROM;
+    // Every matching event from `from` on, soonest first, with its day group.
+    const reach = matched
+      .filter((group) => group.day >= from)
+      .flatMap((group) => group.items.map((item) => ({ group, item })));
+    // A stated `to` is a whole-day extent; otherwise the extent is the `count`
+    // nearest events (`event-horizon.ts` `resolveEventHorizonFromData`).
+    const statedTo = url.searchParams.get("to");
+    const count = Number(url.searchParams.get("count") ?? Number.NaN);
+    const shown =
+      statedTo !== null
+        ? reach.filter(({ group }) => group.day < statedTo)
+        : reach.slice(
+            0,
+            Number.isInteger(count) && count > 0
+              ? count
+              : upcomingStepSize(reach.length),
+          );
     const to =
-      url.searchParams.get("to") ??
-      upcomingStepTo(from, matched) ??
-      addDays(from, 1);
+      statedTo ??
+      (shown.length > 0
+        ? addDays(shown.at(-1).group.day, 1)
+        : addDays(from, 1));
     // `day` is deliberately NOT read here: the real service ignores it too
     // (`doctor-events-feed.schema.ts` — "Never narrows the read", LD-1). A day
     // selection is URL state that scrolls the feed body to the `day-<ISO>`
     // anchor; teaching this double to narrow would evidence a fiction.
-    const served = ALL_DAYS.filter(
-      (group) => group.day >= from && group.day < to,
-    );
     // The `format` facet is honoured (every fixture card is `online`) so a
     // route-level test can prove the facet reached the SERVER through the URL
     // rather than being applied in the browser (019 EARS-8, #1523).
-    const days = served
-      .map((group) => ({
-        ...group,
-        items: group.items.filter((item) => matchesFacets(item, url)),
-      }))
-      .filter((group) => group.items.length > 0);
-    const nextTo = upcomingStepTo(to, matched);
+    const days = [];
+    for (const { group, item } of shown) {
+      const last = days.at(-1);
+      if (last?.day === group.day) last.items.push(item);
+      else days.push({ ...group, items: [item] });
+    }
+    // «показать ещё» is offered only when a matching fixture event actually
+    // lies beyond the served extent — the same data-aware rule the service
+    // applies (#1803).
+    const remaining = reach.length - shown.length;
+    const nextBatch = upcomingStepSize(remaining);
     return json(response, 200, {
       tense: "upcoming",
       // D10 — every read carries the api's (here: pinned) today.
@@ -578,13 +592,8 @@ const server = createServer((request, response) => {
       from,
       to,
       days,
-      totalCount: itemCount(days),
-      // «показать ещё» is offered only when a fixture day actually lies beyond
-      // the served window, and the `to` it names COVERS that day — the same
-      // data-aware rule the service applies (#1803). Deriving it from the mere
-      // presence of a `to` would let the route look green while production
-      // offered a control walking into an empty widening.
-      nextTo,
+      totalCount: shown.length,
+      nextCount: remaining === 0 ? null : shown.length + nextBatch,
       nextFrom: null,
       // D9 — the doctor option block; no fixture event carries a city (007).
       facets: {
@@ -599,18 +608,10 @@ const server = createServer((request, response) => {
         })),
       },
       // The M of «Показать ещё N (осталось M)»: the fixture events beyond the extent;
-      // `0` exactly when `nextTo` is `null`, as the contract states.
-      remaining:
-        nextTo === null
-          ? 0
-          : itemCount(matched.filter((group) => group.day >= to)),
-      // N: the events in `[to, nextTo)` — what the next step adds.
-      nextBatch:
-        nextTo === null
-          ? 0
-          : itemCount(
-              matched.filter((group) => group.day >= to && group.day < nextTo),
-            ),
+      // `0` exactly when `nextCount` is `null`, as the contract states.
+      remaining,
+      // N: exactly what the next step adds.
+      nextBatch,
       targeting: {
         mode: "general",
         specialtyReference: null,

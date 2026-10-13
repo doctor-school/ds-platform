@@ -56,12 +56,13 @@ export interface EventsFeedCard {
 
 /**
  * The read's extent (019 LD-2). «Показать ещё» widens it: on «Будущие» to
- * `nextTo`, on «Прошедшие» back to `nextFrom`; `null` = nothing lies beyond.
+ * `nextCount` events from `from`, on «Прошедшие» back to `nextFrom`; `null` =
+ * nothing lies beyond.
  */
 export interface EventsFeedHorizon {
   readonly from: string;
   readonly to: string;
-  readonly nextTo: string | null;
+  readonly nextCount: number | null;
   readonly nextFrom: string | null;
 }
 

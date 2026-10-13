@@ -130,7 +130,7 @@ test("NEW: after «Показать ещё» a day click keeps the widened exten
   // today the feed read carries (D10, the double's pinned 2026-09-01).
   await page.goto("/events");
   await page.getByTestId("events-feed-show-more").click();
-  await expect(page).toHaveURL(/\?from=2026-09-01&to=2026-09-21$/);
+  await expect(page).toHaveURL(/\?from=2026-09-01&count=14$/);
 
   await page
     .getByTestId("events-compact-month")

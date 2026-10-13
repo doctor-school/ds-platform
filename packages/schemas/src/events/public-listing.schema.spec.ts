@@ -119,7 +119,7 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
     ).toBe(false);
   });
 
-  it("NEW: a horizon page echoes the applied horizon and the `to` «Показать ещё» writes", () => {
+  it("NEW: a horizon page echoes the applied horizon and the `count` «Показать ещё» writes", () => {
     const parsed = PublicEventListingPageSchema.safeParse({
       data: [card()],
       counts: { upcoming: 5, past: 0, upcomingSchools: 2, pastSchools: 0 },
@@ -128,7 +128,7 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
         today: "2026-10-08",
         from: "2026-10-08",
         to: "2026-10-22",
-        nextTo: "2026-11-05",
+        nextCount: 20,
         nextFrom: null,
         remaining: 3,
         nextBatch: 2,
@@ -136,7 +136,7 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
     });
     expect(parsed.success).toBe(true);
     if (!parsed.success) return;
-    expect(parsed.data.horizon?.nextTo).toBe("2026-11-05");
+    expect(parsed.data.horizon?.nextCount).toBe(20);
     // D10 — the api's today rides the horizon page; one without it is refused.
     expect(parsed.data.horizon?.today).toBe("2026-10-08");
     const { today: _today, ...noToday } = parsed.data.horizon!;
@@ -154,7 +154,7 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
         today: "2026-10-08",
         from: "1899-12-31",
         to: "3000-01-01",
-        nextTo: null,
+        nextCount: null,
         nextFrom: null,
         remaining: 0,
         nextBatch: 0,
@@ -175,7 +175,7 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
         today: "2026-10-08",
         from: "2026-09-24",
         to: "2026-10-09",
-        nextTo: null,
+        nextCount: null,
         nextFrom: "2026-08-27",
         remaining: 4,
         nextBatch: 1,
@@ -189,7 +189,7 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
     expect(
       PublicEventListingPageSchema.safeParse({
         ...base,
-        horizon: { from: "2026-09-24", to: "2026-10-09", nextTo: null },
+        horizon: { from: "2026-09-24", to: "2026-10-09", nextCount: null },
       }).success,
     ).toBe(false);
   });

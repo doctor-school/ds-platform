@@ -7,7 +7,9 @@ import {
   EVENT_HORIZON_ROW_CAP,
   eventHorizonReachingFirstMatch,
   eventHorizonInstants,
+  EVENT_HORIZON_LAST_STEP,
   EVENT_HORIZON_STEP,
+  holdBackEventHorizonRows,
   resolveEventHorizonBeyond,
   resolveEventHorizonFromData,
   type EventHorizon,
@@ -30,7 +32,7 @@ describe("boundEventHorizonRows — one horizon response stays bounded (wave-2 g
   });
 
   const nothingBeyond = {
-    nextTo: null,
+    nextCount: null,
     nextFrom: null,
     remaining: 0,
     nextBatch: 0,
@@ -106,7 +108,7 @@ describe("boundEventHorizonRows — one horizon response stays bounded (wave-2 g
         { to: "2026-10-20" },
         {
           ...nothingBeyond,
-          nextTo: "2026-11-02",
+          nextCount: 2,
           remaining: 1,
           nextBatch: 1,
         },
@@ -194,7 +196,7 @@ async function readHorizon(
   archive: readonly { id: string; startsAt: Date }[],
   tense: "upcoming" | "past",
   today: string,
-  query: { from?: string; to?: string },
+  query: { from?: string; to?: string; count?: number },
 ) {
   const listStartsIn = async (range: EventHorizonReach) =>
     archive
@@ -212,22 +214,25 @@ async function readHorizon(
   const { fromInstant, toInstant } = eventHorizonInstants(requested);
   const inside = archive
     .filter((row) => row.startsAt >= fromInstant && row.startsAt < toInstant)
-    .sort((a, b) =>
-      EVENT_HORIZON_READ_ORDER[tense] === "asc"
-        ? a.startsAt.getTime() - b.startsAt.getTime()
-        : b.startsAt.getTime() - a.startsAt.getTime(),
-    )
+    // `(startsAt, id)` in the read's direction, as both repositories order.
+    .sort((a, b) => {
+      const ascending =
+        a.startsAt.getTime() - b.startsAt.getTime() || a.id.localeCompare(b.id);
+      return EVENT_HORIZON_READ_ORDER[tense] === "asc" ? ascending : -ascending;
+    })
     .slice(0, EVENT_HORIZON_ROW_CAP + 1);
   const bounded = boundEventHorizonRows(requested, tense, inside);
+  const shown = holdBackEventHorizonRows(bounded.rows, requested.heldBack);
   const beyond = await resolveEventHorizonBeyond(
     bounded.horizon,
     tense,
     listStartsIn,
+    { count: shown.length, heldBack: requested.heldBack },
   );
   return {
-    ...clampRequestedEdge(bounded.horizon, tense, bounded.rows, query, beyond),
+    ...clampRequestedEdge(bounded.horizon, tense, shown, query, beyond),
     ...beyond,
-    ids: bounded.rows.map((row) => row.id),
+    ids: shown.map((row) => row.id),
   };
 }
 
@@ -268,10 +273,10 @@ describe("the capped window slides with «Показать ещё» (wave-2 gate
     const farthest = archive.at(-1)!.id;
     let page = await readHorizon(archive, "upcoming", today, {});
     let steps = 0;
-    while (page.nextTo !== null) {
+    while (page.nextCount !== null) {
       const next = await readHorizon(archive, "upcoming", today, {
         from: page.from,
-        to: page.nextTo,
+        count: page.nextCount,
       });
       expect(next.ids.length).toBeLessThanOrEqual(EVENT_HORIZON_ROW_CAP);
       expect(next.ids.some((id) => !page.ids.includes(id))).toBe(true);
@@ -288,10 +293,10 @@ describe("the capped window slides with «Показать ещё» (wave-2 gate
     const farAhead = addDoctorEventsFeedDays(today, 800);
     const archive = [...archiveOf(1, 300, 2), at(farAhead)];
     let page = await readHorizon(archive, "upcoming", today, {});
-    while (page.nextTo !== null) {
+    while (page.nextCount !== null) {
       page = await readHorizon(archive, "upcoming", today, {
         from: page.from,
-        to: page.nextTo,
+        count: page.nextCount,
       });
     }
     expect(page.ids).toContain(`${farAhead}-0`);
@@ -302,26 +307,26 @@ describe("the capped window slides with «Показать ещё» (wave-2 gate
 describe("eventHorizonReachingFirstMatch — the default extent opens on the first match (#1973)", () => {
   const beyond = (
     over: Partial<{
-      nextTo: string | null;
+      nextCount: number | null;
       nextFrom: string | null;
       remaining: number;
     }>,
   ) => ({
-    nextTo: null,
+    nextCount: null,
     nextFrom: null,
     remaining: 0,
     nextBatch: 0,
     ...over,
   });
 
-  it("upcoming: an empty DEFAULT window with matches beyond reads up to the next bound", () => {
+  it("upcoming: the default extent is counted from the data, so it never needs re-reading", () => {
     expect(
       eventHorizonReachingFirstMatch(
         { tense: "upcoming" },
         0,
-        beyond({ nextTo: "2026-11-30", remaining: 8 }),
+        beyond({ nextCount: 8, remaining: 8 }),
       ),
-    ).toEqual({ to: "2026-11-30" });
+    ).toBeNull();
   });
 
   it("past: an empty DEFAULT window with older matches reads back to the next bound", () => {
@@ -336,7 +341,7 @@ describe("eventHorizonReachingFirstMatch — the default extent opens on the fir
 
   it("a window holding a match, nothing beyond, or a moving edge the URL states is left as it is", () => {
     const some = beyond({
-      nextTo: "2026-11-30",
+      nextCount: 2,
       nextFrom: "2026-08-01",
       remaining: 2,
     });
@@ -345,13 +350,6 @@ describe("eventHorizonReachingFirstMatch — the default extent opens on the fir
     ).toBeNull();
     expect(
       eventHorizonReachingFirstMatch({ tense: "upcoming" }, 0, beyond({})),
-    ).toBeNull();
-    expect(
-      eventHorizonReachingFirstMatch(
-        { tense: "upcoming", to: "2026-10-20" },
-        0,
-        some,
-      ),
     ).toBeNull();
     expect(
       eventHorizonReachingFirstMatch(
@@ -401,16 +399,17 @@ describe("019 LD-2 both tenses page by a count step of 10 events, not by days (#
     expect(page.ids).toEqual(archive.slice(0, 10).map((row) => row.id));
     expect(page.from).toBe(today);
     expect(page.to).toBe(addDoctorEventsFeedDays(today, 91));
-    expect(page.nextTo).toBe(addDoctorEventsFeedDays(today, 181));
+    expect(page.nextCount).toBe(20);
     expect(page.nextBatch).toBe(10);
     expect(page.remaining).toBe(15);
   });
 
-  it("upcoming: with 10 or fewer upcoming events the screen holds them all and offers no «Показать ещё»", async () => {
-    for (const count of [2, 10]) {
+  it("EARS-3: with 11 or fewer upcoming events the screen holds them all and offers no «Показать ещё» — never a one-event tail", async () => {
+    expect(EVENT_HORIZON_LAST_STEP).toBe(11);
+    for (const count of [2, 10, 11]) {
       const page = await readHorizon(dailyAfter(count), "upcoming", today, {});
       expect(page.ids).toHaveLength(count);
-      expect(page.nextTo).toBeNull();
+      expect(page.nextCount).toBeNull();
       expect(page.remaining).toBe(0);
       expect(page.nextBatch).toBe(0);
     }
@@ -440,10 +439,10 @@ describe("019 LD-2 both tenses page by a count step of 10 events, not by days (#
     const screens = [page.ids.length];
     const batches = [page.nextBatch];
     const remainders = [page.remaining];
-    while (page.nextTo !== null) {
+    while (page.nextCount !== null) {
       page = await readHorizon(archive, "upcoming", today, {
         from: page.from,
-        to: page.nextTo,
+        count: page.nextCount,
       });
       screens.push(page.ids.length);
       batches.push(page.nextBatch);
@@ -465,16 +464,81 @@ describe("019 LD-2 both tenses page by a count step of 10 events, not by days (#
     expect(page.remaining).toBe(0);
   });
 
-  it("upcoming: the extent is whole days: a day the 10th event falls on is shown whole", async () => {
-    // Nine single days, then a day holding three events.
+  /** Walks «Будущие» from the default screen to the end, step by step. */
+  const walkUpcoming = async (
+    archive: readonly { id: string; startsAt: Date }[],
+  ) => {
+    let page = await readHorizon(archive, "upcoming", today, {});
+    const pages = [page];
+    while (page.nextCount !== null) {
+      page = await readHorizon(archive, "upcoming", today, {
+        from: page.from,
+        count: page.nextCount,
+      });
+      pages.push(page);
+    }
+    return pages;
+  };
+
+  it("EARS-3: a step adds exactly 10 events even when the 10th shares its day with later ones (184 remaining → «ещё 10»)", async () => {
+    // Ten single days, nine more, a day holding three events, then 172 singles.
+    const archive = [
+      ...dailyAfter(19),
+      ...rowsOn([addDoctorEventsFeedDays(today, 20)], 3),
+      ...Array.from({ length: 172 }, (_, d) =>
+        at(addDoctorEventsFeedDays(today, 21 + d)),
+      ),
+    ];
+    const first = await readHorizon(archive, "upcoming", today, {});
+    expect(first.ids).toEqual(archive.slice(0, 10).map((row) => row.id));
+    expect(first.remaining).toBe(184);
+    expect(first.nextBatch).toBe(10);
+    expect(first.nextCount).toBe(20);
+    // The step ends inside the three-event day: exactly 10 more, not 12.
+    const second = await readHorizon(archive, "upcoming", today, {
+      from: first.from,
+      count: first.nextCount!,
+    });
+    expect(second.ids).toEqual(archive.slice(0, 20).map((row) => row.id));
+    expect(second.to).toBe(addDoctorEventsFeedDays(today, 21));
+    expect(second.remaining).toBe(174);
+    expect(second.nextBatch).toBe(10);
+    // The rest of that day opens the next step.
+    const third = await readHorizon(archive, "upcoming", today, {
+      from: second.from,
+      count: second.nextCount!,
+    });
+    expect(third.ids).toEqual(archive.slice(0, 30).map((row) => row.id));
+  });
+
+  it("EARS-3: 11 remaining → one last step adds all 11 and the list ends", async () => {
+    const pages = await walkUpcoming(dailyAfter(21));
+    expect(pages.map((page) => page.ids.length)).toEqual([10, 21]);
+    expect(pages.map((page) => page.nextBatch)).toEqual([11, 0]);
+    expect(pages.map((page) => page.remaining)).toEqual([11, 0]);
+  });
+
+  it("EARS-3: 12 remaining → a step of 10, then a last step of 2", async () => {
+    const pages = await walkUpcoming(dailyAfter(22));
+    expect(pages.map((page) => page.ids.length)).toEqual([10, 20, 22]);
+    expect(pages.map((page) => page.nextBatch)).toEqual([10, 2, 0]);
+  });
+
+  it("EARS-3: the default screen holds exactly 10 even when the 10th shares its day with later ones", async () => {
+    // Nine single days, then a day holding three events, then 5 more.
     const archive = [
       ...dailyAfter(9),
       ...rowsOn([addDoctorEventsFeedDays(today, 20)], 3),
+      ...Array.from({ length: 5 }, (_, d) =>
+        at(addDoctorEventsFeedDays(today, 21 + d)),
+      ),
     ];
     const page = await readHorizon(archive, "upcoming", today, {});
-    expect(page.ids).toHaveLength(12);
+    expect(page.ids).toEqual(archive.slice(0, 10).map((row) => row.id));
     expect(page.to).toBe(addDoctorEventsFeedDays(today, 21));
-    expect(page.remaining).toBe(0);
+    expect(page.remaining).toBe(7);
+    expect(page.nextBatch).toBe(7);
+    expect(page.nextCount).toBe(17);
   });
 
   it("no event in the tense: the default screen is empty and offers no «Показать ещё»", async () => {
@@ -493,7 +557,7 @@ describe("019 LD-2 both tenses page by a count step of 10 events, not by days (#
       {},
     );
     expect(upcoming.ids).toEqual([]);
-    expect(upcoming.nextTo).toBeNull();
+    expect(upcoming.nextCount).toBeNull();
   });
 
   it("a URL with an explicit `from`/`to` still addresses that range, answered as written", async () => {
@@ -507,7 +571,7 @@ describe("019 LD-2 both tenses page by a count step of 10 events, not by days (#
     expect(page.to).toBe(to);
     // The next step from a stated range is the next 10 events past it.
     expect(page.nextBatch).toBe(10);
-    expect(page.nextTo).toBe(addDoctorEventsFeedDays(today, 14));
+    expect(page.nextCount).toBe(13);
     expect(page.remaining).toBe(22);
   });
 });

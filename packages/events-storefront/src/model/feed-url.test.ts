@@ -73,7 +73,7 @@ describe("the one feed codec (019 LD-1)", () => {
     expect(feedTenseOf({ tense: "nonsense" })).toBe("upcoming");
   });
 
-  it("NEW: «Показать ещё» writes the extent to the URL — «Будущие» widens to, «Прошедшие» widens from", () => {
+  it("NEW: «Показать ещё» writes the extent to the URL — «Будущие» grows its count, «Прошедшие» widens from", () => {
     expect(
       showMoreHref(
         "/events",
@@ -81,11 +81,11 @@ describe("the one feed codec (019 LD-1)", () => {
         {
           from: "2026-10-08",
           to: "2026-10-22",
-          nextTo: "2026-11-05",
+          nextCount: 20,
           nextFrom: null,
         },
       ),
-    ).toBe("/events?from=2026-10-08&to=2026-11-05");
+    ).toBe("/events?from=2026-10-08&count=20");
     expect(
       showMoreHref(
         "/events",
@@ -93,7 +93,7 @@ describe("the one feed codec (019 LD-1)", () => {
         {
           from: "2026-09-24",
           to: "2026-10-08",
-          nextTo: null,
+          nextCount: null,
           nextFrom: "2026-09-10",
         },
       ),
@@ -102,16 +102,26 @@ describe("the one feed codec (019 LD-1)", () => {
       showMoreHref(
         "/events",
         {},
-        { from: "a", to: "b", nextTo: null, nextFrom: "z" },
+        { from: "a", to: "b", nextCount: null, nextFrom: "z" },
       ),
     ).toBeNull();
     expect(
       showMoreHref(
         "/events",
         { tense: "past" },
-        { from: "a", to: "b", nextTo: "y", nextFrom: null },
+        { from: "a", to: "b", nextCount: 3, nextFrom: null },
       ),
     ).toBeNull();
+  });
+
+  it("EARS-3: «Будущие» «Показать ещё» writes the event count, so the step adds exactly its events even inside a day; a stated `to` gives way to it (#2908)", () => {
+    expect(
+      showMoreHref(
+        "/events",
+        { from: "2026-10-08", to: "2026-10-30" },
+        { from: "2026-10-08", to: "2026-10-30", nextCount: 31, nextFrom: null },
+      ),
+    ).toBe("/events?from=2026-10-08&count=31");
   });
 
   it("NEW: «Показать ещё» writes BOTH returned bounds — a capped read that moved its fixed edge slides the window instead of growing it (row 32)", () => {
@@ -124,7 +134,7 @@ describe("the one feed codec (019 LD-1)", () => {
         {
           from: "2026-01-01",
           to: "2026-03-01",
-          nextTo: null,
+          nextCount: null,
           nextFrom: "2025-12-18",
         },
       ),
@@ -137,11 +147,11 @@ describe("the one feed codec (019 LD-1)", () => {
         {
           from: "2026-12-20",
           to: "2027-06-01",
-          nextTo: "2027-06-15",
+          nextCount: 510,
           nextFrom: null,
         },
       ),
-    ).toBe("/events?from=2026-12-20&to=2027-06-15");
+    ).toBe("/events?from=2026-12-20&count=510");
   });
 
   it("the read query carries the tense under the host's read param and the codec's horizon and facets", () => {
@@ -252,6 +262,21 @@ describe("dayHref — one day-href rule over the extent (row 57)", () => {
     const query = params(dayHref("/events", {}, "2026-09-15", HORIZON, TODAY));
     expect(query.get("from")).toBe("2026-09-01");
     expect(query.get("to")).toBe("2026-09-16");
+  });
+
+  it("EARS-3: a day click on the extent's last day — which a `count` step may hold only in part — takes the whole day in and drops the count (#2908)", () => {
+    const query = params(
+      dayHref(
+        "/events",
+        { from: "2026-09-01", count: "20" },
+        "2026-09-14",
+        HORIZON,
+        TODAY,
+      ),
+    );
+    expect(query.get("from")).toBe("2026-09-01");
+    expect(query.get("to")).toBe("2026-09-15");
+    expect(query.get("count")).toBeNull();
   });
 
   it("EARS-4.5: a day past the horizon widens to the day AFTER it, so the day itself is inside the read", () => {

@@ -66,7 +66,8 @@ export interface EventsFeedWorld {
   pastBefore?: { cards: number; step: number; from: string | null };
   /** The horizon before «Показать ещё» on «Будущие». */
   horizonBefore?: {
-    to: string | null;
+    /** The `count` cursor of the URL (019 LD-2), absent on the default screen. */
+    count: string | null;
     days: number;
     cards: number;
     step: number;

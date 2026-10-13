@@ -116,12 +116,27 @@ export const DoctorEventsFeedSpecialtySchema = z.union([
  * this many events nearest today — «Будущие» the soonest upcoming ones,
  * however far ahead; «Прошедшие» the most recent past ones, however long ago —
  * and every «показать ещё» adds this many more in the tense's direction (the
- * last step the remainder). The extent stays `from`/`to` in whole МСК days, so
- * a day the step's last event falls on is shown whole. A `from`/`to` outside
+ * last step the remainder). «Будущие» counts exactly — its extent is `from`
+ * plus the `count` cursor, so a day can continue on the next step, and when
+ * one more than this many remain the last step takes them all; «Прошедшие»
+ * stays `from`/`to` in whole МСК days, a day the step's last event falls on
+ * shown whole. A `from`/`to` outside
  * the served years ({@link DOCTOR_EVENTS_QUERY_YEAR_MIN}–
  * {@link DOCTOR_EVENTS_QUERY_YEAR_MAX}) is a 400 (019 EARS-8.17).
  */
 export const DOCTOR_EVENTS_FEED_STEP_EVENTS = 10;
+
+/**
+ * «Будущие»'s count cursor (019 LD-2): the extent is the `count` nearest
+ * upcoming events from `from`, so «показать ещё» adds exactly the next step
+ * even inside a day. A stated `to` is a whole-day extent and wins over it;
+ * «Прошедшие» ignores it.
+ */
+export const DoctorEventsFeedCountSchema = z.coerce
+  .number()
+  .int()
+  .min(1)
+  .max(100_000);
 
 export const DoctorEventsFeedQuerySchema = z
   .object({
@@ -130,6 +145,7 @@ export const DoctorEventsFeedQuerySchema = z
     tense: DoctorEventsFeedTenseSchema.default("upcoming"),
     from: DoctorEventsFeedDaySchema.optional(),
     to: DoctorEventsFeedDaySchema.optional(),
+    count: DoctorEventsFeedCountSchema.optional(),
     format: z.array(DoctorEventFormatSchema).default([]),
     /**
      * The `kind` FACET is a list of 012 event-kind dictionary SLUGS — the
@@ -229,31 +245,31 @@ export const DoctorEventsFeedSchema = z
     days: z.array(DoctorEventDayGroupSchema),
     totalCount: z.number().int().nonnegative(),
     /**
-     * «Будущие»: the later `to` «показать ещё» writes into the URL — the day
-     * after the next step's last event; `null` when nothing lies past the
+     * «Будущие»: the `count` «показать ещё» writes into the URL — the events
+     * on screen plus the next step's; `null` when nothing lies past the
      * extent. Always `null` on «Прошедшие», whose extent widens backward
      * ({@link nextFrom}).
      */
-    nextTo: DoctorEventsFeedDayShapeSchema.nullable(),
+    nextCount: z.number().int().positive().nullable(),
     /**
      * «Прошедшие»: the older `from` «показать ещё» writes into the URL — the
      * day of the next step's last event; `null` when nothing older lies
-     * beyond the extent. Always `null` on
-     * «Будущие». One codec: the past extent moves its `from`, the upcoming
-     * extent its `to` — the same two URL keys.
+     * beyond the extent. Always `null` on «Будущие», whose extent grows by
+     * its `count` ({@link nextCount}).
      */
     nextFrom: DoctorEventsFeedDayShapeSchema.nullable(),
     /**
      * The matching events beyond the current extent that further «показать
      * ещё» steps can still reach — the M of «Показать ещё N (осталось M)»;
-     * `0` exactly when both next bounds are `null`.
+     * `0` exactly when both cursors are `null`.
      */
     remaining: z.number().int().nonnegative(),
     /**
-     * The matching events the NEXT «показать ещё» step adds — the events in
-     * `[to, nextTo)` on «Будущие», `[nextFrom, from)` on «Прошедшие» — the N
-     * of «Показать ещё N (осталось M)»; `0` exactly when both next bounds are
-     * `null`.
+     * The matching events the NEXT «показать ещё» step adds — on «Будущие»
+     * exactly {@link DOCTOR_EVENTS_FEED_STEP_EVENTS}, or all that remain when
+     * they are one more at most; on «Прошедшие» the events in
+     * `[nextFrom, from)` — the N of «Показать ещё N (осталось M)»; `0` exactly
+     * when both cursors are `null`.
      */
     nextBatch: z.number().int().nonnegative(),
     targeting: DoctorEventsFeedTargetingSchema,
@@ -280,6 +296,7 @@ export const DOCTOR_EVENTS_FEED_QUERY_FIELDS = [
   { key: "tense", kind: "scalar" },
   { key: "from", kind: "scalar" },
   { key: "to", kind: "scalar" },
+  { key: "count", kind: "scalar" },
   { key: "format", kind: "list" },
   { key: "kind", kind: "list" },
   {

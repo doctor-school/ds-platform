@@ -319,7 +319,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(upcoming.data.map((c) => c.id)).toEqual([farUpcoming]);
       expect(upcoming.horizon?.from).toBe(today);
       expect(upcoming.horizon?.to).toBe(addDoctorEventsFeedDays(today, 41));
-      expect(upcoming.horizon?.nextTo).toBeNull();
+      expect(upcoming.horizon?.nextCount).toBeNull();
       expect(upcoming.horizon?.remaining).toBe(0);
 
       const past = await read(`timeframe=past&expert=${farExpertSlug}`);

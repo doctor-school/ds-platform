@@ -32,6 +32,7 @@ import {
   type EventHorizonReach,
   eventHorizonInstants,
   eventHorizonReachingFirstMatch,
+  holdBackEventHorizonRows,
   eventHorizonTenseReach,
   eventHorizonUpcomingReach,
   resolveEventHorizonBeyond,
@@ -173,15 +174,21 @@ export class DoctorEventsService {
     const rows = bounded.rows;
 
     const cards = await this.toCards(rows);
-    const filtered = applyCardFacets(cards, query);
+    // «Будущие» counts exactly (019 LD-2): the latest events of the extent's
+    // last day past its `count` wait for the next step.
+    const filtered = holdBackEventHorizonRows(
+      applyCardFacets(cards, query),
+      requested.heldBack,
+    );
 
     const days = groupByDay(rows, filtered);
-    // The next bound («Будущие» `to`, «Прошедшие» an older `from`) and the
-    // remainder — the one resolution both storefronts share.
+    // The next cursor («Будущие» `count`, «Прошедшие» an older `from`) and
+    // the remainder — the one resolution both storefronts share.
     const beyond = await resolveEventHorizonBeyond(
       bounded.horizon,
       query.tense,
       listStartsIn,
+      { count: filtered.length, heldBack: requested.heldBack },
     );
 
     // #1973 — an empty default window under matches beyond opens on the
@@ -214,8 +221,8 @@ export class DoctorEventsService {
       days,
       totalCount: filtered.length,
       // «показать ещё» is a URL edit, not a client paging state (LD-2/EARS-8):
-      // the server names the next bound, the client writes it into the address.
-      nextTo: beyond.nextTo,
+      // the server names the next cursor, the client writes it into the address.
+      nextCount: beyond.nextCount,
       nextFrom: beyond.nextFrom,
       remaining: beyond.remaining,
       nextBatch: beyond.nextBatch,

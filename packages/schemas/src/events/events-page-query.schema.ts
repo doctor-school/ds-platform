@@ -3,6 +3,7 @@ import { z } from "zod";
 import { SlugSchema } from "../taxonomy/taxonomy.schema.js";
 import {
   DOCTOR_EVENTS_FEED_QUERY_FIELDS,
+  DoctorEventsFeedCountSchema,
   DoctorEventsFeedDayShapeSchema,
   DoctorEventsFeedQuerySchema,
 } from "./doctor-events-feed.schema.js";
@@ -25,6 +26,7 @@ export const EventsPageQuerySchema = DoctorEventsFeedQuerySchema.extend({
   day: DoctorEventsFeedDayShapeSchema.optional(),
   from: DoctorEventsFeedDayShapeSchema.optional(),
   to: DoctorEventsFeedDayShapeSchema.optional(),
+  count: DoctorEventsFeedCountSchema.optional().catch(undefined),
   view: z.enum(["month"]).optional().catch(undefined),
   month: z.string().regex(MONTH_PARAM).optional().catch(undefined),
   project: z.array(SlugSchema).default([]),

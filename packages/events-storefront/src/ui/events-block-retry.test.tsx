@@ -110,7 +110,7 @@ const PAGE: EventsFeedPage = {
   horizon: {
     from: "2026-10-08",
     to: "2026-10-22",
-    nextTo: "2026-11-05",
+    nextCount: 20,
     nextFrom: null,
   },
   remaining: 0,
@@ -359,7 +359,13 @@ describe("«Повторить» in a failed block (#2832)", () => {
   it("EARS-9: a recovered day feed fills what the page derives from the feed read — «Вид события», the subline — from the retried read, with no other read", async () => {
     const action = hostAction();
     const failed = Promise.resolve({ ok: false as const });
-    const panel = { config: DOCTOR, raw: {}, feed: failed, specialties: NO_SPECIALTIES, kinds: NO_KINDS };
+    const panel = {
+      config: DOCTOR,
+      raw: {},
+      feed: failed,
+      specialties: NO_SPECIALTIES,
+      kinds: NO_KINDS,
+    };
     render(
       <FeedReadScope>
         {await CountedSubline({
@@ -474,10 +480,18 @@ describe("«Повторить» in a failed block (#2832)", () => {
     const action = hostAction();
     const failed = Promise.resolve({ ok: false as const });
     const raw = { kind: ["master-klass"] };
-    const kinds = Promise.resolve([{ slug: "master-klass", title: "Мастер-класс" }]);
+    const kinds = Promise.resolve([
+      { slug: "master-klass", title: "Мастер-класс" },
+    ]);
     render(
       <FeedReadScope>
-        {await FacetColumn({ config: DOCTOR, raw, feed: failed, specialties: NO_SPECIALTIES, kinds })}
+        {await FacetColumn({
+          config: DOCTOR,
+          raw,
+          feed: failed,
+          specialties: NO_SPECIALTIES,
+          kinds,
+        })}
         {await FeedSection({
           config: DOCTOR,
           query: raw,
@@ -493,20 +507,35 @@ describe("«Повторить» in a failed block (#2832)", () => {
     vi.clearAllMocks();
     mocks.fetchEventsFeed.mockResolvedValue({
       ok: true,
-      value: { ...PAGE, facetOptions: { kind: [{ slug: "webinar", title: "Вебинар", count: 3 }] } },
+      value: {
+        ...PAGE,
+        facetOptions: {
+          kind: [{ slug: "webinar", title: "Вебинар", count: 3 }],
+        },
+      },
     });
     await userEvent.click(
-      within(screen.getByTestId("events-feed-error")).getByRole("button", { name: "Повторить" }),
+      within(screen.getByTestId("events-feed-error")).getByRole("button", {
+        name: "Повторить",
+      }),
     );
     expect(await screen.findByTestId("events-feed")).toBeInTheDocument();
     const kind = await screen.findByRole("group", { name: "Вид события" });
-    expect(within(kind).getByRole("button", { name: "Мастер-класс", pressed: true })).toBeInTheDocument();
+    expect(
+      within(kind).getByRole("button", { name: "Мастер-класс", pressed: true }),
+    ).toBeInTheDocument();
   });
 
   it("EARS-9: a page the server renders again drops the recovered feed read for its own", async () => {
     const action = hostAction();
     const failed = Promise.resolve({ ok: false as const });
-    const panel = { config: DOCTOR, raw: {}, feed: failed, specialties: NO_SPECIALTIES, kinds: NO_KINDS };
+    const panel = {
+      config: DOCTOR,
+      raw: {},
+      feed: failed,
+      specialties: NO_SPECIALTIES,
+      kinds: NO_KINDS,
+    };
     const page = async () => (
       <FeedReadScope>
         {await FacetColumn(panel)}

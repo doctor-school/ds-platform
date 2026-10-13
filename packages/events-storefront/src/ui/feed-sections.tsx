@@ -7,7 +7,7 @@ import {
 
 import { FEED_COPY } from "../copy/feed-copy";
 import { eventNounOf } from "../copy/listing-copy";
-import { type PluralNoun, formatEventCount } from "../model/event-count";
+import type { PluralNoun } from "../model/event-count";
 import type { EventsStorefrontHostConfig } from "../host-config";
 import {
   type BlockRead,
@@ -29,7 +29,10 @@ import {
   fetchMyEvents,
 } from "../server";
 import { BlockError } from "./block-error";
+import { BlockRetry } from "./block-retry";
+import type { EventsBlockRetryAction } from "./events-block-retry";
 import { DayAnchorScroll } from "./day-anchor-scroll";
+import { RecoveredSubline, SublineCounts } from "./feed-read-scope";
 import { FeedList } from "./feed-list";
 import { LiveBlock } from "./live-block";
 import { MyEventsCut } from "./my-events-cut";
@@ -51,6 +54,12 @@ export async function readMyEvents(
 }
 
 /**
+ * The specialty book, read on demand: only an empty state that names a picked
+ * specialty reads it, so a block's retry re-reads it only then.
+ */
+export type SpecialtyBook = () => Promise<readonly SpecialtyChoice[]>;
+
+/**
  * The empty state of either view (019 EARS-9, #2786): each applied condition in
  * the canvas order is counted by a feed read of the same tense without it —
  * one read at a time, stopping at the first that finds events; a failed read
@@ -61,10 +70,10 @@ export async function readEmptyFeedState(
   config: EventsStorefrontHostConfig,
   query: RawQueryRecord,
   titles: FeedFacetOptions,
-  specialties: Promise<readonly SpecialtyChoice[]>,
+  specialties: SpecialtyBook,
   request: ReadRequest,
 ): Promise<EmptyFeedState> {
-  const book = await specialties;
+  const book = await specialties();
   return emptyFeedState(query, {
     listing: config.routes.listing,
     noun: eventNounOf(config.copy),
@@ -165,18 +174,37 @@ export async function LiveSection({
 export async function MyEventsSection({
   config,
   mine,
+  retry,
 }: {
   config: EventsStorefrontHostConfig;
   mine: Promise<BlockRead<readonly MyEventItem[] | null>>;
+  retry: EventsBlockRetryAction;
 }) {
-  const read = await mine;
+  return MyEventsBlock({ config, read: await mine, retry });
+}
+
+/**
+ * «Мои события» from its read — the block its «Повторить» re-renders (019
+ * EARS-9, #2832): a failure retries the viewer's registrations read alone.
+ */
+export function MyEventsBlock({
+  config,
+  read,
+  retry,
+}: {
+  config: EventsStorefrontHostConfig;
+  read: BlockRead<readonly MyEventItem[] | null>;
+  retry: EventsBlockRetryAction;
+}) {
   if (!read.ok) {
     return (
-      <BlockError
-        title={FEED_COPY.my.errorTitle}
-        description={FEED_COPY.my.errorBody}
-        testId="events-my-events-error"
-      />
+      <BlockRetry retry={retry.bind(null, { block: "my-events" })}>
+        <BlockError
+          title={FEED_COPY.my.errorTitle}
+          description={FEED_COPY.my.errorBody}
+          testId="events-my-events-error"
+        />
+      </BlockRetry>
     );
   }
   if (read.value === null) return null;
@@ -186,7 +214,8 @@ export async function MyEventsSection({
 /**
  * The counted head subline «N эфиров · M школ» (gate row 19, the canvas
  * `headCount`), off the same feed read the day feed renders. A failed read
- * states nothing here — the feed block below carries the cause.
+ * states nothing here — the feed block below carries the cause — until the
+ * feed's «Повторить» recovers that read (#2832).
  */
 export async function CountedSubline({
   feed,
@@ -198,13 +227,16 @@ export async function CountedSubline({
   schoolNoun: PluralNoun;
 }) {
   const read = await feed;
-  if (!read.ok || read.value.summary === undefined) return null;
-  const { events, schools } = read.value.summary;
+  if (!read.ok) {
+    return <RecoveredSubline eventNoun={eventNoun} schoolNoun={schoolNoun} />;
+  }
+  if (read.value.summary === undefined) return null;
   return (
-    <span data-testid="events-feed-subline-counts">
-      {formatEventCount(events, eventNoun)} ·{" "}
-      {formatEventCount(schools, schoolNoun)}
-    </span>
+    <SublineCounts
+      summary={read.value.summary}
+      eventNoun={eventNoun}
+      schoolNoun={schoolNoun}
+    />
   );
 }
 
@@ -215,6 +247,7 @@ export async function FeedSection({
   mine,
   specialties,
   request,
+  retry,
 }: {
   config: EventsStorefrontHostConfig;
   query: RawQueryRecord;
@@ -223,16 +256,62 @@ export async function FeedSection({
   /** The specialty book — read only to name a picked specialty in the empty state. */
   specialties: Promise<readonly SpecialtyChoice[]>;
   request: ReadRequest;
+  /** The host's block retry: the failed feed's «Повторить» re-runs the feed read alone. */
+  retry: EventsBlockRetryAction;
+}) {
+  const [read, registered] = await Promise.all([feed, mine]);
+  return FeedBlock({
+    config,
+    query,
+    read,
+    registeredSlugs:
+      registered.ok && registered.value
+        ? registered.value.map((event) => event.slug)
+        : [],
+    specialties: () => specialties,
+    request,
+    retry,
+  });
+}
+
+/**
+ * The day feed from its read — the block its «Повторить» re-renders (019
+ * EARS-9, #2832). The viewer's registered marks arrive as data from the
+ * page's «Мои события» read, so a retry re-runs the feed read alone.
+ */
+export async function FeedBlock({
+  config,
+  query,
+  read,
+  registeredSlugs,
+  specialties,
+  request,
+  retry,
+}: {
+  config: EventsStorefrontHostConfig;
+  query: RawQueryRecord;
+  read: BlockRead<EventsFeedPage>;
+  registeredSlugs: readonly string[];
+  specialties: SpecialtyBook;
+  request: ReadRequest;
+  retry: EventsBlockRetryAction;
 }) {
   const tense = feedTenseOf(query);
-  const [read, registered] = await Promise.all([feed, mine]);
   if (!read.ok) {
     return (
-      <BlockError
-        title={FEED_COPY.feed.errorTitle}
-        description={FEED_COPY.feed.errorBody}
-        testId="events-feed-error"
-      />
+      <BlockRetry
+        retry={retry.bind(null, {
+          block: "feed",
+          raw: query,
+          registeredSlugs: [...registeredSlugs],
+        })}
+      >
+        <BlockError
+          title={FEED_COPY.feed.errorTitle}
+          description={FEED_COPY.feed.errorBody}
+          testId="events-feed-error"
+        />
+      </BlockRetry>
     );
   }
   const page = read.value;
@@ -252,11 +331,7 @@ export async function FeedSection({
       <FeedList
         cards={page.cards}
         tense={tense}
-        registeredSlugs={
-          registered.ok && registered.value
-            ? registered.value.map((event) => event.slug)
-            : []
-        }
+        registeredSlugs={registeredSlugs}
         routes={config.routes}
         remaining={page.remaining}
         showMore={

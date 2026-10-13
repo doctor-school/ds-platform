@@ -25,13 +25,16 @@ import type { RawQueryRecord } from "@ds/schemas";
 import { FILTER_COPY } from "../copy/filter-copy";
 import type { PluralNoun } from "../model/event-count";
 import {
+  type SpecialtyChoice,
   appliedFacetsOf,
+  filterOptionsOf,
   resetFacetsHref,
   filterLabelsOf,
   withAppliedFacets,
 } from "../model/facets";
 import type { FeedFacetOptions } from "../model/feed";
 import { pageHref } from "../model/feed-url";
+import { useRecoveredFeedRead } from "./feed-read-scope";
 
 export interface FacetPanelProps {
   filterSet: EventsFilterHost;
@@ -40,6 +43,31 @@ export interface FacetPanelProps {
   options: EventsFilterOptions;
   /** The feed read's option block: it decides which controls render (`filterLabelsOf`). */
   optionBlock: FeedFacetOptions;
+  /** The specialty book the options were named from. */
+  specialties: readonly SpecialtyChoice[];
+}
+
+/**
+ * The panel's options and option block: the page's own feed read, or — when
+ * that read failed and the feed's «Повторить» recovered it (019 EARS-9, #2832)
+ * — the retried read, so the panel ends as a full load would draw it.
+ */
+function useFacetSource({
+  filterSet,
+  options,
+  optionBlock,
+  specialties,
+}: FacetPanelProps): Pick<FacetPanelProps, "options" | "optionBlock"> & {
+  recoveredMatching: number | null;
+} {
+  const recovered = useRecoveredFeedRead();
+  if (recovered === null)
+    return { options, optionBlock, recoveredMatching: null };
+  return {
+    options: filterOptionsOf(filterSet, recovered.facetOptions, specialties),
+    optionBlock: recovered.facetOptions,
+    recoveredMatching: recovered.matching,
+  };
 }
 
 /**
@@ -49,13 +77,11 @@ export interface FacetPanelProps {
  * feed or the month under the new facets; «Сбросить» is a real link.
  */
 export function FacetPanel({
-  filterSet,
-  listing,
-  raw,
-  options,
-  optionBlock,
   showHeader = true,
+  ...panel
 }: FacetPanelProps & { showHeader?: boolean }) {
+  const { filterSet, listing, raw } = panel;
+  const { options, optionBlock } = useFacetSource(panel);
   const router = useRouter();
   const specialty = options.specialty ?? [];
   const applied = appliedFacetsOf(
@@ -71,9 +97,12 @@ export function FacetPanel({
       showHeader={showHeader}
       resetHref={resetFacetsHref(listing, raw, filterSet)}
       onChange={(next) =>
-        router.push(pageHref(listing, withAppliedFacets(raw, next, filterSet)), {
-          scroll: false,
-        })
+        router.push(
+          pageHref(listing, withAppliedFacets(raw, next, filterSet)),
+          {
+            scroll: false,
+          },
+        )
       }
     />
   );
@@ -93,6 +122,7 @@ export function FacetSheet({
     appliedFacetsOf(panel.raw),
     panel.filterSet,
   );
+  const shown = useFacetSource(panel).recoveredMatching ?? matching;
   return (
     <Sheet>
       <SheetTrigger asChild>
@@ -119,10 +149,10 @@ export function FacetSheet({
               {FILTER_COPY[panel.filterSet].reset}
             </Link>
           </Button>
-          {matching === null ? null : (
+          {shown === null ? null : (
             <SheetClose asChild>
               <Button data-testid="events-filter-show">
-                {FILTER_COPY.showN(matching, noun)}
+                {FILTER_COPY.showN(shown, noun)}
               </Button>
             </SheetClose>
           )}

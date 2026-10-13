@@ -924,6 +924,9 @@ importers:
       '@ds/schemas':
         specifier: workspace:*
         version: link:../schemas
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
       '@testing-library/jest-dom':
         specifier: ^7.0.1

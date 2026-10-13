@@ -1,6 +1,7 @@
 import { EventsListingPage } from "@ds/events-storefront/listing";
 
 import { ACADEMY_EVENTS_STOREFRONT } from "../../lib/events-storefront.host-config";
+import { retryAcademyEventsBlock } from "./retry-block-action";
 
 /**
  * 004 EARS-7 / EARS-19 — the public listing at `/webinars`, mounted from
@@ -21,6 +22,7 @@ export default async function WebinarsListingPage({
     <EventsListingPage
       config={ACADEMY_EVENTS_STOREFRONT}
       searchParams={searchParams}
+      retry={retryAcademyEventsBlock}
     />
   );
 }

@@ -50,6 +50,7 @@ vi.mock("../server", async (importOriginal) => ({
 import { EventsListingPage } from "./events-listing-page";
 import { FeedSection, LiveSection, MyEventsSection } from "./feed-sections";
 import { FeedFrame } from "./feed-frame";
+import { FeedReadScope } from "./feed-read-scope";
 import { LiveBlock } from "./live-block";
 import { MonthView } from "./month-view";
 
@@ -141,6 +142,8 @@ const strip = (n: number) => ({
 const SESSION = { cookie: "", forwardedFor: "" } as never;
 const REQUEST = { cookie: "", forwardedFor: "10.0.0.1" };
 const NO_SPECIALTIES = Promise.resolve([]);
+/** The host's block retry; #2832 pins what it re-reads in `events-block-retry.test.tsx`. */
+const RETRY = vi.fn(async (): Promise<ReactNode> => null);
 const EMPTY_PAGE: EventsFeedPage = {
   ...PAGE,
   cards: [],
@@ -158,15 +161,18 @@ beforeEach(() => {
   mocks.fetchSpecialtyChoices.mockResolvedValue([]);
 });
 
-/** The FeedFrame element the one page returns in its feed view. */
+/** The FeedFrame element the one page returns in its feed view, inside the page's feed-read scope (#2832). */
 async function frame(
   config: EventsStorefrontHostConfig,
   query: Record<string, string> = {},
 ) {
-  const element = (await EventsListingPage({
+  const scope = (await EventsListingPage({
     config,
     searchParams: Promise.resolve(query),
-  })) as ReactElement<ComponentProps<typeof FeedFrame>>;
+    retry: RETRY,
+  })) as ReactElement<{ children: ReactElement<ComponentProps<typeof FeedFrame>> }>;
+  expect(scope.type).toBe(FeedReadScope);
+  const element = scope.props.children;
   expect(element.type).toBe(FeedFrame);
   return element;
 }
@@ -257,7 +263,7 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
     render(
       <>
         {await LiveSection({ config: DOCTOR, session: SESSION })}
-        {await MyEventsSection({ config: DOCTOR, mine })}
+        {await MyEventsSection({ config: DOCTOR, mine, retry: RETRY })}
         {await FeedSection({
           config: DOCTOR,
           query: {},
@@ -265,6 +271,7 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
           mine,
           specialties: NO_SPECIALTIES,
           request: REQUEST,
+          retry: RETRY,
         })}
       </>,
     );
@@ -273,7 +280,13 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
     await userEvent.click(
       within(error).getByRole("button", { name: "Повторить" }),
     );
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+    // #2832: the retry is the feed block's own, never a refresh of every read.
+    expect(RETRY).toHaveBeenCalledWith({
+      block: "feed",
+      raw: {},
+      registeredSlugs: ["m-1"],
+    });
+    expect(mocks.refresh).not.toHaveBeenCalled();
     expect(screen.getByTestId("events-live-block")).toHaveTextContent("Эфир 1");
     expect(screen.getByTestId("events-my-events")).toHaveTextContent(
       "Моё событие",
@@ -289,6 +302,7 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
         mine: Promise.resolve({ ok: true, value: null }),
         specialties: NO_SPECIALTIES,
         request: REQUEST,
+        retry: RETRY,
       }),
     );
     const more = screen.getByTestId("events-feed-show-more");
@@ -330,6 +344,7 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
         {await MyEventsSection({
           config: DOCTOR,
           mine: Promise.resolve({ ok: true, value: null }),
+          retry: RETRY,
         })}
       </>,
     );
@@ -372,6 +387,7 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
         mine: Promise.resolve({ ok: true, value: null }),
         specialties: NO_SPECIALTIES,
         request: REQUEST,
+        retry: RETRY,
       }),
     );
     expect(
@@ -412,6 +428,7 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
           { code: "neurology", name: "Неврология" },
         ]),
         request: REQUEST,
+        retry: RETRY,
       }),
     );
     const empty = screen.getByTestId("events-feed-empty");
@@ -433,6 +450,7 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
         mine: Promise.resolve({ ok: true, value: null }),
         specialties: NO_SPECIALTIES,
         request: REQUEST,
+        retry: RETRY,
       }),
     );
     expect(mocks.fetchEventsFeed).not.toHaveBeenCalled();
@@ -457,6 +475,7 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
         }),
         specialties: NO_SPECIALTIES,
         request: REQUEST,
+        retry: RETRY,
       }),
     );
     expect(mocks.fetchEventsFeed).toHaveBeenCalledWith(
@@ -492,6 +511,7 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
           feed: Promise.resolve({ ok: true as const, value: EMPTY_PAGE }),
           specialties: NO_SPECIALTIES,
           request: REQUEST,
+          retry: RETRY,
         }),
       );
       const empty = screen.getByTestId("events-month-empty");

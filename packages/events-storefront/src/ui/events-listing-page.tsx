@@ -7,11 +7,12 @@ import { type RawQueryRecord, rawQueryScalar } from "@ds/schemas";
 
 import { LISTING_COPY, eventNounOf } from "../copy/listing-copy";
 import type { EventsStorefrontHostConfig } from "../host-config";
+import { type SpecialtyChoice, filterOptionsOf } from "../model/facets";
 import {
-  type SpecialtyChoice,
-  filterOptionsOf,
-} from "../model/facets";
-import { type BlockRead, type EventsFeedPage, pageTodayOf } from "../model/feed";
+  type BlockRead,
+  type EventsFeedPage,
+  pageTodayOf,
+} from "../model/feed";
 import {
   canonicalFeedRedirect,
   dayHref,
@@ -35,10 +36,12 @@ import {
   fetchMonthEntries,
   fetchSpecialtyChoices,
   forwardedSessionFrom,
+  readRequestFrom,
 } from "../server";
 import { CompactMonth } from "./compact-month";
 import { FacetPanel, FacetSheet } from "./facet-panel";
 import { FeedFrame } from "./feed-frame";
+import { FeedReadScope } from "./feed-read-scope";
 import {
   CountedSubline,
   FeedSection,
@@ -50,6 +53,7 @@ import {
   SkeletonSlot,
   readMyEvents,
 } from "./feed-sections";
+import type { EventsBlockRetryAction } from "./events-block-retry";
 import { MonthView } from "./month-view";
 
 type FeedRead = Promise<BlockRead<EventsFeedPage>>;
@@ -68,6 +72,7 @@ async function panelOptions({ config, feed, specialties }: PanelInput) {
   return {
     options: filterOptionsOf(config.filterSet, block, book),
     optionBlock: block,
+    specialties: book,
   };
 }
 
@@ -78,7 +83,7 @@ export async function FacetColumn(input: PanelInput) {
       filterSet={input.config.filterSet}
       listing={input.config.routes.listing}
       raw={input.raw}
-      {...(await panelOptions(input))}
+      {...await panelOptions(input)}
     />
   );
 }
@@ -182,9 +187,16 @@ export function MonthSkeleton() {
 export async function EventsListingPage({
   config,
   searchParams,
+  retry,
 }: {
   config: EventsStorefrontHostConfig;
   searchParams: Promise<RawQueryRecord>;
+  /**
+   * The host's block-retry server action (019 EARS-9, #2832): the host's
+   * `"use server"` module answers `renderEventsBlock(<its config>, <itself>, input)`.
+   * A failed block's «Повторить» calls it for that block alone.
+   */
+  retry: EventsBlockRetryAction;
 }) {
   const raw = await searchParams;
   const listing = config.routes.listing;
@@ -195,10 +207,7 @@ export async function EventsListingPage({
   const tense = feedTenseOf(raw);
   const requestHeaders = await headers();
   const session = forwardedSessionFrom(requestHeaders);
-  const request: ReadRequest = {
-    cookie: requestHeaders.get("cookie") ?? "",
-    forwardedFor: requestHeaders.get("x-forwarded-for") ?? "",
-  };
+  const request = readRequestFrom(requestHeaders);
   // One feed read serves the day feed, the counted subline, the facet
   // options and the sheet's «Показать N» — in either view.
   const feed = fetchEventsFeed(config, raw, request);
@@ -218,107 +227,117 @@ export async function EventsListingPage({
   const { subline } = config.headerCopy;
   const panel: PanelInput = { config, raw, feed, specialties };
 
+  // A failed feed read recovered by the day feed's «Повторить» fills what the
+  // page derives from it — facets, «Показать N», the subline (EARS-9, #2832).
   return (
-    <FeedFrame
-      title={config.headerCopy.title}
-      subline={
-        typeof subline === "string" ? (
-          subline
-        ) : (
-          <Suspense
-            fallback={<SkeletonSlot className="inline-block h-4 w-48" />}
-          >
-            <CountedSubline
-              feed={feed}
-              eventNoun={eventNounOf(config.copy)}
-              schoolNoun={subline.schoolNoun}
-            />
-          </Suspense>
-        )
-      }
-      tense={tense}
-      view={view}
-      hrefs={{
-        upcoming: tenseHref(listing, raw, "upcoming"),
-        past: tenseHref(listing, raw, "past"),
-      }}
-      headAction={
-        <div className="hidden lg:block">
-          <DsLink asChild tone="on-primary" variant="inline">
-            <Link data-testid="events-view-switch" href={switchHref}>
-              {switchLabel}
-            </Link>
-          </DsLink>
-        </div>
-      }
-    >
-      <div className="flex flex-col gap-10 lg:flex-row lg:items-start">
-        <aside
-          className="hidden lg:sticky lg:top-4 lg:flex lg:w-75 lg:flex-none lg:flex-col lg:gap-7"
-          data-testid="events-column"
-        >
-          {view === "feed" ? (
-            <Suspense fallback={<SkeletonSlot className="h-85 w-full" />}>
-              <CompactMonthSection
-                config={config}
-                raw={raw}
+    <FeedReadScope>
+      <FeedFrame
+        title={config.headerCopy.title}
+        subline={
+          typeof subline === "string" ? (
+            subline
+          ) : (
+            <Suspense
+              fallback={<SkeletonSlot className="inline-block h-4 w-48" />}
+            >
+              <CountedSubline
                 feed={feed}
-                request={request}
+                eventNoun={eventNounOf(config.copy)}
+                schoolNoun={subline.schoolNoun}
               />
             </Suspense>
-          ) : null}
-          <Suspense fallback={<SkeletonSlot className="h-96 w-full" />}>
-            <FacetColumn {...panel} />
-          </Suspense>
-        </aside>
-        <div className="flex min-w-0 flex-1 flex-col gap-10">
-          <div className="flex items-center justify-between gap-3 lg:hidden">
-            <Suspense fallback={<SkeletonSlot className="h-11 w-36" />}>
-              <FacetSheetSection {...panel} />
-            </Suspense>
-            <DsLink asChild variant="inline">
-              <Link data-testid="events-view-switch-narrow" href={switchHref}>
+          )
+        }
+        tense={tense}
+        view={view}
+        hrefs={{
+          upcoming: tenseHref(listing, raw, "upcoming"),
+          past: tenseHref(listing, raw, "past"),
+        }}
+        headAction={
+          <div className="hidden lg:block">
+            <DsLink asChild tone="on-primary" variant="inline">
+              <Link data-testid="events-view-switch" href={switchHref}>
                 {switchLabel}
               </Link>
             </DsLink>
           </div>
-          {view === "month" ? (
-            <Suspense fallback={<MonthSkeleton />}>
-              <MonthView
-                config={config}
-                raw={raw}
-                month={pageMonthOf(raw)}
-                feed={feed}
-                specialties={specialties}
-                request={request}
-              />
-            </Suspense>
-          ) : (
-            <>
-              {tense === "upcoming" ? (
-                <Suspense fallback={<LiveSkeleton />}>
-                  <LiveSection config={config} session={session} />
-                </Suspense>
-              ) : null}
-              {tense === "upcoming" && session.cookie !== "" ? (
-                <Suspense fallback={<MyEventsSkeleton />}>
-                  <MyEventsSection config={config} mine={mine} />
-                </Suspense>
-              ) : null}
-              <Suspense fallback={<FeedSkeleton />}>
-                <FeedSection
+        }
+      >
+        <div className="flex flex-col gap-10 lg:flex-row lg:items-start">
+          <aside
+            className="hidden lg:sticky lg:top-4 lg:flex lg:w-75 lg:flex-none lg:flex-col lg:gap-7"
+            data-testid="events-column"
+          >
+            {view === "feed" ? (
+              <Suspense fallback={<SkeletonSlot className="h-85 w-full" />}>
+                <CompactMonthSection
                   config={config}
-                  query={raw}
+                  raw={raw}
                   feed={feed}
-                  mine={mine}
-                  specialties={specialties}
                   request={request}
                 />
               </Suspense>
-            </>
-          )}
+            ) : null}
+            <Suspense fallback={<SkeletonSlot className="h-96 w-full" />}>
+              <FacetColumn {...panel} />
+            </Suspense>
+          </aside>
+          <div className="flex min-w-0 flex-1 flex-col gap-10">
+            <div className="flex items-center justify-between gap-3 lg:hidden">
+              <Suspense fallback={<SkeletonSlot className="h-11 w-36" />}>
+                <FacetSheetSection {...panel} />
+              </Suspense>
+              <DsLink asChild variant="inline">
+                <Link data-testid="events-view-switch-narrow" href={switchHref}>
+                  {switchLabel}
+                </Link>
+              </DsLink>
+            </div>
+            {view === "month" ? (
+              <Suspense fallback={<MonthSkeleton />}>
+                <MonthView
+                  config={config}
+                  raw={raw}
+                  month={pageMonthOf(raw)}
+                  feed={feed}
+                  specialties={specialties}
+                  request={request}
+                  retry={retry}
+                />
+              </Suspense>
+            ) : (
+              <>
+                {tense === "upcoming" ? (
+                  <Suspense fallback={<LiveSkeleton />}>
+                    <LiveSection config={config} session={session} />
+                  </Suspense>
+                ) : null}
+                {tense === "upcoming" && session.cookie !== "" ? (
+                  <Suspense fallback={<MyEventsSkeleton />}>
+                    <MyEventsSection
+                      config={config}
+                      mine={mine}
+                      retry={retry}
+                    />
+                  </Suspense>
+                ) : null}
+                <Suspense fallback={<FeedSkeleton />}>
+                  <FeedSection
+                    config={config}
+                    query={raw}
+                    feed={feed}
+                    mine={mine}
+                    specialties={specialties}
+                    request={request}
+                    retry={retry}
+                  />
+                </Suspense>
+              </>
+            )}
+          </div>
         </div>
-      </div>
-    </FeedFrame>
+      </FeedFrame>
+    </FeedReadScope>
   );
 }

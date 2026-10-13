@@ -39,6 +39,18 @@ export interface StepWorld {
 export interface EventsFeedWorld {
   /** Feed URLs (path + query) in the order the journey left them. */
   history: string[];
+  /**
+   * What the browser sent while a failed block's «Повторить» ran (#2832):
+   * the block-retry server-action POSTs, the page re-reads (an RSC route
+   * fetch or a document load), the «Идёт сейчас» re-reads, and the one
+   * action answer's body.
+   */
+  retry?: {
+    actions: number;
+    pageReads: number;
+    liveReads: number;
+    answer: string;
+  };
   /** The card the journey opened, read from the rendered feed. */
   card?: { title: string; href: string };
   /** `YYYY-MM-DD` of the day picked in the compact month. */

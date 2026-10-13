@@ -63,16 +63,17 @@ Thin host projections are intentional: Academy and Doctor have different targeti
 
 ## Host-file allowlist
 
-This table is the checked-in answer key for every `apps/portal` / `apps/doctor` `.ts`/`.tsx` file the allowlist guard scans: everything except Next.js route files (`page`, `layout`, `loading`, `error`, `not-found`, `template`, `default`, `route`, `middleware`, `proxy`), tests (`*.test.*`, `*.spec.*`, `__tests__/`), `e2e/`, ambient `*.d.ts` and each app's own root-level config. **A new file anywhere in that scope needs a row here in the same PR** — the allowlist guard ([#2002](https://github.com/doctor-school/ds-platform/issues/2002), tech spec §3 rule 3) reads this table as the tree check and fails a file it cannot find (WARN until wave 1 lands, BLOCK after). Rows are exact repo-relative paths, never globs, and a row naming a file that no longer exists fails too — the dead-glob self-test keeps the answer key honest. `until` names the extraction wave that deletes the row; `permanent` means the file is genuinely host-only — brand, config, or a surface the other host does not have; `DEBT.md²` means no extraction wave owns the file and a named open `DEBT.md` line is its lifetime owner — the row leaves that state only when the line's `promote-when` fires and the Issue it becomes deletes the file (or re-labels the row with that Issue's wave). Rows are grouped by directory and sorted by path; 84 files today. Route files are excluded from this table on purpose — they answer to «Route-file registry» below, which records the package each `page.tsx` / `layout.tsx` mounts or will mount.
+This table is the checked-in answer key for every `apps/portal` / `apps/doctor` `.ts`/`.tsx` file the allowlist guard scans: everything except Next.js route files (`page`, `layout`, `loading`, `error`, `not-found`, `template`, `default`, `route`, `middleware`, `proxy`), tests (`*.test.*`, `*.spec.*`, `__tests__/`), `e2e/`, ambient `*.d.ts` and each app's own root-level config. **A new file anywhere in that scope needs a row here in the same PR** — the allowlist guard ([#2002](https://github.com/doctor-school/ds-platform/issues/2002), tech spec §3 rule 3) reads this table as the tree check and fails a file it cannot find (WARN until wave 1 lands, BLOCK after). Rows are exact repo-relative paths, never globs, and a row naming a file that no longer exists fails too — the dead-glob self-test keeps the answer key honest. `until` names the extraction wave that deletes the row; `permanent` means the file is genuinely host-only — brand, config, or a surface the other host does not have; `DEBT.md²` means no extraction wave owns the file and a named open `DEBT.md` line is its lifetime owner — the row leaves that state only when the line's `promote-when` fires and the Issue it becomes deletes the file (or re-labels the row with that Issue's wave). Rows are grouped by directory and sorted by path; 69 files today. Route files are excluded from this table on purpose — they answer to «Route-file registry» below, which records the package each `page.tsx` / `layout.tsx` mounts or will mount.
 
 ### `apps/doctor/app`
 
-| path                                                              | reason                         | until          |
-| ----------------------------------------------------------------- | ------------------------------ | -------------- |
-| `apps/doctor/app/(room)/events/[slug]/room/copy.ts`               | wave 4 twin — deleted by #2073 | wave 4 (#2073) |
-| `apps/doctor/app/(room)/events/[slug]/room/room-client.tsx`       | wave 4 twin — deleted by #2073 | wave 4 (#2073) |
-| `apps/doctor/app/(room)/events/[slug]/room/room-routes.ts`        | wave 4 twin — deleted by #2073 | wave 4 (#2073) |
-| `apps/doctor/app/(room)/events/[slug]/room/room-user-cluster.tsx` | wave 4 twin — deleted by #2073 | wave 4 (#2073) |
+| path                                                              | reason                                                                                                                          | until          |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `apps/doctor/app/(room)/events/[slug]/room/copy.ts`               | wave 4 twin — deleted by #2073                                                                                                  | wave 4 (#2073) |
+| `apps/doctor/app/(room)/events/[slug]/room/room-client.tsx`       | wave 4 twin — deleted by #2073                                                                                                  | wave 4 (#2073) |
+| `apps/doctor/app/(room)/events/[slug]/room/room-routes.ts`        | wave 4 twin — deleted by #2073                                                                                                  | wave 4 (#2073) |
+| `apps/doctor/app/(room)/events/[slug]/room/room-user-cluster.tsx` | wave 4 twin — deleted by #2073                                                                                                  | wave 4 (#2073) |
+| `apps/doctor/app/(storefront)/events/retry-block-action.ts`       | thin `"use server"` projection of `@ds/events-storefront` `renderEventsBlock` over the host config (019 EARS-9 per-block retry) | permanent      |
 
 ### `apps/doctor/components`
 
@@ -117,25 +118,26 @@ This table is the checked-in answer key for every `apps/portal` / `apps/doctor` 
 
 ### `apps/portal/app`
 
-| path                                                               | reason                                                                                                               | until          |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | -------------- |
-| `apps/portal/app/academy-home-view.tsx`                            | host-only surface (Academy home)                                                                                     | permanent      |
-| `apps/portal/app/academy-partnership-action.ts`                    | host-only surface (academy partnership form)                                                                         | permanent      |
-| `apps/portal/app/account/account-profile.tsx`                      | the signed-in cabinet body, split out as a client child when the route became a guest-deciding Server Component (S1) | wave 4 (#2073) |
-| `apps/portal/app/education-index/_components/audience-table.tsx`   | host-only surface — temporary 045 demo (#2360), no DS chart primitive; deleted by the EARS-14 release (032/035)      | permanent      |
-| `apps/portal/app/education-index/_components/demo-plaque.tsx`      | host-only surface — temporary 045 demo (#2360), no DS chart primitive; deleted by the EARS-14 release (032/035)      | permanent      |
-| `apps/portal/app/education-index/_components/demo-unavailable.tsx` | host-only surface — temporary 045 demo (#2360), no DS chart primitive; deleted by the EARS-14 release (032/035)      | permanent      |
-| `apps/portal/app/education-index/_components/emblem.tsx`           | host-only surface — temporary 045 demo (#2360), no DS chart primitive; deleted by the EARS-14 release (032/035)      | permanent      |
-| `apps/portal/app/education-index/_components/format.ts`            | host-only surface — temporary 045 demo (#2360), no DS chart primitive; deleted by the EARS-14 release (032/035)      | permanent      |
-| `apps/portal/app/education-index/_components/leaderboard.tsx`      | host-only surface — temporary 045 demo (#2360), no DS chart primitive; deleted by the EARS-14 release (032/035)      | permanent      |
-| `apps/portal/app/education-index/_components/section-head.tsx`     | host-only surface — temporary 045 demo (#2360), no DS chart primitive; deleted by the EARS-14 release (032/035)      | permanent      |
-| `apps/portal/app/fixtures.ts`                                      | host-only surface (Academy home demo fixtures)                                                                       | permanent      |
-| `apps/portal/app/lead-demo-fields.tsx`                             | host-only surface (academy partnership form)                                                                         | permanent      |
-| `apps/portal/app/webinars/[slug]/recording-gate.tsx`               | host-only surface (Academy recordings)                                                                               | permanent      |
-| `apps/portal/app/webinars/[slug]/recording-player.tsx`             | host-only surface (Academy recordings)                                                                               | permanent      |
-| `apps/portal/app/webinars/[slug]/room/copy.ts`                     | wave 4 source (#2073) — moves to `packages/room`                                                                     | wave 4 (#2073) |
-| `apps/portal/app/webinars/[slug]/room/room-client.tsx`             | wave 4 source (#2073) — moves to `packages/room`                                                                     | wave 4 (#2073) |
-| `apps/portal/app/webinars/[slug]/room/room-routes.ts`              | wave 4 source (#2073) — moves to `packages/room`                                                                     | wave 4 (#2073) |
+| path                                                               | reason                                                                                                                          | until          |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `apps/portal/app/academy-home-view.tsx`                            | host-only surface (Academy home)                                                                                                | permanent      |
+| `apps/portal/app/academy-partnership-action.ts`                    | host-only surface (academy partnership form)                                                                                    | permanent      |
+| `apps/portal/app/account/account-profile.tsx`                      | the signed-in cabinet body, split out as a client child when the route became a guest-deciding Server Component (S1)            | wave 4 (#2073) |
+| `apps/portal/app/education-index/_components/audience-table.tsx`   | host-only surface — temporary 045 demo (#2360), no DS chart primitive; deleted by the EARS-14 release (032/035)                 | permanent      |
+| `apps/portal/app/education-index/_components/demo-plaque.tsx`      | host-only surface — temporary 045 demo (#2360), no DS chart primitive; deleted by the EARS-14 release (032/035)                 | permanent      |
+| `apps/portal/app/education-index/_components/demo-unavailable.tsx` | host-only surface — temporary 045 demo (#2360), no DS chart primitive; deleted by the EARS-14 release (032/035)                 | permanent      |
+| `apps/portal/app/education-index/_components/emblem.tsx`           | host-only surface — temporary 045 demo (#2360), no DS chart primitive; deleted by the EARS-14 release (032/035)                 | permanent      |
+| `apps/portal/app/education-index/_components/format.ts`            | host-only surface — temporary 045 demo (#2360), no DS chart primitive; deleted by the EARS-14 release (032/035)                 | permanent      |
+| `apps/portal/app/education-index/_components/leaderboard.tsx`      | host-only surface — temporary 045 demo (#2360), no DS chart primitive; deleted by the EARS-14 release (032/035)                 | permanent      |
+| `apps/portal/app/education-index/_components/section-head.tsx`     | host-only surface — temporary 045 demo (#2360), no DS chart primitive; deleted by the EARS-14 release (032/035)                 | permanent      |
+| `apps/portal/app/fixtures.ts`                                      | host-only surface (Academy home demo fixtures)                                                                                  | permanent      |
+| `apps/portal/app/lead-demo-fields.tsx`                             | host-only surface (academy partnership form)                                                                                    | permanent      |
+| `apps/portal/app/webinars/[slug]/recording-gate.tsx`               | host-only surface (Academy recordings)                                                                                          | permanent      |
+| `apps/portal/app/webinars/[slug]/recording-player.tsx`             | host-only surface (Academy recordings)                                                                                          | permanent      |
+| `apps/portal/app/webinars/[slug]/room/copy.ts`                     | wave 4 source (#2073) — moves to `packages/room`                                                                                | wave 4 (#2073) |
+| `apps/portal/app/webinars/[slug]/room/room-client.tsx`             | wave 4 source (#2073) — moves to `packages/room`                                                                                | wave 4 (#2073) |
+| `apps/portal/app/webinars/[slug]/room/room-routes.ts`              | wave 4 source (#2073) — moves to `packages/room`                                                                                | wave 4 (#2073) |
+| `apps/portal/app/webinars/retry-block-action.ts`                   | thin `"use server"` projection of `@ds/events-storefront` `renderEventsBlock` over the host config (019 EARS-9 per-block retry) | permanent      |
 
 ### `apps/portal/components`
 

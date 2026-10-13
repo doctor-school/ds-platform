@@ -1,6 +1,7 @@
 import { EventsListingPage } from "@ds/events-storefront/listing";
 
 import { DOCTOR_EVENTS_STOREFRONT } from "../../../lib/events-storefront.host-config";
+import { retryDoctorEventsBlock } from "./retry-block-action";
 
 /**
  * 019 EARS-3 — `doctor.school/events`, the one events page of both
@@ -22,6 +23,7 @@ export default async function DoctorEventsPage({
     <EventsListingPage
       config={DOCTOR_EVENTS_STOREFRONT}
       searchParams={searchParams}
+      retry={retryDoctorEventsBlock}
     />
   );
 }

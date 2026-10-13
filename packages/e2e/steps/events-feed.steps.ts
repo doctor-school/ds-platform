@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, type Locator, type Page, type Request } from "@playwright/test";
 import { golden } from "@ds/db/seed/golden";
 
 import {
@@ -1099,27 +1099,99 @@ Then("no page-level error screen replaces the feed", async ({ page }) => {
   ).toHaveCount(0);
 });
 
+/** A failed block of the page, by the name the scenarios give it. */
+const FAILED_BLOCK = {
+  feed: "events-feed-error",
+  month: "events-month-error",
+} as const;
+
+/** The marker a node keeps while no render replaces it. */
+const UNTOUCHED = "__untouchedByRetry";
+
+/**
+ * Activates «Повторить» in one failed block and records what the browser sent
+ * meanwhile (#2832, 019 EARS-9): the block-retry server action's POSTs, any
+ * page re-read (an RSC route fetch — what `router.refresh()` sends — or a
+ * document load) and any «Идёт сейчас» re-read, with the action's answer.
+ * The month toolbar and the facet panel are marked first, so a later step can
+ * tell they were never re-rendered.
+ */
+async function retryBlock(
+  page: Page,
+  world: StepWorld,
+  block: keyof typeof FAILED_BLOCK,
+): Promise<void> {
+  const feed = feedOf(world);
+  feed.history.push(pathAndQuery(page));
+  for (const id of ["month-toolbar", "events-column"]) {
+    const node = page.getByTestId(id);
+    if ((await node.count()) === 1) {
+      await node.evaluate((el, key) => {
+        (el as unknown as Record<string, boolean>)[key] = true;
+      }, UNTOUCHED);
+    }
+  }
+  const seen = { actions: 0, pageReads: 0, liveReads: 0 };
+  const onRequest = (request: Request) => {
+    const headers = request.headers();
+    const url = new URL(request.url());
+    if (request.method() === "POST" && headers["next-action"] !== undefined) {
+      seen.actions += 1;
+    } else if (
+      request.resourceType() === "document" ||
+      headers["rsc"] === "1" ||
+      url.searchParams.has("_rsc")
+    ) {
+      seen.pageReads += 1;
+    } else if (url.pathname.endsWith("/events/live")) {
+      seen.liveReads += 1;
+    }
+  };
+  page.on("request", onRequest);
+  const answered = page.waitForResponse(
+    (res) =>
+      res.request().method() === "POST" &&
+      res.request().headers()["next-action"] !== undefined,
+  );
+  await page
+    .getByTestId(FAILED_BLOCK[block])
+    .getByRole("button", { name: "Повторить", exact: true })
+    .click();
+  const answer = await (await answered).text();
+  await settle(page);
+  page.off("request", onRequest);
+  feed.retry = { ...seen, answer };
+}
+
 When(
-  "the {word} activates «Повторить»",
-  async ({ page, world }, _actor: string) => {
-    feedOf(world).history.push(pathAndQuery(page));
-    let documentLoads = 0;
-    page.on("load", () => (documentLoads += 1));
-    const reread = page.waitForResponse(
-      (res) => res.request().headers()["rsc"] === "1",
-    );
-    await page
-      .getByTestId("events-feed-error")
-      .getByRole("button", { name: "Повторить", exact: true })
-      .click();
-    await reread;
-    await settle(page);
-    expect(documentLoads, "the retry re-reads in place, no reload").toBe(0);
+  "the {word} activates «Повторить» in the day feed",
+  async ({ page, world }, _actor: string) => retryBlock(page, world, "feed"),
+);
+
+When(
+  "the {word} activates «Повторить» in the month grid",
+  async ({ page, world }, _actor: string) => retryBlock(page, world, "month"),
+);
+
+function retryOf(world: StepWorld): NonNullable<EventsFeedWorld["retry"]> {
+  const retry = feedOf(world).retry;
+  expect(retry, "a block's «Повторить» ran").toBeDefined();
+  return retry as NonNullable<EventsFeedWorld["retry"]>;
+}
+
+Then(
+  "only the day feed is read again: one block retry and no page re-read",
+  async ({ world }) => {
+    const retry = retryOf(world);
+    expect(retry.actions, "one block-retry action").toBe(1);
+    expect(retry.pageReads, "no route refresh, no reload").toBe(0);
+    expect(retry.answer).toContain("events-feed-error");
+    expect(retry.answer).not.toContain('"events-column"');
   },
 );
 
 Then(
-  "the page re-reads in place, keeping the URL and the shell, and the day feed states the cause again",
+  "the page keeps the URL and the shell, and the day feed states the cause again",
   async ({ page, world }) => {
     expect(pathAndQuery(page)).toBe(feedOf(world).history.at(-1));
     await expect(page.getByTestId("storefront-shell")).toBeVisible();
@@ -1127,6 +1199,85 @@ Then(
       "Не удалось загрузить ленту событий",
     );
     await expect(liveStrip(page)).toBeVisible();
+  },
+);
+
+When(
+  "the {word} opens the month view of «События» on a month that the month read refuses",
+  async ({ page, host }, _actor: string) => {
+    // A real refusal of the month read alone: the month read serves only the
+    // years 1900–2999 (#2831), the page codec takes any well-shaped month, and
+    // the feed, live and facet reads carry no month.
+    await page.goto(`${host.eventsPath}?view=month&month=1899-12`, {
+      waitUntil: "domcontentloaded",
+    });
+    await settle(page);
+  },
+);
+
+Then(
+  "the month grid states the cause in Russian and offers «Повторить» inside the page, its toolbar and the facet panel beside it",
+  async ({ page }) => {
+    await expect(page.getByTestId("storefront-shell")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "События", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/Application error|Internal Server Error/iu),
+    ).toHaveCount(0);
+    const error = page.getByTestId("events-month-error");
+    await expect(error).toBeVisible();
+    await expect(error).toContainText("Не удалось загрузить календарь");
+    await expect(
+      error.getByRole("button", { name: "Повторить", exact: true }),
+    ).toBeEnabled();
+    await expect(page.getByTestId("month-toolbar")).toBeVisible();
+    await expect(filterPanel(page)).toBeVisible();
+  },
+);
+
+Then(
+  "only the month grid is read again: one block retry, no page re-read and no re-read of the day feed or «Идёт сейчас»",
+  async ({ world }) => {
+    const retry = retryOf(world);
+    expect(retry.actions, "one block-retry action").toBe(1);
+    expect(retry.pageReads, "no route refresh, no reload").toBe(0);
+    // The month view does not mount «Идёт сейчас» today, so this guards a
+    // future mount: a month-grid retry must never re-read the live block.
+    expect(retry.liveReads, "«Идёт сейчас» is not re-read").toBe(0);
+    // The action answers the month grid alone — nothing the feed read or the
+    // live read renders rides it.
+    expect(retry.answer).toContain("events-month-error");
+    for (const other of [
+      '"month-toolbar"',
+      '"events-column"',
+      '"events-feed"',
+      '"events-feed-subline-counts"',
+      '"events-live-block"',
+    ]) {
+      expect(retry.answer, `the answer carries no ${other}`).not.toContain(other);
+    }
+  },
+);
+
+Then(
+  "the month grid states the cause again while the month toolbar and the facet panel stay the same, untouched by the retry",
+  async ({ page, world }) => {
+    expect(pathAndQuery(page)).toBe(feedOf(world).history.at(-1));
+    await expect(page.getByTestId("events-month-error")).toContainText(
+      "Не удалось загрузить календарь",
+    );
+    for (const id of ["month-toolbar", "events-column"]) {
+      expect(
+        await page
+          .getByTestId(id)
+          .evaluate(
+            (el, key) => (el as unknown as Record<string, boolean>)[key] === true,
+            UNTOUCHED,
+          ),
+        `${id} was not re-rendered`,
+      ).toBe(true);
+    }
   },
 );
 

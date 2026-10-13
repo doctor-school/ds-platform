@@ -189,8 +189,19 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       Then the day feed states the cause in Russian and offers «Повторить»
       And the «Идёт сейчас» block, the compact month and the facet panel stay usable
       And no page-level error screen replaces the feed
-      When the visitor activates «Повторить»
-      Then the page re-reads in place, keeping the URL and the shell, and the day feed states the cause again
+      When the visitor activates «Повторить» in the day feed
+      Then only the day feed is read again: one block retry and no page re-read
+      And the page keeps the URL and the shell, and the day feed states the cause again
+
+    @EARS-9 @failure
+    Scenario: A failing month-grid read retried re-runs only that read
+      Given a visitor with no account
+      And the viewport is 1440 wide
+      When the visitor opens the month view of «События» on a month that the month read refuses
+      Then the month grid states the cause in Russian and offers «Повторить» inside the page, its toolbar and the facet panel beside it
+      When the visitor activates «Повторить» in the month grid
+      Then only the month grid is read again: one block retry, no page re-read and no re-read of the day feed or «Идёт сейчас»
+      And the month grid states the cause again while the month toolbar and the facet panel stay the same, untouched by the retry
 
     @EARS-15 @happy
     Scenario: The doctor events screen is built from the shared module in both themes and at both breakpoints

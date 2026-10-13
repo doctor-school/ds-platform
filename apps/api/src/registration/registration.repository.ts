@@ -504,8 +504,12 @@ export class RegistrationRepository {
    * The order is the EARS-22 sort ({@link rosterOrderBy}); without one it is
    * the `registered_at ASC` the read model has always had, tie-broken by `id` so
    * that a page boundary is stable when two rows share an instant. The per-column
-   * filters are EARS-23 ({@link rosterColumnFilterPredicates}); the «возможный
-   * дубль» marker is EARS-30/EARS-31 and is not here.
+   * filters are EARS-23 ({@link rosterColumnFilterPredicates}). The «возможный
+   * дубль» marker (EARS-30) and its yes/no filter (EARS-31) read
+   * {@link eventDuplicates}, joined by id: the marker is computed over the
+   * event's participant registrations (#2456: a staff account's registration
+   * marks nobody) BEFORE the search, the filters, the sort and the page apply, so a filter that hides one row of a sharing pair never unmarks
+   * the other.
    */
   async findEventRosterPage(
     eventId: string,
@@ -522,6 +526,8 @@ export class RegistrationRepository {
     const phoneNormalised = sql<
       string | null
     >`nullif(${registrations.answers}->>'contactPhoneNormalised', '')`;
+
+    const duplicates = this.eventDuplicates(eventId);
 
     const where = and(
       eq(registrations.eventId, eventId),
@@ -551,6 +557,9 @@ export class RegistrationRepository {
         city,
         region,
       }),
+      query.possibleDuplicate === undefined
+        ? undefined
+        : eq(duplicates.possibleDuplicate, query.possibleDuplicate === "yes"),
     );
 
     const pageSize = query.pageSize;
@@ -568,8 +577,10 @@ export class RegistrationRepository {
         email,
         registeredAt: registrations.registeredAt,
         confirmationMailStatus: registrations.confirmationMailStatus,
+        possibleDuplicate: duplicates.possibleDuplicate,
       })
       .from(registrations)
+      .innerJoin(duplicates, eq(duplicates.id, registrations.id))
       .leftJoin(users, eq(users.id, registrations.userId))
       .leftJoin(specialtiesMinzdrav, specialtyJoin)
       .where(where)
@@ -587,6 +598,7 @@ export class RegistrationRepository {
     const [counted] = await this.db
       .select({ total: sql<number>`count(*)::int` })
       .from(registrations)
+      .innerJoin(duplicates, eq(duplicates.id, registrations.id))
       .leftJoin(users, eq(users.id, registrations.userId))
       .leftJoin(specialtiesMinzdrav, specialtyJoin)
       .where(where);
@@ -607,6 +619,7 @@ export class RegistrationRepository {
         email: r.email ?? null,
         registeredAt: r.registeredAt.toISOString(),
         confirmationMailStatus: r.confirmationMailStatus ?? null,
+        possibleDuplicate: r.possibleDuplicate,
         attendance: congressDays.map(
           (day): CongressDayAttendance => ({
             day,
@@ -616,6 +629,33 @@ export class RegistrationRepository {
       })),
       total: counted?.total ?? 0,
     };
+  }
+
+  /**
+   * 044 EARS-30 — the event-scoped «возможный дубль» subquery: one row per
+   * participant registration of the event with its marker
+   * ({@link possibleDuplicateOverScope}), the window running over the WHOLE
+   * event's participants because nothing but the event and #2456's
+   * participant rule scope this subquery — the same population the roster
+   * shows. The participant card and the roster list both join it by id, so the card, the row and the EARS-31 filter can never disagree,
+   * and no outer filter or page can change a marker.
+   */
+  private eventDuplicates(eventId: string) {
+    return this.db
+      .select({
+        id: registrations.id,
+        possibleDuplicate: possibleDuplicateOverScope(),
+      })
+      .from(registrations)
+      .where(
+        and(
+          eq(registrations.eventId, eventId),
+          // #2456 — a staff registration is never a roster row, so it never
+          // makes a participant a «возможный дубль» either.
+          isParticipant(registrations.userId),
+        ),
+      )
+      .as("duplicates");
   }
 
   /**
@@ -837,8 +877,10 @@ export class RegistrationRepository {
    *   roster's own definitions; the name parts are the answers alone (the
    *   account has only a display name, which `fullName` already falls back to).
    * - «возможный дубль» is {@link possibleDuplicateOverScope} computed over the
-   *   event's rows in a subquery, THEN narrowed to this registration — the
-   *   window has to see the whole event to count a shared phone.
+   *   event's participant registrations in a subquery (#2456: a staff
+   *   account's registration marks nobody), THEN narrowed to this registration
+   *   — the window has to see every participant of the event to count a shared
+   *   phone.
    * - Consents are the participant's congress sign-up consent rows.
    * - Attendance is the current `registration_attendance` value per configured
    *   day (`null` = never marked) plus the day's 010 audit history
@@ -852,14 +894,7 @@ export class RegistrationRepository {
     congressDays: readonly string[],
   ): Promise<CongressParticipantCard | undefined> {
     const cells = registrationCells();
-    const duplicates = this.db
-      .select({
-        id: registrations.id,
-        possibleDuplicate: possibleDuplicateOverScope(),
-      })
-      .from(registrations)
-      .where(eq(registrations.eventId, eventId))
-      .as("duplicates");
+    const duplicates = this.eventDuplicates(eventId);
     const [row] = await this.db
       .select({
         registrationId: registrations.id,
@@ -879,10 +914,12 @@ export class RegistrationRepository {
         intakeOrigin: registrations.intakeOrigin,
         confirmationMailStatus: registrations.confirmationMailStatus,
         confirmationMailAt: registrations.confirmationMailAt,
-        possibleDuplicate: duplicates.possibleDuplicate,
+        // A staff registration has no row in the participant-only subquery;
+        // its card still opens, unmarked.
+        possibleDuplicate: sql<boolean>`coalesce(${duplicates.possibleDuplicate}, false)`,
       })
       .from(registrations)
-      .innerJoin(duplicates, eq(duplicates.id, registrations.id))
+      .leftJoin(duplicates, eq(duplicates.id, registrations.id))
       .leftJoin(users, eq(users.id, registrations.userId))
       .leftJoin(specialtiesMinzdrav, specialtyJoin)
       .where(registrationOfEvent(eventId, registrationId))

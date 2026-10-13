@@ -9,7 +9,7 @@ import {
 } from "next/navigation";
 import { Authenticated, useCustom } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Label, NativeSelect } from "@ds/design-system";
+import { Badge, Label, NativeSelect } from "@ds/design-system";
 import type { DataTableColumn, DataTableSort } from "@ds/design-system/blocks";
 import type { CongressRosterList, CongressRosterRow } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
@@ -268,7 +268,23 @@ export default function CongressRosterPage() {
   // uncut. What gives is the ФИО cell: a long name wraps in full rather than
   // ellipsing (the date column never truncates).
   const columns: DataTableColumn<Row>[] = [
-    column("fullName", "19%", "wrap"),
+    {
+      ...column("fullName", "19%", "wrap"),
+      // 044 EARS-31 — the «возможный дубль» marker sits UNDER the ФИО (owner
+      // Stage-A «Под ФИО», #2328): the same label badge and copy the
+      // participant card shows, no column of its own, so only a marked row
+      // grows. The same render serves the table and the narrow record card.
+      render: (row) => (
+        <span className="flex flex-col items-start gap-1">
+          <span data-testid="roster-cell-fullName">{row.cells.fullName}</span>
+          {row.possibleDuplicate ? (
+            <Badge variant="label" data-testid="roster-row-duplicate">
+              {t("congressRoster.participantCard.possibleDuplicate")}
+            </Badge>
+          ) : null}
+        </span>
+      ),
+    },
     column("specialtyName", "14%"),
     column("city", "11%"),
     column("phone", "14%"),
@@ -398,7 +414,11 @@ export default function CongressRosterPage() {
     : [];
   const filterChip = (field: string, value: string) =>
     t("congressRoster.filters.chip", {
-      field: t(`congressRoster.filters.columns.${field}`),
+      // The «возможный дубль» filter is named by the marker's own copy.
+      field:
+        field === "possibleDuplicate"
+          ? t("congressRoster.participantCard.possibleDuplicate")
+          : t(`congressRoster.filters.columns.${field}`),
       value,
     });
   const filterValueLabel = (key: RosterFilterKey, value: string): string => {
@@ -407,6 +427,8 @@ export default function CongressRosterPage() {
         return specialtyLabel ?? "…";
       case "mailStatus":
         return t(`congressRoster.filters.mailStatus.${value}`);
+      case "possibleDuplicate":
+        return t(`congressRoster.filters.possibleDuplicate.chip.${value}`);
       default:
         return value;
     }

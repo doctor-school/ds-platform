@@ -20,10 +20,11 @@ import { MskCalendarDaySchema } from "./congress-intake-settings.schema.js";
  *
  * The query below is the `AdminDataList` baseline state (`page`, `pageSize`,
  * `q`) extended by the EARS-34 presence filter, the EARS-22 sort (`sort` +
- * `dir`) and the EARS-23 per-column filters. The «возможный дубль» marker is EARS-30/EARS-31 and
- * is likewise absent from the row: it already exists on the PII-free
- * `EventRosterEntry` read model, and projecting it onto THIS row is that pair's
- * own handler, not EARS-18's.
+ * `dir`), the EARS-23 per-column filters and the EARS-31 «возможный дубль»
+ * yes/no filter. The row carries the EARS-30 marker as `possibleDuplicate`, the
+ * same read-time derivation the PII-free `EventRosterEntry` and the participant
+ * card read, computed over the event's participant registrations — never over
+ * the filtered page.
  */
 
 /** Upper bound on the instant-search term — the same 160 the 007 admin list uses. */
@@ -82,6 +83,18 @@ export const CongressRosterMailStatusFilterSchema = z.enum(
 );
 export type CongressRosterMailStatusFilter = z.infer<
   typeof CongressRosterMailStatusFilterSchema
+>;
+
+/**
+ * 044 EARS-31 — the «возможный дубль» filter values: `yes` keeps the rows the
+ * EARS-30 marker flags, `no` every other row; absent is no filter.
+ */
+export const CONGRESS_ROSTER_POSSIBLE_DUPLICATE_FILTERS = ["yes", "no"] as const;
+export const CongressRosterPossibleDuplicateFilterSchema = z.enum(
+  CONGRESS_ROSTER_POSSIBLE_DUPLICATE_FILTERS,
+);
+export type CongressRosterPossibleDuplicateFilter = z.infer<
+  typeof CongressRosterPossibleDuplicateFilterSchema
 >;
 
 /**
@@ -179,6 +192,13 @@ export const CongressRosterQuerySchema = z
     registeredFrom: MskCalendarDaySchema.optional(),
     /** 044 EARS-23 — the last Moscow calendar day of the range (inclusive, the whole day). */
     registeredTo: MskCalendarDaySchema.optional(),
+    /**
+     * 044 EARS-31 — возможный дубль: `yes` / `no` over the EARS-30 marker,
+     * which is derived over the event's participant registrations (#2456: a
+     * staff account's registration marks nobody), so a row keeps
+     * its marker whatever the other filters leave on the page.
+     */
+    possibleDuplicate: CongressRosterPossibleDuplicateFilterSchema.optional(),
   })
   .refine((q) => q.present === undefined || q.attendanceDay !== undefined, {
     message: "present requires attendanceDay",
@@ -233,6 +253,13 @@ export const CongressRosterRowSchema = z.object({
   registeredAt: z.iso.datetime(),
   /** 044 EARS-27 — the confirmation-letter outcome; `null` before any attempt. */
   confirmationMailStatus: z.enum(["sent", "failed"]).nullable(),
+  /**
+   * 044 EARS-30/EARS-31 — «возможный дубль»: two or more of the event's
+   * participant registrations share this row's normalised contact phone
+   * (#2456: a staff account's registration marks nobody). Derived at read
+   * time, never stored; `false` for a row with no answers.
+   */
+  possibleDuplicate: z.boolean(),
   /**
    * 044 EARS-34 — one entry per configured congress day, in day order; a day
    * nobody marked reads `present: false`.

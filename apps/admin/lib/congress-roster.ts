@@ -3,6 +3,8 @@ import {
   CONGRESS_ROSTER_SORT_DEFAULT,
   CongressRosterMailStatusFilterSchema,
   type CongressRosterMailStatusFilter,
+  CongressRosterPossibleDuplicateFilterSchema,
+  type CongressRosterPossibleDuplicateFilter,
   CongressRosterSortDirSchema,
   CongressRosterSortKeySchema,
   type CongressRosterRow,
@@ -211,9 +213,10 @@ export function rosterSortQuery(sort: RosterSort): {
 }
 
 /**
- * 044 EARS-23 — the per-column filters (owner layout F1, #2316). They live in
- * the ADDRESS under the route's own param names, so a filtered roster is
- * linkable and survives a reload; `""` = not applied.
+ * 044 EARS-23 — the per-column filters (owner layout F1, #2316), plus the
+ * EARS-31 «возможный дубль» yes/no select. They live in the ADDRESS under the
+ * route's own param names, so a filtered roster is linkable and survives a
+ * reload; `""` = not applied.
  */
 export const ROSTER_FILTER_KEYS = [
   "name",
@@ -226,13 +229,17 @@ export const ROSTER_FILTER_KEYS = [
   "mailStatus",
   "registeredFrom",
   "registeredTo",
+  "possibleDuplicate",
 ] as const;
 export type RosterFilterKey = (typeof ROSTER_FILTER_KEYS)[number];
 
 export type RosterColumnFilters = Record<
-  Exclude<RosterFilterKey, "mailStatus">,
+  Exclude<RosterFilterKey, "mailStatus" | "possibleDuplicate">,
   string
-> & { mailStatus: CongressRosterMailStatusFilter | "" };
+> & {
+  mailStatus: CongressRosterMailStatusFilter | "";
+  possibleDuplicate: CongressRosterPossibleDuplicateFilter | "";
+};
 
 export const ROSTER_FILTERS_EMPTY: RosterColumnFilters = {
   name: "",
@@ -245,6 +252,7 @@ export const ROSTER_FILTERS_EMPTY: RosterColumnFilters = {
   mailStatus: "",
   registeredFrom: "",
   registeredTo: "",
+  possibleDuplicate: "",
 };
 
 const CALENDAR_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -272,7 +280,7 @@ function validRange(from: string, to: string): [string, string] {
 /**
  * The filters the address asks for. A value the route would refuse is DROPPED
  * — read as not applied, never sent to become a 400 page: an unknown mail
- * status, a malformed id, an impossible or malformed day, text over the
+ * status or «возможный дубль» value, a malformed id, an impossible or malformed day, text over the
  * route's {@link CONGRESS_ROSTER_SEARCH_MAX}, a phone with no digit, and the
  * «по» of an inverted range.
  */
@@ -286,6 +294,9 @@ export function rosterFiltersFromAddress(
   };
   const mail = CongressRosterMailStatusFilterSchema.safeParse(
     read("mailStatus"),
+  );
+  const duplicate = CongressRosterPossibleDuplicateFilterSchema.safeParse(
+    read("possibleDuplicate"),
   );
   const day = (key: RosterFilterKey) =>
     isCalendarDay(read(key)) ? read(key) : "";
@@ -305,6 +316,7 @@ export function rosterFiltersFromAddress(
     mailStatus: mail.success ? mail.data : "",
     registeredFrom,
     registeredTo,
+    possibleDuplicate: duplicate.success ? duplicate.data : "",
   };
 }
 

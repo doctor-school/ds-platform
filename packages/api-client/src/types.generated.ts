@@ -2515,6 +2515,7 @@ export interface components {
                 email: string | null;
                 fullName: string;
                 phone: string | null;
+                possibleDuplicate: boolean;
                 region: string | null;
                 /** Format: date-time */
                 registeredAt: string;
@@ -4845,6 +4846,7 @@ export interface operations {
                 page?: number;
                 pageSize?: number;
                 phone?: string;
+                possibleDuplicate?: "yes" | "no";
                 present?: "marked" | "unmarked";
                 q?: string;
                 region?: string;

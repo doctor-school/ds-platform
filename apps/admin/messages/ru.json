@@ -1714,6 +1714,15 @@
         "failed": "Не доставлено",
         "none": "Не отправлялось"
       },
+      "possibleDuplicate": {
+        "any": "Любой",
+        "yes": "Да",
+        "no": "Нет",
+        "chip": {
+          "yes": "да",
+          "no": "нет"
+        }
+      },
       "registeredFrom": "с",
       "registeredTo": "по",
       "registeredFromLabel": "Дата регистрации с",

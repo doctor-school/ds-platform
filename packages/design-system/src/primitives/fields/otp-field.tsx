@@ -83,6 +83,7 @@ export function OtpField<T extends FieldValues>({
   onComplete,
   rejection,
   autoFocus = false,
+  hint,
 }: {
   field: ControllerRenderProps<T>;
   /** Fixed code length — 6 for every mailed/texted code, the TOTP length for admin MFA. */
@@ -115,6 +116,13 @@ export function OtpField<T extends FieldValues>({
    * steps, whose purpose is this field (#2881). Read at mount only.
    */
   autoFocus?: boolean;
+  /**
+   * The resting line under the cells (#2882, 003 EARS-42 — canvas
+   * `codeLifetimeHint`). It is the FormMessage's helper children, so the input's
+   * `aria-describedby` resolves it and a field error replaces it in place —
+   * one line, one id, as on `<PasswordField>`. Absent = no line.
+   */
+  hint?: React.ReactNode;
 }) {
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const { resetField } = useFormContext<T>();
@@ -154,37 +162,41 @@ export function OtpField<T extends FieldValues>({
   return (
     <FormItem>
       <FormLabel>{label}</FormLabel>
-      <FormControl>
-        <InputOTP
-          {...field}
-          ref={bindInput}
-          maxLength={length}
-          autoComplete="one-time-code"
-          // #1110: the mobile keyboard the widget requests — the digit keypad for
-          // a numeric code, the full keyboard (uppercase hints) for alphanumeric.
-          inputMode={charset === "alphanumeric" ? "text" : "numeric"}
-          {...(charset === "alphanumeric"
-            ? { autoCapitalize: "characters" as const }
-            : NUMERIC_CELL_PROPS)}
-          value={field.value ?? ""}
-          // input-otp calls onChange with a raw string (not a DOM event). #1109:
-          // an alphanumeric value is upper-cased so a lowercase keystroke lands
-          // the case the code was issued in.
-          onChange={(v: string) =>
-            field.onChange(
-              charset === "alphanumeric" ? v.toUpperCase() : digitsOnly(v),
-            )
-          }
-          {...(onComplete ? { onComplete } : {})}
-        >
-          <InputOTPGroup>
-            {Array.from({ length }, (_, i) => (
-              <InputOTPSlot key={i} index={i} />
-            ))}
-          </InputOTPGroup>
-        </InputOTP>
-      </FormControl>
-      <FormMessage />
+      {/* The line hangs 7px under the cells (canvas auth.dc.html 73
+          `margin-top:7px`), as under the password control. */}
+      <div className="flex flex-col gap-1.75">
+        <FormControl>
+          <InputOTP
+            {...field}
+            ref={bindInput}
+            maxLength={length}
+            autoComplete="one-time-code"
+            // #1110: the mobile keyboard the widget requests — the digit keypad for
+            // a numeric code, the full keyboard (uppercase hints) for alphanumeric.
+            inputMode={charset === "alphanumeric" ? "text" : "numeric"}
+            {...(charset === "alphanumeric"
+              ? { autoCapitalize: "characters" as const }
+              : NUMERIC_CELL_PROPS)}
+            value={field.value ?? ""}
+            // input-otp calls onChange with a raw string (not a DOM event). #1109:
+            // an alphanumeric value is upper-cased so a lowercase keystroke lands
+            // the case the code was issued in.
+            onChange={(v: string) =>
+              field.onChange(
+                charset === "alphanumeric" ? v.toUpperCase() : digitsOnly(v),
+              )
+            }
+            {...(onComplete ? { onComplete } : {})}
+          >
+            <InputOTPGroup>
+              {Array.from({ length }, (_, i) => (
+                <InputOTPSlot key={i} index={i} />
+              ))}
+            </InputOTPGroup>
+          </InputOTP>
+        </FormControl>
+        <FormMessage>{hint}</FormMessage>
+      </div>
     </FormItem>
   );
 }

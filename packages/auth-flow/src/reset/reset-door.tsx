@@ -343,6 +343,11 @@ function cardCopyOf(copy: AuthFlowResetCopy): PasswordRecoveryCardCopy {
     },
     complete: {
       codeLabel: copy.codeLabel,
+      // #2882: the held identifier picks the line, as it picks the sentence above.
+      codeHint: (destination) =>
+        isPhoneIdentifier(destination)
+          ? copy.codeLifetimeHint.sms
+          : copy.codeLifetimeHint.email,
       newPasswordLabel: copy.newPasswordLabel,
       passwordPolicyHint: copy.passwordHint,
       passwordReveal: copy.reveal,

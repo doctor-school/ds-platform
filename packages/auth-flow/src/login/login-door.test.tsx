@@ -89,12 +89,12 @@ describe("017 #1933: what reaches the HTML of the sign-in door", () => {
     expect(markup(ACADEMY_FIXTURE)).toContain("Электронная почта или телефон");
   });
 
-  it("#2027: the password box shows the «••••••••» placeholder on both hosts (canvas 82, owner 2026-09-24)", () => {
+  it("#2882: the password box carries no placeholder on either host (canvas, owner 2026-10-13)", () => {
     for (const config of [DOCTOR_FIXTURE, ACADEMY_FIXTURE]) {
       render(<LoginDoor config={config} landing="/" />);
       expect(
         screen.getByLabelText("Пароль", { selector: "input" }),
-      ).toHaveAttribute("placeholder", "••••••••");
+      ).not.toHaveAttribute("placeholder");
       cleanup();
     }
   });
@@ -164,10 +164,14 @@ async function signIn(props?: {
 }) {
   const user = userEvent.setup();
   render(<LoginDoor config={DOCTOR_FIXTURE} landing="/events" {...props} />);
-  await user.type(screen.getByLabelText("Электронная почта или телефон"), "doc@clinic.ru");
+  await user.type(
+    screen.getByLabelText("Электронная почта или телефон"),
+    "doc@clinic.ru",
+  );
   await user.type(
     screen.getByLabelText("Пароль", { selector: "input" }),
-    "correct-horse-battery");
+    "correct-horse-battery",
+  );
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await waitFor(() => expect(login).toHaveBeenCalled());
 }
@@ -244,7 +248,10 @@ describe("021 EARS-3 (#2333): the post-sign-in landing is re-decided for the new
       />,
     );
     await user.click(screen.getByTestId("login-method-otp"));
-    await user.type(screen.getByLabelText(COPY.otp.emailLabel), "doc@clinic.ru");
+    await user.type(
+      screen.getByLabelText(COPY.otp.emailLabel),
+      "doc@clinic.ru",
+    );
     await user.click(screen.getByTestId("otp-send"));
     await screen.findByTestId("otp-verify");
     await user.click(screen.getByRole("textbox"));

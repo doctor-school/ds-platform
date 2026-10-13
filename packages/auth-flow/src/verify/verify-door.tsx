@@ -278,6 +278,7 @@ function cardCopyOf(copy: AuthFlowVerifyCopy): EmailConfirmCardCopy {
     description: (destination) =>
       withBoldDestination(copy.description, destination),
     codeLabel: copy.codeLabel,
+    codeHint: copy.codeLifetimeHint,
     submit: copy.submit,
     codeAccepted: copy.codeAccepted,
     resend: copy.resend,

@@ -41,6 +41,8 @@ export interface EmailConfirmCardCopy {
   /** Rich description — the host may embed markup around the destination. */
   description: (destination: string) => React.ReactNode;
   codeLabel: string;
+  /** The line under the cells — the code's lifetime (#2882); absent = none. */
+  codeHint?: React.ReactNode;
   submit: React.ReactNode;
   /** Success row shown once the server accepted the code. */
   codeAccepted: React.ReactNode;
@@ -236,6 +238,7 @@ export function EmailConfirmCard({
             <OtpFocusScreen
               field={field}
               codeLabel={copy.codeLabel}
+              codeHint={copy.codeHint}
               submitLabel={copy.submit}
               backLabel={copy.back}
               resendLabel={copy.resend}

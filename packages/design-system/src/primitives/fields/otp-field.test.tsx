@@ -36,6 +36,7 @@ function SlottedHarness({
   rejection,
   required,
   autoFocus,
+  hint,
 }: {
   length: number;
   charset?: "alphanumeric" | "numeric";
@@ -45,6 +46,7 @@ function SlottedHarness({
   /** A field message for an empty code, validated on touch as the auth forms do. */
   required?: string;
   autoFocus?: boolean;
+  hint?: string;
 }) {
   const form = useForm<{ code: string }>({
     mode: "onTouched",
@@ -67,6 +69,7 @@ function SlottedHarness({
               onComplete={onComplete}
               rejection={rejection}
               {...(autoFocus !== undefined ? { autoFocus } : {})}
+              {...(hint === undefined ? {} : { hint })}
             />
           );
         }}
@@ -403,5 +406,26 @@ describe("OtpField variant=slotted", () => {
     render(<SlottedHarness length={6} />);
     expect(screen.getByRole("textbox")).not.toHaveFocus();
     await drainSelectionEvents();
+  });
+});
+
+/**
+ * #2882 (003 EARS-42) — the hint line under the cells (canvas
+ * `codeLifetimeHint`) is the field's description: the input names it in
+ * `aria-describedby`, so a screen reader hears it with the field, and an
+ * absent hint draws no line at all.
+ */
+describe("OtpField hint", () => {
+  it("003 EARS-42: renders the hint under the cells as the field's description", () => {
+    render(<SlottedHarness length={6} hint="Код действует 5 минут." />);
+    const line = screen.getByText("Код действует 5 минут.");
+    expect(
+      screen.getByRole("textbox").getAttribute("aria-describedby")?.split(" "),
+    ).toContain(line.id);
+  });
+
+  it("003 EARS-42: without a hint nothing renders under the cells", () => {
+    const { container } = render(<SlottedHarness length={6} />);
+    expect(container.querySelector("p")).toBeNull();
   });
 });

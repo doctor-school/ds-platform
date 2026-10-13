@@ -774,6 +774,50 @@ describe.each(HOSTS)("003 EARS-54/55 on the %s host", (_, config) => {
     },
   );
 
+  // #2882 (003 EARS-42, canvas `resetCodeHint`): the reset code lives one hour;
+  // only a mailed code adds the spam hint. The line describes the code field.
+  it.each([
+    [
+      IDENTIFIER,
+      "Код действует 1 час. Не видите письмо — проверьте папку «Спам».",
+    ],
+    [PHONE, "Код действует 1 час."],
+  ])(
+    "003 EARS-42: the code step for %j reads its lifetime line, described by the code field",
+    async (identifier, expected) => {
+      const user = userEvent.setup();
+      mount();
+      await screen.findByTestId("reset-request-submit");
+      await user.type(screen.getByLabelText(copy.identifierLabel), identifier);
+      await user.click(screen.getByTestId("reset-request-submit"));
+      await waitFor(() =>
+        expect(screen.getByLabelText(copy.codeLabel)).toBeTruthy(),
+      );
+
+      const line = screen.getByText(expected);
+      expect(
+        screen
+          .getByLabelText(copy.codeLabel)
+          .getAttribute("aria-describedby")
+          ?.split(" "),
+      ).toContain(line.id);
+    },
+  );
+
+  it("#2882: the new-password field carries no placeholder", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByTestId("reset-request-submit");
+    await user.type(screen.getByLabelText(copy.identifierLabel), IDENTIFIER);
+    await user.click(screen.getByTestId("reset-request-submit"));
+    await waitFor(() =>
+      expect(screen.getByLabelText(copy.codeLabel)).toBeTruthy(),
+    );
+    expect(
+      screen.getByLabelText(copy.newPasswordLabel, { selector: "input" }),
+    ).not.toHaveAttribute("placeholder");
+  });
+
   it("003 EARS-54: an email's code step keeps the mailbox sentence", async () => {
     const user = userEvent.setup();
     mount();

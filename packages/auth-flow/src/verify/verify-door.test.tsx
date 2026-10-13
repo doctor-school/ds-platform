@@ -692,3 +692,23 @@ describe("#2881 /verify: the step opens with the caret in the code", () => {
     expect(input.selectionStart).toBe(0);
   });
 });
+
+/**
+ * #2882 (003 EARS-42, canvas `codeLifetimeHint`) — the registration code is the
+ * one-hour verification code, so the confirmation step states that lifetime
+ * and the spam hint under the cells, as the code field's description.
+ */
+describe("003 EARS-42: the confirmation step's code lifetime line", () => {
+  it("003 EARS-42: the step reads the 1-hour line with the spam hint, described by the code field", async () => {
+    await mountSettled();
+    const line = screen.getByText(
+      "Код действует 1 час. Не видите письмо — проверьте папку «Спам».",
+    );
+    expect(
+      screen
+        .getByLabelText(COPY.codeLabel)
+        .getAttribute("aria-describedby")
+        ?.split(" "),
+    ).toContain(line.id);
+  });
+});

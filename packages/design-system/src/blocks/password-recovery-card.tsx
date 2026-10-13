@@ -100,6 +100,9 @@ export interface PasswordRecoveryCardCopy {
   };
   complete: {
     codeLabel: string;
+    /** The line under the cells for the held identifier — the code's lifetime
+     * (#2882); absent = none. */
+    codeHint?: (identifier: string) => React.ReactNode;
     newPasswordLabel: string;
     passwordPolicyHint: string;
     /** Localized show/hide copy for the password reveal toggle (003 EARS-38);
@@ -435,6 +438,7 @@ function RecoveryCompleteForm({
               rejection={error}
               // #2881 — the step opens with the caret in the first cell.
               autoFocus={autoFocusCode}
+              hint={copy.codeHint?.(identifier)}
             />
           )}
         />

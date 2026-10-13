@@ -233,8 +233,6 @@ export type AuthFlowLoginCopy = {
     readonly identifierLabel: string;
     readonly identifierPlaceholder: string;
     readonly passwordLabel: string;
-    /** The password input's placeholder (canvas 82 `••••••••`). */
-    readonly passwordPlaceholder: string;
     /** The empty password box on the sign-in form (the registration sentence differs). */
     readonly passwordRequired: string;
     /** The password-reveal toggle (003 EARS-38); absent = the design-system default. */
@@ -266,6 +264,8 @@ export type AuthFlowLoginCopy = {
     readonly sentTo: string;
     /** The code label per channel («Код из письма / из сообщения»). */
     readonly codeLabel: { readonly email: string; readonly sms: string };
+    /** The line under the cells per channel (canvas `codeLifetimeHint`, #2882). */
+    readonly codeLifetimeHint: { readonly email: string; readonly sms: string };
     /** Template with `{destination}` — the after-resend notice (canvas 81-83). */
     readonly resentTo: string;
     /** The malformed sign-in code (the registration confirmation sentence differs). */
@@ -301,8 +301,6 @@ export type AuthFlowRegisterCopy = {
   readonly emailLabel: string;
   readonly emailPlaceholder: string;
   readonly passwordLabel: string;
-  /** The password input's placeholder (canvas `auth.dc.html:151`). */
-  readonly passwordPlaceholder: string;
   /** 003 EARS-38 — the reveal toggle's labels; absent = the primitive's defaults. */
   readonly reveal?: {
     readonly show: string;
@@ -341,6 +339,8 @@ export type AuthFlowVerifyCopy = {
   /** Template with `{destination}` — the address the code went to. */
   readonly description: string;
   readonly codeLabel: string;
+  /** The line under the cells (canvas `codeLifetimeHint`, #2882). */
+  readonly codeLifetimeHint: string;
   readonly submit: string;
   /** The accepted-code line, shown while the door navigates on. */
   readonly codeAccepted: string;
@@ -385,6 +385,8 @@ export type AuthFlowResetCopy = {
    */
   readonly completeDescriptionPhone: string;
   readonly codeLabel: string;
+  /** The line under the cells per held identifier (canvas `resetCodeHint`, #2882). */
+  readonly codeLifetimeHint: { readonly email: string; readonly sms: string };
   readonly newPasswordLabel: string;
   /** The persistent length hint under the new-password field. */
   readonly passwordHint: string;

@@ -88,7 +88,9 @@ export function appliedFacetsOf(
   return {
     query: rawQueryScalar(raw.q) ?? "",
     specialtyScope,
-    format: list("format"),
+    // The format set is fixed: a value outside it (a hand-edited URL) names
+    // no format, so it is not applied — never a chip or a count (EARS-7).
+    format: list("format").filter((id) => Object.hasOwn(FILTER_COPY.format, id)),
     kind: list("kind"),
     city: list("city"),
     nmoOnly: rawQueryBoolean(raw.nmo) === true,

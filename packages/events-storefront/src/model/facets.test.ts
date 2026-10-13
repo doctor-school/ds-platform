@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { filterLabelsOf, filterOptionsOf, resetFacetsHref } from "./facets";
+import {
+  appliedFacetsOf,
+  filterLabelsOf,
+  filterOptionsOf,
+  resetFacetsHref,
+} from "./facets";
 import { pageHref } from "./feed-url";
 
 const kind = [{ slug: "lecture", title: "Лекция", count: 2 }];
@@ -52,5 +57,19 @@ describe("the facet panel's options (rows 58, 59, D9)", () => {
     expect(pageHref("/webinars", { project: ["a", "b"], tense: "upcoming" })).toBe(
       "/webinars?project=a&project=b",
     );
+  });
+});
+
+describe("the URL's facets as the panel's applied set (019 EARS-7)", () => {
+  it("EARS-7: a format value outside the fixed set is not an applied facet — it could never be shown or counted", () => {
+    expect(appliedFacetsOf({ format: ["online", "radio"] }).format).toEqual([
+      "online",
+    ]);
+  });
+
+  it("EARS-7: a kind slug stays applied even when the read no longer offers it — the panel shows it as removable", () => {
+    expect(appliedFacetsOf({ kind: ["retired-kind"] }).kind).toEqual([
+      "retired-kind",
+    ]);
   });
 });

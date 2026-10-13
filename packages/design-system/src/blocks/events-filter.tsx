@@ -197,6 +197,13 @@ export interface EventsFilterLabels {
   reset: string;
   /** Verb prefix of a removable chip's accessible name («Убрать» → «Убрать: Казань»). */
   removeFacet: string;
+  /**
+   * The chip of an applied «Формат» / «Вид события» value the host no longer
+   * offers (a kind withdrawn from the dictionary after the link was shared):
+   * the value stays visible and removable, named by this copy — never by its
+   * raw id (019 EARS-7).
+   */
+  unavailableOption: string;
   /** Strings every Combobox facet shares. */
   combobox: {
     emptyLabel: string;
@@ -401,13 +408,22 @@ function ChipFacet({
   label,
   options,
   values,
+  unavailableLabel,
   onToggle,
 }: {
   label: string;
   options: EventsFilterOption[];
   values: string[];
+  /** The label of an applied value `options` does not carry. */
+  unavailableLabel: string;
   onToggle: (id: string) => void;
 }) {
+  // An applied value the host no longer offers stays a selected chip after
+  // the offered ones, so every applied value «Применено: N» counts is on
+  // screen and removable (019 EARS-7).
+  const unavailable = values.filter(
+    (id) => !options.some((option) => option.id === id),
+  );
   return (
     <div role="group" aria-label={label} className="flex flex-col gap-3">
       <FacetCaption>{label}</FacetCaption>
@@ -419,6 +435,11 @@ function ChipFacet({
             onClick={() => onToggle(option.id)}
           >
             {option.label}
+          </FilterChip>
+        ))}
+        {unavailable.map((id) => (
+          <FilterChip key={id} selected onClick={() => onToggle(id)}>
+            {unavailableLabel}
           </FilterChip>
         ))}
       </div>
@@ -550,13 +571,15 @@ export function EventsFilter({
 
   const chipFacet = (facet: "format" | "kind") => {
     const label = labels[facet];
-    const list = options[facet];
-    if (!label || !list || list.length === 0) return null;
+    const list = options[facet] ?? [];
+    const values = applied[facet];
+    if (!label || (list.length === 0 && values.length === 0)) return null;
     return (
       <ChipFacet
         label={label}
         options={list}
-        values={applied[facet]}
+        values={values}
+        unavailableLabel={labels.unavailableOption}
         onToggle={(id) =>
           onChange({ ...applied, [facet]: toggle(applied[facet], id) })
         }

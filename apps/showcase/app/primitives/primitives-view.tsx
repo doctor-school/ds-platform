@@ -1908,6 +1908,7 @@ const EVENTS_FILTER_SHARED_LABELS = {
   appliedCount: (n: number) => `Применено: ${n}`,
   reset: "Сбросить",
   removeFacet: "Убрать",
+  unavailableOption: "Больше не проводится",
   combobox: {
     emptyLabel: "Ничего не найдено",
     searchLabel: "Найти",
@@ -2082,6 +2083,16 @@ function EventsFilterSection() {
                 direction: ["arthro"],
                 nmoOnly: true,
               }}
+            />
+          )}
+        />
+      </SubRow>
+      <SubRow label='host="doctor" — an applied kind no longer offered (a shared link to a withdrawn kind): a selected chip «Больше не проводится», removable, counted'>
+        <ThemePair
+          render={() => (
+            <EventsFilterDemo
+              host="doctor"
+              initial={{ kind: ["webinar", "withdrawn-kind"] }}
             />
           )}
         />

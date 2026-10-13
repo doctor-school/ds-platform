@@ -101,6 +101,7 @@ const LABELS: EventsFilterLabels = {
   appliedCount: (n: number) => `Применено: ${n}`,
   reset: "Сбросить",
   removeFacet: "Убрать",
+  unavailableOption: "Больше не проводится",
   combobox: {
     emptyLabel: "Ничего не найдено",
     searchLabel: "Найти",
@@ -397,6 +398,58 @@ describe("EventsFilter — the doctor facet set (EARS-7, filterSet)", () => {
       within(group("Город")).getByRole("button", { name: "Убрать: Казань" }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/ghost-id/)).not.toBeInTheDocument();
+  });
+
+  it("EARS-7.1: an applied kind the host no longer offers stays a selected chip, named by the host copy, never a raw slug", () => {
+    renderPanel({ applied: { ...EMPTY, kind: ["webinar", "retired-kind"] } });
+    const kinds = within(group("Вид события")).getAllByRole("button");
+    expect(kinds.map((chip) => chip.textContent)).toEqual([
+      "Вебинар",
+      "Конгресс",
+      "Встреча клуба",
+      "Больше не проводится",
+    ]);
+    expect(kinds[3]).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText(/retired-kind/)).not.toBeInTheDocument();
+    expect(screen.getByText("Применено: 2")).toBeInTheDocument();
+  });
+
+  it("EARS-7.1: removing an applied kind the host no longer offers drops it from the applied set", async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderPanel({
+      applied: { ...EMPTY, kind: ["webinar", "retired-kind"] },
+    });
+    await user.click(
+      within(group("Вид события")).getByRole("button", {
+        name: "Больше не проводится",
+      }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith({ ...EMPTY, kind: ["webinar"] });
+  });
+
+  it("EARS-7.1: an applied format outside the offered set is shown the same way", () => {
+    renderPanel({ applied: { ...EMPTY, format: ["radio"] } });
+    expect(
+      within(group("Формат")).getByRole("button", {
+        name: "Больше не проводится",
+        pressed: true,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Применено: 1")).toBeInTheDocument();
+  });
+
+  it("EARS-7.1: the kind facet stays while an applied kind is set even when the read offers no kind at all", () => {
+    renderPanel({
+      options: { ...OPTIONS, kind: [] },
+      applied: { ...EMPTY, kind: ["retired-kind"] },
+    });
+    expect(
+      within(group("Вид события")).getByRole("button", {
+        name: "Больше не проводится",
+        pressed: true,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Применено: 1")).toBeInTheDocument();
   });
 
   it("EARS-7.1: the НМО switch label is bold, as the canvas draws it", () => {

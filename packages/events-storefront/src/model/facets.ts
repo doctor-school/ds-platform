@@ -142,10 +142,33 @@ export function withAppliedFacets(
   return next;
 }
 
-/** A published event kind's URL value and name (012 EARS-28 dictionary). */
+/**
+ * An event kind's URL value and name, as the public kind dictionary serves it
+ * — a published or a retired kind (012 EARS-28, Amendment — 2026-10-13).
+ */
 export interface KindTitle {
   readonly slug: string;
   readonly title: string;
+}
+
+/**
+ * The page's query with every applied kind the dictionary does not carry
+ * dropped — a slug that names no published or retired kind (never existed, a
+ * draft, deleted) is not applied, like a format outside the fixed set: no
+ * read, no chip, no count (019 EARS-7). A retired kind stays applied. A failed
+ * dictionary read (`null`) drops nothing, so a transient failure never loses
+ * an applied kind.
+ */
+export function withKnownKinds(
+  raw: RawQueryRecord,
+  kinds: readonly KindTitle[] | null,
+): RawQueryRecord {
+  const applied = rawQueryList(raw.kind) ?? [];
+  if (kinds === null || applied.length === 0) return raw;
+  const known = applied.filter((slug) => kinds.some((kind) => kind.slug === slug));
+  if (known.length === applied.length) return raw;
+  const { kind: _dropped, ...rest } = raw;
+  return known.length === 0 ? rest : { ...rest, kind: known };
 }
 
 /** A specialty the doctor specialty combobox offers — its URL value and name. */
@@ -161,7 +184,8 @@ export interface SpecialtyChoice {
  * the doctor specialties from the specialty book. A facet the read names no
  * option for is left out, so the panel drops it (a doctor city, while no
  * event carries one). The kind dictionary names an applied kind the read does
- * not offer under this reading, so its chip keeps its name (019 EARS-7).
+ * not offer under this reading (a retired kind with no event in it), so its
+ * chip keeps its title (019 EARS-7).
  */
 export function filterOptionsOf(
   filterSet: EventsFilterHost,

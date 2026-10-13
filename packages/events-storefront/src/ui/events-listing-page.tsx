@@ -15,6 +15,7 @@ import {
   type KindTitle,
   type SpecialtyChoice,
   filterOptionsOf,
+  withKnownKinds,
 } from "../model/facets";
 import {
   type BlockRead,
@@ -215,10 +216,20 @@ export async function EventsListingPage({
    */
   retry: EventsBlockRetryAction;
 }) {
-  const raw = await searchParams;
+  const requested = await searchParams;
   const listing = config.routes.listing;
-  const canonical = canonicalFeedRedirect(listing, raw);
+  const canonical = canonicalFeedRedirect(listing, requested);
   if (canonical !== null) permanentRedirect(canonical);
+  // The kind dictionary (published and retired kinds) is read only while the
+  // URL applies a kind: it names an applied kind the read does not offer, and
+  // a slug it does not carry is dropped before any read, like a format outside
+  // the fixed set (019 EARS-7, 012 Amendment — 2026-10-13).
+  const kindBook =
+    config.filterSet === "doctor" &&
+    (rawQueryList(requested.kind) ?? []).length > 0
+      ? await fetchEventKindTitles()
+      : null;
+  const raw = withKnownKinds(requested, kindBook);
 
   const view = pageViewOf(raw);
   const tense = feedTenseOf(raw);
@@ -232,12 +243,7 @@ export async function EventsListingPage({
     config.filterSet === "doctor"
       ? fetchSpecialtyChoices()
       : Promise.resolve([]);
-  // An applied kind the read does not offer under this reading keeps its own
-  // name on the panel (019 EARS-7); no kind applied, no dictionary read.
-  const kinds: Promise<KindTitle[]> =
-    config.filterSet === "doctor" && (rawQueryList(raw.kind) ?? []).length > 0
-      ? fetchEventKindTitles()
-      : Promise.resolve([]);
+  const kinds: Promise<KindTitle[]> = Promise.resolve(kindBook ?? []);
   const mine = readMyEvents(config.contentSet.myEventsPath, session);
 
   const switchHref = viewHref(
@@ -331,6 +337,7 @@ export async function EventsListingPage({
                   month={pageMonthOf(raw)}
                   feed={feed}
                   specialties={specialties}
+                  kinds={kinds}
                   request={request}
                   retry={retry}
                 />
@@ -358,6 +365,7 @@ export async function EventsListingPage({
                     feed={feed}
                     mine={mine}
                     specialties={specialties}
+                    kinds={kinds}
                     request={request}
                     retry={retry}
                   />

@@ -101,7 +101,6 @@ const LABELS: EventsFilterLabels = {
   appliedCount: (n: number) => `Применено: ${n}`,
   reset: "Сбросить",
   removeFacet: "Убрать",
-  unavailableOption: "Больше не проводится",
   combobox: {
     emptyLabel: "Ничего не найдено",
     searchLabel: "Найти",
@@ -400,69 +399,65 @@ describe("EventsFilter — the doctor facet set (EARS-7, filterSet)", () => {
     expect(screen.queryByText(/ghost-id/)).not.toBeInTheDocument();
   });
 
-  it("EARS-7.1: an applied kind the host no longer offers stays a selected chip, named by the host copy, never a raw slug", () => {
-    renderPanel({ applied: { ...EMPTY, kind: ["webinar", "retired-kind"] } });
-    const kinds = within(group("Вид события")).getAllByRole("button");
-    expect(kinds.map((chip) => chip.textContent)).toEqual([
-      "Вебинар",
-      "Конгресс",
-      "Встреча клуба",
-      "Больше не проводится",
-    ]);
-    expect(kinds[3]).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByText(/retired-kind/)).not.toBeInTheDocument();
-    expect(screen.getByText("Применено: 2")).toBeInTheDocument();
-  });
-
-  it("EARS-7.1: an applied kind with no event in this reading keeps its own name when the host knows it", () => {
+  it("EARS-7.1: an applied kind the reading does not offer stays a selected chip after the offered ones, under the name the host gives it", () => {
     renderPanel({
       options: {
         ...OPTIONS,
         appliedNames: { kind: [{ id: "master", label: "Мастер-класс" }] },
       },
-      applied: { ...EMPTY, kind: ["master", "retired-kind"] },
+      applied: { ...EMPTY, kind: ["webinar", "master"] },
     });
-    const kinds = within(group("Вид события")).getAllByRole("button", {
-      pressed: true,
-    });
+    const kinds = within(group("Вид события")).getAllByRole("button");
     expect(kinds.map((chip) => chip.textContent)).toEqual([
+      "Вебинар",
+      "Конгресс",
+      "Встреча клуба",
       "Мастер-класс",
-      "Больше не проводится",
     ]);
+    expect(kinds[3]).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Применено: 2")).toBeInTheDocument();
   });
 
-  it("EARS-7.1: removing an applied kind the host no longer offers drops it from the applied set", async () => {
-    const user = userEvent.setup();
-    const { onChange } = renderPanel({
-      applied: { ...EMPTY, kind: ["webinar", "retired-kind"] },
-    });
-    await user.click(
-      within(group("Вид события")).getByRole("button", {
-        name: "Больше не проводится",
-      }),
-    );
-    expect(onChange).toHaveBeenLastCalledWith({ ...EMPTY, kind: ["webinar"] });
-  });
-
-  it("EARS-7.1: an applied format outside the offered set is shown the same way", () => {
-    renderPanel({ applied: { ...EMPTY, format: ["radio"] } });
+  it("EARS-7.1: the block carries no copy of its own for an applied chip value: one the host does not name is shown by its value, never hidden while it counts", () => {
+    renderPanel({ applied: { ...EMPTY, kind: ["master"] } });
     expect(
-      within(group("Формат")).getByRole("button", {
-        name: "Больше не проводится",
+      within(group("Вид события")).getByRole("button", {
+        name: "master",
         pressed: true,
       }),
     ).toBeInTheDocument();
     expect(screen.getByText("Применено: 1")).toBeInTheDocument();
   });
 
+  it("EARS-7.1: removing an applied kind the reading does not offer drops it from the applied set", async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderPanel({
+      options: {
+        ...OPTIONS,
+        appliedNames: { kind: [{ id: "master", label: "Мастер-класс" }] },
+      },
+      applied: { ...EMPTY, kind: ["webinar", "master"] },
+    });
+    await user.click(
+      within(group("Вид события")).getByRole("button", {
+        name: "Мастер-класс",
+      }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith({ ...EMPTY, kind: ["webinar"] });
+  });
+
   it("EARS-7.1: the kind facet stays while an applied kind is set even when the read offers no kind at all", () => {
     renderPanel({
-      options: { ...OPTIONS, kind: [] },
-      applied: { ...EMPTY, kind: ["retired-kind"] },
+      options: {
+        ...OPTIONS,
+        kind: [],
+        appliedNames: { kind: [{ id: "master", label: "Мастер-класс" }] },
+      },
+      applied: { ...EMPTY, kind: ["master"] },
     });
     expect(
       within(group("Вид события")).getByRole("button", {
-        name: "Больше не проводится",
+        name: "Мастер-класс",
         pressed: true,
       }),
     ).toBeInTheDocument();

@@ -67,6 +67,16 @@ export interface EventKindIncidentEvent {
 /** The lifecycle states in which an event is on a public surface. */
 const PUBLIC_STATES = new Set(["published", "live", "ended"]);
 
+/**
+ * 012 EARS-28 (Amendment — 2026-10-13) — the kind statuses a public read
+ * names: a published kind and a retired one (retiring a kind does not take it
+ * out of the storefront filter); never a draft.
+ */
+export const PUBLIC_KIND_STATUSES: readonly ("published" | "retired")[] = [
+  "published",
+  "retired",
+];
+
 @Injectable()
 export class EventKindsRepository {
   constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {}
@@ -269,7 +279,11 @@ export class EventKindsRepository {
     return { rows, total: Number(totals?.value ?? 0) };
   }
 
-  /** EARS-28 — every published, non-retired kind, ordered by title. */
+  /**
+   * EARS-28 (Amendment — 2026-10-13) — every published or retired kind,
+   * ordered by title: a retired kind keeps its name wherever the storefront
+   * names it. Never a draft; the status is not exposed.
+   */
   async listPublic(): Promise<Array<{ id: string; slug: string; title: string }>> {
     return this.db
       .select({
@@ -278,7 +292,7 @@ export class EventKindsRepository {
         title: eventKinds.title,
       })
       .from(eventKinds)
-      .where(and(eq(eventKinds.status, "published"), isNull(eventKinds.deletedAt)))
+      .where(inArray(eventKinds.status, PUBLIC_KIND_STATUSES))
       .orderBy(asc(eventKinds.title), asc(eventKinds.id));
   }
 }

@@ -162,8 +162,8 @@ export interface EventsFilterOptions {
   /**
    * Names of applied «Формат» / «Вид события» values the facet does not offer
    * in this reading (a kind with no event under the current tense or scope).
-   * Such a value stays a selected chip under this name; one the host cannot
-   * name reads `labels.unavailableOption` (019 EARS-7).
+   * Such a value stays a selected chip under this name (019 EARS-7); the host
+   * names every value it applies, so the value itself is only a last resort.
    */
   appliedNames?: { format?: EventsFilterOption[]; kind?: EventsFilterOption[] };
 }
@@ -204,13 +204,6 @@ export interface EventsFilterLabels {
   reset: string;
   /** Verb prefix of a removable chip's accessible name («Убрать» → «Убрать: Казань»). */
   removeFacet: string;
-  /**
-   * The chip of an applied «Формат» / «Вид события» value the host cannot name
-   * (a kind withdrawn from the dictionary after the link was shared): the
-   * value stays visible and removable, named by this copy — never by its raw
-   * id (019 EARS-7).
-   */
-  unavailableOption: string;
   /** Strings every Combobox facet shares. */
   combobox: {
     emptyLabel: string;
@@ -416,7 +409,6 @@ function ChipFacet({
   options,
   values,
   names,
-  unavailableLabel,
   onToggle,
 }: {
   label: string;
@@ -424,14 +416,12 @@ function ChipFacet({
   values: string[];
   /** Names of applied values `options` does not carry. */
   names: EventsFilterOption[];
-  /** The label of an applied value neither `options` nor `names` carries. */
-  unavailableLabel: string;
   onToggle: (id: string) => void;
 }) {
   // An applied value the facet does not offer stays a selected chip after
   // the offered ones, so every applied value «Применено: N» counts is on
   // screen and removable (019 EARS-7).
-  const unavailable = values.filter(
+  const unoffered = values.filter(
     (id) => !options.some((option) => option.id === id),
   );
   return (
@@ -447,9 +437,9 @@ function ChipFacet({
             {option.label}
           </FilterChip>
         ))}
-        {unavailable.map((id) => (
+        {unoffered.map((id) => (
           <FilterChip key={id} selected onClick={() => onToggle(id)}>
-            {names.find((name) => name.id === id)?.label ?? unavailableLabel}
+            {names.find((name) => name.id === id)?.label ?? id}
           </FilterChip>
         ))}
       </div>
@@ -590,7 +580,6 @@ export function EventsFilter({
         options={list}
         values={values}
         names={options.appliedNames?.[facet] ?? []}
-        unavailableLabel={labels.unavailableOption}
         onToggle={(id) =>
           onChange({ ...applied, [facet]: toggle(applied[facet], id) })
         }

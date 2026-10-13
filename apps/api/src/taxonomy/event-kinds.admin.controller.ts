@@ -342,8 +342,9 @@ export class EventKindsAdminController {
 }
 
 /**
- * EARS-28 — `GET /v1/public/event-kinds`: every published, non-retired kind as
- * `PublicEventKind { id, slug, title }`. The same body for a guest and a
+ * EARS-28 — `GET /v1/public/event-kinds`: every published or retired kind
+ * (never a draft) as `PublicEventKind { id, slug, title }`, no status exposed
+ * (Amendment — 2026-10-13). The same body for a guest and a
  * logged-in reader, so a short shared cache.
  */
 @Controller({ path: "public/event-kinds", version: "1" })

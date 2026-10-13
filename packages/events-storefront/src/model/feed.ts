@@ -17,7 +17,6 @@ import type {
 } from "@ds/design-system/blocks";
 
 import type { FeedCopy } from "../copy/feed-copy";
-import { FILTER_COPY } from "../copy/filter-copy";
 import { type EventsStorefrontHostConfig, eventPageHref } from "../host-config";
 import { type PluralNoun, formatEventCount } from "./event-count";
 import { type KindTitle, hasAppliedFacets, resetFacetsHref } from "./facets";
@@ -436,8 +435,8 @@ export type WidenMatching = (
  * and offers no widening. Either way it offers «Сбросить фильтры» — the page
  * without the host's facets (canvas `emptyOf`). Facet values are named by the
  * read's titles, a picked specialty by the specialty book. An applied kind the
- * read does not offer is named by the kind dictionary, else «Больше не
- * проводится» — as on the panel, never by its raw slug (019 EARS-7). Only the host's own
+ * read does not offer (a retired kind with no event in this reading) is named
+ * by the kind dictionary, as on the panel (019 EARS-7). Only the host's own
  * facet keys (`FACET_KEYS[filterSet]`) are conditions: a foreign key in a
  * crafted URL reaches no read, so it makes no chip and spends no widen read.
  *
@@ -529,10 +528,13 @@ export async function emptyFeedState(
     (v) =>
       `${copy.facet.format}: ${copy.card.format[v as EventParticipationFormat] ?? v}`,
   );
+  // The page drops a slug no kind carries before any read (`withKnownKinds`),
+  // so the dictionary names every applied kind; the value itself is only the
+  // last resort of a failed dictionary read.
   const kindTitleOf = (value: string) =>
     titles.kind?.find((option) => option.slug === value)?.title ??
     kinds.find((kind) => kind.slug === value)?.title ??
-    FILTER_COPY.doctor.unavailableOption;
+    value;
   chipsOf("kind", (v) => `${copy.facet.kind}: ${kindTitleOf(v)}`);
   chipsOf("city", (v) => `${copy.facet.city}: ${v}`);
   if (own.has("nmo") && rawQueryBoolean(query.nmo) === true) {

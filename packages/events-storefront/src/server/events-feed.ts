@@ -188,23 +188,24 @@ export async function fetchSpecialtyChoices(
 }
 
 /**
- * The published event-kind dictionary (012 EARS-28) — the name of an applied
- * kind the feed read does not offer under the current reading (019 EARS-7).
- * A kind missing here is withdrawn; a failed read names nothing.
+ * The public event-kind dictionary — every published or retired kind (012
+ * EARS-28, Amendment — 2026-10-13): it names an applied kind the feed read
+ * does not offer under the current reading, and a slug it does not carry is
+ * not applied (019 EARS-7). A failed read is `null` — unknown, not empty.
  */
 export async function fetchEventKindTitles(
   fetchImpl: typeof fetch = fetch,
-): Promise<KindTitle[]> {
+): Promise<KindTitle[] | null> {
   try {
     const res = await fetchImpl(`${API_BASE}/v1/public/event-kinds`, {
       headers: { accept: "application/json" },
       cache: "no-store",
     });
-    if (!res.ok) return [];
+    if (!res.ok) return null;
     return PublicEventKindListSchema.parse(await res.json()).data.map(
       ({ slug, title }) => ({ slug, title }),
     );
   } catch {
-    return [];
+    return null;
   }
 }

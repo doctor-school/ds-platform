@@ -30,6 +30,8 @@ import {
   UPCOMING_BROADCAST_STATES,
 } from "@ds/schemas";
 
+import { PUBLIC_KIND_STATUSES } from "../taxonomy/event-kinds.repository.js";
+
 /** A lifecycle set a feed read selects — one tense's, or the month grid's. */
 export type DoctorFeedStates =
   readonly (typeof MONTH_BROADCAST_STATES)[number][];
@@ -194,10 +196,10 @@ export class DoctorEventsRepository {
    * feed predicate selects WITHOUT the kind facet: every 012 kind one of them
    * carries, with `count` = those events under the OTHER SQL facet (`format`).
    * The Academy option rule (014-design §9, `academyFacetOptions`): a kind no
-   * base event carries is not an option; a zero-yield one stays at `0`. Only a
-   * published kind is an option (012 EARS-28): a retired one stays on its
-   * events' cards, never in the facet.
-   * Ordered by title, then slug.
+   * base event carries is not an option; a zero-yield one stays at `0`. A
+   * published or a retired kind is an option under its own title while its
+   * events are in the reading; a draft kind never is (012 EARS-28, Amendment
+   * — 2026-10-13). Ordered by title, then slug.
    */
   async findKindOptions(
     filters: Omit<DoctorFeedFilters, "kindSlugs" | "limit" | "order">,
@@ -219,9 +221,10 @@ export class DoctorEventsRepository {
       .select({ slug: eventKinds.slug, title: eventKinds.title, count })
       .from(events)
       .innerJoin(eventKinds, eq(eventKinds.id, events.kindId))
-      // 012 EARS-28 / 019 EARS-17 — events keep a retired kind's reference,
-      // but only a published kind is offered as a facet value.
-      .where(and(...where, eq(eventKinds.status, "published")))
+      // 012 EARS-28 / 019 EARS-17 (Amendment — 2026-10-13) — retiring a kind
+      // does not take it out of the filter: its events keep the reference and
+      // it stays a facet value; a draft kind is never offered.
+      .where(and(...where, inArray(eventKinds.status, PUBLIC_KIND_STATUSES)))
       .groupBy(eventKinds.id)
       .orderBy(asc(eventKinds.title), asc(eventKinds.slug));
     return rows.map((row) => ({

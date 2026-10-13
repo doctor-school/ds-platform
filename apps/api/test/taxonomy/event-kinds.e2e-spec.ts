@@ -491,7 +491,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
     });
 
-    it("012 EARS-28: retiring a kind goes through the signed lifecycle-impact preview, keeps the events' retained reference and drops the kind from the public list", async () => {
+    it("012 EARS-28: retiring a kind goes through the signed lifecycle-impact preview, keeps the events' retained reference and keeps naming the kind in the public list (Amendment — 2026-10-13)", async () => {
       const kind = await publishKind(await newKind(["online"]));
       const event = await seedEvent({ audience: "doctors", kindId: kind.id });
 
@@ -505,7 +505,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         [event.id],
       );
       expect(rows[0]!.kind_id).toBe(kind.id);
-      expect((await publicKinds()).map((k) => k.id)).not.toContain(kind.id);
+      // Retired, the kind is still named by the public list — the same
+      // { id, slug, title }, no status exposed (owner decision 2026-10-13).
+      expect((await publicKinds()).find((k) => k.id === kind.id)).toEqual({
+        id: kind.id,
+        slug: kind.slug,
+        title: kind.title,
+      });
 
       // A retired kind is no longer selectable for a new event.
       const refused = await createEvent(eventPayload({ kindId: kind.id }));
@@ -513,7 +519,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(fieldOf(refused)).toContainEqual(["kindId"]);
     });
 
-    it("012 EARS-28: a retired kind is no longer offered by the doctor feed's kind facet, while the event that carries it keeps its kind label (019 EARS-17, #2830)", async () => {
+    it("012 EARS-28: a retired kind stays a value of the doctor feed's kind facet while its events are in the reading, under its own title, and the event keeps its kind label (019 EARS-17, Amendment — 2026-10-13)", async () => {
       const kind = await publishKind(await newKind(["online"]));
       const event = await seedEvent({ audience: "doctors", kindId: kind.id });
 
@@ -527,13 +533,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           days: {
             items: { id: string; kind: { slug: string; title: string } }[];
           }[];
-          facets?: { kind: { slug: string }[] };
+          facets?: { kind: { slug: string; title: string }[] };
         };
         return {
           card: body.days
             .flatMap((d) => d.items)
             .find((item) => item.id === event.id),
           kindOptions: (body.facets?.kind ?? []).map((o) => o.slug),
+          kindOption: (body.facets?.kind ?? []).find(
+            (o) => o.slug === kind.slug,
+          ),
         };
       }
 
@@ -544,14 +553,38 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const { res } = await retireKind(kind);
       expect(res.statusCode).toBe(200);
 
-      // Retired, it is no longer offered — the event stays listed with its
-      // retained kind label.
+      // Retired, it is still offered under its own title while its event is
+      // in the reading — the event stays listed with its retained kind label.
       const after = await readFeed();
-      expect(after.kindOptions).not.toContain(kind.slug);
+      expect(after.kindOption).toMatchObject({
+        slug: kind.slug,
+        title: kind.title,
+      });
       expect(after.card?.kind).toMatchObject({
         slug: kind.slug,
         title: kind.title,
       });
+    });
+
+    it("012 EARS-28: a draft kind is never a value of the doctor feed's kind facet nor named by the public list, even when an event carries it", async () => {
+      const draft = await newKind(["online"]);
+      const event = await seedEvent({ audience: "doctors", kindId: draft.id });
+      const res = await app.inject({
+        method: "GET",
+        url: "/v1/storefront/doctor/events?specialty=all",
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as {
+        days: { items: { id: string }[] }[];
+        facets?: { kind: { slug: string }[] };
+      };
+      expect(
+        body.days.flatMap((d) => d.items).map((item) => item.id),
+      ).toContain(event.id);
+      expect((body.facets?.kind ?? []).map((o) => o.slug)).not.toContain(
+        draft.slug,
+      );
+      expect((await publicKinds()).map((k) => k.id)).not.toContain(draft.id);
     });
 
     // ── EARS-26: the event's kind ────────────────────────────────────────

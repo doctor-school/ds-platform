@@ -15,8 +15,6 @@ const SHARED = {
   appliedCount: (count: number) => `Применено: ${count}`,
   reset: "Сбросить",
   removeFacet: "Убрать",
-  /** An applied kind the doctor's link names but the platform no longer offers. */
-  unavailableOption: "Больше не проводится",
   combobox: {
     emptyLabel: "Ничего не найдено",
     searchLabel: "Найти",
@@ -28,13 +26,7 @@ const SHARED = {
   },
 } satisfies Pick<
   EventsFilterLabels,
-  | "panel"
-  | "title"
-  | "appliedCount"
-  | "reset"
-  | "removeFacet"
-  | "unavailableOption"
-  | "combobox"
+  "panel" | "title" | "appliedCount" | "reset" | "removeFacet" | "combobox"
 >;
 
 export const FILTER_COPY = {

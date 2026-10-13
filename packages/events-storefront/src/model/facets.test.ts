@@ -5,6 +5,7 @@ import {
   filterLabelsOf,
   filterOptionsOf,
   resetFacetsHref,
+  withKnownKinds,
 } from "./facets";
 import { pageHref } from "./feed-url";
 
@@ -72,6 +73,28 @@ describe("the facet panel's options (rows 58, 59, D9)", () => {
 });
 
 describe("the URL's facets as the panel's applied set (019 EARS-7)", () => {
+  it("EARS-7: an applied kind no published or retired kind carries (never existed, a draft, deleted) is dropped from the reading like an unknown format; a retired one stays", () => {
+    const dictionary = [
+      { slug: "vebinar", title: "Вебинар" },
+      // Retired — the public kind read still names it (012 Amendment — 2026-10-13).
+      { slug: "master-klass", title: "Мастер-класс" },
+    ];
+    expect(
+      withKnownKinds(
+        { tense: "past", kind: ["master-klass", "ghost", "vebinar"], format: "online" },
+        dictionary,
+      ),
+    ).toEqual({ tense: "past", kind: ["master-klass", "vebinar"], format: "online" });
+    expect(withKnownKinds({ kind: "ghost", q: "сон" }, dictionary)).toEqual({ q: "сон" });
+    // No kind applied, nothing to check.
+    expect(withKnownKinds({ q: "сон" }, dictionary)).toEqual({ q: "сон" });
+  });
+
+  it("EARS-7: a failed kind-dictionary read drops nothing — an applied kind is never lost to a transient failure", () => {
+    const raw = { kind: ["master-klass", "ghost"] };
+    expect(withKnownKinds(raw, null)).toBe(raw);
+  });
+
   it("EARS-7: a format value outside the fixed set is not an applied facet — it could never be shown or counted", () => {
     expect(appliedFacetsOf({ format: ["online", "radio"] }).format).toEqual([
       "online",

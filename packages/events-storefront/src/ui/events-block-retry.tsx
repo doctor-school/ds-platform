@@ -8,6 +8,7 @@ import type { EventsFeedHorizon, FeedFacetOptions } from "../model/feed";
 import {
   fetchEventsFeed,
   fetchMonthEntries,
+  fetchEventKindTitles,
   fetchSpecialtyChoices,
   forwardedSessionFrom,
   readRequestFrom,
@@ -106,6 +107,10 @@ export async function renderEventsBlock(
     config.filterSet === "doctor"
       ? fetchSpecialtyChoices()
       : Promise.resolve([]);
+  // The retried block's query is the page's, unknown kinds already dropped;
+  // the dictionary is read only when its empty state names an applied kind.
+  const kinds = async () =>
+    config.filterSet === "doctor" ? ((await fetchEventKindTitles()) ?? []) : [];
 
   switch (parsed.block) {
     case "month":
@@ -124,6 +129,7 @@ export async function renderEventsBlock(
           request,
         ),
         specialties,
+        kinds,
         request,
         retry,
       });
@@ -138,6 +144,7 @@ export async function renderEventsBlock(
         read,
         registeredSlugs: parsed.registeredSlugs,
         specialties,
+        kinds,
         request,
         retry,
       });

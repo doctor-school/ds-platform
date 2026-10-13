@@ -64,7 +64,7 @@ describe("fetchEventsLive", () => {
 });
 
 describe("fetchEventKindTitles", () => {
-  it("EARS-7: reads the published kind dictionary as slug → title", async () => {
+  it("EARS-7: reads the public kind dictionary (published and retired kinds) as slug → title", async () => {
     const fetchImpl = vi.fn(async () =>
       Response.json({
         data: [{ id: "00460046-0000-4000-8000-000000000005", slug: "master-klass", title: "Мастер-класс" }],
@@ -77,8 +77,12 @@ describe("fetchEventKindTitles", () => {
     expect(url).toMatch(/\/v1\/public\/event-kinds$/);
   });
 
-  it("EARS-7: a failed dictionary read names nothing, never a thrown page", async () => {
-    const fetchImpl = vi.fn(async () => new Response("", { status: 503 }));
-    expect(await fetchEventKindTitles(fetchImpl as unknown as typeof fetch)).toEqual([]);
+  it("EARS-7: a failed dictionary read is reported as unknown (null), never a thrown page and never an empty dictionary", async () => {
+    const failed = vi.fn(async () => new Response("", { status: 503 }));
+    expect(await fetchEventKindTitles(failed as unknown as typeof fetch)).toBeNull();
+    const thrown = vi.fn(async () => {
+      throw new Error("ECONNREFUSED");
+    });
+    expect(await fetchEventKindTitles(thrown as unknown as typeof fetch)).toBeNull();
   });
 });

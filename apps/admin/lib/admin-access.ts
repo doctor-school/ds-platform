@@ -82,6 +82,9 @@ export const ADMIN_SECTION_NAV: readonly AdminNavItem[] = [
     testId: "nav-specialties",
     labelKey: "app.nav.specialties",
   },
+  // 047 EARS-1 — staff access closes the row: it manages who reaches the
+  // sections before it. Drawn only here, so only a platform_admin sees it.
+  { href: "/access", testId: "nav-access", labelKey: "app.nav.access" },
 ];
 
 const NO_ACCESS: AdminAccess = {

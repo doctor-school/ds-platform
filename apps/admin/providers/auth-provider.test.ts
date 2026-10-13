@@ -94,6 +94,19 @@ describe("authProvider.onError — which refusal ends the session", () => {
     expect(verdict).not.toHaveProperty("redirectTo");
   });
 
+  it("047 EARS-8: a 401 STEP_UP_REQUIRED is not a lost session — no sign-out, the screen owns the code step", async () => {
+    const error = {
+      statusCode: 401,
+      errorCode: "STEP_UP_REQUIRED",
+      stepUpUrl: "/mfa/challenge?mode=reverify",
+      message: "x",
+    };
+    const verdict = await authProvider.onError(error);
+    expect(verdict).toEqual({ error });
+    expect(verdict).not.toHaveProperty("logout");
+    expect(verdict).not.toHaveProperty("redirectTo");
+  });
+
   it("044 EARS-38: any other failure is left to the screen", async () => {
     await expect(
       authProvider.onError({ statusCode: 503, message: "x" }),

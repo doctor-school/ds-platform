@@ -104,9 +104,21 @@ export const authProvider: AuthProvider = {
    * registrar whose event binding was withdrawn (044 EARS-38). The screen that
    * made the call owns what it shows; logging out here would race it to
    * `/login` and hide the refusal.
+   *
+   * 047 EARS-8 — a `401 STEP_UP_REQUIRED` is not a lost session either: the
+   * session is live and only its second factor is older than 30 minutes
+   * (ADR-0001 §10). The screen that sent the request keeps it and takes the
+   * operator to the code screen (`lib/step-up.ts`); signing out here would
+   * throw away the session and the entered form.
    */
   onError: async (error) => {
-    const status = (error as { statusCode?: number }).statusCode;
+    const { statusCode: status, errorCode } = error as {
+      statusCode?: number;
+      errorCode?: string;
+    };
+    if (status === 401 && errorCode === "STEP_UP_REQUIRED") {
+      return { error };
+    }
     if (status === 401) {
       return { logout: true, redirectTo: LOGIN_PATH, error };
     }

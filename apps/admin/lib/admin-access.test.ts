@@ -84,6 +84,7 @@ describe("044 EARS-20 admin access projection", () => {
       "/direction-specialties",
       "/direction-adjacency",
       "/specialties",
+      "/access",
     ]);
     expect(canAccessPath(access, "/events")).toBe(true);
     expect(canAccessPath(access, `/events/${EVENT_B}/roster`)).toBe(true);
@@ -95,6 +96,22 @@ describe("044 EARS-20 admin access projection", () => {
     });
     expect(adminNavItems(both)).toEqual(ADMIN_SECTION_NAV);
     expect(canAccessPath(both, "/projects")).toBe(true);
+  });
+
+  it("047 EARS-1: «Доступы» is drawn for platform_admin only and its route opens for no one else", () => {
+    const admin = adminAccess(platformAdmin);
+    expect(adminNavItems(admin)).toContainEqual({
+      href: "/access",
+      testId: "nav-access",
+      labelKey: "app.nav.access",
+    });
+    expect(canAccessPath(admin, "/access")).toBe(true);
+
+    const registrar = adminAccess(registrarBoundToA);
+    expect(adminNavItems(registrar).map((item) => item.href)).not.toContain(
+      "/access",
+    );
+    expect(canAccessPath(registrar, "/access")).toBe(false);
   });
 
   it("044 EARS-20.4: an unreadable session fails closed — nothing drawn, nothing reachable", () => {

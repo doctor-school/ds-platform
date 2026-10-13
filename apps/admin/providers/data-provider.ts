@@ -220,6 +220,12 @@ export interface TaxonomyHttpError extends HttpError {
    * own problem schema.
    */
   problems?: unknown[];
+  /**
+   * 047 EARS-8 — only on `401 STEP_UP_REQUIRED`: the admin path where the
+   * operator re-elevates the current session (ADR-0001 §10). The step-up branch
+   * of the calling screen (`lib/step-up.ts`) navigates there.
+   */
+  stepUpUrl?: string;
 }
 
 async function toHttpError(res: Response): Promise<TaxonomyHttpError> {
@@ -228,6 +234,7 @@ async function toHttpError(res: Response): Promise<TaxonomyHttpError> {
   let traceId: string | undefined;
   let fieldErrors: { path: string; message: string }[] | undefined;
   let problems: unknown[] | undefined;
+  let stepUpUrl: string | undefined;
   try {
     const body = (await res.json()) as {
       message?: unknown;
@@ -238,6 +245,7 @@ async function toHttpError(res: Response): Promise<TaxonomyHttpError> {
       traceId?: unknown;
       errors?: unknown;
       problems?: unknown;
+      stepUpUrl?: unknown;
     };
     if (typeof body.message === "string") message = body.message;
     else if (typeof body.detail === "string") message = body.detail;
@@ -257,6 +265,7 @@ async function toHttpError(res: Response): Promise<TaxonomyHttpError> {
       fieldErrors = body.errors as { path: string; message: string }[];
     }
     if (Array.isArray(body.problems)) problems = body.problems;
+    if (typeof body.stepUpUrl === "string") stepUpUrl = body.stepUpUrl;
   } catch {
     // Non-JSON / empty body — keep the generic message.
   }
@@ -267,6 +276,7 @@ async function toHttpError(res: Response): Promise<TaxonomyHttpError> {
     ...(traceId ? { traceId } : {}),
     ...(fieldErrors ? { fieldErrors } : {}),
     ...(problems ? { problems } : {}),
+    ...(stepUpUrl ? { stepUpUrl } : {}),
   };
 }
 

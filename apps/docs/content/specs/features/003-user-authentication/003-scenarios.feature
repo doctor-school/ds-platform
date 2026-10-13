@@ -259,17 +259,26 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And an otp.sent audit_ledger row is appended only when a code is actually issued
     And the resend is subject to the EARS-13 rate limits and writes no users or consent row
 
-  @EARS-2 @EARS-16 @failure
+  @EARS-2 @EARS-16 @failure @phone-only-registration
   Scenario: Phone-only registration is not offered and never 500s
     # Zitadel cannot create a login-capable human without an email (GH #202);
     # email is the primary registration identifier, phone is a post-registration
     # secondary identifier. A phone-only register attempt is rejected as a
     # handled, enumeration-safe failure — never an opaque 500.
-    Given a visitor who submits the registration form with a phone but no email
-    When the request reaches the BFF
-    Then the request is rejected with a generic, enumeration-safe failure
-    And the response is not a 500 server error
-    And no account is created
+    Given an Academy visitor sees email-only registration and owns two phone-only request identifiers
+    When the visitor sends both phone-without-email payloads to the real Academy registration BFF
+    Then both phone-only requests receive the same generic enumeration-safe failure without identifiers or credentials
+    And neither phone-only response is a 500 server error and the visitor still has no private session
+    And neither owned submitted phone identifier has an account mirror and the isolated local users total remains unchanged when applicable
+    When the same visitor submits the real Academy registration form with a unique valid email as a control
+    Then the valid email control reaches its delivered-code step without pre-code private access or any phone registration route
+    # NEW browser UI/request-level refusal: phone-only-registration.steps.ts.
+    # The email-only form is not forced to submit a phone payload. Real mirror
+    # absence is scoped to both submitted phones on local and canonical Stage;
+    # the isolated local contour additionally requires unchanged total users.
+    # Retain packages/schemas/src/auth/auth.schema.ts RegisterRequestSchema and
+    # apps/api/test/auth/register.e2e-spec.ts EARS-2 actual-phone SELECT absence
+    # plus DTO/IdP robustness. These native proofs own upstream IdP behavior.
 
   @EARS-3 @EARS-41 @happy @email-confirmation
   Scenario: Verify email with the OTP code

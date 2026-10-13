@@ -770,3 +770,37 @@ registration journeys remain intact. The same scenario stays active in the
 canonical full Academy staging/release suite and in the lead-owned local contour;
 this coverage change has no render surface and requires
 no Stage-B request or slot.
+
+### Phone-only registration refusal (003 EARS-2/16)
+
+`Phone-only registration is not offered and never 500s` checks the real Academy
+email/password registration form, with no phone input, then sends two distinct
+phone-without-email payloads through ordinary same-origin browser fetches to the
+real BFF. `steps/phone-only-registration.steps.ts` requires the exact generic
+missing-email DTO validation 400, identical complete responses across the two identifiers, no 500 or
+identifier/password/token echo, and no private session or profile access.
+The CAPTCHA proof uses the existing `captchaTestTokenFromEnv` and
+`x-smartcaptcha-token` carrier whenever required; only the owned local HTTP
+contour with explicit bot protection OFF omits it. The HTML form is not modified
+to submit a payload it does not offer.
+
+The canonical `readOwnedPhoneAccountCount` observes only the two actual
+submitted synthetic phone identifiers before and after refusal, requiring zero
+both times. A pre-existing collision fails before either POST. The serialized
+isolated local contour additionally requires `readOwnedUserCount` before and
+after the refusals with an unchanged total; missing local topology variables
+fail closed. Canonical HTTPS Stage uses its existing read-only slot/SSH route
+for the submitted-phone count and never queries a shared global users total.
+The unrelated unique control email does not select phone rows. Observer target
+validation and sanitized `E2E_STAND_COMMAND_LOG` behavior are described above.
+
+The same visitor then submits the real registration form with that unique valid
+email, requiring neutral acceptance and fresh addressed six-digit registration
+mail at an unconsumed code step without pre-code private access. This is an
+acceptance control without an additional code-confirmation journey. Trace-off
+auth fixtures and the existing registration/mail helpers are reused; cleanup
+closes only the owned context. Native `RegisterRequestSchema` and API
+`register.e2e-spec.ts` EARS-2 actual-phone absence/DTO/IdP robustness proofs remain
+intact as separate upstream evidence. Run only this selected case with
+`E2E_WORKERS=1` on the lead-selected contour; the coverage change has no render
+surface and requires no Stage-B request or new slot.

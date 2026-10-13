@@ -99,6 +99,12 @@ export interface EmailConfirmCardProps {
    * registration door carries. Absent → NOTHING renders (EARS-3 honest-empty).
    */
   returnContextSlot?: React.ReactNode | undefined;
+  /**
+   * The code step puts the caret in its first cell when it appears (003
+   * EARS-22, #2881) — the code is the step's purpose. Defaults to `true`; only
+   * a catalog that draws the step as a specimen beside others turns it off.
+   */
+  autoFocusCode?: boolean | undefined;
 }
 
 /** The block's addressable parts — see `EMAIL_CONFIRM_TEST_IDS` for the shipped ids. */
@@ -143,6 +149,7 @@ export function EmailConfirmCard({
   resendCooldownSeconds = EMAIL_CONFIRM_RESEND_COOLDOWN_SECONDS,
   testIds,
   returnContextSlot,
+  autoFocusCode = true,
 }: EmailConfirmCardProps) {
   const form = useForm<EmailConfirmValues>({
     resolver,
@@ -241,6 +248,7 @@ export function EmailConfirmCard({
               succeededLabel={copy.codeAccepted}
               notice={resend.notice}
               rejection={blockedByRule ? null : error}
+              autoFocus={autoFocusCode}
               onComplete={onComplete}
               onSubmit={submit}
               onResend={resend.onResend}

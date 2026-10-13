@@ -50,6 +50,13 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "../input-otp";
  * seen last is compared, not a first-run flag (StrictMode runs the mount effect
  * twice): a refusal already standing at mount, or re-rendered unchanged, is not
  * a new one.
+ *
+ * Step focus (#2881): with `autoFocus` the caret lands in the first cell when
+ * the field MOUNTS — the moment a code step appears — so the visitor types the
+ * code without reaching for it, and the active cell draws its focus ring. Read
+ * at mount only: a re-render never pulls the caret back from wherever the
+ * visitor moved it. Off by default, so a field that is not its page's purpose
+ * (a catalog specimen, a settings form) never takes the caret on its own.
  */
 const digitsOnly = (raw: string) => raw.replace(/\D/g, "");
 
@@ -75,6 +82,7 @@ export function OtpField<T extends FieldValues>({
   charset,
   onComplete,
   rejection,
+  autoFocus = false,
 }: {
   field: ControllerRenderProps<T>;
   /** Fixed code length — 6 for every mailed/texted code, the TOTP length for admin MFA. */
@@ -102,6 +110,11 @@ export function OtpField<T extends FieldValues>({
    * Each new non-empty value empties the cells and refocuses the first (#2881).
    */
   rejection?: React.ReactNode;
+  /**
+   * Put the caret in the first cell when the field mounts — set by the code
+   * steps, whose purpose is this field (#2881). Read at mount only.
+   */
+  autoFocus?: boolean;
 }) {
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const { resetField } = useFormContext<T>();
@@ -114,6 +127,19 @@ export function OtpField<T extends FieldValues>({
     [fieldRef],
   );
 
+  /** The caret into the first cell — on the step's appearance and on each refusal. */
+  const caretToFirstCell = React.useCallback(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.focus();
+    input.setSelectionRange(0, 0);
+  }, []);
+
+  React.useEffect(() => {
+    if (autoFocus) caretToFirstCell();
+    // Mount only (#2881): the step's appearance, never a later re-render.
+  }, []);
+
   const seenRejection = React.useRef(rejection);
   React.useEffect(() => {
     if (seenRejection.current === rejection) return;
@@ -121,10 +147,7 @@ export function OtpField<T extends FieldValues>({
     if (rejection === null || rejection === undefined || rejection === false)
       return;
     resetField(name);
-    const input = inputRef.current;
-    if (!input) return;
-    input.focus();
-    input.setSelectionRange(0, 0);
+    caretToFirstCell();
     // Keyed only on the refusal — the field handles are stable per render.
   }, [rejection]);
 

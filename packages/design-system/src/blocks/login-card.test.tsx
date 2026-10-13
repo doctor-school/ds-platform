@@ -153,6 +153,10 @@ afterEach(cleanup);
 const drainSelectionEvents = () =>
   act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
 
+// #2881 — the code step takes the caret when it appears, so every mount of it
+// queues jsdom's focus/selection events; they land before the unmount.
+afterEach(drainSelectionEvents);
+
 describe("<LoginCard>", () => {
   it("renders every visible string from the copy prop, with the title as the page h1", () => {
     setup();
@@ -588,9 +592,9 @@ describe("003 EARS-55 <LoginCard> SMS hint slot", () => {
     const hint = screen.getByText("copy.otp.channelSmsHint");
     // Canvas 130–132: muted small ink under the switch, a token class only.
     expect(hint).toHaveClass("text-xs", "text-muted-foreground");
-    expect(
-      screen.getByRole("radiogroup").parentElement?.contains(hint),
-    ).toBe(true);
+    expect(screen.getByRole("radiogroup").parentElement?.contains(hint)).toBe(
+      true,
+    );
     // The hint is announced with the switch it explains.
     expect(hint.id).not.toBe("");
     expect(screen.getByRole("radiogroup")).toHaveAttribute(
@@ -647,4 +651,3 @@ describe("#2881 <LoginCard> a refused sign-in code", () => {
     await drainSelectionEvents();
   });
 });
-

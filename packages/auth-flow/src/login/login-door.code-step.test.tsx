@@ -177,7 +177,8 @@ describe("003 EARS-42: sign-in by code shows the one code step", () => {
   it.each(HOSTS)(
     "003 EARS-42 (#2607): on %s two addresses typed in turn read apart on the step, and a long one wraps inside the column",
     async (_host, config) => {
-      const LONG = "anna.konstantinova-rozhdestvenskaya.cardiology@regional-clinical-hospital.example.ru";
+      const LONG =
+        "anna.konstantinova-rozhdestvenskaya.cardiology@regional-clinical-hospital.example.ru";
       const user = await sendEmailCode(config);
       expect(screen.getByText(EMAIL).tagName).toBe("STRONG");
 
@@ -219,6 +220,16 @@ describe("003 EARS-42: sign-in by code shows the one code step", () => {
   });
 
   it.each(HOSTS)(
+    "003 EARS-22 (#2881): on %s the caret is in the first code cell once the code is sent",
+    async (_host, config) => {
+      await sendEmailCode(config);
+      const input = screen.getByRole("textbox") as HTMLInputElement;
+      await waitFor(() => expect(input).toHaveFocus());
+      expect(input.selectionStart).toBe(0);
+    },
+  );
+
+  it.each(HOSTS)(
     "003 EARS-22 (#2881): on %s a wrong code after a failed resend is sent once — the confirm button cannot send it again",
     async (_host, config) => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -255,7 +266,9 @@ describe("003 EARS-42: sign-in by code shows the one code step", () => {
             resendSentence,
           ),
         );
-        await waitFor(() => expect(screen.getByRole("textbox")).toHaveValue(""));
+        await waitFor(() =>
+          expect(screen.getByRole("textbox")).toHaveValue(""),
+        );
         // …so the confirm button sends nothing a second time.
         await user.click(screen.getByTestId("otp-verify"));
         expect(loginWithOtp).toHaveBeenCalledTimes(1);

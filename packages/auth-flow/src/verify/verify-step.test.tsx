@@ -482,6 +482,15 @@ describe("003 EARS-24 / row 76: the step's words and hops on the doctor /verify"
     expect(screen.queryByTestId("verify-go-to-reset")).toBeNull();
   });
 
+  it("003 EARS-22 (#2881): on arrival after registration the first code cell of the doctor /verify has the caret", async () => {
+    renderPanel();
+    const field = screen.getByLabelText(
+      CONFIRM_COPY.codeLabel,
+    ) as HTMLInputElement;
+    await waitFor(() => expect(field).toHaveFocus());
+    expect(field.selectionStart).toBe(0);
+  });
+
   it("003 EARS-40: a doctor /verify with no address is replaced onto the registration door, the carried target kept", () => {
     render(
       <VerifyEntry

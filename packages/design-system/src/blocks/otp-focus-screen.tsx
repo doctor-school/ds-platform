@@ -63,6 +63,7 @@ export function OtpFocusScreen<T extends FieldValues>({
   succeededLabel,
   notice,
   rejection,
+  autoFocus = false,
   onComplete,
   onSubmit,
   onResend,
@@ -104,6 +105,11 @@ export function OtpFocusScreen<T extends FieldValues>({
    * and refocuses the first, so a typed code reaches the server once (#2881).
    */
   rejection?: React.ReactNode;
+  /**
+   * The caret lands in the first cell when the step appears (#2881) — the auth
+   * cards set it; a catalog specimen leaves it off.
+   */
+  autoFocus?: boolean;
   /** Fired when the sixth character lands (app wires the guarded auto-submit). */
   onComplete?: (() => void) | undefined;
   /** Manual submit handler (the `<form onSubmit>` the app owns). */
@@ -141,6 +147,7 @@ export function OtpFocusScreen<T extends FieldValues>({
           label={codeLabel}
           onComplete={onComplete}
           rejection={rejection}
+          autoFocus={autoFocus}
         />
 
         {/* Canvas 73-75 — confirms acceptance while the app navigates on. */}

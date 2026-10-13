@@ -180,6 +180,12 @@ export interface PasswordRecoveryCardProps {
   otpLength?: number;
   /** Resend cooldown in seconds; defaults to 30. */
   resendCooldownSeconds?: number;
+  /**
+   * The code step puts the caret in its first cell when it appears (003
+   * EARS-22, #2881) — the code is the step's purpose. Defaults to `true`; only
+   * a catalog that draws the step as a specimen beside others turns it off.
+   */
+  autoFocusCode?: boolean | undefined;
 }
 
 const defaultRenderLink = ({
@@ -201,6 +207,7 @@ export function PasswordRecoveryCard({
   complete,
   otpLength = PASSWORD_RECOVERY_OTP_LENGTH,
   resendCooldownSeconds = PASSWORD_RECOVERY_RESEND_COOLDOWN_SECONDS,
+  autoFocusCode = true,
 }: PasswordRecoveryCardProps) {
   // Canvas 53-56 / `errText()` screen=reset — ONE operation-level plate above the
   // glyph on every auth screen: the refused request, the refused completion and a
@@ -251,6 +258,7 @@ export function PasswordRecoveryCard({
           identifier={identifier}
           otpLength={otpLength}
           cooldownSeconds={resendCooldownSeconds}
+          autoFocusCode={autoFocusCode}
           {...complete}
         />
       )}
@@ -357,11 +365,13 @@ function RecoveryCompleteForm({
   onRestart,
   notice,
   captchaSlot,
+  autoFocusCode,
 }: PasswordRecoveryCompleteProps & {
   copy: PasswordRecoveryCardCopy["complete"];
   identifier: string;
   otpLength: number;
   cooldownSeconds: number;
+  autoFocusCode: boolean;
 }) {
   // #200: the resolver is app-owned so the complete step validates against the
   // portal's message-less field schemas (the request schema's message-carrying
@@ -423,6 +433,8 @@ function RecoveryCompleteForm({
               // #2881 — a refused code is emptied so it is never sent again;
               // the new password is kept.
               rejection={error}
+              // #2881 — the step opens with the caret in the first cell.
+              autoFocus={autoFocusCode}
             />
           )}
         />

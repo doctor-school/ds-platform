@@ -78,6 +78,10 @@ afterEach(cleanup);
 const drainSelectionEvents = () =>
   act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
 
+// #2881 — the code step takes the caret when it appears, so every mount of it
+// queues jsdom's focus/selection events; they land before the unmount.
+afterEach(drainSelectionEvents);
+
 describe("<EmailConfirmCard>", () => {
   it("renders every visible string from the copy prop, with the title as the page h1", () => {
     setup();
@@ -288,7 +292,9 @@ describe("<EmailConfirmCard> canvas code step", () => {
     vi.useFakeTimers();
     try {
       render(
-        <EmailConfirmCard {...props({ testIds: { returnContext: "plate" } })} />,
+        <EmailConfirmCard
+          {...props({ testIds: { returnContext: "plate" } })}
+        />,
       );
       expect(screen.queryByTestId("plate")).toBeNull();
 
@@ -358,7 +364,6 @@ describe("#2881 <EmailConfirmCard> a refused code", () => {
     await drainSelectionEvents();
   });
 });
-
 
 describe("#2881 <EmailConfirmCard> an incomplete code", () => {
   it("003 EARS-22 (#2881): an incomplete code on Enter keeps the typed digits; a later server refusal still empties them", async () => {

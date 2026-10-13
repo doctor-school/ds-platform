@@ -124,6 +124,10 @@ afterEach(cleanup);
 const drainSelectionEvents = () =>
   act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
 
+// #2881 — the code step takes the caret when it appears, so every mount of it
+// queues jsdom's focus/selection events; they land before the unmount.
+afterEach(drainSelectionEvents);
+
 describe("<PasswordRecoveryCard>", () => {
   it("renders every visible string from the copy prop, with the title as the page h1", () => {
     setup();
@@ -242,7 +246,8 @@ describe("<PasswordRecoveryCard>", () => {
 
   it("#2556: the «Начать заново» / resend row wraps at the canvas 12px gap (canvas 247 gap:12px; flex-wrap:wrap)", () => {
     setup({ stage: "complete", identifier: "doc@example.com" });
-    const row = screen.getByTestId("reset-restart").parentElement as HTMLElement;
+    const row = screen.getByTestId("reset-restart")
+      .parentElement as HTMLElement;
     expect(row).toHaveClass("flex", "flex-wrap", "gap-3");
     expect(row.className).not.toMatch(/(^|\s)gap-2(\s|$)/);
   });
@@ -442,4 +447,3 @@ describe("#2881 <PasswordRecoveryCard> a refused reset code", () => {
     await drainSelectionEvents();
   });
 });
-

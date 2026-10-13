@@ -229,6 +229,12 @@ export interface LoginCardProps {
   defaultMethod?: LoginCardMethod;
   /** Resend cooldown in seconds; defaults to 30. */
   resendCooldownSeconds?: number;
+  /**
+   * The code step puts the caret in its first cell when it appears (003
+   * EARS-22, #2881) — the code is the step's purpose. Defaults to `true`; only
+   * a catalog that draws the step as a specimen beside others turns it off.
+   */
+  autoFocusCode?: boolean | undefined;
 }
 
 const defaultRenderLink = ({
@@ -250,6 +256,7 @@ export function LoginCard({
   onMethodChange,
   defaultMethod = "password",
   resendCooldownSeconds = LOGIN_RESEND_COOLDOWN_SECONDS,
+  autoFocusCode = true,
 }: LoginCardProps) {
   const channels = otp.channels ?? DEFAULT_CHANNELS;
   // 003 EARS-43 (#2615): both method tabs share ONE typed identifier — each
@@ -362,6 +369,7 @@ export function LoginCard({
           <OtpLogin
             copy={copy.otp}
             resendCooldownSeconds={resendCooldownSeconds}
+            autoFocusCode={autoFocusCode}
             {...otp}
             channels={channels}
             channel={channel}
@@ -527,10 +535,12 @@ function OtpLogin({
   onChangeMethod,
   initialIdentifier,
   onIdentifierChange,
+  autoFocusCode,
 }: Omit<LoginCardOtpProps, "channels"> &
   CarriedIdentifierProps & {
     copy: LoginCardCopy["otp"];
     resendCooldownSeconds: number;
+    autoFocusCode: boolean;
     channels: readonly LoginCardOtpChannel[];
     channel: LoginCardOtpChannel;
     onChannelChange: (channel: LoginCardOtpChannel) => void;
@@ -680,6 +690,7 @@ function OtpLogin({
             cooldownSeconds={resendCooldownSeconds}
             resendNonce={resendNonce}
             rejection={screenError}
+            autoFocus={autoFocusCode}
             onVerify={onVerify}
             onResend={() => onResend({ identifier: sentIdentifier, channel })}
             onChangeMethod={onChangeMethod}
@@ -711,6 +722,7 @@ function OtpVerifyForm({
   cooldownSeconds,
   resendNonce,
   rejection,
+  autoFocus,
   onVerify,
   onResend,
   onChangeMethod,
@@ -725,6 +737,8 @@ function OtpVerifyForm({
   resendNonce: number;
   /** The focus screen's refusal — a new one clears the typed code (#2881). */
   rejection?: React.ReactNode;
+  /** The caret into the first cell when the step appears (#2881). */
+  autoFocus: boolean;
   onVerify: (values: LoginCardOtpVerifyValues) => Promise<void> | void;
   onResend: () => void;
   onChangeMethod: () => void;
@@ -781,6 +795,7 @@ function OtpVerifyForm({
             isSubmitting={verifyForm.formState.isSubmitting}
             notice={resent ? copy.resentTo(identifier) : null}
             rejection={rejection}
+            autoFocus={autoFocus}
             onComplete={onCodeComplete}
             onSubmit={submit}
             onResend={onResend}

@@ -755,6 +755,25 @@ describe.each(HOSTS)("003 EARS-54/55 on the %s host", (_, config) => {
     );
   });
 
+  it.each([
+    ["an email", IDENTIFIER],
+    ["a phone", PHONE],
+  ])(
+    "003 EARS-22 (#2881): once a code is requested for %s the first code cell has the caret",
+    async (_kind, identifier) => {
+      const user = userEvent.setup();
+      mount();
+      await screen.findByTestId("reset-request-submit");
+      await user.type(screen.getByLabelText(copy.identifierLabel), identifier);
+      await user.click(screen.getByTestId("reset-request-submit"));
+      const code = (await screen.findByLabelText(
+        copy.codeLabel,
+      )) as HTMLInputElement;
+      await waitFor(() => expect(code).toHaveFocus());
+      expect(code.selectionStart).toBe(0);
+    },
+  );
+
   it("003 EARS-54: an email's code step keeps the mailbox sentence", async () => {
     const user = userEvent.setup();
     mount();

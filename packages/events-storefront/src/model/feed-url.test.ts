@@ -483,39 +483,88 @@ describe("the facet panel writes the URL (rows 58, 59)", () => {
     const fallback = { defaultScopeEmpty: true };
     expect(appliedFacetsOf({}, undefined, fallback).specialtyScope).toBe("all");
     // An explicit scope in the URL always wins over the fall-back.
-    expect(appliedFacetsOf({ specialty: "mine-and-adjacent" }, undefined, fallback).specialtyScope).toBe(
-      "mine-and-adjacent",
-    );
-    expect(appliedFacetsOf({ specialty: "s1" }, undefined, fallback).specialtyScope).toEqual([
-      { id: "s1", label: "s1" },
-    ]);
+    expect(
+      appliedFacetsOf({ specialty: "mine-and-adjacent" }, undefined, fallback)
+        .specialtyScope,
+    ).toBe("mine-and-adjacent");
+    expect(
+      appliedFacetsOf({ specialty: "s1" }, undefined, fallback).specialtyScope,
+    ).toEqual([{ id: "s1", label: "s1" }]);
     const base = appliedFacetsOf({}, undefined, fallback);
-    const mine = withAppliedFacets({}, { ...base, specialtyScope: "mine-and-adjacent" }, "doctor", fallback);
-    expect(pageHref("/events", mine)).toBe("/events?specialty=mine-and-adjacent");
+    const mine = withAppliedFacets(
+      {},
+      { ...base, specialtyScope: "mine-and-adjacent" },
+      "doctor",
+      fallback,
+    );
+    expect(pageHref("/events", mine)).toBe(
+      "/events?specialty=mine-and-adjacent",
+    );
     // Removing the last picked specialty returns to this visitor's default.
     expect(
-      pageHref("/events", withAppliedFacets({ specialty: "s1" }, { ...base, specialtyScope: "all" }, "doctor", fallback)),
+      pageHref(
+        "/events",
+        withAppliedFacets(
+          { specialty: "s1" },
+          { ...base, specialtyScope: "all" },
+          "doctor",
+          fallback,
+        ),
+      ),
     ).toBe("/events");
     // Under the fall-back an explicit «Моя и смежные» is an applied facet, and
     // an explicit `specialty=all` is the default, applying none.
-    expect(hasAppliedFacets({ specialty: "mine-and-adjacent" }, "doctor", fallback)).toBe(true);
-    expect(hasAppliedFacets({ specialty: "all" }, "doctor", fallback)).toBe(false);
+    expect(
+      hasAppliedFacets({ specialty: "mine-and-adjacent" }, "doctor", fallback),
+    ).toBe(true);
+    expect(hasAppliedFacets({ specialty: "all" }, "doctor", fallback)).toBe(
+      false,
+    );
     // «Все специальности» is this visitor's default, so picking it leaves the
     // scope unwritten — an explicit `specialty=all` is not an applied facet.
-    expect(pageHref("/events", withAppliedFacets({ specialty: "mine-and-adjacent" }, { ...base, specialtyScope: "all" }, "doctor", fallback))).toBe(
-      "/events",
-    );
-    // A later facet click keeps the explicit «Моя и смежные» in the URL.
-    const picked = appliedFacetsOf({ specialty: "mine-and-adjacent" }, undefined, fallback);
     expect(
-      pageHref("/events", withAppliedFacets({ specialty: "mine-and-adjacent" }, { ...picked, format: ["online"] }, "doctor", fallback)),
+      pageHref(
+        "/events",
+        withAppliedFacets(
+          { specialty: "mine-and-adjacent" },
+          { ...base, specialtyScope: "all" },
+          "doctor",
+          fallback,
+        ),
+      ),
+    ).toBe("/events");
+    // A later facet click keeps the explicit «Моя и смежные» in the URL.
+    const picked = appliedFacetsOf(
+      { specialty: "mine-and-adjacent" },
+      undefined,
+      fallback,
+    );
+    expect(
+      pageHref(
+        "/events",
+        withAppliedFacets(
+          { specialty: "mine-and-adjacent" },
+          { ...picked, format: ["online"] },
+          "doctor",
+          fallback,
+        ),
+      ),
     ).toBe("/events?format=online&specialty=mine-and-adjacent");
     // Without the fall-back «Моя и смежные» is the default and stays unwritten.
-    expect(pageHref("/events", withAppliedFacets({ specialty: "all" }, { ...base, specialtyScope: "mine-and-adjacent" }, "doctor"))).toBe(
-      "/events",
-    );
+    expect(
+      pageHref(
+        "/events",
+        withAppliedFacets(
+          { specialty: "all" },
+          { ...base, specialtyScope: "mine-and-adjacent" },
+          "doctor",
+        ),
+      ),
+    ).toBe("/events");
     // The explicit default applies no facet, as the absent one does.
-    expect(hasAppliedFacets({ specialty: "mine-and-adjacent" }, "doctor")).toBe(false);
+    expect(hasAppliedFacets({ specialty: "mine-and-adjacent" }, "doctor")).toBe(
+      false,
+    );
   });
 });
 

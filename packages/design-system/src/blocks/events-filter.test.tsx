@@ -314,9 +314,14 @@ describe("EventsFilter — the doctor facet set (EARS-7, filterSet)", () => {
       },
     });
     await user.click(
-      within(group("Специальность")).getByRole("button", { name: "Убрать: Травматология" }),
+      within(group("Специальность")).getByRole("button", {
+        name: "Убрать: Травматология",
+      }),
     );
-    expect(onChange).toHaveBeenLastCalledWith({ ...EMPTY, specialtyScope: "all" });
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...EMPTY,
+      specialtyScope: "all",
+    });
   });
 
   it("EARS-7.1: the combobox never offers a value that is already picked", async () => {

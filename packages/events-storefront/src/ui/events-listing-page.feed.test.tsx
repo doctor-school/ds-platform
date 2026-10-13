@@ -47,7 +47,11 @@ vi.mock("../server", async (importOriginal) => ({
   fetchMonthCounts: mocks.fetchMonthCounts,
 }));
 
-import { EventsListingPage, FacetColumn, FacetSheetSection } from "./events-listing-page";
+import {
+  EventsListingPage,
+  FacetColumn,
+  FacetSheetSection,
+} from "./events-listing-page";
 import { FeedSection, LiveSection, MyEventsSection } from "./feed-sections";
 import { FeedFrame } from "./feed-frame";
 import { FeedReadScope } from "./feed-read-scope";
@@ -319,7 +323,11 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
       headerCopy: {
         title: "События",
         subline: {
-          byScope: { mineAndAdjacent: "line-mine", all: "line-all", picked: "line-picked" },
+          byScope: {
+            mineAndAdjacent: "line-mine",
+            all: "line-all",
+            picked: "line-picked",
+          },
         },
       },
     };
@@ -336,7 +344,9 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
       expect(subline.type).toBe(Suspense);
       const { children } = subline.props as { children: ReactElement };
       render(
-        await (children.type as (p: unknown) => Promise<ReactElement>)(children.props),
+        await (children.type as (p: unknown) => Promise<ReactElement>)(
+          children.props,
+        ),
       );
       const text = screen.getByTestId("events-feed-subline-scope").textContent;
       cleanup();
@@ -345,7 +355,9 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
     expect(await lineOf({}, false)).toBe("line-mine");
     expect(await lineOf({}, true)).toBe("line-all");
     expect(await lineOf({ specialty: "all" }, false)).toBe("line-all");
-    expect(await lineOf({ specialty: "mine-and-adjacent" }, true)).toBe("line-mine");
+    expect(await lineOf({ specialty: "mine-and-adjacent" }, true)).toBe(
+      "line-mine",
+    );
     expect(await lineOf({ specialty: "s-1" }, false)).toBe("line-picked");
   });
 
@@ -400,17 +412,26 @@ describe("the doctor's default «Моя и смежные» is empty (019 EARS-9
 
   it("EARS-9: the default feed opens with «Все специальности» selected as this visitor's default — not counted, nothing to reset", async () => {
     render(await panel({}, FALLBACK_PAGE));
-    expect(screen.getByRole("button", { name: "Все специальности" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Моя и смежные" })).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getByRole("button", { name: "Все специальности" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: "Моя и смежные" }),
+    ).toHaveAttribute("aria-pressed", "false");
     expect(screen.queryByText(/Применено/)).toBeNull();
     expect(screen.queryByRole("link", { name: "Сбросить" })).toBeNull();
   });
 
   it("EARS-9: under the fall-back a facet beyond the default is counted alone, and «Сбросить» follows it", async () => {
     render(await panel({ format: "online" }, FALLBACK_PAGE));
-    expect(screen.getByRole("button", { name: "Все специальности" })).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: "Все специальности" }),
+    ).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Применено: 1")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Сбросить" })).toHaveAttribute("href", "/events");
+    expect(screen.getByRole("link", { name: "Сбросить" })).toHaveAttribute(
+      "href",
+      "/events",
+    );
   });
 
   it("EARS-9: the narrow-screen «Фильтры» trigger does not count the fall-back default", async () => {
@@ -422,40 +443,62 @@ describe("the doctor's default «Моя и смежные» is empty (019 EARS-9
         specialties: NO_SPECIALTIES,
       }),
     );
-    expect(screen.getByTestId("events-filter-open")).toHaveTextContent(/^Фильтры$/);
+    expect(screen.getByTestId("events-filter-open")).toHaveTextContent(
+      /^Фильтры$/,
+    );
   });
 
   it("EARS-9: picking «Моя и смежные» writes it into the URL, so the fall-back does not take it back", async () => {
     render(await panel({}, FALLBACK_PAGE));
-    await userEvent.click(screen.getByRole("button", { name: "Моя и смежные" }));
-    expect(mocks.push).toHaveBeenCalledWith("/events?specialty=mine-and-adjacent", { scroll: false });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Моя и смежные" }),
+    );
+    expect(mocks.push).toHaveBeenCalledWith(
+      "/events?specialty=mine-and-adjacent",
+      { scroll: false },
+    );
   });
 
   it("EARS-9: an explicit «Моя и смежные» narrows this visitor's default — counted 1 with «Сбросить»", async () => {
     render(await panel({ specialty: "mine-and-adjacent" }, FALLBACK_PAGE));
-    expect(screen.getByRole("button", { name: "Моя и смежные" })).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: "Моя и смежные" }),
+    ).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Применено: 1")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Сбросить" })).toHaveAttribute("href", "/events");
+    expect(screen.getByRole("link", { name: "Сбросить" })).toHaveAttribute(
+      "href",
+      "/events",
+    );
   });
 
   it("EARS-9: after picking «Моя и смежные» another facet keeps the scope in the URL", async () => {
     render(await panel({ specialty: "mine-and-adjacent" }, FALLBACK_PAGE));
     await userEvent.click(
-      within(screen.getByRole("group", { name: "Формат" })).getByRole("button", { name: "Онлайн" }),
+      within(screen.getByRole("group", { name: "Формат" })).getByRole(
+        "button",
+        { name: "Онлайн" },
+      ),
     );
-    expect(mocks.push).toHaveBeenCalledWith("/events?format=online&specialty=mine-and-adjacent", { scroll: false });
+    expect(mocks.push).toHaveBeenCalledWith(
+      "/events?format=online&specialty=mine-and-adjacent",
+      { scroll: false },
+    );
   });
 
   it("EARS-9: an explicit «Все специальности» is this visitor's default — not counted, and picking it leaves the URL scope-free", async () => {
     render(await panel({ specialty: "all" }, FALLBACK_PAGE));
-    expect(screen.getByRole("button", { name: "Все специальности" })).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: "Все специальности" }),
+    ).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText(/Применено/)).toBeNull();
     expect(screen.queryByRole("link", { name: "Сбросить" })).toBeNull();
   });
 
   it("EARS-9: from «Моя и смежные» back to «Все специальности» returns the default URL", async () => {
     render(await panel({ specialty: "mine-and-adjacent" }, FALLBACK_PAGE));
-    await userEvent.click(screen.getByRole("button", { name: "Все специальности" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Все специальности" }),
+    );
     expect(mocks.push).toHaveBeenCalledWith("/events", { scroll: false });
   });
 
@@ -466,8 +509,15 @@ describe("the doctor's default «Моя и смежные» is empty (019 EARS-9
   });
 
   it("EARS-9: an explicit scope in the URL wins — «Моя и смежные» stays selected and uncounted", async () => {
-    render(await panel({ specialty: "mine-and-adjacent" }, { ...PAGE, defaultScopeEmpty: false }));
-    expect(screen.getByRole("button", { name: "Моя и смежные" })).toHaveAttribute("aria-pressed", "true");
+    render(
+      await panel(
+        { specialty: "mine-and-adjacent" },
+        { ...PAGE, defaultScopeEmpty: false },
+      ),
+    );
+    expect(
+      screen.getByRole("button", { name: "Моя и смежные" }),
+    ).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText(/Применено/)).toBeNull();
   });
 
@@ -492,10 +542,19 @@ describe("the doctor's default «Моя и смежные» is empty (019 EARS-9
         defaultScopeEmpty: true,
       },
     };
-    expect(adaptDoctorEventsFeed(dto, { tense: "upcoming" }).defaultScopeEmpty).toBe(true);
+    expect(
+      adaptDoctorEventsFeed(dto, { tense: "upcoming" }).defaultScopeEmpty,
+    ).toBe(true);
     expect(
       adaptDoctorEventsFeed(
-        { ...dto, targeting: { ...dto.targeting, mode: "targeted", defaultScopeEmpty: false } },
+        {
+          ...dto,
+          targeting: {
+            ...dto.targeting,
+            mode: "targeted",
+            defaultScopeEmpty: false,
+          },
+        },
         { tense: "upcoming" },
       ).defaultScopeEmpty,
     ).toBe(false);

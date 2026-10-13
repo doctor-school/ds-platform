@@ -584,7 +584,9 @@ export function EventsFilter({
             onChange({
               ...applied,
               specialtyScope:
-                rest.length > 0 ? rest : (defaultSpecialtyScope ?? "mine-and-adjacent"),
+                rest.length > 0
+                  ? rest
+                  : (defaultSpecialtyScope ?? "mine-and-adjacent"),
             });
           },
         }))}

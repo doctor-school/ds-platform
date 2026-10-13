@@ -8,8 +8,10 @@ icom:
   C1: C1
   O1: O4
   O2: O4
+  O3: O6
   M1: M1
-  M2: M3
+  M2: M2
+  M3: M3
 boxes:
   - id: A641
     name: Создать, изменить или снять роль
@@ -17,7 +19,8 @@ boxes:
     mechanisms: [Продуктовая команда]
     note: >-
       Шаг 5 (новое, в реестре нет): governance-встреча круга по возражениям «вред / откат»; реестр
-      ролей публичный. Часы — суммарно по участникам.
+      ролей публичный. Раз в месяц встреча фиксирует загрузку и мощность команд — ядру и в
+      управление A15 (сколько новых договоров команда может взять). Часы — суммарно по участникам.
     leaf: true
     effort:
       role: Продуктовая команда
@@ -76,15 +79,25 @@ arrows:
     objects: [O-115]
     from: { box: A643, side: O }
     to: { boundary: O2 }
+  - id: O3
+    label: Загрузка и мощность команд
+    objects: [O-001, O-177]
+    from: { box: A641, side: O }
+    to: { boundary: O3 }
   - id: M1
-    label: Команды, менеджеры экспертов
+    label: Продуктовая команда
     objects: [O-001]
     from: { boundary: M1 }
-    to: [{ box: A641, side: M }, { box: A643, side: M }]
+    to: { box: A641, side: M }
   - id: M2
-    label: Коуч ядра
-    objects: [O-017]
+    label: Менеджер эксперта
+    objects: [O-001]
     from: { boundary: M2 }
+    to: { box: A643, side: M }
+  - id: M3
+    label: Коуч
+    objects: [O-017]
+    from: { boundary: M3 }
     to: { box: A642, side: M }
   - id: a01
     label: Фасилитация, разрешённые конфликты

@@ -11,8 +11,13 @@ icom:
   I3: a07
   C1: C6
   O1: a05
-  M1: M4
-  M2: M7
+  M1: M8
+  M2: M11
+  M3: M8
+  M4: M8
+  M5: M8
+  M6: M8
+  M7: M8
 boxes:
   - id: A3141
     name: Сделать и согласовать раскадровку
@@ -137,16 +142,35 @@ arrows:
     from: { box: A3146, side: O }
     to: { boundary: O1 }
   - id: M1
-    label: Медиа-круг
+    label: Медиа-круг — медиа-ведущий
     objects: [O-012, O-013]
     from: { boundary: M1 }
-    to:
-      - { box: A3141, side: M }
-      - { box: A3142, side: M }
-      - { box: A3143, side: M }
-      - { box: A3144, side: M }
-      - { box: A3145, side: M }
-      - { box: A3146, side: M }
+    to: { box: A3141, side: M }
+  - id: M3
+    label: Медиа-круг — дизайнер схем
+    objects: [O-012, O-013]
+    from: { boundary: M3 }
+    to: { box: A3142, side: M }
+  - id: M4
+    label: Медиа-круг — медицинская визуализация
+    objects: [O-012, O-013]
+    from: { boundary: M4 }
+    to: { box: A3143, side: M }
+  - id: M5
+    label: Медиа-круг — аниматор
+    objects: [O-012, O-013]
+    from: { boundary: M5 }
+    to: { box: A3144, side: M }
+  - id: M6
+    label: Медиа-круг — голос
+    objects: [O-012, O-013]
+    from: { boundary: M6 }
+    to: { box: A3145, side: M }
+  - id: M7
+    label: Медиа-круг — монтажёр
+    objects: [O-012, O-013]
+    from: { boundary: M7 }
+    to: { box: A3146, side: M }
   - id: M2
     label: ИИ-инструменты
     objects: [O-183]

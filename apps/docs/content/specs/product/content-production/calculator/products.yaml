@@ -148,7 +148,7 @@ externals:
     name: Гонорар спикера подкаста
     per: эпизод
     rub: null
-    basis: "model/A32.yaml, A324: часы спикера — гонорар (переменная)"
+    basis: "model/A324.yaml, A3241: часы гостя — операция модели, ставка — переменная калькулятора; в items не входит, чтобы не считать дважды"
   event_venue_broadcast:
     name: Площадка и трансляция мероприятия
     per: мероприятие
@@ -158,7 +158,7 @@ externals:
     name: Гонорары спикеров и амбассадора мероприятия
     per: мероприятие
     rub: null
-    basis: "model/A33.yaml, A334: часы спикеров — гонорар (переменная); rates.yaml: ставки амбассадора и спикера — null"
+    basis: "model/A33.yaml, A339: часы спикера — операция модели, ставка — переменная калькулятора; в items не входит, чтобы не считать дважды; rates.yaml: ставки амбассадора и спикера — null"
 
 # Продукты. reserve_line — номер линии модели (префикс листьев), чьи прямые часы × доля пересборки
 # входят в резерв актуализации единицы (В6). items: { leaf, qty?, per? } — лист модели; { product, qty } — другой продукт. qty — число
@@ -222,32 +222,33 @@ products:
 
   эпизод подкаста:
     name: Эпизод подкаста
-    basis: model/A32.yaml — линия A321–A325
+    basis: "model/A32.yaml — линия A321–A325: запись A3242, монтаж и нарезка A3251; часы гостя A3241 — не в items, пока его оплата — гонорар podcast_speaker_fee"
     reserve_line: A32
     items:
       - { leaf: A321 }
       - { leaf: A322 }
       - { leaf: A323 }
-      - { leaf: A324 }
-      - { leaf: A325 }
+      - { leaf: A3242 }
+      - { leaf: A3251 }
     externals: [podcast_studio, podcast_speaker_fee]
     lead:
-      chain: { seq: [A321, A322, A323, A324, A325] }
+      chain: { seq: [A321, A322, A323, A3242, A3251] }
       basis: capacity-ru.md, «Срок единицы»
 
   вебинар:
     name: Вебинар (онлайн-мероприятие)
-    basis: model/A33.yaml — линия A331–A336, онлайн
+    basis: "model/A33.yaml — линия A331–A337, онлайн; A338 — только офлайн; часы спикеров A339 — не в items, пока их оплата — гонорар event_speaker_fees"
     items:
       - { leaf: A331 }
       - { leaf: A332 }
       - { leaf: A333 }
+      - { leaf: A337 }
       - { leaf: A334 }
       - { leaf: A335 }
       - { leaf: A336 }
     externals: [event_venue_broadcast, event_speaker_fees]
     lead:
-      chain: { seq: [A331, A332, A333, { par: [A334, A335] }, A336] }
+      chain: { seq: [A331, A332, A333, A337, { par: [A334, A335] }, A336] }
       basis: capacity-ru.md, «Срок единицы»
 
   клуб:
@@ -257,12 +258,13 @@ products:
       - { leaf: A331 }
       - { leaf: A332 }
       - { leaf: A333 }
+      - { leaf: A337 }
       - { leaf: A334 }
       - { leaf: A335 }
       - { leaf: A336 }
     externals: [event_venue_broadcast, event_speaker_fees]
     lead:
-      chain: { seq: [A331, A332, A333, { par: [A334, A335] }, A336] }
+      chain: { seq: [A331, A332, A333, A337, { par: [A334, A335] }, A336] }
       basis: capacity-ru.md, «Срок единицы»
 
   практическая школа:
@@ -281,12 +283,13 @@ products:
       - { leaf: A331, per: [офлайн] }
       - { leaf: A332 }
       - { leaf: A333 }
+      - { leaf: A337, per: [офлайн] }
       - { leaf: A334, per: [офлайн, дни] }
       - { leaf: A335, per: [офлайн, дни] }
       - { leaf: A336 }
     externals: [event_venue_broadcast, event_speaker_fees]
     lead:
-      chain: { seq: [A331, A332, A333, { par: [A334, A335] }, A336] }
+      chain: { seq: [A331, A332, A333, A337, { par: [A334, A335] }, A336] }
       basis: capacity-ru.md, «Срок единицы» (срок прохода листа не масштабируется драйвером)
 
   конгресс:
@@ -309,12 +312,13 @@ products:
       - { leaf: A331, per: [офлайн, секции] }
       - { leaf: A332, per: [секции] }
       - { leaf: A333, per: [секции] }
+      - { leaf: A337, per: [офлайн] }
       - { leaf: A334, per: [секции, дни] }
       - { leaf: A335, per: [офлайн, дни] }
       - { leaf: A336, per: [секции] }
     externals: [event_venue_broadcast, event_speaker_fees]
     lead:
-      chain: { seq: [A331, A332, A333, { par: [A334, A335] }, A336] }
+      chain: { seq: [A331, A332, A333, A337, { par: [A334, A335] }, A336] }
       basis: capacity-ru.md, «Срок единицы» (срок прохода листа не масштабируется драйвером)
 
   проектирование курса:
@@ -344,9 +348,14 @@ products:
         unit: отчётных этапов на договор
         basis: "оценка аналитика; число этапов — из договора (effort-draft-ru.md)"
     items:
-      - { leaf: A12, per: [запросы] }
-      - { leaf: A13 }
-      - { leaf: A14 }
+      - { leaf: A121, per: [запросы] }
+      - { leaf: A122, per: [запросы] }
+      - { leaf: A123, per: [запросы] }
+      - { leaf: A131 }
+      - { leaf: A132 }
+      - { leaf: A133 }
+      - { leaf: A141 }
+      - { leaf: A142 }
       - { leaf: A15 }
       - { leaf: A16 }
       - { leaf: A51, per: [этапы] }

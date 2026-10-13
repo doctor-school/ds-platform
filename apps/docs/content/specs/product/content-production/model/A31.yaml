@@ -19,13 +19,17 @@ icom:
   C6: C7
   O1: O1
   M1: M1
-  M2: M2
-  M3: M3
-  M4: M4
-  M5: M5
-  M6: M6
-  M7: M7
-  M8: M9
+  M2: M1
+  M3: M1
+  M4: M1
+  M5: M1
+  M6: M2
+  M7: M3
+  M8: M4
+  M9: M5
+  M10: M6
+  M11: M7
+  M12: M9
 boxes:
   - id: A311
     name: Подготовить материал эксперта
@@ -61,9 +65,11 @@ boxes:
       - Сервисный круг — юрист
       - Менеджер эксперта
       - Аккаунт
+      - Продуктовая команда
     note: >-
       Шаги 8–11: медрецензия с вето на достоверность (В4), юрпроверка рекламы, апрув эксперта,
-      этап 1 фармы.
+      этап 1 фармы — аккаунт окно к фарме, продуктовая команда подключается по содержанию по
+      необходимости.
   - id: A314
     name: Произвести медиа
     functions: [F-051, F-041, F-042, F-043, F-044, F-047, F-048]
@@ -73,10 +79,12 @@ boxes:
       монтаж идут потоком в медиа-круге; пики — внешний пул по стандарту DS. Нарезка записей
       мероприятий — тот же монтаж.
   - id: A315
-    name: Составить тесты и материалы
+    name: Составить тесты и брошюру
     functions: [F-045, F-046]
     mechanisms: [Медредактор-сценарист]
-    note: Шаг 15 — тесты обязательны, по стандарту теста; брошюра для скачивания.
+    note: >-
+      Шаг 15 — идёт параллельно медиа (A314), исполнитель — медредактор-сценарист: тесты обязательны,
+      по стандарту теста; брошюра для скачивания.
     leaf: true
     effort:
       role: Медредактор-сценарист
@@ -93,7 +101,10 @@ boxes:
       - Пул медрецензентов
       - Продюсер
       - Аккаунт
-    note: Шаги 16–18 — проверка монтажа, приёмка по чек-листу, этап 2 фармы и номер одобрения.
+      - Продуктовая команда
+    note: >-
+      Шаги 16–18 — проверка монтажа, приёмка по чек-листу, этап 2 фармы и номер одобрения; аккаунт —
+      окно к фарме, продуктовая команда подключается по содержанию по необходимости.
 arrows:
   # ---- Boundary inputs ----
   - id: I1
@@ -165,51 +176,69 @@ arrows:
     objects: [O-041, O-197, O-093]
     from: { box: A316, side: O }
     to: { boundary: O1 }
-  # ---- Boundary mechanisms ----
+  # ---- Boundary mechanisms (one arrow per role) ----
   - id: M1
-    label: Медредактор-сценарист, продюсер, аккаунт
-    objects: [O-010, O-011, O-004, O-015]
+    label: Медредактор-сценарист
+    objects: [O-010, O-011]
     from: { boundary: M1 }
     to:
       - { box: A311, side: M }
       - { box: A312, side: M }
-      - { box: A313, side: M }
       - { box: A315, side: M }
-      - { box: A316, side: M }
   - id: M2
-    label: Эксперты, заместители
-    objects: [O-024, O-026]
+    label: Менеджер эксперта
+    objects: [O-001]
     from: { boundary: M2 }
     to: [{ box: A311, side: M }, { box: A313, side: M }]
   - id: M3
+    label: Продюсер
+    objects: [O-004]
+    from: { boundary: M3 }
+    to: { box: A316, side: M }
+  - id: M4
+    label: Аккаунт (окно к фарме)
+    objects: [O-015]
+    from: { boundary: M4 }
+    to: [{ box: A313, side: M }, { box: A316, side: M }]
+  - id: M5
+    label: Продуктовая команда (по содержанию, по необходимости)
+    objects: [O-001]
+    from: { boundary: M5 }
+    to: [{ box: A313, side: M }, { box: A316, side: M }]
+  - id: M6
+    label: Пул экспертов — эксперт (приглашённый спикер урока)
+    objects: [O-024]
+    from: { boundary: M6 }
+    to: { box: A311, side: M }
+  - id: M7
     label: Пул медрецензентов
     objects: [O-009]
-    from: { boundary: M3 }
+    from: { boundary: M7 }
     to: [{ box: A313, side: M }, { box: A316, side: M }]
-  - id: M4
+  - id: M8
     label: Медиа-круг
     objects: [O-012, O-013]
-    from: { boundary: M4 }
+    from: { boundary: M8 }
     to: { box: A314, side: M }
-  - id: M5
-    label: Юрист
+  - id: M9
+    label: Сервисный круг — юрист
     objects: [O-014]
-    from: { boundary: M5 }
+    from: { boundary: M9 }
     to: { box: A313, side: M }
-  - id: M6
-    label: Личный кабинет
+  - id: M10
+    label: Платформа DS — личный кабинет
     objects: [O-184]
-    from: { boundary: M6 }
+    from: { boundary: M10 }
     to: { box: A313, side: M }
-  - id: M7
+  - id: M11
     label: ИИ-инструменты
     objects: [O-183]
-    from: { boundary: M7 }
+    from: { boundary: M11 }
     to: [{ box: A312, side: M }, { box: A314, side: M }]
-  - id: M8
-    label: Менеджеры экспертов
-    objects: [O-001]
-    from: { boundary: M8 }
+  - id: M12
+    label: Команды, роли, пулы
+    objects: [O-001, O-115]
+    from: { boundary: M12 }
     to: { box: A311, side: M }
   # ---- Internal ----
   - id: a01

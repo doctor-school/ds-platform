@@ -1,0 +1,77 @@
+# IDEF0 decomposition A27 «Заключить договоры с экспертами и лидерами» (child of A2; format: FORMAT-ru.md).
+# Step 10 of process block 2 (../process-to-be-ru.md). Leaves carry a DRAFT effort for the owner's
+# calibration (effort-draft-ru.md); rates are calculator variables, never numbers here.
+id: A27
+parent: A2
+title: Заключить договоры с экспертами и лидерами
+# Child boundary code → A2 arrow touching box A27 on that side.
+icom:
+  I1: a03
+  C1: C4
+  O1: a07
+  M1: M3
+  M2: M6
+boxes:
+  - id: A271
+    name: Согласовать условия с экспертом
+    functions: []
+    mechanisms: [Менеджер эксперта]
+    note: >-
+      Новое: менеджер эксперта согласует с автором курса и спикерами уроков SLA, автоодобрение,
+      гонорар и авторскую долю по стандарту DS и передаёт условия юристу.
+    leaf: true
+    effort:
+      role: Менеджер эксперта
+      unit: курс
+      hours_draft: [1, 3]
+      lead_days_draft: [3, 10]
+      lead_days_basis: "оценка аналитика; опора: SLA ответа эксперта 24 ч (L1777), ответ ассистентов раз в неделю (L1829)"
+      driver: число экспертов курса; доля новых для DS экспертов
+      basis: оценка аналитика
+  - id: A272
+    name: Оформить рамочный договор или приложение на курс
+    functions: [F-026]
+    mechanisms: [Сервисный круг — юрист]
+    note: >-
+      Шаг 10: рамочный договор по шаблону DS — один раз на эксперта; на каждый курс — приложение к
+      нему. Повторный эксперт — только приложение.
+    leaf: true
+    effort:
+      role: Сервисный круг — юрист
+      unit: договор
+      hours_draft: [0.5, 3]
+      lead_days_draft: [3, 10]
+      lead_days_basis: "оценка аналитика; ожидание подписи эксперта внутри прохода"
+      driver: доля новых экспертов (рамочный договор) против повторных (только приложение)
+      basis: оценка аналитика
+arrows:
+  - id: I1
+    label: Автор, спикеры уроков
+    objects: [O-024]
+    from: { boundary: I1 }
+    to: { box: A271, side: I }
+  - id: C1
+    label: Стандарты DS
+    objects: [O-141]
+    from: { boundary: C1 }
+    to: [{ box: A271, side: C }, { box: A272, side: C }]
+  - id: O1
+    label: Договоры с экспертами — рамочные и приложения на курс
+    objects: [O-110]
+    from: { box: A272, side: O }
+    to: { boundary: O1 }
+  - id: M1
+    label: Менеджер эксперта
+    objects: [O-001]
+    from: { boundary: M1 }
+    to: { box: A271, side: M }
+  - id: M2
+    label: Сервисный круг — юрист
+    objects: [O-014]
+    from: { boundary: M2 }
+    to: { box: A272, side: M }
+  - id: a01
+    label: Согласованные условия эксперта
+    objects: [O-110]
+    from: { box: A271, side: O }
+    to: { box: A272, side: I }

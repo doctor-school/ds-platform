@@ -7,14 +7,16 @@ title: Развивать команды и систему производст�
 # Child boundary code → A0 arrow touching box A6 on that side.
 icom:
   I1: a11
+  I2: a17
   C1: C4
   O1: a13
   O2: a14
   O3: a14
   O4: a14
   O5: a15
+  O6: a16
   M1: M1
-  M2: M3
+  M2: M1
   M3: M6
 boxes:
   - id: A61
@@ -83,6 +85,11 @@ arrows:
     objects: [O-177, O-174]
     from: { boundary: I1 }
     to: [{ box: A62, side: I }, { box: A65, side: I }]
+  - id: I2
+    label: Потребность в новой команде
+    objects: [O-001]
+    from: { boundary: I2 }
+    to: { box: A61, side: I }
   - id: C1
     label: Базовый минимум качества
     objects: [O-138]
@@ -132,8 +139,13 @@ arrows:
     objects: [O-172, O-177]
     from: { box: A65, side: O }
     to: { boundary: O5 }
+  - id: O6
+    label: Загрузка и мощность команд
+    objects: [O-001, O-177]
+    from: { box: A64, side: O }
+    to: { boundary: O6 }
   - id: M1
-    label: Продуктовые команды, менеджеры экспертов
+    label: Продуктовая команда
     objects: [O-001]
     from: { boundary: M1 }
     to:
@@ -142,12 +154,12 @@ arrows:
       - { box: A64, side: M }
       - { box: A65, side: M }
   - id: M2
-    label: Пул медрецензентов — политика независимости
-    objects: [O-009]
+    label: Менеджер эксперта
+    objects: [O-001]
     from: { boundary: M2 }
-    to: { box: A65, side: M }
+    to: { box: A64, side: M }
   - id: M3
-    label: Ядро — стандарты, рынок, калькулятор, коуч
+    label: Ядро
     objects: [O-017, O-223]
     from: { boundary: M3 }
     to:

@@ -6,7 +6,8 @@ parent: A0
 title: Отчитаться и закрыть
 # Child boundary code → A0 arrow touching box A5 on that side.
 icom:
-  I1: a06
+  I1: I5
+  I2: a06
   C1: a01
   C2: a13
   O1: a08
@@ -15,17 +16,22 @@ icom:
   O4: a11
   O5: a12
   M1: M1
-  M2: M5
-  M3: M7
-  M4: a14
+  M2: M1
+  M3: M1
+  M4: M5
+  M5: M7
+  M6: M7
+  M7: a14
 boxes:
   - id: A51
     name: Измерить осведомлённость и собрать данные
     functions: [F-110]
     mechanisms: [Продюсер]
     note: >-
-      Шаг 1: входной и выходной тест урока (реко Р6.1 — во всех продуктах), посещаемость и досмотры
-      — из данных платформы, не вручную.
+      Шаг 1: входной и выходной тест урока (реко Р6.1 — во всех продуктах), просмотры, посещаемость
+      и контакты врачей — данные Платформы DS (внешний вход), не ручная сборка; посещаемость офлайн
+      — из A3. Верификация врача — функция Платформы DS, не операция модели; контакты считаются по
+      верифицированным врачам. Отчётность по аккредитации НМО — вне рамок модели.
     leaf: true
     effort:
       role: Продюсер
@@ -121,9 +127,14 @@ boxes:
 arrows:
   # ---- Boundary ----
   - id: I1
-    label: Посещаемость, досмотры, выпущенные уроки, контакты с врачом
-    objects: [O-100, O-178, O-180, O-176, O-206]
+    label: Просмотры, тесты, посещаемость, контакты врачей (данные платформы)
+    objects: [O-178, O-100, O-206, O-180]
     from: { boundary: I1 }
+    to: { box: A51, side: I }
+  - id: I2
+    label: Посещаемость офлайн-мероприятий
+    objects: [O-100]
+    from: { boundary: I2 }
     to: { box: A51, side: I }
   - id: C1
     label: Договор — предмет соглашения
@@ -167,27 +178,39 @@ arrows:
     from: { box: A55, side: O }
     to: { boundary: O5 }
   - id: M1
-    label: Аккаунт, продюсер, команда
-    objects: [O-015, O-004, O-001]
+    label: Аккаунт
+    objects: [O-015]
     from: { boundary: M1 }
-    to:
-      - { box: A51, side: M }
-      - { box: A52, side: M }
-      - { box: A55, side: M }
+    to: [{ box: A52, side: M }, { box: A55, side: M }]
   - id: M2
-    label: Бухгалтер
-    objects: [O-224]
+    label: Продюсер
+    objects: [O-004]
     from: { boundary: M2 }
-    to: [{ box: A53, side: M }, { box: A54, side: M }]
+    to: { box: A51, side: M }
   - id: M3
-    label: Платформа DS, кабинет партнёра
-    objects: [O-185, O-207]
-    from: { boundary: M3 }
-    to: [{ box: A51, side: M }, { box: A52, side: M }]
-  - id: M4
-    label: Команда проекта
+    label: Продуктовая команда
     objects: [O-001]
+    from: { boundary: M3 }
+    to: { box: A56, side: M }
+  - id: M4
+    label: Сервисный круг — бухгалтер
+    objects: [O-224]
     from: { boundary: M4 }
+    to: [{ box: A53, side: M }, { box: A54, side: M }]
+  - id: M5
+    label: Платформа DS (данные, верификация врача)
+    objects: [O-185]
+    from: { boundary: M5 }
+    to: { box: A51, side: M }
+  - id: M6
+    label: Платформа DS — кабинет партнёра
+    objects: [O-207]
+    from: { boundary: M6 }
+    to: { box: A52, side: M }
+  - id: M7
+    label: Команды, роли, пулы
+    objects: [O-001]
+    from: { boundary: M7 }
     to: { box: A56, side: M }
   # ---- Internal ----
   - id: a01

@@ -12,8 +12,9 @@ icom:
   C2: C6
   O1: a01
   M1: M1
-  M2: M2
-  M3: M8
+  M2: M6
+  M3: M2
+  M4: M12
 boxes:
   - id: A3111
     name: Подготовить бриф и формат DS
@@ -99,7 +100,7 @@ arrows:
     from: { boundary: M1 }
     to: { box: A3113, side: M }
   - id: M2
-    label: Эксперт
+    label: Пул экспертов — эксперт (приглашённый спикер урока)
     objects: [O-024]
     from: { boundary: M2 }
     to: { box: A3112, side: M }
@@ -107,6 +108,11 @@ arrows:
     label: Менеджер эксперта
     objects: [O-001]
     from: { boundary: M3 }
+    to: { box: A3111, side: M }
+  - id: M4
+    label: Команды, роли, пулы (база экспертов)
+    objects: [O-115]
+    from: { boundary: M4 }
     to: { box: A3111, side: M }
   - id: a01
     label: Бриф эксперту

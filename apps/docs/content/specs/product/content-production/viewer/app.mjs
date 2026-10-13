@@ -1006,6 +1006,12 @@ function Explanation({
           : null
       }
       ${hasChild?.(box.id) ? html`<p><button onClick=${() => onOpen(box.id)}>Открыть декомпозицию ${box.id}</button></p>` : null}
+      ${box.leaf ? html`<p class="muted">Операция — выполняет одна роль, часы измеримы.</p>` : null}
+      ${
+        box.decomposition === "pending"
+          ? html`<p class="muted">Чёрный ящик — операции раскроются на следующем шаге декомпозиции.</p>`
+          : null
+      }
       ${box.note ? html`<p>${box.note}</p>` : null}
       ${
         brief
@@ -1162,13 +1168,13 @@ function HoverCard({ diagram, focus, anchor, knowledge }) {
 
 // ---------- Side panel ----------
 
-/** Draft effort of a leaf (model/FORMAT-ru.md «Лист и черновая трудоёмкость»). */
+/** Draft effort of a leaf (model/FORMAT-ru.md «Операция и черновая трудоёмкость»). */
 function Effort({ effort }) {
   const hours = Array.isArray(effort.hours_draft)
     ? effort.hours_draft.join("–")
     : effort.hours_draft;
   return html`<div>
-    <h3>Трудоёмкость — черновик</h3>
+    <h3>Трудоёмкость операции — черновик</h3>
     <ul>
       <li><b>Роль:</b> ${effort.role}</li>
       <li><b>Часы на ${effort.unit}:</b> ${hours}</li>

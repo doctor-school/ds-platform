@@ -11,9 +11,21 @@ diagrams:
   - id: A1
     file: A1.yaml
     parent: A0
+  - id: A12
+    file: A12.yaml
+    parent: A1
+  - id: A13
+    file: A13.yaml
+    parent: A1
+  - id: A14
+    file: A14.yaml
+    parent: A1
   - id: A2
     file: A2.yaml
     parent: A0
+  - id: A27
+    file: A27.yaml
+    parent: A2
   - id: A3
     file: A3.yaml
     parent: A0
@@ -35,6 +47,12 @@ diagrams:
   - id: A32
     file: A32.yaml
     parent: A3
+  - id: A324
+    file: A324.yaml
+    parent: A32
+  - id: A325
+    file: A325.yaml
+    parent: A32
   - id: A33
     file: A33.yaml
     parent: A3

@@ -84,17 +84,23 @@ function parseProcess(text) {
       for (const id of expandFunctionIds(line)) blocks.get(current).add(id);
     }
   }
-  // Role and circle names: first column of the «Роли и круги TO-BE» table, parenthetical dropped.
+  // Role and circle names: first column of the «Роли и круги TO-BE» table, parenthetical dropped;
+  // «Где живёт» starting with «команда» / «ядро» makes the role a member of that circle.
   const roles = new Set();
+  const circleOf = new Map();
   let inRoles = false;
   for (const line of lines) {
     if (line.startsWith("## ")) inRoles = /^## Роли и круги/.test(line);
     else if (inRoles && /^\|/.test(line) && !/^\|\s*-/.test(line)) {
       const name = cells(line)[1].replace(/\s*\(.*\)\s*$/, "");
-      if (name && !/^Круг \/ роль/.test(name)) roles.add(name);
+      if (!name || /^Круг \/ роль/.test(name)) continue;
+      roles.add(name);
+      const home = (cells(line)[2] ?? "").split(/[\s,;]/)[0];
+      if (home === "команда") circleOf.set(name, "Продуктовая команда");
+      else if (home === "ядро") circleOf.set(name, "Ядро");
     }
   }
-  return { outside, blocks, roles };
+  return { outside, blocks, roles, circleOf };
 }
 
 const [registryText, processText, indexText, formatText] = await Promise.all([
@@ -595,31 +601,75 @@ for (const key of Object.keys(ratesDoc?.variables ?? {}))
       `rates.yaml: variables.${key} — hours per month live in teams.yaml paid_hours_per_month`,
     );
 
+// Mechanism performers (FORMAT-ru.md «Стрелки»): a mechanism arrow carries one role or one means.
+// A role on it performs at least one operation (leaf) inside every box it enters: a leaf is
+// performed by its effort.role, a decomposed box by the roles of all its operations, a pending
+// (black) box by its declared `mechanisms`. A circle is performed by itself, by its sub-roles
+// («Медиа-круг — монтажёр») and by its member roles («Где живёт» = команда / ядро).
+const MEANS = [
+  "Платформа DS",
+  "ИИ-инструменты",
+  "Студия",
+  // the A6 output used as a mechanism (A0 a14): the teams and pools themselves, not a performer
+  "Команды, роли, пулы",
+];
+const singleRoles = new Set([
+  ...process_.roles,
+  ...[...subRoles].flatMap(([circle, names]) =>
+    [...names].map((name) => `${circle} — ${name}`),
+  ),
+]);
+const performersOf = (diagramId, box) => {
+  if (box.leaf) return [box.effort?.role].filter(Boolean);
+  const child = diagrams.find(
+    (d) => d.id === box.id && d.parent === diagramId,
+  );
+  if (child)
+    return (child.boxes ?? []).flatMap((b) => performersOf(child.id, b));
+  return asList(box.mechanisms);
+};
+const performs = (role, performer) =>
+  performer === role ||
+  performer.startsWith(`${role} — `) ||
+  process_.circleOf.get(performer) === role;
+let mechanismEntries = 0;
+for (const diagram of diagrams)
+  for (const arrow of diagram.arrows ?? []) {
+    const targets = asList(arrow.to).filter((end) => end.side === "M");
+    if (!targets.length) continue;
+    const name = String(arrow.label ?? "").replace(/\s*\(.*\)\s*$/, "");
+    if (MEANS.some((m) => name === m || name.startsWith(`${m} — `))) continue;
+    if (!singleRoles.has(name)) {
+      errors.push(
+        `${diagram.id}: mechanism arrow ${arrow.id} «${arrow.label}» is neither one role of «Роли и круги» / «Подроли» (full name) nor a means (${MEANS.join(", ")}) — one arrow per role`,
+      );
+      continue;
+    }
+    for (const end of targets) {
+      const box = (diagram.boxes ?? []).find((b) => b.id === end.box);
+      if (!box) continue;
+      mechanismEntries += 1;
+      const performers = performersOf(diagram.id, box);
+      if (!performers.some((p) => performs(name, p)))
+        errors.push(
+          `${diagram.id}: role «${name}» on mechanism arrow ${arrow.id} performs no operation inside ${box.id} (performers: ${[...new Set(performers)].join(", ") || "—"})`,
+        );
+    }
+  }
+console.log(
+  `Mechanisms: ${mechanismEntries} role entries into boxes checked`,
+);
+
 // Rate coverage (../rates/rates.yaml): every role string of the model — leaf effort.role, box
 // mechanisms, teams.yaml roles, «Роли и круги» and the closed sub-role list — has a rates.yaml
-// record, unless it is a tool or an aggregate label listed in NO_OWN_RATE; every rates.yaml record
+// record, unless it is a tool listed in NO_OWN_RATE (mechanism labels name one role each, so no
+// aggregate label needs an exemption); every rates.yaml record
 // names a model role and carries a dated source or `composite_of`.
 const NO_OWN_RATE = new Set([
   // tools and external costs, not roles
   "Платформа DS",
   "ИИ-инструменты",
   "Студия",
-  // aggregate mechanism labels of upper diagrams: each named role is rated by its own record
-  "Продуктовая команда — аккаунт, продюсер",
-  "Продуктовая команда — аккаунт, продюсер, методолог",
-  "Продуктовая команда — медредактор-сценарист, менеджер эксперта, продюсер, менеджер мероприятий",
-  "Продуктовая команда — методолог, продюсер, аккаунт, менеджеры экспертов",
-  "Продуктовая команда — продюсер, команда-владелец направления",
-  "Продуктовые команды",
-  "Продуктовые команды — найм, деление, СОП",
-  "Пул медрецензентов — по сигналу",
-  "Пул медрецензентов — политика независимости",
-  "Пул экспертов — амбассадор, эксперты",
-  "Пул экспертов — эксперты, спикеры",
-  "Сервисный круг — оператор платформы, режиссёр трансляции, поддержка",
-  "Сервисный круг — юрист, бухгалтер",
-  "Сервисный круг — юрист, оператор платформы, режиссёр трансляции, поддержка",
-  "Ядро — стандарты, рынок, калькулятор, коуч",
 ]);
 const rateRoles = new Set(asList(ratesDoc?.roles).map((record) => record.role));
 const modelRoles = new Set([
@@ -647,7 +697,7 @@ for (const team of teamsDoc?.teams ?? [])
 for (const [role, where] of needsRate)
   if (!rateRoles.has(role) && !NO_OWN_RATE.has(role))
     errors.push(
-      `${where}: role «${role}» has no rates.yaml record (add one, or list it in NO_OWN_RATE if it is a tool or an aggregate label)`,
+      `${where}: role «${role}» has no rates.yaml record (add one, or list it in NO_OWN_RATE if it is a tool)`,
     );
 for (const label of NO_OWN_RATE)
   if (!needsRate.has(label))

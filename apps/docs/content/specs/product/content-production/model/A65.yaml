@@ -12,8 +12,7 @@ icom:
   O3: O5
   O4: a03
   M1: M1
-  M2: M2
-  M3: M3
+  M2: M3
 boxes:
   - id: A651
     name: Сформировать и пересмотреть стандарты DS и шаблоны договоров
@@ -107,19 +106,14 @@ arrows:
     from: { box: A651, side: O }
     to: { boundary: O4 }
   - id: M1
-    label: Продуктовые команды
+    label: Продуктовая команда
     objects: [O-001]
     from: { boundary: M1 }
     to: { box: A652, side: M }
   - id: M2
-    label: Пул медрецензентов — политика независимости
-    objects: [O-009]
-    from: { boundary: M2 }
-    to: { box: A651, side: M }
-  - id: M3
     label: Ядро
     objects: [O-017, O-223]
-    from: { boundary: M3 }
+    from: { boundary: M2 }
     to:
       - { box: A651, side: M }
       - { box: A653, side: M }

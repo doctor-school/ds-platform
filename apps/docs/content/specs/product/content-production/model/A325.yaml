@@ -1,0 +1,104 @@
+# IDEF0 decomposition A325 «Смонтировать, нарезать, выложить и архивировать» (child of A32; format:
+# FORMAT-ru.md). Podcast line step 23 (../process-to-be-ru.md, block 3): «эпизод подкаста» uses A3251,
+# «видеоподкаст» adds A3252 and A3253. Leaves carry a DRAFT effort per episode.
+id: A325
+parent: A32
+title: Смонтировать, нарезать, выложить и архивировать
+# Child boundary code → A32 arrow touching box A325 on that side (O1 and O3 merge into O1).
+icom:
+  I1: a04
+  C1: C6
+  O1: O1
+  O2: O2
+  O3: O1
+  M1: M5
+  M2: M6
+boxes:
+  - id: A3251
+    name: Нарезать, выложить и архивировать
+    functions: [F-087, F-088]
+    mechanisms: [Медиа-круг — монтажёр]
+    note: Шаг 23 — нарезки и выкладка; архив или встраивание в урок как компонент; в обоих продуктах.
+    leaf: true
+    effort:
+      role: Медиа-круг — монтажёр
+      unit: эпизод
+      hours_draft: [3, 6]
+      lead_days_draft: [2, 4]
+      lead_days_basis: "оценка аналитика"
+      driver: число нарезок на эпизод
+      basis: оценка аналитика
+  - id: A3252
+    name: Смонтировать видеоподкаст с цветокоррекцией и графикой
+    functions: []
+    mechanisms: [Медиа-круг — монтажёр]
+    note: Новое, только видеоподкаст — монтаж нескольких камер, цветокоррекция, титры и графика.
+    leaf: true
+    effort:
+      role: Медиа-круг — монтажёр
+      unit: эпизод
+      hours_draft: [6, 12]
+      lead_days_draft: [3, 5]
+      lead_days_basis: "оценка аналитика"
+      driver: длительность эпизода; число камер; объём графики
+      basis: оценка аналитика
+  - id: A3253
+    name: Сделать обложки и клипы
+    functions: []
+    mechanisms: [Медиа-круг — анонсы]
+    note: >-
+      Новое: видеоподкаст — обложки и 5–10 клипов на эпизод; рилсы Академии смыслов — M в месяц по
+      плану A11.
+    leaf: true
+    effort:
+      role: Медиа-круг — анонсы
+      unit: эпизод
+      hours_draft: [3, 8]
+      lead_days_draft: [2, 4]
+      lead_days_basis: "оценка аналитика"
+      driver: число клипов на эпизод (5–10); рилсов Академии смыслов в месяц
+      basis: оценка аналитика
+arrows:
+  - id: I1
+    label: Запись подкаста
+    objects: [O-048]
+    from: { boundary: I1 }
+    to: [{ box: A3251, side: I }, { box: A3252, side: I }]
+  - id: C1
+    label: СОП подкаста, 4K
+    objects: [O-144, O-168]
+    from: { boundary: C1 }
+    to:
+      - { box: A3251, side: C }
+      - { box: A3252, side: C }
+      - { box: A3253, side: C }
+  - id: O1
+    label: Подкасты и архив
+    objects: [O-048, O-065, O-057]
+    from: { box: A3251, side: O }
+    to: { boundary: O1 }
+  - id: O2
+    label: Запись подкаста — компонент урока
+    objects: [O-048]
+    from: { box: A3251, side: O }
+    to: { boundary: O2 }
+  - id: O3
+    label: Обложки, клипы, рилсы Академии смыслов
+    objects: [O-058]
+    from: { box: A3253, side: O }
+    to: { boundary: O3 }
+  - id: M1
+    label: Медиа-круг — монтажёр
+    objects: [O-012, O-013]
+    from: { boundary: M1 }
+    to: [{ box: A3251, side: M }, { box: A3252, side: M }]
+  - id: M2
+    label: Медиа-круг — анонсы
+    objects: [O-012, O-013]
+    from: { boundary: M2 }
+    to: { box: A3253, side: M }
+  - id: a01
+    label: Смонтированный видеоподкаст
+    objects: [O-048]
+    from: { box: A3252, side: O }
+    to: [{ box: A3251, side: I }, { box: A3253, side: I }]

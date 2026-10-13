@@ -1,10 +1,12 @@
 # IDEF0 decomposition A33 «Провести мероприятие» (child of A3; format: FORMAT-ru.md). Process block 4
 # (../process-to-be-ru.md). Leaves carry a DRAFT effort per event; the reference event is an online
-# webinar, offline / congress scale through the drivers.
+# webinar, the offline event (practical school) scales through the drivers and adds A338, whose
+# decomposition is pending.
 id: A33
 parent: A3
 title: Провести мероприятие
-# Child boundary code → A3 arrow touching box A33 on that side.
+# Child boundary code → A3 arrow touching box A33 on that side (M1 and M2 both enter through A3 M1,
+# M4–M6 through A3 M5).
 icom:
   C1: C6
   C2: a02
@@ -14,28 +16,32 @@ icom:
   C6: C7
   O1: O3
   O2: O4
+  O3: O5
   M1: M1
-  M2: M2
-  M3: M5
-  M4: M6
-  M5: M8
-  M6: M9
+  M2: M1
+  M3: M2
+  M4: M5
+  M5: M5
+  M6: M5
+  M7: M6
+  M8: M8
+  M9: M9
 boxes:
   - id: A331
-    name: Подготовить мероприятие и пригласить врачей
-    functions: [F-117, F-119]
+    name: Спланировать мероприятие
+    functions: [F-117]
     mechanisms: [Менеджер мероприятий]
     note: >-
-      Шаги 1 и 4: информация для оператора платформы, приглашение врачей через каналы партнёра;
-      очная логистика — подряд (реко Р4.1).
+      Шаг 1: формат (онлайн или офлайн), дата, программа и состав спикеров по графику; информация
+      для оператора платформы, приглашения врачей и подготовки офлайн мероприятия.
     leaf: true
     effort:
       role: Менеджер мероприятий
       unit: мероприятие
-      hours_draft: [4, 8]
-      lead_days_draft: [10, 20]
-      lead_days_basis: "оценка аналитика; приглашение врачей до даты мероприятия"
-      driver: тип мероприятия (онлайн / офлайн); конгресс — множитель числа секций
+      hours_draft: [2, 4]
+      lead_days_draft: [3, 7]
+      lead_days_basis: "оценка аналитика"
+      driver: тип мероприятия (онлайн / офлайн); число спикеров
       basis: оценка аналитика
   - id: A332
     name: Авторизовать спикеров и согласовать коммерческую часть
@@ -75,8 +81,8 @@ boxes:
     functions: [F-086]
     mechanisms: [Сервисный круг — режиссёр трансляции]
     note: >-
-      Шаг 5: вебинар, клуб, практическая школа, конгресс; запись пригодна для нарезки. Часы спикеров —
-      гонорар (переменная); площадка и трансляция — внешние затраты.
+      Шаг 5: вебинар, клуб, практическая школа; запись пригодна для нарезки. Часы спикеров — A339;
+      площадка офлайн — A338.
     leaf: true
     effort:
       role: Сервисный круг — режиссёр трансляции
@@ -84,7 +90,7 @@ boxes:
       hours_draft: [3, 4]
       lead_days_draft: 1
       lead_days_basis: "оценка аналитика; день мероприятия, ≥ 90 мин (P: Gateway_NMOConditions)"
-      driver: длительность; онлайн / офлайн; число секций
+      driver: длительность; онлайн / офлайн
       basis: "оценка аналитика; опора: ≥ 90 мин — условие баллов НМО (P: Gateway_NMOConditions)"
   - id: A335
     name: Поддерживать участников и контролировать присутствие
@@ -92,7 +98,8 @@ boxes:
     mechanisms: [Сервисный круг — поддержка]
     note: >-
       Шаги 6–7: контроль присутствия по формальному критерию механизмом платформы (снимает TK-11),
-      поддержка; на очных — регистрация на месте и бейджи.
+      поддержка; на офлайн мероприятии — регистрация на месте и бейджи; посещаемость офлайн уходит в
+      отчёт партнёру (A5).
     leaf: true
     effort:
       role: Сервисный круг — поддержка
@@ -118,12 +125,52 @@ boxes:
       lead_days_basis: "оценка аналитика"
       driver: доля ручных начислений НМО; число участников
       basis: оценка аналитика
+  - id: A337
+    name: Пригласить врачей
+    functions: [F-119]
+    mechanisms: [Менеджер мероприятий]
+    note: >-
+      Шаг 4: приглашение врачей через каналы партнёра и платформы до даты мероприятия; регистрации
+      врачей — на вход поддержке и контролю присутствия.
+    leaf: true
+    effort:
+      role: Менеджер мероприятий
+      unit: мероприятие
+      hours_draft: [2, 4]
+      lead_days_draft: [7, 13]
+      lead_days_basis: "оценка аналитика; приглашение врачей до даты мероприятия"
+      driver: число каналов приглашения; онлайн / офлайн
+      basis: оценка аналитика
+  - id: A338
+    name: Подготовить офлайн мероприятие
+    functions: []
+    mechanisms: [Менеджер мероприятий]
+    note: >-
+      Новое, только офлайн мероприятие (практическая школа): площадка, очная логистика, подряд
+      (реко Р4.1). Пока чёрный ящик — операции раскроются на следующем шаге декомпозиции.
+    decomposition: pending
+  - id: A339
+    name: Выступить на мероприятии
+    functions: []
+    mechanisms: [Пул экспертов — спикер]
+    note: >-
+      Новое: спикер готовит доклад по программе и выступает; часы спикера — операция, ставка —
+      переменная калькулятора.
+    leaf: true
+    effort:
+      role: Пул экспертов — спикер
+      unit: мероприятие
+      hours_draft: [3, 6]
+      lead_days_draft: [3, 10]
+      lead_days_basis: "оценка аналитика; подготовка доклада до даты мероприятия"
+      driver: число спикеров мероприятия; длительность выступления
+      basis: оценка аналитика
 arrows:
   - id: C1
     label: График и программа мероприятия
     objects: [O-214, O-213, O-071]
     from: { boundary: C1 }
-    to: { box: A331, side: C }
+    to: [{ box: A331, side: C }, { box: A339, side: C }]
   - id: C2
     label: База авторизованных спикеров
     objects: [O-117]
@@ -137,6 +184,8 @@ arrows:
       - { box: A332, side: C }
       - { box: A333, side: C }
       - { box: A334, side: C }
+      - { box: A337, side: C }
+      - { box: A339, side: C }
   - id: C4
     label: Условия баллов НМО
     objects: [O-211, O-158]
@@ -146,7 +195,7 @@ arrows:
     label: Предмет договора
     objects: [O-170]
     from: { boundary: C5 }
-    to: { box: A331, side: C }
+    to: [{ box: A331, side: C }, { box: A338, side: C }]
   - id: C6
     label: Технический стандарт
     objects: [O-168]
@@ -162,53 +211,79 @@ arrows:
     objects: [O-064]
     from: { box: A336, side: O }
     to: { boundary: O2 }
+  - id: O3
+    label: Посещаемость офлайн-мероприятий
+    objects: [O-100]
+    from: { box: A335, side: O }
+    to: { boundary: O3 }
   - id: M1
     label: Менеджер мероприятий
     objects: [O-193]
     from: { boundary: M1 }
-    to: { box: A331, side: M }
+    to:
+      - { box: A331, side: M }
+      - { box: A337, side: M }
+      - { box: A338, side: M }
   - id: M2
-    label: Спикеры
-    objects: [O-027]
+    label: Менеджер эксперта
+    objects: [O-001]
     from: { boundary: M2 }
-    to: { box: A334, side: M }
+    to: { box: A332, side: M }
   - id: M3
-    label: Оператор платформы, режиссёр, поддержка
-    objects: [O-194, O-195, O-196]
+    label: Пул экспертов — спикер
+    objects: [O-027]
     from: { boundary: M3 }
-    to:
-      - { box: A333, side: M }
-      - { box: A334, side: M }
-      - { box: A335, side: M }
-      - { box: A336, side: M }
+    to: { box: A339, side: M }
   - id: M4
-    label: Платформа DS, контроль присутствия
-    objects: [O-185, O-218]
+    label: Сервисный круг — оператор платформы
+    objects: [O-194]
     from: { boundary: M4 }
-    to:
-      - { box: A333, side: M }
-      - { box: A335, side: M }
-      - { box: A336, side: M }
+    to: [{ box: A333, side: M }, { box: A336, side: M }]
   - id: M5
-    label: Студия и площадка
-    objects: [O-187]
+    label: Сервисный круг — режиссёр трансляции
+    objects: [O-195]
     from: { boundary: M5 }
     to: { box: A334, side: M }
   - id: M6
-    label: Команда, менеджер эксперта
-    objects: [O-001]
+    label: Сервисный круг — поддержка
+    objects: [O-196]
     from: { boundary: M6 }
+    to: { box: A335, side: M }
+  - id: M7
+    label: Платформа DS — контроль присутствия
+    objects: [O-185, O-218]
+    from: { boundary: M7 }
+    to:
+      - { box: A333, side: M }
+      - { box: A335, side: M }
+      - { box: A336, side: M }
+  - id: M8
+    label: Студия (и площадка)
+    objects: [O-187]
+    from: { boundary: M8 }
+    to: { box: A334, side: M }
+  - id: M9
+    label: Команды, роли, пулы
+    objects: [O-001]
+    from: { boundary: M9 }
     to: [{ box: A331, side: M }, { box: A332, side: M }]
   - id: a01
     label: Информация о мероприятии
     objects: [O-213, O-214]
     from: { box: A331, side: O }
-    to: [{ box: A332, side: I }, { box: A333, side: I }]
+    to:
+      - { box: A332, side: I }
+      - { box: A333, side: I }
+      - { box: A337, side: I }
+      - { box: A338, side: I }
   - id: a02
     label: Карточка мероприятия
     objects: [O-215]
     from: { box: A333, side: O }
-    to: [{ box: A334, side: I }, { box: A335, side: I }]
+    to:
+      - { box: A334, side: I }
+      - { box: A335, side: I }
+      - { box: A337, side: I }
   - id: a03
     label: Запись мероприятия
     objects: [O-064]
@@ -223,4 +298,19 @@ arrows:
     label: Авторизованные спикеры, согласованная коммерческая часть
     objects: [O-117]
     from: { box: A332, side: O }
-    to: { box: A333, side: I }
+    to: [{ box: A333, side: I }, { box: A339, side: I }]
+  - id: a06
+    label: Регистрации врачей на мероприятие
+    objects: [O-217]
+    from: { box: A337, side: O }
+    to: { box: A335, side: I }
+  - id: a07
+    label: Площадка и очная логистика
+    objects: [O-187]
+    from: { box: A338, side: O }
+    to: { box: A334, side: I }
+  - id: a08
+    label: Спикер готов, тезисы доклада
+    objects: [O-076]
+    from: { box: A339, side: O }
+    to: { box: A334, side: I }

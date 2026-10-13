@@ -1,0 +1,77 @@
+# IDEF0 decomposition A14 «Согласовать с фармой порядок проверки контента» (child of A1; format:
+# FORMAT-ru.md). Step 13 of process block 1 (../process-to-be-ru.md): the pair Аккаунт + Продюсер.
+# Leaves carry a DRAFT effort for the owner's calibration (effort-draft-ru.md).
+id: A14
+parent: A1
+title: Согласовать с фармой порядок проверки контента
+# Child boundary code → A1 arrow touching box A14 on that side.
+icom:
+  I1: a03
+  C1: C2
+  O1: a04
+  M1: M1
+  M2: M2
+boxes:
+  - id: A141
+    name: Согласовать с компанией стандарт проверки
+    functions: [F-061]
+    mechanisms: [Аккаунт]
+    note: >-
+      Шаг 12: стандарт проверки согласуется один раз на компанию; повторный договор с той же
+      компанией его не повторяет.
+    leaf: true
+    effort:
+      role: Аккаунт
+      unit: договор
+      hours_draft: [0.5, 3]
+      lead_days_draft: [2, 5]
+      lead_days_basis: "оценка аналитика; ожидание ответа фармы внутри прохода"
+      driver: новая компания или повторная (F-061 — один раз)
+      basis: оценка аналитика
+  - id: A142
+    name: Согласовать состав и этапы проверки единиц
+    functions: [F-049]
+    mechanisms: [Продюсер]
+    note: >-
+      Шаг 12: какие единицы проходят этап 1 и этап 2 фармы, максимум кругов и срок автоодобрения; при
+      гранте проверки нет.
+    leaf: true
+    effort:
+      role: Продюсер
+      unit: договор
+      hours_draft: [0.5, 3]
+      lead_days_draft: [1, 3]
+      lead_days_basis: "оценка аналитика"
+      driver: число типов единиц в предмете договора; грант или спонсорский контент
+      basis: оценка аналитика
+arrows:
+  - id: I1
+    label: Принятое КП, вариант финансирования, цена
+    objects: [O-069, O-165, O-135, O-129, O-130, O-131]
+    from: { boundary: I1 }
+    to: { box: A141, side: I }
+  - id: C1
+    label: Шаблон маршрута одобрения
+    objects: [O-222, O-166]
+    from: { boundary: C1 }
+    to: [{ box: A141, side: C }, { box: A142, side: C }]
+  - id: O1
+    label: Предмет, порядок проверки контента фармой
+    objects: [O-170, O-142, O-222]
+    from: { box: A142, side: O }
+    to: { boundary: O1 }
+  - id: M1
+    label: Аккаунт
+    objects: [O-015]
+    from: { boundary: M1 }
+    to: { box: A141, side: M }
+  - id: M2
+    label: Продюсер
+    objects: [O-004]
+    from: { boundary: M2 }
+    to: { box: A142, side: M }
+  - id: a01
+    label: Согласованный стандарт проверки компании
+    objects: [O-142]
+    from: { box: A141, side: O }
+    to: { box: A142, side: I }

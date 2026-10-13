@@ -15,7 +15,7 @@ boxes:
     name: Создавать и продавать образовательные продукты DS для врачей
     functions: []
     mechanisms:
-      - Продуктовые команды
+      - Продуктовая команда
       - Пул экспертов
       - Пул медрецензентов
       - Медиа-круг
@@ -48,6 +48,11 @@ arrows:
     label: Сигнал неактуальности
     objects: [O-126]
     from: { boundary: I4 }
+    to: { box: A0, side: I }
+  - id: I5
+    label: Просмотры, тесты, посещаемость, контакты врачей (данные платформы)
+    objects: [O-178, O-100, O-206, O-180]
+    from: { boundary: I5 }
     to: { box: A0, side: I }
   # ---- Controls ----
   - id: C1
@@ -123,7 +128,7 @@ arrows:
     to: { boundary: O5 }
   # ---- Mechanisms ----
   - id: M1
-    label: Продуктовые команды
+    label: Продуктовая команда
     objects: [O-001, O-004, O-005, O-010, O-011, O-015, O-193]
     from: { boundary: M1 }
     to: { box: A0, side: M }

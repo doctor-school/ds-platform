@@ -183,10 +183,11 @@ export function FeedSkeleton() {
 }
 
 /**
- * «Идёт сейчас» under the page's APPLIED specialty scope (019 EARS-6, #2907):
- * the server read and the browser's refresh read the one `liveReadHref`, and
- * the block is keyed by it, so a scope change re-mounts it on the new scope
- * rather than keeping the old scope's answer and refresh.
+ * «Идёт сейчас» under the page's APPLIED filter set — the specialty scope and
+ * the facets (019 EARS-6, #2907): the server read and the browser's refresh
+ * read the one `liveReadHref`, and the block is keyed by it, so a filter change
+ * re-mounts it on the new set rather than keeping the old set's answer and
+ * refresh.
  */
 export async function LiveSection({
   config,

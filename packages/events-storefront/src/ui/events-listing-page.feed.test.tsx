@@ -945,7 +945,7 @@ describe("<LiveBlock> — «Идёт сейчас» (gate rows 43–44)", () => 
     mocks.fetchEventsLive.mockResolvedValue({ ok: true, value: [strip(1)] });
     const element = (await LiveSection({
       config: DOCTOR,
-      raw: { specialty: "all", format: "online" },
+      raw: { specialty: "all" },
       session: SESSION,
       request: REQUEST,
     })) as ReactElement<{ livePath: string }>;
@@ -973,6 +973,34 @@ describe("<LiveBlock> — «Идёт сейчас» (gate rows 43–44)", () => 
       ),
     );
     fetchSpy.mockRestore();
+  });
+
+  it("019 EARS-6: the strip reads the WHOLE applied filter set the feed reads — kind and format included (#2907)", async () => {
+    await LiveSection({
+      config: DOCTOR,
+      raw: { kind: "efir", format: "offline", specialty: "all", q: "PRP" },
+      session: SESSION,
+      request: REQUEST,
+    });
+    const liveHref = mocks.fetchEventsLive.mock.calls[0]?.[0] as string;
+    const query = new URL(liveHref, "http://x").searchParams;
+    expect(liveHref.startsWith("/v1/storefront/doctor/events/live?")).toBe(true);
+    expect(query.getAll("kind")).toEqual(["efir"]);
+    expect(query.getAll("format")).toEqual(["offline"]);
+    expect(query.get("specialty")).toBe("all");
+    expect(query.get("q")).toBe("PRP");
+  });
+
+  it("019 EARS-6: the horizon, the tense and the view never reach the live read", async () => {
+    await LiveSection({
+      config: DOCTOR,
+      raw: { kind: "efir", to: "2026-12-01", from: "2026-11-01", view: "feed" },
+      session: SESSION,
+      request: REQUEST,
+    });
+    expect(mocks.fetchEventsLive.mock.calls[0]?.[0]).toBe(
+      "/v1/storefront/doctor/events/live?kind=efir",
+    );
   });
 
   it("019 EARS-6: the default scope states no query, so the strip reads «моя и смежные» like the feed", async () => {

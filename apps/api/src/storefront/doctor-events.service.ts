@@ -5,6 +5,7 @@ import {
   type DoctorEventFacetOptions,
   type DoctorEventsFeed,
   type DoctorEventsFeedQuery,
+  type DoctorEventsLiveQuery,
   type DoctorEventsFeedTargeting,
   type DoctorEventsMonthCountsQuery,
   type DoctorEventsMonthGrid,
@@ -378,15 +379,16 @@ export class DoctorEventsService {
    * эфир running right now, earliest start first, `[]` when none (wave-2 gate
    * §4.2, D5). The selection, the entry policy and the counts are the shared
    * {@link EventsLiveService}'s; this method contributes the doctor's own
-   * inputs — the `doctors` audience and the SAME targeting the feed resolves
-   * under the page's APPLIED scope (019 «Amendment — 2026-10-13», #2907):
-   * «моя и смежные» over the remembered specialty (none chosen ⇒ untargeted),
-   * `all`, or an explicit pick — so an эфир badged live in the feed below is
-   * never missing from the strip, and the strip never shows one the feed hides.
+   * inputs — the `doctors` audience and the page's WHOLE applied filter set
+   * (019 «Amendment — 2026-10-13», #2907): the targeting the feed resolves for
+   * the specialty scope, and the feed's ONE predicate (`findFeedRows` +
+   * `applyCardFacets`) over the `live` state for `kind` / `format` / `q` and
+   * the card facets — so an эфир badged live in the feed below is never
+   * missing from the strip, and the strip never shows one the feed hides.
    */
   async live(input: {
-    /** The applied specialty scope — the feed read's own `specialty` value. */
-    query: Pick<DoctorEventsFeedQuery, "specialty">;
+    /** The applied filter set — the feed read's own specialty scope and facets. */
+    query: DoctorEventsLiveQuery;
     /** The remembered specialty of the 017 anonymous session; `null` degrades to the untargeted read. */
     specialtyReference: string | null;
     /** The calling host's route table — the only host-specific thing in this read. */
@@ -398,19 +400,38 @@ export class DoctorEventsService {
     // The strip follows the scope the feed below EFFECTIVELY reads — the
     // LD-9 fall-back to every specialty included (019 «Amendment —
     // 2026-10-13», #2907), so it runs the feed's own targeting resolution.
+    const { query } = input;
     const targeting = await this.resolveTargeting(
-      input.query,
+      query,
       input.specialtyReference,
       doctorEventsFeedDayOf(input.now ?? new Date()),
     );
+    const directionIds =
+      targeting.mode === "all"
+        ? null
+        : [...targeting.directionIds, ...targeting.adjacentDirectionIds];
+    const rows = await this.repository.findFeedRows({
+      states: ["live"],
+      order: "asc",
+      directionIds,
+      fromInstant: null,
+      toInstant: null,
+      kindSlugs: query.kind,
+      formats: query.format,
+      q: query.q,
+    });
+    const onlyEventIds = new Set(
+      applyCardFacets(
+        rows.map((row) => ({ ...cardFacetsOf(row), id: row.id })),
+        query,
+      ).map((row) => row.id),
+    );
     return this.liveEvents.live({
       audience: "doctors",
-      directionIds:
-        targeting.mode === "all"
-          ? null
-          : [...targeting.directionIds, ...targeting.adjacentDirectionIds],
+      directionIds,
       routes: input.routes,
       sub: input.sub,
+      onlyEventIds,
     });
   }
 

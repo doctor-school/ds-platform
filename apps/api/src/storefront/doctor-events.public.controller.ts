@@ -272,9 +272,15 @@ export class DoctorEventsPublicController {
    * because the answer varies per viewer AND changes the moment a room closes.
    */
   @Get("live")
-  // The applied specialty scope (#2907): the strip reads the scope the feed
-  // below it reads — absent = «моя и смежные», the feed's own default.
+  // The applied filter set (#2907): the strip reads the specialty scope and
+  // the facets the feed below it reads — absent = «моя и смежные», no facet.
+  @ApiQuery({ name: "format", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "kind", required: false, isArray: true, type: String })
   @ApiQuery({ name: "specialty", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "city", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "nmo", required: false, type: Boolean })
+  @ApiQuery({ name: "free", required: false, type: Boolean })
+  @ApiQuery({ name: "q", required: false })
   // `LiveStrip[]` (`EventsLiveReadSchema`): «nothing is live» — the most
   // common answer — is `[]`, a value of the same contract, never a null.
   @ApiOkResponse({ type: EventLiveStripDto, isArray: true })

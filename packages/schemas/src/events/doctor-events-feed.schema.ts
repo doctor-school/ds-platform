@@ -310,33 +310,6 @@ export function parseDoctorEventsFeedQuery(
 }
 
 /**
- * 019 EARS-6 (#2907) — the «Идёт сейчас» read's query: the page's APPLIED
- * specialty scope and nothing else, so the strip reads the same scope as the
- * feed below it («моя и смежные» by default, `all`, or an explicit pick).
- */
-export const DoctorEventsLiveQuerySchema = DoctorEventsFeedQuerySchema.pick({
-  specialty: true,
-}).strict();
-export type DoctorEventsLiveQuery = z.infer<typeof DoctorEventsLiveQuerySchema>;
-
-/**
- * The live query codec. The scope is DECODED by the feed's codec — a second
- * parse of `specialty` here would let the strip and the feed disagree on what
- * the same URL means.
- */
-export function parseDoctorEventsLiveQuery(
-  raw: RawQueryRecord,
-): z.ZodSafeParseResult<DoctorEventsLiveQuery> {
-  const facets = parseDoctorEventsFeedQuery({ specialty: raw.specialty });
-  if (!facets.success) {
-    return facets as unknown as z.ZodSafeParseResult<DoctorEventsLiveQuery>;
-  }
-  return DoctorEventsLiveQuerySchema.safeParse({
-    specialty: facets.data.specialty,
-  });
-}
-
-/**
  * The other half of the same round-trip (EARS-8): re-encode exactly what the
  * codec understood, as ordered wire entries (a host turns them into its own
  * `URLSearchParams` — this package stays platform-free). Anything it did not understand is DROPPED rather than

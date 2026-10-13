@@ -27,7 +27,10 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
-import { eventClassificationSql } from "../setup/event-classification.js";
+import {
+  SEED_EVENT_KINDS,
+  eventClassificationSql,
+} from "../setup/event-classification.js";
 
 /**
  * 019 EARS-6 (#1521) — «Идёт сейчас» over REAL rows.
@@ -391,6 +394,66 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(picked.map((strip) => strip.title)).toEqual([
         "Идущий эфир по ревматологии",
       ]);
+    });
+
+    it("019 EARS-6: the kind facet narrows the strip as it narrows the feed — a kind no live эфир carries empties it (#2907)", async () => {
+      // Both fixture эфиры are «Встреча клуба» (the default fixture kind); the
+      // explicit pick isolates the fixture's rheumatology эфир from any other
+      // live row the database holds.
+      const picked = `specialty=${encodeURIComponent(otherCode)}`;
+      expect(
+        await readLiveList({
+          specialtyCode: ownCode,
+          scope: `${picked}&kind=${SEED_EVENT_KINDS.efir.slug}`,
+        }),
+      ).toEqual([]);
+      const sameKind = await readLiveList({
+        specialtyCode: ownCode,
+        scope: `${picked}&kind=${SEED_EVENT_KINDS.vstrechaKluba.slug}`,
+      });
+      expect(sameKind.map((strip) => strip.title)).toEqual([
+        "Идущий эфир по ревматологии",
+      ]);
+    });
+
+    it("019 EARS-6: the format facet and the title search narrow the strip as they narrow the feed (#2907)", async () => {
+      // Both fixture эфиры are `online` (the column default).
+      const picked = `specialty=${encodeURIComponent(otherCode)}`;
+      expect(
+        await readLiveList({
+          specialtyCode: ownCode,
+          scope: `${picked}&format=offline`,
+        }),
+      ).toEqual([]);
+      const online = await readLiveList({
+        specialtyCode: ownCode,
+        scope: `${picked}&format=online`,
+      });
+      expect(online.map((strip) => strip.title)).toEqual([
+        "Идущий эфир по ревматологии",
+      ]);
+      // Both picked specialties hold one эфир each; the search keeps the one
+      // whose title carries the words.
+      const both = `specialty=${encodeURIComponent(ownCode)}&${picked}`;
+      expect(
+        (await readLiveList({ specialtyCode: ownCode, scope: both })).length,
+      ).toBe(2);
+      const searched = await readLiveList({
+        specialtyCode: ownCode,
+        scope: `${both}&q=${encodeURIComponent("ревматологии")}`,
+      });
+      expect(searched.map((strip) => strip.title)).toEqual([
+        "Идущий эфир по ревматологии",
+      ]);
+    });
+
+    it("019 EARS-6: a malformed facet on the live read is a 400, as on the feed read (#2907)", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/storefront/doctor/events/live?format=teleport",
+        headers: headersFor({}),
+      });
+      expect(response.statusCode).toBe(400);
     });
 
     it("NEW: several targeted эфиры running at once are each a strip, earliest start first (wave-2 gate row 44)", async () => {

@@ -6753,6 +6753,12 @@ export interface operations {
     DoctorEventsPublicController_live: {
         parameters: {
             query?: {
+                city?: string[];
+                format?: string[];
+                free?: boolean;
+                kind?: string[];
+                nmo?: boolean;
+                q?: unknown;
                 specialty?: string[];
             };
             header: {

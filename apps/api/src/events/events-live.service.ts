@@ -74,12 +74,21 @@ export class EventsLiveService {
     routes: ParticipationRoutes;
     /** The authenticated subject, absent for a guest. */
     sub?: string | undefined;
+    /**
+     * The doctor storefront's applied facets, as the ids of the live events
+     * its feed predicate keeps (019 EARS-6, #2907); absent = no facet narrows.
+     */
+    onlyEventIds?: ReadonlySet<string> | undefined;
   }): Promise<EventsLiveRead> {
     const rows = await this.repository.findLiveRows({
       audience: input.audience,
       directionIds: input.directionIds,
     });
-    return Promise.all(rows.map((row) => this.toStrip(row, input)));
+    const kept =
+      input.onlyEventIds === undefined
+        ? rows
+        : rows.filter((row) => input.onlyEventIds!.has(row.id));
+    return Promise.all(kept.map((row) => this.toStrip(row, input)));
   }
 
   private async toStrip(

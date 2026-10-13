@@ -129,7 +129,7 @@ sequenceDiagram
 
 The client never derives liveness from `startsAt`. A stale LIVE badge is a defect, and so is a rendered-but-empty live container — the grid must close over the absent block. This resolver and entry policy are the same canonical capability used by Academy; `apps/doctor` supplies route composition, not a second lifecycle implementation.
 
-> **Read under 019 «Amendment — 2026-10-13 — the live strip follows the applied scope»** ([requirements](./019-requirements-en.md), #2907): the doctor live read takes the page's applied `specialty` scope (`GET /v1/storefront/doctor/events/live?specialty=…`, decoded by the feed's codec; absent = «моя и смежные»), and the server render and the client refresh read the one same-origin href built from the page URL, carrying the guest's remembered-specialty cookie like the feed read. The block is keyed by that href, so a scope change re-mounts it on the new scope.
+> **Read under 019 «Amendment — 2026-10-13 — the live strip follows the applied scope»** ([requirements](./019-requirements-en.md), #2907): the doctor live read takes the page's whole applied filter set — the `specialty` scope and the `format` / `kind` / `city` / `nmo` / `free` / `q` facets (`GET /v1/storefront/doctor/events/live?…`, decoded by the feed's codec through the month query's facet half; absent = «моя и смежные», no facet) — and selects through the feed's one predicate (`findFeedRows` over the `live` state + `applyCardFacets`). The server render and the client refresh read the one same-origin href built from the page URL, carrying the guest's remembered-specialty cookie like the feed read. The block is keyed by that href, so a filter change re-mounts it on the new set.
 
 ## 5. Tense switch and the past reading (EARS-10)
 

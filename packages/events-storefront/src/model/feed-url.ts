@@ -157,27 +157,29 @@ export function feedReadQuery(
 }
 
 /**
- * The scope keys of each host's set — the part of the facets the «Идёт сейчас»
- * read takes (019 EARS-6, #2907). The doctor strip follows the APPLIED
- * specialty scope, the same one the feed reads; the Academy has no scope facet,
- * so its strip reads the bare path.
+ * The keys each host's «Идёт сейчас» read takes (019 EARS-6, #2907). The doctor
+ * strip follows the WHOLE applied filter set the feed reads — the specialty
+ * scope and every facet — so it never shows an эфир the feed below it hides.
+ * The Academy live read takes no facet, so its strip reads the bare path.
  */
-const LIVE_SCOPE_KEYS: Readonly<Record<EventsFilterHost, readonly string[]>> = {
-  doctor: ["specialty"],
+const LIVE_READ_KEYS: Readonly<Record<EventsFilterHost, readonly string[]>> = {
+  doctor: FACET_KEYS.doctor,
   academy: [],
 };
 
 /**
  * The «Идёт сейчас» read's href — the server render and the browser's refresh
- * both read THIS, so the strip can never answer a different scope than the one
- * it was painted with. The default scope stays unstated, as in every href.
+ * both read THIS, so the strip can never answer a different filter set than the
+ * one it was painted with. The horizon, the tense and the view never reach it
+ * («now» is the strip's only horizon); the default scope stays unstated, as in
+ * every href.
  */
 export function liveReadHref(
   livePath: string,
   raw: RawQueryRecord,
   filterSet: EventsFilterHost,
 ): string {
-  return href(livePath, onlyKeys(codecEntries(raw), LIVE_SCOPE_KEYS[filterSet]));
+  return href(livePath, onlyKeys(codecEntries(raw), LIVE_READ_KEYS[filterSet]));
 }
 
 /**

@@ -221,6 +221,18 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       When the visitor opens «События»
       Then the kind facet does not offer the retired kind
 
+    # The run narrows the feed by name to its own events, so the kind facet counts exactly
+    # the kinds this run published — the golden kinds are neither counted nor touched.
+    @EARS-17 @happy @editor-write
+    Scenario: The kind facet and the card label hold 9 and then 3 published kinds at both breakpoints
+      Given an editor publishes 9 new event kinds in the admin, each carried by a doctors-audience event of this run starting within the hour
+      And a visitor with no account
+      When the visitor opens «События» narrowed by name to this run's events
+      Then at 1440 and at 390 wide the kind facet holds exactly the 9 published kinds, and every card holds its kind label, without breaking the panel, the card or the screen grid
+      When the editor retires 6 of those kinds in the admin
+      And the visitor opens «События» narrowed by name to this run's events
+      Then at 1440 and at 390 wide the kind facet holds exactly the 3 published kinds, and every card holds its kind label, without breaking the panel, the card or the screen grid
+
     @EARS-18 @happy
     Scenario: Both storefronts mount one events module and differ only in the cited rows
       Given a visitor with no account
@@ -536,13 +548,6 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       When the doctor read contract answers a feed request
       Then every event in the response is rendered or excluded only by the applied facets in the URL
       And no event is delivered to the client and hidden there
-
-    @EARS-17 @happy
-    Scenario: The kind facet holds 3 and 9 published kinds
-      Given 3 published kinds of the event-kind dictionary carried by the doctor's events
-      When the doctor opens the facet panel
-      Then the panel holds the 3 kinds without breaking the screen grid
-      And with 9 published kinds carried by the doctor's events it holds the 9 without breaking the screen grid
 
     @EARS-18 @failure
     Scenario: An uncited storefront difference is a defect

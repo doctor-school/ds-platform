@@ -208,11 +208,20 @@ removal helps; a refused feed read stays inside its block with «Повтори�
 EARS-15 (one shared composition at 1440/390 in light and dark), EARS-17 (a kind
 an editor publishes or retires) and EARS-18 (doctor and Academy render one
 module, differing only in header copy, filter set and content set; Issue #1530).
-The EARS-17 pair is tagged `@editor-write`: it publishes and retires a kind and
-an event through the real admin screens (`admin/event-kinds.ts`,
-`admin/events.ts`), so it runs only where `E2E_ADMIN_URL` names an admin this run
-owns (a local dev stand on a branch DB), is skipped otherwise — never on the
-read-only slot run — and its After hook retires what it created.
+The three EARS-17 scenarios are tagged `@editor-write`: they publish and retire
+kinds and events through the real admin screens (`admin/event-kinds.ts`,
+`admin/events.ts`), so they run only where `E2E_ADMIN_URL` names an admin this run
+owns (a local dev stand on a branch DB), are skipped otherwise — never on the
+read-only slot run — and the After hook takes down what they created, each record
+on its own, even when the scenario failed (`ensureEventKindRetired` skips a kind
+whose retire already landed). The 3/9 scenario publishes 9 kinds, each carried by
+one event whose title holds a per-run token, opens the feed narrowed by that token
+(`q`), so the kind facet counts exactly this run's kinds, checks the panel, the
+sheet and every card at 1440 and 390 by layout (option count, boxes inside the
+panel/sheet/viewport, no horizontal overflow), then retires 6 and checks the 3. On
+a local stand the api runs with bot protection off and the slot's test-runner
+`RATE_LIMIT_*` ceilings (`infra/deploy/compose/slot/compose.yml`); otherwise the
+admin sign-ins of a whole-feature run trip the per-IP auth window.
 
 `Given the golden doctor "verified-cardiologist" is signed in` (§6.1). A feature
 file never carries an email or a password. `lib/golden.ts` is the one place a

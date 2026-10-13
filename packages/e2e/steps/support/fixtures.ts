@@ -70,6 +70,12 @@ export interface EditorWrites {
   page: Page;
   kind?: { title: string; detailUrl: string; retired: boolean };
   event?: { id: string; title: string };
+  /** The kind set of the 3/9 scenario: the run's token its event titles carry, its kinds and events. */
+  run?: {
+    token: string;
+    kinds: { title: string; detailUrl: string; retired: boolean }[];
+    events: { id: string; title: string; kindTitle: string }[];
+  };
 }
 
 // playwright-bdd's bddgen detects the custom test instance by the

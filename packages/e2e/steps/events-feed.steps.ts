@@ -5,6 +5,7 @@ import {
   ADMIN_ORIGIN,
   createPublishedEvent,
   createPublishedEventKind,
+  ensureEventKindRetired,
   retireEventFromStorefronts,
   retireEventKind,
   signInAsAdmin,
@@ -1128,7 +1129,11 @@ function isDarkClass(value: string | null): boolean {
 async function setTheme(page: Page, dark: boolean): Promise<void> {
   const html = page.locator("html");
   if (isDarkClass(await html.getAttribute("class")) === dark) return;
-  await page.getByTestId("theme-toggle").filter({ visible: true }).first().click();
+  await page
+    .getByTestId("theme-toggle")
+    .filter({ visible: true })
+    .first()
+    .click();
   await expect
     .poll(async () => isDarkClass(await html.getAttribute("class")))
     .toBe(dark);
@@ -1224,16 +1229,46 @@ Before({ tags: "@editor-write" }, async ({ $testInfo }) => {
 After({ tags: "@editor-write" }, async ({ world }) => {
   const editor = world.eventsFeed?.editor;
   if (!editor) return;
+  // Every record this scenario made is taken down, each on its own: one failed
+  // take-down must not leave the rest published, so failures are collected and
+  // reported together once every take-down was attempted.
+  const failures: string[] = [];
+  const attempt = async (what: string, run: () => Promise<void>) => {
+    try {
+      await run();
+    } catch (error) {
+      failures.push(`${what}: ${(error as Error).message.split("\n")[0]}`);
+    }
+  };
   try {
     if (editor.event) {
-      await retireEventFromStorefronts(editor.page, editor.event.id);
+      const { id } = editor.event;
+      await attempt(`event ${id}`, () =>
+        retireEventFromStorefronts(editor.page, id),
+      );
     }
     if (editor.kind && !editor.kind.retired) {
-      await retireEventKind(editor.page, editor.kind.detailUrl);
+      const { detailUrl } = editor.kind;
+      await attempt(`kind ${detailUrl}`, () =>
+        ensureEventKindRetired(editor.page, detailUrl),
+      );
+    }
+    for (const event of editor.run?.events ?? []) {
+      await attempt(`event ${event.id}`, () =>
+        retireEventFromStorefronts(editor.page, event.id),
+      );
+    }
+    for (const kind of editor.run?.kinds ?? []) {
+      if (kind.retired) continue;
+      await attempt(`kind ${kind.detailUrl}`, async () => {
+        await ensureEventKindRetired(editor.page, kind.detailUrl);
+        kind.retired = true;
+      });
     }
   } finally {
     await editor.page.context().close();
   }
+  expect(failures, "the editor's records left published").toEqual([]);
 });
 
 interface PublishedKind {
@@ -1318,7 +1353,9 @@ Then(
   "that event's card carries the new kind's label without overflowing the card, the panel or the screen grid",
   async ({ page, world }) => {
     const { kind } = editorKindOf(world);
-    const card = feedCards(page).filter({ hasText: editorEventOf(world).title });
+    const card = feedCards(page).filter({
+      hasText: editorEventOf(world).title,
+    });
     await expect(card).toHaveCount(1);
     await expect(card).toContainText(kind.title);
     await expectNoOverflow(card, "the card");
@@ -1365,6 +1402,208 @@ Then(
   },
 );
 
+// ── EARS-17: the kind facet at 9 and at 3 kinds ─────────────────────────────
+
+/** Admin writes for 9 kinds + 9 events and their take-down outlast the default (≈40 s locally). */
+const KIND_SET_TIMEOUT_MS = 6 * 60 * 1000;
+/** Kind titles of mixed length, the longest wrapping on the card and in the panel. */
+const KIND_STEMS = [
+  "Клинический разбор с пациентом и обсуждением тактики",
+  "Школа",
+  "Консилиум",
+  "Мастер-класс по ультразвуку",
+  "Дебаты",
+  "Круглый стол специалистов",
+  "Лекция",
+  "Практикум",
+  "Обзор литературы за год",
+];
+
+interface KindSetRun {
+  page: Page;
+  run: NonNullable<EditorWrites["run"]>;
+}
+
+function kindSetOf(world: StepWorld): KindSetRun {
+  const editor = feedOf(world).editor;
+  if (!editor?.run) throw new Error("No kind set was published by an editor");
+  return { page: editor.page, run: editor.run };
+}
+
+Given(
+  "an editor publishes {int} new event kinds in the admin, each carried by a doctors-audience event of this run starting within the hour",
+  async ({ browser, world, $testInfo }, total: number) => {
+    expect(total, "one stem per kind").toBeLessThanOrEqual(KIND_STEMS.length);
+    $testInfo.setTimeout(KIND_SET_TIMEOUT_MS);
+    const context = await browser.newContext({
+      baseURL: ADMIN_ORIGIN,
+      locale: "ru-RU",
+    });
+    const page = await context.newPage();
+    // The token marks this run's kinds and event titles: the feed narrowed by
+    // it lists this run's events only, whatever else the stand carries.
+    const token = `набор${Date.now().toString(36)}`;
+    const run: NonNullable<EditorWrites["run"]> = {
+      token,
+      kinds: [],
+      events: [],
+    };
+    feedOf(world).editor = { page, run };
+    await signInAsAdmin(page);
+    for (const stem of KIND_STEMS.slice(0, total)) {
+      const title = `${stem} ${token}`;
+      const detailUrl = await createPublishedEventKind(page, title, ["online"]);
+      run.kinds.push({ title, detailUrl, retired: false });
+    }
+    for (const [index, kind] of run.kinds.entries()) {
+      const title = `Событие ${index + 1} ${token}`;
+      const id = await createPublishedEvent(page, title, {
+        startsInMs: (45 + index) * 60 * 1000,
+        kindTitle: kind.title,
+        audience: "doctors",
+      });
+      run.events.push({ id, title, kindTitle: kind.title });
+    }
+  },
+);
+
+When(
+  "the editor retires {int} of those kinds in the admin",
+  async ({ world }, count: number) => {
+    const { page, run } = kindSetOf(world);
+    const published = run.kinds.filter((kind) => !kind.retired);
+    expect(published.length).toBeGreaterThanOrEqual(count);
+    for (const kind of published.slice(0, count)) {
+      await retireEventKind(page, kind.detailUrl);
+      kind.retired = true;
+    }
+  },
+);
+
+When(
+  "the {word} opens «События» narrowed by name to this run's events",
+  async ({ page, host, world }, _actor: string) => {
+    const { run } = kindSetOf(world);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const query = new URLSearchParams({ q: run.token });
+    await openFeed(page, `${host.eventsPath}?${query.toString()}`);
+  },
+);
+
+/** The box of a locator, asserted rendered. */
+async function boxOf(locator: Locator, what: string) {
+  const box = await locator.boundingBox();
+  expect(box, `${what} is rendered`).not.toBeNull();
+  return box!;
+}
+
+/**
+ * The kind facet group holds exactly the published kinds: one button per kind,
+ * every one inside the panel's width, with no horizontal overflow of the panel.
+ */
+async function expectKindFacetHolds(
+  panel: Locator,
+  kinds: readonly string[],
+  what: string,
+): Promise<void> {
+  const group = panel.getByRole("group", { name: "Вид события" });
+  await expect(group, `${what}: the kind facet`).toBeVisible();
+  const buttons = group.getByRole("button");
+  await expect(buttons, `${what}: one option per published kind`).toHaveCount(
+    kinds.length,
+  );
+  for (const title of kinds) {
+    await expect(
+      group.getByRole("button", { name: title, exact: true }),
+      `${what}: the option of «${title}»`,
+    ).toBeVisible();
+  }
+  const frame = await boxOf(panel, `${what}: the panel`);
+  for (let index = 0; index < kinds.length; index += 1) {
+    const box = await boxOf(buttons.nth(index), `${what}: option ${index + 1}`);
+    expect(
+      box.x,
+      `${what}: option ${index + 1} starts inside the panel`,
+    ).toBeGreaterThanOrEqual(frame.x - 0.5);
+    expect(
+      box.x + box.width,
+      `${what}: option ${index + 1} ends inside the panel`,
+    ).toBeLessThanOrEqual(frame.x + frame.width + 0.5);
+  }
+  await expectNoOverflow(panel, `${what}: the panel`);
+}
+
+/** Every card of the run holds its kind label inside its own box. */
+async function expectCardsHoldTheirKinds(
+  page: Page,
+  run: NonNullable<EditorWrites["run"]>,
+  what: string,
+): Promise<void> {
+  const cards = feedCards(page);
+  for (const event of run.events) {
+    const card = cards.filter({ hasText: event.title });
+    await expect(card, `${what}: the card of «${event.title}»`).toHaveCount(1);
+    await expect(card).toContainText(event.kindTitle);
+    await expectNoOverflow(card, `${what}: the card of «${event.title}»`);
+    const frame = await boxOf(card, `${what}: the card`);
+    expect(
+      frame.x,
+      `${what}: the card starts on screen`,
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      frame.x + frame.width,
+      `${what}: the card ends inside the viewport`,
+    ).toBeLessThanOrEqual(page.viewportSize()!.width + 0.5);
+  }
+  await expect(cards, `${what}: only this run's events are listed`).toHaveCount(
+    run.events.length,
+  );
+  await expectNoOverflow(page.locator("html"), `${what}: the screen grid`);
+}
+
+Then(
+  "at 1440 and at 390 wide the kind facet holds exactly the {int} published kinds, and every card holds its kind label, without breaking the panel, the card or the screen grid",
+  async ({ page, world }, count: number) => {
+    const { run } = kindSetOf(world);
+    const kinds = run.kinds
+      .filter((kind) => !kind.retired)
+      .map((kind) => kind.title);
+    expect(kinds).toHaveLength(count);
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expectKindFacetHolds(filterPanel(page), kinds, "1440");
+    // The column sits beside the feed, never over it.
+    const column = await boxOf(page.getByTestId("events-column"), "the column");
+    const feed = await boxOf(page.getByTestId("events-feed"), "the feed");
+    expect(
+      column.x >= feed.x + feed.width - 0.5 ||
+        column.x + column.width <= feed.x + 0.5,
+      "1440: the facet column overlaps the feed",
+    ).toBe(true);
+    await expectCardsHoldTheirKinds(page, run, "1440");
+
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expect(page.getByTestId("events-column")).toBeHidden();
+    await expectCardsHoldTheirKinds(page, run, "390");
+    await page.getByTestId("events-filter-open").click();
+    const sheet = page.getByTestId("events-filter-sheet");
+    await expect(sheet).toBeVisible();
+    // The sheet slides in (a CSS transition): measure its resting layout.
+    await sheet.evaluate((node) =>
+      Promise.all(node.getAnimations().map((animation) => animation.finished)),
+    );
+    await expectKindFacetHolds(sheet, kinds, "390 sheet");
+    const sheetBox = await boxOf(sheet, "the sheet");
+    expect(
+      sheetBox.x + sheetBox.width,
+      "390: the sheet ends on screen",
+    ).toBeLessThanOrEqual(390 + 0.5);
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+    await page.setViewportSize({ width: 1440, height: 900 });
+  },
+);
+
 // ── EARS-18: one module on both storefronts ─────────────────────────────────
 
 /** The accessible names of the facet groups a host's panel renders. */
@@ -1392,7 +1631,9 @@ async function feedSlugs(page: Page, host: HostConfig): Promise<string[]> {
   const hrefs = await page
     .getByTestId("events-feed")
     .locator(`a[href^="${prefix}"]`)
-    .evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? ""));
+    .evaluateAll((links) =>
+      links.map((link) => link.getAttribute("href") ?? ""),
+    );
   return hrefs.map((href) => href.slice(prefix.length));
 }
 

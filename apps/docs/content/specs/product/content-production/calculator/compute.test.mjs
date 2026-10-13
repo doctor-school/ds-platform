@@ -361,6 +361,37 @@ test("2661-5: external costs default from rates.yaml external_costs; studio × r
   );
 });
 
+test("2661-5: видеоподкаст carries the rates.yaml video_podcast components as its own external lines", () => {
+  const vp = inputs.rates.external_costs.video_podcast;
+  const c = vp.components;
+  const expected = {
+    video_podcast_crew: mid(c.multi_camera_crew.rub),
+    video_podcast_director: mid(c.director.rub),
+    video_podcast_grading: mid(c.grading_graphics.rub),
+    video_podcast_cover: mid(c.cover.rub),
+    video_podcast_clips: mid(c.clips.rub_per_clip) * mid(c.clips.clips_per_episode),
+  };
+  const lines = unitCost(model, "видеоподкаст", U).externals;
+  for (const [id, rub] of Object.entries(expected)) {
+    const line = lines.find((e) => e.id === id);
+    assert.ok(line, `видеоподкаст has no external line ${id}`);
+    near(line.rub, rub, 1e-9);
+    assert.equal(line.per, vp.per);
+    near(line.cost, rub * line.qty, 1e-6);
+    assert.equal(line.qty, 1);
+  }
+  // the audio episode has none of them
+  const episode = unitCost(model, "эпизод подкаста", U).externals;
+  assert.ok(!episode.some((e) => e.id.startsWith("video_podcast_")));
+  // a component is editable like any external
+  const edited = unitCost(buildModel(inputs, { "external:video_podcast_cover": 0 }), "видеоподкаст", U);
+  near(
+    unitCost(model, "видеоподкаст", U).total.byLoad - edited.total.byLoad,
+    expected.video_podcast_cover,
+    1e-6,
+  );
+});
+
 test("2661-5: a black box (decomposition: pending) is a «не задано: подпроцесс не раскрыт» line", () => {
   const school = unitCost(model, "практическая школа", U);
   const line = school.trail.find((l) => l.leaf === "A338");
@@ -467,11 +498,20 @@ test("2661-8: advance + result split, contacts low / plan / high, break-even, au
   near(p.outcomes.high.revenue, p.advance + hi * p.pricePerContact.value, 1e-6);
   near(p.outcomes.plan.margin, p.price - p.cost, 1e-6);
   near(p.outcomes.plan.authorShare, 0.1 * (p.price - p.cost), 1e-6);
+  // break-even never goes below zero contacts: an advance above the cost breaks even at 0
   near(
     p.breakEvenContacts,
-    (p.cost - p.advance) / p.pricePerContact.value,
+    Math.max(0, (p.cost - p.advance) / p.pricePerContact.value),
     1e-6,
   );
+  const thin = priceProduct(buildModel(inputs, { "var:price_value": 0.05 }), "курс", U);
+  assert.ok(thin.advance < thin.cost);
+  near(
+    thin.breakEvenContacts,
+    (thin.cost - thin.advance) / thin.pricePerContact.value,
+    1e-6,
+  );
+  assert.ok(thin.breakEvenContacts > 0);
   // budget cap: hard by default, tiered discount as an option
   const hard = priceProduct(buildModel(inputs, { "var:budget_cap": p.price }), "курс", U);
   near(hard.outcomes.high.revenue, p.price, 1e-6);
@@ -670,8 +710,8 @@ test("unitCost: overrides change exactly the targeted figures", () => {
     else near(edited[role], base[role], 1e-9);
   const rated = buildModel(inputs, { "rate:Аккаунт:monthly": 240000 });
   near(roleHourlyCost(rated, "Аккаунт", U).value, staffFull(240000), 1e-9);
-  const graded = buildModel(inputs, { "rate:Аккаунт:monthly:senior": 300000 });
-  near(roleHourlyCost(graded, "Аккаунт", at("usual", "senior")).value, staffFull(300000), 1e-9);
+  const graded = buildModel(inputs, { "rate:Аккаунт:monthly:senior": 230000 });
+  near(roleHourlyCost(graded, "Аккаунт", at("usual", "senior")).value, staffFull(230000), 1e-9);
   near(
     roleHourlyCost(graded, "Аккаунт", MID).value,
     roleHourlyCost(model, "Аккаунт", MID).value,
@@ -757,21 +797,35 @@ const planSum = (m, c, part) =>
     0,
   );
 
-const reconcile = (m, c) => {
+const reconcile = (m, c, { freelanceCircle = false } = {}) => {
   const plan = periodPlan(m, c);
   const team = new Set(plan.idle.byRole.map((r) => r.role));
   team.add("Продуктовая команда");
   const payroll = plan.idle.byRole.reduce((a, r) => a + r.payroll, 0);
   const contracted = plan.idle.byRole.reduce((a, r) => a + r.contractorCost, 0);
+  // A freelance member of the circle is paid per hour for its share of circle hours: that money
+  // is the circle lines' contractors article, outside every штат payroll. Only for a model whose
+  // circle has no media_external_share: a штат member's external share is already in contractorCost.
+  const circleContractors = (l) =>
+    freelanceCircle && l.role === "Продуктовая команда" ? (l.byArticle?.contractors ?? 0) : 0;
   let otherDirect = 0;
+  let circleFreelance = 0;
   for (const [name, n] of Object.entries(plan.sold))
-    for (const l of unitCost(m, name, c).trail)
-      if (l.class === "direct" && !team.has(l.role)) otherDirect += n * (l.cost ?? 0);
-  const otherPool = plan.poolLines
-    .filter((l) => !team.has(l.role))
-    .reduce((a, l) => a + (l.cost ?? 0), 0);
+    for (const l of unitCost(m, name, c).trail) {
+      if (l.class !== "direct") continue;
+      if (!team.has(l.role)) otherDirect += n * (l.cost ?? 0);
+      else circleFreelance += n * circleContractors(l);
+    }
+  let otherPool = 0;
+  for (const l of plan.poolLines)
+    if (!team.has(l.role)) otherPool += l.cost ?? 0;
+    else circleFreelance += circleContractors(l);
   const full = planSum(m, c, (u) => u.direct.cost + u.overhead.cost + u.idle.cost + u.tools.cost);
-  near(full, payroll + contracted + otherDirect + otherPool + plan.tools.total, 1e-3);
+  near(
+    full,
+    payroll + contracted + circleFreelance + otherDirect + otherPool + plan.tools.total,
+    1e-3,
+  );
   return plan;
 };
 
@@ -802,7 +856,7 @@ test("reconciliation at media_external_share 0,5: idle and payroll at the шта
 });
 
 test("reconciliation with a freelance team role: its hours are contractor cost, never payroll", () => {
-  reconcile(buildModel(inputs, { "engage:Методолог": "gph" }), U);
+  reconcile(buildModel(inputs, { "engage:Методолог": "gph" }), U, { freelanceCircle: true });
 });
 
 test("урок: A3132 (lawyer, ad section) only on the sponsored share of lessons", () => {

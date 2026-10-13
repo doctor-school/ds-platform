@@ -288,6 +288,26 @@ externals:
   podcast_studio:
     name: Студия записи подкаста
     basis: "model/A32.yaml, A324: студия — внешняя затрата, цена за час записи (операторы и режиссёрское переключение студии включены)"
+  video_podcast_crew:
+    name: "Видеоподкаст: операторы нескольких камер"
+    component: video_podcast.multi_camera_crew
+    basis: "rates.yaml external_costs.video_podcast.components.multi_camera_crew — смена, середина диапазона"
+  video_podcast_director:
+    name: "Видеоподкаст: режиссёр съёмки"
+    component: video_podcast.director
+    basis: "rates.yaml external_costs.video_podcast.components.director — смена, середина диапазона"
+  video_podcast_grading:
+    name: "Видеоподкаст: цветокоррекция и графика"
+    component: video_podcast.grading_graphics
+    basis: "rates.yaml external_costs.video_podcast.components.grading_graphics — эпизод, середина диапазона"
+  video_podcast_cover:
+    name: "Видеоподкаст: обложка"
+    component: video_podcast.cover
+    basis: "rates.yaml external_costs.video_podcast.components.cover — эпизод, середина диапазона"
+  video_podcast_clips:
+    name: "Видеоподкаст: клипы"
+    component: video_podcast.clips
+    basis: "rates.yaml external_costs.video_podcast.components.clips — цена клипа × клипов на эпизод, середины диапазонов"
   event_venue_broadcast:
     name: Площадка и трансляция мероприятия
     basis: "model/A33.yaml, A334: площадка и трансляция — внешние затраты; онлайн — собственная платформа (0), для очного задаёт владелец"
@@ -376,7 +396,7 @@ products:
   видеоподкаст:
     name: Видеоподкаст (эпизод на несколько камер)
     contact_type: podcast_live
-    basis: "model/A324.yaml и A325.yaml: эпизод подкаста + съёмка на несколько камер A3243, монтаж с цветокоррекцией и графикой A3252, обложки и клипы A3253; студия — за часы съёмки A3243. Компоненты rates.yaml external_costs.video_podcast не добавляются: операторы и переключение — в часе студии, монтаж, графика, обложки и клипы — операции A3252, A3253"
+    basis: "model/A324.yaml и A325.yaml: эпизод подкаста + съёмка на несколько камер A3243, монтаж с цветокоррекцией и графикой A3252, обложки и клипы A3253; студия — за часы съёмки A3243; компоненты rates.yaml external_costs.video_podcast (операторы, режиссёр, цветокоррекция и графика, обложка, клипы) — внешние строки эпизода"
     reserve_line: A32
     items:
       - { leaf: A321 }
@@ -387,7 +407,13 @@ products:
       - { leaf: A3251 }
       - { leaf: A3252 }
       - { leaf: A3253 }
-    externals: [{ id: podcast_studio, hours_of: [A3243] }]
+    externals:
+      - { id: podcast_studio, hours_of: [A3243] }
+      - video_podcast_crew
+      - video_podcast_director
+      - video_podcast_grading
+      - video_podcast_cover
+      - video_podcast_clips
     lead:
       chain: { seq: [A321, A322, A323, A3243, { par: [A3252, A3253] }, A3251] }
       basis: capacity-ru.md, «Срок единицы»

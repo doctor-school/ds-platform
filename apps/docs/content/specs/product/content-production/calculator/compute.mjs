@@ -181,6 +181,20 @@ export function buildModel(inputs, overrides = {}) {
     );
   const externals = {};
   for (const [id, e] of Object.entries(src.products.externals)) {
+    if (e.component) {
+      // A component of a composite rates.yaml cost (external_costs.<group>.components.<key>):
+      // a range at its middle; a per-clip price × clips per unit.
+      const [group, key] = e.component.split(".");
+      const g = src.rates.external_costs?.[group];
+      const part = g?.components?.[key];
+      const rub = !part
+        ? null
+        : part.rub_per_clip != null
+          ? middle(part.rub_per_clip) * middle(part.clips_per_episode)
+          : middle(part.rub);
+      externals[id] = { ...e, rub, per: g?.per ?? null };
+      continue;
+    }
     const cost = src.rates.external_costs?.[id];
     externals[id] = { ...e, rub: cost?.rub ?? null, per: cost?.per ?? null };
   }

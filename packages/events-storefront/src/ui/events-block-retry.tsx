@@ -47,6 +47,7 @@ const EventsBlockRetryInputSchema = z.discriminatedUnion("block", [
       })
       .optional(),
     facetOptions: FacetOptionsSchema,
+    defaultScopeEmpty: z.boolean().optional(),
   }),
   z.object({
     block: z.literal("feed"),
@@ -64,6 +65,8 @@ export type EventsBlockRetryInput =
       readonly today: string;
       readonly horizon?: EventsFeedHorizon;
       readonly facetOptions: FeedFacetOptions;
+      /** 019 LD-9 — the page's feed read fell back to every specialty. */
+      readonly defaultScopeEmpty?: boolean;
     }
   | {
       readonly block: "feed";
@@ -113,7 +116,13 @@ export async function renderEventsBlock(
         today: parsed.today,
         horizon: parsed.horizon,
         facetOptions: parsed.facetOptions,
-        entries: await fetchMonthEntries(config, parsed.raw, parsed.month, request),
+        defaultScopeEmpty: parsed.defaultScopeEmpty === true,
+        entries: await fetchMonthEntries(
+          config,
+          parsed.raw,
+          parsed.month,
+          request,
+        ),
         specialties,
         request,
         retry,
@@ -139,6 +148,7 @@ export async function renderEventsBlock(
             facetOptions={read.value.facetOptions}
             matching={read.value.matching}
             summary={read.value.summary}
+            defaultScopeEmpty={read.value.defaultScopeEmpty === true}
           />
           {block}
         </>

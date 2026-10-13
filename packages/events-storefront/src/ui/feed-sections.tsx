@@ -19,7 +19,11 @@ import {
   plainEmptyFeedState,
   showMoreLabel,
 } from "../model/feed";
-import type { SpecialtyChoice } from "../model/facets";
+import {
+  type SpecialtyChoice,
+  type SpecialtyScopeKind,
+  specialtyScopeKindOf,
+} from "../model/facets";
 import { feedTenseOf, showMoreHref } from "../model/feed-url";
 import {
   type ForwardedSession,
@@ -32,7 +36,11 @@ import { BlockError } from "./block-error";
 import { BlockRetry } from "./block-retry";
 import type { EventsBlockRetryAction } from "./events-block-retry";
 import { DayAnchorScroll } from "./day-anchor-scroll";
-import { RecoveredSubline, SublineCounts } from "./feed-read-scope";
+import {
+  RecoveredScopedSubline,
+  RecoveredSubline,
+  SublineCounts,
+} from "./feed-read-scope";
 import { FeedList } from "./feed-list";
 import { LiveBlock } from "./live-block";
 import { MyEventsCut } from "./my-events-cut";
@@ -72,9 +80,12 @@ export async function readEmptyFeedState(
   titles: FeedFacetOptions,
   specialties: SpecialtyBook,
   request: ReadRequest,
+  /** The page read's 019 LD-9 fact — this visitor's default scope. */
+  defaultScopeEmpty = false,
 ): Promise<EmptyFeedState> {
   const book = await specialties();
   return emptyFeedState(query, {
+    defaultScopeEmpty,
     listing: config.routes.listing,
     noun: eventNounOf(config.copy),
     copy: FEED_COPY,
@@ -83,7 +94,12 @@ export async function readEmptyFeedState(
     specialtyName: (code) => book.find((choice) => choice.code === code)?.name,
     matching: async (without) => {
       const read = await fetchEventsFeed(config, without, request);
-      return read.ok ? read.value.matching : null;
+      return read.ok
+        ? {
+            matching: read.value.matching,
+            defaultScopeEmpty: read.value.defaultScopeEmpty === true,
+          }
+        : null;
     },
   });
 }
@@ -240,6 +256,28 @@ export async function CountedSubline({
   );
 }
 
+/**
+ * The head subline stated per specialty scope (019 LD-9, #2871): the line of
+ * the scope the page applies — the URL's, or with none the visitor's default,
+ * which the feed read reports (`defaultScopeEmpty`).
+ */
+export async function ScopedSubline({
+  feed,
+  raw,
+  byScope,
+}: {
+  feed: Promise<BlockRead<EventsFeedPage>>;
+  raw: RawQueryRecord;
+  byScope: Record<SpecialtyScopeKind, string>;
+}) {
+  const read = await feed;
+  if (!read.ok) return <RecoveredScopedSubline raw={raw} byScope={byScope} />;
+  const scope = specialtyScopeKindOf(raw, {
+    defaultScopeEmpty: read.value.defaultScopeEmpty === true,
+  });
+  return <span data-testid="events-feed-subline-scope">{byScope[scope]}</span>;
+}
+
 export async function FeedSection({
   config,
   query,
@@ -323,6 +361,7 @@ export async function FeedBlock({
         page.facetOptions,
         specialties,
         request,
+        page.defaultScopeEmpty === true,
       )
     : plainEmptyFeedState(eventNounOf(config.copy), FEED_COPY);
   return (

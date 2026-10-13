@@ -49,6 +49,9 @@ export interface SpecialtyRef {
   label: string;
 }
 
+/** The two specialty scopes the panel offers beside a picked list. */
+export type SpecialtyScopeMode = "mine-and-adjacent" | "all";
+
 /**
  * Every facet value both hosts can carry, mirrored one-to-one into the URL by
  * the consumer. A host reads and counts only its own keys
@@ -58,7 +61,7 @@ export interface AppliedFacets {
   /** Doctor: name search (committed trimmed). */
   query: string;
   /** Doctor: default `mine-and-adjacent`; a picked list replaces the scope. */
-  specialtyScope: "mine-and-adjacent" | "all" | SpecialtyRef[];
+  specialtyScope: SpecialtyScopeMode | SpecialtyRef[];
   /** Doctor: format ids (online / offline / hybrid) — repeatable. */
   format: string[];
   /** Doctor: event-kind dictionary slugs (012 LD-12) — repeatable. */
@@ -96,11 +99,14 @@ export function defaultAppliedFacets(): AppliedFacets {
 /**
  * The applied count of one host's facet set — the «Применено: N» of the
  * header and the N of the mobile «Фильтры (N)» control, from ONE rule.
- * «Все специальности» counts once; each picked specialty counts once.
+ * «Все специальности» counts once; each picked specialty counts once. The
+ * visitor's default specialty scope is never counted — «Моя и смежные», or
+ * «Все специальности» when that is the host's default for this visitor.
  */
 export function countAppliedFacets(
   applied: AppliedFacets,
   host: EventsFilterHost,
+  { defaultSpecialtyScope = "mine-and-adjacent" }: AppliedCountOptions = {},
 ): number {
   if (host === "academy") {
     return (
@@ -113,10 +119,20 @@ export function countAppliedFacets(
     applied.kind.length +
     applied.city.length +
     applied.direction.length +
-    (Array.isArray(scope) ? scope.length : scope === "all" ? 1 : 0) +
+    (Array.isArray(scope)
+      ? scope.length
+      : scope === defaultSpecialtyScope
+        ? 0
+        : 1) +
     (applied.nmoOnly ? 1 : 0) +
     (applied.query.trim().length > 0 ? 1 : 0)
   );
+}
+
+/** How the applied count reads the specialty scope. */
+export interface AppliedCountOptions {
+  /** The scope the visitor reads with nothing applied. Default «Моя и смежные». */
+  defaultSpecialtyScope?: SpecialtyScopeMode | undefined;
 }
 
 /** The D-1 panel state the unit declares to its host. */
@@ -216,6 +232,12 @@ export interface EventsFilterProps {
   resetHref?: string;
   /** Reset as an action (state-driven consumer). */
   onReset?: () => void;
+  /**
+   * The specialty scope this visitor reads with nothing applied: it renders
+   * selected but is not counted, so it neither states «Применено» nor offers
+   * «Сбросить». Default «Моя и смежные».
+   */
+  defaultSpecialtyScope?: SpecialtyScopeMode;
   /** Render the «Фильтры» header. `false` for the mobile sheet body. Default `true`. */
   showHeader?: boolean;
   /** Server-search / paging bridge per Combobox facet (the city book is paged). */
@@ -412,6 +434,7 @@ export function EventsFilter({
   onChange,
   resetHref,
   onReset,
+  defaultSpecialtyScope,
   showHeader = true,
   paging,
   queryDebounceMs = 400,
@@ -476,7 +499,9 @@ export function EventsFilter({
     panelRef.current?.focus();
   });
 
-  const appliedCount = countAppliedFacets(applied, host);
+  const appliedCount = countAppliedFacets(applied, host, {
+    defaultSpecialtyScope,
+  });
   const hasApplied = appliedCount > 0;
 
   const nameOf = (list: EventsFilterOption[] | undefined, id: string) =>
@@ -558,7 +583,8 @@ export function EventsFilter({
             const rest = picked.filter((item) => item.id !== ref.id);
             onChange({
               ...applied,
-              specialtyScope: rest.length > 0 ? rest : "mine-and-adjacent",
+              specialtyScope:
+                rest.length > 0 ? rest : (defaultSpecialtyScope ?? "mine-and-adjacent"),
             });
           },
         }))}

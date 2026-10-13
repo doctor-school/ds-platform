@@ -105,11 +105,11 @@ describe("019 EARS-8 event listing query codec", () => {
     it("019 EARS-8.6: a defaults-only state round-trips to the same state", () => {
       const defaults = parseDoctorEventsFeedQuery({});
       expect(defaults.success).toBe(true);
-      // The defaults are the host's, not the codec's: `tense` and `specialty`
-      // are materialised by the schema, the rest stay absent.
+      // The defaults are the host's, not the codec's: `tense` is materialised
+      // by the schema; `specialty` stays absent, because the server resolves
+      // the default scope (019 LD-9), and so do the rest.
       expect(defaults.data).toEqual({
         tense: "upcoming",
-        specialty: "mine-and-adjacent",
         format: [],
         kind: [],
         city: [],
@@ -146,14 +146,13 @@ describe("019 EARS-8 event listing query codec", () => {
       expect(twice).toEqual(once);
       // The key order is the field-table order, not the order the caller typed
       // them in — the same state always yields the same, comparable URL. The
-      // host defaults (`tense`, `specialty`) are materialised into the link, so
-      // the URL states the applied targeting rather than implying it.
+      // `tense` default is materialised into the link; an absent `specialty`
+      // stays absent, because the server resolves the default scope (LD-9).
       expect(once.map(([key]) => key)).toEqual([
         "day",
         "tense",
         "format",
         "format",
-        "specialty",
         "nmo",
         "q",
       ]);

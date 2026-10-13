@@ -74,10 +74,14 @@ another visitor.
   (`monthWindowRows`) over the year, bucketed by МСК month.
 - **`hasLive` is 007's lifecycle state**, the same `state: "live"` the feed's
   card carries. Nothing here compares a start time to the clock.
-- **The two empty reasons stay distinct** (LD-9): the grid carries the feed's own
-  `targeting` envelope, so «пусто по специальности» (a targeted read with no
-  adjacency rows) and «пусто по фасетам» are two different renders rather than
-  one bare zero.
+- **The default scope falls back like the feed's** (LD-9): the grid carries the
+  feed's own `targeting` envelope. Every read reports `defaultScopeEmpty`
+  (the doctor's default «Моя и смежные» — own plus adjacent areas — has no
+  upcoming event), whatever scope
+  the URL names; a read naming no `specialty` then answers `mode: "all"`, so the
+  month counts every specialty, as the feed does; an explicit `specialty` is
+  never replaced. The only empty grid left is
+  the facet-emptied one («пусто по фасетам»).
 - **A malformed `month` is a 400.** Unlike the feed's `to=`, which is clamped, a
   month has no nearest honest value a reader could be assumed to have meant.
 

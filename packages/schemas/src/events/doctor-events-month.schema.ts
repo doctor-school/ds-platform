@@ -4,7 +4,7 @@ import { SlugSchema } from "../taxonomy/taxonomy.schema.js";
 import { DoctorEventFormatSchema } from "./doctor-event-card.schema.js";
 import {
   DoctorEventsFeedDayShapeSchema,
-  DoctorEventsFeedSpecialtyModeSchema,
+  DoctorEventsFeedSpecialtySchema,
   isDoctorEventsQueryYear,
   DoctorEventsFeedTargetingSchema,
   type DoctorEventsFeedQuery,
@@ -41,14 +41,16 @@ import { MonthBroadcastEntrySchema, YEAR_PARAM } from "./events.schema.js";
  * whole МСК month, past days included (019 «Amendment — 2026-10-05»): a past
  * day counts its ended events, which the grid shows as muted pills.
  *
- * ## The two empty reasons stay distinct
+ * ## An empty specialty is not an empty month
  *
- * `targeting` is the SAME envelope field the feed carries, so the
- * `dataState` × surface matrix row «Month grid» renders «пусто по фасетам» and
- * «пусто по специальности» as the two different renders 019-design §3 requires
- * (LD-9): an empty month under `mode: "targeted"` with no adjacency rows is a
- * rare specialty, an empty month under any mode with facets applied is a facet
- * problem. No second discriminator vocabulary is invented for the grid.
+ * `targeting` is the SAME envelope field the feed carries, so the grid and the
+ * feed of one screen share one scope (019 LD-9): `defaultScopeEmpty` reports,
+ * on every read, that the viewer's default «Моя и смежные» (own plus
+ * adjacent areas) has no upcoming event; when
+ * the URL names no scope, both then fall back to every specialty
+ * (`mode: "all"`); an empty month
+ * with facets applied is a facet problem. No second discriminator vocabulary is
+ * invented for the grid.
  */
 
 /**
@@ -79,12 +81,8 @@ export const DoctorEventsMonthQuerySchema = z
     month: DoctorEventsMonthSchema.optional(),
     format: z.array(DoctorEventFormatSchema).default([]),
     kind: z.array(SlugSchema).default([]),
-    specialty: z
-      .union([
-        DoctorEventsFeedSpecialtyModeSchema,
-        z.array(z.string().min(1)).min(1),
-      ])
-      .default("mine-and-adjacent"),
+    /** Absent = the server-resolved default scope, as on the feed (019 LD-9). */
+    specialty: DoctorEventsFeedSpecialtySchema.optional(),
     city: z.array(z.string().min(1)).default([]),
     nmo: z.boolean().optional(),
     free: z.boolean().optional(),

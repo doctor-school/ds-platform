@@ -190,8 +190,10 @@ export type {
   EventsFilterComboLabels,
   EventsFilterComboPaging,
   AppliedFacets,
+  AppliedCountOptions,
   FacetPanelState,
   SpecialtyRef,
+  SpecialtyScopeMode,
 } from "./events-filter";
 export { Combobox } from "./combobox";
 export type { ComboboxProps, ComboboxOption } from "./combobox";

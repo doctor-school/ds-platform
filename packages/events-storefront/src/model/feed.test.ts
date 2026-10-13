@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { FEED_COPY } from "../copy/feed-copy";
 import {
   type EventsFeedCard,
+  type WidenRead,
   buildFeedItems,
   MAX_WIDEN_READS,
   emptyFeedState,
@@ -350,13 +351,19 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
     copy: FEED_COPY,
     filterSet: "academy",
   } as const;
-  /** A widen read answering `counts[i]` for the i-th asked removal; `null` = failed. */
-  function reads(...counts: (number | null)[]) {
+  /**
+   * A widen read answering `counts[i]` for the i-th asked removal; `null` =
+   * failed; an object is the whole read (its LD-9 fall-back signal included).
+   */
+  function reads(...counts: (number | null | WidenRead)[]) {
     const asked: RawQueryRecord[] = [];
-    const matching = async (without: RawQueryRecord) => {
+    const matching = async (
+      without: RawQueryRecord,
+    ): Promise<WidenRead | null> => {
       asked.push(without);
       const count = counts[asked.length - 1];
-      return count === undefined ? 0 : count;
+      if (count === undefined) return { matching: 0 };
+      return typeof count === "number" ? { matching: count } : count;
     };
     return { asked, matching };
   }
@@ -439,6 +446,15 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
     });
   });
 
+  it("EARS-9: under the LD-9 fall-back an empty explicit «Моя и смежные» is a facet the visitor set — the state offers «Сбросить фильтры»", async () => {
+    const { matching } = reads();
+    const state = await emptyFeedState(
+      { specialty: "mine-and-adjacent" },
+      { ...DOCTOR_EMPTY, matching, defaultScopeEmpty: true },
+    );
+    expect(state.reset).toEqual({ label: "Сбросить фильтры", href: "/events" });
+  });
+
   it("EARS-9: a failed widen read counts nothing for its facet — the next facet is asked (#2786)", async () => {
     const { matching } = reads(null, 5);
     const state = await emptyFeedState(
@@ -449,7 +465,7 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
     expect(state.description).toBe("Без этого фильтра найдётся 5 событий.");
   });
 
-  it("EARS-9: an empty specialty offers «Показать смежные специальности» with the adjacent count", async () => {
+  it("EARS-9: a picked specialty with no match offers «Показать смежные специальности» with the adjacent count", async () => {
     const { asked, matching } = reads(2);
     const state = await emptyFeedState(
       { specialty: ["cardiology"], format: ["offline"] },
@@ -461,6 +477,28 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
     );
     expect(state.widen?.label).toBe("Показать смежные специальности");
     expect(state.widen?.href).toBe("/events?format=offline");
+  });
+
+  it("EARS-9: when dropping the picked specialty falls back to every specialty (LD-9), no adjacent-areas offer — the next applied facet is weakened", async () => {
+    const { asked, matching } = reads(
+      { matching: 40, defaultScopeEmpty: true },
+      3,
+    );
+    const state = await emptyFeedState(
+      { specialty: ["osteopathy"], format: ["offline"] },
+      { ...DOCTOR_EMPTY, matching },
+    );
+    expect(asked).toEqual([
+      { specialty: undefined, format: ["offline"] },
+      { specialty: ["osteopathy"], format: undefined },
+    ]);
+    expect(state.title).toBe("Нет событий по фильтру «Формат: Офлайн»");
+    expect(state.description).toBe("Без этого фильтра найдётся 3 события.");
+    expect(state.widen).toEqual({
+      label: "Убрать фильтр «Формат: Офлайн»",
+      href: "/events?specialty=osteopathy",
+    });
+    expect(JSON.stringify(state)).not.toMatch(/смежн/);
   });
 
   it("EARS-9: a picked specialty is named «Специальность: <name>» by the first picked specialty (canvas facetChips)", async () => {

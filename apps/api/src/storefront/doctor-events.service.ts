@@ -385,6 +385,8 @@ export class DoctorEventsService {
     /** The authenticated subject, absent for a guest. */
     sub?: string | undefined;
   }): Promise<EventsLiveRead> {
+    // The strip reads «моя и смежные» whatever scope the page applies — the
+    // LD-9 fall-back to every specialty included, like any applied scope.
     const targeting = await this.resolveTargeting(
       { specialty: "mine-and-adjacent" },
       input.specialtyReference,
@@ -400,21 +402,59 @@ export class DoctorEventsService {
     });
   }
 
+  /**
+   * The read's targeting. `defaultScopeEmpty` describes the VISITOR, not the
+   * query (019 LD-9 / EARS-9): whether the visitor's default «Моя и смежные»
+   * — own directions plus adjacent ones — holds no upcoming doctors event. It
+   * is reported on every read, whatever scope the URL names, so the page knows
+   * this visitor's default scope. Only an ABSENT `specialty` — the default
+   * «Моя и смежные» — falls back to every specialty on it; an explicit
+   * `specialty` (`mine-and-adjacent` included) is never replaced.
+   */
   private async resolveTargeting(
     query: Pick<DoctorEventsFeedQuery, "specialty">,
     remembered: string | null,
   ): Promise<DoctorEventsFeedTargeting> {
-    if (query.specialty === "all") {
+    const own = await this.resolveScope("mine-and-adjacent", remembered);
+    const defaultScopeEmpty =
+      own.mode !== "all" &&
+      !(await this.repository.hasUpcomingEventOn([
+        ...own.directionIds,
+        ...own.adjacentDirectionIds,
+      ]));
+    if (query.specialty === undefined) {
+      if (!defaultScopeEmpty) return own;
+      return {
+        mode: "all",
+        specialtyReference: own.specialtyReference,
+        directionIds: [],
+        adjacentDirectionIds: [],
+        defaultScopeEmpty: true,
+      };
+    }
+    const targeting =
+      query.specialty === "mine-and-adjacent"
+        ? own
+        : await this.resolveScope(query.specialty, remembered);
+    return { ...targeting, defaultScopeEmpty };
+  }
+
+  private async resolveScope(
+    specialty: NonNullable<DoctorEventsFeedQuery["specialty"]>,
+    remembered: string | null,
+  ): Promise<DoctorEventsFeedTargeting> {
+    if (specialty === "all") {
       return {
         mode: "all",
         specialtyReference: null,
         directionIds: [],
         adjacentDirectionIds: [],
+        defaultScopeEmpty: false,
       };
     }
 
-    const references = Array.isArray(query.specialty)
-      ? query.specialty
+    const references = Array.isArray(specialty)
+      ? specialty
       : remembered === null
         ? []
         : [remembered];
@@ -428,6 +468,7 @@ export class DoctorEventsService {
         specialtyReference: null,
         directionIds: [],
         adjacentDirectionIds: [],
+        defaultScopeEmpty: false,
       };
     }
 
@@ -450,7 +491,7 @@ export class DoctorEventsService {
       for (const direction of set.directions) directionIds.add(direction.id);
       // An explicit `specialty=<ids>` pick is the doctor asking for THOSE
       // specialties; the adjacency widening belongs to «моя и смежные».
-      if (!Array.isArray(query.specialty)) {
+      if (!Array.isArray(specialty)) {
         for (const direction of set.adjacentDirections) {
           adjacentDirectionIds.add(direction.id);
         }
@@ -466,6 +507,7 @@ export class DoctorEventsService {
         specialtyReference: null,
         directionIds: [],
         adjacentDirectionIds: [],
+        defaultScopeEmpty: false,
       };
     }
 
@@ -473,11 +515,12 @@ export class DoctorEventsService {
 
     return {
       mode,
-      specialtyReference: Array.isArray(query.specialty)
-        ? query.specialty.join(",")
+      specialtyReference: Array.isArray(specialty)
+        ? specialty.join(",")
         : remembered,
       directionIds: [...directionIds],
       adjacentDirectionIds: [...adjacentDirectionIds],
+      defaultScopeEmpty: false,
     };
   }
 

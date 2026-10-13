@@ -27,6 +27,7 @@ import type { PluralNoun } from "../model/event-count";
 import {
   type SpecialtyChoice,
   appliedFacetsOf,
+  defaultSpecialtyScopeOf,
   filterOptionsOf,
   resetFacetsHref,
   filterLabelsOf,
@@ -45,6 +46,8 @@ export interface FacetPanelProps {
   optionBlock: FeedFacetOptions;
   /** The specialty book the options were named from. */
   specialties: readonly SpecialtyChoice[];
+  /** The feed read's LD-9 signal: the absent scope reads as «Все специальности». */
+  defaultScopeEmpty?: boolean;
 }
 
 /**
@@ -57,16 +60,19 @@ function useFacetSource({
   options,
   optionBlock,
   specialties,
+  defaultScopeEmpty = false,
 }: FacetPanelProps): Pick<FacetPanelProps, "options" | "optionBlock"> & {
   recoveredMatching: number | null;
+  defaultScopeEmpty: boolean;
 } {
   const recovered = useRecoveredFeedRead();
   if (recovered === null)
-    return { options, optionBlock, recoveredMatching: null };
+    return { options, optionBlock, recoveredMatching: null, defaultScopeEmpty };
   return {
     options: filterOptionsOf(filterSet, recovered.facetOptions, specialties),
     optionBlock: recovered.facetOptions,
     recoveredMatching: recovered.matching,
+    defaultScopeEmpty: recovered.defaultScopeEmpty === true,
   };
 }
 
@@ -81,12 +87,14 @@ export function FacetPanel({
   ...panel
 }: FacetPanelProps & { showHeader?: boolean }) {
   const { filterSet, listing, raw } = panel;
-  const { options, optionBlock } = useFacetSource(panel);
+  const { options, optionBlock, defaultScopeEmpty } = useFacetSource(panel);
   const router = useRouter();
   const specialty = options.specialty ?? [];
+  const scopeDefault = { defaultScopeEmpty };
   const applied = appliedFacetsOf(
     raw,
     (id) => specialty.find((option) => option.id === id)?.label,
+    scopeDefault,
   );
   return (
     <EventsFilter
@@ -95,13 +103,17 @@ export function FacetPanel({
       options={options}
       labels={filterLabelsOf(filterSet, optionBlock)}
       showHeader={showHeader}
+      // LD-9: under the fall-back «Все специальности» is this visitor's
+      // default — selected, never counted, nothing to reset on its own.
+      defaultSpecialtyScope={defaultSpecialtyScopeOf(scopeDefault)}
       resetHref={resetFacetsHref(listing, raw, filterSet)}
       onChange={(next) =>
         router.push(
-          pageHref(listing, withAppliedFacets(raw, next, filterSet)),
-          {
-            scroll: false,
-          },
+          pageHref(
+            listing,
+            withAppliedFacets(raw, next, filterSet, scopeDefault),
+          ),
+          { scroll: false },
         )
       }
     />
@@ -118,11 +130,14 @@ export function FacetSheet({
   noun,
   ...panel
 }: FacetPanelProps & { matching: number | null; noun: PluralNoun }) {
+  const source = useFacetSource(panel);
+  const scopeDefault = { defaultScopeEmpty: source.defaultScopeEmpty };
   const applied = countAppliedFacets(
-    appliedFacetsOf(panel.raw),
+    appliedFacetsOf(panel.raw, undefined, scopeDefault),
     panel.filterSet,
+    { defaultSpecialtyScope: defaultSpecialtyScopeOf(scopeDefault) },
   );
-  const shown = useFacetSource(panel).recoveredMatching ?? matching;
+  const shown = source.recoveredMatching ?? matching;
   return (
     <Sheet>
       <SheetTrigger asChild>

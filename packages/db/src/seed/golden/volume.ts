@@ -90,6 +90,10 @@ import {
   GOLDEN_EMPTY_DIRECTION_ADJACENCY,
   GOLDEN_EMPTY_SPECIALTY,
   GOLDEN_EMPTY_SPECIALTY_FORMER_DIRECTION,
+  GOLDEN_EMPTY_SCOPE_DIRECTION,
+  GOLDEN_EMPTY_SCOPE_DIRECTION_ADJACENCY,
+  GOLDEN_EMPTY_SCOPE_SPECIALTY,
+  GOLDEN_EMPTY_SCOPE_SPECIALTY_FORMER_DIRECTION,
   GOLDEN_PARTNERS,
   GOLDEN_PUBLISHED_DIRECTIONS,
   publishedDirectionIndexOfSpecialty,
@@ -1197,13 +1201,17 @@ function buildDirectionSpecialties(at: At): GoldenDirectionSpecialtyLink[] {
   };
 
   GOLDEN_DIRECTIONS.forEach((spec, i) => {
-    // #2836: the empty direction's link is appended after every list below.
-    if (spec === GOLDEN_EMPTY_DIRECTION) return;
+    // #2836 / #2871: the empty directions' links are appended after every
+    // list below.
+    if (spec === GOLDEN_EMPTY_DIRECTION || spec === GOLDEN_EMPTY_SCOPE_DIRECTION)
+      return;
     for (const name of spec.specialties) {
-      // The partition link the editor retired when the empty specialty moved.
+      // The partition links the editor retired when the empty specialties moved.
       const moved =
-        spec.slug === GOLDEN_EMPTY_SPECIALTY_FORMER_DIRECTION &&
-        name === GOLDEN_EMPTY_SPECIALTY;
+        (spec.slug === GOLDEN_EMPTY_SPECIALTY_FORMER_DIRECTION &&
+          name === GOLDEN_EMPTY_SPECIALTY) ||
+        (spec.slug === GOLDEN_EMPTY_SCOPE_SPECIALTY_FORMER_DIRECTION &&
+          name === GOLDEN_EMPTY_SCOPE_SPECIALTY);
       push(i, name, moved);
     }
   });
@@ -1215,6 +1223,9 @@ function buildDirectionSpecialties(at: At): GoldenDirectionSpecialtyLink[] {
   }
   for (const name of GOLDEN_EMPTY_DIRECTION.specialties) {
     push(directionIndexOf(GOLDEN_EMPTY_DIRECTION.slug), name, false);
+  }
+  for (const name of GOLDEN_EMPTY_SCOPE_DIRECTION.specialties) {
+    push(directionIndexOf(GOLDEN_EMPTY_SCOPE_DIRECTION.slug), name, false);
   }
   return rows;
 }
@@ -1245,6 +1256,7 @@ function buildDirectionAdjacency(at: At): NewDirectionAdjacency[] {
   for (const edge of GOLDEN_ADJACENCY) push(edge, false);
   for (const edge of GOLDEN_ADJACENCY_RETIRED) push(edge, true);
   for (const edge of GOLDEN_EMPTY_DIRECTION_ADJACENCY) push(edge, false);
+  for (const edge of GOLDEN_EMPTY_SCOPE_DIRECTION_ADJACENCY) push(edge, false);
   return rows;
 }
 

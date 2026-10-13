@@ -24,7 +24,14 @@ export const DOCTOR_EVENTS_STOREFRONT = {
   filterSet: "doctor",
   headerCopy: {
     title: "События",
-    subline: "События по вашей специальности и смежным",
+    // 019 LD-9 (#2871): the line follows the applied specialty scope.
+    subline: {
+      byScope: {
+        mineAndAdjacent: "События по вашей специальности и смежным",
+        all: "События по всем специальностям",
+        picked: "События по выбранным специальностям",
+      },
+    },
   },
   routes: {
     listing: "/events",

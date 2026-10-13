@@ -118,5 +118,6 @@ export const adaptDoctorEventsFeed: EventsStorefrontAdapter = (dto) => {
     nextBatch: feed.nextBatch,
     facetOptions: feed.facets ?? {},
     matching: cards.length + feed.remaining,
+    defaultScopeEmpty: feed.targeting.defaultScopeEmpty,
   };
 };

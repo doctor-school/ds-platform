@@ -100,6 +100,12 @@ export interface EventsFeedPage {
   readonly facetOptions: FeedFacetOptions;
   /** The events this reading matches — the page plus the rest of its reach («Показать N», row 60). */
   readonly matching: number;
+  /**
+   * 019 LD-9 / EARS-9 (doctor host) — the doctor's default «Моя и смежные»
+   * (own plus adjacent areas) has no upcoming event. A fact about the visitor, reported on every read whatever
+   * scope the URL names: this visitor's default scope is «Все специальности».
+   */
+  readonly defaultScopeEmpty?: boolean;
 }
 
 /** One facet option: the URL value, its title and its count under the other facets. */
@@ -399,11 +405,24 @@ interface EmptyFeedChip {
   readonly specialty?: true;
 }
 
+/** One widen read: the events it matches, and whether it fell back (LD-9). */
+export interface WidenRead {
+  readonly matching: number;
+  /**
+   * The doctor's default «Моя и смежные» is empty (019 LD-9) — reported on every read.
+   * For a specialty chip's widen read, whose `without` drops the scope
+   * entirely, it means that read fell back to every specialty.
+   */
+  readonly defaultScopeEmpty?: boolean;
+}
+
 /**
- * Counts the events of the query's tense, over its whole reach, under `without`
+ * Reads the events of the query's tense, over its whole reach, under `without`
  * — `null` when the read failed (that condition is then passed over).
  */
-export type WidenMatching = (without: RawQueryRecord) => Promise<number | null>;
+export type WidenMatching = (
+  without: RawQueryRecord,
+) => Promise<WidenRead | null>;
 
 /**
  * The empty feed (019 EARS-9, LD-9; canvas `events-feed-kit.js` `K.empty`): the
@@ -411,7 +430,8 @@ export type WidenMatching = (without: RawQueryRecord) => Promise<number | null>;
  * picked specialty list, format, kind, city, НМО, project, expert, the search —
  * each asked in turn how many events of the tense its removal finds; the first
  * that finds any is named with that count and its removal offered (a picked
- * specialty widens to the adjacent ones). When none does, the state says so
+ * specialty widens to the adjacent ones — unless its removal falls back to
+ * every specialty, LD-9: then it is passed over for the next facet). When none does, the state says so
  * and offers no widening. Either way it offers «Сбросить фильтры» — the page
  * without the host's facets (canvas `emptyOf`). Facet values are named by the
  * read's titles, a picked specialty by the specialty book. Only the host's own
@@ -435,6 +455,7 @@ export async function emptyFeedState(
     titles = {},
     specialtyName = () => undefined,
     matching,
+    defaultScopeEmpty = false,
   }: {
     listing: string;
     noun: PluralNoun;
@@ -446,10 +467,13 @@ export async function emptyFeedState(
     /** A picked specialty's name from the specialty book, by its code. */
     specialtyName?: (code: string) => string | undefined;
     matching: WidenMatching;
+    /** The page read's LD-9 fact: this visitor's default scope is «Все специальности». */
+    defaultScopeEmpty?: boolean;
   },
 ): Promise<EmptyFeedState> {
-  if (!hasAppliedFacets(query, filterSet))
+  if (!hasAppliedFacets(query, filterSet, { defaultScopeEmpty })) {
     return plainEmptyFeedState(noun, copy);
+  }
 
   const own = new Set(FACET_KEYS[filterSet]);
   const titleOf = (key: string, value: string) =>
@@ -521,11 +545,16 @@ export async function emptyFeedState(
     label: copy.feed.resetFilters,
     href: resetFacetsHref(listing, query, filterSet),
   };
-  // One widen read at a time, stopping at the first that finds events.
+  // One widen read at a time, stopping at the first that finds events. A
+  // picked specialty whose removal falls back to every specialty (LD-9) has
+  // no adjacent areas to offer, so it is passed over for the next facet. The
+  // read's `defaultScopeEmpty` says so only because the specialty chip's
+  // `without` drops the scope entirely (an absent scope is what falls back).
   for (const chip of chips.slice(0, MAX_WIDEN_READS)) {
-    const found = await matching(chip.without);
-    if (found === null || found <= 0) continue;
-    const count = formatEventCount(found, noun);
+    const read = await matching(chip.without);
+    if (read === null || read.matching <= 0) continue;
+    if (chip.specialty && read.defaultScopeEmpty === true) continue;
+    const count = formatEventCount(read.matching, noun);
     return {
       title: copy.feed.emptyByFacet(noun.many, chip.label),
       description: chip.specialty

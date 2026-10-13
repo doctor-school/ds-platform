@@ -105,6 +105,12 @@ export type DoctorEventsFeedSpecialtyMode = z.infer<
   typeof DoctorEventsFeedSpecialtyModeSchema
 >;
 
+/** A `specialty` value: a mode word or an explicit list of specialty references. */
+export const DoctorEventsFeedSpecialtySchema = z.union([
+  DoctorEventsFeedSpecialtyModeSchema,
+  z.array(z.string().min(1)).min(1),
+]);
+
 /**
  * Both tenses page by COUNT, not by days (019 LD-2): the default screen is
  * this many events nearest today — «Будущие» the soonest upcoming ones,
@@ -132,12 +138,13 @@ export const DoctorEventsFeedQuerySchema = z
      * malformed value is a 400 at the boundary, never a database error.
      */
     kind: z.array(SlugSchema).default([]),
-    specialty: z
-      .union([
-        DoctorEventsFeedSpecialtyModeSchema,
-        z.array(z.string().min(1)).min(1),
-      ])
-      .default("mine-and-adjacent"),
+    /**
+     * Absent = the DEFAULT scope, which the server resolves (019 LD-9):
+     * «Моя и смежные», or every specialty when that default scope (own plus
+     * adjacent areas) has no upcoming event. An explicit value — `mine-and-adjacent` included —
+     * always wins over that fallback, so the absence is kept, not defaulted.
+     */
+    specialty: DoctorEventsFeedSpecialtySchema.optional(),
     city: z.array(z.string().min(1)).default([]),
     nmo: z.boolean().optional(),
     free: z.boolean().optional(),
@@ -169,6 +176,15 @@ export const DoctorEventsFeedTargetingSchema = z
     directionIds: z.array(z.string()),
     /** Empty exactly when the specialty has no active adjacency rows (@EARS-3 @failure). */
     adjacentDirectionIds: z.array(z.string()),
+    /**
+     * 019 LD-9 / EARS-9 — `true` exactly when the viewer's default «Моя и
+     * смежные» scope — own plus adjacent areas — has no upcoming event. It describes the viewer, not the query, so every read
+     * reports it whatever scope the URL names: the page's default scope for
+     * this viewer is then «Все специальности» (selected, not counted), and an
+     * explicit «Моя и смежные» is a counted narrowing. Only a read naming no
+     * `specialty` falls back to every specialty on it (`mode: "all"`).
+     */
+    defaultScopeEmpty: z.boolean().default(false),
   })
   .strict();
 export type DoctorEventsFeedTargeting = z.infer<
@@ -253,8 +269,9 @@ export type DoctorEventsFeed = z.infer<typeof DoctorEventsFeedSchema>;
  * The grammar — repeatable-parameter spelling, boolean spelling, drop-unknown,
  * the deterministic key order — lives in `event-listing-query.schema.ts` and is
  * shared. What stays HERE is only this host's vocabulary and defaults: which
- * keys exist, what each takes, and that a missing `tense` means `upcoming` and
- * a missing `specialty` means `mine-and-adjacent`. The field table below is
+ * keys exist, what each takes, and that a missing `tense` means `upcoming`; a
+ * missing `specialty` stays missing — the server resolves the default scope
+ * (019 LD-9). The field table below is
  * ordered, and that order IS the URL's key order.
  */
 /** The doctor codec's field table — its order IS the URL's key order. */

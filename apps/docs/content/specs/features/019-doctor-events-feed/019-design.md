@@ -94,14 +94,14 @@ graph LR
 
 | Surface       | обычно           | загрузка       | пусто по фасетам             | пусто по специальности       | ошибка                       | нет живого эфира     |
 | ------------- | ---------------- | -------------- | ---------------------------- | ---------------------------- | ---------------------------- | -------------------- |
-| Day feed      | day groups       | feed skeleton  | narrowest facet + weakening  | adjacent areas offered       | RU cause + retry (this read) | n/a                  |
-| Month grid    | day counts       | grid skeleton  | empty month, facets retained | adjacent areas offered       | RU cause + retry             | no live markers      |
+| Day feed      | day groups       | feed skeleton  | narrowest facet + weakening  | «Все специальности» applied  | RU cause + retry (this read) | n/a                  |
+| Month grid    | day counts       | grid skeleton  | empty month, facets retained | «Все специальности» applied  | RU cause + retry             | no live markers      |
 | Calendar page | month as body    | grid skeleton  | same as month grid           | same as month grid           | RU cause + retry             | no live markers      |
 | Live block    | LIVE + presence  | not rendered   | n/a                          | n/a                          | not rendered                 | **absent from tree** |
-| Facet panel   | facets + applied | panel skeleton | applied + reset stay visible | applied + reset stay visible | panel stays operable         | n/a                  |
+| Facet panel   | facets + applied | panel skeleton | applied + reset stay visible | «Все специальности» selected | panel stays operable         | n/a                  |
 | «Мои события» | short cut        | cut skeleton   | «пока ничего» statement      | «пока ничего» statement      | RU cause + retry             | n/a                  |
 
-The two empty reasons are distinct renders (LD-9): a doctor in a rare specialty is never told to loosen a facet they did not set.
+An empty default scope is not an empty render (LD-9): every read reports whether the doctor's default «Моя и смежные» — own plus adjacent directions — has no upcoming doctors-audience event (`targeting.defaultScopeEmpty`, whatever scope the URL names; one existence probe over those directions, upcoming states only); a doctor whose own specialty is empty but whose adjacent areas carry events keeps «Моя и смежные»; a read naming no scope then resolves the default to every specialty, and the screen is the ordinary feed with «Все специальности» as this visitor's default — selected in the facet panel, counted neither in «Применено: N» nor in «Фильтры (N)», and «Сбросить» shown only for a facet beyond it (`EventsFilter` `defaultSpecialtyScope`). In the no-match state a picked specialty whose removal falls back this way is passed over — no «Показать смежные специальности» — and the next applied facet is weakened. An explicit scope in the URL wins: an explicit «Все специальности» is this visitor's default (uncounted, left out of the URL), an explicit «Моя и смежные» a counted narrowing kept in the URL across other facet changes. A doctor in a rare specialty is never shown an empty feed nor told to loosen a facet they did not set.
 
 ## 4. Live-block resolution (LD-6, EARS-6)
 

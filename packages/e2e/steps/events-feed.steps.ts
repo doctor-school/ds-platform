@@ -1,5 +1,14 @@
-import { expect, type Locator, type Page, type Request } from "@playwright/test";
-import { golden } from "@ds/db/seed/golden";
+import {
+  expect,
+  type Locator,
+  type Page,
+  type Request,
+} from "@playwright/test";
+import {
+  GOLDEN_EMPTY_SCOPE_SPECIALTY,
+  GOLDEN_EMPTY_SPECIALTY,
+  golden,
+} from "@ds/db/seed/golden";
 
 import {
   ADMIN_ORIGIN,
@@ -635,6 +644,199 @@ Then("no facet is applied and the URL carries none", async ({ page }) => {
   await expect(feedCards(page).first()).toBeVisible();
 });
 
+// ── EARS-9 / LD-9: a specialty with no events falls back to every specialty ──
+
+/** The specialty-scope options of the facet panel (019 LD-1 row 59). */
+function scopeOption(page: Page, name: string): Locator {
+  return filterPanel(page).getByRole("button", { name, exact: true });
+}
+
+/**
+ * The guest `ChooseSpecialty` command, issued in-page on the storefront origin
+ * so the api's `__Host-ds_specialty` cookie lands in this browser exactly as the
+ * home catalog's choice would (017 EARS-6). The specialty is resolved through
+ * the book search by its golden name, never typed as an id.
+ */
+async function chooseGoldenSpecialty(
+  page: Page,
+  eventsPath: string,
+  name: string,
+): Promise<void> {
+  await page.goto(eventsPath, { waitUntil: "domcontentloaded" });
+  const chosen = await page.evaluate(async (wanted: string) => {
+    const search = await fetch(
+      `/v1/public/specialties/search?q=${encodeURIComponent(wanted)}`,
+    );
+    if (!search.ok) return `search ${search.status}`;
+    const { entries } = (await search.json()) as {
+      entries: { id: string; name: string }[];
+    };
+    const entry = entries.find((candidate) => candidate.name === wanted);
+    if (!entry) return `no book entry named ${wanted}`;
+    const choice = await fetch("/v1/public/specialty-choice", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": crypto.randomUUID(),
+      },
+      body: JSON.stringify({ specialty: entry.id }),
+    });
+    if (!choice.ok) return `choose ${choice.status}`;
+    const body = (await choice.json()) as {
+      specialty: { name: string } | null;
+    };
+    return body.specialty?.name ?? "nothing remembered";
+  }, name);
+  expect(chosen, "the guest choice is remembered").toBe(name);
+}
+
+/**
+ * The golden specialty whose default «Моя и смежные» is empty (#2871): its own
+ * direction and its one adjacent direction carry no эфиры.
+ */
+Given(
+  "the {word} has chosen the golden specialty whose «Моя и смежные» has no events",
+  async ({ page, host }, _actor: string) => {
+    await chooseGoldenSpecialty(
+      page,
+      host.eventsPath,
+      GOLDEN_EMPTY_SCOPE_SPECIALTY,
+    );
+  },
+);
+
+/**
+ * The golden specialty whose own direction has no эфиры while its managed
+ * adjacency leads to directions that do (#2836).
+ */
+Given(
+  "the {word} has chosen the golden specialty with no events of its own",
+  async ({ page, host }, _actor: string) => {
+    await chooseGoldenSpecialty(page, host.eventsPath, GOLDEN_EMPTY_SPECIALTY);
+  },
+);
+
+Then(
+  "the facet panel shows the specialty scope «Моя и смежные» selected as the default and states no applied count",
+  async ({ page }) => {
+    await expect(scopeOption(page, "Моя и смежные")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(scopeOption(page, "Все специальности")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await expect(filterPanel(page)).not.toContainText("Применено");
+  },
+);
+
+Then("the feed lists events of the adjacent areas", async ({ page }) => {
+  // The chosen specialty's own direction carries no эфиры (#2836), so every
+  // card «Моя и смежные» lists comes from an adjacent area.
+  await expect(feedCards(page).first()).toBeVisible();
+  await expect(page.getByTestId("events-feed")).not.toContainText(
+    "Нет событий",
+  );
+});
+
+Then(
+  "the facet panel shows the specialty scope «Все специальности» selected as the default and states no applied count",
+  async ({ page }) => {
+    await expect(scopeOption(page, "Все специальности")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(scopeOption(page, "Моя и смежные")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await expect(filterPanel(page)).not.toContainText("Применено");
+  },
+);
+
+Then(
+  "the URL carries no specialty facet and the panel offers no «Сбросить»",
+  async ({ page }) => {
+    const query = params(page);
+    for (const name of FACET_PARAMS) expect(query.has(name), name).toBe(false);
+    await expect(
+      filterPanel(page).getByRole("link", { name: "Сбросить", exact: true }),
+    ).toHaveCount(0);
+  },
+);
+
+Then("the feed lists events of other specialties", async ({ page }) => {
+  // The chosen specialty's «Моя и смежные» carries no эфиры (#2871), so
+  // every card the fall-back lists belongs to another specialty.
+  await expect(feedCards(page).first()).toBeVisible();
+  await expect(page.getByTestId("events-feed")).not.toContainText(
+    "Нет событий",
+  );
+});
+
+When(
+  "the {word} picks the specialty scope «Моя и смежные» in the facet panel",
+  async ({ page }, _actor: string) => {
+    await scopeOption(page, "Моя и смежные").click();
+    await page.waitForURL(
+      (url) => url.searchParams.get("specialty") === "mine-and-adjacent",
+    );
+    await settle(page);
+  },
+);
+
+Then(
+  "the URL carries the specialty scope «Моя и смежные» and the panel shows it selected and counted with «Сбросить»",
+  async ({ page }) => {
+    expect(params(page).get("specialty")).toBe("mine-and-adjacent");
+    await expect(scopeOption(page, "Моя и смежные")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(scopeOption(page, "Все специальности")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    // «Все специальности» is this visitor's default (LD-9), so the pick is a
+    // narrowing: counted, with the reset back to the default.
+    await expect(filterPanel(page)).toContainText("Применено: 1");
+    await expect(
+      filterPanel(page).getByRole("link", { name: "Сбросить", exact: true }),
+    ).toBeVisible();
+  },
+);
+
+When(
+  "the {word} applies the format «Онлайн» in the facet panel while the feed is empty",
+  async ({ page }, _actor: string) => {
+    // The picked «Моя и смежные» of this golden specialty holds no event in
+    // any format (019 LD-9), so the read stays on the empty state.
+    await filterPanel(page)
+      .getByRole("group", { name: "Формат" })
+      .getByRole("button", { name: "Онлайн", exact: true })
+      .click();
+    await page.waitForURL((url) =>
+      url.searchParams.getAll("format").includes("online"),
+    );
+    await expect(emptyFeed(page)).toBeVisible();
+  },
+);
+
+Then(
+  "the URL keeps the specialty scope «Моя и смежные» beside the format «Онлайн» and the panel states «Применено: 2»",
+  async ({ page }) => {
+    const query = params(page);
+    expect(query.get("specialty")).toBe("mine-and-adjacent");
+    expect(query.getAll("format")).toEqual(["online"]);
+    await expect(scopeOption(page, "Моя и смежные")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(filterPanel(page)).toContainText("Применено: 2");
+  },
+);
+
 // ── EARS-8: the URL is the state ────────────────────────────────────────────
 
 When(
@@ -1255,7 +1457,9 @@ Then(
       '"events-feed-subline-counts"',
       '"events-live-block"',
     ]) {
-      expect(retry.answer, `the answer carries no ${other}`).not.toContain(other);
+      expect(retry.answer, `the answer carries no ${other}`).not.toContain(
+        other,
+      );
     }
   },
 );
@@ -1272,7 +1476,8 @@ Then(
         await page
           .getByTestId(id)
           .evaluate(
-            (el, key) => (el as unknown as Record<string, boolean>)[key] === true,
+            (el, key) =>
+              (el as unknown as Record<string, boolean>)[key] === true,
             UNTOUCHED,
           ),
         `${id} was not re-rendered`,

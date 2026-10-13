@@ -54,7 +54,12 @@ import {
   type EventsBlockRetryInput,
   renderEventsBlock,
 } from "./events-block-retry";
-import { CountedSubline, FeedSection, MyEventsSection } from "./feed-sections";
+import {
+  CountedSubline,
+  FeedSection,
+  MyEventsSection,
+  ScopedSubline,
+} from "./feed-sections";
 import { FeedReadScope } from "./feed-read-scope";
 import { FacetColumn } from "./events-listing-page";
 import { MonthView } from "./month-view";
@@ -71,7 +76,10 @@ const DOCTOR: EventsStorefrontHostConfig = {
     countsPath: "/v1/storefront/doctor/events/month-counts",
     adapt: adaptDoctorEventsFeed,
   },
-  headerCopy: { title: "События", subline: "События по вашей специальности и смежным" },
+  headerCopy: {
+    title: "События",
+    subline: "События по вашей специальности и смежным",
+  },
   routes: {
     listing: "/events",
     eventPage: "/events",
@@ -99,7 +107,12 @@ const PAGE: EventsFeedPage = {
     },
   ],
   today: "2026-10-08",
-  horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05", nextFrom: null },
+  horizon: {
+    from: "2026-10-08",
+    to: "2026-10-22",
+    nextTo: "2026-11-05",
+    nextFrom: null,
+  },
   remaining: 0,
   nextBatch: 0,
 };
@@ -164,7 +177,12 @@ describe("renderEventsBlock — one block's read, one block's render (#2832)", (
       </>,
     );
     expect(calledReads()).toEqual(["monthEntries"]);
-    expect(mocks.fetchMonthEntries).toHaveBeenCalledWith(DOCTOR, raw, "2026-10", ACTION_REQUEST);
+    expect(mocks.fetchMonthEntries).toHaveBeenCalledWith(
+      DOCTOR,
+      raw,
+      "2026-10",
+      ACTION_REQUEST,
+    );
     expect(screen.getByTestId("month-grid-desktop")).toBeInTheDocument();
     expect(screen.queryByTestId("events-month-error")).toBeNull();
     expect(screen.queryByTestId("month-toolbar")).toBeNull();
@@ -182,8 +200,14 @@ describe("renderEventsBlock — one block's read, one block's render (#2832)", (
       </>,
     );
     expect(calledReads()).toEqual(["feed"]);
-    expect(mocks.fetchEventsFeed).toHaveBeenCalledWith(DOCTOR, {}, ACTION_REQUEST);
-    expect(screen.getByTestId("events-feed")).toHaveTextContent("Клинический разбор");
+    expect(mocks.fetchEventsFeed).toHaveBeenCalledWith(
+      DOCTOR,
+      {},
+      ACTION_REQUEST,
+    );
+    expect(screen.getByTestId("events-feed")).toHaveTextContent(
+      "Клинический разбор",
+    );
   });
 
   it("EARS-9: a «Мои события» retry re-runs only the viewer's registrations read", async () => {
@@ -227,7 +251,9 @@ describe("«Повторить» in a failed block (#2832)", () => {
 
     vi.clearAllMocks();
     mocks.fetchMonthEntries.mockResolvedValue({ ok: true, value: [] });
-    await userEvent.click(within(error).getByRole("button", { name: "Повторить" }));
+    await userEvent.click(
+      within(error).getByRole("button", { name: "Повторить" }),
+    );
 
     expect(await screen.findByTestId("month-grid-desktop")).toBeInTheDocument();
     expect(screen.queryByTestId("events-month-error")).toBeNull();
@@ -239,6 +265,8 @@ describe("«Повторить» in a failed block (#2832)", () => {
       today: "2026-10-08",
       horizon: PAGE.horizon,
       facetOptions: {},
+      // 019 LD-9 — the page read's fall-back signal rides the retry as data.
+      defaultScopeEmpty: false,
     });
     expect(calledReads()).toEqual(["monthEntries"]);
     expect(mocks.refresh).not.toHaveBeenCalled();
@@ -305,19 +333,34 @@ describe("«Повторить» in a failed block (#2832)", () => {
       </>,
     );
     const error = screen.getByTestId("events-feed-error");
-    await userEvent.click(within(error).getByRole("button", { name: "Повторить" }));
+    await userEvent.click(
+      within(error).getByRole("button", { name: "Повторить" }),
+    );
 
-    expect(await screen.findByTestId("events-feed")).toHaveTextContent("Клинический разбор");
-    expect(action).toHaveBeenCalledWith({ block: "feed", raw: {}, registeredSlugs: ["e-1"] });
+    expect(await screen.findByTestId("events-feed")).toHaveTextContent(
+      "Клинический разбор",
+    );
+    expect(action).toHaveBeenCalledWith({
+      block: "feed",
+      raw: {},
+      registeredSlugs: ["e-1"],
+    });
     expect(calledReads()).toEqual(["feed"]);
     expect(mocks.refresh).not.toHaveBeenCalled();
-    expect(screen.getByTestId("events-my-events")).toHaveTextContent("Моё событие");
+    expect(screen.getByTestId("events-my-events")).toHaveTextContent(
+      "Моё событие",
+    );
   });
 
   it("EARS-9: a recovered day feed fills what the page derives from the feed read — «Вид события», the subline — from the retried read, with no other read", async () => {
     const action = hostAction();
     const failed = Promise.resolve({ ok: false as const });
-    const panel = { config: DOCTOR, raw: {}, feed: failed, specialties: NO_SPECIALTIES };
+    const panel = {
+      config: DOCTOR,
+      raw: {},
+      feed: failed,
+      specialties: NO_SPECIALTIES,
+    };
     render(
       <FeedReadScope>
         {await CountedSubline({
@@ -345,17 +388,23 @@ describe("«Повторить» in a failed block (#2832)", () => {
       ok: true,
       value: {
         ...PAGE,
-        facetOptions: { kind: [{ slug: "webinar", title: "Вебинар", count: 3 }] },
+        facetOptions: {
+          kind: [{ slug: "webinar", title: "Вебинар", count: 3 }],
+        },
         summary: { events: 5, schools: 2 },
       },
     });
     await userEvent.click(
-      within(screen.getByTestId("events-feed-error")).getByRole("button", { name: "Повторить" }),
+      within(screen.getByTestId("events-feed-error")).getByRole("button", {
+        name: "Повторить",
+      }),
     );
 
     expect(await screen.findByTestId("events-feed")).toBeInTheDocument();
     const kind = await screen.findByRole("group", { name: "Вид события" });
-    expect(within(kind).getByRole("button", { name: "Вебинар" })).toBeInTheDocument();
+    expect(
+      within(kind).getByRole("button", { name: "Вебинар" }),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("events-feed-subline-counts")).toHaveTextContent(
       "5 событий · 2 школы",
     );
@@ -364,10 +413,70 @@ describe("«Повторить» in a failed block (#2832)", () => {
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
+  it("EARS-9: a recovered feed read that fell back to every specialty selects «Все специальности» and states its line (019 LD-9, #2871)", async () => {
+    const action = hostAction();
+    const failed = Promise.resolve({ ok: false as const });
+    render(
+      <FeedReadScope>
+        {await ScopedSubline({
+          feed: failed,
+          raw: {},
+          byScope: {
+            mineAndAdjacent: "line-mine",
+            all: "line-all",
+            picked: "line-picked",
+          },
+        })}
+        {await FacetColumn({
+          config: DOCTOR,
+          raw: {},
+          feed: failed,
+          specialties: NO_SPECIALTIES,
+        })}
+        {await FeedSection({
+          config: DOCTOR,
+          query: {},
+          feed: failed,
+          mine: Promise.resolve({ ok: true as const, value: null }),
+          specialties: NO_SPECIALTIES,
+          request: REQUEST,
+          retry: action,
+        })}
+      </FeedReadScope>,
+    );
+    expect(screen.getByTestId("events-feed-subline-scope")).toHaveTextContent(
+      "line-mine",
+    );
+
+    mocks.fetchEventsFeed.mockResolvedValue({
+      ok: true,
+      value: { ...PAGE, defaultScopeEmpty: true },
+    });
+    await userEvent.click(
+      within(screen.getByTestId("events-feed-error")).getByRole("button", {
+        name: "Повторить",
+      }),
+    );
+
+    expect(await screen.findByTestId("events-feed")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Все специальности" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText(/Применено/)).toBeNull();
+    expect(screen.getByTestId("events-feed-subline-scope")).toHaveTextContent(
+      "line-all",
+    );
+  });
+
   it("EARS-9: a page the server renders again drops the recovered feed read for its own", async () => {
     const action = hostAction();
     const failed = Promise.resolve({ ok: false as const });
-    const panel = { config: DOCTOR, raw: {}, feed: failed, specialties: NO_SPECIALTIES };
+    const panel = {
+      config: DOCTOR,
+      raw: {},
+      feed: failed,
+      specialties: NO_SPECIALTIES,
+    };
     const page = async () => (
       <FeedReadScope>
         {await FacetColumn(panel)}
@@ -385,12 +494,21 @@ describe("«Повторить» in a failed block (#2832)", () => {
     const { rerender } = render(await page());
     mocks.fetchEventsFeed.mockResolvedValue({
       ok: true,
-      value: { ...PAGE, facetOptions: { kind: [{ slug: "webinar", title: "Вебинар", count: 3 }] } },
+      value: {
+        ...PAGE,
+        facetOptions: {
+          kind: [{ slug: "webinar", title: "Вебинар", count: 3 }],
+        },
+      },
     });
     await userEvent.click(
-      within(screen.getByTestId("events-feed-error")).getByRole("button", { name: "Повторить" }),
+      within(screen.getByTestId("events-feed-error")).getByRole("button", {
+        name: "Повторить",
+      }),
     );
-    expect(await screen.findByRole("group", { name: "Вид события" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("group", { name: "Вид события" }),
+    ).toBeInTheDocument();
 
     rerender(await page());
     expect(screen.queryByRole("group", { name: "Вид события" })).toBeNull();
@@ -407,7 +525,11 @@ describe("«Повторить» in a failed block (#2832)", () => {
     );
     render(
       <BlockRetry retry={retry}>
-        <BlockError title="Не удалось" description="Причина" testId="block-error" />
+        <BlockError
+          title="Не удалось"
+          description="Причина"
+          testId="block-error"
+        />
       </BlockRetry>,
     );
     const button = screen.getByRole("button", { name: "Повторить" });
@@ -430,13 +552,19 @@ describe("«Повторить» in a failed block (#2832)", () => {
     });
     render(
       <BlockRetry retry={retry}>
-        <BlockError title="Не удалось" description="Причина" testId="block-error" />
+        <BlockError
+          title="Не удалось"
+          description="Причина"
+          testId="block-error"
+        />
       </BlockRetry>,
     );
     await userEvent.click(screen.getByRole("button", { name: "Повторить" }));
     await vi.waitFor(() => expect(retry).toHaveBeenCalledTimes(1));
     expect(
-      within(screen.getByTestId("block-error")).getByRole("button", { name: "Повторить" }),
+      within(screen.getByTestId("block-error")).getByRole("button", {
+        name: "Повторить",
+      }),
     ).toBeEnabled();
     expect(mocks.refresh).not.toHaveBeenCalled();
   });

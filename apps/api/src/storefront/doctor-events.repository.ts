@@ -27,6 +27,7 @@ import {
   type EventParticipationFormat,
   MONTH_BROADCAST_STATES,
   type PublicEventFacetOption,
+  UPCOMING_BROADCAST_STATES,
 } from "@ds/schemas";
 
 /** A lifecycle set a feed read selects — one tense's, or the month grid's. */
@@ -227,6 +228,30 @@ export class DoctorEventsRepository {
       title: row.title,
       count: Number(row.count),
     }));
+  }
+
+  /**
+   * 019 LD-9 / EARS-9 — whether any doctors-audience event the doctor could
+   * still attend (`UPCOMING_BROADCAST_STATES`) sits on one of these
+   * directions. The test behind the default scope's fall-back to every
+   * specialty: the same audience, record-status and managed-direction
+   * restriction the feed predicate applies, asked for one row.
+   */
+  async hasUpcomingEventOn(directionIds: string[]): Promise<boolean> {
+    if (directionIds.length === 0) return false;
+    const rows = await this.db
+      .select({ id: events.id })
+      .from(events)
+      .where(
+        and(
+          eq(events.recordStatus, "active"),
+          DOCTOR_AUDIENCE,
+          inArray(events.state, [...UPCOMING_BROADCAST_STATES]),
+          inArray(events.id, this.activeDirectionsOf(directionIds)),
+        ),
+      )
+      .limit(1);
+    return rows.length > 0;
   }
 
   async findFeedRows(filters: DoctorFeedFilters): Promise<DoctorFeedRow[]> {

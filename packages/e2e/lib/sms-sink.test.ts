@@ -67,7 +67,7 @@ describe("SMS sink reads for the 003 SMS reset journey", () => {
   });
 
   it("EARS-53: lists the messages to a phone after a cutoff through the sink API", async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
       Response.json({
         messages: [{ id: 1, receivedAt: "x", body: RU_RESET, json: null }],
       }),

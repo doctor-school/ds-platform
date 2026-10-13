@@ -70,6 +70,7 @@
                 <div style="display:flex">
                   <sc-for list="{{ codeSlots }}" as="c" hint-placeholder-count="6"><input id="{{ c.id }}" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="one-time-code" value="{{ c.value }}" onChange="{{ c.onChange }}" onKeyDown="{{ c.onKeyDown }}" onPaste="{{ c.onPaste }}" style="{{ c.style }}"></sc-for>
                 </div>
+                <div style="font-size:12px;font-weight:600;color:{{ inkFaint }};margin-top:7px">{{ codeLifetimeHint }}</div>
               </div>
               <sc-if value="{{ verified }}" hint-placeholder-val="{{ false }}">
                 <div style="border:2px solid {{ success }};background:{{ successTint }};padding:12px 14px;display:flex;gap:10px;align-items:center;font-size:13px;font-weight:700;color:{{ ink }}"><span style="color:{{ success }}">✓</span>Код принят — входим…</div>
@@ -105,7 +106,7 @@
                 <div>
                   <label style="{{ fLoginPw.labelStyle }}">{{ fLoginPw.label }}</label>
                   <div style="position:relative">
-                    <input type="{{ pwType }}" value="{{ fLoginPw.value }}" onChange="{{ fLoginPw.onChange }}" onBlur="{{ fLoginPw.onBlur }}" placeholder="••••••••" style="{{ fLoginPw.inputStyle }};padding-right:96px">
+                    <input type="{{ pwType }}" value="{{ fLoginPw.value }}" onChange="{{ fLoginPw.onChange }}" onBlur="{{ fLoginPw.onBlur }}" style="{{ fLoginPw.inputStyle }};padding-right:96px">
                     <button onClick="{{ togglePw }}" type="button" aria-label="{{ pwToggleAria }}" data-link style="text-underline-offset:4px;position:absolute;top:0;right:0;height:100%;padding:0 14px;background:transparent;border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:800;color:{{ linkColor }}">{{ pwToggle }}</button>
                   </div>
                   <div style="{{ fLoginPw.errStyle }}">⚠ {{ fLoginPw.error }}</div>
@@ -124,11 +125,11 @@
                   <div>
                     <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:8px">Канал кода</div>
                     <div style="display:flex;gap:8px">
-                      <button onClick="{{ chEmail }}" data-tab="{{ chEmailOn }}" style="{{ chEmailStyle }}">Эл. почта</button>
+                      <button onClick="{{ chEmail }}" data-tab="{{ chEmailOn }}" style="{{ chEmailStyle }}">Эл.&nbsp;почта</button>
                       <button onClick="{{ chSms }}" data-tab="{{ chSmsOn }}" style="{{ chSmsStyle }}">SMS</button>
                     </div>
                     <sc-if value="{{ chSmsOn }}" hint-placeholder-val="{{ false }}">
-                      <div style="font-size:12.5px;line-height:1.5;color:{{ inkFaint }};margin-top:8px">Код по SMS придёт, только если телефон подтверждён в профиле. Если нет — выберите «Эл. почта».</div>
+                      <div style="font-size:12.5px;line-height:1.5;color:{{ inkFaint }};margin-top:8px">Код по SMS придёт, только если телефон подтверждён в профиле. Если нет — выберите «Эл.&nbsp;почта».</div>
                     </sc-if>
                   </div>
                   <div>
@@ -158,7 +159,7 @@
               <div>
                 <label style="{{ fRegPw.labelStyle }}">{{ fRegPw.label }}</label>
                 <div style="position:relative">
-                  <input type="{{ pwType }}" value="{{ fRegPw.value }}" onChange="{{ fRegPw.onChange }}" onBlur="{{ fRegPw.onBlur }}" placeholder="••••••••" style="{{ fRegPw.inputStyle }};padding-right:96px">
+                  <input type="{{ pwType }}" value="{{ fRegPw.value }}" onChange="{{ fRegPw.onChange }}" onBlur="{{ fRegPw.onBlur }}" style="{{ fRegPw.inputStyle }};padding-right:96px">
                   <button onClick="{{ togglePw }}" type="button" aria-label="{{ pwToggleAria }}" data-link style="text-underline-offset:4px;position:absolute;top:0;right:0;height:100%;padding:0 14px;background:transparent;border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:800;color:{{ linkColor }}">{{ pwToggle }}</button>
                 </div>
                 <div style="{{ fRegPwHint }}">Не менее 8 символов.</div>
@@ -243,11 +244,12 @@
                   <div style="display:flex">
                     <sc-for list="{{ codeSlots }}" as="c" hint-placeholder-count="6"><input id="{{ c.id }}" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="one-time-code" value="{{ c.value }}" onChange="{{ c.onChange }}" onKeyDown="{{ c.onKeyDown }}" onPaste="{{ c.onPaste }}" style="{{ c.style }}"></sc-for>
                   </div>
+                  <div style="font-size:12px;font-weight:600;color:{{ inkFaint }};margin-top:7px">{{ resetCodeHint }}</div>
                 </div>
                 <div>
                   <label style="{{ fResetPw.labelStyle }}">{{ fResetPw.label }}</label>
                   <div style="position:relative">
-                    <input type="{{ pwType }}" value="{{ fResetPw.value }}" onChange="{{ fResetPw.onChange }}" onBlur="{{ fResetPw.onBlur }}" placeholder="••••••••" style="{{ fResetPw.inputStyle }};padding-right:96px">
+                    <input type="{{ pwType }}" value="{{ fResetPw.value }}" onChange="{{ fResetPw.onChange }}" onBlur="{{ fResetPw.onBlur }}" style="{{ fResetPw.inputStyle }};padding-right:96px">
                     <button onClick="{{ togglePw }}" type="button" aria-label="{{ pwToggleAria }}" data-link style="text-underline-offset:4px;position:absolute;top:0;right:0;height:100%;padding:0 14px;background:transparent;border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:800;color:{{ linkColor }}">{{ pwToggle }}</button>
                   </div>
                   <div style="{{ fResetPwHint }}">Не менее 8 символов.</div>
@@ -528,6 +530,8 @@ class Component extends DCLogic {
       opError: errText(),
       isCodeStep, showLoginTabs: !loginCodeStep,
       codeLabel: smsStep ? 'Код из сообщения' : 'Код из письма',
+      codeLifetimeHint: s.screen === 'verify' ? 'Код действует 1 час. Не видите письмо — проверьте папку «Спам».' : smsStep ? 'Код действует 5 минут.' : 'Код действует 5 минут. Не видите письмо — проверьте папку «Спам».',
+      resetCodeHint: resetIsPhone ? 'Код действует 1 час.' : 'Код действует 1 час. Не видите письмо — проверьте папку «Спам».',
       codeBtnLabel: busy(s.screen === 'verify' ? 'verify' : 'login', 'Подтвердить и войти'),
       codeBackLabel: s.screen === 'verify' ? '← Изменить почту' : '← Изменить способ',
       codeBack: s.screen === 'verify'

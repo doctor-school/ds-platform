@@ -106,12 +106,12 @@ describe("golden seed re-pinning (#2262)", () => {
         );
         expect(inbound.rows).toEqual([
           {
-            conname:
-              "congress_submissions_registration_id_registrations_id_fk",
+            conname: "congress_submissions_registration_id_registrations_id_fk",
             confdeltype: "r",
           },
           {
-            conname: "registration_attendance_registration_id_registrations_id_fk",
+            conname:
+              "registration_attendance_registration_id_registrations_id_fk",
             confdeltype: "r",
           },
         ]);
@@ -328,5 +328,100 @@ describe("golden seed re-pinning (#2262)", () => {
       .catch((error) => {
         if (error !== rollback) throw error.cause ?? error;
       });
+  }, 120_000);
+});
+
+// #2875 — a long-lived slot DB already mirrors the golden IdP accounts before the
+// golden seed ever writes them: every slot api runs the reconcile sweep against
+// the SHARED stage Zitadel (`ReconcileService.sweep` → `UserMirrorService.upsert`),
+// which inserts a fresh-uuid `users` row per enumerated account. The seed must
+// adopt that row for the golden identity instead of tripping
+// `users_email_unique` / `users_zitadel_sub_unique`.
+describe("golden seed adopts IdP-mirrored rows of a golden identity (#2875)", () => {
+  if (!process.env.DATABASE_URL)
+    throw new Error("DATABASE_URL is required by the e2e harness");
+  const { db, pool } = createDrizzle(process.env.DATABASE_URL);
+  const subjects = resolveGoldenSubjects(
+    Object.fromEntries(
+      GOLDEN_IDP_ACCOUNTS.map((account, i) => [
+        account.subjectEnvVar,
+        `2875-subject-${i}`,
+      ]),
+    ),
+  );
+  const pin = "2026-10-13T08:00:00.000Z";
+  const poolEmail = "golden.doctor.verified.w1@example.test";
+  const rollback = new Error("2875 fixture rollback");
+  afterAll(() => pool.end());
+
+  const goldenPoolUser = () => {
+    const row = buildGoldenDataset(new Date(pin), subjects).users.find(
+      (u) => u.email === poolEmail,
+    );
+    if (!row?.id || !row.zitadelSub) throw new Error("no golden pool user");
+    return { id: row.id, zitadelSub: row.zitadelSub };
+  };
+
+  it("#2875: seeds over a reconcile-mirrored row carrying the golden email and subject under a non-golden id", async () => {
+    const golden = goldenPoolUser();
+    await db
+      .transaction(async (tx) => {
+        // Exactly what the sweep writes for a never-seen account (user-mirror
+        // insert): its own uuid, the sub, the email, `doctor_guest`.
+        const strayId = randomUUID();
+        await tx.insert(users).values({
+          id: strayId,
+          zitadelSub: golden.zitadelSub,
+          email: poolEmail,
+          emailVerified: true,
+          role: "doctor_guest",
+        });
+        await seedGolden(tx, { subjects, env: { GOLDEN_NOW: pin } });
+        const rows = await tx
+          .select()
+          .from(users)
+          .where(eq(users.zitadelSub, golden.zitadelSub));
+        expect(rows.map((r) => [r.id, r.email])).toEqual([
+          [golden.id, poolEmail],
+        ]);
+        expect(
+          await tx.select().from(users).where(eq(users.id, strayId)),
+        ).toEqual([]);
+        // Idempotent on a re-run.
+        await seedGolden(tx, { subjects, env: { GOLDEN_NOW: pin } });
+        throw rollback;
+      })
+      .catch((error) => {
+        if (error !== rollback) throw error.cause ?? error;
+      });
+  }, 120_000);
+
+  it("#2875: refuses, naming the identity, when the mirrored row already carries product data", async () => {
+    const golden = goldenPoolUser();
+    let failure: unknown;
+    await db
+      .transaction(async (tx) => {
+        const strayId = randomUUID();
+        await tx.insert(users).values({
+          id: strayId,
+          zitadelSub: golden.zitadelSub,
+          email: poolEmail,
+          emailVerified: true,
+          role: "doctor_guest",
+        });
+        await tx.execute(sql`
+          insert into consent_records (user_id, purpose, version)
+          values (${strayId}, '2875-fixture', 'v1')
+        `);
+        await seedGolden(tx, { subjects, env: { GOLDEN_NOW: pin } });
+        throw rollback;
+      })
+      .catch((error) => {
+        failure = error;
+      });
+    expect(failure).not.toBe(rollback);
+    const message = String((failure as Error)?.message);
+    expect(message).toContain("cannot adopt");
+    expect(message).toContain(poolEmail);
   }, 120_000);
 });

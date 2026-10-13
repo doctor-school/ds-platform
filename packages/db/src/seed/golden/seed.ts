@@ -4,11 +4,22 @@
 // referential soundness) lives in `plan.ts` and is unit-tested without a
 // database; what remains here is the part that genuinely needs Postgres.
 
-import { and, getTableColumns, gte, inArray, lte, sql } from "drizzle-orm";
+import {
+  and,
+  eq,
+  getTableColumns,
+  gte,
+  inArray,
+  lte,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import { goldenUuid } from "./ids.js";
 import { GOLDEN_VOLUME_ORDINAL_BASE } from "./volume.js";
 import { specialtiesMinzdrav } from "../../schema/specialties.js";
+import { users, type NewUser } from "../../schema/users.js";
 import { seedSpecialtiesMinzdrav } from "../specialties-minzdrav.js";
 import { buildGoldenDataset, GoldenDatasetError } from "./dataset.js";
 import { resolveGoldenSubjects, type GoldenSubjectMap } from "./idp.js";
@@ -115,6 +126,60 @@ async function clearVolumeNamespace(
   await tx.delete(step.table).where(range);
 }
 
+/**
+ * #2875 — adopts the IdP mirror's own row of a golden identity.
+ *
+ * Every slot api runs the reconcile sweep against the SHARED stage Zitadel
+ * (`ReconcileService.sweep` → `UserMirrorService.upsert`), and the sweep mirrors
+ * each enumerated account under a fresh uuid. A long-lived slot database (stage
+ * `main`) therefore holds a golden account's row BEFORE the golden seed ever
+ * writes it whenever the account is provisioned after that database was last
+ * seeded — the #2805 worker pool, created by a PR slot's `reset-identities`, is
+ * the first such case. The users upsert targets `id`, so that row would trip
+ * `users_email_unique` / `users_zitadel_sub_unique`.
+ *
+ * Such a row is the same identity under a non-golden key and carries only what
+ * Zitadel already holds, so it is removed and the golden row takes its place. A
+ * row that has gathered product data (consents, registrations, …) is NOT
+ * discarded: every FK into `users` is `ON DELETE RESTRICT`, and the refusal names
+ * the identity so the operator decides.
+ */
+async function adoptMirroredGoldenIdentities(
+  tx: GoldenExecutor,
+  goldenUsers: readonly NewUser[],
+): Promise<void> {
+  const present = <T>(values: (T | null | undefined)[]): T[] =>
+    values.filter((v): v is T => v !== null && v !== undefined);
+  const ids = present(goldenUsers.map((u) => u.id));
+  const subs = present(goldenUsers.map((u) => u.zitadelSub));
+  const emails = present(goldenUsers.map((u) => u.email));
+  const strays: { id: string; zitadelSub: string; email: string | null }[] =
+    await tx
+      .select({
+        id: users.id,
+        zitadelSub: users.zitadelSub,
+        email: users.email,
+      })
+      .from(users)
+      .where(
+        and(
+          notInArray(users.id, ids),
+          or(inArray(users.zitadelSub, subs), inArray(users.email, emails)),
+        ),
+      );
+  for (const stray of strays) {
+    try {
+      await tx.delete(users).where(eq(users.id, stray.id));
+    } catch (err) {
+      const cause =
+        err instanceof Error && err.cause instanceof Error ? err.cause : err;
+      throw new GoldenPlanError(
+        `users: cannot adopt the IdP-mirrored row ${stray.id} of golden identity ${stray.email ?? stray.zitadelSub} — it already carries product data (${cause instanceof Error ? cause.message : String(cause)})`,
+      );
+    }
+  }
+}
+
 /** Executes one planned step as an idempotent upsert. */
 export async function applyGoldenStep(
   tx: GoldenExecutor,
@@ -214,6 +279,7 @@ export async function seedGolden(
     const specialtyIdByName = await loadSpecialtyIdByName(tx);
     const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
     const steps: { name: string; rows: number }[] = [];
+    await adoptMirroredGoldenIdentities(tx, dataset.users);
     for (const step of plan) {
       await clearVolumeNamespace(tx, step);
       steps.push({ name: step.name, rows: await applyGoldenStep(tx, step) });

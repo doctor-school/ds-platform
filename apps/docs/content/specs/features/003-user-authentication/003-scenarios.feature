@@ -576,14 +576,21 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # trimming, Enter/Escape, header and accessibility coverage; an optimistic
     # render alone does not prove persistence after a real document reload.
 
-  @EARS-29 @happy
+  @EARS-29 @happy @verification-mail
   Scenario: The verification code email is composed and sent by the BFF mailer, code-only
-    Given a visitor completes a registration that triggers an email verification code
-    When Zitadel returns the one-time code to the BFF via returnCode
-    Then Zitadel itself sends no email
-    And the BFF mailer sends exactly one branded code-only email with the code leading the subject and shown in the body
-    And the email contains no link, button or navigation URL in any block including the footer
-    And HTML and plain text show the same code, expiry and instruction to use the already-open requesting tab
+    Given a fresh owned Academy registration is completed in its requesting tab without consuming a code
+    When the real BFF verification mail arrives for that owned Academy registration
+    Then exactly one email of any purpose is addressed to that owned registrant over the full delivery horizon
+    And the delivered BFF verification email is branded with a leading six-digit subject code and that code in both bodies
+    And the delivered verification email has no link, button or navigation URL in any block including its footer
+    And its HTML and plain text show the same real code, one-hour expiry and requesting-tab instruction
+    When the registrant rejects a different code and enters that delivered verification code once in the same Academy tab
+    Then only that delivered code opens the same email-verified owned Academy account with a secure BFF session and the account return target
+    # Native returnCode / "Zitadel itself sends no email" mechanism ownership:
+    # apps/api/test/auth/zitadel-email-verify.e2e-spec.ts:192 remains retained.
+    # This browser binds real registration, strict fresh addressed mail and the
+    # no-second-mail horizon; it observes no provider HTTP or internal SMTP.
+    # Keep the broader portal registration/confirmation/session journeys intact.
 
   @EARS-29 @happy
   Scenario: The password-reset code email is BFF-sent and link-free

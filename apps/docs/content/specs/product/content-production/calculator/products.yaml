@@ -1,8 +1,8 @@
 # Состав стандартных продуктов и переменные калькулятора себестоимости (формулы: cost-model-ru.md).
 # Часы, круги и роли — в ../model/*.yaml; ставки — в ../rates/rates.yaml; FTE и оплачиваемые часы —
 # в ../model/teams.yaml. Здесь — только состав продукта (единица × количество), параметры драйверов,
-# период плана, резерв актуализации и внешние затраты. Внешние затраты без значения — null («не
-# задано»): калькулятор не считает их нулём и показывает флаг. Своя композиция — та же схема.
+# период плана, резерв актуализации, названия внешних затрат и переменные цены. Рубли — только в
+# ../rates/rates.yaml; переменная с draft null берёт значение оттуда. Своя композиция — та же схема.
 
 # Какой лист — накладные (решение В8, effort-draft-ru.md «Как это попадает в себестоимость единицы»):
 # сначала роль, затем единица. Всё прочее — прямые часы единицы.
@@ -34,11 +34,125 @@ variables:
     draft: 0
     unit: доля часов подролей медиа-круга во внешнем пуле подрядчиков
     basis: "решение В3 — пики сверх обязательства уходят во внешний пул; долю задаёт владелец (rates-ru.md, «Форма привлечения»), по умолчанию — весь объём в штате"
-  contractor_form:
-    label: Форма договора подрядчика
+  # Стоимость часа штата. null — значение по умолчанию из ../rates/rates.yaml (деньги живут там).
+  contributions_mode:
+    label: Режим страховых взносов
     draft: null
-    unit: "форма договора подрядчика: npd_self_employed | ip | gph_individual | gph_individual_with_nsipz; null — по engagement роли"
-    basis: "../rates/rates.yaml variables.contractor_on_top_rate — по умолчанию самозанятый (0)"
+    unit: "general | msp_priority; null — rates.yaml variables.contributions_modes.default"
+    basis: "../rates/rates.yaml variables.contributions_modes — режим подтверждает бухгалтерия DS"
+  bonus_share:
+    label: Премия, доля к gross
+    draft: null
+    unit: "доля к gross, облагается взносами; null — rates.yaml variables.bonus_share.default"
+    basis: "../rates/rates.yaml variables.bonus_share"
+  staff_other_costs_rub_month:
+    label: Прочие расходы на штатного сотрудника, ₽ в месяц
+    draft: null
+    unit: "₽ на одного штатного сотрудника в месяц; null — rates.yaml staff_other_costs_rub_month.total_rub (типичное)"
+    basis: "../rates/rates.yaml variables.staff_other_costs_rub_month — отпуск и болезнь уже в делителе paid_hours_per_month"
+  grade_mix:
+    label: Смесь грейдов команды
+    draft: null
+    unit: "доли { junior, middle, senior }, сумма 1; null — rates.yaml variables.default_team_grade_mix"
+    basis: "../rates/rates.yaml variables.default_team_grade_mix — грейд «смесь» берёт эти доли"
+  # Грейды экспертов: ключ ../rates/rates.yaml experts.grades (врач | к.м.н. | д.м.н. | лидер мнений).
+  expert_grade_author:
+    label: Грейд автора курса
+    draft: д.м.н.
+    unit: грейд эксперта для роли «Пул экспертов — амбассадор» (автор курса, A28)
+    basis: "оценка аналитика: автор курса НМО — обычно доктор наук; правит владелец"
+  expert_grade_lesson:
+    label: Грейд приглашённого спикера урока
+    draft: к.м.н.
+    unit: грейд эксперта для роли «Пул экспертов — эксперт» (материал урока, A3112)
+    basis: "оценка аналитика"
+  expert_grade_speaker:
+    label: Грейд спикера подкаста и мероприятия
+    draft: к.м.н.
+    unit: грейд эксперта для роли «Пул экспертов — спикер» (A3241, A339)
+    basis: "оценка аналитика"
+  # Инструменты и инфраструктура: месячный пул, распределяется как накладные (на прямой час).
+  tool_seats:
+    label: Мест в подписках инструментов
+    draft: null
+    unit: "мест (пользователей) подписок per: seat; null — команд × Σ FTE ролей команды"
+    basis: "оценка аналитика: место у каждого участника команды направления"
+  payment_markup:
+    label: Комиссия посредника за зарубежные подписки
+    draft: null
+    unit: "доля к цене подписки в валюте; null — rates.yaml tools.payment_markup.default"
+    basis: "../rates/rates.yaml tools.payment_markup"
+  # Цена и выручка.
+  price_mode:
+    label: Ведущий способ цены
+    draft: markup
+    unit: "multiplier (× себестоимость) | markup (наценка к себестоимости) | margin (маржа в цене) | fixed (₽); остальные выводятся"
+    basis: "оценка аналитика"
+  price_value:
+    label: Значение ведущего способа цены
+    draft: 0.3
+    unit: "множитель, доля наценки, доля маржи или ₽ — по price_mode"
+    basis: "оценка аналитика: наценка 30 % к полной себестоимости"
+  contacts:
+    label: Контакты с врачами — мало / план / много
+    draft: [300, 1000, 3000]
+    unit: контактов за продукт [мало, план, много]
+    basis: "оценка аналитика; живой вебинар обычно ≤ 100 участников, урок ≈ 1 000 просмотров (rates.yaml doctor_contacts.contact_types)"
+  audience_doctors:
+    label: Размер аудитории специальности, врачей
+    draft: 10000
+    unit: "врачей специальности в РФ — выбирает полосу rates.yaml doctor_contacts.price_per_contact_by_audience_size"
+    basis: "оценка аналитика: полоса 5–20 тыс. (эндокринологи, кардиологи)"
+  price_per_contact:
+    label: Цена контакта, ₽
+    draft: null
+    unit: "₽ за контакт; null — середина полосы аудитории × вес типа контакта продукта (rates.yaml doctor_contacts)"
+    basis: "../rates/rates.yaml doctor_contacts"
+  budget_cap:
+    label: Потолок бюджета спонсора, ₽
+    draft: null
+    unit: "₽ за продукт; null — без потолка"
+    basis: "задаёт владелец по запросу спонсора"
+  budget_cap_mode:
+    label: Потолок бюджета — жёсткий или со скидкой
+    draft: hard
+    unit: "hard — выручка не выше потолка | tiered — сверх потолка контакты со скидкой"
+    basis: "оценка аналитика: по умолчанию жёсткий"
+  budget_tier_discount:
+    label: Скидка на контакты сверх потолка
+    draft: 0.5
+    unit: доля скидки к выручке сверх потолка (budget_cap_mode tiered)
+    basis: "оценка аналитика"
+  billing_period:
+    label: Период выставления счетов
+    draft: month
+    unit: "month | quarter"
+    basis: "оценка аналитика"
+  author_share:
+    label: Авторская доля
+    draft: 0.1
+    unit: доля маржи продукта автору курса (распределение прибыли, не себестоимость — A27)
+    basis: "оценка аналитика; model/A2.yaml, A27: авторская доля — распределение прибыли"
+  market_gap_threshold:
+    label: Порог расхождения с рынком
+    draft: 0.5
+    unit: доля отклонения себестоимости или цены от середины рыночного ориентира, выше которой — флаг
+    basis: "оценка аналитика"
+  sensitivity_step:
+    label: Шаг чувствительности статей затрат
+    draft: 0.2
+    unit: доля ± к масштабу статьи затрат в анализе чувствительности
+    basis: "оценка аналитика"
+  extended_campaign:
+    label: Расширенная кампания продвижения
+    draft: false
+    unit: "true — к продукту добавляется кампания: цена привлечения контакта × контакты плана (A47)"
+    basis: "model/A4.yaml, A47 — опция пакета сверх базового анонса A43"
+  campaign_cost_per_contact:
+    label: Стоимость привлечения контакта, ₽
+    draft: null
+    unit: "₽ за регистрацию; null — середина rates.yaml doctor_contacts.paid_acquisition_cost_per_lead_rub.registration"
+    basis: "../rates/rates.yaml doctor_contacts"
   teams:
     label: Команд в плане месяца
     draft: 1
@@ -105,6 +219,39 @@ rate_proxy:
   "Медиа-круг — голос": "Медиа-круг — монтажёр"
 rate_proxy_basis: "rates.yaml, «Медиа-круг — голос», proxy_role: работа оператора синтеза — часовая стоимость монтажёра"
 
+# Роли экспертов: час = rates.yaml experts.grades[грейд].per_hour_rub (середина) × часы листа; грейд —
+# переменная. Гонорар за единицу поверх часов не начисляется — иначе двойной учёт.
+expert_roles:
+  "Пул экспертов — амбассадор": expert_grade_author
+  "Пул экспертов — эксперт": expert_grade_lesson
+  "Пул экспертов — спикер": expert_grade_speaker
+
+# Пул «Инструменты и инфраструктура» из rates.yaml tools: подписки, разовые лицензии, Платформа DS,
+# оборудование (capex ÷ useful_life_months). ai_items — подписки статьи «ИИ», прочее — статья «прочие
+# инструменты». platform_items — строки platform_ds_monthly без двойного учёта: «весь prod-контур»
+# уже включает prod-VPS и S3, поэтому они не суммируются отдельно.
+tools_pool:
+  ai_items:
+    - "ChatGPT Business, место (годовая оплата)"
+    - "Claude Team Standard, место (годовая оплата)"
+    - "Midjourney Standard"
+    - "Runway Pro"
+    - "Kling Pro"
+    - "ElevenLabs Pro (~600 мин синтеза)"
+  platform_items:
+    - "весь prod-контур (2 VPS + NAT + S3)"
+    - "Timeweb Cloud, 8 vCPU / 12 ГБ / 100 ГБ (stage, preset 4805) + IPv4"
+    - "Kinescope Super — видеохостинг и CDN (от 10 € в месяц + 0,03 € за ГБ)"
+    - "домены платформы (.ru, продление 999 ₽ в год за домен, ×3)"
+  one_off_life_months: 36
+  one_off_basis: "разовая лицензия ПО распределяется на срок компьютера — 36 мес. (rates.yaml tools.useful_life_basis)"
+
+# Расширенная кампания (переменная extended_campaign): затрата = campaign_cost_per_contact × контакты
+# плана; работа A47 — чёрный ящик модели, строка «не задано: подпроцесс не раскрыт».
+extended_campaign:
+  pending: A47
+  name: Расширенная кампания продвижения
+
 # Листья периода и системы: сколько проходов в месяц даёт план. `per` — произведение переменных
 # (`teams` — число команд плана). Листья с единицей продукта сюда не входят — их объём задаёт план единиц.
 period_leaves:
@@ -127,47 +274,36 @@ update_reserve:
   affected_leaves: [A45, A46]
   basis: effort-draft-ru.md, «Выпуск и сопровождение» — резерв единицы на срок договора
 
-# Внешние затраты: названы в модели, значений нет. rub — на одну единицу `per`; null — «не задано».
+# Внешние затраты: названия здесь, рубли — ../rates/rates.yaml external_costs (тот же ключ), правка —
+# override `external:<id>`. Нет значения — «не задано»: калькулятор не считает его нулём. В продукте
+# `{ id, hours_of: [лист] }` — затрата на час: × часы этих листов единицы. Гонорары спикеров здесь не
+# появляются: часы A3241 и A339 — операции продуктов, цена — грейд эксперта × часы.
 externals:
   ai_generation:
     name: ИИ-генерация медкадров и анимации
-    per: урок
-    rub: null
     basis: "model/A314.yaml, A3143: генерация — внешняя затрата"
   voices_licences:
     name: Голоса и лицензии синтеза речи
-    per: урок
-    rub: null
     basis: "model/A314.yaml, A3145: голоса и лицензии (O-118, O-119) — внешняя затрата"
   podcast_studio:
     name: Студия записи подкаста
-    per: эпизод
-    rub: null
-    basis: "model/A32.yaml, A324: студия — внешняя затрата"
-  podcast_speaker_fee:
-    name: Гонорар спикера подкаста
-    per: эпизод
-    rub: null
-    basis: "model/A324.yaml, A3241: часы гостя — операция модели, ставка — переменная калькулятора; в items не входит, чтобы не считать дважды"
+    basis: "model/A32.yaml, A324: студия — внешняя затрата, цена за час записи (операторы и режиссёрское переключение студии включены)"
   event_venue_broadcast:
     name: Площадка и трансляция мероприятия
-    per: мероприятие
-    rub: null
-    basis: "model/A33.yaml, A334: площадка и трансляция — внешние затраты"
-  event_speaker_fees:
-    name: Гонорары спикеров и амбассадора мероприятия
-    per: мероприятие
-    rub: null
-    basis: "model/A33.yaml, A339: часы спикера — операция модели, ставка — переменная калькулятора; в items не входит, чтобы не считать дважды; rates.yaml: ставки амбассадора и спикера — null"
+    basis: "model/A33.yaml, A334: площадка и трансляция — внешние затраты; онлайн — собственная платформа (0), для очного задаёт владелец"
 
 # Продукты. reserve_line — номер линии модели (префикс листьев), чьи прямые часы × доля пересборки
-# входят в резерв актуализации единицы (В6). items: { leaf, qty?, per? } — лист модели; { product, qty } — другой продукт. qty — число
+# входят в резерв актуализации единицы (В6). items: { leaf, qty?, per? } — лист модели; { product, qty } — другой продукт;
+# { pending, qty?, per? } — чёрный ящик модели (decomposition: pending), строка «не задано: подпроцесс не раскрыт». qty — число
 # или имя параметра продукта; per — список параметров-множителей (драйверы). Параметр: draft
 # (число, [min, max] или null), unit, basis. lead — срок: chain (цепочка листов: seq — сумма,
 # par — максимум) или pipeline (первые единицы подряд + такт узкого места на остальные).
+# contact_type — тип контакта с врачом (rates.yaml doctor_contacts.contact_types) для цены контакта;
+# без него у продукта нет оплаты за результат.
 products:
   урок:
     name: Урок (≈ 45 мин)
+    contact_type: single_lesson_view
     basis: "process-to-be-ru.md, «Сквозной поток»: урок — сериал, микролернинги, материал для скачивания, запись подкаста, тесты; линия A31 и выпуск A41–A43"
     reserve_line: A31
     parameters:
@@ -222,22 +358,44 @@ products:
 
   эпизод подкаста:
     name: Эпизод подкаста
-    basis: "model/A32.yaml — линия A321–A325: запись A3242, монтаж и нарезка A3251; часы гостя A3241 — не в items, пока его оплата — гонорар podcast_speaker_fee"
+    contact_type: podcast_live
+    basis: "model/A32.yaml — линия A321–A325: гость A3241, запись A3242, монтаж и нарезка A3251; студия — за час записи A3242"
     reserve_line: A32
     items:
       - { leaf: A321 }
       - { leaf: A322 }
       - { leaf: A323 }
+      - { leaf: A3241 }
       - { leaf: A3242 }
       - { leaf: A3251 }
-    externals: [podcast_studio, podcast_speaker_fee]
+    externals: [{ id: podcast_studio, hours_of: [A3242] }]
     lead:
       chain: { seq: [A321, A322, A323, A3242, A3251] }
       basis: capacity-ru.md, «Срок единицы»
 
+  видеоподкаст:
+    name: Видеоподкаст (эпизод на несколько камер)
+    contact_type: podcast_live
+    basis: "model/A324.yaml и A325.yaml: эпизод подкаста + съёмка на несколько камер A3243, монтаж с цветокоррекцией и графикой A3252, обложки и клипы A3253; студия — за часы съёмки A3243. Компоненты rates.yaml external_costs.video_podcast не добавляются: операторы и переключение — в часе студии, монтаж, графика, обложки и клипы — операции A3252, A3253"
+    reserve_line: A32
+    items:
+      - { leaf: A321 }
+      - { leaf: A322 }
+      - { leaf: A323 }
+      - { leaf: A3241 }
+      - { leaf: A3243 }
+      - { leaf: A3251 }
+      - { leaf: A3252 }
+      - { leaf: A3253 }
+    externals: [{ id: podcast_studio, hours_of: [A3243] }]
+    lead:
+      chain: { seq: [A321, A322, A323, A3243, { par: [A3252, A3253] }, A3251] }
+      basis: capacity-ru.md, «Срок единицы»
+
   вебинар:
     name: Вебинар (онлайн-мероприятие)
-    basis: "model/A33.yaml — линия A331–A337, онлайн; A338 — только офлайн; часы спикеров A339 — не в items, пока их оплата — гонорар event_speaker_fees"
+    contact_type: webinar_live
+    basis: "model/A33.yaml — линия A331–A337 и выступление спикера A339, онлайн; A338 — только офлайн"
     items:
       - { leaf: A331 }
       - { leaf: A332 }
@@ -246,13 +404,15 @@ products:
       - { leaf: A334 }
       - { leaf: A335 }
       - { leaf: A336 }
-    externals: [event_venue_broadcast, event_speaker_fees]
+      - { leaf: A339 }
+    externals: [event_venue_broadcast]
     lead:
       chain: { seq: [A331, A332, A333, A337, { par: [A334, A335] }, A336] }
       basis: capacity-ru.md, «Срок единицы»
 
   клуб:
     name: Клуб модуля
+    contact_type: webinar_live
     basis: "process-to-be-ru.md, блок 4: клуб закрывает каждый модуль; capacity-ru.md считает клуб мероприятием A33 — онлайн-формат вебинара"
     items:
       - { leaf: A331 }
@@ -262,14 +422,16 @@ products:
       - { leaf: A334 }
       - { leaf: A335 }
       - { leaf: A336 }
-    externals: [event_venue_broadcast, event_speaker_fees]
+      - { leaf: A339 }
+    externals: [event_venue_broadcast]
     lead:
       chain: { seq: [A331, A332, A333, A337, { par: [A334, A335] }, A336] }
       basis: capacity-ru.md, «Срок единицы»
 
   практическая школа:
     name: Практическая школа (очная)
-    basis: "model/A33.yaml — та же линия через драйверы: тип мероприятия (онлайн / офлайн), длительность, число участников"
+    contact_type: webinar_live
+    basis: "model/A33.yaml — та же линия через драйверы: тип мероприятия (онлайн / офлайн), длительность, число участников; подготовка офлайн A338 — чёрный ящик модели"
     parameters:
       офлайн:
         draft: [1.5, 3]
@@ -287,43 +449,21 @@ products:
       - { leaf: A334, per: [офлайн, дни] }
       - { leaf: A335, per: [офлайн, дни] }
       - { leaf: A336 }
-    externals: [event_venue_broadcast, event_speaker_fees]
-    lead:
-      chain: { seq: [A331, A332, A333, A337, { par: [A334, A335] }, A336] }
-      basis: capacity-ru.md, «Срок единицы» (срок прохода листа не масштабируется драйвером)
-
-  конгресс:
-    name: Конгресс (очный, с секциями)
-    basis: "model/A33.yaml, A331: конгресс — множитель числа секций; драйверы A332–A336"
-    parameters:
-      офлайн:
-        draft: [1.5, 3]
-        unit: множитель часов очного мероприятия к онлайн
-        basis: "оценка аналитика; драйверы A331, A334, A335 «онлайн / офлайн»"
-      секции:
-        draft: [3, 8]
-        unit: секций конгресса
-        basis: "оценка аналитика; драйвер A331 «конгресс — множитель числа секций»"
-      дни:
-        draft: [1, 3]
-        unit: дней конгресса
-        basis: "оценка аналитика; драйвер A334 «длительность»"
-    items:
-      - { leaf: A331, per: [офлайн, секции] }
-      - { leaf: A332, per: [секции] }
-      - { leaf: A333, per: [секции] }
-      - { leaf: A337, per: [офлайн] }
-      - { leaf: A334, per: [секции, дни] }
-      - { leaf: A335, per: [офлайн, дни] }
-      - { leaf: A336, per: [секции] }
-    externals: [event_venue_broadcast, event_speaker_fees]
+      - { leaf: A339, per: [дни] }
+      - { pending: A338 }
+    externals: [event_venue_broadcast]
     lead:
       chain: { seq: [A331, A332, A333, A337, { par: [A334, A335] }, A336] }
       basis: capacity-ru.md, «Срок единицы» (срок прохода листа не масштабируется драйвером)
 
   проектирование курса:
     name: Проектирование курса (A2)
-    basis: model/A2.yaml — листья на курс
+    basis: "model/A2.yaml — листья на курс; A27: условия с экспертом A271 и договор A272 — приложение на каждый курс плюс рамочный договор один раз на нового эксперта; A28 — автор курса ведёт курс"
+    parameters:
+      новые_эксперты:
+        draft: [1, 4]
+        unit: новых экспертов курса — по каждому рамочный договор (A272) один раз
+        basis: "оценка аналитика: автор и приглашённые спикеры уроков, впервые работающие с DS; model/A2.yaml, A27"
     items:
       - { leaf: A21 }
       - { leaf: A22 }
@@ -331,6 +471,10 @@ products:
       - { leaf: A24 }
       - { leaf: A25 }
       - { leaf: A26 }
+      - { leaf: A271 }
+      - { leaf: A272 }
+      - { leaf: A272, per: [новые_эксперты] }
+      - { leaf: A28 }
     lead:
       chain: { seq: [A21, A22, { par: [{ seq: [A23, A24] }, A25] }, A26] }
       basis: capacity-ru.md, «Срок единицы» — A25 ветвится от A22 параллельно A23
@@ -366,6 +510,7 @@ products:
 
   модуль:
     name: Модуль (6 уроков + клуб)
+    contact_type: series_view
     basis: "process-to-be-ru.md: модуль = 6 уроков + клуб; продаётся и отдельно (ОВ1) — со своей сделкой"
     parameters:
       сделки:
@@ -382,6 +527,7 @@ products:
 
   курс:
     name: Курс 36 ч (18 уроков, 18 эпизодов, 3 клуба)
+    contact_type: series_view
     basis: "process-to-be-ru.md, «Сквозной поток» и строка 95: курс 36 ч (O-040) — 3 модуля, 18 уроков, 18 подкастов, 3 клуба; проектирование A2 на курс"
     parameters:
       сделки:
@@ -406,6 +552,7 @@ products:
 
   специальность:
     name: Специальность 144 ч (4 курса)
+    contact_type: series_view
     basis: "process-to-be-ru.md, «Сквозной поток»: специальность 144 ч = 4 курса по 36 ч"
     parameters:
       сделки:

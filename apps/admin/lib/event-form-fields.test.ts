@@ -72,7 +72,18 @@ describe("007 EARS-2/EARS-3 form fields projection (#1593)", () => {
       participationFormat: "",
       audience: "",
       projectId: "",
+      // 007 EARS-12 (#2913) — «Скрыть число записавшихся» starts off.
+      hideSignUpCount: false,
     });
+  });
+
+  it("007 EARS-12: the editor pre-fills «Скрыть число записавшихся» from the detail — on stays on, off stays off", () => {
+    expect(
+      eventFormFields({ ...detail, hideSignUpCount: true }).hideSignUpCount,
+    ).toBe(true);
+    expect(
+      eventFormFields({ ...detail, hideSignUpCount: false }).hideSignUpCount,
+    ).toBe(false);
   });
 
   it("012 EARS-26/29: the edit fields project the event's kind id, participation format and audience", () => {

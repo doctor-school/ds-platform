@@ -16,6 +16,7 @@ import {
 } from "../setup/rate-limit.js";
 import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import {
   describeTiming,
   medianSpread,
@@ -25,9 +26,10 @@ import {
 // Verification (EARS-3, email-only per #202): a correct email OTP code flips
 // `email_verified` via Zitadel; an invalid/expired code returns a generic failure
 // and leaves the flag unchanged. Registration is email-primary, so there is no
-// phone verification at registration (EARS-4 is a future post-registration
-// secondary-identifier concern). Real Postgres + fake IdP (the fake treats
-// FAKE_VALID_CODE as the only correct code).
+// phone verification at registration (EARS-4): a phone is confirmed only after
+// registration, from a session, through the confirmed-phone path (EARS-47/48),
+// and the two channels never confirm each other. Real Postgres + fake IdP (the
+// fake treats FAKE_VALID_CODE as the only correct code).
 describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
   let app: NestFastifyApplication;
   let pool: pg.Pool;
@@ -37,6 +39,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
   const consent = [{ purpose: "tos", version: "2026-01" }];
   const runId = Date.now();
   const createdEmails: string[] = [];
+  const fake = new FakeIdpClient();
 
   async function register(payload: Record<string, unknown>): Promise<void> {
     const res = await app.inject({
@@ -68,7 +71,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
       imports: [AppModule],
     })
       .overrideProvider(IDP_CLIENT)
-      .useValue(new FakeIdpClient())
+      .useValue(fake)
       .overrideProvider(RATE_LIMIT_THRESHOLDS)
       .useValue(RELAXED_RATE_LIMIT)
       .compile();
@@ -131,9 +134,105 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
     expect(rows[0].email_verified).toBe(false);
   });
 
-  // #202: EARS-4 phone verification at registration is REMOVED — registration is
-  // email-primary, so there is no phone to verify at registration. Phone
-  // verification becomes a future post-registration secondary-identifier path.
+  it("EARS-4: registration verification is email-only — the email code never confirms a phone, and the post-registration phone confirmation never touches email verification", async () => {
+    const email = `ears4-${runId}@ds.test`;
+    const phone = `+7999${String(runId).slice(-7)}`;
+    const device = { "user-agent": "Test/1.0", "accept-language": "en-US" };
+    createdEmails.push(email);
+
+    // Registration asks for no phone code: nothing reaches the SMS channel.
+    const smsBefore = fake.phoneCodeRequests.length;
+    await register({ email });
+    expect(fake.phoneCodeRequests).toHaveLength(smsBefore);
+
+    const mirror = async () =>
+      (
+        await pool.query<{
+          zitadel_sub: string;
+          email_verified: boolean;
+          phone: string | null;
+          phone_verified: boolean;
+        }>(
+          `SELECT zitadel_sub, email_verified, phone, phone_verified
+             FROM users WHERE email = $1`,
+          [email],
+        )
+      ).rows[0]!;
+    const verifiedRowsSince = async (sub: string, after: string) =>
+      Number(
+        (
+          await pool.query<{ count: string }>(
+            `SELECT count(*)::text AS count FROM audit_ledger
+              WHERE event_type = 'auth.account.verified'
+                AND subject_id = $1 AND created_at >= $2`,
+            [sub, after],
+          )
+        ).rows[0]!.count,
+      );
+    const { zitadel_sub: sub } = await mirror();
+
+    // The IdP holds a number on the registrant, unverified (as a console-added
+    // phone would be). The email code verifies the email and never that phone.
+    await fake.setPhone(sub, phone, "none");
+    const verifyRes = await app.inject({
+      method: "POST",
+      url: "/v1/auth/verify",
+      headers: device,
+      payload: { email, code: FAKE_VALID_CODE },
+    });
+    expect(verifyRes.statusCode).toBe(200);
+    expect(await fake.getUser(sub)).toMatchObject({
+      emailVerified: true,
+      phoneVerified: false,
+    });
+    expect(await mirror()).toMatchObject({
+      email_verified: true,
+      phone: null,
+      phone_verified: false,
+    });
+
+    // After registration, from the session, the phone is confirmed only through
+    // the confirmed-phone path — which writes the phone and nothing else.
+    const session = verifyRes.cookies.find(
+      (c) => c.name === SESSION_COOKIE_NAME,
+    );
+    expect(session).toBeDefined();
+    const headers = {
+      ...device,
+      cookie: `${SESSION_COOKIE_NAME}=${session!.value}`,
+    };
+    const since = await dbNow();
+    const request = await app.inject({
+      method: "POST",
+      url: "/v1/me/phone",
+      headers,
+      payload: { phone },
+    });
+    expect(request.statusCode).toBe(200);
+    expect(fake.phoneCodeRequests.at(-1)).toEqual({
+      sub,
+      phone,
+      delivery: "sms",
+    });
+    const confirm = await app.inject({
+      method: "POST",
+      url: "/v1/me/phone/confirm",
+      headers,
+      payload: { code: FAKE_VALID_CODE },
+    });
+    expect(confirm.statusCode).toBe(200);
+    expect(await mirror()).toMatchObject({
+      email_verified: true,
+      phone,
+      phone_verified: true,
+    });
+    expect(await fake.getUser(sub)).toMatchObject({
+      emailVerified: true,
+      phoneVerified: true,
+    });
+    // The phone channel emits no email-verification terminal row.
+    expect(await verifiedRowsSince(sub, since)).toBe(0);
+  });
 
   // EARS-25 (#319): resend the registration email verification code,
   // enumeration-safely (003 EARS-25 amended). The code that fits the account

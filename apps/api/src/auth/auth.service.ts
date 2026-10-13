@@ -701,7 +701,8 @@ export class AuthService {
    * identifier — Zitadel cannot create a login-capable human without one — so the
    * dual-identifier phone-register branch (and its EARS-14 register-time SMS-budget
    * gate) is gone; `SmsBudgetService` still gates the SMS-OTP *login* send. Phone is
-   * a future post-registration secondary identifier. Consent-gated (EARS-20) and
+   * a post-registration secondary identifier, confirmed from a session through
+   * the confirmed-phone path (003 EARS-4/47/48). Consent-gated (EARS-20) and
    * enumeration-resistant (EARS-16): an already-registered email produces the
    * identical response with no duplicate account and no consent row.
    */
@@ -809,8 +810,8 @@ export class AuthService {
       await this.idp.grantProjectRole(created.sub, DOCTOR_GUEST_ROLE);
 
       // #202: registration is email-only — trigger the Zitadel email verification
-      // code (unmetered, no SMS). Phone verification is a future post-registration
-      // secondary-identifier concern, so there is no register-time SMS send and no
+      // code (unmetered, no SMS). Phone confirmation happens after registration,
+      // from a session (EARS-4, EARS-47/48), so there is no register-time SMS send and no
       // EARS-14 budget gate here (the budget still gates the SMS-OTP login send).
       // The registrant's email is the destination of the code-only, link-free
       // mail (003 EARS-29), so the adapter needs no user lookup to address it.

@@ -255,7 +255,7 @@ Feature: Minimal event admin — one operator creates, publishes, streams, runs,
     Given an event with registrants and the «Скрыть число записавшихся» option off by default
     When the operator turns the option on and saves the event
     Then the event persists hide_sign_up_count true
-    And the admin list and detail still show the exact registrant count
+    And the editor shows the option as on when the event is reopened
     And a public read of the event carries signUpCount null
 
   @EARS-12 @failure

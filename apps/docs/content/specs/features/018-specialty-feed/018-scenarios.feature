@@ -83,7 +83,7 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
   Scenario: The nearest events stand first with the sign-up counter always visible
     When any visitor opens the feed
     Then the nearest-events block is the first block below the statistics line
-    And every event card shows how many colleagues have signed up
+    And every event card whose «Скрыть число записавшихся» option is off shows how many colleagues have signed up
     And «Все события по специальности →» leads into feature 019's events feed
 
   @EARS-4 @happy

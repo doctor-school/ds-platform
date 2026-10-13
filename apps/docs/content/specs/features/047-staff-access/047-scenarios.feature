@@ -9,11 +9,15 @@ Feature: 047 — Staff access
     And the 2027 congress event exists
 
   @EARS-1 @EARS-2
-  Scenario: Only the platform administrator reaches «Доступы»
+  Scenario: The platform administrator opens «Доступы»
     When the administrator opens «Доступы» from the admin navigation
     Then the shell lands on "/access" showing "Доступы"
     And every account holding a staff role is listed with ФИО, email, роль and мероприятие, one row per role and event
+
+  @EARS-1
+  Scenario: A congress registrar does not reach «Доступы»
     Given a congress registrar is signed in to the admin
+    When the registrar looks at the admin navigation
     Then the registrar's navigation has no «Доступы»
     And every staff-access endpoint refuses the registrar
 
@@ -54,11 +58,28 @@ Feature: 047 — Staff access
     When the administrator tries to revoke their own «Администратор платформы»
     Then the revocation is refused
 
+  @EARS-7 @EARS-9
+  Scenario: A revocation the IdP cannot apply ends the sessions and is finished by repeating it
+    Given "committee.new@example.org" holds «Программный комитет» for the 2027 congress only
+    And that person has an open admin session
+    And the IdP fails the next role change
+    When the administrator confirms «Отозвать» on that row
+    Then the revocation answers that the service is unavailable, with a retry
+    And the person's admin session is ended
+    And no "auth.role.revoked" is recorded
+    When the IdP is available again and the administrator confirms «Отозвать» on the same row
+    Then the committee role leaves the account's grant, the visitor role stays
+    And "auth.role.revoked" is recorded once
+
   @EARS-8
-  Scenario: A stale second factor sends the administrator to sign in again
+  Scenario: A stale second factor asks for a code in the same session and the grant goes through
     Given the administrator's second factor was verified 31 minutes ago
-    When the administrator submits a grant
+    When the administrator submits a grant of «Программный комитет» for the 2027 congress to "committee.second@example.org"
     Then the grant is refused and nothing changes
-    And the shell lands on "/login" showing "Вход для администраторов"
-    When the administrator signs in again with the password and the app code and repeats the grant
-    Then the grant completes
+    And the administrator is on the code screen, still signed in
+    And "auth.step_up.requested" is recorded
+    When the administrator enters a current code from the authenticator app
+    Then the administrator is back on «Доступы» and the grant to "committee.second@example.org" completes with the entered values
+    And "auth.step_up.succeeded" is recorded
+    When the administrator submits another grant within 30 minutes
+    Then it completes without asking for a code

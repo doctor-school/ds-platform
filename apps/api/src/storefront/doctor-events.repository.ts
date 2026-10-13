@@ -36,6 +36,7 @@ export type DoctorFeedStates =
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { eventsOnActiveDirections } from "../events/event-direction-restriction.js";
 import { countEventSignUps } from "../events/event-sign-ups.js";
+import type { EventHorizonReach } from "../events/event-horizon.js";
 
 type Db = DrizzleHandle["db"];
 
@@ -231,23 +232,32 @@ export class DoctorEventsRepository {
   }
 
   /**
-   * 019 LD-9 / EARS-9 — whether any doctors-audience event the doctor could
-   * still attend (`UPCOMING_BROADCAST_STATES`) sits on one of these
-   * directions. The test behind the default scope's fall-back to every
-   * specialty: the same audience, record-status and managed-direction
-   * restriction the feed predicate applies, asked for one row.
+   * 019 LD-9 / EARS-9 — whether the «Будущие» feed would list any event on
+   * these directions over `reach` (from today on): the feed's ONE predicate
+   * ({@link feedWhere}) with no facet applied, asked for one row. The test
+   * behind the default scope's fall-back to every specialty — the same
+   * states, audience, record-status, start range and managed-direction
+   * restriction the feed reads, so a past-dated event still `published` is
+   * not «upcoming» here either.
    */
-  async hasUpcomingEventOn(directionIds: string[]): Promise<boolean> {
+  async hasUpcomingEventOn(
+    directionIds: string[],
+    reach: EventHorizonReach,
+  ): Promise<boolean> {
     if (directionIds.length === 0) return false;
     const rows = await this.db
       .select({ id: events.id })
       .from(events)
       .where(
         and(
-          eq(events.recordStatus, "active"),
-          DOCTOR_AUDIENCE,
-          inArray(events.state, [...UPCOMING_BROADCAST_STATES]),
-          inArray(events.id, this.activeDirectionsOf(directionIds)),
+          ...this.feedWhere({
+            states: UPCOMING_BROADCAST_STATES,
+            order: "asc",
+            directionIds,
+            ...reach,
+            kindSlugs: [],
+            formats: [],
+          }),
         ),
       )
       .limit(1);

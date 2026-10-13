@@ -67,7 +67,10 @@ describe("005 EARS-2 registration-intent return-target guard", () => {
   });
 
   it("EARS-2: the system shall reject a PII/credential-laden intent payload — the intent carries event context only", () => {
-    const base = { eventSlug: "ahilles-042", returnTo: "/webinars/ahilles-042" };
+    const base = {
+      eventSlug: "ahilles-042",
+      returnTo: "/webinars/ahilles-042",
+    };
     // The bare event context is a valid intent…
     expect(RegistrationIntentSchema.safeParse(base).success).toBe(true);
     // …but any extra field (a credential, an identifier, a token, a raw password)
@@ -98,8 +101,9 @@ describe("005 EARS-2 registration-intent return-target guard", () => {
 //
 // The describe title OPENS with `019 EARS-12 ` — the ears-test-lint scope prefix.
 describe("019 EARS-12 doctor-feed return target", () => {
-  const CANONICAL =
-    "/events?day=2026-09-10&tense=upcoming&specialty=mine-and-adjacent&resume=my-event";
+  // No `specialty`: an absent scope is the visitor's default (019 LD-9), so the
+  // codec keeps it absent rather than pinning an explicit «Моя и смежные».
+  const CANONICAL = "/events?day=2026-09-10&tense=upcoming&resume=my-event";
   /** A literal backslash, spelled by code point so no escape survives an edit. */
   const BACKSLASH = String.fromCharCode(92);
 
@@ -118,9 +122,7 @@ describe("019 EARS-12 doctor-feed return target", () => {
       "/events?resume=my-event&returnTo=https://evil.example&utm_source=x",
     );
     expect(intent?.eventSlug).toBe("my-event");
-    expect(intent?.returnTo).toBe(
-      "/events?tense=upcoming&specialty=mine-and-adjacent&resume=my-event",
-    );
+    expect(intent?.returnTo).toBe("/events?tense=upcoming&resume=my-event");
     expect(intent?.returnTo).not.toContain("evil.example");
     expect(intent?.returnTo).not.toContain("utm_source");
   });

@@ -32,6 +32,7 @@ import {
   eventHorizonInstants,
   eventHorizonReachingFirstMatch,
   eventHorizonTenseReach,
+  eventHorizonUpcomingReach,
   resolveEventHorizonBeyond,
   resolveEventHorizonFromData,
 } from "../events/event-horizon.js";
@@ -112,6 +113,7 @@ export class DoctorEventsService {
     const targeting = await this.resolveTargeting(
       query,
       input.specialtyReference,
+      today,
     );
 
     const directionIds =
@@ -264,6 +266,7 @@ export class DoctorEventsService {
     const targeting = await this.resolveTargeting(
       facets,
       input.specialtyReference,
+      today,
     );
     const rows = await this.monthWindowRows(
       facets,
@@ -321,6 +324,7 @@ export class DoctorEventsService {
     const targeting = await this.resolveTargeting(
       facets,
       input.specialtyReference,
+      doctorEventsFeedDayOf(new Date()),
     );
     const year = Number(input.query.year);
     const rows = await this.monthWindowRows(
@@ -386,9 +390,11 @@ export class DoctorEventsService {
     sub?: string | undefined;
   }): Promise<EventsLiveRead> {
     // The strip reads «моя и смежные» whatever scope the page applies — the
-    // LD-9 fall-back to every specialty included, like any applied scope.
-    const targeting = await this.resolveTargeting(
-      { specialty: "mine-and-adjacent" },
+    // LD-9 fall-back to every specialty included, like any applied scope. It
+    // never reports the visitor's default-scope emptiness, so it skips that
+    // probe.
+    const targeting = await this.resolveScope(
+      "mine-and-adjacent",
       input.specialtyReference,
     );
     return this.liveEvents.live({
@@ -409,19 +415,22 @@ export class DoctorEventsService {
    * is reported on every read, whatever scope the URL names, so the page knows
    * this visitor's default scope. Only an ABSENT `specialty` — the default
    * «Моя и смежные» — falls back to every specialty on it; an explicit
-   * `specialty` (`mine-and-adjacent` included) is never replaced.
+   * `specialty` (`mine-and-adjacent` included) is never replaced. «Upcoming»
+   * is exactly what the default «Будущие» feed lists: its states and its
+   * reach from `today` 00:00 МСК on.
    */
   private async resolveTargeting(
     query: Pick<DoctorEventsFeedQuery, "specialty">,
     remembered: string | null,
+    today: string,
   ): Promise<DoctorEventsFeedTargeting> {
     const own = await this.resolveScope("mine-and-adjacent", remembered);
     const defaultScopeEmpty =
       own.mode !== "all" &&
-      !(await this.repository.hasUpcomingEventOn([
-        ...own.directionIds,
-        ...own.adjacentDirectionIds,
-      ]));
+      !(await this.repository.hasUpcomingEventOn(
+        [...own.directionIds, ...own.adjacentDirectionIds],
+        eventHorizonUpcomingReach(today),
+      ));
     if (query.specialty === undefined) {
       if (!defaultScopeEmpty) return own;
       return {

@@ -68,6 +68,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
      * empty.
      */
     let emptyScopeCode = "";
+    /**
+     * EARS-9 / LD-9 — a specialty whose own direction AND its adjacent one hold
+     * only past-dated events still in `published` (an offline event never
+     * leaves it): nothing the «Будущие» feed reads, so its default
+     * «Моя и смежные» is empty.
+     */
+    let staleScopeCode = "";
     let expertsEventId = "";
     /** «Прошедшие» fixtures on the adjacency-less direction (gate rows 10/30/31/32). */
     let pastMontageEventId = "";
@@ -370,9 +377,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
         `SELECT s.id, s.code FROM specialties_minzdrav s
           WHERE s.is_other = false
             AND NOT EXISTS (SELECT 1 FROM direction_specialties ds WHERE ds.specialty_minzdrav_id = s.id)
-          ORDER BY s.code LIMIT 2`,
+          ORDER BY s.code LIMIT 3`,
       );
-      const [ownEmptySpecialty, emptyScopeSpecialty] = unlinked.rows;
+      const [ownEmptySpecialty, emptyScopeSpecialty, staleScopeSpecialty] =
+        unlinked.rows;
       ownEmptyAdjacentCarryingCode = ownEmptySpecialty!.code;
       const emptyDirection = await makeDirection("Пустая специальность");
       await linkSpecialty(emptyDirection, ownEmptySpecialty!.id);
@@ -402,6 +410,29 @@ describe.skipIf(!process.env.DATABASE_URL)(
         startsAt: at(-2, 12),
         directionId: emptyScopeAdjacent,
         state: "ended",
+      });
+
+      // A scope whose events are all dated before today yet still `published`
+      // — the «Будущие» feed reads from today 00:00 МСК, so none of them is
+      // upcoming for it.
+      staleScopeCode = staleScopeSpecialty!.code;
+      const staleScopeDirection = await makeDirection("Устаревшая область");
+      const staleScopeAdjacent = await makeDirection(
+        "Устаревшая смежная область",
+      );
+      await linkSpecialty(staleScopeDirection, staleScopeSpecialty!.id);
+      await makeEdge(staleScopeDirection, staleScopeAdjacent);
+      await makeEvent({
+        title: "Прошедший конгресс, всё ещё опубликован",
+        startsAt: at(-4, 12),
+        directionId: staleScopeDirection,
+        state: "published",
+      });
+      await makeEvent({
+        title: "Несостоявшийся эфир в смежной области",
+        startsAt: at(-1, 12),
+        directionId: staleScopeAdjacent,
+        state: "published",
       });
     }, 60_000);
 
@@ -876,6 +907,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
       expect(ids).toContain(ownEventId);
       expect(ids).not.toContain(unreachableEventId);
+    });
+
+    it("EARS-9.6: a default scope whose only events are dated before today, though still published, is empty — the feed falls back to «Все специальности»", async () => {
+      const feed = await readFeed({ specialtyCode: staleScopeCode });
+
+      expect(feed.targeting.mode).toBe("all");
+      expect(feed.targeting.defaultScopeEmpty).toBe(true);
+      expect(feed.targeting.specialtyReference).toBe(staleScopeCode);
     });
 
     it("EARS-9.5: a specialty with upcoming events of its own keeps the default «Моя и смежные», whatever scope the URL names", async () => {

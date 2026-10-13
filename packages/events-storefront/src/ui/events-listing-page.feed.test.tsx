@@ -608,7 +608,7 @@ describe("the doctor's default «Моя и смежные» is empty (019 EARS-9
       to: "2026-10-22",
       days: [],
       totalCount: 0,
-      nextTo: null,
+      nextCount: null,
       nextFrom: null,
       remaining: 0,
       nextBatch: 0,

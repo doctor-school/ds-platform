@@ -3527,15 +3527,17 @@ describe("ZitadelIdpClient 047 staff-access calls wire shape (V-8)", () => {
     const none = routedFetch({
       "/management/v1/users/grants/_search": { json: { result: [] } },
     });
-    await expect(client(none.fetchImpl).getProjectGrant("u-1")).resolves.toBeNull();
+    await expect(
+      client(none.fetchImpl).getProjectGrant("u-1"),
+    ).resolves.toBeNull();
     const noId = routedFetch({
       "/management/v1/users/grants/_search": {
         json: { result: [{ projectId: "proj-1", roleKeys: ["doctor_guest"] }] },
       },
     });
-    await expect(client(noId.fetchImpl).getProjectGrant("u-1")).rejects.toBeInstanceOf(
-      IdpUnavailableError,
-    );
+    await expect(
+      client(noId.fetchImpl).getProjectGrant("u-1"),
+    ).rejects.toBeInstanceOf(IdpUnavailableError);
   });
 
   it("047 EARS-4: updateProjectGrantRoles PUTs the full role-key set to the grant, org-scoped, and fails loud on a non-2xx", async () => {
@@ -3558,7 +3560,9 @@ describe("ZitadelIdpClient 047 staff-access calls wire shape (V-8)", () => {
       "/management/v1/users/u-1/grants/g-1": { ok: false, status: 409 },
     });
     await expect(
-      client(refused.fetchImpl).updateProjectGrantRoles("u-1", "g-1", ["doctor_guest"]),
+      client(refused.fetchImpl).updateProjectGrantRoles("u-1", "g-1", [
+        "doctor_guest",
+      ]),
     ).rejects.toBeInstanceOf(IdpUnavailableError);
   });
 
@@ -3580,7 +3584,10 @@ describe("ZitadelIdpClient 047 staff-access calls wire shape (V-8)", () => {
       },
     });
     await expect(
-      client(fetchImpl).listProjectGrantsWithRoles(["platform_admin", "event-registrar"]),
+      client(fetchImpl).listProjectGrantsWithRoles([
+        "platform_admin",
+        "event-registrar",
+      ]),
     ).resolves.toEqual([
       {
         grantId: "g-1",
@@ -3607,17 +3614,51 @@ describe("ZitadelIdpClient 047 staff-access calls wire shape (V-8)", () => {
         },
       },
     ]);
-    expect(bodies[1]!.queries[1]!["roleKeyQuery"]!.roleKey).toBe("event-registrar");
+    expect(bodies[1]!.queries[1]!["roleKeyQuery"]!.roleKey).toBe(
+      "event-registrar",
+    );
     expect(bodies[0]!.query.limit).toBeGreaterThan(0);
+  });
+
+  it("047 EARS-2: listProjectGrantsWithRoles reads every page of a role's grants, not only the first", async () => {
+    const bodies: { query: { limit: number; offset?: number } }[] = [];
+    const fetchImpl: FetchLike = (_url, init) => {
+      const body = JSON.parse(init.body ?? "{}") as {
+        query: { limit: number; offset?: number };
+      };
+      bodies.push(body);
+      const offset = Number(body.query.offset ?? 0);
+      // A full first page, then one more grant: a role held by limit + 1 people.
+      const size = offset === 0 ? body.query.limit : 1;
+      const result = Array.from({ length: size }, (_, i) => ({
+        id: `g-${offset + i}`,
+        userId: `u-${offset + i}`,
+        projectId: "proj-1",
+        roleKeys: ["platform_admin"],
+      }));
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ result }),
+      });
+    };
+    const holders = await client(fetchImpl).listProjectGrantsWithRoles([
+      "platform_admin",
+    ]);
+    const limit = bodies[0]!.query.limit;
+    expect(holders).toHaveLength(limit + 1);
+    expect(holders.at(-1)!.sub).toBe(`u-${limit}`);
+    expect(bodies).toHaveLength(2);
+    expect(Number(bodies[1]!.query.offset)).toBe(limit);
   });
 
   it("047 EARS-4: findUserByEmail returns the subject, null for nobody, and fails loud on a fault, never nobody on an outage", async () => {
     const found = routedFetch({
       "/v2/users": { json: { result: [{ userId: "u-7" }] } },
     });
-    await expect(client(found.fetchImpl).findUserByEmail("staff@ds.test")).resolves.toBe(
-      "u-7",
-    );
+    await expect(
+      client(found.fetchImpl).findUserByEmail("staff@ds.test"),
+    ).resolves.toBe("u-7");
     expect(found.calls[0]!.method).toBe("POST");
     expect(found.calls[0]!.url).toBe(`${BASE}/v2/users`);
     expect(found.calls[0]!.body).toContain("staff@ds.test");
@@ -3643,13 +3684,15 @@ describe("ZitadelIdpClient 047 staff-access calls wire shape (V-8)", () => {
         json: { authMethodTypes: ["AUTHENTICATION_METHOD_TYPE_PASSWORD"] },
       },
     });
-    await expect(client(held.fetchImpl).userHasPassword("u-1")).resolves.toBe(true);
+    await expect(client(held.fetchImpl).userHasPassword("u-1")).resolves.toBe(
+      true,
+    );
     const down = routedFetch({
       "/v2/users/u-1/authentication_methods": { ok: false, status: 500 },
     });
-    await expect(client(down.fetchImpl).userHasPassword("u-1")).rejects.toBeInstanceOf(
-      IdpUnavailableError,
-    );
+    await expect(
+      client(down.fetchImpl).userHasPassword("u-1"),
+    ).rejects.toBeInstanceOf(IdpUnavailableError);
   });
 
   it("047 EARS-6: setUserPassword fails loud on a refused set", async () => {

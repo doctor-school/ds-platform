@@ -2131,10 +2131,13 @@ export class ZitadelIdpClient implements IdpClient {
   ): Promise<IdpProjectGrantHolder[]> {
     const byId = new Map<string, IdpProjectGrantHolder>();
     for (const roleKey of roleKeys) {
-      const grants = await this.searchProjectGrants([
-        { projectIdQuery: { projectId: this.config.projectId } },
-        { roleKeyQuery: { roleKey, method: "TEXT_QUERY_METHOD_EQUALS" } },
-      ], USER_GRANT_SEARCH_LIMIT);
+      const grants = await this.searchProjectGrants(
+        [
+          { projectIdQuery: { projectId: this.config.projectId } },
+          { roleKeyQuery: { roleKey, method: "TEXT_QUERY_METHOD_EQUALS" } },
+        ],
+        USER_GRANT_SEARCH_LIMIT,
+      );
       for (const grant of grants) {
         if (!grant.id || !grant.userId) {
           throw new IdpUnavailableError(
@@ -2158,7 +2161,10 @@ export class ZitadelIdpClient implements IdpClient {
    * (`POST /management/v1/users/grants/_search`, org-scoped by
    * `x-zitadel-orgid`), filtered to this deployment's project. Wire shape and
    * the reasons for the org header and for staying on management-v1:
-   * {@link getProjectRoles}. Every fault throws {@link IdpUnavailableError}.
+   * {@link getProjectRoles}. With a `limit` it reads page after page (`offset`)
+   * until a page comes back short, so a role held by more people than one page
+   * is read whole (047 EARS-2 lists every holder). Every fault throws
+   * {@link IdpUnavailableError}.
    */
   private async searchProjectGrants(
     queries: Record<string, unknown>[],
@@ -2172,6 +2178,32 @@ export class ZitadelIdpClient implements IdpClient {
     // Throws `IdpUnavailableError` on its own failure paths, so the fail-loud
     // contract holds across the org hop too.
     const orgId = await this.resolveOrgId();
+    if (limit === undefined) {
+      return this.ownProjectGrants(
+        await this.searchUserGrantsPage(orgId, { queries }),
+      );
+    }
+    const grants: ZitadelUserGrant[] = [];
+    for (let offset = 0; ; offset += limit) {
+      const page = await this.searchUserGrantsPage(orgId, {
+        query: { offset, limit },
+        queries,
+      });
+      grants.push(...page);
+      if (page.length < limit) break;
+    }
+    return this.ownProjectGrants(grants);
+  }
+
+  private ownProjectGrants(grants: ZitadelUserGrant[]): ZitadelUserGrant[] {
+    return grants.filter((grant) => grant.projectId === this.config.projectId);
+  }
+
+  /** One page of the user-grant search, unfiltered. */
+  private async searchUserGrantsPage(
+    orgId: string,
+    body: Record<string, unknown>,
+  ): Promise<ZitadelUserGrant[]> {
     let res: Awaited<ReturnType<FetchLike>>;
     try {
       res = await this.fetchImpl(
@@ -2179,9 +2211,7 @@ export class ZitadelIdpClient implements IdpClient {
         {
           method: "POST",
           headers: { ...this.headers(), "x-zitadel-orgid": orgId },
-          body: JSON.stringify(
-            limit === undefined ? { queries } : { query: { limit }, queries },
-          ),
+          body: JSON.stringify(body),
         },
       );
     } catch (cause) {
@@ -2195,9 +2225,7 @@ export class ZitadelIdpClient implements IdpClient {
       );
     }
     const data = (await res.json()) as { result?: ZitadelUserGrant[] };
-    return (data.result ?? []).filter(
-      (grant) => grant.projectId === this.config.projectId,
-    );
+    return data.result ?? [];
   }
 
   /**
@@ -2936,7 +2964,7 @@ export class ZitadelIdpClient implements IdpClient {
  * branch (003 EARS-16, 044 EARS-7).
  */
 
-/** The page size of a user-grant search — far above the few dozen staff grants. */
+/** The page size of a paged user-grant search ({@link ZitadelIdpClient.searchProjectGrants} reads every page). */
 const USER_GRANT_SEARCH_LIMIT = 1000;
 
 /** One management-v1 user grant as the grant search returns it (#1194, 047). */

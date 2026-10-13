@@ -706,3 +706,38 @@ IdP: response/timing parity, no SMS/mail, no ledger row, the email path) and
 (EARS-58 confirmed-only resolution and mirror clearing).
 This coverage change has no render surface and requires no Stage-B request or
 slot.
+
+### Existing consent preservation (003 EARS-23/41)
+
+`Re-registration never overwrites an existing platform consent` creates and
+verifies a unique owned Academy account, establishes its secure session, and
+logs out through the ordinary account control. The real registration form then
+submits that same address in mixed case with a distinct password and Academy's
+read-only terms statement. A fresh addressed re-registration code remains
+unconsumed while private access is refused and the persisted consent remains
+unchanged. One accepted code opens the same verified profile and subject at
+`/account`, with a fresh secure session and no password sign-in replay.
+
+`steps/registration-consent-preservation.steps.ts` compares the consent row ID,
+total consent count, purpose, version, full PostgreSQL timestamp and relevant
+user mirror fields before submission, before code acceptance and after it.
+`lib/owned-auth-observation.ts` uses the public `@ds/db` pool in a read-only
+transaction; it accepts only consistent literal local Academy/API origins and
+an explicitly named isolated `ds_dev_<issue>` database, verifying
+`current_database()` before the data read. Fixture prefix, UUID, normalized
+email, session subject and observed profile ID bind every consent read.
+The same helper's `readOwnedUserCount` supplies a scalar total-users count for
+the phone-only refusal journey on the serialized isolated database; it deliberately
+does not filter by the control fixture's email. Malformed rows and connection,
+cleanup or ledger failures fail closed without retaining secret diagnostics.
+
+The lead supplies `E2E_API_URL`, `E2E_AUTH_DATABASE_URL` and
+`E2E_AUTH_DATABASE_NAME` from the actual owned contour. When supplied, the absolute
+`E2E_STAND_COMMAND_LOG` receives only operation, database and read-only completion
+metadata with `nativeExit: null` for the JavaScript SQL call; browser command exits
+are recorded separately by the lead. The existing `consent-refusal.ts` staging
+contract remains unchanged. Traces stay off, assertions project only safe evidence,
+and cleanup revokes only the owned session. Native API consent proofs and broader
+registration journeys remain intact. Run only this selected scenario on the
+lead-owned local contour; this coverage change has no render surface and requires
+no Stage-B request or slot.

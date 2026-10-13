@@ -210,13 +210,17 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And profile fields the account already holds are not overwritten
     And the platform consent ticked on the form is recorded only after the code is accepted
 
-  @EARS-23 @EARS-41 @happy
+  @EARS-23 @EARS-41 @happy @registration-consent-preservation
   Scenario: Re-registration never overwrites an existing platform consent
-    Given a verified account for "owner@example.org" that already holds a platform consent
-    When a visitor submits the registration form for "owner@example.org" with accepted consent versions
-    And enters the code from the mail on the code step
-    Then a BFF session is established
-    And no second platform consent row is written and the existing consent is unchanged
+    Given a uniquely owned verified Academy account is logged out with its existing platform consent observed
+    When that verified account re-registers through Academy with its mixed-case email, a different password and the read-only accepted terms
+    Then fresh addressed re-registration mail is delivered while the original consent and private-access refusal remain unchanged
+    When that registrant enters the delivered re-registration code once in the requesting Academy tab
+    Then that one code opens the same verified profile and secure session at the account return target without password replay
+    And the owned consent row ID, count, version and exact captured timestamp and relevant user mirrors are still identical
+    # NEW real read-only persistence proof: registration-consent-preservation.steps.ts.
+    # Retain auth.service.spec.ts EARS-23/41 recordMissingConsent proof and the
+    # broader app-local registration/mail/accepted-code/session journeys.
 
   @EARS-23 @failure @registration-duplicate-mail
   Scenario: Repeated duplicate registrations do not flood the inbox

@@ -156,6 +156,7 @@ const EMPTY_PAGE: EventsFeedPage = {
   remaining: 0,
   matching: 0,
 };
+const NO_KINDS = Promise.resolve([]);
 
 afterEach(cleanup);
 beforeEach(() => {
@@ -300,6 +301,7 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
           feed: Promise.resolve({ ok: false as const }),
           mine,
           specialties: NO_SPECIALTIES,
+          kinds: NO_KINDS,
           request: REQUEST,
           retry: RETRY,
         })}
@@ -331,6 +333,7 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
         feed: Promise.resolve({ ok: true as const, value: PAGE }),
         mine: Promise.resolve({ ok: true, value: null }),
         specialties: NO_SPECIALTIES,
+        kinds: NO_KINDS,
         request: REQUEST,
         retry: RETRY,
       }),
@@ -621,6 +624,7 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
         }),
         mine: Promise.resolve({ ok: true, value: null }),
         specialties: NO_SPECIALTIES,
+        kinds: NO_KINDS,
         request: REQUEST,
         retry: RETRY,
       }),
@@ -662,6 +666,7 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
         specialties: Promise.resolve([
           { code: "neurology", name: "Неврология" },
         ]),
+        kinds: NO_KINDS,
         request: REQUEST,
         retry: RETRY,
       }),
@@ -676,6 +681,24 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
     ]);
   });
 
+  it("EARS-7: an empty doctor feed under a kind the read does not offer names it by the kind dictionary, never by its raw slug", async () => {
+    mocks.fetchEventsFeed.mockResolvedValueOnce({ ok: true, value: { ...EMPTY_PAGE, matching: 5 } });
+    render(
+      await FeedSection({
+        config: DOCTOR,
+        query: { kind: "vebinar" },
+        feed: Promise.resolve({ ok: true as const, value: EMPTY_PAGE }),
+        mine: Promise.resolve({ ok: true, value: null }),
+        specialties: NO_SPECIALTIES,
+        kinds: Promise.resolve([{ slug: "vebinar", title: "Вебинар" }]),
+        request: REQUEST,
+      }),
+    );
+    const empty = screen.getByTestId("events-feed-empty");
+    expect(empty).toHaveTextContent("Нет событий по фильтру «Вид события: Вебинар»");
+    expect(empty).not.toHaveTextContent("vebinar");
+  });
+
   it("EARS-9: a non-empty feed makes no widen read", async () => {
     render(
       await FeedSection({
@@ -684,6 +707,7 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
         feed: Promise.resolve({ ok: true as const, value: PAGE }),
         mine: Promise.resolve({ ok: true, value: null }),
         specialties: NO_SPECIALTIES,
+        kinds: NO_KINDS,
         request: REQUEST,
         retry: RETRY,
       }),
@@ -709,6 +733,7 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
           value: { ...EMPTY_PAGE, facetOptions: TOPICS },
         }),
         specialties: NO_SPECIALTIES,
+        kinds: NO_KINDS,
         request: REQUEST,
         retry: RETRY,
       }),
@@ -745,6 +770,7 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
           month: "2026-10",
           feed: Promise.resolve({ ok: true as const, value: EMPTY_PAGE }),
           specialties: NO_SPECIALTIES,
+          kinds: NO_KINDS,
           request: REQUEST,
           retry: RETRY,
         }),

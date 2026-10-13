@@ -17,9 +17,10 @@ import type {
 } from "@ds/design-system/blocks";
 
 import type { FeedCopy } from "../copy/feed-copy";
+import { FILTER_COPY } from "../copy/filter-copy";
 import { type EventsStorefrontHostConfig, eventPageHref } from "../host-config";
 import { type PluralNoun, formatEventCount } from "./event-count";
-import { hasAppliedFacets, resetFacetsHref } from "./facets";
+import { type KindTitle, hasAppliedFacets, resetFacetsHref } from "./facets";
 import { FACET_KEYS, pageHref, withoutFeedQuery } from "./feed-url";
 import { isRecordingPlayable } from "./recording-cta";
 
@@ -434,7 +435,9 @@ export type WidenMatching = (
  * every specialty, LD-9: then it is passed over for the next facet). When none does, the state says so
  * and offers no widening. Either way it offers «Сбросить фильтры» — the page
  * without the host's facets (canvas `emptyOf`). Facet values are named by the
- * read's titles, a picked specialty by the specialty book. Only the host's own
+ * read's titles, a picked specialty by the specialty book. An applied kind the
+ * read does not offer is named by the kind dictionary, else «Больше не
+ * проводится» — as on the panel, never by its raw slug (019 EARS-7). Only the host's own
  * facet keys (`FACET_KEYS[filterSet]`) are conditions: a foreign key in a
  * crafted URL reaches no read, so it makes no chip and spends no widen read.
  *
@@ -453,6 +456,7 @@ export async function emptyFeedState(
     copy,
     filterSet,
     titles = {},
+    kinds = [],
     specialtyName = () => undefined,
     matching,
     defaultScopeEmpty = false,
@@ -464,6 +468,8 @@ export async function emptyFeedState(
     filterSet: EventsFilterHost;
     /** The read's facet options — a facet value is named by its title. */
     titles?: FeedFacetOptions;
+    /** The kind dictionary — names an applied kind the read does not offer (019 EARS-7). */
+    kinds?: readonly KindTitle[];
     /** A picked specialty's name from the specialty book, by its code. */
     specialtyName?: (code: string) => string | undefined;
     matching: WidenMatching;
@@ -523,7 +529,11 @@ export async function emptyFeedState(
     (v) =>
       `${copy.facet.format}: ${copy.card.format[v as EventParticipationFormat] ?? v}`,
   );
-  chipsOf("kind", (v) => `${copy.facet.kind}: ${titleOf("kind", v)}`);
+  const kindTitleOf = (value: string) =>
+    titles.kind?.find((option) => option.slug === value)?.title ??
+    kinds.find((kind) => kind.slug === value)?.title ??
+    FILTER_COPY.doctor.unavailableOption;
+  chipsOf("kind", (v) => `${copy.facet.kind}: ${kindTitleOf(v)}`);
   chipsOf("city", (v) => `${copy.facet.city}: ${v}`);
   if (own.has("nmo") && rawQueryBoolean(query.nmo) === true) {
     chips.push({

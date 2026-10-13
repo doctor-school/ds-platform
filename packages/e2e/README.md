@@ -804,3 +804,30 @@ closes only the owned context. Native `RegisterRequestSchema` and API
 intact as separate upstream evidence. Run only this selected case with
 `E2E_WORKERS=1` on the lead-selected contour; the coverage change has no render
 surface and requires no Stage-B request or new slot.
+
+### Verification-mail artifact (003 EARS-29)
+
+`The verification code email is composed and sent by the BFF mailer, code-only`
+registers one unique owned Academy address through the real form with the
+`/account` return target. `steps/verification-mail.steps.ts` captures recipient
+message IDs before registration, reads the strictly fresh addressed BFF artifact
+and requires exactly one added delivery. The canonical `assertNoAddressedMail`
+helper then observes every mail purpose over a full 15-second horizon, including
+a final query started at or after its deadline; a second IdP mail cannot hide
+behind a verification-purpose filter.
+
+The actual subject leads with six digits; HTML and plain text carry that same
+unbroken code, the approved 3600-second verification-purpose expiry and the
+instruction to enter it in the already-open requesting tab. Both complete bodies,
+footer included, contain no link, button or navigation URL. In that same tab,
+one different code must receive the real generic refusal without private access
+or a session; entering the delivered code once must open the same email-verified
+profile at `/account` with a secure BFF session and no sign-in/password replay.
+Assertions retain only safe evidence, traces stay off, and cleanup revokes only
+the owned session and closes its context. The native `returnCode` and
+IdP-no-native-send mechanism ownership remains explicitly mapped to
+`apps/api/test/auth/zitadel-email-verify.e2e-spec.ts:192`; the browser makes no
+provider HTTP or internal SMTP observation claim. Broader app-local registration
+and confirmation journeys remain intact. Run this selected case on the
+lead-selected stand; this coverage change has no render surface and requires no
+owner Stage-B request or slot.

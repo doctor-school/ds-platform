@@ -7,11 +7,11 @@ import { parseDoctorEventsLiveQuery } from "./doctor-events-month.schema.js";
  * codec, so the strip and the feed below it never read different filters.
  */
 describe("019 EARS-6 doctor live-strip query", () => {
-  it("019 EARS-6: a read with no filter is «моя и смежные» with no facet, the feed's own default", () => {
+  it("019 EARS-6: a read with no filter names no scope and no facet, the feed's own default (the server resolves it, LD-9 fall-back included)", () => {
     const parsed = parseDoctorEventsLiveQuery({});
     expect(parsed.success).toBe(true);
+    expect(parsed.data?.specialty).toBeUndefined();
     expect(parsed.data).toEqual({
-      specialty: "mine-and-adjacent",
       format: [],
       kind: [],
       city: [],

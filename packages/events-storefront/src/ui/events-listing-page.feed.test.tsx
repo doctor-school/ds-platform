@@ -1030,7 +1030,7 @@ describe("<LiveBlock> — «Идёт сейчас» (gate rows 43–44)", () => 
     expect(query.has("view")).toBe(false);
   });
 
-  it("019 EARS-6: the default scope states no query, so the strip reads «моя и смежные» like the feed", async () => {
+  it("019 EARS-6: the default scope states no query, so the strip reads the visitor's default scope like the feed", async () => {
     await LiveSection({
       config: DOCTOR,
       raw: {},

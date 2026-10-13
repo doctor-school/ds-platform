@@ -76,6 +76,38 @@ describe("019 EARS-8.17 doctor events feed — the served calendar days (#2831)"
     }
   });
 
+  it("019 EARS-8.17: the response echoes the horizon resolved past the served years", () => {
+    // The refusal lives at the request boundary only: upcoming `from=2999-12-31`
+    // resolves `to=3000-01-01`, past `to=1900-01-01` resolves `from=1899-12-31`.
+    const feed = {
+      tense: "upcoming" as const,
+      today: "2026-10-08",
+      from: `${DOCTOR_EVENTS_QUERY_YEAR_MAX}-12-31`,
+      to: `${DOCTOR_EVENTS_QUERY_YEAR_MAX + 1}-01-01`,
+      days: [],
+      totalCount: 0,
+      nextTo: null,
+      nextFrom: `${DOCTOR_EVENTS_QUERY_YEAR_MIN - 1}-12-31`,
+      remaining: 0,
+      nextBatch: 0,
+      targeting: {
+        mode: "all" as const,
+        specialtyReference: null,
+        directionIds: [],
+        adjacentDirectionIds: [],
+      },
+    };
+    expect(DoctorEventsFeedSchema.safeParse(feed).success).toBe(true);
+    expect(
+      DoctorEventsFeedSchema.safeParse({
+        ...feed,
+        from: `${DOCTOR_EVENTS_QUERY_YEAR_MIN - 1}-12-31`,
+        to: `${DOCTOR_EVENTS_QUERY_YEAR_MIN}-01-01`,
+        nextTo: `${DOCTOR_EVENTS_QUERY_YEAR_MAX + 1}-01-15`,
+      }).success,
+    ).toBe(true);
+  });
+
   it("019 EARS-9: the page URL keeps a refused day for the read to refuse", () => {
     const parsed = EVENTS_PAGE_QUERY_CODEC.parse({
       from: "0001-01-01",

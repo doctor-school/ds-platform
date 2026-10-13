@@ -3,7 +3,7 @@ import { z } from "zod";
 import { SlugSchema } from "../taxonomy/taxonomy.schema.js";
 import { DoctorEventFormatSchema } from "./doctor-event-card.schema.js";
 import {
-  DoctorEventsFeedDaySchema,
+  DoctorEventsFeedDayShapeSchema,
   DoctorEventsFeedSpecialtyModeSchema,
   isDoctorEventsQueryYear,
   DoctorEventsFeedTargetingSchema,
@@ -98,7 +98,7 @@ export type DoctorEventsMonthQuery = z.infer<
 /** One cell of the grid. `count` is the number of feed cards that fall on `date`. */
 export const DoctorEventsMonthDaySchema = z
   .object({
-    date: DoctorEventsFeedDaySchema,
+    date: DoctorEventsFeedDayShapeSchema,
     count: z.number().int().nonnegative(),
     /** The live marker of EARS-4 — the same lifecycle state the feed's card carries, never a start-time guess. */
     hasLive: z.boolean(),
@@ -110,7 +110,7 @@ export const DoctorEventsMonthGridSchema = z
   .object({
     month: DoctorEventsMonthSchema,
     /** «Сегодня» — the МСК calendar day, so the marker cannot drift with the reader's device clock. */
-    today: DoctorEventsFeedDaySchema,
+    today: DoctorEventsFeedDayShapeSchema,
     /** EVERY day of `month`, ascending — the host fills nothing in. */
     days: z.array(DoctorEventsMonthDaySchema).min(28),
     /**

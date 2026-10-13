@@ -145,6 +145,24 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
     ).toBe(false);
   });
 
+  it("NEW: the horizon echo past the served years still parses (#2831)", () => {
+    const parsed = PublicEventListingPageSchema.safeParse({
+      data: [card()],
+      counts: { upcoming: 0, past: 1, upcomingSchools: 0, pastSchools: 1 },
+      pagination: { nextCursor: null, hasMore: false },
+      horizon: {
+        today: "2026-10-08",
+        from: "1899-12-31",
+        to: "3000-01-01",
+        nextTo: null,
+        nextFrom: null,
+        remaining: 0,
+        nextBatch: 0,
+      },
+    });
+    expect(parsed.success).toBe(true);
+  });
+
   it("NEW: a past horizon page names the older `from` and the remainder; a horizon without them is refused (rows 30, 32)", () => {
     const base = {
       data: [card()],

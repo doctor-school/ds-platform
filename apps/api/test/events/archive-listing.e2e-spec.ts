@@ -137,6 +137,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
         url: "/v1/public/events?timeframe=past&cursor=not-issued",
       });
       expect(malformed.statusCode).toBe(400);
+
+      // #2831 — the listing's `from`/`to` share the doctor read's day codec: a
+      // day outside the served years is a 400 at the boundary, never a 500.
+      const refusedDay = await app.inject({
+        method: "GET",
+        url: "/v1/public/events?timeframe=upcoming&from=0001-01-01",
+      });
+      expect(refusedDay.statusCode).toBe(400);
     });
 
     it("NEW: the listing counts shall carry the distinct schools among upcoming published events for the «N эфиров · M школ» subline", async () => {

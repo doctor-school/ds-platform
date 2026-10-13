@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { RecordingProjectionSchema } from "../recordings/recordings.schema.js";
 import { SlugSchema } from "../taxonomy/taxonomy.schema.js";
-import { DoctorEventsFeedDaySchema } from "./doctor-events-feed.schema.js";
+import {
+  DoctorEventsFeedDayShapeSchema,
+  DoctorEventsFeedDaySchema,
+} from "./doctor-events-feed.schema.js";
 import { PublicEventFacetOptionSchema } from "./event-facet-option.schema.js";
 import {
   createEventListingQueryCodec,
@@ -155,11 +158,11 @@ export const PublicEventListingPageSchema = z.object({
   horizon: z
     .object({
       /** Wave-2 gate §4.3 D10 — the api's «сегодня» (МСК), the doctor feed's `today`. */
-      today: DoctorEventsFeedDaySchema,
-      from: DoctorEventsFeedDaySchema,
-      to: DoctorEventsFeedDaySchema,
-      nextTo: DoctorEventsFeedDaySchema.nullable(),
-      nextFrom: DoctorEventsFeedDaySchema.nullable(),
+      today: DoctorEventsFeedDayShapeSchema,
+      from: DoctorEventsFeedDayShapeSchema,
+      to: DoctorEventsFeedDayShapeSchema,
+      nextTo: DoctorEventsFeedDayShapeSchema.nullable(),
+      nextFrom: DoctorEventsFeedDayShapeSchema.nullable(),
       remaining: z.number().int().nonnegative(),
       nextBatch: z.number().int().nonnegative(),
     })

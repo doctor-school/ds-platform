@@ -1,6 +1,7 @@
 import { createDrizzle, type DrizzleHandle } from "@ds/db";
-import { appendFileSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, isAbsolute, join, relative } from "node:path";
 
 export interface OwnedAuthContour {
   academyBaseUrl: string;
@@ -14,6 +15,10 @@ export interface OwnedAuthFixture {
   email: string;
   subject?: string | undefined;
   profileId?: string | undefined;
+}
+export interface OwnedPhoneFixture {
+  email: string;
+  phones: readonly string[];
 }
 export interface OwnedConsentSnapshot {
   profileId: string;
@@ -36,6 +41,160 @@ const UUID =
 const OWNED_EMAIL =
   /^(consent-2856|phone-control-2857)-([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})@example\.test$/;
 const FAILURE = "Owned auth observation failed";
+const CONSENT_SELECT =
+  "SELECT u.id AS profile_id, u.email = $1 AS email_matches, u.zitadel_sub = $2 AS subject_matches, u.email_verified, u.phone IS NULL AS phone_absent, u.phone_verified, u.display_name IS NULL AS display_name_absent, c.id AS consent_id, c.purpose, c.version, c.captured_at::text AS captured_at, c.origin FROM users u JOIN consent_records c ON c.user_id = u.id WHERE u.email = $1 AND u.zitadel_sub = $2 AND ($3::uuid IS NULL OR u.id = $3::uuid) ORDER BY c.id";
+
+interface StageConsentEffects {
+  capture: (script: string) => Promise<string>;
+}
+
+function stageSlot(base: string): string | undefined {
+  try {
+    const url = new URL(base);
+    const match = /^academy-(main|pr-[1-9][0-9]{0,9})\.[a-z0-9.-]+$/.exec(
+      url.hostname,
+    );
+    if (
+      !match ||
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.port ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash ||
+      url.origin !== base.replace(/\/$/, "")
+    )
+      return undefined;
+    return match[1];
+  } catch {
+    return undefined;
+  }
+}
+
+function recordStageOperation(
+  slot: string,
+  operation: string,
+  status: string,
+  nativeExit: number | null,
+): void {
+  const log =
+    process.env.E2E_STAND_COMMAND_LOG ||
+    join(tmpdir(), "ds-e2e-stand-ops", "owned-auth-observation.jsonl");
+  const fromTemp = relative(tmpdir(), log);
+  if (!isAbsolute(log) || fromTemp.startsWith("..") || isAbsolute(fromTemp))
+    throw new Error();
+  mkdirSync(dirname(log), { recursive: true });
+  appendFileSync(
+    log,
+    `${JSON.stringify({ at: new Date().toISOString(), operation, slot, readOnly: true, status, nativeExit })}\n`,
+    "utf8",
+  );
+}
+
+async function observeStageAuth(
+  base: string,
+  slot: string,
+  fixture: OwnedAuthFixture,
+  effects?: StageConsentEffects,
+  phones?: readonly string[],
+): Promise<unknown[]> {
+  const owned = { ...fixture };
+  validateFixture(owned, phones === undefined);
+  try {
+    // Reuse the same public stage transport as consent-refusal.ts, keeping its caller contract intact.
+    const staging = await import(
+      new URL("../../../tools/staging/slot.mjs", import.meta.url).href
+    );
+    const capture = async (
+      operation: string,
+      script: string,
+    ): Promise<string> => {
+      recordStageOperation(slot, operation, "started", null);
+      let output: string;
+      try {
+        if (effects) output = await effects.capture(script);
+        else {
+          const remote = await import(
+            new URL("../../../tools/deploy/lib/remote.mjs", import.meta.url)
+              .href
+          );
+          output = await remote.sshCapture(staging.STAGE_1, script, {
+            sshOptions: ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"],
+            signal: AbortSignal.timeout(15_000),
+            stderr: "pipe",
+          });
+        }
+      } catch {
+        recordStageOperation(slot, operation, "failed", null);
+        throw new Error();
+      }
+      // sshCapture resolves only when its native child exits 0; injected unit captures have no native exit.
+      recordStageOperation(slot, operation, "completed", effects ? null : 0);
+      return output;
+    };
+    const env = staging.parseEnvFile(
+      await capture(
+        "owned-stage-topology-read",
+        staging.quoteCommand(["sudo", "cat", staging.STAGE_ENV_FILE]),
+      ),
+    );
+    const configuredHost = staging.slotHostnames(
+      slot,
+      staging.requiredBaseDomain(env),
+    ).academy;
+    if (new URL(base).hostname !== configuredHost) throw new Error();
+    const database: string = staging.slotDatabaseName(slot);
+    if (!/^ds_(main|pr_[1-9][0-9]{0,9})$/.test(database)) throw new Error();
+    const bound =
+      phones === undefined
+        ? CONSENT_SELECT.replaceAll("$1", `'${owned.email}'`)
+            .replaceAll("$2", `'${owned.subject}'`)
+            .replaceAll(
+              "$3",
+              owned.profileId === undefined ? "NULL" : `'${owned.profileId}'`,
+            )
+        : `SELECT count(*)::text AS count FROM users WHERE phone IN (${phones.map((phone) => `'${phone}'`).join(", ")})`;
+    const sql = `BEGIN READ ONLY; SET LOCAL statement_timeout = '5s'; SET LOCAL timezone = 'UTC'; SELECT json_build_object('database', current_database(), 'readOnly', current_setting('transaction_read_only') = 'on', 'rows', CASE WHEN current_database() = '${database}' AND current_setting('transaction_read_only') = 'on' THEN (SELECT coalesce(json_agg(row_to_json(binding)), '[]'::json) FROM (${bound}) binding) ELSE NULL END); ROLLBACK;`;
+    const output = await capture(
+      phones === undefined
+        ? "owned-stage-consent-read"
+        : "owned-stage-phone-account-count",
+      staging.quoteCommand([
+        "sudo",
+        "docker",
+        "exec",
+        "-i",
+        staging.POSTGRES_CONTAINER,
+        "psql",
+        "-X",
+        "-qAt",
+        "-U",
+        "ds",
+        "-d",
+        database,
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-c",
+        sql,
+      ]),
+    );
+    const result = exactRow(JSON.parse(output), [
+      "database",
+      "readOnly",
+      "rows",
+    ]);
+    if (
+      result.database !== database ||
+      result.readOnly !== true ||
+      !Array.isArray(result.rows)
+    )
+      throw new Error();
+    return result.rows;
+  } catch {
+    throw new Error(FAILURE);
+  }
+}
 
 function validateTarget(contour: OwnedAuthContour): void {
   try {
@@ -137,6 +296,7 @@ async function observe(
   contour: OwnedAuthContour,
   fixture: OwnedAuthFixture,
   consent: boolean,
+  phones?: readonly string[],
 ): Promise<unknown[]> {
   validateTarget(contour);
   validateFixture(fixture, consent);
@@ -170,11 +330,17 @@ async function observe(
     )
       throw new Error();
     const result = consent
-      ? await client.query(
-          "SELECT u.id AS profile_id, u.email = $1 AS email_matches, u.zitadel_sub = $2 AS subject_matches, u.email_verified, u.phone IS NULL AS phone_absent, u.phone_verified, u.display_name IS NULL AS display_name_absent, c.id AS consent_id, c.purpose, c.version, c.captured_at::text AS captured_at, c.origin FROM users u JOIN consent_records c ON c.user_id = u.id WHERE u.email = $1 AND u.zitadel_sub = $2 AND ($3::uuid IS NULL OR u.id = $3::uuid) ORDER BY c.id",
-          [fixture.email, fixture.subject, fixture.profileId ?? null],
-        )
-      : await client.query("SELECT count(*)::text AS count FROM users");
+      ? await client.query(CONSENT_SELECT, [
+          fixture.email,
+          fixture.subject,
+          fixture.profileId ?? null,
+        ])
+      : phones === undefined
+        ? await client.query("SELECT count(*)::text AS count FROM users")
+        : await client.query(
+            "SELECT count(*)::text AS count FROM users WHERE phone = ANY($1::text[])",
+            [phones],
+          );
     if (!Array.isArray(result.rows)) throw new Error();
     rows = result.rows;
   } catch {
@@ -204,7 +370,7 @@ async function observe(
     try {
       appendFileSync(
         commandLog,
-        `${JSON.stringify({ at: new Date().toISOString(), operation: consent ? "owned-consent-read" : "owned-users-count", database: contour.expectedDatabase, readOnly: true, nativeExit: null, ok: !failed })}\n`,
+        `${JSON.stringify({ at: new Date().toISOString(), operation: consent ? "owned-consent-read" : phones === undefined ? "owned-users-count" : "owned-phone-account-count", database: contour.expectedDatabase, readOnly: true, nativeExit: null, ok: !failed })}\n`,
         "utf8",
       );
     } catch {
@@ -220,6 +386,10 @@ export async function readOwnedUserCount(
   fixture: OwnedAuthFixture,
 ): Promise<number> {
   const rows = await observe(contour, fixture, false);
+  return parseCount(rows);
+}
+
+function parseCount(rows: unknown[]): number {
   try {
     if (rows.length !== 1) throw new Error();
     const row = exactRow(rows[0], ["count"]);
@@ -233,11 +403,41 @@ export async function readOwnedUserCount(
   }
 }
 
+export async function readOwnedPhoneAccountCount(
+  contour: OwnedAuthContour,
+  fixture: OwnedPhoneFixture,
+  effects?: StageConsentEffects,
+): Promise<number> {
+  if (
+    typeof fixture.email !== "string" ||
+    !OWNED_EMAIL.test(fixture.email) ||
+    !fixture.email.startsWith("phone-control-2857-") ||
+    !Array.isArray(fixture.phones) ||
+    fixture.phones.length !== 2 ||
+    new Set(fixture.phones).size !== 2 ||
+    fixture.phones.some(
+      (phone) => typeof phone !== "string" || !/^\+1999[0-9]{8}$/.test(phone),
+    )
+  )
+    throw new Error("Invalid owned phone observation fixture");
+  const slot = stageSlot(contour.academyBaseUrl);
+  const rows = slot
+    ? await observeStageAuth(contour.academyBaseUrl, slot, fixture, effects, [
+        ...fixture.phones,
+      ])
+    : await observe(contour, fixture, false, [...fixture.phones]);
+  return parseCount(rows);
+}
+
 export async function readOwnedConsentSnapshot(
   contour: OwnedAuthContour,
   fixture: OwnedAuthFixture,
+  effects?: StageConsentEffects,
 ): Promise<OwnedConsentSnapshot> {
-  const rows = await observe(contour, fixture, true);
+  const slot = stageSlot(contour.academyBaseUrl);
+  const rows = slot
+    ? await observeStageAuth(contour.academyBaseUrl, slot, fixture, effects)
+    : await observe(contour, fixture, true);
   try {
     if (rows.length !== 1) throw new Error();
     const row = exactRow(rows[0], [

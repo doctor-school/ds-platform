@@ -721,16 +721,27 @@ unchanged. One accepted code opens the same verified profile and subject at
 `steps/registration-consent-preservation.steps.ts` compares the consent row ID,
 total consent count, purpose, version, full PostgreSQL timestamp and relevant
 user mirror fields before submission, before code acceptance and after it.
-`lib/owned-auth-observation.ts` uses the public `@ds/db` pool in a read-only
-transaction; it accepts only consistent literal local Academy/API origins and
+For a local contour, `lib/owned-auth-observation.ts` uses the public `@ds/db` pool
+in a read-only transaction; it accepts only consistent literal local Academy/API origins and
 an explicitly named isolated `ds_dev_<issue>` database on the trusted host and
 port from the actual runtime recipe, verifying
 `current_database()` before the data read. Fixture prefix, UUID, normalized
 email, session subject and observed profile ID bind every consent read.
-The same helper's `readOwnedUserCount` supplies a scalar total-users count for
-the phone-only refusal journey on the serialized isolated database; it deliberately
-does not filter by the control fixture's email. Malformed rows and connection,
-cleanup or ledger failures fail closed without retaining secret diagnostics.
+On canonical HTTPS Academy staging, the reader derives the actual slot hostname
+and database from the staging environment through the existing public SSH/slot
+helpers. It needs no local API or DB environment variables. Before reading the
+exact owned fixture, it checks the configured hostname; the read-only SQL guards
+the projection by actual `current_database()` and `transaction_read_only`, and
+the result must match both. Consent cardinality and typed projection checks are
+shared by both routes. Missing SSH access fails explicitly with redacted errors.
+
+`readOwnedPhoneAccountCount` is the #2857 request-bound mirror-absence observer:
+it counts only rows for the two actual submitted, distinct `+1999` plus eight-digit
+synthetic phone identifiers, bound to an owned `phone-control-2857-<UUID>` fixture.
+It supports local and staging contours, with no control-email filter or shared
+global-user claim. `readOwnedUserCount` remains the additional total-users oracle
+for the serialized isolated local database; it rejects staging before any query.
+Malformed results, connection, cleanup and ledger failures fail closed.
 
 The lead supplies `E2E_API_URL`, `E2E_AUTH_DATABASE_URL`,
 `E2E_AUTH_DATABASE_NAME`, `E2E_AUTH_DATABASE_HOST` and `E2E_AUTH_DATABASE_PORT`
@@ -739,10 +750,14 @@ Academy/API remain local. The observer refuses any DB host or port that differs
 from that trusted binding, as well as production/shared database targets.
 When supplied, the absolute
 `E2E_STAND_COMMAND_LOG` receives only operation, database and read-only completion
-metadata with `nativeExit: null` for the JavaScript SQL call; browser command exits
-are recorded separately by the lead. The existing `consent-refusal.ts` staging
+metadata with `nativeExit: null` for local JavaScript SQL calls. Staging always
+records sanitized operations in the TEMP log (default
+`ds-e2e-stand-ops/owned-auth-observation.jsonl`); successful native SSH exits are 0,
+and no SQL, identifiers, rows or secret diagnostics are logged. Browser command
+exits are recorded separately by the lead. The existing `consent-refusal.ts` staging
 contract remains unchanged. Traces stay off, assertions project only safe evidence,
 and cleanup revokes only the owned session. Native API consent proofs and broader
-registration journeys remain intact. Run only this selected scenario on the
-lead-owned local contour; this coverage change has no render surface and requires
+registration journeys remain intact. The same scenario stays active in the
+canonical full Academy staging/release suite and in the lead-owned local contour;
+this coverage change has no render surface and requires
 no Stage-B request or slot.

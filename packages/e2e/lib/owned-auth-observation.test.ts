@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   readOwnedConsentSnapshot,
   readOwnedUserCount,
+  readOwnedPhoneAccountCount,
   type OwnedAuthContour,
 } from "./owned-auth-observation.js";
 
@@ -14,9 +17,14 @@ const mocked = vi.hoisted(() => ({
   remove: vi.fn(),
   on: vi.fn(),
   append: vi.fn(),
+  mkdir: vi.fn(),
 }));
 vi.mock("@ds/db", () => ({ createDrizzle: mocked.create }));
-vi.mock("node:fs", () => ({ appendFileSync: mocked.append }));
+vi.mock("node:fs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:fs")>()),
+  appendFileSync: mocked.append,
+  mkdirSync: mocked.mkdir,
+}));
 const contour: OwnedAuthContour = {
   academyBaseUrl: "http://localhost:3001",
   apiBaseUrl: "http://localhost:3000",
@@ -25,6 +33,7 @@ const contour: OwnedAuthContour = {
   expectedDatabaseHost: "localhost",
   expectedDatabasePort: 5432,
 };
+const commandLog = join(tmpdir(), "stand-ops-2856.jsonl");
 const fixture = {
   email: "consent-2856-12345678-1234-4234-8234-123456789abc@example.test",
   subject: "123456789012345678",
@@ -70,6 +79,280 @@ beforeEach(() => {
     },
   });
   rows([consentRow]);
+});
+
+describe("canonical stage consent observation", () => {
+  const stageContour = (slot = "main"): OwnedAuthContour => ({
+    ...contour,
+    academyBaseUrl: `https://academy-${slot}.stage.doctor.school`,
+    apiBaseUrl: "",
+    databaseUrl: "",
+    expectedDatabase: "",
+    expectedDatabaseHost: "",
+    expectedDatabasePort: NaN,
+  });
+  const stageEffects = (
+    slot = "main",
+    envelope: unknown = {
+      database: slot === "main" ? "ds_main" : `ds_${slot.replace("-", "_")}`,
+      readOnly: true,
+      rows: [consentRow],
+    },
+  ) => ({
+    capture: vi.fn(async (script: string) =>
+      script.includes("ON_ERROR_STOP=1")
+        ? JSON.stringify(envelope)
+        : "STAGE_BASE_DOMAIN=stage.doctor.school\nSYNTHETIC_SECRET=never-log-this",
+    ),
+  });
+  it.each(["main", "pr-2872"])(
+    "EARS-23: accepts canonical %s without local DB/API variables and returns the same typed owned projection",
+    async (slot) => {
+      const effects = stageEffects(slot);
+      const snapshot = await readOwnedConsentSnapshot(
+        stageContour(slot),
+        fixture,
+        effects,
+      );
+      expect(snapshot.consentId).toBe(consentRow.consent_id);
+      expect(snapshot.capturedAt).toBe(consentRow.captured_at);
+      expect(effects.capture).toHaveBeenCalledTimes(2);
+      const sql = effects.capture.mock.calls[1]![0];
+      expect(sql).toContain("BEGIN READ ONLY");
+      expect(sql).toContain("statement_timeout");
+      expect(sql).toContain("ON_ERROR_STOP=1");
+      expect(sql).toContain("current_database()");
+      expect(sql).toContain("transaction_read_only");
+      expect(sql).toContain("ROLLBACK");
+      expect(sql).toContain(`ds_${slot.replace("-", "_")}`);
+      expect(/SELECT \*|INSERT|UPDATE|DELETE|DROP/i.test(sql)).toBe(false);
+      expect(mocked.create).not.toHaveBeenCalled();
+      const ledger = mocked.append.mock.calls.map((call) =>
+        JSON.parse(call[1]),
+      );
+      expect(ledger.length).toBeGreaterThan(0);
+      expect(JSON.stringify(ledger)).not.toMatch(
+        /never-log-this|example\.test|123456789012345678|SELECT|synthetic-password/,
+      );
+    },
+  );
+  it("EARS-23: refuses a hostname mismatched with actual Stage topology before the private query", async () => {
+    const effects = stageEffects();
+    await expect(
+      readOwnedConsentSnapshot(
+        {
+          ...stageContour(),
+          academyBaseUrl: "https://academy-main.foreign.test",
+        },
+        fixture,
+        effects,
+      ),
+    ).rejects.toThrow(/^Owned auth observation failed$/);
+    expect(effects.capture).toHaveBeenCalledOnce();
+  });
+  it.each([
+    { database: "ds", readOnly: true, rows: [consentRow] },
+    { database: "ds_pr_999", readOnly: true, rows: [consentRow] },
+    { database: "ds_main", readOnly: false, rows: [consentRow] },
+    { database: "ds_main", readOnly: "on", rows: [consentRow] },
+    { database: "ds_main", readOnly: true, rows: [consentRow, consentRow] },
+    {
+      database: "ds_main",
+      readOnly: true,
+      rows: [{ ...consentRow, version: "secret@example.test" }],
+    },
+    {
+      database: "ds_main",
+      readOnly: true,
+      rows: [consentRow],
+      secret: "never-log-this",
+    },
+    null,
+  ])(
+    "EARS-23: rejects wrong DB, non-read-only or malformed Stage projections without retaining them %#",
+    async (envelope) => {
+      const effects = stageEffects("main", envelope);
+      await expect(
+        readOwnedConsentSnapshot(stageContour(), fixture, effects),
+      ).rejects.toThrow(/^Owned auth observation failed$/);
+    },
+  );
+  it("EARS-23: missing Stage SSH access fails hard with redacted diagnostics", async () => {
+    const effects = {
+      capture: vi
+        .fn()
+        .mockRejectedValue(new Error("synthetic-password secret@example.test")),
+    };
+    await expect(
+      readOwnedConsentSnapshot(stageContour(), fixture, effects),
+    ).rejects.toThrow(/^Owned auth observation failed$/);
+    expect(effects.capture).toHaveBeenCalledOnce();
+  });
+  it("EARS-23: an unsafe owned fixture is rejected before any Stage access", async () => {
+    const effects = stageEffects();
+    await expect(
+      readOwnedConsentSnapshot(
+        stageContour(),
+        { ...fixture, email: "owner@example.org" },
+        effects,
+      ),
+    ).rejects.toThrow("Invalid owned auth observation fixture");
+    expect(effects.capture).not.toHaveBeenCalled();
+  });
+  it("EARS-23: Stage fixture binding cannot change while topology is awaited", async () => {
+    const mutable = { ...fixture };
+    const effects = stageEffects();
+    effects.capture.mockImplementation(async (script: string) => {
+      if (!script.includes("ON_ERROR_STOP=1")) {
+        mutable.email = "owner@example.org";
+        return "STAGE_BASE_DOMAIN=stage.doctor.school";
+      }
+      return JSON.stringify({
+        database: "ds_main",
+        readOnly: true,
+        rows: [consentRow],
+      });
+    });
+    await readOwnedConsentSnapshot(stageContour(), mutable, effects);
+    expect(effects.capture.mock.calls[1]![0]).toContain(fixture.email);
+    expect(effects.capture.mock.calls[1]![0]).not.toContain(mutable.email);
+  });
+  it("EARS-2: a global Stage users count is refused before any SQL or pool", async () => {
+    await expect(
+      readOwnedUserCount(stageContour(), { email: fixture.email }),
+    ).rejects.toThrow("Invalid owned auth observation target");
+    expect(mocked.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("owned submitted-phone account absence", () => {
+  const phoneFixture = {
+    email:
+      "phone-control-2857-12345678-1234-4234-8234-123456789abc@example.test",
+    phones: ["+199912345678", "+199987654321"] as [string, string],
+  };
+  it("EARS-2: local reads count only the two actual submitted phones without filtering the control email", async () => {
+    rows([{ count: "0" }]);
+    expect(await readOwnedPhoneAccountCount(contour, phoneFixture)).toBe(0);
+    expect(
+      mocked.query.mock.calls.find(([sql]) => sql.includes("WHERE phone"))?.[1],
+    ).toEqual([phoneFixture.phones]);
+    expect(
+      mocked.query.mock.calls.some(([sql]) => sql.includes("WHERE email")),
+    ).toBe(false);
+  });
+  it("EARS-2: shared Stage reads only the submitted owned phone identifiers with actual topology guards", async () => {
+    const stage = {
+      ...contour,
+      academyBaseUrl: "https://academy-main.stage.doctor.school",
+      apiBaseUrl: "",
+      databaseUrl: "",
+    };
+    const effects = {
+      capture: vi.fn(async (script: string) =>
+        script.includes("ON_ERROR_STOP=1")
+          ? JSON.stringify({
+              database: "ds_main",
+              readOnly: true,
+              rows: [{ count: "0" }],
+            })
+          : "STAGE_BASE_DOMAIN=stage.doctor.school",
+      ),
+    };
+    expect(await readOwnedPhoneAccountCount(stage, phoneFixture, effects)).toBe(
+      0,
+    );
+    const script = effects.capture.mock.calls[1]![0];
+    expect(script).toContain("WHERE phone IN");
+    expect(script).toContain(phoneFixture.phones[0]);
+    expect(script).toContain(phoneFixture.phones[1]);
+    expect(script).not.toContain(phoneFixture.email);
+  });
+  it("EARS-2: submitted phone bindings cannot change during the Stage topology await", async () => {
+    const mutable = { ...phoneFixture, phones: [...phoneFixture.phones] };
+    const effects = {
+      capture: vi.fn(async (script: string) => {
+        if (!script.includes("ON_ERROR_STOP=1")) {
+          mutable.phones[0] = "+79991234567";
+          return "STAGE_BASE_DOMAIN=stage.doctor.school";
+        }
+        return JSON.stringify({
+          database: "ds_main",
+          readOnly: true,
+          rows: [{ count: "0" }],
+        });
+      }),
+    };
+    await readOwnedPhoneAccountCount(
+      {
+        ...contour,
+        academyBaseUrl: "https://academy-main.stage.doctor.school",
+      },
+      mutable,
+      effects,
+    );
+    expect(effects.capture.mock.calls[1]![0]).toContain(phoneFixture.phones[0]);
+    expect(effects.capture.mock.calls[1]![0]).not.toContain(mutable.phones[0]);
+  });
+  it.each([
+    { ...phoneFixture, email: fixture.email },
+    { ...phoneFixture, phones: [] },
+    {
+      ...phoneFixture,
+      phones: [phoneFixture.phones[0], phoneFixture.phones[0]],
+    },
+    { ...phoneFixture, phones: ["+79991234567", phoneFixture.phones[1]] },
+    { ...phoneFixture, phones: ["+1999' OR true--", phoneFixture.phones[1]] },
+  ])(
+    "EARS-2: unsafe or unbound phone fixtures fail before any local pool or Stage access %#",
+    async (bad) => {
+      rows([{ count: "0" }]);
+      const effects = { capture: vi.fn() };
+      for (const target of [
+        contour,
+        {
+          ...contour,
+          academyBaseUrl: "https://academy-main.stage.doctor.school",
+        },
+      ])
+        await expect(
+          readOwnedPhoneAccountCount(target, bad, effects),
+        ).rejects.toThrow("Invalid owned phone observation fixture");
+      expect(mocked.create).not.toHaveBeenCalled();
+      expect(effects.capture).not.toHaveBeenCalled();
+    },
+  );
+  it.each(
+    [
+      [],
+      [{ count: "0" }, { count: "0" }],
+      [{ count: "-1" }],
+      [{ count: 0 }],
+      [{ count: "0", secret: "synthetic-password" }],
+    ].map((resultRows) => ({ resultRows })),
+  )(
+    "EARS-2: malformed Stage phone-count projections cannot credit account absence %#",
+    async ({ resultRows }) => {
+      const stage = {
+        ...contour,
+        academyBaseUrl: "https://academy-main.stage.doctor.school",
+      };
+      const effects = {
+        capture: vi.fn(async (script: string) =>
+          script.includes("ON_ERROR_STOP=1")
+            ? JSON.stringify({
+                database: "ds_main",
+                readOnly: true,
+                rows: resultRows,
+              })
+            : "STAGE_BASE_DOMAIN=stage.doctor.school",
+        ),
+      };
+      await expect(
+        readOwnedPhoneAccountCount(stage, phoneFixture, effects),
+      ).rejects.toThrow(/^Owned auth observation failed$/);
+    },
+  );
 });
 describe("owned auth observation", () => {
   it("EARS-23: reads only the exact owned consent binding and retains timestamp precision", async () => {
@@ -244,10 +527,7 @@ describe("owned auth observation", () => {
     },
   );
   it("EARS-23: records only safe completion metadata with no invented native SQL exit", async () => {
-    vi.stubEnv(
-      "E2E_STAND_COMMAND_LOG",
-      "C:/Users/sidor/AppData/Local/Temp/stand-ops-2856.jsonl",
-    );
+    vi.stubEnv("E2E_STAND_COMMAND_LOG", commandLog);
     await readOwnedConsentSnapshot(contour, fixture);
     expect(mocked.append).toHaveBeenCalledOnce();
     const record = JSON.parse(mocked.append.mock.calls[0]![1]);
@@ -269,10 +549,7 @@ describe("owned auth observation", () => {
     ]);
   });
   it("EARS-23: a failed ledger write fails closed without leaking its error", async () => {
-    vi.stubEnv(
-      "E2E_STAND_COMMAND_LOG",
-      "C:/Users/sidor/AppData/Local/Temp/stand-ops-2856.jsonl",
-    );
+    vi.stubEnv("E2E_STAND_COMMAND_LOG", commandLog);
     mocked.append.mockImplementation(() => {
       throw new Error("synthetic-password");
     });

@@ -5,7 +5,15 @@ import {
   type NestFastifyApplication,
 } from "@nestjs/platform-fastify";
 import { VersioningType } from "@nestjs/common";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import type pg from "pg";
 import { AppModule } from "../../src/app.module.js";
 import {
@@ -32,6 +40,8 @@ import {
 import { STEP_UP_URL } from "../../src/authz/authz.types.js";
 import { collectAuthzRows } from "../../src/authz/authz.discovery.js";
 import { StaffAccessRepository } from "../../src/staff-access/staff-access.repository.js";
+import { SessionService } from "../../src/auth/session/session.service.js";
+import { AdminSessionService } from "../../src/auth/admin-session/admin-session.service.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -144,7 +154,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
     }
 
     /** An enrolled staff member holding `role`, with a live admin session. */
-    async function enrolledStaff(prefix: string, role: string): Promise<Operator> {
+    async function enrolledStaff(
+      prefix: string,
+      role: string,
+    ): Promise<Operator> {
       const { email, sub } = await registeredDoctor(prefix);
       await fake.grantProjectRole(sub, role);
       const login = await app.inject({
@@ -195,7 +208,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return totpCode(secret, Date.now() + TOTP_STEP_SECONDS * 1000);
     }
 
-    async function ageSecondFactor(sid: string, byMs = STALE_MS): Promise<void> {
+    async function ageSecondFactor(
+      sid: string,
+      byMs = STALE_MS,
+    ): Promise<void> {
       const store = app.get<AdminSessionStore>(ADMIN_SESSION_STORE);
       const record = (await store.get(sid))!;
       await store.create({ ...record, mfaVerifiedAtMs: Date.now() - byMs });
@@ -230,9 +246,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return rows;
     }
 
-    async function bindingsOf(email: string): Promise<
-      Array<{ id: string; role: string; event_id: string }>
-    > {
+    async function bindingsOf(
+      email: string,
+    ): Promise<Array<{ id: string; role: string; event_id: string }>> {
       const { rows } = await pool.query<{
         id: string;
         role: string;
@@ -308,10 +324,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("047 EARS-1: a registrar and a committee member are refused on every staff-access endpoint", async () => {
       const registrar = await enrolledStaff("reg", "event-registrar");
-      const committee = await enrolledStaff(
-        "pc",
-        "congress-program-committee",
-      );
+      const committee = await enrolledStaff("pc", "congress-program-committee");
       const spies = idpWriteSpies();
       for (const op of [registrar, committee]) {
         const list = await app.inject({
@@ -513,10 +526,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // The owner proved the mailbox (003 verify): only then is the account
       // «existing» in the EARS-4 sense and its password kept.
       fake.setIdentity(doctor.sub, { emailVerified: true });
-      const { rows: before } = await pool.query<{ display_name: string | null }>(
-        "SELECT display_name FROM users WHERE zitadel_sub = $1",
-        [doctor.sub],
-      );
+      const { rows: before } = await pool.query<{
+        display_name: string | null;
+      }>("SELECT display_name FROM users WHERE zitadel_sub = $1", [doctor.sub]);
       const create = vi.spyOn(fake, "createUser");
       const createGrant = vi.spyOn(fake, "grantProjectRole");
       const update = vi.spyOn(fake, "updateProjectGrantRoles");
@@ -538,7 +550,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(fake.grantedRoles(doctor.sub).sort()).toEqual(
         ["congress-program-committee", "doctor_guest"].sort(),
       );
-      expect((await fake.passwordLogin(doctor.email, password)).outcome).toBe("authenticated");
+      expect((await fake.passwordLogin(doctor.email, password)).outcome).toBe(
+        "authenticated",
+      );
       const { rows: after } = await pool.query<{ display_name: string | null }>(
         "SELECT display_name FROM users WHERE zitadel_sub = $1",
         [doctor.sub],
@@ -552,10 +566,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
     it("047 EARS-6: an existing account without a password gets a temporary password", async () => {
       const admin = await enrolledStaff("adm", "platform_admin");
       const email = uniqueEmail("nopw");
+      // An account with a verified email and no password (an operator-made
+      // account, the email-code sign-in only).
       const created = await fake.createUser({
         email,
         credential: "none",
         profile: { givenName: "Ольга", familyName: "Смирнова" },
+        emailVerified: true,
       });
       await fake.grantProjectRole(created.sub, "doctor_guest");
       expect(await fake.userHasPassword(created.sub)).toBe(false);
@@ -569,26 +586,30 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const temp = (res.json() as { temporaryPassword?: string })
         .temporaryPassword!;
       expect(temp).toHaveLength(16);
-      expect((await fake.passwordLogin(email, temp)).outcome).toBe("authenticated");
+      expect((await fake.passwordLogin(email, temp)).outcome).toBe(
+        "authenticated",
+      );
       expect(fake.grantedRoles(created.sub).sort()).toEqual(
         ["doctor_guest", "platform_admin"].sort(),
       );
     });
 
-    it("047 EARS-4/EARS-6: an existing account whose email is unverified gets a new temporary password, the email verified and every session ended — the old password no longer signs in", async () => {
+    it("047 EARS-3: an existing account whose email is unverified is refused with STAFF_GRANT_EMAIL_UNVERIFIED and nothing changes — not its password, roles, sessions, mirror row or bindings; once its email is verified the same grant adds the role and keeps the password", async () => {
       const admin = await enrolledStaff("adm", "platform_admin");
-      // Someone registered the staff member's address first, with a password of
-      // their own, and never proved the mailbox.
-      const squatted = await registeredDoctor("squat");
-      await fake.grantProjectRole(squatted.sub, "doctor_guest");
-      expect((await fake.getUser(squatted.sub))!.emailVerified).toBe(false);
-      expect((await fake.passwordLogin(squatted.email, password)).outcome).toBe("authenticated");
+      const eventId = await insertEvent(
+        "Конгресс 047 — неподтверждённая почта",
+      );
+      // Someone registered the staff member's address with a password of their
+      // own and never proved the mailbox.
+      const unverified = await registeredDoctor("unverified");
+      await fake.grantProjectRole(unverified.sub, "doctor_guest");
+      expect((await fake.getUser(unverified.sub))!.emailVerified).toBe(false);
       const sessions = app.get<SessionStore>(SESSION_STORE);
-      const sid = `squat-${randomUUID()}`;
+      const sid = `unverified-${randomUUID()}`;
       await sessions.create({
         sid,
-        zitadelSessionId: "z-squat",
-        sub: squatted.sub,
+        zitadelSessionId: "z-unverified",
+        sub: unverified.sub,
         roles: ["doctor_guest"],
         mfa: false,
         accessToken: "a",
@@ -596,22 +617,85 @@ describe.skipIf(!process.env.DATABASE_URL)(
         fingerprint: "f",
         expiresAtMs: Date.now() + 3_600_000,
       });
-
-      const res = await grant(admin, {
-        email: squatted.email,
+      const mirrorRow = async () =>
+        (
+          await pool.query("SELECT * FROM users WHERE zitadel_sub = $1", [
+            unverified.sub,
+          ])
+        ).rows;
+      const mirrorBefore = await mirrorRow();
+      const since = await dbNow();
+      const spies = [
+        ...idpWriteSpies(),
+        vi.spyOn(fake, "markEmailVerified"),
+        vi.spyOn(app.get(SessionService), "revokeAllBeforeVerification"),
+        vi.spyOn(app.get(AdminSessionService), "forceLogout"),
+      ];
+      const body = {
+        email: unverified.email,
         fullName: "Сотрудник Настоящий",
-        role: "platform_admin",
+        role: "congress-program-committee",
+        eventId,
+      };
+
+      const refused = await grant(admin, body);
+      expect(refused.statusCode).toBe(409);
+      expect(refused.json()).toMatchObject({
+        statusCode: 409,
+        errorCode: "STAFF_GRANT_EMAIL_UNVERIFIED",
       });
-      expect(res.statusCode).toBe(201);
-      const temp = (res.json() as { temporaryPassword?: string })
-        .temporaryPassword;
-      expect(temp).toHaveLength(16);
-      expect((await fake.passwordLogin(squatted.email, password)).outcome).toBe("rejected");
-      expect((await fake.passwordLogin(squatted.email, temp!)).outcome).toBe("authenticated");
-      expect((await fake.getUser(squatted.sub))!.emailVerified).toBe(true);
-      expect(await sessions.get(sid)).toBeUndefined();
-      expect(fake.grantedRoles(squatted.sub).sort()).toEqual(
-        ["doctor_guest", "platform_admin"].sort(),
+      expect(refused.json()).not.toHaveProperty("temporaryPassword");
+      for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+      expect(fake.grantedRoles(unverified.sub)).toEqual(["doctor_guest"]);
+      expect((await fake.getUser(unverified.sub))!.emailVerified).toBe(false);
+      expect(
+        (await fake.passwordLogin(unverified.email, password)).outcome,
+      ).toBe("authenticated");
+      expect(await sessions.get(sid)).toBeDefined();
+      expect(await mirrorRow()).toEqual(mirrorBefore);
+      expect(await bindingsOf(unverified.email)).toEqual([]);
+      expect(await roleRows(unverified.sub, since)).toHaveLength(0);
+      vi.restoreAllMocks();
+
+      // The person proves the mailbox (the email-code sign-in); the
+      // administrator repeats the grant, which now takes the verified branch.
+      fake.setIdentity(unverified.sub, { emailVerified: true });
+      const granted = await grant(admin, body);
+      expect(granted.statusCode).toBe(201);
+      expect(granted.json()).not.toHaveProperty("temporaryPassword");
+      expect(fake.grantedRoles(unverified.sub).sort()).toEqual(
+        ["congress-program-committee", "doctor_guest"].sort(),
+      );
+      expect(
+        (await fake.passwordLogin(unverified.email, password)).outcome,
+      ).toBe("authenticated");
+      expect(
+        (await bindingsOf(unverified.email)).map((b) => b.event_id),
+      ).toEqual([eventId]);
+      expect(
+        (await roleRows(unverified.sub, since)).map((r) => r.event_type),
+      ).toEqual(["auth.role.granted"]);
+    });
+
+    it("047 EARS-3: two concurrent grants for one email are serialized — one completes, the other is refused as complete, and the shown password signs in", async () => {
+      const admin = await enrolledStaff("adm", "platform_admin");
+      const email = uniqueEmail("race");
+      const body = { email, fullName: "Гонкин Пётр", role: "platform_admin" };
+      const create = vi.spyOn(fake, "createUser");
+
+      const answers = await Promise.all([
+        grant(admin, body),
+        grant(admin, body),
+      ]);
+      expect(answers.map((a) => a.statusCode).sort()).toEqual([201, 409]);
+      expect(create).toHaveBeenCalledTimes(1);
+      const temp = (
+        answers.find((a) => a.statusCode === 201)!.json() as {
+          temporaryPassword?: string;
+        }
+      ).temporaryPassword!;
+      expect((await fake.passwordLogin(email, temp)).outcome).toBe(
+        "authenticated",
       );
     });
 
@@ -643,9 +727,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
         "EVENT_NOT_FOUND",
       );
       for (const spy of spies) expect(spy).not.toHaveBeenCalled();
-      const { rows } = await pool.query("SELECT 1 FROM users WHERE email = $1", [
-        email,
-      ]);
+      const { rows } = await pool.query(
+        "SELECT 1 FROM users WHERE email = $1",
+        [email],
+      );
       expect(rows).toHaveLength(0);
     });
 
@@ -737,6 +822,45 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(second.statusCode).toBe(201);
     });
 
+    it("047 EARS-3: a registrar binding written past the grant's read (by a writer outside the grant lock) is refused by the database constraint as REGISTRAR_BOUND_ELSEWHERE, with no auth.role.granted", async () => {
+      const admin = await enrolledStaff("adm", "platform_admin");
+      const eventA = await insertEvent("Конгресс 047 — гонка A");
+      const eventB = await insertEvent("Конгресс 047 — гонка B");
+      const registrar = uniqueEmail("regrace");
+      expect(
+        (
+          await grant(admin, {
+            email: registrar,
+            fullName: "Регистратор Гонка",
+            role: "event-registrar",
+            eventId: eventA,
+          })
+        ).statusCode,
+      ).toBe(201);
+      const since = await dbNow();
+      // The completeness read misses the eventA binding, as if it landed
+      // between the read and the commit.
+      vi.spyOn(
+        app.get(StaffAccessRepository),
+        "listBindings",
+      ).mockResolvedValueOnce([]);
+
+      const res = await grant(admin, {
+        email: registrar,
+        fullName: "Регистратор Гонка",
+        role: "event-registrar",
+        eventId: eventB,
+      });
+      expect(res.statusCode).toBe(409);
+      expect((res.json() as { errorCode: string }).errorCode).toBe(
+        "REGISTRAR_BOUND_ELSEWHERE",
+      );
+      expect((await bindingsOf(registrar)).map((b) => b.event_id)).toEqual([
+        eventA,
+      ]);
+      expect(await roleRows(await subOf(registrar), since)).toHaveLength(0);
+    });
+
     it("047 EARS-3: a platform_admin grant that failed after the IdP role add is finished by the same grant, with one auth.role.granted and the password shown by the finishing request", async () => {
       const admin = await enrolledStaff("adm", "platform_admin");
       const email = uniqueEmail("dbfault");
@@ -762,10 +886,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(finished.statusCode).toBe(201);
       const temp = (finished.json() as { temporaryPassword?: string })
         .temporaryPassword!;
-      expect((await fake.passwordLogin(email, temp)).outcome).toBe("authenticated");
-      expect(
-        (await roleRows(sub, since)).map((r) => r.event_type),
-      ).toEqual(["auth.role.granted"]);
+      expect((await fake.passwordLogin(email, temp)).outcome).toBe(
+        "authenticated",
+      );
+      expect((await roleRows(sub, since)).map((r) => r.event_type)).toEqual([
+        "auth.role.granted",
+      ]);
 
       const again = await grant(admin, body);
       expect(again.statusCode).toBe(409);
@@ -793,10 +919,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(finished.statusCode).toBe(201);
       const temp = (finished.json() as { temporaryPassword?: string })
         .temporaryPassword!;
-      expect((await fake.passwordLogin(email, temp)).outcome).toBe("authenticated");
-      expect(
-        (await roleRows(sub, since)).map((r) => r.event_type),
-      ).toEqual(["auth.role.granted"]);
+      expect((await fake.passwordLogin(email, temp)).outcome).toBe(
+        "authenticated",
+      );
+      expect((await roleRows(sub, since)).map((r) => r.event_type)).toEqual([
+        "auth.role.granted",
+      ]);
     });
 
     // ---- V-6 -------------------------------------------------------------
@@ -850,7 +978,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
         method: "POST",
         url: REVERIFY_URL,
         headers: admin.headers,
-        payload: { code: nextWindowCode(admin.secret), endpoint: GRANT_ENDPOINT },
+        payload: {
+          code: nextWindowCode(admin.secret),
+          endpoint: GRANT_ENDPOINT,
+        },
       });
       expect(accepted.statusCode).toBe(200);
       expect(accepted.cookies).toHaveLength(0);

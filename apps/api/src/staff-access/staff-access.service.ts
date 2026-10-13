@@ -15,9 +15,10 @@ import {
   type IdpProjectGrant,
 } from "../auth/idp/idp.types.js";
 import { mirrorRoleFromClaims } from "../auth/staff-role.js";
-import { SessionService } from "../auth/session/session.service.js";
-import { AdminSessionService } from "../auth/admin-session/admin-session.service.js";
-import { StaffAccessRepository } from "./staff-access.repository.js";
+import {
+  StaffAccessRepository,
+  isRegistrarBindingConflict,
+} from "./staff-access.repository.js";
 import { generateTemporaryPassword } from "./temporary-password.js";
 
 /**
@@ -27,7 +28,8 @@ import { generateTemporaryPassword } from "./temporary-password.js";
 export type StaffAccessRefusalCode =
   | "EVENT_NOT_FOUND"
   | "REGISTRAR_BOUND_ELSEWHERE"
-  | "GRANT_ALREADY_COMPLETE";
+  | "GRANT_ALREADY_COMPLETE"
+  | "STAFF_GRANT_EMAIL_UNVERIFIED";
 
 const REFUSALS: Record<
   StaffAccessRefusalCode,
@@ -44,6 +46,10 @@ const REFUSALS: Record<
   GRANT_ALREADY_COMPLETE: {
     status: HttpStatus.CONFLICT,
     message: "the person already holds this access",
+  },
+  STAFF_GRANT_EMAIL_UNVERIFIED: {
+    status: HttpStatus.CONFLICT,
+    message: "the email of this account is not verified",
   },
 };
 
@@ -78,9 +84,6 @@ export class StaffAccessService {
   constructor(
     @Inject(IDP_CLIENT) private readonly idp: IdpClient,
     @Inject(StaffAccessRepository) private readonly repo: StaffAccessRepository,
-    @Inject(SessionService) private readonly portalSessions: SessionService,
-    @Inject(AdminSessionService)
-    private readonly adminSessions: AdminSessionService,
   ) {}
 
   /**
@@ -144,16 +147,10 @@ export class StaffAccessService {
   }
 
   /**
-   * EARS-3…EARS-6, EARS-9 — the grant cascade. Validation and the completeness
-   * read first, before any write; then (1) the account, (2) the role on the IdP
-   * grant, (3) one DB transaction — mirror, binding, audit mark — and (4) the
-   * temporary password, last, so a password is only ever set by a request that
-   * then answers `201` with it.
-   */
-  /**
    * Whether the account's email is verified at the IdP. `getUser` answers
    * `null` on a provider hiccup; that must not read as «unverified» — it would
-   * reset a real owner's password — so it fails loud as an IdP fault.
+   * refuse a grant the account qualifies for — so it fails loud as an IdP
+   * fault.
    */
   private async emailVerifiedOf(sub: string): Promise<boolean> {
     const user = await this.idp.getUser(sub);
@@ -163,12 +160,33 @@ export class StaffAccessService {
     return user.emailVerified;
   }
 
+  /**
+   * EARS-3…EARS-6, EARS-9 — the grant cascade, run under the per-email grant
+   * lock so two grants for one person never interleave: the second reads the
+   * state the first left (and is refused as complete). Validation, the
+   * completeness read and every refusal come first, before any write — an
+   * existing account whose email is not verified is refused there — then (1)
+   * the account, (2) the role on the IdP grant, (3) one DB transaction —
+   * mirror, binding, audit mark — and (4) the temporary password, last, so a
+   * password is only ever set by a request that then answers `201` with it.
+   */
   async grant(
     input: StaffAccessGrantRequest,
     byAdmin: string,
   ): Promise<StaffAccessGrantResponse> {
+    return this.repo.withGrantLock(input.email, () =>
+      this.grantLocked(input, byAdmin),
+    );
+  }
+
+  private async grantLocked(
+    input: StaffAccessGrantRequest,
+    byAdmin: string,
+  ): Promise<StaffAccessGrantResponse> {
     const role: GrantableStaffRole = input.role;
-    const eventId = isEventBoundStaffRole(role) ? (input.eventId ?? null) : null;
+    const eventId = isEventBoundStaffRole(role)
+      ? (input.eventId ?? null)
+      : null;
 
     const event = eventId === null ? null : await this.repo.findEvent(eventId);
     if (eventId !== null && !event) {
@@ -179,17 +197,24 @@ export class StaffAccessService {
     let sub = await this.idp.findUserByEmail(input.email);
     let grant: IdpProjectGrant | null = null;
     let hasPassword = false;
-    let emailVerified = true;
     if (sub) {
+      // EARS-3: an existing account whose email nobody proved belongs to
+      // whoever registered it, not necessarily to the person the administrator
+      // named; the grant is refused with nothing changed. The person proves the
+      // mailbox (the email-code sign-in) and the administrator repeats it.
+      if (!(await this.emailVerifiedOf(sub))) {
+        throw new StaffAccessRefusal("STAFF_GRANT_EMAIL_UNVERIFIED");
+      }
       grant = await this.idp.getProjectGrant(sub);
       hasPassword = await this.idp.userHasPassword(sub);
-      emailVerified = await this.emailVerifiedOf(sub);
     }
     const mirror = sub ? await this.repo.findMirrorBySub(sub) : undefined;
 
     let bindingPresent = true;
     if (eventId !== null && isEventBoundStaffRole(role)) {
-      const bindings = mirror ? await this.repo.listBindings(mirror.id, role) : [];
+      const bindings = mirror
+        ? await this.repo.listBindings(mirror.id, role)
+        : [];
       // 044 EARS-38: a registrar works exactly one event.
       if (
         role === "event-registrar" &&
@@ -201,14 +226,7 @@ export class StaffAccessService {
     }
 
     const roleHeld = grant?.roleKeys.includes(role) ?? false;
-    if (
-      sub &&
-      roleHeld &&
-      bindingPresent &&
-      hasPassword &&
-      emailVerified &&
-      mirror
-    ) {
+    if (sub && roleHeld && bindingPresent && hasPassword && mirror) {
       const latest = await this.repo.latestRoleEvent(sub, role, eventId);
       if (latest === "auth.role.granted") {
         throw new StaffAccessRefusal("GRANT_ALREADY_COMPLETE");
@@ -233,27 +251,14 @@ export class StaffAccessService {
       }
       sub = created.sub;
       if (created.alreadyExisted) {
-        // Lost a race with another create: continue on the existing account.
+        // Lost a race with another create: continue on the existing account,
+        // under the same EARS-3 refusal as one found by the read above.
+        if (!(await this.emailVerifiedOf(sub))) {
+          throw new StaffAccessRefusal("STAFF_GRANT_EMAIL_UNVERIFIED");
+        }
         grant = await this.idp.getProjectGrant(sub);
         hasPassword = await this.idp.userHasPassword(sub);
-        emailVerified = await this.emailVerifiedOf(sub);
       }
-    }
-
-    // ---- (1b) An existing account whose email nobody proved (EARS-4/EARS-6).
-    // Anyone can register or submit the congress form with a staff member's
-    // address before the grant; that account's password and sessions belong to
-    // whoever did it, not to the person the administrator named. So before the
-    // role reaches it, the account is closed to its current holder: a fresh
-    // unshown password replaces any it had and every session ends. The shown
-    // temporary password and the verified email come in step (4); a retry of a
-    // part-failed grant still sees the email unverified and repeats this step.
-    if (!emailVerified) {
-      if (hasPassword) {
-        await this.idp.setUserPassword(sub, generateTemporaryPassword());
-      }
-      await this.portalSessions.revokeAllBeforeVerification(sub);
-      await this.adminSessions.forceLogout(sub);
     }
 
     // ---- (2) The role on the IdP grant (EARS-4/5), keeping every other role.
@@ -269,36 +274,33 @@ export class StaffAccessService {
     }
 
     // ---- (3) Mirror, binding and the completion mark — one transaction.
-    await this.repo.commitGrant({
-      sub,
-      email: input.email,
-      fullName: input.fullName,
-      mirrorRole: mirrorRoleFromClaims(roleKeys),
-      role,
-      eventId,
-      byAdmin,
-    });
+    try {
+      await this.repo.commitGrant({
+        sub,
+        email: input.email,
+        fullName: input.fullName,
+        mirrorRole: mirrorRoleFromClaims(roleKeys),
+        role,
+        eventId,
+        byAdmin,
+      });
+    } catch (error) {
+      // 044 EARS-38 is the database's invariant, not only the read above: a
+      // registrar binding written by a path outside the grant lock after the
+      // completeness read trips the partial unique index; the transaction rolls
+      // back (no binding, no mark) and the grant answers the same refusal.
+      if (isRegistrarBindingConflict(error)) {
+        throw new StaffAccessRefusal("REGISTRAR_BOUND_ELSEWHERE");
+      }
+      throw error;
+    }
 
-    // ---- (4) The temporary password (EARS-6): for an account without one, and
-    // for one whose email was unverified (its password was not the staff
-    // member's). Then the email is marked verified — the administrator vouches
-    // for the address they typed — last, so an interrupted grant stays
-    // unverified and its repeat issues the password again.
+    // ---- (4) The temporary password (EARS-6): for an account without one.
     let temporaryPassword: string | undefined;
-    if (!hasPassword || !emailVerified) {
+    if (!hasPassword) {
       const password = generateTemporaryPassword();
       await this.idp.setUserPassword(sub, password);
       temporaryPassword = password;
-    }
-    if (!emailVerified) {
-      // `markEmailVerified` answers `false` both for «already verified» and for
-      // a failed flip; only a re-read tells them apart, and a grant that ends
-      // unverified must not answer 201 (its repeat would replace the password
-      // the administrator just handed over).
-      const flipped = await this.idp.markEmailVerified(sub);
-      if (!flipped && !(await this.emailVerifiedOf(sub))) {
-        throw new IdpUnavailableError("the IdP did not mark the email verified");
-      }
     }
 
     const saved = await this.repo.findMirrorBySub(sub);

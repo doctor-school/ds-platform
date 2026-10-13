@@ -19,6 +19,36 @@ import { toLedgerRow } from "../auth/session/auth-audit.ledger.js";
 
 type Db = DrizzleHandle["db"];
 
+/** 044 EARS-38's partial unique index: one `event-registrar` binding per user. */
+const REGISTRAR_ONE_EVENT_INDEX = "event_role_grants_registrar_user_uniq";
+
+/**
+ * Whether `error` (or a `cause` up its chain — drizzle wraps the pg error) is
+ * the unique violation of {@link REGISTRAR_ONE_EVENT_INDEX}: a registrar
+ * binding to another event landed after the grant's completeness read. The
+ * constraint name is read from the structured field, else from the message
+ * (the precedent of `taxonomy.errors.ts` `asSlotConflict`).
+ */
+export function isRegistrarBindingConflict(error: unknown): boolean {
+  for (let node: unknown = error, depth = 0; node && depth < 5; depth += 1) {
+    const candidate = node as {
+      code?: unknown;
+      constraint?: unknown;
+      message?: unknown;
+      cause?: unknown;
+    };
+    if (candidate.code === "23505") {
+      return (
+        candidate.constraint === REGISTRAR_ONE_EVENT_INDEX ||
+        (typeof candidate.message === "string" &&
+          candidate.message.includes(REGISTRAR_ONE_EVENT_INDEX))
+      );
+    }
+    node = candidate.cause;
+  }
+  return false;
+}
+
 /** The `users` mirror row a grant reads and writes (047-design §Grant cascade). */
 export interface StaffMirrorRow {
   id: string;
@@ -127,7 +157,10 @@ export class StaffAccessRepository {
       .where(inArray(users.zitadelSub, [...subs]));
   }
 
-  listBindings(userId: string, role: EventScopedRole): Promise<EventGrantBinding[]> {
+  listBindings(
+    userId: string,
+    role: EventScopedRole,
+  ): Promise<EventGrantBinding[]> {
     return listEventGrantsForUserRole(this.db, userId, role);
   }
 
@@ -146,6 +179,28 @@ export class StaffAccessRepository {
     eventId: string | null,
   ): Promise<RoleEventType | null> {
     return latestRoleEventIn(this.db, sub, role, eventId);
+  }
+
+  /**
+   * 047 EARS-3 — run one grant cascade for `email` alone: a transaction holding
+   * `pg_advisory_xact_lock` on the email (the idiom of
+   * `congress-submissions.service.ts` and the taxonomy repositories) for the
+   * whole cascade, so two grants for one person cannot interleave — the second
+   * reads the state the first left. The lock is held for exactly as long as
+   * `run` takes — the transaction commits (or rolls back on a throw) only after
+   * `run` settles, and Postgres releases an xact lock at that end, so release
+   * is guaranteed on every exit, including a lost connection. The cascade's own
+   * writes run on their own pooled connections; this transaction holds only the
+   * lock. The lock serializes grants; the binding invariants themselves are the
+   * table's unique indexes, which `commitGrant` relies on, not on the read.
+   */
+  async withGrantLock<T>(email: string, run: () => Promise<T>): Promise<T> {
+    return this.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`staff-access-grant:${email}`}, 0))`,
+      );
+      return run();
+    });
   }
 
   /**
@@ -173,6 +228,9 @@ export class StaffAccessRepository {
             .where(eq(users.id, existing.id));
         }
       } else {
+        // The mirror can also be created by a sign-in of this account outside
+        // the grant lock (the 003 mirror upsert); the `zitadel_sub` unique
+        // index decides, and a lost race re-projects the role on the winner.
         const [inserted] = await tx
           .insert(users)
           .values({
@@ -182,8 +240,18 @@ export class StaffAccessRepository {
             displayName: commit.fullName,
             role: commit.mirrorRole,
           })
+          .onConflictDoNothing({ target: users.zitadelSub })
           .returning({ id: users.id });
-        userId = inserted!.id;
+        if (inserted) {
+          userId = inserted.id;
+        } else {
+          const [winner] = await tx
+            .update(users)
+            .set({ role: commit.mirrorRole, updatedAt: new Date() })
+            .where(eq(users.zitadelSub, commit.sub))
+            .returning({ id: users.id });
+          userId = winner!.id;
+        }
       }
 
       if (commit.eventId !== null) {

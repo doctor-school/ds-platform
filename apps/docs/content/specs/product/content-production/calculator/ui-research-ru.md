@@ -1,3 +1,13 @@
+---
+title: "Исследование UI калькулятора себестоимости и цены"
+description: "Веб-исследование интерфейса калькулятора себестоимости и цены единицы контента: ведущая переменная, наценка и маржа, связанные слайдеры, сценарии рядом, торнадо, безубыточность и водопад — правила R1–R14 с первоисточниками."
+slug: content-production-calculator-ui-research-ru
+epic: ../README-ru.md
+parent_issue: https://github.com/doctor-school/ds-platform/issues/2522
+status: "Исследование к Issue #2661; правила применены в калькуляторе"
+lang: ru
+---
+
 # Исследование: UI калькулятора себестоимости и цены (Issue #2661)
 
 Дата: 2026-10-12. Только чтение веба, в репозитории ничего не менялось. Объект исследования: одностраничный статический HTML/JS-калькулятор «снизу вверх» для студии медицинского образовательного контента (урок, курс, эпизод подкаста, видеоподкаст, вебинар …). Его пользователи — владелец студии и бизнес-партнёр, которые назначают цену фарма-клиентам.
@@ -27,9 +37,9 @@ _Почему:_ по NN/g, ответ быстрее 0,1 с создаёт ощ�
 _Источники:_ https://www.nngroup.com/articles/response-times-3-important-limits/ , https://baymard.com/blog/slider-interfaces
 
 **R5. Изменения подсвечиваются в месте, где пользователь смотрит, и показываются как дельта от базы.**
-_Почему:_ NN/g описывает change blindness — люди не замечают изменений вдали от фокуса внимания, особенно когда меняется сразу многое. Отсюда рекомендации: группировать то, что меняется вместе, неизменное приглушать, не устраивать конкурирующих анимаций. Паттерн «One-Second Spotlight» — короткая вспышка изменившегося значения. Rill отмечает, что «живые» анимации графиков в BI-инструментах сами вызывают change blindness.
+_Почему:_ NN/g описывает change blindness — люди не замечают изменений вдали от фокуса внимания, особенно когда меняется сразу многое. Отсюда рекомендации: группировать то, что меняется вместе, неизменное приглушать, не устраивать конкурирующих анимаций. Паттерн «One-Second Spotlight» — короткая вспышка изменившегося значения; его первоисточник — Yellow Fade Technique 37signals. Rill отмечает, что «живые» анимации графиков в BI-инструментах сами вызывают change blindness.
 _Следствие:_ KPI-полоса показывает «было → стало (Δ ₽, Δ %)» и снимок, зафиксированный кнопкой «Запомнить как базу». Вспышка длится около 1 с, и подсвечивается только то, что изменилось.
-_Источники:_ https://www.nngroup.com/articles/change-blindness-definition/ , https://www.oreilly.com/library/view/ajax-design-patterns/0596101805/ch16.html , https://docs.rilldata.com/notes/0.15
+_Источники:_ https://www.nngroup.com/articles/change-blindness-definition/ , https://signalvnoise.com/archives/000558.php , https://docs.rilldata.com/notes/0.15
 
 **R6. Около 200 параметров раскрываются постепенно, в три уровня.**
 Уровень 1 — продукт, грейд, ход работы, цена и контакты. Уровень 2 — бюджетные слайдеры по статьям. Уровень 3 — раскрываемая таблица точечных ставок и часов по ролям.
@@ -39,7 +49,7 @@ _Источники:_ https://www.nngroup.com/articles/progressive-disclosure/ ,
 **R7. Сводный слайдер «ФОТ всего» масштабирует ставки ролей пропорционально, через коэффициент, без перераспределения между ролями.**
 Сводный слайдер задаёт множитель k = новый ФОТ / базовый ФОТ, и эффективная ставка каждой роли равна базовой ставке × k. Точечная правка ставки меняет базу и пересчитывает сумму. Отдельный флажок «зафиксирована» для роли не нужен: это лишняя сложность.
 _Почему:_ в описаниях паттерна связанных слайдеров есть три подхода: авто-компенсация (остальные слайдеры поглощают изменение), веса с нормализацией при чтении и фиксированный итог с индикатором остатка. При большом числе категорий авто-компенсация становится «грязной». Самый простой и предсказуемый вариант — веса или пропорциональный коэффициент плюс явный индикатор превышения бюджета.
-_Источники:_ https://www.bennadel.com/blog/3739-creating-linked-slider-inputs-constrained-to-a-given-total-in-angular-9-0-0-rc-5.htm , https://gamedev.net/forums/topic/642734-input-method-to-emulate-multiple-sliders , https://connect.superhuman.com/t/linked-slider-controls/740
+_Источники:_ https://www.bennadel.com/blog/3739-creating-linked-slider-inputs-constrained-to-a-given-total-in-angular-9-0-0-rc-5.htm , https://connect.superhuman.com/t/linked-slider-controls/740 (обсуждение на форуме gamedev.net закрыто от автоматической проверки ссылок и не цитируется)
 
 **R8. Проверка «Влезает ли в бюджет?» показывает остаток или перерасход, а не блокирует ввод.**
 По каждой статье видно: бюджет, потребность, Δ, и отдельный список «что нельзя купить ниже рынка». Пример строки: «ставка монтажёра 900 ₽/ч < рыночного минимума 1 400 ₽/ч».
@@ -53,7 +63,7 @@ _Источники:_ https://support.microsoft.com/kb/282851 , https://www.taxm
 
 **R10. Сценарии (low/plan/high, грейд, ход работы) сравниваются рядом, в колонках, на одной и той же структуре модели.**
 _Почему:_ Pigment показывает несколько сценариев рядом, колонками. Структура модели одинакова во всех сценариях, поэтому видно, что именно изменилось. Causal строит модели из переменных с формулами на «человеческом языке» и поддерживает диапазоны («от–до») вместо точечных значений. Это прямая аналогия с low/plan/high по контактам и с осями «Грейд» × «Ход работы».
-_Источники:_ https://kb.pigment.com/docs/compare-scenarios , https://kb.pigment.com/docs/versions-scenarios , https://www.producthunt.com/products/casual-saas-financial-model/launches/causal
+_Источники:_ https://kb.pigment.com/docs/compare-scenarios , https://kb.pigment.com/docs/versions-scenarios , https://web.archive.org/web/20251208201124/https://docs.causal.app/formulas/values-with-uncertainty (Causal вошёл в Lucanet, документация доступна только в архиве)
 
 **R11. Термины объясняются через tooltip или popup-tip, но всё, что нужно для решения, остаётся на экране.**
 _Почему:_ по NN/g, tooltip не подходит для критичной информации: он исчезает, и пользователь должен запомнить прочитанное. Tooltip открывается по hover и keyboard focus. На тач-экранах нужна иконка «i» с popup по нажатию. Текст должен быть коротким и не повторять подпись.
@@ -63,7 +73,7 @@ _Источник:_ https://www.nngroup.com/articles/tooltip-guidelines/
 **R12. Блок «Что двигает цену» — это торнадо: каждый драйвер меняется отдельно, бары отсортированы по размаху, есть линия базового значения.**
 Подробная спецификация — в разделе 4.
 _Почему:_ таковы конвенции торнадо-диаграмм в health economics и финансах. Их ограничение: торнадо не показывает взаимодействие параметров, поэтому рядом нужна комбинированная матрица сценариев (R10).
-_Источники:_ https://docs.oracle.com/cd/E36352_01/epm.1112/cb_oq_user/apas04.html , https://sumproduct.com/thought/tornado-charts , https://yhec.co.uk/?p=1310
+_Источники:_ https://docs.oracle.com/cd/E36352_01/epm.1112/cb_oq_user/apas04.html , https://www.yhec.co.uk/glossary-term/tornado-diagram/ (статья SumProduct «Tornado charts» закрыта от автоматической проверки ссылок и не цитируется)
 
 **R13. Состав цены показывается водопадом с 5–7 сгруппированными шагами, а не 15–20 барами.**
 Шаги: ФОТ → внешние → накладные → инструменты → себестоимость (подитог) → прибыль → цена.
@@ -161,7 +171,7 @@ _Источники:_ https://conjointly.com/products/van-westendorp/ , https://
 - **Сортировка:** по размаху (|high − low|) по убыванию, самый широкий бар сверху. Показываются топ-8–10 драйверов, остальные сворачиваются в «прочие».
 - **Цвета:** левая половина бара — «низкое значение входа», правая — «высокое». Цвет кодирует направление входа, а не знак эффекта. На концах баров подписаны значения входа (например, «900 ₽/ч | 1 600 ₽/ч») и выхода.
 - **Что движется при правке:** базовая линия и все бары пересчитываются. Порядок баров может меняться, и перестановка должна идти плавным переходом (≤200 мс), чтобы глаз отследил её. Бар правленого драйвера кратко подсвечивается (R5).
-- _Источники:_ https://docs.oracle.com/cd/E36352_01/epm.1112/cb_oq_user/apas04.html , https://sumproduct.com/thought/tornado-charts , https://yhec.co.uk/?p=1310
+- _Источники:_ https://docs.oracle.com/cd/E36352_01/epm.1112/cb_oq_user/apas04.html , https://www.yhec.co.uk/glossary-term/tornado-diagram/ (статья SumProduct «Tornado charts» закрыта от автоматической проверки ссылок и не цитируется)
 
 ### 4.2 Безубыточность
 
@@ -207,13 +217,13 @@ _Источники:_ https://conjointly.com/products/van-westendorp/ , https://
 - NN/g — tooltips: https://www.nngroup.com/articles/tooltip-guidelines/
 - NN/g — response times: https://www.nngroup.com/articles/response-times-3-important-limits/
 - NN/g — change blindness: https://www.nngroup.com/articles/change-blindness-definition/
-- One-Second Spotlight: https://www.oreilly.com/library/view/ajax-design-patterns/0596101805/ch16.html
+- One-Second Spotlight (Yellow Fade Technique): https://signalvnoise.com/archives/000558.php
 - Rill — анимации и change blindness: https://docs.rilldata.com/notes/0.15
 - Markup vs margin: https://elementor.com/tools/markup-calculator/ , https://www.mooninvoice.com/blog/margin-vs-markup/
 - Pigment — сценарии: https://kb.pigment.com/docs/compare-scenarios , https://kb.pigment.com/docs/versions-scenarios
-- Causal: https://www.producthunt.com/products/casual-saas-financial-model/launches/causal
+- Causal: https://web.archive.org/web/20251208201124/https://docs.causal.app/formulas/values-with-uncertainty (Causal вошёл в Lucanet, документация доступна только в архиве)
 - Excel Goal Seek / data tables: https://support.microsoft.com/kb/282851
-- Торнадо: https://docs.oracle.com/cd/E36352_01/epm.1112/cb_oq_user/apas04.html , https://sumproduct.com/thought/tornado-charts , https://yhec.co.uk/?p=1310
+- Торнадо: https://docs.oracle.com/cd/E36352_01/epm.1112/cb_oq_user/apas04.html , https://www.yhec.co.uk/glossary-term/tornado-diagram/ (статья SumProduct «Tornado charts» закрыта от автоматической проверки ссылок и не цитируется)
 - Безубыточность: https://ecampusontario.pressbooks.pub/financemath/chapter/6-4-break-even-chart/ , https://www.accountingtools.com/articles/break-even-chart
 - Waterfall: https://deckary.com/blog/waterfall-charts-powerpoint , https://www.think-cell.com/en/content/how-to-build-waterfall-chart-excel.html
 - Связанные слайдеры: https://www.bennadel.com/blog/3739-creating-linked-slider-inputs-constrained-to-a-given-total-in-angular-9-0-0-rc-5.htm , https://connect.superhuman.com/t/linked-slider-controls/740

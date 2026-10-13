@@ -1033,11 +1033,12 @@ export function toolsPool(model, ctx) {
     const items = [];
     const push = (item, group, rub) =>
       items.push({ item, group, article: ai.has(item) ? "tools_ai" : "tools_other", rub });
+    const count = { seat: seats, team: model.vars.teams };
     for (const o of t.opex_monthly)
       push(
         o.item,
         "subscriptions",
-        o.rub_month * (o.per === "seat" ? seats : 1) * (o.usd != null ? 1 + markup : 1),
+        o.rub_month * (count[o.per] ?? 1) * (o.usd != null ? 1 + markup : 1),
       );
     for (const o of t.opex_one_off ?? [])
       push(o.item, "oneOff", (o.price_rub * (o.usd != null ? 1 + markup : 1)) / cfg.one_off_life_months);
@@ -1245,20 +1246,19 @@ export function unitCost(model, productName, ctx) {
       }
       for (const e of normExternals(p.externals)) {
         if (!applies(model, e)) continue;
+        // Hours of the model leaf itself, so a rental keeps its hours when a contractor replaces
+        // the leaf's own work in the product (products.yaml «Внешние затраты»).
         const factor = e.hours_of
-          ? sum(
-              productHours(model, node.product, c)
-                .lines.filter((l) => e.hours_of.includes(l.leaf))
-                .map((l) => l.hours),
-            )
+          ? sum(e.hours_of.map((id) => leafLine(model, id, 1, [node.product, id], c).hours))
           : 1;
         add(ext, e.id, node.qty * factor);
       }
     });
+    const scaled = (rub) => (rub == null ? null : rub * model.scale.externals);
     const externals = Object.entries(ext).map(([id, qty]) => {
       const e = model.externals[id];
       if (!e) throw new Error(`«${productName}»: unknown external «${id}»`);
-      const rub = e.rub ?? null;
+      const rub = scaled(e.rub);
       return {
         id,
         name: e.name,
@@ -1273,7 +1273,7 @@ export function unitCost(model, productName, ctx) {
     if (model.vars.extended_campaign) {
       const cfg = model.config.extended_campaign;
       const contacts = contactsPlan(model);
-      const rub = model.vars.campaign_cost_per_contact;
+      const rub = scaled(model.vars.campaign_cost_per_contact);
       externals.push({
         id: "extended_campaign",
         name: cfg.name,
@@ -1398,6 +1398,14 @@ function capRevenue(model, raw) {
   return cap;
 }
 
+/** Raw revenue whose capped value equals `target`; null when the cap keeps revenue below it. */
+function uncapRevenue(model, target) {
+  const cap = model.vars.budget_cap;
+  if (cap == null || target <= cap) return target;
+  const d = model.vars.budget_cap_mode === "tiered" ? model.vars.budget_tier_discount : 1;
+  return d < 1 ? cap + (target - cap) / (1 - d) : null;
+}
+
 function leadingPrice(mode, value, cost) {
   switch (mode) {
     case "multiplier":
@@ -1453,11 +1461,11 @@ export function priceProduct(model, productName, ctx) {
         authorShare: Math.max(0, margin) * model.vars.author_share,
       };
     };
+    const rawForCost = uncapRevenue(model, cost);
     let breakEvenContacts;
-    if (per > 0) breakEvenContacts = Math.max(0, (cost - advance) / per);
-    else breakEvenContacts = advance >= cost ? 0 : null;
-    if (breakEvenContacts != null && capRevenue(model, advance + breakEvenContacts * per) < cost - 1e-6)
-      breakEvenContacts = null;
+    if (rawForCost == null) breakEvenContacts = null;
+    else if (per > 0) breakEvenContacts = Math.max(0, (rawForCost - advance) / per);
+    else breakEvenContacts = capRevenue(model, advance) >= cost ? 0 : null;
     const leadDays = leadTime(model, productName, c);
     const periodMonths = model.vars.billing_period === "quarter" ? 3 : 1;
     const leadMonths = leadDays == null ? 0 : leadDays / model.vars.working_days_per_month;
@@ -1626,12 +1634,17 @@ export function budgetFit(model, ctx) {
     if (engagement === "staff" && hasMonthly(record) && !model.grossOverride[role]) {
       const h = staffHour(model, role, c);
       if (h.full == null) continue;
+      // The floor follows grossAt's region choice: the region's own band, else Moscow.
+      const regional =
+        model.vars.region === "moscow" ? null : record.monthly_gross_rub?.[model.vars.region];
+      const low = (t) => (typeof t === "number" ? t : t[0]);
       const floor =
         sum(
           weights.map(([g, w]) => {
+            if (regional != null) return w * low(regional);
             const band = record.monthly_gross_by_grade_rub?.[g];
             const t = record.monthly_gross_rub?.moscow;
-            return w * (band ? band[0] : t ? t[0] : 0);
+            return w * (band ? band[0] : t ? low(t) : 0);
           }),
         ) / W;
       const value = h.gross * model.scale.payroll;

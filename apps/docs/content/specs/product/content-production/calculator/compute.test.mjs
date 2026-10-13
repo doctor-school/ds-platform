@@ -378,16 +378,11 @@ test("2661-5: видеоподкаст «подрядчик» — five component
   const m = buildModel(inputs, VP_CONTRACTOR);
   const leaves = productHours(m, "видеоподкаст", U).lines.map((l) => l.leaf);
   for (const leaf of ["A3252", "A3253"]) assert.ok(!leaves.includes(leaf), leaf);
-  for (const leaf of ["A3241", "A3243", "A3251"]) assert.ok(leaves.includes(leaf), leaf);
+  for (const leaf of ["A3241", "A3251"]) assert.ok(leaves.includes(leaf), leaf);
   const u = unitCost(m, "видеоподкаст", U);
   assert.ok(!u.externals.some((e) => e.id === "podcast_studio"));
   const bare = u.externals.find((e) => e.id === "podcast_studio_bare");
   near(bare.rub, mid(inputs.rates.external_costs.podcast_studio.market_rub), 1e-9);
-  near(
-    bare.qty,
-    productHours(m, "видеоподкаст", U).lines.find((l) => l.leaf === "A3243").hours,
-    1e-9,
-  );
   // the audio episode keeps its own studio hour in both modes
   assert.ok(unitCost(m, "эпизод подкаста", U).externals.some((e) => e.id === "podcast_studio"));
   assert.throws(() => buildModel(inputs, { "var:video_podcast_production": "x" }), /video_podcast_production/);
@@ -427,6 +422,33 @@ test("2661-5: видеоподкаст «подрядчик» carries the rates.
     expected.video_podcast_cover,
     1e-6,
   );
+});
+
+test("2661-5: видеоподкаст «подрядчик» — the contractor director replaces the own director's hours A3243", () => {
+  const m = buildModel(inputs, VP_CONTRACTOR);
+  const lines = productHours(m, "видеоподкаст", U).lines;
+  assert.ok(!lines.some((l) => l.leaf === "A3243"), "A3243 is priced twice");
+  // the bare studio still rents for the shoot hours of A3243
+  const shoot = productHours(model, "видеоподкаст", U).lines.find((l) => l.leaf === "A3243");
+  const bare = unitCost(m, "видеоподкаст", U).externals.find((e) => e.id === "podcast_studio_bare");
+  near(bare.qty, shoot.hours, 1e-9);
+});
+
+test("2661-11: scale:externals multiplies every external rate and sum, the extended campaign included", () => {
+  const base = { "var:extended_campaign": true, "var:campaign_cost_per_contact": 100 };
+  const one = unitCost(buildModel(inputs, base), "видеоподкаст", U);
+  const two = unitCost(buildModel(inputs, { ...base, "scale:externals": 2 }), "видеоподкаст", U);
+  assert.ok(one.externalCost > 0);
+  near(two.externalCost, 2 * one.externalCost, 1e-6);
+  near(two.total.byLoad - one.total.byLoad, one.externalCost, 1e-6);
+  for (const e of one.externals) {
+    const scaled = two.externals.find((x) => x.id === e.id);
+    near(scaled.rub, 2 * e.rub, 1e-9);
+    near(scaled.cost, 2 * e.cost, 1e-6);
+  }
+  near(two.articles.externals, 2 * one.articles.externals, 1e-6);
+  const driver = sensitivity(model, "видеоподкаст", U).drivers.find((d) => d.id === "scale:externals");
+  assert.ok(driver.high.cost > driver.low.cost);
 });
 
 test("2661-2: «Продуктовая команда» hours are exposed per member role, freelance members included", () => {
@@ -488,6 +510,13 @@ test("2661-6: tools pool = subscriptions + Платформа DS + capex ÷ usef
   const capex = t.capex.reduce((a, c) => a + c.price_rub / c.useful_life_months, 0);
   near(pool.byGroup.capex, capex, 1e-6);
   near(pool.total, pool.ai + pool.other, 1e-9);
+  // per-team subscriptions scale with the number of direction teams
+  const perTeam = t.opex_monthly
+    .filter((o) => o.per === "team")
+    .reduce((a, o) => a + o.rub_month * (o.usd ? 1 + markup : 1), 0);
+  assert.ok(perTeam > 0);
+  const two = toolsPool(buildModel(inputs, { "var:teams": 2, "var:tool_seats": seats }), U);
+  near(two.byGroup.subscriptions - pool.byGroup.subscriptions, perTeam, 1e-6);
   assert.ok(pool.byGroup.platform > 0);
   const plan = periodPlan(model, U);
   near(plan.tools.perDirectHour, pool.total / plan.directHours, 1e-9);
@@ -600,6 +629,33 @@ test("2661-8: advance + result split, contacts low / plan / high, break-even, au
   near(deal.advance, deal.price, 1e-9);
 });
 
+test("2661-8: break-even above a tiered budget cap is solved on the discounted revenue", () => {
+  const p = priceProduct(model, "урок", U);
+  const per = p.pricePerContact.value;
+  const cap = p.advance + 0.5 * (p.cost - p.advance);
+  const tiered = priceProduct(
+    buildModel(inputs, { "var:budget_cap": cap, "var:budget_cap_mode": "tiered" }),
+    "урок",
+    U,
+  );
+  const d = inputs.products.variables.budget_tier_discount.draft;
+  near(tiered.breakEvenContacts, (cap + (p.cost - cap) / (1 - d) - p.advance) / per, 1e-6);
+  // a hard cap below the cost never breaks even
+  const hard = priceProduct(buildModel(inputs, { "var:budget_cap": cap }), "урок", U);
+  assert.equal(hard.breakEvenContacts, null);
+  // a tier discount of 100 % freezes revenue at the cap
+  const frozen = priceProduct(
+    buildModel(inputs, {
+      "var:budget_cap": cap,
+      "var:budget_cap_mode": "tiered",
+      "var:budget_tier_discount": 1,
+    }),
+    "урок",
+    U,
+  );
+  assert.equal(frozen.breakEvenContacts, null);
+});
+
 // ── 2661-9 Market reference ──
 
 test("2661-9: market reference per product → gap vs cost and price, flagged above the threshold", () => {
@@ -665,6 +721,8 @@ test("2661-11: a scale per cost article; below-market roles listed; golden price
     1e-9,
   );
   assert.equal(budgetFit(model, U).fits, true);
+  // a regional gross is held against the region's own market floor, not Moscow's
+  assert.deepEqual(budgetFit(buildModel(inputs, { "var:region": "russia_remote" }), U).below, []);
   const fit = budgetFit(half, U);
   assert.equal(fit.fits, false);
   assert.ok(fit.below.some((b) => b.role === "Аккаунт" && b.article === "payroll"));

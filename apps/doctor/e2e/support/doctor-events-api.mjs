@@ -8,20 +8,23 @@ import { createServer } from "node:http";
  * way to drive the day grouping and the «Показать ещё» horizon walk in a browser
  * is to answer that read. This server answers it with a FIXED, deterministic
  * payload: the assertions are about the route's projection of the contract (day
- * groups rendered as groups, «Показать ещё N из M» widening the extent in the
- * URL), never about the api's targeting arithmetic — that
+ * groups rendered as groups, «Показать ещё N (осталось M)» widening the extent
+ * in the URL), never about the api's targeting arithmetic — that
  * half is owned by `apps/api/test/storefront/doctor-events-feed.e2e-spec.ts`
  * against the real database.
  *
- * The horizon walk is modelled the way the real service behaves: a read with no
- * explicit `to` gets the default window plus a `nextTo` that COVERS the nearest
- * fixture day beyond it; a read that already carries every fixture day gets
+ * The horizon walk is modelled the way the real service behaves (019 LD-2,
+ * `event-horizon.ts`): «Будущие» pages by a COUNT of events in whole days — a
+ * read with no explicit `to` holds the nearest step of matching events and its
+ * `to` is the day after the step's last one; `nextTo` takes in the next step
+ * the same way; a read that already carries every fixture event gets
  * `nextTo: null`, because there is nothing left to walk to (#1803).
  */
 const port = Number(process.env.DOCTOR_EVENTS_FAKE_API_PORT ?? 3214);
 
 const DEFAULT_FROM = "2026-09-01";
-const DEFAULT_TO = "2026-09-15";
+/** `DOCTOR_EVENTS_FEED_STEP_EVENTS` (packages/schemas) — the «Будущие» step. */
+const UPCOMING_STEP_EVENTS = 10;
 
 const card = (id, startsAt, overrides = {}) => ({
   id,
@@ -92,8 +95,26 @@ const WIDENED_DAY = {
   ],
 };
 
+/**
+ * Seven more разборы on 2026-09-10 bring the events before WIDENED_DAY to ten —
+ * exactly one «Будущие» step (019 LD-2, `DOCTOR_EVENTS_FEED_STEP_EVENTS` = 10):
+ * the default screen holds 09-02, 09-04 and 09-10, and «Показать ещё» adds the
+ * four of 09-20, the remainder. Hybrid разборы, like the three of 09-20, so the
+ * `format=online` / `kind=vebinar` reads keep their own sets.
+ */
+const STEP_FILL_DAY = {
+  day: "2026-09-10",
+  label: "10 сентября, четверг",
+  items: Array.from({ length: 7 }, (_unused, index) =>
+    card(`evt-${index + 8}`, `2026-09-10T0${index + 1}:00:00.000Z`, {
+      format: "hybrid",
+      kind: RAZBOR,
+    }),
+  ),
+};
+
 /** Every day this fixture knows; a read serves the `[from, to)` slice of it. */
-const ALL_DAYS = [...BASE_DAYS, WIDENED_DAY];
+const ALL_DAYS = [...BASE_DAYS, STEP_FILL_DAY, WIDENED_DAY];
 
 /**
  * «Прошедшие» (019 LD-13, gate rows 29–31) — ended events only, served NEWEST
@@ -111,7 +132,7 @@ const ALL_DAYS = [...BASE_DAYS, WIDENED_DAY];
  * lies beyond them so «Показать ещё» widens `from` backward to it.
  */
 const PAST_DEFAULT_TO = "2026-09-02";
-/** `DOCTOR_EVENTS_FEED_PAST_STEP_EVENTS` (packages/schemas). */
+/** `DOCTOR_EVENTS_FEED_STEP_EVENTS` (packages/schemas). */
 const PAST_STEP_EVENTS = 10;
 const PUBLISHED_RECORDING = {
   state: "montage",
@@ -175,8 +196,8 @@ const PAST_DAYS = [
 /**
  * 019 EARS-4 (#1519) — the month the calendar pane paints. `today` is a day
  * with NO events so «сегодня» and the live marker are two independent signals
- * the spec can assert apart: 2026-09-02 is the live day, 2026-09-04 and
- * 2026-09-20 are planned-only days, every other day of September is empty (the
+ * the spec can assert apart: 2026-09-02 is the live day, 2026-09-04,
+ * 2026-09-10 and 2026-09-20 are planned-only days, every other day of September is empty (the
  * contract requires EVERY day of the month to be present).
  */
 const MONTH = "2026-09";
@@ -188,18 +209,27 @@ const KINDS = [
   { slug: RAZBOR.slug, title: RAZBOR.title },
 ];
 const SPECIALTIES = [
-  { id: "00000000-0000-4000-8000-000000000001", code: "kardiologiya", name: "Кардиология", isOther: false },
-  { id: "00000000-0000-4000-8000-000000000002", code: "nevrologiya", name: "Неврология", isOther: false },
+  {
+    id: "00000000-0000-4000-8000-000000000001",
+    code: "kardiologiya",
+    name: "Кардиология",
+    isOther: false,
+  },
+  {
+    id: "00000000-0000-4000-8000-000000000002",
+    code: "nevrologiya",
+    name: "Неврология",
+    isOther: false,
+  },
 ];
 const MONTH_TODAY = "2026-09-01";
 const MONTH_COUNTS = {
   "2026-09-02": { count: 2, hasLive: true },
   "2026-09-04": { count: 1, hasLive: false },
+  "2026-09-10": { count: 7, hasLive: false },
   // evt-4 plus the three разборы of WIDENED_DAY.
   "2026-09-20": { count: 4, hasLive: false },
 };
-
-const HORIZON_STEP_DAYS = 14;
 
 const addDays = (day, days) => {
   const shifted = new Date(`${day}T00:00:00Z`);
@@ -207,15 +237,8 @@ const addDays = (day, days) => {
   return shifted.toISOString().slice(0, 10);
 };
 
-const dayGap = (from, to) =>
-  Math.round(
-    (new Date(`${to}T00:00:00Z`).getTime() -
-      new Date(`${from}T00:00:00Z`).getTime()) /
-      86_400_000,
-  );
-
 /**
- * The real `pastStepFrom` (apps/api `event-horizon.ts`): the `from` that takes
+ * Mirrors the real `stepBound` (apps/api `event-horizon.ts`) on «Прошедшие»: the `from` that takes
  * in the next `PAST_STEP_EVENTS` fixture events older than `bound` — the day
  * of the step's last (oldest) one, whole days; `null` when none lies before it.
  */
@@ -231,17 +254,19 @@ function pastStepFrom(bound) {
 const itemCount = (days) =>
   days.reduce((sum, group) => sum + group.items.length, 0);
 
-/** `null` when no fixture day lies at or past `to`; else the covering step boundary. */
-function nextToBeyond(to, days = ALL_DAYS) {
-  const beyond = days
-    .filter((group) => group.items.length > 0)
-    .map((group) => group.day)
-    .filter((day) => day >= to)
-    .sort()
-    .at(0);
-  if (beyond === undefined) return null;
-  const steps = Math.floor(dayGap(to, beyond) / HORIZON_STEP_DAYS) + 1;
-  return addDays(to, steps * HORIZON_STEP_DAYS);
+/**
+ * The real `stepBound` for «Будущие» (apps/api `event-horizon.ts`): the `to`
+ * that takes in the next `UPCOMING_STEP_EVENTS` fixture events at or after
+ * `bound` — the day AFTER the step's last one, whole days; `null` when none
+ * lies there.
+ */
+function upcomingStepTo(bound, days = ALL_DAYS) {
+  const starts = days
+    .filter((group) => group.day >= bound)
+    .flatMap((group) => group.items.map(() => group.day))
+    .sort();
+  if (starts.length === 0) return null;
+  return addDays(starts[Math.min(UPCOMING_STEP_EVENTS, starts.length) - 1], 1);
 }
 
 function monthDays() {
@@ -446,7 +471,10 @@ const server = createServer((request, response) => {
     );
   }
   if (url.pathname === "/v1/public/specialties") {
-    return json(response, 200, { entries: SPECIALTIES, total: SPECIALTIES.length });
+    return json(response, 200, {
+      entries: SPECIALTIES,
+      total: SPECIALTIES.length,
+    });
   }
 
   if (url.pathname === "/v1/storefront/doctor/events/month") {
@@ -491,7 +519,7 @@ const server = createServer((request, response) => {
         nextTo: null,
         nextFrom,
         remaining: itemCount(PAST_DAYS.filter((group) => group.day < from)),
-        // N of «Показать ещё N из M»: the events the next step adds.
+        // N of «Показать ещё N (осталось M)»: the events the next step adds.
         nextBatch:
           nextFrom === null
             ? 0
@@ -514,8 +542,18 @@ const server = createServer((request, response) => {
     // served set from the mere PRESENCE of `to` would let a link that widens to
     // a bound one day short of its own selection look green here and fail in
     // production, so the value is compared, never its existence.
+    // The service's beyond-probe, the default extent, the counts and the next
+    // bound run under the same facet predicate as the served days
+    // (`feedWhere`).
+    const matched = ALL_DAYS.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => matchesFacets(item, url)),
+    }));
     const from = url.searchParams.get("from") ?? DEFAULT_FROM;
-    const to = url.searchParams.get("to") ?? DEFAULT_TO;
+    const to =
+      url.searchParams.get("to") ??
+      upcomingStepTo(from, matched) ??
+      addDays(from, 1);
     // `day` is deliberately NOT read here: the real service ignores it too
     // (`doctor-events-feed.schema.ts` — "Never narrows the read", LD-1). A day
     // selection is URL state that scrolls the feed body to the `day-<ISO>`
@@ -532,13 +570,7 @@ const server = createServer((request, response) => {
         items: group.items.filter((item) => matchesFacets(item, url)),
       }))
       .filter((group) => group.items.length > 0);
-    // The service's beyond-probe, the counts and the next bound run under the
-    // same facet predicate as the served days (`feedWhere`).
-    const matched = ALL_DAYS.map((group) => ({
-      ...group,
-      items: group.items.filter((item) => matchesFacets(item, url)),
-    }));
-    const nextTo = nextToBeyond(to, matched);
+    const nextTo = upcomingStepTo(to, matched);
     return json(response, 200, {
       tense: "upcoming",
       // D10 — every read carries the api's (here: pinned) today.
@@ -566,7 +598,7 @@ const server = createServer((request, response) => {
           ),
         })),
       },
-      // The M of «Показать ещё N из M»: the fixture events beyond the extent;
+      // The M of «Показать ещё N (осталось M)»: the fixture events beyond the extent;
       // `0` exactly when `nextTo` is `null`, as the contract states.
       remaining:
         nextTo === null
@@ -624,7 +656,8 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
  * специальности» (gate row 59).
  */
 function matchesFacets(item, url) {
-  const list = (key) => url.searchParams.getAll(key).flatMap((v) => v.split(","));
+  const list = (key) =>
+    url.searchParams.getAll(key).flatMap((v) => v.split(","));
   const formats = list("format");
   const kinds = list("kind");
   const specialties = list("specialty").filter(
@@ -632,7 +665,8 @@ function matchesFacets(item, url) {
   );
   if (formats.length > 0 && !formats.includes(item.format)) return false;
   if (kinds.length > 0 && !kinds.includes(item.kind.slug)) return false;
-  if (specialties.length > 0 && !specialties.includes("kardiologiya")) return false;
+  if (specialties.length > 0 && !specialties.includes("kardiologiya"))
+    return false;
   return true;
 }
 

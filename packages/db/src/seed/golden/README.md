@@ -292,8 +292,8 @@ line up, and a `#2213:` test in `golden.spec.ts` locks each step:
    EVERY 14-DAY FEED HORIZON.** The `event_directions` walk is a contiguous
    `upcomingCounter % 38` sweep over the published directions, TWO directions
    per эфир, so the 38-direction cycle closes every 19 эфиров (about ten days)
-   — inside any horizon the doctor feed can open (`DOCTOR_EVENTS_FEED_HORIZON_DAYS`
-   = 14), at any pin, not only at the authored one. One direction per эфир
+   — inside any 14-day window, at any pin, not only at the authored one (a
+   density bar; the doctor feed itself pages by event count, 019 LD-2). One direction per эфир
    closed the cycle only every ~19 days and left a third of the specialties
    with an empty first window. This is the invariant that makes «pick any
    specialty ⇒ a non-empty feed» true rather than likely; the test replays it

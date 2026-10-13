@@ -47,7 +47,7 @@ import { academyFacetsOf, NO_ACADEMY_FACETS } from "./academy-facets.js";
 import { denseMonthlyCounts } from "./monthly-counts.js";
 import {
   boundEventHorizonRows,
-  clampRequestedPastFrom,
+  clampRequestedEdge,
   EVENT_HORIZON_READ_ORDER,
   EVENT_HORIZON_ROW_CAP,
   type EventHorizonReach,
@@ -1307,7 +1307,6 @@ export class EventsService {
       const beyond = await resolveEventHorizonBeyond(
         bounded.horizon,
         query.timeframe,
-        today,
         listStartsIn,
       );
       // #1973 — an empty default window under matches beyond opens on the
@@ -1332,11 +1331,11 @@ export class EventsService {
         pagination: { hasMore: beyond.remaining > 0, nextCursor: null },
         horizon: {
           today,
-          ...clampRequestedPastFrom(
+          ...clampRequestedEdge(
             bounded.horizon,
             query.timeframe,
             bounded.rows,
-            query.from,
+            { from: query.from, to: query.to },
             beyond,
           ),
           ...beyond,

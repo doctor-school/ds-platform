@@ -52,7 +52,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     const idleProjectSlug = `fx-idle-project-${tag}`;
     const expertSlug = `fx-expert-${tag}`;
     const topicSlug = `fx-topic-${tag}`;
-    /** Carried only by events beyond both default windows (#1973). */
+    /** Carried only by events far from today in both tenses (#1973). */
     const farExpertSlug = `fx-far-expert-${tag}`;
     let farExpertId = "";
     let farUpcoming = "";
@@ -307,7 +307,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       }
     });
 
-    it("NEW: a facet whose matches all lie beyond the default window opens on the first match (both tenses, Academy host, #1973)", async () => {
+    it("NEW: a facet whose matches all lie far away opens on them — the default screen is the nearest matches (both tenses, Academy host, #1973, #2884)", async () => {
       const today = doctorEventsFeedDayOf(new Date());
       const read = async (query: string) => {
         const response = await get(`/v1/public/events?${query}`);
@@ -315,12 +315,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
         return PublicEventListingPageSchema.parse(response.json());
       };
 
-      const upcoming = await read(
-        `timeframe=upcoming&expert=${farExpertSlug}`,
-      );
+      const upcoming = await read(`timeframe=upcoming&expert=${farExpertSlug}`);
       expect(upcoming.data.map((c) => c.id)).toEqual([farUpcoming]);
       expect(upcoming.horizon?.from).toBe(today);
-      expect(upcoming.horizon?.to).toBe(addDoctorEventsFeedDays(today, 42));
+      expect(upcoming.horizon?.to).toBe(addDoctorEventsFeedDays(today, 41));
       expect(upcoming.horizon?.nextTo).toBeNull();
       expect(upcoming.horizon?.remaining).toBe(0);
 

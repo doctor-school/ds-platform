@@ -78,14 +78,18 @@ test("NEW: the month view carries no tense tabs — at ≥1024 px its head row h
   await expect(back).toHaveText("← Лента событий");
   // Right-aligned: the link's right edge meets the row's.
   const [rowBox, backBox] = [await row.boundingBox(), await back.boundingBox()];
-  expect(Math.abs(rowBox!.x + rowBox!.width - (backBox!.x + backBox!.width))).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(rowBox!.x + rowBox!.width - (backBox!.x + backBox!.width)),
+  ).toBeLessThanOrEqual(1);
 
   // «← Лента событий» returns to the feed in the tense the month came from.
   await back.click();
   await expect(page).toHaveURL(/tense=past/);
   await expect(page).not.toHaveURL(/view=month/);
   await expect(
-    page.getByTestId("events-tense-tabs").getByRole("tab", { name: "Прошедшие" }),
+    page
+      .getByTestId("events-tense-tabs")
+      .getByRole("tab", { name: "Прошедшие" }),
   ).toHaveAttribute("aria-selected", "true");
 });
 
@@ -113,7 +117,7 @@ test("EARS-4.3: selecting a day beyond the current horizon widens `to=` so the d
 
   await expect(page).toHaveURL(new RegExp(`day=${BEYOND_DAY}`));
   await expect(page).toHaveURL(/to=2026-09-2\d/);
-  await expect(page.locator('section[id^="day-"]')).toHaveCount(3);
+  await expect(page.locator('section[id^="day-"]')).toHaveCount(4);
   const selected = page.locator(`section[id="day-${BEYOND_DAY}"]`);
   await expect(selected).toBeVisible();
   await expect(selected).toBeInViewport();
@@ -126,7 +130,7 @@ test("NEW: after «Показать ещё» a day click keeps the widened exten
   // today the feed read carries (D10, the double's pinned 2026-09-01).
   await page.goto("/events");
   await page.getByTestId("events-feed-show-more").click();
-  await expect(page).toHaveURL(/\?from=2026-09-01&to=2026-09-29$/);
+  await expect(page).toHaveURL(/\?from=2026-09-01&to=2026-09-21$/);
 
   await page
     .getByTestId("events-compact-month")
@@ -136,7 +140,7 @@ test("NEW: after «Показать ещё» a day click keeps the widened exten
   await expect(page).toHaveURL(new RegExp(`day=${BEYOND_DAY}`));
   // The widening is kept — the day click never shrinks the read to the default extent.
   await expect(page).toHaveURL(/from=2026-09-01/);
-  await expect(page).toHaveURL(/to=2026-09-29/);
+  await expect(page).toHaveURL(/to=2026-09-21/);
   const selected = page.locator(`section[id="day-${BEYOND_DAY}"]`);
   await expect(selected).toBeVisible();
   await expect(selected).toBeInViewport();
@@ -153,6 +157,6 @@ test("EARS-4.4: a day with no events keeps the whole feed and lands on the neare
     .click();
 
   await expect(page).toHaveURL(/day=2026-09-03/);
-  await expect(page.locator('section[id^="day-"]')).toHaveCount(2);
+  await expect(page.locator('section[id^="day-"]')).toHaveCount(3);
   await expect(page.locator('section[id="day-2026-09-04"]')).toBeInViewport();
 });

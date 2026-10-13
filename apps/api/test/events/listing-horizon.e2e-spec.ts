@@ -10,14 +10,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import {
   addDoctorEventsFeedDays,
-  DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS,
   doctorEventsFeedDayOf,
   PublicEventListingPageSchema,
   type UpcomingBroadcastCard,
 } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
 import {
-  EVENT_HORIZON_PAST_STEP,
+  EVENT_HORIZON_STEP,
   EVENT_HORIZON_ROW_CAP,
 } from "../../src/events/event-horizon.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
@@ -173,8 +172,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // Thirty days back: older than a stated 14-day `from`, so from there only
       // a BACKWARD widening of «Прошедшие» reaches it.
       pastOld = await makeEvent({ offsetMs: -30 * DAY, state: "ended" });
-      // Four hundred days back: older than the widest single «Будущие» horizon
-      // — the archive must still reach it (no age floor on «Прошедшие»).
+      // Four hundred days back: the archive must still reach it (no age floor
+      // on «Прошедшие»).
       pastAncient = await makeEvent({ offsetMs: -400 * DAY, state: "ended" });
 
       await register(near.slug);
@@ -218,23 +217,50 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(widened.data.map((card) => card.id)).toContain(far.id);
     });
 
-    it("NEW: a hand-edited `to` past the widest horizon is clamped, and nothing more is offered", async () => {
-      const body = await page(
-        `timeframe=upcoming&from=${today}&to=${addDoctorEventsFeedDays(today, 5000)}`,
+    it("NEW: a hand-edited far `to` is answered as written — «Будущие» has no far bound — and echoed clamped to the day after the latest matching event; nothing more is offered", async () => {
+      const body = await page(`timeframe=upcoming&from=${today}&to=2999-12-31`);
+      expect(body.data.map((card) => card.id)).toContain(far.id);
+      const latest = doctorEventsFeedDayOf(
+        new Date(body.data.at(-1)!.startsAt),
       );
-      expect(body.horizon?.to).toBe(
-        addDoctorEventsFeedDays(today, DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS),
-      );
+      expect(body.horizon?.to).toBe(addDoctorEventsFeedDays(latest, 1));
       expect(body.horizon?.nextTo).toBeNull();
+      expect(body.horizon?.remaining).toBe(0);
     });
 
     it("NEW: a read with no bound and no cursor is the horizon read of the tense's default extent — the bare `/webinars` and `?tense=past` (D2, row 32)", async () => {
+      // 019 LD-2 (#2884) — «Будущие» pages by count too: the default extent
+      // is the 10 nearest upcoming events, however far ahead, its `to` the day
+      // after the latest of them (whole days, so that day is shown whole).
       const upcoming = await page("timeframe=upcoming");
       expect(upcoming.horizon?.from).toBe(today);
-      expect(upcoming.horizon?.to).toBe(addDoctorEventsFeedDays(today, 14));
-      expect(upcoming.data.map((card) => card.id)).not.toContain(far.id);
-      expect(upcoming.horizon?.nextTo).not.toBeNull();
+      expect(upcoming.data.length).toBeGreaterThanOrEqual(
+        Math.min(
+          EVENT_HORIZON_STEP,
+          upcoming.data.length + upcoming.horizon!.remaining,
+        ),
+      );
+      const upcomingDays = upcoming.data.map((card) =>
+        doctorEventsFeedDayOf(new Date(card.startsAt)),
+      );
+      expect(upcoming.horizon?.to).toBe(
+        addDoctorEventsFeedDays(upcomingDays.at(-1)!, 1),
+      );
+      // Past the 10th card only the last day's own events follow.
+      expect(
+        upcomingDays
+          .slice(EVENT_HORIZON_STEP)
+          .every((day) => day === upcomingDays.at(-1)),
+      ).toBe(true);
       expect(upcoming.pagination.nextCursor).toBeNull();
+      // «Показать ещё» from the bare read walks on to the +20 event.
+      let ahead = upcoming;
+      while (ahead.horizon?.nextTo) {
+        ahead = await page(
+          `timeframe=upcoming&from=${today}&to=${ahead.horizon.nextTo}`,
+        );
+      }
+      expect(ahead.data.map((card) => card.id)).toContain(far.id);
 
       // 019 LD-2 — «Прошедшие» pages by count: the default extent is the 10
       // most recent past events, its `from` the day of the oldest of them
@@ -243,7 +269,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(past.horizon?.today).toBe(doctorEventsFeedDayOf(new Date()));
       expect(past.horizon?.to).toBe(addDoctorEventsFeedDays(today, 1));
       expect(past.data.length).toBeGreaterThanOrEqual(
-        Math.min(EVENT_HORIZON_PAST_STEP, past.data.length + past.horizon!.remaining),
+        Math.min(
+          EVENT_HORIZON_STEP,
+          past.data.length + past.horizon!.remaining,
+        ),
       );
       const days = past.data.map((card) =>
         doctorEventsFeedDayOf(new Date(card.startsAt)),
@@ -251,7 +280,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(days.at(-1)).toBe(past.horizon?.from);
       // Past the 10th card only the `from` day's own events follow.
       expect(
-        days.slice(EVENT_HORIZON_PAST_STEP).every((day) => day === past.horizon?.from),
+        days
+          .slice(EVENT_HORIZON_STEP)
+          .every((day) => day === past.horizon?.from),
       ).toBe(true);
       // «Показать ещё» from the bare past read walks back to the −30 event.
       let extent = past;
@@ -355,7 +386,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           before.horizon!.nextBatch,
         );
         expect(before.horizon!.nextBatch).toBeGreaterThanOrEqual(
-          Math.min(EVENT_HORIZON_PAST_STEP, before.horizon!.remaining),
+          Math.min(EVENT_HORIZON_STEP, before.horizon!.remaining),
         );
       }
       expect(extent.data.map((card) => card.id)).toContain(pastAncient.id);
@@ -377,16 +408,20 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         .map((card) => doctorEventsFeedDayOf(new Date(card.startsAt)))
         .sort()[0]!;
       expect(hostile.horizon?.from).toBe(earliest);
-      expect(hostile.horizon!.from <= doctorEventsFeedDayOf(new Date(Date.now() - 400 * DAY))).toBe(true);
+      expect(
+        hostile.horizon!.from <=
+          doctorEventsFeedDayOf(new Date(Date.now() - 400 * DAY)),
+      ).toBe(true);
       expect(hostile.data.map((card) => card.id)).toContain(pastAncient.id);
     });
 
-    it("NEW: «Показать ещё» states the next batch and the remainder — `remaining` is the events the widest horizon would add", async () => {
+    it("NEW: «Показать ещё» states the next batch and the remainder — `remaining` is the events every further step would add", async () => {
       const upcoming = await page(
         `timeframe=upcoming&from=${today}&to=${addDoctorEventsFeedDays(today, 14)}`,
       );
+      // «Будущие» has no far bound: every upcoming event is the reach.
       const upcomingAll = await page(
-        `timeframe=upcoming&from=${today}&to=${addDoctorEventsFeedDays(today, DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS)}`,
+        `timeframe=upcoming&from=${today}&to=2999-12-31`,
       );
       // `far` (+20) lies beyond the window, so the remainder is at least one.
       expect(upcoming.horizon?.remaining).toBeGreaterThanOrEqual(1);

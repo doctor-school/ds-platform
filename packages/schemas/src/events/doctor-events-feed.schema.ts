@@ -32,9 +32,10 @@ import {
  *    EMPTY `adjacentDirectionIds`, and the feed carries only its own events;
  *    there is no name-similarity path into this contract at all.
  *
- * The horizon (`from`/`to`) is the LD-2 bounded window: «показать ещё» widens
- * `to` in the URL, so the feed stays a pure function of its URL (EARS-8) and
- * no client-local paging engine exists.
+ * The horizon (`from`/`to`) is the LD-2 extent of {@link
+ * DOCTOR_EVENTS_FEED_STEP_EVENTS}-event steps: «показать ещё» widens `to`
+ * («Будущие») or `from` («Прошедшие») in the URL, so the feed stays a pure
+ * function of its URL (EARS-8) and no client-local paging engine exists.
  */
 
 /**
@@ -105,26 +106,16 @@ export type DoctorEventsFeedSpecialtyMode = z.infer<
 >;
 
 /**
- * «Будущие»: the default horizon width and the step «показать ещё» adds to it,
- * in days.
+ * Both tenses page by COUNT, not by days (019 LD-2): the default screen is
+ * this many events nearest today — «Будущие» the soonest upcoming ones,
+ * however far ahead; «Прошедшие» the most recent past ones, however long ago —
+ * and every «показать ещё» adds this many more in the tense's direction (the
+ * last step the remainder). The extent stays `from`/`to` in whole МСК days, so
+ * a day the step's last event falls on is shown whole. A `from`/`to` outside
+ * the served years ({@link DOCTOR_EVENTS_QUERY_YEAR_MIN}–
+ * {@link DOCTOR_EVENTS_QUERY_YEAR_MAX}) is a 400 (019 EARS-8.17).
  */
-export const DOCTOR_EVENTS_FEED_HORIZON_DAYS = 14;
-export const DOCTOR_EVENTS_FEED_HORIZON_STEP_DAYS = 14;
-/**
- * «Прошедшие» pages by COUNT, not by days (019 LD-2, «Amendment — 2026-10-12»):
- * the default screen is this many most recent past events and every
- * «показать ещё» adds this many older ones (the last step the remainder). The
- * extent stays `from`/`to` in whole МСК days, so a day the step's last event
- * falls on is shown whole.
- */
-export const DOCTOR_EVENTS_FEED_PAST_STEP_EVENTS = 10;
-/**
- * The widest horizon a single read will serve; a wider `to` within the served
- * years is clamped, not rejected. A `to` outside them
- * ({@link DOCTOR_EVENTS_QUERY_YEAR_MIN}–{@link DOCTOR_EVENTS_QUERY_YEAR_MAX})
- * is a 400 (019 EARS-8.17).
- */
-export const DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS = 365;
+export const DOCTOR_EVENTS_FEED_STEP_EVENTS = 10;
 
 export const DoctorEventsFeedQuerySchema = z
   .object({
@@ -222,28 +213,31 @@ export const DoctorEventsFeedSchema = z
     days: z.array(DoctorEventDayGroupSchema),
     totalCount: z.number().int().nonnegative(),
     /**
-     * «Будущие»: the `to` «показать ещё» writes into the URL; `null` when
-     * nothing lies past the window or the horizon is already maximal. Always
-     * `null` on «Прошедшие», whose extent widens backward ({@link nextFrom}).
+     * «Будущие»: the later `to` «показать ещё» writes into the URL — the day
+     * after the next step's last event; `null` when nothing lies past the
+     * extent. Always `null` on «Прошедшие», whose extent widens backward
+     * ({@link nextFrom}).
      */
     nextTo: DoctorEventsFeedDayShapeSchema.nullable(),
     /**
-     * «Прошедшие»: the older `from` «показать ещё» writes into the URL; `null`
-     * when nothing older lies within the widest horizon. Always `null` on
+     * «Прошедшие»: the older `from` «показать ещё» writes into the URL — the
+     * day of the next step's last event; `null` when nothing older lies
+     * beyond the extent. Always `null` on
      * «Будущие». One codec: the past extent moves its `from`, the upcoming
      * extent its `to` — the same two URL keys.
      */
     nextFrom: DoctorEventsFeedDayShapeSchema.nullable(),
     /**
      * The matching events beyond the current extent that further «показать
-     * ещё» steps can still reach (within the widest horizon) — the M of
-     * «Показать ещё N из M»; `0` exactly when both next bounds are `null`.
+     * ещё» steps can still reach — the M of «Показать ещё N (осталось M)»;
+     * `0` exactly when both next bounds are `null`.
      */
     remaining: z.number().int().nonnegative(),
     /**
      * The matching events the NEXT «показать ещё» step adds — the events in
      * `[to, nextTo)` on «Будущие», `[nextFrom, from)` on «Прошедшие» — the N
-     * of «Показать ещё N из M»; `0` exactly when both next bounds are `null`.
+     * of «Показать ещё N (осталось M)»; `0` exactly when both next bounds are
+     * `null`.
      */
     nextBatch: z.number().int().nonnegative(),
     targeting: DoctorEventsFeedTargetingSchema,
@@ -265,22 +259,22 @@ export type DoctorEventsFeed = z.infer<typeof DoctorEventsFeedSchema>;
  */
 /** The doctor codec's field table — its order IS the URL's key order. */
 export const DOCTOR_EVENTS_FEED_QUERY_FIELDS = [
-    { key: "day", kind: "scalar" },
-    { key: "tense", kind: "scalar" },
-    { key: "from", kind: "scalar" },
-    { key: "to", kind: "scalar" },
-    { key: "format", kind: "list" },
-    { key: "kind", kind: "list" },
-    {
-      key: "specialty",
-      kind: "mode-or-list",
-      modes: DoctorEventsFeedSpecialtyModeSchema.options,
-    },
-    { key: "city", kind: "list" },
-    { key: "nmo", kind: "boolean" },
-    { key: "free", kind: "boolean" },
-    { key: "q", kind: "scalar" },
-  ] as const satisfies readonly EventListingQueryField[];
+  { key: "day", kind: "scalar" },
+  { key: "tense", kind: "scalar" },
+  { key: "from", kind: "scalar" },
+  { key: "to", kind: "scalar" },
+  { key: "format", kind: "list" },
+  { key: "kind", kind: "list" },
+  {
+    key: "specialty",
+    kind: "mode-or-list",
+    modes: DoctorEventsFeedSpecialtyModeSchema.options,
+  },
+  { key: "city", kind: "list" },
+  { key: "nmo", kind: "boolean" },
+  { key: "free", kind: "boolean" },
+  { key: "q", kind: "scalar" },
+] as const satisfies readonly EventListingQueryField[];
 
 export const DOCTOR_EVENTS_FEED_QUERY_CODEC = createEventListingQueryCodec({
   schema: DoctorEventsFeedQuerySchema,

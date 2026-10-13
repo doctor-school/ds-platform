@@ -3,7 +3,6 @@ import {
   EVENTS_PAGE_QUERY_CODEC,
   type EventListingQueryEntry,
   addDoctorEventsFeedDays,
-  DOCTOR_EVENTS_FEED_HORIZON_DAYS,
   type RawQueryRecord,
   encodeQueryString,
   rawQueryScalar,
@@ -26,10 +25,11 @@ const LEGACY_PARAMS = ["tab", "cursor", "cursorTrail", "page"] as const;
  * The facet keys of each host's `filterSet` (row 58) — the facets that reach
  * that host's reads; the rest of the codec never leaves the page.
  */
-export const FACET_KEYS: Readonly<Record<EventsFilterHost, readonly string[]>> = {
-  doctor: ["format", "kind", "specialty", "city", "nmo", "free", "q"],
-  academy: ["project", "expert", "topic"],
-};
+export const FACET_KEYS: Readonly<Record<EventsFilterHost, readonly string[]>> =
+  {
+    doctor: ["format", "kind", "specialty", "city", "nmo", "free", "q"],
+    academy: ["project", "expert", "topic"],
+  };
 
 /** The horizon keys a feed read takes besides the facets. */
 const HORIZON_KEYS = ["from", "to"] as const;
@@ -48,7 +48,10 @@ function codecEntries(raw: RawQueryRecord): EventListingQueryEntry[] {
   );
 }
 
-function href(listing: string, entries: readonly EventListingQueryEntry[]): string {
+function href(
+  listing: string,
+  entries: readonly EventListingQueryEntry[],
+): string {
   const query = encodeQueryString(entries);
   return query ? `${listing}?${query}` : listing;
 }
@@ -74,8 +77,7 @@ export function canonicalFeedRedirect(
   raw: RawQueryRecord,
 ): string | null {
   if (!LEGACY_PARAMS.some((key) => raw[key] !== undefined)) return null;
-  const tense =
-    rawQueryScalar(raw.tab) === "past" ? "past" : feedTenseOf(raw);
+  const tense = rawQueryScalar(raw.tab) === "past" ? "past" : feedTenseOf(raw);
   const rest: RawQueryRecord = { ...raw };
   for (const key of LEGACY_PARAMS) delete rest[key];
   rest.tense = tense === "past" ? "past" : undefined;
@@ -119,7 +121,10 @@ export function showMoreHref(
 }
 
 /** The page query with one facet removed. */
-export function withoutFeedQuery(raw: RawQueryRecord, key: string): RawQueryRecord {
+export function withoutFeedQuery(
+  raw: RawQueryRecord,
+  key: string,
+): RawQueryRecord {
   return { ...raw, [key]: undefined };
 }
 
@@ -212,24 +217,18 @@ export function monthHref(
 /**
  * A tense's default extent as of `today`, as far as the href can know it —
  * the one horizon resolution of both reads (`resolveEventHorizonFromData`,
- * apps/api): «Будущие» `[today, today + width)`. «Прошедшие» opens on the 10
- * most recent past events (019 LD-2, «Amendment — 2026-10-12») — a `from` only
- * the data knows — so its known extent is the empty `[tomorrow, tomorrow)`,
- * and a day switched to is always written in by widening `from` back to it.
+ * apps/api). Both tenses open on the 10 events nearest today (019 LD-2) — a
+ * moving edge only the data knows — so the known extent is the empty one at
+ * the fixed edge: «Будущие» `[today, today)`, «Прошедшие» `[tomorrow,
+ * tomorrow)`, and a day switched to is always written in by widening the
+ * moving edge to it.
  */
 function defaultExtent(
   tense: FeedTense,
   today: string,
 ): { from: string; to: string } {
-  return tense === "past"
-    ? {
-        from: addDoctorEventsFeedDays(today, 1),
-        to: addDoctorEventsFeedDays(today, 1),
-      }
-    : {
-        from: today,
-        to: addDoctorEventsFeedDays(today, DOCTOR_EVENTS_FEED_HORIZON_DAYS),
-      };
+  const edge = tense === "past" ? addDoctorEventsFeedDays(today, 1) : today;
+  return { from: edge, to: edge };
 }
 
 /**

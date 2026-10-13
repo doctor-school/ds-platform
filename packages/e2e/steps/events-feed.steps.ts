@@ -235,7 +235,17 @@ When(
   "the {word} activates «Показать ещё»",
   async ({ page, world }, _actor: string) => {
     const days = await page.locator('section[id^="day-"]').count();
-    feedOf(world).horizonBefore = { to: params(page).get("to"), days };
+    const cards = await feedCards(page).count();
+    const more = page.getByTestId("events-feed-show-more");
+    await expect(more).toHaveText(/^Показать ещё \d+ \(осталось \d+\)$/u);
+    // The first number of «Показать ещё K (осталось N)» is what the step adds.
+    const step = Number(/\d+/u.exec((await more.innerText()).trim())![0]);
+    feedOf(world).horizonBefore = {
+      to: params(page).get("to"),
+      days,
+      cards,
+      step,
+    };
     await showMore(page, world);
   },
 );
@@ -250,6 +260,22 @@ Then(
     if (before.to) expect(to! > before.to).toBe(true);
     expect(await page.locator('section[id^="day-"]').count()).toBeGreaterThan(
       before.days,
+    );
+    expect(await feedCards(page).count()).toBe(before.cards + before.step);
+  },
+);
+
+Then(
+  "the screen holds the 10 nearest upcoming events, «Показать ещё 10 \\(осталось N)» adding the next later ones",
+  async ({ page }) => {
+    // 019 «Amendment — 2026-10-12» (#2884): «Будущие» pages by the count step
+    // of 10, a day shared by the tenth event and later ones shown whole.
+    expect(
+      await feedCards(page).count(),
+      "the default upcoming screen",
+    ).toBeGreaterThanOrEqual(10);
+    await expect(page.getByTestId("events-feed-show-more")).toHaveText(
+      /^Показать ещё \d+ \(осталось \d+\)$/u,
     );
   },
 );

@@ -9,12 +9,12 @@ import { expect, test } from "@playwright/test";
  *
  *   row 28 — the head's tense tabs, «Будущие» by default, the tense in the URL;
  *   rows 29–30 — «Прошедшие» groups by month newest first, no archive block;
- *   row 32 — «Показать ещё N из M» is offered from the bare `/webinars`, and
- *            «Показать ещё N (осталось M)» from `?tense=past` (10 past events
- *            a step, 019 LD-2 «Amendment — 2026-10-12»); both widen the
- *            extent in the URL (seeded `seed-005-upcoming-3` at +14 d,
- *            `seed-014-ended-month-ago` at −30 d, `seed-006-legacy-archived`
- *            at −400 d — no age floor);
+ *   row 32 — both tenses page by 10 events (019 LD-2): the bare `/webinars`
+ *            holds the seeded upcoming эфиры at once — fewer than 10, so no
+ *            «Показать ещё» (`seed-005-upcoming-3` at +14 d included) — and
+ *            `?tense=past` offers «Показать ещё N (осталось M)», which widens
+ *            the extent in the URL (`seed-014-ended-month-ago` at −30 d,
+ *            `seed-006-legacy-archived` at −400 d — no age floor);
  *   row 31 — a published recording reads «Запись · <length>» + «Смотреть запись»;
  *   row 43 — the live block renders an experts-audience live event
  *            (`E2E_WEBINAR_SLUG_LIVE`, default `seed-005-live`);
@@ -128,7 +128,7 @@ test.describe("the Academy feed view (wave-2 entry gate §2.4)", () => {
     await expect(legacy).toContainText("Запись · 1 ч 20 мин");
   });
 
-  test("gate row 32: the bare `/webinars` offers «Показать ещё», which reaches the эфир just past the 14-day default", async ({
+  test("gate row 32: the bare `/webinars` holds its fewer than 10 upcoming эфиры at once, however far ahead, and offers no «Показать ещё» (019 LD-2, #2884)", async ({
     page,
   }) => {
     await page.goto("/webinars", { waitUntil: "domcontentloaded" });
@@ -136,13 +136,8 @@ test.describe("the Academy feed view (wave-2 entry gate §2.4)", () => {
       .locator("[data-webinar-card]")
       .filter({ hasText: "Ревматология: ранняя диагностика" });
     await expect(page.getByTestId("events-feed")).toBeVisible();
-    await expect(later).toHaveCount(0);
-
-    const more = page.getByTestId("events-feed-show-more");
-    await expect(more).toHaveText(/^Показать ещё \d+ из \d+$/);
-    await more.click();
-    await expect(page).toHaveURL(/[?&]to=\d{4}-\d{2}-\d{2}/);
     await expect(later).toHaveCount(1);
+    await expect(page.getByTestId("events-feed-show-more")).toHaveCount(0);
   });
 
   test("gate rows 43, 50: the live block renders the experts-audience live event, between the head and the day feed", async ({
@@ -152,11 +147,9 @@ test.describe("the Academy feed view (wave-2 entry gate §2.4)", () => {
 
     const block = page.getByTestId("events-live-block");
     await expect(block).toBeVisible();
-    const strip = block
-      .getByTestId("live-event-strip")
-      .filter({
-        has: page.locator(`a[href="/webinars/${SLUG_LIVE}"]`),
-      });
+    const strip = block.getByTestId("live-event-strip").filter({
+      has: page.locator(`a[href="/webinars/${SLUG_LIVE}"]`),
+    });
     await expect(strip).toHaveCount(1);
     await expect(strip.getByTestId("live-event-strip-title")).toHaveAttribute(
       "href",
@@ -186,15 +179,22 @@ test.describe("the Academy feed view (wave-2 entry gate §2.4)", () => {
       maxRedirects: 0,
     });
     expect(response.status()).toBe(308);
-    const location = new URL(response.headers()["location"]!, "http://portal.test");
-    expect(`${location.pathname}${location.search}`).toBe("/webinars?tense=past");
+    const location = new URL(
+      response.headers()["location"]!,
+      "http://portal.test",
+    );
+    expect(`${location.pathname}${location.search}`).toBe(
+      "/webinars?tense=past",
+    );
 
     await page.goto("/webinars?tab=past&cursor=x", {
       waitUntil: "domcontentloaded",
     });
     await expect(page).toHaveURL(/\/webinars\?tense=past$/);
     await expect(
-      page.getByTestId("events-tense-tabs").getByRole("tab", { name: "Прошедшие" }),
+      page
+        .getByTestId("events-tense-tabs")
+        .getByRole("tab", { name: "Прошедшие" }),
     ).toHaveAttribute("aria-selected", "true");
   });
 });

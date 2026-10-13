@@ -49,7 +49,8 @@ function build(
 
 describe("buildFeedItems — the one card projection of both hosts", () => {
   it("019 EARS-17: names the kind and the format as two labels, a long kind title included", () => {
-    const long = "Междисциплинарная клинико-практическая конференция с разбором";
+    const long =
+      "Междисциплинарная клинико-практическая конференция с разбором";
     const [item] = build([card({ kindTitle: long, format: "hybrid" })]);
     expect(item?.kindLabel).toBe(long);
     expect(item?.formatLabel).toBe("Гибрид");
@@ -198,8 +199,16 @@ describe("buildFeedItems — the one card projection of both hosts", () => {
   it("NEW: past items group under «<month> <year>» newest first", () => {
     const items = build(
       [
-        card({ id: "sep", state: "past", startsAt: "2026-09-10T10:00:00.000Z" }),
-        card({ id: "aug", state: "past", startsAt: "2026-08-05T10:00:00.000Z" }),
+        card({
+          id: "sep",
+          state: "past",
+          startsAt: "2026-09-10T10:00:00.000Z",
+        }),
+        card({
+          id: "aug",
+          state: "past",
+          startsAt: "2026-08-05T10:00:00.000Z",
+        }),
       ],
       { tense: "past" },
     );
@@ -238,18 +247,14 @@ describe("buildFeedItems — the one card projection of both hosts", () => {
 });
 
 describe("showMoreLabel", () => {
-  it("NEW: «Показать ещё» on «Будущие» states the next batch and the remainder", () => {
-    // N is the api's `nextBatch` — the events the next widening adds — never a
-    // fixed page size: a 14-day step holding 6 of 45 reads «6 из 45».
-    expect(showMoreLabel(6, 45, FEED_COPY, "upcoming")).toBe("Показать ещё 6 из 45");
-    expect(showMoreLabel(3, 3, FEED_COPY, "upcoming")).toBe("Показать ещё 3 из 3");
-    expect(showMoreLabel(0, 0, FEED_COPY, "upcoming")).toBe("Показать ещё");
-  });
-
-  it("NEW: «Показать ещё» on «Прошедшие» names the next step and what is left after this screen (#2768)", () => {
-    expect(showMoreLabel(10, 25, FEED_COPY, "past")).toBe("Показать ещё 10 (осталось 25)");
-    expect(showMoreLabel(5, 5, FEED_COPY, "past")).toBe("Показать ещё 5 (осталось 5)");
-    expect(showMoreLabel(0, 0, FEED_COPY, "past")).toBe("Показать ещё");
+  it("NEW: «Показать ещё» names the next step and what is left after this screen — one label for both tenses (#2768, #2884)", () => {
+    // N is the api's `nextBatch` — the events the next step adds, the last
+    // step the remainder — and M the api's `remaining`.
+    expect(showMoreLabel(10, 25, FEED_COPY)).toBe(
+      "Показать ещё 10 (осталось 25)",
+    );
+    expect(showMoreLabel(5, 5, FEED_COPY)).toBe("Показать ещё 5 (осталось 5)");
+    expect(showMoreLabel(0, 0, FEED_COPY)).toBe("Показать ещё");
   });
 });
 
@@ -320,19 +325,31 @@ describe("myEventsCut — 019 EARS-11", () => {
     expect(rows.map((r) => r.title)).toEqual(["Моё 1", "Моё 2", "Моё 3"]);
     expect(rows[0]?.href).toBe("/events/mine-1");
     expect(rows[0]?.time).toBe("13:00 МСК");
-    expect(myEventsCut([], {
-      viewerZone: "Europe/Moscow",
-      routes: ROUTES,
-      copy: FEED_COPY,
-    })).toEqual([]);
+    expect(
+      myEventsCut([], {
+        viewerZone: "Europe/Moscow",
+        routes: ROUTES,
+        copy: FEED_COPY,
+      }),
+    ).toEqual([]);
   });
 });
 
 describe("emptyFeedState — 019 EARS-9, LD-9", () => {
   const EVENTS = { one: "событие", few: "события", many: "событий" };
   const EFIRS = { one: "эфир", few: "эфира", many: "эфиров" };
-  const DOCTOR_EMPTY = { listing: "/events", noun: EVENTS, copy: FEED_COPY, filterSet: "doctor" } as const;
-  const ACADEMY_EMPTY = { listing: "/webinars", noun: EFIRS, copy: FEED_COPY, filterSet: "academy" } as const;
+  const DOCTOR_EMPTY = {
+    listing: "/events",
+    noun: EVENTS,
+    copy: FEED_COPY,
+    filterSet: "doctor",
+  } as const;
+  const ACADEMY_EMPTY = {
+    listing: "/webinars",
+    noun: EFIRS,
+    copy: FEED_COPY,
+    filterSet: "academy",
+  } as const;
   /** A widen read answering `counts[i]` for the i-th asked removal; `null` = failed. */
   function reads(...counts: (number | null)[]) {
     const asked: RawQueryRecord[] = [];
@@ -353,14 +370,24 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
     expect(state.title).toBe("Нет событий по фильтру «Формат: Офлайн»");
     expect(state.description).toBe("Без этого фильтра найдётся 3 события.");
     expect(state.widen?.label).toBe("Убрать фильтр «Формат: Офлайн»");
-    expect(state.widen?.href).toBe("/events?city=%D0%9A%D0%B0%D0%B7%D0%B0%D0%BD%D1%8C");
+    expect(state.widen?.href).toBe(
+      "/events?city=%D0%9A%D0%B0%D0%B7%D0%B0%D0%BD%D1%8C",
+    );
     // The tense rides with every widen read; the read stops at the first hit.
-    expect(asked).toEqual([{ tense: "upcoming", format: undefined, city: ["Казань"] }]);
+    expect(asked).toEqual([
+      { tense: "upcoming", format: undefined, city: ["Казань"] },
+    ]);
   });
 
   it("EARS-9: a facet-emptied state carries «Сбросить фильтры» beside the widening — the page without the host's facets, tense and view kept (canvas emptyOf)", async () => {
     const state = await emptyFeedState(
-      { tense: "past", view: "month", month: "2026-11", kind: ["lecture"], nmo: "true" },
+      {
+        tense: "past",
+        view: "month",
+        month: "2026-11",
+        kind: ["lecture"],
+        nmo: "true",
+      },
       { ...DOCTOR_EMPTY, matching: reads(4).matching },
     );
     expect(state.widen?.label).toBe("Убрать фильтр «Вид события: lecture»");
@@ -377,7 +404,9 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
       {
         ...ACADEMY_EMPTY,
         titles: {
-          project: [{ slug: "golden-school", title: "Золотая школа", count: 0 }],
+          project: [
+            { slug: "golden-school", title: "Золотая школа", count: 0 },
+          ],
           topic: [{ slug: "genetics", title: "Генетика", count: 0 }],
         },
         matching,
@@ -427,18 +456,29 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
       { ...DOCTOR_EMPTY, matching },
     );
     expect(asked).toEqual([{ specialty: undefined, format: ["offline"] }]);
-    expect(state.description).toBe("В вашей и смежных специальностях найдётся 2 события.");
+    expect(state.description).toBe(
+      "В вашей и смежных специальностях найдётся 2 события.",
+    );
     expect(state.widen?.label).toBe("Показать смежные специальности");
     expect(state.widen?.href).toBe("/events?format=offline");
   });
 
   it("EARS-9: a picked specialty is named «Специальность: <name>» by the first picked specialty (canvas facetChips)", async () => {
-    const names: Record<string, string> = { neurology: "Неврология", cardiology: "Кардиология" };
+    const names: Record<string, string> = {
+      neurology: "Неврология",
+      cardiology: "Кардиология",
+    };
     const state = await emptyFeedState(
       { specialty: ["neurology", "cardiology"] },
-      { ...DOCTOR_EMPTY, specialtyName: (code) => names[code], matching: reads(7).matching },
+      {
+        ...DOCTOR_EMPTY,
+        specialtyName: (code) => names[code],
+        matching: reads(7).matching,
+      },
     );
-    expect(state.title).toBe("Нет событий по фильтру «Специальность: Неврология»");
+    expect(state.title).toBe(
+      "Нет событий по фильтру «Специальность: Неврология»",
+    );
   });
 
   it("EARS-9: a picked specialty the specialty book does not name is named by its code", async () => {
@@ -446,7 +486,9 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
       { specialty: ["x-unknown"] },
       { ...DOCTOR_EMPTY, matching: reads(1).matching },
     );
-    expect(state.title).toBe("Нет событий по фильтру «Специальность: x-unknown»");
+    expect(state.title).toBe(
+      "Нет событий по фильтру «Специальность: x-unknown»",
+    );
   });
 
   it("EARS-9: an Academy topic chip comes first and offers «Показать все темы»", async () => {
@@ -455,11 +497,17 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
       { project: ["orto"], topic: ["metrics"] },
       {
         ...ACADEMY_EMPTY,
-        titles: { topic: [{ slug: "metrics", title: "Медико-биологические науки", count: 0 }] },
+        titles: {
+          topic: [
+            { slug: "metrics", title: "Медико-биологические науки", count: 0 },
+          ],
+        },
         matching,
       },
     );
-    expect(state.title).toBe("Нет эфиров по фильтру «Тема: Медико-биологические науки»");
+    expect(state.title).toBe(
+      "Нет эфиров по фильтру «Тема: Медико-биологические науки»",
+    );
     expect(state.widen).toEqual({
       label: "Показать все темы",
       href: "/webinars?project=orto",
@@ -480,15 +528,30 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
       { ...ACADEMY_EMPTY, matching },
     );
     expect(asked).toEqual([
-      { format: ["offline"], kind: ["lecture"], city: ["Казань"], nmo: "true", q: "x", expert: undefined },
+      {
+        format: ["offline"],
+        kind: ["lecture"],
+        city: ["Казань"],
+        nmo: "true",
+        q: "x",
+        expert: undefined,
+      },
     ]);
     expect(state.title).toBe("Нет эфиров по фильтру «Эксперт: ivanov»");
   });
 
   it("EARS-9: an Academy page whose only facet is a foreign key reads the plain empty feed (#2786)", async () => {
     const { asked, matching } = reads();
-    const state = await emptyFeedState({ format: ["offline"] }, { ...ACADEMY_EMPTY, matching });
-    expect(state).toEqual({ title: "Эфиров нет", description: "", widen: null, reset: null });
+    const state = await emptyFeedState(
+      { format: ["offline"] },
+      { ...ACADEMY_EMPTY, matching },
+    );
+    expect(state).toEqual({
+      title: "Эфиров нет",
+      description: "",
+      widen: null,
+      reset: null,
+    });
     expect(asked).toEqual([]);
   });
 
@@ -548,7 +611,12 @@ describe("the page's one today (wave-2 gate §4.3 D10)", () => {
   const page = {
     today: "2026-10-07",
     cards: [],
-    horizon: { from: "2026-10-05", to: "2026-11-02", nextTo: null, nextFrom: null },
+    horizon: {
+      from: "2026-10-05",
+      to: "2026-11-02",
+      nextTo: null,
+      nextFrom: null,
+    },
     remaining: 0,
     nextBatch: 0,
     facetOptions: {},
@@ -562,7 +630,9 @@ describe("the page's one today (wave-2 gate §4.3 D10)", () => {
 
   it("D10: only a failed feed read falls back to the МСК day of the page clock", () => {
     // 22:30 UTC on 7 Oct is 01:30 МСК on 8 Oct.
-    expect(pageTodayOf({ ok: false }, new Date("2026-10-07T22:30:00.000Z"))).toBe("2026-10-08");
+    expect(
+      pageTodayOf({ ok: false }, new Date("2026-10-07T22:30:00.000Z")),
+    ).toBe("2026-10-08");
   });
 });
 

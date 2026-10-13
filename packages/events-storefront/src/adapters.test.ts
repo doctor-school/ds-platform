@@ -31,11 +31,24 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
       {
         data: [
           { ...base, state: "published" },
-          { ...base, id: "22222222-2222-4222-8222-222222222222", slug: "a-2", state: "live" },
+          {
+            ...base,
+            id: "22222222-2222-4222-8222-222222222222",
+            slug: "a-2",
+            state: "live",
+          },
         ],
         counts: { upcoming: 30, past: 4, upcomingSchools: 3, pastSchools: 2 },
         pagination: { nextCursor: null, hasMore: true },
-        horizon: { today: "2026-10-08", from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05", nextFrom: null, remaining: 28, nextBatch: 5 },
+        horizon: {
+          today: "2026-10-08",
+          from: "2026-10-08",
+          to: "2026-10-22",
+          nextTo: "2026-11-05",
+          nextFrom: null,
+          remaining: 28,
+          nextBatch: 5,
+        },
       },
       { tense: "upcoming" },
     );
@@ -56,7 +69,7 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
     // D10 — the api's today rides the read; the page takes its one today from it.
     expect(page.today).toBe("2026-10-08");
     expect(page.remaining).toBe(28);
-    // N of «Показать ещё N из M» is the api's next batch, carried as is.
+    // N of «Показать ещё N (осталось M)» is the api's next batch, carried as is.
     expect(page.nextBatch).toBe(5);
   });
 
@@ -75,47 +88,92 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
 
   const summaryOf = (
     tense: "upcoming" | "past",
-    counts: { upcoming: number; past: number; upcomingSchools: number; pastSchools: number },
+    counts: {
+      upcoming: number;
+      past: number;
+      upcomingSchools: number;
+      pastSchools: number;
+    },
   ) =>
     adaptPublicEventListing(
       {
         data: [],
         counts,
         pagination: { nextCursor: null, hasMore: false },
-        horizon: { today: "2026-10-08", from: "2026-10-08", to: "2026-10-22", nextTo: null, nextFrom: null, remaining: 0, nextBatch: 0 },
+        horizon: {
+          today: "2026-10-08",
+          from: "2026-10-08",
+          to: "2026-10-22",
+          nextTo: null,
+          nextFrom: null,
+          remaining: 0,
+          nextBatch: 0,
+        },
       },
       { tense },
     ).summary;
 
   it("NEW: on «Будущие» the head summary counts upcoming эфиры and their distinct schools (row 19)", () => {
     expect(
-      summaryOf("upcoming", { upcoming: 30, past: 4, upcomingSchools: 3, pastSchools: 2 }),
+      summaryOf("upcoming", {
+        upcoming: 30,
+        past: 4,
+        upcomingSchools: 3,
+        pastSchools: 2,
+      }),
     ).toEqual({ events: 30, schools: 3 });
   });
 
   it("NEW: on «Прошедшие» the head summary counts past эфиры and their distinct schools (#2768)", () => {
     expect(
-      summaryOf("past", { upcoming: 30, past: 4, upcomingSchools: 3, pastSchools: 2 }),
+      summaryOf("past", {
+        upcoming: 30,
+        past: 4,
+        upcomingSchools: 3,
+        pastSchools: 2,
+      }),
     ).toEqual({ events: 4, schools: 2 });
   });
 
   it("NEW: a tab with no events carries no head summary, so no subline renders (#2768)", () => {
     expect(
-      summaryOf("past", { upcoming: 30, past: 0, upcomingSchools: 3, pastSchools: 0 }),
+      summaryOf("past", {
+        upcoming: 30,
+        past: 0,
+        upcomingSchools: 3,
+        pastSchools: 0,
+      }),
     ).toBeUndefined();
     expect(
-      summaryOf("upcoming", { upcoming: 0, past: 4, upcomingSchools: 0, pastSchools: 2 }),
+      summaryOf("upcoming", {
+        upcoming: 0,
+        past: 4,
+        upcomingSchools: 0,
+        pastSchools: 2,
+      }),
     ).toBeUndefined();
   });
 
   it("NEW: the Academy facet options reach the page model, and the matching count is the page plus the rest of the reach (rows 58, 60)", () => {
-    const options = { project: [{ slug: "p", title: "Проект", count: 2 }], expert: [], topic: [] };
+    const options = {
+      project: [{ slug: "p", title: "Проект", count: 2 }],
+      expert: [],
+      topic: [],
+    };
     const page = adaptPublicEventListing(
       {
         data: [{ ...base, state: "published" }],
         counts: { upcoming: 30, past: 4, upcomingSchools: 3, pastSchools: 2 },
         pagination: { nextCursor: null, hasMore: true },
-        horizon: { today: "2026-10-08", from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05", nextFrom: null, remaining: 28, nextBatch: 5 },
+        horizon: {
+          today: "2026-10-08",
+          from: "2026-10-08",
+          to: "2026-10-22",
+          nextTo: "2026-11-05",
+          nextFrom: null,
+          remaining: 28,
+          nextBatch: 5,
+        },
         facets: options,
       },
       { tense: "upcoming" },
@@ -138,7 +196,15 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
         data: [{ ...base, state: "ended", recording }],
         counts: { upcoming: 0, past: 1, upcomingSchools: 0, pastSchools: 1 },
         pagination: { nextCursor: null, hasMore: false },
-        horizon: { today: "2026-10-08", from: "2026-09-24", to: "2026-10-09", nextTo: null, nextFrom: "2026-09-10", remaining: 3, nextBatch: 2 },
+        horizon: {
+          today: "2026-10-08",
+          from: "2026-09-24",
+          to: "2026-10-09",
+          nextTo: null,
+          nextFrom: "2026-09-10",
+          remaining: 3,
+          nextBatch: 2,
+        },
       },
       { tense: "past" },
     );
@@ -177,14 +243,23 @@ describe("adaptDoctorEventsFeed — the doctor read onto the one feed model", ()
         from: "2026-10-08",
         to: "2026-10-22",
         days: [
-          { day: "2026-10-20", label: "20 октября", items: [card, { ...card, id: "d-2", slug: "d-2", state: "live" }] },
+          {
+            day: "2026-10-20",
+            label: "20 октября",
+            items: [card, { ...card, id: "d-2", slug: "d-2", state: "live" }],
+          },
         ],
         totalCount: 2,
         nextTo: "2026-11-05",
         nextFrom: null,
         remaining: 7,
         nextBatch: 4,
-        targeting: { mode: "all", specialtyReference: null, directionIds: [], adjacentDirectionIds: [] },
+        targeting: {
+          mode: "all",
+          specialtyReference: null,
+          directionIds: [],
+          adjacentDirectionIds: [],
+        },
       },
       { tense: "upcoming" },
     );
@@ -210,13 +285,28 @@ describe("adaptDoctorEventsFeed — the doctor read onto the one feed model", ()
   });
 
   it("NEW: the doctor facet options reach the page model (row 58, D9)", () => {
-    const facets = { kind: [{ slug: "webinar", title: "Вебинар", count: 1 }], city: [] };
+    const facets = {
+      kind: [{ slug: "webinar", title: "Вебинар", count: 1 }],
+      city: [],
+    };
     const page = adaptDoctorEventsFeed(
       {
-        tense: "upcoming", today: "2026-10-08", from: "2026-10-08", to: "2026-10-22",
+        tense: "upcoming",
+        today: "2026-10-08",
+        from: "2026-10-08",
+        to: "2026-10-22",
         days: [{ day: "2026-10-20", label: "20 октября", items: [card] }],
-        totalCount: 1, nextTo: null, nextFrom: null, remaining: 0, nextBatch: 0,
-        targeting: { mode: "all", specialtyReference: null, directionIds: [], adjacentDirectionIds: [] },
+        totalCount: 1,
+        nextTo: null,
+        nextFrom: null,
+        remaining: 0,
+        nextBatch: 0,
+        targeting: {
+          mode: "all",
+          specialtyReference: null,
+          directionIds: [],
+          adjacentDirectionIds: [],
+        },
         facets,
       },
       { tense: "upcoming" },
@@ -232,13 +322,24 @@ describe("adaptDoctorEventsFeed — the doctor read onto the one feed model", ()
         today: "2026-10-08",
         from: "2026-09-24",
         to: "2026-10-09",
-        days: [{ day: "2026-10-01", label: "1 октября", items: [{ ...card, state: "recorded", recording: RECORDING }] }],
+        days: [
+          {
+            day: "2026-10-01",
+            label: "1 октября",
+            items: [{ ...card, state: "recorded", recording: RECORDING }],
+          },
+        ],
         totalCount: 1,
         nextTo: null,
         nextFrom: null,
         remaining: 0,
         nextBatch: 0,
-        targeting: { mode: "all", specialtyReference: null, directionIds: [], adjacentDirectionIds: [] },
+        targeting: {
+          mode: "all",
+          specialtyReference: null,
+          directionIds: [],
+          adjacentDirectionIds: [],
+        },
       },
       { tense: "past" },
     );

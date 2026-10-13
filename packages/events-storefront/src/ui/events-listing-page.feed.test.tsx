@@ -34,7 +34,8 @@ vi.mock("next/navigation", () => ({
   permanentRedirect: vi.fn(),
 }));
 vi.mock("next/headers", () => ({
-  headers: async () => new Headers(mocks.cookie ? { cookie: mocks.cookie } : {}),
+  headers: async () =>
+    new Headers(mocks.cookie ? { cookie: mocks.cookie } : {}),
 }));
 vi.mock("../server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../server")>()),
@@ -116,7 +117,12 @@ const PAGE: EventsFeedPage = {
   matching: 0,
   cards: [CARD],
   today: "2026-10-08",
-  horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05", nextFrom: null },
+  horizon: {
+    from: "2026-10-08",
+    to: "2026-10-22",
+    nextTo: "2026-11-05",
+    nextFrom: null,
+  },
   remaining: 57,
   nextBatch: 6,
 };
@@ -135,7 +141,12 @@ const strip = (n: number) => ({
 const SESSION = { cookie: "", forwardedFor: "" } as never;
 const REQUEST = { cookie: "", forwardedFor: "10.0.0.1" };
 const NO_SPECIALTIES = Promise.resolve([]);
-const EMPTY_PAGE: EventsFeedPage = { ...PAGE, cards: [], remaining: 0, matching: 0 };
+const EMPTY_PAGE: EventsFeedPage = {
+  ...PAGE,
+  cards: [],
+  remaining: 0,
+  matching: 0,
+};
 
 afterEach(cleanup);
 beforeEach(() => {
@@ -176,7 +187,10 @@ const FEED_BLOCKS: unknown[] = [LiveSection, MyEventsSection, FeedSection];
 /** The feed blocks: each Suspense child's component and its fallback test id. */
 function blocks(element: ReactElement<{ children: ReactNode }>) {
   return boundaries(element.props.children)
-    .map((child) => child.props as { children: ReactElement; fallback: ReactElement })
+    .map(
+      (child) =>
+        child.props as { children: ReactElement; fallback: ReactElement },
+    )
     .filter(({ children }) => FEED_BLOCKS.includes(children.type))
     .map(({ children, fallback }) => {
       render(fallback);
@@ -256,10 +270,14 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
     );
     const error = screen.getByTestId("events-feed-error");
     expect(error).toHaveTextContent("Не удалось загрузить ленту событий");
-    await userEvent.click(within(error).getByRole("button", { name: "Повторить" }));
+    await userEvent.click(
+      within(error).getByRole("button", { name: "Повторить" }),
+    );
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("events-live-block")).toHaveTextContent("Эфир 1");
-    expect(screen.getByTestId("events-my-events")).toHaveTextContent("Моё событие");
+    expect(screen.getByTestId("events-my-events")).toHaveTextContent(
+      "Моё событие",
+    );
   });
 
   it("NEW: «Показать ещё» states the next batch and the remainder and writes the extent to the URL", async () => {
@@ -274,8 +292,11 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
       }),
     );
     const more = screen.getByTestId("events-feed-show-more");
-    expect(more).toHaveTextContent("Показать ещё 6 из 57");
-    expect(more).toHaveAttribute("href", "/events?from=2026-10-08&to=2026-11-05");
+    expect(more).toHaveTextContent("Показать ещё 6 (осталось 57)");
+    expect(more).toHaveAttribute(
+      "href",
+      "/events?from=2026-10-08&to=2026-11-05",
+    );
   });
 
   it("019 row 19: the Academy head subline counts the upcoming эфиры and their schools «N эфиров · M школ»; the doctor head keeps its copy", async () => {
@@ -287,7 +308,11 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
     const { subline } = academy.props as unknown as { subline: ReactElement };
     expect(subline.type).toBe(Suspense);
     const { children } = subline.props as { children: ReactElement };
-    render(await (children.type as (p: unknown) => Promise<ReactElement>)(children.props));
+    render(
+      await (children.type as (p: unknown) => Promise<ReactElement>)(
+        children.props,
+      ),
+    );
     expect(screen.getByTestId("events-feed-subline-counts")).toHaveTextContent(
       "21 эфир · 3 школы",
     );
@@ -301,7 +326,12 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
 
   it("NEW: a guest gets no «Мои события» block even when its read answers", async () => {
     const { container } = render(
-      <>{await MyEventsSection({ config: DOCTOR, mine: Promise.resolve({ ok: true, value: null }) })}</>,
+      <>
+        {await MyEventsSection({
+          config: DOCTOR,
+          mine: Promise.resolve({ ok: true, value: null }),
+        })}
+      </>,
     );
     expect(container).toBeEmptyDOMElement();
   });
@@ -309,7 +339,9 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
 
 describe("the empty state of both views (019 EARS-9, #2786)", () => {
   const TOPICS = {
-    topic: [{ slug: "biomedical", title: "Медико-биологические науки", count: 0 }],
+    topic: [
+      { slug: "biomedical", title: "Медико-биологические науки", count: 0 },
+    ],
     project: [{ slug: "golden", title: "Золотая школа", count: 0 }],
   };
   /** The empty block's actions in order, by accessible name and href. */
@@ -320,46 +352,72 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
 
   it("EARS-9: an empty feed names the first facet whose removal finds events, counted by a widen read of the same tense, and offers the widening then «Сбросить фильтры»", async () => {
     mocks.fetchEventsFeed
-      .mockResolvedValueOnce({ ok: true, value: { ...EMPTY_PAGE, matching: 0 } })
-      .mockResolvedValueOnce({ ok: true, value: { ...EMPTY_PAGE, matching: 12 } });
+      .mockResolvedValueOnce({
+        ok: true,
+        value: { ...EMPTY_PAGE, matching: 0 },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: { ...EMPTY_PAGE, matching: 12 },
+      });
     const query = { tense: "past", project: "golden", topic: "biomedical" };
     render(
       await FeedSection({
         config: ACADEMY,
         query,
-        feed: Promise.resolve({ ok: true as const, value: { ...EMPTY_PAGE, facetOptions: TOPICS } }),
+        feed: Promise.resolve({
+          ok: true as const,
+          value: { ...EMPTY_PAGE, facetOptions: TOPICS },
+        }),
         mine: Promise.resolve({ ok: true, value: null }),
         specialties: NO_SPECIALTIES,
         request: REQUEST,
       }),
     );
-    expect(mocks.fetchEventsFeed.mock.calls.map(([, raw, request]) => [raw, request])).toEqual([
+    expect(
+      mocks.fetchEventsFeed.mock.calls.map(([, raw, request]) => [
+        raw,
+        request,
+      ]),
+    ).toEqual([
       [{ ...query, topic: undefined }, REQUEST],
       [{ ...query, project: undefined }, REQUEST],
     ]);
     const empty = screen.getByTestId("events-feed-empty");
-    expect(empty).toHaveTextContent("Нет эфиров по фильтру «Проект: Золотая школа»");
+    expect(empty).toHaveTextContent(
+      "Нет эфиров по фильтру «Проект: Золотая школа»",
+    );
     expect(empty).toHaveTextContent("Без этого фильтра найдётся 12 эфиров.");
     expect(actionsOf(empty)).toEqual([
-      ["Убрать фильтр «Проект: Золотая школа»", "/webinars?tense=past&topic=biomedical"],
+      [
+        "Убрать фильтр «Проект: Золотая школа»",
+        "/webinars?tense=past&topic=biomedical",
+      ],
       ["Сбросить фильтры", "/webinars?tense=past"],
     ]);
   });
 
   it("EARS-9: an empty doctor feed names a picked specialty by the specialty book «Специальность: <name>»", async () => {
-    mocks.fetchEventsFeed.mockResolvedValueOnce({ ok: true, value: { ...EMPTY_PAGE, matching: 3 } });
+    mocks.fetchEventsFeed.mockResolvedValueOnce({
+      ok: true,
+      value: { ...EMPTY_PAGE, matching: 3 },
+    });
     render(
       await FeedSection({
         config: DOCTOR,
         query: { specialty: "neurology" },
         feed: Promise.resolve({ ok: true as const, value: EMPTY_PAGE }),
         mine: Promise.resolve({ ok: true, value: null }),
-        specialties: Promise.resolve([{ code: "neurology", name: "Неврология" }]),
+        specialties: Promise.resolve([
+          { code: "neurology", name: "Неврология" },
+        ]),
         request: REQUEST,
       }),
     );
     const empty = screen.getByTestId("events-feed-empty");
-    expect(empty).toHaveTextContent("Нет событий по фильтру «Специальность: Неврология»");
+    expect(empty).toHaveTextContent(
+      "Нет событий по фильтру «Специальность: Неврология»",
+    );
     expect(actionsOf(empty)).toEqual([
       ["Показать смежные специальности", "/events"],
       ["Сбросить фильтры", "/events"],
@@ -383,21 +441,33 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
   it("EARS-9: an empty month names the facet by its title and counts the tense's whole reach (#2786)", async () => {
     mocks.fetchMonthEntries.mockResolvedValue({ ok: true, value: [] });
     mocks.fetchMonthCounts.mockResolvedValue({ ok: true, value: [] });
-    mocks.fetchEventsFeed.mockResolvedValueOnce({ ok: true, value: { ...EMPTY_PAGE, matching: 1 } });
+    mocks.fetchEventsFeed.mockResolvedValueOnce({
+      ok: true,
+      value: { ...EMPTY_PAGE, matching: 1 },
+    });
     const raw = { view: "month", topic: "biomedical" };
     render(
       await MonthView({
         config: ACADEMY,
         raw,
         month: "2026-10",
-        feed: Promise.resolve({ ok: true as const, value: { ...EMPTY_PAGE, facetOptions: TOPICS } }),
+        feed: Promise.resolve({
+          ok: true as const,
+          value: { ...EMPTY_PAGE, facetOptions: TOPICS },
+        }),
         specialties: NO_SPECIALTIES,
         request: REQUEST,
       }),
     );
-    expect(mocks.fetchEventsFeed).toHaveBeenCalledWith(ACADEMY, { ...raw, topic: undefined }, REQUEST);
+    expect(mocks.fetchEventsFeed).toHaveBeenCalledWith(
+      ACADEMY,
+      { ...raw, topic: undefined },
+      REQUEST,
+    );
     const empty = screen.getByTestId("events-month-empty");
-    expect(empty).toHaveTextContent("Нет эфиров по фильтру «Тема: Медико-биологические науки»");
+    expect(empty).toHaveTextContent(
+      "Нет эфиров по фильтру «Тема: Медико-биологические науки»",
+    );
     expect(empty).toHaveTextContent("Без этого фильтра найдётся 1 эфир.");
     expect(actionsOf(empty)).toEqual([
       ["Показать все темы", "/webinars?view=month"],
@@ -426,7 +496,9 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
       );
       const empty = screen.getByTestId("events-month-empty");
       expect(empty).toHaveTextContent("По выбранным фильтрам событий нет");
-      expect(actionsOf(empty)).toEqual([["Сбросить фильтры", "/events?view=month"]]);
+      expect(actionsOf(empty)).toEqual([
+        ["Сбросить фильтры", "/events?view=month"],
+      ]);
     },
   );
 });
@@ -453,21 +525,37 @@ describe("<FeedFrame> — the head", () => {
 
   it("NEW: host header copy renders title + subline on each host", () => {
     renderFrame();
-    expect(screen.getByRole("heading", { level: 1, name: "События" })).toBeInTheDocument();
-    expect(screen.getByText("События по вашей специальности и смежным")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "События" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("События по вашей специальности и смежным"),
+    ).toBeInTheDocument();
   });
 
   it("NEW: the head carries the tense tabs «Прошедшие | Будущие» with «Будущие» selected by default and writes tense=past to the URL", async () => {
     renderFrame();
-    const tabs = within(screen.getByTestId("events-tense-tabs")).getAllByRole("tab");
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["Прошедшие", "Будущие"]);
-    expect(screen.getByRole("tab", { name: "Будущие" })).toHaveAttribute("aria-selected", "true");
+    const tabs = within(screen.getByTestId("events-tense-tabs")).getAllByRole(
+      "tab",
+    );
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      "Прошедшие",
+      "Будущие",
+    ]);
+    expect(screen.getByRole("tab", { name: "Будущие" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     await userEvent.click(screen.getByRole("tab", { name: "Прошедшие" }));
     expect(mocks.push).toHaveBeenCalledWith("/events?tense=past");
   });
 
   it("NEW: the month view carries no tense tabs; the tense stays the URL's and the content stays keyed by it (#2798)", () => {
-    renderFrame("past", "month", <a href="/events?tense=past">← Лента событий</a>);
+    renderFrame(
+      "past",
+      "month",
+      <a href="/events?tense=past">← Лента событий</a>,
+    );
     expect(screen.queryByTestId("events-tense-tabs")).toBeNull();
     expect(screen.queryAllByRole("tab")).toHaveLength(0);
     // No tabs ⇒ no tab panel: no orphan `tabpanel` labelled by a missing tab.
@@ -476,7 +564,9 @@ describe("<FeedFrame> — the head", () => {
     // The head row holds only the view link, right-aligned, desktop-only.
     const row = screen.getByTestId("events-head-row");
     expect(row).toHaveClass("hidden", "lg:flex", "justify-end");
-    expect(within(row).getByRole("link", { name: "← Лента событий" })).toBeInTheDocument();
+    expect(
+      within(row).getByRole("link", { name: "← Лента событий" }),
+    ).toBeInTheDocument();
   });
 
   it("NEW: the feed view keeps the head row with the tense tabs on every width (#2798)", () => {
@@ -513,7 +603,9 @@ describe("<LiveBlock> — «Идёт сейчас» (gate rows 43–44)", () => 
   it("NEW: read failed ⇒ the error line + retry, which re-reads the live path", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValue(new Response(JSON.stringify([strip(1)]), { status: 200 }));
+      .mockResolvedValue(
+        new Response(JSON.stringify([strip(1)]), { status: 200 }),
+      );
     render(
       <LiveBlock
         initial={{ ok: false }}
@@ -535,7 +627,11 @@ describe("<LiveBlock> — «Идёт сейчас» (gate rows 43–44)", () => 
 
   it("019 EARS-6: nothing live ⇒ no block in the tree", () => {
     const { container } = render(
-      <LiveBlock initial={{ ok: true, value: [] }} livePath="/x" routes={ROUTES} />,
+      <LiveBlock
+        initial={{ ok: true, value: [] }}
+        livePath="/x"
+        routes={ROUTES}
+      />,
     );
     expect(container).toBeEmptyDOMElement();
   });

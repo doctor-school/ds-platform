@@ -1282,12 +1282,14 @@ function buildEventDirections(
     const i = plan.index;
     const upcoming =
       plan.state === "published" && plan.startsAt.getTime() > nowMs;
-    // TWO contiguous walking slots per эфир, not one. The doctor feed reads a
-    // 14-day horizon that carries ~27 published эфиров, and one slot per эфир
-    // closes the 38-direction cycle only every ~19 days — so a third of the
-    // specialties opened an empty feed on the stand. Two slots close it every
-    // 19 эфиров (~10 days), inside every horizon the doctor can open; the
-    // `#2213: … every 14-day feed window` test replays that over the season.
+    // TWO contiguous walking slots per эфир, not one. Any 14-day window of
+    // the season carries ~27 published эфиров, and one slot per эфир closes
+    // the 38-direction cycle only every ~19 days — so a third of the
+    // specialties read an empty specialty-narrowed feed for days of the
+    // stand's calendar. Two slots close it every 19 эфиров (~10 days), inside
+    // any 14-day window (a density bar; the doctor feed itself pages by event
+    // count, 019 LD-2, #2884); the `#2213: … every 14-day feed window` test
+    // replays that over the season.
     // The pair also gives the admin's «направления эфира» block its second
     // and third chip, which the former one-in-seven cross-file used to do.
     const walk = upcoming ? upcomingCounter : otherCounter;

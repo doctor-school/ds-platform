@@ -25,7 +25,7 @@ import {
 import { eventEconomyFacts } from "../events/event-economy-facts.js";
 import {
   boundEventHorizonRows,
-  clampRequestedPastFrom,
+  clampRequestedEdge,
   EVENT_HORIZON_READ_ORDER,
   EVENT_HORIZON_ROW_CAP,
   type EventHorizonReach,
@@ -178,7 +178,6 @@ export class DoctorEventsService {
     const beyond = await resolveEventHorizonBeyond(
       bounded.horizon,
       query.tense,
-      today,
       listStartsIn,
     );
 
@@ -199,7 +198,7 @@ export class DoctorEventsService {
     const facets = await this.facetOptions(
       query,
       { ...tenseRead, directionIds },
-      eventHorizonTenseReach(requested, query.tense, today),
+      eventHorizonTenseReach(requested, query.tense),
     );
 
     return {
@@ -208,13 +207,7 @@ export class DoctorEventsService {
       // against; the page takes its one today from here.
       today,
       facets,
-      ...clampRequestedPastFrom(
-        bounded.horizon,
-        query.tense,
-        rows,
-        query.from,
-        beyond,
-      ),
+      ...clampRequestedEdge(bounded.horizon, query.tense, rows, query, beyond),
       days,
       totalCount: filtered.length,
       // «показать ещё» is a URL edit, not a client paging state (LD-2/EARS-8):

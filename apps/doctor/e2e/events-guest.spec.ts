@@ -51,7 +51,7 @@ test("gate row 42: a `resume` parameter re-seats nothing — the return lands on
 
   // The horizon in the URL is served whole; `resume` is not feed state any
   // more, so no card is focused and the page reads from its top.
-  await expect(page.locator('section[id^="day-"]')).toHaveCount(3);
+  await expect(page.locator('section[id^="day-"]')).toHaveCount(4);
   await expect(page.locator("[data-webinar-card] a:focus")).toHaveCount(0);
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
 });

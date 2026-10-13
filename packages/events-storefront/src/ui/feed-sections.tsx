@@ -7,7 +7,7 @@ import {
 
 import { FEED_COPY } from "../copy/feed-copy";
 import { eventNounOf } from "../copy/listing-copy";
-import { type PluralNoun, formatEventCount } from "../model/event-count";
+import type { PluralNoun } from "../model/event-count";
 import type { EventsStorefrontHostConfig } from "../host-config";
 import {
   type BlockRead,
@@ -32,6 +32,7 @@ import { BlockError } from "./block-error";
 import { BlockRetry } from "./block-retry";
 import type { EventsBlockRetryAction } from "./events-block-retry";
 import { DayAnchorScroll } from "./day-anchor-scroll";
+import { RecoveredSubline, SublineCounts } from "./feed-read-scope";
 import { FeedList } from "./feed-list";
 import { LiveBlock } from "./live-block";
 import { MyEventsCut } from "./my-events-cut";
@@ -213,7 +214,8 @@ export function MyEventsBlock({
 /**
  * The counted head subline «N эфиров · M школ» (gate row 19, the canvas
  * `headCount`), off the same feed read the day feed renders. A failed read
- * states nothing here — the feed block below carries the cause.
+ * states nothing here — the feed block below carries the cause — until the
+ * feed's «Повторить» recovers that read (#2832).
  */
 export async function CountedSubline({
   feed,
@@ -225,13 +227,16 @@ export async function CountedSubline({
   schoolNoun: PluralNoun;
 }) {
   const read = await feed;
-  if (!read.ok || read.value.summary === undefined) return null;
-  const { events, schools } = read.value.summary;
+  if (!read.ok) {
+    return <RecoveredSubline eventNoun={eventNoun} schoolNoun={schoolNoun} />;
+  }
+  if (read.value.summary === undefined) return null;
   return (
-    <span data-testid="events-feed-subline-counts">
-      {formatEventCount(events, eventNoun)} ·{" "}
-      {formatEventCount(schools, schoolNoun)}
-    </span>
+    <SublineCounts
+      summary={read.value.summary}
+      eventNoun={eventNoun}
+      schoolNoun={schoolNoun}
+    />
   );
 }
 

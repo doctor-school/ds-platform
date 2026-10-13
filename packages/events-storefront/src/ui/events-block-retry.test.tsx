@@ -54,7 +54,9 @@ import {
   type EventsBlockRetryInput,
   renderEventsBlock,
 } from "./events-block-retry";
-import { FeedSection, MyEventsSection } from "./feed-sections";
+import { CountedSubline, FeedSection, MyEventsSection } from "./feed-sections";
+import { FeedReadScope } from "./feed-read-scope";
+import { FacetColumn } from "./events-listing-page";
 import { MonthView } from "./month-view";
 
 const DOCTOR: EventsStorefrontHostConfig = {
@@ -310,6 +312,89 @@ describe("«Повторить» in a failed block (#2832)", () => {
     expect(calledReads()).toEqual(["feed"]);
     expect(mocks.refresh).not.toHaveBeenCalled();
     expect(screen.getByTestId("events-my-events")).toHaveTextContent("Моё событие");
+  });
+
+  it("EARS-9: a recovered day feed fills what the page derives from the feed read — «Вид события», the subline — from the retried read, with no other read", async () => {
+    const action = hostAction();
+    const failed = Promise.resolve({ ok: false as const });
+    const panel = { config: DOCTOR, raw: {}, feed: failed, specialties: NO_SPECIALTIES };
+    render(
+      <FeedReadScope>
+        {await CountedSubline({
+          feed: failed,
+          eventNoun: { one: "событие", few: "события", many: "событий" },
+          schoolNoun: { one: "школа", few: "школы", many: "школ" },
+        })}
+        {await FacetColumn(panel)}
+        {await FeedSection({
+          config: DOCTOR,
+          query: {},
+          feed: failed,
+          mine: Promise.resolve({ ok: true as const, value: null }),
+          specialties: NO_SPECIALTIES,
+          request: REQUEST,
+          retry: action,
+        })}
+      </FeedReadScope>,
+    );
+    expect(screen.queryByRole("group", { name: "Вид события" })).toBeNull();
+    expect(screen.queryByTestId("events-feed-subline-counts")).toBeNull();
+
+    vi.clearAllMocks();
+    mocks.fetchEventsFeed.mockResolvedValue({
+      ok: true,
+      value: {
+        ...PAGE,
+        facetOptions: { kind: [{ slug: "webinar", title: "Вебинар", count: 3 }] },
+        summary: { events: 5, schools: 2 },
+      },
+    });
+    await userEvent.click(
+      within(screen.getByTestId("events-feed-error")).getByRole("button", { name: "Повторить" }),
+    );
+
+    expect(await screen.findByTestId("events-feed")).toBeInTheDocument();
+    const kind = await screen.findByRole("group", { name: "Вид события" });
+    expect(within(kind).getByRole("button", { name: "Вебинар" })).toBeInTheDocument();
+    expect(screen.getByTestId("events-feed-subline-counts")).toHaveTextContent(
+      "5 событий · 2 школы",
+    );
+    expect(calledReads()).toEqual(["feed"]);
+    expect(mocks.fetchEventsFeed).toHaveBeenCalledTimes(1);
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("EARS-9: a page the server renders again drops the recovered feed read for its own", async () => {
+    const action = hostAction();
+    const failed = Promise.resolve({ ok: false as const });
+    const panel = { config: DOCTOR, raw: {}, feed: failed, specialties: NO_SPECIALTIES };
+    const page = async () => (
+      <FeedReadScope>
+        {await FacetColumn(panel)}
+        {await FeedSection({
+          config: DOCTOR,
+          query: {},
+          feed: failed,
+          mine: Promise.resolve({ ok: true as const, value: null }),
+          specialties: NO_SPECIALTIES,
+          request: REQUEST,
+          retry: action,
+        })}
+      </FeedReadScope>
+    );
+    const { rerender } = render(await page());
+    mocks.fetchEventsFeed.mockResolvedValue({
+      ok: true,
+      value: { ...PAGE, facetOptions: { kind: [{ slug: "webinar", title: "Вебинар", count: 3 }] } },
+    });
+    await userEvent.click(
+      within(screen.getByTestId("events-feed-error")).getByRole("button", { name: "Повторить" }),
+    );
+    expect(await screen.findByRole("group", { name: "Вид события" })).toBeInTheDocument();
+
+    rerender(await page());
+    expect(screen.queryByRole("group", { name: "Вид события" })).toBeNull();
+    expect(screen.getByTestId("events-feed-error")).toBeInTheDocument();
   });
 
   it("EARS-9: an action that cannot be reached leaves the block's cause and its «Повторить» in place", async () => {

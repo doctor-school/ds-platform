@@ -13,6 +13,7 @@ import {
   readRequestFrom,
 } from "../server";
 import { FeedBlock, MyEventsBlock, readMyEvents } from "./feed-sections";
+import { RecoveredFeedRead } from "./feed-read-scope";
 import { MonthGridBlock } from "./month-view";
 
 const RawQuerySchema = z.record(
@@ -84,7 +85,9 @@ export type EventsBlockRetryAction = (
  * One failed block of the events page, read and rendered again (019 EARS-9,
  * #2832): the month grid re-runs the month read, the day feed the feed read,
  * «Мои события» the viewer's registrations read — and nothing else. The
- * answer is that block alone; the browser puts it in place of the failed one,
+ * answer is that block alone (a recovered feed also hands its read to the
+ * page's `FeedReadScope`, which fills the facets and the subline the
+ * failed read left out); the browser puts it in place of the failed one,
  * so no other block re-reads. «Идёт сейчас» needs none: its block re-reads its
  * own same-origin path (row 43, D5).
  */
@@ -115,16 +118,32 @@ export async function renderEventsBlock(
         request,
         retry,
       });
-    case "feed":
-      return FeedBlock({
+    case "feed": {
+      // The page's one feed read, re-run: the day feed renders from it, and
+      // what the page derives from it (facets, «Показать N», the subline)
+      // takes the same answer — no other read.
+      const read = await fetchEventsFeed(config, parsed.raw, request);
+      const block = await FeedBlock({
         config,
         query: parsed.raw,
-        read: await fetchEventsFeed(config, parsed.raw, request),
+        read,
         registeredSlugs: parsed.registeredSlugs,
         specialties,
         request,
         retry,
       });
+      if (!read.ok) return block;
+      return (
+        <>
+          <RecoveredFeedRead
+            facetOptions={read.value.facetOptions}
+            matching={read.value.matching}
+            summary={read.value.summary}
+          />
+          {block}
+        </>
+      );
+    }
     case "my-events":
       return MyEventsBlock({
         config,

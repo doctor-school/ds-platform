@@ -50,6 +50,7 @@ vi.mock("../server", async (importOriginal) => ({
 import { EventsListingPage } from "./events-listing-page";
 import { FeedSection, LiveSection, MyEventsSection } from "./feed-sections";
 import { FeedFrame } from "./feed-frame";
+import { FeedReadScope } from "./feed-read-scope";
 import { LiveBlock } from "./live-block";
 import { MonthView } from "./month-view";
 
@@ -160,16 +161,18 @@ beforeEach(() => {
   mocks.fetchSpecialtyChoices.mockResolvedValue([]);
 });
 
-/** The FeedFrame element the one page returns in its feed view. */
+/** The FeedFrame element the one page returns in its feed view, inside the page's feed-read scope (#2832). */
 async function frame(
   config: EventsStorefrontHostConfig,
   query: Record<string, string> = {},
 ) {
-  const element = (await EventsListingPage({
+  const scope = (await EventsListingPage({
     config,
     searchParams: Promise.resolve(query),
     retry: RETRY,
-  })) as ReactElement<ComponentProps<typeof FeedFrame>>;
+  })) as ReactElement<{ children: ReactElement<ComponentProps<typeof FeedFrame>> }>;
+  expect(scope.type).toBe(FeedReadScope);
+  const element = scope.props.children;
   expect(element.type).toBe(FeedFrame);
   return element;
 }

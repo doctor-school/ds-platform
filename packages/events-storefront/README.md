@@ -28,7 +28,9 @@ the tense tabs, «Идёт сейчас», the «Мои события» cut and
 streaming behind its own skeleton with its own error and retry — a failed
 block's «Повторить» calls the host's block-retry server action (`./retry`),
 which re-runs only that block's read and answers that block alone, never a
-route refresh (019 EARS-9, #2832); the one card
+route refresh (019 EARS-9, #2832); a recovered day feed also hands its read to
+the page's client `FeedReadScope`, so the facets, «Показать N» and the subline
+the failed read left out are filled from that same answer; the one card
 projection; the one feed URL codec with the legacy Academy redirect (D1) and the
 horizon «Показать ещё» (D2); and the closed adapter list (`./adapters`) mapping
 each host's feed read onto the one page model. Hosts add host-config data only.

@@ -625,6 +625,29 @@ The golden verified EARS-6 journey remains distinct. Run this selected scenario
 on the lead-selected stand; this test-only change requires no owner Stage-B
 request or new slot.
 
+### Verified re-registration password preservation (003 EARS-23/41)
+
+`Academy verified re-registration preserves the original password and display name`
+registers and verifies a unique owned account, saves an original name through
+the ordinary account editor and logs out. An independent guest submits that same
+address with a distinct replacement password and `/account` return target. The
+fresh strictly addressed re-registration mail must contain the six-digit code,
+already-registered notice and «Ваш пароль не изменился» in both complete,
+link-free bodies. One accepted code opens the same verified subject and original
+name with a fresh secure host-only session and no password sign-in replay.
+
+`steps/registration-verified-password.steps.ts` then drives two independent guest
+password sign-ins: the original password opens that same named account, while
+the replacement receives the complete generic 401 and no private access. It
+reuses the canonical registration, mail and session helpers, asserts only safe
+evidence and keeps traces off; cleanup revokes its sessions and closes its owned
+contexts. This Academy case proves preservation of the already saved display
+name. Academy offers no display-name input during registration, so the broader
+spec scenario remains distinct, along with `auth.service.spec.ts` EARS-23
+verified-credential preservation proof and the app-local journeys.
+Run only this selected case on the lead-selected stand; the coverage change has
+no render surface and requires no owner Stage-B request or slot.
+
 ### Abandoned registration replacement (003 EARS-23/41)
 
 `An abandoned registrant who registers again gets the new password, not the

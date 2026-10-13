@@ -86,6 +86,10 @@ import {
   GOLDEN_DIRECTION_EXTRA_LINKS,
   GOLDEN_DIRECTION_RETIRED_LINKS,
   GOLDEN_DIRECTIONS,
+  GOLDEN_EMPTY_DIRECTION,
+  GOLDEN_EMPTY_DIRECTION_ADJACENCY,
+  GOLDEN_EMPTY_SPECIALTY,
+  GOLDEN_EMPTY_SPECIALTY_FORMER_DIRECTION,
   GOLDEN_PARTNERS,
   GOLDEN_PUBLISHED_DIRECTIONS,
   publishedDirectionIndexOfSpecialty,
@@ -1193,13 +1197,24 @@ function buildDirectionSpecialties(at: At): GoldenDirectionSpecialtyLink[] {
   };
 
   GOLDEN_DIRECTIONS.forEach((spec, i) => {
-    for (const name of spec.specialties) push(i, name, false);
+    // #2836: the empty direction's link is appended after every list below.
+    if (spec === GOLDEN_EMPTY_DIRECTION) return;
+    for (const name of spec.specialties) {
+      // The partition link the editor retired when the empty specialty moved.
+      const moved =
+        spec.slug === GOLDEN_EMPTY_SPECIALTY_FORMER_DIRECTION &&
+        name === GOLDEN_EMPTY_SPECIALTY;
+      push(i, name, moved);
+    }
   });
   for (const [slug, name] of GOLDEN_DIRECTION_EXTRA_LINKS) {
     push(directionIndexOf(slug), name, false);
   }
   for (const [slug, name] of GOLDEN_DIRECTION_RETIRED_LINKS) {
     push(directionIndexOf(slug), name, true);
+  }
+  for (const name of GOLDEN_EMPTY_DIRECTION.specialties) {
+    push(directionIndexOf(GOLDEN_EMPTY_DIRECTION.slug), name, false);
   }
   return rows;
 }
@@ -1229,6 +1244,7 @@ function buildDirectionAdjacency(at: At): NewDirectionAdjacency[] {
   };
   for (const edge of GOLDEN_ADJACENCY) push(edge, false);
   for (const edge of GOLDEN_ADJACENCY_RETIRED) push(edge, true);
+  for (const edge of GOLDEN_EMPTY_DIRECTION_ADJACENCY) push(edge, false);
   return rows;
 }
 

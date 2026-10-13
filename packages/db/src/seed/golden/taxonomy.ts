@@ -408,10 +408,45 @@ export const GOLDEN_UNPUBLISHED_DIRECTIONS: readonly GoldenDirectionSpec[] = [
   },
 ];
 
+/**
+ * #2836 — the one specialty the golden dataset leaves WITHOUT эфиры on purpose.
+ *
+ * 019 EARS-9 / LD-9 renders «в вашей специальности пока ничего нет» apart from
+ * «по фильтрам ничего не нашлось», and offers the nearest эфиры of the ADJACENT
+ * directions instead. A scenario can only drive that state on a specialty that
+ * is empty for real, and the partition above guarantees the opposite for every
+ * name it walks. So one real book name — outside the fourteen specialties the
+ * volume titles are written for (`content.ts`), so no эфир names it — is moved
+ * out of «Реабилитация и физиотерапия» into a published direction of its own:
+ * the editor retired the old link (`GOLDEN_EMPTY_SPECIALTY_FORMER_DIRECTION`)
+ * and linked the specialty to the new direction, which the event walk in
+ * `volume.ts` never classifies anything under, while its managed adjacency
+ * ({@link GOLDEN_EMPTY_DIRECTION_ADJACENCY}) leads to directions that carry
+ * upcoming эфиры.
+ *
+ * The direction is NOT a member of {@link GOLDEN_PUBLISHED_DIRECTIONS}: that
+ * array is the event walk's modulus and the ordinals of every row after it, so
+ * it is appended LAST to {@link GOLDEN_DIRECTIONS} instead — no row seeded
+ * before it changes id or pairing.
+ */
+export const GOLDEN_EMPTY_SPECIALTY = "Остеопатия";
+
+/** The direction {@link GOLDEN_EMPTY_SPECIALTY} was partitioned under. */
+export const GOLDEN_EMPTY_SPECIALTY_FORMER_DIRECTION = "rehabilitation";
+
+/** The published direction with no эфиры — the only home of the empty specialty. */
+export const GOLDEN_EMPTY_DIRECTION: GoldenDirectionSpec = {
+  slug: "osteopathy",
+  title: "Остеопатия",
+  status: "published",
+  specialties: [GOLDEN_EMPTY_SPECIALTY],
+};
+
 /** Every direction the golden seed writes, published ones first. */
 export const GOLDEN_DIRECTIONS: readonly GoldenDirectionSpec[] = [
   ...GOLDEN_PUBLISHED_DIRECTIONS,
   ...GOLDEN_UNPUBLISHED_DIRECTIONS,
+  GOLDEN_EMPTY_DIRECTION,
 ];
 
 /**
@@ -550,6 +585,17 @@ export const GOLDEN_ADJACENCY: readonly GoldenAdjacencyEdge[] = [
   e("laboratory", "biomedical", "interdisciplinary", 56),
   e("nutrition", "rehabilitation", "interdisciplinary", 45),
   e("health-management", "nursing", "interdisciplinary", 58),
+];
+
+/**
+ * #2836 — the managed adjacency of {@link GOLDEN_EMPTY_DIRECTION}: where a doctor
+ * whose specialty has nothing yet is led instead. Seeded AFTER the retired edges,
+ * so the ordinals of every edge above stay where they were.
+ */
+export const GOLDEN_EMPTY_DIRECTION_ADJACENCY: readonly GoldenAdjacencyEdge[] = [
+  e("osteopathy", "rehabilitation", "related", 86),
+  e("osteopathy", "neurology", "interdisciplinary", 72),
+  e("osteopathy", "traumatology", "related", 68),
 ];
 
 /**

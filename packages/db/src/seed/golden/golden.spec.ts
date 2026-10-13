@@ -48,7 +48,10 @@ import {
   createInMemoryGoldenMediaStore,
   eventProgrammeKey,
   expertPhotoKey,
+  GOLDEN_EMPTY_DIRECTION,
+  GOLDEN_EMPTY_SPECIALTY,
   GOLDEN_SEED_ORDER,
+  goldenDirectionId,
   goldenProgrammeSpecs,
   goldenReferentialIssues,
   GoldenPlanError,
@@ -1625,7 +1628,9 @@ describe("#2213 golden taxonomy and targeting", () => {
         );
         return !own.some((link) => liveDirections.has(link.directionId));
       });
-      expect(starved, pin).toEqual([]);
+      // #2836: exactly ONE named specialty is starved on purpose — the 019
+      // EARS-9 «пустая специальность» state needs a real one to render.
+      expect(starved, pin).toEqual([GOLDEN_EMPTY_SPECIALTY]);
     }
   });
 
@@ -1692,8 +1697,67 @@ describe("#2213 golden taxonomy and targeting", () => {
           }
         }
       }
-      expect(starved, pin).toEqual([]);
+      // #2836: the one deliberately empty specialty, empty from the first day.
+      expect(starved, pin).toEqual([`${GOLDEN_EMPTY_SPECIALTY} @ +0d`]);
     }
+  });
+
+  it("#2836: carries one pickable specialty with no эфиры and a managed adjacency", () => {
+    // 019 EARS-9 / LD-9: «в вашей специальности пока ничего нет» is a render of
+    // its own, and a scenario can only drive it on a specialty that is empty
+    // for real — every direction it resolves to classifies NO эфир at all —
+    // while its adjacent directions lead to upcoming ones.
+    expect(RAZDEL_I_NAMES).toContain(GOLDEN_EMPTY_SPECIALTY);
+    const emptyId = goldenDirectionId(GOLDEN_EMPTY_DIRECTION.slug);
+    const own = ownDirectionIds(
+      specialtyIdByName.get(GOLDEN_EMPTY_SPECIALTY) as string,
+    );
+    expect(own).toEqual([emptyId]);
+    expect(directionById.get(emptyId)?.status).toBe("published");
+    expect(
+      dataset.eventDirections.filter((link) => link.directionId === emptyId),
+    ).toEqual([]);
+
+    const upcoming = new Set(
+      dataset.events
+        .filter(
+          (e) =>
+            e.state === "published" &&
+            (e.startsAt as Date).getTime() > now.getTime(),
+        )
+        .map((e) => e.id as string),
+    );
+    const adjacent = dataset.directionAdjacency.filter(
+      (edge) => edge.directionId === emptyId && edge.status === "active",
+    );
+    expect(adjacent.length).toBeGreaterThanOrEqual(2);
+    for (const edge of adjacent) {
+      const to = edge.adjacentDirectionId as string;
+      expect(directionById.get(to)?.status, to).toBe("published");
+      expect(
+        dataset.eventDirections.some(
+          (link) =>
+            link.directionId === to &&
+            link.status === "active" &&
+            upcoming.has(link.eventId as string),
+        ),
+        to,
+      ).toBe(true);
+    }
+
+    // Append, never renumber: the new direction, its link and its edges take
+    // the LAST ordinal of their families, so no row seeded before keeps a
+    // different id or pairing.
+    expect(dataset.directions.at(-1)?.id).toBe(emptyId);
+    const lastLink = dataset.directionSpecialties.at(-1);
+    expect([lastLink?.directionId, lastLink?.specialtyName]).toEqual([
+      emptyId,
+      GOLDEN_EMPTY_SPECIALTY,
+    ]);
+    const tail = dataset.directionAdjacency.slice(-adjacent.length);
+    expect(tail.map((edge) => edge.directionId)).toEqual(
+      adjacent.map(() => emptyId),
+    );
   });
 
   it("#2213: keeps the adjacency graph directed, loop-free and singly authored", () => {

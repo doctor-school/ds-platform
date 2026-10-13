@@ -150,7 +150,7 @@ http://127.0.0.1:2020 {
 	# `path_regexp` can judge it.
 	rewrite * /ask/{query.domain}
 
-	@stage_ask path_regexp ask "^/ask/((academy|doctor|admin|api)-(main|pr-[1-9][0-9]{0,9})|id|s3|mailpit)[.]{$STAGE_BASE_DOMAIN}$"
+	@stage_ask path_regexp ask "^/ask/((academy|doctor|admin|api)-(main|pr-[1-9][0-9]{0,9})|id|s3|mailpit|sms-sink)[.]{$STAGE_BASE_DOMAIN}$"
 	handle @stage_ask {
 		respond 200
 	}
@@ -207,6 +207,25 @@ http://127.0.0.1:2020 {
 	@mailpit host mailpit.{$STAGE_BASE_DOMAIN}
 	handle @mailpit {
 		import staging_gate mailpit:8025
+	}
+
+	# Shared SMS sink (#2878): only its READ API, behind the same gate as Mailpit, so
+	# a slot run reads the delivered SMS code (`E2E_SMS_SINK_URL`). `POST /` is the
+	# IdP webhook that STORES a message — reachable here, anyone holding the gate
+	# pair could inject a code the suite trusts — so every request other than a GET
+	# of the read paths is refused before the gate and never reaches the sink.
+	@sms_sink host sms-sink.{$STAGE_BASE_DOMAIN}
+	handle @sms_sink {
+		@sms_sink_read {
+			method GET
+			path /api/messages /healthz
+		}
+		handle @sms_sink_read {
+			import staging_gate sms-sink:8090
+		}
+		handle {
+			respond 405
+		}
 	}
 
 	# Centrifugo path families on `api-<slot>` — the ONE basic-auth exemption on a

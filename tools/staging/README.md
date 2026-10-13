@@ -62,6 +62,18 @@ slots: use the slot-tagged sender and test recipient to find the right message.
 Shared Zitadel OTP mail has no sender slot tag; find the newest mail for the
 registration recipient used on your slot.
 
+## Reading SMS codes (#2878)
+
+The stand's SMS sink (the SMS analogue of Mailpit, one for all slots) publishes its
+read API at `https://sms-sink.stage.doctor.school` behind the same gate:
+`GET /api/messages?to=<phone>&after=<iso>&event=<substr>` (newest first) and
+`GET /healthz`. Every other request — above all `POST /`, the IdP webhook that
+stores a message — is refused at the edge with 405, so nothing outside the box can
+plant a code. `pnpm e2e:stage <slot>` hands the suite
+`E2E_SMS_SINK_URL=https://sms-sink.<base domain>`, and `packages/e2e/lib/sms-sink.ts`
+sends the stage basic-auth pair, so the `@sms-reset` scenarios run on a slot instead
+of skipping. Use a fresh number per run (EARS-14 per-phone budget).
+
 ## Driving captcha-gated auth on a slot (#2605)
 
 Registration, the login-OTP request, verification resend and password reset are

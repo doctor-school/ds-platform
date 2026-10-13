@@ -67,7 +67,7 @@ describe("SMS sink reads for the 003 SMS reset journey", () => {
   });
 
   it("EARS-53: lists the messages to a phone after a cutoff through the sink API", async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
       Response.json({
         messages: [{ id: 1, receivedAt: "x", body: RU_RESET, json: null }],
       }),
@@ -80,9 +80,40 @@ describe("SMS sink reads for the 003 SMS reset journey", () => {
       "user.human.phone.code.added",
     );
     expect(messages).toHaveLength(1);
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
       "http://sink:8090/api/messages?to=%2B79991234567&after=2026-10-13T00%3A00%3A00.000Z&event=user.human.phone.code.added",
     );
+  });
+
+  it("EARS-53: sends the stage basic-auth pair to a gated sink, and none on a bare one (#2878)", async () => {
+    const fetchMock = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        Response.json({ messages: [] }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("E2E_HTTP_USER", "stage");
+    vi.stubEnv("E2E_HTTP_PASS", "s3cret");
+    await smsSinkMessages(
+      "https://sms-sink.stage.test",
+      "+79991234567",
+      "2026-10-13T00:00:00Z",
+    );
+    const gated = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
+    expect(gated.get("authorization")).toBe(
+      `Basic ${Buffer.from("stage:s3cret").toString("base64")}`,
+    );
+    // A redirect would carry the pair to wherever it points; refuse it.
+    expect(fetchMock.mock.calls[0]?.[1]?.redirect).toBe("error");
+
+    vi.stubEnv("E2E_HTTP_USER", "");
+    vi.stubEnv("E2E_HTTP_PASS", "");
+    await smsSinkMessages(
+      "http://localhost:8090",
+      "+79991234567",
+      "2026-10-13T00:00:00Z",
+    );
+    const bare = new Headers(fetchMock.mock.calls[1]?.[1]?.headers);
+    expect(bare.has("authorization")).toBe(false);
   });
 
   it("EARS-53: a sink that does not answer fails by status, never as an empty inbox", async () => {

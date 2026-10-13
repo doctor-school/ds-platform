@@ -109,6 +109,34 @@ test("Mailpit is a shared gated host, never a slot", () => {
   assert.match(text, /import staging_gate \{re\.slot\.2\}-\{slot_service\}:\{slot_port\}/);
 });
 
+test("the SMS sink is a shared gated host, never a slot (#2878)", () => {
+  const ask = new RegExp(matcherRegexp("stage_ask").replace("{$STAGE_BASE_DOMAIN}", "stage\\.test"));
+  assert.ok(ask.test("/ask/sms-sink.stage.test"), "sms-sink must be admitted");
+  assert.ok(!ask.test("/ask/sms-sink-pr-1.stage.test"), "sms-sink-pr-1 must not be admitted");
+  assert.ok(!new RegExp(matcherRegexp("stage_slot")).test("sms-sink.stage.test"));
+  assert.ok(!SLOT_NAME_RE.test("sms-sink"));
+  assert.match(text, /@sms_sink host sms-sink\.\{\$STAGE_BASE_DOMAIN\}/);
+});
+
+test("the SMS sink publishes only its gated GET read API; every other request is refused (#2878)", () => {
+  // `POST /` is the Zitadel webhook that STORES an SMS. Reachable at the edge, it
+  // would let anyone holding the gate pair inject a code the suite trusts.
+  const lines = text.split(NEWLINE);
+  const at = lines.findIndex((line) => line.trimStart().startsWith("handle @sms_sink {"));
+  assert.notEqual(at, -1, "the @sms_sink handler is missing from the Caddyfile");
+  const end = lines.findIndex((line, i) => i > at && line === "\t}");
+  const block = lines.slice(at, end + 1).join(NEWLINE);
+  assert.match(block, /@sms_sink_read\s*\{\s*method GET\s*path \/api\/messages \/healthz\s*\}/);
+  assert.match(block, /handle @sms_sink_read\s*\{\s*import staging_gate sms-sink:8090\s*\}/);
+  assert.match(block, /handle\s*\{\s*respond 405\s*\}/);
+  assert.equal(
+    (block.match(/sms-sink:8090/g) ?? []).length,
+    1,
+    "the sink upstream is reachable only through the GET read matcher",
+  );
+  assert.doesNotMatch(block, /staging_basic_auth/, "the gate comes from staging_gate, not a second pair");
+});
+
 test("the ask responder admits the shared object-storage host, and only that label", () => {
   const ask = new RegExp(matcherRegexp("stage_ask").replace("{$STAGE_BASE_DOMAIN}", "stage\\.test"));
   assert.ok(ask.test("/ask/s3.stage.test"), "s3 must be admitted");

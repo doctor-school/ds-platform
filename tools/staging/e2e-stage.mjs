@@ -179,6 +179,9 @@ export function releaseCheckEnvRefusal(env) {
  * The env the suites read (§6.6): one base URL per storefront plus the stand's
  * basic-auth pair, which `packages/e2e/playwright.config.ts` turns into Playwright
  * `httpCredentials`. The portal serves under `academy-<slot>`, never `portal-`.
+ * The SMS sink is one shared host per stand (like Mailpit), read through the
+ * same basic-auth pair (`packages/e2e/lib/sms-sink.ts`), so the `@sms-reset`
+ * scenarios run on a slot instead of naming their skip (#2878).
  */
 export function slotE2eEnv({ slot, baseDomain, user, password }) {
   const hosts = slotHostnames(slot, baseDomain);
@@ -187,6 +190,7 @@ export function slotE2eEnv({ slot, baseDomain, user, password }) {
     E2E_DOCTOR_URL: `https://${hosts.doctor}`,
     E2E_HTTP_USER: user,
     E2E_HTTP_PASS: password,
+    E2E_SMS_SINK_URL: `https://sms-sink.${baseDomain}`,
   };
 }
 

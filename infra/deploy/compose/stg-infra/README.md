@@ -187,6 +187,13 @@ Max-Age=31536000; Secure; HttpOnly; SameSite=Lax`; a request carrying that cooki
   slot that can never exist.
 - **`id` vhost.** The shared Zitadel: `/ui/v2/login/*` → `idp-login:3000`, everything
   else → `h2c://idp:8080`, the production shape of `id.doctor.school`.
+- **`mailpit` and `sms-sink` vhosts.** The shared mail and SMS sinks, both behind the
+  `staging_gate` cookie/basic-auth gate and admitted by `@stage_ask` as single fixed
+  labels. `sms-sink` (#2878) publishes only its read API — `GET /api/messages` and
+  `GET /healthz` → `sms-sink:8090`; any other method or path answers 405 before the
+  gate, so the IdP webhook `POST /` that stores a message stays reachable only from
+  inside the box. The stage e2e run reads delivered SMS codes through it
+  (`E2E_SMS_SINK_URL`, `tools/staging/README.md` → Reading SMS codes).
 
 **Alias contract — satisfied since #2064 part 1.** The slot handler proxies to the
 container names `<slot>-portal:3001`, `<slot>-doctor:3004`, `<slot>-admin:3002`,

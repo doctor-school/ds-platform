@@ -88,7 +88,7 @@ test.describe("021 EARS-11: per-field validation on the registration door", () =
     await expect(email).not.toHaveAttribute("aria-invalid", "true");
   });
 
-  test("021 EARS-11.2: the password error REPLACES the hint in the single shared slot, and the hint returns", async ({
+  test("003 EARS-37 / 021 EARS-11.2: the password error REPLACES the hint in the single shared slot, and the hint returns", async ({
     page,
   }) => {
     await page.goto("/register");

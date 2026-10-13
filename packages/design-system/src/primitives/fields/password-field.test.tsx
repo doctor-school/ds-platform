@@ -61,10 +61,12 @@ function PwHarness({
   );
 }
 
-const POLICY = "Не менее 8 символов: заглавная, строчная, цифра, спецсимвол.";
+// 003 EARS-36/37 — the creation policy is length-only, so the hint states ONE
+// rule and the too-short error restates that same rule (owner decision Б).
+const POLICY = "Не менее 8 символов.";
 
 describe("PasswordField composition (inline message)", () => {
-  it("renders the policy hint as the ONE message element — no duplicate description element", () => {
+  it("003 EARS-37.1: the policy hint is the ONE message element from first render — no duplicate description element", () => {
     const { container } = render(
       <PwHarness purpose="new" policyHint={POLICY} />,
     );
@@ -81,20 +83,21 @@ describe("PasswordField composition (inline message)", () => {
     expect(container.querySelectorAll("p")).toHaveLength(1);
   });
 
-  it("swaps the error into the hint's place (message id, small weight-700 danger + ⚠, alert)", () => {
+  it("003 EARS-37.2: the error swaps into the hint's place, restating the same rule (message id, small weight-700 danger + ⚠, alert)", () => {
     const { container } = render(
       <PwHarness
         purpose="new"
         policyHint={POLICY}
-        error="Не менее 8 символов."
+        error={POLICY}
       />,
     );
     const paras = container.querySelectorAll("p");
-    // Still ONE element — the error replaced the helper, not a new line.
+    // Still ONE element — the error replaced the helper, not a new line, and
+    // the rule is stated ONCE: the hint is not stacked under the error.
     expect(paras).toHaveLength(1);
     const slot = paras[0]!;
-    expect(slot).toHaveTextContent("Не менее 8 символов.");
-    expect(slot.textContent ?? "").not.toContain(POLICY);
+    expect(slot).toHaveTextContent(POLICY);
+    expect((container.textContent ?? "").split(POLICY)).toHaveLength(2);
     expect(slot).toHaveClass("text-xs", "font-bold", "text-destructive-text");
     expect(slot.textContent ?? "").toContain("⚠");
     expect(slot).toHaveAttribute("role", "alert");

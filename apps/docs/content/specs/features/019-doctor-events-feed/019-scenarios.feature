@@ -591,3 +591,17 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       Given a build in which one storefront's events feed differs from the other outside the three cited rows
       When the cross-front reuse review runs
       Then the difference is reported as a defect
+
+    @EARS-19 @happy
+    Scenario: An event with the option on shows no registrant count anywhere public
+      Given an upcoming event whose «Скрыть число записавшихся» option is on and which has registrants
+      When a visitor opens the doctor feed, the 018 nearest events or the Academy listing
+      Then the public read of that event carries signUpCount null
+      And its card renders no «Коллег записались» line, no «0» and no empty slot
+      And the cards of events with the option off still show their count
+
+    @EARS-19 @failure
+    Scenario: The hidden count is absent from the response, not hidden in the client
+      Given an event whose «Скрыть число записавшихся» option is on
+      When any public read returns that event
+      Then the response carries no registrant number for it

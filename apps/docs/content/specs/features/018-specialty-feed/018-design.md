@@ -165,16 +165,16 @@ Every targeted block filters on `TargetingSet.directions`; the adjacent-areas bl
 
 ## 7. Read contracts
 
-| Read                                              | Auth   | Shape                  | Notes                                      |
-| ------------------------------------------------- | ------ | ---------------------- | ------------------------------------------ |
-| `GET /v1/storefront/feed/{specialty}`             | public | `SpecialtyFeed`        | envelope, fixed order (LD-1)               |
-| `GET /v1/storefront/feed/{specialty}/events`      | public | `FeedEvents`           | `signUpCount` always, `format`, `nmo` attr |
-| `GET /v1/storefront/feed/{specialty}/schools`     | public | `FeedSchools`          | `seriesEpisodes`, `preparing[]` (LD-4)     |
-| `GET /v1/storefront/feed/{specialty}/lessons`     | public | `FeedLessons`          | `sharedWithMobileApp: true`                |
-| `GET /v1/storefront/feed/{specialty}/adjacent`    | public | `AdjacentAreas`        | from the managed relation only             |
-| `GET /v1/storefront/feed/{specialty}/leaderboard` | public | `SpecialtyLeaderboard` | consented rows only                        |
-| `GET /v1/storefront/feed/{specialty}/communities` | public | `SpecialtyCommunities` | read-only (LD-5)                           |
-| `GET /v1/storefront/statistics?specialty=`        | public | `SpecialtyStatistics`  | `computedAt`, omit-on-missing              |
+| Read                                              | Auth   | Shape                  | Notes                                                                                                                                                                                                                     |
+| ------------------------------------------------- | ------ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/storefront/feed/{specialty}`             | public | `SpecialtyFeed`        | envelope, fixed order (LD-1)                                                                                                                                                                                              |
+| `GET /v1/storefront/feed/{specialty}/events`      | public | `FeedEvents`           | `signUpCount` always **[Amended 2026-10-13 ([#2913](https://github.com/doctor-school/ds-platform/issues/2913)) — `null` for an event whose «Скрыть число записавшихся» option is on; 019 EARS-19]**, `format`, `nmo` attr |
+| `GET /v1/storefront/feed/{specialty}/schools`     | public | `FeedSchools`          | `seriesEpisodes`, `preparing[]` (LD-4)                                                                                                                                                                                    |
+| `GET /v1/storefront/feed/{specialty}/lessons`     | public | `FeedLessons`          | `sharedWithMobileApp: true`                                                                                                                                                                                               |
+| `GET /v1/storefront/feed/{specialty}/adjacent`    | public | `AdjacentAreas`        | from the managed relation only                                                                                                                                                                                            |
+| `GET /v1/storefront/feed/{specialty}/leaderboard` | public | `SpecialtyLeaderboard` | consented rows only                                                                                                                                                                                                       |
+| `GET /v1/storefront/feed/{specialty}/communities` | public | `SpecialtyCommunities` | read-only (LD-5)                                                                                                                                                                                                          |
+| `GET /v1/storefront/statistics?specialty=`        | public | `SpecialtyStatistics`  | `computedAt`, omit-on-missing                                                                                                                                                                                             |
 
 All reads are `access: public` per ADR-0001; the session only changes card `state` and `viewer`. Errors are RFC 7807 Problem Details (ADR-0002) rendered as the block's Russian-language error with a retry.
 

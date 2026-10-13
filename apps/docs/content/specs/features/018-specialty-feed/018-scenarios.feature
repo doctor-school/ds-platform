@@ -83,7 +83,7 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
   Scenario: The nearest events stand first with the sign-up counter always visible
     When any visitor opens the feed
     Then the nearest-events block is the first block below the statistics line
-    And every event card shows how many colleagues have signed up
+    And every event card whose «Скрыть число записавшихся» option is off shows how many colleagues have signed up
     And «Все события по специальности →» leads into feature 019's events feed
 
   @EARS-4 @happy
@@ -238,3 +238,18 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
     Then no Academy content block is rendered
     And no Academy link exists on the feed — 017's footer link remains the only crossing
     And no backstage navigation entry is present
+
+  @EARS-4 @happy
+  Scenario: An event whose option hides the sign-up counter shows none
+    Given an upcoming event whose «Скрыть число записавшихся» option is on
+    When a visitor opens the feed
+    Then its nearest-events item carries signUpCount null
+    And its card renders no sign-up counter line, no «0» and no empty slot
+    And the cards of events with the option off still show the counter
+
+  @EARS-15 @happy
+  Scenario: The design-system gate runs before a 018 surface is implemented
+    Given an implementation Issue is about to build a 018 surface
+    When its pre-implementation gate runs
+    Then the build-ui-from-design-system gate has run against design-source/doctor-feed.dc.html and the reused units
+    And the surface is built from @ds/design-system primitives with tokens-only styling

@@ -328,3 +328,10 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
     And no reminder promise, reminder setting or reminder placeholder is rendered
     And no «Мои события» link is rendered on the card
     And no «Участвовать» CTA is rendered anywhere on the page
+
+  @EARS-3 @happy
+  Scenario: An event with the hide option on shows no sign-up proof
+    Given an event whose «Скрыть число записавшихся» option is on and which has registrants
+    When a guest or a signed-in doctor opens the event page
+    Then the event-page read carries no sign-up proof
+    And the sticky card renders no registrant count, no zero and no empty slot

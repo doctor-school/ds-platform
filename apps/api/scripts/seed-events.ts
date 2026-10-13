@@ -342,8 +342,7 @@ function specs(now: number): SeedSpec[] {
       },
     },
     // ── wave-2 «Прошедшие» widening fixture (#2028, gate row 32) ─────────────
-    // An ended эфир a month back — past the 14-day default extent, so only
-    // «Показать ещё» reaches it — with a published montage whose length the
+    // An ended эфир a month back with a published montage whose length the
     // canvas recording line reads («Запись · 1 ч 12 мин»).
     {
       slug: "seed-014-ended-month-ago",

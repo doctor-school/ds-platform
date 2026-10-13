@@ -238,9 +238,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
         startsAt: at(2, 15),
         directionId: lonelyDirection,
       });
-      // Two horizon steps out: the nearest event beyond the default window is
-      // NOT inside `to + STEP`, so a `nextTo` that merely adds one step would
-      // hand the doctor a «показать ещё» leading to an empty widening.
+      // Far out: a stated window that stops short of it must name a `nextTo`
+      // that covers it, never an empty widening.
       lonelyFarEventId = await makeEvent({
         title: "Через сорок дней",
         startsAt: at(40, 12),
@@ -320,7 +319,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         directionId: tenseDirection,
         state: "ended",
       });
-      // Beyond «Будущие» [today, +14): two in the next 14-day step, one far.
+      // Beyond a stated «Будущие» [today, +14): two near, one far.
       upcomingStepIds = [
         await makeEvent({
           title: "Через 20 дней",
@@ -391,8 +390,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // No managed row reaches it — a shared name prefix is not a relation.
       expect(ids).not.toContain(unreachableEventId);
       expect(ids).not.toContain(lonelyEventId);
-      // Outside the default bounded horizon.
-      expect(ids).not.toContain(farEventId);
+      // Fewer than 10 upcoming events: the default screen holds them all,
+      // however far ahead (LD-2, #2884).
+      expect(ids).toContain(farEventId);
 
       const ownDay = addDoctorEventsFeedDays(today, 1);
       const group = feed.days.find((day) => day.day === ownDay);
@@ -427,10 +427,69 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
       expect(feed.targeting.adjacentDirectionIds).toEqual([]);
       const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
-      expect(ids).toEqual([lonelyEventId]);
+      expect(ids).toEqual([lonelyEventId, lonelyFarEventId]);
       // The near-twin name of the adjacent direction pulls nothing in.
       expect(ids).not.toContain(adjacentEventId);
       expect(ids).not.toContain(ownEventId);
+    });
+
+    it("NEW: 019 LD-2 (#2884) — «Будущие» pages by count: with ≤10 upcoming events the screen holds them all and offers no «показать ещё»; with more it holds the 10 nearest and each step adds the next 10, the last the remainder", async () => {
+      const idsOf = (feed: { days: { items: { id: string }[] }[] }) =>
+        feed.days.flatMap((day) => day.items.map((item) => item.id));
+      // Two upcoming events (+2, +40): both, however far apart, no step.
+      const few = await readFeed({ specialtyCode: lonelyCode });
+      expect(idsOf(few)).toEqual([lonelyEventId, lonelyFarEventId]);
+      expect(few.from).toBe(today);
+      expect(few.to).toBe(addDoctorEventsFeedDays(today, 41));
+      expect(few.nextTo).toBeNull();
+      expect(few.remaining).toBe(0);
+      expect(few.nextBatch).toBe(0);
+
+      // Twenty-one more, one a day at +3…+23: 23 upcoming in all.
+      const added: string[] = [];
+      for (let day = 3; day <= 23; day += 1) {
+        added.push(
+          await makeEvent({
+            title: `Шаг ленты ${day}`,
+            startsAt: at(day, 12),
+            directionId: lonelyDirectionId,
+          }),
+        );
+      }
+      try {
+        const first = await readFeed({ specialtyCode: lonelyCode });
+        expect(idsOf(first)).toHaveLength(10);
+        expect(idsOf(first)[0]).toBe(lonelyEventId);
+        expect(first.to).toBe(addDoctorEventsFeedDays(today, 12));
+        expect(first.nextBatch).toBe(10);
+        expect(first.remaining).toBe(13);
+        expect(first.nextTo).toBe(addDoctorEventsFeedDays(today, 22));
+
+        const second = await readFeed({
+          specialtyCode: lonelyCode,
+          query: `?from=${first.from}&to=${first.nextTo!}`,
+        });
+        expect(idsOf(second)).toHaveLength(20);
+        expect(second.nextBatch).toBe(3);
+        expect(second.remaining).toBe(3);
+        expect(second.nextTo).toBe(addDoctorEventsFeedDays(today, 41));
+
+        const last = await readFeed({
+          specialtyCode: lonelyCode,
+          query: `?from=${second.from}&to=${second.nextTo!}`,
+        });
+        expect(idsOf(last)).toHaveLength(23);
+        expect(idsOf(last).at(-1)).toBe(lonelyFarEventId);
+        expect(last.nextTo).toBeNull();
+        expect(last.remaining).toBe(0);
+      } finally {
+        for (const id of added) {
+          await pool.query("DELETE FROM event_directions WHERE event_id = $1", [
+            id,
+          ]);
+          await pool.query("DELETE FROM events WHERE id = $1", [id]);
+        }
+      }
     });
 
     it("EARS-3.3: the response carries no ranking, score or personalisation field", async () => {
@@ -459,15 +518,23 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("EARS-3.4: «показать ещё» extends the horizon named in the URL and only then reveals the later event", async () => {
-      const first = await readFeed({ specialtyCode: adjacentCarryingCode });
+      // A URL with an explicit range still addresses that range (#2884).
+      const first = await readFeed({
+        specialtyCode: adjacentCarryingCode,
+        query: `?from=${today}&to=${addDoctorEventsFeedDays(today, 5)}`,
+      });
+      expect(first.to).toBe(addDoctorEventsFeedDays(today, 5));
+      expect(
+        first.days.flatMap((day) => day.items.map((item) => item.id)),
+      ).not.toContain(farEventId);
       expect(first.nextTo).not.toBeNull();
       expect(first.nextTo! > first.to).toBe(true);
 
       const extended = await readFeed({
         specialtyCode: adjacentCarryingCode,
-        query: `?from=${first.from}&to=${addDoctorEventsFeedDays(today, 30)}`,
+        query: `?from=${first.from}&to=${first.nextTo!}`,
       });
-      expect(extended.to).toBe(addDoctorEventsFeedDays(today, 30));
+      expect(extended.to).toBe(first.nextTo);
       const ids = extended.days.flatMap((day) =>
         day.items.map((item) => item.id),
       );
@@ -536,9 +603,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("NEW: a facet-narrowed feed names the next bound and the remainder of the narrowed set — `format` and `kind` live in the one SQL predicate (row 58, #1805)", async () => {
-      // An offline event at +20 sits between the window (+14) and the online
-      // +40 event: unfaceted it is the next bound; under `format=online` the
-      // probe must skip it, and under `format=offline` it is all that remains.
+      // An offline event at +20 sits between a stated window [today, +14) and
+      // the online +40 event: unfaceted the next step takes both; under
+      // `format=online` the probe must skip it, and under `format=offline` it
+      // is all there is.
       const offlineId = await makeEvent({
         title: "Очное событие",
         startsAt: at(20, 12),
@@ -549,27 +617,33 @@ describe.skipIf(!process.env.DATABASE_URL)(
         [offlineId],
       );
       try {
-        const all = await readFeed({ specialtyCode: lonelyCode });
-        expect(all.nextTo).toBe(addDoctorEventsFeedDays(today, 28));
+        const window = `from=${today}&to=${addDoctorEventsFeedDays(today, 14)}`;
+        const all = await readFeed({
+          specialtyCode: lonelyCode,
+          query: `?${window}`,
+        });
+        expect(all.nextTo).toBe(addDoctorEventsFeedDays(today, 41));
         expect(all.remaining).toBe(2);
+        expect(all.nextBatch).toBe(2);
 
         const online = await readFeed({
           specialtyCode: lonelyCode,
-          query: "?format=online",
+          query: `?${window}&format=online`,
         });
-        expect(online.nextTo).toBe(addDoctorEventsFeedDays(today, 42));
+        expect(online.nextTo).toBe(addDoctorEventsFeedDays(today, 41));
         expect(online.remaining).toBe(1);
+        expect(online.nextBatch).toBe(1);
 
         const offline = await readFeed({
           specialtyCode: lonelyCode,
           query: "?format=offline",
         });
-        // The default window holds no offline event, so the extent opens on
-        // the first match (#1973): the +20 event, nothing beyond it.
+        // The default screen is the nearest matching events: the +20 event,
+        // nothing beyond it.
         expect(
           offline.days.flatMap((day) => day.items.map((item) => item.id)),
         ).toEqual([offlineId]);
-        expect(offline.to).toBe(addDoctorEventsFeedDays(today, 28));
+        expect(offline.to).toBe(addDoctorEventsFeedDays(today, 21));
         expect(offline.nextTo).toBeNull();
         expect(offline.remaining).toBe(0);
 
@@ -633,12 +707,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(feed.nextTo).toBeNull();
     });
 
-    it("EARS-3.8: the next `to` COVERS the nearest event beyond the horizon, not merely one step on", async () => {
-      const feed = await readFeed({ specialtyCode: lonelyCode });
+    it("EARS-3.8: the next `to` COVERS the next events beyond the horizon, in whole days", async () => {
+      const feed = await readFeed({
+        specialtyCode: lonelyCode,
+        query: `?from=${today}&to=${addDoctorEventsFeedDays(today, 14)}`,
+      });
       expect(feed.to).toBe(addDoctorEventsFeedDays(today, 14));
-      // One step (+28) would still fall short of the +40 event; the horizon
-      // walks whole steps until it covers it.
-      expect(feed.nextTo).toBe(addDoctorEventsFeedDays(today, 42));
+      // The next step's last event is the +40 one: the bound is the day after.
+      expect(feed.nextTo).toBe(addDoctorEventsFeedDays(today, 41));
 
       const extended = await readFeed({
         specialtyCode: lonelyCode,
@@ -650,23 +726,21 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(ids).toContain(lonelyFarEventId);
     });
 
-    it("NEW: a facet whose matches all lie beyond the default window opens on the first match (both tenses, doctor host, #1973)", async () => {
+    it("NEW: a facet whose matches all lie far away opens on them — the default screen is the nearest matches (both tenses, doctor host, #1973, #2884)", async () => {
       const idsOf = (feed: { days: { items: { id: string }[] }[] }) =>
         feed.days.flatMap((day) => day.items.map((item) => item.id));
-      // Only the +40 event matches: the default [today, +14) window holds none,
-      // so the default extent reaches the step that covers it.
+      // Only the +40 event matches: the default screen holds it.
       const upcoming = await readFeed({
         specialtyCode: lonelyCode,
         query: `?q=${encodeURIComponent("Через сорок дней")}`,
       });
       expect(idsOf(upcoming)).toEqual([lonelyFarEventId]);
       expect(upcoming.from).toBe(today);
-      expect(upcoming.to).toBe(addDoctorEventsFeedDays(today, 42));
+      expect(upcoming.to).toBe(addDoctorEventsFeedDays(today, 41));
       expect(upcoming.nextTo).toBeNull();
       expect(upcoming.remaining).toBe(0);
 
-      // Only the −30 event matches: the default [−14, +1) window holds none,
-      // so the default extent reaches back to the step that covers it.
+      // Only the −30 event matches: the default screen reaches back to it.
       const past = await readFeed({
         specialtyCode: lonelyCode,
         query: `?tense=past&q=${encodeURIComponent("Прошедший месяц назад")}`,
@@ -700,7 +774,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
       expect(stale.from).toBe(addDoctorEventsFeedDays(today, -3));
       expect(stale.today).toBe(doctorEventsFeedDayOf(new Date()));
-      const past = await readFeed({ specialtyCode: lonelyCode, query: "?tense=past" });
+      const past = await readFeed({
+        specialtyCode: lonelyCode,
+        query: "?tense=past",
+      });
       expect(past.today).toBe(doctorEventsFeedDayOf(new Date()));
     });
 
@@ -765,8 +842,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("NEW: «Показать ещё» states the next batch and the remainder — `remaining` counts the matching events beyond the extent", async () => {
-      const first = await readFeed({ specialtyCode: lonelyCode });
-      // Only the +40 event lies past the default upcoming window.
+      const first = await readFeed({
+        specialtyCode: lonelyCode,
+        query: `?from=${today}&to=${addDoctorEventsFeedDays(today, 14)}`,
+      });
+      // Only the +40 event lies past the stated window.
       expect(first.remaining).toBe(1);
       expect(first.nextFrom).toBeNull();
 
@@ -862,9 +942,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("NEW: `nextBatch` is exactly the events the next widening step adds, beside `remaining` (row 32)", async () => {
-      const upcoming = await readFeed({ specialtyCode: tenseCode });
+      // From a stated [today, +14) the three later events are fewer than the
+      // step of 10, so one step adds them all (LD-2).
+      const upcoming = await readFeed({
+        specialtyCode: tenseCode,
+        query: `?from=${today}&to=${addDoctorEventsFeedDays(today, 14)}`,
+      });
       expect(upcoming.remaining).toBe(3);
-      expect(upcoming.nextBatch).toBe(2);
+      expect(upcoming.nextBatch).toBe(3);
       const widened = await readFeed({
         specialtyCode: tenseCode,
         query: `?from=${upcoming.from}&to=${upcoming.nextTo!}`,
@@ -875,10 +960,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const added = widened.days
         .flatMap((day) => day.items.map((item) => item.id))
         .filter((id) => !before.has(id));
-      expect([...added].sort()).toEqual([...upcomingStepIds].sort());
-      expect(added).not.toContain(upcomingFarId);
-      expect(widened.nextBatch).toBe(1);
-      expect(widened.remaining).toBe(1);
+      expect([...added].sort()).toEqual(
+        [...upcomingStepIds, upcomingFarId].sort(),
+      );
+      expect(widened.nextBatch).toBe(0);
+      expect(widened.remaining).toBe(0);
+      expect(widened.nextTo).toBeNull();
 
       // «Прошедшие» steps by count (LD-2): from a stated 14-day `from`, the
       // two older events are fewer than the step of 10, so one step adds both.
@@ -1010,7 +1097,21 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
 
       it("NEW: «Будущие» past the cap — every «Показать ещё» returns new events, the page stays within the cap, the walk reaches the farthest event and ends", async () => {
-        let feed = await readFeed({ specialtyCode: capCode });
+        // «Будущие» steps by 10 events too (LD-2, #2884): the walk starts a
+        // few steps short of the cap, from a stated `to` (two events a day).
+        const nearCap = addDoctorEventsFeedDays(
+          doctorEventsFeedDayOf(
+            new Date(
+              at(20, 12).getTime() +
+                (EVENT_HORIZON_ROW_CAP - 15) * 12 * 60 * 60_000,
+            ),
+          ),
+          1,
+        );
+        let feed = await readFeed({
+          specialtyCode: capCode,
+          query: `?from=${today}&to=${nearCap}`,
+        });
         let steps = 0;
         let crossed = false;
         while (feed.nextTo !== null) {

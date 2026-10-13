@@ -10,7 +10,11 @@ import {
   rawQueryList,
   rawQueryScalar,
 } from "@ds/schemas";
-import type { DayAgendaRow, EventListItem, EventsFilterHost } from "@ds/design-system/blocks";
+import type {
+  DayAgendaRow,
+  EventListItem,
+  EventsFilterHost,
+} from "@ds/design-system/blocks";
 
 import type { FeedCopy } from "../copy/feed-copy";
 import { type EventsStorefrontHostConfig, eventPageHref } from "../host-config";
@@ -73,7 +77,8 @@ export interface EventsFeedSummary {
 
 /**
  * One feed read, mapped. `remaining` = matching events beyond the extent (the
- * M of «Показать ещё N из M»); `nextBatch` = the ones the next step adds (N).
+ * M of «Показать ещё N (осталось M)»); `nextBatch` = the ones the next step
+ * adds (N).
  */
 export interface EventsFeedPage {
   /**
@@ -119,8 +124,7 @@ export type EventsStorefrontAdapter = (
 
 /** A read the page renders or replaces with its per-block error (019 EARS-9). */
 export type BlockRead<T> =
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false };
+  { readonly ok: true; readonly value: T } | { readonly ok: false };
 
 /**
  * Wave-2 gate §4.3 D10 — the page's ONE today: the api's, from the feed read
@@ -175,7 +179,10 @@ export function buildFeedItems(
     const live = !isPast && card.state === "live";
     const venue =
       card.format === "hybrid" && card.venueZone
-        ? formatEventTime({ startsAt: card.startsAt, viewerZone: card.venueZone })
+        ? formatEventTime({
+            startsAt: card.startsAt,
+            viewerZone: card.venueZone,
+          })
         : null;
     return {
       id: card.id,
@@ -235,22 +242,18 @@ export function buildFeedItems(
 }
 
 /**
- * The «Показать ещё» label — N the events the next widening adds (the api's
- * `nextBatch`), M the remainder beyond this screen (`remaining`). «Будущие»
- * widens by a day step and reads «Показать ещё N из M»; «Прошедшие» steps by a
- * count of events (019 LD-2, «Amendment — 2026-10-12») and reads «Показать ещё
- * N (осталось M)». N is read off the data either way, never a page size.
+ * The «Показать ещё» label of both tenses — «Показать ещё N (осталось M)»: N
+ * the events the next step adds (the api's `nextBatch` — 10, the last step the
+ * remainder; 019 LD-2), M the remainder beyond this screen (`remaining`). N is
+ * read off the data, never a page size.
  */
 export function showMoreLabel(
   nextBatch: number,
   remaining: number,
   copy: FeedCopy,
-  tense: FeedTense,
 ): string {
   if (remaining <= 0 || nextBatch <= 0) return copy.feed.showMore;
-  return tense === "past"
-    ? copy.feed.showMorePast(nextBatch, remaining)
-    : copy.feed.showMoreOf(nextBatch, remaining);
+  return copy.feed.showMoreOf(nextBatch, remaining);
 }
 
 export interface LiveStripProps {
@@ -297,7 +300,10 @@ export function liveStripView(
     };
   });
   const overflow = strips.length - shown.length;
-  return { strips: shown, moreLabel: overflow > 0 ? copy.live.more(overflow) : null };
+  return {
+    strips: shown,
+    moreLabel: overflow > 0 ? copy.live.more(overflow) : null,
+  };
 }
 
 /**
@@ -365,8 +371,16 @@ export interface EmptyFeedState {
 }
 
 /** The empty state of a feed with nothing to widen — no facet applied. */
-export function plainEmptyFeedState(noun: PluralNoun, copy: FeedCopy): EmptyFeedState {
-  return { title: copy.feed.empty(noun.many), description: "", widen: null, reset: null };
+export function plainEmptyFeedState(
+  noun: PluralNoun,
+  copy: FeedCopy,
+): EmptyFeedState {
+  return {
+    title: copy.feed.empty(noun.many),
+    description: "",
+    widen: null,
+    reset: null,
+  };
 }
 
 /**
@@ -434,13 +448,18 @@ export async function emptyFeedState(
     matching: WidenMatching;
   },
 ): Promise<EmptyFeedState> {
-  if (!hasAppliedFacets(query, filterSet)) return plainEmptyFeedState(noun, copy);
+  if (!hasAppliedFacets(query, filterSet))
+    return plainEmptyFeedState(noun, copy);
 
   const own = new Set(FACET_KEYS[filterSet]);
   const titleOf = (key: string, value: string) =>
     titles[key]?.find((option) => option.slug === value)?.title ?? value;
   const chips: EmptyFeedChip[] = [];
-  const chipsOf = (key: string, label: (value: string) => string, widen?: string) => {
+  const chipsOf = (
+    key: string,
+    label: (value: string) => string,
+    widen?: string,
+  ) => {
     if (!own.has(key)) return;
     const values = rawQueryList(query[key]) ?? [];
     if (values.length !== 1) return;
@@ -451,12 +470,21 @@ export async function emptyFeedState(
     });
   };
 
-  chipsOf("topic", (v) => `${copy.facet.topic}: ${titleOf("topic", v)}`, copy.feed.widenTopic);
-  const specialty = own.has("specialty") ? rawQueryList(query.specialty) : undefined;
+  chipsOf(
+    "topic",
+    (v) => `${copy.facet.topic}: ${titleOf("topic", v)}`,
+    copy.feed.widenTopic,
+  );
+  const specialty = own.has("specialty")
+    ? rawQueryList(query.specialty)
+    : undefined;
   if (
     specialty !== undefined &&
     specialty.length > 0 &&
-    !(specialty.length === 1 && ["mine-and-adjacent", "all"].includes(specialty[0]!))
+    !(
+      specialty.length === 1 &&
+      ["mine-and-adjacent", "all"].includes(specialty[0]!)
+    )
   ) {
     const first = specialty[0]!;
     chips.push({
@@ -468,18 +496,25 @@ export async function emptyFeedState(
   }
   chipsOf(
     "format",
-    (v) => `${copy.facet.format}: ${copy.card.format[v as EventParticipationFormat] ?? v}`,
+    (v) =>
+      `${copy.facet.format}: ${copy.card.format[v as EventParticipationFormat] ?? v}`,
   );
   chipsOf("kind", (v) => `${copy.facet.kind}: ${titleOf("kind", v)}`);
   chipsOf("city", (v) => `${copy.facet.city}: ${v}`);
   if (own.has("nmo") && rawQueryBoolean(query.nmo) === true) {
-    chips.push({ label: copy.facet.nmo, without: withoutFeedQuery(query, "nmo") });
+    chips.push({
+      label: copy.facet.nmo,
+      without: withoutFeedQuery(query, "nmo"),
+    });
   }
   chipsOf("project", (v) => `${copy.facet.project}: ${titleOf("project", v)}`);
   chipsOf("expert", (v) => `${copy.facet.expert}: ${titleOf("expert", v)}`);
   const q = own.has("q") ? rawQueryScalar(query.q) : undefined;
   if (q !== undefined) {
-    chips.push({ label: copy.facet.query(q), without: withoutFeedQuery(query, "q") });
+    chips.push({
+      label: copy.facet.query(q),
+      without: withoutFeedQuery(query, "q"),
+    });
   }
 
   const reset: EmptyFeedAction = {

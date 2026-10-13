@@ -41,9 +41,10 @@ test("019 EARS-8.19: the facet in the URL reaches the read rather than the brows
 test("019 EARS-8.20: the forward control carries the whole state and drops nothing", async ({
   page,
 }) => {
-  // No `to` — the horizon is the default one, so «показать ещё» is present.
+  // No `to` — the extent is the default step. Both formats match all fourteen
+  // fixture events, more than one step, so «показать ещё» is present.
   await page.goto(
-    "/events?day=2026-09-02&format=online&specialty=all&city=msk&nmo=true&q=%D1%81%D0%B5%D1%80%D0%B4%D1%86%D0%B5&sort=relevance&utm_source=mail",
+    "/events?day=2026-09-02&format=online&format=hybrid&specialty=all&city=msk&nmo=true&q=%D1%81%D0%B5%D1%80%D0%B4%D1%86%D0%B5&sort=relevance&utm_source=mail",
   );
 
   const href = await page
@@ -58,13 +59,13 @@ test("019 EARS-8.20: the forward control carries the whole state and drops nothi
   // only what differs from the default).
   expect(params.get("day")).toBe("2026-09-02");
   expect(params.has("tense")).toBe(false);
-  expect(params.getAll("format")).toEqual(["online"]);
+  expect(params.getAll("format")).toEqual(["online", "hybrid"]);
   expect(params.get("specialty")).toBe("all");
   expect(params.getAll("city")).toEqual(["msk"]);
   expect(params.get("nmo")).toBe("true");
   expect(params.get("q")).toBe("сердце");
   // Only the horizon moved.
-  expect(params.get("to")).toBe("2026-09-29");
+  expect(params.get("to")).toBe("2026-09-21");
 
   // …and it moved THROUGH the codec: the widened link is in field-table order,
   // with `from`/`to` in positions 3-4, not appended after the facets. The same
@@ -74,6 +75,7 @@ test("019 EARS-8.20: the forward control carries the whole state and drops nothi
     "day",
     "from",
     "to",
+    "format",
     "format",
     "specialty",
     "city",

@@ -12,7 +12,9 @@ const api = `http://127.0.0.1:${process.env.DOCTOR_EVENTS_FAKE_API_PORT ?? 3214}
 const MONTH = "/events?view=month&month=2026-09";
 
 function panel(page: Page) {
-  return page.getByTestId("events-column").getByRole("region", { name: "Фильтры" });
+  return page
+    .getByTestId("events-column")
+    .getByRole("region", { name: "Фильтры" });
 }
 
 test.describe("at 1440 px", () => {
@@ -63,7 +65,9 @@ test.describe("at 1440 px", () => {
     const grid = page.getByTestId("month-grid-desktop");
     await expect(grid).toBeVisible();
     await expect(
-      grid.getByRole("link", { name: /^Идёт сейчас \d\d:\d\d \S+ · Событие evt-1$/ }),
+      grid.getByRole("link", {
+        name: /^Идёт сейчас \d\d:\d\d \S+ · Событие evt-1$/,
+      }),
     ).toHaveAttribute("href", "/events/evt-1");
     await expect(grid.getByText("Запланировано")).toBeVisible();
     await expect(grid.getByText("Прошло")).toBeVisible();
@@ -103,7 +107,11 @@ test.describe("at 1440 px", () => {
     page,
     request,
   }) => {
-    expect((await request.post(`${api}/__e2e/month`, { data: { failing: true } })).ok()).toBe(true);
+    expect(
+      (
+        await request.post(`${api}/__e2e/month`, { data: { failing: true } })
+      ).ok(),
+    ).toBe(true);
     try {
       await page.goto(MONTH);
       await expect(page.getByTestId("events-month-error")).toContainText(
@@ -123,15 +131,18 @@ test.describe("at 1440 px", () => {
     // The widen path (#2786): the facet named by its title, the count its
     // removal finds over the tense, its removal as the primary action and
     // «Сбросить фильтры» beside it (canvas `emptyOf`).
-    await expect(empty).toContainText("Нет событий по фильтру «Вид события: Мастер-класс»");
-    await expect(empty).toContainText("Без этого фильтра найдётся 7 событий.");
-    await expect(
-      empty.getByRole("link", { name: "Убрать фильтр «Вид события: Мастер-класс»" }),
-    ).toHaveAttribute("href", "/events?view=month&month=2026-09");
-    await expect(empty.getByRole("link", { name: "Сбросить фильтры" })).toHaveAttribute(
-      "href",
-      "/events?view=month&month=2026-09",
+    await expect(empty).toContainText(
+      "Нет событий по фильтру «Вид события: Мастер-класс»",
     );
+    await expect(empty).toContainText("Без этого фильтра найдётся 14 событий.");
+    await expect(
+      empty.getByRole("link", {
+        name: "Убрать фильтр «Вид события: Мастер-класс»",
+      }),
+    ).toHaveAttribute("href", "/events?view=month&month=2026-09");
+    await expect(
+      empty.getByRole("link", { name: "Сбросить фильтры" }),
+    ).toHaveAttribute("href", "/events?view=month&month=2026-09");
     await expect(page.getByTestId("month-grid-desktop")).toHaveCount(0);
   });
 
@@ -149,14 +160,19 @@ test.describe("at 1440 px", () => {
     await expect(facets.getByRole("group", { name: "Проект" })).toHaveCount(0);
     await expect(facets.getByText(/Применено/)).toHaveCount(0);
 
-    await facets.getByRole("group", { name: "Формат" }).getByRole("button", { name: "Онлайн" }).click();
+    await facets
+      .getByRole("group", { name: "Формат" })
+      .getByRole("button", { name: "Онлайн" })
+      .click();
     await expect(page).toHaveURL(/format=online/);
     await expect(facets.getByText("Применено: 1")).toBeVisible();
     await expect(
-      facets.getByRole("group", { name: "Формат" }).getByRole("button", { name: "Онлайн" }),
+      facets
+        .getByRole("group", { name: "Формат" })
+        .getByRole("button", { name: "Онлайн" }),
     ).toHaveAttribute("aria-pressed", "true");
     // The facet reached the read: the server narrowed the feed.
-    await expect(page.locator('section[id^="day-"]')).toHaveCount(2);
+    await expect(page.locator('section[id^="day-"]')).toHaveCount(3);
 
     await facets.getByRole("link", { name: "Сбросить" }).click();
     await expect(page).not.toHaveURL(/format=/);
@@ -168,17 +184,15 @@ test.describe("at 1440 px", () => {
   }) => {
     await page.goto("/events?month=2026-09");
     const specialty = panel(page).getByRole("group", { name: "Специальность" });
-    await expect(specialty.getByRole("button", { name: "Моя и смежные" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await expect(
+      specialty.getByRole("button", { name: "Моя и смежные" }),
+    ).toHaveAttribute("aria-pressed", "true");
 
     await specialty.getByRole("button", { name: "Все специальности" }).click();
     await expect(page).toHaveURL(/specialty=all/);
-    await expect(specialty.getByRole("button", { name: "Все специальности" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await expect(
+      specialty.getByRole("button", { name: "Все специальности" }),
+    ).toHaveAttribute("aria-pressed", "true");
 
     await specialty.getByRole("combobox").click();
     await page.getByRole("option", { name: "Неврология" }).click();
@@ -194,10 +208,9 @@ test.describe("at 1440 px", () => {
     // Removing the last picked specialty returns to «Моя и смежные».
     await specialty.getByRole("button", { name: "Убрать: Неврология" }).click();
     await expect(page).not.toHaveURL(/specialty=/);
-    await expect(specialty.getByRole("button", { name: "Моя и смежные" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await expect(
+      specialty.getByRole("button", { name: "Моя и смежные" }),
+    ).toHaveAttribute("aria-pressed", "true");
 
     await page.goto("/events?month=2026-09&specialty=nevrologiya");
     await page
@@ -205,7 +218,7 @@ test.describe("at 1440 px", () => {
       .getByRole("link", { name: "Показать смежные специальности" })
       .click();
     await expect(page).not.toHaveURL(/specialty=/);
-    await expect(page.locator('section[id^="day-"]')).toHaveCount(2);
+    await expect(page.locator('section[id^="day-"]')).toHaveCount(3);
   });
 
   test("NEW: tense tabs keyboard-operable (row 61)", async ({ page }) => {
@@ -251,10 +264,9 @@ test.describe("at 390 px", () => {
     await mobile.getByRole("button", { name: /^4 сентября/ }).click();
     const agenda = page.getByTestId("day-agenda");
     await expect(agenda).toContainText("4 сентября");
-    await expect(agenda.getByRole("link", { name: /Событие evt-3/ })).toHaveAttribute(
-      "href",
-      "/events/evt-3",
-    );
+    await expect(
+      agenda.getByRole("link", { name: /Событие evt-3/ }),
+    ).toHaveAttribute("href", "/events/evt-3");
     await mobile.getByRole("button", { name: /^3 сентября/ }).click();
     await expect(agenda).toContainText("В этот день событий нет");
   });
@@ -268,20 +280,32 @@ test.describe("at 390 px", () => {
     await open.click();
     const sheet = page.getByTestId("events-filter-sheet");
     await expect(sheet.getByRole("heading", { name: "Фильтры" })).toBeVisible();
-    await expect(page.getByTestId("events-filter-show")).toHaveText("Показать 4 события");
+    await expect(page.getByTestId("events-filter-show")).toHaveText(
+      "Показать 4 события",
+    );
     // The canvas renders the sheet description for screen readers only
     // (`SheetDescription` `sr-only`): announced, never painted as a subtitle.
     const description = sheet.getByText("Фасеты ленты событий");
     await expect(description).toHaveCount(1);
-    expect((await description.boundingBox())?.width ?? 0).toBeLessThanOrEqual(1);
+    expect((await description.boundingBox())?.width ?? 0).toBeLessThanOrEqual(
+      1,
+    );
 
-    await sheet.getByRole("group", { name: "Формат" }).getByRole("button", { name: "Офлайн" }).click();
-    await expect(page).toHaveURL(/format=online&format=offline|format=offline&format=online/);
+    await sheet
+      .getByRole("group", { name: "Формат" })
+      .getByRole("button", { name: "Офлайн" })
+      .click();
+    await expect(page).toHaveURL(
+      /format=online&format=offline|format=offline&format=online/,
+    );
     await page.getByTestId("events-filter-show").click();
     await expect(sheet).toBeHidden();
 
     await page.getByTestId("events-filter-open").click();
-    await page.getByTestId("events-filter-sheet").getByRole("link", { name: "Сбросить" }).click();
+    await page
+      .getByTestId("events-filter-sheet")
+      .getByRole("link", { name: "Сбросить" })
+      .click();
     await expect(page).not.toHaveURL(/format=|kind=/);
     await expect(page.getByTestId("events-filter-open")).toHaveText("Фильтры");
   });

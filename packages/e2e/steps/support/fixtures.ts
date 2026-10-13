@@ -53,7 +53,12 @@ export interface EventsFeedWorld {
   /** The past screen before «Показать ещё»: its card count and the step it promised. */
   pastBefore?: { cards: number; step: number; from: string | null };
   /** The horizon before «Показать ещё» on «Будущие». */
-  horizonBefore?: { to: string | null; days: number };
+  horizonBefore?: {
+    to: string | null;
+    days: number;
+    cards: number;
+    step: number;
+  };
   /** The same URL opened in a second, cookie-free browser context. */
   freshPage?: Page;
   /** The name search no event matches (EARS-9). */

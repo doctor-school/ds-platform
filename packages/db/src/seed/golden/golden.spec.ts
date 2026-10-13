@@ -1635,10 +1635,12 @@ describe("#2213 golden taxonomy and targeting", () => {
   });
 
   it("#2213: shows every specialty a published эфир in every 14-day feed window", () => {
-    // The doctor feed reads exactly one horizon: today (МСК) to today + 14
-    // days (`DOCTOR_EVENTS_FEED_HORIZON_DAYS`). «Every direction has SOME
-    // upcoming эфир» is not enough — a direction whose next эфир is five weeks
-    // out renders the same empty feed the owner rejected. So the invariant is
+    // A density bar for the golden season: every specialty's directions carry
+    // a published эфир inside any 14 days. The doctor feed itself pages by
+    // event count (019 LD-2, #2884), so this is not its horizon; «every
+    // direction has SOME upcoming эфир» is still too weak — a direction whose
+    // next эфир is five weeks out makes a specialty-narrowed feed read as empty
+    // for weeks of the stand's calendar. So the invariant is
     // replayed over every window a doctor could open between the pin and the
     // end of the season, on the specialty's OWN directions only: adjacency is a
     // widening the product may or may not apply, never what keeps a feed alive.

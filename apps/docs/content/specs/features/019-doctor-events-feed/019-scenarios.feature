@@ -10,8 +10,8 @@
 # head carries the tense tabs «Прошедшие | Будущие» («Будущие» by default), and the
 # compact month and the facet panel sit in a sticky column at 1024 px and wider.
 # Read under «— 2026-10-06» (no card action, no guest band), «— 2026-10-08» (the
-# colleagues' count on upcoming and live cards only) and «— 2026-10-12» («Прошедшие»
-# pages by ten events).
+# colleagues' count on upcoming and live cards only) and «— 2026-10-12» (both
+# tenses page by ten events).
 # Route-level scenarios tagged EARS-2/3/4/7/8/9 are integration obligations of
 # EARS-1 / #1516. Their predecessor Issues prove route-independent components,
 # the API contract, query state, or state matrix and do not publish `/events`.
@@ -37,6 +37,7 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       Then the page head reads «События» with the tense tabs «Прошедшие | Будущие» and «Будущие» selected
       And the blocks read in the order: the head, «Идёт сейчас», the day feed
       And the events are grouped under their day headings, nearest first
+      And the screen holds the 10 nearest upcoming events, «Показать ещё 10 (осталось N)» adding the next later ones
       When the visitor activates «Показать ещё»
       Then the feed extends its horizon and the new range is visible in the URL
 
@@ -307,6 +308,7 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       When the doctor opens «События»
       Then events are grouped under their day headings within the current horizon
       And every listed event belongs to the specialty or to one of its adjacent directions
+      And the screen holds the 10 nearest upcoming events, «Показать ещё 10 (осталось N)» adding the next later ones
       And «показать ещё» extends the horizon and the new range is visible in the URL
       And no response field carries a ranking score or a personalisation flag
 

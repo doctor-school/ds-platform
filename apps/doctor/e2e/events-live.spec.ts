@@ -64,7 +64,7 @@ test("019 EARS-6: a registered doctor's live strip leads into the room", async (
       (node, feedNode) =>
         Boolean(
           node.compareDocumentPosition(feedNode!) &
-            Node.DOCUMENT_POSITION_FOLLOWING,
+          Node.DOCUMENT_POSITION_FOLLOWING,
         ),
       await feed.elementHandle(),
     ),
@@ -121,7 +121,9 @@ test("gate row 44: three эфиры ⇒ two strips, earliest first, and «Ещё
   const titles = block.getByTestId("live-event-strip-title");
   await expect(titles).toHaveText(["Эфир номер 1", "Эфир номер 2"]);
   await expect(block.getByTestId("live-event-strip")).toHaveCount(2);
-  await expect(block.getByRole("link", { name: "Ещё 1 в эфире →" })).toBeVisible();
+  await expect(
+    block.getByRole("link", { name: "Ещё 1 в эфире →" }),
+  ).toBeVisible();
 });
 
 test("gate row 44: a failed live read states its cause with a retry while the feed keeps working", async ({
@@ -137,7 +139,7 @@ test("gate row 44: a failed live read states its cause with a retry while the fe
   await expect(page.getByTestId("events-live-block")).toHaveCount(0);
   // The feed is untouched by the live block's failure.
   await expect(page.getByTestId("events-feed")).toBeVisible();
-  await expect(page.locator('section[id^="day-"]')).toHaveCount(2);
+  await expect(page.locator('section[id^="day-"]')).toHaveCount(3);
 
   // The retry re-reads the live path only.
   await setScenario(request, "unregistered");

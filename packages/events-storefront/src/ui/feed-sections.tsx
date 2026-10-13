@@ -238,7 +238,13 @@ export async function FeedSection({
   const page = read.value;
   const more = showMoreHref(config.routes.listing, query, page.horizon);
   const empty = feedReadsEmpty(page)
-    ? await readEmptyFeedState(config, query, page.facetOptions, specialties, request)
+    ? await readEmptyFeedState(
+        config,
+        query,
+        page.facetOptions,
+        specialties,
+        request,
+      )
     : plainEmptyFeedState(eventNounOf(config.copy), FEED_COPY);
   return (
     <>
@@ -256,7 +262,10 @@ export async function FeedSection({
         showMore={
           more === null
             ? null
-            : { href: more, label: showMoreLabel(page.nextBatch, page.remaining, FEED_COPY, tense) }
+            : {
+                href: more,
+                label: showMoreLabel(page.nextBatch, page.remaining, FEED_COPY),
+              }
         }
         empty={empty}
       />

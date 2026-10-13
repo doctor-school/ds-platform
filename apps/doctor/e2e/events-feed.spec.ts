@@ -13,7 +13,7 @@ import { expect, test } from "@playwright/test";
  */
 const API = `http://127.0.0.1:${process.env.DOCTOR_EVENTS_FAKE_API_PORT ?? 3214}`;
 const DEFAULT_FROM = "2026-09-01";
-const WIDENED_TO = "2026-09-29";
+const WIDENED_TO = "2026-09-21";
 const SESSION = { cookie: "__Host-ds_session=e2e-doctor" };
 
 test.afterEach(async ({ request }) => {
@@ -21,24 +21,38 @@ test.afterEach(async ({ request }) => {
   await request.post(`${API}/__e2e/live`, { data: { scenario: "none" } });
 });
 
-test("gate row 32: «Показать ещё N из M» states the batch and the remainder and writes the extent to the URL", async ({
+test("gate row 32: «Показать ещё N (осталось M)» states the batch and the remainder and writes the extent to the URL", async ({
   page,
 }) => {
   await page.goto("/events");
 
   const more = page.getByTestId("events-feed-show-more");
-  // One fixture day (four events) lies beyond the default horizon: the next batch is it.
-  await expect(more).toHaveText("Показать ещё 4 из 4");
+  // The default screen is one step of ten events (09-02, 09-04, 09-10); the
+  // four of 09-20 lie beyond it and are the next batch and the remainder.
+  await expect(page.locator('section[id^="day-"]')).toHaveCount(3);
+  await expect(more).toHaveText("Показать ещё 4 (осталось 4)");
   await more.click();
 
   await expect(page).toHaveURL(
     new RegExp(`/events\\?from=${DEFAULT_FROM}&to=${WIDENED_TO}$`),
   );
-  await expect(page.locator('section[id^="day-"]')).toHaveCount(3);
+  await expect(page.locator('section[id^="day-"]')).toHaveCount(4);
   await expect(page.locator('section[id="day-2026-09-20"]')).toBeVisible();
 
   // Nothing lies beyond any more (`nextTo: null`), so the control is gone
   // rather than disabled — there is no paging state left to hold.
+  await expect(page.getByTestId("events-feed-show-more")).toHaveCount(0);
+});
+
+test("gate row 32 (#2884): ten or fewer matching upcoming events are all on the screen with no «Показать ещё»", async ({
+  page,
+}) => {
+  // `format=online` matches four events (09-02 ×2, 09-04, 09-20) — fewer than
+  // one step, so all of them are served however far ahead they lie.
+  await page.goto("/events?format=online");
+
+  await expect(page.locator("[data-webinar-card]")).toHaveCount(4);
+  await expect(page.locator('section[id="day-2026-09-20"]')).toBeVisible();
   await expect(page.getByTestId("events-feed-show-more")).toHaveCount(0);
 });
 
@@ -84,7 +98,10 @@ test("gate rows 29–31: «Прошедшие» groups by month newest first, wi
   await expect(titles).toHaveText([
     "Событие past-recorded",
     "Событие past-no-cut",
-    ...Array.from({ length: 8 }, (_unused, index) => `Событие past-fill-${8 - index}`),
+    ...Array.from(
+      { length: 8 },
+      (_unused, index) => `Событие past-fill-${8 - index}`,
+    ),
   ]);
 
   // Row 29: the past reading is the tense — no archive subtitle, tab or block.
@@ -173,7 +190,7 @@ test("gate row 48: a failed feed read states its cause with «Повторить
   await request.post(`${API}/__e2e/feed`, { data: { failing: false } });
   await error.getByRole("button", { name: "Повторить" }).click();
   await expect(page.getByTestId("events-feed")).toBeVisible();
-  await expect(page.locator('section[id^="day-"]')).toHaveCount(2);
+  await expect(page.locator('section[id^="day-"]')).toHaveCount(3);
   await expect(page.getByTestId("events-feed-error")).toHaveCount(0);
   await expect(page).toHaveURL(/\/events$/);
 });

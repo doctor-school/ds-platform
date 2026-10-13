@@ -133,7 +133,7 @@ test.describe("044 EARS-21 — the congress roster in admin", () => {
   let eventId = "";
   const emails: Record<string, string> = {};
 
-  test("044 EARS-21: the roster renders on AdminDataList, searches and pages", async ({
+  test("044 EARS-21/24: the roster renders view-only on AdminDataList, searches and pages", async ({
     page,
     browser,
   }) => {

@@ -458,6 +458,7 @@ describe("the doctor's default «Моя и смежные» is empty (019 EARS-9
       raw,
       feed: Promise.resolve({ ok: true as const, value: page }),
       specialties: NO_SPECIALTIES,
+      kinds: NO_KINDS,
     });
 
   it("EARS-9: the default feed opens with «Все специальности» selected as this visitor's default — not counted, nothing to reset", async () => {
@@ -491,6 +492,7 @@ describe("the doctor's default «Моя и смежные» is empty (019 EARS-9
         raw: {},
         feed: Promise.resolve({ ok: true as const, value: FALLBACK_PAGE }),
         specialties: NO_SPECIALTIES,
+        kinds: NO_KINDS,
       }),
     );
     expect(screen.getByTestId("events-filter-open")).toHaveTextContent(

@@ -202,3 +202,7 @@ Response shape is the read-model set of the requirements' Event Model. Errors ar
 8. **Guest path (EARS-12)** — depends on EARS-8's addressable state and 021's return. Read under 019 «Amendment — 2026-10-06»: the guest path is full reading only; the sign-up and its return live on feature 020's event page.
 9. **«Мои события» (EARS-11)** — last, behind 021 (data) and 022 (destination) per LD-8.
 10. **Mobile + axe (EARS-13)** and **purity scan (EARS-14)** across the finished surfaces; **EARS-15** is the process gate that wraps the whole sequence.
+
+## 9. Amendment — 2026-10-13 — hidden registrant count ([#2913](https://github.com/doctor-school/ds-platform/issues/2913))
+
+Read with 019 requirements «Amendment — 2026-10-13» and EARS-19. The field on every public card schema (`PublicEventSummary`, `FeedEvents` items, the Academy listing card) stays the existing `signUpCount`; it becomes nullable (`number | null`) and is `null` exactly when the event's `hide_sign_up_count` (007 design) is true. The shared `WebinarCard` renders the «Коллег записались: N» line only for a number; `null` renders nothing, with no placeholder. The nullable field is introduced once in the shared `packages/schemas` card schema, so the doctor, 018 and Academy reads inherit it, with no per-host field. Admin reads keep the integer.

@@ -247,3 +247,19 @@ Feature: Minimal event admin — one operator creates, publishes, streams, runs,
     Then it uses stock Refine components with the adopt-before-bespoke gate recorded
     And token discipline (no arbitrary Tailwind) holds for any bespoke styling
     And there is no canvas-fidelity check because no admin canvas exists (Stage-A gap)
+
+  # --- Amendment 2026-10-13: hide the registrant count (US-1, US-2) ---
+
+  @EARS-12 @happy
+  Scenario: An operator hides the registrant count of an event
+    Given an event with registrants and the «Скрыть число записавшихся» option off by default
+    When the operator turns the option on and saves the event
+    Then the event persists hide_sign_up_count true
+    And the admin list and detail still show the exact registrant count
+    And a public read of the event carries signUpCount null
+
+  @EARS-12 @failure
+  Scenario: A caller who may not edit the event cannot change the option
+    Given a doctor_guest or a public caller
+    When they try to set the «Скрыть число записавшихся» option through UpdateEvent
+    Then the command is refused as for any other admin command (EARS-8)

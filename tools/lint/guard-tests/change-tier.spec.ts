@@ -642,3 +642,31 @@ describe("#2808: auth, server endpoints and server actions are Ask paths", () =>
     ).toBe("ship");
   });
 });
+
+describe("#2819: CI runner scripts under e2e/ are not test paths", () => {
+  it("EARS-1: a PR changing only an e2e runner script is neither test-only nor ship", () => {
+    for (const path of [
+      "apps/doctor/e2e/run-ci-tiers.mjs",
+      "packages/e2e/bin/check-host-tags.ts",
+    ]) {
+      const result = classifyChangeTier([mod(path)]);
+      expect(result.minimum, path).toBe("show");
+      expect(result.testOnly ?? false, path).toBe(false);
+      expect(isNonRuntimePath(path), path).toBe(false);
+    }
+  });
+
+  it("EARS-1: e2e support, steps, lib and evidence helpers stay test-only", () => {
+    for (const path of [
+      "apps/doctor/e2e/support/session.ts",
+      "packages/e2e/tests/steps/auth.steps.ts",
+      "packages/e2e/lib/mail.ts",
+      "apps/doctor/e2e/ui-evidence-home.mjs",
+      "packages/e2e/admin/sign-in.ts",
+    ]) {
+      const result = classifyChangeTier([mod(path)]);
+      expect(result.minimum, path).toBe("ship");
+      expect(result.testOnly, path).toBe(true);
+    }
+  });
+});

@@ -51,6 +51,7 @@ export interface OtpFocusScreenTestIds {
 export function OtpFocusScreen<T extends FieldValues>({
   field,
   codeLabel,
+  codeHint,
   submitLabel,
   backLabel,
   resendLabel,
@@ -75,6 +76,8 @@ export function OtpFocusScreen<T extends FieldValues>({
   field: ControllerRenderProps<T>;
   /** Label above the six cells («Код из письма» / «Код из сообщения»). */
   codeLabel: string;
+  /** The line under the cells — the code's lifetime (#2882); absent = none. */
+  codeHint?: React.ReactNode;
   /** Primary button copy. */
   submitLabel: React.ReactNode;
   /** The back control («← Изменить способ» / «← Изменить почту»). */
@@ -145,6 +148,7 @@ export function OtpFocusScreen<T extends FieldValues>({
           length={CODE_STEP_LENGTH}
           charset="numeric"
           label={codeLabel}
+          hint={codeHint}
           onComplete={onComplete}
           rejection={rejection}
           autoFocus={autoFocus}

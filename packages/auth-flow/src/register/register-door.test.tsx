@@ -237,14 +237,13 @@ describe("003 EARS-17 / 021 EARS-19.4: the challenge runs BEFORE the command", (
   );
 });
 
-describe("#2027: the password field's canvas placeholder", () => {
+describe("#2882: the password field has no placeholder", () => {
   it.each(HOSTS)(
-    "#2027: the %s door's password input carries the canvas placeholder (canvas 151)",
+    "#2882: the %s door's password input carries no placeholder (canvas, owner 2026-10-13)",
     async (_host, config) => {
       await renderDoor(config);
-      expect(screen.getByTestId("register-password")).toHaveAttribute(
+      expect(screen.getByTestId("register-password")).not.toHaveAttribute(
         "placeholder",
-        "••••••••",
       );
     },
   );
@@ -381,7 +380,12 @@ describe("003 EARS-41 / 021 EARS-15.4: what the door holds for the code step", (
         expect(peekPendingRegistration(EMAIL)).toMatchObject({
           identifier: EMAIL,
           registration: sent,
-          form: { email: EMAIL, password: PASSWORD, promoCode: "", consents: {} },
+          form: {
+            email: EMAIL,
+            password: PASSWORD,
+            promoCode: "",
+            consents: {},
+          },
         }),
       );
       // A hold for another address is never handed out.
@@ -411,7 +415,12 @@ describe("003 EARS-41 / 021 EARS-15.4: what the door holds for the code step", (
     setPendingRegistration({
       identifier: EMAIL,
       registration: { password: "stale-password", consent: [] },
-      form: { email: EMAIL, password: "stale-password", promoCode: "", consents: {} },
+      form: {
+        email: EMAIL,
+        password: "stale-password",
+        promoCode: "",
+        consents: {},
+      },
     });
     await fillForm(user);
     await user.click(screen.getByTestId("register-submit"));

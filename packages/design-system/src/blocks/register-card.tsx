@@ -133,8 +133,6 @@ export interface RegisterCardCopy {
   emailLabel: string;
   emailPlaceholder?: string;
   passwordLabel: string;
-  /** The password input's placeholder (canvas 151 `••••••••`); absent = none. */
-  passwordPlaceholder?: string;
   /** The length baseline ONLY — 003 EARS-36 forbids a surface declaring a second password policy. */
   passwordPolicyHint?: string;
   /**
@@ -429,9 +427,6 @@ export function RegisterCard({
                   field={field}
                   purpose="new"
                   label={copy.passwordLabel}
-                  {...(copy.passwordPlaceholder === undefined
-                    ? {}
-                    : { placeholder: copy.passwordPlaceholder })}
                   {...(copy.passwordPolicyHint === undefined
                     ? {}
                     : { policyHint: copy.passwordPolicyHint })}

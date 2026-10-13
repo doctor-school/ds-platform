@@ -278,3 +278,46 @@ describe("003 EARS-42: sign-in by code shows the one code step", () => {
     },
   );
 });
+
+/**
+ * #2882 (003 EARS-42, canvas `codeLifetimeHint`) — under the six cells the step
+ * states how long the code lives and, for a mailed code, where to look when the
+ * letter is missing. The line is the code field's description, so a screen
+ * reader hears it with the field. Sign-in by e-mail always reads «5 минут»: the
+ * screen cannot know the account is unverified (EARS-16), so the stated limit
+ * is never longer than the real one.
+ */
+describe("003 EARS-42: the code lifetime line under the cells", () => {
+  it.each(HOSTS)(
+    "003 EARS-42: on %s the e-mail sign-in step reads the 5-minute line with the spam hint, described by the code field",
+    async (_host, config) => {
+      await sendEmailCode(config);
+      const line = screen.getByText(
+        "Код действует 5 минут. Не видите письмо — проверьте папку «Спам».",
+      );
+      const field = screen.getByLabelText(COPY.otp.codeLabel.email);
+      expect(field.getAttribute("aria-describedby")?.split(" ")).toContain(
+        line.id,
+      );
+    },
+  );
+
+  it("003 EARS-42: the SMS sign-in step reads the 5-minute line without the spam hint", async () => {
+    const user = userEvent.setup();
+    render(<LoginDoor config={DOCTOR_FIXTURE} landing="/" />);
+    await user.click(screen.getByTestId("login-method-otp"));
+    await user.click(screen.getByTestId("otp-channel-sms"));
+    await user.type(screen.getByLabelText(COPY.otp.phoneLabel), "+79991234567");
+    await user.click(screen.getByTestId("otp-send"));
+    await screen.findByTestId("otp-verify");
+
+    const line = screen.getByText("Код действует 5 минут.");
+    expect(
+      screen
+        .getByLabelText(COPY.otp.codeLabel.sms)
+        .getAttribute("aria-describedby")
+        ?.split(" "),
+    ).toContain(line.id);
+    expect(screen.queryByText(/«Спам»/)).toBeNull();
+  });
+});

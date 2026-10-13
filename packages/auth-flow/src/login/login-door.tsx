@@ -229,7 +229,6 @@ function loginCardCopyOf(config: AuthFlowHostConfig): LoginCardCopy {
       identifierLabel: copy.password.identifierLabel,
       identifierPlaceholder: copy.password.identifierPlaceholder,
       passwordLabel: copy.password.passwordLabel,
-      passwordPlaceholder: copy.password.passwordPlaceholder,
       // 003 EARS-38: the reveal toggle copy rides the host catalog where the
       // host states one; ABSENT — spread, not `undefined` — leaves the
       // design-system RU default, which is a different thing from "no labels".
@@ -254,6 +253,7 @@ function loginCardCopyOf(config: AuthFlowHostConfig): LoginCardCopy {
       sentTo: (destination) =>
         withBoldDestination(copy.otp.sentTo, destination),
       codeLabel: copy.otp.codeLabel,
+      codeHint: copy.otp.codeLifetimeHint,
       verifySubmit: copy.otp.verifySubmit,
       resend: copy.otp.resend,
       resendCountdown: (seconds) =>

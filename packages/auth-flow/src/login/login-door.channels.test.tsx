@@ -76,18 +76,20 @@ describe("003 EARS-55: the SMS hint under the code-channel switch", () => {
     "003 EARS-55: on %s the hint shows only while «SMS» is selected",
     async (_host, config) => {
       const hint = resolveAuthFlowCopy(config).login.otp.channelSmsHint;
+      // The sentence holds a no-break space after «Эл.»: match it as drawn.
+      const exact = { normalizer: (text: string) => text };
       const user = userEvent.setup();
       render(<LoginDoor config={config} landing={config.landing.afterLogin} />);
       await user.click(screen.getByTestId("login-method-otp"));
 
-      expect(screen.queryByText(hint)).toBeNull();
+      expect(screen.queryByText(hint, exact)).toBeNull();
       await user.click(screen.getByTestId("otp-channel-sms"));
-      expect(screen.getByText(hint)).toBeInTheDocument();
+      expect(screen.getByText(hint, exact)).toBeInTheDocument();
       // Identical whatever is typed: no lookup, no per-input variant.
       await user.type(screen.getByLabelText(COPY.otp.phoneLabel), "9991234567");
-      expect(screen.getByText(hint)).toBeInTheDocument();
+      expect(screen.getByText(hint, exact)).toBeInTheDocument();
       await user.click(screen.getByTestId("otp-channel-email"));
-      expect(screen.queryByText(hint)).toBeNull();
+      expect(screen.queryByText(hint, exact)).toBeNull();
     },
   );
 
@@ -96,7 +98,7 @@ describe("003 EARS-55: the SMS hint under the code-channel switch", () => {
     const doctor = resolveAuthFlowCopy(DOCTOR_FIXTURE).login.otp;
     expect(academy.channelSmsHint).toBe(doctor.channelSmsHint);
     expect(academy.channelSmsHint).toBe(
-      "Код по SMS придёт, только если телефон подтверждён в профиле. Если нет — выберите «Эл. почта».",
+      "Код по SMS придёт, только если телефон подтверждён в профиле. Если нет — выберите «Эл.\u00a0почта».",
     );
   });
 });

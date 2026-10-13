@@ -68,7 +68,6 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
       identifierLabel: "Электронная почта или телефон",
       identifierPlaceholder: "doctor@example.com или +7…",
       passwordLabel: "Пароль",
-      passwordPlaceholder: "••••••••",
       passwordRequired: "Заполните это поле.",
       reveal: {
         show: "Показать",
@@ -83,11 +82,11 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
       heading: "Вход по одноразовому коду",
       description: "Пришлём код на почту или телефон — пароль не нужен.",
       channelGroupLabel: "Канал кода",
-      channelEmail: "Эл. почта",
+      channelEmail: "Эл.\u00a0почта",
       channelSms: "SMS",
       // Canvas 130–132 (003 EARS-55 a).
       channelSmsHint:
-        "Код по SMS придёт, только если телефон подтверждён в профиле. Если нет — выберите «Эл. почта».",
+        "Код по SMS придёт, только если телефон подтверждён в профиле. Если нет — выберите «Эл.\u00a0почта».",
       emailLabel: "Электронная почта",
       emailPlaceholder: "doctor@example.com",
       phoneLabel: "Телефон",
@@ -98,6 +97,14 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
       verifyTitle: { email: "Проверьте почту", sms: "Проверьте телефон" },
       sentTo: "Мы отправили код на {destination}.",
       codeLabel: { email: "Код из письма", sms: "Код из сообщения" },
+      // Canvas `codeLifetimeHint` (#2882): the sign-in code lives 300 s. An
+      // unverified account's code lives longer, but the step cannot tell it
+      // apart (003 EARS-16), so the line never states more than the real limit.
+      codeLifetimeHint: {
+        email:
+          "Код действует 5 минут. Не видите письмо — проверьте папку «Спам».",
+        sms: "Код действует 5 минут.",
+      },
       codeInvalid: "Введите код.",
       verifySubmit: "Подтвердить и войти",
       resend: "Отправить снова",
@@ -117,7 +124,6 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
     emailLabel: "Электронная почта",
     emailPlaceholder: "doctor@example.com",
     passwordLabel: "Пароль",
-    passwordPlaceholder: "••••••••",
     reveal: {
       show: "Показать",
       hide: "Скрыть",
@@ -140,6 +146,9 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
     title: "Проверьте почту",
     description: "Мы отправили код на {destination}.",
     codeLabel: "Код из письма",
+    // Canvas `codeLifetimeHint`, verify branch (#2882): the verification code.
+    codeLifetimeHint:
+      "Код действует 1 час. Не видите письмо — проверьте папку «Спам».",
     submit: "Подтвердить и войти",
     codeAccepted: "Код принят — входим…",
     resend: "Отправить снова",
@@ -170,6 +179,11 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
     completeDescriptionPhone:
       "Если телефон {destination} подтверждён в профиле, мы отправили на него код по SMS. Введите его и задайте новый пароль.",
     codeLabel: "Код из сообщения",
+    // Canvas `resetCodeHint` (#2882): the reset code lives one hour.
+    codeLifetimeHint: {
+      email: "Код действует 1 час. Не видите письмо — проверьте папку «Спам».",
+      sms: "Код действует 1 час.",
+    },
     newPasswordLabel: "Новый пароль",
     passwordHint: `Не менее ${PASSWORD_MIN_LENGTH} символов.`,
     reveal: {

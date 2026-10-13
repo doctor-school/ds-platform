@@ -97,8 +97,6 @@ export interface LoginCardCopy {
     identifierLabel: string;
     identifierPlaceholder: string;
     passwordLabel: string;
-    /** The password input's placeholder (canvas 82 `••••••••`); absent = none. */
-    passwordPlaceholder?: string;
     /** Localized show/hide copy for the password reveal toggle (003 EARS-38);
      * omitted leaves the design-system RU default. */
     reveal?: PasswordRevealLabels;
@@ -125,6 +123,8 @@ export interface LoginCardCopy {
     sentTo: (destination: string) => React.ReactNode;
     /** The code label per channel (canvas «Код из письма / из сообщения»). */
     codeLabel: Record<LoginCardOtpChannel, string>;
+    /** The line under the cells per channel — the code's lifetime (#2882); absent = none. */
+    codeHint?: Record<LoginCardOtpChannel, React.ReactNode>;
     verifySubmit: React.ReactNode;
     resend: React.ReactNode;
     resendCountdown: (seconds: number) => React.ReactNode;
@@ -451,9 +451,6 @@ function PasswordLogin({
               field={field}
               purpose="current"
               label={copy.passwordLabel}
-              {...(copy.passwordPlaceholder === undefined
-                ? {}
-                : { placeholder: copy.passwordPlaceholder })}
               {...(copy.reveal ? { revealLabels: copy.reveal } : {})}
             />
           )}
@@ -786,6 +783,7 @@ function OtpVerifyForm({
           <OtpFocusScreen
             field={field}
             codeLabel={copy.codeLabel[channel]}
+            codeHint={copy.codeHint?.[channel]}
             submitLabel={copy.verifySubmit}
             backLabel={copy.changeMethod}
             resendLabel={copy.resend}

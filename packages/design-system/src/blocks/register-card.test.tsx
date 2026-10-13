@@ -425,7 +425,9 @@ describe("<RegisterCard>", () => {
       },
     });
 
-    expect(screen.getByTestId("register-email")).toHaveValue("doctor@clinic.ru");
+    expect(screen.getByTestId("register-email")).toHaveValue(
+      "doctor@clinic.ru",
+    );
     expect(screen.getByTestId("register-password")).toHaveValue(
       "correct horse 8",
     );
@@ -587,11 +589,10 @@ describe("#2027 <RegisterCard> canvas tone and kegel", () => {
     expect(mount?.parentElement).toBe(screen.getByTestId("registration-form"));
   });
 
-  it("#2027: the password input carries the host placeholder (canvas 151)", () => {
-    renderCard({ copy: { ...COPY, passwordPlaceholder: "••••••••" } });
-    expect(screen.getByTestId("register-password")).toHaveAttribute(
+  it("#2882: the password input carries no placeholder (canvas, owner 2026-10-13)", () => {
+    renderCard();
+    expect(screen.getByTestId("register-password")).not.toHaveAttribute(
       "placeholder",
-      "••••••••",
     );
   });
 });

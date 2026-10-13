@@ -641,9 +641,10 @@ password sign-ins: the original password opens that same named account, while
 the replacement receives the complete generic 401 and no private access. It
 reuses the canonical registration, mail and session helpers, asserts only safe
 evidence and keeps traces off; cleanup revokes its sessions and closes its owned
-contexts. Academy offers no display-name input during registration, so the
-broader spec scenario remains distinct, along with the native API/IdP
-fill-only-empty/name and credential-preservation tests and app-local journeys.
+contexts. This Academy case proves preservation of the already saved display
+name. Academy offers no display-name input during registration, so the broader
+spec scenario remains distinct, along with `auth.service.spec.ts` EARS-23
+verified-credential preservation proof and the app-local journeys.
 Run only this selected case on the lead-selected stand; the coverage change has
 no render surface and requires no owner Stage-B request or slot.
 

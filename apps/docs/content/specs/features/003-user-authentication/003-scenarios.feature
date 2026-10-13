@@ -187,9 +187,9 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then that code opens the same verified account and original name with a fresh secure session at the account return target without password replay
     And independent guests sign into that same named account with the original password while the submitted replacement gets only generic refusal and no private access
     # Academy projection: registration-verified-password.steps.ts; its form has
-    # no registration display-name field. Retain the broader scenario above and
-    # auth.service.spec.ts / zitadel.idp.spec.ts EARS-23 fill-only-empty/name and
-    # verified-credential preservation proof plus app-local auth journeys.
+    # no registration display-name field; this case proves saved-name preservation.
+    # Retain the broader scenario above, auth.service.spec.ts EARS-23 verified-
+    # credential preservation proof, and app-local auth journeys.
 
   @EARS-23 @EARS-41 @happy @registration-abandoned
   Scenario: An abandoned registrant who registers again gets the new password, not the abandoned one

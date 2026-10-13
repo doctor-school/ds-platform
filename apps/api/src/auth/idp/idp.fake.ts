@@ -1015,8 +1015,8 @@ export class FakeIdpClient implements IdpClient {
   }
 
   /**
-   * #202 test helper: attach a phone to an already-created user, modelling the
-   * future post-registration secondary-identifier flow. Registration is
+   * #202 test helper: attach a phone to an already-created user, standing in
+   * for the post-registration confirmed-phone flow (EARS-47/48). Registration is
    * email-primary (no phone at create), but login-by-phone + SMS-OTP login
    * (EARS-7) operate on an attached phone — tests register by email, then attach
    * a phone here so the phone resolves for the login paths. Mirrors a real

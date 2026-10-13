@@ -5,6 +5,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -358,3 +359,50 @@ describe("#2881 <EmailConfirmCard> a refused code", () => {
   });
 });
 
+
+describe("#2881 <EmailConfirmCard> an incomplete code", () => {
+  it("003 EARS-22 (#2881): an incomplete code on Enter keeps the typed digits; a later server refusal still empties them", async () => {
+    function InvalidThenRefusingHost() {
+      const [error, setError] = React.useState<string | null>(null);
+      return (
+        <EmailConfirmCard
+          {...props({
+            error,
+            // The host's six-digit rule (the `@ds/schemas` SSOT in the doors).
+            resolver: async (values) =>
+              /^\d{6}$/.test(values.code)
+                ? { values, errors: {} }
+                : {
+                    values: {},
+                    errors: { code: { type: "length", message: "six" } },
+                  },
+            onInvalid: () => setError("copy.invalid"),
+            onSubmit: async () => {
+              setError(null);
+              await Promise.resolve();
+              setError("copy.refused");
+            },
+          })}
+        />
+      );
+    }
+    render(<InvalidThenRefusingHost />);
+    const user = userEvent.setup();
+    const input = screen.getByRole("textbox");
+    await user.click(input);
+    await user.keyboard("482");
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByTestId("verify-error")).toHaveTextContent(
+      "copy.invalid",
+    );
+    expect(input).toHaveValue("482");
+
+    await user.keyboard("913");
+    expect(await screen.findByTestId("verify-error")).toHaveTextContent(
+      "copy.refused",
+    );
+    await waitFor(() => expect(input).toHaveValue(""));
+    await drainSelectionEvents();
+  });
+});

@@ -660,3 +660,19 @@ describe("021 EARS-2: the return-context plate on the confirmation step", () => 
     expect(screen.queryByTestId("registration-return-context")).toBeNull();
   });
 });
+
+describe("#2881 /verify: only a server refusal empties the code", () => {
+  it("003 EARS-22 (#2881): an incomplete code on Enter keeps the typed digits", async () => {
+    const user = userEvent.setup();
+    await mountSettled();
+    const input = screen.getByRole("textbox");
+    await user.click(input);
+    await user.keyboard("482");
+    await user.keyboard("{Enter}");
+
+    // The client-side rule speaks on the plate; nothing reached the server.
+    expect(await screen.findByTestId("verify-error")).not.toBeEmptyDOMElement();
+    expect(h.verify).not.toHaveBeenCalled();
+    expect(input).toHaveValue("482");
+  });
+});

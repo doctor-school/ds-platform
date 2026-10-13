@@ -75,7 +75,10 @@ export interface EmailConfirmCardProps {
   /** App-owned RHF resolver (localized messages + the `@ds/schemas` SSOT). */
   resolver: Resolver<EmailConfirmValues>;
   /** Awaited by RHF, so it drives `isSubmitting`. Transport + routing are the host's. */
-  onSubmit: (values: EmailConfirmValues) => Promise<void> | void;
+  onSubmit: (
+    values: EmailConfirmValues,
+    event?: React.BaseSyntheticEvent,
+  ) => Promise<void> | void;
   /** A submit blocked by validation (#904): the host decides the message. */
   onInvalid?: (() => void) | undefined;
   /** Already-localized code error. */
@@ -169,7 +172,20 @@ export function EmailConfirmCard({
   // #175 — auto-submit on the sixth character, guarded against a double call.
   // #2469 — an accepted code is spent: once the host reports acceptance no
   // path (a click, Enter, a re-typed or pasted code) submits it again.
-  const handleSubmit = form.handleSubmit(onSubmit, onInvalid);
+  // #2881 — only a SERVER refusal of a sent code empties the cells: a submit
+  // the client rule blocked sent nothing, so the host's sentence for it is
+  // kept off the field's `rejection` and the typed digits stay.
+  const [blockedByRule, setBlockedByRule] = React.useState(false);
+  const handleSubmit = form.handleSubmit(
+    (values, event) => {
+      setBlockedByRule(false);
+      return onSubmit(values, event);
+    },
+    () => {
+      setBlockedByRule(true);
+      onInvalid?.();
+    },
+  );
   const submit = React.useCallback(
     (event?: React.BaseSyntheticEvent) => {
       if (succeeded) {
@@ -224,7 +240,7 @@ export function EmailConfirmCard({
               succeeded={succeeded}
               succeededLabel={copy.codeAccepted}
               notice={resend.notice}
-              rejection={error}
+              rejection={blockedByRule ? null : error}
               onComplete={onComplete}
               onSubmit={submit}
               onResend={resend.onResend}

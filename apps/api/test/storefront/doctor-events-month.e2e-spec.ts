@@ -488,7 +488,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("NEW: the doctor month counts refuse a missing or malformed year", async () => {
-      for (const query of ["", "?year=26", "?year=2026&format=radio"]) {
+      for (const query of [
+        "",
+        "?year=26",
+        "?year=2026&format=radio",
+        // Well-shaped but outside the served year range (#2831).
+        "?year=0001",
+        "?year=9999",
+      ]) {
         const response = await app.inject({
           method: "GET",
           url: `/v1/storefront/doctor/events/month-counts${query}`,
@@ -498,7 +505,15 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("EARS-4.7: refuses a malformed month with RFC 7807 Problem Details", async () => {
-      for (const month of ["2026-13", "septembre", "2026-09-01"]) {
+      // `9999-12` and `0001-01` are well-shaped but outside the served year
+      // range — the month arithmetic would roll past year 9999 (#2831).
+      for (const month of [
+        "2026-13",
+        "septembre",
+        "2026-09-01",
+        "9999-12",
+        "0001-01",
+      ]) {
         const response = await app.inject({
           method: "GET",
           url: `/v1/storefront/doctor/events/month?month=${encodeURIComponent(month)}`,

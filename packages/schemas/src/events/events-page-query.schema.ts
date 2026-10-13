@@ -3,6 +3,7 @@ import { z } from "zod";
 import { SlugSchema } from "../taxonomy/taxonomy.schema.js";
 import {
   DOCTOR_EVENTS_FEED_QUERY_FIELDS,
+  DoctorEventsFeedDayShapeSchema,
   DoctorEventsFeedQuerySchema,
 } from "./doctor-events-feed.schema.js";
 import { createEventListingQueryCodec } from "./event-listing-query.schema.js";
@@ -16,8 +17,14 @@ import { MONTH_PARAM, MonthBroadcastListSchema } from "./events.schema.js";
  * the Academy `project`, `expert`, `topic` of 014 EARS-12). The page writes
  * every href through it; each host's READ is then handed only its own keys.
  * A malformed `view` / `month` reads as absent rather than voiding the URL.
+ * `day` / `from` / `to` keep only the day SHAPE here: a well-shaped day the
+ * read refuses (an impossible date, a year outside the served range) reaches
+ * the read, whose 400 the feed block reports alone (019 EARS-9, #1530/#2831).
  */
 export const EventsPageQuerySchema = DoctorEventsFeedQuerySchema.extend({
+  day: DoctorEventsFeedDayShapeSchema.optional(),
+  from: DoctorEventsFeedDayShapeSchema.optional(),
+  to: DoctorEventsFeedDayShapeSchema.optional(),
   view: z.enum(["month"]).optional().catch(undefined),
   month: z.string().regex(MONTH_PARAM).optional().catch(undefined),
   project: z.array(SlugSchema).default([]),

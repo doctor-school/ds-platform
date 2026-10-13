@@ -229,6 +229,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
         // slug grammar is refused at the boundary, never matched downstream.
         "?kind=Not_A_Slug",
         "?day=2026-13-99x",
+        // A well-shaped but impossible or out-of-range day (#2831): the
+        // horizon arithmetic downstream must never see it.
+        "?day=2026-02-31",
+        "?from=0001-01-01",
+        "?to=9999-12-31",
+        "?from=2026-02-30&to=2026-03-10",
       ]) {
         const response = await read(query);
         // The status is the assertion; the envelope is the app-wide error

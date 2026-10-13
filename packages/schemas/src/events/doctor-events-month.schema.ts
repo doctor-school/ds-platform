@@ -5,6 +5,7 @@ import { DoctorEventFormatSchema } from "./doctor-event-card.schema.js";
 import {
   DoctorEventsFeedDaySchema,
   DoctorEventsFeedSpecialtyModeSchema,
+  isDoctorEventsQueryYear,
   DoctorEventsFeedTargetingSchema,
   type DoctorEventsFeedQuery,
   parseDoctorEventsFeedQuery,
@@ -50,10 +51,17 @@ import { MonthBroadcastEntrySchema, YEAR_PARAM } from "./events.schema.js";
  * problem. No second discriminator vocabulary is invented for the grid.
  */
 
-/** `YYYY-MM` — a calendar month in МСК. */
+/**
+ * `YYYY-MM` — a calendar month in МСК, its year in the served range (#2831):
+ * `9999-12` would roll the exclusive upper bound into year 10000.
+ */
 export const DoctorEventsMonthSchema = z
   .string()
-  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "expected an ISO month (YYYY-MM)");
+  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "expected an ISO month (YYYY-MM)")
+  .refine(
+    (month) => isDoctorEventsQueryYear(Number(month.slice(0, 4))),
+    "expected a month within the served years",
+  );
 
 /**
  * The month query: the feed's facet subset plus `month`. `.strict()` guards the
@@ -127,7 +135,15 @@ export type DoctorEventsMonthGrid = z.infer<typeof DoctorEventsMonthGridSchema>;
  */
 export const DoctorEventsMonthCountsQuerySchema =
   DoctorEventsMonthQuerySchema.omit({ month: true })
-    .extend({ year: z.string().regex(YEAR_PARAM, "expected a year (YYYY)") })
+    .extend({
+      year: z
+        .string()
+        .regex(YEAR_PARAM, "expected a year (YYYY)")
+        .refine(
+          (year) => isDoctorEventsQueryYear(Number(year)),
+          "expected a year within the served years",
+        ),
+    })
     .strict();
 export type DoctorEventsMonthCountsQuery = z.infer<
   typeof DoctorEventsMonthCountsQuerySchema

@@ -197,3 +197,28 @@ describe("019 EARS-4 doctor month entries and per-month counts (wave-2 gate §4.
     ).toBe(false);
   });
 });
+
+/** #2831 — the month and the counts year stay inside the served years. */
+describe("019 EARS-4.7 doctor month reads — the served years (#2831)", () => {
+  it("EARS-4.7: a month outside the served years fails the parse", () => {
+    for (const month of ["9999-12", "0001-01", "1899-12", "3000-01"]) {
+      expect(parseDoctorEventsMonthQuery({ month }).success, month).toBe(false);
+    }
+    for (const month of ["1900-01", "2999-12", "2026-09"]) {
+      expect(parseDoctorEventsMonthQuery({ month }).success, month).toBe(true);
+    }
+  });
+
+  it("EARS-4.7: a counts year outside the served years fails the parse", () => {
+    for (const year of ["0001", "9999", "1899", "3000"]) {
+      expect(parseDoctorEventsMonthCountsQuery({ year }).success, year).toBe(
+        false,
+      );
+    }
+    for (const year of ["1900", "2999", "2026"]) {
+      expect(parseDoctorEventsMonthCountsQuery({ year }).success, year).toBe(
+        true,
+      );
+    }
+  });
+});

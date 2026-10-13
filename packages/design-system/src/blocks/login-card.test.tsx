@@ -584,8 +584,17 @@ describe("003 EARS-55 <LoginCard> SMS hint slot", () => {
     expect(
       screen.getByRole("radiogroup").parentElement?.contains(hint),
     ).toBe(true);
+    // The hint is announced with the switch it explains.
+    expect(hint.id).not.toBe("");
+    expect(screen.getByRole("radiogroup")).toHaveAttribute(
+      "aria-describedby",
+      hint.id,
+    );
     fireEvent.click(screen.getByTestId("otp-channel-email"));
     expect(screen.queryByText("copy.otp.channelSmsHint")).toBeNull();
+    expect(screen.getByRole("radiogroup")).not.toHaveAttribute(
+      "aria-describedby",
+    );
   });
 
   it("003 EARS-55: a one-channel host draws no switch and so no hint", () => {

@@ -132,13 +132,7 @@ interface Deferral {
  * Deferral allowlist — EARS ids whose real test genuinely cannot be added cheaply,
  * each tracked by an OPEN Issue. Keep this list SHORT and prune stale entries.
  */
-const BUILTIN_DEFERRALS: Record<string, Deferral> = {
-  '003:EARS-37': {
-    issue: 1331,
-    reason:
-      'spec authored ahead of code (password-friction increment); EARS-37 tests land with the requirement-presentation slice of #1331',
-  },
-};
+const BUILTIN_DEFERRALS: Record<string, Deferral> = {};
 
 function loadDeferrals(): Record<string, Deferral> {
   const raw = process.env.LINT_EARS_DEFERRALS;

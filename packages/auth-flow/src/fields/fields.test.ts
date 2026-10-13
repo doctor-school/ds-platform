@@ -1,19 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { resolveAuthFlowCopy } from "../copy";
 
-import {
-  DOCTOR_REGISTER_FIELD_SPECS,
-  PROMO_CODE_MAX_LENGTH,
-} from "@ds/schemas";
+import { PASSWORD_MIN_LENGTH, PROMO_CODE_MAX_LENGTH } from "@ds/schemas";
 
 import {
   identifierFieldSchema,
   loginIdentifierFormSchema,
   otpIdentifierFormSchema,
+  registerFieldHint,
   registerFieldRules,
   resolveVerificationCode,
 } from "./index";
-import { DOCTOR_FIXTURE } from "../test-support/host-config-fixtures";
+import {
+  ACADEMY_FIXTURE,
+  DOCTOR_FIXTURE,
+} from "../test-support/host-config-fixtures";
 
 /**
  * 021 EARS-11 (#1547) — the react-hook-form projection of the FieldSpec SSOT,
@@ -34,18 +35,36 @@ describe("021 EARS-11: the registration form rules derive from the FieldSpec SSO
     expect(rules.validate("doctor@clinic.ru")).toBe(true);
   });
 
-  it("021 EARS-11.2: the password rule restates the single length rule in its error", () => {
+  it("021 EARS-11.2: the password rule rejects a too-short password with the catalog error", () => {
     const rules = registerFieldRules(DOCTOR_FIXTURE, "password");
-    const hint = DOCTOR_REGISTER_FIELD_SPECS.password.hint;
 
     expect(rules.validate("short12")).toBe(COPY.password.invalid);
     expect(rules.validate("longenough")).toBe(true);
-    // 003 EARS-37 (owner decision Б) — one slot: the error restates the rule
-    // the hint states, because the error REPLACES the hint when it appears.
-    expect(hint).not.toBeNull();
-    expect(COPY.password.invalid).toContain("8");
-    expect(hint).toContain("8");
   });
+
+  it.each([
+    ["Academy", ACADEMY_FIXTURE],
+    ["doctor", DOCTOR_FIXTURE],
+  ] as const)(
+    "003 EARS-37: on the %s host the password error is the catalog copy of the ONE rule the hint states",
+    (_host, fixture) => {
+      // Owner decision Б — one slot: the error REPLACES the hint when it
+      // appears, so it must name exactly the rule the hint named, no more and
+      // no less, or the swap costs the visitor the rule they still need.
+      const hint = registerFieldHint("password");
+      const catalogError = resolveAuthFlowCopy(fixture).fields.password.invalid;
+      const rules = registerFieldRules(fixture, "password");
+
+      expect(hint).toBe(`Не менее ${PASSWORD_MIN_LENGTH} символов.`);
+      // The rejection the field shows IS the message-catalog entry (EARS-21).
+      expect(rules.validate("short12")).toBe(catalogError);
+      expect(catalogError).toBe(hint);
+      // Length-only policy (EARS-36): no character class is ever asked for.
+      for (const text of [hint, catalogError]) {
+        expect(text).not.toMatch(/заглавн|строчн|цифр|спецсимвол/i);
+      }
+    },
+  );
 
   it("021 EARS-11.3: the promo rule is optional, trimmed and bounded", () => {
     const rules = registerFieldRules(DOCTOR_FIXTURE, "promoCode");

@@ -250,11 +250,25 @@ test.describe("EARS-22: portal /reset identifier validation (client-side, ungate
 test.describe("EARS-22: creation-password RU copy + on-blur validation (client-side, ungated) (#200)", () => {
   test.use({ baseURL: BASE });
 
-  test("EARS-21/22/36: a too-short new password renders the RU length copy from the message catalog, never the baked English", async ({
+  test("003 EARS-37 / EARS-21/22/36: the too-short error replaces the pre-submit hint in the one slot, restating its single rule from the message catalog, never the baked English", async ({
     page,
   }) => {
     await page.goto("/register");
     const pw = page.locator('input[autocomplete="new-password"]');
+    const form = page.locator("form").filter({ has: pw });
+
+    // 003 EARS-37 — before any interaction the field's one slot already states
+    // the single rule, as a hint (not an alert).
+    const restingId = (
+      (await pw.getAttribute("aria-describedby")) ?? ""
+    )
+      .trim()
+      .split(/\s+/)
+      .pop();
+    expect(restingId, "the password field is wired to a message slot").toBeTruthy();
+    const hint = page.locator(`#${restingId}`);
+    await expect(hint).toHaveText(RU_PASSWORD_TOO_SHORT);
+    await expect(hint).not.toHaveAttribute("role", "alert");
 
     // Blur (mode: "onTouched") is enough to run the field resolver — no submit
     // click, so this stays backend-free even when a stand happens to be up.
@@ -263,6 +277,10 @@ test.describe("EARS-22: creation-password RU copy + on-blur validation (client-s
 
     // The field is flagged invalid, the message element is the RU copy …
     await expectFieldError(page, pw, RU_PASSWORD_TOO_SHORT);
+    // … which took the hint's place: the rule is stated ONCE on the form — the
+    // error replaced the hint, it did not stack under it (owner decision Б).
+    await expect(form.getByText(RU_PASSWORD_TOO_SHORT)).toHaveCount(1);
+    await expect(hint).toHaveCount(0);
     // … with NO English leak from `@ds/schemas`.
     await expect(page.getByText(/password must be at least/i)).toHaveCount(0);
   });

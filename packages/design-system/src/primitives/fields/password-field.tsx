@@ -90,6 +90,9 @@ function PasswordControl<T extends FieldValues>({
     if (!input || !caret || !caret.focused) return;
     if (document.activeElement !== input) input.focus();
     try {
+      // 003 EARS-38: resolving the type-swap layout before selection restoration
+      // prevents the observed Chromium post-click caret reset.
+      input.getBoundingClientRect();
       input.setSelectionRange(caret.start ?? 0, caret.end ?? caret.start ?? 0);
     } catch {
       // `setSelectionRange` throws on input types that do not support selection;

@@ -7,6 +7,7 @@ import {
   fireEvent,
   waitFor,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Form, FormField } from "../form";
@@ -85,11 +86,7 @@ describe("PasswordField composition (inline message)", () => {
 
   it("003 EARS-37.2: the error swaps into the hint's place, restating the same rule (message id, small weight-700 danger + ⚠, alert)", () => {
     const { container } = render(
-      <PwHarness
-        purpose="new"
-        policyHint={POLICY}
-        error={POLICY}
-      />,
+      <PwHarness purpose="new" policyHint={POLICY} error={POLICY} />,
     );
     const paras = container.querySelectorAll("p");
     // Still ONE element — the error replaced the helper, not a new line, and
@@ -236,6 +233,7 @@ describe("PasswordField reveal toggle (003 EARS-38)", () => {
   });
 
   it("003 EARS-38.3: the entered value and the caret survive a toggle, focus stays on the field", async () => {
+    const user = userEvent.setup();
     render(<RevealHarness />);
     const input = screen.getByTestId("pw") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "secret1234" } });
@@ -243,7 +241,7 @@ describe("PasswordField reveal toggle (003 EARS-38)", () => {
     input.focus();
     input.setSelectionRange(4, 4);
 
-    fireEvent.click(screen.getByTestId("pw-reveal"));
+    await user.click(screen.getByTestId("pw-reveal"));
 
     expect(input).toHaveValue("secret1234");
     expect(input).toHaveAttribute("type", "text");

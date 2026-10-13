@@ -1,13 +1,23 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, posix, resolve } from "node:path";
 
 import {
   API_COPY_ALLOWLIST,
   classifyChangeTier,
   isEnvironmentSensitivePath,
+  E2E_RUN_SELECTION_MODULES,
   isNonRuntimePath,
+  isTestPath,
   normalizeTierFiles,
   parseDeclaredTier,
   resolveTier,
@@ -640,5 +650,77 @@ describe("#2808: auth, server endpoints and server actions are Ask paths", () =>
       classifyChangeTier([mod("packages/auth-flow/src/flow/login.test.ts")])
         .minimum,
     ).toBe("ship");
+  });
+});
+
+describe("#2819: CI runner scripts under e2e/ are not test paths", () => {
+  it("EARS-1: a PR changing only an e2e runner script is neither test-only nor ship", () => {
+    for (const path of [
+      "apps/doctor/e2e/run-ci-tiers.mjs",
+      "packages/e2e/bin/check-host-tags.ts",
+    ]) {
+      const result = classifyChangeTier([mod(path)]);
+      expect(result.minimum, path).toBe("show");
+      expect(result.testOnly ?? false, path).toBe(false);
+      expect(isNonRuntimePath(path), path).toBe(false);
+    }
+  });
+
+  it("EARS-1: an e2e run-selection module or tsconfig is neither test-only nor ship", () => {
+    for (const path of [
+      "packages/e2e/lib/host-tags.ts",
+      "packages/e2e/hosts.ts",
+      "packages/e2e/tsconfig.json",
+    ]) {
+      const result = classifyChangeTier([
+        mod(path),
+        mod("packages/e2e/lib/host-tags.test.ts"),
+      ]);
+      expect(result.minimum, path).toBe("show");
+      expect(result.testOnly ?? false, path).toBe(false);
+    }
+  });
+
+  it("EARS-1: the run-selection set is exactly what the e2e config and bin/ import at runtime", () => {
+    const root = resolve(__dirname, "../../..");
+    const entries = [
+      "packages/e2e/playwright.config.ts",
+      ...readdirSync(join(root, "packages/e2e/bin")).map(
+        (f) => `packages/e2e/bin/${f}`,
+      ),
+    ];
+    const reached = new Set<string>();
+    const queue = [...entries];
+    while (queue.length) {
+      const file = queue.pop() as string;
+      const src = readFileSync(join(root, file), "utf8");
+      for (const m of src.matchAll(
+        /^import\s+(?!type\b)[^;]*?from\s+"(\.{1,2}\/[^"]+)"/gms,
+      )) {
+        const target = posix
+          .join(posix.dirname(file), m[1])
+          .replace(/\.js$/, ".ts");
+        if (!existsSync(join(root, target)) || reached.has(target)) continue;
+        reached.add(target);
+        queue.push(target);
+      }
+    }
+    const underE2e = [...reached].filter((p) => /(?:^|\/)e2e\//.test(p));
+    expect(underE2e.sort()).toEqual([...E2E_RUN_SELECTION_MODULES].sort());
+    for (const path of underE2e) expect(isTestPath(path), path).toBe(false);
+  });
+
+  it("EARS-1: e2e support, steps, lib and evidence helpers stay test-only", () => {
+    for (const path of [
+      "apps/doctor/e2e/support/session.ts",
+      "packages/e2e/tests/steps/auth.steps.ts",
+      "packages/e2e/lib/mailpit.ts",
+      "apps/doctor/e2e/ui-evidence-home.mjs",
+      "packages/e2e/admin/sign-in.ts",
+    ]) {
+      const result = classifyChangeTier([mod(path)]);
+      expect(result.minimum, path).toBe("ship");
+      expect(result.testOnly, path).toBe(true);
+    }
   });
 });

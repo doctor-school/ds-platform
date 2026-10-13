@@ -235,19 +235,28 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
       { slug: "master-klass", title: "Мастер-класс" },
     ]);
     await frame(DOCTOR, { kind: "ghost", q: "сон" });
-    const [, read] = mocks.fetchEventsFeed.mock.calls[0] as [unknown, Record<string, unknown>];
+    const [, read] = mocks.fetchEventsFeed.mock.calls[0] as [
+      unknown,
+      Record<string, unknown>,
+    ];
     expect(read).toEqual({ q: "сон" });
 
     mocks.fetchEventsFeed.mockClear();
     await frame(DOCTOR, { kind: "master-klass" });
-    const [, kept] = mocks.fetchEventsFeed.mock.calls[0] as [unknown, Record<string, unknown>];
+    const [, kept] = mocks.fetchEventsFeed.mock.calls[0] as [
+      unknown,
+      Record<string, unknown>,
+    ];
     expect(kept).toEqual({ kind: "master-klass" });
   });
 
   it("EARS-7: a failed kind-dictionary read drops no applied kind", async () => {
     mocks.fetchEventKindTitles.mockResolvedValue(null);
     await frame(DOCTOR, { kind: "master-klass" });
-    const [, read] = mocks.fetchEventsFeed.mock.calls[0] as [unknown, Record<string, unknown>];
+    const [, read] = mocks.fetchEventsFeed.mock.calls[0] as [
+      unknown,
+      Record<string, unknown>,
+    ];
     expect(read).toEqual({ kind: "master-klass" });
   });
 
@@ -258,11 +267,15 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
         raw: { kind: ["master-klass"] },
         feed: Promise.resolve({ ok: true, value: PAGE }),
         specialties: Promise.resolve([]),
-        kinds: Promise.resolve([{ slug: "master-klass", title: "Мастер-класс" }]),
+        kinds: Promise.resolve([
+          { slug: "master-klass", title: "Мастер-класс" },
+        ]),
       }),
     );
     const kinds = within(screen.getByRole("group", { name: "Вид события" }));
-    expect(kinds.getByRole("button", { name: "Мастер-класс", pressed: true })).toBeInTheDocument();
+    expect(
+      kinds.getByRole("button", { name: "Мастер-класс", pressed: true }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("master-klass")).not.toBeInTheDocument();
     expect(screen.getByText("Применено: 1")).toBeInTheDocument();
   });
@@ -718,7 +731,10 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
   });
 
   it("EARS-7: an empty doctor feed under a kind the read does not offer (a retired kind with no event in this reading) names it by the kind dictionary, never by its raw slug", async () => {
-    mocks.fetchEventsFeed.mockResolvedValueOnce({ ok: true, value: { ...EMPTY_PAGE, matching: 5 } });
+    mocks.fetchEventsFeed.mockResolvedValueOnce({
+      ok: true,
+      value: { ...EMPTY_PAGE, matching: 5 },
+    });
     render(
       await FeedSection({
         config: DOCTOR,
@@ -732,7 +748,9 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
       }),
     );
     const empty = screen.getByTestId("events-feed-empty");
-    expect(empty).toHaveTextContent("Нет событий по фильтру «Вид события: Вебинар»");
+    expect(empty).toHaveTextContent(
+      "Нет событий по фильтру «Вид события: Вебинар»",
+    );
     expect(empty).not.toHaveTextContent("vebinar");
   });
 

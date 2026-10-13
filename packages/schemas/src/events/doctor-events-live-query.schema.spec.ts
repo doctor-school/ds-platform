@@ -19,9 +19,11 @@ describe("019 EARS-6 doctor live-strip query", () => {
   });
 
   it("019 EARS-6: `specialty=all` and an explicit pick decode exactly as the feed decodes them", () => {
-    expect(parseDoctorEventsLiveQuery({ specialty: "all" }).data).toMatchObject({
-      specialty: "all",
-    });
+    expect(parseDoctorEventsLiveQuery({ specialty: "all" }).data).toMatchObject(
+      {
+        specialty: "all",
+      },
+    );
     expect(
       parseDoctorEventsLiveQuery({ specialty: ["101", "102"] }).data,
     ).toMatchObject({ specialty: ["101", "102"] });

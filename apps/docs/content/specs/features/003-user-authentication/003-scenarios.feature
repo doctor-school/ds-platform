@@ -1026,12 +1026,17 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # EARS-40 cases -> bare-verification.steps.ts, including HTML and history.
     # Retain fragment and positive ?email= cases plus auth-flow unit contracts.
 
-  @EARS-41 @EARS-16 @failure
+  @EARS-41 @EARS-16 @failure @wrong-verification-code
   Scenario: A wrong code fails identically for every identifier
     Given a verified account, an unverified account and an unknown identifier
     When a wrong six-digit code is submitted for each
     Then each response is the same generic failure in status, body, and timing within 50 ms
     And no account state changes
+    # NEW live triad binding: wrong-verification-code.steps.ts; exact response
+    # bytes and five interleaved class medians within 50 ms, with the 30 ms floor.
+    # The discarded UI warm-up proves the generic refusal and absent session.
+    # Retain apps/api/test/auth/verify.e2e-spec.ts EARS-41 deterministic timing
+    # and apps/api/src/auth/auth.service.spec.ts refusal/IdP mutation contracts.
 
   @EARS-42 @happy
   Scenario: No eight-cell code step exists on either storefront

@@ -1153,11 +1153,37 @@ export function resolveDesiredRedirectSet(step, env = process.env) {
   };
 }
 
-function idpRedirectStep(slotNames, baseDomain) {
+/**
+ * The desired set at CONVERGE time: the slots live now, with the step's own slot
+ * forced in (`up`/`sync`) or out (`down`), plus the env pins.
+ *
+ * `liveSlotNames` is read immediately before the write, never the snapshot the command
+ * took at start — a parallel session may have raised or removed a slot meanwhile, and
+ * the whole-set write would otherwise drop it (#2694). Forcing the step's own slot keeps
+ * a `down` from re-adding the slot it just removed if the read still lists it.
+ */
+export function desiredRedirectSetAt(step, liveSlotNames, env = process.env) {
+  const names = new Set(liveSlotNames ?? []);
+  if (step.slot && step.membership === "include") names.add(step.slot);
+  if (step.slot && step.membership === "exclude") names.delete(step.slot);
+  return resolveDesiredRedirectSet(
+    { desired: renderIdpRedirectUris([...names], step.baseDomain) },
+    env,
+  );
+}
+
+/**
+ * `desired` is the plan-time rendering, read only by the plan tests; the converge
+ * itself recomputes the set from the live slots via `desiredRedirectSetAt`.
+ */
+function idpRedirectStep(slotNames, baseDomain, { slot, membership }) {
   return {
     kind: "idp",
     op: "redirect-uris",
     label: "converge the shared IdP redirect set",
+    slot,
+    membership,
+    baseDomain,
     desired: renderIdpRedirectUris(slotNames, baseDomain),
   };
 }
@@ -1385,7 +1411,7 @@ export function planSlotUp({
     seedCommandPlan(slot),
     upCommandPlan(slot),
     caddyAttachCommand(slot),
-    idpRedirectStep([...Object.keys(live), slot], baseDomain),
+    idpRedirectStep([...Object.keys(live), slot], baseDomain, { slot, membership: "include" }),
     { kind: "verify-running", label: "verify the running images", sha, slot },
     {
       kind: "health",
@@ -1491,6 +1517,7 @@ export function planSlotDown({ slot, liveSlots, baseDomain, now = new Date() }) 
     idpRedirectStep(
       Object.keys(live).filter((name) => name !== slot),
       baseDomain,
+      { slot, membership: "exclude" },
     ),
   );
 
@@ -2571,7 +2598,10 @@ function realEffects(boxEnv) {
           client,
           projectName,
           appName,
-          desired: resolveDesiredRedirectSet(step, boxEnv),
+          // Re-read the live slots AT converge time (and again for the read-back),
+          // never the start-time snapshot `main()` took (#2694).
+          readDesired: async () =>
+            desiredRedirectSetAt(step, Object.keys(await readLiveSlots()), boxEnv),
           log,
         });
         return undefined;

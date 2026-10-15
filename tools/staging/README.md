@@ -426,10 +426,15 @@ PAT is read from `/etc/ds-platform/idp-bootstrap-pat.txt` on the box, the origin
 `resolveIdpBaseUrl` (see above).
 
 The converge runs as the LAST step of the `up`, `sync`, `down` and `reset` plans, after
-the slot's containers have reached their new state, so the set it writes matches the live
-state the command just produced — the slot names come from `docker ps`, not from a file
-anyone could leave stale. It is ensure-present: the current `oidc_config` is read first
-and the `PUT` is skipped when the sets already match (order-insensitive compare). Any URIs
+the slot's containers have reached their new state. Parallel sessions converge the same
+app, so the set is never the snapshot the command took at start: the live slots are
+re-read from `docker ps` immediately before the write (`desiredRedirectSetAt` — the
+command's own slot forced in for `up`/`sync`, out for `down`), the current `oidc_config`
+is probed and the `PUT` skipped when the sets already match (order-insensitive compare),
+and the app is read back afterwards against a fresh live read. A read-back that lacks a
+live slot's callback or still holds a removed one re-reads and re-converges — at most 3
+attempts, 2 s then 4 s backoff — and still wrong fails the command naming every missing /
+extra URI; it never succeeds silently. Any URIs
 pinned in `IDP_REDIRECT_URIS` / `IDP_POST_LOGOUT_URIS` are unioned in, so non-slot callers
 keep their registration — both must be FILLED in `/etc/ds-platform/stage.env` (see
 `infra/deploy/stage.env.example`): left empty, `provision.sh` substitutes its localhost dev

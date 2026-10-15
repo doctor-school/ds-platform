@@ -45,7 +45,10 @@ function stubFetch(routes, calls = []) {
     const method = init.method ?? "GET";
     const key = `${method} ${path}`;
     calls.push({ key, body: init.body ? JSON.parse(init.body) : undefined, init });
-    const answer = routes[key];
+    // An array route answers in order and then repeats its last answer — a probe
+    // and a read-back of the same app can see different states.
+    const route = routes[key];
+    const answer = Array.isArray(route) ? (route.length > 1 ? route.shift() : route[0]) : route;
     if (!answer) throw new Error(`unrouted request: ${key}`);
     return {
       ok: (answer.status ?? 200) < 400,
@@ -209,6 +212,175 @@ test("an already converged app is read and left alone", async () => {
   });
   assert.equal(result.action, "skip");
   assert.equal(calls.filter((call) => call.key.startsWith("PUT ")).length, 0);
+});
+
+// --- converge-time read + read-back (#2694) ----------------------------------
+
+const APP_PATH = "GET /management/v1/projects/p1/apps/a1";
+const PUT_PATH = "PUT /management/v1/projects/p1/apps/a1/oidc_config";
+const cb = (slot) => `https://api-${slot}.stage.example/auth/callback`;
+const appWith = (slots) => ({
+  body: { app: { oidcConfig: { redirectUris: slots.map(cb), postLogoutRedirectUris: [] } } },
+});
+const setOf = (slots) => ({ redirectUris: slots.map(cb), postLogoutUris: [] });
+
+test("the converge writes the set read at converge time, not a start-time snapshot", async () => {
+  const calls = [];
+  const client = createIdpClient({
+    fetch: stubFetch(
+      {
+        ...APP_ROUTES,
+        [APP_PATH]: [appWith(["main", "pr-a"]), appWith(["main", "pr-a", "pr-b"])],
+        [PUT_PATH]: { body: {} },
+      },
+      calls,
+    ),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  // The command started when {main, pr-a} were live; pr-b came up from a parallel
+  // session before this converge ran.
+  const result = await convergeRedirectUris({
+    client,
+    desired: setOf(["main", "pr-a"]),
+    readDesired: async () => setOf(["main", "pr-a", "pr-b"]),
+    sleep: async () => {},
+  });
+  const puts = calls.filter((call) => call.key === PUT_PATH);
+  assert.equal(puts.length, 1);
+  assert.ok(puts[0].body.redirectUris.includes(cb("pr-b")));
+  assert.equal(result.action, "put");
+});
+
+test("a read-back missing a live slot's callback re-reads the live set and re-converges", async () => {
+  const calls = [];
+  const client = createIdpClient({
+    fetch: stubFetch(
+      {
+        ...APP_ROUTES,
+        // probe → read-back (a parallel writer dropped pr-b) → probe → read-back OK
+        [APP_PATH]: [
+          appWith(["main"]),
+          appWith(["main", "pr-a"]),
+          appWith(["main", "pr-a"]),
+          appWith(["main", "pr-a", "pr-b"]),
+        ],
+        [PUT_PATH]: { body: {} },
+      },
+      calls,
+    ),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  let reads = 0;
+  await convergeRedirectUris({
+    client,
+    desired: setOf(["main", "pr-a"]),
+    readDesired: async () => (++reads === 1 ? setOf(["main", "pr-a"]) : setOf(["main", "pr-a", "pr-b"])),
+    sleep: async () => {},
+  });
+  const puts = calls.filter((call) => call.key === PUT_PATH);
+  assert.equal(puts.length, 2);
+  assert.ok(puts[1].body.redirectUris.includes(cb("pr-b")));
+});
+
+test("a read-back that stays wrong fails loudly, naming the missing slot's callback", async () => {
+  const client = createIdpClient({
+    fetch: stubFetch({ ...APP_ROUTES, [APP_PATH]: appWith(["main"]), [PUT_PATH]: { body: {} } }),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  const sleeps = [];
+  await assert.rejects(
+    convergeRedirectUris({
+      client,
+      desired: setOf(["main", "pr-b"]),
+      readDesired: async () => setOf(["main", "pr-b"]),
+      sleep: async (ms) => sleeps.push(ms),
+    }),
+    (err) => err instanceof IdpError && /missing/.test(err.message) && err.message.includes(cb("pr-b")),
+  );
+  assert.equal(sleeps.length, 2, "three attempts, two backoffs between them");
+});
+
+test("a removed slot's callback still present after a down converge fails loudly as extra", async () => {
+  const client = createIdpClient({
+    fetch: stubFetch({
+      ...APP_ROUTES,
+      [APP_PATH]: appWith(["main", "pr-gone"]),
+      [PUT_PATH]: { body: {} },
+    }),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  await assert.rejects(
+    convergeRedirectUris({
+      client,
+      desired: setOf(["main"]),
+      readDesired: async () => setOf(["main"]),
+      sleep: async () => {},
+    }),
+    (err) => err instanceof IdpError && /extra/.test(err.message) && err.message.includes(cb("pr-gone")),
+  );
+});
+
+test("a re-converge PUT answered 400 «No changes» (read-back lagged) is judged by the next read-back", async () => {
+  const calls = [];
+  const client = createIdpClient({
+    fetch: stubFetch(
+      {
+        ...APP_ROUTES,
+        // probe → read-back lags the PUT → probe still stale → read-back caught up
+        [APP_PATH]: [
+          appWith(["main"]),
+          appWith(["main"]),
+          appWith(["main"]),
+          appWith(["main", "pr-b"]),
+        ],
+        // Zitadel refuses an identical config with 400 «No changes».
+        [PUT_PATH]: [{ body: {} }, { status: 400 }],
+      },
+      calls,
+    ),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  const result = await convergeRedirectUris({
+    client,
+    desired: setOf(["main", "pr-b"]),
+    readDesired: async () => setOf(["main", "pr-b"]),
+    sleep: async () => {},
+  });
+  assert.equal(calls.filter((call) => call.key === PUT_PATH).length, 2);
+  assert.equal(result.attempts, 2);
+});
+
+test("a URI held in the wrong list does not pass the read-back", async () => {
+  const client = createIdpClient({
+    fetch: stubFetch({
+      ...APP_ROUTES,
+      [APP_PATH]: {
+        body: {
+          app: { oidcConfig: { redirectUris: [], postLogoutRedirectUris: [cb("main")] } },
+        },
+      },
+      [PUT_PATH]: { body: {} },
+    }),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  await assert.rejects(
+    convergeRedirectUris({
+      client,
+      desired: setOf(["main"]),
+      readDesired: async () => setOf(["main"]),
+      sleep: async () => {},
+    }),
+    (err) =>
+      err instanceof IdpError &&
+      err.message.includes(`redirect missing: ${cb("main")}`) &&
+      err.message.includes(`post-logout extra: ${cb("main")}`),
+  );
 });
 
 test("an app the shared project does not carry is a hard failure, never a create", async () => {

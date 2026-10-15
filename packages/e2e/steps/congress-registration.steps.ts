@@ -29,7 +29,7 @@ import {
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
-import { After, Given, Then, When } from "./support/auth-fixtures.js";
+import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 
 const SESSION = "__Host-ds_session";
 interface CongressRegistration extends OwnedCredentials {
@@ -410,11 +410,9 @@ Then(
     });
     expect(new URL(state.page.url()).pathname).toBe("/verify");
     await expect(
-      state.page
-        .getByRole("alert")
-        .filter({
-          hasText: "Код не подошёл. Проверьте его или запросите новый.",
-        }),
+      state.page.getByRole("alert").filter({
+        hasText: "Код не подошёл. Проверьте его или запросите новый.",
+      }),
     ).toBeVisible();
     await assertNoPrivateRegistrationAccess(
       state.page,
@@ -447,6 +445,16 @@ Then(
       "exact identity, profile, congress intake and consent unchanged before code",
     ).toBe(true);
     await assertNoPrivateRegistrationAccess(state.page, "", state);
+    await test.info().attach("congress-refused-code", {
+      body: await state.page.screenshot({
+        mask: [
+          state.page.locator("input"),
+          state.page.getByText(state.email, { exact: true }),
+          state.page.getByText(state.displayName, { exact: true }),
+        ],
+      }),
+      contentType: "image/png",
+    });
   },
 );
 
@@ -575,6 +583,20 @@ Then(
     await assertNoPrivateRegistrationAccess(state.page, "", state);
     await passwordProbe(state.page, world.hostBaseUrl, state, true);
     await identity(state);
+    await expect(state.page.getByTestId("profile-email")).toBeVisible();
+    await expect(state.page.getByTestId("profile-name")).toBeVisible();
+    await test.info().attach("congress-password-signin", {
+      body: await state.page.screenshot({
+        mask: [
+          state.page.locator("input"),
+          state.page.getByTestId("profile-email"),
+          state.page.getByTestId("profile-name"),
+          state.page.getByText(state.email, { exact: true }),
+          state.page.getByText(state.displayName, { exact: true }),
+        ],
+      }),
+      contentType: "image/png",
+    });
   },
 );
 

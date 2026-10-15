@@ -43,7 +43,7 @@ const row = {
     {
       id: "22345678-1234-4234-8234-123456789abc",
       purpose: "congress-personal-data",
-      version: "2026-01",
+      version: `2026-09-23.sha256-${"a".repeat(64)}`,
       capturedAt: "2026-10-15 01:02:03.123456+00",
       origin: null,
     },
@@ -145,6 +145,25 @@ describe("owned congress registration observation", () => {
     {
       rows: [
         { ...row, consents: [{ ...row.consents[0], purpose: "unexpected" }] },
+      ],
+    },
+    {
+      rows: [
+        { ...row, consents: [{ ...row.consents[0], version: "2026-01" }] },
+      ],
+    },
+    {
+      rows: [
+        {
+          ...row,
+          consents: [
+            {
+              ...row.consents[0],
+              purpose: "tos",
+              version: row.consents[0]!.version,
+            },
+          ],
+        },
       ],
     },
   ])(

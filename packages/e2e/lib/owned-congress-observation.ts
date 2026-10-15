@@ -112,7 +112,9 @@ function snapshot(rows: unknown[]): CongressSnapshot {
       !UUID.test(consent.id) ||
       !["congress-personal-data", "tos"].includes(String(consent.purpose)) ||
       typeof consent.version !== "string" ||
-      !/^[a-zA-Z0-9.-]{1,80}$/.test(consent.version) ||
+      !(consent.purpose === "tos"
+        ? consent.version === "2026-01"
+        : /^\d{4}-\d{2}-\d{2}\.sha256-[0-9a-f]{64}$/.test(consent.version)) ||
       typeof consent.capturedAt !== "string" ||
       !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?\+00$/.test(
         consent.capturedAt,

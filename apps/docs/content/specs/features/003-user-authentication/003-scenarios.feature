@@ -213,15 +213,19 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the pre-verification password no longer signs in
     And every session the account held before the code is revoked
 
-  @EARS-23 @EARS-41 @happy
+  @EARS-23 @EARS-41 @happy @congress-registration
   Scenario: A password-less congress account that registers gets the entered password after the code
-    Given a congress-created account for "guest@example.org" with no credential and an unverified email
-    When a visitor submits the registration form for "guest@example.org" with a policy-conforming password
-    And enters the code from the mail on the code step
-    Then email_verified becomes true and a BFF session is established
-    And the submitted password now signs in
-    And profile fields the account already holds are not overwritten
-    And the platform consent ticked on the form is recorded only after the code is accepted
+    Given a uniquely owned passwordless unverified congress signup has its original profile and congress consent observed
+    When that congress account registers through Academy with a new policy-conforming password and the accepted platform terms
+    Then a different congress registration code is refused without changing the profile, intake or consent and the submitted password still has no private access
+    When that congress registrant enters its delivered code once in the requesting Academy tab
+    Then the accepted congress registration code opens the same verified profile and a secure BFF session at the account return target
+    And the original congress profile, intake and consent survive and exactly one new platform consent is recorded after that code
+    And after an explicit logout the congress registrant signs into that same named account with the submitted password
+    # NEW live passwordless congress registration: congress-registration.steps.ts.
+    # Retain auth.service.spec.ts EARS-23 password installation and missing-
+    # consent unit proofs; the native portal EARS-44 congress hand-off journey
+    # remains distinct. Academy records platform terms from its read-only statement.
 
   @EARS-23 @EARS-41 @happy @registration-consent-preservation
   Scenario: Re-registration never overwrites an existing platform consent

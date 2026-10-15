@@ -916,3 +916,42 @@ and link-free` scenario and native returnCode/no-native-mail wire tests in
 reset/session tests in `apps/api/test/auth/password-reset.e2e-spec.ts`. Run the
 single `@password-reset-mail` Academy case on the lead-selected stand; this test
 coverage change has no render surface and needs no owner Stage-B request or slot.
+
+### Passwordless congress registration (003 EARS-23/41)
+
+`A password-less congress account that registers gets the entered password after
+the code` creates a unique `congress-registration-2927-<UUID>@example.test`
+identity through the real configured congress intake. The account has its original
+display name, one congress-personal-data consent and no platform consent. The Academy
+registration form sends a new password with its read-only accepted platform terms
+and reaches the actual fresh addressed re-registration code. Before consuming it,
+an exact snapshot proves the profile, intake and consent unchanged. A guaranteed
+different six-digit code receives the actual generic refusal without private access;
+the same snapshot remains unchanged and an independent guest proves the submitted
+password still fails. One delivered code opens the same
+email-verified subject with a secure host-only BFF session at `/account`.
+
+`steps/congress-registration.steps.ts` then proves the original congress consent,
+profile and intake survive, exactly one `tos/2026-01` consent was added after the
+code, and an explicit logout followed by the submitted password opens that same
+named account. `lib/owned-congress-observation.ts` admits only this issue's exact
+owned UUID address and fixed display-name fixture. It reuses the existing public
+`@ds/db` pool locally and canonical SSH/slot transport on stage, verifying the
+actual isolated branch/slot database and READ ONLY before the exact account read.
+Profile/intake preservation fingerprints exclude only verification/update fields
+and the asynchronous confirmation-mail outcome; consent IDs, purposes, versions
+and full PostgreSQL timestamps are compared directly. Local target bindings use
+the existing `E2E_API_URL` and `E2E_AUTH_DATABASE_*` variables described above.
+Sanitized started/completed operations go to the absolute TEMP
+`E2E_STAND_COMMAND_LOG` (default `ds-e2e-stand-ops/owned-congress-2927.jsonl`).
+
+This is new real congress-to-Academy credential/consent coverage. Retain
+`apps/api/src/auth/auth.service.spec.ts:1465` (password installation), `:1489`
+(missing consent purposes) and the distinct congress hand-off journey at
+`apps/portal/e2e/auth-journeys.e2e.spec.ts:314`. No native proof is removed or
+claimed as a new browser assertion. Traces remain off; cleanup revokes only
+owned sessions and closes owned contexts. The stand needs its existing
+`CONGRESS_SIGNUP_*` configuration and a real registrable event; the test creates
+neither a fake event nor an account through SQL. Run the single
+`@congress-registration` Academy case on the lead-selected contour. This coverage
+change has no render surface and needs no owner Stage-B request or slot.

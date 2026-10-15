@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  DOCTOR_REGISTER_FIELD_SPECS,
   EmailIdentifierSchema,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
@@ -45,13 +46,15 @@ export const IdentifierFieldSchema = z.union(
 );
 
 /**
- * OTP code field shape. The BFF contract for the code is loose (`z.string().min(1)`
- * — Zitadel verifies it), so the client guard is intentionally light: a non-empty
- * value. The fixed length + numeric-only + auto-submit behavior is enforced by the
- * `<OtpField>` widget (maxLength + digit strip), not re-encoded here, mirroring the
- * server's loose `code`. Kept as a fragment so a form can compose it uniformly.
+ * OTP code field shape — the ONE code rule of every auth code step (sign-in,
+ * reset, `/verify`). Every mailed or texted code is six digits (003 EARS-6/7/29
+ * amended, #2636) and the BFF accepts nothing else, so the client guard is that
+ * same `code` FieldSpec rule (surrounding whitespace trimmed, six digits), never a
+ * looser copy: an incomplete code is refused in the browser and never reaches the
+ * server (003 EARS-22, #2899). The `<OtpField>` widget still supplies maxLength,
+ * the digit strip and the auto-submit on the sixth digit.
  */
-export const OtpCodeFieldSchema = z.string().min(1);
+export const OtpCodeFieldSchema = DOCTOR_REGISTER_FIELD_SPECS.code.rule;
 
 /**
  * Creation-password field shape — registration / reset "new password". The policy

@@ -538,6 +538,40 @@ along with the existing auth-flow unit contracts. No account is created.
 pnpm e2e:stage <slot> --project academy --grep "A /verify opened with no address goes to the registration door"
 ```
 
+### Wrong verification code across account states (003 EARS-41/16)
+
+`A wrong code fails identically for every identifier` is one Academy scenario
+with fresh verified, unverified and unknown identifiers in distinct browsers.
+`steps/wrong-verification-code.steps.ts` creates its two owned accounts through
+real registration and Mailpit, verifies one, and revokes that prerequisite
+session. Every browser opens a cold `/verify` document and submits the same
+complete wrong six-digit code through the UI; status, exact response bytes,
+the generic error and absent private cookie/profile/principal must match.
+These three UI submissions form the discarded warm-up round. Five measured
+round-robin rounds then submit the same code-only request from each browser.
+Their class medians must differ by no more than 50 ms and every measured request
+must satisfy the native 30 ms floor. Eighteen failures plus one fixture
+confirmation fit the unchanged 20/IP verification budget; selected local runs
+need a fresh window and a serialized runtime lease, never a counter reset.
+
+`lib/wrong-verification-observation.ts` accepts only issue-2928 UUID fixtures.
+Before and after refusal, it checks exact account/verification/consent counts
+and hashes every complete owned user and consent row. The unknown stays absent.
+Local reads validate the actual isolated database binding and run parameterized
+SQL in a verified read-only transaction; canonical Stage reads reuse the slot
+hostname/database/SSH mechanism with the same read-only guards. They require
+the local topology variables described below or working Stage SSH access.
+Sanitized operation records go to the absolute TEMP `E2E_STAND_COMMAND_LOG`
+(default `ds-e2e-stand-ops/wrong-verification-2928.jsonl`); snapshots expose no
+identifiers or private rows. Traces stay off and screenshots mask the email and
+code field. Cleanup closes only owned browsers and revokes an owned session if
+failure interrupted fixture preparation. Native `verify.e2e-spec.ts` EARS-41
+interleaved timing and `auth.service.spec.ts` refusal/IdP mutation contracts
+remain intact. Run the single `@wrong-verification-code` Academy declaration on
+the lead-selected contour. The verification-route timing fix is Ask-tier auth
+logic, so the agent also verifies it on its own PR slot. No render source changes
+or owner Stage-B request are needed.
+
 ### Registration password persistence (003 EARS-39)
 
 `The held registration password is never persisted anywhere` observes one unique

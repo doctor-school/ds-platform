@@ -70,8 +70,32 @@ describe("resolveAdminReturnTarget — what a carried target may be", () => {
     ["space", "/ /evil.com"],
     ["encoded newline", "/%0a/evil.com"],
     ["malformed escape", "/events/%E0%A4%A"],
+    // Dot-segment normalisation yields `/%2fevil`, which decodes to `//evil`.
+    ["normalised to encoded protocol-relative", "/%2e%2e/%2fevil"],
   ])("#2782 security: refuses %s", (_label, raw) => {
     expect(resolveAdminReturnTarget(raw)).toBeNull();
+  });
+
+  // The returned target is re-validated at every hop, so it must be a fixed
+  // point: validating an accepted target again returns it unchanged.
+  it.each([
+    "/events/123?tab=x",
+    "/projects/7#partners",
+    "/events/1?x=//evil.com",
+    "/events/./1/../2?a=1",
+    "/login-audit",
+    "/events/..%2F..%2F/evil",
+    "/%2e%2e/%2fevil",
+    "/%2e%2e//evil",
+    "/a/..//evil",
+    "/events/%2e%2e/login",
+    "/@evil.com",
+    "/;//evil",
+    "/events#//evil",
+    "/%252F%252Fevil",
+  ])("#2782 security: validation is idempotent for %s", (raw) => {
+    const once = resolveAdminReturnTarget(raw);
+    expect(resolveAdminReturnTarget(once)).toBe(once);
   });
 
   it("#2782 security: `//` inside the query is data, not a host — kept", () => {

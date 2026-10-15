@@ -287,4 +287,48 @@ test.describe("011 EARS-6/7 — TOTP challenge on admin login (browser)", () => 
       timeout: 20_000,
     });
   });
+
+  test("#2782: a 401 on a data fetch mid-page (no reload) returns the operator to the same page", async ({
+    page,
+  }) => {
+    const { email, password } = await bootstrapAdminSession(ORIGIN);
+    const secret = await enrolOnce(page, { email, password });
+
+    const deep = "/projects?page=2&q=2782";
+    await page.goto(deep);
+    await expect(page).toHaveURL(/\/projects\?/);
+    await expect(page.getByRole("searchbox")).toBeVisible();
+
+    // The session drops while the page stays open; the next list fetch gets
+    // the 401, so the target comes from the provider's `onError`, not from a
+    // reload through `<Authenticated>`.
+    const userAgent = await page.evaluate(() => navigator.userAgent);
+    await page
+      .context()
+      .setExtraHTTPHeaders({ "user-agent": `${userAgent} network-changed` });
+    const documentLoads: string[] = [];
+    page.on("request", (req) => {
+      if (req.isNavigationRequest() && req.frame() === page.mainFrame())
+        documentLoads.push(req.url());
+    });
+    const refused = page.waitForResponse(
+      (res) => /\/v1\/admin\/projects/.test(res.url()) && res.status() === 401,
+    );
+    await page.getByRole("searchbox").fill("onerror");
+    await page.getByRole("searchbox").press("Enter");
+    await refused;
+    await page.waitForURL(/\/login\?/, { timeout: 20_000 });
+    expect(documentLoads).toEqual([]);
+    expect(new URL(page.url()).searchParams.get("to")).toBe(deep);
+
+    await signIn(page, { email, password }, { navigate: false });
+    await page.waitForURL(/\/mfa\/challenge\?/, { timeout: 20_000 });
+    await page
+      .getByTestId("mfa-challenge-form")
+      .getByRole("textbox")
+      .fill(totpCode(secret, Date.now() + STEP_MS));
+    await page.waitForURL((url) => `${url.pathname}${url.search}` === deep, {
+      timeout: 20_000,
+    });
+  });
 });

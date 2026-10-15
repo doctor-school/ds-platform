@@ -1,5 +1,7 @@
 /**
- * #2782 — the page a signed-out admin is returned to once the sign-in completes.
+ * #2782 — the page a signed-out admin is returned to once the sign-in completes:
+ * 011 requires the login screen to «return the operator to their intended
+ * route» (`specs/features/011-*` requirements, SameSite cost).
  *
  * The target rides as a URL parameter across `/login` → `/mfa/challenge` or
  * `/mfa/enroll` → landing. It is named `to` because that is the parameter
@@ -46,6 +48,17 @@ function hasUnsafeCharacter(value: string): boolean {
   return false;
 }
 
+/** `path` after one decode pass is free of unsafe characters and not `//`-led. */
+function decodedPathIsSafe(path: string): boolean {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(path);
+  } catch {
+    return false;
+  }
+  return !hasUnsafeCharacter(decoded) && !decoded.startsWith("//");
+}
+
 /** The validated admin target for `raw`, or `null` when it may not be carried. */
 export function resolveAdminReturnTarget(
   raw: string | null | undefined,
@@ -59,16 +72,7 @@ export function resolveAdminReturnTarget(
   // …and after one decode pass of the path, where `%2F%2F`, `%09`, `%5C` can
   // re-form the same shape in a consumer that decodes before routing. The query
   // and fragment are data (`?x=//a` is fine) and are not decoded here.
-  const rawPath = raw.split(/[?#]/, 1)[0] ?? "";
-  let decodedPath: string;
-  try {
-    decodedPath = decodeURIComponent(rawPath);
-  } catch {
-    return null;
-  }
-  if (hasUnsafeCharacter(decodedPath) || decodedPath.startsWith("//")) {
-    return null;
-  }
+  if (!decodedPathIsSafe(raw.split(/[?#]/, 1)[0] ?? "")) return null;
 
   let url: URL;
   try {
@@ -80,6 +84,11 @@ export function resolveAdminReturnTarget(
 
   const { pathname } = url;
   if (pathname === "/" || pathname.startsWith("//")) return null;
+  // Dot-segment normalisation can itself produce such a shape
+  // (`/%2e%2e/%2fevil` → `/%2fevil`, which decodes to `//evil`), so the
+  // normalised path passes the same check: the output is then a fixed point —
+  // re-validating a returned target returns it unchanged.
+  if (!decodedPathIsSafe(pathname)) return null;
   const refused = REFUSED_ROOTS.some(
     (root) => pathname === root || pathname.startsWith(`${root}/`),
   );

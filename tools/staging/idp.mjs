@@ -552,22 +552,31 @@ async function resolveSharedApp(client, { projectName, appName }) {
 
 /**
  * What the app's read-back lacks (`missing`) or carries beyond (`extra`) the desired
- * set, over the redirect and post-logout lists together. Empty both ⇒ converged.
+ * set, per list — a URI held in the wrong list is not converged. Every list empty ⇒
+ * converged.
  */
 export function diffRedirectSet({ current, desired }) {
-  const have = new Set([
-    ...(current?.redirectUris ?? []),
-    ...(current?.postLogoutRedirectUris ?? []),
-  ]);
-  const want = new Set([
-    ...(desired?.redirectUris ?? []),
-    ...(desired?.postLogoutUris ?? desired?.postLogoutRedirectUris ?? []),
-  ]);
+  const diff = (have, want) => {
+    const h = new Set(have ?? []);
+    const w = new Set(want ?? []);
+    return {
+      missing: [...w].filter((uri) => !h.has(uri)).sort(),
+      extra: [...h].filter((uri) => !w.has(uri)).sort(),
+    };
+  };
   return {
-    missing: [...want].filter((uri) => !have.has(uri)).sort(),
-    extra: [...have].filter((uri) => !want.has(uri)).sort(),
+    redirect: diff(current?.redirectUris, desired?.redirectUris),
+    postLogout: diff(
+      current?.postLogoutRedirectUris,
+      desired?.postLogoutUris ?? desired?.postLogoutRedirectUris,
+    ),
   };
 }
+
+const isConverged = ({ redirect, postLogout }) =>
+  [redirect.missing, redirect.extra, postLogout.missing, postLogout.extra].every(
+    (list) => list.length === 0,
+  );
 
 /** Converge attempts before a read-back mismatch is a hard failure (#2694). */
 export const REDIRECT_CONVERGE_ATTEMPTS = 3;
@@ -605,16 +614,27 @@ export async function convergeRedirectUris({
   const appPath = `/management/v1/projects/${projectId}/apps/${appId}`;
   let want = await readDesired();
   let lastPut;
-  let diff = { missing: [], extra: [] };
+  let diff;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const current = (await client.request("GET", appPath))?.app?.oidcConfig ?? {};
     const plan = planRedirectUriConverge({ current, desired: want });
     if (plan.action === "put") {
-      await client.request("PUT", `${appPath}/oidc_config`, plan.body);
+      // A re-converge's probe can see a read-back that lagged the previous PUT, so it
+      // PUTs the config the app already holds and Zitadel answers 400 «No changes».
+      // That is judged by the read-back below, never surfaced as a bare 400 (the
+      // first attempt's probe is fresh, so a 400 there stays a hard failure).
+      const answer = await client.request(
+        "PUT",
+        `${appPath}/oidc_config`,
+        plan.body,
+        attempt > 1 ? { allowStatus: [400] } : {},
+      );
       lastPut = plan.body;
       log(
-        `  ↳ idp redirect set converged: ${plan.body.redirectUris.length} redirect, ` +
-          `${plan.body.postLogoutRedirectUris.length} post-logout URI(s)`,
+        answer === null
+          ? "  ↳ idp redirect set: PUT answered «no changes» — judging by the read-back"
+          : `  ↳ idp redirect set converged: ${plan.body.redirectUris.length} redirect, ` +
+              `${plan.body.postLogoutRedirectUris.length} post-logout URI(s)`,
       );
     } else {
       log(`  ↳ idp redirect set already holds ${current.redirectUris?.length ?? 0} URI(s)`);
@@ -624,7 +644,7 @@ export async function convergeRedirectUris({
     // judged against the set as it is now, and becomes the next attempt's target.
     want = await readDesired();
     diff = diffRedirectSet({ current: readBack, desired: want });
-    if (diff.missing.length === 0 && diff.extra.length === 0) {
+    if (isConverged(diff)) {
       return lastPut
         ? { action: "put", projectId, appId, body: lastPut, attempts: attempt }
         : { action: "skip", projectId, appId, attempts: attempt };
@@ -642,10 +662,16 @@ export async function convergeRedirectUris({
   );
 }
 
-function describeDiff({ missing, extra }) {
+function describeDiff({ redirect, postLogout }) {
   const parts = [];
-  if (missing.length) parts.push(`missing: ${missing.join(", ")}`);
-  if (extra.length) parts.push(`extra: ${extra.join(", ")}`);
+  for (const [name, list] of [
+    ["redirect missing", redirect.missing],
+    ["redirect extra", redirect.extra],
+    ["post-logout missing", postLogout.missing],
+    ["post-logout extra", postLogout.extra],
+  ]) {
+    if (list.length) parts.push(`${name}: ${list.join(", ")}`);
+  }
   return parts.join("; ");
 }
 

@@ -324,6 +324,65 @@ test("a removed slot's callback still present after a down converge fails loudly
   );
 });
 
+test("a re-converge PUT answered 400 «No changes» (read-back lagged) is judged by the next read-back", async () => {
+  const calls = [];
+  const client = createIdpClient({
+    fetch: stubFetch(
+      {
+        ...APP_ROUTES,
+        // probe → read-back lags the PUT → probe still stale → read-back caught up
+        [APP_PATH]: [
+          appWith(["main"]),
+          appWith(["main"]),
+          appWith(["main"]),
+          appWith(["main", "pr-b"]),
+        ],
+        // Zitadel refuses an identical config with 400 «No changes».
+        [PUT_PATH]: [{ body: {} }, { status: 400 }],
+      },
+      calls,
+    ),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  const result = await convergeRedirectUris({
+    client,
+    desired: setOf(["main", "pr-b"]),
+    readDesired: async () => setOf(["main", "pr-b"]),
+    sleep: async () => {},
+  });
+  assert.equal(calls.filter((call) => call.key === PUT_PATH).length, 2);
+  assert.equal(result.attempts, 2);
+});
+
+test("a URI held in the wrong list does not pass the read-back", async () => {
+  const client = createIdpClient({
+    fetch: stubFetch({
+      ...APP_ROUTES,
+      [APP_PATH]: {
+        body: {
+          app: { oidcConfig: { redirectUris: [], postLogoutRedirectUris: [cb("main")] } },
+        },
+      },
+      [PUT_PATH]: { body: {} },
+    }),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  await assert.rejects(
+    convergeRedirectUris({
+      client,
+      desired: setOf(["main"]),
+      readDesired: async () => setOf(["main"]),
+      sleep: async () => {},
+    }),
+    (err) =>
+      err instanceof IdpError &&
+      err.message.includes(`redirect missing: ${cb("main")}`) &&
+      err.message.includes(`post-logout extra: ${cb("main")}`),
+  );
+});
+
 test("an app the shared project does not carry is a hard failure, never a create", async () => {
   const client = createIdpClient({
     fetch: stubFetch({ "POST /management/v1/projects/_search": { body: { result: [] } } }),

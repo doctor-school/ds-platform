@@ -1173,8 +1173,8 @@ export function desiredRedirectSetAt(step, liveSlotNames, env = process.env) {
 }
 
 /**
- * `desired` is the plan-time rendering (what `status` and the plan tests read); the
- * converge itself recomputes the set from the live slots via `desiredRedirectSetAt`.
+ * `desired` is the plan-time rendering, read only by the plan tests; the converge
+ * itself recomputes the set from the live slots via `desiredRedirectSetAt`.
  */
 function idpRedirectStep(slotNames, baseDomain, { slot, membership }) {
   return {
@@ -2598,7 +2598,6 @@ function realEffects(boxEnv) {
           client,
           projectName,
           appName,
-          desired: resolveDesiredRedirectSet(step, boxEnv),
           // Re-read the live slots AT converge time (and again for the read-back),
           // never the start-time snapshot `main()` took (#2694).
           readDesired: async () =>

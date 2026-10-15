@@ -6,7 +6,7 @@ import { dirname, isAbsolute, join, relative } from "node:path";
 import type { OwnedAuthContour } from "./owned-auth-observation.js";
 
 const OWNED =
-  /^wrong-verify-2928-(verified|unverified|unknown)-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}@example\.test$/;
+  /^wrong-2928-(verified|unverified|unknown)-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}@example\.test$/;
 const FAILURE = "Owned wrong-verification observation failed";
 export interface WrongVerificationSnapshot {
   users: number;

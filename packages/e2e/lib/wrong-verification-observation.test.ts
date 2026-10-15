@@ -25,7 +25,7 @@ const target: OwnedAuthContour = {
   expectedDatabasePort: 5432,
 };
 const email =
-  "wrong-verify-2928-unverified-12345678-1234-4234-8234-123456789abc@example.test";
+  "wrong-2928-unverified-12345678-1234-4234-8234-123456789abc@example.test";
 const row = {
   users: 1,
   verified: false,

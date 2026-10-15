@@ -104,7 +104,7 @@ Given(
         kind,
         context,
         page: owned,
-        email: `wrong-verify-2928-${kind}-${randomUUID()}@example.test`,
+        email: `wrong-2928-${kind}-${randomUUID()}@example.test`,
         password: `Wrong-${randomUUID()}-aA1!`,
       };
       value.probes.push(probe);

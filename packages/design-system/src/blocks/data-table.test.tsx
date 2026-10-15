@@ -197,6 +197,36 @@ describe("<DataTable>", () => {
     expect(truncated?.className).toContain("truncate");
   });
 
+  it("omits a field from the mobile record card when its full value is empty, keeping the desktop cell", () => {
+    const rows: Row[] = [
+      { id: "empty", title: "Без родителя", parent: "", count: 1 },
+      { id: "filled", title: "С родителем", parent: "Терапия", count: 2 },
+    ];
+    const { container } = renderTable({ rows });
+    const cards = Array.from(container.querySelectorAll("dl"));
+    expect(cards).toHaveLength(2);
+    const terms = (card: Element) =>
+      Array.from(card.querySelectorAll("dt")).map((dt) => dt.textContent);
+    expect(terms(first(cards))).toEqual(["Материалов"]);
+    expect(terms(cards[1] as Element)).toEqual([
+      "Родительское направление",
+      "Материалов",
+    ]);
+    // Desktop keeps the column shape: every row still has its (empty) cell.
+    const bodyRows = container.querySelectorAll("tbody tr");
+    expect(bodyRows).toHaveLength(2);
+    expect(first(Array.from(bodyRows)).querySelectorAll("td")).toHaveLength(3);
+  });
+
+  it("keeps a card field whose column defines no full value, whatever it renders", () => {
+    const rows: Row[] = [{ id: "zero", title: "Ноль", parent: "Терапия", count: 0 }];
+    const { container } = renderTable({ rows });
+    const terms = Array.from(container.querySelectorAll("dl dt")).map(
+      (dt) => dt.textContent,
+    );
+    expect(terms).toContain("Материалов");
+  });
+
   it("wraps the desktop record title in full without a line clamp", () => {
     const { container } = renderTable({
       rowHref: (row) => `/directions/${row.id}`,

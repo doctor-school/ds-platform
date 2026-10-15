@@ -133,7 +133,7 @@ const PAGE: EventsFeedPage = {
   horizon: {
     from: "2026-10-08",
     to: "2026-10-22",
-    nextTo: "2026-11-05",
+    nextCount: 20,
     nextFrom: null,
   },
   remaining: 57,
@@ -389,7 +389,7 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
     expect(more).toHaveTextContent("Показать ещё 6 (осталось 57)");
     expect(more).toHaveAttribute(
       "href",
-      "/events?from=2026-10-08&to=2026-11-05",
+      "/events?from=2026-10-08&count=20",
     );
   });
 
@@ -608,7 +608,7 @@ describe("the doctor's default «Моя и смежные» is empty (019 EARS-9
       to: "2026-10-22",
       days: [],
       totalCount: 0,
-      nextTo: null,
+      nextCount: null,
       nextFrom: null,
       remaining: 0,
       nextBatch: 0,

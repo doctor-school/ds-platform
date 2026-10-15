@@ -208,6 +208,8 @@ export function createEventListingQueryCodec<S extends z.ZodType>(input: {
         case "scalar":
           if (typeof value === "string" && value.length > 0) {
             entries.push([field.key, value]);
+          } else if (typeof value === "number" && Number.isFinite(value)) {
+            entries.push([field.key, String(value)]);
           }
           break;
         case "boolean":

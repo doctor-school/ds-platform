@@ -69,29 +69,43 @@ export function resolveEventHorizon(
 export const EVENT_HORIZON_STEP = DOCTOR_EVENTS_FEED_STEP_EVENTS;
 
 /**
+ * «Будущие» never leaves a one-event tail (019 LD-2): when this many or fewer
+ * events remain, the next step — or the default screen — takes all of them.
+ */
+export const EVENT_HORIZON_LAST_STEP = EVENT_HORIZON_STEP + 1;
+
+/**
+ * How many events the next «Будущие» step adds out of `remaining`: exactly
+ * {@link EVENT_HORIZON_STEP}, or all of them when they fit
+ * {@link EVENT_HORIZON_LAST_STEP}.
+ */
+export function eventHorizonStepSize(remaining: number): number {
+  return remaining <= EVENT_HORIZON_LAST_STEP ? remaining : EVENT_HORIZON_STEP;
+}
+
+/**
  * The first МСК day past the served years — «Будущие»'s reach has no far bound
  * short of it, as «Прошедшие»'s has no older one (`fromInstant: null`).
  */
 const EVENT_HORIZON_SERVED_END = `${DOCTOR_EVENTS_QUERY_YEAR_MAX + 1}-01-01`;
 
 /**
- * The moving-edge bound that takes in the next {@link EVENT_HORIZON_STEP}
+ * The moving-edge bound, in whole МСК days, that takes in the nearest `take`
  * events of `starts` (all beyond the current extent, in the tense's
- * direction), in whole МСК days, so a day the step's last event shares with
- * further ones is shown whole: «Прошедшие» the `from` that is the day of the
- * step's oldest event; «Будущие» the exclusive `to` that is the day after the
- * step's latest event. `null` when `starts` is empty.
+ * direction): «Прошедшие» the `from` that is the day of the step's oldest
+ * event; «Будущие» the exclusive `to` that is the day after the step's latest
+ * event. `null` when `starts` is empty.
  */
 function stepBound(
   starts: readonly Date[],
   tense: "upcoming" | "past",
+  take: number,
 ): string | null {
-  if (starts.length === 0) return null;
+  if (starts.length === 0 || take <= 0) return null;
   const nearestFirst = starts
     .map((start) => start.getTime())
     .sort((a, b) => (tense === "past" ? b - a : a - b));
-  const last =
-    nearestFirst[Math.min(EVENT_HORIZON_STEP, nearestFirst.length) - 1]!;
+  const last = nearestFirst[Math.min(take, nearestFirst.length) - 1]!;
   const day = doctorEventsFeedDayOf(new Date(last));
   return tense === "past" ? day : addDoctorEventsFeedDays(day, 1);
 }
@@ -118,40 +132,88 @@ function servedEndInstant(): Date {
 }
 
 /**
+ * The extent a storefront read answers: a {@link EventHorizon} plus, on
+ * «Будущие», the events of its last day that the count cursor holds back for
+ * the next step.
+ */
+export interface ResolvedEventHorizon extends EventHorizon {
+  /**
+   * Matching events inside `[from, to)` past the extent's count — the latest
+   * ones of its last day, which the next «Показать ещё» step shows first
+   * (019 LD-2: a step adds exactly {@link EVENT_HORIZON_STEP}, so a day can
+   * continue on the next step). `0` = the extent is whole days.
+   */
+  heldBack: number;
+}
+
+/**
  * The horizon a storefront read answers — {@link resolveEventHorizon}, except
- * that a read leaving its tense's moving edge unstated («Будущие» `to`,
- * «Прошедшие» `from`) opens on the {@link EVENT_HORIZON_STEP} events nearest
- * the fixed edge, however far away (019 LD-2). `listStartsIn` is the read's
- * own predicate, every facet applied — the same callback
- * {@link resolveEventHorizonBeyond} asks — so the default screen counts exactly
- * the events the read then shows. A stated edge is a real extent and is
- * answered as written.
+ * that a read leaving its tense's moving edge unstated opens on the events
+ * nearest the fixed edge, however far away (019 LD-2):
+ *
+ * - «Будущие» reads by COUNT: the `count` nearest upcoming events (the
+ *   «Показать ещё» cursor), or, with no `count`, the default screen —
+ *   {@link EVENT_HORIZON_STEP} events, all of them when they fit
+ *   {@link EVENT_HORIZON_LAST_STEP}. The day of the last counted event may
+ *   hold more: `to` takes that day in and {@link ResolvedEventHorizon.heldBack}
+ *   names the events the read then leaves out ({@link holdBackEventHorizonRows}).
+ * - «Прошедшие» opens on the {@link EVENT_HORIZON_STEP} most recent events in
+ *   whole days.
+ *
+ * `listStartsIn` is the read's own predicate, every facet applied — the same
+ * callback {@link resolveEventHorizonBeyond} asks — so the screen counts
+ * exactly the events the read then shows. A stated edge is a real extent and
+ * is answered as written, in whole days.
  */
 export async function resolveEventHorizonFromData(
   query: {
     tense: "upcoming" | "past";
     from?: string | undefined;
     to?: string | undefined;
+    count?: number | undefined;
   },
   today: string,
   listStartsIn: (range: EventHorizonReach) => Promise<readonly Date[]>,
-): Promise<EventHorizon> {
+): Promise<ResolvedEventHorizon> {
   const stated = resolveEventHorizon(query, today);
   const past = query.tense === "past";
-  if ((past ? query.from : query.to) !== undefined) return stated;
+  if ((past ? query.from : query.to) !== undefined) {
+    return { ...stated, heldBack: 0 };
+  }
   // The whole tense from the fixed edge: an empty extent at that edge.
   const fixed: EventHorizon = past
     ? { from: stated.to, to: stated.to }
     : { from: stated.from, to: stated.from };
-  const bound = stepBound(
-    await listStartsIn(reachBeyond(fixed, query.tense)),
-    query.tense,
-  );
-  if (bound === null) return stated;
-  return resolveEventHorizon(
+  const starts = await listStartsIn(reachBeyond(fixed, query.tense));
+  const take = past
+    ? EVENT_HORIZON_STEP
+    : query.count !== undefined
+      ? Math.min(query.count, starts.length)
+      : eventHorizonStepSize(starts.length);
+  const bound = stepBound(starts, query.tense, take);
+  if (bound === null) return { ...stated, heldBack: 0 };
+  const horizon = resolveEventHorizon(
     past ? { ...query, from: bound } : { ...query, to: bound },
     today,
   );
+  if (past) return { ...horizon, heldBack: 0 };
+  const end = eventHorizonInstants(horizon).toInstant.getTime();
+  const inExtent = starts.filter((start) => start.getTime() < end).length;
+  return { ...horizon, heldBack: inExtent - take };
+}
+
+/**
+ * The rows a «Будущие» count-cursor read shows: its matching rows in display
+ * order (soonest first) without the {@link ResolvedEventHorizon.heldBack}
+ * latest ones, which the next step adds.
+ */
+export function holdBackEventHorizonRows<T>(
+  rows: readonly T[],
+  heldBack: number,
+): T[] {
+  return heldBack > 0
+    ? rows.slice(0, Math.max(0, rows.length - heldBack))
+    : [...rows];
 }
 
 /**
@@ -197,8 +259,13 @@ export function boundEventHorizonRows<T extends { startsAt: Date }>(
   tense: "upcoming" | "past",
   rows: readonly T[],
 ): { horizon: EventHorizon; rows: T[] } {
+  // The extent leaves as its two days only: a {@link ResolvedEventHorizon}'s
+  // `heldBack` is the read's own bookkeeping, never part of the envelope.
   if (rows.length <= EVENT_HORIZON_ROW_CAP) {
-    return { horizon, rows: [...rows].reverse() };
+    return {
+      horizon: { from: horizon.from, to: horizon.to },
+      rows: [...rows].reverse(),
+    };
   }
   const cutDay = doctorEventsFeedDayOf(rows[EVENT_HORIZON_ROW_CAP]!.startsAt);
   const capped = rows.slice(0, EVENT_HORIZON_ROW_CAP);
@@ -307,22 +374,27 @@ export interface EventHorizonReach {
 }
 
 /**
- * What lies beyond a rendered extent: the next bound «Показать ещё» writes into
- * the URL and the remainder M of «Показать ещё N (осталось M)» (wave-2 entry
- * gate rows 30, 32; 019 LD-1, LD-2, LD-13). ONE answer for both storefront
- * reads, carried under the same names on both.
+ * What lies beyond a rendered extent: the cursor «Показать ещё» writes into the
+ * URL and the remainder M of «Показать ещё N (осталось M)» (wave-2 entry gate
+ * rows 30, 32; 019 LD-1, LD-2, LD-13). ONE answer for both storefront reads,
+ * carried under the same names on both.
  */
 export interface EventHorizonBeyond {
-  /** «Будущие»: the next (later) `to`; `null` on «Прошедшие» and when nothing lies beyond. */
-  nextTo: string | null;
+  /**
+   * «Будущие»: the `count` «Показать ещё» writes into the URL — the events
+   * shown plus the next step's; `null` on «Прошедшие» and when nothing lies
+   * beyond.
+   */
+  nextCount: number | null;
   /** «Прошедшие»: the next (older) `from`; `null` on «Будущие» and when nothing lies beyond. */
   nextFrom: string | null;
-  /** Matching events still reachable beyond the extent. `0` ⇔ both bounds `null`. */
+  /** Matching events still reachable beyond the extent. `0` ⇔ both cursors `null`. */
   remaining: number;
   /**
-   * Matching events the NEXT step adds — inside `[nextFrom, from)` /
-   * `[to, nextTo)` — the N of «Показать ещё N (осталось M)»; `0` ⇔ both
-   * bounds `null`.
+   * Matching events the NEXT step adds — the N of «Показать ещё N (осталось
+   * M)»: on «Будущие» exactly {@link EVENT_HORIZON_STEP}, or all the remaining
+   * ones when they fit {@link EVENT_HORIZON_LAST_STEP}; on «Прошедшие» those
+   * inside `[nextFrom, from)`. `0` ⇔ both cursors `null`.
    */
   nextBatch: number;
 }
@@ -333,69 +405,77 @@ export interface EventHorizonBeyond {
  * ANYTHING lies past it.
  *
  * The question is asked of everything past the moving edge — from `to` on for
- * «Будущие», everything before `from` for «Прошедшие» — under the SAME
- * predicate the read itself selects with: the caller's `listStartsIn` returns
- * the start instant of every eligible event in that range, after every facet
- * the read applies, so the remainder and the bound can never count an event
- * the widened read would then not show. Both tenses step by COUNT (019 LD-2):
- * the next bound takes in the next {@link EVENT_HORIZON_STEP} events in the
- * tense's direction, in whole days.
+ * «Будущие» (plus the events the extent holds back, `shown.heldBack`),
+ * everything before `from` for «Прошедшие» — under the SAME predicate the read
+ * itself selects with: the caller's `listStartsIn` returns the start instant
+ * of every eligible event in that range, after every facet the read applies,
+ * so the remainder and the cursor can never count an event the next read
+ * would then not show. Both tenses step by COUNT (019 LD-2): «Будущие» by
+ * exactly {@link eventHorizonStepSize} events, the next `count` being the
+ * `shown.count` events on screen plus that step; «Прошедшие» by the next
+ * {@link EVENT_HORIZON_STEP} older events in whole days.
  */
 export async function resolveEventHorizonBeyond(
   horizon: EventHorizon,
   tense: "upcoming" | "past",
   listStartsIn: (range: EventHorizonReach) => Promise<readonly Date[]>,
+  shown: { count: number; heldBack: number },
 ): Promise<EventHorizonBeyond> {
   const starts = await listStartsIn(reachBeyond(horizon, tense));
-  const bound = stepBound(starts, tense);
+  if (tense === "upcoming") {
+    const remaining = starts.length + shown.heldBack;
+    if (remaining === 0) {
+      return { nextCount: null, nextFrom: null, remaining: 0, nextBatch: 0 };
+    }
+    const nextBatch = eventHorizonStepSize(remaining);
+    return {
+      nextCount: shown.count + nextBatch,
+      nextFrom: null,
+      remaining,
+      nextBatch,
+    };
+  }
+  const bound = stepBound(starts, tense, EVENT_HORIZON_STEP);
   if (bound === null) {
-    return { nextTo: null, nextFrom: null, remaining: 0, nextBatch: 0 };
+    return { nextCount: null, nextFrom: null, remaining: 0, nextBatch: 0 };
   }
   // The same half-open instants the widened read selects with.
-  const widened = eventHorizonInstants(
-    tense === "past"
-      ? { from: bound, to: horizon.to }
-      : { from: horizon.from, to: bound },
-  );
-  const nextBatch = starts.filter((start) =>
-    tense === "past"
-      ? start.getTime() >= widened.fromInstant.getTime()
-      : start.getTime() < widened.toInstant.getTime(),
+  const widened = eventHorizonInstants({ from: bound, to: horizon.to });
+  const nextBatch = starts.filter(
+    (start) => start.getTime() >= widened.fromInstant.getTime(),
   ).length;
   return {
-    nextTo: tense === "past" ? null : bound,
-    nextFrom: tense === "past" ? bound : null,
+    nextCount: null,
+    nextFrom: bound,
     remaining: starts.length,
     nextBatch,
   };
 }
 
 /**
- * #1973 — the DEFAULT extent opens on the first match. When the URL leaves the
- * tense's moving edge unstated («Будущие» `to`, «Прошедшие» `from`) and the
- * default window holds no matching event while matches lie beyond, the read
- * is answered over the extent «Показать ещё» would name next — `beyond`'s
- * bound, which by construction covers the nearest match — instead of an empty
- * window under a non-zero count. ONE rule for both storefront reads; a stated
- * edge is a real extent and is answered as written. Returns the bound to read
- * with, or `null` to keep the window.
+ * #1973 — the DEFAULT «Прошедшие» extent opens on the first match. When the
+ * URL leaves `from` unstated and the default window holds no matching event
+ * while matches lie beyond, the read is answered over the extent «Показать
+ * ещё» would name next — `beyond`'s `nextFrom`, which by construction covers
+ * the nearest match — instead of an empty window under a non-zero count.
+ * «Будущие» never needs it: its default extent is counted from the data
+ * ({@link resolveEventHorizonFromData}), so it holds the first matches. ONE
+ * rule for both storefront reads; a stated edge is a real extent and is
+ * answered as written. Returns the bound to read with, or `null` to keep the
+ * window.
  */
 export function eventHorizonReachingFirstMatch(
   query: {
     tense: "upcoming" | "past";
     from?: string | undefined;
-    to?: string | undefined;
   },
   matched: number,
   beyond: EventHorizonBeyond,
-): { from: string } | { to: string } | null {
+): { from: string } | null {
   if (matched > 0 || beyond.remaining === 0) return null;
-  if (query.tense === "past") {
-    return query.from === undefined && beyond.nextFrom !== null
-      ? { from: beyond.nextFrom }
-      : null;
-  }
-  return query.to === undefined && beyond.nextTo !== null
-    ? { to: beyond.nextTo }
+  return query.tense === "past" &&
+    query.from === undefined &&
+    beyond.nextFrom !== null
+    ? { from: beyond.nextFrom }
     : null;
 }

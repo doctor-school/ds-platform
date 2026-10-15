@@ -53,6 +53,7 @@ import {
   type EventHorizonReach,
   eventHorizonInstants,
   eventHorizonReachingFirstMatch,
+  holdBackEventHorizonRows,
   resolveEventHorizonBeyond,
   resolveEventHorizonFromData,
 } from "./event-horizon.js";
@@ -1257,6 +1258,7 @@ export class EventsService {
     const horizonRead =
       query.from !== undefined ||
       query.to !== undefined ||
+      query.count !== undefined ||
       (query.cursor === undefined && query.limit === undefined);
     if (horizonRead) {
       // Wave-2 gate §4.3 D10 — one today per read, echoed on the horizon.
@@ -1271,7 +1273,12 @@ export class EventsService {
           facets,
         );
       const requested = await resolveEventHorizonFromData(
-        { tense: query.timeframe, from: query.from, to: query.to },
+        {
+          tense: query.timeframe,
+          from: query.from,
+          to: query.to,
+          count: query.count,
+        },
         today,
         listStartsIn,
       );
@@ -1301,18 +1308,23 @@ export class EventsService {
         query.timeframe,
         read.map((row) => ({ row, startsAt: row.event.startsAt })),
       );
-      const rows = bounded.rows.map(({ row }) => row);
-      // «Будущие» widens `to`, «Прошедшие» widens `from` backward (rows 30,
-      // 32); the remainder rides along — the one resolution both hosts share.
+      // «Будущие» counts exactly (019 LD-2): the latest events of the
+      // extent's last day past its `count` wait for the next step.
+      const shown = holdBackEventHorizonRows(bounded.rows, requested.heldBack);
+      const rows = shown.map(({ row }) => row);
+      // «Будущие» grows its `count`, «Прошедшие» widens `from` backward (rows
+      // 30, 32); the remainder rides along — the one resolution both hosts
+      // share.
       const beyond = await resolveEventHorizonBeyond(
         bounded.horizon,
         query.timeframe,
         listStartsIn,
+        { count: rows.length, heldBack: requested.heldBack },
       );
       // #1973 — an empty default window under matches beyond opens on the
       // first match: the same read over the bound «Показать ещё» would name.
       const reach = eventHorizonReachingFirstMatch(
-        { tense: query.timeframe, from: query.from, to: query.to },
+        { tense: query.timeframe, from: query.from },
         rows.length,
         beyond,
       );
@@ -1334,7 +1346,7 @@ export class EventsService {
           ...clampRequestedEdge(
             bounded.horizon,
             query.timeframe,
-            bounded.rows,
+            shown,
             { from: query.from, to: query.to },
             beyond,
           ),

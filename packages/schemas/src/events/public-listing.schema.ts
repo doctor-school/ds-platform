@@ -2,6 +2,7 @@ import { z } from "zod";
 import { RecordingProjectionSchema } from "../recordings/recordings.schema.js";
 import { SlugSchema } from "../taxonomy/taxonomy.schema.js";
 import {
+  DoctorEventsFeedCountSchema,
   DoctorEventsFeedDayShapeSchema,
   DoctorEventsFeedDaySchema,
 } from "./doctor-events-feed.schema.js";
@@ -98,13 +99,17 @@ export const PublicEventListingQuerySchema = z
     cursor: z.string().min(1).max(512).optional(),
     from: DoctorEventsFeedDaySchema.optional(),
     to: DoctorEventsFeedDaySchema.optional(),
+    /** «Будущие»'s count cursor — the doctor feed's `count` (019 LD-2). */
+    count: DoctorEventsFeedCountSchema.optional(),
     ...AcademyEventFacetsShape,
   })
   .refine(
     (query) =>
       query.cursor === undefined ||
-      (query.from === undefined && query.to === undefined),
-    { message: "a cursor and a horizon (from, to) never combine" },
+      (query.from === undefined &&
+        query.to === undefined &&
+        query.count === undefined),
+    { message: "a cursor and a horizon (from, to, count) never combine" },
   );
 export type PublicEventListingQuery = z.infer<
   typeof PublicEventListingQuerySchema
@@ -147,13 +152,13 @@ export const PublicEventListingPageSchema = z.object({
   }),
   /**
    * Present exactly on a horizon read (D2): the applied window, echoed so the
-   * client never re-derives it; the next bound «Показать ещё» writes into the
-   * URL — `nextTo` on «Будущие», `nextFrom` (an older `from`) on
+   * client never re-derives it; the cursor «Показать ещё» writes into the
+   * URL — `nextCount` on «Будущие», `nextFrom` (an older `from`) on
    * «Прошедшие», each `null` when nothing lies beyond; `remaining`, the
    * matching events beyond the extent; and `nextBatch`, the ones the next step
    * adds; and `today`, the api's day the window resolved against (D10). Same
    * names and semantics as the doctor feed's `today` / `from` / `to` /
-   * `nextTo` / `nextFrom` / `remaining` / `nextBatch`.
+   * `nextCount` / `nextFrom` / `remaining` / `nextBatch`.
    */
   horizon: z
     .object({
@@ -161,7 +166,7 @@ export const PublicEventListingPageSchema = z.object({
       today: DoctorEventsFeedDayShapeSchema,
       from: DoctorEventsFeedDayShapeSchema,
       to: DoctorEventsFeedDayShapeSchema,
-      nextTo: DoctorEventsFeedDayShapeSchema.nullable(),
+      nextCount: z.number().int().positive().nullable(),
       nextFrom: DoctorEventsFeedDayShapeSchema.nullable(),
       remaining: z.number().int().nonnegative(),
       nextBatch: z.number().int().nonnegative(),

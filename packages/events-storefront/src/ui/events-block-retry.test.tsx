@@ -110,7 +110,7 @@ const PAGE: EventsFeedPage = {
   horizon: {
     from: "2026-10-08",
     to: "2026-10-22",
-    nextTo: "2026-11-05",
+    nextCount: 20,
     nextFrom: null,
   },
   remaining: 0,

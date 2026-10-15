@@ -38,7 +38,7 @@ const CONFIG = {
       facetOptions: {},
       matching: 0,
       today: "2026-10-08",
-      horizon: { from: "", to: "", nextTo: null, nextFrom: null },
+      horizon: { from: "", to: "", nextCount: null, nextFrom: null },
       remaining: 0,
       nextBatch: 0,
     }),

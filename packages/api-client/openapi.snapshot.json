@@ -2733,18 +2733,19 @@
             "minimum": 0,
             "type": "integer"
           },
-          "nextFrom": {
+          "nextCount": {
             "anyOf": [
               {
-                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-                "type": "string"
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "type": "integer"
               },
               {
                 "type": "null"
               }
             ]
           },
-          "nextTo": {
+          "nextFrom": {
             "anyOf": [
               {
                 "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
@@ -2827,7 +2828,7 @@
           "to",
           "days",
           "totalCount",
-          "nextTo",
+          "nextCount",
           "nextFrom",
           "remaining",
           "nextBatch",
@@ -4490,18 +4491,19 @@
                 "minimum": 0,
                 "type": "integer"
               },
-              "nextFrom": {
+              "nextCount": {
                 "anyOf": [
                   {
-                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-                    "type": "string"
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
                   },
                   {
                     "type": "null"
                   }
                 ]
               },
-              "nextTo": {
+              "nextFrom": {
                 "anyOf": [
                   {
                     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
@@ -4530,7 +4532,7 @@
               "today",
               "from",
               "to",
-              "nextTo",
+              "nextCount",
               "nextFrom",
               "remaining",
               "nextBatch"
@@ -8421,6 +8423,14 @@
             "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "count",
+            "required": false,
+            "schema": {
+              "type": "number"
             }
           },
           {

@@ -116,7 +116,13 @@ export function withAppliedFacets(
   filterSet: EventsFilterHost,
   { defaultScopeEmpty = false }: SpecialtyDefault = {},
 ): RawQueryRecord {
-  const next: RawQueryRecord = { ...raw, day: undefined, from: undefined, to: undefined };
+  const next: RawQueryRecord = {
+    ...raw,
+    day: undefined,
+    from: undefined,
+    to: undefined,
+    count: undefined,
+  };
   for (const key of FACET_KEYS[filterSet]) next[key] = undefined;
   const set = (key: string, values: readonly string[]) => {
     if (values.length > 0) next[key] = [...values];
@@ -252,7 +258,13 @@ export function resetFacetsHref(
   raw: RawQueryRecord,
   filterSet: EventsFilterHost,
 ): string {
-  const next: RawQueryRecord = { ...raw, day: undefined, from: undefined, to: undefined };
+  const next: RawQueryRecord = {
+    ...raw,
+    day: undefined,
+    from: undefined,
+    to: undefined,
+    count: undefined,
+  };
   for (const key of FACET_KEYS[filterSet]) next[key] = undefined;
   return pageHref(listing, next);
 }

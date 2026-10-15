@@ -13,7 +13,8 @@ import { expect, test } from "@playwright/test";
  */
 const API = `http://127.0.0.1:${process.env.DOCTOR_EVENTS_FAKE_API_PORT ?? 3214}`;
 const DEFAULT_FROM = "2026-09-01";
-const WIDENED_TO = "2026-09-21";
+/** The 10 of the default screen plus the step of the four 09-20 events. */
+const WIDENED_COUNT = 14;
 const SESSION = { cookie: "__Host-ds_session=e2e-doctor" };
 
 test.afterEach(async ({ request }) => {
@@ -34,12 +35,12 @@ test("gate row 32: «Показать ещё N (осталось M)» states the
   await more.click();
 
   await expect(page).toHaveURL(
-    new RegExp(`/events\\?from=${DEFAULT_FROM}&to=${WIDENED_TO}$`),
+    new RegExp(`/events\\?from=${DEFAULT_FROM}&count=${WIDENED_COUNT}$`),
   );
   await expect(page.locator('section[id^="day-"]')).toHaveCount(4);
   await expect(page.locator('section[id="day-2026-09-20"]')).toBeVisible();
 
-  // Nothing lies beyond any more (`nextTo: null`), so the control is gone
+  // Nothing lies beyond any more (`nextCount: null`), so the control is gone
   // rather than disabled — there is no paging state left to hold.
   await expect(page.getByTestId("events-feed-show-more")).toHaveCount(0);
 });

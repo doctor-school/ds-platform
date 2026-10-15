@@ -250,7 +250,7 @@ When(
     // The first number of «Показать ещё K (осталось N)» is what the step adds.
     const step = Number(/\d+/u.exec((await more.innerText()).trim())![0]);
     feedOf(world).horizonBefore = {
-      to: params(page).get("to"),
+      count: params(page).get("count"),
       days,
       cards,
       step,
@@ -264,12 +264,15 @@ Then(
   async ({ page, world }) => {
     const before = feedOf(world).horizonBefore;
     if (!before) throw new Error("«Показать ещё» was not activated before");
-    const to = params(page).get("to");
-    expect(to, "the wider horizon is URL state").toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    if (before.to) expect(to! > before.to).toBe(true);
-    expect(await page.locator('section[id^="day-"]').count()).toBeGreaterThan(
-      before.days,
-    );
+    // «Будущие» grows by an event count (019 LD-2, #2908): the URL states
+    // how many events the screen holds — exactly the ones before plus the step.
+    const count = params(page).get("count");
+    expect(count, "the wider extent is URL state").toMatch(/^\d+$/);
+    expect(Number(count)).toBe(before.cards + before.step);
+    if (before.count) expect(Number(count)).toBeGreaterThan(Number(before.count));
+    expect(
+      await page.locator('section[id^="day-"]').count(),
+    ).toBeGreaterThanOrEqual(before.days);
     expect(await feedCards(page).count()).toBe(before.cards + before.step);
   },
 );
@@ -277,12 +280,13 @@ Then(
 Then(
   "the screen holds the 10 nearest upcoming events, «Показать ещё 10 \\(осталось N)» adding the next later ones",
   async ({ page }) => {
-    // 019 «Amendment — 2026-10-12» (#2884): «Будущие» pages by the count step
-    // of 10, a day shared by the tenth event and later ones shown whole.
+    // 019 «Amendment — 2026-10-13» (#2884, #2908): «Будущие» pages by exactly
+    // 10 events; a day shared by the tenth event and later ones continues on
+    // the next step.
     expect(
       await feedCards(page).count(),
       "the default upcoming screen",
-    ).toBeGreaterThanOrEqual(10);
+    ).toBe(10);
     await expect(page.getByTestId("events-feed-show-more")).toHaveText(
       /^Показать ещё \d+ \(осталось \d+\)$/u,
     );
@@ -1334,9 +1338,17 @@ When(
     const day = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Europe/Moscow",
     }).format(new Date(world.upcomingStartsAt));
-    for (let step = 0; step < 20; step += 1) {
-      const to = params(page).get("to");
-      if (to && to >= day) return;
+    // «Будущие» steps by an exact count (019 LD-2), so a day can continue on
+    // the next step: the day is whole once a later day is on screen or
+    // nothing lies beyond.
+    for (let step = 0; step < 40; step += 1) {
+      const shownDays = await page
+        .locator('section[id^="day-"]')
+        .evaluateAll((sections) => sections.map((section) => section.id.slice(4)));
+      if (shownDays.some((shown) => shown > day)) return;
+      if ((await page.getByTestId("events-feed-show-more").count()) === 0) {
+        return;
+      }
       await showMore(page, world);
     }
     throw new Error(`The feed horizon never reached ${day}`);

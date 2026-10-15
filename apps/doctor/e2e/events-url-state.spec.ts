@@ -64,17 +64,21 @@ test("019 EARS-8.20: the forward control carries the whole state and drops nothi
   expect(params.getAll("city")).toEqual(["msk"]);
   expect(params.get("nmo")).toBe("true");
   expect(params.get("q")).toBe("сердце");
-  // Only the horizon moved.
-  expect(params.get("to")).toBe("2026-09-21");
+  // Only the extent moved: «Будущие» steps by a COUNT (019 LD-2, #2908) — the
+  // 10 events on screen plus the remaining 4, all of them as 11 or fewer
+  // remain — from the served `from`, with no `to`.
+  expect(params.get("from")).toBe("2026-09-01");
+  expect(params.get("count")).toBe("14");
+  expect(params.has("to")).toBe(false);
 
   // …and it moved THROUGH the codec: the widened link is in field-table order,
-  // with `from`/`to` in positions 3-4, not appended after the facets. The same
+  // with `from`/`count` in positions 2-3, not appended after the facets. The same
   // state must always yield the same, comparable URL — including this one, the
   // only link the feature itself writes.
   expect([...params.keys()]).toEqual([
     "day",
     "from",
-    "to",
+    "count",
     "format",
     "format",
     "specialty",

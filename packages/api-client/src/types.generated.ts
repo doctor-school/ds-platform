@@ -2851,8 +2851,8 @@ export interface components {
             };
             from: string;
             nextBatch: number;
+            nextCount: number | null;
             nextFrom: string | null;
-            nextTo: string | null;
             remaining: number;
             targeting: {
                 adjacentDirectionIds: string[];
@@ -3237,8 +3237,8 @@ export interface components {
             horizon?: {
                 from: string;
                 nextBatch: number;
+                nextCount: number | null;
                 nextFrom: string | null;
-                nextTo: string | null;
                 remaining: number;
                 to: string;
                 today: string;
@@ -6295,6 +6295,7 @@ export interface operations {
     EventsPublicController_list: {
         parameters: {
             query?: {
+                count?: number;
                 cursor?: string;
                 expert?: string[];
                 from?: string;

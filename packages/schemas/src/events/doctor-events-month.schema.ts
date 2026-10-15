@@ -219,6 +219,36 @@ export function doctorEventsMonthFacets(
   };
 }
 
+/**
+ * 019 EARS-6 (#2907) — the «Идёт сейчас» read's query: the page's WHOLE
+ * applied filter set — the specialty scope and every facet the feed reads
+ * (`format`, `kind`, `city`, `nmo`, `free`, `q`) — so the strip never shows an
+ * эфир the feed below it hides, and never misses one the feed badges «В ЭФИРЕ».
+ * It is the month query's facet half with no period: «now» is the strip's only
+ * horizon, so `tense`, `day`, `from`, `to` and `month` never reach it.
+ */
+export const DoctorEventsLiveQuerySchema = DoctorEventsMonthQuerySchema.omit({
+  month: true,
+}).strict();
+export type DoctorEventsLiveQuery = z.infer<typeof DoctorEventsLiveQuerySchema>;
+
+/**
+ * The live query codec — the month codec's facet half, which delegates to the
+ * feed's codec: a second parse of any facet here would let the strip and the
+ * feed disagree on what the same URL means.
+ */
+export function parseDoctorEventsLiveQuery(
+  raw: Record<string, RawQueryValue>,
+): z.ZodSafeParseResult<DoctorEventsLiveQuery> {
+  const facets = parseDoctorEventsMonthQuery({ ...raw, month: undefined });
+  if (!facets.success) {
+    return facets as unknown as z.ZodSafeParseResult<DoctorEventsLiveQuery>;
+  }
+  return DoctorEventsLiveQuerySchema.safeParse(
+    doctorEventsMonthFacets(facets.data),
+  );
+}
+
 /** The МСК month an ISO day falls in. */
 export function doctorEventsMonthOf(day: string): string {
   return day.slice(0, 7);

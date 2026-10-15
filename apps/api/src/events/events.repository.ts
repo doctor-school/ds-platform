@@ -626,10 +626,15 @@ export class EventsRepository {
    * the whole audience, a list restricts through the one targeting subquery,
    * and an empty list reads nothing — the short-circuit the feed applies too.
    * The order is a deterministic tie-break, not a ranking.
+   *
+   * `academyFacets` are the Academy's applied project / expert / topic facets
+   * (019 EARS-6, #2907): the strip narrows by the listing's own
+   * {@link academyFacetClauses}, so it never shows an эфир the feed hides.
    */
   async findLiveRows(input: {
     audience: EventAudience;
     directionIds: string[] | null;
+    academyFacets?: AcademyEventFacets | undefined;
   }): Promise<LiveEventRow[]> {
     if (input.directionIds !== null && input.directionIds.length === 0) {
       return [];
@@ -638,6 +643,7 @@ export class EventsRepository {
       ACTIVE_EVENT,
       eq(events.audience, input.audience),
       eq(events.state, "live"),
+      ...this.facetWhere(input.academyFacets ?? NO_ACADEMY_FACETS),
     ];
     if (input.directionIds !== null) {
       where.push(

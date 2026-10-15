@@ -51,15 +51,40 @@ describe("fetchEventsFeed", () => {
 });
 
 describe("fetchEventsLive", () => {
+  const GUEST = { cookie: "", userAgent: "ua", acceptLanguage: "ru", forwardedFor: "1.2.3.4" };
   it("parses the live LIST and degrades a failure to a block error", async () => {
     const ok = vi.fn(async () => new Response("[]", { status: 200 }));
     expect(
-      await fetchEventsLive("/v1/public/events/live", { cookie: "", userAgent: "", acceptLanguage: "", forwardedFor: "" }, ok as unknown as typeof fetch),
+      await fetchEventsLive("/v1/public/events/live", { contentSet }, GUEST, { cookie: "", forwardedFor: "" }, ok as unknown as typeof fetch),
     ).toEqual({ ok: true, value: [] });
     const bad = vi.fn(async () => { throw new Error("down"); });
     expect(
-      await fetchEventsLive("/v1/public/events/live", { cookie: "", userAgent: "", acceptLanguage: "", forwardedFor: "" }, bad as unknown as typeof fetch),
+      await fetchEventsLive("/v1/public/events/live", { contentSet }, GUEST, { cookie: "", forwardedFor: "" }, bad as unknown as typeof fetch),
     ).toEqual({ ok: false });
+  });
+
+  it("019 EARS-6: a guest's live read carries the remembered specialty cookie like the feed read, and the applied scope (#2907)", async () => {
+    const fetchImpl = vi.fn(async () => new Response("[]", { status: 200 }));
+    await fetchEventsLive(
+      "/v1/storefront/doctor/events/live?specialty=all",
+      { contentSet },
+      GUEST,
+      { cookie: "other=1; ds_specialty=cardio", forwardedFor: "1.2.3.4" },
+      fetchImpl as unknown as typeof fetch,
+    );
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toMatch(/\/v1\/storefront\/doctor\/events\/live\?specialty=all$/);
+    const headers = init.headers as Record<string, string>;
+    expect(headers.cookie).toBe("ds_specialty=cardio");
+    expect(headers["x-forwarded-for"]).toBe("1.2.3.4");
+  });
+
+  it("019 EARS-6: a signed-in viewer's live read forwards the whole session surface unchanged", async () => {
+    const fetchImpl = vi.fn(async () => new Response("[]", { status: 200 }));
+    const session = { cookie: "__Host-ds_session=s; ds_specialty=cardio", userAgent: "ua", acceptLanguage: "ru", forwardedFor: "" };
+    await fetchEventsLive("/v1/storefront/doctor/events/live", { contentSet }, session, { cookie: session.cookie, forwardedFor: "" }, fetchImpl as unknown as typeof fetch);
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(init.headers).toMatchObject({ cookie: session.cookie, "user-agent": "ua", "accept-language": "ru" });
   });
 });
 

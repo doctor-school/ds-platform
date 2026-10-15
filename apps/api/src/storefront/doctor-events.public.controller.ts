@@ -21,6 +21,7 @@ import {
   type MonthlyEventCount,
   type ParticipationCta,
   parseDoctorEventsFeedQuery,
+  parseDoctorEventsLiveQuery,
   parseDoctorEventsMonthCountsQuery,
   parseDoctorEventsMonthQuery,
   type RawQueryValue,
@@ -271,6 +272,15 @@ export class DoctorEventsPublicController {
    * because the answer varies per viewer AND changes the moment a room closes.
    */
   @Get("live")
+  // The applied filter set (#2907): the strip reads the specialty scope and
+  // the facets the feed below it reads — absent = «моя и смежные», no facet.
+  @ApiQuery({ name: "format", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "kind", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "specialty", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "city", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "nmo", required: false, type: Boolean })
+  @ApiQuery({ name: "free", required: false, type: Boolean })
+  @ApiQuery({ name: "q", required: false })
   // `LiveStrip[]` (`EventsLiveReadSchema`): «nothing is live» — the most
   // common answer — is `[]`, a value of the same contract, never a null.
   @ApiOkResponse({ type: EventLiveStripDto, isArray: true })
@@ -284,10 +294,16 @@ export class DoctorEventsPublicController {
   })
   live(
     @Req() req: FastifyRequest,
+    @Query() query: Record<string, RawQueryValue>,
     @Headers("cookie") cookie?: string,
   ): Promise<EventsLiveRead> {
+    const parsed = parseDoctorEventsLiveQuery(query ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException("invalid doctor events live query");
+    }
     const sub = (req as { user?: { sub?: string } }).user?.sub;
     return this.feed.live({
+      query: parsed.data,
       specialtyReference: readSpecialtyChoiceCookie(cookie),
       routes: DOCTOR_ROUTES,
       sub,

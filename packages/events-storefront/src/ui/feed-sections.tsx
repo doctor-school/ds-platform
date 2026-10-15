@@ -26,7 +26,7 @@ import {
   type SpecialtyScopeKind,
   specialtyScopeKindOf,
 } from "../model/facets";
-import { feedTenseOf, showMoreHref } from "../model/feed-url";
+import { feedTenseOf, liveReadHref, showMoreHref } from "../model/feed-url";
 import {
   type ForwardedSession,
   type ReadRequest,
@@ -182,18 +182,35 @@ export function FeedSkeleton() {
   );
 }
 
+/**
+ * «Идёт сейчас» under the page's APPLIED filter set — the specialty scope and
+ * the facets (019 EARS-6, #2907): the server read and the browser's refresh
+ * read the one `liveReadHref`, and the block is keyed by it, so a filter change
+ * re-mounts it on the new set rather than keeping the old set's answer and
+ * refresh.
+ */
 export async function LiveSection({
   config,
+  raw,
   session,
+  request,
 }: {
   config: EventsStorefrontHostConfig;
+  raw: RawQueryRecord;
   session: ForwardedSession;
+  request: ReadRequest;
 }) {
-  const initial = await fetchEventsLive(config.contentSet.livePath, session);
+  const liveHref = liveReadHref(
+    config.contentSet.livePath,
+    raw,
+    config.filterSet,
+  );
+  const initial = await fetchEventsLive(liveHref, config, session, request);
   return (
     <LiveBlock
+      key={liveHref}
       initial={initial}
-      livePath={config.contentSet.livePath}
+      livePath={liveHref}
       routes={config.routes}
     />
   );

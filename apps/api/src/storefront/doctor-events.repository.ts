@@ -105,9 +105,13 @@ export interface DoctorFeedFilters {
   order: "asc" | "desc";
   /** `null` = targeting off (`specialty=all`); `[]` = a targeted read with no reachable direction. */
   directionIds: string[] | null;
-  /** Half-open horizon `[fromInstant, toInstant)` in UTC; `fromInstant: null` = no older bound (the «Прошедшие» archive). */
+  /**
+   * Half-open horizon `[fromInstant, toInstant)` in UTC; `fromInstant: null` =
+   * no older bound (the «Прошедшие» archive); `toInstant: null` = no newer
+   * bound (the «Идёт сейчас» read, whose only horizon is the `live` state).
+   */
   fromInstant: Date | null;
-  toInstant: Date;
+  toInstant: Date | null;
   /** 012 event-kind dictionary SLUGS of the `kind` facet — matched on `events.kind_id`. */
   kindSlugs: string[];
   /** The `format` facet — matched on the event's own `participation_format` column. */
@@ -144,8 +148,10 @@ export class DoctorEventsRepository {
       eq(events.recordStatus, "active"),
       DOCTOR_AUDIENCE,
       inArray(events.state, [...filters.states]),
-      lt(events.startsAt, filters.toInstant),
     ];
+    if (filters.toInstant !== null) {
+      where.push(lt(events.startsAt, filters.toInstant));
+    }
     if (filters.fromInstant !== null) {
       where.push(gte(events.startsAt, filters.fromInstant));
     }

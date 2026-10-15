@@ -27,7 +27,10 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
-import { eventClassificationSql } from "../setup/event-classification.js";
+import {
+  SEED_EVENT_KINDS,
+  eventClassificationSql,
+} from "../setup/event-classification.js";
 
 /**
  * 019 EARS-6 (#1521) — «Идёт сейчас» over REAL rows.
@@ -181,10 +184,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const readLiveList = async (input: {
       specialtyCode?: string;
       session?: string;
+      /** The applied scope's query string, as the page's feed read states it. */
+      scope?: string;
     }) => {
       const response = await app.inject({
         method: "GET",
-        url: "/v1/storefront/doctor/events/live",
+        url: `/v1/storefront/doctor/events/live${input.scope ? `?${input.scope}` : ""}`,
         headers: headersFor(input),
       });
       expect(response.statusCode).toBe(200);
@@ -266,6 +271,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       liveEventId = live.id;
       liveSlug = live.slug;
+
+      // An upcoming эфир in the viewer's own direction keeps its default
+      // «Моя и смежные» non-empty (019 LD-9) when the live one ends, so the
+      // default read stays targeted rather than opening on every specialty.
+      await makeEvent({
+        title: "Предстоящий эфир по ортобиологии",
+        startsAt: new Date(Date.now() + 3 * 24 * 60 * 60_000),
+        durationMin: 60,
+        directionId: ownDirection,
+      });
 
       const otherLive = await makeEvent({
         title: "Идущий эфир по ревматологии",
@@ -353,12 +368,135 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(strip.presenceCount).toBe(2);
     });
 
-    it("EARS-6.5: a viewer whose specialty reaches no direction reads an empty list, even while two эфиры are live", async () => {
-      expect(await readLiveList({ specialtyCode: unreachedCode })).toEqual([]);
+    it("EARS-6.5: a viewer whose specialty reaches no direction reads an empty list under «Моя и смежные», even while two эфиры are live", async () => {
+      // The explicit own scope: the default screen of such a viewer falls back
+      // to every specialty (019 LD-9), asserted on its own below.
+      expect(
+        await readLiveList({
+          specialtyCode: unreachedCode,
+          scope: "specialty=mine-and-adjacent",
+        }),
+      ).toEqual([]);
       // The targeting is per-specialty, not a global «what is live»: the second
       // specialty resolves to its OWN эфир, never the first one's.
       const otherStrip = await readLive({ specialtyCode: otherCode });
       expect(otherStrip.title).toBe("Идущий эфир по ревматологии");
+    });
+
+    it("019 EARS-6: a guest with a remembered specialty reads the APPLIED scope — «моя и смежные» with no targeted эфир is empty, «все» shows every live эфир (#2907)", async () => {
+      // «Моя и смежные»: nothing live reaches this specialty.
+      expect(
+        await readLiveList({
+          specialtyCode: unreachedCode,
+          scope: "specialty=mine-and-adjacent",
+        }),
+      ).toEqual([]);
+      // «Все специальности»: the strip follows the feed and shows both эфиры.
+      const all = await readLiveList({
+        specialtyCode: unreachedCode,
+        scope: "specialty=all",
+      });
+      expect(all.map((strip) => strip.eventId)).toContain(liveEventId);
+      expect(all.map((strip) => strip.title)).toContain(
+        "Идущий эфир по ревматологии",
+      );
+    });
+
+    it("019 EARS-6: when the default «Моя и смежные» is empty the feed opens on every specialty (LD-9), and the strip follows that same effective scope (#2907)", async () => {
+      // The feed's default screen falls back to «Все специальности» …
+      const feed = await app.inject({
+        method: "GET",
+        url: "/v1/storefront/doctor/events",
+        headers: headersFor({ specialtyCode: unreachedCode }),
+      });
+      expect(feed.statusCode).toBe(200);
+      const targeting = DoctorEventsFeedSchema.parse(feed.json()).targeting;
+      expect(targeting.mode).toBe("all");
+      expect(targeting.defaultScopeEmpty).toBe(true);
+      // … so the strip above it shows every live эфир, not an empty list.
+      const fallback = await readLiveList({ specialtyCode: unreachedCode });
+      expect(fallback.map((strip) => strip.eventId)).toContain(liveEventId);
+      expect(fallback.map((strip) => strip.title)).toContain(
+        "Идущий эфир по ревматологии",
+      );
+      // An explicit «Моя и смежные» is never replaced — the feed and the strip
+      // both read the empty own scope.
+      expect(
+        await readLiveList({
+          specialtyCode: unreachedCode,
+          scope: "specialty=mine-and-adjacent",
+        }),
+      ).toEqual([]);
+    });
+
+    it("019 EARS-6: an explicit specialty pick narrows the strip to THAT specialty, not the remembered one (#2907)", async () => {
+      const picked = await readLiveList({
+        specialtyCode: ownCode,
+        scope: `specialty=${encodeURIComponent(otherCode)}`,
+      });
+      expect(picked.map((strip) => strip.title)).toEqual([
+        "Идущий эфир по ревматологии",
+      ]);
+    });
+
+    it("019 EARS-6: the kind facet narrows the strip as it narrows the feed — a kind no live эфир carries empties it (#2907)", async () => {
+      // Both fixture эфиры are «Встреча клуба» (the default fixture kind); the
+      // explicit pick isolates the fixture's rheumatology эфир from any other
+      // live row the database holds.
+      const picked = `specialty=${encodeURIComponent(otherCode)}`;
+      expect(
+        await readLiveList({
+          specialtyCode: ownCode,
+          scope: `${picked}&kind=${SEED_EVENT_KINDS.efir.slug}`,
+        }),
+      ).toEqual([]);
+      const sameKind = await readLiveList({
+        specialtyCode: ownCode,
+        scope: `${picked}&kind=${SEED_EVENT_KINDS.vstrechaKluba.slug}`,
+      });
+      expect(sameKind.map((strip) => strip.title)).toEqual([
+        "Идущий эфир по ревматологии",
+      ]);
+    });
+
+    it("019 EARS-6: the format facet and the title search narrow the strip as they narrow the feed (#2907)", async () => {
+      // Both fixture эфиры are `online` (the column default).
+      const picked = `specialty=${encodeURIComponent(otherCode)}`;
+      expect(
+        await readLiveList({
+          specialtyCode: ownCode,
+          scope: `${picked}&format=offline`,
+        }),
+      ).toEqual([]);
+      const online = await readLiveList({
+        specialtyCode: ownCode,
+        scope: `${picked}&format=online`,
+      });
+      expect(online.map((strip) => strip.title)).toEqual([
+        "Идущий эфир по ревматологии",
+      ]);
+      // Both picked specialties hold one эфир each; the search keeps the one
+      // whose title carries the words.
+      const both = `specialty=${encodeURIComponent(ownCode)}&${picked}`;
+      expect(
+        (await readLiveList({ specialtyCode: ownCode, scope: both })).length,
+      ).toBe(2);
+      const searched = await readLiveList({
+        specialtyCode: ownCode,
+        scope: `${both}&q=${encodeURIComponent("ревматологии")}`,
+      });
+      expect(searched.map((strip) => strip.title)).toEqual([
+        "Идущий эфир по ревматологии",
+      ]);
+    });
+
+    it("019 EARS-6: a malformed facet on the live read is a 400, as on the feed read (#2907)", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/storefront/doctor/events/live?format=teleport",
+        headers: headersFor({}),
+      });
+      expect(response.statusCode).toBe(400);
     });
 
     it("NEW: several targeted эфиры running at once are each a strip, earliest start first (wave-2 gate row 44)", async () => {

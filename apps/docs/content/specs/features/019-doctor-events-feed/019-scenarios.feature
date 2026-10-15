@@ -11,7 +11,8 @@
 # compact month and the facet panel sit in a sticky column at 1024 px and wider.
 # Read under «— 2026-10-06» (no card action, no guest band), «— 2026-10-08» (the
 # colleagues' count on upcoming and live cards only), «— 2026-10-12» («Прошедшие»
-# pages by ten events) and «— 2026-10-13» («Будущие» page by ten events too).
+# pages by ten events), «— 2026-10-13» («Будущие» page by ten events too) and
+# «— 2026-10-13 — the live strip follows the applied scope» (#2907).
 # Route-level scenarios tagged EARS-2/3/4/7/8/9 are integration obligations of
 # EARS-1 / #1516. Their predecessor Issues prove route-independent components,
 # the API contract, query state, or state matrix and do not publish `/events`.
@@ -71,6 +72,25 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       And the live block offers no route into a room
       When the visitor follows the live block's action on that broadcast
       Then the visitor lands on the event page of the golden doctors' broadcast
+
+    @EARS-6 @happy
+    Scenario: The live block reads the applied specialty scope and facets, the same ones the feed reads
+      Given a visitor with no account whose remembered specialty reaches no live event
+      And feature 006 reports an open room for an event of another specialty
+      When the visitor opens «События» under «Моя и смежные»
+      Then no «Идёт сейчас» container exists in the DOM
+      And the block stays absent across its next refresh
+      When the visitor switches the specialty scope to «Все специальности»
+      Then the «Идёт сейчас» block carries that event without a page reload
+      And every event the feed marks «В ЭФИРЕ» is present in the block
+      When the visitor applies a kind that event does not carry
+      Then no «Идёт сейчас» container exists in the DOM
+      And every event the feed marks «В ЭФИРЕ» is present in the block
+      When the visitor clears the kind facet
+      Then the «Идёт сейчас» block carries that event without a page reload
+      When the visitor switches the specialty scope to «Моя и смежные»
+      Then no «Идёт сейчас» container exists in the DOM
+      And the page was not reloaded
 
     @EARS-4 @happy
     Scenario: A day picked in the compact month moves the feed to that day

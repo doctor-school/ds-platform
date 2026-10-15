@@ -7,7 +7,13 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -178,7 +184,9 @@ async function frame(
     config,
     searchParams: Promise.resolve(query),
     retry: RETRY,
-  })) as ReactElement<{ children: ReactElement<ComponentProps<typeof FeedFrame>> }>;
+  })) as ReactElement<{
+    children: ReactElement<ComponentProps<typeof FeedFrame>>;
+  }>;
   expect(scope.type).toBe(FeedReadScope);
   const element = scope.props.children;
   expect(element.type).toBe(FeedFrame);
@@ -227,19 +235,28 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
       { slug: "master-klass", title: "Мастер-класс" },
     ]);
     await frame(DOCTOR, { kind: "ghost", q: "сон" });
-    const [, read] = mocks.fetchEventsFeed.mock.calls[0] as [unknown, Record<string, unknown>];
+    const [, read] = mocks.fetchEventsFeed.mock.calls[0] as [
+      unknown,
+      Record<string, unknown>,
+    ];
     expect(read).toEqual({ q: "сон" });
 
     mocks.fetchEventsFeed.mockClear();
     await frame(DOCTOR, { kind: "master-klass" });
-    const [, kept] = mocks.fetchEventsFeed.mock.calls[0] as [unknown, Record<string, unknown>];
+    const [, kept] = mocks.fetchEventsFeed.mock.calls[0] as [
+      unknown,
+      Record<string, unknown>,
+    ];
     expect(kept).toEqual({ kind: "master-klass" });
   });
 
   it("EARS-7: a failed kind-dictionary read drops no applied kind", async () => {
     mocks.fetchEventKindTitles.mockResolvedValue(null);
     await frame(DOCTOR, { kind: "master-klass" });
-    const [, read] = mocks.fetchEventsFeed.mock.calls[0] as [unknown, Record<string, unknown>];
+    const [, read] = mocks.fetchEventsFeed.mock.calls[0] as [
+      unknown,
+      Record<string, unknown>,
+    ];
     expect(read).toEqual({ kind: "master-klass" });
   });
 
@@ -250,11 +267,15 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
         raw: { kind: ["master-klass"] },
         feed: Promise.resolve({ ok: true, value: PAGE }),
         specialties: Promise.resolve([]),
-        kinds: Promise.resolve([{ slug: "master-klass", title: "Мастер-класс" }]),
+        kinds: Promise.resolve([
+          { slug: "master-klass", title: "Мастер-класс" },
+        ]),
       }),
     );
     const kinds = within(screen.getByRole("group", { name: "Вид события" }));
-    expect(kinds.getByRole("button", { name: "Мастер-класс", pressed: true })).toBeInTheDocument();
+    expect(
+      kinds.getByRole("button", { name: "Мастер-класс", pressed: true }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("master-klass")).not.toBeInTheDocument();
     expect(screen.getByText("Применено: 1")).toBeInTheDocument();
   });
@@ -314,7 +335,12 @@ describe("<EventsListingPage> — the feed view of both storefronts", () => {
     });
     render(
       <>
-        {await LiveSection({ config: DOCTOR, session: SESSION })}
+        {await LiveSection({
+          config: DOCTOR,
+          raw: {},
+          session: SESSION,
+          request: REQUEST,
+        })}
         {await MyEventsSection({ config: DOCTOR, mine, retry: RETRY })}
         {await FeedSection({
           config: DOCTOR,
@@ -705,7 +731,10 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
   });
 
   it("EARS-7: an empty doctor feed under a kind the read does not offer (a retired kind with no event in this reading) names it by the kind dictionary, never by its raw slug", async () => {
-    mocks.fetchEventsFeed.mockResolvedValueOnce({ ok: true, value: { ...EMPTY_PAGE, matching: 5 } });
+    mocks.fetchEventsFeed.mockResolvedValueOnce({
+      ok: true,
+      value: { ...EMPTY_PAGE, matching: 5 },
+    });
     render(
       await FeedSection({
         config: DOCTOR,
@@ -719,7 +748,9 @@ describe("the empty state of both views (019 EARS-9, #2786)", () => {
       }),
     );
     const empty = screen.getByTestId("events-feed-empty");
-    expect(empty).toHaveTextContent("Нет событий по фильтру «Вид события: Вебинар»");
+    expect(empty).toHaveTextContent(
+      "Нет событий по фильтру «Вид события: Вебинар»",
+    );
     expect(empty).not.toHaveTextContent("vebinar");
   });
 
@@ -928,6 +959,124 @@ describe("<LiveBlock> — «Идёт сейчас» (gate rows 43–44)", () => 
     );
     expect(await screen.findByText("Эфир 1")).toBeInTheDocument();
     fetchSpy.mockRestore();
+  });
+
+  it("019 EARS-6: the server render and the refresh read the SAME applied scope (#2907)", async () => {
+    mocks.fetchEventsLive.mockResolvedValue({ ok: true, value: [strip(1)] });
+    const element = (await LiveSection({
+      config: DOCTOR,
+      raw: { specialty: "all" },
+      session: SESSION,
+      request: REQUEST,
+    })) as ReactElement<{ livePath: string }>;
+    const scoped = "/v1/storefront/doctor/events/live?specialty=all";
+    expect(mocks.fetchEventsLive).toHaveBeenCalledWith(
+      scoped,
+      DOCTOR,
+      SESSION,
+      REQUEST,
+    );
+    expect(element.props.livePath).toBe(scoped);
+    // Keyed by the scope: a scope toggle re-mounts the block on the new scope.
+    expect(element.key).toBe(scoped);
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("[]", { status: 200 }));
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    render(element);
+    document.dispatchEvent(new Event("visibilitychange"));
+    await waitFor(() =>
+      expect(fetchSpy).toHaveBeenCalledWith(
+        scoped,
+        expect.objectContaining({ credentials: "include" }),
+      ),
+    );
+    fetchSpy.mockRestore();
+  });
+
+  it("019 EARS-6: the strip reads the WHOLE applied filter set the feed reads — kind and format included (#2907)", async () => {
+    await LiveSection({
+      config: DOCTOR,
+      raw: { kind: "efir", format: "offline", specialty: "all", q: "PRP" },
+      session: SESSION,
+      request: REQUEST,
+    });
+    const liveHref = mocks.fetchEventsLive.mock.calls[0]?.[0] as string;
+    const query = new URL(liveHref, "http://x").searchParams;
+    expect(liveHref.startsWith("/v1/storefront/doctor/events/live?")).toBe(
+      true,
+    );
+    expect(query.getAll("kind")).toEqual(["efir"]);
+    expect(query.getAll("format")).toEqual(["offline"]);
+    expect(query.get("specialty")).toBe("all");
+    expect(query.get("q")).toBe("PRP");
+  });
+
+  it("019 EARS-6: the horizon, the tense and the view never reach the live read", async () => {
+    await LiveSection({
+      config: DOCTOR,
+      raw: { kind: "efir", to: "2026-12-01", from: "2026-11-01", view: "feed" },
+      session: SESSION,
+      request: REQUEST,
+    });
+    expect(mocks.fetchEventsLive.mock.calls[0]?.[0]).toBe(
+      "/v1/storefront/doctor/events/live?kind=efir",
+    );
+  });
+
+  it("019 EARS-6: the Academy strip reads the Academy's applied facets by the same rule — one core, no host divergence (#2907)", async () => {
+    await LiveSection({
+      config: ACADEMY,
+      raw: {
+        project: "orthobio",
+        expert: "ivanov",
+        topic: "prp",
+        timeframe: "upcoming",
+        view: "feed",
+      },
+      session: SESSION,
+      request: REQUEST,
+    });
+    const liveHref = mocks.fetchEventsLive.mock.calls[0]?.[0] as string;
+    const query = new URL(liveHref, "http://x").searchParams;
+    expect(liveHref.startsWith("/v1/public/events/live?")).toBe(true);
+    expect(query.getAll("project")).toEqual(["orthobio"]);
+    expect(query.getAll("expert")).toEqual(["ivanov"]);
+    expect(query.getAll("topic")).toEqual(["prp"]);
+    expect(query.has("timeframe")).toBe(false);
+    expect(query.has("view")).toBe(false);
+  });
+
+  it("019 EARS-6: the default scope states no query, so the strip reads the visitor's default scope like the feed", async () => {
+    await LiveSection({
+      config: DOCTOR,
+      raw: {},
+      session: SESSION,
+      request: REQUEST,
+    });
+    expect(mocks.fetchEventsLive.mock.calls[0]?.[0]).toBe(
+      "/v1/storefront/doctor/events/live",
+    );
+  });
+
+  it("019 EARS-6: a new server answer re-syncs the mounted strip without a reload", () => {
+    const { rerender } = render(
+      <LiveBlock
+        initial={{ ok: true, value: [strip(1)] }}
+        livePath="/v1/storefront/doctor/events/live?specialty=all"
+        routes={ROUTES}
+      />,
+    );
+    expect(screen.getByTestId("events-live-block")).toHaveTextContent("Эфир 1");
+    rerender(
+      <LiveBlock
+        initial={{ ok: true, value: [] }}
+        livePath="/v1/storefront/doctor/events/live?specialty=all"
+        routes={ROUTES}
+      />,
+    );
+    expect(screen.queryByTestId("events-live-block")).toBeNull();
   });
 
   it("019 EARS-6: nothing live ⇒ no block in the tree", () => {

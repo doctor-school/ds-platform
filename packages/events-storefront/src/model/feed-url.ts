@@ -157,6 +157,24 @@ export function feedReadQuery(
 }
 
 /**
+ * The «Идёт сейчас» read's href (019 EARS-6, #2907). On both hosts the strip
+ * follows the WHOLE applied filter set the feed reads — the host's facet keys
+ * (the doctor's specialty scope and facets, the Academy's project / expert /
+ * topic) — so it never shows an эфир the feed below it hides. The server render
+ * and the browser's refresh both read THIS, so the strip can never answer a
+ * different filter set than the one it was painted with. The horizon, the tense
+ * and the view never reach it («now» is the strip's only horizon); the default
+ * scope stays unstated, as in every href.
+ */
+export function liveReadHref(
+  livePath: string,
+  raw: RawQueryRecord,
+  filterSet: EventsFilterHost,
+): string {
+  return href(livePath, onlyKeys(codecEntries(raw), FACET_KEYS[filterSet]));
+}
+
+/**
  * A month READ's query (row 54): the month (or the counts' year) and the host
  * set's facets — the month view and the picker narrow as the feed does.
  */

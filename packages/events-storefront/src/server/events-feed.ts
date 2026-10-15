@@ -68,16 +68,26 @@ export async function fetchEventsFeed(
 /**
  * The «Идёт сейчас» read (019 EARS-6, D5). Viewer-DEPENDENT: the api picks the
  * room or the event page against the viewer's registration, so the session
- * rides with it.
+ * rides with it. It reads `liveHref` — the host's live path under the page's
+ * applied filter set (`liveReadHref`) — and, like the feed, it carries the host's
+ * relay cookie (the remembered specialty) for a GUEST too: without it a guest's
+ * «моя и смежные» strip would fall back to every specialty (#2907). A signed-in
+ * viewer's cookie header already carries it.
  */
 export async function fetchEventsLive(
-  livePath: string,
+  liveHref: string,
+  config: Pick<EventsStorefrontHostConfig, "contentSet">,
   session: ForwardedSession,
+  request: ReadRequest,
   fetchImpl: typeof fetch = fetch,
 ): Promise<BlockRead<EventLiveStrip[]>> {
+  const cookie =
+    session.cookie !== ""
+      ? session.cookie
+      : relayOnly(request.cookie, config.contentSet.relayCookie);
   try {
-    const res = await fetchImpl(`${API_BASE}${livePath}`, {
-      headers: forwardedHeaders(session),
+    const res = await fetchImpl(`${API_BASE}${liveHref}`, {
+      headers: forwardedHeaders({ ...session, cookie }),
       cache: "no-store",
     });
     if (!res.ok) return { ok: false };

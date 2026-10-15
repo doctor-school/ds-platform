@@ -6420,7 +6420,11 @@ export interface operations {
     };
     EventsPublicController_live: {
         parameters: {
-            query?: never;
+            query?: {
+                expert?: string[];
+                project?: string[];
+                topic?: string[];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6752,7 +6756,15 @@ export interface operations {
     };
     DoctorEventsPublicController_live: {
         parameters: {
-            query?: never;
+            query?: {
+                city?: string[];
+                format?: string[];
+                free?: boolean;
+                kind?: string[];
+                nmo?: boolean;
+                q?: unknown;
+                specialty?: string[];
+            };
             header: {
                 cookie: string;
             };

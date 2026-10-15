@@ -98,7 +98,9 @@ varies per viewer and changes the moment a room closes. It is the doctor twin of
 the Academy's `GET /v1/public/events/live`: both read the ONE live resolution,
 `EventsLiveService` (`../events/events-live.service.ts`, wave-2 entry gate §4.3
 D5), parameterised by audience; this host hands it the `doctors` audience, the
-feed's own targeting and `DOCTOR_ROUTES`.
+feed's own targeting under the page's applied scope — the LD-9 fall-back to
+every specialty included — narrowed by the feed's applied facets and title
+search (019 «Amendment — 2026-10-13», #2907), and `DOCTOR_ROUTES`.
 
 - **It exists because the feed cannot carry it.** An эфир that started before the
   rendered horizon is excluded by the feed's lower bound, so a doctor arriving

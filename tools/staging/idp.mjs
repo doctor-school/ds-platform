@@ -551,37 +551,102 @@ async function resolveSharedApp(client, { projectName, appName }) {
 }
 
 /**
+ * What the app's read-back lacks (`missing`) or carries beyond (`extra`) the desired
+ * set, over the redirect and post-logout lists together. Empty both ⇒ converged.
+ */
+export function diffRedirectSet({ current, desired }) {
+  const have = new Set([
+    ...(current?.redirectUris ?? []),
+    ...(current?.postLogoutRedirectUris ?? []),
+  ]);
+  const want = new Set([
+    ...(desired?.redirectUris ?? []),
+    ...(desired?.postLogoutUris ?? desired?.postLogoutRedirectUris ?? []),
+  ]);
+  return {
+    missing: [...want].filter((uri) => !have.has(uri)).sort(),
+    extra: [...have].filter((uri) => !want.has(uri)).sort(),
+  };
+}
+
+/** Converge attempts before a read-back mismatch is a hard failure (#2694). */
+export const REDIRECT_CONVERGE_ATTEMPTS = 3;
+/** Backoff before attempt N+1 is `N × this`, so 2 s then 4 s. */
+export const REDIRECT_CONVERGE_BACKOFF_MS = 2000;
+
+const realSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
  * Converge the WHOLE redirect + post-logout set onto the shared OIDC app.
  *
- * Probe (`GET .../apps/{id}`) → PUT only on a difference → any failure of either hop
- * aborts. A slot whose callback is not registered fails login with `invalid
+ * The write is whole-set and parallel sessions converge the same app, so the set is
+ * never a start-time snapshot: `readDesired` (an injected effect — the live slot read)
+ * yields it immediately before the probe, and again after the write to check the
+ * read-back. A read-back that lacks a live slot's callback, or still carries a removed
+ * one, re-reads and re-converges, bounded by `attempts` with a growing backoff; still
+ * wrong ⇒ `IdpError` naming every missing/extra URI. Never a silent success.
+ *
+ * Probe (`GET .../apps/{id}`) → PUT only on a difference → read-back; any failure of
+ * a hop aborts. A slot whose callback is not registered fails login with `invalid
  * redirect_uri`, which is strictly worse than a refused `slot up`.
  */
 export async function convergeRedirectUris({
   client,
   desired,
+  readDesired = async () => desired,
   projectName = DEFAULT_PROJECT_NAME,
   appName = DEFAULT_APP_NAME,
   log = () => {},
+  attempts = REDIRECT_CONVERGE_ATTEMPTS,
+  backoffMs = REDIRECT_CONVERGE_BACKOFF_MS,
+  sleep = realSleep,
 }) {
   const { projectId, appId } = await resolveSharedApp(client, { projectName, appName });
-  const detail = await client.request("GET", `/management/v1/projects/${projectId}/apps/${appId}`);
-  const current = detail?.app?.oidcConfig ?? {};
-  const plan = planRedirectUriConverge({ current, desired });
-  if (plan.action === "skip") {
-    log(`  ↳ idp redirect set already holds ${current.redirectUris?.length ?? 0} URI(s)`);
-    return { action: "skip", projectId, appId };
+  const appPath = `/management/v1/projects/${projectId}/apps/${appId}`;
+  let want = await readDesired();
+  let lastPut;
+  let diff = { missing: [], extra: [] };
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const current = (await client.request("GET", appPath))?.app?.oidcConfig ?? {};
+    const plan = planRedirectUriConverge({ current, desired: want });
+    if (plan.action === "put") {
+      await client.request("PUT", `${appPath}/oidc_config`, plan.body);
+      lastPut = plan.body;
+      log(
+        `  ↳ idp redirect set converged: ${plan.body.redirectUris.length} redirect, ` +
+          `${plan.body.postLogoutRedirectUris.length} post-logout URI(s)`,
+      );
+    } else {
+      log(`  ↳ idp redirect set already holds ${current.redirectUris?.length ?? 0} URI(s)`);
+    }
+    const readBack = (await client.request("GET", appPath))?.app?.oidcConfig ?? {};
+    // Re-read the live set: a slot that came up (or went down) during this write is
+    // judged against the set as it is now, and becomes the next attempt's target.
+    want = await readDesired();
+    diff = diffRedirectSet({ current: readBack, desired: want });
+    if (diff.missing.length === 0 && diff.extra.length === 0) {
+      return lastPut
+        ? { action: "put", projectId, appId, body: lastPut, attempts: attempt }
+        : { action: "skip", projectId, appId, attempts: attempt };
+    }
+    log(
+      `  ↳ idp read-back differs from the live set (attempt ${attempt}/${attempts}): ` +
+        describeDiff(diff),
+    );
+    if (attempt < attempts) await sleep(backoffMs * attempt);
   }
-  await client.request(
-    "PUT",
-    `/management/v1/projects/${projectId}/apps/${appId}/oidc_config`,
-    plan.body,
+  throw new IdpError(
+    `the shared IdP redirect set did not converge after ${attempts} attempt(s) — ` +
+      `${describeDiff(diff)}. A parallel slot run may be rewriting it; re-run ` +
+      "`stage:slot sync` once it finishes.",
   );
-  log(
-    `  ↳ idp redirect set converged: ${plan.body.redirectUris.length} redirect, ` +
-      `${plan.body.postLogoutRedirectUris.length} post-logout URI(s)`,
-  );
-  return { action: "put", projectId, appId, body: plan.body };
+}
+
+function describeDiff({ missing, extra }) {
+  const parts = [];
+  if (missing.length) parts.push(`missing: ${missing.join(", ")}`);
+  if (extra.length) parts.push(`extra: ${extra.join(", ")}`);
+  return parts.join("; ");
 }
 
 // --- golden identity converge ------------------------------------------------

@@ -46,6 +46,7 @@ import {
   composeProjectName,
   containerAliases,
   databaseAction,
+  desiredRedirectSetAt,
   dropDatabaseStatements,
   healthVerdict,
   migrateCommandPlan,
@@ -675,6 +676,40 @@ test("the converge writes the env pins unioned with the rendered slot set", () =
 test("no pins in the env leaves the rendered set untouched", () => {
   const step = { desired: renderIdpRedirectUris(["pr-7"], BASE) };
   assert.deepEqual(resolveDesiredRedirectSet(step, {}), step.desired);
+});
+
+test("up converges over the slots live AT CONVERGE TIME, not the start-time snapshot", () => {
+  // Started when {main} was live; pr-9 came up from a parallel session meanwhile.
+  const step = stepOf(
+    upPlan({ liveSlots: live({ main: [] }) }),
+    "converge the shared IdP redirect set",
+  );
+  const desired = desiredRedirectSetAt(step, ["main", "pr-7", "pr-9"], {});
+  assert.deepEqual(desired, renderIdpRedirectUris(["main", "pr-7", "pr-9"], BASE));
+});
+
+test("up keeps its own slot in the converge-time set even if the live read misses it", () => {
+  const step = stepOf(
+    upPlan({ liveSlots: live({ main: [] }) }),
+    "converge the shared IdP redirect set",
+  );
+  assert.deepEqual(desiredRedirectSetAt(step, ["main"], {}), renderIdpRedirectUris(["main", "pr-7"], BASE));
+});
+
+test("down never re-adds the removed slot, even if the converge-time read still lists it", () => {
+  const step = stepOf(
+    planSlotDown({ slot: "pr-7", liveSlots: live({ main: [], "pr-7": [] }), baseDomain: BASE }),
+    "converge the shared IdP redirect set",
+  );
+  const desired = desiredRedirectSetAt(step, ["main", "pr-7", "pr-9"], {});
+  assert.deepEqual(desired, renderIdpRedirectUris(["main", "pr-9"], BASE));
+});
+
+test("the converge-time set still carries the env pins", () => {
+  const step = stepOf(upPlan(), "converge the shared IdP redirect set");
+  const pin = `https://api.${BASE}/auth/callback`;
+  const desired = desiredRedirectSetAt(step, [], { IDP_REDIRECT_URIS: pin });
+  assert.deepEqual(desired.redirectUris, [pin, `https://api-pr-7.${BASE}/auth/callback`]);
 });
 
 // --- gc ----------------------------------------------------------------------

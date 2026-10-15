@@ -11,6 +11,7 @@ import {
   fetchRecoveryCode,
   mailpitUrlFor,
   nativeRecoveryMail,
+  type AddressedMailCheckpoint,
 } from "../lib/mailpit.js";
 import { inputSecret } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
@@ -22,6 +23,7 @@ interface Handoff {
   email: string;
   reference?: string;
   authPosts: string[];
+  beforeHandoff?: AddressedMailCheckpoint;
   requestedAt?: string;
   code?: string;
   redeemed?: CapturedResponse;
@@ -119,6 +121,49 @@ Given(
     ).toEqual({ status: 200, accepted: true, validReference: true });
     state.reference = accepted.reference;
     expect(state.authPosts, "signup used no separate auth command").toEqual([]);
+    const mail = nativeRecoveryMail();
+    const mailpit =
+      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl);
+    // 044 EARS-11/13: the real intake sends its own code-free notice first.
+    await expect
+      .poll(
+        async () =>
+          (await captureAddressedMailCheckpoint(mail, mailpit, state.email))
+            .messageIds.length,
+        { message: "the congress confirmation notice is delivered" },
+      )
+      .toBe(1);
+    const notice = await captureAddressedMailCheckpoint(
+      mail,
+      mailpit,
+      state.email,
+    );
+    const detail = await mail.get(
+      `${mailpit.replace(/\/$/, "")}/api/v1/message/${encodeURIComponent(notice.messageIds[0]!)}`,
+    );
+    expect(detail.status(), "owned congress notice can be read").toBe(200);
+    const message = (await detail.json().catch(() => {
+      throw new Error("Malformed owned congress notice");
+    })) as { ID?: string; Subject?: string; To?: { Address?: string }[] };
+    expect(
+      message.ID === notice.messageIds[0] &&
+        message.To?.some(
+          (recipient) => recipient.Address?.toLowerCase() === state.email,
+        ) &&
+        typeof message.Subject === "string" &&
+        message.Subject.startsWith("Doctor.School — вы зарегистрированы на ") &&
+        message.Subject.length >
+          "Doctor.School — вы зарегистрированы на ".length,
+      "the pre-handoff delivery is the real congress notice, not an auth-code mail",
+    ).toBe(true);
+    await assertNoAddressedMail(
+      mail,
+      mailpit,
+      state.email,
+      new Date().toISOString(),
+      notice,
+    );
+    state.beforeHandoff = notice;
   },
 );
 
@@ -147,7 +192,7 @@ Then(
   "exactly one fresh sign-in code mail is issued to that hand-off account without another request",
   async ({ page, world }) => {
     const state = handoff(page);
-    if (!state.redeemed || !state.requestedAt)
+    if (!state.redeemed || !state.requestedAt || !state.beforeHandoff)
       throw new Error("Handoff redemption was not observed");
     let correct = false;
     try {
@@ -181,10 +226,24 @@ Then(
       mailpit,
       state.email,
     );
+    const beforeIds = new Set(state.beforeHandoff.messageIds);
     expect(
-      delivered.messageIds.length,
-      "one mail of any purpose in owned inbox",
-    ).toBe(1);
+      {
+        total: delivered.messageIds.length,
+        added: delivered.messageIds.filter((id) => !beforeIds.has(id)).length,
+        unique:
+          new Set(delivered.messageIds).size === delivered.messageIds.length,
+        congressNoticeRemains: state.beforeHandoff.messageIds.every((id) =>
+          delivered.messageIds.includes(id),
+        ),
+      },
+      "exactly one addressed login delivery was added to the congress-notice baseline",
+    ).toEqual({
+      total: 2,
+      added: 1,
+      unique: true,
+      congressNoticeRemains: true,
+    });
     await assertNoAddressedMail(
       nativeRecoveryMail(),
       mailpit,

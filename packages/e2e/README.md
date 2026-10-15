@@ -966,9 +966,13 @@ with its actual `/account` return route; the Doctor congress contract's
 `CONGRESS_SIGNUP_*` configuration pointing to a real existing event. No event,
 provider, reference or session is substituted by the scenario.
 
-The real redemption must return the exact original address and deliver exactly
-one fresh addressed sign-in mail of any purpose, with a full 15-second check
-for additional delivery. The six-cell code step offers neither method selection
+The actual signup first delivers its code-free congress confirmation notice
+(044 EARS-11/13, `congress-signup.service.ts` and `notice-emails.ts`). Its exact
+recipient/message-ID checkpoint and notice-purpose subject are observed before
+handoff, followed by a full 15-second check for any additional mail. The real
+redemption must return the exact original address and add exactly one fresh
+addressed sign-in code mail to that baseline, with another full 15-second check
+for additional delivery of any purpose. The six-cell code step offers neither method selection
 nor captcha. The browser response carries `no-referrer`; Chromium navigation
 history and the address bar contain no reference. There is one redemption and
 one mailed-code submission, with no ordinary code request, resend or registration

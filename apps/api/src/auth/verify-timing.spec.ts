@@ -81,7 +81,7 @@ describe("003 EARS-41/16 verification response timing", () => {
     const context = {
       getHandler: () => AuthController.prototype.verify,
       getClass: () => AuthController,
-    } as ExecutionContext;
+    } as unknown as ExecutionContext;
     vi.useFakeTimers();
     const timings: number[][] = [[], [], []];
     try {

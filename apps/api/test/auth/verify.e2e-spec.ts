@@ -365,8 +365,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
       expect(r.body).toEqual(reference.body);
     }
     expect(reference.status).toBe(400);
-    // The @TimingEqualized floor engages on every response (≥ 30 ms allows
-    // scheduling jitter below the 40 ms floor) and the spread stays in budget.
+    // 003 EARS-41/16: retain the native minimum as well as the median budget;
+    // the route's production floor is covered by verify-timing.spec.ts.
     expect(medianSpread(timing)).toBeLessThanOrEqual(50);
     for (const r of results) expect(r.ms).toBeGreaterThanOrEqual(30);
   }, 30_000); // 003 EARS-41: 18 samples at the production one-second route floor.

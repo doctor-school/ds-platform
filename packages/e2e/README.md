@@ -568,7 +568,9 @@ code field. Cleanup closes only owned browsers and revokes an owned session if
 failure interrupted fixture preparation. Native `verify.e2e-spec.ts` EARS-41
 interleaved timing and `auth.service.spec.ts` refusal/IdP mutation contracts
 remain intact. Run the single `@wrong-verification-code` Academy declaration on
-the lead-selected contour; no render source changes or Stage-B slot are needed.
+the lead-selected contour. The verification-route timing fix is Ask-tier auth
+logic, so the agent also verifies it on its own PR slot. No render source changes
+or owner Stage-B request are needed.
 
 ### Registration password persistence (003 EARS-39)
 

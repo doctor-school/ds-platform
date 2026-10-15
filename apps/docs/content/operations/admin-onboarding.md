@@ -23,6 +23,15 @@ section, «Operator access to the product admin app») and the
 
 ## When to use / prerequisites
 
+- **Staff access is granted in the admin, not here.** A `platform_admin` grants
+  `platform_admin`, `event-registrar` and `congress-program-committee` in the
+  admin section «Доступы» (`/access`, feature 047): it finds or creates
+  the account, adds the role to the person's grant, writes the event binding and
+  shows a one-time temporary password. This runbook is only for **bootstrapping
+  the first `platform_admin`** of an environment — the one grant «Доступы»
+  cannot make, because nobody can sign in to it yet — and for recovery when the
+  admin itself is unavailable. Steps 7–8 (credential delivery, first login)
+  apply to a «Доступы» grant as well.
 - **Owner decision first.** Onboarding grants the full `platform_admin` project
   role — the admin panel authorizes on that role. There is **no narrower
   events-only role**: `event-registrar` (044 EARS-17) authorizes the congress

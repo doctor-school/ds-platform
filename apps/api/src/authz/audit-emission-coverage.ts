@@ -273,6 +273,30 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
       coveredBy:
         "mfa-factor-removal.e2e (011 EARS-13.1/13.3): a removal appends exactly one auth.mfa.reset carrying by_admin + tier: admin, and a wrong caller code appends auth.mfa.failure with stage: factor_removal; admin-audit.e2e (011 EARS-9.7) asserts the same row from the audit side",
     },
+    "POST /v1/admin/staff-access/grants": {
+      // 047 EARS-5/EARS-9: the grant that completes appends exactly one
+      // `auth.role.granted` (role, by_admin, event_id). The route declares
+      // `stepUp: true`, so a stale second factor is refused by the authority
+      // guard, which appends `auth.step_up.requested` for this route (EARS-8).
+      emits: ["RoleGranted", "StepUpRequested", "AdminSessionEnded"],
+      coveredBy:
+        "staff-access.e2e (047 EARS-5/EARS-8/EARS-9): a completed grant appends one auth.role.granted, a retried grant still appends exactly one, and a stale second factor appends auth.step_up.requested with nothing changed",
+    },
+    "POST /v1/admin/auth/mfa/reverify": {
+      // 047 EARS-8: the in-session re-verification. A correct code refreshes the
+      // same session's second-factor time (`auth.step_up.succeeded`); a refused
+      // one appends `auth.step_up.failed` plus the shared 011 EARS-7 failure
+      // accounting (`auth.mfa.failure`, and `auth.lockout.triggered` at the
+      // threshold) — the same lockout counter every admin code check uses.
+      emits: [
+        "StepUpSucceeded",
+        "StepUpFailed",
+        "MfaChallengeFailed",
+        "LockoutTriggered",
+      ],
+      coveredBy:
+        "staff-access.e2e (047 EARS-8): a wrong code appends auth.step_up.failed, a correct one auth.step_up.succeeded on the same session; the auth.mfa.failure / auth.lockout.triggered rows come from the shared guardedTotpCheck (mfa-challenge.e2e 011 EARS-7.3/7.4)",
+    },
     "POST /v1/auth/verify/resend": {
       // #319 (EARS-25): a resend re-issues the otp_email code ONLY for an existing,
       // unverified registrant → one auth.otp.sent row; the no-op paths (unknown /

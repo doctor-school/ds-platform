@@ -68,6 +68,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/auth/mfa/reverify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminAuthController_reverifyStepUp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/auth/mfa/verify": {
         parameters: {
             query?: never;
@@ -1332,6 +1348,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/staff-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["StaffAccessAdminController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/staff-access/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["StaffAccessAdminController_grant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/users/{id}/mfa": {
         parameters: {
             query?: never;
@@ -2338,6 +2386,10 @@ export interface components {
         AdminMfaCodeRequestDto: {
             code: string;
         };
+        AdminMfaReverifyRequestDto: {
+            code: string;
+            endpoint: string;
+        };
         ConfigureStreamRequestDto: {
             embedRef: string;
             /** @enum {string} */
@@ -3264,6 +3316,37 @@ export interface components {
         SetDisplayNameRequestDto: {
             displayName: string;
         };
+        StaffAccessGrantRequestDto: {
+            email: string;
+            /** Format: uuid */
+            eventId?: string;
+            fullName: string;
+            /** @enum {string} */
+            role: "platform_admin" | "event-registrar" | "congress-program-committee";
+        };
+        StaffAccessGrantResponseDto: {
+            row: {
+                email: string | null;
+                eventId: string | null;
+                eventTitle: string | null;
+                fullName: string | null;
+                /** @enum {string} */
+                role: "platform_admin" | "event-registrar" | "congress-program-committee";
+                userId: string;
+            };
+            temporaryPassword?: string;
+        };
+        StaffAccessListResponseDto: {
+            items: {
+                email: string | null;
+                eventId: string | null;
+                eventTitle: string | null;
+                fullName: string | null;
+                /** @enum {string} */
+                role: "platform_admin" | "event-registrar" | "congress-program-committee";
+                userId: string;
+            }[];
+        };
         TransitionEventRequestDto: {
             /** @enum {string} */
             to: "draft" | "published" | "live" | "ended" | "hidden" | "in_archive";
@@ -3402,6 +3485,27 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["AdminMfaCodeRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminAuthController_reverifyStepUp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminMfaReverifyRequestDto"];
             };
         };
         responses: {
@@ -5448,6 +5552,48 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    StaffAccessAdminController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAccessListResponseDto"];
+                };
+            };
+        };
+    };
+    StaffAccessAdminController_grant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffAccessGrantRequestDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAccessGrantResponseDto"];
+                };
             };
         };
     };

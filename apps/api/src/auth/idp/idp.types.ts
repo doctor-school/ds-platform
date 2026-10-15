@@ -61,6 +61,19 @@ export class IdpInvalidArgumentError extends Error {
 }
 
 /**
+ * 047 EARS-3 — more than one IdP account holds the email an administrator's
+ * read looked up. The IdP does not enforce email uniqueness across users, so
+ * picking one would act on whichever came first; the caller refuses instead
+ * (`STAFF_GRANT_EMAIL_AMBIGUOUS`) with nothing changed.
+ */
+export class IdpAmbiguousEmailError extends Error {
+  constructor(message = "more than one IdP account holds this email") {
+    super(message);
+    this.name = "IdpAmbiguousEmailError";
+  }
+}
+
+/**
  * The IdP could not be reached or returned a genuine **infra fault** (5xx /
  * network) (#202) — transient and not the caller's fault. The service maps this
  * to a 503 "service temporarily unavailable" (the project's actionable-errors
@@ -94,6 +107,11 @@ interface CreateUserIdentity {
 export interface CreateUserProfile {
   givenName: string;
   familyName: string;
+  /**
+   * 047 EARS-5 — the display name exactly as the administrator typed the ФИО.
+   * Absent ⇒ the adapter composes `givenName familyName` (044 EARS-4).
+   */
+  displayName?: string | undefined;
 }
 
 /** 003 — create a user who chose a password on the registration form. */
@@ -120,6 +138,13 @@ export interface CreateUserPasswordlessInput extends CreateUserIdentity {
   credential: "none";
   /** Mandatory here — the surface asked for a name, so the IdP gets the real one. */
   profile: CreateUserProfile;
+  /**
+   * 047 EARS-5 — create the email already VERIFIED (`isVerified: true`, no
+   * verification code generated). Only a platform administrator granting a
+   * staff role vouches for an address this way; every self-service and intake
+   * create leaves it unset and the address is proven by a code.
+   */
+  emailVerified?: true | undefined;
 }
 
 /** Input to create a Zitadel user with a single primary identifier. */
@@ -201,6 +226,19 @@ export type SmsSendOutcome = "sent" | "unconfirmed" | "failed";
  * not count it. Never reflected to a client.
  */
 export type SmsResetOutcome = SmsSendOutcome | "email_unverified";
+
+/** 047 — one user's grant on this project: its id and role keys. */
+export interface IdpProjectGrant {
+  grantId: string;
+  roleKeys: string[];
+}
+
+/** 047 EARS-2 — a project grant as the staff list reads it, with the holder. */
+export interface IdpProjectGrantHolder extends IdpProjectGrant {
+  sub: string;
+  email?: string | undefined;
+  displayName?: string | undefined;
+}
 
 /** A Zitadel user as seen by the reconciliation sweep (EARS-19). */
 export interface IdpUser {
@@ -713,7 +751,10 @@ export interface IdpClient {
    * missing project config) is a real fault and throws, so it surfaces loudly
    * rather than silently leaving a registered user un-authorized.
    */
-  grantProjectRole(sub: string, roleKey: string): Promise<void>;
+  grantProjectRole(
+    sub: string,
+    roleKey: string | readonly string[],
+  ): Promise<void>;
   /**
    * 011 EARS-13: the Zitadel **project roles** `sub` currently holds.
    *
@@ -732,6 +773,58 @@ export interface IdpClient {
    * silent refusal of a legitimate recovery.
    */
   getProjectRoles(sub: string): Promise<string[]>;
+  /**
+   * 047 EARS-4 — this project's grant of `sub` WITH its grant id, or `null` when
+   * the user holds no grant on the project. The id is what
+   * {@link updateProjectGrantRoles} addresses: Zitadel keeps one grant per user
+   * and project, and a second CreateAuthorization for a user who already holds
+   * one answers `409` (proven on stage 2026-10-13), so a role is added to an
+   * existing account by rewriting that grant's role keys. Fails loudly
+   * ({@link IdpUnavailableError}) — `null` must mean «no grant», never «could
+   * not read».
+   */
+  getProjectGrant(sub: string): Promise<IdpProjectGrant | null>;
+  /**
+   * 047 EARS-4/7 — replace the role keys of `sub`'s existing project grant
+   * `grantId` with `roleKeys` (the caller passes the full set: the current keys
+   * plus or minus one role). Fails loudly ({@link IdpUnavailableError}).
+   */
+  updateProjectGrantRoles(
+    sub: string,
+    grantId: string,
+    roleKeys: readonly string[],
+  ): Promise<void>;
+  /**
+   * 047 EARS-2 — every grant on this project carrying at least one of
+   * `roleKeys`, with the holder's IdP profile where the IdP returns it. The
+   * «Доступы» list is built from it: the IdP grant, not the `users.role`
+   * mirror, is the authority for who holds a staff role. Fails loudly — an
+   * outage is a `503`, never an empty list.
+   */
+  listProjectGrantsWithRoles(
+    roleKeys: readonly string[],
+  ): Promise<IdpProjectGrantHolder[]>;
+  /**
+   * 047 EARS-4 — the subject holding `email` (matched case-insensitively), or
+   * `null` when no account holds it. Unlike the reset-path lookups, which fail
+   * closed to `null` for enumeration safety, this one is an administrator's
+   * read and fails LOUDLY: reading «no account» on an outage would create a
+   * second account for an existing person. More than one account on the email
+   * is {@link IdpAmbiguousEmailError}, never the first of them.
+   */
+  findUserByEmail(email: string): Promise<string | null>;
+  /**
+   * 047 EARS-6 — whether `sub` holds a password. Fails loudly: a guessed `true`
+   * would leave a staff account unable to sign in, a guessed `false` would
+   * overwrite a person's own password.
+   */
+  userHasPassword(sub: string): Promise<boolean>;
+  /**
+   * 047 EARS-6 — set `password` on `sub` WITHOUT a forced change (the admin
+   * sign-in has no change-password step). The password is forwarded and never
+   * logged. Fails loudly ({@link IdpUnavailableError}).
+   */
+  setUserPassword(sub: string, password: string): Promise<void>;
   /**
    * 011 EARS-3: does `sub` hold a **registered** (ready) TOTP factor at the IdP?
    *

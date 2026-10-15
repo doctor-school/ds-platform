@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   readAdminSession,
+  reverifyMfa,
   startMfaEnrollment,
   verifyMfaChallenge,
   verifyMfaEnrollment,
@@ -84,6 +85,49 @@ describe("MFA verify — refusal mapping", () => {
     expect(await verifyMfaChallenge("123456")).toEqual({
       ok: true,
       value: undefined,
+    });
+  });
+});
+
+describe("047 EARS-8 step-up re-verification of the current session", () => {
+  it("047 EARS-8: the code and the refused endpoint go to mfa/reverify with the CSRF double-submit header", async () => {
+    vi.stubGlobal("document", { cookie: "__Host-ds_admin_csrf=csrf-1" });
+    const stub = respondWith(200, { state: "active" });
+    expect(
+      await reverifyMfa("123456", "POST /v1/admin/staff-access/grants"),
+    ).toEqual({ ok: true, value: undefined });
+    const [url, init] = stub.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/v1/admin/auth/mfa/reverify");
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    expect(init.headers).toMatchObject({
+      "content-type": "application/json",
+      "x-ds-admin-csrf": "csrf-1",
+    });
+    expect(JSON.parse(String(init.body))).toEqual({
+      code: "123456",
+      endpoint: "POST /v1/admin/staff-access/grants",
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it("047 EARS-8: a wrong code is the uniform refusal; 429 and 503 keep their carve-outs", async () => {
+    respondWith(401);
+    expect(await reverifyMfa("123456", "POST /x")).toEqual({
+      ok: false,
+      refused: true,
+    });
+    respondWith(429);
+    expect(await reverifyMfa("123456", "POST /x")).toEqual({
+      ok: false,
+      refused: true,
+      throttled: true,
+    });
+    respondWith(503);
+    expect(await reverifyMfa("123456", "POST /x")).toEqual({
+      ok: false,
+      refused: true,
+      outage: true,
     });
   });
 });

@@ -97,6 +97,14 @@ const REGISTRAR_ADMITTED: Record<string, string[]> = {
     "event-registrar",
     "congress-program-committee",
   ],
+  // 047 EARS-8 — re-verifying one's own second factor inside the session, for
+  // any staff role the design admits; it changes no grant (047-design §Fresh
+  // second factor).
+  "POST /v1/admin/auth/mfa/reverify": [
+    "platform_admin",
+    "event-registrar",
+    "congress-program-committee",
+  ],
   // 044 EARS-18 — the congress roster read, the working surface the role
   // exists for: a read of one event's roster.
   "GET /v1/admin/events/:idOrSlug/roster": [
@@ -164,6 +172,28 @@ const FLOOR_ROUTES: {
     endpoint: "GET /v1/admin/auth/session",
     method: "GET",
     url: "/v1/admin/auth/session",
+  },
+  // 047 EARS-8 — the in-session re-verification sits behind the live session.
+  // A wrong code answers the same uniform 401 an authz refusal does, so the
+  // payload names a non-step-up endpoint: the route's own 400 (checked before
+  // any code) is what proves the floor admitted the principal.
+  {
+    endpoint: "POST /v1/admin/auth/mfa/reverify",
+    method: "POST",
+    url: "/v1/admin/auth/mfa/reverify",
+    payload: { code: "000000", endpoint: "GET /v1/admin/events" },
+  },
+  // 047 EARS-1 — the staff-access list and grant, platform_admin only.
+  {
+    endpoint: "GET /v1/admin/staff-access",
+    method: "GET",
+    url: "/v1/admin/staff-access",
+  },
+  {
+    endpoint: "POST /v1/admin/staff-access/grants",
+    method: "POST",
+    url: "/v1/admin/staff-access/grants",
+    payload: {},
   },
   {
     endpoint: "DELETE /v1/admin/users/:id/mfa",

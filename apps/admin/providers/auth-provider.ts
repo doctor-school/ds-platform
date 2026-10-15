@@ -4,6 +4,7 @@ import type { AuthProvider } from "@refinedev/core";
 import { adminLogin, adminLogout, readAdminAuthState } from "@/lib/admin-auth";
 import { clearAdminSession } from "@/lib/admin-session-cache";
 import { loginFailureMessage } from "@/lib/login-failure";
+import { browserStepUpStorage, clearStepUpRequest } from "@/lib/step-up";
 
 /**
  * Refine auth provider over the **011 admin session tier**.
@@ -79,6 +80,9 @@ export const authProvider: AuthProvider = {
     // 044 EARS-20: the cached session read (nav + `can`) belongs to the principal
     // who just left; the next sign-in in this tab re-reads its own.
     clearAdminSession();
+    // 047 EARS-8: a grant the step-up interrupted belongs to this session only;
+    // it is never sent under the next one (the 401 path signs out through here).
+    clearStepUpRequest(browserStepUpStorage());
     return { success: true, redirectTo: LOGIN_PATH };
   },
 
@@ -104,9 +108,21 @@ export const authProvider: AuthProvider = {
    * registrar whose event binding was withdrawn (044 EARS-38). The screen that
    * made the call owns what it shows; logging out here would race it to
    * `/login` and hide the refusal.
+   *
+   * 047 EARS-8 — a `401 STEP_UP_REQUIRED` is not a lost session either: the
+   * session is live and only its second factor is older than 30 minutes
+   * (ADR-0001 §10). The screen that sent the request keeps it and takes the
+   * operator to the code screen (`lib/step-up.ts`); signing out here would
+   * throw away the session and the entered form.
    */
   onError: async (error) => {
-    const status = (error as { statusCode?: number }).statusCode;
+    const { statusCode: status, errorCode } = error as {
+      statusCode?: number;
+      errorCode?: string;
+    };
+    if (status === 401 && errorCode === "STEP_UP_REQUIRED") {
+      return { error };
+    }
     if (status === 401) {
       return { logout: true, redirectTo: LOGIN_PATH, error };
     }

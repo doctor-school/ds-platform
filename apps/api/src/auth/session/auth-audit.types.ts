@@ -89,7 +89,24 @@ export type AdminPrimaryAuthFailureReason =
  * operator failed to authorize the most destructive action in this spec" the same
  * row, which is precisely the distinction a forensic reader is looking for.
  */
-export type AdminMfaStage = "enrollment" | "challenge" | "factor_removal";
+export type AdminMfaStage =
+  | "enrollment"
+  | "challenge"
+  | "factor_removal"
+  // 047 EARS-8: the step-up re-verification of an established admin session.
+  | "step_up";
+
+/**
+ * 047 EARS-8 — what an `auth.step_up.*` row records about the attempt
+ * (ADR-0001 design §7.3): the signed-in operator, the `stepUp` route the
+ * re-elevation is for (`"<METHOD> <route>"`), and the request's origin.
+ */
+export interface StepUpAttempt {
+  sub: string;
+  endpoint: string;
+  ip: string | null;
+  ua: string | null;
+}
 
 /**
  * 011 EARS-7: why a TOTP verification was refused. **Audit-only** — the caller
@@ -246,6 +263,22 @@ export type AuthAuditEvent =
   // `sub` is the TARGET whose factor is gone; `byAdmin` is the acting operator.
   // Both are opaque IdP subjects — no identifier, no code, no secret.
   | { type: "MfaFactorRemoved"; sub: string; byAdmin: string }
+  // 047 EARS-9: a staff role granted from «Доступы» — written once, after the
+  // IdP holds the role (the completion mark of the grant). `eventId` is the
+  // bound event of an event-scoped role, `null` for `platform_admin`.
+  | {
+      type: "RoleGranted";
+      sub: string;
+      role: string;
+      eventId: string | null;
+      byAdmin: string;
+    }
+  // 047 EARS-8: the step-up trail. `StepUpRequested` is the guard's refusal of
+  // a `stepUp` route on a stale second factor; `StepUpSucceeded` /
+  // `StepUpFailed` are the re-verification attempts.
+  | ({ type: "StepUpRequested" } & StepUpAttempt)
+  | ({ type: "StepUpSucceeded" } & StepUpAttempt)
+  | ({ type: "StepUpFailed" } & StepUpAttempt)
   // EARS-7: the §7 lockout threshold (10 failed verifies / 30 min) crossed — the
   // admin-tier counterpart of 003's `AccountLocked`, which OBSERVES Zitadel's
   // native password lockout. This one the BFF owns outright, because Zitadel has
@@ -303,6 +336,10 @@ export const AUTH_AUDIT_EVENT_TYPES = [
   "MfaChallengeSucceeded",
   "MfaChallengeFailed",
   "MfaFactorRemoved",
+  "RoleGranted",
+  "StepUpRequested",
+  "StepUpSucceeded",
+  "StepUpFailed",
   "LockoutTriggered",
   "AdminSessionEstablished",
   "AdminSessionEnded",

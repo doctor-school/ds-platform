@@ -52,11 +52,16 @@ const CANONICAL_ADMIN_WIRE_IDS = [
   "auth.session.created",
   "auth.session.terminated",
   "auth.session.rejected",
+  // 047 §Audit: the staff-access grant and the step-up trail, admin-tier rows.
+  "auth.role.granted",
+  "auth.step_up.requested",
+  "auth.step_up.succeeded",
+  "auth.step_up.failed",
 ] as const;
 
 /**
  * 011 EARS-9 — the canonical §7.3 wire-id mapping, asserted **table-driven over
- * all ten rows** of the requirements Event Model mapping table.
+ * all ten rows** of the 011 requirements Event Model mapping table, plus the four admin-tier rows 047 §Audit adds.
  *
  * This half is a pure assertion over the single shipped mapper (`toLedgerRow`),
  * deliberately outside the DB-gated describe below: the mapping is what the EARS
@@ -153,6 +158,83 @@ describe("011 EARS-9 — canonical wire-id mapping (Event Model → Events)", ()
       wireId: "auth.session.rejected",
       reason: "wrong_cookie",
       metadata: { tier: "admin" },
+    },
+    {
+      event: {
+        type: "RoleGranted",
+        sub: "sub-2",
+        role: "event-registrar",
+        eventId: "event-1",
+        byAdmin: "sub-1",
+      },
+      wireId: "auth.role.granted",
+      reason: null,
+      metadata: {
+        role: "event-registrar",
+        by_admin: "sub-1",
+        event_id: "event-1",
+        tier: "admin",
+      },
+    },
+    {
+      event: {
+        type: "StepUpRequested",
+        sub: "sub-1",
+        endpoint: "POST /v1/admin/staff-access/grants",
+        ip: "127.0.0.1",
+        ua: "ua",
+      },
+      wireId: "auth.step_up.requested",
+      reason: null,
+      metadata: {
+        endpoint: "POST /v1/admin/staff-access/grants",
+        acr_before: "mfa-stale",
+        acr_after: "mfa-stale",
+        mfa_method: "totp",
+        ip: "127.0.0.1",
+        ua: "ua",
+        tier: "admin",
+      },
+    },
+    {
+      event: {
+        type: "StepUpSucceeded",
+        sub: "sub-1",
+        endpoint: "POST /v1/admin/staff-access/grants",
+        ip: "127.0.0.1",
+        ua: "ua",
+      },
+      wireId: "auth.step_up.succeeded",
+      reason: null,
+      metadata: {
+        endpoint: "POST /v1/admin/staff-access/grants",
+        acr_before: "mfa-stale",
+        acr_after: "mfa-fresh",
+        mfa_method: "totp",
+        ip: "127.0.0.1",
+        ua: "ua",
+        tier: "admin",
+      },
+    },
+    {
+      event: {
+        type: "StepUpFailed",
+        sub: "sub-1",
+        endpoint: "POST /v1/admin/staff-access/grants",
+        ip: "127.0.0.1",
+        ua: "ua",
+      },
+      wireId: "auth.step_up.failed",
+      reason: null,
+      metadata: {
+        endpoint: "POST /v1/admin/staff-access/grants",
+        acr_before: "mfa-stale",
+        acr_after: "mfa-stale",
+        mfa_method: "totp",
+        ip: "127.0.0.1",
+        ua: "ua",
+        tier: "admin",
+      },
     },
   ];
 

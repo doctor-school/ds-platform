@@ -227,7 +227,7 @@ const BUTTON_VARIANTS = [
   "ghost",
   "link",
 ] as const;
-const BUTTON_SIZES = ["default", "sm", "lg", "icon"] as const;
+const BUTTON_SIZES = ["default", "sm", "lg", "icon", "field"] as const;
 
 function ButtonSection() {
   return (
@@ -297,6 +297,15 @@ function ButtonSection() {
               </Button>
             </div>
           ))}
+        </div>
+      </SubRow>
+
+      <SubRow label="size=field beside an Input (one control height)">
+        <div className="flex max-w-md gap-2">
+          <Input aria-label="Field" readOnly value="EBdz#hbNAZwjFBR4" />
+          <Button variant="outline" size="field">
+            Copy
+          </Button>
         </div>
       </SubRow>
 

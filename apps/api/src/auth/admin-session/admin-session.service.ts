@@ -737,6 +737,56 @@ export class AdminSessionService {
   }
 
   /**
+   * 047 EARS-8 — the step-up **re-verification** of the caller's CURRENT admin
+   * session (ADR-0001 §10): a current authenticator code refreshes the session's
+   * second-factor time and nothing else — same sid, same expiry, no new cookie.
+   *
+   * The code check runs inside {@link guardedTotpCheck} (stage `step_up`), so a
+   * wrong code spends the SAME per-user window and lockout counter the sign-in
+   * challenge does and writes the same `auth.mfa.failure` row: the re-verify is
+   * not a code-guessing surface with a budget of its own. Every attempt also
+   * appends its `auth.step_up.succeeded` / `.failed` row naming `endpoint`.
+   *
+   * A session that vanished, or that predates the carried identifier the §7
+   * window is keyed by, resolves to the uniform refusal (as in
+   * {@link removeMfaFactor}); so does a session force-logged-out between the
+   * check and the write, which {@link AdminSessionStore.markMfaVerified} refuses
+   * to resurrect.
+   */
+  async reverifyStepUp(
+    caller: AdminSessionPrincipal,
+    code: string,
+    attempt: { endpoint: string; ip: string | null; ua: string | null },
+  ): Promise<"verified" | "refused" | "throttled"> {
+    const stepUp = { sub: caller.sub, ...attempt };
+    const session = await this.sessions.get(caller.sid);
+    if (!session?.identifier) {
+      await this.audit.record({ type: "StepUpFailed", ...stepUp });
+      return "refused";
+    }
+
+    const outcome = await this.guardedTotpCheck({
+      sub: caller.sub,
+      identifier: session.identifier,
+      stage: "step_up",
+      check: async () =>
+        (await this.idp.checkTotpCode(caller.sub, code)) ? true : undefined,
+    });
+    if (outcome.status !== "verified") {
+      await this.audit.record({ type: "StepUpFailed", ...stepUp });
+      return outcome.status;
+    }
+
+    const marked = await this.sessions.markMfaVerified(caller.sid, Date.now());
+    if (!marked) {
+      await this.audit.record({ type: "StepUpFailed", ...stepUp });
+      return "refused";
+    }
+    await this.audit.record({ type: "StepUpSucceeded", ...stepUp });
+    return "verified";
+  }
+
+  /**
    * EARS-13 / LD-2 — the **one** writer of a factor removal: drop the factor at
    * the IdP, then append the canonical `auth.mfa.reset` row naming the acting
    * operator in `by_admin`.

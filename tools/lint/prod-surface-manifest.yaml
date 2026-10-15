@@ -408,6 +408,12 @@ routes:
     route: /specialties
     file: apps/admin/app/specialties/page.tsx
     status: product-ready
+  # 047 EARS-1…EARS-6 (#2901): «Доступы» — the staff list and the grant panel,
+  # platform_admin only; driven live in `apps/admin/e2e/staff-access.spec.ts`.
+  - app: admin
+    route: /access
+    file: apps/admin/app/access/page.tsx
+    status: product-ready
   # 012 EARS-4 (#1286): the descriptive-partner authoring vertical — the same
   # shared list shell and tabbed detail, with a logo slot and an https-only
   # website address. Real product deliverables, driven live in

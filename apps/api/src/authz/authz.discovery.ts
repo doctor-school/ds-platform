@@ -36,8 +36,18 @@ function firstString(value: unknown, fallback = ""): string {
 export function collectAuthzRows(
   app: INestApplicationContext,
 ): AuthzScanResult {
-  const discovery = app.get(DiscoveryService);
-  const reflector = app.get(Reflector);
+  return collectAuthzRowsFrom(app.get(DiscoveryService), app.get(Reflector));
+}
+
+/**
+ * {@link collectAuthzRows} over an injected `DiscoveryService` + `Reflector` —
+ * the form a provider inside the running app uses (047: the `stepUp` route set
+ * the re-verification accepts is read from this same registry).
+ */
+export function collectAuthzRowsFrom(
+  discovery: DiscoveryService,
+  reflector: Reflector,
+): AuthzScanResult {
   const scanner = new MetadataScanner();
 
   const rows: MatrixRow[] = [];

@@ -146,6 +146,14 @@ export interface AdminSessionStore {
    * for the batch (EARS-9's one-row-per-lifecycle-event discipline).
    */
   deleteBySub(sub: string): Promise<string[]>;
+  /**
+   * 047 EARS-8 — record a step-up re-verification on the LIVE session `sid`:
+   * set its `mfaVerifiedAtMs` to `atMs` and change nothing else — same sid, same
+   * `expiresAtMs`, same TTL (ADR-0001 §10 «Session lifetime after step-up»).
+   * Resolves `false`, writing nothing, when the session is gone (expired or
+   * force-logged-out meanwhile) — a re-verification never resurrects a session.
+   */
+  markMfaVerified(sid: string, atMs: number): Promise<boolean>;
 }
 
 /** DI token the {@link AdminSessionStore} port is bound to (fake or Redis adapter). */

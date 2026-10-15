@@ -100,6 +100,13 @@ const buttonVariants = cva(
         sm: "px-4 py-2 text-caption",
         lg: "px-8 py-4",
         icon: "size-11",
+        // A button in one row with a text field: the field controls (`Input`,
+        // `NativeSelect`, `Combobox`) are `h-11`, while `default` is
+        // padding-driven and lands 4px taller once its 2px border is added, so
+        // the pair read as two sizes (#2901). Canvas: `ds-foundation.dc.html`
+        // draws the button and the field with the same 12px vertical padding
+        // and 2px border — one control height.
+        field: "h-11 px-5",
         // The on-header chip geometry of the canvas (`ds-shell.dc.html` line
         // 37): 12×22 padding at 13.5px/800. Both halves are tokens
         // (`space.3` / `space.chip-x` / `font.size.chip`), so the chip's size

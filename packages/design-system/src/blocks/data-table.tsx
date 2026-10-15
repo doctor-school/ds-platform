@@ -35,7 +35,9 @@ import {
  *    the title WRAPS in full and a muted context line sits under it, so a long RU
  *    taxonomy name is never truncated. Below `md` (768px) the grid is
  *    replaced by stacked record CARDS — the same data, labelled — so a phone NEVER
- *    scrolls horizontally and no column silently leaves the screen.
+ *    scrolls horizontally and no column silently leaves the screen. A card omits
+ *    a field whose `fullValue` is blank (hide a block until it has content); the
+ *    grid keeps that empty cell.
  * 3. THE STATE SET. `loading` (skeleton rows under an already-drawn header) / `error` /
  *    `empty — no records` / `empty — no results for the current filters` / `populated`,
  *    plus the paginated footer. The two empty situations are two `EmptyState` variants
@@ -104,7 +106,10 @@ export interface DataTableColumn<Row> {
   /**
    * Plain-text full value, put on the cell's `title`. REQUIRED in spirit for any
    * `ellipsis` column carrying free text — it is the "the full value stays
-   * reachable" half of the truncation rule.
+   * reachable" half of the truncation rule. A blank value (`""` after trim) also
+   * leaves the field off that row's mobile record card — a term with no value
+   * reads as missing data; the desktop cell stays so the grid keeps its shape.
+   * Without `fullValue` the card always shows the field.
    */
   fullValue?: (row: Row) => string;
   /** Keep this column off the mobile record card (rarely right — default false). */
@@ -596,7 +601,14 @@ export function DataTable<Row>({
         </div>
         <dl className="flex flex-col gap-1">
           {columns
-            .filter((column) => !column.hideOnCard)
+            .filter(
+              (column) =>
+                !column.hideOnCard &&
+                // An empty field is left off the card: a label with nothing after
+                // it reads as missing data, while the desktop grid keeps the empty
+                // cell so its columns stay aligned.
+                column.fullValue?.(row).trim() !== "",
+            )
             .map((column) => (
               <div key={column.key} className="flex gap-2 text-sm">
                 <dt className="text-caption text-muted-foreground">

@@ -13,5 +13,11 @@ export {
   findEventGrant,
   findEventGrantForEvent,
   listEventGrantsBySub,
+  listEventGrantsForUserRole,
+  listStaffEventBindings,
+  insertEventGrant,
 } from "./event-grants.js";
-export type { EventGrantBinding } from "./event-grants.js";
+export type {
+  EventGrantBinding,
+  StaffEventBinding,
+} from "./event-grants.js";

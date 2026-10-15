@@ -76,13 +76,27 @@ function refusal(res: Response): {
  * request, which is the correct fail-closed answer.
  */
 export function adminCsrfHeaders(): Record<string, string> {
-  if (typeof document === "undefined") return {};
+  const token = adminCsrfToken();
+  return token ? { [ADMIN_CSRF_HEADER]: token } : {};
+}
+
+/**
+ * The current admin session's CSRF token — minted per session at sign-in — or
+ * `null` when none is readable. Besides the double-submit header it binds a
+ * step-up request saved by this session to this session (047 EARS-8,
+ * `lib/step-up.ts`).
+ */
+export function adminCsrfToken(): string | null {
+  if (typeof document === "undefined") return null;
   const match = new RegExp(`(?:^|; )${ADMIN_CSRF_COOKIE_NAME}=([^;]*)`).exec(
     document.cookie,
   );
-  return match?.[1]
-    ? { [ADMIN_CSRF_HEADER]: decodeURIComponent(match[1]) }
-    : {};
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -204,6 +218,33 @@ export async function verifyMfaChallenge(
   code: string,
 ): Promise<AdminAuthResult<void>> {
   return submitCode(`${ADMIN_AUTH_BASE}/mfa/verify`, code);
+}
+
+/**
+ * 047 EARS-8 — the step-up re-verification of the CURRENT admin session
+ * (ADR-0001 §10): a current authenticator code refreshes the session's
+ * second-factor time and nothing else. `endpoint` names the refused request the
+ * console sends again (`"POST /v1/admin/staff-access/grants"`). Unlike the
+ * sign-in challenge this is a signed-in, state-changing route, so it carries the
+ * EARS-10 CSRF double-submit header. The refusal mapping is the challenge's: one
+ * uniform 401 for a wrong code, the 429 and 503 carve-outs.
+ */
+export async function reverifyMfa(
+  code: string,
+  endpoint: string,
+): Promise<AdminAuthResult<void>> {
+  const res = await fetch(`${ADMIN_AUTH_BASE}/mfa/reverify`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json",
+      ...adminCsrfHeaders(),
+    },
+    body: JSON.stringify({ code, endpoint }),
+  });
+  if (!res.ok) return refusal(res);
+  return { ok: true, value: undefined };
 }
 
 async function submitCode(

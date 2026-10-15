@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
   Alert,
@@ -15,7 +15,16 @@ import {
   OtpField,
 } from "@ds/design-system";
 import { Form, FormField } from "@ds/design-system/form";
-import { readAdminAuthState, verifyMfaChallenge } from "@/lib/admin-auth";
+import {
+  readAdminAuthState,
+  reverifyMfa,
+  verifyMfaChallenge,
+} from "@/lib/admin-auth";
+import {
+  browserStepUpStorage,
+  markStepUpConfirmed,
+  reverifyReturnTo,
+} from "@/lib/step-up";
 import {
   mfaFailurePresentation,
   type MfaFailurePresentation,
@@ -52,10 +61,23 @@ interface CodeForm {
  * re-enters enrollment) is on the screen permanently, not surfaced after failure:
  * an operator whose phone is lost or wiped needs it before they have burned ten
  * attempts finding out.
+ *
+ * **Re-verify mode** (047 EARS-8, ADR-0001 §10): `?mode=reverify&returnTo=…&endpoint=…`
+ * is where a step-up refusal sends a SIGNED-IN operator whose second factor is
+ * older than 30 minutes. The same card and code field serve an active session
+ * (any other state goes to `/login`), the code goes to `mfa/reverify` — which
+ * refreshes the current session's second-factor time and nothing else — and an
+ * accepted code returns to `returnTo` (an admin path, else `/events`), where the
+ * console sends the refused request again. `endpoint` names that request for the
+ * API's step-up audit row. Refusals render exactly as at sign-in.
  */
 export default function MfaChallengePage() {
   const t = useTranslations("mfaChallenge");
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const reverify = searchParams.get("mode") === "reverify";
+  const returnTo = reverifyReturnTo(searchParams.get("returnTo"));
+  const endpoint = searchParams.get("endpoint") ?? "";
   const [checking, setChecking] = useState(true);
   const [failure, setFailure] = useState<MfaFailurePresentation | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -66,6 +88,12 @@ export default function MfaChallengePage() {
     let cancelled = false;
     void readAdminAuthState().then((state) => {
       if (cancelled) return;
+      // 047 EARS-8: re-verification is for a live session only.
+      if (reverify) {
+        if (state === "active") setChecking(false);
+        else router.replace("/login");
+        return;
+      }
       // Not a pending-challenge principal: an already-active session belongs in
       // admin, a pending ENROLLMENT belongs on the enrollment screen, and anything
       // else belongs at the login form. Rendering a code field to any of them
@@ -85,14 +113,16 @@ export default function MfaChallengePage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [reverify, router]);
 
   const submit = useCallback(
     async ({ code: submitted }: CodeForm) => {
       if (submitting) return;
       setSubmitting(true);
       setFailure(null);
-      const result = await verifyMfaChallenge(submitted);
+      const result = reverify
+        ? await reverifyMfa(submitted, endpoint)
+        : await verifyMfaChallenge(submitted);
       setSubmitting(false);
       if (!result.ok) {
         setFailure(mfaFailurePresentation(result));
@@ -111,16 +141,19 @@ export default function MfaChallengePage() {
       }
       // LD-1: the verify response carried `__Host-ds_admin_session` — the login
       // is complete in place, so this is a navigation, not a second sign-in.
-      router.replace("/events");
+      // Re-verify: the same session is fresh again; back to the refused action.
+      // 047 EARS-8: the confirmed code is what lets the saved request go out.
+      if (reverify) markStepUpConfirmed(browserStepUpStorage(), Date.now());
+      router.replace(reverify ? returnTo : "/events");
     },
-    [form, router, submitting, t],
+    [endpoint, form, returnTo, reverify, router, submitting],
   );
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md items-center px-6">
       <Card className="w-full">
         <CardHeader>
-          <CardTitle>{t("title")}</CardTitle>
+          <CardTitle>{t(reverify ? "reverifyTitle" : "title")}</CardTitle>
           <CardDescription>{t("description")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
@@ -162,7 +195,7 @@ export default function MfaChallengePage() {
                     disabled={code.length !== CODE_LENGTH}
                     data-testid="mfa-submit"
                   >
-                    {t("submit")}
+                    {t(reverify ? "reverifySubmit" : "submit")}
                   </Button>
                 </form>
               </Form>

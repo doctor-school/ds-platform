@@ -53,6 +53,7 @@ const ADMIN_SECTIONS = [
   "nav-direction-specialties",
   "nav-direction-adjacency",
   "nav-specialties",
+  "nav-access",
 ];
 
 test.describe.configure({ mode: "serial" });

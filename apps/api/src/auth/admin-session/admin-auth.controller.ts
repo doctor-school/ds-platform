@@ -6,9 +6,11 @@ import {
   HttpCode,
   HttpException,
   HttpStatus,
+  Inject,
   Ip,
   Post,
   Req,
+  BadRequestException,
   Res,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -20,10 +22,12 @@ import type {
   AdminLoginResponse,
   AdminLogoutResponse,
   AdminMfaEnrollVerifyResponse,
+  AdminMfaReverifyResponse,
   AdminMfaVerifyResponse,
   AdminSessionResponse,
 } from "@ds/schemas";
 import { Authz, EventGrantPolicy, Public } from "../../authz/index.js";
+import { StepUpRoutes } from "../../authz/step-up-routes.js";
 import { IdpUnavailableError } from "../idp/idp.types.js";
 import { RateLimited } from "../rate-limit/index.js";
 import { TimingEqualized } from "../timing/index.js";
@@ -41,6 +45,7 @@ import {
 import {
   AdminLoginRequestDto,
   AdminMfaCodeRequestDto,
+  AdminMfaReverifyRequestDto,
 } from "./admin-auth.dto.js";
 
 /**
@@ -111,8 +116,9 @@ const GENERIC_ADMIN_THROTTLED = "too many requests, please try again later";
 @Controller({ path: "admin/auth", version: "1" })
 export class AdminAuthController {
   constructor(
-    private readonly admin: AdminSessionService,
-    private readonly grants: EventGrantPolicy,
+    @Inject(AdminSessionService) private readonly admin: AdminSessionService,
+    @Inject(EventGrantPolicy) private readonly grants: EventGrantPolicy,
+    @Inject(StepUpRoutes) private readonly stepUpRoutes: StepUpRoutes,
   ) {}
 
   /**
@@ -327,6 +333,68 @@ export class AdminAuthController {
       ),
     );
     this.issueAdminSession(outcome, reply);
+    return { state: "active" };
+  }
+
+  /**
+   * 047 EARS-8 — the step-up **re-verification** of the CURRENT admin session
+   * (ADR-0001 §10), the re-verify mode of the challenge: the admin code screen
+   * at `STEP_UP_URL` submits here after a `stepUp` route answered
+   * `401 STEP_UP_REQUIRED`. A current code sets the session's second-factor
+   * time to now — same session, same cookie, same expiry — and the console
+   * sends the refused request again.
+   *
+   * A sibling of `mfa/verify` rather than a mode of it: the authorization
+   * matrix gives each route one access kind, and `mfa/verify` is a
+   * `pending-auth` route that refuses a caller already holding a session. This
+   * one is `authenticated`, carries the EARS-10 CSRF double-submit (enforced in
+   * the hook), and answers every code refusal with the SAME 401 body the
+   * challenge screen gets, under `@TimingEqualized()` and the same budgets.
+   *
+   * `endpoint` must name a route that declares `stepUp` in the `@Authz`
+   * registry, else `400` before any code check — so an `auth.step_up.*` row can
+   * only name a real step-up route. No `revalidate: "live"`: it changes no
+   * grant, and the `stepUp` route the operator retries re-asks the IdP before
+   * it acts (`REVALIDATION_EXEMPT`).
+   */
+  @Post("mfa/reverify")
+  @RateLimited()
+  @TimingEqualized()
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin", "event-registrar", "congress-program-committee"],
+    check: "fast-path",
+    audit: "high-stakes",
+    tests: ["EARS-8"],
+  })
+  async reverifyStepUp(
+    @Body() dto: AdminMfaReverifyRequestDto,
+    @Headers("user-agent") userAgent: string | undefined,
+    @Ip() ip: string,
+    @Req() req: { user?: AdminSessionPrincipal },
+  ): Promise<AdminMfaReverifyResponse> {
+    const caller = req.user;
+    if (!caller) throw new UnauthorizedException(GENERIC_ADMIN_MFA_FAILURE);
+    if (!this.stepUpRoutes.has(dto.endpoint)) {
+      throw new BadRequestException("endpoint is not a step-up route");
+    }
+    const outcome = await this.mapIdpFault(() =>
+      this.admin.reverifyStepUp(caller, dto.code, {
+        endpoint: dto.endpoint,
+        ip: ip ?? null,
+        ua: userAgent ?? null,
+      }),
+    );
+    if (outcome === "throttled") {
+      throw new HttpException(
+        GENERIC_ADMIN_THROTTLED,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    if (outcome !== "verified") {
+      throw new UnauthorizedException(GENERIC_ADMIN_MFA_FAILURE);
+    }
     return { state: "active" };
   }
 

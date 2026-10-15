@@ -54,6 +54,13 @@ export class InMemoryAdminSessionStore implements AdminSessionStore {
     return Promise.resolve(revoked);
   }
 
+  async markMfaVerified(sid: string, atMs: number): Promise<boolean> {
+    const record = await this.get(sid);
+    if (!record) return false;
+    this.bySid.set(sid, { ...record, mfaVerifiedAtMs: atMs });
+    return true;
+  }
+
   private unlink(record: AdminSessionRecord): void {
     this.bySid.delete(record.sid);
     const sids = this.bySub.get(record.sub);

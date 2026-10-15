@@ -34,11 +34,19 @@ Feature: 047 — Staff access
 
   @EARS-4 @EARS-6
   Scenario: An existing account gets the role added
-    Given an account with a password and the visitor role holds the email "doctor@example.org"
+    Given an account with a verified email, a password and the visitor role holds the email "doctor@example.org"
     When the administrator grants «Администратор Конгресса» for the 2027 congress to "doctor@example.org"
     Then the account's existing grant holds the visitor role and the registrar role
     And no second account is created
     And no password is shown and the account's password is unchanged
+
+  @EARS-4 @EARS-6
+  Scenario: An account someone registered with the email but never confirmed is taken back
+    Given an account with an unconfirmed email "staff@example.org", its own password and a signed-in session
+    When the administrator grants «Администратор» to "staff@example.org"
+    Then a temporary password is shown once with a copy action
+    And the old password no longer signs in and the session has ended
+    And the account's email is confirmed and its grant holds the visitor role and the administrator role
 
   @EARS-3
   Scenario: A registrar cannot be bound to a second event

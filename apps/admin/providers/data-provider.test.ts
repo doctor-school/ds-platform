@@ -77,12 +77,13 @@ describe("dataProvider.custom — refusal envelopes (#1593)", () => {
         }),
     ) as unknown as typeof fetch;
 
-    return dataProvider
-      .custom!({ url: "/v1/admin/events/evt-1/publish", method: "post" })
-      .then(
-        () => undefined,
-        (error: unknown) => error,
-      );
+    return dataProvider.custom!({
+      url: "/v1/admin/events/evt-1/publish",
+      method: "post",
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
   }
 
   it("EARS-7: a 412 in the 007 `code` envelope surfaces as a mapped errorCode", async () => {
@@ -105,6 +106,22 @@ describe("dataProvider.custom — refusal envelopes (#1593)", () => {
     )) as { errorCode?: string };
 
     expect(error.errorCode).toBe("PRECONDITION_REQUIRED");
+  });
+
+  it("047 EARS-8: a STEP_UP_REQUIRED refusal carries the stepUpUrl the operator re-elevates at", async () => {
+    const error = (await refusalFrom(
+      {
+        errorCode: "STEP_UP_REQUIRED",
+        stepUpUrl: "/mfa/challenge?mode=reverify",
+        title: "Fresh step-up verification required",
+        status: 401,
+      },
+      401,
+    )) as { errorCode?: string; stepUpUrl?: string; statusCode?: number };
+
+    expect(error.statusCode).toBe(401);
+    expect(error.errorCode).toBe("STEP_UP_REQUIRED");
+    expect(error.stepUpUrl).toBe("/mfa/challenge?mode=reverify");
   });
 
   it("EARS-7: `errorCode` wins when a body carries both", async () => {
@@ -189,7 +206,9 @@ describe("dataProvider — the event-kind resource (012 EARS-25, #2509)", () => 
       filters: [{ field: "status", operator: "eq", value: "published" }],
     });
     const [url] = fetchStub.mock.calls[0] as unknown as [string];
-    expect(url).toBe("/v1/admin/event-kinds?page=1&pageSize=20&status=published");
+    expect(url).toBe(
+      "/v1/admin/event-kinds?page=1&pageSize=20&status=published",
+    );
   });
 
   it("012 EARS-25: a kind create posts JSON with no file part", async () => {

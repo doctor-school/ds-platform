@@ -12,6 +12,12 @@ export interface RedisLike {
     value: string,
     mode: "EX",
     ttlSeconds: number,
+    /**
+     * 047 EARS-8: `"XX"` writes only when the key still exists (Redis `SET … XX`),
+     * so a rewrite of a live record can never resurrect one a concurrent
+     * force-logout deleted. Resolves `null` when nothing was written.
+     */
+    condition?: "XX",
   ): Promise<unknown>;
   get(key: string): Promise<string | null>;
   del(...keys: string[]): Promise<unknown>;

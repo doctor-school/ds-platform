@@ -107,3 +107,83 @@ export async function listEventGrantsBySub(
     .where(eq(users.zitadelSub, zitadelSub))
     .orderBy(eventRoleGrants.role, eventRoleGrants.createdAt);
 }
+
+/**
+ * 047 EARS-3 — every binding a user holds for one event-scoped role, keyed by
+ * the `users` row id. The grant reads it for the «registrar already bound to
+ * another event» refusal and for the completeness check (047-design
+ * §Completeness and retry).
+ */
+export async function listEventGrantsForUserRole(
+  db: DrizzleHandle["db"],
+  userId: string,
+  role: EventScopedRole,
+): Promise<EventGrantBinding[]> {
+  return db
+    .select({
+      role: eventRoleGrants.role,
+      eventId: eventRoleGrants.eventId,
+      eventSlug: events.slug,
+    })
+    .from(eventRoleGrants)
+    .innerJoin(events, eq(events.id, eventRoleGrants.eventId))
+    .where(
+      and(eq(eventRoleGrants.userId, userId), eq(eventRoleGrants.role, role)),
+    )
+    .orderBy(eventRoleGrants.createdAt);
+}
+
+/** One event binding as the «Доступы» list expands it (047 EARS-2). */
+export interface StaffEventBinding {
+  zitadelSub: string;
+  role: EventScopedRole;
+  eventId: string;
+  eventTitle: string;
+}
+
+/**
+ * 047 EARS-2 — every event binding of every user, joined to the holder's IdP
+ * subject and the event's title, in one read. The list joins it to the IdP's
+ * grant search; a few dozen staff rows, so no paging.
+ */
+export async function listStaffEventBindings(
+  db: DrizzleHandle["db"],
+): Promise<StaffEventBinding[]> {
+  return db
+    .select({
+      zitadelSub: users.zitadelSub,
+      role: eventRoleGrants.role,
+      eventId: eventRoleGrants.eventId,
+      eventTitle: events.title,
+    })
+    .from(eventRoleGrants)
+    .innerJoin(users, eq(users.id, eventRoleGrants.userId))
+    .innerJoin(events, eq(events.id, eventRoleGrants.eventId))
+    .orderBy(eventRoleGrants.role, eventRoleGrants.createdAt);
+}
+
+/**
+ * 047 EARS-4/5 — write the binding of an event-scoped role to one event, unless
+ * it already exists. Idempotent by the `(user_id, role, event_id)` unique index,
+ * so the repeat of a part-failed grant skips it (047-design §Completeness and
+ * retry). Takes the caller's transaction: the binding commits with the mirror
+ * row and the `auth.role.granted` audit row, under the request's 010 actor.
+ * Resolves `true` when a row was written.
+ */
+export async function insertEventGrant(
+  db: Pick<DrizzleHandle["db"], "insert">,
+  grant: { userId: string; role: EventScopedRole; eventId: string },
+): Promise<boolean> {
+  const written = await db
+    .insert(eventRoleGrants)
+    .values(grant)
+    .onConflictDoNothing({
+      target: [
+        eventRoleGrants.userId,
+        eventRoleGrants.role,
+        eventRoleGrants.eventId,
+      ],
+    })
+    .returning({ id: eventRoleGrants.id });
+  return written.length > 0;
+}

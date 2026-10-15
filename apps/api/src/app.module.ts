@@ -23,6 +23,7 @@ import { RecordingsModule } from "./recordings/recordings.module.js";
 import { StorefrontModule } from "./storefront/storefront.module.js";
 import { CongressModule } from "./congress/congress.module.js";
 
+import { StaffAccessModule } from "./staff-access/staff-access.module.js";
 @Module({
   imports: [
     // 010 EARS-3/EARS-5 — global audit-context interceptor: attributes every
@@ -83,6 +84,8 @@ import { CongressModule } from "./congress/congress.module.js";
     // 006 self-scoped display name — the JIT room-entry «Имя и фамилия» write +
     // owner-only read (authenticated ∧ doctor_guest ∧ fast-path; EARS-14/16).
     MeModule,
+    // 047 — «Доступы»: the platform administrator's staff-role list and grant.
+    StaffAccessModule,
     HealthModule,
     ReadinessModule,
   ],

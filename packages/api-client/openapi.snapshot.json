@@ -37,6 +37,22 @@
         "required": ["code"],
         "type": "object"
       },
+      "AdminMfaReverifyRequestDto": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "pattern": "^\\d{6}$",
+            "type": "string"
+          },
+          "endpoint": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["code", "endpoint"],
+        "type": "object"
+      },
       "ConfigureStreamRequestDto": {
         "properties": {
           "embedRef": {
@@ -4620,6 +4636,188 @@
         "required": ["displayName"],
         "type": "object"
       },
+      "StaffAccessGrantRequestDto": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "eventId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "platform_admin",
+              "event-registrar",
+              "congress-program-committee"
+            ],
+            "type": "string"
+          }
+        },
+        "required": ["email", "fullName", "role"],
+        "type": "object"
+      },
+      "StaffAccessGrantResponseDto": {
+        "additionalProperties": false,
+        "properties": {
+          "row": {
+            "additionalProperties": false,
+            "properties": {
+              "email": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "eventId": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "eventTitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "fullName": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "role": {
+                "enum": [
+                  "platform_admin",
+                  "event-registrar",
+                  "congress-program-committee"
+                ],
+                "type": "string"
+              },
+              "userId": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "userId",
+              "fullName",
+              "email",
+              "role",
+              "eventId",
+              "eventTitle"
+            ],
+            "type": "object"
+          },
+          "temporaryPassword": {
+            "type": "string"
+          }
+        },
+        "required": ["row"],
+        "type": "object"
+      },
+      "StaffAccessListResponseDto": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "email": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "eventId": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "eventTitle": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fullName": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "role": {
+                  "enum": [
+                    "platform_admin",
+                    "event-registrar",
+                    "congress-program-committee"
+                  ],
+                  "type": "string"
+                },
+                "userId": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "userId",
+                "fullName",
+                "email",
+                "role",
+                "eventId",
+                "eventTitle"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["items"],
+        "type": "object"
+      },
       "TransitionEventRequestDto": {
         "properties": {
           "to": {
@@ -4971,6 +5169,28 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/AdminMfaCodeRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["AdminAuth"]
+      }
+    },
+    "/v1/admin/auth/mfa/reverify": {
+      "post": {
+        "operationId": "AdminAuthController_reverifyStepUp",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminMfaReverifyRequestDto"
               }
             }
           },
@@ -7470,6 +7690,54 @@
           }
         },
         "tags": ["ProjectCuratorAdmin"]
+      }
+    },
+    "/v1/admin/staff-access": {
+      "get": {
+        "operationId": "StaffAccessAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffAccessListResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["StaffAccessAdmin"]
+      }
+    },
+    "/v1/admin/staff-access/grants": {
+      "post": {
+        "operationId": "StaffAccessAdminController_grant",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffAccessGrantRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffAccessGrantResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["StaffAccessAdmin"]
       }
     },
     "/v1/admin/users/{id}/mfa": {

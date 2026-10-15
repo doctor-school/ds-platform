@@ -73,6 +73,7 @@ interface Harness {
   getBySid: ReturnType<typeof vi.fn>;
   handler: ReturnType<typeof vi.fn>;
   context: Parameters<AdminAuthorityGuard["canActivate"]>[0];
+  audit: { record: ReturnType<typeof vi.fn> };
 }
 
 interface HarnessOptions {
@@ -105,8 +106,11 @@ function harness(opts: HarnessOptions): Harness {
     getAllAndOverride: () => opts.meta,
   } as unknown as Reflector;
 
+  const audit = { record: vi.fn(() => Promise.resolve()) };
+
   const guard = new AdminAuthorityGuard(
     { revalidateAdminAuthority: revalidate } as unknown as IdpClient,
+    audit,
     reflector,
     { getBySid } as unknown as AdminSessionService,
   );
@@ -119,7 +123,7 @@ function harness(opts: HarnessOptions): Harness {
     }),
   } as unknown as Parameters<AdminAuthorityGuard["canActivate"]>[0];
 
-  return { guard, revalidate, getBySid, handler, context };
+  return { guard, revalidate, getBySid, handler, context, audit };
 }
 
 async function expectRefusal(
@@ -378,6 +382,50 @@ describe("AdminAuthorityGuard (#1304)", () => {
   });
 
   describe("step-up freshness (ADR-0009 approval route)", () => {
+    it("047 EARS-8: a step-up refusal appends auth.step_up.requested naming the refused route", async () => {
+      const h = harness({
+        meta: metaOf({ stepUp: true, roles: ["pd_officer"] }),
+        principal: { sid: SID },
+        record: recordOf({
+          mfaVerifiedAtMs: Date.now() - STEP_UP_MAX_AGE_MS - 60_000,
+        }),
+      });
+      const request = {
+        user: { sid: SID },
+        method: "POST",
+        url: "/v1/admin/staff-access/grants?x=1",
+        routeOptions: { url: "/v1/admin/staff-access/grants" },
+        ip: "203.0.113.7",
+        headers: { "user-agent": "AdminTest/1.0" },
+      };
+      const context = {
+        ...h.context,
+        switchToHttp: () => ({ getRequest: () => request }),
+      } as unknown as Parameters<AdminAuthorityGuard["canActivate"]>[0];
+      await expect(h.guard.canActivate(context)).rejects.toBeInstanceOf(
+        AdminAuthorityException,
+      );
+      expect(h.audit.record).toHaveBeenCalledTimes(1);
+      expect(h.audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "StepUpRequested",
+          endpoint: "POST /v1/admin/staff-access/grants",
+          ip: "203.0.113.7",
+          ua: "AdminTest/1.0",
+        }),
+      );
+    });
+
+    it("047 EARS-8: a fresh elevation writes no step-up row", async () => {
+      const h = harness({
+        meta: metaOf({ stepUp: true, roles: ["pd_officer"] }),
+        principal: { sid: SID },
+        record: recordOf({ mfaVerifiedAtMs: Date.now() - 1_000 }),
+      });
+      await expect(h.guard.canActivate(h.context)).resolves.toBe(true);
+      expect(h.audit.record).not.toHaveBeenCalled();
+    });
+
     it("#1304: 401 STEP_UP_REQUIRED + stepUpUrl — no elevation recorded on the session", async () => {
       const h = harness({
         meta: metaOf({ stepUp: true, roles: ["pd_officer"] }),

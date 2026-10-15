@@ -1,0 +1,6 @@
+[
+  {"host":"academy","screen":"login code step (e-mail)","device":"desktop","scheme":"light","typed":"1234","key":"Enter","fieldError":"Введите код.","valueAfter":"1234","loginOtpRequests":0,"file":"academy-login-code-step-incomplete-desktop-light.png"},
+  {"host":"academy","screen":"login code step (e-mail)","device":"desktop","scheme":"dark","typed":"1234","key":"Enter","fieldError":"Введите код.","valueAfter":"1234","loginOtpRequests":0,"file":"academy-login-code-step-incomplete-desktop-dark.png"},
+  {"host":"academy","screen":"login code step (e-mail)","device":"mobile","scheme":"light","typed":"1234","key":"Enter","fieldError":"Введите код.","valueAfter":"1234","loginOtpRequests":0,"file":"academy-login-code-step-incomplete-mobile-light.png"},
+  {"host":"academy","screen":"login code step (e-mail)","device":"mobile","scheme":"dark","typed":"1234","key":"Enter","fieldError":"Введите код.","valueAfter":"1234","loginOtpRequests":0,"file":"academy-login-code-step-incomplete-mobile-dark.png"}
+]

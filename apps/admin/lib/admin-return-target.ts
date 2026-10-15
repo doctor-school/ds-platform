@@ -33,8 +33,12 @@ const REFUSED_ROOTS = ["/login", "/mfa", "/v1", "/api", "/_next"] as const;
 /** A throwaway base: only same-origin resolution is being tested against it. */
 const PROBE_ORIGIN = "https://admin.invalid";
 
-/** C0 controls and DEL — the characters the URL parser silently strips. */
-function hasControlCharacter(value: string): boolean {
+/**
+ * A backslash, whitespace, or a C0 control / DEL — the characters the WHATWG
+ * parser rewrites or silently strips.
+ */
+function hasUnsafeCharacter(value: string): boolean {
+  if (value.includes("\\") || /\s/.test(value)) return true;
   for (let i = 0; i < value.length; i += 1) {
     const code = value.charCodeAt(i);
     if (code <= 0x1f || code === 0x7f) return true;
@@ -48,10 +52,21 @@ export function resolveAdminReturnTarget(
 ): string | null {
   if (!raw) return null;
   if (!raw.startsWith("/") || raw.startsWith("//")) return null;
-  // A backslash (raw or percent-encoded) is read as `/` by browsers, which turns
-  // `/\evil.example` into a protocol-relative URL; control characters are
-  // stripped by the URL parser and can smuggle the same shape.
-  if (raw.includes("\\") || /%5c/i.test(raw) || hasControlCharacter(raw)) {
+  // Parser differential: browsers read `\` as `/` and the WHATWG parser strips
+  // tab/newline, so `/\evil` or `/\t/evil` become protocol-relative there while
+  // looking path-absolute here. Refuse them raw…
+  if (hasUnsafeCharacter(raw) || /%5c/i.test(raw)) return null;
+  // …and after one decode pass of the path, where `%2F%2F`, `%09`, `%5C` can
+  // re-form the same shape in a consumer that decodes before routing. The query
+  // and fragment are data (`?x=//a` is fine) and are not decoded here.
+  const rawPath = raw.split(/[?#]/, 1)[0] ?? "";
+  let decodedPath: string;
+  try {
+    decodedPath = decodeURIComponent(rawPath);
+  } catch {
+    return null;
+  }
+  if (hasUnsafeCharacter(decodedPath) || decodedPath.startsWith("//")) {
     return null;
   }
 
@@ -64,7 +79,7 @@ export function resolveAdminReturnTarget(
   if (url.origin !== PROBE_ORIGIN) return null;
 
   const { pathname } = url;
-  if (pathname === "/") return null;
+  if (pathname === "/" || pathname.startsWith("//")) return null;
   const refused = REFUSED_ROOTS.some(
     (root) => pathname === root || pathname.startsWith(`${root}/`),
   );

@@ -231,6 +231,33 @@ test.describe("011 EARS-6/7 — TOTP challenge on admin login (browser)", () => 
     });
   });
 
+  test("#2782 security: a hostile ?to= never leaves the admin or skips the second factor", async ({
+    page,
+  }) => {
+    const { email, password } = await bootstrapAdminSession(ORIGIN);
+    const secret = await enrolOnce(page, { email, password });
+    await page.getByTestId("sign-out").click();
+    await page.waitForURL(/\/login/, { timeout: 20_000 });
+
+    await page.goto(`/login?to=${encodeURIComponent("//evil.example/x")}`);
+    await signIn(page, { email, password }, { navigate: false });
+    // The password step routes to the challenge it owes — not to `to`, and with
+    // the refused target dropped rather than carried.
+    await page.waitForURL(/\/mfa\/challenge/, { timeout: 20_000 });
+    expect(new URL(page.url()).origin).toBe(new URL(ORIGIN).origin);
+    expect(new URL(page.url()).searchParams.get("to")).toBeNull();
+
+    await page
+      .getByTestId("mfa-challenge-form")
+      .getByRole("textbox")
+      .fill(totpCode(secret, Date.now() + STEP_MS));
+    await page.waitForURL(
+      (url) =>
+        url.origin === new URL(ORIGIN).origin && url.pathname === "/events",
+      { timeout: 20_000 },
+    );
+  });
+
   test("#2782: a session dropped mid-work returns the operator to the page they were on", async ({
     page,
   }) => {

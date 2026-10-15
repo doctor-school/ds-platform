@@ -53,6 +53,39 @@ describe("resolveAdminReturnTarget — what a carried target may be", () => {
     expect(resolveAdminReturnTarget(raw)).toBeNull();
   });
 
+  // Parser differential: the validator and the browser / Next router must not
+  // read one string two ways. WHATWG strips tab/newline and treats `\` as `/`,
+  // and a decoded `%2F%2F` / `%5C` / `%09` can re-form a protocol-relative URL.
+  it.each([
+    ["backslash host", "/\\evil.com"],
+    ["encoded backslash", "/%5Cevil.com"],
+    ["tab-split slashes", "/\t/evil.com"],
+    ["encoded tab-split slashes", "/%09/evil.com"],
+    ["protocol-relative", "//evil.com"],
+    ["encoded protocol-relative", "/%2F%2Fevil.com"],
+    ["encoded single slash pair", "/%2Fevil.com"],
+    ["scheme without slashes", "https:evil.com"],
+    ["javascript scheme", "javascript:alert(1)"],
+    ["double backslash", "\\\\evil.com"],
+    ["space", "/ /evil.com"],
+    ["encoded newline", "/%0a/evil.com"],
+    ["malformed escape", "/events/%E0%A4%A"],
+  ])("#2782 security: refuses %s", (_label, raw) => {
+    expect(resolveAdminReturnTarget(raw)).toBeNull();
+  });
+
+  it("#2782 security: `//` inside the query is data, not a host — kept", () => {
+    expect(resolveAdminReturnTarget("/events/1?x=//evil.com")).toBe(
+      "/events/1?x=//evil.com",
+    );
+  });
+
+  it("#2782 security: returns the rebuilt parsed URL, not the raw input", () => {
+    expect(resolveAdminReturnTarget("/events/./1/../2?a=1")).toBe(
+      "/events/2?a=1",
+    );
+  });
+
   it("#2782: a path merely starting with an auth word is still an admin page", () => {
     expect(resolveAdminReturnTarget("/login-audit")).toBe("/login-audit");
   });

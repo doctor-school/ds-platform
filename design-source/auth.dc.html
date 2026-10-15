@@ -42,7 +42,7 @@
       <!-- Контекст возврата · мобайл: карточка события над формой -->
       <sc-if value="{{ showGateCardMobile }}" hint-placeholder-val="{{ false }}">
         <div data-screen-label="контекст возврата · моб" style="margin:20px -16px 0;background:{{ sectionGray }};padding:16px 16px 4px">
-          <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:6px">Вы вернётесь к этому событию</div>
+          <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ inkMuted }};margin-bottom:6px">Вы вернётесь к этому событию</div>
           <dc-import name="unit-event-card" hint-size="100%,200px" dark="{{ darkFlag }}" variant="scheduled" num="{{ gateNum }}" time="{{ gateTime }}" time-sub="{{ gateTimeSub }}" school="{{ gateSchool }}" title="{{ gateTitle }}" speakers="{{ gateSpeakers }}" show-cta="{{ false }}" show-secondary="{{ false }}"></dc-import>
           <p style="margin:10px 0 12px;font-size:13px;line-height:1.55;color:{{ inkMuted }}">{{ gateAssurance }}</p>
         </div>
@@ -358,7 +358,7 @@ class Component extends DCLogic {
     const tintFg = d ? '#D3E8FD' : '#114D9E';
     const shadow = d ? '#6BB1F7' : '#114D9E';
     const shadowSm = d ? '#1F69C8' : '#AED4FB';
-    const sectionGray = d ? 'oklch(.185 .02 250)' : 'oklch(.972 .004 250)';
+    const sectionGray = d ? 'oklch(.185 .02 250)' : 'oklch(.955 .004 250)';
     const headerBg = '#114D9E';
     const danger = d ? '#E15555' : '#C81E1E';
     const dangerTint = d ? '#3a1414' : '#fdecec';

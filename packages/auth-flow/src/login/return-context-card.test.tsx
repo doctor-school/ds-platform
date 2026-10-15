@@ -283,13 +283,12 @@ describe("#2465: the mobile plate draws the canvas strip — eyebrow, card, then
       plate?.lastElementChild,
     ];
 
-    // The band is the section surface (canvas `sectionGray`; #2710 tracks the
-    // canvas light value).
+    // The band is the section surface (canvas `sectionGray`).
     const plateClasses = plate?.className.split(" ") ?? [];
     expect(plateClasses).toContain("bg-section");
     expect(plateClasses).not.toContain("bg-muted");
 
-    // Eyebrow: 11px/800/.14em uppercase in the AA-safe muted ink (#2710).
+    // Eyebrow: 11px/800/.14em uppercase in the AA-safe muted ink (canvas `inkMuted`).
     const eyebrowClasses = eyebrow?.className.split(" ") ?? [];
     expect(eyebrowClasses).toContain("tracking-eyebrow");
     expect(eyebrowClasses).toContain("text-muted-foreground");

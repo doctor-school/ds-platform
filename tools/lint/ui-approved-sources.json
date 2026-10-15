@@ -285,7 +285,10 @@
         "apps/admin/components/staff-access-grant-form.tsx",
         "apps/admin/app/mfa/challenge/page.tsx",
         "apps/admin/messages/ru.json",
-        "apps/admin/lib/admin-access.ts"
+        "apps/admin/lib/admin-access.ts",
+        "apps/showcase/app/primitives/primitives-view.tsx",
+        "packages/design-system/src/blocks/data-table.tsx",
+        "packages/design-system/src/primitives/button.tsx"
       ],
       "states": [
         "staff-access-nav",
@@ -299,7 +302,8 @@
       ],
       "approvalProvenance": [
         "https://github.com/doctor-school/ds-platform/issues/2901#issuecomment-6141610486",
-        "https://github.com/doctor-school/ds-platform/issues/2901#issuecomment-6143413707"
+        "https://github.com/doctor-school/ds-platform/issues/2901#issuecomment-6143413707",
+        "https://github.com/doctor-school/ds-platform/issues/2901#issuecomment-6192341323"
       ]
     },
     "admin-event-and-direction-pages-v1": {

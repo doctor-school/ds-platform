@@ -248,9 +248,15 @@ When(
         captured.response.status(),
         "wrong code refused by actual UI command",
       ).toBe(400);
-      await expect(probe.page.getByTestId("verify-error")).toHaveText(
-        "Код не подошёл. Проверьте его или запросите новый.",
-      );
+      const error = probe.page.getByTestId("verify-error");
+      await expect(error).toBeVisible();
+      await expect
+        .poll(
+          async () =>
+            (await error.ariaSnapshot()) ===
+            "- alert: Код не подошёл. Проверьте его или запросите новый.",
+        )
+        .toBe(true);
       expect(new URL(probe.page.url()).pathname).toBe("/verify");
       await noPrivateAccess(probe);
       await probe.page.screenshot({

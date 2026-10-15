@@ -22,6 +22,11 @@ import {
   mfaFailurePresentation,
   type MfaFailurePresentation,
 } from "@/lib/mfa-failure";
+import {
+  adminLandingFor,
+  currentReturnTarget,
+  withAdminReturnTarget,
+} from "@/lib/admin-return-target";
 
 /** The TOTP code length the provisioning URI this screen renders declares (`digits=6`). */
 const CODE_LENGTH = 6;
@@ -86,7 +91,7 @@ export default function MfaEnrollPage() {
         // Not a pending-enrollment principal (no pending reference, an expired
         // one, or one owing a different step): send them to the login form rather
         // than render an empty card that suggests the flow is broken.
-        router.replace("/login");
+        router.replace(withAdminReturnTarget("/login", currentReturnTarget()));
         return;
       }
       setOffer(result.value);
@@ -125,8 +130,9 @@ export default function MfaEnrollPage() {
         return;
       }
       // LD-1: the verify response carried `__Host-ds_admin_session` — the login is
-      // complete in place, so this is a navigation, not a second sign-in.
-      router.replace("/events");
+      // complete in place, so this is a navigation, not a second sign-in — to
+      // the page the operator came from (#2782), validated, else /events.
+      router.replace(adminLandingFor(currentReturnTarget()));
     },
     [form, router, submitting, t],
   );
@@ -157,7 +163,10 @@ export default function MfaEnrollPage() {
 
           {offer ? (
             <>
-              <section className="flex flex-col gap-3" aria-labelledby="mfa-scan">
+              <section
+                className="flex flex-col gap-3"
+                aria-labelledby="mfa-scan"
+              >
                 <h2
                   id="mfa-scan"
                   className="text-sm font-medium text-primary-action"
@@ -212,6 +221,9 @@ export default function MfaEnrollPage() {
                         length={CODE_LENGTH}
                         label={t("codeLabel")}
                         charset="numeric"
+                        // #2781: the caret is in the code field the moment the
+                        // enrollment step appears — no extra click.
+                        autoFocus
                         onComplete={() => void form.handleSubmit(submit)()}
                       />
                     )}

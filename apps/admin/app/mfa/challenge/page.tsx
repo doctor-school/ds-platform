@@ -29,6 +29,11 @@ import {
   mfaFailurePresentation,
   type MfaFailurePresentation,
 } from "@/lib/mfa-failure";
+import {
+  adminLandingFor,
+  currentReturnTarget,
+  withAdminReturnTarget,
+} from "@/lib/admin-return-target";
 
 /** The TOTP code length the provisioning URI this tier emits declares (`digits=6`). */
 const CODE_LENGTH = 6;
@@ -102,12 +107,15 @@ export default function MfaChallengePage() {
         setChecking(false);
         return;
       }
+      // #2782: every onward hop keeps the carried return target.
+      const target = currentReturnTarget();
       router.replace(
         state === "active"
-          ? "/events"
-          : state === "mfa_pending_enrollment"
-            ? "/mfa/enroll"
-            : "/login",
+          ? adminLandingFor(target)
+          : withAdminReturnTarget(
+              state === "mfa_pending_enrollment" ? "/mfa/enroll" : "/login",
+              target,
+            ),
       );
     });
     return () => {
@@ -140,11 +148,14 @@ export default function MfaChallengePage() {
         return;
       }
       // LD-1: the verify response carried `__Host-ds_admin_session` — the login
-      // is complete in place, so this is a navigation, not a second sign-in.
+      // is complete in place, so this is a navigation, not a second sign-in —
+      // to the page the operator came from (#2782), validated, else /events.
       // Re-verify: the same session is fresh again; back to the refused action.
       // 047 EARS-8: the confirmed code is what lets the saved request go out.
       if (reverify) markStepUpConfirmed(browserStepUpStorage(), Date.now());
-      router.replace(reverify ? returnTo : "/events");
+      router.replace(
+        reverify ? returnTo : adminLandingFor(currentReturnTarget()),
+      );
     },
     [endpoint, form, returnTo, reverify, router, submitting],
   );
@@ -185,6 +196,9 @@ export default function MfaChallengePage() {
                         length={CODE_LENGTH}
                         label={t("codeLabel")}
                         charset="numeric"
+                        // #2781: the code is this screen's only task — the caret
+                        // is in the field the moment it appears, no extra click.
+                        autoFocus
                         onComplete={() => void form.handleSubmit(submit)()}
                       />
                     )}

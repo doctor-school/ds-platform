@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { bootstrapAdminSession, totpCode } from "@ds/e2e/admin-events";
+import { evidenceShot } from "./support/evidence-shot";
 
 /**
  * 011 Verification rows 6 + 7, browser half — the TOTP challenge on login, and
@@ -37,8 +38,11 @@ const STEP_MS = 30_000;
 async function signIn(
   page: Page,
   credentials: { email: string; password: string },
+  { navigate = true }: { navigate?: boolean } = {},
 ): Promise<void> {
-  await page.goto("/login");
+  // `navigate: false` signs in on the login screen the app itself routed to,
+  // keeping the return target it carried (#2782).
+  if (navigate) await page.goto("/login");
   await page.locator("#email").fill(credentials.email);
   await page.locator("#password").fill(credentials.password);
   await page.getByTestId("login-submit").click();
@@ -195,5 +199,65 @@ test.describe("011 EARS-6/7 — TOTP challenge on admin login (browser)", () => 
       return res.status;
     });
     expect(admitted).toBe(200);
+  });
+
+  test("#2781/#2782: a deep admin URL opened signed out lands back on itself (with its query) after password + TOTP, and the code field takes the caret", async ({
+    page,
+  }) => {
+    const { email, password } = await bootstrapAdminSession(ORIGIN);
+    const secret = await enrolOnce(page, { email, password });
+    await page.getByTestId("sign-out").click();
+    await page.waitForURL(/\/login/, { timeout: 20_000 });
+
+    // Signed out, the operator opens a page that is NOT the default landing.
+    const deep = "/projects?page=2&q=2782";
+    await page.goto(deep);
+    await page.waitForURL(/\/login\?/, { timeout: 20_000 });
+    expect(new URL(page.url()).searchParams.get("to")).toBe(deep);
+
+    await signIn(page, { email, password }, { navigate: false });
+    await page.waitForURL(/\/mfa\/challenge\?/, { timeout: 20_000 });
+
+    // #2781: the caret is already in the code field — no click before typing.
+    const field = page.getByTestId("mfa-challenge-form").getByRole("textbox");
+    await expect(field).toBeFocused();
+    await evidenceShot(page, "mfa-challenge-focused");
+    await expect(field).toBeFocused();
+    await page.keyboard.type(totpCode(secret, Date.now() + STEP_MS));
+
+    // #2782: the landing is the page they came from, query intact — not /events.
+    await page.waitForURL((url) => `${url.pathname}${url.search}` === deep, {
+      timeout: 20_000,
+    });
+  });
+
+  test("#2782: a session dropped mid-work returns the operator to the page they were on", async ({
+    page,
+  }) => {
+    const { email, password } = await bootstrapAdminSession(ORIGIN);
+    const secret = await enrolOnce(page, { email, password });
+
+    const deep = "/projects?page=2&q=2782";
+    await page.goto(deep);
+    await expect(page).toHaveURL(/\/projects\?/);
+
+    // The same fingerprint drop as the prod 2026-10-12 case (#2822) above.
+    const userAgent = await page.evaluate(() => navigator.userAgent);
+    await page
+      .context()
+      .setExtraHTTPHeaders({ "user-agent": `${userAgent} network-changed` });
+    await page.reload();
+    await page.waitForURL(/\/login\?/, { timeout: 20_000 });
+    expect(new URL(page.url()).searchParams.get("to")).toBe(deep);
+
+    await signIn(page, { email, password }, { navigate: false });
+    await page.waitForURL(/\/mfa\/challenge\?/, { timeout: 20_000 });
+    await page
+      .getByTestId("mfa-challenge-form")
+      .getByRole("textbox")
+      .fill(totpCode(secret, Date.now() + STEP_MS));
+    await page.waitForURL((url) => `${url.pathname}${url.search}` === deep, {
+      timeout: 20_000,
+    });
   });
 });

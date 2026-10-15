@@ -27,6 +27,11 @@ import { LoginFormSchema, type LoginFormFields } from "@/lib/form-schemas";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 import { readAdminAuthState } from "@/lib/admin-auth";
 import {
+  adminLandingFor,
+  currentReturnTarget,
+  withAdminReturnTarget,
+} from "@/lib/admin-return-target";
+import {
   loginFailureFromMessage,
   type LoginFailurePresentation,
 } from "@/lib/login-failure";
@@ -65,19 +70,24 @@ function LoginForm() {
 
   function submit(values: LoginFormFields) {
     setFailure(null);
-    login(values, {
-      onSuccess: (data) => {
-        if (!data.success) {
-          // What the refusal WAS is decided by the provider and re-read here
-          // (`login-failure.ts`): an IdP outage must not be repainted as a
-          // verdict on the credentials, which were never checked (#1217).
-          setFailure(loginFailureFromMessage(data.error?.message));
-        }
+    // #2782: the page the operator came from rides on to the second-factor step
+    // (the provider validates it before carrying it).
+    login(
+      { ...values, to: currentReturnTarget() },
+      {
+        onSuccess: (data) => {
+          if (!data.success) {
+            // What the refusal WAS is decided by the provider and re-read here
+            // (`login-failure.ts`): an IdP outage must not be repainted as a
+            // verdict on the credentials, which were never checked (#1217).
+            setFailure(loginFailureFromMessage(data.error?.message));
+          }
+        },
+        // A thrown transport error says nothing about the service being down in
+        // the way a 503 does, so it stays the uniform refusal.
+        onError: () => setFailure(loginFailureFromMessage(undefined)),
       },
-      // A thrown transport error says nothing about the service being down in
-      // the way a 503 does, so it stays the uniform refusal.
-      onError: () => setFailure(loginFailureFromMessage(undefined)),
-    });
+    );
   }
 
   return (
@@ -124,7 +134,9 @@ function LoginForm() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel htmlFor="password">{t("login.password")}</FormLabel>
+                    <FormLabel htmlFor="password">
+                      {t("login.password")}
+                    </FormLabel>
                     <FormControl>
                       <Input
                         id="password"
@@ -137,7 +149,11 @@ function LoginForm() {
                   </FormItem>
                 )}
               />
-              <Button type="submit" loading={isPending} data-testid="login-submit">
+              <Button
+                type="submit"
+                loading={isPending}
+                data-testid="login-submit"
+              >
                 {t("login.submit")}
               </Button>
             </form>
@@ -173,9 +189,13 @@ export default function LoginPage() {
     let cancelled = false;
     void readAdminAuthState().then((state) => {
       if (cancelled) return;
-      if (state === "active") router.replace("/events");
-      else if (state === "mfa_pending_challenge") router.replace("/mfa/challenge");
-      else if (state === "mfa_pending_enrollment") router.replace("/mfa/enroll");
+      // #2782: every onward hop keeps the carried return target.
+      const target = currentReturnTarget();
+      if (state === "active") router.replace(adminLandingFor(target));
+      else if (state === "mfa_pending_challenge")
+        router.replace(withAdminReturnTarget("/mfa/challenge", target));
+      else if (state === "mfa_pending_enrollment")
+        router.replace(withAdminReturnTarget("/mfa/enroll", target));
       else setResolved(true);
     });
     return () => {

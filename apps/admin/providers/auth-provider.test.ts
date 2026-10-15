@@ -138,3 +138,63 @@ describe("authProvider.logout — 047 EARS-8 step-up replay", () => {
     expect([...data.keys()]).toEqual(["unrelated"]);
   });
 });
+
+/**
+ * #2782 — the sign-in returns the admin to the page they were on. A 401 mid-work
+ * (most often `fingerprint_mismatch` after a network change) sends the operator
+ * to `/login` carrying where they were, and a successful password step carries
+ * that target on to the second-factor screen it routes to.
+ */
+function onPage(href: string): void {
+  const url = new URL(href, "https://admin.example");
+  vi.stubGlobal("window", {
+    location: { pathname: url.pathname, search: url.search, hash: url.hash },
+  });
+}
+
+describe("authProvider — #2782 return target", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("#2782: a 401 on an admin page routes to /login carrying that page and its query", async () => {
+    onPage("/events/123?tab=x");
+    const error = { statusCode: 401, message: "x" };
+    await expect(authProvider.onError(error)).resolves.toEqual({
+      logout: true,
+      redirectTo: "/login?to=%2Fevents%2F123%3Ftab%3Dx",
+      error,
+    });
+  });
+
+  it("#2782: a 401 while already on a sign-in screen carries nothing (no /login loop)", async () => {
+    onPage("/login?to=%2Fevents");
+    await expect(
+      authProvider.onError({ statusCode: 401, message: "x" }),
+    ).resolves.toMatchObject({ redirectTo: "/login" });
+  });
+
+  it("#2782: the password step carries a valid target to the challenge", async () => {
+    respondWith(200, { state: "mfa_pending_challenge" });
+    expect(
+      await authProvider.login!({ ...credentials, to: "/events/123?tab=x" }),
+    ).toEqual({
+      success: true,
+      redirectTo: "/mfa/challenge?to=%2Fevents%2F123%3Ftab%3Dx",
+    });
+  });
+
+  it("#2782: the password step carries a valid target to enrollment", async () => {
+    respondWith(200, { state: "mfa_pending_enrollment" });
+    expect(
+      await authProvider.login!({ ...credentials, to: "/projects/7" }),
+    ).toEqual({ success: true, redirectTo: "/mfa/enroll?to=%2Fprojects%2F7" });
+  });
+
+  it("#2782: the password step drops a hostile target", async () => {
+    respondWith(200, { state: "mfa_pending_challenge" });
+    expect(
+      await authProvider.login!({ ...credentials, to: "//evil.example" }),
+    ).toEqual({ success: true, redirectTo: "/mfa/challenge" });
+  });
+});

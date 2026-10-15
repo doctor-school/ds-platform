@@ -201,6 +201,12 @@ test.describe("047 «Доступы» — a platform administrator grants staff 
     await expect(admin.getByTestId("staff-access-password-copy")).toHaveText(
       "Скопировать",
     );
+    // The field and its «Скопировать» are one control height (#2901 Stage-B).
+    const fieldBox = await password.boundingBox();
+    const copyBox = await admin
+      .getByTestId("staff-access-password-copy")
+      .boundingBox();
+    expect(copyBox?.height).toBe(fieldBox?.height);
     await evidenceShot(admin, "staff-access-temp-password", {
       fullPage: false,
     });

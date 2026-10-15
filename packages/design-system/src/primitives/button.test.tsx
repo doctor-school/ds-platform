@@ -242,3 +242,29 @@ describe("Button tone (#2180, canvas ds-shell.dc.html line 36)", () => {
     expect(btn).not.toHaveAttribute("tone");
   });
 });
+
+/**
+ * The `field` size — a button that sits in one row with a text field. The
+ * field controls (`Input`, `NativeSelect`, `Combobox`) are `h-11`; the default
+ * size is padding-driven (`py-3` + the `text-sm` line box + a 2px border) and
+ * rendered 4px taller than the field beside it (#2901).
+ */
+describe("Button field size (#2901, the field control height)", () => {
+  it("shares the field control height and keeps the default horizontal padding for every variant", () => {
+    for (const variant of ["default", "outline", "secondary", "destructive"] as const) {
+      const cls = buttonVariants({ variant, size: "field" });
+      expect(cls).toMatch(/(?:^|\s)h-11(?:\s|$)/);
+      expect(cls).toMatch(/(?:^|\s)px-5(?:\s|$)/);
+      expect(cls).not.toMatch(/(?:^|\s)py-3(?:\s|$)/);
+    }
+  });
+
+  it("renders the field size on the element", () => {
+    render(
+      <Button variant="outline" size="field">
+        Copy
+      </Button>,
+    );
+    expect(screen.getByRole("button", { name: "Copy" })).toHaveClass("h-11", "px-5");
+  });
+});

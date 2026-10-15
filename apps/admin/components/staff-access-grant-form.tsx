@@ -466,6 +466,7 @@ function TemporaryPassword({ password }: { password: string }) {
           <Button
             type="button"
             variant="outline"
+            size="field"
             data-testid="staff-access-password-copy"
             onClick={() => {
               void navigator.clipboard

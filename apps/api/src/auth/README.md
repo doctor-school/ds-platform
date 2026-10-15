@@ -425,6 +425,22 @@ process exits mid-send. `test/auth/email-timing.e2e-spec.ts` exercises the real
 controller/service/adapter/mailer chain with stalled local SMTP, delayed fallback
 and invalid configuration; only Zitadel's native API responses are simulated.
 
+`POST /v1/auth/verify` uses the same interceptor with its own per-request reader
+(`verify-timing.ts`, EARS-41/16). Its production default is 1000 ms because the
+real unverified-account branch performs sequential IdP calls that exceed the
+global 40 ms default. `AUTH_VERIFY_TIMING_FLOOR_MS` accepts whole milliseconds
+from 40 through 2147483647; unset, empty, malformed, unsafe, smaller or overflowing
+values fall back to 1000. The upper bound prevents Node from clamping an
+overflowing timer to 1 ms. This changes only verification, on both success and
+failure; sending doors retain their existing floor and detached-delivery budget.
+
+Calibrate the route floor to at least the heaviest real-IdP branch's p99 plus
+scheduling margin on the target environment. A short browser triad proves its
+observed response band, not p99. Padding only adds time: a branch exceeding the
+configured floor can still disclose a difference, so repeat the interleaved
+EARS-41 timing check after provider or network changes. The value is read per
+request; editing an env file requires restarting the process to inherit it.
+
 ## Cross-cutting security (F6 #90)
 
 The mandatory v1 baseline (ADR-0001 §7) is enforced as additive global guards /
@@ -518,16 +534,13 @@ PD-masked):
 Each row is **identifier-keyed** (`subject_id` NULL; the raw identifier is masked
 to an `identifier_hash` by the writer, exactly like `LoginFailed` — never raw PD)
 and carries **no one-time code** (003 EARS-30). The client outcome is unchanged: the
-same generic 400 for every failure (EARS-16). Timing safety here is by **symmetry**,
-NOT the interceptor: `/verify` and `/password/reset/complete` are code-gated routes
-that are **not** under the EARS-16 ≤50 ms floor — they carry no `@TimingEqualized`,
-and 003-requirements-en.md:207 does not list them (unlike register/login/otp/reset).
-So the guarantee is that each failure write is a single awaited INSERT that **mirrors
-the success-path write** (same ledger hop, no extra network I/O), introducing no new
-timing differential between the success and failure paths. Any future heavier
-failure-path write (an extra query, a counter round-trip) would break that symmetry
-and must be re-evaluated — see the read-time attempt-count note below, which
-deliberately keeps the write path to that single INSERT.
+same generic 400 for every failure (EARS-16). `/verify` is timing-equalized by its
+route-specific reader above, including the awaited failure audit INSERT.
+`/password/reset/complete` retains its existing symmetry guarantee: its failure
+write mirrors the success-path audit hop, without extra network I/O, and that
+route carries no `@TimingEqualized`. A future heavier failure write must be
+re-evaluated against its route's timing contract — see the read-time attempt-count
+note below, which keeps the write path to a single INSERT.
 
 **Port limitation (deliberate, not a stub).** The IdP port returns only a boolean
 (`verifyEmail → bool`) / a session-or-null (`completePasswordReset`), so the granular

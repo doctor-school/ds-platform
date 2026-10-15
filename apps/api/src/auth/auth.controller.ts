@@ -35,6 +35,7 @@ import {
   RateLimitService,
 } from "./rate-limit/index.js";
 import { TimingEqualized } from "./timing/index.js";
+import { readAuthVerifyTimingFloorMs } from "./verify-timing.js";
 import {
   LoginChallenged,
   LoginChallengePolicy,
@@ -410,7 +411,7 @@ export class AuthController {
   @Post("verify")
   @Public()
   @RateLimited()
-  @TimingEqualized()
+  @TimingEqualized({ floorMs: readAuthVerifyTimingFloorMs })
   @HttpCode(200)
   @Authz({
     access: "public",

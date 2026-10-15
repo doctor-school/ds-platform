@@ -369,5 +369,5 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
     // scheduling jitter below the 40 ms floor) and the spread stays in budget.
     expect(medianSpread(timing)).toBeLessThanOrEqual(50);
     for (const r of results) expect(r.ms).toBeGreaterThanOrEqual(30);
-  });
+  }, 30_000); // 003 EARS-41: 18 samples at the production one-second route floor.
 });

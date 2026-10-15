@@ -305,6 +305,9 @@ export const ApiEnvSchema = z.looseObject({
 
   CONGRESS_SIGNUP_TIMING_FLOOR_MS: z.string().optional(),
 
+  // 003 EARS-41/16 — parsed fail-safe by verify-timing.ts on each request.
+  AUTH_VERIFY_TIMING_FLOOR_MS: z.string().optional(),
+
   // 003 EARS-51 — the `POST /v1/me/phone` timing floor (whole ms, read per
   // request by `phone-timing.ts`); unset ⇒ 1000.
   PHONE_CODE_REQUEST_TIMING_FLOOR_MS: z.string().optional(),

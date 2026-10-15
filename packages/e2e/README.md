@@ -955,3 +955,37 @@ owned sessions and closes owned contexts. The stand needs its existing
 neither a fake event nor an account through SQL. Run the single
 `@congress-registration` Academy case on the lead-selected contour. This coverage
 change has no render surface and needs no owner Stage-B request or slot.
+
+### Valid congress handoff (003 EARS-44)
+
+`A valid hand-off reference opens the code step with the code already sent`
+uses the real congress intake to create a fresh `valid-handoff-2929-` account
+and reference. `steps/valid-handoff.steps.ts` opens that reference on Academy
+with its actual `/account` return route; the Doctor congress contract's
+`/account/congress` target is unchanged. The API must have its documented
+`CONGRESS_SIGNUP_*` configuration pointing to a real existing event. No event,
+provider, reference or session is substituted by the scenario.
+
+The actual signup first delivers its code-free congress confirmation notice
+(044 EARS-11/13, `congress-signup.service.ts` and `notice-emails.ts`). Its exact
+recipient/message-ID checkpoint and notice-purpose subject are observed before
+handoff, followed by a full 15-second check for any additional mail. The real
+redemption must return the exact original address and add exactly one fresh
+addressed sign-in code mail to that baseline, with another full 15-second check
+for additional delivery of any purpose. The six-cell code step offers neither method selection
+nor captcha. The browser response carries `no-referrer`; Chromium navigation
+history and the address bar contain no reference. There is one redemption and
+one mailed-code submission, with no ordinary code request, resend or registration
+replay. Only that delivered code opens the same account's private profile at
+`/account` with the secure host-only BFF session. Cleanup revokes only the owned
+session and closes its context; traces remain off and screenshots stay in the
+selected run's private artifact directory.
+
+Migration mapping: `apps/portal/e2e/auth-journeys.e2e.spec.ts` EARS-44 valid
+handoff (the test ending in `lands on /account`) maps to this BDD case and remains
+as app-local coverage until equivalent host-suite migration is complete. The
+Doctor app-local configurable handoff journey and API native expiry, redemption
+budget and other-account session tests remain complementary; this single case
+makes no claim to cover them. Run the selected `@valid-handoff` Academy case on
+the lead-selected contour. This coverage change has no render surface and needs
+no owner Stage-B request or new staging slot.

@@ -153,7 +153,7 @@ export default function MfaChallengePage() {
     <div className="mx-auto flex min-h-screen max-w-md items-center px-6">
       <Card className="w-full">
         <CardHeader>
-          <CardTitle>{t("title")}</CardTitle>
+          <CardTitle>{t(reverify ? "reverifyTitle" : "title")}</CardTitle>
           <CardDescription>{t("description")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
@@ -195,7 +195,7 @@ export default function MfaChallengePage() {
                     disabled={code.length !== CODE_LENGTH}
                     data-testid="mfa-submit"
                   >
-                    {t("submit")}
+                    {t(reverify ? "reverifySubmit" : "submit")}
                   </Button>
                 </form>
               </Form>

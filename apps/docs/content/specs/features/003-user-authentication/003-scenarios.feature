@@ -1066,15 +1066,20 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # -> identifier-switch.steps.ts. Retain unit/channel-request coverage;
     # no exactly matching app-local browser test exists to remove.
 
-  @EARS-44 @happy
+  @EARS-44 @happy @valid-handoff
   Scenario: A valid hand-off reference opens the code step with the code already sent
-    Given a congress sign-up was accepted and returned a hand-off reference
-    When the visitor opens /login?method=code&handoff=<ref>&returnTo=/account/congress
-    Then the login code is issued to that account exactly as for a code request
-    And the code step opens with «Мы отправили код на <address>» without a method choice or a captcha
-    And the handoff parameter is removed from the address bar
-    When the visitor enters the code from the mail
-    Then a BFF session is established and the visitor is returned to "/account/congress"
+    Given a uniquely owned Academy congress sign-up was accepted and returned a real hand-off reference
+    When the visitor opens that valid Academy hand-off link with the account return target
+    Then exactly one fresh sign-in code mail is issued to that hand-off account without another request
+    And the hand-off code step shows the exact original address and six cells without a method choice or captcha
+    And the hand-off reference is absent from the address bar and browser navigation history
+    When the visitor enters the delivered hand-off sign-in code once in that Academy tab
+    Then a secure BFF session opens that hand-off account's own Academy profile at the account return target
+    # Academy projects the carried returnTo to its actual /account route.
+    # The Doctor congress contract retains returnTo=/account/congress.
+    # Mapping: apps/portal/e2e/auth-journeys.e2e.spec.ts EARS-44 valid handoff
+    # -> valid-handoff.steps.ts. Retain the app-local journey until equivalent
+    # host-suite migration; native expiry/redemption/other-account tests remain.
 
   @EARS-44 @happy
   Scenario: A hand-off link opened while signed in as its own account goes straight to the target

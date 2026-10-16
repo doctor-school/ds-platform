@@ -213,6 +213,22 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the pre-verification password no longer signs in
     And every session the account held before the code is revoked
 
+  @EARS-41 @failure @signin-first-code
+  Scenario: Academy refuses the preverification password after the owner's first sign-in code
+    Given a uniquely owned Academy account has its original registration password and an unconsumed verification code
+    When the mailbox owner requests a fresh sign-in code through the ordinary Academy email method
+    Then the first-code request acknowledges only otp_sent and grants no private session or profile access
+    And the first-code sign-in mail delivers fresh addressed six digits without a link
+    When the mailbox owner enters that fresh sign-in code once on Academy
+    Then Academy opens the first-code owner's same verified account with a secure host-only session and no readable auth tokens
+    When an independent Academy guest submits the password set before the owner's first sign-in code
+    Then the preverification password receives only the generic refusal and grants no guest session or profile access
+    # Academy projection of the preceding broader EARS-41 scenario; retain it.
+    # Native apps/api/test/auth/zitadel-email-verify.e2e-spec.ts:272 retains
+    # the real IdP first-sign-in-code/password invalidation round trip.
+    # Native apps/api/src/auth/auth.service.spec.ts:1402 owns revoke-all sessions.
+    # This browser case establishes no pre-code session and claims no revoke-all proof.
+
   @EARS-23 @EARS-41 @happy @congress-registration
   Scenario: A password-less congress account that registers gets the entered password after the code
     Given a uniquely owned passwordless unverified congress signup has its original profile and congress consent observed

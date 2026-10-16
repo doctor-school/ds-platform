@@ -14,12 +14,12 @@ lang: en
 
 ## 1. Route topology and screen composition
 
-019 owns two routes of `apps/doctor`, both mounting `@ds/events-storefront` (the feed and the month view are the package, not route-local composition), both inside feature 017's shell, both over one read contract (LD-3): `/events` and `/events/calendar`. The room entry a live event links into is a THIRD `apps/doctor` route, `/events/[slug]/room` (mounted at `apps/doctor/app/(room)/events/[slug]/room/`) — a sibling root route group deliberately rendered OUTSIDE the 017 shell, because the room is viewport-bounded (006 EARS-11) and a nested layout cannot remove the parent shell's `<main>`. That route is owned by feature 006 over the shared room unit `packages/room` (`@ds/room`), extraction #1722; 019 owns only the way into it.
+019 owns one route of `apps/doctor`, `/events`, which mounts `@ds/events-storefront` (the feed and the month view are the package, not route-local composition), inside feature 017's shell, over one read contract (LD-3); the feed and the month view are two views of that page, the month view being a URL state of `/events`. The room entry a live event links into is a SECOND `apps/doctor` route, `/events/[slug]/room` (mounted at `apps/doctor/app/(room)/events/[slug]/room/`) — a sibling root route group deliberately rendered OUTSIDE the 017 shell, because the room is viewport-bounded (006 EARS-11) and a nested layout cannot remove the parent shell's `<main>`. That route is owned by feature 006 over the shared room unit `packages/room` (`@ds/room`), extraction #1722; 019 owns only the way into it.
 
 ```mermaid
 graph TD
   Shell["017 shell — header / nav / footer"] --> Events["#d-events — /events"]
-  Shell --> Cal["dedicated calendar page — /events/calendar (EARS-5)"]
+  Shell --> Cal["month view of /events — URL state (EARS-5)"]
   Events --> Row["tense row: Будущие / Прошедшие — wave 2 (#1525); release 1 renders no tense row, LD-10 (no Неделя / Месяц switch — F-019-2 Б)"]
   Events --> Live["«Идёт сейчас» block above the feed (F-019-3 А)"]
   Events --> Panel["events-filter — sidebar on desktop (F-019-1 Б)"]
@@ -35,7 +35,7 @@ graph TD
   Mine --> Cabinet["022 — #d-lk"]
 ```
 
-`019` owns the two Doctor routes, not a second events engine or room. The feed, the month calendar, the facet panel, the live strip, «Мои события», the data states and the МСК formatter are one package, `@ds/events-storefront`, mounted by both `apps/doctor` and `apps/portal`; the routes mount it and add nothing of their own. The host-specific `DoctorEventsFeed` response is a thin projection over the canonical event, room and registration services named below; it is not a parallel read model implementation. Managed specialty targeting and directed adjacency come from the landed 017 artifact #1484; 018's doctor content card and rendered adjacent-areas block are not substrates here.
+`019` owns the one Doctor route `/events`, not a second events engine or room. The feed, the month calendar, the facet panel, the live strip, «Мои события», the data states and the МСК formatter are one package, `@ds/events-storefront`, mounted by both `apps/doctor` and `apps/portal`; the route mounts it and adds only route-segment config and the config-bound retry action. The host-specific `DoctorEventsFeed` response is a thin projection over the canonical event, room and registration services named below; it is not a parallel read model implementation. Managed specialty targeting and directed adjacency come from the landed 017 artifact #1484; 018's doctor content card and rendered adjacent-areas block are not substrates here.
 
 ### 1.1 Cross-front ownership and extraction matrix (EARS-15)
 

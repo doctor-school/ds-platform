@@ -32,6 +32,11 @@
  * 30-minute window, so it asks for no code.
  */
 
+import {
+  adminLandingFor,
+  resolveAdminReturnTarget,
+} from "./admin-return-target";
+
 /** The one key the pending request lives under. */
 export const STEP_UP_STORAGE_KEY = "ds-admin:step-up-request";
 
@@ -74,9 +79,6 @@ export interface BoundStepUpRequest extends SavedStepUpRequest {
   owner: string;
   savedAt: number;
 }
-
-/** Where a re-verification lands when no valid return path came with it. */
-const FALLBACK_RETURN = "/events";
 
 /** A `401 STEP_UP_REQUIRED` refusal carrying the code screen to go to. */
 export function isStepUpRequired(error: unknown): error is {
@@ -145,8 +147,9 @@ export function adminPathOf(raw: string | null | undefined): string | null {
  * The code screen to send the operator to: the server's `stepUpUrl` plus the
  * page to return to and the refused endpoint the re-verification names (the API
  * records it on the `auth.step_up.*` row and accepts only a `stepUp` route).
- * `null` when either the `stepUpUrl` or the return path is not a same-origin
- * admin path — never followed off-origin.
+ * `null` when the `stepUpUrl` is not a same-origin admin path or the return
+ * path is not a valid admin return target (`resolveAdminReturnTarget`) — never
+ * followed off-origin.
  */
 export function stepUpChallengeHref(
   stepUpUrl: string,
@@ -154,7 +157,7 @@ export function stepUpChallengeHref(
   endpoint: string,
 ): string | null {
   const challenge = adminPathOf(stepUpUrl);
-  const back = adminPathOf(returnTo);
+  const back = resolveAdminReturnTarget(returnTo);
   if (challenge === null || back === null) return null;
   const url = new URL(challenge, ADMIN_BASE_ORIGIN);
   url.searchParams.set("returnTo", back);
@@ -162,9 +165,14 @@ export function stepUpChallengeHref(
   return `${url.pathname}${url.search}`;
 }
 
-/** The re-verify screen's `returnTo`, normalised, accepted only as an admin path. */
+/**
+ * The re-verify screen's `returnTo`, normalised. It is a sign-in return target
+ * like any other, so the one admin rule decides it (`admin-return-target.ts`,
+ * #2782): a same-origin admin page, never a sign-in screen or a non-page path,
+ * else the admin landing.
+ */
 export function reverifyReturnTo(raw: string | null): string {
-  return adminPathOf(raw) ?? FALLBACK_RETURN;
+  return adminLandingFor(raw);
 }
 
 /**

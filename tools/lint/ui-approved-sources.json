@@ -303,7 +303,8 @@
         "apps/admin/lib/admin-access.ts",
         "apps/showcase/app/primitives/primitives-view.tsx",
         "packages/design-system/src/blocks/data-table.tsx",
-        "packages/design-system/src/primitives/button.tsx"
+        "packages/design-system/src/primitives/button.tsx",
+        "apps/admin/components/staff-access-revoke-dialog.tsx"
       ],
       "states": [
         "staff-access-nav",
@@ -313,7 +314,8 @@
         "staff-access-existing-account",
         "staff-access-refused",
         "staff-access-refused-unverified",
-        "staff-access-step-up"
+        "staff-access-step-up",
+        "staff-access-revoke-confirm"
       ],
       "approvalProvenance": [
         "https://github.com/doctor-school/ds-platform/issues/2901#issuecomment-6141610486",

@@ -1104,6 +1104,20 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then X's session is revoked, the browser holds only Y's session
     And the visitor is returned to "/account/congress" as Y
 
+  @EARS-44 @happy @handoff-other-account
+  Scenario: Academy switches from another signed-in account to the hand-off account
+    Given a uniquely owned Academy congress account Y has a real hand-off reference
+    And that Academy browser holds a different uniquely owned verified account X session
+    When X opens Y's Academy hand-off link with the account return target
+    Then one fresh sign-in code is delivered only to Y and Academy opens Y's code step
+    When the visitor enters Y's delivered hand-off code once in that Academy tab
+    Then X's retained Academy session is revoked and the browser holds only Y's secure session
+    And Academy returns to its account page with Y's own verified private profile
+    # Academy projection uses its real /account return route. The broader
+    # Doctor /account/congress scenario above remains unchanged.
+    # Retain apps/api/test/auth/login-handoff.e2e-spec.ts:381: native session
+    # replacement remains complementary to this independent-cookie browser proof.
+
   @EARS-44 @EARS-16 @failure
   Scenario: An expired, unknown or exhausted reference falls back to the plain code entry
     Given an expired reference, an unknown reference and a reference already redeemed three times

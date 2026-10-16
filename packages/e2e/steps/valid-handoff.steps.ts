@@ -1,6 +1,4 @@
-import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
-import { captchaTestTokenFromEnv } from "../lib/captcha-stub.js";
 import {
   captureResponse,
   type CapturedResponse,
@@ -13,6 +11,7 @@ import {
   nativeRecoveryMail,
   type AddressedMailCheckpoint,
 } from "../lib/mailpit.js";
+import { createOwnedCongressSignup } from "../lib/owned-congress-signup.js";
 import { inputSecret } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
@@ -49,7 +48,7 @@ Given(
     const state: Handoff = {
       context,
       page: owned,
-      email: `valid-handoff-2929-${randomUUID()}@example.test`,
+      email: "",
       authPosts: [],
     };
     handoffs.set(page, state);
@@ -58,112 +57,15 @@ Given(
       if (request.method() === "POST" && pathname.startsWith("/v1/auth/"))
         state.authPosts.push(pathname);
     });
-    await owned.goto(world.hostBaseUrl, { waitUntil: "load" });
-    const before = await captureAddressedMailCheckpoint(
-      nativeRecoveryMail(),
-      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
-      state.email,
+    const signup = await createOwnedCongressSignup(
+      owned,
+      world.hostBaseUrl,
+      "valid-handoff-2929",
     );
-    expect(before.messageIds.length, "fresh owned mailbox is empty").toBe(0);
-    // 044 EARS-1/39: use the real intake as the only reference minter.
-    const accepted = await owned.evaluate(
-      async ({ email, captchaToken }) => {
-        const book = await fetch("/v1/public/specialties");
-        const specialties = await book.json().catch(() => ({}));
-        const specialtyId = specialties.entries?.[0]?.id;
-        if (!book.ok || typeof specialtyId !== "string")
-          throw new Error("Congress specialty prerequisite is unavailable");
-        const response = await fetch("/v1/congress/sign-up", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(captchaToken ? { "x-smartcaptcha-token": captchaToken } : {}),
-          },
-          body: JSON.stringify({
-            surname: "Иванова",
-            firstName: "Мария",
-            patronymic: "Петровна",
-            email,
-            specialtyId,
-            workplace: "ГКБ № 1",
-            city: "Москва",
-            region: "Москва",
-            contactPhone: "+7 (900) 123-45-67",
-            personalDataConsent: true,
-          }),
-        });
-        const body = await response.json().catch(() => ({}));
-        return {
-          status: response.status,
-          accepted: body.status === "accepted",
-          reference:
-            typeof body.handoff === "string" &&
-            /^[A-Za-z0-9_-]{43}$/.test(body.handoff)
-              ? body.handoff
-              : undefined,
-        };
-      },
-      {
-        email: state.email,
-        captchaToken:
-          process.env.BOT_PROTECTION_ENABLED === "false"
-            ? undefined
-            : captchaTestTokenFromEnv(),
-      },
-    );
-    expect(
-      {
-        status: accepted.status,
-        accepted: accepted.accepted,
-        validReference: Boolean(accepted.reference),
-      },
-      "real congress intake accepted the owned account and minted a reference",
-    ).toEqual({ status: 200, accepted: true, validReference: true });
-    state.reference = accepted.reference;
+    state.email = signup.email;
+    state.reference = signup.reference;
+    state.beforeHandoff = signup.notice;
     expect(state.authPosts, "signup used no separate auth command").toEqual([]);
-    const mail = nativeRecoveryMail();
-    const mailpit =
-      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl);
-    // 044 EARS-11/13: the real intake sends its own code-free notice first.
-    await expect
-      .poll(
-        async () =>
-          (await captureAddressedMailCheckpoint(mail, mailpit, state.email))
-            .messageIds.length,
-        { message: "the congress confirmation notice is delivered" },
-      )
-      .toBe(1);
-    const notice = await captureAddressedMailCheckpoint(
-      mail,
-      mailpit,
-      state.email,
-    );
-    const detail = await mail.get(
-      `${mailpit.replace(/\/$/, "")}/api/v1/message/${encodeURIComponent(notice.messageIds[0]!)}`,
-    );
-    expect(detail.status(), "owned congress notice can be read").toBe(200);
-    const message = (await detail.json().catch(() => {
-      throw new Error("Malformed owned congress notice");
-    })) as { ID?: string; Subject?: string; To?: { Address?: string }[] };
-    expect(
-      message.ID === notice.messageIds[0] &&
-        message.To?.some(
-          (recipient) => recipient.Address?.toLowerCase() === state.email,
-        ) &&
-        typeof message.Subject === "string" &&
-        message.Subject.startsWith("Doctor.School — вы зарегистрированы на ") &&
-        message.Subject.length >
-          "Doctor.School — вы зарегистрированы на ".length,
-      "the pre-handoff delivery is the real congress notice, not an auth-code mail",
-    ).toBe(true);
-    await assertNoAddressedMail(
-      mail,
-      mailpit,
-      state.email,
-      new Date().toISOString(),
-      notice,
-    );
-    state.beforeHandoff = notice;
   },
 );
 

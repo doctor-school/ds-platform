@@ -9,7 +9,7 @@ composition blocks» in
 `apps/docs/content/specs/tech/2026-10-16-event-page-wave-3-entry-gate-en.md`.
 
 Since wave-3 PR 3.1 the package holds the Academy composition moved unchanged
-from `apps/portal/app/webinars/[slug]/page.tsx`: the event read, the
+from `apps/portal/app/webinars/[slug]/(event-page)/page.tsx`: the event read, the
 server-resolved participation card with the one-tap slot, the hero status plate
 with the recording badge, the room access-branch guidance (`?from=room`), the
 recording plaque / guest gate / player / raw-original spoiler, the about and

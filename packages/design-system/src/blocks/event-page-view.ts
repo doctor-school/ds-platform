@@ -53,8 +53,6 @@ function inMoscow(instant: string | Date) {
  * function below takes the copy as data and keeps one shape.
  */
 export interface EventPageCopy {
-  /** The Moscow-time label rendered next to every time (004 EARS-12). */
-  tz: string;
   /** Duration unit for the hero date line — «90 минут». */
   minutes: string;
   /** Sign-up card condition labels. */
@@ -115,7 +113,6 @@ export interface EventPageCopy {
 }
 
 export const EVENT_PAGE_COPY: EventPageCopy = {
-  tz: "МСК",
   minutes: "минут",
   conditionFormat: "Формат",
   conditionDuration: "Длительность",
@@ -145,7 +142,13 @@ export const EVENT_PAGE_COPY: EventPageCopy = {
     "Во время эфира: вопрос лектору · опросы с живым графиком · отметки присутствия",
 };
 
-/** The МСК parts every surface of the page renders from the one UTC instant. */
+/**
+ * The facts of an event the page's times are formatted from — the instant and
+ * the participation format, which decides whether the viewer's zone applies.
+ */
+export type EventPageMoment = Pick<EventPageView, "startsAt" | "format">;
+
+/** The parts every surface of the page renders from the one UTC instant. */
 export interface EventPageTimeParts {
   /** «19:00» */
   time: string;
@@ -153,24 +156,42 @@ export interface EventPageTimeParts {
   date: string;
   /** «пятница» */
   weekday: string;
+  /** «МСК», «GMT+5» — the zone the time is stated in (004 EARS-12). */
+  zoneLabel: string;
 }
 
-export function eventPageTimeParts(view: EventPageView): EventPageTimeParts {
-  const { time, date, weekday } = inMoscow(view.startsAt);
-  return { time, date, weekday };
+/**
+ * 020 «Amendment — 2026-10-02» (004 EARS-12 as amended, gate D9): an online or
+ * hybrid event's time reads in the viewer's zone with its explicit label; an
+ * offline event stays pinned to Moscow (`formatEventTime` owns that rule). The
+ * server never knows the viewer's zone, so it calls this with the default
+ * `Europe/Moscow` and the client island re-formats after mount
+ * (`useViewerZone`).
+ */
+export function eventPageTimeParts(
+  view: EventPageMoment,
+  viewerZone: string = MOSCOW_TIME_ZONE,
+): EventPageTimeParts {
+  const { time, date, weekday, zoneLabel } = formatEventTime({
+    startsAt: view.startsAt,
+    participationFormat: view.format,
+    viewerZone,
+  });
+  return { time, date, weekday, zoneLabel };
 }
 
 /**
  * The hero date line — «28 августа, 19:00 (МСК) · 90 минут». One string, so the
  * two hosts cannot disagree about the order of date, time, timezone and
- * duration for the same event (EARS-1: date + time «МСК» + duration).
+ * duration for the same event (EARS-1: date + time + zone label + duration).
  */
 export function eventPageDateLine(
-  view: EventPageView,
+  view: EventPageMoment & Pick<EventPageView, "durationMin">,
   copy: EventPageCopy = EVENT_PAGE_COPY,
+  viewerZone: string = MOSCOW_TIME_ZONE,
 ): string {
-  const { date, time } = eventPageTimeParts(view);
-  return `${date}, ${time} (${copy.tz}) · ${view.durationMin} ${copy.minutes}`;
+  const { date, time, zoneLabel } = eventPageTimeParts(view, viewerZone);
+  return `${date}, ${time} (${zoneLabel}) · ${view.durationMin} ${copy.minutes}`;
 }
 
 /**
@@ -340,7 +361,7 @@ export function eventSignupCardProps(
   cta: ParticipationCta,
   copy: EventPageCopy = EVENT_PAGE_COPY,
 ): EventSignupCardProps {
-  const { time, date, weekday } = eventPageTimeParts(view);
+  const { time, date, weekday, zoneLabel } = eventPageTimeParts(view);
   // Canvas:181-198 order — Участие · Формат · Длительность · НМО. «Участие»
   // leads: the cost is the fact that decides whether a doctor reads any of the
   // rest, and the canvas sets the FREE reading in the success tone for exactly
@@ -367,7 +388,7 @@ export function eventSignupCardProps(
   return {
     timeLabel: time,
     dateLabel: date,
-    weekdayLabel: `${weekday} · ${copy.tz}`,
+    weekdayLabel: `${weekday} · ${zoneLabel}`,
     conditions,
     cta,
     // Canvas:201 carries the footnote under the register control alone. In

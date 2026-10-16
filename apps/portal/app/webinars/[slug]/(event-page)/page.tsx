@@ -1,6 +1,6 @@
 import { EventPage } from "@ds/event-page/page";
 
-import { ACADEMY_EVENT_PAGE } from "../../../lib/events-storefront.host-config";
+import { ACADEMY_EVENT_PAGE } from "../../../../lib/events-storefront.host-config";
 
 /**
  * 020 EARS-1 / EARS-18 — the Academy event page at `/webinars/:slug`, mounted

@@ -2,6 +2,7 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -230,6 +231,53 @@ describe("003 EARS-44: /login redeems the Congress hand-off into the code step",
  */
 describe("003 EARS-44 (#2659): a hand-off link opened while signed in", () => {
   it.each(HOSTS)(
+    "003 EARS-44: on %s the SAME account never renders a sign-in form before or during its direct return",
+    async (_host, config) => {
+      let answerHandoff!: (value: { status: "already_signed_in" }) => void;
+      let answerLanding!: (value: string) => void;
+      redeemLoginHandoff.mockReturnValue(
+        new Promise((resolve) => {
+          answerHandoff = resolve;
+        }),
+      );
+      const resolveSignedInLanding = vi.fn(
+        () =>
+          new Promise<string>((resolve) => {
+            answerLanding = resolve;
+          }),
+      );
+      const door = (
+        <LoginDoor
+          config={config}
+          landing="/account"
+          defaultMethod="otp"
+          handoffRef={REF}
+          signedIn
+          resolveSignedInLanding={resolveSignedInLanding}
+        />
+      );
+
+      // Server HTML precedes effects: a pending flag set in an effect is too late.
+      expect(renderToString(door)).not.toContain('data-testid="login-screen"');
+      render(<StrictMode>{door}</StrictMode>);
+      expect(screen.queryByTestId("login-screen")).toBeNull();
+      expect(redeemLoginHandoff).toHaveBeenCalledTimes(1);
+
+      await act(async () => answerHandoff({ status: "already_signed_in" }));
+      expect(resolveSignedInLanding).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId("login-screen")).toBeNull();
+      expect(push).not.toHaveBeenCalled();
+
+      await act(async () => answerLanding("/account"));
+      expect(push).toHaveBeenCalledExactlyOnceWith("/account");
+      expect(refresh).toHaveBeenCalledOnce();
+      // push() starts navigation; it does not guarantee this door has unmounted.
+      expect(screen.queryByTestId("login-screen")).toBeNull();
+      expect(requestOtp).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(HOSTS)(
     "003 EARS-44: on %s the SAME account goes straight to the carried landing, with no code step",
     async (_host, config) => {
       redeemLoginHandoff.mockResolvedValue({ status: "already_signed_in" });
@@ -248,17 +296,46 @@ describe("003 EARS-44 (#2659): a hand-off link opened while signed in", () => {
   it.each(HOSTS)(
     "003 EARS-44: on %s ANOTHER account gets the ordinary code step for the reference's address",
     async (_host, config) => {
-      redeemLoginHandoff.mockResolvedValue({
-        status: "otp_sent",
-        identifier: EMAIL,
-      });
+      let answerHandoff!: (value: {
+        status: "otp_sent";
+        identifier: string;
+      }) => void;
+      redeemLoginHandoff.mockReturnValue(
+        new Promise((resolve) => {
+          answerHandoff = resolve;
+        }),
+      );
 
       renderDoor(config, REF, true);
+      expect(screen.queryByTestId("login-screen")).toBeNull();
+      await act(async () =>
+        answerHandoff({ status: "otp_sent", identifier: EMAIL }),
+      );
 
       await screen.findByTestId("otp-verify");
       expect(screen.getByText(EMAIL).parentElement).toHaveTextContent(
         `Мы отправили код на ${EMAIL}.`,
       );
+      expect(push).not.toHaveBeenCalled();
+      expect(requestOtp).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(HOSTS)(
+    "003 EARS-44: on %s a failed signed-in redemption restores the existing request error and retry form",
+    async (_host, config) => {
+      redeemLoginHandoff.mockRejectedValue(
+        new AuthError(429, "Too Many Requests"),
+      );
+
+      renderDoor(config, REF, true);
+
+      expect(
+        await screen.findByText(ERRORS.tooManyAttempts),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("otp-identifier")).toHaveValue("");
+      expect(screen.getByTestId("otp-send")).not.toBeDisabled();
+      expect(screen.queryByTestId("otp-verify")).toBeNull();
       expect(push).not.toHaveBeenCalled();
     },
   );
@@ -270,5 +347,6 @@ describe("003 EARS-44 (#2659): a hand-off link opened while signed in", () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("/account"));
     expect(screen.queryByTestId("otp-verify")).toBeNull();
+    expect(screen.queryByTestId("login-screen")).toBeNull();
   });
 });

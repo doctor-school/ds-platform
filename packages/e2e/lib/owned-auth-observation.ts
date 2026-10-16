@@ -39,7 +39,7 @@ export interface OwnedConsentSnapshot {
 const UUID =
   /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const OWNED_EMAIL =
-  /^(consent-2856|phone-control-2857)-([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})@example\.test$/;
+  /^(consent-2856|phone-control-2857|sms-hint-2990)-([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})@example\.test$/;
 const FAILURE = "Owned auth observation failed";
 const CONSENT_SELECT =
   "SELECT u.id AS profile_id, u.email = $1 AS email_matches, u.zitadel_sub = $2 AS subject_matches, u.email_verified, u.phone IS NULL AS phone_absent, u.phone_verified, u.display_name IS NULL AS display_name_absent, c.id AS consent_id, c.purpose, c.version, c.captured_at::text AS captured_at, c.origin FROM users u JOIN consent_records c ON c.user_id = u.id WHERE u.email = $1 AND u.zitadel_sub = $2 AND ($3::uuid IS NULL OR u.id = $3::uuid) ORDER BY c.id";
@@ -408,13 +408,21 @@ export async function readOwnedPhoneAccountCount(
   fixture: OwnedPhoneFixture,
   effects?: StageConsentEffects,
 ): Promise<number> {
+  // #2857 registration refusal owns two submitted phones; #2990 SMS sign-in owns one.
+  const owned =
+    typeof fixture.email !== "string"
+      ? 0
+      : fixture.email.startsWith("phone-control-2857-")
+        ? 2
+        : fixture.email.startsWith("sms-hint-2990-")
+          ? 1
+          : 0;
   if (
-    typeof fixture.email !== "string" ||
+    owned === 0 ||
     !OWNED_EMAIL.test(fixture.email) ||
-    !fixture.email.startsWith("phone-control-2857-") ||
     !Array.isArray(fixture.phones) ||
-    fixture.phones.length !== 2 ||
-    new Set(fixture.phones).size !== 2 ||
+    fixture.phones.length !== owned ||
+    new Set(fixture.phones).size !== owned ||
     fixture.phones.some(
       (phone) => typeof phone !== "string" || !/^\+1999[0-9]{8}$/.test(phone),
     )

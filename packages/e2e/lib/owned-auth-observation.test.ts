@@ -231,6 +231,43 @@ describe("owned submitted-phone account absence", () => {
       "phone-control-2857-12345678-1234-4234-8234-123456789abc@example.test",
     phones: ["+199912345678", "+199987654321"] as [string, string],
   };
+  const smsHintFixture = {
+    email: "sms-hint-2990-12345678-1234-4234-8234-123456789abc@example.test",
+    phones: ["+199912345678"],
+  };
+  it("EARS-56: the SMS sign-in hint fixture counts its one owned phone locally and on Stage", async () => {
+    rows([{ count: "0" }]);
+    expect(await readOwnedPhoneAccountCount(contour, smsHintFixture)).toBe(0);
+    expect(
+      mocked.query.mock.calls.find(([sql]) => sql.includes("WHERE phone"))?.[1],
+    ).toEqual([smsHintFixture.phones]);
+    const effects = {
+      capture: vi.fn(async (script: string) =>
+        script.includes("ON_ERROR_STOP=1")
+          ? JSON.stringify({
+              database: "ds_main",
+              readOnly: true,
+              rows: [{ count: "0" }],
+            })
+          : "STAGE_BASE_DOMAIN=stage.doctor.school",
+      ),
+    };
+    expect(
+      await readOwnedPhoneAccountCount(
+        {
+          ...contour,
+          academyBaseUrl: "https://academy-main.stage.doctor.school",
+        },
+        smsHintFixture,
+        effects,
+      ),
+    ).toBe(0);
+    const script = effects.capture.mock.calls[1]![0];
+    expect(script).toContain(
+      `WHERE phone IN ('\\''${smsHintFixture.phones[0]}'\\'')`,
+    );
+    expect(script).not.toContain(smsHintFixture.email);
+  });
   it("EARS-2: local reads count only the two actual submitted phones without filtering the control email", async () => {
     rows([{ count: "0" }]);
     expect(await readOwnedPhoneAccountCount(contour, phoneFixture)).toBe(0);
@@ -303,6 +340,11 @@ describe("owned submitted-phone account absence", () => {
     },
     { ...phoneFixture, phones: ["+79991234567", phoneFixture.phones[1]] },
     { ...phoneFixture, phones: ["+1999' OR true--", phoneFixture.phones[1]] },
+    { ...phoneFixture, phones: [phoneFixture.phones[0]] },
+    { ...smsHintFixture, phones: phoneFixture.phones },
+    { ...smsHintFixture, phones: [] },
+    { ...smsHintFixture, phones: ["+79991234567"] },
+    { ...smsHintFixture, email: "sms-hint-2990-not-a-uuid@example.test" },
   ])(
     "EARS-2: unsafe or unbound phone fixtures fail before any local pool or Stage access %#",
     async (bad) => {

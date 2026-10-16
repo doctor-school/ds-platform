@@ -936,9 +936,11 @@ the projection by actual `current_database()` and `transaction_read_only`, and
 the result must match both. Consent cardinality and typed projection checks are
 shared by both routes. Missing SSH access fails explicitly with redacted errors.
 
-`readOwnedPhoneAccountCount` is the #2857 request-bound mirror-absence observer:
-it counts only rows for the two actual submitted, distinct `+1999` plus eight-digit
-synthetic phone identifiers, bound to an owned `phone-control-2857-<UUID>` fixture.
+`readOwnedPhoneAccountCount` is the request-bound mirror-absence observer: it
+counts only rows for the actual submitted, distinct `+1999` plus eight-digit
+synthetic phone identifiers bound to an owned fixture — two for the #2857
+`phone-control-2857-<UUID>` registration refusal, one for the #2990
+`sms-hint-2990-<UUID>` SMS sign-in hint (`signin-sms-hint.steps.ts`).
 It supports local and staging contours, with no control-email filter or shared
 global-user claim. `readOwnedUserCount` remains the additional total-users oracle
 for the serialized isolated local database; it rejects staging before any query.

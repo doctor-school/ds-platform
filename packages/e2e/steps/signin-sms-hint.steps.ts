@@ -1,8 +1,4 @@
-import { randomUUID } from "node:crypto";
-import { appendFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { isAbsolute, relative } from "node:path";
-import { createDrizzle, type DrizzleHandle } from "@ds/db";
+import { randomInt, randomUUID } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
@@ -11,10 +7,10 @@ import {
   inputSecret,
 } from "../lib/owned-registration.js";
 import {
-  freshConfirmablePhone,
-  smsSinkMessages,
-  smsSinkUrl,
-} from "../lib/sms-sink.js";
+  readOwnedPhoneAccountCount,
+  type OwnedAuthContour,
+} from "../lib/owned-auth-observation.js";
+import { smsSinkMessages, smsSinkUrl } from "../lib/sms-sink.js";
 import { Given, Then, When, test } from "./support/auth-fixtures.js";
 
 const SMS_HINT =
@@ -34,116 +30,27 @@ function visitor(page: Page): SmsVisitor {
   return state;
 }
 
-async function assertUnconfirmedPhone(page: Page, phone: string) {
-  const failure = "Owned SMS sign-in mirror observation failed";
-  let pool: DrizzleHandle["pool"] | undefined;
-  const connect = (ownedPool: DrizzleHandle["pool"]) => ownedPool.connect();
-  let client: Awaited<ReturnType<typeof connect>> | undefined;
-  let failed = false;
-  let absent = false;
-  let started = false;
-  const log = process.env.E2E_STAND_COMMAND_LOG ?? "";
-  const id = randomUUID();
-  const record = (status: string) =>
-    appendFileSync(
-      log,
-      `${JSON.stringify({
-        at: new Date().toISOString(),
-        id,
-        operation: "signin-sms-hint-mirror-read",
-        status,
-        readOnly: true,
-        ...(status === "completed"
-          ? { ok: !failed && absent, nativeExit: failed ? 1 : 0 }
-          : {}),
-      })}\n`,
-      "utf8",
-    );
-  try {
-    const part = relative(tmpdir(), log);
-    if (!isAbsolute(log) || part.startsWith("..") || isAbsolute(part))
-      throw new Error();
-    const database = new URL(process.env.E2E_AUTH_DATABASE_URL ?? "");
-    const academy = new URL(page.url());
-    const api = new URL(process.env.E2E_API_URL ?? "");
-    const host = process.env.E2E_AUTH_DATABASE_HOST;
-    const port = Number(process.env.E2E_AUTH_DATABASE_PORT);
-    if (
-      !["localhost", "127.0.0.1", "[::1]"].includes(academy.hostname) ||
-      academy.hostname !== api.hostname ||
-      academy.protocol !== api.protocol ||
-      api.origin !== process.env.E2E_API_URL?.replace(/\/$/, "") ||
-      api.username ||
-      api.password ||
-      !academy.port ||
-      !api.port ||
-      academy.port === api.port ||
-      !["http:", "https:"].includes(academy.protocol) ||
-      !["postgres:", "postgresql:"].includes(database.protocol) ||
-      !host ||
-      /(?:^|\.)doctor\.school$/.test(host) ||
-      database.hostname !== host ||
-      !Number.isSafeInteger(port) ||
-      port < 1 ||
-      port > 65535 ||
-      database.port !== String(port) ||
-      process.env.E2E_AUTH_DATABASE_NAME !== "ds_dev_2250" ||
-      database.pathname !== "/ds_dev_2250" ||
-      database.search ||
-      database.hash ||
-      !/^\+7999[0-9]{7}$/.test(phone)
-    )
-      throw new Error();
-    record("started");
-    started = true;
-    pool = createDrizzle(database.toString(), {
-      max: 1,
-      statement_timeout: 5_000,
-    }).pool;
-    pool.removeAllListeners("error");
-    pool.on("error", () => {
-      failed = true;
-    });
-    client = await connect(pool);
-    await client.query("BEGIN READ ONLY");
-    const result = await client.query(
-      "SELECT current_database() = $2 AS database_matches, current_setting('transaction_read_only') = 'on' AS read_only, NOT EXISTS (SELECT 1 FROM users WHERE phone = $1 AND phone_verified = true) AS unconfirmed",
-      [phone, "ds_dev_2250"],
-    );
-    absent =
-      result.rows.length === 1 &&
-      result.rows[0].database_matches === true &&
-      result.rows[0].read_only === true &&
-      result.rows[0].unconfirmed === true;
-  } catch {
-    failed = true;
-  } finally {
-    if (client) {
-      try {
-        await client.query("ROLLBACK");
-      } catch {
-        failed = true;
-      }
-      try {
-        client.release();
-      } catch {
-        failed = true;
-      }
-    }
-    if (pool) {
-      try {
-        await pool.end();
-      } catch {
-        failed = true;
-      }
-    }
-    try {
-      if (started) record("completed");
-    } catch {
-      failed = true;
-    }
-  }
-  if (failed || !absent) throw new Error(failure);
+async function assertUnconfirmedPhone(page: Page, state: SmsVisitor) {
+  const contour: OwnedAuthContour = {
+    academyBaseUrl: process.env.E2E_PORTAL_URL ?? "",
+    apiBaseUrl: process.env.E2E_API_URL ?? "",
+    databaseUrl: process.env.E2E_AUTH_DATABASE_URL ?? "",
+    expectedDatabase: process.env.E2E_AUTH_DATABASE_NAME ?? "",
+    expectedDatabaseHost: process.env.E2E_AUTH_DATABASE_HOST ?? "",
+    expectedDatabasePort: Number(process.env.E2E_AUTH_DATABASE_PORT),
+  };
+  expect(
+    contour.academyBaseUrl.replace(/\/$/, "") === new URL(page.url()).origin,
+    "the phone observer belongs to the actual Academy contour",
+  ).toBe(true);
+  // No account mirror at all carries the owned phone, so none has it confirmed.
+  expect(
+    await readOwnedPhoneAccountCount(contour, {
+      email: state.email,
+      phones: [state.phone],
+    }),
+    "the owned phone has no account mirror",
+  ).toBe(0);
 }
 
 async function noPrivateAccess(page: Page, state: SmsVisitor) {
@@ -164,7 +71,8 @@ Given(
     const sink = smsSinkUrl();
     if (!sink) throw new Error("SMS sign-in requires E2E_SMS_SINK_URL");
     const state: SmsVisitor = {
-      phone: freshConfirmablePhone(),
+      // Synthetic owned phone: the request must be neutrally accepted, never delivered.
+      phone: `+1999${randomInt(10_000_000, 100_000_000)}`,
       sink,
       email: `sms-hint-2990-${randomUUID()}@example.test`,
       password: `Unsubmitted-${randomUUID()}-aA1!`,
@@ -195,7 +103,7 @@ Given(
       "true",
     );
     await noPrivateAccess(page, state);
-    await assertUnconfirmedPhone(page, state.phone);
+    await assertUnconfirmedPhone(page, state);
   },
 );
 

@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 
+import { withRuntimeBotProtection } from "../bot-protection/server";
 import type { AuthFlowHostConfig } from "../host-config";
 import { withReturnTarget } from "@ds/schemas";
 import {
@@ -33,12 +34,14 @@ import { ResetDoor } from "./reset-door";
  * typed, not resolved — so no эфир is read and no return-context card is drawn.
  */
 export async function ResetRoute({
-  config,
+  config: hostConfig,
   searchParams,
 }: {
   config: AuthFlowHostConfig;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  // #2981 — the site key is runtime env, read per request (bot-protection/server).
+  const config = withRuntimeBotProtection(hostConfig);
   const params = await searchParams;
   const raw = params[RETURN_CONTEXT_PARAM];
   // A repeated param arrives as an array; the FIRST value wins rather than the

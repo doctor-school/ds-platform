@@ -90,6 +90,7 @@ Owner-confirmed 2026-10-16 (chat): «Да, всё так.» The design is measur
    - Stage and prod pull the **same** image by that recorded digest. A release never re-resolves a tag.
    - PR-head images go under a separate `pr/` repository prefix, and a release accepts only digests recorded by a `main` build.
    - No box builds an image.
+   - Images are environment-agnostic: a build bakes no per-environment value. Per-environment values (the SmartCaptcha site key `SMARTCAPTCHA_SITE_KEY`, the staging-contour flag `CONTOUR_MANIFEST`) are runtime env. Only a build-time value identical in every environment stays a build arg — `API_PROXY_TARGET=http://api:3000`, because Next freezes `rewrites()` at build (DSO-100).
 2. **Stage `main` converges automatically.** (P4, P7)
    - After the build, an Actions job converges the stage `main` slot to those images.
    - The stage suite then runs against `*.stage.doctor.school` over HTTPS, and its verdict becomes a check on the commit.

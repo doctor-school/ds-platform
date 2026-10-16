@@ -9,8 +9,8 @@ import { test, expect, type Page, type Request } from "@playwright/test";
  * assertable — the body the enabled submit builds, and the fact that a resend is
  * a real round trip rather than a re-render.
  *
- * TOKENLESS BY CONSTRUCTION, and deliberately so. The CI build carries no
- * `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY`, so `<BotProtectionField>` renders no
+ * TOKENLESS BY CONSTRUCTION, and deliberately so. The CI server runs with no
+ * `SMARTCAPTCHA_SITE_KEY` runtime env (#2981), so `<BotProtectionField>` renders no
  * provider widget and resumes the pending action without a token — exactly the
  * state the backend guard no-ops in when the provider is disabled, and exactly
  * the dev-stand default. That is the honest browser assertion: the challenge

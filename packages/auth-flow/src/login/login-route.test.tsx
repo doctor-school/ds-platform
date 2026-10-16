@@ -956,3 +956,26 @@ describe("003 EARS-44: /login hands a well-formed hand-off reference to the door
     ).toBe("/account/congress");
   });
 });
+
+/** #2981 — the site key is runtime env, read by the mount per request. */
+describe("2981: the sign-in door's site key comes from runtime env", () => {
+  type Configured = { config: AuthFlowHostConfig };
+
+  beforeEach(() => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("2981: a set SMARTCAPTCHA_SITE_KEY reaches the door; unset hands it no key", async () => {
+    vi.stubEnv("SMARTCAPTCHA_SITE_KEY", "ysc1_runtime");
+    const keyed = (await doorOf(ACADEMY_FIXTURE, {})).props as unknown as Configured;
+    expect(keyed.config.botProtection?.siteKey).toBe("ysc1_runtime");
+
+    vi.stubEnv("SMARTCAPTCHA_SITE_KEY", undefined);
+    const keyless = (await doorOf(DOCTOR_FIXTURE, {})).props as unknown as Configured;
+    expect(keyless.config.botProtection?.siteKey).toBeUndefined();
+  });
+});

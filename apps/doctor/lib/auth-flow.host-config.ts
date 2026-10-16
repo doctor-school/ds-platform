@@ -102,12 +102,6 @@ export const DOCTOR_AUTH_FLOW = {
     loginIcon: "shield-check-square",
     registerIcon: "user-plus-square",
   },
-  botProtection: {
-    // The prod key is the `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY` build arg
-    // (`apps/doctor/Dockerfile`); `new.doctor.school` must be an allowed domain
-    // of the SmartCaptcha resource for the challenge to run there.
-    siteKey: process.env.NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY,
-  },
   register: {
     promoField: true,
   },

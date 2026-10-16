@@ -87,9 +87,6 @@ export const ACADEMY_AUTH_FLOW = {
     panel: { src: "/brand/logo-white.svg", width: 500, height: 164 },
     loginIcon: "shield-check",
   },
-  botProtection: {
-    siteKey: process.env.NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY,
-  },
   register: { promoField: false },
   /**
    * 003 EARS-20 — what the Academy records at sign-up, and what it SHOWS.

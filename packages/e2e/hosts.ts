@@ -91,15 +91,16 @@ export const HOSTS: Readonly<Record<HostId, HostConfig>> = Object.freeze({
  * route manifest to — staging/regression-contour tech spec §6.3, second bullet:
  * «exported at image build time to a fixed path the walk fetches from the slot».
  *
- * `.next/server/app-paths-manifest.json` is a BUILD artifact that the standalone
- * bundle does not carry, so the route walk cannot read it from the repo (the repo
- * says what the source declares) nor from the running container's filesystem (the
- * walk talks HTTP to a slot it does not own). Both Dockerfiles therefore copy the
- * manifest into the image's `public/` tree at this path, where the standalone
- * server serves it as an ordinary static file — SLOT IMAGES ONLY, behind the
- * `CONTOUR_MANIFEST` build arg that defaults to `0` and that only the slot
- * compose passes, so production serves no `/__contour/*`. One constant, because
- * the two Dockerfiles, the walk and the package README must never disagree.
+ * `.next/server/app-paths-manifest.json` is a BUILD artifact, carried by every
+ * image's standalone bundle at that non-public path, so the route walk cannot
+ * read it from the repo (the repo says what the source declares) nor from the
+ * running container's filesystem (the walk talks HTTP to a slot it does not own).
+ * Each storefront's route handler
+ * (`app/%5F_contour/app-paths-manifest.json/route.ts`) therefore serves it here —
+ * only when the container's RUNTIME env sets `CONTOUR_MANIFEST=1` (#2981), which
+ * only the slot compose does, so production answers 404 at `/__contour/*`. One
+ * constant, because the two route handlers, the walk and the package README must
+ * never disagree.
  */
 export const MANIFEST_PATH = "/__contour/app-paths-manifest.json";
 

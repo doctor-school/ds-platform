@@ -25,13 +25,11 @@ WORKDIR /repo
 
 FROM base AS build
 ENV NEXT_TELEMETRY_DISABLED=1
-# NEXT_PUBLIC_* are INLINED into the client bundle at BUILD time, so the Yandex
-# SmartCaptcha site key must arrive as a build-arg (not runtime env). Empty is the
-# local-dev default and renders no widget because the matching backend provider is
-# disabled there; production supplies a real key and executes the invisible check
-# on demand. The SERVER half lives in api.env (SMARTCAPTCHA_SERVER_KEY), never here.
-ARG NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY=
-ENV NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY=$NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY
+# ENVIRONMENT-AGNOSTIC IMAGE (#2981): one build runs on stage and prod, so the
+# build bakes no per-environment value. The SmartCaptcha site key is RUNTIME env
+# (SMARTCAPTCHA_SITE_KEY, read per request by the @ds/auth-flow server mounts);
+# only a value identical in every environment, like API_PROXY_TARGET below, is a
+# build arg.
 # API_PROXY_TARGET must be present at BUILD time: Next evaluates `rewrites()` during
 # `next build` and freezes the destination into .next/routes-manifest.json — runtime
 # env cannot change it (DSO-100 on-box find: built without it, the portal proxied
@@ -47,18 +45,6 @@ ENV API_PROXY_TARGET=$API_PROXY_TARGET
 COPY . .
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile
 RUN pnpm turbo run build --filter=@ds/portal
-# STAGING-CONTOUR ARTIFACT, OFF BY DEFAULT. `.next/server/app-paths-manifest.json`
-# is the route list the IMAGE actually mounts (tech spec §6.3, #2012) and the
-# standalone bundle does not carry it. Only infra/deploy/compose/slot passes
-# CONTOUR_MANIFEST=1, so production images contain no `public/__contour/**` and
-# serve no `/__contour/*`. The served path is `MANIFEST_PATH` in
-# `packages/e2e/hosts.ts` — one constant, two Dockerfiles, never disagreeing.
-ARG CONTOUR_MANIFEST=0
-RUN if [ "$CONTOUR_MANIFEST" = "1" ]; then \
-      mkdir -p apps/portal/public/__contour && \
-      cp apps/portal/.next/server/app-paths-manifest.json \
-         apps/portal/public/__contour/app-paths-manifest.json; \
-    fi
 
 FROM node:24-slim AS runtime
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
@@ -68,6 +54,11 @@ COPY --from=build --chown=node:node /repo/apps/portal/.next/standalone ./
 # Static assets + public are NOT in standalone — copy them alongside.
 COPY --from=build --chown=node:node /repo/apps/portal/.next/static ./apps/portal/.next/static
 COPY --from=build --chown=node:node /repo/apps/portal/public ./apps/portal/public
+# The standalone bundle above carries .next/server/app-paths-manifest.json, the
+# route list the IMAGE mounts (staging-contour tech spec §6.3) at a NON-public
+# path; `app/%5F_contour/app-paths-manifest.json/route.ts` serves it only when the
+# container sets CONTOUR_MANIFEST=1 (slot compose, #2981), so production answers
+# 404 at `MANIFEST_PATH` (packages/e2e/hosts.ts).
 # Feature 013 EARS-6: the dedicated named volume is mounted here in production.
 # Docker initializes a new volume from this node-owned 0700 directory, so the
 # non-root runtime can write private 0600 JSON records and no sibling service can.

@@ -107,27 +107,20 @@ services:
       start_period: 30s
 
   # --- portal — Next.js standalone, the academy storefront (academy-<slot>.…) ------
-  # API_PROXY_TARGET and the SmartCaptcha SITE key are baked at BUILD time by the
-  # `build:` block below (Next freezes `rewrites()` destinations into
-  # routes-manifest.json — DSO-100); the runtime copies below exist only so the
-  # container env matches prod.
+  # The image is environment-agnostic (#2981): only API_PROXY_TARGET, identical in
+  # every environment, is a build arg (Next freezes `rewrites()` destinations into
+  # routes-manifest.json — DSO-100). The SmartCaptcha SITE key is runtime env from
+  # stage.env (env_file below), and the contour manifest is gated by the runtime
+  # CONTOUR_MANIFEST flag in `environment:`.
   portal:
     build:
       context: ../../../..
       dockerfile: apps/portal/Dockerfile
       args:
-        # PUBLIC SmartCaptcha site key, inlined into the client bundle at build
-        # time (NEXT_PUBLIC_*). From stage.env; empty ⇒ inactive placeholder.
-        NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY: ${SMARTCAPTCHA_SITE_KEY:-}
         # BUILD-time on purpose (DSO-100): Next freezes `rewrites()` destinations
         # into .next/routes-manifest.json, so a runtime-only value is ignored and
         # the baked localhost fallback ECONNREFUSEDs the same-origin /v1/* proxy.
         API_PROXY_TARGET: http://api:3000
-        # Staging-contour only: exports .next/server/app-paths-manifest.json to
-        # public/__contour/ so the derived route walk can read what the IMAGE
-        # mounts. Defaults to 0 in the Dockerfile, and no production build passes
-        # it, so /__contour/* exists on slot images alone.
-        CONTOUR_MANIFEST: "1"
     image: ds-portal:${DEPLOY_SHA:-local}
     container_name: ${SLOT:?}-portal
     restart: unless-stopped
@@ -136,6 +129,10 @@ services:
       - /etc/ds-platform/slots/${SLOT:?}.env
     environment:
       PORT: "3001"
+      # Staging-contour only (#2981): serves /__contour/app-paths-manifest.json, the
+      # route list the IMAGE mounts, to the derived route walk. Every image carries
+      # the manifest; no production compose sets this, so prod answers 404 there.
+      CONTOUR_MANIFEST: "1"
       # Feature 013 EARS-6: fail-closed private JSON persistence (api-prod
       # precedent). Per-slot volume — a preview must not read main's submissions.
       ACADEMY_SUBMISSIONS_DIR: /var/lib/ds-platform/academy-submissions
@@ -163,10 +160,7 @@ services:
       context: ../../../..
       dockerfile: apps/doctor/Dockerfile
       args:
-        NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY: ${SMARTCAPTCHA_SITE_KEY:-}
         API_PROXY_TARGET: http://api:3000
-        # Staging-contour only — see the portal block above.
-        CONTOUR_MANIFEST: "1"
     image: ds-doctor:${DEPLOY_SHA:-local}
     container_name: ${SLOT:?}-doctor
     restart: unless-stopped
@@ -175,6 +169,8 @@ services:
       - /etc/ds-platform/slots/${SLOT:?}.env
     environment:
       PORT: "3004"
+      # Staging-contour only — see the portal block above.
+      CONTOUR_MANIFEST: "1"
     depends_on:
       api:
         condition: service_started

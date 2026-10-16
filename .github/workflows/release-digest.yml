@@ -1,8 +1,8 @@
 name: Release digest → Mattermost
 
 # Fire the aggregated PROD release digest (Issue #868) from CI on a successful
-# production Deployment (Issue #968). `deploy:prod` ships from the operator's box
-# (ADR-0012 — SSH deploy, no CI), so `secrets.MATTERMOST_WEBHOOK_URL` never existed
+# production Deployment (Issue #968). `deploy:prod` ships from the operator's
+# workstation over SSH, not from CI, so `secrets.MATTERMOST_WEBHOOK_URL` never existed
 # on that path and the digest had NEVER fired (the #950 `.env.local` fallback was a
 # crutch, now retired). But `deploy:prod` records a GitHub Deployment + `success`
 # status (#942/#954), which fires this workflow — where the secret already lives.

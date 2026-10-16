@@ -116,6 +116,10 @@ services:
       # overrode the image's ENV PORT=3001, the portal bound 3000, and Caddy's
       # portal:3001 upstream broke). compose `environment:` outranks env_file.
       PORT: "3001"
+      # Pin OFF (#2981): the `/__contour/app-paths-manifest.json` route answers only
+      # when the runtime CONTOUR_MANIFEST is exactly "1" (slot compose). Pinned here
+      # so a stray line in the shared api.env env_file can never expose it in prod.
+      CONTOUR_MANIFEST: "0"
       # Yandex SmartCaptcha CLIENT key (#186) — RUNTIME env (#2981): the image is
       # environment-agnostic, the @ds/auth-flow server mounts read it per request
       # and hand it to the widget. Interpolated from the non-secret `.env` beside
@@ -212,6 +216,8 @@ services:
       # must never leak an api PORT value into a Next app. compose `environment:`
       # outranks env_file. 3004 matches the Dockerfile ENV + the Caddy upstream.
       PORT: "3004"
+      # Pin OFF, as on the portal (#2981): the contour manifest route stays 404 in prod.
+      CONTOUR_MANIFEST: "0"
       # SmartCaptcha CLIENT key — RUNTIME env, same `.env` source as the portal
       # (#2981). Registration bot-protection (#1558) ships here too, so
       # `new.doctor.school` must be on the `ds-platform-prod` SmartCaptcha

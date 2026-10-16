@@ -17,8 +17,8 @@ import type {
  * The host value file of `@ds/auth-flow` on this host. A plain constant rather
  * than the Academy's hook: this storefront ships no i18n runtime. Its RU
  * auth sentences are the package's own defaults (#2027) — and what stays here is
- * the transport, the field SET and the site key, which Next inlines from the
- * literal `process.env.NEXT_PUBLIC_…` expression below.
+ * the transport and the field SET. The SmartCaptcha site key is not a host value:
+ * the package's server mounts read it from the runtime env per request (#2981).
  */
 
 /**

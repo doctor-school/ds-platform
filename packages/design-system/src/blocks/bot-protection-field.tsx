@@ -6,15 +6,14 @@ import { SmartCaptcha, type BotProtectionFailure } from "./smart-captcha";
 
 export interface BotProtectionFieldProps {
   /**
-   * The provider site key, resolved by the HOST (021 EARS-19, #1558).
+   * The provider site key, resolved by the caller (021 EARS-19, #1558).
    *
-   * The portal-local original read `process.env.NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY`
-   * itself. A design-system block must not: the package ships no build-time env
-   * of its own and is mounted by two Next apps that inline their own, so the key
-   * arrives as a prop and each host names the variable it actually builds with.
-   * Absent or empty — the dev-stand default, and the state a storefront built
-   * without a key runs in — the pending action RESUMES TOKENLESS, exactly
-   * matching the backend guard's no-op when the provider is disabled.
+   * A design-system block reads no env: this is a client component, and the key
+   * is a per-environment value the caller's server reads at request time (#2981),
+   * so it arrives as a prop. Absent or empty — the dev-stand default, and the
+   * state a storefront run without a key is in — the pending action RESUMES
+   * TOKENLESS, exactly matching the backend guard's no-op when the provider is
+   * disabled.
    */
   sitekey?: string | undefined;
   /** Monotonic key for one pending protected action; `null` is idle. */

@@ -11,8 +11,10 @@ import ru from "../messages/ru.json";
  *
  * The host value file of `@ds/auth-flow`, in the same role as `lib/room-config.ts`
  * is for `@ds/room`: the RULES (the transport, the error branch, the field
- * shapes) and every sentence a doctor reads live in the package once; the PATHS,
- * the field SET and the site key are this host's and live here.
+ * shapes) and every sentence a doctor reads live in the package once; the PATHS
+ * and the field SET are this host's and live here. The SmartCaptcha site key is
+ * not a host value: the package's server mounts read it from the runtime env per
+ * request (#2981).
  */
 
 /**
@@ -32,8 +34,7 @@ const m = ru;
  * The full host config — a plain constant (#2027 PR 1.5).
  *
  * DATA, not a hook: the sign-in door is mounted by a server route file that can
- * only pass an imported identifier to the package. The literal `process.env.NEXT_PUBLIC_…` expression is what Next inlines at build,
- * which is why the site-key read lives in the app rather than in the package.
+ * only pass an imported identifier to the package.
  */
 export const ACADEMY_AUTH_FLOW = {
   api: ACADEMY_AUTH_FLOW_API,

@@ -22,8 +22,8 @@
  *   E2E_DOCTOR_URL=http://127.0.0.1:3004 MAILPIT_URL=… DATABASE_URL=<branch db> \
  *     node apps/doctor/e2e/ui-evidence-2435.mjs .github/ui-evidence/2435
  *
- * Boot recipe (bot protection in its stand bypass, the host built with an empty
- * `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY`, the server bound to 127.0.0.1): the
+ * Boot recipe (bot protection in its stand bypass, the host run with no
+ * `SMARTCAPTCHA_SITE_KEY`, the server bound to 127.0.0.1): the
  * docblock of `e2e/congress-submissions.spec.ts`.
  */
 

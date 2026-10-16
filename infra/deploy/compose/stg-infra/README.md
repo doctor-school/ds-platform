@@ -562,11 +562,12 @@ raising the cap would be a one-constant change (`REDIS_DB_MAX` in `tools/staging
 if the box ever grows past three previews.
 
 **Building images.** The box builds, exactly as api-prod does. `pnpm stage:slot up|sync`
-ships the tree and runs the build there; no registry and no workflow is involved. The SmartCaptcha SITE key is
-baked at build time from the box env's `SMARTCAPTCHA_SITE_KEY` (the slot compose reads that exact
-name; empty renders the inactive placeholder). It is one half of a coherent trio — `stage.env.example`
-→ «Bot protection», enforced by `up|sync` (#2207) — and a slot built before the pair was placed must be
-re-converged.
+ships the tree and runs the build there; no registry and no workflow is involved. The image bakes no
+SmartCaptcha SITE key (#2981): the portal and doctor slot containers load the box env
+`/etc/ds-platform/stage.env` as `env_file`, and the `@ds/auth-flow` server mounts read its
+`SMARTCAPTCHA_SITE_KEY` per request (empty renders the inactive placeholder). It is one half of a
+coherent trio — `stage.env.example` → «Bot protection», enforced by `up|sync` (#2207) — and a key
+placed or changed after a slot is up reaches it on a container recreate, never a rebuild.
 
 **Disk.** `pnpm stage:slot gc` removes slot-tagged images whose slot is not live, and
 only then, if free space on `/var/lib/docker` is below **10 GB**, additionally runs

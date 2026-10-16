@@ -166,6 +166,18 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the response is the usual enumeration-safe one and no SMS is sent
     And the unconfirmed-phone counter for flow "signin" increases once
 
+  # Academy browser projection of the sign-in hint/no-send clause (#2990).
+  # Native counter/audit/timing: apps/api/test/auth/login-otp.e2e-spec.ts EARS-56/16.
+  # Shared hint: packages/auth-flow/src/login/login-door.channels.test.tsx EARS-55.
+  # EARS-55 is under the channel switch; the EARS-42 code step is unchanged.
+  @EARS-55 @EARS-56 @EARS-16 @happy @signin-sms-hint
+  Scenario: Academy shows the static SMS sign-in hint and neutrally accepts an unconfirmed phone
+    Given a fresh Academy guest opens login by code with a unique unconfirmed phone
+    When the Academy guest selects the real SMS sign-in channel
+    Then Academy shows the exact static SMS eligibility hint associated with the channel switch
+    When the Academy guest requests an SMS sign-in code for that phone
+    Then Academy offers the unchanged SMS code step without a private session or addressed SMS for twenty seconds
+
   @EARS-1 @EARS-20 @EARS-19 @happy @registration-before-confirmation
   Scenario: Register with email and password
     Given an Academy visitor with a unique never-registered email

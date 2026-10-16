@@ -9,7 +9,7 @@ lang: en
 
 # 014 — Event recordings and the archived-event page (Design)
 
-Requirements: [`014-requirements-en.md`](./014-requirements-en.md) · PRD: [`014-product.md`](./014-product.md) · Canvases: `design-source/event-page-recording.dc.html`, `design-source/unit-events-filter.dc.html`, `design-source/account-my-events.dc.html`.
+Requirements: [`014-requirements-en.md`](./014-requirements-en.md) · PRD: [`014-product.md`](./014-product.md) · Canvases: `design-source/event-page.dc.html` (`phase: прошло`), `design-source/unit-events-filter.dc.html`, `design-source/account-my-events.dc.html`.
 
 Every EARS clause in the requirements carries a `wave: core | facets` tag. This design marks each section the same way, so an implementation Issue reads its layer boundaries and its wave from one place.
 
@@ -359,13 +359,13 @@ The archived-event speaker projection consumes only 012's canonical eligible `ev
 
 ### 8.1 `/webinars/[slug]` post-live state
 
-Built from `design-source/event-page-recording.dc.html`, whose props map one-to-one onto the projection:
+Built from `design-source/event-page.dc.html` `phase: прошло`, whose props map one-to-one onto the projection:
 
-| Canvas prop                                   | Source                                                   |
-| --------------------------------------------- | -------------------------------------------------------- |
-| `viewer: authed \| guest`                     | session presence                                         |
-| `recording: montage \| raw-only \| preparing` | `RecordingProjection.state`                              |
-| `secondaryUi: spoiler`                        | fixed — the canvas default is the operative Stage-A pick |
+| Canvas prop                                         | Source                                                   |
+| --------------------------------------------------- | -------------------------------------------------------- |
+| `auth: гость \| вошёл`                              | session presence                                         |
+| `recording: монтаж \| только оригинал \| готовится` | `RecordingProjection.state`                              |
+| the drawn spoiler «▸ Смотреть оригинал трансляции»  | fixed — the canvas default is the operative Stage-A pick |
 
 The page is the same route and the same layout as the pre-live state; the hero, meta row, «О чём эфир» timecode rows, speaker/materials aside and bottom CTA are the canvas composition. The player card holds exactly one of: the player, the guest gate, the plaque, or the unavailability message.
 

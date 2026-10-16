@@ -23,7 +23,7 @@ class Component extends DCLogic {
     const variant = p.variant || 'scheduled';
     const live = variant === 'live', past = variant === 'past', registered = variant === 'registered';
     const navigable = p.showCta !== false;
-    const href = p.href || (past ? 'event-page-recording.dc.html' : 'event-page.dc.html');
+    const href = p.href || (past ? 'event-page.dc.html' : 'event-page.dc.html');
     const speakers = (Array.isArray(p.speakers) ? p.speakers : p.speakers ? [p.speakers] : [
       { name: 'Андрей Королёв', org: 'травматолог-ортопед, к.м.н.' },
       { name: 'Мария Белова', org: 'врач ЛФК и спортивной медицины' }
@@ -31,7 +31,7 @@ class Component extends DCLogic {
 
     const ctaByVariant = {
       live: ['Войти в эфир ↗', p.ctaHref || 'room.dc.html'],
-      past: ['Смотреть запись ↗', p.ctaHref || 'event-page-recording.dc.html']
+      past: ['Смотреть запись ↗', p.ctaHref || 'event-page.dc.html']
     };
     const [ctaLabel, ctaHref] = ctaByVariant[variant] || [undefined, undefined];
 

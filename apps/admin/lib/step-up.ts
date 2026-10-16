@@ -245,23 +245,26 @@ function isBoundRequest(value: unknown): value is BoundStepUpRequest {
 }
 
 /**
- * The saved request for `path`, read once — or `null`. It comes back only for
- * the session that saved it, after a code confirmed since it was saved, within
- * {@link STEP_UP_REPLAY_TTL_MS}; any other saved request for `path` is
- * discarded together with the confirmation. A request saved for another path
- * stays for its own screen.
+ * The saved request for `path` — or for any of `path` when a screen sends more
+ * than one kind of request («Доступы»: a grant or a revocation, routed by the
+ * returned `path`; one key holds one request) — read once, or `null`. It comes
+ * back only for the session that saved it, after a code confirmed since it was
+ * saved, within {@link STEP_UP_REPLAY_TTL_MS}; any other saved request for those
+ * paths is discarded together with the confirmation. A request saved for
+ * another path stays for its own screen.
  */
 export function takeStepUpRequest(
   storage: StepUpStorage | null,
-  path: string,
+  path: string | readonly string[],
   scope: StepUpReplayScope,
 ): BoundStepUpRequest | null {
+  const paths: readonly string[] = typeof path === "string" ? [path] : path;
   if (!storage) return null;
   try {
     const raw = storage.getItem(STEP_UP_STORAGE_KEY);
     if (raw === null) return null;
     const saved = parsed(raw);
-    if (isBoundRequest(saved) && saved.path !== path) return null;
+    if (isBoundRequest(saved) && !paths.includes(saved.path)) return null;
     const confirmed = parsed(storage.getItem(STEP_UP_CONFIRMED_KEY)) as {
       at?: unknown;
     } | null;

@@ -4,7 +4,12 @@ import { useEffect, useState } from "react";
 import { Authenticated, useCustom } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import type { DataTableColumn } from "@ds/design-system/blocks";
-import type { StaffAccessListResponse, StaffAccessRow } from "@ds/schemas";
+import { Button } from "@ds/design-system";
+import {
+  StaffAccessRowSchema,
+  type StaffAccessListResponse,
+  type StaffAccessRow,
+} from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import {
   ADMIN_DATA_LIST_INITIAL_QUERY,
@@ -16,9 +21,14 @@ import {
   type StaffAccessGrantResume,
 } from "@/components/staff-access-grant-form";
 import {
+  StaffAccessRevokeDialog,
+  type StaffAccessRevokeTarget,
+} from "@/components/staff-access-revoke-dialog";
+import {
   GRANT_FORM_EMPTY,
   STAFF_ACCESS_GRANTS_PATH,
   STAFF_ACCESS_PATH,
+  STAFF_ACCESS_REVOCATIONS_PATH,
   staffAccessCells,
   staffAccessRowKey,
   type GrantFormFields,
@@ -40,15 +50,18 @@ import { useAdminAccess } from "@/lib/use-admin-access";
  * The list read (`GET /v1/admin/staff-access`) answers the whole set — a few
  * dozen staff — so the ФИО/почта search and the pager run over it here.
  *
- * «Выдать доступ» opens the grant panel (`StaffAccessGrantForm`). A grant the
- * step-up interrupted (047 EARS-8) comes back here from the code screen: the
- * saved request is read once on load and handed to the panel, which restores
- * the entered values and sends it again — only for the session that saved it,
- * after a confirmed code and within the replay window (`lib/step-up.ts`); any
- * other saved request is discarded.
+ * «Выдать доступ» opens the grant panel (`StaffAccessGrantForm`); each row's
+ * «Отозвать» opens the confirmation (`StaffAccessRevokeDialog`, 047 EARS-7). The
+ * caller's own platform-administrator row draws it too: the session read the
+ * console holds names roles, not the caller's account, so the API refusal
+ * (`REVOKE_SELF_PLATFORM_ADMIN`) is what the dialog shows there.
  *
- * The per-row «Отозвать» belongs to the revocation slice (#2902); no row action
- * is drawn until it works.
+ * A grant or a revocation the step-up interrupted (047 EARS-8) comes back here
+ * from the code screen. One saved request exists at a time, so it is read once
+ * on load and routed by its path — to the panel, which restores the entered
+ * values, or to the confirmation of the saved row — and sent again: only for
+ * the session that saved it, after a confirmed code and within the replay
+ * window (`lib/step-up.ts`); any other saved request is discarded.
  */
 export default function StaffAccessPage() {
   const t = useTranslations();
@@ -57,12 +70,20 @@ export default function StaffAccessPage() {
     ADMIN_DATA_LIST_INITIAL_QUERY,
   );
   const [resume, setResume] = useState<StaffAccessGrantResume | null>(null);
+  const [revoking, setRevoking] = useState<StaffAccessRevokeTarget | null>(
+    null,
+  );
   useEffect(() => {
     const saved = takeStepUpRequest(
       browserStepUpStorage(),
-      STAFF_ACCESS_GRANTS_PATH,
+      [STAFF_ACCESS_GRANTS_PATH, STAFF_ACCESS_REVOCATIONS_PATH],
       { owner: adminCsrfToken(), now: Date.now() },
     );
+    if (saved?.path === STAFF_ACCESS_REVOCATIONS_PATH) {
+      const row = StaffAccessRowSchema.safeParse(saved.context.row);
+      if (row.success) setRevoking({ row: row.data, replay: true });
+      return;
+    }
     const fields = saved?.context.fields as
       Partial<GrantFormFields> | undefined;
     if (!saved || typeof fields !== "object" || fields === null) return;
@@ -113,17 +134,38 @@ export default function StaffAccessPage() {
     fullValue: (row) => row.cells[key],
   });
   const columns: DataTableColumn<Row>[] = [
-    textColumn("email", "32%"),
+    textColumn("email", "28%"),
     {
       key: "role",
       header: t("staffAccess.columns.role"),
-      width: "24%",
+      width: "20%",
       render: (row) => (
         <span data-testid="staff-access-cell-role">{t(row.cells.roleKey)}</span>
       ),
       fullValue: (row) => t(row.cells.roleKey),
     },
     textColumn("event", "20%"),
+    {
+      key: "actions",
+      header: t("staffAccess.columns.actions"),
+      width: "12%",
+      fullValue: () => t("staffAccess.revoke.trigger"),
+      render: (row) => (
+        <Button
+          variant="outline"
+          size="sm"
+          data-testid={`staff-access-revoke-${row.key}`}
+          onClick={() => {
+            // The list item itself, not the display row: it is what the
+            // step-up saves and reads back against the row schema.
+            const item = items.find((i) => staffAccessRowKey(i) === row.key);
+            if (item) setRevoking({ row: item, replay: false });
+          }}
+        >
+          {t("staffAccess.revoke.trigger")}
+        </Button>
+      ),
+    },
   ];
 
   return (
@@ -149,7 +191,7 @@ export default function StaffAccessPage() {
             caption={t("staffAccess.tableCaption")}
             record={{
               header: t("staffAccess.columns.fullName"),
-              width: "24%",
+              width: "20%",
               title: (row) => (
                 <span data-testid={`staff-access-row-${row.key}`}>
                   {row.cells.fullName}
@@ -168,6 +210,11 @@ export default function StaffAccessPage() {
             emptyTitle={t("staffAccess.empty")}
             emptyDescription={t("staffAccess.emptyDescription")}
             testId="staff-access"
+          />
+          <StaffAccessRevokeDialog
+            target={revoking}
+            onClose={() => setRevoking(null)}
+            onRevoked={() => void request.refetch()}
           />
         </div>
       </AppShell>

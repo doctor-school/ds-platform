@@ -8,6 +8,7 @@ import {
   StaffAccessGrantResponseSchema,
   type GrantableStaffRole,
   type StaffAccessGrantRequest,
+  type StaffAccessRevokeRequest,
   type StaffAccessRow,
 } from "@ds/schemas";
 import { formatMskDateTime } from "./msk";
@@ -26,6 +27,11 @@ export const STAFF_ACCESS_PATH = "/v1/admin/staff-access";
 export const STAFF_ACCESS_GRANTS_PATH = "/v1/admin/staff-access/grants";
 /** The grant as the step-up re-verification names it (EARS-8). */
 export const STAFF_ACCESS_GRANT_ENDPOINT = `POST ${STAFF_ACCESS_GRANTS_PATH}`;
+/** `POST` — the revocation of one row (EARS-7). */
+export const STAFF_ACCESS_REVOCATIONS_PATH =
+  "/v1/admin/staff-access/revocations";
+/** The revocation as the step-up re-verification names it (EARS-8). */
+export const STAFF_ACCESS_REVOKE_ENDPOINT = `POST ${STAFF_ACCESS_REVOCATIONS_PATH}`;
 /** The page the code screen returns to. */
 export const STAFF_ACCESS_ROUTE = "/access";
 
@@ -199,6 +205,47 @@ export function grantRefusal(
         eventTitle: binding?.eventTitle ?? null,
       };
     }
+  }
+  if (statusCode === 503) return { kind: "unavailable" };
+  if (statusCode === 403) return { kind: "forbidden" };
+  if (statusCode === 400) return { kind: "invalid" };
+  return { kind: "generic" };
+}
+
+// ── the revocation ──────────────────────────────────────────────────────────
+
+/** The revocation of one row: the row's own identity, nothing typed. */
+export function revokeRequestOf(row: StaffAccessRow): StaffAccessRevokeRequest {
+  return {
+    userId: row.userId,
+    role: row.role,
+    ...(row.eventId ? { eventId: row.eventId } : {}),
+  };
+}
+
+export type RevokeRefusal =
+  | { kind: "stepUp"; stepUpUrl: string }
+  /** Nothing left to revoke — the dialog closes and the list is read again. */
+  | { kind: "alreadyComplete" }
+  /** The caller's own platform-administrator row. */
+  | { kind: "selfPlatformAdmin" }
+  | { kind: "unavailable" }
+  | { kind: "forbidden" }
+  | { kind: "invalid" }
+  | { kind: "generic" };
+
+/** How a refused revocation reads at the dialog (EARS-7, EARS-8). */
+export function revokeRefusal(error: unknown): RevokeRefusal {
+  if (isStepUpRequired(error)) {
+    return { kind: "stepUp", stepUpUrl: error.stepUpUrl };
+  }
+  const { statusCode, errorCode } =
+    typeof error === "object" && error !== null
+      ? (error as { statusCode?: unknown; errorCode?: unknown })
+      : {};
+  if (errorCode === "REVOKE_ALREADY_COMPLETE") return { kind: "alreadyComplete" };
+  if (errorCode === "REVOKE_SELF_PLATFORM_ADMIN") {
+    return { kind: "selfPlatformAdmin" };
   }
   if (statusCode === 503) return { kind: "unavailable" };
   if (statusCode === 403) return { kind: "forbidden" };

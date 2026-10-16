@@ -179,11 +179,38 @@ Then(
     );
     await expect(state.page.getByTestId("login-method-otp")).toHaveCount(0);
     await expect(state.page.getByTestId("otp-send")).toHaveCount(0);
-    await expect(
-      state.page.locator(
-        'iframe[src*="smartcaptcha"], [data-testid="smartcaptcha"]',
+    // With a site key the step keeps an idle resend captcha mounted; its
+    // provider iframes stay hidden or off-screen, so assert behaviour instead.
+    if (!state.redeemed) throw new Error("Handoff redemption was not observed");
+    expect(
+      Object.keys(await state.redeemed.response.request().allHeaders()),
+      "the hand-off redemption carried no captcha token",
+    ).not.toContain("x-smartcaptcha-token");
+    expect(state.authPosts, "no captcha-gated auth request").toEqual([
+      "/v1/auth/login/otp/handoff",
+    ]);
+    const viewport = state.page.viewportSize();
+    if (!viewport) throw new Error("The hand-off page has no viewport");
+    const captchaBoxes = await Promise.all(
+      (
+        await state.page
+          .locator('iframe[src*="smartcaptcha"], [data-testid="smartcaptcha"]')
+          .all()
+      ).map((captcha) => captcha.boundingBox()),
+    );
+    expect(
+      captchaBoxes.filter(
+        (box) =>
+          box !== null &&
+          box.width > 0 &&
+          box.height > 0 &&
+          box.x < viewport.width &&
+          box.y < viewport.height &&
+          box.x + box.width > 0 &&
+          box.y + box.height > 0,
       ),
-    ).toHaveCount(0);
+      "no captcha is visible on the hand-off code step",
+    ).toEqual([]);
     expect(
       (await state.context.cookies()).some(
         (cookie) => cookie.name === "__Host-ds_session",

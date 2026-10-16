@@ -29,14 +29,16 @@ const API_BASE = (
  * Fetch the participation CTA for `idOrSlug`, or `null` when the event is not
  * publicly reachable. A guest (no cookie) issues the SAME read — the endpoint is
  * `@Public()` with an optional principal, so there is no host-side branch on
- * whether a session exists.
+ * whether a session exists. `pagePath` is the host's `contentSet.pagePath`
+ * (wave-3 gate §4.4) — participation is `${pagePath}/:slug/participation`.
  */
 export async function fetchParticipationCta(
   idOrSlug: string,
   session: ForwardedSession,
+  pagePath = "/v1/public/events",
 ): Promise<ParticipationCta | null> {
   const res = await fetch(
-    `${API_BASE}/v1/public/events/${encodeURIComponent(idOrSlug)}/participation`,
+    `${API_BASE}${pagePath}/${encodeURIComponent(idOrSlug)}/participation`,
     {
       // A guest simply carries no session surface: the helper emits `accept`
       // alone when no session cookie rode the request.

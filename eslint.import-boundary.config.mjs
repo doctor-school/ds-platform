@@ -54,6 +54,10 @@ export const PACKAGE_GRAPH = {
   "design-system": ["schemas"],
   room: ["schemas", "design-system"],
   "events-storefront": ["schemas", "design-system"],
+  // The one event page (#2072, wave-3 gate D1): it composes the recording
+  // player, which needs `@ds/room/embed`, beside the event reads — so it sits
+  // beside `auth-flow`, and never imports it.
+  "event-page": ["schemas", "design-system", "room", "events-storefront"],
   // The congress-submissions section (046): primitives, the shared schemas and
   // the auth-flow server helpers its route mount decides a guest with.
   "congress-submissions": ["schemas", "design-system", "auth-flow"],
@@ -62,7 +66,13 @@ export const PACKAGE_GRAPH = {
   // that dependency through their shell.
   "storefront-shell": ["schemas", "design-system"],
   "auth-flow": ["schemas", "design-system", "room", "events-storefront"],
-  account: ["schemas", "design-system", "room", "events-storefront", "auth-flow"],
+  account: [
+    "schemas",
+    "design-system",
+    "room",
+    "events-storefront",
+    "auth-flow",
+  ],
 };
 
 /**
@@ -73,7 +83,12 @@ export const PACKAGE_GRAPH = {
 export const ALLOWED_ADAPTERS = [];
 
 /** Scope 1 — every package source, minus build output and tests. */
-export const PACKAGE_FILES = ["packages/**/*.ts", "packages/**/*.tsx", "packages/**/*.mts", "packages/**/*.cts"];
+export const PACKAGE_FILES = [
+  "packages/**/*.ts",
+  "packages/**/*.tsx",
+  "packages/**/*.mts",
+  "packages/**/*.cts",
+];
 
 /**
  * Scope 2 — the host-config FILE CONVENTION on the two storefronts. Slice C
@@ -137,7 +152,10 @@ export default [
     languageOptions,
     plugins,
     rules: {
-      "local/host-config-boundary": ["error", { allowedAdapters: ALLOWED_ADAPTERS }],
+      "local/host-config-boundary": [
+        "error",
+        { allowedAdapters: ALLOWED_ADAPTERS },
+      ],
     },
   },
 ];

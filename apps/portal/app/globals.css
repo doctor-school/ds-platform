@@ -27,3 +27,9 @@
  */
 @source "../../../packages/storefront-shell/src";
 @source "../../../packages/events-storefront/src";
+
+/*
+ * And `@ds/event-page` (#2072), the one event page `/webinars/:slug` mounts —
+ * the same silence in the Docker build if it were left undeclared.
+ */
+@source "../../../packages/event-page/src";

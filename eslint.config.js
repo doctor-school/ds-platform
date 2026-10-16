@@ -185,10 +185,7 @@ export default [
     // the portal auth-surface gate above). Scoped to the admin app/component tree
     // (not the config/provider plumbing, which carries no display copy). Rides the
     // existing `eslint .` → `lint` CI job.
-    files: [
-      "apps/admin/app/**/*.tsx",
-      "apps/admin/components/**/*.tsx",
-    ],
+    files: ["apps/admin/app/**/*.tsx", "apps/admin/components/**/*.tsx"],
     languageOptions: {
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
@@ -215,13 +212,15 @@ export default [
     //   • local/no-token-redefinition — forbids forking a generated token value
     //     via inline style / setProperty in app code (token values change only
     //     in the @ds/design-system source).
-    // #1722 D11 / #2005 — `packages/room/src` and `packages/events-storefront/src`
-    // carry UI that used to live under `apps/portal/app`; the tokens-only
+    // #1722 D11 / #2005 / #2072 — `packages/room/src`, `packages/events-storefront/src`
+    // and `packages/event-page/src` carry UI that used to live under
+    // `apps/portal/app`; the tokens-only
     // contract follows the code, so the shared units are scoped here alongside
     // the apps that mount them.
     files: [
       "apps/**/*.{ts,tsx,js,jsx,mjs,cjs}",
       "packages/events-storefront/src/**/*.{ts,tsx}",
+      "packages/event-page/src/**/*.{ts,tsx}",
       "packages/room/src/**/*.{ts,tsx}",
       "packages/congress-submissions/src/**/*.{ts,tsx}",
     ],
@@ -258,13 +257,19 @@ export default [
     // warnings). The PROMOTABLE pass/fail check surface for the WARN→BLOCK sweep
     // is the dedicated `glossary-ids` CI job (`pnpm lint:glossary-ids`, its own
     // `eslint.glossary-ids.config.mjs` at `error`).
-    files: ["apps/cms/**/*.{ts,tsx,js,jsx,mjs,cjs}", "apps/docs/**/*.{ts,tsx,js,jsx,mjs,cjs}"],
+    files: [
+      "apps/cms/**/*.{ts,tsx,js,jsx,mjs,cjs}",
+      "apps/docs/**/*.{ts,tsx,js,jsx,mjs,cjs}",
+    ],
     languageOptions: {
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
     plugins: { local: localRules },
     rules: {
-      "local/glossary-canonical-ids": ["warn", { domainEnumIds: ["doctor_guest"] }],
+      "local/glossary-canonical-ids": [
+        "warn",
+        { domainEnumIds: ["doctor_guest"] },
+      ],
     },
   },
   {
@@ -294,13 +299,14 @@ export default [
     //
     // SCOPE: the storefront hosts plus the shared chrome packages that carry UI
     // which used to live in a host (`storefront-shell`, `events-storefront`,
-    // `room`). NOT `packages/design-system/**` — a primitive legitimately styles
+    // `event-page`, `room`). NOT `packages/design-system/**` — a primitive legitimately styles
     // itself — and not `apps/showcase` (its job is to demonstrate primitives,
     // including deliberate overrides) nor test / e2e sources.
     files: [
       "apps/**/*.{ts,tsx,js,jsx,mjs,cjs}",
       "packages/storefront-shell/src/**/*.{ts,tsx}",
       "packages/events-storefront/src/**/*.{ts,tsx}",
+      "packages/event-page/src/**/*.{ts,tsx}",
       "packages/room/src/**/*.{ts,tsx}",
       "packages/congress-submissions/src/**/*.{ts,tsx}",
     ],
@@ -339,7 +345,9 @@ export default [
       "apps/portal/app/academy-home-view.tsx",
       "apps/portal/app/account/account-profile.tsx",
       "apps/portal/app/documents/page.tsx",
-      "apps/portal/app/webinars/[[]slug[]]/recording-gate.tsx",
+      // The recording gate, moved unchanged from
+      // `apps/portal/app/webinars/[slug]/recording-gate.tsx` by #2072 (wave-3 PR 3.1).
+      "packages/event-page/src/ui/recording-gate.tsx",
       // The «Мои события» page head, moved unchanged from
       // `apps/portal/app/account/events/page.tsx` by #1972 (wave-2 PR 2.3).
       "packages/events-storefront/src/ui/my-events-route.tsx",
@@ -366,7 +374,10 @@ export default [
     ],
     plugins: { local: localRules },
     rules: {
-      "local/host-config-boundary": ["warn", { allowedAdapters: ALLOWED_ADAPTERS }],
+      "local/host-config-boundary": [
+        "warn",
+        { allowedAdapters: ALLOWED_ADAPTERS },
+      ],
     },
   },
   prettier,

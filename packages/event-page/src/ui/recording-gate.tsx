@@ -6,8 +6,8 @@ import { Link as DsLink } from "@ds/design-system/link";
  * 014 EARS-5 — the GUEST GATE: what a visitor with no session sees in the player
  * position of a post-live page whose recording is published.
  *
- * Built to the `design-source/event-page-recording.dc.html` guest artboard: the event
- * poster, dimmed, with a boxed invitation centred over it — the recording kind +
+ * Built to the `design-source/event-page.dc.html` `phase: прошло` guest artboard: the
+ * event poster, dimmed, with a boxed invitation centred over it — the recording kind +
  * duration as the eyebrow, an explicit «войдите, чтобы посмотреть» headline, the
  * free-for-doctors reassurance, one labelled primary sign-in action, and a
  * secondary «нет аккаунта? создать» line. There is no paywall framing anywhere in
@@ -17,7 +17,7 @@ import { Link as DsLink } from "@ds/design-system/link";
  * The gate is a SERVER component with no client state. It is not an overlay
  * dismissible from the browser and it is not a soft wall over a rendered player:
  * the source never reaches this HTML at all, because a guest render never issues
- * the authenticated source read (`lib/event-playback`). What is behind the dim is
+ * the authenticated source read (`server/event-playback`). What is behind the dim is
  * the poster — a public field — and nothing else.
  *
  * Both actions carry the current page as a same-origin `returnTo` through

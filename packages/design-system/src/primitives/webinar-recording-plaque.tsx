@@ -4,7 +4,7 @@ import { cn } from "../lib/utils";
 
 /**
  * Neo-brutalist «запись готовится» PLAQUE (014 EARS-7, source
- * `design-source/event-page-recording.dc.html` — the `isPreparing` prep-card
+ * `design-source/event-page.dc.html` `phase: прошло` — the `isPreparing` prep-card
  * artboard). It occupies the PLAYER position on a post-live event page whose
  * recording is not published yet: design §8.1 says the player card holds exactly
  * one of the player, the guest gate, the plaque, or the unavailability message,
@@ -37,8 +37,10 @@ import { cn } from "../lib/utils";
  * ALL copy is injected — the host resolves it through the message catalog and
  * formats the day; no string and no date math live here.
  */
-export interface WebinarRecordingPlaqueProps
-  extends Omit<React.ComponentPropsWithoutRef<"div">, "title"> {
+export interface WebinarRecordingPlaqueProps extends Omit<
+  React.ComponentPropsWithoutRef<"div">,
+  "title"
+> {
   /** The time-plate micro label — «Запись» (from the catalog). */
   timeLabel: string;
   /**

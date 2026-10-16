@@ -64,6 +64,7 @@ const config: NextConfig = {
   transpilePackages: [
     "@ds/auth-flow",
     "@ds/design-system",
+    "@ds/event-page",
     "@ds/events-storefront",
     "@ds/room",
     "@ds/storefront-shell",
@@ -73,7 +74,9 @@ const config: NextConfig = {
   // capture covers the whole versioned api surface (`/v1/auth/*` today) so the
   // portal never needs CORS or an absolute api URL in client code.
   async rewrites() {
-    return [{ source: "/v1/:path*", destination: `${API_PROXY_TARGET}/v1/:path*` }];
+    return [
+      { source: "/v1/:path*", destination: `${API_PROXY_TARGET}/v1/:path*` },
+    ];
   },
   // 003 EARS-44 leak control: `/login` may carry a Congress hand-off reference
   // in its query until the page strips it, so no request leaving it may send

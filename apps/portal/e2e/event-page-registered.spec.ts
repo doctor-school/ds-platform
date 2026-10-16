@@ -166,14 +166,15 @@ test.describe("005 EARS-5 registered join signposting on the event page (e2e)", 
       waitUntil: "domcontentloaded",
     });
 
-    // The confirmation is present (a registered doctor is signposted, not gated)…
-    await expect(
-      page.getByText("Вы записаны", { exact: false }).first(),
-    ).toBeVisible();
-    // …the "broadcast is on" signpost rides the status card head…
-    await expect(
-      page.getByText("Эфир идёт — вы записаны", { exact: false }).first(),
-    ).toBeVisible();
+    // The registered doctor is signposted, not gated: on a LIVE event the
+    // server CTA is `enter-room` (the shared sign-up card's policy attribute —
+    // the registered statement «Вы записаны» is the upcoming render only)…
+    await expect(page.getByTestId("event-signup-card")).toHaveAttribute(
+      "data-cta-action",
+      "enter-room",
+    );
+    // …the "broadcast is on" signpost rides the hero status plate…
+    await expect(page.getByRole("status")).toHaveText("В эфире");
     // …and the 006 EARS-6 enter-room CTA now points at the shipped room surface —
     // the onward-to-room affordance that landed with the room (#584); a registered
     // doctor on a live event gets a real link into `/webinars/:slug/room`.

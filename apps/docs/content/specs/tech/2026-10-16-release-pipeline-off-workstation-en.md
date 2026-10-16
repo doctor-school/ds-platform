@@ -1,0 +1,277 @@
+---
+title: Release pipeline off the owner's workstation — registry images built once, release through GitHub Actions with Environment approval
+status: Accepted — direction owner-confirmed 2026-10-16 (chat), access model lead decision under owner delegation 2026-10-16
+date: 2026-10-16
+kind: engineering-task plan (owner-requested)
+issue: 2975
+---
+
+# Release pipeline off the owner's workstation
+
+Epic: [#2975](https://github.com/doctor-school/ds-platform/issues/2975); this document lands under [#2976](https://github.com/doctor-school/ds-platform/issues/2976). Owner request of 2026-10-15 (chat): «полноценный ресёрч по теме, нашей инфре, кодовой базе, истории выкладок, тестов… а не урывочными выводами». This document is the single place the plan lives between sessions; a session working on it reads this file first and updates §8 and §10 here, never a parallel note.
+
+Related canon it changes or narrows:
+
+- ADR-0012 — amendment A1 records the delivery decision.
+- The release runbook (skill `run-prod-deploy`, `tools/deploy/README.md`) — it stays the runbook until §8 step (f) retires the workstation path.
+- The release-cycle spec §10 (`2026-07-15-release-cycle-context-freshness-design-en.md`) and `.claude/rules/repo-conventions.md` → Release train: today standing-auth change-classes ship autonomously with «no human operator step». Under this plan the agent still decides to propose and dispatches a release, but every production release waits for the owner's Environment approval (§3 item 3). Step (f) rewrites both texts.
+- The staging spec `2026-09-08-staging-previews-and-regression-contour-en.md`: for the `main` slot and for production this document supersedes its §3 «host builds» delivery, its §5 operator-machine suite run, and its §10 rows for #2202 (the stand is operated by hand, nothing written to GitHub) and #2701 (the stage suite gate inside `pnpm deploy:prod`). The slot lifecycle, golden data, regression contract and Stage-B rules stay in force.
+
+## 1. Finding (why this exists)
+
+**A release today depends on one personal Windows workstation staying alive, reachable and correctly configured for 20–90 minutes.** Verified in code on 2026-10-15:
+
+- `pnpm deploy:prod` (`tools/deploy/prod.mjs`) is one foreground Node process on the owner's PC. In order, it:
+  1. checks stage prerequisites (`STAGE_BASIC_AUTH_PASS`, `ssh ds-stage-1 true`), a clean tree, fetch, green CI and the release gate;
+  2. runs the stage `main` check (`tools/deploy/stage-main-check.mjs`): a temporary worktree, `pnpm install`, then `slot.mjs up main`, which ships the tree and builds images on ds-stage-1, then `tools/staging/e2e-stage.mjs`, which runs the Playwright suite **on the PC** against `*.stage.doctor.school`;
+  3. runs read-only prod checks;
+  4. ships the tree to ds-api-prod and ds-data-prod (`git archive` piped over ssh, `tools/deploy/lib/remote.mjs` `shipTree`);
+  5. takes a pgbackrest backup;
+  6. runs `docker compose build` **on ds-api-prod** (~192 s);
+  7. verifies boot, updates the IdP, migrates and runs `up -d` (~246 s);
+  8. verifies SHA, retention and smoke;
+  9. writes `gh release create` and a GitHub Deployment record (`tools/deploy/deployment-record.mjs`), **on success only**.
+- Nothing detaches remote work: there is no `nohup`, `setsid`, `systemd-run` or `tmux`, no lock and no state file. When the client dies mid-step, the code can only report that the remote work «MAY have completed» (`tools/deploy/lib/remote.mjs:78`).
+- Port 22 on ds-api-prod and ds-stage-1 admits only the owner PC's `/32` (`infra/deploy/terraform/network.tf:97-103`, `stage-1.tf:132-138`). None of the seven GitHub Actions workflows (all `ubuntu-latest`) reaches a Timeweb host. `.github/workflows/release-digest.yml` already listens to `deployment_status`.
+- The PC is the only holder of four credentials: the ssh keys to the three boxes; the GitHub token (in the OS keyring); `TWC_TOKEN` (the full Timeweb account) together with the local `terraform.tfstate`; and `STAGE_BASIC_AUTH_PASS`, exported by hand. Stage and prod runtime secrets already live on the boxes.
+- The agent's `gh` runs under the owner's own GitHub account (`sidorovanthon`). GitHub therefore cannot tell an action the agent takes from one the owner takes. §3 item 3 is built around this fact.
+
+**Measured** (each figure comes from a probe, a transcript or a GitHub record; nothing below is assumed):
+
+| Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Source                                                 |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| 2026-09-15 → 2026-10-15: 29 successful releases, 17 failed or aborted. Causes: release gate / CI pending / malformed PR body 6 (the gate worked); `STAGE_BASIC_AUTH_PASS` missing on the PC 3 (fixed by #2806); owner IP drifted off the ssh `/32` 2 (≥11–12 drifts since July); Docker Hub 429 + api-prod overload 2; real product/test failure 2; PC/harness kill 1; laptop sleep 0. The causes add up to 16; the remaining failure is unclassified                  | Claude Code transcripts + 62 GitHub Deployment records |
+| Healthy release 17–25 min since the stage gate (#2705); 2026-10-09 and 2026-10-12 ~89 min; on 2026-10-15 the release waited ~50 min on ds-stage-1 under parallel builds                                                                                                                                                                                                                                                                                                | transcripts                                            |
+| 2026-10-13 11:38:26Z: the harness killed the background `pnpm deploy:prod` with «stopped because the system is running low on memory … while the session was idle» (Claude Code 2.1.296, win32). Vendor docs scope that reaper to macOS/Linux only. Only the shell wrapper died; the orphaned `prod.mjs` kept acting on ds-stage-1 for 74 s, then failed spawning ssh (exit `0xC0000142`). Prod was untouched only because the failing step came before the switchover | session 267cd323 transcript                            |
+| Killing a local `ssh host 'loop'` client kills the remote command within ~2 s                                                                                                                                                                                                                                                                                                                                                                                          | probe 2026-10-16                                       |
+| Stage suite since PR #2859 (4 workers, `retries: 0`): 9 full runs, 7 green; 3.6–4.9 min (12.2 min at 1 worker); 90–103 of ~730 tests execute; results are stored nowhere durable. Playwright memory on the PC: ~0.61 GB per extra worker + ~0.29 GB fixed; 4 workers peak at 2.7 GB                                                                                                                                                                                    | transcripts, PC measurement                            |
+| Owner PC egress geolocates to Bangkok, TH (residential dynamic IP); a PC → ds-api-prod ssh call takes ≈ 2.8 s, so every release already crosses a border                                                                                                                                                                                                                                                                                                               | probe                                                  |
+| GitHub-hosted runners (2 jobs, Azure US): ssh connect 10/10 on each job at 1.6–2.2 s per call; 190 MB each way in 14.5–20 s; a 15-minute ssh session kept 90/90 ticks, rc=0, on both. HTTPS 443 runner → our boxes 60/60 (connect 0.16–0.4 s). Three probes came from three different Azure IPs, so there is no fixed egress                                                                                                                                           | run 38877110379 (2026-10-16) + earlier probe           |
+| Timeweb Container Registry `ds-platform` (id 31207, preset 25 GB / 180 ₽/mo, project ds-platform 2568419, ru-1 SPb — the only location offered) at `ds-platform.registry.twcstorage.ru`. Auth is a Bearer realm `https://api.timeweb.cloud/api/v1/k8s/cr-auth` whose password is a Timeweb API token. Two restricted tokens, scoped to project ds-platform + Container Registry only: the push token can push and pull; the pull token can only pull (push denied)     | owner panel + probe 2026-10-16                         |
+| Registry speed: ds-stage-1 pushed a 375 MB image in 9 s (re-push 2 s) and downloads layers at 42–79 MB/s. A GitHub runner pushed a 300 MB incompressible layer in 48 s (~6 MB/s); a dedup re-push took 4 s. For comparison, ds-stage-1 pulls from ghcr.io at ~1.8 MB/s (221 MB in 123 s)                                                                                                                                                                               | probes 2026-10-16                                      |
+| Images on prod: `ds-api` 628 MB; `ds-portal` / `ds-admin` / `ds-doctor` ~395 MB each; `ds-api-migrate` 1.92 GB (oversized); third-party zitadel / centrifugo / caddy / redis from ghcr.io and Docker Hub. The shipped source tarball is ≈ 234 MB gz; a compressed `docker save` of ds-api is 116 MB                                                                                                                                                                    | `docker images` on ds-api-prod                         |
+| Repo `doctor-school/ds-platform` is public on the Free org plan, so Actions job logs are world-readable and artifacts are downloadable by any signed-in user. Environment `production` exists with no deployment-branch policy. The fork-PR approval policy is `first_time_contributors`. Environments with required reviewers work on public repos on Free. GHCR private packages on Free include 1 GB transfer/month                                                 | GitHub settings + GitHub docs                          |
+
+**Assumed, not yet measured:**
+
+- Playwright memory on a 4-vCPU / 16 GB Linux runner (measured only on the PC; see §10).
+- The size `ds-api-migrate` shrinks to once dev dependencies leave it (§10).
+
+**The workstation is the dominant point of failure.** Of the 17 failed releases:
+
+- 6 exist only because the release runs from a personal machine: the harness kill 1, the IP drift 2, the missing env var 3.
+- 2 follow from building on the boxes: Docker Hub 429 and api-prod overload.
+- 6 were the gate doing its job.
+- 2 were real product/test failures.
+- 1 is unclassified.
+
+## 2. Target picture
+
+Owner-confirmed 2026-10-16 (chat): «Да, всё так.» The design is measured against these ten properties:
+
+| #   | Property                                                                                                                     |
+| --- | ---------------------------------------------------------------------------------------------------------------------------- |
+| P1  | No personal machine in the release path                                                                                      |
+| P2  | The owner decides when: the agent dispatches, only the owner approves the production deployment, and both are recorded       |
+| P3  | A durable, clean executor: client death never kills a box step                                                               |
+| P4  | An automatic stage check whose results are stored                                                                            |
+| P5  | Prod is protected: one release at a time, idempotent steps, a rollback floor                                                 |
+| P6  | No secrets on personal machines; least privilege for each credential                                                         |
+| P7  | Visible status, failures included, without exposing logs or data in a public repository                                      |
+| P8  | The agent prepares, dispatches and observes a release; it never approves the production deployment and never holds prod keys |
+| P9  | Proportionate cost                                                                                                           |
+| P10 | A defined fallback when the normal path is unavailable                                                                       |
+
+## 3. Decision
+
+1. **Build once, in Actions, into the Timeweb registry.** (P1, P3, P5, P9)
+   - On merge to `main`, a GitHub-hosted runner builds each first-party image once, tags it with the full commit SHA and pushes it to `ds-platform.registry.twcstorage.ru`.
+   - The build job records each image's digest for that SHA as a job output and an uploaded manifest.
+   - Stage and prod pull the **same** image by that recorded digest. A release never re-resolves a tag.
+   - PR-head images go under a separate `pr/` repository prefix, and a release accepts only digests recorded by a `main` build.
+   - No box builds an image.
+2. **Stage `main` converges automatically.** (P4, P7)
+   - After the build, an Actions job converges the stage `main` slot to those images.
+   - The stage suite then runs against `*.stage.doctor.school` over HTTPS, and its verdict becomes a check on the commit.
+   - The report is handled under the public-log rules in §4.
+3. **Release = `workflow_dispatch` + owner-only Environment approval.** (P2, P5, P7, P8)
+   - The agent, on the owner's word, or the owner dispatches the release workflow for a SHA. The workflow refuses a SHA without a green stage-suite check.
+   - The workflow then waits on Environment `production`. Its deployment branches are restricted to `main`, and its required reviewer is the owner.
+   - After approval it runs the deploy job and then smoke. It writes a GitHub Deployment record for **success and failure** alike. The existing Mattermost digest (`release-digest.yml`) fires on success.
+   - A workflow `concurrency` group allows one release at a time.
+   - **Approving the deployment is owner-only, but GitHub cannot enforce that today.** The agent's `gh` runs under the owner's account (§1), so GitHub cannot distinguish an approval the agent sends from one the owner sends.
+     - **Current control (agent-side).** The Claude Code and Codex permission configurations deny the pending-deployments approval call: a `POST` to `repos/*/actions/runs/*/pending_deployments` through `gh api`, and every `gh run` approval-style subcommand. The agent may dispatch and observe only. This is a structural deny rule, not a discipline note (§8 step (e)).
+     - **Target state.** The agent operates under its own GitHub identity (a machine user or a GitHub App with `actions:write`). That identity is not a reviewer and no owner token sits in the agent harness. It must exist before step (e) goes live (§10). Prevent-self-review stays **off** while the owner is the single human reviewer: with it on, a release the owner dispatched could never be approved. The protection comes from the agent identity not being a reviewer, plus the agent-side deny rule.
+4. **Box access: GitHub-hosted runners push over hardened ssh.** (P1, P6, P8)
+   - Port 22 opens to the internet with the hardening set in §4.
+   - The prod key is released only inside Environment `production`, after approval. The stage key is released only inside Environment `stage`.
+   - ds-data-prod stays private: it is reached through ds-api-prod as a jump host.
+   - This retires the owner-`/32` rule and its IP-drift failures.
+5. **Every long box step is a detached, locked, observable unit** (§5). The runner starts the unit and polls its status file, and a fresh runner can reattach. (P3, P5)
+6. **Secrets live where they are used** (§4). The normal path needs no secret on any personal machine. (P6)
+7. **Break-glass.** The same box entrypoints can be run by hand from any machine that holds the owner's offline break-glass key (§4). (P10)
+8. **PR slots keep the agent-driven lifecycle and the Stage-B rules unchanged.** The difference is that their images also come from the registry, built by Actions for the PR head under the `pr/` prefix, instead of being built on the box. Slot mechanics stay in the staging spec. (P3, P9)
+
+```text
+merge to main
+   │
+   ▼
+[Actions: build]  GitHub-hosted runner, push token (Environment `build`)
+   │  docker build ×N ──push──▶ ds-platform.registry.twcstorage.ru/<image>:<full-sha>
+   │  records digests for <sha> (job output + manifest)
+   ▼
+[Actions: stage-converge]  Environment `stage` (stage ssh key)
+   │  ssh ds-stage-1 → forced command → systemd-run ds-stage-main-<sha12> (pull by digest, migrate, up)
+   ▼
+[Actions: stage-suite]  Environment `stage` (STAGE_BASIC_AUTH_PASS, test tokens)
+   │  Playwright → https://*.stage.doctor.school ──▶ commit check (summary only) · full report → ds-stage-1 over ssh
+   ▼
+(agent on the owner's word, or the owner) workflow_dispatch release <sha>
+   │  refuse unless the stage-suite check on <sha> is green
+   ▼
+[Environment `production` approval]  branches: main only · required reviewer: owner
+   │  agent-side deny rule: the agent never calls the approval API
+   ▼
+[Actions: deploy]  concurrency: release; prod ssh key released now
+   │  ssh ds-api-prod → forced command → systemd-run ds-prod-<sha12>
+   │     (pull recorded digests · pgbackrest backup · migrate · up -d · verify · prune)
+   │  runner polls the status file; job log = status lines only; a fresh runner may reattach
+   ▼
+[Actions: smoke + record]  GitHub Deployment success|failure ──▶ release-digest.yml → Mattermost
+```
+
+## 4. Secrets and access
+
+| Secret                                                   | Holder                                                      | Released when                                          |
+| -------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------ |
+| Registry push token (push + pull)                        | Environment secret of the build job                         | every build on `main` / PR head (internal PRs only)    |
+| Registry pull token (pull only)                          | each box, `/etc/ds-platform/registry-pull-token` (600 root) | read by the box unit on pull                           |
+| Prod ssh key (`deploy` user, forced command)             | Environment `production` (deployment branches: `main`)      | only after the owner approves the release              |
+| Stage ssh key (`deploy` user, forced command)            | Environment `stage` (deployment branches: `main`)           | stage converge and slot jobs                           |
+| `STAGE_BASIC_AUTH_PASS`, suite test tokens               | Environment `stage`                                         | stage-suite job                                        |
+| Break-glass ssh key                                      | owner, offline                                              | by hand, only when the normal path is unavailable (§9) |
+| `TWC_TOKEN` (full Timeweb account) + `terraform.tfstate` | owner-side admin credential                                 | never on a box, never in GitHub                        |
+| Stage / prod runtime secrets                             | the boxes (unchanged)                                       | read by compose on the box                             |
+
+Today the push token is stored only on ds-stage-1 (`/etc/ds-platform/registry-push-token`). §8 step (a) moves it into the build Environment and removes it from the box.
+
+**ssh hardening on ds-api-prod and ds-stage-1** (§8 step (c)) — the standard set for a key-only admin port open to the internet:
+
+- key-only authentication (already in place: `PasswordAuthentication no`);
+- `PermitRootLogin no` (today it is `yes`);
+- a dedicated `deploy` user. The CI keys in its `authorized_keys` carry `command="/usr/local/bin/ds-deploy-entrypoint",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding`. The entrypoint parses `SSH_ORIGINAL_COMMAND` against a strict allowlist (`release <env> <sha>`, `status <env> <sha>`) and rejects anything else, so a CI key never reaches a shell;
+- the existing operator key of `deploy` keeps its current sudo until step (f), so `pnpm deploy:prod` and `slot.mjs` keep working unchanged; once the workstation path is retired to break-glass, `deploy`'s sudo is narrowed from NOPASSWD-all to the entrypoint alone;
+- break-glass uses a separate admin user. Its key is held offline by the owner, carries no forced command, and has full sudo; it is the only interactive admin path once root login is off;
+- connection rate limiting: `MaxStartups` plus fail2ban on the sshd journal;
+- `unattended-upgrades` for security patches;
+- ds-data-prod keeps no public ssh; it is reached through ds-api-prod as a jump host.
+
+**Public logs and artifacts (ADR-0011 channel 3).** The repository is public. ADR-0011 channel 3 allows build, test and deploy automation in Actions only with no runtime personal data in logs. Under that rule:
+
+- **Prod jobs print status lines only:** unit name, phase, exit code, SHA and duration. They never print `journalctl` output, compose logs, migration output or backup output. The full logs stay on the box (the journal of the unit) and are read over ssh by the operator.
+- **Nothing from the stage suite that can carry credentials goes to GitHub.** Stage holds only the deterministic golden synthetic dataset, and production data never reaches the box (staging spec §4), but a Playwright trace keeps the `Authorization: Basic` header of the stage gate and the passwords a test types (`packages/e2e/playwright.config.ts:160-161`: `trace: "retain-on-failure"`, `httpCredentials`). So the public check shows only a machine-readable summary: test title, status, duration and retry count — no traces, screenshots, videos, HTML report or error bodies. The full Playwright report, traces included, is copied over ssh to ds-stage-1 `/var/lib/ds-platform/e2e-reports/<sha>/` (root-readable, 14-day retention enforced by the next run's cleanup) and read there by the operator.
+
+**Rejected for now: a pull agent.** This is the OpenGitOps «pulled automatically» principle: an agent on each box polls for a desired state, and port 22 stays closed. It changes only who initiates the deploy; the images, registry and approval stay identical, so switching later is cheap. Revisit trigger: a regulatory requirement (152-ФЗ / ФСТЭК) to keep admin ports closed, or log evidence of attempts beating the controls above.
+
+## 5. Durable box steps
+
+Every long box step (pull, backup, migrate, up, prune) runs inside a transient systemd unit. The caller's death — a cancelled runner, a network cut, a killed workstation — never kills the step.
+
+- **Unit name.** `systemd-run --unit=ds-<env>-<sha12> --remain-after-exit -p KillMode=mixed /usr/local/bin/ds-release <env> <sha>`, where `<env>` is one of `prod`, `stage-main` or `stage-pr-<N>`. A second start under the same name fails fast, so the name itself deduplicates. Finished units are cleaned up by the next run for that env: only after it has taken the lock, and only for units already in a finished state, it resets the previous unit before starting its own.
+- **Lock.** The entrypoint holds `flock -n /run/lock/ds-<env>.lock` for its whole life. While one SHA runs for an env, a different SHA for the same env is refused. The workflow `concurrency` group is the first line of defence and the lock the last.
+- **Status file — the authority.** The file is `/var/lib/ds-platform/release/<env>/<sha>.json`. The entrypoint writes it atomically (write to `*.tmp`, `fsync`, `rename`) after every step:
+
+  ```json
+  {
+    "env": "prod",
+    "sha": "<full sha>",
+    "unit": "ds-prod-<sha12>",
+    "state": "running | succeeded | failed",
+    "step": "pull | backup | migrate | up | verify | prune",
+    "steps": [{ "name": "pull", "startedAt": "…", "endedAt": "…", "rc": 0 }],
+    "startedAt": "…",
+    "updatedAt": "…",
+    "error": null
+  }
+  ```
+
+- **Reattach.** The runner never streams the step: it starts the unit, then polls `status <env> <sha>`, which reads the status file. Each poll prints one status line into the job log (§4); it never tails the journal. `release <env> <sha>` reads the status file first:
+  - `succeeded` or `failed`: it returns that verdict without starting a unit. A re-run never repeats backup or migrate.
+  - `running`: it attaches to the existing unit by name.
+  - absent: it starts the unit.
+
+  Every step stays idempotent, as the `pnpm deploy:prod` steps are today.
+
+- **Rollback floor.** This is unchanged from today: the pre-migrate pgbackrest backup and the app-only rollback to the previous image digest (`run-prod-deploy` → rollback). With registry images, the rollback becomes a pull of the previous SHA's recorded digest instead of a rebuild.
+
+## 6. What this replaces
+
+| Past decision                                                                                                                                      | Original reason                                                                                                                                                                                                                                                             | Holds?                                                                                                                                     | Now                                                                                                            |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Off-CI ssh deploy from the operator machine                                                                                                        | Deploy keys were disabled org-wide (`infra/deploy/README.md:260-266`, 2026-07-03); the option was never compared with CI. ADR-0012 contains no off-CI rule: the attributions in `run-prod-deploy`, `tools/deploy/README.md` and elsewhere were wrong (corrected in this PR) | no — the reason concerned repository deploy keys, not where the deploy runs                                                                | the deploy runs in GitHub Actions; ADR-0012 A1 records it                                                      |
+| «раннер убираем» (owner 2026-09-09, #2095 / #2126): no self-hosted runner                                                                          | a self-hosted runner on a public repo would execute fork PRs on our box                                                                                                                                                                                                     | yes                                                                                                                                        | kept — GitHub-hosted runners only                                                                              |
+| «Однозначно идём в схему прода» (owner 2026-09-11, #2194): stage delivery = prod delivery, build on the box                                        | Unify stage and prod. The build-on-box shape rested partly on the claim that the box «cannot pull» GHCR images                                                                                                                                                              | Unification holds. The GHCR claim does not: the box lacked a credential (the requested token had no packages scope), it was not impossible | unification kept: stage and prod both pull the same registry images                                            |
+| #2202 (owner «Го» 2026-09-14): «nothing on the box or in GitHub decides when — the agent does»; no workflow, nothing written to GitHub             | the root principle «не плодить точки отказа» (owner 2026-09-08)                                                                                                                                                                                                             | The principle holds; the conclusion does not: §1 shows the workstation is the dominant point of failure                                    | the owner decides when (agent dispatch + owner-only Environment approval); GitHub executes and records         |
+| #2701 (owner «Окей, реализуй» 2026-10-08): the stage suite gate inside `pnpm deploy:prod`                                                          | no release without a green suite on the release SHA                                                                                                                                                                                                                         | yes                                                                                                                                        | The gate is kept and moved into the pipeline as a required check. «Nothing written to GitHub» falls with #2202 |
+| Release-cycle spec §10 D+B policy: standing-auth classes ship autonomously, «no human operator step»                                               | the agent should not wait on a human for routine releases                                                                                                                                                                                                                   | Partly. The agent still decides to propose and dispatches; the owner approves each production deployment (P2, owner-confirmed 2026-10-16)  | rewritten in step (f)                                                                                          |
+| ssh `/32` to the owner PC (owner 2026-08-20, #1384: wider CIDR / VPN / bastion rejected, «Re-raise only if… rotation frequency becomes untenable») | the smallest exposure of port 22                                                                                                                                                                                                                                            | The re-raise clause is met: ≥12 drifts since July and 2 failed releases in a month                                                         | port 22 open with the §4 hardening; forced-command CI keys released per Environment                            |
+
+## 7. Rejected alternatives
+
+- **Workstation hardening only** (keep-awake, IP pinning, a watchdog): it fails P1, «no personal machine».
+- **GHCR:** private packages on Free include only 1 GB transfer/month, which one release exceeds. Pulls to RU boxes run at ~1.8 MB/s, and making the packages public needs an org setting change.
+- **S3 tarballs via `docker save` / `docker load`:** no layer dedup, and it would need its own versioning and GC. It is kept only as the emergency fallback (§9).
+- **Self-hosted `registry:2` on S3:** one more service to run and patch.
+- **Timeweb App Platform for the core stack:** compose apps forbid `volumes` and proxy only the first service. There are no stands for compose apps, no pre-deploy or migration step and no approval, so orchestration would still be needed.
+- **Kubernetes + GitOps:** overkill for one prod box and one operator.
+- **Self-hosted CI inside Russia:** GitLab CE needs 8 vCPU / 16 GB, and pull-mirroring is a Premium feature. Forgejo and Gitea lack environments with reviewers and would become a second source of truth.
+- **Self-hosted GitHub runner:** fork PRs would run on our box, because the repo is public (owner 2026-09-09).
+- **Larger GitHub runners with a static IP:** they require a paid plan.
+
+## 8. Execution plan
+
+The plan is staged. Each step is independently valuable and ships as its own sub-issue of #2975. Until step (f), `pnpm deploy:prod` stays the release runbook.
+
+| Step | Scope                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Value on its own                                                                                  |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| (a)  | **Build once and pull instead of build.** An Actions build-once job on merge to `main` (and on internal PR heads under the `pr/` prefix) pushes SHA-tagged images to the registry and records their digests. It needs only HTTPS from the runner to the registry, so no ssh is involved. Compose files reference `ds-platform.registry.twcstorage.ru/<image>@<digest>`. The boxes log in with the pull token and pull instead of build. Stage comes first, through the existing operator path (`slot.mjs` / `pnpm deploy:prod` from the workstation), then prod through the same path. Shrink `ds-api-migrate` to production dependencies. The push token moves into the build Environment and leaves ds-stage-1 | removes on-box builds: the api-prod overload, the ~192 s build and Docker Hub 429s on base layers |
+| (b)  | **Durable box entrypoints.** `ds-release` (`release` / `status`) on `systemd-run` + `flock` + the status file (§5). The existing operator path calls them                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | client death no longer kills a box step, even from the workstation                                |
+| (c)  | **ssh hardening on all boxes** (§4): `PermitRootLogin no`; new CI keys on the `deploy` user restricted by forced command to the allowlisted entrypoint (the existing operator key and its sudo stay as they are, so the workstation runbook keeps working); a break-glass admin user; `MaxStartups` + fail2ban, `unattended-upgrades`. Port 22 on ds-stage-1 opens to GitHub-hosted runners. Environment `stage` (deployment branches `main`) holds the stage key, `STAGE_BASIC_AUTH_PASS` and the test tokens                                                                                                                                                                                                   | runners can reach stage, and the boxes are hardened before any port opens                         |
+| (d)  | **Stage in Actions.** A stage `main` converge job and a stage-suite job run after the build; the verdict is a commit check carrying only the summary; the full report goes over ssh to ds-stage-1 (§4)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | stored suite results; stage always on `main`; no PC RAM in the loop                               |
+| (e)  | **Release workflow.** `workflow_dispatch` → green stage-suite check required → Environment `production` (deployment branches `main` only, owner as required reviewer) → deploy using the recorded digests → smoke → Deployment record for success and failure; `concurrency` allows one release. Port 22 on ds-api-prod opens to GitHub-hosted runners. The agent-side permission deny rule for the approval API (§3 item 3) lands in the Claude Code and Codex configurations in the same step. Prerequisite: the agent's own non-reviewer GitHub identity exists (§10)                                                                                                                                         | a release no longer needs the workstation                                                         |
+| (f)  | **Retire the workstation path to break-glass.** Rewrite skill `run-prod-deploy`, `tools/deploy/README.md`, release-cycle spec §10 and `repo-conventions.md` → Release train around the workflow. Retire the owner `/32` firewall rule. Narrow the `deploy` user's sudo to the entrypoint (break-glass uses the separate admin user). `tools/deploy/prod.mjs` either keeps only the break-glass role or is removed                                                                                                                                                                                                                                                                                                | one documented release path                                                                       |
+
+**Order.**
+
+- (a) depends on nothing.
+- (b) depends on nothing and can run in parallel with (a).
+- (c) depends on (b): the forced command needs the entrypoint to exist.
+- (d) depends on (a), for the registry images, and on (c), for runner ssh to ds-stage-1 and Environment `stage`.
+- (e) depends on (b), (c) and (d), and on the agent's own non-reviewer GitHub identity (§10). It needs the durable entrypoints, the hardened boxes and the green stage check it requires. Its own prod port-22 opening and deny rule land inside it.
+- (f) depends on (e). Narrowing `deploy`'s sudo belongs here, because until the workstation path is retired the operator key still needs that sudo.
+
+## 9. Failure modes and recovery
+
+| Failure                                  | Effect                                                                                                    | Recovery                                                                                                                                                       |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Timeweb registry down                    | no new pulls; running containers are unaffected                                                           | emergency fallback: the build job writes a `docker save` of the built images to S3, and the box loads it with `docker load` through the break-glass entrypoint |
+| GitHub or the cross-border path degraded | no build and no release workflow                                                                          | break-glass: the same box entrypoints, run by hand from any machine that holds the break-glass key, against images already in the registry                     |
+| Runner dies mid-step                     | nothing happens on the box: the unit keeps running                                                        | re-run the job for the same SHA; the status file returns the verdict, or the job reattaches to the running unit (§5)                                           |
+| Failed migrate                           | the unit ends `failed` at `migrate`; the Deployment record says `failure`; prod keeps the previous images | the existing rollback floor: the pre-migrate pgbackrest backup and the app-only rollback to the previous digest (`run-prod-deploy`)                            |
+| Two releases dispatched                  | the second waits                                                                                          | the workflow `concurrency` group; the box `flock` refuses a second lock for the same env                                                                       |
+| Red or missing stage-suite check         | the release workflow refuses before approval                                                              | fix forward on `main`; the gate cannot be bypassed                                                                                                             |
+
+## 10. Owner decisions and open items
+
+| Decision                                                           | State                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Research scope                                                     | owner 2026-10-15 (chat): «полноценный ресёрч по теме, нашей инфре, кодовой базе, истории выкладок, тестов… а не урывочными выводами»                                                                                                                                                                                                                                               |
+| Target picture (§2)                                                | owner 2026-10-16 (chat): «Да, всё так.»                                                                                                                                                                                                                                                                                                                                            |
+| Registry = Timeweb Container Registry                              | owner 2026-10-16 (chat): «Окей, берём Container Registry Timeweb.»                                                                                                                                                                                                                                                                                                                 |
+| Box access model (hosted runners over hardened ssh, §3 item 4, §4) | lead decision 2026-10-16 under owner delegation (chat): «Нет, это не ко мне вопрос, я не специалист по сетевой безопасности. Ты скажи, как это делают. Ты же проводил ресёрч бест-практик и лучше меня знаешь, как это корректно организовать.»                                                                                                                                    |
+| Runner and registry probes                                         | owner 2026-10-16 (chat): «Го»                                                                                                                                                                                                                                                                                                                                                      |
+| Approval is owner-only, enforced agent-side for now (§3 item 3)    | lead decision 2026-10-16. Until the agent has its own identity, GitHub cannot tell an agent approval from the owner's; the Claude Code + Codex deny rule on the approval API is the structural control (step (e))                                                                                                                                                                  |
+| Open: the agent's own GitHub identity                              | A machine user or GitHub App with `actions:write`, not a reviewer, and no owner token in the agent harness. Trigger: it must exist before step (e) goes live. Prevent-self-review stays off while the owner is the single human reviewer (with it on, an owner-dispatched release could never be approved); the protection is the identity not being a reviewer plus the deny rule |
+| Open: the registry is not in Terraform                             | The Timeweb provider has no Container Registry resource. The registry was created via the API and is to be documented as a manual one-off in `infra/deploy/README.md` (step (a))                                                                                                                                                                                                   |
+| Open: `ds-api-migrate` is 1.92 GB                                  | it likely carries dev dependencies; shrinking it is part of step (a)                                                                                                                                                                                                                                                                                                               |
+| Open: Playwright RAM on Linux runners                              | Unmeasured. The PC figures (§1) put 4 workers at ~2.7 GB, inside a standard runner's 16 GB; step (d) confirms or corrects them                                                                                                                                                                                                                                                     |

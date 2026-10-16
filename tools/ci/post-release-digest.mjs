@@ -4,7 +4,7 @@
 // RELEASE TAG (Issue #975).
 //
 // Why this exists: the aggregated digest (#868) is a DEPLOY event. `deploy:prod`
-// ships from the operator's box (ADR-0012 — SSH deploy, no CI), where
+// ships from the operator's workstation over SSH, not from CI, where
 // `secrets.MATTERMOST_WEBHOOK_URL` does not exist, so the digest had NEVER fired
 // (the #950 `.env.local` fallback was a crutch, now retired). But `deploy:prod`
 // records a GitHub Deployment + `success` status (#942/#954), and THAT event fires

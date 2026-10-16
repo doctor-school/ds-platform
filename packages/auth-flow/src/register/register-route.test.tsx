@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ReactElement } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * The SERVER MOUNT of the sign-up door (#2027 PR 1.6): one route body, two
@@ -410,5 +410,46 @@ describe("021 EARS-3 (#2333): the confirmation after the sign-up door gets the s
 
   it("021 EARS-3: the Academy's constant landing gets no re-decision", async () => {
     expect(await actionOf(ACADEMY_FIXTURE, {})).toBeUndefined();
+  });
+});
+
+/**
+ * #2981 — one image serves every environment, so the SmartCaptcha site key is
+ * RUNTIME env (`SMARTCAPTCHA_SITE_KEY`), read by the server mount per request
+ * and handed to the client door as data. No build bakes it.
+ */
+describe("2981: the site key reaches the door from runtime env", () => {
+  type Configured = { config: AuthFlowHostConfig };
+
+  beforeEach(() => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("2981: a set SMARTCAPTCHA_SITE_KEY reaches the sign-up door, its shell and the /verify step", async () => {
+    vi.stubEnv("SMARTCAPTCHA_SITE_KEY", "ysc1_runtime");
+
+    const shell = (await shellOf(DOCTOR_FIXTURE, {})) as unknown as ReactElement<
+      Configured & ShellProps
+    >;
+    const door = shell.props.children.props as unknown as Configured;
+    const step = (await stepOf(ACADEMY_FIXTURE, {})) as unknown as Configured;
+
+    expect(shell.props.config.botProtection?.siteKey).toBe("ysc1_runtime");
+    expect(door.config.botProtection?.siteKey).toBe("ysc1_runtime");
+    expect(step.config.botProtection?.siteKey).toBe("ysc1_runtime");
+  });
+
+  it("2981: an unset or blank SMARTCAPTCHA_SITE_KEY hands the door no key — the inactive placeholder", async () => {
+    vi.stubEnv("SMARTCAPTCHA_SITE_KEY", "  ");
+    const blank = (await doorOf(DOCTOR_FIXTURE, {})) as unknown as Configured;
+    expect(blank.config.botProtection?.siteKey).toBeUndefined();
+
+    vi.stubEnv("SMARTCAPTCHA_SITE_KEY", undefined);
+    const unset = (await doorOf(ACADEMY_FIXTURE, {})) as unknown as Configured;
+    expect(unset.config.botProtection?.siteKey).toBeUndefined();
   });
 });

@@ -85,7 +85,7 @@ never touches it.
 | Service          | Port          | Key env (from `env_file`)                                                                        |
 | ---------------- | ------------- | ------------------------------------------------------------------------------------------------ |
 | api (NestJS)     | 3000 (`PORT`) | `DATABASE_URL` `REDIS_URL` `IDP_*` `AUDIT_IDENTIFIER_PEPPER` `*_DELIVERY_MODE` `IDP_SMTP_REAL_*` |
-| portal (Next.js) | 3001          | `API_PROXY_TARGET=http://api:3000` (build-arg `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY` — wave-1 ON)   |
+| portal (Next.js) | 3001          | `API_PROXY_TARGET=http://api:3000` (build-time); runtime `SMARTCAPTCHA_SITE_KEY` — wave-1 ON     |
 | admin (Next.js)  | 3002          | `API_PROXY_TARGET=http://api:3000` (build-time, same routes-manifest bake as the portal)         |
 | centrifugo       | 8000          | `CENTRIFUGO_HTTP_API_KEY` `CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY` (native names, from api.env) |
 | zitadel core     | 8080 (h2c)    | `ZITADEL_MASTERKEY` `ZITADEL_DATABASE_POSTGRES_*` `ZITADEL_EXTERNAL*`                            |
@@ -585,7 +585,7 @@ image build.
    A domain-list-only update needs **no rebuild or deploy when the existing
    site/server keys are unchanged**. Creating or replacing the provider resource
    is **[OWNER-GATED]**;
-   capture its **site key** (public, build-time) and **server key** (secret), but
+   capture its **site key** (public, runtime env) and **server key** (secret), but
    never print or copy the server key into a repo file, command transcript, or
    issue/PR.
 
@@ -593,13 +593,13 @@ image build.
    `BOT_PROTECTION_ENABLED=true` with the `ysc2_` server key, and the compose
    `.env` beside `compose/api-prod/compose.yml` carries the matching `ysc1_`
    site key. One compose var (`SMARTCAPTCHA_SITE_KEY`) feeds both the portal and
-   the doctor image builds, so the state is all-or-nothing across
+   the doctor containers as runtime env, so the state is all-or-nothing across
    `academy.doctor.school` and `new.doctor.school` — it cannot be ON for the
    portal alone. Rate limits are independent of the flag and stay on either way.
 
-   Before an image build that activates or revalidates bot protection — the
-   storefront images bake `SMARTCAPTCHA_SITE_KEY` at build time — confirm the
-   on-box state without printing either value:
+   Before a deploy that activates or revalidates bot protection — the
+   storefront containers read `SMARTCAPTCHA_SITE_KEY` as runtime env — confirm
+   the on-box state without printing either value:
 
    ```bash
    test "$(sudo grep -c '^BOT_PROTECTION_ENABLED=true$' /etc/ds-platform/api.env)" -eq 1
@@ -619,9 +619,9 @@ image build.
    keypair identifier; comparing only that identifier verifies the pair without
    printing the server key.
 
-   The site key is baked into the portal bundle at `next build`, so a portal
-   image built before the binding exists must be rebuilt even when the source
-   SHA is unchanged.
+   The site key is RUNTIME env (#2981 — the images are environment-agnostic):
+   the storefront server mounts read it per request, so a key change needs only a
+   container recreate (`docker compose up -d portal doctor`), never a rebuild.
 
 4. **Converge the on-box env (out-of-band, root:root 0600).** On api-prod,
    ensure `/etc/ds-platform/api.env` contains the wave-1 blocks from
@@ -636,8 +636,8 @@ image build.
    - `BOT_PROTECTION_ENABLED=true` + `SMARTCAPTCHA_SERVER_KEY` from step 3.
 
    And in the **non-secret** `.env` beside `compose/api-prod/compose.yml` (the
-   `DEPLOY_SHA` interpolation file), ensure there is exactly one build-time site
-   key entry, preserving every other line:
+   `DEPLOY_SHA` interpolation file), ensure there is exactly one runtime site
+   key entry (compose interpolates it into the portal and doctor `environment:`), preserving every other line:
 
    ```dotenv
    SMARTCAPTCHA_SITE_KEY=<site-key-from-step-3>
@@ -650,8 +650,8 @@ image build.
 
    - **OFF** — `BOT_PROTECTION_ENABLED=false` and comment out
      `SMARTCAPTCHA_SERVER_KEY` in `api.env`; empty `SMARTCAPTCHA_SITE_KEY=` in
-     the compose `.env`; `pnpm deploy:prod`. The storefront images MUST rebuild;
-     the clients then submit tokenless and the api guard stays wired and no-ops
+     the compose `.env`; `pnpm deploy:prod` (it recreates the storefront
+     containers, which read the key at runtime); the clients then submit tokenless and the api guard stays wired and no-ops
      (003 design §10.1 fallback).
    - **ON** — restore `BOT_PROTECTION_ENABLED=true` plus the `ysc2_` server half
      in `api.env` and `SMARTCAPTCHA_SITE_KEY=ysc1_…` in the compose `.env`, run
@@ -668,8 +668,9 @@ image build.
    sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build admin
    sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build portal
    sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build api
-   # admin is NEW; portal MUST rebuild (bakes the captcha site key); api rebuilds
-   # to the wave-1 code. centrifugo is pulled (centrifugo/centrifugo:v6).
+   # admin is NEW; portal and api rebuild to the wave-1 code (the captcha site
+   # key is runtime env, #2981 — no image bakes it).
+   # centrifugo is pulled (centrifugo/centrifugo:v6).
    ```
 
 6. **One-shot migrations.** The wave-1 events/rooms migrations are ordinary
@@ -896,7 +897,7 @@ Order — steps run in sequence; **do not reorder 4 and 5** (the reason is in 5)
    fully retired. Post-#1173 the list is `academy.doctor.school` (the legacy
    `app.doctor.school` entry is dropped as part of the retirement, after its DNS
    record is gone) plus, from #1723, `new.doctor.school` — the doctor storefront
-   ships the same SmartCaptcha site key in its own image. The site key is
+   reads the same SmartCaptcha site key as runtime env. The site key is
    unchanged either way, so **no rebuild is needed** for this step alone.
 
 3. **Zitadel URI set — re-pass EVERY URI, not just the new one.** `provision.sh`
@@ -1098,9 +1099,9 @@ Order:
    `new.doctor.school` are listed and domain validation is ON. No rebuild or
    deploy is needed for this domain-only change when the keys are unchanged.
    Successful live registration/resend remains a separate verification result.
-   The doctor image bakes the same PUBLIC
+   The doctor container reads the same PUBLIC
    site key as the portal (`SMARTCAPTCHA_SITE_KEY` in the `.env` beside
-   `compose/api-prod/compose.yml`, inlined at build time), so a missing domain
+   `compose/api-prod/compose.yml`, runtime env since #2981), so a missing domain
    entry makes the registration widget inert while the page still renders green.
 
 3. **Zitadel post-logout URI — re-pass EVERY URI.** `provision.sh` sends one

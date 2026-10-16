@@ -1,6 +1,7 @@
 import type { LoginCardMethod } from "@ds/design-system/blocks";
 import { headers } from "next/headers";
 
+import { withRuntimeBotProtection } from "../bot-protection/server";
 import type { AuthFlowHostConfig } from "../host-config";
 import {
   RETURN_CONTEXT_PARAM,
@@ -62,12 +63,14 @@ export function resolveLoginMethod(
  * host route file keeps its single JSX mount with no await of its own.
  */
 export async function LoginRoute({
-  config,
+  config: hostConfig,
   searchParams,
 }: {
   config: AuthFlowHostConfig;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  // #2981 — the site key is runtime env, read per request (bot-protection/server).
+  const config = withRuntimeBotProtection(hostConfig);
   const params = await searchParams;
   const raw = params[RETURN_CONTEXT_PARAM];
   // A repeated param arrives as an array; the FIRST value wins rather than the

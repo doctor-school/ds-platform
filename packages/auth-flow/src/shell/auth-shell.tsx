@@ -35,8 +35,8 @@ export type AuthShellProps = {
  * frame is server-safe; the nested form carries its own client boundary.
  *
  * The notice renders exactly where `config.botProtection.siteKey` is set: the
- * value the challenge itself runs on, read by the host from its literal
- * `process.env.NEXT_PUBLIC_…` expression. A host that challenges discloses.
+ * value the challenge itself runs on, read by the server mount from the runtime
+ * `SMARTCAPTCHA_SITE_KEY` env (#2981). A host that challenges discloses.
  *
  * Assets are static SVGs served `unoptimized` (ADR-0013 §8): a tiny vector needs
  * no Next re-encode; the intrinsic size is the host's value and `h-* w-auto`
@@ -97,7 +97,7 @@ export function AuthShell({ config, returnContext, children }: AuthShellProps) {
       copy={brandCopy}
     >
       {children}
-      {config.botProtection.siteKey ? (
+      {config.botProtection?.siteKey ? (
         <p
           className="mt-3.5 text-xs leading-normal text-faint"
           data-testid="smartcaptcha-disclosure"

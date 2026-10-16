@@ -592,17 +592,14 @@ export type AuthFlowHostConfig = {
   readonly copy?: AuthFlowCopyOverride;
   readonly brand: AuthFlowBrand;
   /**
-   * The SmartCaptcha site key VALUE, not the env name.
-   *
-   * Gate §4.2 drafted `botProtection: { siteKeyEnv: string }`; that shape cannot
-   * work, because Next inlines `NEXT_PUBLIC_*` only at a LITERAL
-   * `process.env.NEXT_PUBLIC_…` read in the app's own source — a package handed
-   * an env NAME would read `undefined` in every built host. The host does its own
-   * literal read and states the resulting value here. Rewritten in PR 1.3 while
-   * the draft is still a draft (nothing runs on it yet), per the inline-rewrite
-   * rule.
+   * The SmartCaptcha site key VALUE the doors run the challenge on — never stated
+   * by a host (#2981). Each image serves every environment, so the key is RUNTIME
+   * env: the four server mounts read `SMARTCAPTCHA_SITE_KEY` per request
+   * (`bot-protection/server.ts`) and hand the doors this resolved field as
+   * serialised props. Absent or `undefined` ⇒ no challenge, the inactive
+   * placeholder.
    */
-  readonly botProtection: { readonly siteKey: string | undefined };
+  readonly botProtection?: { readonly siteKey: string | undefined };
   readonly register: {
     /** Whether the registration form carries the optional promo-code box (row 9). */
     readonly promoField: boolean;

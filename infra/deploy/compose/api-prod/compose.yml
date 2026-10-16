@@ -98,15 +98,6 @@ services:
       context: ../../../..
       dockerfile: apps/portal/Dockerfile
       args:
-        # Yandex SmartCaptcha CLIENT key (#186, wave-1) — BUILD-time inlined into
-        # the client bundle (NEXT_PUBLIC_*). Sourced from the non-secret `.env`
-        # beside this compose file (same mechanism as DEPLOY_SHA): put
-        # `SMARTCAPTCHA_SITE_KEY=<site-key>` there before `docker compose build`.
-        # The site key is PUBLIC by design (it ships in the served JS); the
-        # SERVER key stays in api.env (SMARTCAPTCHA_SERVER_KEY). Empty ⇒ bot
-        # protection renders an inactive placeholder (003-slice behavior).
-        # A portal image built before the key was set must be REBUILT.
-        NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY: ${SMARTCAPTCHA_SITE_KEY:-}
         # BUILD-time on purpose (DSO-100): Next evaluates `rewrites()` at `next
         # build` and freezes the destination into .next/routes-manifest.json — a
         # runtime-only API_PROXY_TARGET is ignored and the baked localhost fallback
@@ -125,6 +116,18 @@ services:
       # overrode the image's ENV PORT=3001, the portal bound 3000, and Caddy's
       # portal:3001 upstream broke). compose `environment:` outranks env_file.
       PORT: "3001"
+      # Pin OFF (#2981): the `/__contour/app-paths-manifest.json` route answers only
+      # when the runtime CONTOUR_MANIFEST is exactly "1" (slot compose). Pinned here
+      # so a stray line in the shared api.env env_file can never expose it in prod.
+      CONTOUR_MANIFEST: "0"
+      # Yandex SmartCaptcha CLIENT key (#186) — RUNTIME env (#2981): the image is
+      # environment-agnostic, the @ds/auth-flow server mounts read it per request
+      # and hand it to the widget. Interpolated from the non-secret `.env` beside
+      # this compose file (same mechanism as DEPLOY_SHA). PUBLIC by design (it is
+      # served to the browser); the SERVER key stays in api.env
+      # (SMARTCAPTCHA_SERVER_KEY). Empty ⇒ inactive placeholder. A key change
+      # needs a container recreate, never a rebuild.
+      SMARTCAPTCHA_SITE_KEY: ${SMARTCAPTCHA_SITE_KEY:-}
       # Feature 013 EARS-6: fail-closed private JSON persistence. This named
       # volume is mounted into portal only; the image pre-creates the mount point
       # node-owned with 0700 and each record is written 0600.
@@ -197,15 +200,6 @@ services:
       context: ../../../..
       dockerfile: apps/doctor/Dockerfile
       args:
-        # Yandex SmartCaptcha CLIENT key — BUILD-time inlined into the client
-        # bundle (NEXT_PUBLIC_*), same mechanism and same `.env` source as the
-        # portal's. Registration bot-protection (#1558) ships on the doctor
-        # storefront, so the key must be baked here too; `new.doctor.school` also
-        # has to be on the `ds-platform-prod` SmartCaptcha resource's allowed
-        # domains (Yandex Cloud console step — infra/deploy/README.md §"Doctor
-        # storefront roll-out"). Empty ⇒ inactive placeholder, and an image built
-        # before the key was set must be REBUILT.
-        NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY: ${SMARTCAPTCHA_SITE_KEY:-}
         # BUILD-time on purpose (DSO-100, same as portal/admin): Next freezes
         # `rewrites()` destinations into .next/routes-manifest.json at build time,
         # so a runtime-only API_PROXY_TARGET is ignored and the baked localhost
@@ -222,6 +216,14 @@ services:
       # must never leak an api PORT value into a Next app. compose `environment:`
       # outranks env_file. 3004 matches the Dockerfile ENV + the Caddy upstream.
       PORT: "3004"
+      # Pin OFF, as on the portal (#2981): the contour manifest route stays 404 in prod.
+      CONTOUR_MANIFEST: "0"
+      # SmartCaptcha CLIENT key — RUNTIME env, same `.env` source as the portal
+      # (#2981). Registration bot-protection (#1558) ships here too, so
+      # `new.doctor.school` must be on the `ds-platform-prod` SmartCaptcha
+      # resource's allowed domains (infra/deploy/README.md §"Doctor storefront
+      # roll-out"). Empty ⇒ inactive placeholder.
+      SMARTCAPTCHA_SITE_KEY: ${SMARTCAPTCHA_SITE_KEY:-}
     depends_on:
       api:
         condition: service_started

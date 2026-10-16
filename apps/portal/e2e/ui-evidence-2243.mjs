@@ -14,7 +14,7 @@
  * Boot the PRODUCTION standalone build of the branch head, from the worktree root
  * (the portal builds with `output: "standalone"`; `next start` silently 404s):
  *
- *   NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY='' API_PROXY_TARGET=http://localhost:3100 \
+ *   API_PROXY_TARGET=http://localhost:3100 \
  *     pnpm --filter "@ds/api..." --filter "@ds/portal..." build
  *   cp -r apps/portal/.next/static apps/portal/.next/standalone/apps/portal/.next/
  *   cp -r apps/portal/public       apps/portal/.next/standalone/apps/portal/

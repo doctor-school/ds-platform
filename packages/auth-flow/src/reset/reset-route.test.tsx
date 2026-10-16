@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ReactElement } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * The SERVER MOUNT of password recovery (#2027 PR 1.8, rows 78 and 83) — the
@@ -84,9 +84,10 @@ describe.each(HOSTS)("ResetRoute on the %s host", (_, config) => {
     const shell = await mountOf(config, {});
 
     expect(shell.type).toBe(AuthShell);
-    expect(shell.props.config).toBe(config);
+    // The host config, with the request-time site key resolved in (#2981).
+    expect(shell.props.config).toEqual(config);
     expect(shell.props.children.type).toBe(ResetDoor);
-    expect(shell.props.children.props.config).toBe(config);
+    expect(shell.props.children.props.config).toBe(shell.props.config);
     expect(shell.props.children.props.loginHref).toBe(config.routes.login);
   });
 
@@ -150,5 +151,30 @@ describe.each(HOSTS)("ResetRoute on the %s host", (_, config) => {
     });
 
     expect(props.landing).toBe("/account/events");
+  });
+});
+
+/** #2981 — the site key is runtime env, read by the mount per request. */
+describe("2981: the recovery door's site key comes from runtime env", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("2981: a set SMARTCAPTCHA_SITE_KEY reaches the shell and the door; unset hands them no key", async () => {
+    vi.stubEnv("SMARTCAPTCHA_SITE_KEY", "ysc1_runtime");
+    const keyed = await mountOf(ACADEMY_FIXTURE, {});
+    const keyedDoor = keyed.props.children.props as unknown as {
+      config: AuthFlowHostConfig;
+    };
+    expect((keyed.props.config as AuthFlowHostConfig).botProtection?.siteKey).toBe(
+      "ysc1_runtime",
+    );
+    expect(keyedDoor.config.botProtection?.siteKey).toBe("ysc1_runtime");
+
+    vi.stubEnv("SMARTCAPTCHA_SITE_KEY", undefined);
+    const keyless = await mountOf(DOCTOR_FIXTURE, {});
+    expect(
+      (keyless.props.config as AuthFlowHostConfig).botProtection?.siteKey,
+    ).toBeUndefined();
   });
 });

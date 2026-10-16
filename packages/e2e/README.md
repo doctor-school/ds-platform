@@ -193,20 +193,20 @@ both hosts instead of standing permanently red.
 
 ### The route manifest is published by the image
 
-The walk reads `.next/server/app-paths-manifest.json`, which the standalone
-bundle does not carry. Both `apps/portal/Dockerfile` and `apps/doctor/Dockerfile`
-copy it into the image's `public/` tree at
+The walk reads `.next/server/app-paths-manifest.json`, which every image's
+standalone bundle carries at that non-public path, and each app's route
+handler (`app/%5F_contour/app-paths-manifest.json/route.ts`) serves it at
 
 ```
 /__contour/app-paths-manifest.json
 ```
 
 exported from `hosts.ts` as `MANIFEST_PATH` — one constant shared by the two
-Dockerfiles, the walk and this README. The copy is guarded by the
-`CONTOUR_MANIFEST` build arg, which defaults to `0`: **slot images only**, because
-`infra/deploy/compose/slot/compose.yml` is the one build that passes `"1"`.
-Production images therefore carry no `public/__contour/` and serve no
-`/__contour/*`. Reading it from the SLOT rather than from the repo is the whole
+route handlers, the walk and this README. The handler answers only when the
+container's RUNTIME env sets `CONTOUR_MANIFEST=1` (#2981 — one image serves stage
+and prod, so the gate cannot be a build arg): **slot containers only**, because
+`infra/deploy/compose/slot/compose.yml` is the one compose that sets it.
+Production therefore answers 404 at `/__contour/*`. Reading it from the SLOT rather than from the repo is the whole
 point: the repo says what the source declares, the slot says what the image
 actually serves.
 

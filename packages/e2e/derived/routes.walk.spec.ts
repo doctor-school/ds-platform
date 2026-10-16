@@ -17,10 +17,10 @@ import { resolveRoute } from "../route-params.js";
  * bullet (Issue #2067).
  *
  * It contains no list of routes either. Each SLOT image publishes its own Next
- * route manifest at {@link MANIFEST_PATH} (both Dockerfiles copy
- * `.next/server/app-paths-manifest.json` into the image's `public/` tree when the
- * `CONTOUR_MANIFEST` build arg is on — slot compose only, so production serves no
- * `/__contour/*`), and this walk fetches that file FROM THE SLOT, filters it to
+ * route manifest at {@link MANIFEST_PATH} (every image carries
+ * `.next/server/app-paths-manifest.json`; the route handler serves it only when
+ * the RUNTIME env sets `CONTOUR_MANIFEST=1` — slot compose only, so production
+ * answers 404 at `/__contour/*`, #2981), and this walk fetches that file FROM THE SLOT, filters it to
  * the page addresses a visitor can type (`lib/routes.ts`), resolves dynamic
  * segments from `route-params.ts`, and asserts 200 + the landed PATHNAME (or the
  * lawful login redirect, `returnTo` intact) + a non-empty `h1` on every one.

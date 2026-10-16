@@ -17,8 +17,8 @@ import type {
  * The host value file of `@ds/auth-flow` on this host. A plain constant rather
  * than the Academy's hook: this storefront ships no i18n runtime. Its RU
  * auth sentences are the package's own defaults (#2027) — and what stays here is
- * the transport, the field SET and the site key, which Next inlines from the
- * literal `process.env.NEXT_PUBLIC_…` expression below.
+ * the transport and the field SET. The SmartCaptcha site key is not a host value:
+ * the package's server mounts read it from the runtime env per request (#2981).
  */
 
 /**
@@ -101,12 +101,6 @@ export const DOCTOR_AUTH_FLOW = {
     panel: { src: "/brand/logo-white.svg", width: 500, height: 164 },
     loginIcon: "shield-check-square",
     registerIcon: "user-plus-square",
-  },
-  botProtection: {
-    // The prod key is the `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY` build arg
-    // (`apps/doctor/Dockerfile`); `new.doctor.school` must be an allowed domain
-    // of the SmartCaptcha resource for the challenge to run there.
-    siteKey: process.env.NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY,
   },
   register: {
     promoField: true,

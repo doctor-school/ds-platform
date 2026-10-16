@@ -1232,9 +1232,9 @@ sudo docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info
     `cd ${API_COMPOSE}
 # Rewrite ONLY the DEPLOY_SHA line — this .env also carries other non-secret
 # compose-interpolation vars (SMARTCAPTCHA_SITE_KEY, #729/#186: the portal's and
-# — since #1723 — the doctor storefront's BUILD-time captcha site key) that a
-# clobbering '>' would silently wipe, baking an empty site key into the very
-# images built two lines below.
+# — since #1723 — the doctor storefront's RUNTIME captcha site key, #2981) that a
+# clobbering '>' would silently wipe, recreating both storefronts with an empty
+# site key (the inactive captcha placeholder on every bot-protected door).
 { { [ -f .env ] && grep -v '^DEPLOY_SHA=' .env; } || true; printf 'DEPLOY_SHA=%s\\n' '${sha}'; } > .env.next && mv .env.next .env
 echo '── build ${sha.slice(0, 12)}… : ${formatServiceImages(services)} ──'
 # ${NO_ATTEST}: reproducible image IDs so a same-SHA re-run is a true no-op (#486).

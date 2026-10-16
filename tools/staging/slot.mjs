@@ -2294,8 +2294,8 @@ export function requiredOperatorPassword(env) {
  * and rejects every bot-protected call that carries no token — the login journey's OTP
  * request, registration, verification resend, password reset (`POST /v1/auth/login`
  * itself is not decorated); the storefront only produces a
- * token when its image was baked with a real `SMARTCAPTCHA_SITE_KEY` (slot compose →
- * `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY`). Half a pair therefore has ONE observable
+ * token when its container runs with a real `SMARTCAPTCHA_SITE_KEY` (the box env
+ * `stage.env`, loaded as `env_file` and read per request — #2981). Half a pair therefore has ONE observable
  * outcome — every slot login answers 403 (seen live on 2026-09-14, all three slots) —
  * and nothing in the converge noticed. So `up|sync` refuse by name:
  *   ON  ⇒ a real `ysc2_` server key AND a real `ysc1_` site key — the two halves of the

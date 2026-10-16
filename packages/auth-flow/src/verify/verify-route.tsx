@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 
+import { withRuntimeBotProtection } from "../bot-protection/server";
 import type { AuthFlowHostConfig } from "../host-config";
 import { returnContextSlots } from "../login/return-context-card";
 import { resolveRegistrationArrival } from "../register/registration-arrival";
@@ -27,12 +28,14 @@ import { VerifyAddressGate, VerifyStep } from "./verify-entry";
  * other in-journey hop of this step navigates.
  */
 export async function VerifyRoute({
-  config,
+  config: hostConfig,
   searchParams,
 }: {
   config: AuthFlowHostConfig;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  // #2981 — the site key is runtime env, read per request (bot-protection/server).
+  const config = withRuntimeBotProtection(hostConfig);
   const params = await searchParams;
   // A repeated param arrives as an array; the FIRST value wins, the way the
   // other auth mounts read theirs.

@@ -310,10 +310,9 @@ export type AuthFlowHostConfig = {
   returnTo?: {
     parkingCookie: { name: string; maxAgeSeconds: number };
   };
-  // The VALUE, not the env NAME: Next inlines `NEXT_PUBLIC_*` only where the
-  // app's own source reads `process.env.NEXT_PUBLIC_…` as a literal, so a
-  // package that received a name would read `undefined` in the browser.
-  botProtection: { siteKey: string | undefined };
+  // Not stated by the host: the package's server mounts fill it from the
+  // runtime env SMARTCAPTCHA_SITE_KEY per request (#2981).
+  botProtection?: { siteKey: string | undefined };
   channels: readonly OtpChannel[];
   register: {
     promoField: boolean;

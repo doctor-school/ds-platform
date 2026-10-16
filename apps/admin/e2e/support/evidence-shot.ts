@@ -58,8 +58,16 @@ export async function evidenceShot(
       await prepare?.();
       // The controls fade their colours (`transition-colors`): a shot taken
       // mid-fade after a palette or width switch shows washed-out fields.
+      // A looping animation (a focused OTP cell's blinking caret) never
+      // finishes, so only finite ones are waited out.
       await page.waitForFunction(() =>
-        document.getAnimations().every((a) => a.playState !== "running"),
+        document
+          .getAnimations()
+          .every(
+            (a) =>
+              a.playState !== "running" ||
+              a.effect?.getTiming().iterations === Infinity,
+          ),
       );
       await page.screenshot({
         path: path.join(SHOT_DIR, `${name}-${label}-${palette}.png`),

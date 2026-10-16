@@ -129,6 +129,20 @@ describe("047 EARS-8 step-up — the console keeps the request across the code s
     ).toBe("/access?x=1");
   });
 
+  it("047 EARS-8 / #2782: the re-verify return path obeys the one admin return-target rule — a dot-segment that normalises to `//`, a sign-in screen or a non-page path is refused", () => {
+    for (const refused of [
+      "/%2e%2e/%2fevil.example",
+      "/login",
+      "/mfa/challenge?mode=reverify",
+      "/v1/admin/staff-access/grants",
+    ]) {
+      expect(reverifyReturnTo(refused)).toBe("/events");
+      expect(
+        stepUpChallengeHref("/mfa/challenge?mode=reverify", refused, "POST /x"),
+      ).toBeNull();
+    }
+  });
+
   const OWNER = "csrf-session-a";
   const T0 = 1_760_000_000_000;
   const saved = (owner = OWNER, at = T0) =>

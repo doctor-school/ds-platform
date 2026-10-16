@@ -5,6 +5,11 @@ import { adminLogin, adminLogout, readAdminAuthState } from "@/lib/admin-auth";
 import { clearAdminSession } from "@/lib/admin-session-cache";
 import { loginFailureMessage } from "@/lib/login-failure";
 import { browserStepUpStorage, clearStepUpRequest } from "@/lib/step-up";
+import {
+  ADMIN_LANDING,
+  currentPageAsReturnTarget,
+  withAdminReturnTarget,
+} from "@/lib/admin-return-target";
 
 /**
  * Refine auth provider over the **011 admin session tier**.
@@ -34,13 +39,22 @@ import { browserStepUpStorage, clearStepUpRequest } from "@/lib/step-up";
  * the three cookies that hold the answer are `HttpOnly`, so the state is a server
  * read by construction, not a cookie sniff.
  */
-const ADMIN_ROOT = "/events";
+const ADMIN_ROOT = ADMIN_LANDING;
 const LOGIN_PATH = "/login";
 const ENROLL_PATH = "/mfa/enroll";
 const CHALLENGE_PATH = "/mfa/challenge";
 
 export const authProvider: AuthProvider = {
-  login: async ({ email, password }: { email?: string; password?: string }) => {
+  login: async ({
+    email,
+    password,
+    to,
+  }: {
+    email?: string;
+    password?: string;
+    /** #2782 — the page the operator came from; validated before it is carried. */
+    to?: string | null;
+  }) => {
     // 044 EARS-20: a new sign-in is a new principal — never draw the last one's nav.
     clearAdminSession();
     const result = await adminLogin(email ?? "", password ?? "");
@@ -67,11 +81,14 @@ export const authProvider: AuthProvider = {
     // Primary auth succeeded and issued NO session: send the operator to the step
     // they owe. `success: true` here means "the password was right", which is
     // what the login form needs to know; `check` still reports them
-    // unauthenticated until a factor is satisfied.
+    // unauthenticated until a factor is satisfied. The return target (#2782)
+    // rides on to that step, which lands the operator on it once satisfied.
     return {
       success: true,
-      redirectTo:
+      redirectTo: withAdminReturnTarget(
         result.value === "mfa_pending_challenge" ? CHALLENGE_PATH : ENROLL_PATH,
+        to,
+      ),
     };
   },
 
@@ -114,6 +131,10 @@ export const authProvider: AuthProvider = {
    * (ADR-0001 §10). The screen that sent the request keeps it and takes the
    * operator to the code screen (`lib/step-up.ts`); signing out here would
    * throw away the session and the entered form.
+   *
+   * #2782: the 401 carries the page the operator was on (`?to=`), so the sign-in
+   * returns them there — the same parameter `<Authenticated>` appends for an
+   * unauthenticated page load. A sign-in screen is never carried (no loops).
    */
   onError: async (error) => {
     const { statusCode: status, errorCode } = error as {
@@ -124,7 +145,14 @@ export const authProvider: AuthProvider = {
       return { error };
     }
     if (status === 401) {
-      return { logout: true, redirectTo: LOGIN_PATH, error };
+      return {
+        logout: true,
+        redirectTo: withAdminReturnTarget(
+          LOGIN_PATH,
+          currentPageAsReturnTarget(),
+        ),
+        error,
+      };
     }
     if (status === 403) {
       return { error };

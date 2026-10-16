@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
-import { useLogin } from "@refinedev/core";
+import { useInvalidateAuthStore } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import {
   Alert,
@@ -27,14 +27,20 @@ import { LoginFormSchema, type LoginFormFields } from "@/lib/form-schemas";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 import { readAdminAuthState } from "@/lib/admin-auth";
 import {
+  adminLandingFor,
+  currentReturnTarget,
+  withAdminReturnTarget,
+} from "@/lib/admin-return-target";
+import {
   loginFailureFromMessage,
   type LoginFailurePresentation,
 } from "@/lib/login-failure";
+import { authProvider } from "@/providers/auth-provider";
 
 /**
  * Admin login — since 011, **primary authentication only**.
  *
- * `useLogin` → `authProvider.login` → `POST /v1/admin/auth/login`, which issues
+ * `authProvider.login` → `POST /v1/admin/auth/login`, which issues
  * no session: it produces a short-lived pending authentication and names the
  * second-factor step it owes, and the provider's `redirectTo` carries the
  * operator to the enrollment or challenge screen. The session is issued there, in
@@ -55,7 +61,9 @@ import {
  */
 function LoginForm() {
   const t = useTranslations();
-  const { mutate: login, isPending } = useLogin();
+  const router = useRouter();
+  const invalidateAuthStore = useInvalidateAuthStore();
+  const [isPending, setIsPending] = useState(false);
   const [failure, setFailure] = useState<LoginFailurePresentation | null>(null);
   const form = useForm<LoginFormFields>({
     mode: "onTouched",
@@ -63,21 +71,37 @@ function LoginForm() {
     defaultValues: { email: "", password: "" },
   });
 
-  function submit(values: LoginFormFields) {
+  // #2782: the provider is called directly, NOT through Refine's `useLogin`.
+  // `useLogin` reads the raw `?to=` from the URL and, on success, navigates to
+  // it unvalidated in place of the provider's `redirectTo` — an open redirect
+  // (`/login?to=//evil.example`) and a skip past the second-factor step. Here
+  // the only navigation is the provider's `redirectTo`, whose carried target
+  // went through `resolveAdminReturnTarget`.
+  async function submit(values: LoginFormFields) {
+    if (isPending) return;
     setFailure(null);
-    login(values, {
-      onSuccess: (data) => {
-        if (!data.success) {
-          // What the refusal WAS is decided by the provider and re-read here
-          // (`login-failure.ts`): an IdP outage must not be repainted as a
-          // verdict on the credentials, which were never checked (#1217).
-          setFailure(loginFailureFromMessage(data.error?.message));
-        }
-      },
+    setIsPending(true);
+    try {
+      const data = await authProvider.login({
+        ...values,
+        to: currentReturnTarget(),
+      });
+      if (!data.success) {
+        // What the refusal WAS is decided by the provider and re-read here
+        // (`login-failure.ts`): an IdP outage must not be repainted as a
+        // verdict on the credentials, which were never checked (#1217).
+        setFailure(loginFailureFromMessage(data.error?.message));
+        return;
+      }
+      await invalidateAuthStore();
+      if (data.redirectTo) router.replace(data.redirectTo);
+    } catch {
       // A thrown transport error says nothing about the service being down in
       // the way a 503 does, so it stays the uniform refusal.
-      onError: () => setFailure(loginFailureFromMessage(undefined)),
-    });
+      setFailure(loginFailureFromMessage(undefined));
+    } finally {
+      setIsPending(false);
+    }
   }
 
   return (
@@ -124,7 +148,9 @@ function LoginForm() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel htmlFor="password">{t("login.password")}</FormLabel>
+                    <FormLabel htmlFor="password">
+                      {t("login.password")}
+                    </FormLabel>
                     <FormControl>
                       <Input
                         id="password"
@@ -137,7 +163,11 @@ function LoginForm() {
                   </FormItem>
                 )}
               />
-              <Button type="submit" loading={isPending} data-testid="login-submit">
+              <Button
+                type="submit"
+                loading={isPending}
+                data-testid="login-submit"
+              >
                 {t("login.submit")}
               </Button>
             </form>
@@ -173,9 +203,13 @@ export default function LoginPage() {
     let cancelled = false;
     void readAdminAuthState().then((state) => {
       if (cancelled) return;
-      if (state === "active") router.replace("/events");
-      else if (state === "mfa_pending_challenge") router.replace("/mfa/challenge");
-      else if (state === "mfa_pending_enrollment") router.replace("/mfa/enroll");
+      // #2782: every onward hop keeps the carried return target.
+      const target = currentReturnTarget();
+      if (state === "active") router.replace(adminLandingFor(target));
+      else if (state === "mfa_pending_challenge")
+        router.replace(withAdminReturnTarget("/mfa/challenge", target));
+      else if (state === "mfa_pending_enrollment")
+        router.replace(withAdminReturnTarget("/mfa/enroll", target));
       else setResolved(true);
     });
     return () => {

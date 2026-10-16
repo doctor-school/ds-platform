@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { bootstrapAdminSession, totpCode } from "@ds/e2e/admin-events";
 
+import { evidenceShot } from "./support/evidence-shot";
+
 /**
  * 011 Verification rows 4 + 5, browser half — the forced-enrollment screen.
  *
@@ -104,6 +106,11 @@ test.describe("011 EARS-4/5 — forced TOTP enrollment (admin)", () => {
     await expect(qr).toHaveAttribute("role", "img");
     expect(await qr.getAttribute("aria-label")).toBeTruthy();
 
+    // #2781: the caret is already in the code field — no click before typing.
+    await expect(
+      page.getByTestId("mfa-enroll-form").getByRole("textbox"),
+    ).toBeFocused();
+
     // Transcribable: the same secret as selectable text an operator can type.
     const secret = (await page.getByTestId("mfa-secret").innerText()).trim();
     expect(secret).toMatch(/^[A-Z2-7]{16,}$/);
@@ -156,5 +163,22 @@ test.describe("011 EARS-4/5 — forced TOTP enrollment (admin)", () => {
       loginPosts,
       "a successful enrollment verify completes the login in place — no second primary auth",
     ).toEqual([]);
+  });
+
+  test("#2781: on a phone the focused code field does not scroll the QR code out of view", async ({
+    page,
+  }) => {
+    const { email, password } = await bootstrapAdminSession(ORIGIN);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await primaryAuth(page, { email, password });
+
+    await page.goto("/mfa/enroll");
+    const field = page.getByTestId("mfa-enroll-form").getByRole("textbox");
+    await expect(field).toBeFocused();
+    // The operator scans the QR on this very step: focusing the field below it
+    // must leave the code fully on screen.
+    await expect(page.getByTestId("mfa-qr")).toBeInViewport({ ratio: 1 });
+    await evidenceShot(page, "mfa-enroll-focused");
+    await expect(field).toBeFocused();
   });
 });

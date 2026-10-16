@@ -168,16 +168,18 @@ test.describe("005 EARS-2 (#2005): the эфир intent is completed on the way b
         encodeURIComponent("/webinars/" + RETURN_SLUG),
     );
 
-    // `exact` matters: the field shares its accessible-name prefix with the
-    // «Показать пароль» reveal toggle, so a loose label match is a strict-mode
-    // violation (the repo-wide shape — see `login.spec.ts`).
-    await page
+    // Scoped to the password form, as `room.spec.ts` does: the door's «Пароль»
+    // tab panel carries the same accessible name as the field, and `exact`
+    // keeps the «Показать пароль» reveal toggle out of the match.
+    const form = page.getByTestId("password-login-form");
+    await expect(form).toBeVisible();
+    await form
       .getByLabel("Электронная почта или телефон", { exact: true })
       .fill(process.env.E2E_DOCTOR_EMAIL ?? "");
-    await page
+    await form
       .getByLabel("Пароль", { exact: true })
       .fill(process.env.E2E_DOCTOR_PASSWORD ?? "");
-    await page.getByRole("button", { name: "Войти" }).click();
+    await page.getByTestId("password-login-submit").click();
 
     // Landed on THIS host эфир page, never the academy /webinars/<slug>.
     await page.waitForURL("**" + eventPath(RETURN_SLUG));

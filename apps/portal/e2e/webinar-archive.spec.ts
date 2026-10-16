@@ -477,6 +477,10 @@ test.describe("014 EARS-5 the login gate and the mounted player (e2e)", () => {
       waitUntil: "domcontentloaded",
     });
 
+    // Gate row 29 (D8): the page now streams behind its skeleton, and the
+    // player's native listener exists only once its boundary hydrated.
+    await page.waitForLoadState("load");
+    await page.waitForLoadState("networkidle");
     await expect(page.locator("iframe")).toHaveCount(1);
     // Dispatched as a plain `Event` inside the page rather than through
     // Playwright's `dispatchEvent("error")` helper, which synthesizes its own

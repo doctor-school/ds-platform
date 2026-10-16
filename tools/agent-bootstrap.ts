@@ -14,6 +14,11 @@
  * §3.5 already forbids treating it as ground truth. The agent triages the open
  * board itself (`pnpm backlog:triage`); the bootstrap reports state.
  *
+ * `## Epics` (#2957): every open `epic:` Issue with its native sub-issue bar
+ * (`<completed>/<total> sub-issues closed`) and each open child as `ready` or
+ * `blocked … — by #X` (open native `blocked_by` edges); the first ready child
+ * is marked `next →`. A failed fetch prints `(unknown — see Warnings)`.
+ *
  * Hard rule: NEVER throw an unhandled error. Every failure path returns a
  * printable warning so the SessionStart hook does not crash. Exit code is
  * always 0 (warnings reported in a "Warnings" section).
@@ -442,6 +447,142 @@ async function ghMergedShowPRs(): Promise<unknown[] | null> {
   }
 }
 
+/**
+ * Open epics and their native sub-issue progress (#2957). An epic carries no
+ * milestone (repo-conventions «Track ≠ milestone ≠ epic»): its progress is the
+ * native sub-issue bar, so the session entry prints that bar and the readiness
+ * of every open child — the epic is the goal a session must not lose.
+ */
+export interface EpicChild {
+  number: number;
+  title: string;
+  /** Open native `blocked_by` edges; empty = ready. */
+  blockedBy: number[];
+}
+
+export interface EpicRow {
+  number: number;
+  title: string;
+  completed: number;
+  total: number;
+  /** Open sub-issues in native sub-issue order. */
+  openChildren: EpicChild[];
+}
+
+export const EPIC_TITLE_MAX = 90;
+export const EPIC_CHILDREN_MAX = 10;
+
+function clip(title: string): string {
+  return title.length > EPIC_TITLE_MAX
+    ? `${title.slice(0, EPIC_TITLE_MAX - 1)}…`
+    : title;
+}
+
+/** `null` = the source could not be read (rendered as unknown, not none). */
+export function renderEpicsSection(epics: EpicRow[] | null): string[] {
+  const head = "## Epics";
+  if (epics === null) return [head, "(unknown — see Warnings)"];
+  if (epics.length === 0) return [head, "(none)"];
+  const out = [head];
+  for (const e of epics) {
+    out.push(
+      `- #${e.number} ${clip(e.title)} — ${e.completed}/${e.total} sub-issues closed`,
+    );
+    const nextReady = e.openChildren.find((c) => c.blockedBy.length === 0);
+    for (const c of e.openChildren.slice(0, EPIC_CHILDREN_MAX)) {
+      if (c.blockedBy.length > 0) {
+        out.push(
+          `  - blocked #${c.number} ${clip(c.title)} — by ${c.blockedBy.map((n) => `#${n}`).join(", ")}`,
+        );
+      } else {
+        out.push(
+          `  - ${c === nextReady ? "next → " : ""}ready #${c.number} ${clip(c.title)}`,
+        );
+      }
+    }
+    const more = e.openChildren.length - EPIC_CHILDREN_MAX;
+    if (more > 0) out.push(`  - … +${more} more`);
+  }
+  return out;
+}
+
+interface GhIssueRef {
+  number: number;
+  title: string;
+  state: string;
+}
+
+async function ghApiJson<T>(path: string, paginate = false): Promise<T> {
+  const args = ["api", path];
+  if (paginate) args.push("--paginate", "--slurp");
+  const { stdout } = await execa("gh", args, { cwd: REPO_ROOT });
+  return JSON.parse(stdout) as T;
+}
+
+async function ghOpenEpics(): Promise<EpicRow[] | null> {
+  try {
+    const { stdout } = await execa(
+      "gh",
+      [
+        "issue",
+        "list",
+        "--state",
+        "open",
+        "--search",
+        "epic: in:title",
+        "--limit",
+        "50",
+        "--json",
+        "number,title",
+      ],
+      { cwd: REPO_ROOT },
+    );
+    const epics = (
+      JSON.parse(stdout) as Array<{ number: number; title: string }>
+    )
+      .filter((i) => /^epic:/i.test(i.title))
+      .sort((a, b) => a.number - b.number);
+    return await Promise.all(
+      epics.map(async (epic): Promise<EpicRow> => {
+        const repoPath = `repos/{owner}/{repo}/issues/${epic.number}`;
+        const [issue, pages] = await Promise.all([
+          ghApiJson<{
+            sub_issues_summary?: { completed?: number; total?: number };
+          }>(repoPath),
+          ghApiJson<GhIssueRef[][]>(`${repoPath}/sub_issues`, true),
+        ]);
+        const open = pages.flat().filter((c) => c.state === "open");
+        const openChildren = await Promise.all(
+          open.map(async (c): Promise<EpicChild> => {
+            const blockers = await ghApiJson<GhIssueRef[][]>(
+              `repos/{owner}/{repo}/issues/${c.number}/dependencies/blocked_by`,
+              true,
+            );
+            return {
+              number: c.number,
+              title: c.title,
+              blockedBy: blockers
+                .flat()
+                .filter((b) => b.state === "open")
+                .map((b) => b.number),
+            };
+          }),
+        );
+        return {
+          number: epic.number,
+          title: epic.title,
+          completed: issue.sub_issues_summary?.completed ?? 0,
+          total: issue.sub_issues_summary?.total ?? 0,
+          openChildren,
+        };
+      }),
+    );
+  } catch (e) {
+    note("gh epics (sub-issues)", e);
+    return null;
+  }
+}
+
 interface SpecMeta {
   status: string;
   adrs: string[];
@@ -784,6 +925,7 @@ async function main(): Promise<void> {
     realityProbe,
     stageSlots,
     mergedShow,
+    epics,
   ] = await Promise.all([
     gitState(),
     ghIssues(["--assignee", "@me", "--label", "agent-working"]),
@@ -815,6 +957,8 @@ async function main(): Promise<void> {
     probeStageSlots(),
     // Merged Show PRs owing their post-merge Mode (a) review (#2808).
     ghMergedShowPRs(),
+    // Open epics + native sub-issue progress and child readiness (#2957).
+    ghOpenEpics(),
   ]);
   // The slot probe collects its own degrade reasons (unreachable box, a failing
   // `gh pr view`) instead of reaching into the module-level list; merge them so
@@ -958,6 +1102,9 @@ async function main(): Promise<void> {
     out.push("");
     out.push(mainTreeIsolationDirective(conc.liveSessions));
   }
+  out.push("");
+
+  out.push(...renderEpicsSection(epics));
   out.push("");
 
   out.push("## Issues (working / awaiting / ready)");

@@ -2624,9 +2624,16 @@
                         "type": "integer"
                       },
                       "signUpCount": {
-                        "maximum": 9007199254740991,
-                        "minimum": 0,
-                        "type": "integer"
+                        "anyOf": [
+                          {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "slug": {
                         "type": "string"
@@ -4197,9 +4204,16 @@
                       "type": "string"
                     },
                     "signUpCount": {
-                      "maximum": 9007199254740991,
-                      "minimum": 0,
-                      "type": "integer"
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "slug": {
                       "type": "string"
@@ -4356,9 +4370,16 @@
                       "type": "string"
                     },
                     "signUpCount": {
-                      "maximum": 9007199254740991,
-                      "minimum": 0,
-                      "type": "integer"
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "slug": {
                       "type": "string"
@@ -4867,9 +4888,16 @@
               "type": "string"
             },
             "signUpCount": {
-              "maximum": 9007199254740991,
-              "minimum": 0,
-              "type": "integer"
+              "anyOf": [
+                {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "slug": {
               "type": "string"

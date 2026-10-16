@@ -53,5 +53,8 @@ export function eventUpdateVars(
     kindId: values.kindId,
     participationFormat: values.participationFormat,
     audience: values.audience,
+    // 007 EARS-12 (#2913) — always sent: the editor shows the option's state, so
+    // a save writes exactly what the operator sees.
+    hideSignUpCount: values.hideSignUpCount,
   };
 }

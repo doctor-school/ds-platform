@@ -77,6 +77,15 @@ describe("019 EARS-2 — DoctorEventCard payload", () => {
     expect(DoctorEventCardSchema.safeParse(withoutCount).success).toBe(false);
   });
 
+  it("019 EARS-19: a hidden registrant count is `null`, never a negative or absent number", () => {
+    expect(
+      DoctorEventCardSchema.parse({ ...BASE, signUpCount: null }).signUpCount,
+    ).toBeNull();
+    expect(
+      DoctorEventCardSchema.safeParse({ ...BASE, signUpCount: -1 }).success,
+    ).toBe(false);
+  });
+
   it("019 EARS-2.6: zero cost is a valid Pul cost — the free-for-the-doctor reading", () => {
     expect(DoctorEventCardSchema.parse({ ...BASE, pulCost: 0 }).pulCost).toBe(
       0,

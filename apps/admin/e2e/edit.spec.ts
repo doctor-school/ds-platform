@@ -1,0 +1,122 @@
+import {
+  createPublishedEvent,
+  retireEventFromStorefronts,
+  signInAsAdmin,
+} from "@ds/e2e/admin-events";
+import { expect, test, type Page } from "@playwright/test";
+import { evidenceShot } from "./support/evidence-shot";
+
+/**
+ * 007 EARS-12 (#2913), browser half — the event editor's «Скрыть число
+ * записавшихся».
+ *
+ * The unit rows (`lib/event-form-fields.test.ts`, `lib/event-create-vars.test.ts`,
+ * `lib/event-update-vars.test.ts`) prove the projection and the request bodies;
+ * the API e2e (`apps/api/test/admin/edit-event.e2e-spec.ts`) proves the column.
+ * What only a browser proves is the operator's round trip: the option is off on
+ * a new event, ticking it and saving persists it (the reopened editor shows it
+ * on), the public read then serves `signUpCount: null` (019 EARS-19), and
+ * unticking it brings the number back.
+ *
+ * The spec creates its OWN published event (titled with the run's timestamp, so
+ * a re-run never collides) and takes it off every storefront at the end.
+ *
+ * `E2E_SHOT_DIR` opts into the render evidence the PR body cites — the edit form
+ * with the option ON, at 1440 and 390, light and dark (`support/evidence-shot.ts`).
+ *
+ * Dev-stand-gated like every `apps/admin/e2e` flow spec (see
+ * `playwright.flows.config.ts`): the bootstrap provisions a real `platform_admin`
+ * and throws when `IDP_*` is absent.
+ */
+const OPTION_LABEL = "Скрыть число записавшихся";
+
+/** The bare public Academy read (`GET /v1/public/events`) — the event's `signUpCount`. */
+async function publicSignUpCount(
+  page: Page,
+  eventId: string,
+): Promise<number | null | undefined> {
+  const read = await page.evaluate(async (id) => {
+    // `no-store`: the read is `Cache-Control: public, max-age=30`, and the
+    // browser would otherwise answer the second read from the first.
+    const res = await fetch("/v1/public/events", {
+      cache: "no-store",
+      headers: { accept: "application/json" },
+    });
+    const cards = res.ok
+      ? ((await res.json()) as { id: string; signUpCount: number | null }[])
+      : [];
+    const card = cards.find((c) => c.id === id);
+    return {
+      status: res.status,
+      found: Boolean(card),
+      count: card?.signUpCount,
+    };
+  }, eventId);
+  expect(read.status, "public events read").toBe(200);
+  expect(read.found, "the published event is on the public read").toBe(true);
+  return read.count;
+}
+
+/**
+ * Toggle a DS `Checkbox` the way a user does: the real input is `sr-only` behind
+ * its painted box, so the click goes to the wrapping `<label>` (the
+ * `legacy-broadcast.spec.ts` precedent).
+ */
+async function toggle(page: Page, testId: string): Promise<void> {
+  await page.getByTestId(testId).locator("xpath=ancestor::label[1]").click();
+}
+
+async function saveAndReopen(page: Page, eventId: string): Promise<void> {
+  await page.getByTestId("submit-event").click();
+  await expect(page.getByTestId("edit-ok")).toBeVisible({ timeout: 20_000 });
+  await page.goto(`/events/${eventId}`);
+  await expect(page.getByTestId("event-form")).toBeVisible();
+}
+
+test.describe("007 EARS-12 — «Скрыть число записавшихся» in the event editor", () => {
+  test("007 EARS-12: the create form offers the option off, and not on an архивный эфир", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+    await page.goto("/events/create");
+    const option = page.getByLabel(OPTION_LABEL);
+    await expect(option).toBeVisible();
+    await expect(option).not.toBeChecked();
+    // The legacy create body has no such key — the box is not offered there.
+    await toggle(page, "legacy-toggle");
+    await expect(page.getByTestId("legacy-toggle")).toBeChecked();
+    await expect(page.getByTestId("hide-sign-up-count")).toHaveCount(0);
+  });
+
+  test("007 EARS-12 / 019 EARS-19: on → saved, reopened on, public count null; off → the number returns", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+    const id = await createPublishedEvent(
+      page,
+      `Скрытый счётчик ${Date.now()}`,
+      { audience: "experts" },
+    );
+    try {
+      const option = page.getByLabel(OPTION_LABEL);
+      await expect(option).not.toBeChecked();
+      expect(typeof (await publicSignUpCount(page, id))).toBe("number");
+
+      await toggle(page, "hide-sign-up-count");
+      await expect(option).toBeChecked();
+      await saveAndReopen(page, id);
+      await expect(page.getByLabel(OPTION_LABEL)).toBeChecked();
+      expect(await publicSignUpCount(page, id)).toBeNull();
+      await page.getByTestId("hide-sign-up-count").scrollIntoViewIfNeeded();
+      await evidenceShot(page, "admin-edit-option-on");
+
+      await toggle(page, "hide-sign-up-count");
+      await expect(page.getByLabel(OPTION_LABEL)).not.toBeChecked();
+      await saveAndReopen(page, id);
+      await expect(page.getByLabel(OPTION_LABEL)).not.toBeChecked();
+      expect(typeof (await publicSignUpCount(page, id))).toBe("number");
+    } finally {
+      await retireEventFromStorefronts(page, id);
+    }
+  });
+});

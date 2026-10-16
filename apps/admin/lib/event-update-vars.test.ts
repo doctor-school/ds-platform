@@ -29,6 +29,7 @@ const base: EventFormValues = {
   participationFormat: "online",
   audience: "experts",
   projectId: null,
+  hideSignUpCount: false,
 };
 
 describe("eventUpdateVars", () => {
@@ -77,7 +78,19 @@ describe("eventUpdateVars", () => {
       kindId: "22222222-2222-4222-8222-222222222222",
       participationFormat: "online",
       audience: "experts",
+      hideSignUpCount: false,
     });
+  });
+
+  it("007 EARS-12: the update carries «Скрыть число записавшихся» as the editor left it — on and off alike", () => {
+    expect(
+      eventUpdateVars({ ...base, hideSignUpCount: true }, { legacy: false })
+        .hideSignUpCount,
+    ).toBe(true);
+    expect(
+      eventUpdateVars({ ...base, hideSignUpCount: false }, { legacy: true })
+        .hideSignUpCount,
+    ).toBe(false);
   });
 
   it("012 EARS-26/29: the update carries the kind, the participation format and the audience, and never a project link", () => {

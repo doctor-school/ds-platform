@@ -43,7 +43,11 @@ export interface EventsFeedCard {
   readonly speakers: readonly string[];
   readonly specialties?: readonly string[];
   readonly state: "upcoming" | "live" | "past";
-  readonly signUpCount: number;
+  /**
+   * Colleagues signed up; `null` while the event's «Скрыть число
+   * записавшихся» option is on (019 EARS-19) — the card then has no count line.
+   */
+  readonly signUpCount: number | null;
   readonly pulCost?: number;
   readonly nmo?: boolean;
   readonly city?: string;
@@ -238,8 +242,9 @@ export function buildFeedItems(
         : {}),
       live,
       liveLabel: copy.card.live,
-      // 019 EARS-2 as narrowed 2026-10-08: never on a past card.
-      ...(!isPast
+      // 019 EARS-2 as narrowed 2026-10-08: never on a past card; 019 EARS-19:
+      // never for an event whose count the operator hid (`null`).
+      ...(!isPast && card.signUpCount !== null
         ? { signUpCount: card.signUpCount, signUpLabel: copy.card.signUp }
         : {}),
       registered: !isPast && registeredSlugs.has(card.slug),

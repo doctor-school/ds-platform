@@ -90,6 +90,11 @@ export interface EventFormValues {
    * «Проекты» tab owns the links of an existing event.
    */
   projectId: string | null;
+  /**
+   * 007 EARS-12 (#2913) — «Скрыть число записавшихся». Public reads then serve
+   * `signUpCount: null` (019 EARS-19). Not part of the legacy-эфир create body.
+   */
+  hideSignUpCount: boolean;
 }
 
 const PDF_MIME = "application/pdf";
@@ -239,6 +244,7 @@ export function EventForm({
         fieldsValue.participationFormat as EventParticipationFormat,
       audience: fieldsValue.audience as EventAudience,
       projectId: detail ? null : fieldsValue.projectId || null,
+      hideSignUpCount: fieldsValue.hideSignUpCount,
       // Only on CREATE: the route choice and the recording are authoring
       // facts, and the detail page's update never carries either.
       ...(detail ? null : legacySubmission(fieldsValue)),
@@ -326,6 +332,37 @@ export function EventForm({
         />
 
         <EventClassificationFields form={form} detail={detail} />
+
+        {/* 007 EARS-12 (#2913) — a public-display option, beside the audience.
+            Same design-system checkbox as «Это архивный эфир». Not offered while
+            an архивный эфир is being CREATED: the legacy create body has no such
+            key, so a ticked box there would be a value silently dropped. */}
+        {isCreateLegacy ? null : (
+          <FormField
+            control={form.control}
+            name="hideSignUpCount"
+            render={({ field }) => (
+              <FormItem>
+                <FormControl>
+                  <Checkbox
+                    id="hideSignUpCount"
+                    data-testid="hide-sign-up-count"
+                    checked={field.value}
+                    name={field.name}
+                    onBlur={field.onBlur}
+                    onChange={(e) => field.onChange(e.target.checked)}
+                    ref={field.ref}
+                  >
+                    {t("events.fields.hideSignUpCount")}
+                  </Checkbox>
+                </FormControl>
+                <FormMessage>
+                  {t("events.fields.hideSignUpCountHint")}
+                </FormMessage>
+              </FormItem>
+            )}
+          />
+        )}
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <FormField

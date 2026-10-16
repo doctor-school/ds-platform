@@ -341,6 +341,7 @@ export class EventsRepository {
         | "kindId"
         | "participationFormat"
         | "audience"
+        | "hideSignUpCount"
       >
     >,
   ): Promise<EventAggregate | null> {

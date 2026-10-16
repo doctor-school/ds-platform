@@ -55,6 +55,29 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
     ).toBe(false);
   });
 
+  it("019 EARS-19: a hidden registrant count is served as `null` on upcoming and past cards — never omitted", () => {
+    expect(
+      UpcomingBroadcastCardSchema.parse(card({ signUpCount: null }))
+        .signUpCount,
+    ).toBeNull();
+    expect(
+      PastBroadcastCardSchema.safeParse(
+        card({
+          signUpCount: null,
+          state: "ended",
+          recording: {
+            state: "preparing",
+            primaryKind: null,
+            secondaryKind: null,
+            posterUrl: null,
+            expectedBy: null,
+            durationSec: null,
+          },
+        }),
+      ).success,
+    ).toBe(true);
+  });
+
   it("NEW: a past card carries the same kind, format and count fields", () => {
     const parsed = PastBroadcastCardSchema.safeParse(
       card({

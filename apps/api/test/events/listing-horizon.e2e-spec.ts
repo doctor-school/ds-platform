@@ -72,16 +72,20 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     let pastOld = { id: "", slug: "" };
     let pastAncient = { id: "", slug: "" };
     let hybrid = { id: "", slug: "" };
+    let hiddenCount = { id: "", slug: "" };
+    let hiddenPast = { id: "", slug: "" };
 
     const makeEvent = async (input: {
       offsetMs: number;
       format?: "online" | "offline" | "hybrid";
       state?: "published" | "ended";
+      /** 007 EARS-12 (#2913) — «Скрыть число записавшихся». */
+      hideSignUpCount?: boolean;
     }): Promise<{ id: string; slug: string }> => {
       const id = randomUUID();
       const slug = `horizon-${id.slice(0, 8)}`;
       await pool.query(
-        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, participation_format, kind_id, audience) VALUES ($1, $2, $3, $4, $5, $6, $8, $7, ${eventClassificationSql("experts")})`,
+        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, participation_format, hide_sign_up_count, kind_id, audience) VALUES ($1, $2, $3, $4, $5, $6, $8, $7, $9, ${eventClassificationSql("experts")})`,
         [
           id,
           slug,
@@ -91,6 +95,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           90,
           input.format ?? "online",
           input.state ?? "published",
+          input.hideSignUpCount ?? false,
         ],
       );
       eventIds.push(id);
@@ -176,8 +181,18 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // on «Прошедшие»).
       pastAncient = await makeEvent({ offsetMs: -400 * DAY, state: "ended" });
 
+      // 019 EARS-19 (#2913) — an event whose operator hid the registrant
+      // count, upcoming (with real sign-ups behind it) and past.
+      hiddenCount = await makeEvent({ offsetMs: 4 * DAY, hideSignUpCount: true });
+      hiddenPast = await makeEvent({
+        offsetMs: -4 * DAY,
+        state: "ended",
+        hideSignUpCount: true,
+      });
+
       await register(near.slug);
       await register(near.slug);
+      await register(hiddenCount.slug);
     }, 120_000);
 
     afterAll(async () => {
@@ -349,6 +364,31 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       expect(bare?.signUpCount).toBe(2);
       expect(bare?.format).toBe("online");
+    });
+
+    it("019 EARS-19: while the event's «Скрыть число записавшихся» is on, the Academy read serves `signUpCount: null` — upcoming, past and the bare read; off, the number", async () => {
+      const upcoming = await page(
+        `timeframe=upcoming&from=${today}&to=${addDoctorEventsFeedDays(today, 14)}`,
+      );
+      // The event HAS an active registration — the count is withheld, not zero.
+      expect(cardOf(upcoming.data, hiddenCount.id)?.signUpCount).toBeNull();
+      expect(cardOf(upcoming.data, near.id)?.signUpCount).toBe(2);
+
+      const past = await page(
+        `timeframe=past&from=${addDoctorEventsFeedDays(today, -14)}&to=${today}`,
+      );
+      expect(cardOf(past.data, hiddenPast.id)?.signUpCount).toBeNull();
+      expect(cardOf(past.data, pastNear.id)?.signUpCount).toBe(0);
+
+      const legacy = await app.inject({
+        method: "GET",
+        url: "/v1/public/events",
+      });
+      const bare = (legacy.json() as UpcomingBroadcastCard[]).find(
+        (c) => c.id === hiddenCount.id,
+      );
+      expect(bare).toBeDefined();
+      expect(bare?.signUpCount).toBeNull();
     });
 
     it("NEW: «Прошедшие» extends BACKWARD — `nextFrom` names an older bound and that widening reaches older events (rows 30, 32)", async () => {

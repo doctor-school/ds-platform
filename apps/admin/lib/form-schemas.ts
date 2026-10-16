@@ -142,6 +142,8 @@ export function eventFormSchema({
         }
       }),
       legacy: z.boolean(),
+      // 007 EARS-12 (#2913) — «Скрыть число записавшихся», a plain boolean.
+      hideSignUpCount: z.boolean(),
       // Free-text at the object level; the CONDITIONAL rules below are what make it
       // a real source triple, so an untouched block on a platform event is not an
       // error the operator has to clear before saving.
@@ -225,6 +227,8 @@ export interface EventFormFields {
   audience: EventAudience | "";
   /** 012 EARS-30 — create only: the linked project ("" = none). */
   projectId: string;
+  /** 007 EARS-12 (#2913) — «Скрыть число записавшихся» (default off). */
+  hideSignUpCount: boolean;
 }
 
 /** The stream-config form validator — the SSOT request schema verbatim (EARS-3). */

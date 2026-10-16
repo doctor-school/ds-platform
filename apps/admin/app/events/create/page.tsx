@@ -14,8 +14,8 @@ import type { CreateEventProjectRequest, EventAdminDetail } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { EventForm } from "@/components/event-form";
+import { eventCreateVars } from "@/lib/event-create-vars";
 import {
-  type CreateEventVars,
   type CreateLegacyBroadcastVars,
   eventProjectsUrl,
 } from "@/providers/data-provider";
@@ -121,19 +121,8 @@ export default function CreateEventPage() {
               );
               return;
             }
-            const vars: CreateEventVars = {
-              title: values.title,
-              school: values.school,
-              startsAtMsk: values.startsAtMsk,
-              durationMin: values.durationMin,
-              description: values.description,
-              specialties: values.specialties,
-              partnerRef: values.partnerRef,
-              programPdf: values.programPdf,
-              ...classification,
-            };
             create(
-              { resource: "events", values: vars },
+              { resource: "events", values: eventCreateVars(values) },
               {
                 onSuccess,
                 onError: () => setError(t("events.errors.createFailed")),

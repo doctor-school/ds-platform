@@ -66,8 +66,12 @@ export const DoctorEventCardSchema = z
     nmo: z.boolean(),
     /** Cost in Pul attention points; `0` is the free-for-the-doctor reading. */
     pulCost: z.number().int().nonnegative(),
-    /** Colleagues signed up — rendered in EVERY card state. */
-    signUpCount: z.number().int().nonnegative(),
+    /**
+     * Colleagues signed up — rendered in EVERY card state, except that it is
+     * `null` while the event's «Скрыть число записавшихся» option is on
+     * (019 EARS-19): the card then renders no count line at all.
+     */
+    signUpCount: z.number().int().nonnegative().nullable(),
     city: z.string().optional(),
     seatsLeft: z.number().int().nonnegative().optional(),
     state: DoctorEventCardStateSchema,

@@ -416,6 +416,12 @@ export const CreateEventRequestSchema = z.object({
    * but the command never infers it.
    */
   audience: EventAudienceSchema,
+  /**
+   * 007 EARS-12 (#2913) — «Скрыть число записавшихся». A display attribute,
+   * not lifecycle visibility: while it is on, every public card read serves
+   * `signUpCount: null` (019 EARS-19). Default off.
+   */
+  hideSignUpCount: z.boolean().default(false),
 });
 export type CreateEventRequest = z.infer<typeof CreateEventRequestSchema>;
 
@@ -503,6 +509,8 @@ export const UpdateEventRequestSchema = z.object({
   participationFormat: EventParticipationFormatSchema.optional(),
   /** 012 EARS-29 — the storefront selector; omitted leaves it. */
   audience: EventAudienceSchema.optional(),
+  /** 007 EARS-12 (#2913) — «Скрыть число записавшихся»; omitted leaves it. */
+  hideSignUpCount: z.boolean().optional(),
   /**
    * 014 EARS-23 (#1741) — `origin` is set once at creation and **rejected** by
    * every update path. Declared as `z.never().optional()` rather than simply
@@ -557,6 +565,11 @@ export const EventAdminDetailSchema = z.object({
   participationFormat: EventParticipationFormatSchema,
   /** 012 EARS-29 — the storefront selector. */
   audience: EventAudienceSchema,
+  /**
+   * 007 EARS-12 (#2913) — the option's own state, so the editor round-trips
+   * it. No admin read carries the registrant count itself.
+   */
+  hideSignUpCount: z.boolean(),
   /**
    * #1593 — the aggregate's optimistic-concurrency counter, and the value the
    * admin read's `ETag` carries as `W/"<version>"` (`taxonomyETag`). It is
@@ -820,8 +833,11 @@ export const UpcomingBroadcastCardSchema = z.object({
    * Wave-2 entry gate §4.2 (owner decision A2) — the colleagues' sign-up count:
    * active participant registrations, the same count the doctor card carries.
    * Whether a card SHOWS it (upcoming and live, never past) is a UI rule.
+   * `null` exactly while the event's «Скрыть число записавшихся» option is on
+   * (019 EARS-19, 007 EARS-12): the number is never delivered to be hidden
+   * client-side.
    */
-  signUpCount: z.number().int().nonnegative(),
+  signUpCount: z.number().int().nonnegative().nullable(),
 });
 export type UpcomingBroadcastCard = z.infer<typeof UpcomingBroadcastCardSchema>;
 

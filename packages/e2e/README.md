@@ -727,6 +727,25 @@ The golden verified EARS-6 journey remains distinct. Run this selected scenario
 on the lead-selected stand; this test-only change requires no owner Stage-B
 request or new slot.
 
+### SMS sign-in eligibility hint (003 EARS-55 / EARS-56)
+
+`Academy shows the static SMS sign-in hint and neutrally accepts an unconfirmed phone`
+(`steps/signin-sms-hint.steps.ts`, #2990) opens the actual Academy
+`/login?method=code` door, chooses SMS and verifies the exact shared eligibility
+sentence and its radiogroup description. The sentence is invariant while typing
+and absent on the email channel. A fresh owned phone is checked against the
+isolated branch account mirror in a read-only transaction before its real SMS
+request. The exact `{status:'otp_sent'}` acknowledgement leads to the unchanged
+six-digit code step; no SMS may reach that phone over the complete 20-second
+sink-delivery horizon, and session/profile access stays unauthorized before and
+after. A missing sink or mirror contour fails rather than skipping. Traces stay
+off and no code is supplied. `login-door.channels.test.tsx` retains the shared
+component contract; `apps/api/test/auth/login-otp.e2e-spec.ts` EARS-56 retains
+unconfirmed-counter and no-audit assertions, with native EARS-16 timing proof
+remaining there. Browser proof claims neither internal counter/timing invariants
+nor a real Yandex challenge. The broader native feature declaration is preserved.
+This coverage change has no render surface or owner Stage-B slot.
+
 ### Verified re-registration password preservation (003 EARS-23/41)
 
 `Academy verified re-registration preserves the original password and display name`

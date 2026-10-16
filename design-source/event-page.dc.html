@@ -66,9 +66,120 @@
     </main>
   </sc-if>
 
+  <!-- ═══ в архиве · прямая ссылка · без действий ═══ -->
+  <sc-if value="{{ stArchive }}" hint-placeholder-val="{{ false }}">
+    <main data-screen-label="d-event · в архиве" style="max-width:1104px;margin:-80px auto 0;padding:{{ mainPad }};position:relative;z-index:1">
+      <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(28px,5vw,48px)">
+        <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:12px">Архив · прошло 28 августа 2026</div>
+        <div style="font-size:clamp(19px,2.6vw,24px);font-weight:800;letter-spacing:-.02em;color:{{ ink }};margin-bottom:10px">Мероприятие в архиве</div>
+        <div style="font-size:14px;line-height:1.65;color:{{ inkMuted }};max-width:560px">Событие перенесено в архив школы. Запись и материалы на этой странице больше не публикуются.</div>
+      </div>
+    </main>
+  </sc-if>
+
   <!-- ═══════════ Основной поток страницы ═══════════ -->
   <sc-if value="{{ stMain }}" hint-placeholder-val="{{ true }}">
   <main style="max-width:1104px;margin:-80px auto 0;padding:{{ mainPad }};position:relative;z-index:1">
+
+    <!-- ═══ прошло · плеер записи под постер-шапкой (вобрал event-page-recording) ═══ -->
+    <sc-if value="{{ recPlayer }}" hint-placeholder-val="{{ false }}">
+      <div id="player" data-screen-label="d-event · прошло · плеер записи" style="background:{{ surface }};border:{{ playerCardBorder }};box-shadow:{{ playerCardShadow }};margin:{{ playerCardMargin }}">
+        <div style="position:relative;background:#0A1B33;aspect-ratio:16/9;overflow:hidden">
+          <div style="position:absolute;inset:0;padding:clamp(20px,4vw,48px) clamp(20px,4vw,48px) clamp(64px,8vw,88px);display:flex;flex-direction:column;justify-content:space-between">
+            <div style="font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#6BB1F7">Doctor.School · Школа ортобиологии</div>
+            <div>
+              <div style="font-size:clamp(18px,3vw,34px);font-weight:800;letter-spacing:-.03em;line-height:1.1;color:#fff;max-width:640px">PRP при гонартрозе</div>
+              <div style="font-size:clamp(11px,1.4vw,13px);font-weight:700;color:#AED4FB;margin-top:10px">28 августа 2026 · {{ speakerSurnames }}</div>
+            </div>
+          </div>
+          <sc-if value="{{ recViewer }}" hint-placeholder-val="{{ true }}">
+            <button title="Смотреть" style="font:inherit;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:clamp(64px,9vw,92px);height:clamp(64px,9vw,92px);background:#fff;border:0;cursor:pointer;box-shadow:5px 5px 0 #114D9E;display:flex;align-items:center;justify-content:center" style-hover="transform:translate(calc(-50% + 2px),calc(-50% + 2px));box-shadow:3px 3px 0 #114D9E">
+              <span style="width:0;height:0;border-left:26px solid #114D9E;border-top:16px solid transparent;border-bottom:16px solid transparent;margin-left:6px"></span>
+            </button>
+            <div style="position:absolute;left:0;right:0;bottom:0;padding:0 clamp(16px,3vw,28px) clamp(14px,2.5vw,20px)">
+              <div style="height:6px;background:rgba(255,255,255,.22);position:relative">
+                <span style="position:absolute;left:0;top:0;bottom:0;width:{{ seekPct }};background:#6BB1F7;transition:width .3s"></span>
+                <sc-for list="{{ chapterMarks }}" as="mk" hint-placeholder-count="2">
+                  <span title="{{ mk.title }}" style="position:absolute;left:{{ mk.left }};top:-2px;bottom:-2px;width:2px;background:rgba(255,255,255,.55)"></span>
+                </sc-for>
+              </div>
+              <div style="display:flex;justify-content:space-between;gap:12px;margin-top:10px;font-size:12px;font-weight:700;color:#AED4FB;font-variant-numeric:tabular-nums">
+                <span>{{ seekLabel }} / {{ playerTotal }} · {{ chapterNow }}</span><span style="text-transform:uppercase;letter-spacing:.08em">{{ playerFoot }}</span>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ guest }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;inset:0;background:rgba(7,17,32,.78);display:flex;align-items:center;justify-content:center;padding:20px">
+              <div style="background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(22px,4vw,36px);max-width:430px;text-align:center">
+                <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:12px">{{ gateKicker }}</div>
+                <div style="font-size:clamp(18px,2.4vw,22px);font-weight:800;letter-spacing:-.02em;color:{{ ink }};line-height:1.25">Войдите, чтобы посмотреть запись</div>
+                <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }};margin-top:12px">Вход — по почте, две минуты.</div>
+                <a href="auth.dc.html" style="display:inline-block;margin-top:20px;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:15px 28px;text-decoration:none;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Войти и смотреть ↗</a>
+                <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }};margin-top:14px">Нет аккаунта? <a href="auth.dc.html" style="color:{{ accent }};font-weight:700" style-hover="text-decoration:underline;text-underline-offset:3px">Создать</a></div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+
+        <!-- мета-строка -->
+        <div style="padding:{{ metaPad }};display:flex;align-items:center;gap:clamp(20px,3vw,40px);flex-wrap:wrap">
+          <div><div style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Эфир прошёл</div><div style="font-size:15px;font-weight:700;color:{{ ink }};margin-top:3px">28 августа 2026</div></div>
+          <div><div style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Смотрели</div><div style="font-size:15px;font-weight:700;color:{{ ink }};margin-top:3px">214 коллег</div></div>
+          <div><div style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Доступна ещё</div><div style="font-size:15px;font-weight:700;color:{{ ink }};margin-top:3px">30 дней</div></div>
+          <div style="margin-left:auto;display:flex;gap:12px;flex-wrap:wrap">
+            <sc-if value="{{ recViewer }}" hint-placeholder-val="{{ true }}">
+              <button onClick="{{ toMaterials }}" style="font:inherit;font-size:13px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:10px 16px;cursor:pointer;box-shadow:3px 3px 0 {{ shadowSm }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ shadowSm }}">Материалы ↓</button>
+              <button style="font:inherit;font-size:13px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:10px 16px;cursor:pointer;box-shadow:3px 3px 0 {{ shadowSm }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ shadowSm }}">Сертификат</button>
+            </sc-if>
+            <sc-if value="{{ guest }}" hint-placeholder-val="{{ false }}">
+              <span style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Материалы и сертификат — после входа</span>
+            </sc-if>
+          </div>
+        </div>
+
+        <!-- только оригинал · честная плашка -->
+        <sc-if value="{{ recRaw }}" hint-placeholder-val="{{ false }}">
+          <div style="background:{{ tint }};padding:16px clamp(16px,3vw,28px);font-size:13px;line-height:1.6;color:{{ tintInk }}"><b>Пока это оригинальная запись трансляции.</b> Смонтированную версию — без пауз и техперерывов — опубликуем здесь же; ссылка не изменится.</div>
+        </sc-if>
+      </div>
+
+      <!-- монтаж · спойлер оригинала · 014 EARS-8 -->
+      <sc-if value="{{ recSpoiler }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="d-event · прошло · оригинал трансляции" style="border:2px solid {{ hairline }};margin-top:16px;background:{{ surface }}">
+          <button onClick="{{ toggleSpoiler }}" aria-expanded="{{ spoilerOpen }}" style="font:inherit;width:100%;text-align:left;background:transparent;border:0;padding:18px clamp(16px,3vw,28px);cursor:pointer;display:flex;align-items:center;gap:14px;flex-wrap:wrap" style-hover="background:{{ tint }}">
+            <span style="font-size:14px;font-weight:800;color:{{ ink }}">{{ spoilerArrow }} Смотреть оригинал трансляции</span>
+            <span style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">2 ч 04 мин · без монтажа, с паузами и вопросами между блоками</span>
+          </button>
+          <sc-if value="{{ spoilerOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:0 clamp(16px,3vw,28px) 24px">
+              <div style="position:relative;background:#0A1B33;aspect-ratio:16/9;max-width:560px;display:flex;align-items:center;justify-content:center">
+                <div style="position:absolute;top:14px;left:16px;font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#6BB1F7">Оригинал трансляции</div>
+                <button title="Смотреть оригинал" style="font:inherit;width:60px;height:60px;background:#fff;border:0;cursor:pointer;box-shadow:4px 4px 0 #114D9E;display:flex;align-items:center;justify-content:center" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 #114D9E"><span style="width:0;height:0;border-left:18px solid #114D9E;border-top:11px solid transparent;border-bottom:11px solid transparent;margin-left:4px"></span></button>
+                <div style="position:absolute;right:16px;bottom:12px;font-size:12px;font-weight:700;color:#AED4FB;font-variant-numeric:tabular-nums">2:04:12</div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+    </sc-if>
+
+    <!-- ═══ прошло · запись готовится ═══ -->
+    <sc-if value="{{ recPrep }}" hint-placeholder-val="{{ false }}">
+      <div id="player" data-screen-label="d-event · прошло · запись готовится" style="{{ prepCardStyle }}">
+        <div style="{{ prepTimeCol }}">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ tintInk }}">Запись</div>
+          <div style="font-size:{{ prepTimeSize }};font-weight:800;line-height:1;letter-spacing:-.04em;color:{{ tintInk }}">≈2 дня</div>
+          <div style="font-size:12.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:{{ regTimeSubColor }};line-height:1.6">на монтаж</div>
+        </div>
+        <div style="{{ prepBodyStyle }}">
+          <div style="min-width:220px;flex:1">
+            <div style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:{{ ink }};margin-bottom:8px">Запись готовится</div>
+            <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Эфир завершился 28 августа в 20:32 МСК. Монтируем запись — опубликуем на этой странице до 30 августа, 12:00 МСК. Всем зарегистрированным пришлём письмо со ссылкой.</div>
+          </div>
+          <button onClick="{{ toggleRemind }}" style="font:inherit;font-size:15px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:15px 22px;cursor:pointer;white-space:nowrap;box-shadow:4px 4px 0 {{ shadowSm }};align-self:flex-start" style-hover="transform:translate(1px,1px);box-shadow:3px 3px 0 {{ shadowSm }}">{{ remindLabel }}</button>
+        </div>
+      </div>
+    </sc-if>
 
     <!-- ═══ Блок 3 · запись на событие · единственный CTA «Участвовать» (вариант Б — в потоке) ═══ -->
     <div data-screen-label="d-event · блок записи" style="{{ regCardStyle }}">
@@ -173,11 +284,8 @@
         <sc-if value="{{ ctaCancelled }}" hint-placeholder-val="{{ false }}">
           <div style="min-width:220px">
             <div style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:{{ ink }};margin-bottom:8px">Событие отменено</div>
-            <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Мы вернули очки и напишем, когда назначим новую дату.</div>
+            <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Новую дату объявим на этой странице.</div>
           </div>
-          <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
-            <div style="background:{{ tint }};padding:12px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px;font-weight:700;color:{{ tintInk }};font-variant-numeric:tabular-nums"><span style="font-weight:800">+50 Pul</span><span>возврат — событие отменено · 22 августа, 14:02</span><a href="#" style="margin-left:auto;font-weight:800;color:{{ tintInk }};text-decoration:underline;text-underline-offset:3px">История начислений →</a></div>
-          </sc-if>
         </sc-if>
 
         <!-- Прошло -->
@@ -185,9 +293,11 @@
           <div style="display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap">
             <div style="min-width:220px;flex:1">
               <div style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:{{ ink }};margin-bottom:8px">Событие завершено</div>
-              <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Запись, материалы и оценка — ниже на этой странице.</div>
+              <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">{{ pastSub }}</div>
             </div>
-            <a href="#after" style="font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:13px 22px;white-space:nowrap;box-shadow:4px 4px 0 {{ shadowSm }};text-decoration:none" style-hover="transform:translate(1px,1px)">К записи ↓</a>
+            <sc-if value="{{ pastHasRec }}" hint-placeholder-val="{{ true }}">
+              <a href="#player" onClick="{{ toRecording }}" style="font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:13px 22px;white-space:nowrap;box-shadow:4px 4px 0 {{ shadowSm }};text-decoration:none" style-hover="transform:translate(1px,1px);box-shadow:3px 3px 0 {{ shadowSm }}">К записи ↓</a>
+            </sc-if>
           </div>
         </sc-if>
       </div>
@@ -197,9 +307,10 @@
     <div data-screen-label="d-event · открытая часть" style="display:grid;grid-template-columns:{{ colsTemplate }};gap:clamp(32px,4vw,56px);margin-top:64px">
       <div>
         <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:28px">
-          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">О чём событие</span>
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">{{ aboutTitle }}</span>
           <span style="flex:1;border-top:2px solid {{ ink }}"></span>
         </div>
+        <sc-if value="{{ notPast }}" hint-placeholder-val="{{ true }}">
         <p style="margin:0 0 32px;font-size:16px;line-height:1.7;color:{{ inkBody }};text-wrap:pretty">PRP-терапия при гонартрозе: показания, доказательная база и рабочие протоколы. Разбираем реальный клинический случай — от отбора пациента до оценки результата через 6 месяцев. Вопросы спикеру — прямо в чате эфира.</p>
 
         <!-- тизер · доступен без регистрации -->
@@ -226,6 +337,29 @@
             <div><div style="font-size:16.5px;font-weight:700;color:{{ ink }};margin-bottom:6px">Ответы на вопросы из чата</div><div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Самые залайканные вопросы — первыми: решает аудитория.</div></div>
           </div>
         </div>
+
+        </sc-if>
+
+        <!-- прошло · «О чём эфир» · таймкоды ведут плеер -->
+        <sc-if value="{{ isPast }}" hint-placeholder-val="{{ false }}">
+          <p style="margin:0 0 36px;font-size:16px;line-height:1.7;color:{{ inkBody }};text-wrap:pretty">{{ pastLead }}</p>
+          <div data-screen-label="d-event · прошло · таймкоды" style="display:grid;gap:0">
+            <sc-for list="{{ chapters }}" as="c" hint-placeholder-count="3">
+              <sc-if value="{{ c.seekable }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ c.on }}" aria-label="{{ c.aria }}" style="{{ c.rowStyle }}" style-hover="background:{{ tint }}">
+                  <span style="display:block"><span style="display:block;font-size:26px;font-weight:800;color:{{ accent }};letter-spacing:-.02em">{{ c.num }}</span><span style="display:inline-block;font-size:12.5px;font-weight:700;color:{{ accent }};margin-top:4px;font-variant-numeric:tabular-nums;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px">{{ c.tc }} ▸</span></span>
+                  <span style="display:block"><span style="display:block;font-size:16.5px;font-weight:700;color:{{ ink }};margin-bottom:6px">{{ c.title }}</span><span style="display:block;font-size:14px;line-height:1.6;color:{{ inkMuted }}">{{ c.desc }}</span></span>
+                </button>
+              </sc-if>
+              <sc-if value="{{ c.fixed }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ c.rowStyle }}">
+                  <div><div style="font-size:26px;font-weight:800;color:{{ accent }};letter-spacing:-.02em">{{ c.num }}</div><div style="font-size:12px;font-weight:700;color:{{ inkFaint }};margin-top:4px;font-variant-numeric:tabular-nums">{{ c.range }}</div></div>
+                  <div><div style="font-size:16.5px;font-weight:700;color:{{ ink }};margin-bottom:6px">{{ c.title }}</div><div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">{{ c.desc }}</div></div>
+                </div>
+              </sc-if>
+            </sc-for>
+          </div>
+        </sc-if>
 
         <!-- рекламная маркировка · по закону -->
         <div style="margin-top:44px;border:2px solid {{ hairline }};padding:22px 26px;display:flex;align-items:center;gap:22px;flex-wrap:wrap">
@@ -257,8 +391,26 @@
               </div>
             </sc-for>
           </div>
+          <!-- прошло · материалы эфира -->
+          <sc-if value="{{ isPast }}" hint-placeholder-val="{{ false }}">
+            <div id="materials" data-screen-label="d-event · прошло · материалы" style="border:2px solid {{ hairline }};padding:24px;background:{{ surface }}">
+              <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:8px">Материалы эфира</div>
+              <div style="display:flex;flex-direction:column">
+                <sc-for list="{{ materials }}" as="mt" hint-placeholder-count="2">
+                  <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ true }}">
+                    <a href="#" onClick="{{ mt.on }}" style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:12px 6px;margin:0 -6px;border-top:{{ mt.top }};text-decoration:none" style-hover="background:{{ tint }}"><span style="font-size:13.5px;font-weight:700;color:{{ ink }}">{{ mt.name }}<span style="font-weight:600;color:{{ inkFaint }}"> · PDF</span></span><span style="font-size:12px;font-weight:700;color:{{ accent }};white-space:nowrap">{{ mt.action }}</span></a>
+                  </sc-if>
+                  <sc-if value="{{ guest }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:12px 0;border-top:{{ mt.top }}"><span style="font-size:13.5px;font-weight:700;color:{{ ink }}">{{ mt.name }}<span style="font-weight:600;color:{{ inkFaint }}"> · PDF</span></span><span style="font-size:12px;font-weight:700;color:{{ inkFaint }};white-space:nowrap">После входа</span></div>
+                  </sc-if>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
           <div style="background:{{ tint }};padding:24px;font-size:13.5px;line-height:1.65;color:{{ tintInk }}"><b>Школа ортобиологии</b> — результат проекта Академии: 12 уроков, 3 живых разбора. Событие входит в программу школы.<br><a href="doctor-feed.dc.html" style="display:inline-block;margin-top:12px;font-weight:700;color:{{ tintInk }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Открыть школу</a></div>
-          <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:4px 4px 0 {{ shadowSm }};padding:18px 22px;font-size:13.5px;font-weight:800;color:{{ ink }}">Уже записались 37 ортопедов<div style="margin-top:6px;font-size:12px;font-weight:600;color:{{ inkFaint }}">и 14 врачей смежных специальностей</div></div>
+          <sc-if value="{{ notPast }}" hint-placeholder-val="{{ true }}">
+            <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:4px 4px 0 {{ shadowSm }};padding:18px 22px;font-size:13.5px;font-weight:800;color:{{ ink }}">Уже записались 37 ортопедов<div style="margin-top:6px;font-size:12px;font-weight:600;color:{{ inkFaint }}">и 14 врачей смежных специальностей</div></div>
+          </sc-if>
         </div>
       </aside>
     </div>
@@ -454,28 +606,15 @@
           <span style="flex:1;border-top:2px solid {{ ink }}"></span>
         </div>
 
-        <!-- запись · юнит webinar-archive, отсюда только вход -->
-        <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }};display:flex;align-items:center;gap:22px;padding:24px 28px;flex-wrap:wrap">
-          <div style="width:150px;aspect-ratio:16/9;background:{{ tint }};display:flex;align-items:center;justify-content:center;flex:none;border:2px solid {{ border }}"><span style="font-size:18px;color:{{ tintInk }}">▶</span></div>
-          <div style="flex:1;min-width:200px">
-            <div style="font-size:16px;font-weight:800;letter-spacing:-.01em;color:{{ ink }}">Запись эфира готова · 92 минуты</div>
-            <div style="font-size:13px;line-height:1.6;color:{{ inkMuted }};margin-top:6px">Смотрели 214 врачей. Материалы: презентация спикера и протокол PRP.</div>
-          </div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap">
-            <a href="event-page-recording.dc.html" style="font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:14px 26px;white-space:nowrap;box-shadow:4px 4px 0 {{ border }};text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Смотреть запись ↗</a>
-            <a href="event-page-recording.dc.html" style="font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:12px 22px;white-space:nowrap;box-shadow:4px 4px 0 {{ shadowSm }};text-decoration:none" style-hover="transform:translate(1px,1px)">Материалы</a>
-          </div>
-        </div>
-
         <!-- итог НМО · только записанному -->
         <sc-if value="{{ registered }}" hint-placeholder-val="{{ false }}">
-          <div style="margin-top:24px;{{ nmoStyle }}">
+          <div style="margin-bottom:32px;{{ nmoStyle }}">
             <span style="font-size:14px;font-weight:800">{{ nmoHead }}</span>
             <span style="font-size:13px;font-weight:600;line-height:1.6">{{ nmoSub }}</span>
           </div>
         </sc-if>
 
-        <div style="display:grid;grid-template-columns:{{ colsTemplate }};gap:clamp(32px,4vw,56px);margin-top:32px;align-items:start">
+        <div style="display:grid;grid-template-columns:{{ colsTemplate }};gap:clamp(32px,4vw,56px);align-items:start">
           <!-- оценка и отзыв · REQ-118 -->
           <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:4px 4px 0 {{ shadowSm }};padding:28px">
             <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};margin-bottom:12px">Как прошло?</div>
@@ -542,6 +681,16 @@
       </div>
     </section>
   </main>
+  </sc-if>
+
+  <!-- ═══ прошло · нижний CTA ═══ -->
+  <sc-if value="{{ footCtaOn }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="d-event · прошло · нижний CTA" style="background:#114D9E;padding:clamp(36px,5vw,56px) clamp(16px,4vw,48px)">
+      <div style="max-width:1104px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:32px;flex-wrap:wrap">
+        <div style="font-size:clamp(24px,4vw,32px);font-weight:800;letter-spacing:-.03em;color:#fff;text-wrap:balance">{{ footCtaTitle }}<sc-if value="{{ footCtaHasSub }}" hint-placeholder-val="{{ true }}"><br><span style="color:#D3E8FD">{{ footCtaSub }}</span></sc-if></div>
+        <a href="{{ footCtaHref }}" style="font-size:16px;font-weight:800;color:#114D9E;background:#fff;border:0;padding:18px 34px;white-space:nowrap;box-shadow:4px 4px 0 {{ footShadow }};text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ footShadow }}">{{ footCtaLabel }}</a>
+      </div>
+    </div>
   </sc-if>
 
   <!-- ═══════════ Стенды ═══════════ -->
@@ -716,7 +865,7 @@
   </dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1104,&quot;height&quot;:900},&quot;header&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;витрина врача&quot;,&quot;Академия&quot;],&quot;default&quot;:&quot;витрина врача&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Оболочка · D-4&quot;},&quot;format&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;эфир&quot;,&quot;офлайн&quot;,&quot;гибрид&quot;],&quot;default&quot;:&quot;эфир&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Формат · D-4&quot;},&quot;speakers&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;1&quot;,&quot;2&quot;,&quot;3&quot;],&quot;default&quot;:&quot;1&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Контент&quot;},&quot;phase&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;до начала&quot;,&quot;идёт сейчас&quot;,&quot;прошло&quot;,&quot;отменено&quot;],&quot;default&quot;:&quot;до начала&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;auth&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;гость&quot;,&quot;вошёл&quot;],&quot;default&quot;:&quot;гость&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;registered&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;pul&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;хватает&quot;,&quot;не хватает — партнёрская ссылка&quot;,&quot;не хватает — пришёл сам&quot;],&quot;default&quot;:&quot;хватает&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;medGate&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;soldOut&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;nmoOk&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;pageState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;обычно&quot;,&quot;загрузка&quot;,&quot;ошибка&quot;],&quot;default&quot;:&quot;обычно&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;выкл&quot;,&quot;билет и QR&quot;,&quot;блок записи — А·Б·В&quot;,&quot;гибрид — А·Б&quot;,&quot;мест нет — А·Б·В&quot;,&quot;мини-опрос — А·Б&quot;],&quot;default&quot;:&quot;выкл&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Стенды&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1104,&quot;height&quot;:900},&quot;header&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;витрина врача&quot;,&quot;Академия&quot;],&quot;default&quot;:&quot;витрина врача&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Оболочка · D-4&quot;},&quot;format&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;эфир&quot;,&quot;офлайн&quot;,&quot;гибрид&quot;],&quot;default&quot;:&quot;эфир&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Формат · D-4&quot;},&quot;speakers&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;1&quot;,&quot;2&quot;,&quot;3&quot;],&quot;default&quot;:&quot;1&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Контент&quot;},&quot;phase&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;до начала&quot;,&quot;идёт сейчас&quot;,&quot;прошло&quot;,&quot;отменено&quot;,&quot;в архиве&quot;],&quot;default&quot;:&quot;до начала&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;recording&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;монтаж&quot;,&quot;только оригинал&quot;,&quot;готовится&quot;,&quot;нет записи&quot;],&quot;default&quot;:&quot;монтаж&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние · прошло&quot;},&quot;auth&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;гость&quot;,&quot;вошёл&quot;],&quot;default&quot;:&quot;гость&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;registered&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;pul&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;хватает&quot;,&quot;не хватает — партнёрская ссылка&quot;,&quot;не хватает — пришёл сам&quot;],&quot;default&quot;:&quot;хватает&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;medGate&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;soldOut&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;nmoOk&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Оболочка · D-4&quot;},&quot;pageState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;обычно&quot;,&quot;загрузка&quot;,&quot;ошибка&quot;],&quot;default&quot;:&quot;обычно&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;выкл&quot;,&quot;билет и QR&quot;,&quot;блок записи — А·Б·В&quot;,&quot;гибрид — А·Б&quot;,&quot;мест нет — А·Б·В&quot;,&quot;мини-опрос — А·Б&quot;],&quot;default&quot;:&quot;выкл&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Стенды&quot;}}">
 class Component extends DCLogic {
   state = {
     dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
@@ -727,10 +876,27 @@ class Component extends DCLogic {
     checks: 1,
     adVoted: false,
     stars: 0, reviewText: '', reviewSent: false,
-    mr: null
+    mr: null,
+    seek: 161, spoilerOpen: false, remind: false
   };
+  componentDidUpdate(prev) {
+    if (prev.dark !== this.props.dark && typeof this.props.dark === 'boolean') this.setState({ dark: this.props.dark });
+  }
+  scrollToId(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    let pp = el.parentElement;
+    while (pp && pp !== document.body) {
+      const oy = getComputedStyle(pp).overflowY;
+      if ((oy === 'auto' || oy === 'scroll') && pp.scrollHeight > pp.clientHeight) break;
+      pp = pp.parentElement;
+    }
+    if (pp && pp !== document.body) pp.scrollTo({ top: el.getBoundingClientRect().top - pp.getBoundingClientRect().top + pp.scrollTop - 16, behavior: 'smooth' });
+    else window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 16, behavior: 'smooth' });
+  }
   componentDidMount() {
-    this.mq = window.matchMedia('(max-width: 900px)');
+    if (typeof this.props.dark === 'boolean') this.setState({ dark: this.props.dark });
+    this.mq = window.matchMedia('(max-width: 1023px)');
     this.upd = () => this.setState({ isMobile: this.mq.matches });
     this.upd();
     this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
@@ -766,6 +932,12 @@ class Component extends DCLogic {
     const isLive = phase === 'идёт сейчас';
     const isPast = phase === 'прошло';
     const isCancelled = phase === 'отменено';
+    const isArchive = phase === 'в архиве';
+    const recording = p.recording || 'монтаж';
+    const recMontage = isPast && recording === 'монтаж';
+    const recRaw = isPast && recording === 'только оригинал';
+    const recPrep = isPast && recording === 'готовится';
+    const recPlayer = recMontage || recRaw;
 
     const fmtOnline = format === 'эфир', fmtOffline = format === 'офлайн', fmtHybrid = format === 'гибрид';
     // гибрид · вариант А: выбор при записи; записанному считаем выбранным «очно»
@@ -781,14 +953,20 @@ class Component extends DCLogic {
     const R = React.createElement;
     const badgeBase = 'display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#fff;padding:9px 16px;transform:rotate(3deg);flex:none;margin-top:8px;box-shadow:3px 3px 0 ' + shadow;
     let heroBadgeStyle, heroBadgeEl, regTimeLabel, regTime, regTimeSub, regTimeSubM;
-    if (isCancelled) {
+    if (isArchive) {
+      heroBadgeStyle = badgeBase + ';background:oklch(.45 .02 250);transform:rotate(-2deg)';
+      heroBadgeEl = 'В архиве';
+    } else if (isCancelled) {
       heroBadgeStyle = badgeBase + ';background:oklch(.45 .02 250);transform:rotate(-2deg)';
       heroBadgeEl = 'Отменено';
       regTimeLabel = 'Отменено'; regTime = '—'; regTimeSub = 'было назначено\nна 28 августа'; regTimeSubM = 'было на 28 августа';
     } else if (isPast) {
       heroBadgeStyle = badgeBase + ';background:oklch(.45 .02 250);transform:rotate(-2deg)';
-      heroBadgeEl = 'Завершено';
-      regTimeLabel = 'Запись'; regTime = '92'; regTimeSub = 'минуты · было 28 августа\nдоступна 30 дней'; regTimeSubM = 'мин · было 28 августа';
+      heroBadgeEl = recPlayer ? 'Запись доступна' : recPrep ? 'Запись готовится' : 'Завершено';
+      if (recPlayer) heroBadgeStyle = badgeBase + ';background:#00693D';
+      if (recMontage) { regTimeLabel = 'Запись'; regTime = '92'; regTimeSub = 'минуты · было 28 августа\nдоступна 30 дней'; regTimeSubM = 'мин · было 28 августа'; }
+      else if (recRaw) { regTimeLabel = 'Оригинал'; regTime = '124'; regTimeSub = 'минуты · было 28 августа\nдоступна 30 дней'; regTimeSubM = 'мин · было 28 августа'; }
+      else { regTimeLabel = 'Было'; regTime = '19:00'; regTimeSub = '28 августа · пятница\nМСК · 90 минут'; regTimeSubM = '28 августа · МСК'; }
     } else if (isLive) {
       heroBadgeStyle = badgeBase + ';background:#C81E1E';
       heroBadgeEl = R(React.Fragment, null, R('span', { style: { width: '8px', height: '8px', borderRadius: '50%', background: '#fff', animation: 'livePulse 1.6s ease-in-out infinite' } }), 'В эфире');
@@ -865,6 +1043,31 @@ class Component extends DCLogic {
     };
     const anyBoard = Object.values(boards).some(Boolean);
 
+    // прошло · запись
+    const fmtT = sec => { const h = Math.floor(sec / 3600), mm = Math.floor(sec % 3600 / 60), ss = sec % 60, z = n => String(n).padStart(2, '0'); return h ? h + ':' + z(mm) + ':' + z(ss) : z(mm) + ':' + z(ss); };
+    const recTotal = recRaw ? 7452 : 5520;
+    const chapDefs = [
+      { title: 'Показания и доказательная база PRP при гонартрозе', desc: 'Кому назначать, кому нет: критерии отбора по стадиям. Михаил Страхов.', mo: 0, ro: 460, range: '19:00–19:25 МСК' },
+      { title: 'Протокол приготовления и введения: клинический случай', desc: 'Пациент 54 лет, II стадия. Снимки, техника, результат через 6 месяцев.', mo: 1510, ro: 2285, range: '19:25–20:05 МСК' },
+      { title: 'Ответы на вопросы из чата', desc: 'В запись вошли все вопросы — самые залайканные первыми.', mo: 3870, ro: 5180, range: '20:05–20:32 МСК' }
+    ];
+    const seek = Math.min(s.seek, recTotal);
+    const starts = chapDefs.map(c => recRaw ? c.ro : c.mo);
+    let cur = 0; starts.forEach((st, i) => { if (seek >= st) cur = i; });
+    const toPlayer = () => this.scrollToId('player');
+    const chapters = chapDefs.map((c, i) => ({
+      num: '0' + (i + 1), title: c.title, desc: c.desc, range: c.range,
+      tc: fmtT(starts[i]), seekable: recPlayer, fixed: !recPlayer,
+      aria: 'Перейти к ' + fmtT(starts[i]) + ' — ' + c.title,
+      rowStyle: 'font:inherit;color:inherit;width:100%;box-sizing:border-box;text-align:left;display:grid;grid-template-columns:' + (m ? '76px' : '96px') + ' 1fr;gap:' + (m ? '16px' : '24px') + ';padding:22px 8px;margin:0;border:0;border-top:1px solid ' + hairline + (i === chapDefs.length - 1 ? ';border-bottom:1px solid ' + hairline : '') + ';background:' + (recPlayer && !guest && i === cur ? tint : 'transparent') + (recPlayer ? ';cursor:pointer' : ''),
+      on: () => { if (!guest) this.setState({ seek: starts[i] }); toPlayer(); }
+    }));
+    const nextHref = hdrDoctor ? 'doctor-events.dc.html' : 'events-feed.dc.html';
+    let footCtaTitle = 'Следующий эфир школы — 11 сентября.', footCtaSub = '', footCtaLabel = 'Записаться ↗', footCtaHref = nextHref;
+    if (recPlayer && guest) { footCtaTitle = 'Войдите — и смотрите целиком.'; footCtaLabel = 'Войти ↗'; footCtaHref = 'auth.dc.html'; }
+    else if (recPlayer) { footCtaTitle = 'Понравился разбор?'; footCtaSub = 'Следующий эфир школы — 11 сентября.'; }
+    else if (recPrep) { footCtaTitle = 'Запись готовится.'; footCtaSub = 'Следующий эфир школы — 11 сентября.'; }
+
     const chooserOn = s.hybChoice === 'очно' || (registered && !s.hybChoice);
     const tileBase = 'font:inherit;text-align:left;display:flex;flex-direction:column;gap:8px;padding:24px;cursor:pointer;background:' + surface + ';';
     const tileSel = 'border:2px solid ' + accent + ';box-shadow:6px 6px 0 ' + shadow;
@@ -893,7 +1096,45 @@ class Component extends DCLogic {
       heroBadgeStyle, heroBadgeEl,
       stLoading: pageState === 'загрузка' && !anyBoard,
       stError: pageState === 'ошибка' && !anyBoard,
-      stMain: pageState === 'обычно' && !anyBoard,
+      stMain: pageState === 'обычно' && !anyBoard && !isArchive,
+      stArchive: pageState === 'обычно' && !anyBoard && isArchive,
+      notPast: !isPast, recPlayer, recRaw, recPrep, recViewer: recPlayer && !guest,
+      recSpoiler: recMontage && !guest,
+      aboutTitle: isPast ? 'О чём эфир' : 'О чём событие',
+      pastLead: recPlayer
+        ? 'Запись эфира 28 августа: показания к PRP при гонартрозе, доказательная база и рабочий протокол — на клиническом случае с наблюдением 6 месяцев. Вопросы из чата вошли в запись. Таймкоды ниже ведут к главам' + (recRaw ? ' оригинала трансляции.' : '.')
+        : 'Эфир прошёл 28 августа: показания к PRP при гонартрозе, доказательная база и рабочий протокол — на клиническом случае с наблюдением 6 месяцев, затем ответы на вопросы из чата.',
+      chapters,
+      chapterMarks: starts.slice(1).map((st, i) => ({ left: (st / recTotal * 100).toFixed(2) + '%', title: 'Глава 0' + (i + 2) })),
+      seekPct: (seek / recTotal * 100).toFixed(2) + '%',
+      seekLabel: fmtT(seek), playerTotal: fmtT(recTotal), chapterNow: 'глава 0' + (cur + 1),
+      playerFoot: recRaw ? 'оригинал трансляции' : 'запись эфира · 92 минуты',
+      gateKicker: recRaw ? 'Оригинал трансляции · 2 ч 04 мин' : 'Запись эфира · 92 минуты',
+      speakerSurnames: speakerList.map(sp => sp.name.split(/\s+/)[1]).join(', '),
+      toggleSpoiler: () => this.setState(st => ({ spoilerOpen: !st.spoilerOpen })),
+      spoilerOpen: s.spoilerOpen, spoilerArrow: s.spoilerOpen ? '▾' : '▸',
+      toggleRemind: () => this.setState(st => ({ remind: !st.remind })),
+      remindLabel: s.remind ? 'Напомним на почту ✓' : 'Напомнить на почту',
+      toRecording: e => { if (e) e.preventDefault(); toPlayer(); },
+      toMaterials: () => this.scrollToId('materials'),
+      pastHasRec: recPlayer || recPrep,
+      pastSub: recPlayer ? 'Запись — на этой странице, материалы и оценка — ниже.' : recPrep ? 'Запись появится на этой странице, материалы и оценка — ниже.' : 'Материалы и оценка — ниже на этой странице.',
+      materials: ['Презентация спикера', 'Протокол PRP'].map((name, i) => ({ name, action: 'Скачать ↓', top: i ? '1px solid ' + hairline : '0', on: e => e.preventDefault() })),
+      playerCardBorder: m ? '0' : '2px solid ' + border,
+      playerCardShadow: m ? 'none' : '6px 6px 0 ' + shadow,
+      playerCardMargin: m ? '0 -16px' : '0',
+      metaPad: m ? '18px 16px' : '22px 28px',
+      prepCardStyle: m
+        ? 'background:' + surface + ';display:block;margin:0 -16px'
+        : 'background:' + surface + ';border:2px solid ' + border + ';box-shadow:6px 6px 0 ' + shadow + ';display:grid;grid-template-columns:196px 1fr',
+      prepTimeCol: 'background:' + tint + ';display:flex;flex-direction:column;' + (m ? 'gap:6px;padding:16px' : 'gap:14px;padding:30px 24px;border-right:2px solid ' + border),
+      prepTimeSize: m ? '40px' : '52px',
+      prepBodyStyle: m
+        ? 'padding:20px 16px;display:flex;flex-direction:column;gap:16px'
+        : 'padding:28px 32px;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap',
+      footCtaOn: isPast && pageState === 'обычно' && !anyBoard,
+      footCtaTitle, footCtaSub, footCtaHasSub: !!footCtaSub, footCtaLabel, footCtaHref,
+      footShadow: d ? 'oklch(.16 .02 250)' : '#0A1B33',
       ...boards,
       colsTemplate: m ? '1fr' : '1fr 380px',
       interCols: m ? '1fr' : 'repeat(3,1fr)',
@@ -902,7 +1143,7 @@ class Component extends DCLogic {
       mainPad: m ? '0 16px 64px' : '0 clamp(16px,4vw,48px) 96px',
       regCardStyle: (m
         ? 'background:' + surface + ';border:0;box-shadow:none;display:block;margin:0 -16px'
-        : 'background:' + surface + ';border:2px solid ' + border + ';box-shadow:6px 6px 0 ' + shadow + ';display:grid;grid-template-columns:196px 1fr'),
+        : 'background:' + surface + ';border:2px solid ' + border + ';box-shadow:6px 6px 0 ' + shadow + ';display:grid;grid-template-columns:196px 1fr') + ((recPlayer || recPrep) ? ';margin-top:' + (m ? '24px' : '40px') : ''),
       regTimeCol: 'background:' + tint + ';display:flex;' + (m
         ? 'flex-direction:column;align-items:stretch;gap:10px;padding:14px 16px'
         : 'flex-direction:column;gap:14px;padding:30px 24px;border-right:2px solid ' + border),
@@ -913,7 +1154,7 @@ class Component extends DCLogic {
       regTimeLabel, regTime, regTimeSub, regTimeSubM,
       regTimeSubColor: d ? 'rgba(255,255,255,.75)' : 'oklch(.21 .02 250)',
       ctaGuest, ctaJoin, ctaRegistered, ctaSoldOut, ctaGate, ctaCancelled, ctaPast,
-      guestHead: isLive ? 'Эфир уже идёт — присоединяйтесь' : 'Бесплатно для врача — за очки внимания',
+      guestHead: isLive ? 'Эфир уже идёт — присоединяйтесь' : 'Участие — за очки внимания',
       joinHead: isLive ? 'Эфир уже идёт — 412 врачей в комнате' : 'Запись открыта',
       joinSub: 'Спишем 50 Pul при записи. Напомним за час до начала, ссылка придёт на почту.',
       shortSelf, notePartner,

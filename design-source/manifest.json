@@ -92,6 +92,12 @@
       "remotePath": null,
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
+    "archive/archive-event-page-recording.dc.html": {
+      "sha256": "04e1509122edb4defae95d84d99c4af6af6380032b284b25f577bacaaaee8156",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "archived 2026-10-16 (#2971): superseded by event-page.dc.html phase «прошло»; bytes = the 2026-09-28 backfill, not re-pulled"
+    },
     "archive/archive-event-page-variant-a.dc.html": {
       "sha256": "22656fad2325d1c012ffe490418521b977b490fff9e0b053a94fe3b2287b568d",
       "pulledAt": "2026-09-28",
@@ -197,17 +203,10 @@
       "pulledAt": "2026-10-05T03:52:53.831Z",
       "remotePath": "ds-shell.dc.html"
     },
-    "event-page-recording.dc.html": {
-      "sha256": "04e1509122edb4defae95d84d99c4af6af6380032b284b25f577bacaaaee8156",
-      "pulledAt": "2026-09-28",
-      "remotePath": null,
-      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
-    },
     "event-page.dc.html": {
-      "sha256": "3185a40db5db81b8fdf1de041383010495c6dad39279433f3371d9b193dede6d",
-      "pulledAt": "2026-09-28",
-      "remotePath": null,
-      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+      "sha256": "110145319a049fad31118669ce248f2d82f7f060bdf8951583eb6bb72c160790",
+      "pulledAt": "2026-10-16T09:35:21.739Z",
+      "remotePath": "event-page.dc.html"
     },
     "events-feed-kit.js": {
       "sha256": "e6a16d9bde189e401ba546e51e406adb9d541e2506427dcf8e15fefe8f9de812",

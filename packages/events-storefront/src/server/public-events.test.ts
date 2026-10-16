@@ -12,6 +12,8 @@ function jsonResponse(body: unknown, status = 200) {
   } as unknown as Response;
 }
 
+const ACADEMY_READ = { pagePath: "/v1/public/events" };
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -23,9 +25,14 @@ describe("004 EARS-1 fetchPublicEventPage — the public projection read", () =>
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(fetchPublicEventPage("cardio-2026")).resolves.toEqual({
-      slug: "cardio-2026",
-    });
+    await expect(
+      fetchPublicEventPage(
+        "cardio-2026",
+        ACADEMY_READ,
+        // The Academy declares no relay cookie: a session cookie never rides.
+        new Headers({ cookie: "__Host-ds_session=abc" }),
+      ),
+    ).resolves.toEqual({ slug: "cardio-2026" });
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toMatch(/\/v1\/public\/events\/cardio-2026$/);
     expect(init?.headers).toEqual({ accept: "application/json" });
@@ -38,7 +45,11 @@ describe("004 EARS-1 fetchPublicEventPage — the public projection read", () =>
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await fetchPublicEventPage("cardio-2026", "/v1/storefront/doctor/events");
+    await fetchPublicEventPage(
+      "cardio-2026",
+      { pagePath: "/v1/storefront/doctor/events" },
+      new Headers(),
+    );
     expect(fetchMock.mock.calls[0]![0]).toMatch(
       /\/v1\/storefront\/doctor\/events\/cardio-2026$/,
     );
@@ -49,14 +60,16 @@ describe("004 EARS-1 fetchPublicEventPage — the public projection read", () =>
       "fetch",
       vi.fn(async () => jsonResponse({}, 404)),
     );
-    await expect(fetchPublicEventPage("draft")).resolves.toBeNull();
+    await expect(
+      fetchPublicEventPage("draft", ACADEMY_READ, new Headers()),
+    ).resolves.toBeNull();
 
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => jsonResponse({}, 503)),
     );
-    await expect(fetchPublicEventPage("x")).rejects.toThrow(
-      /public event page fetch failed \(503\)/,
-    );
+    await expect(
+      fetchPublicEventPage("x", ACADEMY_READ, new Headers()),
+    ).rejects.toThrow(/public event page fetch failed \(503\)/);
   });
 });

@@ -14,8 +14,10 @@ server-resolved participation card with the one-tap slot, the hero status plate
 with the recording badge, the room access-branch guidance (`?from=room`), the
 recording plaque / guest gate / player / raw-original spoiler, the about and
 programme sections, the speakers, the format block and the partners plate. The
-Academy mounts it at `/webinars/[slug]`; the doctor storefront mounts it in PR
-3.2.
+Academy mounts it at `/webinars/[slug]` (`ACADEMY_EVENT_PAGE`); since PR 3.2 the
+doctor storefront mounts it at `/events/[slug]` (`DOCTOR_EVENT_PAGE`). The page
+read forwards the client chain and only the host's `contentSet.relayCookie`
+(017's remembered specialty on the doctor host); never the session.
 
 ## Why a package of its own (gate D1)
 

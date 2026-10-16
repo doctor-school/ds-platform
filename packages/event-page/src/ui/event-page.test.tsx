@@ -89,7 +89,8 @@ describe("020 EARS-1 EventPage — the reads sit at the host's pagePath", () => 
     await expect(mount("draft")).rejects.toBe(NOT_FOUND);
     expect(reads.fetchPublicEventPage).toHaveBeenCalledWith(
       "draft",
-      "/v1/storefront/doctor/events",
+      CONFIG.contentSet,
+      expect.any(Headers),
     );
     expect(reads.fetchParticipationCta).not.toHaveBeenCalled();
   });

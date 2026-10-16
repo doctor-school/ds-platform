@@ -105,7 +105,10 @@ export async function EventPage({
   searchParams,
 }: EventPageProps) {
   const { slug } = await params;
-  const event = await fetchPublicEventPage(slug, config.contentSet.pagePath);
+  const h = await headers();
+  // The session-free page read: the client chain and the host's relay cookie
+  // only (`contentSet.relayCookie`, gate D4).
+  const event = await fetchPublicEventPage(slug, config.contentSet, h);
   // Draft or unknown slug renders not-found; a hidden event stays a reachable 200.
   if (!event) notFound();
 
@@ -114,7 +117,6 @@ export async function EventPage({
   // routing is a truthful, guided front door.
   const fromRoom = (await searchParams).from === "room";
 
-  const h = await headers();
   // The session is fingerprint-bound (ADR-0001 §6) — the shared builder carries
   // the same surface the browser bound at login, forwarded client address
   // included, so an authed read is not 401'd (#2054).

@@ -9,8 +9,9 @@ import type { RoomCopyStrings } from "@ds/room";
  * drive it straight off `messages/ru.json` without booting next-intl.
  *
  * Two namespaces feed it:
- * - `room` — everything the room composition paints (D22: `room.accessGuidance.*`
- *   is read by the EVENT page, never by the room, so it is NOT mapped here).
+ * - `room` — everything the room composition paints (D22: the access guidance
+ *   belongs to the EVENT page — `EVENT_PAGE_COPY.accessGuidance` in
+ *   `packages/event-page/src/copy/event-page-copy.ts` — never to the room).
  * - `errors.validation` — the four display-name validation strings (D18). The
  *   prompt's messages come from the academy's shared validation catalogue, the
  *   single academy source for validation wording, so

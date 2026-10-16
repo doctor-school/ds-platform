@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { EventPageView } from "@ds/schemas";
+
 import type { EventPageHostConfig } from "../host-config";
 
 // The page's READ half (wave-3 gate §2.1 rows 1, 4, 13): the event read and
@@ -41,6 +43,33 @@ const CONFIG = {
   copy: { breadcrumb: "События" },
 } satisfies EventPageHostConfig;
 
+const ENDED_WITH_RECORDING: EventPageView = {
+  id: "11111111-1111-4111-8111-111111111111",
+  slug: "cardio-2026",
+  title: "Кардиология 2026",
+  school: "Школа кардиологии",
+  startsAt: "2026-08-28T16:00:00.000Z",
+  durationMin: 90,
+  nmo: false,
+  pulCost: 0,
+  description: "Разбор клинического случая.",
+  speakers: [],
+  specialties: [],
+  partners: [],
+  state: "ended",
+  recording: {
+    state: "montage",
+    primaryKind: "edited",
+    secondaryKind: null,
+    posterUrl: null,
+    expectedBy: null,
+    durationSec: 5400,
+  },
+  format: "online",
+  seatsLeft: null,
+  links: { speakerPages: [] },
+};
+
 function mount(slug: string) {
   return EventPage({
     config: CONFIG,
@@ -67,16 +96,13 @@ describe("020 EARS-1 EventPage — the reads sit at the host's pagePath", () => 
 
   it("EARS-1: the participation read is addressed at the host's pagePath; a guest never issues the playback read", async () => {
     reads.fetchParticipationCta.mockResolvedValue(null);
+    // A guest: no session rode the request, so the per-user state is null.
     reads.fetchEventRegistrationState.mockResolvedValue(null);
-    // The full read-model render is exercised by the Academy e2e; here only
-    // the addressing of the second read is pinned, so the event read answers
-    // with a minimal body and the render past the reads is not asserted.
-    reads.fetchPublicEventPage.mockResolvedValue({
-      slug: "cardio-2026",
-      state: "published",
-      recording: { state: "none" },
-    });
-    await mount("cardio-2026").catch(() => undefined);
+    // An ENDED event with a PUBLISHED recording — the one shape on which a
+    // signed-in viewer's page issues the playback read — so the assertion
+    // below pins the guest branch rather than holding trivially.
+    reads.fetchPublicEventPage.mockResolvedValue(ENDED_WITH_RECORDING);
+    await mount("cardio-2026");
     expect(reads.fetchParticipationCta).toHaveBeenCalledWith(
       "cardio-2026",
       expect.objectContaining({ cookie: "" }),

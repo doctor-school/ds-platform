@@ -133,7 +133,7 @@ test.describe("014 EARS-4 public post-live event page (e2e)", () => {
     // The 004 projection still renders whole: title, school, description and the
     // speaker list are the page's substance, not a recording teaser.
     await expect(page.getByRole("heading", { level: 1 })).not.toBeEmpty();
-    await expect(page.getByText("О чём эфир", { exact: true })).toBeVisible();
+    await expect(page.getByText("О чём событие", { exact: true })).toBeVisible();
     // `exact` because the sponsor disclaimer prose also contains the word
     // «спикеры» — the assertion is about the section LABEL, not the substring.
     await expect(page.getByText("Спикеры", { exact: true })).toBeVisible();

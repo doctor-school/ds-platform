@@ -67,9 +67,9 @@ export interface RecordingPlayerProps {
   title: string;
   /** «Монтаж» / «Оригинал» — the cut being played, part of the frame's name. */
   kindLabel: string;
-  /** «Запись временно недоступна» (catalog `webinar.playerUnavailable.title`). */
+  /** «Запись временно недоступна» (`EVENT_PAGE_COPY.playerUnavailable.title`, `../copy/event-page-copy.ts`). */
   unavailableTitle: string;
-  /** The unavailability explanation (catalog `…playerUnavailable.body`). */
+  /** The unavailability explanation (`EVENT_PAGE_COPY.playerUnavailable.body`). */
   unavailableBody: string;
   /** «Попробовать ещё раз» (catalog `…playerUnavailable.retry`). */
   retryLabel: string;

@@ -33,14 +33,14 @@ import type { CanvasStatus } from "./event-lifecycle";
  */
 export interface RecordingSignal {
   /**
-   * Catalog key under `webinar.recordingBadge.*` for the hero badge — the
+   * Key of `EVENT_PAGE_COPY.recordingBadge` (`packages/event-page/src/copy/event-page-copy.ts`) for the hero badge — the
    * canvas's «Запись доступна» / «Запись готовится» plate.
    */
   badgeKey: "available" | "preparing";
   /** Whether the badge reads as a positive result (drives the badge variant). */
   available: boolean;
   /**
-   * Catalog key under `webinar.recordingKind.*` for the meta line's kind label
+   * Key of `EVENT_PAGE_COPY.recordingKind` (`packages/event-page/src/copy/event-page-copy.ts`) for the meta line's kind label
    * («Монтаж» / «Оригинал»), or `null` while nothing is published yet — the
    * canvas prints no kind for a recording that does not exist.
    */

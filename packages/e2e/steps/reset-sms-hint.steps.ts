@@ -59,7 +59,10 @@ Given(
     journeys.set(page, state);
     visitor.on("request", (request) => {
       const path = new URL(request.url()).pathname;
-      if (request.method() === "POST" && path.startsWith("/v1/auth/"))
+      if (
+        !["GET", "HEAD", "OPTIONS"].includes(request.method()) &&
+        path.startsWith("/v1/auth/")
+      )
         state.commands.push(path);
     });
     await prepareCaptchaForJourney(
@@ -161,10 +164,15 @@ Then(
         const destination = [...document.querySelectorAll("strong")].find(
           (element) => element.textContent === phone,
         );
-        return destination?.parentElement?.textContent === expected;
+        return {
+          conditional: destination?.parentElement?.textContent === expected,
+          unconditional:
+            document.body.textContent?.includes(`Код отправлен на ${phone}.`) ??
+            false,
+        };
       }, state.phone),
       "conditional SMS sentence includes the number exactly as typed in bold",
-    ).toBe(true);
+    ).toEqual({ conditional: true, unconditional: false });
     await expect(state.visitor.getByTestId("reset-restart")).toHaveText(
       "Начать заново",
     );
@@ -217,6 +225,15 @@ Then(
   async ({ page, world }) => {
     const state = journey(page);
     await expect(state.visitor.getByText(HINT, { exact: true })).toHaveCount(0);
+    const identifier = state.visitor.getByLabel(
+      "Электронная почта или телефон",
+      { exact: true },
+    );
+    expect(
+      (await identifier.inputValue()) === state.email,
+      "identifier contains the owned email",
+    ).toBe(true);
+    await expect(identifier).toHaveAccessibleDescription("");
     await expect(
       state.visitor.locator('input[autocomplete="one-time-code"]'),
     ).toHaveCount(0);

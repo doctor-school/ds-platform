@@ -2628,8 +2628,10 @@ function WebinarRecordingPlaqueSection() {
     >
       <p className="text-sm text-muted-foreground">
         The post-live «запись готовится» plaque (source{" "}
-        <code className="font-mono text-xs">event-page-recording.dc.html</code>,
-        014 EARS-7): what occupies the player position while nothing is
+        <code className="font-mono text-xs">
+          event-page.dc.html · phase: прошло
+        </code>
+        , 014 EARS-7): what occupies the player position while nothing is
         published yet. The{" "}
         <span className="font-medium text-foreground">dated</span> render
         carries the operator&apos;s committed readiness day; the{" "}
@@ -2669,8 +2671,10 @@ function RecordingSpoilerSection() {
       <p className="text-sm text-muted-foreground">
         The secondary-cut disclosure that sits under the post-live player when
         an эфир published BOTH cuts (source{" "}
-        <code className="font-mono text-xs">event-page-recording.dc.html</code>,
-        014 EARS-8). It is a native{" "}
+        <code className="font-mono text-xs">
+          event-page.dc.html · phase: прошло
+        </code>
+        , 014 EARS-8). It is a native{" "}
         <code className="font-mono text-xs">
           &lt;details&gt;/&lt;summary&gt;
         </code>{" "}

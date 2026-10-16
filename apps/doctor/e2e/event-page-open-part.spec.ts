@@ -39,10 +39,23 @@ const MOBILE = { width: 390, height: 844 };
 async function shoot(page: Page, name: string) {
   if (!SHOT_DIR) return;
   mkdirSync(SHOT_DIR, { recursive: true });
-  await page.screenshot({ path: join(SHOT_DIR, `${name}.png`), fullPage: true });
+  await page.screenshot({
+    path: join(SHOT_DIR, `${name}.png`),
+    fullPage: true,
+  });
+}
+
+// Gate row 30 (D9, 004 «Amendment — 2026-10-02»): the browser runs in Asia/Yekaterinburg.
+// After hydration an online or hybrid event states its time in that zone with
+// its label; an offline event stays МСК. The server bytes stay МСК.
+async function expectedZoneLabel(page: Page): Promise<string> {
+  const kicker =
+    (await page.getByTestId("event-page-kicker").textContent()) ?? "";
+  return /Очно/u.test(kicker) ? "МСК" : "GMT+5";
 }
 
 test.describe("020 EARS-2 — the registration-free decision set", () => {
+  test.use({ timezoneId: "Asia/Yekaterinburg" });
   test.skip(!BASE || !SLUG, "requires a live doctor app + a seeded event slug");
 
   test("020 EARS-2.6: a guest reads the complete decision set in canvas order, and the open part carries no dead link", async ({
@@ -59,7 +72,9 @@ test.describe("020 EARS-2 — the registration-free decision set", () => {
     // ── the decision set, in the canvas's reading order ──────────────────
     await expect(page.getByTestId("event-page-kicker")).toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await expect(page.getByTestId("event-page-hero")).toContainText("МСК");
+    await expect(page.getByTestId("event-page-hero")).toContainText(
+      `(${await expectedZoneLabel(page)})`,
+    );
     await expect(page.getByTestId("event-page-hero-chips")).toBeVisible();
 
     const openPart = page.getByTestId("event-page-open-part");
@@ -75,14 +90,16 @@ test.describe("020 EARS-2 — the registration-free decision set", () => {
     expect(
       (await download.count()) + (await statement.count()),
     ).toBeGreaterThan(0);
-    await expect(openPart.getByTestId("event-speaker-card").first()).toBeVisible();
+    await expect(
+      openPart.getByTestId("event-speaker-card").first(),
+    ).toBeVisible();
 
     // ── «absent rather than dead» (spec L190) ────────────────────────────
     // Every anchor in the open part resolves somewhere real: no empty href, no
     // `#` placeholder, no `javascript:` stub.
-    const hrefs = await openPart.locator("a").evaluateAll((nodes) =>
-      nodes.map((node) => node.getAttribute("href")),
-    );
+    const hrefs = await openPart
+      .locator("a")
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("href")));
     for (const href of hrefs) {
       expect(href, "an open-part anchor with no href").toBeTruthy();
       expect(href?.trim()).not.toBe("");
@@ -109,10 +126,10 @@ test.describe("020 EARS-2 — the registration-free decision set", () => {
     context,
   }) => {
     await context.clearCookies();
-    await page.goto(`${BASE}/events/${SLUG}`, { waitUntil: "domcontentloaded" });
-    const guest = await page
-      .getByTestId("event-page-open-part")
-      .innerHTML();
+    await page.goto(`${BASE}/events/${SLUG}`, {
+      waitUntil: "domcontentloaded",
+    });
+    const guest = await page.getByTestId("event-page-open-part").innerHTML();
 
     // The open part is the host's projection of a `@Public()` read: `links` are
     // resolved from the HOST's route table, never from the viewer. A session
@@ -129,7 +146,9 @@ test.describe("020 EARS-2 — the registration-free decision set", () => {
         secure: true,
       },
     ]);
-    await page.goto(`${BASE}/events/${SLUG}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE}/events/${SLUG}`, {
+      waitUntil: "domcontentloaded",
+    });
     const withSession = await page
       .getByTestId("event-page-open-part")
       .innerHTML();
@@ -150,7 +169,9 @@ test.describe("020 EARS-2 — the registration-free decision set", () => {
   }) => {
     await context.clearCookies();
     await page.setViewportSize(DESKTOP);
-    await page.goto(`${BASE}/events/${SLUG}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE}/events/${SLUG}`, {
+      waitUntil: "domcontentloaded",
+    });
     await expect(page.getByTestId("event-page-open-part")).toBeVisible();
 
     const results = await new AxeBuilder({ page })
@@ -207,7 +228,9 @@ test.describe("020 EARS-2 — the registration-free decision set", () => {
     // there is nothing to hover — recorded as `N/A` in the PR body instead.
     await page.setViewportSize(DESKTOP);
     await page.emulateMedia({ colorScheme: "light" });
-    await page.goto(`${BASE}/events/${SLUG}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE}/events/${SLUG}`, {
+      waitUntil: "domcontentloaded",
+    });
     const download = page.getByTestId("event-programme").getByRole("link");
     if ((await download.count()) > 0) {
       await download.first().focus();

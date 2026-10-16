@@ -57,7 +57,9 @@ test.describe("005 EARS-4 registered-state overlay on the event page (e2e)", () 
     await expect(cta).toBeVisible();
 
     // No registered-state confirmation is composed onto the public page for a guest.
-    await expect(page.getByText("Вы записаны", { exact: false })).toHaveCount(0);
+    await expect(page.getByText("Вы записаны", { exact: false })).toHaveCount(
+      0,
+    );
   });
 
   test("005 EARS-4: a registered doctor sees the registered confirmation and NO register CTA (never shown the register CTA as if unregistered)", async ({
@@ -70,8 +72,12 @@ test.describe("005 EARS-4 registered-state overlay on the event page (e2e)", () 
 
     // Log the doctor in through the real 003 flow (identifier + password).
     await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-    await page.getByRole("textbox", { name: /почта|email/i }).fill(DOCTOR_EMAIL!);
-    await page.getByRole("textbox", { name: /пароль|password/i }).fill(DOCTOR_PASSWORD!);
+    await page
+      .getByRole("textbox", { name: /почта|email/i })
+      .fill(DOCTOR_EMAIL!);
+    await page
+      .getByRole("textbox", { name: /пароль|password/i })
+      .fill(DOCTOR_PASSWORD!);
     await page.getByRole("button", { name: /войти|продолжить/i }).click();
     await page.waitForURL(/\/account|\/webinars/);
 
@@ -126,8 +132,12 @@ test.describe("005 EARS-5 registered join signposting on the event page (e2e)", 
     );
 
     await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-    await page.getByRole("textbox", { name: /почта|email/i }).fill(DOCTOR_EMAIL!);
-    await page.getByRole("textbox", { name: /пароль|password/i }).fill(DOCTOR_PASSWORD!);
+    await page
+      .getByRole("textbox", { name: /почта|email/i })
+      .fill(DOCTOR_EMAIL!);
+    await page
+      .getByRole("textbox", { name: /пароль|password/i })
+      .fill(DOCTOR_PASSWORD!);
     await page.getByRole("button", { name: /войти|продолжить/i }).click();
     await page.waitForURL(/\/account|\/webinars/);
 
@@ -139,9 +149,15 @@ test.describe("005 EARS-5 registered join signposting on the event page (e2e)", 
     await expect(
       page.getByText("Вы записаны", { exact: false }).first(),
     ).toBeVisible();
-    // …the МСК start is signposted (the «МСК» label rides the status-card time
-    // plate) regardless of the Asia/Tokyo browser timezone (EARS-11, no drift)…
-    await expect(page.getByText("МСК", { exact: false }).first()).toBeVisible();
+    // …the start is signposted with its zone label on the sign-up card. Gate
+    // row 30 (D9, 004 «Amendment — 2026-10-02»): an online or hybrid event
+    // reads in the Asia/Tokyo viewer zone, an offline one stays МСК…
+    const kicker =
+      (await page.getByTestId("event-page-kicker").textContent()) ?? "";
+    const zoneLabel = /Очно/u.test(kicker) ? "МСК" : "GMT+9";
+    await expect(
+      page.getByText(`· ${zoneLabel}`, { exact: false }).first(),
+    ).toBeVisible();
     // …and no register CTA is re-offered.
     await expect(
       page.getByRole("link", { name: "Участвовать", exact: true }),
@@ -157,8 +173,12 @@ test.describe("005 EARS-5 registered join signposting on the event page (e2e)", 
     );
 
     await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-    await page.getByRole("textbox", { name: /почта|email/i }).fill(DOCTOR_EMAIL!);
-    await page.getByRole("textbox", { name: /пароль|password/i }).fill(DOCTOR_PASSWORD!);
+    await page
+      .getByRole("textbox", { name: /почта|email/i })
+      .fill(DOCTOR_EMAIL!);
+    await page
+      .getByRole("textbox", { name: /пароль|password/i })
+      .fill(DOCTOR_PASSWORD!);
     await page.getByRole("button", { name: /войти|продолжить/i }).click();
     await page.waitForURL(/\/account|\/webinars/);
 
@@ -219,7 +239,10 @@ test.describe("005 EARS-9 registration lifecycle gating on the event page (e2e)"
     page,
     context,
   }) => {
-    test.skip(!SLUG_ENDED, "requires a seeded ended event (005↔007 fixture seam)");
+    test.skip(
+      !SLUG_ENDED,
+      "requires a seeded ended event (005↔007 fixture seam)",
+    );
 
     await context.clearCookies();
     await page.goto(`${BASE}/webinars/${SLUG_ENDED}`, {
@@ -257,7 +280,9 @@ test.describe("005 EARS-9 registration lifecycle gating on the event page (e2e)"
       page.getByRole("link", { name: "Записаться", exact: true }),
     ).toHaveCount(0);
     // The hidden render replaces the CTA column with a plain «скрыт» notice.
-    await expect(page.getByText("скрыт", { exact: false }).first()).toBeVisible();
+    await expect(
+      page.getByText("скрыт", { exact: false }).first(),
+    ).toBeVisible();
   });
 
   test("005 EARS-9: register-during-live — a guest's «Участвовать» CTA routes into the registration handoff, never the not-yet-built room", async ({
@@ -337,7 +362,10 @@ async function signInAndReadRegistration(
 }
 
 test.describe("#2232 a non-doctor session on the Academy webinar page", () => {
-  test.skip(!ADMIN_TIER, "requires the IdP service token + project id + Mailpit");
+  test.skip(
+    !ADMIN_TIER,
+    "requires the IdP service token + project id + Mailpit",
+  );
   test.setTimeout(180_000);
 
   test("#2232: a platform_admin session gets /webinars/<slug> rendered as for a guest — 200, the «Участвовать» door, no server error", async ({
@@ -362,7 +390,9 @@ test.describe("#2232 a non-doctor session on the Academy webinar page", () => {
       page.getByRole("link", { name: "Участвовать", exact: true }),
     ).toBeVisible();
     await expect(page.getByTestId("event-register-one-tap")).toHaveCount(0);
-    await expect(page.getByText("Вы записаны", { exact: false })).toHaveCount(0);
+    await expect(page.getByText("Вы записаны", { exact: false })).toHaveCount(
+      0,
+    );
   });
 
   test("#2232: a doctor_guest session is unchanged — 200 and the in-place one-tap", async ({
@@ -384,7 +414,10 @@ test.describe("#2232 a non-doctor session on the Academy webinar page", () => {
  * профиль» error frame and the sign-out never rendered — a dead end.
  */
 test.describe("#2456 a staff session on the Academy account page", () => {
-  test.skip(!ADMIN_TIER, "requires the IdP service token + project id + Mailpit");
+  test.skip(
+    !ADMIN_TIER,
+    "requires the IdP service token + project id + Mailpit",
+  );
   test.setTimeout(180_000);
 
   test("#2456: a platform_admin-only session opens /account — its profile, no error frame — and signs out from it", async ({

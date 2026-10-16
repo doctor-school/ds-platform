@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 /**
  * 004 EARS-1 — the public webinar event page renders server-side for an
@@ -112,7 +112,18 @@ test("EARS-3: a guest sees exactly one primary «Участвовать» CTA th
  *   • ended — «Эфир завершён» + NO participation CTA (no dead link).
  * The registration flow is a seam (005) — asserted by route, not driven here.
  */
+
+// Gate row 30 (D9, 004 «Amendment — 2026-10-02»): the browser runs in Asia/Yekaterinburg.
+// After hydration an online or hybrid event states its time in that zone with
+// its label; an offline event stays МСК. The server bytes stay МСК.
+async function expectedZoneLabel(page: Page): Promise<string> {
+  const kicker =
+    (await page.getByTestId("event-page-kicker").textContent()) ?? "";
+  return /Очно/u.test(kicker) ? "МСК" : "GMT+5";
+}
+
 test.describe("004 EARS-4 lifecycle render swap (e2e)", () => {
+  test.use({ timezoneId: "Asia/Yekaterinburg" });
   test("EARS-4: the upcoming render shows the «Скоро» hero badge, the status-card time plate, and a register-routing «Участвовать» CTA", async ({
     page,
     context,
@@ -122,13 +133,15 @@ test.describe("004 EARS-4 lifecycle render swap (e2e)", () => {
       waitUntil: "domcontentloaded",
     });
 
-    // Hero lifecycle badge = «Скоро»; the time plate carries an explicit «МСК».
+    // Hero lifecycle badge = «Скоро»; the time plate carries an explicit zone label.
     await expect(
       // The plate carries the Stage-B countdown suffix «Скоро · через N дней»
       // (#1779), so the badge is matched by prefix, not by exact text.
       page.getByText(/^Скоро(\s·\s.+)?$/).first(),
     ).toBeVisible();
-    await expect(page.locator("body")).toContainText("МСК");
+    await expect(page.getByTestId("event-page-hero")).toContainText(
+      `(${await expectedZoneLabel(page)})`,
+    );
 
     // Exactly one primary «Участвовать» CTA, routing into the registration handoff.
     const cta = page.getByRole("link", { name: "Участвовать", exact: true });
@@ -213,7 +226,9 @@ test.describe("004 EARS-5 hidden direct-link notice (e2e)", () => {
     expect(new URL(page.url()).pathname).toBe(`/webinars/${SLUG_HIDDEN}`);
 
     // The «скрыт» hero badge + the hidden notice are present.
-    await expect(page.getByText("Скрыто", { exact: true }).first()).toBeVisible();
+    await expect(
+      page.getByText("Скрыто", { exact: true }).first(),
+    ).toBeVisible();
     await expect(page.getByText("Мероприятие скрыто").first()).toBeVisible();
   });
 
@@ -282,7 +297,10 @@ test.describe("004 EARS-4 hero status plate — mobile viewport containment (e2e
         await expect(plate).toBeVisible();
 
         const box = await plate.boundingBox();
-        expect(box, "the hero status plate must have a layout box").not.toBeNull();
+        expect(
+          box,
+          "the hero status plate must have a layout box",
+        ).not.toBeNull();
         // Left edge inside the viewport…
         expect(
           Math.round(box!.x),
@@ -300,7 +318,10 @@ test.describe("004 EARS-4 hero status plate — mobile viewport containment (e2e
             document.documentElement.scrollWidth -
             document.documentElement.clientWidth,
         );
-        expect(overflow, `document horizontal overflow @ ${width}px`).toBeLessThanOrEqual(0);
+        expect(
+          overflow,
+          `document horizontal overflow @ ${width}px`,
+        ).toBeLessThanOrEqual(0);
       });
     }
   }

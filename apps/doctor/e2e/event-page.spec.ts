@@ -1,5 +1,4 @@
-
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 /**
  * 020 EARS-1 / EARS-18 (#1764, slice 3) — `doctor.school/events/:slug`.
@@ -21,11 +20,18 @@ const BASE = process.env.E2E_DOCTOR_URL;
 const API = process.env.E2E_API_URL;
 const SLUG = process.env.E2E_WEBINAR_SLUG;
 
+// Gate row 30 (D9, 004 «Amendment — 2026-10-02»): the browser runs in Asia/Yekaterinburg.
+// After hydration an online or hybrid event states its time in that zone with
+// its label; an offline event stays МСК. The server bytes stay МСК.
+async function expectedZoneLabel(page: Page): Promise<string> {
+  const kicker =
+    (await page.getByTestId("event-page-kicker").textContent()) ?? "";
+  return /Очно/u.test(kicker) ? "МСК" : "GMT+5";
+}
+
 test.describe("020 EARS-1 — the doctor storefront event page", () => {
-  test.skip(
-    !BASE || !SLUG,
-    "requires a live doctor app + a seeded event slug",
-  );
+  test.use({ timezoneId: "Asia/Yekaterinburg" });
+  test.skip(!BASE || !SLUG, "requires a live doctor app + a seeded event slug");
 
   test("020 EARS-1: a guest reads the whole event server-side on doctor.school, composed from the shared blocks", async ({
     page,
@@ -40,7 +46,9 @@ test.describe("020 EARS-1 — the doctor storefront event page", () => {
 
     await expect(page.getByTestId("event-page-shell")).toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await expect(page.getByTestId("event-page-hero")).toContainText("МСК");
+    await expect(page.getByTestId("event-page-hero")).toContainText(
+      `(${await expectedZoneLabel(page)})`,
+    );
     await expect(page.getByTestId("event-page-hero-chips")).toBeVisible();
     await expect(page.getByTestId("event-about")).toBeVisible();
     await expect(page.getByTestId("event-speaker-card").first()).toBeVisible();
@@ -61,7 +69,9 @@ test.describe("020 EARS-1 — the doctor storefront event page", () => {
     context,
   }) => {
     await context.clearCookies();
-    await page.goto(`${BASE}/events/${SLUG}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE}/events/${SLUG}`, {
+      waitUntil: "domcontentloaded",
+    });
 
     await expect(page.getByTestId("event-signup-card")).toHaveCount(1);
     const cta = page.getByRole("link", { name: "Участвовать", exact: true });
@@ -76,7 +86,9 @@ test.describe("020 EARS-1 — the doctor storefront event page", () => {
     context,
   }) => {
     await context.clearCookies();
-    await page.goto(`${BASE}/events/${SLUG}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE}/events/${SLUG}`, {
+      waitUntil: "domcontentloaded",
+    });
 
     // One column, one card: the aside carries the sign-up card and nothing
     // else. EARS-4 adds data to that card's conditions line — never a second
@@ -101,7 +113,9 @@ test.describe("020 EARS-1 — the doctor storefront event page", () => {
 
     // Exactly one participation control page-wide, and no commerce copy that
     // would imply a second path (buy / request / download).
-    await expect(page.getByRole("link", { name: /Участвовать/ })).toHaveCount(1);
+    await expect(page.getByRole("link", { name: /Участвовать/ })).toHaveCount(
+      1,
+    );
     await expect(page.getByRole("button", { name: /Участвовать/ })).toHaveCount(
       0,
     );

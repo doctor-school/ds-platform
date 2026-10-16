@@ -1046,3 +1046,27 @@ remain unchanged and complementary. No provider/internal mail mechanism claim
 is inferred from this browser proof. Run the selected `@handoff-other-account`
 Academy case on the lead-selected contour. This test coverage change has no
 render surface and needs no owner Stage-B request or new staging slot.
+
+### First sign-in code invalidates the preverification password (003 EARS-41)
+
+`Academy refuses the preverification password after the owner's first sign-in code`
+uses `steps/signin-first-code.steps.ts` to register one unique owned
+`signin-first-code-2941-<UUID>@example.test` account without consuming its
+registration code. The ordinary Academy email-code login requests a fresh
+addressed six-digit sign-in mail. Its code-free acknowledgement grants no private
+access. One submission verifies that same account and opens `/account` with a
+secure host-only session and no readable tokens. An independent guest submits
+the exact original registration password once and receives the generic refusal
+without a private session or profile access. Traces remain off; cleanup revokes
+only owned sessions and closes owned contexts.
+
+This is a narrow Academy projection of `A password set before verification does
+not survive the owner's first code`; that broader scenario remains unchanged.
+Retain `apps/api/test/auth/zitadel-email-verify.e2e-spec.ts:272` for the real IdP
+first-sign-in-code/password invalidation round trip and
+`apps/api/src/auth/auth.service.spec.ts:1402` for revocation of every prior
+session. The browser cannot establish a session on this unverified registration
+and makes no revoke-all claim from that absence. Existing cold `/verify`,
+unverified login, and other broader cases remain complementary. Select the one
+`@signin-first-code` Academy case on the lead-selected contour. This test coverage
+change has no render surface and needs no owner Stage-B request or staging slot.

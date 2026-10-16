@@ -170,12 +170,16 @@ Timeweb Cloud container registry (#2981, tech spec
 - **A manual one-off, not Terraform.** The registry was created through the Timeweb
   API on 2026-10-16; no Terraform resource models it, so `terraform plan` neither
   shows nor recreates it. Endpoint: `ds-platform.registry.twcstorage.ru`.
-- **Two tokens, each in one place.**
+- **Two tokens, each scoped to the job that needs it.**
 
-  | Token | Scope       | Lives in                                                                  | Used by                                                      |
-  | ----- | ----------- | ------------------------------------------------------------------------- | ------------------------------------------------------------ |
-  | push  | push + pull | GitHub Environment `build`, secret `REGISTRY_PUSH_TOKEN`                  | `.github/workflows/runtime-images.yml` (build + verify jobs) |
-  | pull  | pull only   | each box, `/etc/ds-platform/registry-pull-token` (mode 0600, `root:root`) | the box's `docker login` before a pull (stage, then prod)    |
+  | Token | Scope       | Lives in                                                                                                                       | Used by                                                                                       |
+  | ----- | ----------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+  | push  | push + pull | GitHub Environment `build`, secret `REGISTRY_PUSH_TOKEN`                                                                       | `runtime-images.yml` `build` job only — it runs nothing but buildx after login                |
+  | pull  | pull only   | GitHub Environment `build`, secret `REGISTRY_PULL_TOKEN`; each box, `/etc/ds-platform/registry-pull-token` (0600, `root:root`) | `runtime-images.yml` `verify` job (runs PR-head code); the box's `docker login` before a pull |
+
+  The registry has no per-repository scopes, so an internal PR head could still push
+  outside `pr/` with the push token. Accepted: a release takes only the digests a `main`
+  build recorded in its `images-<sha>.json`, never a tag. Fork PRs get neither token.
 
   Login: `docker login ds-platform.registry.twcstorage.ru -u ds-platform --password-stdin`
   with the token on stdin — the token authenticates; the username is not checked.

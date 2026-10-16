@@ -120,6 +120,8 @@ jobs:
             }
     env:
       PUSH: ${{ needs.plan.outputs.push }}
+      # The registry host is spelled out: `env` is not available in jobs.<id>.env, so
+      # a change to env.REGISTRY must change this line too.
       TAG: ${{ format('ds-platform.registry.twcstorage.ru/{0}{1}:{2}', needs.plan.outputs.prefix, matrix.image, needs.plan.outputs.sha) }}
     steps:
       - uses: actions/checkout@v7
@@ -273,21 +275,19 @@ jobs:
       # The stage box scripts run the golden seed in this same image (slot.mjs
       # `seedCommandPlan`, golden-db.mjs `buildCommands`), so the image must run it.
       # Same argv as those scripts; the subject ids are throwaway strings (the seed
-      # never creates IdP users) and the media goes to a throwaway MinIO bucket.
+      # never creates IdP users) and the media goes to a throwaway S3Mock bucket
+      # (S3Mock: minio/minio is no longer pullable from Docker Hub).
       - name: Seed the golden dataset from the migrate image
         if: matrix.app == 'api'
         run: |
-          docker run -d --name ds-runtime-s3 --network host \
-            -e MINIO_ROOT_USER=ci-golden -e MINIO_ROOT_PASSWORD=ci-golden-secret \
-            minio/minio:latest server /data
+          docker run -d --name ds-runtime-s3 --network host adobe/s3mock:5.2.2
           ready=false
           for i in $(seq 1 30); do
-            if docker exec ds-runtime-s3 mc ready local; then ready=true; break; fi
+            if curl -sf -o /dev/null http://localhost:9090/; then ready=true; break; fi
             sleep 2
           done
           test "$ready" = true
-          docker exec ds-runtime-s3 mc alias set ci http://localhost:9000 ci-golden ci-golden-secret
-          docker exec ds-runtime-s3 mc mb ci/ds-golden
+          curl -sf -X PUT http://localhost:9090/ds-golden
           subs=""
           for key in DOCTOR_UNVERIFIED DOCTOR_VERIFIED DOCTOR_MFA DOCTOR_DELETED ADMIN \
             DOCTOR_VERIFIED_W1 DOCTOR_VERIFIED_W2 DOCTOR_VERIFIED_W3 DOCTOR_VERIFIED_W4 DOCTOR_VERIFIED_W5; do
@@ -295,7 +295,7 @@ jobs:
           done
           docker run --rm --network host $subs \
             -e DATABASE_URL=postgres://ds:ds@localhost:5432/ds_image \
-            -e S3_ENDPOINT=http://localhost:9000 -e S3_REGION=us-east-1 \
+            -e S3_ENDPOINT=http://localhost:9090 -e S3_REGION=us-east-1 \
             -e S3_BUCKET_UPLOADS=ds-golden -e S3_ACCESS_KEY=ci-golden \
             -e S3_SECRET_KEY=ci-golden-secret \
             ds-runtime:api-migrate pnpm --filter @ds/db run seed:golden

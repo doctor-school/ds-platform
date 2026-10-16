@@ -323,6 +323,22 @@
         "https://github.com/doctor-school/ds-platform/issues/2901#issuecomment-6192341323"
       ]
     },
+    "admin-sign-in-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/login/page.tsx",
+        "apps/admin/app/mfa/challenge/page.tsx",
+        "apps/admin/app/mfa/enroll/page.tsx"
+      ],
+      "states": [
+        "admin-login",
+        "admin-mfa-challenge-focused",
+        "admin-mfa-enroll-focused"
+      ],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/2954#issuecomment-6209041223"
+      ]
+    },
     "admin-event-and-direction-pages-v1": {
       "evidenceProfiles": ["responsive-web"],
       "surfacePaths": [

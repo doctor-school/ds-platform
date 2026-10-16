@@ -1,6 +1,9 @@
 import type { EventPlayback } from "@ds/schemas";
 
-import { forwardedHeaders, type ForwardedSession } from "./registration-state";
+import {
+  forwardedHeaders,
+  type ForwardedSession,
+} from "@ds/events-storefront/server";
 
 /**
  * 014 EARS-5 — the AUTHENTICATED source read behind the recording player.
@@ -11,8 +14,8 @@ import { forwardedHeaders, type ForwardedSession } from "./registration-state";
  * byte-identical for a guest and a signed-in doctor, and no playable source can
  * leak into a guest's HTML because the guest's render never issues this call.
  *
- * Session forwarding is the 005 `registration-state` mechanism unchanged (its
- * {@link ForwardedSession} is reused rather than re-declared): the BFF session is
+ * Session forwarding is the 005 `@ds/events-storefront/server` mechanism
+ * unchanged (its {@link ForwardedSession} is reused rather than re-declared): the BFF session is
  * fingerprint-bound (ADR-0001 §6), so a server-side read on the doctor's behalf
  * must present the browser's `user-agent`, `accept-language` AND client address
  * alongside the cookie or the api re-derives a different fingerprint and 401s a

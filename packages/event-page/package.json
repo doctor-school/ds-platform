@@ -1,0 +1,42 @@
+{
+  "name": "@ds/event-page",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DS Platform shared event page — the one event-page composition (hero, sign-up card, recording gate / player, programme, speakers, format, partners), its reads and its copy, mounted by both storefronts with a data-only host config (ADR-0013 A1, feature 020, epic #2020 wave 3).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./page": "./src/ui/event-page.tsx",
+    "./host-config": "./src/host-config.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@ds/design-system": "workspace:*",
+    "@ds/events-storefront": "workspace:*",
+    "@ds/room": "workspace:*",
+    "@ds/schemas": "workspace:*"
+  },
+  "peerDependencies": {
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.5.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "jsdom": "^30.0.1",
+    "next": "16.3.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

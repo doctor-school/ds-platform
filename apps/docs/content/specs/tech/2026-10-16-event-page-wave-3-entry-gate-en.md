@@ -1,6 +1,6 @@
 ---
 title: Wave-3 entry gate — event-page behaviour matrix, EARS disposition, PR sequence
-status: Draft — owner answers recorded 2026-10-16; awaiting Mode (a) re-review (slice 0 of #2072)
+status: Approved — Mode (a) APPROVE (review 5546055032), owner answers recorded 2026-10-16; PR 3.1 in progress (#2072)
 ---
 
 # Wave-3 entry gate — `@ds/event-page`
@@ -34,7 +34,7 @@ Anchors are `file:line` in this repository at `0b36632c`. Abbreviations: **AP** 
 
 ## 2. Behaviour matrix
 
-One row per scenario. `Allowed difference` takes exactly one of: `none` · `config: <HostConfig field>` (with the clause that permits it) · `product divergence: <ref>` · `convergence: <owner decision / spec clause>` (with the PR that lands it) · `OPEN — owner question`. Every `OPEN` row is repeated verbatim in §6. A test id is an existing `file:line` test title, or `NEW: <proposed package or host-mount test>` naming what it asserts. A cell that could not be anchored reads `UNVERIFIED — <why>`.
+One row per scenario, 45 rows. `Allowed difference` takes exactly one of: `none` · `config: <HostConfig field>` (with the clause that permits it) · `product divergence: <ref>` · `convergence: <owner decision / spec clause>` (with the PR that lands it) · `OPEN — owner question`. Every `OPEN` row is repeated verbatim in §6. A test id is an existing `file:line` test title, or `NEW: <proposed package or host-mount test>` naming what it asserts. A cell that could not be anchored reads `UNVERIFIED — <why>`.
 
 E2E abbreviations: `pe2e` = `apps/portal/e2e`, `de2e` = `apps/doctor/e2e`, `api` = `apps/api/test`.
 

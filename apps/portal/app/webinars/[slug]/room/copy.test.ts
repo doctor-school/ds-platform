@@ -20,7 +20,8 @@ const read = (node: unknown, path: string): unknown =>
   path
     .split(".")
     .reduce<unknown>(
-      (cursor, segment) => (cursor as Record<string, unknown> | undefined)?.[segment],
+      (cursor, segment) =>
+        (cursor as Record<string, unknown> | undefined)?.[segment],
       node,
     );
 
@@ -58,10 +59,14 @@ describe("006 EARS-10 academy room copy — the host's half of the injection con
   });
 
   it("EARS-10: room.accessGuidance is NOT part of the room copy contract (D22)", () => {
-    expect(read(room, "accessGuidance.title")).toEqual(expect.any(String));
+    // The guidance is the event page's sentence: it left this catalogue for the
+    // `@ds/event-page` copy module (#2072, wave-3 gate D7).
+    expect(read(room, "accessGuidance.title")).toBeUndefined();
     expect(
       ROOM_COPY_KEYS.filter((key) => key.startsWith("accessGuidance")),
     ).toEqual([]);
-    expect((copy as unknown as Record<string, unknown>).accessGuidance).toBeUndefined();
+    expect(
+      (copy as unknown as Record<string, unknown>).accessGuidance,
+    ).toBeUndefined();
   });
 });

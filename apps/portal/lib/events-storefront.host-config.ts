@@ -1,5 +1,6 @@
 import { adaptPublicEventListing } from "@ds/events-storefront/adapters";
 import type { EventsStorefrontHostConfig } from "@ds/events-storefront/host-config";
+import type { EventPageHostConfig } from "@ds/event-page/host-config";
 
 /**
  * What the Academy states about itself so the shared events feed can serve it
@@ -34,3 +35,25 @@ export const ACADEMY_EVENTS_STOREFRONT = {
     accountEvents: "/account/events",
   },
 } satisfies EventsStorefrontHostConfig;
+
+/**
+ * What the Academy states about itself so the ONE event page
+ * (`@ds/event-page`) can serve it at `/webinars/:slug` (#2072, epic #2020
+ * wave 3; gate §4.4). DATA only: the public read path (no relay cookie — the
+ * Academy read is public), the routes this host serves and its breadcrumb
+ * word. Every rule and every other sentence lives in `@ds/event-page`.
+ */
+export const ACADEMY_EVENT_PAGE = {
+  contentSet: {
+    pagePath: "/v1/public/events",
+  },
+  routes: {
+    listing: ACADEMY_EVENTS_STOREFRONT.routes.listing,
+    eventPage: ACADEMY_EVENTS_STOREFRONT.routes.eventPage,
+    login: ACADEMY_EVENTS_STOREFRONT.routes.login,
+    register: "/register",
+  },
+  copy: {
+    breadcrumb: "Эфиры",
+  },
+} satisfies EventPageHostConfig;

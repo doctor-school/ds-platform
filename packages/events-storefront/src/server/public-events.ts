@@ -14,12 +14,18 @@ const API_BASE = (
   process.env.API_PROXY_TARGET ?? "http://localhost:3000"
 ).replace(/\/$/, "");
 
-/** Fetch the publish-safe projection, or `null` when the event is not publicly reachable (404 — draft/unknown). */
+/**
+ * Fetch the publish-safe projection, or `null` when the event is not publicly
+ * reachable (404 — draft/unknown). `pagePath` is the host's
+ * `contentSet.pagePath` (`@ds/event-page`, wave-3 gate §4.4); the Academy's
+ * public path is the default every other caller reads.
+ */
 export async function fetchPublicEventPage(
   idOrSlug: string,
+  pagePath = "/v1/public/events",
 ): Promise<PublicEventPage | null> {
   const res = await fetch(
-    `${API_BASE}/v1/public/events/${encodeURIComponent(idOrSlug)}`,
+    `${API_BASE}${pagePath}/${encodeURIComponent(idOrSlug)}`,
     {
       headers: { accept: "application/json" },
       // Live product read — uncached (#843). A lifecycle transition

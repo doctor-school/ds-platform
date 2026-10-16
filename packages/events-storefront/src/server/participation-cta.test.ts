@@ -12,7 +12,12 @@ function jsonResponse(body: unknown, status = 200) {
   } as unknown as Response;
 }
 
-const GUEST = { cookie: "", userAgent: "UA", acceptLanguage: "ru", forwardedFor: "" };
+const GUEST = {
+  cookie: "",
+  userAgent: "UA",
+  acceptLanguage: "ru",
+  forwardedFor: "",
+};
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -40,7 +45,10 @@ describe("020 EARS-1 fetchParticipationCta — one read for guest and doctor", (
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await fetchParticipationCta("cardio-2026", { ...GUEST, cookie: "__Host-ds_session=s" });
+    await fetchParticipationCta("cardio-2026", {
+      ...GUEST,
+      cookie: "__Host-ds_session=s",
+    });
     expect(fetchMock.mock.calls[0]![1]?.headers).toMatchObject({
       cookie: "__Host-ds_session=s",
       "user-agent": "UA",
@@ -48,12 +56,36 @@ describe("020 EARS-1 fetchParticipationCta — one read for guest and doctor", (
   });
 
   it("EARS-1: a 404 yields null; any other failure throws", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({}, 404)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({}, 404)),
+    );
     await expect(fetchParticipationCta("draft", GUEST)).resolves.toBeNull();
 
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({}, 503)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({}, 503)),
+    );
     await expect(fetchParticipationCta("x", GUEST)).rejects.toThrow(
       /participation cta fetch failed \(503\)/,
+    );
+  });
+});
+
+describe("wave-3 gate §4.4 — the read sits at the host's pagePath", () => {
+  it("EARS-1: a host-config pagePath addresses `${pagePath}/:slug/participation`", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      jsonResponse({ kind: "register" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchParticipationCta(
+      "cardio-2026",
+      GUEST,
+      "/v1/storefront/doctor/events",
+    );
+    expect(fetchMock.mock.calls[0]![0]).toMatch(
+      /\/v1\/storefront\/doctor\/events\/cardio-2026\/participation$/,
     );
   });
 });

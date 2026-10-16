@@ -29,6 +29,7 @@ import {
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
+import { gatedPasswordLogin } from "../lib/gated-password-login.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 
 const SESSION = "__Host-ds_session";
@@ -119,9 +120,11 @@ async function passwordProbe(
     page.locator('input[autocomplete="current-password"]'),
     state.password,
   );
-  const pending = captureResponse(page, "/v1/auth/login");
-  await page.getByTestId("password-login-submit").click();
-  const submitted = await pending;
+  const submitted = await gatedPasswordLogin(page, async () => {
+    const pending = captureResponse(page, "/v1/auth/login");
+    await page.getByTestId("password-login-submit").click();
+    return pending;
+  });
   let intended = false;
   try {
     const body = submitted.response.request().postDataJSON();

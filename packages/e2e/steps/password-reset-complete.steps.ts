@@ -22,6 +22,7 @@ import {
   mailpitUrlFor,
   nativeRecoveryMail,
 } from "../lib/mailpit.js";
+import { gatedPasswordLogin } from "../lib/gated-password-login.js";
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
 
 const SESSION = "__Host-ds_session";
@@ -82,9 +83,11 @@ async function passwordSignIn(
   await open(page, `${base}/login?returnTo=%2Faccount`);
   await input(page.locator('input[autocomplete="username"]'), email);
   await input(page.locator('input[autocomplete="current-password"]'), password);
-  const pending = post(page, "/v1/auth/login");
-  await page.getByTestId("password-login-submit").click();
-  return pending;
+  return gatedPasswordLogin(page, async () => {
+    const pending = post(page, "/v1/auth/login");
+    await page.getByTestId("password-login-submit").click();
+    return pending;
+  });
 }
 async function cookieValue(page: Page): Promise<string> {
   const cookie = (await page.context().cookies()).find(

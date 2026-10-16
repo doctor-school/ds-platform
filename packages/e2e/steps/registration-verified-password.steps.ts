@@ -20,6 +20,7 @@ import {
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
+import { gatedPasswordLogin } from "../lib/gated-password-login.js";
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
 
 const SESSION = "__Host-ds_session";
@@ -488,9 +489,11 @@ Then(
         if (request.method() === "POST" && pathname.startsWith("/v1/auth/"))
           posts.push(pathname);
       });
-      const pending = captureResponse(guest, "/v1/auth/login");
-      await guest.getByTestId("password-login-submit").click();
-      const submitted = await pending;
+      const submitted = await gatedPasswordLogin(guest, async () => {
+        const pending = captureResponse(guest, "/v1/auth/login");
+        await guest.getByTestId("password-login-submit").click();
+        return pending;
+      });
       let credentialsMatch = false;
       try {
         const body = submitted.response.request().postDataJSON();

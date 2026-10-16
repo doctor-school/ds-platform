@@ -27,6 +27,7 @@ import {
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
+import { gatedPasswordLogin } from "../lib/gated-password-login.js";
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
 
 interface ResetMail extends OwnedCredentials {
@@ -107,9 +108,11 @@ async function passwordSignIn(
     page.locator('input[autocomplete="current-password"]'),
     password,
   );
-  const pending = captureResponse(page, "/v1/auth/login");
-  await page.getByTestId("password-login-submit").click();
-  return pending;
+  return gatedPasswordLogin(page, async () => {
+    const pending = captureResponse(page, "/v1/auth/login");
+    await page.getByTestId("password-login-submit").click();
+    return pending;
+  });
 }
 
 Given(

@@ -159,20 +159,6 @@ claim: no-email, response timing, counter and audit assertions remain in
 SMS delivery/reset completion in `steps/password-reset-sms.steps.ts` remain
 retained. This coverage-only change has no render surface or owner Stage-B slot.
 
-### One account across the storefronts (020 EARS-18)
-
-`020 EARS-18: a doctor signed in on one storefront opens the same event on the other storefront …`
-(`steps/event-page-cross-host.steps.ts`, gate row 27, #1775) signs in through
-the shared golden sign-in on the project's own host, then opens the golden
-recorded event on the other host in the same browser context. The recorded
-event renders the player only for a signed-in doctor and the sign-in gate for a
-guest, so the signed-in render is observable on either host; the step also
-records every main-frame URL of that tab and fails on any hop to the other
-host's sign-in route. The doctor project drives doctor.school -> Academy, the
-academy project the reverse. It needs two real hosts and one IdP, so it runs on
-a stage slot only: `pnpm e2e:stage pr-<N> --grep "020 EARS-18"` runs both
-directions, `--project doctor` narrows it to doctor.school -> Academy.
-
 ## What is in here
 
 | File                   | What it is                                                                                                                                                                                           |

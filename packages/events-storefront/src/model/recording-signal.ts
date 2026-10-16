@@ -26,7 +26,7 @@ import type { CanvasStatus } from "./event-lifecycle";
  *   • the player and its guest login gate — `resolvePlayerCard` below plus
  *     #1343's authenticated source read (EARS-5);
  *   • the raw-original spoiler under the montage — 014 EARS-8 (#1345). It is
- *     rendered by `app/webinars/[slug]/page.tsx` and gated on the authenticated
+ *     rendered by `@ds/event-page` (`src/ui/event-page.tsx`) and gated on the authenticated
  *     playback read's `secondary` cut, not on `secondaryKind`: the spoiler
  *     needs a playable SOURCE, and this projection is source-free by design.
  *     `secondaryKind` therefore still produces no affordance here.

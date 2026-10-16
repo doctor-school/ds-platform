@@ -34,6 +34,7 @@ interface SwitchHandoff {
   oldSubject?: string;
   oldEmail?: string;
   oldMail?: AddressedMailCheckpoint;
+  oldRevoked?: boolean;
   requestedAt?: string;
   code?: string;
   redeemed?: CapturedResponse;
@@ -341,6 +342,7 @@ Then(
       { profile: old.profile, session: old.session },
       "old X cookie fails real private reads after Y sign-in",
     ).toEqual({ profile: 401, session: 401 });
+    state.oldRevoked = true;
   },
 );
 
@@ -415,7 +417,7 @@ After("@handoff-other-account", async ({ page }) => {
         return { logout: logout.status, profile: profile.status };
       });
       expect(result, "owned session cleanup").toEqual({
-        logout: 200,
+        logout: owned === state.oldPage && state.oldRevoked ? 401 : 200,
         profile: 401,
       });
     }

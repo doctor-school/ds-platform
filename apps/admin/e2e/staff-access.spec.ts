@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import {
   expect,
   test,
@@ -31,8 +32,10 @@ import {
  * Zitadel → Postgres → Redis chain: a platform administrator grants staff
  * roles from the admin, the person signs in with the temporary password, the
  * step-up sends a stale second factor through the code screen and back, the
- * refusals change nothing, and a registrar never sees the section. The
- * revocation half of V-9 lands with «Отозвать» (#2902).
+ * refusals change nothing, and a registrar never sees the section; «Отозвать»
+ * revokes a row, the person's open admin session ends at once (V-9 revocation
+ * half), and a stale second factor sends the revocation through the code screen
+ * and back once.
  *
  * Dev-stand-gated like the rest of the flows tier, plus the session store:
  *
@@ -49,6 +52,8 @@ import {
 function uniqueEmail(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
 }
+
+const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
 const UNVERIFIED_REFUSAL =
   "Почта этой учётной записи не подтверждена. Попросите сотрудника подтвердить почту и повторите выдачу";
@@ -74,6 +79,20 @@ async function rowOf(page: Page, email: string): Promise<Locator> {
     .getByRole("searchbox", { name: "Поиск по ФИО и почте" })
     .fill(email);
   return page.locator("tr", { hasText: email });
+}
+
+/** «Отозвать» of the row of `email` (and `role`, when the person holds several). */
+async function openRevoke(
+  page: Page,
+  email: string,
+  role?: string,
+): Promise<Locator> {
+  const rows = await rowOf(page, email);
+  const row = role ? rows.filter({ hasText: role }) : rows;
+  await row.first().getByRole("button", { name: "Отозвать" }).click();
+  const dialog = page.getByTestId("staff-access-revoke-confirm");
+  await expect(dialog).toBeVisible();
+  return dialog;
 }
 
 async function openGrantForm(page: Page): Promise<void> {
@@ -112,11 +131,18 @@ test.describe("047 «Доступы» — a platform administrator grants staff 
   let adminAccount: BootstrapResult;
   let adminSecret = "";
   let signedInAt = 0;
+  /** When the administrator's last TOTP code was entered — the next must be a later step. */
+  let lastCodeAt = 0;
+  /** The committee member granted below, kept signed in for the revocation (V-9). */
+  let personContext: BrowserContext | undefined;
+  let person: Page;
+  const committee = { email: "" };
   let eventA = { id: "", title: "" };
   let eventB = { id: "", title: "" };
   const verifiedDoctor = { email: "" };
 
   test.afterAll(async () => {
+    await personContext?.close();
     await adminContext?.close();
   });
 
@@ -163,6 +189,7 @@ test.describe("047 «Доступы» — a platform administrator grants staff 
   }) => {
     test.setTimeout(300_000);
     const email = uniqueEmail("committee-new");
+    committee.email = email;
     await admin.goto("/access");
     await openGrantForm(admin);
     // «Мероприятие» belongs to a congress role only.
@@ -222,18 +249,15 @@ test.describe("047 «Доступы» — a platform administrator grants staff 
     ]);
 
     // The person signs in with the temporary password, enrols TOTP (011) and
-    // lands on the bound event's «Заявки».
-    const personContext = await browser.newContext({ locale: "ru-RU" });
-    try {
-      const person = await personContext.newPage();
-      await signInAsAdmin(person, { email, password: temporaryPassword });
-      await person.waitForURL(new RegExp(`/events/${eventA.id}/submissions`), {
-        timeout: 20_000,
-      });
-      await expect(person.getByTestId("nav-access")).toHaveCount(0);
-    } finally {
-      await personContext.close();
-    }
+    // lands on the bound event's «Заявки». The session stays open for the
+    // revocation below.
+    personContext = await browser.newContext({ locale: "ru-RU" });
+    person = await personContext.newPage();
+    await signInAsAdmin(person, { email, password: temporaryPassword });
+    await person.waitForURL(new RegExp(`/events/${eventA.id}/submissions`), {
+      timeout: 20_000,
+    });
+    await expect(person.getByTestId("nav-access")).toHaveCount(0);
   });
 
   test("047 EARS-4: an existing account with a verified email gets the role added — no password, its roles kept", async () => {
@@ -390,6 +414,7 @@ test.describe("047 «Доступы» — a platform administrator grants staff 
     await expect.poll(() => idpRoleKeysOf(email).catch(() => [])).toEqual([]);
 
     const code = await codeAfter(admin, adminSecret, signedInAt);
+    lastCodeAt = Date.now();
     await admin
       .getByTestId("mfa-challenge-form")
       .getByRole("textbox")
@@ -420,6 +445,183 @@ test.describe("047 «Доступы» — a platform administrator grants staff 
       timeout: 30_000,
     });
     expect(admin.url()).toMatch(/\/access$/);
+  });
+
+  test("047 EARS-7/EARS-9 (V-9): «Отозвать» removes the row and the person's open admin session ends at once; the own platform-administrator row is refused", async () => {
+    test.setTimeout(180_000);
+    await admin.goto("/access");
+    const listed = await rowOf(admin, committee.email);
+    await expect(
+      listed.first().getByRole("button", { name: "Отозвать" }),
+    ).toBeVisible();
+
+    const dialog = await openRevoke(admin, committee.email);
+    await expect(dialog.getByRole("heading")).toHaveText(
+      "Отозвать доступ: Сидорова Мария Ивановна — Программный комитет?",
+    );
+    await expect(dialog).toContainText(`Мероприятие: «${eventA.title}».`);
+    await expect(dialog).toContainText("Сотрудник сразу выйдет из админки");
+    const results = await new AxeBuilder({ page: admin })
+      .include("[data-testid='staff-access-revoke-confirm']")
+      .withTags(WCAG_TAGS)
+      .analyze();
+    const summary = results.violations.map(
+      (v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`,
+    );
+    expect(summary, "axe violations on the open revoke dialog").toEqual([]);
+    await evidenceShot(admin, "staff-access-revoke-confirm", {
+      fullPage: false,
+      prepare: async () => {
+        if (!(await dialog.isVisible())) {
+          await openRevoke(admin, committee.email);
+        }
+      },
+    });
+
+    await dialog.getByRole("button", { name: "Отозвать" }).click();
+    await expect(dialog).toBeHidden({ timeout: 30_000 });
+    await expect(admin.locator("tr", { hasText: committee.email })).toHaveCount(
+      0,
+    );
+    expect(await idpRoleKeysOf(committee.email)).toEqual(["doctor_guest"]);
+
+    // EARS-9: the person's next admin navigation finds no session.
+    await person.goto(`/events/${eventA.id}/submissions`);
+    await person.waitForURL(/\/login/, { timeout: 20_000 });
+
+    // The caller's own platform-administrator row: the API refusal, by name,
+    // with nothing to retry.
+    const own = await openRevoke(
+      admin,
+      adminAccount.email,
+      "Администратор платформы",
+    );
+    await own.getByRole("button", { name: "Отозвать" }).click();
+    const refusal = admin.getByTestId("staff-access-revoke-error");
+    await expect(refusal).toHaveAttribute("data-refusal", "selfPlatformAdmin", {
+      timeout: 30_000,
+    });
+    await expect(refusal).toContainText(
+      "Нельзя отозвать собственную роль администратора платформы. Ничего не изменено.",
+    );
+    await expect(admin.getByTestId("staff-access-revoke-submit")).toHaveCount(
+      0,
+    );
+    await own.getByRole("button", { name: "Отмена" }).click();
+    await expect(own).toBeHidden();
+    await expect(
+      (await rowOf(admin, adminAccount.email)).first(),
+    ).toContainText("Администратор платформы");
+  });
+
+  test("047 EARS-8: with a 31-minute-old second factor «Отозвать» opens the code screen, and after the code the revocation completes once", async () => {
+    test.setTimeout(180_000);
+    await ageAdminSecondFactor(adminAccount.email, 31 * 60_000);
+
+    await admin.goto("/access");
+    const dialog = await openRevoke(
+      admin,
+      verifiedDoctor.email,
+      "Администратор Конгресса",
+    );
+    await dialog.getByRole("button", { name: "Отозвать" }).click();
+
+    await admin.waitForURL(/\/mfa\/challenge\?mode=reverify/, {
+      timeout: 20_000,
+    });
+    const challenge = new URL(admin.url());
+    expect(challenge.searchParams.get("returnTo")).toBe("/access");
+    expect(challenge.searchParams.get("endpoint")).toBe(
+      "POST /v1/admin/staff-access/revocations",
+    );
+    // Nothing was revoked by the refused request.
+    expect(await idpRoleKeysOf(verifiedDoctor.email)).toEqual([
+      "doctor_guest",
+      "event-registrar",
+    ]);
+
+    const revocations: string[] = [];
+    admin.on("request", (request) => {
+      if (request.url().endsWith("/v1/admin/staff-access/revocations")) {
+        revocations.push(request.method());
+      }
+    });
+    const code = await codeAfter(admin, adminSecret, lastCodeAt);
+    lastCodeAt = Date.now();
+    await admin
+      .getByTestId("mfa-challenge-form")
+      .getByRole("textbox")
+      .fill(code);
+
+    // Back on «Доступы»: the saved revocation was sent once and the row is gone.
+    await admin.waitForURL(/\/access$/, { timeout: 20_000 });
+    await expect
+      .poll(() => idpRoleKeysOf(verifiedDoctor.email), { timeout: 30_000 })
+      .toEqual(["doctor_guest"]);
+    await expect(admin.getByTestId("staff-access-revoke-confirm")).toBeHidden({
+      timeout: 30_000,
+    });
+    await rowOf(admin, verifiedDoctor.email);
+    await expect(
+      admin.locator("tr", { hasText: verifiedDoctor.email }),
+    ).toHaveCount(0);
+    expect(revocations).toEqual(["POST"]);
+  });
+
+  test("047 EARS-7: a revocation that fails keeps the dialog open with «Повторить», which sends the same revocation", async () => {
+    test.setTimeout(180_000);
+    // The IdP outage cannot be forced against the real Zitadel: the `503` is
+    // route-mocked; the retry goes to the real api.
+    const email = uniqueEmail("admin-retry");
+    await admin.goto("/access");
+    await openGrantForm(admin);
+    await fillGrant(admin, {
+      email,
+      fullName: "Зайцева Нина",
+      role: "platform_admin",
+    });
+    await admin.getByTestId("staff-access-grant-submit").click();
+    await expect(admin.getByTestId("staff-access-password")).toBeVisible({
+      timeout: 30_000,
+    });
+    await admin.getByTestId("staff-access-grant-done").click();
+
+    const revocations = "**/v1/admin/staff-access/revocations";
+    await admin.route(revocations, (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          statusCode: 503,
+          message: "identity provider unavailable",
+        }),
+      }),
+    );
+    const dialog = await openRevoke(admin, email);
+    await dialog.getByRole("button", { name: "Отозвать" }).click();
+    const refusal = admin.getByTestId("staff-access-revoke-error");
+    await expect(refusal).toHaveAttribute("data-refusal", "unavailable");
+    await expect(dialog).toBeVisible();
+    const retry = admin.getByTestId("staff-access-revoke-submit");
+    await expect(retry).toHaveText("Повторить");
+    await evidenceShot(admin, "staff-access-revoke-failed", {
+      fullPage: false,
+      prepare: async () => {
+        if (!(await refusal.isVisible())) {
+          await openRevoke(admin, email);
+          await retry.click();
+          await expect(refusal).toBeVisible();
+        }
+      },
+    });
+
+    await admin.unroute(revocations);
+    await retry.click();
+    await expect(dialog).toBeHidden({ timeout: 30_000 });
+    await expect(admin.locator("tr", { hasText: email })).toHaveCount(0);
+    await expect
+      .poll(() => idpRoleKeysOf(email).catch(() => []))
+      .not.toContain("platform_admin");
   });
 
   test("047 EARS-1: a congress registrar sees no «Доступы» and the route refuses them", async ({

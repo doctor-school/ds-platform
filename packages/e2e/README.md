@@ -1023,3 +1023,26 @@ budget and other-account session tests remain complementary; this single case
 makes no claim to cover them. Run the selected `@valid-handoff` Academy case on
 the lead-selected contour. This coverage change has no render surface and needs
 no owner Stage-B request or new staging slot.
+
+### Other-account congress handoff (003 EARS-44)
+
+`Academy switches from another signed-in account to the hand-off account`
+uses `lib/owned-congress-signup.ts` for real congress Y intake and its actual
+reference, then registers and verifies a different owned Academy X through
+the real browser and addressed confirmation mail. An independent context
+retains X's exact live session cookie and proves private profile/session access
+before the handoff. Opening Y's link must add exactly one fresh sign-in mail
+to Y's congress-notice checkpoint and send no new mail to X. Entering that
+delivered Y code once must replace the browser session with one secure BFF
+cookie and return to Academy's actual `/account` page showing Y's verified
+profile and a subject different from X. The retained X cookie must receive
+401 from both actual private profile and session reads after the switch.
+
+`steps/handoff-other-account.steps.ts` owns only its contexts and sessions;
+cleanup revokes them, traces remain off, and secret-bearing inputs are projected
+to booleans in assertions. The original Doctor `/account/congress` scenario
+and `apps/api/test/auth/login-handoff.e2e-spec.ts:381` native replacement test
+remain unchanged and complementary. No provider/internal mail mechanism claim
+is inferred from this browser proof. Run the selected `@handoff-other-account`
+Academy case on the lead-selected contour. This test coverage change has no
+render surface and needs no owner Stage-B request or new staging slot.

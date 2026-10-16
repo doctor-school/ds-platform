@@ -42,6 +42,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the phone field is prefilled with "8 (999) 123-45-67" and is editable
     And no SMS is sent and users.phone is still empty until the code is confirmed
 
+  # Academy API/UI projection only; the broader declaration above is retained.
+  # Native latest-answer, mirror/no-write proof: apps/api/test/me/profile.e2e-spec.ts EARS-50.
+  # Existing formatting/mask proof: packages/design-system/src/blocks/account-profile-card.test.tsx EARS-50/47.
+  @EARS-50 @happy @congress-phone-prefill
+  Scenario: Academy prefills the congress contact phone without confirming it or sending SMS
+    Given a fresh Academy congress intake holds the raw contact phone and the participant signs in with the ordinary emailed code
+    Then Academy's profile API returns the exact raw congress suggestion with an empty unconfirmed phone and its existing row displays the formatted number
+    When the participant opens the suggested phone editor, changes its masked value and cancels without requesting a code
+    Then editing and canceling makes no fetch or phone request and neither number receives SMS throughout the full delivery horizon while the API suggestion remains unchanged
+
   @EARS-49 @EARS-47 @EARS-52 @EARS-57 @happy @phone-confirmation
   Scenario: Changing a confirmed phone leaves no confirmed phone until the new one is confirmed
     Given a signed-in user with the confirmed phone "+79991234567"

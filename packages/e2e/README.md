@@ -771,6 +771,30 @@ owned context. Existing API suppression, enumeration and timing tests remain
 intact. Run only this selected case on the lead-selected stand; this coverage
 change has no render surface and requires no Stage-B request or slot.
 
+### Congress contact-phone suggestion (003 EARS-50)
+
+`Academy prefills the congress contact phone without confirming it or sending SMS`
+creates a fresh owned intake through `createOwnedCongressSignup` with the raw
+`8 (999) 123-45-67`, then signs in with an ordinary delivered email code. It uses
+no handoff redemption. `steps/congress-phone-prefill.steps.ts` proves the exact
+raw API suggestion, null API phone/verification fields and the existing formatted
+`+7 999 123-45-67` display without a confirmed badge. The editor initially retains
+the raw value; actual input applies the existing E.164 mask. Editing to a distinct
+owned phone and canceling restores the original suggestion, with no fetch/XHR or
+phone mutation. Both numbers receive no addressed SMS over the full 20-second
+SMS delivery horizon, and a final profile read stays unchanged. A missing readable
+SMS sink fails instead of skipping. Traces stay off; cleanup revokes only the
+owned session and closes its context. Intake fixtures remain in the lead-owned
+isolated database inventory until its authorized cleanup.
+
+This is an API/UI projection. The broader original scenario and native
+`apps/api/test/me/profile.e2e-spec.ts` EARS-50 latest-answer/internal no-write proof
+remain intact, alongside the existing account row and phone-mask unit contracts.
+The congress helper accepts an optional fourth `{ contactPhone }` argument;
+three-argument callers retain their original default. Run the single
+`@congress-phone-prefill` Academy case on the lead-selected runtime. This coverage
+change has no render surface and needs no Stage-B request or staging slot.
+
 ### SMS password reset (003 EARS-53/12/35)
 
 `Password reset by a confirmed phone delivers the code by SMS` registers a unique

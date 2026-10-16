@@ -20,6 +20,7 @@ export async function createOwnedCongressSignup(
   page: Page,
   hostBaseUrl: string,
   addressPrefix: string,
+  options: { contactPhone?: string } = {},
 ): Promise<OwnedCongressSignup> {
   const email = `${addressPrefix}-${randomUUID()}@example.test`;
   await page.goto(hostBaseUrl, { waitUntil: "load" });
@@ -31,7 +32,7 @@ export async function createOwnedCongressSignup(
   expect(before.messageIds.length, "fresh page mailbox is empty").toBe(0);
   // 044 EARS-1/39: use the real intake as the only reference minter.
   const accepted = await page.evaluate(
-    async ({ email, captchaToken }) => {
+    async ({ email, captchaToken, contactPhone }) => {
       const book = await fetch("/v1/public/specialties");
       const specialties = await book.json().catch(() => ({}));
       const specialtyId = specialties.entries?.[0]?.id;
@@ -52,7 +53,7 @@ export async function createOwnedCongressSignup(
           workplace: "ГКБ № 1",
           city: "Москва",
           region: "Москва",
-          contactPhone: "+7 (900) 123-45-67",
+          contactPhone,
           personalDataConsent: true,
         }),
       });
@@ -69,6 +70,7 @@ export async function createOwnedCongressSignup(
     },
     {
       email: email,
+      contactPhone: options.contactPhone ?? "+7 (900) 123-45-67",
       captchaToken:
         process.env.BOT_PROTECTION_ENABLED === "false"
           ? undefined

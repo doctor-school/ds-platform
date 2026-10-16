@@ -145,6 +145,19 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the next step says that an SMS was sent only if the number is confirmed in the profile and offers the email way out
     And typing an email into the field shows no hint
 
+  # Academy projection of EARS-54/55 above (#2989); native declaration retained.
+  # No-email/timing/counter/audit: apps/api/test/auth/password-reset.e2e-spec.ts EARS-53/56.
+  # Confirmed-phone delivery/completion: packages/e2e/steps/password-reset-sms.steps.ts.
+  @EARS-54 @EARS-55 @happy @reset-sms-hint
+  Scenario: Academy reset explains SMS eligibility and returns to email without claiming delivery
+    Given an Academy guest opens reset with a fresh unknown phone and a readable SMS sink
+    When the Academy guest types that unknown phone in the real reset identifier field
+    Then the reset field exposes the approved static SMS eligibility hint accessibly without an auth command
+    When the Academy guest requests a reset code for that unknown phone
+    Then Academy shows the conditional SMS code step and email way out while no addressed SMS arrives for twenty seconds
+    When the Academy guest uses start over and types the owned email instead
+    Then the reset email field has no SMS hint and the transition grants no private access or extra auth command
+
   @EARS-55 @EARS-56 @happy @hint
   Scenario: Sign-in under the SMS switch shows the hint and counts a request for an unconfirmed number
     Given the visitor opens "/login" with the "По коду" method and selects «SMS»

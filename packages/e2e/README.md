@@ -24,6 +24,26 @@ the owned session and closes owned contexts. Requires a real readable
 `E2E_SMS_SINK_URL` and Mailpit; a missing sink is an explicit skip, never proof.
 This test coverage change has no render surface or owner Stage-B slot.
 
+### Reset SMS hint and email transition (003 EARS-54/55)
+
+`Academy reset explains SMS eligibility and returns to email without claiming delivery`
+(`steps/reset-sms-hint.steps.ts`, #2989) drives `/reset` as an independent guest
+with a fresh unknown phone. It proves the shipped static eligibility hint is
+accessible from the identifier input, the exact neutral acknowledgement, and the
+conditional SMS code-step wording with the typed phone in bold. A readable real
+SMS sink must show no addressed SMS over a full 20-second horizon; missing sink
+access fails the proof rather than skipping it. The actual `Начать заново`
+control returns to the identifier form, where typing an owned email removes the
+SMS hint without another auth command or private session/profile access. Traces
+stay off and the owned guest context is closed. No recipient email belongs to
+the unknown phone, so this browser projection makes no global inbox-silence
+claim: no-email, response timing, counter and audit assertions remain in
+`apps/api/test/auth/password-reset.e2e-spec.ts` EARS-53/56. The broader native
+`The reset step and the hint tell the truth about the SMS` declaration,
+`packages/auth-flow/src/reset/reset-door.test.tsx` EARS-54/55 and confirmed-phone
+SMS delivery/reset completion in `steps/password-reset-sms.steps.ts` remain
+retained. This coverage-only change has no render surface or owner Stage-B slot.
+
 ## What is in here
 
 | File                   | What it is                                                                                                                                                                                           |

@@ -129,6 +129,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When a visitor requests a password reset with "owner@example.org"
     Then the code is mailed and no SMS is sent
 
+  # Academy projection of the preceding EARS-53 delivery clause (#2962).
+  # The fixed-identity native case above and full reset completion stay retained.
+  @EARS-53 @happy @email-reset-with-phone
+  Scenario: Academy keeps email reset delivery when the account also confirms a phone
+    Given a uniquely owned verified Academy account has confirmed a fresh phone in its profile
+    When an independent guest requests reset using that Academy account's email
+    Then Academy delivers one fresh six-digit email reset code, shows the email step and sends no SMS for twenty seconds
+
   @EARS-54 @EARS-55 @happy @hint
   Scenario: The reset step and the hint tell the truth about the SMS
     When a visitor types a phone into the identifier field of "/reset"

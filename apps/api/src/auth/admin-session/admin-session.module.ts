@@ -74,9 +74,20 @@ import { AdminUsersController } from "./admin-users.controller.js";
     StepUpRoutes,
     {
       provide: ADMIN_SESSION_STORE,
-      useFactory: (): AdminSessionStore => {
+      // The session store consumes pending records when it mints a session
+      // (047 EARS-7), so the in-memory binding shares the pending store's
+      // instance; the Redis binding shares the keyspace.
+      inject: [PENDING_AUTH_STORE],
+      useFactory: (pending: PendingAuthStore): AdminSessionStore => {
         const env = loadEnv();
-        if (!env.REDIS_URL) return new InMemoryAdminSessionStore();
+        if (!env.REDIS_URL) {
+          if (!(pending instanceof InMemoryPendingAuthStore)) {
+            throw new Error(
+              "in-memory admin session store needs the in-memory pending store",
+            );
+          }
+          return new InMemoryAdminSessionStore(pending);
+        }
         return new RedisAdminSessionStore(adminRedis(env.REDIS_URL));
       },
     },

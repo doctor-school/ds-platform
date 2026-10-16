@@ -14,6 +14,42 @@ import type {
 const ADMIN_SESSION_PREFIX = "ds:admin-session:";
 const ADMIN_SESSION_SUB_INDEX_PREFIX = "ds:admin-session:sub:";
 const PENDING_AUTH_PREFIX = "ds:admin-pending:";
+const PENDING_AUTH_SUB_INDEX_PREFIX = "ds:admin-pending:sub:";
+/** 047 EARS-7 — per-person admin access generation; no TTL (a bump must outlive every session). */
+const ACCESS_GENERATION_PREFIX = "ds:admin-access-gen:";
+
+/**
+ * The Redis surface the admin session store needs beyond {@link RedisLike}:
+ * `INCR` for the access generation and `EVAL` for the atomic session write.
+ */
+export interface AdminRedisLike extends RedisLike {
+  incr(key: string): Promise<number>;
+  eval(
+    script: string,
+    numKeys: number,
+    ...args: (string | number)[]
+  ): Promise<unknown>;
+}
+
+/**
+ * 047 EARS-7 — mint a session from a pending sign-in in ONE atomic step.
+ * KEYS: pending record, pending sub index, access generation, session record,
+ * session sub index. ARGV: pending ref, expected generation, session JSON,
+ * TTL seconds, sid. The pending record is consumed whatever the verdict; the
+ * session (and its index entry) is written only while the generation is the
+ * one the sign-in observed before it read the roles.
+ */
+const CREATE_FROM_PENDING_LUA = `
+if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end
+redis.call('DEL', KEYS[1])
+redis.call('SREM', KEYS[2], ARGV[1])
+local generation = redis.call('GET', KEYS[3]) or '0'
+if generation ~= ARGV[2] then return 0 end
+redis.call('SET', KEYS[4], ARGV[3], 'EX', ARGV[4])
+redis.call('SADD', KEYS[5], ARGV[5])
+redis.call('EXPIRE', KEYS[5], ARGV[4])
+return 1
+`;
 
 /** Remaining lifetime in whole seconds, floored at 1 (Redis rejects `EX 0`). */
 function ttlSecondsUntil(expiresAtMs: number): number {
@@ -31,7 +67,38 @@ function ttlSecondsUntil(expiresAtMs: number): number {
  * is simply absent, indistinguishable from one that never existed.
  */
 export class RedisAdminSessionStore implements AdminSessionStore {
-  constructor(private readonly redis: RedisLike) {}
+  constructor(private readonly redis: AdminRedisLike) {}
+
+  async accessGeneration(sub: string): Promise<number> {
+    const raw = await this.redis.get(`${ACCESS_GENERATION_PREFIX}${sub}`);
+    return raw === null ? 0 : Number(raw);
+  }
+
+  async bumpAccessGeneration(sub: string): Promise<void> {
+    await this.redis.incr(`${ACCESS_GENERATION_PREFIX}${sub}`);
+  }
+
+  async createFromPending(
+    session: AdminSessionRecord,
+    pendingRef: string,
+    generation: number,
+  ): Promise<boolean> {
+    const written = await this.redis.eval(
+      CREATE_FROM_PENDING_LUA,
+      5,
+      `${PENDING_AUTH_PREFIX}${pendingRef}`,
+      `${PENDING_AUTH_SUB_INDEX_PREFIX}${session.sub}`,
+      `${ACCESS_GENERATION_PREFIX}${session.sub}`,
+      `${ADMIN_SESSION_PREFIX}${session.sid}`,
+      `${ADMIN_SESSION_SUB_INDEX_PREFIX}${session.sub}`,
+      pendingRef,
+      String(generation),
+      JSON.stringify(session),
+      ttlSecondsUntil(session.expiresAtMs),
+      session.sid,
+    );
+    return written === 1;
+  }
 
   async create(record: AdminSessionRecord): Promise<void> {
     const ttl = ttlSecondsUntil(record.expiresAtMs);
@@ -130,12 +197,18 @@ export class RedisPendingAuthStore implements PendingAuthStore {
   constructor(private readonly redis: RedisLike) {}
 
   async create(record: PendingAuthRecord): Promise<void> {
+    const ttl = ttlSecondsUntil(record.expiresAtMs);
     await this.redis.set(
       `${PENDING_AUTH_PREFIX}${record.ref}`,
       JSON.stringify(record),
       "EX",
-      ttlSecondsUntil(record.expiresAtMs),
+      ttl,
     );
+    // `sub → refs` index for 047 EARS-7's revocation; bumped to this member's
+    // TTL so the index cannot outlive every pending record it tracks.
+    const indexKey = `${PENDING_AUTH_SUB_INDEX_PREFIX}${record.sub}`;
+    await this.redis.sadd(indexKey, record.ref);
+    await this.redis.expire(indexKey, ttl);
   }
 
   async get(ref: string): Promise<PendingAuthRecord | undefined> {
@@ -159,6 +232,25 @@ export class RedisPendingAuthStore implements PendingAuthStore {
   }
 
   async delete(ref: string): Promise<void> {
-    await this.redis.del(`${PENDING_AUTH_PREFIX}${ref}`);
+    const key = `${PENDING_AUTH_PREFIX}${ref}`;
+    const raw = await this.redis.get(key);
+    await this.redis.del(key);
+    if (raw) {
+      const { sub } = JSON.parse(raw) as PendingAuthRecord;
+      await this.redis.srem(`${PENDING_AUTH_SUB_INDEX_PREFIX}${sub}`, ref);
+    }
+  }
+
+  async deleteBySub(sub: string): Promise<void> {
+    const indexKey = `${PENDING_AUTH_SUB_INDEX_PREFIX}${sub}`;
+    const refs = await this.redis.smembers(indexKey);
+    // A member whose record already expired by TTL is simply absent; deleting
+    // its key is a no-op, and the whole index key is dropped below.
+    if (refs.length > 0) {
+      await this.redis.del(
+        ...refs.map((ref) => `${PENDING_AUTH_PREFIX}${ref}`),
+      );
+    }
+    await this.redis.del(indexKey);
   }
 }

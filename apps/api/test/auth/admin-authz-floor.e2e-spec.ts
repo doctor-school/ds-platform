@@ -196,6 +196,12 @@ const FLOOR_ROUTES: {
     payload: {},
   },
   {
+    endpoint: "POST /v1/admin/staff-access/revocations",
+    method: "POST",
+    url: "/v1/admin/staff-access/revocations",
+    payload: {},
+  },
+  {
     endpoint: "DELETE /v1/admin/users/:id/mfa",
     method: "DELETE",
     url: `/v1/admin/users/${ABSENT_ID}/mfa`,

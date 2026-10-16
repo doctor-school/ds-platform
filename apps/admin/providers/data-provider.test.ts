@@ -277,3 +277,19 @@ describe("dataProvider — the event-kind resource (012 EARS-25, #2509)", () => 
     });
   });
 });
+
+describe("dataProvider.custom — a write answered with no body", () => {
+  it("047 EARS-7: a 204 No Content (the revocation) resolves with no data instead of failing to read a body", async () => {
+    globalThis.fetch = vi.fn(
+      async () => new Response(null, { status: 204 }),
+    ) as unknown as typeof fetch;
+
+    await expect(
+      dataProvider.custom!({
+        url: "/v1/admin/staff-access/revocations",
+        method: "post",
+        payload: { userId: "sub-2", role: "platform_admin" },
+      }),
+    ).resolves.toEqual({ data: null });
+  });
+});

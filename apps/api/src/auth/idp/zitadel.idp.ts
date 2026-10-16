@@ -2119,6 +2119,38 @@ export class ZitadelIdpClient implements IdpClient {
   }
 
   /**
+   * 047 EARS-7: Remove User Grant —
+   * `DELETE /management/v1/users/{userId}/grants/{grantId}`, org-scoped like the
+   * update. Used when the revoked role is the grant's last role key. A `404`
+   * means the grant is already gone (a repeated revocation) and counts as done;
+   * any other non-2xx fails loudly.
+   */
+  async removeProjectGrant(sub: string, grantId: string): Promise<void> {
+    const orgId = await this.resolveOrgId();
+    let res: Awaited<ReturnType<FetchLike>>;
+    try {
+      res = await this.fetchImpl(
+        this.url(
+          `/management/v1/users/${encodeURIComponent(sub)}/grants/${encodeURIComponent(grantId)}`,
+        ),
+        {
+          method: "DELETE",
+          headers: { ...this.headers(), "x-zitadel-orgid": orgId },
+        },
+      );
+    } catch (cause) {
+      throw new IdpUnavailableError(
+        `zitadel user-grant remove failed: ${(cause as Error).message}`,
+      );
+    }
+    if (!res.ok && res.status !== 404) {
+      throw new IdpUnavailableError(
+        `zitadel user-grant remove failed: HTTP ${res.status}`,
+      );
+    }
+  }
+
+  /**
    * 047 EARS-2: every grant on this project carrying one of `roleKeys`. One
    * user-grant search per role key — `projectIdQuery` AND `roleKeyQuery`
    * (`TEXT_QUERY_METHOD_EQUALS`) — rather than one project-wide search, which

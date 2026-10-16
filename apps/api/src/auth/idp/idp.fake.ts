@@ -571,6 +571,12 @@ export class FakeIdpClient implements IdpClient {
     return Promise.resolve();
   }
 
+  removeProjectGrant(sub: string, grantId: string): Promise<void> {
+    // Real-adapter parity: a grant already gone (Zitadel `404`) is removed.
+    if (grantId === this.grantIdOf(sub)) this.grants.delete(sub);
+    return Promise.resolve();
+  }
+
   listProjectGrantsWithRoles(
     roleKeys: readonly string[],
   ): Promise<IdpProjectGrantHolder[]> {

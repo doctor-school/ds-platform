@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
-import type { RedisLike } from "../session/session-store.redis.js";
+import { randomUUID } from "node:crypto";
+import { Redis } from "ioredis";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { InMemoryPendingAuthStore } from "./admin-session-store.fake.js";
 import {
+  type AdminRedisLike,
   RedisAdminSessionStore,
   RedisPendingAuthStore,
 } from "./admin-session-store.redis.js";
@@ -18,7 +20,7 @@ import type {
  * `sub` index, so the double must let the two fall out of step exactly as a real
  * Redis does.
  */
-class FakeRedis implements RedisLike {
+class FakeRedis implements AdminRedisLike {
   readonly strings = new Map<string, string>();
   readonly sets = new Map<string, Set<string>>();
 
@@ -58,6 +60,16 @@ class FakeRedis implements RedisLike {
 
   expire(): Promise<unknown> {
     return Promise.resolve(1);
+  }
+  incr(key: string): Promise<number> {
+    const next = Number(this.strings.get(key) ?? "0") + 1;
+    this.strings.set(key, String(next));
+    return Promise.resolve(next);
+  }
+
+  /** No Lua here — `createFromPending` is proven on a real Redis below. */
+  eval(): Promise<unknown> {
+    return Promise.reject(new Error("FakeRedis runs no scripts"));
   }
 }
 
@@ -109,7 +121,10 @@ describe("011 EARS-10 — RedisAdminSessionStore force-logout", () => {
     // outlive its own deadline by up to a second even with real Redis expiry —
     // and the request path must refuse it for that whole window, exactly as the
     // in-memory store does.
-    await store.create({ ...record("sid-past", "sub-2"), expiresAtMs: Date.now() - 1000 });
+    await store.create({
+      ...record("sid-past", "sub-2"),
+      expiresAtMs: Date.now() - 1000,
+    });
 
     await expect(store.get("sid-past")).resolves.toBeUndefined();
     // The read prunes it, so it can never resurface.
@@ -129,6 +144,7 @@ function pending(ref: string, expiresAtMs: number): PendingAuthRecord {
     sessionToken: `tok-${ref}`,
     fingerprint: "fp",
     expiresAtMs,
+    accessGeneration: 0,
   };
 }
 
@@ -163,3 +179,120 @@ describe("011 EARS-3 — pending-auth expiry is enforced by both bindings", () =
     });
   }
 });
+
+describe("047 EARS-7 — PendingAuthStore.deleteBySub drops every pending sign-in of one person", () => {
+  function pendingOf(ref: string, sub: string): PendingAuthRecord {
+    return { ...pending(ref, Date.now() + 60_000), sub };
+  }
+
+  const bindings: [string, () => PendingAuthStore][] = [
+    ["InMemoryPendingAuthStore", () => new InMemoryPendingAuthStore()],
+    ["RedisPendingAuthStore", () => new RedisPendingAuthStore(new FakeRedis())],
+  ];
+
+  for (const [name, make] of bindings) {
+    it(`047 EARS-7: ${name} deleteBySub removes the person's pending records and keeps another person's`, async () => {
+      const store = make();
+      await store.create(pendingOf("ref-a1", "sub-a"));
+      await store.create(pendingOf("ref-a2", "sub-a"));
+      await store.create(pendingOf("ref-b1", "sub-b"));
+
+      await store.deleteBySub("sub-a");
+
+      await expect(store.get("ref-a1")).resolves.toBeUndefined();
+      await expect(store.get("ref-a2")).resolves.toBeUndefined();
+      await expect(store.get("ref-b1")).resolves.toMatchObject({
+        ref: "ref-b1",
+      });
+      // Idempotent: a repeat over an empty index is a no-op.
+      await expect(store.deleteBySub("sub-a")).resolves.toBeUndefined();
+    });
+  }
+
+  it("047 EARS-7: the Redis sub index expires with the pending record and is pruned on delete(ref)", async () => {
+    const redis = new FakeRedis();
+    const expire = vi.spyOn(redis, "expire");
+    const store = new RedisPendingAuthStore(redis);
+    await store.create(pendingOf("ref-a1", "sub-a"));
+    await store.create(pendingOf("ref-a2", "sub-a"));
+    const indexKey = "ds:admin-pending:sub:sub-a";
+    expect(expire).toHaveBeenCalledWith(indexKey, expect.any(Number));
+    const ttl = (expire.mock.calls.at(-1) as unknown[])[1] as number;
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(60);
+
+    await store.delete("ref-a1");
+    expect([...(redis.sets.get(indexKey) ?? [])]).toEqual(["ref-a2"]);
+
+    await store.deleteBySub("sub-a");
+    expect(redis.sets.has(indexKey)).toBe(false);
+    expect(redis.strings.has("ds:admin-pending:ref-a2")).toBe(false);
+  });
+});
+
+/**
+ * 047 EARS-7 — the session write from a pending sign-in is one atomic step on a
+ * REAL Redis (the Lua script cannot run on the double above): the pending record
+ * is consumed and the person's access generation compared in the same step, so
+ * a revocation that bumped the generation or removed the pending record can
+ * never be raced by a session write.
+ */
+describe.skipIf(!process.env.REDIS_URL)(
+  "047 EARS-7 — RedisAdminSessionStore.createFromPending (real Redis)",
+  () => {
+    let redis: Redis;
+    beforeAll(() => {
+      redis = new Redis(process.env.REDIS_URL!);
+    });
+    afterAll(async () => {
+      await redis.quit();
+    });
+
+    async function seeded() {
+      const sub = `sub-${randomUUID()}`;
+      const ref = `ref-${randomUUID()}`;
+      const pendingStore = new RedisPendingAuthStore(redis);
+      await pendingStore.create({ ...pending(ref, Date.now() + 60_000), sub });
+      const store = new RedisAdminSessionStore(redis);
+      const generation = await store.accessGeneration(sub);
+      return { sub, ref, pendingStore, store, generation };
+    }
+
+    it("047 EARS-7: writes the session and consumes the pending record when the generation is unchanged", async () => {
+      const { sub, ref, pendingStore, store, generation } = await seeded();
+      const session = record(`sid-${randomUUID()}`, sub);
+
+      await expect(
+        store.createFromPending(session, ref, generation),
+      ).resolves.toBe(true);
+      await expect(store.get(session.sid)).resolves.toMatchObject({ sub });
+      await expect(pendingStore.get(ref)).resolves.toBeUndefined();
+      await expect(store.deleteBySub(sub)).resolves.toEqual([session.sid]);
+    });
+
+    it("047 EARS-7: a bumped access generation refuses the create — no session written", async () => {
+      const { sub, ref, store, generation } = await seeded();
+      await store.bumpAccessGeneration(sub);
+      const session = record(`sid-${randomUUID()}`, sub);
+
+      await expect(
+        store.createFromPending(session, ref, generation),
+      ).resolves.toBe(false);
+      await expect(store.get(session.sid)).resolves.toBeUndefined();
+      await expect(store.deleteBySub(sub)).resolves.toEqual([]);
+      await redis.del(`ds:admin-access-gen:${sub}`);
+    });
+
+    it("047 EARS-7: a consumed pending record refuses the create — no session written", async () => {
+      const { sub, ref, pendingStore, store, generation } = await seeded();
+      await pendingStore.deleteBySub(sub);
+      const session = record(`sid-${randomUUID()}`, sub);
+
+      await expect(
+        store.createFromPending(session, ref, generation),
+      ).resolves.toBe(false);
+      await expect(store.get(session.sid)).resolves.toBeUndefined();
+      await expect(store.deleteBySub(sub)).resolves.toEqual([]);
+    });
+  },
+);

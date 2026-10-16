@@ -6,7 +6,11 @@ import {
   grantOutcome,
   grantRefusal,
   grantRequestOf,
+  revokeRefusal,
+  revokeRequestOf,
   STAFF_ACCESS_GRANT_ENDPOINT,
+  STAFF_ACCESS_REVOCATIONS_PATH,
+  STAFF_ACCESS_REVOKE_ENDPOINT,
   STAFF_ACCESS_GRANTS_PATH,
   staffAccessCells,
   staffAccessRoleLabelKey,
@@ -287,5 +291,57 @@ describe("047 EARS-3 «Мероприятие» — the event selector's server 
     await expect(
       fetchStaffAccessEventPage({ q: "", page: 1, pageSize: 25 }, fetchImpl),
     ).rejects.toThrow();
+  });
+});
+
+describe("047 EARS-7 revoke — the request and how a refusal reads", () => {
+  it("047 EARS-7: the revocation names the row — person, role and, for a congress role, the event", () => {
+    expect(STAFF_ACCESS_REVOCATIONS_PATH).toBe(
+      "/v1/admin/staff-access/revocations",
+    );
+    expect(STAFF_ACCESS_REVOKE_ENDPOINT).toBe(
+      "POST /v1/admin/staff-access/revocations",
+    );
+    expect(revokeRequestOf(ADMIN_ROW)).toEqual({
+      userId: "sub-1",
+      role: "platform_admin",
+    });
+    expect(revokeRequestOf(REGISTRAR_ROW)).toEqual({
+      userId: "sub-2",
+      role: "event-registrar",
+      eventId: EVENT_ID,
+    });
+  });
+
+  it("047 EARS-8: a 401 STEP_UP_REQUIRED with a stepUpUrl goes to the code screen", () => {
+    expect(
+      revokeRefusal({
+        statusCode: 401,
+        errorCode: "STEP_UP_REQUIRED",
+        stepUpUrl: "/mfa/challenge?mode=reverify",
+      }),
+    ).toEqual({ kind: "stepUp", stepUpUrl: "/mfa/challenge?mode=reverify" });
+  });
+
+  it("047 EARS-7: an already-complete revocation closes the dialog; the last platform administrator's own row is refused by name", () => {
+    expect(
+      revokeRefusal({ statusCode: 409, errorCode: "REVOKE_ALREADY_COMPLETE" }),
+    ).toEqual({ kind: "alreadyComplete" });
+    expect(
+      revokeRefusal({
+        statusCode: 403,
+        errorCode: "REVOKE_SELF_PLATFORM_ADMIN",
+      }),
+    ).toEqual({ kind: "selfPlatformAdmin" });
+  });
+
+  it("047 EARS-7: the IdP unavailable, a refused or malformed request and anything else keep the dialog open for «Повторить»", () => {
+    expect(revokeRefusal({ statusCode: 503 })).toEqual({ kind: "unavailable" });
+    expect(revokeRefusal({ statusCode: 403 })).toEqual({ kind: "forbidden" });
+    expect(revokeRefusal({ statusCode: 400 })).toEqual({ kind: "invalid" });
+    expect(revokeRefusal(new TypeError("Failed to fetch"))).toEqual({
+      kind: "generic",
+    });
+    expect(revokeRefusal(null)).toEqual({ kind: "generic" });
   });
 });

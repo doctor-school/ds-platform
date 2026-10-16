@@ -504,9 +504,10 @@ curl -sS -X POST "https://id.doctor.school/management/v1/users/$USER_ID/grants" 
   -d "{\"projectId\":\"$IDP_PROJECT_ID\",\"roleKeys\":[\"platform_admin\"]}"
 ```
 
-To onboard a staff member end-to-end (account, password, grant, credential
-delivery, first login), follow the
-[admin onboarding runbook](../../apps/docs/content/operations/admin-onboarding.md).
+Staff access is granted and revoked in the admin section «Доступы»; the
+[staff access runbook](../../apps/docs/content/operations/admin-onboarding.md)
+covers it, the credential delivery, offboarding and the manual bootstrap of an
+environment's first platform administrator.
 
 **Product users must NEVER receive Zitadel manager roles** (`IAM_*`, `ORG_*`,
 project-manager memberships): a manager role grants IdP-administration power;

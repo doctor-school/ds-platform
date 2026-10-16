@@ -643,6 +643,8 @@ export const dataProvider: DataProvider = {
         : undefined,
     });
     if (!res.ok) throw await toHttpError(res);
+    // 047 EARS-7: the revocation answers `204` — there is no body to read.
+    if (res.status === 204) return { data: null as never };
     // 007 transitions answer with an `EventAdminDetail`; the 014 routes answer
     // with a `RecordingAdminList` (GET) or a `RecordingAdminDetail` (writes).
     // The caller types the body it asked for — this seam stays shape-agnostic.

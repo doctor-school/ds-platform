@@ -16,6 +16,37 @@ export class InMemoryAdminSessionStore implements AdminSessionStore {
   private readonly bySid = new Map<string, AdminSessionRecord>();
   /** Secondary index `sub → live sids` so force-logout is targeted, not a scan. */
   private readonly bySub = new Map<string, Set<string>>();
+  /** 047 EARS-7 — per-person access generation (absent = 0). */
+  private readonly generations = new Map<string, number>();
+
+  /**
+   * Holds the pending store it upgrades from, so {@link createFromPending} can
+   * consume the pending record and write the session in one synchronous step —
+   * the in-memory mirror of the Redis adapter's atomic script.
+   */
+  constructor(private readonly pending: InMemoryPendingAuthStore) {}
+
+  accessGeneration(sub: string): Promise<number> {
+    return Promise.resolve(this.generations.get(sub) ?? 0);
+  }
+
+  bumpAccessGeneration(sub: string): Promise<void> {
+    this.generations.set(sub, (this.generations.get(sub) ?? 0) + 1);
+    return Promise.resolve();
+  }
+
+  createFromPending(
+    session: AdminSessionRecord,
+    pendingRef: string,
+    generation: number,
+  ): Promise<boolean> {
+    if (!this.pending.take(pendingRef)) return Promise.resolve(false);
+    if ((this.generations.get(session.sub) ?? 0) !== generation) {
+      return Promise.resolve(false);
+    }
+    void this.create(session);
+    return Promise.resolve(true);
+  }
 
   create(record: AdminSessionRecord): Promise<void> {
     this.bySid.set(record.sid, record);
@@ -91,6 +122,20 @@ export class InMemoryPendingAuthStore implements PendingAuthStore {
 
   delete(ref: string): Promise<void> {
     this.byRef.delete(ref);
+    return Promise.resolve();
+  }
+
+  /** Synchronous consume for {@link InMemoryAdminSessionStore.createFromPending}. */
+  take(ref: string): PendingAuthRecord | undefined {
+    const record = this.byRef.get(ref);
+    this.byRef.delete(ref);
+    return record;
+  }
+
+  deleteBySub(sub: string): Promise<void> {
+    for (const [ref, record] of this.byRef) {
+      if (record.sub === sub) this.byRef.delete(ref);
+    }
     return Promise.resolve();
   }
 }

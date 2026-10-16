@@ -35,7 +35,9 @@ import {
 } from "../../src/auth/admin-session/admin-session.cookie.js";
 import {
   ADMIN_SESSION_STORE,
+  PENDING_AUTH_STORE,
   type AdminSessionStore,
+  type PendingAuthStore,
 } from "../../src/auth/admin-session/admin-session.types.js";
 import { STEP_UP_URL } from "../../src/authz/authz.types.js";
 import { collectAuthzRows } from "../../src/authz/authz.discovery.js";
@@ -57,6 +59,9 @@ const LIST_URL = "/v1/admin/staff-access";
 const GRANTS_URL = "/v1/admin/staff-access/grants";
 const GRANT_ENDPOINT = "POST /v1/admin/staff-access/grants";
 const REVERIFY_URL = "/v1/admin/auth/mfa/reverify";
+const REVOCATIONS_URL = "/v1/admin/staff-access/revocations";
+const REVOKE_ENDPOINT = "POST /v1/admin/staff-access/revocations";
+const DOCTOR_GUEST = "doctor_guest";
 const STALE_MS = 31 * 60 * 1000;
 
 interface Operator {
@@ -1060,6 +1065,404 @@ describe.skipIf(!process.env.DATABASE_URL)(
         [admin.sub, since],
       );
       expect(failures).toHaveLength(1);
+    });
+
+    // ---- V-5, V-6, V-7 (revocation) --------------------------------------
+
+    function revoke(op: Operator, body: Record<string, unknown>) {
+      return app.inject({
+        method: "POST",
+        url: REVOCATIONS_URL,
+        headers: op.headers,
+        payload: body,
+      });
+    }
+
+    /** A staff member with an open admin session AND a pending admin sign-in. */
+    async function signedInMember(
+      role: string,
+    ): Promise<Operator & { pendingRef: string }> {
+      const member = await enrolledStaff("pc", role);
+      await fake.grantProjectRole(member.sub, DOCTOR_GUEST);
+      fake.setIdentity(member.sub, { emailVerified: true });
+      const login = await app.inject({
+        method: "POST",
+        url: "/v1/admin/auth/login",
+        headers: ADMIN_DEVICE,
+        payload: { identifier: member.email, password },
+      });
+      expect(login.statusCode).toBe(200);
+      const pendingRef = login.cookies.find(
+        (c) => c.name === ADMIN_PENDING_COOKIE_NAME,
+      )!.value;
+      return { ...member, pendingRef };
+    }
+
+    async function adminSessionStatus(op: Operator): Promise<number> {
+      const res = await app.inject({
+        method: "GET",
+        url: "/v1/admin/auth/session",
+        headers: op.headers,
+      });
+      return res.statusCode;
+    }
+
+    async function pendingRecord(ref: string) {
+      return app.get<PendingAuthStore>(PENDING_AUTH_STORE).get(ref);
+    }
+
+    async function mirrorRole(sub: string): Promise<string> {
+      const { rows } = await pool.query<{ role: string }>(
+        "SELECT role FROM users WHERE zitadel_sub = $1",
+        [sub],
+      );
+      return rows[0]!.role;
+    }
+
+    it("047 EARS-1: the revocation route is platform_admin-only with live revalidation, stepUp and high-stakes audit", () => {
+      const rows = collectAuthzRows(app).rows;
+      const revocations = rows.find((r) => r.endpoint === REVOKE_ENDPOINT);
+      expect(revocations?.meta).toMatchObject({
+        roles: ["platform_admin"],
+        revalidate: "live",
+        stepUp: true,
+        audit: "high-stakes",
+      });
+    });
+
+    it("047 EARS-7: revoking one of two committee bindings keeps the role; revoking the last removes it and keeps doctor_guest; every admin session and pending sign-in ends each time and the next admin request is refused", async () => {
+      const admin = await enrolledStaff("adm", "platform_admin");
+      const first = await insertEvent("Конгресс 047 — первый");
+      const second = await insertEvent("Конгресс 047 — второй");
+      const member = await signedInMember("congress-program-committee");
+      for (const eventId of [first, second]) {
+        const res = await grant(admin, {
+          email: member.email,
+          fullName: "Комитетов Иван",
+          role: "congress-program-committee",
+          eventId,
+        });
+        expect(res.statusCode).toBe(201);
+      }
+      expect(await adminSessionStatus(member)).toBe(200);
+      const since = await dbNow();
+
+      const one = await revoke(admin, {
+        userId: member.sub,
+        role: "congress-program-committee",
+        eventId: first,
+      });
+      expect(one.statusCode).toBe(204);
+      expect((await bindingsOf(member.email)).map((b) => b.event_id)).toEqual([
+        second,
+      ]);
+      expect(fake.grantedRoles(member.sub).sort()).toEqual(
+        ["congress-program-committee", DOCTOR_GUEST].sort(),
+      );
+      expect(await mirrorRole(member.sub)).toBe("congress-program-committee");
+      expect(await adminSessionStatus(member)).toBe(401);
+      expect(await pendingRecord(member.pendingRef)).toBeUndefined();
+      const { rows: terminated } = await pool.query(
+        `SELECT 1 FROM audit_ledger WHERE subject_id = $1 AND created_at >= $2
+           AND event_type = 'auth.session.terminated' AND reason = 'force'`,
+        [member.sub, since],
+      );
+      expect(terminated).toHaveLength(1);
+
+      const last = await revoke(admin, {
+        userId: member.sub,
+        role: "congress-program-committee",
+        eventId: second,
+      });
+      expect(last.statusCode).toBe(204);
+      expect(await bindingsOf(member.email)).toEqual([]);
+      expect(fake.grantedRoles(member.sub)).toEqual([DOCTOR_GUEST]);
+      expect(await mirrorRole(member.sub)).toBe(DOCTOR_GUEST);
+
+      const revoked = await roleRows(member.sub, since);
+      expect(revoked.map((r) => r.event_type)).toEqual([
+        "auth.role.revoked",
+        "auth.role.revoked",
+      ]);
+      expect(revoked.map((r) => r.metadata.event_id)).toEqual([first, second]);
+
+      // A complete revocation is refused as already revoked, nothing changed.
+      const again = await revoke(admin, {
+        userId: member.sub,
+        role: "congress-program-committee",
+        eventId: second,
+      });
+      expect(again.statusCode).toBe(409);
+      expect((again.json() as { errorCode: string }).errorCode).toBe(
+        "REVOKE_ALREADY_COMPLETE",
+      );
+      expect(await roleRows(member.sub, since)).toHaveLength(2);
+    });
+
+    it("047 EARS-7: a platform administrator revoking their own platform_admin is refused with nothing changed", async () => {
+      const admin = await enrolledStaff("adm", "platform_admin");
+      const since = await dbNow();
+      const update = vi.spyOn(fake, "updateProjectGrantRoles");
+      const res = await revoke(admin, {
+        userId: admin.sub,
+        role: "platform_admin",
+      });
+      expect(res.statusCode).toBe(403);
+      expect((res.json() as { errorCode: string }).errorCode).toBe(
+        "REVOKE_SELF_PLATFORM_ADMIN",
+      );
+      expect(update).not.toHaveBeenCalled();
+      expect(fake.grantedRoles(admin.sub)).toContain("platform_admin");
+      expect(await adminSessionStatus(admin)).toBe(200);
+      expect(await roleRows(admin.sub, since)).toEqual([]);
+    });
+
+    it("047 EARS-7: another platform administrator's platform_admin is revoked from the grant, doctor_guest kept, sessions ended", async () => {
+      const admin = await enrolledStaff("adm", "platform_admin");
+      const other = await signedInMember("platform_admin");
+      const since = await dbNow();
+      const res = await revoke(admin, {
+        userId: other.sub,
+        role: "platform_admin",
+      });
+      expect(res.statusCode).toBe(204);
+      expect(fake.grantedRoles(other.sub)).toEqual([DOCTOR_GUEST]);
+      expect(await adminSessionStatus(other)).toBe(401);
+      expect(await pendingRecord(other.pendingRef)).toBeUndefined();
+      const revoked = await roleRows(other.sub, since);
+      expect(revoked).toHaveLength(1);
+      expect(revoked[0]!.metadata).toMatchObject({
+        role: "platform_admin",
+        by_admin: admin.sub,
+      });
+      expect(revoked[0]!.metadata.event_id).toBeUndefined();
+    });
+
+    it("047 EARS-7: revoking the last role of a grant removes the grant, ends the sessions, records one auth.role.revoked and re-projects the mirror", async () => {
+      const admin = await enrolledStaff("adm", "platform_admin");
+      // A grant that predates EARS-4/5: platform_admin alone, no doctor_guest.
+      const solo = await enrolledStaff("solo", "platform_admin");
+      const soloGrant = await fake.getProjectGrant(solo.sub);
+      await fake.updateProjectGrantRoles(solo.sub, soloGrant!.grantId, [
+        "platform_admin",
+      ]);
+      expect(fake.grantedRoles(solo.sub)).toEqual(["platform_admin"]);
+      const update = vi.spyOn(fake, "updateProjectGrantRoles");
+      const remove = vi.spyOn(fake, "removeProjectGrant");
+      const since = await dbNow();
+
+      const res = await revoke(admin, {
+        userId: solo.sub,
+        role: "platform_admin",
+      });
+      expect(res.statusCode).toBe(204);
+      expect(update).not.toHaveBeenCalled();
+      expect(remove).toHaveBeenCalledTimes(1);
+      expect(await fake.getProjectGrant(solo.sub)).toBeNull();
+      expect(await adminSessionStatus(solo)).toBe(401);
+      expect(await mirrorRole(solo.sub)).toBe(DOCTOR_GUEST);
+      const revoked = await roleRows(solo.sub, since);
+      expect(revoked.map((r) => r.event_type)).toEqual(["auth.role.revoked"]);
+    });
+
+    it("047 EARS-7: a legacy holder whose IdP role was already removed by a failed revocation (session end failed) is finished by the repeat — sessions ended, one auth.role.revoked", async () => {
+      const admin = await enrolledStaff("adm", "platform_admin");
+      // Granted the old-runbook way: straight on the IdP, no auth.role.granted row.
+      const legacy = await signedInMember("platform_admin");
+      const since = await dbNow();
+      vi.spyOn(
+        app.get(AdminSessionService),
+        "endAllAdminAccess",
+      ).mockRejectedValueOnce(new Error("simulated session-store outage"));
+      const body = { userId: legacy.sub, role: "platform_admin" };
+
+      const failed = await revoke(admin, body);
+      expect(failed.statusCode).toBe(500);
+      expect(fake.grantedRoles(legacy.sub)).toEqual([DOCTOR_GUEST]);
+      expect(await adminSessionStatus(legacy)).toBe(200);
+      expect(await roleRows(legacy.sub, since)).toEqual([]);
+
+      const finished = await revoke(admin, body);
+      expect(finished.statusCode).toBe(204);
+      expect(await adminSessionStatus(legacy)).toBe(401);
+      expect(await pendingRecord(legacy.pendingRef)).toBeUndefined();
+      expect(await mirrorRole(legacy.sub)).toBe(DOCTOR_GUEST);
+      const revoked = await roleRows(legacy.sub, since);
+      expect(revoked.map((r) => r.event_type)).toEqual(["auth.role.revoked"]);
+    });
+
+    it("047 EARS-7: a repeat after a complete revocation is refused 409, nothing written", async () => {
+      const admin = await enrolledStaff("adm", "platform_admin");
+      const member = await signedInMember("platform_admin");
+      const body = { userId: member.sub, role: "platform_admin" };
+      const since = await dbNow();
+      expect((await revoke(admin, body)).statusCode).toBe(204);
+      const update = vi.spyOn(fake, "updateProjectGrantRoles");
+      const remove = vi.spyOn(fake, "removeProjectGrant");
+      const endAll = vi.spyOn(
+        app.get(AdminSessionService),
+        "endAllAdminAccess",
+      );
+
+      const repeat = await revoke(admin, body);
+      expect(repeat.statusCode).toBe(409);
+      expect((repeat.json() as { errorCode: string }).errorCode).toBe(
+        "REVOKE_ALREADY_COMPLETE",
+      );
+      expect(update).not.toHaveBeenCalled();
+      expect(remove).not.toHaveBeenCalled();
+      expect(endAll).not.toHaveBeenCalled();
+      const rows = await roleRows(member.sub, since);
+      expect(rows.map((r) => r.event_type)).toEqual(["auth.role.revoked"]);
+    });
+
+    it("047 EARS-7: an IdP failure on the role removal answers 503, still ends the sessions and pending sign-in, records no revocation, and the repeat finishes it with one auth.role.revoked", async () => {
+      const admin = await enrolledStaff("adm", "platform_admin");
+      const eventId = await insertEvent("Конгресс 047 — сбой");
+      const member = await signedInMember("congress-program-committee");
+      const granted = await grant(admin, {
+        email: member.email,
+        fullName: "Комитетов Пётр",
+        role: "congress-program-committee",
+        eventId,
+      });
+      expect(granted.statusCode).toBe(201);
+      const since = await dbNow();
+      vi.spyOn(fake, "updateProjectGrantRoles").mockRejectedValueOnce(
+        new IdpUnavailableError("simulated grant-update outage"),
+      );
+      const body = {
+        userId: member.sub,
+        role: "congress-program-committee",
+        eventId,
+      };
+
+      const failed = await revoke(admin, body);
+      expect(failed.statusCode).toBe(503);
+      expect(await adminSessionStatus(member)).toBe(401);
+      expect(await pendingRecord(member.pendingRef)).toBeUndefined();
+      expect(await roleRows(member.sub, since)).toEqual([]);
+      expect(fake.grantedRoles(member.sub)).toContain(
+        "congress-program-committee",
+      );
+      expect(await mirrorRole(member.sub)).toBe("congress-program-committee");
+      expect(await bindingsOf(member.email)).toEqual([]);
+
+      const finished = await revoke(admin, body);
+      expect(finished.statusCode).toBe(204);
+      expect(fake.grantedRoles(member.sub)).toEqual([DOCTOR_GUEST]);
+      expect(await mirrorRole(member.sub)).toBe(DOCTOR_GUEST);
+      const revoked = await roleRows(member.sub, since);
+      expect(revoked).toHaveLength(1);
+      expect(revoked[0]!.event_type).toBe("auth.role.revoked");
+    });
+
+    it("047 EARS-9: the revocation records auth.role.revoked with person, role, event and actor, and the binding delete carries the administrator as the 010 actor", async () => {
+      const admin = await enrolledStaff("adm", "platform_admin");
+      const eventId = await insertEvent("Конгресс 047 — аудит отзыва");
+      const email = uniqueEmail("revaudit");
+      const granted = await grant(admin, {
+        email,
+        fullName: "Регистров Олег",
+        role: "event-registrar",
+        eventId,
+      });
+      expect(granted.statusCode).toBe(201);
+      const [binding] = await bindingsOf(email);
+      const sub = await subOf(email);
+      const since = await dbNow();
+
+      const res = await revoke(admin, {
+        userId: sub,
+        role: "event-registrar",
+        eventId,
+      });
+      expect(res.statusCode).toBe(204);
+      const revoked = await roleRows(sub, since);
+      expect(revoked).toHaveLength(1);
+      expect(revoked[0]).toMatchObject({
+        event_type: "auth.role.revoked",
+        subject_id: sub,
+        metadata: {
+          role: "event-registrar",
+          by_admin: admin.sub,
+          event_id: eventId,
+          tier: "admin",
+        },
+      });
+      const { rows } = await pool.query<{
+        subject_id: string;
+        metadata: Record<string, unknown>;
+      }>(
+        `SELECT subject_id, metadata FROM audit_ledger
+          WHERE event_type = 'data.event_role_grants.delete'
+            AND metadata -> 'pk' ->> 'id' = $1`,
+        [binding!.id],
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.subject_id).toBe(admin.sub);
+      expect(rows[0]!.metadata.source).toBe("admin-ui");
+    });
+
+    it("047 EARS-8: a stale second factor refuses a revocation with STEP_UP_REQUIRED and nothing changes; after a current code the same revocation passes", async () => {
+      const admin = await enrolledStaff("adm", "platform_admin");
+      const eventId = await insertEvent("Конгресс 047 — свежесть отзыва");
+      const member = await signedInMember("congress-program-committee");
+      const granted = await grant(admin, {
+        email: member.email,
+        fullName: "Комитетов Семён",
+        role: "congress-program-committee",
+        eventId,
+      });
+      expect(granted.statusCode).toBe(201);
+      await ageSecondFactor(admin.sid);
+      const since = await dbNow();
+      const update = vi.spyOn(fake, "updateProjectGrantRoles");
+      const body = {
+        userId: member.sub,
+        role: "congress-program-committee",
+        eventId,
+      };
+
+      const refused = await revoke(admin, body);
+      expect(refused.statusCode).toBe(401);
+      const problem = refused.json() as {
+        errorCode: string;
+        stepUpUrl: string;
+      };
+      expect(problem.errorCode).toBe("STEP_UP_REQUIRED");
+      expect(problem.stepUpUrl).toBe("/mfa/challenge?mode=reverify");
+      expect(update).not.toHaveBeenCalled();
+      expect((await bindingsOf(member.email)).map((b) => b.event_id)).toEqual([
+        eventId,
+      ]);
+      expect(await adminSessionStatus(member)).toBe(200);
+      expect(await pendingRecord(member.pendingRef)).toBeDefined();
+      expect(await roleRows(member.sub, since)).toEqual([]);
+
+      const accepted = await app.inject({
+        method: "POST",
+        url: REVERIFY_URL,
+        headers: admin.headers,
+        payload: {
+          code: nextWindowCode(admin.secret),
+          endpoint: REVOKE_ENDPOINT,
+        },
+      });
+      expect(accepted.statusCode).toBe(200);
+
+      const passed = await revoke(admin, body);
+      expect(passed.statusCode).toBe(204);
+      expect(await bindingsOf(member.email)).toEqual([]);
+      expect(fake.grantedRoles(member.sub)).toEqual([DOCTOR_GUEST]);
+      const trail = await stepUpRows(admin.sub, since);
+      expect(trail.map((r) => r.event_type)).toEqual([
+        "auth.step_up.requested",
+        "auth.step_up.succeeded",
+      ]);
+      for (const row of trail) {
+        expect(row.metadata).toMatchObject({ endpoint: REVOKE_ENDPOINT });
+      }
     });
   },
 );

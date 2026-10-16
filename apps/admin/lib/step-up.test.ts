@@ -255,4 +255,33 @@ describe("047 EARS-8 step-up — the console keeps the request across the code s
     expect(takeStepUpRequest(storage, REQUEST.path, scope)).toBeNull();
     expect(storage.data.size).toBe(0);
   });
+
+  it("047 EARS-8: one screen reads the one saved request for any of its paths — a grant or a revocation — under the same replay rules", () => {
+    const REVOKE = {
+      method: "POST" as const,
+      path: "/v1/admin/staff-access/revocations",
+      body: { userId: "sub-2", role: "event-registrar", eventId: "e-1" },
+      context: { rowKey: "sub-2:event-registrar:e-1" },
+    };
+    const paths = [REQUEST.path, REVOKE.path] as const;
+    const scope = { owner: OWNER, now: T0 + 31_000 };
+
+    fresh();
+    saveStepUpRequest(memory, REVOKE, { owner: OWNER, now: T0 });
+    markStepUpConfirmed(memory, T0 + 30_000);
+    expect(takeStepUpRequest(memory, paths, scope)).toMatchObject(REVOKE);
+    expect(takeStepUpRequest(memory, paths, scope)).toBeNull();
+    expect(memory.data.size).toBe(0);
+
+    fresh();
+    saveStepUpRequest(memory, REVOKE, { owner: OWNER, now: T0 });
+    expect(takeStepUpRequest(memory, paths, scope)).toBeNull();
+    expect(memory.data.size).toBe(0);
+
+    fresh();
+    saveStepUpRequest(memory, REVOKE, { owner: OWNER, now: T0 });
+    markStepUpConfirmed(memory, T0 + 30_000);
+    expect(takeStepUpRequest(memory, [REQUEST.path], scope)).toBeNull();
+    expect(memory.data.size).toBe(2);
+  });
 });

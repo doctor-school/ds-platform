@@ -282,6 +282,16 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
       coveredBy:
         "staff-access.e2e (047 EARS-5/EARS-8/EARS-9): a completed grant appends one auth.role.granted, a retried grant still appends exactly one, and a stale second factor appends auth.step_up.requested with nothing changed",
     },
+    "POST /v1/admin/staff-access/revocations": {
+      // 047 EARS-7/EARS-9: the revocation that completes appends exactly one
+      // `auth.role.revoked` (role, by_admin, event_id) and ends every admin
+      // session of the person (`auth.session.terminated`, reason `force`) — the
+      // sessions end also when the IdP step failed. `stepUp: true`, so a stale
+      // second factor appends `auth.step_up.requested` (EARS-8).
+      emits: ["RoleRevoked", "StepUpRequested", "AdminSessionEnded"],
+      coveredBy:
+        "staff-access.e2e (047 EARS-7/EARS-8/EARS-9): a completed revocation appends one auth.role.revoked and one auth.session.terminated per ended session, an IdP failure appends no auth.role.revoked and the repeat appends exactly one, and a stale second factor appends auth.step_up.requested with nothing changed",
+    },
     "POST /v1/admin/auth/mfa/reverify": {
       // 047 EARS-8: the in-session re-verification. A correct code refreshes the
       // same session's second-factor time (`auth.step_up.succeeded`); a refused

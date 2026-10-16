@@ -187,3 +187,26 @@ export async function insertEventGrant(
     .returning({ id: eventRoleGrants.id });
   return written.length > 0;
 }
+
+/**
+ * 047 EARS-7 — delete the binding of an event-scoped role to one event, when
+ * present. Idempotent, so the repeat of a part-failed revocation skips it.
+ * Takes the caller's transaction, which carries the request's 010 actor.
+ * Resolves `true` when a row was deleted.
+ */
+export async function deleteEventGrant(
+  db: Pick<DrizzleHandle["db"], "delete">,
+  grant: { userId: string; role: EventScopedRole; eventId: string },
+): Promise<boolean> {
+  const deleted = await db
+    .delete(eventRoleGrants)
+    .where(
+      and(
+        eq(eventRoleGrants.userId, grant.userId),
+        eq(eventRoleGrants.role, grant.role),
+        eq(eventRoleGrants.eventId, grant.eventId),
+      ),
+    )
+    .returning({ id: eventRoleGrants.id });
+  return deleted.length > 0;
+}

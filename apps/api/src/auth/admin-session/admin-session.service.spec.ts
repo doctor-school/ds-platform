@@ -63,7 +63,8 @@ describe("011 EARS-3/EARS-10 — admin tier refusal + role gate (unit)", () => {
     const email = `admin-${randomUUID()}@ds.test`;
     const { sub } = await idp.createUser({ email, password });
     if (role) await idp.grantProjectRole(sub, role);
-    const store = new InMemoryAdminSessionStore();
+    const pending = new InMemoryPendingAuthStore();
+    const store = new InMemoryAdminSessionStore(pending);
     const audit = new InMemoryAuthAuditLog();
     const mailer = new FakeMailer();
     const clock = { now: Date.now() };
@@ -75,7 +76,7 @@ describe("011 EARS-3/EARS-10 — admin tier refusal + role gate (unit)", () => {
     const svc = new AdminSessionService(
       idp,
       store,
-      new InMemoryPendingAuthStore(),
+      pending,
       audit,
       mailer,
       limiter,
@@ -247,10 +248,11 @@ describe("011 EARS-7 — lockout notification (unit)", () => {
     await idp.grantProjectRole(sub, "platform_admin");
     const mailer = new FakeMailer();
     const lockout = new MfaLockoutService(() => Date.now());
+    const lockoutPending = new InMemoryPendingAuthStore();
     const svc = new AdminSessionService(
       idp,
-      new InMemoryAdminSessionStore(),
-      new InMemoryPendingAuthStore(),
+      new InMemoryAdminSessionStore(lockoutPending),
+      lockoutPending,
       new InMemoryAuthAuditLog(),
       mailer,
       new RateLimitService(DEFAULT_RATE_LIMIT_THRESHOLDS, () => Date.now()),
@@ -288,6 +290,109 @@ describe("011 EARS-7 — lockout notification (unit)", () => {
     expect(again.status).toBe("refused");
     await new Promise((r) => setTimeout(r, 20));
     expect(mailer.adminLockoutNotices).toHaveLength(1);
+  });
+});
+
+/**
+ * 047 EARS-7 «so that the person's next admin request is refused»: a revocation
+ * that has passed its IdP step must leave no admin session minted afterwards
+ * from the pre-revocation roles, whatever the interleaving with an in-flight
+ * sign-in. `endAllAdminAccess` is exactly what the revocation runs after its IdP
+ * step, so the races are driven by calling it from inside the sign-in's own
+ * IdP round-trips.
+ */
+describe("047 EARS-7 — a revocation racing an admin sign-in (unit)", () => {
+  const FP = "fp-admin-device";
+  const password = "Aa1!ufficiently-long-pw";
+
+  async function harness() {
+    const idp = new FakeIdpClient();
+    const email = `race-${randomUUID()}@ds.test`;
+    const { sub } = await idp.createUser({ email, password });
+    await idp.grantProjectRole(sub, "platform_admin");
+    const pending = new InMemoryPendingAuthStore();
+    const store = new InMemoryAdminSessionStore(pending);
+    const audit = new InMemoryAuthAuditLog();
+    const svc = new AdminSessionService(
+      idp,
+      store,
+      pending,
+      audit,
+      new FakeMailer(),
+      new RateLimitService(DEFAULT_RATE_LIMIT_THRESHOLDS, () => Date.now()),
+      new MfaLockoutService(() => Date.now()),
+    );
+    const established = () =>
+      audit.events.filter((e) => e.type === "AdminSessionEstablished");
+    return { idp, email, sub, store, audit, svc, established };
+  }
+
+  it("047 EARS-7: a revocation whose pending delete runs between the sign-in's role read and its pending write leaves no session", async () => {
+    const { idp, email, sub, store, svc, established } = await harness();
+    const hasTotpFactor = idp.hasTotpFactor.bind(idp);
+    // The window: after the token exchange read the roles, before the pending
+    // record is written.
+    vi.spyOn(idp, "hasTotpFactor").mockImplementationOnce(async (s) => {
+      await svc.endAllAdminAccess(s);
+      return hasTotpFactor(s);
+    });
+
+    const login = await svc.startLogin(email, password, FP);
+    expect(login.status).toBe("pending");
+    const ref = pendingRefFrom(
+      (login as { status: "pending"; cookie: string }).cookie,
+    );
+
+    await expect(svc.upgradePending(ref, FP)).resolves.toBeUndefined();
+    expect(established()).toEqual([]);
+    await expect(store.deleteBySub(sub)).resolves.toEqual([]);
+  });
+
+  it("047 EARS-7: a session creation after the revocation's forceLogout, from a pending record read before it, leaves no session", async () => {
+    const { idp, email, sub, store, svc, established } = await harness();
+    const login = await svc.startLogin(email, password, FP);
+    const ref = pendingRefFrom(
+      (login as { status: "pending"; cookie: string }).cookie,
+    );
+    const exchange = idp.exchangeSessionForTokens.bind(idp);
+    // The upgrade holds the record in memory; the revocation lands during its
+    // exchange, before the session write.
+    vi.spyOn(idp, "exchangeSessionForTokens").mockImplementationOnce(
+      async (session) => {
+        const tokens = await exchange(session);
+        await svc.endAllAdminAccess(sub);
+        return tokens;
+      },
+    );
+
+    await expect(svc.upgradePending(ref, FP)).resolves.toBeUndefined();
+    expect(established()).toEqual([]);
+    await expect(store.deleteBySub(sub)).resolves.toEqual([]);
+  });
+
+  it("047 EARS-7: a challenge verified while the revocation ends access is refused like an expired pending sign-in", async () => {
+    const { idp, email, sub, store, audit, svc, established } = await harness();
+    idp.setTotpFactor(sub, true);
+    const login = await svc.startLogin(email, password, FP);
+    const ref = pendingRefFrom(
+      (login as { status: "pending"; cookie: string }).cookie,
+    );
+    vi.spyOn(idp, "checkTotpFactor").mockImplementationOnce(async (session) => {
+      await svc.endAllAdminAccess(sub);
+      return session;
+    });
+
+    const outcome = await svc.verifyChallenge(ref, FP, "123456");
+
+    expect(outcome.status).toBe("refused");
+    expect(audit.events.at(-1)).toMatchObject({
+      type: "MfaChallengeFailed",
+      sub: null,
+      stage: "challenge",
+      reason: "no_pending",
+    });
+    expect(established()).toEqual([]);
+    await expect(store.deleteBySub(sub)).resolves.toEqual([]);
   });
 });
 

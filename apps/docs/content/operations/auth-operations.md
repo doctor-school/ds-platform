@@ -226,7 +226,7 @@ Dev-stand pre-flight and recovery (the stand is power-cycled, not 24/7):
 
 ### Admin locked out of the admin panel
 
-Giving a new staff member admin access in the first place: [Onboard a staff member as Academy admin](./admin-onboarding.md).
+Giving a staff member admin access in the first place, or taking it away: [Grant and revoke staff access](./admin-onboarding.md).
 
 The operator sees one message for every second-factor refusal (011 EARS-7), so
 the screen tells you nothing — the ledger does. Ask three questions in order.

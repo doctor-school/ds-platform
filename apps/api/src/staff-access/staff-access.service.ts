@@ -5,6 +5,7 @@ import {
   type GrantableStaffRole,
   type StaffAccessGrantRequest,
   type StaffAccessGrantResponse,
+  type StaffAccessRevokeRequest,
   type StaffAccessRow,
 } from "@ds/schemas";
 import {
@@ -15,6 +16,7 @@ import {
   type IdpClient,
   type IdpProjectGrant,
 } from "../auth/idp/idp.types.js";
+import { AdminSessionService } from "../auth/admin-session/admin-session.service.js";
 import { mirrorRoleFromClaims } from "../auth/staff-role.js";
 import {
   StaffAccessRepository,
@@ -23,7 +25,8 @@ import {
 import { generateTemporaryPassword } from "./temporary-password.js";
 
 /**
- * The refusals of 047 EARS-3 a grant answers before any write. The `errorCode`
+ * The refusals of 047 EARS-3 (grant) and EARS-7 (revocation) answered before
+ * any write. The `errorCode`
  * is the contract the «Доступы» form reads to show the reason at the field.
  */
 export type StaffAccessRefusalCode =
@@ -31,7 +34,9 @@ export type StaffAccessRefusalCode =
   | "REGISTRAR_BOUND_ELSEWHERE"
   | "GRANT_ALREADY_COMPLETE"
   | "STAFF_GRANT_EMAIL_UNVERIFIED"
-  | "STAFF_GRANT_EMAIL_AMBIGUOUS";
+  | "STAFF_GRANT_EMAIL_AMBIGUOUS"
+  | "REVOKE_SELF_PLATFORM_ADMIN"
+  | "REVOKE_ALREADY_COMPLETE";
 
 const REFUSALS: Record<
   StaffAccessRefusalCode,
@@ -56,6 +61,14 @@ const REFUSALS: Record<
   STAFF_GRANT_EMAIL_AMBIGUOUS: {
     status: HttpStatus.CONFLICT,
     message: "more than one account holds this email",
+  },
+  REVOKE_SELF_PLATFORM_ADMIN: {
+    status: HttpStatus.FORBIDDEN,
+    message: "a platform administrator cannot revoke their own platform_admin",
+  },
+  REVOKE_ALREADY_COMPLETE: {
+    status: HttpStatus.CONFLICT,
+    message: "this access is already revoked",
   },
 };
 
@@ -90,6 +103,8 @@ export class StaffAccessService {
   constructor(
     @Inject(IDP_CLIENT) private readonly idp: IdpClient,
     @Inject(StaffAccessRepository) private readonly repo: StaffAccessRepository,
+    @Inject(AdminSessionService)
+    private readonly adminSessions: AdminSessionService,
   ) {}
 
   /**
@@ -337,5 +352,103 @@ export class StaffAccessService {
       },
       ...(temporaryPassword === undefined ? {} : { temporaryPassword }),
     };
+  }
+
+  /**
+   * EARS-7, EARS-9 — the revocation cascade (047-design §Revoke cascade), run
+   * under the per-account revoke lock so two revocations of one person never
+   * interleave. Refusals first; then (2) the binding, (3) the role on the IdP
+   * grant, (4) every admin session and pending sign-in — always, also when (2)
+   * or (3) failed — and (5), only when all of those succeeded, one DB
+   * transaction: the mirror and the `auth.role.revoked` completion mark.
+   */
+  async revoke(
+    input: StaffAccessRevokeRequest,
+    byAdmin: string,
+  ): Promise<void> {
+    // EARS-7: no self-lockout, so the last administrator can never remove
+    // themselves.
+    if (input.userId === byAdmin && input.role === "platform_admin") {
+      throw new StaffAccessRefusal("REVOKE_SELF_PLATFORM_ADMIN");
+    }
+    return this.repo.withRevokeLock(input.userId, () =>
+      this.revokeLocked(input, byAdmin),
+    );
+  }
+
+  private async revokeLocked(
+    input: StaffAccessRevokeRequest,
+    byAdmin: string,
+  ): Promise<void> {
+    const sub = input.userId;
+    const role: GrantableStaffRole = input.role;
+    const boundRole = isEventBoundStaffRole(role) ? role : null;
+    const eventId = boundRole === null ? null : (input.eventId ?? null);
+
+    // ---- Completeness read: IdP grant; mirror; bindings of this role.
+    const grant = await this.idp.getProjectGrant(sub);
+    const mirror = await this.repo.findMirrorBySub(sub);
+    const bindings =
+      mirror && boundRole !== null
+        ? await this.repo.listBindings(mirror.id, boundRole)
+        : [];
+    const bindingPresent =
+      eventId !== null && bindings.some((b) => b.eventId === eventId);
+    const otherBinding = bindings.some((b) => b.eventId !== eventId);
+    const removeFromGrant =
+      (grant?.roleKeys.includes(role) ?? false) && !otherBinding;
+
+    if (!bindingPresent && !removeFromGrant) {
+      // Nothing left to remove: complete only when the latest mark is the
+      // revocation's own. No mark (a holder granted by the old runbook) or a
+      // grant mark means a revocation failed after its IdP step — the repeat
+      // finishes it: ends all admin access, re-projects, records the mark.
+      const latest = await this.repo.latestRoleEvent(sub, role, eventId);
+      if (latest === "auth.role.revoked") {
+        throw new StaffAccessRefusal("REVOKE_ALREADY_COMPLETE");
+      }
+    }
+
+    let remaining: readonly string[] = grant?.roleKeys ?? [];
+    let failure: unknown;
+    try {
+      // ---- (2) The binding first: fail-closed for that event from here on.
+      if (bindingPresent && boundRole !== null && eventId !== null) {
+        await this.repo.deleteBinding({
+          userId: mirror!.id,
+          role: boundRole,
+          eventId,
+        });
+      }
+      // ---- (3) The role off the IdP grant, keeping every other role; a grant
+      // whose last role this was is removed (never written with no roles).
+      if (removeFromGrant) {
+        remaining = grant!.roleKeys.filter((key) => key !== role);
+        if (remaining.length === 0) {
+          await this.idp.removeProjectGrant(sub, grant!.grantId);
+        } else {
+          await this.idp.updateProjectGrantRoles(
+            sub,
+            grant!.grantId,
+            remaining,
+          );
+        }
+      }
+    } catch (error) {
+      failure = error;
+    }
+
+    // ---- (4) Sessions — always (047-design: fail-safe on an IdP failure).
+    await this.adminSessions.endAllAdminAccess(sub);
+    if (failure !== undefined) throw failure;
+
+    // ---- (5) Mirror and the completion mark — one transaction.
+    await this.repo.commitRevocation({
+      sub,
+      mirrorRole: mirrorRoleFromClaims(remaining),
+      role,
+      eventId,
+      byAdmin,
+    });
   }
 }

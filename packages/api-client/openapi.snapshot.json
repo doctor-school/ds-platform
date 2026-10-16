@@ -4839,6 +4839,30 @@
         "required": ["items"],
         "type": "object"
       },
+      "StaffAccessRevokeRequestDto": {
+        "additionalProperties": false,
+        "properties": {
+          "eventId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "platform_admin",
+              "event-registrar",
+              "congress-program-committee"
+            ],
+            "type": "string"
+          },
+          "userId": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["userId", "role"],
+        "type": "object"
+      },
       "TransitionEventRequestDto": {
         "properties": {
           "to": {
@@ -7762,6 +7786,28 @@
                 }
               }
             },
+            "description": ""
+          }
+        },
+        "tags": ["StaffAccessAdmin"]
+      }
+    },
+    "/v1/admin/staff-access/revocations": {
+      "post": {
+        "operationId": "StaffAccessAdminController_revoke",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffAccessRevokeRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
             "description": ""
           }
         },

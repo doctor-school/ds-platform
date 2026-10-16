@@ -1,0 +1,347 @@
+{
+  "runtimeSha": "497a80716656b846bf1b64c63c422fc45b44cd77",
+  "profiles": 8,
+  "screens": ["code", "settled-request", "validation"],
+  "publicImages": 49,
+  "disclosure": "Recipient sentence masked in code-state copies only. Private originals retained. No OTP/password/token published. before-after uses actual unscaled screencast frames; no pixel-diff or fake canvas renderer claim.",
+  "files": [
+    {
+      "file": "academy-desktop-light-code.png",
+      "source": "final\\academy\\desktop-light\\code.png",
+      "sha256": "998f30723d682dfb6b8e8fb885af0bd5a4df75906be394362fabb863fc81a32b",
+      "mask": "owned recipient sentence only; all other pixels preserved",
+      "maskRects": [[879, 432, 1244, 506]]
+    },
+    {
+      "file": "academy-desktop-light-validation.png",
+      "source": "final\\academy\\desktop-light\\request-validation.png",
+      "sha256": "2f31168271699c72a6c2e806737b589570e8b3a9348ec750b5643210fc26d687",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "academy-desktop-light-control1-active.png",
+      "source": "final\\academy\\desktop-light\\code-control1-active.png",
+      "mask": "none; actual pressed control cropped with16px surrounding surface",
+      "cropRect": [867, 606, 1264, 687]
+    },
+    {
+      "file": "academy-desktop-light-control2-active.png",
+      "source": "final\\academy\\desktop-light\\code-control2-active.png",
+      "mask": "none; actual pressed control cropped with16px surrounding surface",
+      "cropRect": [863, 668, 1043, 733]
+    },
+    {
+      "file": "academy-desktop-light-control4-active.png",
+      "source": "final\\academy\\desktop-light\\code-control4-active.png",
+      "mask": "none; actual pressed control cropped with16px surrounding surface",
+      "cropRect": [863, 726, 1007, 778]
+    },
+    {
+      "file": "academy-desktop-light-control5-active.png",
+      "source": "final\\academy\\desktop-light\\code-control5-active.png",
+      "mask": "none; actual pressed control cropped with16px surrounding surface",
+      "cropRect": [1120, 726, 1260, 778]
+    },
+    {
+      "file": "academy-desktop-dark-code.png",
+      "source": "final\\academy\\desktop-dark\\code.png",
+      "sha256": "2b7e16c8d434c5f4256aebfebfd8273881ec393e5b214e2f8ee1ae096413a684",
+      "mask": "owned recipient sentence only; all other pixels preserved",
+      "maskRects": [[879, 432, 1244, 506]]
+    },
+    {
+      "file": "academy-desktop-dark-validation.png",
+      "source": "final\\academy\\desktop-dark\\request-validation.png",
+      "sha256": "99d81cd68612ee718b72d6426aa5f00a6135d3b130026022312d60a268e28401",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "academy-desktop-dark-control1-active.png",
+      "source": "final\\academy\\desktop-dark\\code-control1-active.png",
+      "mask": "none; actual pressed control cropped with16px surrounding surface",
+      "cropRect": [867, 606, 1264, 687]
+    },
+    {
+      "file": "academy-desktop-dark-control2-active.png",
+      "source": "final\\academy\\desktop-dark\\code-control2-active.png",
+      "mask": "none; actual pressed control cropped with16px surrounding surface",
+      "cropRect": [863, 668, 1043, 733]
+    },
+    {
+      "file": "academy-desktop-dark-control4-active.png",
+      "source": "final\\academy\\desktop-dark\\code-control4-active.png",
+      "mask": "none; actual pressed control cropped with16px surrounding surface",
+      "cropRect": [863, 726, 1007, 778]
+    },
+    {
+      "file": "academy-desktop-dark-control5-active.png",
+      "source": "final\\academy\\desktop-dark\\code-control5-active.png",
+      "mask": "none; actual pressed control cropped with16px surrounding surface",
+      "cropRect": [1120, 726, 1260, 778]
+    },
+    {
+      "file": "academy-mobile-light-code.png",
+      "source": "final\\academy\\mobile-light\\code.png",
+      "sha256": "875cf0e47a702c54a381e70fb440327ebcc0ef2f5ebbb7d99c20941fa5a6c28f",
+      "mask": "owned recipient sentence only; all other pixels preserved",
+      "maskRects": [[42, 341, 348, 437]]
+    },
+    {
+      "file": "academy-mobile-light-validation.png",
+      "source": "final\\academy\\mobile-light\\request-validation.png",
+      "sha256": "a60f3a74a6af8c25c3674c690f1da546fd9393488104295b2a3e38008b7110a6",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "academy-mobile-dark-code.png",
+      "source": "final\\academy\\mobile-dark\\code.png",
+      "sha256": "7a466458395e75dc816e40bddad2e61082be57705ca68c9a0cc0fdf4e62ee923",
+      "mask": "owned recipient sentence only; all other pixels preserved",
+      "maskRects": [[42, 341, 348, 437]]
+    },
+    {
+      "file": "academy-mobile-dark-validation.png",
+      "source": "final\\academy\\mobile-dark\\request-validation.png",
+      "sha256": "3e2a7c98f8257a8497a3330f9c91138e4a74996c1e59210c6cf5fb486e0eefa0",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "doctor-desktop-light-code.png",
+      "source": "final\\doctor\\desktop-light\\code.png",
+      "sha256": "62a4fbabc29b75a9e07a461331949abe99c99b1c76654eb23add85866fb097d4",
+      "mask": "owned recipient sentence only; all other pixels preserved",
+      "maskRects": [[879, 432, 1244, 506]]
+    },
+    {
+      "file": "doctor-desktop-light-validation.png",
+      "source": "final\\doctor\\desktop-light\\request-validation.png",
+      "sha256": "0e533faf96ea3cecdc1380c35a66b3f06b1625d15e220938cf04a3c11a8c9b6a",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "doctor-desktop-light-control1-active.png",
+      "source": "final\\doctor\\desktop-light\\code-control1-active.png",
+      "mask": "none; actual pressed control cropped with16px surrounding surface",
+      "cropRect": [867, 606, 1264, 687]
+    },
+    {
+      "file": "doctor-desktop-light-control2-active.png",
+      "source": "final\\doctor\\desktop-light\\code-control2-active.png",
+      "mask": "none; actual pressed control cropped with16px surrounding surface",
+      "cropRect": [863, 668, 1043, 733]
+    },
+    {
+      "file": "doctor-desktop-light-control4-active.png",
+      "source": "final\\doctor\\desktop-light\\code-control4-active.png",
+      "mask": "none; actual pressed control cropped with16px surrounding surface",
+      "cropRect": [863, 726, 1007, 778]
+    },
+    {
+      "file": "doctor-desktop-light-control5-active.png",
+      "source": "final\\doctor\\desktop-light\\code-control5-active.png",
+      "mask": "none; actual pressed control cropped with16px surrounding surface",
+      "cropRect": [1120, 726, 1260, 778]
+    },
+    {
+      "file": "doctor-desktop-dark-code.png",
+      "source": "final\\doctor\\desktop-dark\\code.png",
+      "sha256": "54381b8cd47c7110063921aced49326ff9eb6100aca7ca7abe974ec1fab4ff6f",
+      "mask": "owned recipient sentence only; all other pixels preserved",
+      "maskRects": [[879, 432, 1244, 506]]
+    },
+    {
+      "file": "doctor-desktop-dark-validation.png",
+      "source": "final\\doctor\\desktop-dark\\request-validation.png",
+      "sha256": "c35b1570b9d56897bd45746d8f92f63f26620528999e3b243f3460bdb447334c",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "doctor-desktop-dark-control1-active.png",
+      "source": "final\\doctor\\desktop-dark\\code-control1-active.png",
+      "mask": "none; actual pressed control cropped with16px surrounding surface",
+      "cropRect": [867, 606, 1264, 687]
+    },
+    {
+      "file": "doctor-desktop-dark-control2-active.png",
+      "source": "final\\doctor\\desktop-dark\\code-control2-active.png",
+      "mask": "none; actual pressed control cropped with16px surrounding surface",
+      "cropRect": [863, 668, 1043, 733]
+    },
+    {
+      "file": "doctor-desktop-dark-control4-active.png",
+      "source": "final\\doctor\\desktop-dark\\code-control4-active.png",
+      "mask": "none; actual pressed control cropped with16px surrounding surface",
+      "cropRect": [863, 726, 1007, 778]
+    },
+    {
+      "file": "doctor-desktop-dark-control5-active.png",
+      "source": "final\\doctor\\desktop-dark\\code-control5-active.png",
+      "mask": "none; actual pressed control cropped with16px surrounding surface",
+      "cropRect": [1120, 726, 1260, 778]
+    },
+    {
+      "file": "doctor-mobile-light-code.png",
+      "source": "final\\doctor\\mobile-light\\code.png",
+      "sha256": "85a6e93dbccea1ba7a025f60d18cd98c52a3f82b4db8f5078a78ad1633a67b4b",
+      "mask": "owned recipient sentence only; all other pixels preserved",
+      "maskRects": [[42, 341, 348, 437]]
+    },
+    {
+      "file": "doctor-mobile-light-validation.png",
+      "source": "final\\doctor\\mobile-light\\request-validation.png",
+      "sha256": "5c939b2b9f12ca5dba24bf80406af700cff5f39b8d1d17e915f0f9dd460a7b81",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "doctor-mobile-dark-code.png",
+      "source": "final\\doctor\\mobile-dark\\code.png",
+      "sha256": "74e113ca163080a667159e540fd41641a6e3096fc94fb6f05ca8d37f248d9796",
+      "mask": "owned recipient sentence only; all other pixels preserved",
+      "maskRects": [[42, 341, 348, 437]]
+    },
+    {
+      "file": "doctor-mobile-dark-validation.png",
+      "source": "final\\doctor\\mobile-dark\\request-validation.png",
+      "sha256": "7fde8bd60c057f71e42f145247497dd11c16f2b07ae74063e4ea665bc0885aec",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "academy-desktop-light-request.png",
+      "source": "settled\\academy\\desktop-light\\request-settled.png",
+      "sha256": "e10f45235b440b1f74f962649933925f5680be8998d0eacc48f650fd04cccd66",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "academy-desktop-dark-request.png",
+      "source": "settled\\academy\\desktop-dark\\request-settled.png",
+      "sha256": "843dde2a7496574b901a26d702f4dfd943c0edaf67ce25e31126eb86815d18c9",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "academy-mobile-light-request.png",
+      "source": "settled\\academy\\mobile-light\\request-settled.png",
+      "sha256": "aa1144344cad070b43bd2ab5a56578bd3966dfe001a79f9667f7c498dfad4a83",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "academy-mobile-dark-request.png",
+      "source": "settled\\academy\\mobile-dark\\request-settled.png",
+      "sha256": "60665293fda9bc77ebceed04663ab01151261135349ffd78e2d773ccaa842032",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "doctor-desktop-light-request.png",
+      "source": "settled\\doctor\\desktop-light\\request-settled.png",
+      "sha256": "db0a3546e0ed6b09baec2e466d76ca549c2945508a29d6f4cf759b3706c2bfa6",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "doctor-desktop-dark-request.png",
+      "source": "settled\\doctor\\desktop-dark\\request-settled.png",
+      "sha256": "10fa62ae4444ad2e1b23429427631cbb62f12d3e63d15d949020c8e417266703",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "doctor-mobile-light-request.png",
+      "source": "settled\\doctor\\mobile-light\\request-settled.png",
+      "sha256": "fbaef15b6ebca3ab898d183575c757052ed76889c46b458f8406d05e7cc99329",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "doctor-mobile-dark-request.png",
+      "source": "settled\\doctor\\mobile-dark\\request-settled.png",
+      "sha256": "2eba653ad7e57bd9b9d66c916d05fd80a6e8024bab8837c3efdd7335d5d1c711",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "academy-wrongCode-dark.png",
+      "source": "branches\\academy\\wrong-code-dark.png",
+      "sha256": "42575702e99354691f98dd01209b335c52af5e6041459030d0bc034a9efa373f",
+      "mask": "owned recipient sentence only; all other pixels preserved",
+      "maskRects": [[879, 475, 1244, 549]]
+    },
+    {
+      "file": "academy-resend-dark.png",
+      "source": "branches\\academy\\resend-notice-dark.png",
+      "sha256": "c02a7365d62ba2a458e3f861c94ade75e97df73b77a44cae0041a73a0f7f81b8",
+      "mask": "owned recipient sentence only; all other pixels preserved",
+      "maskRects": [
+        [879, 447, 1244, 521],
+        [879, 757, 1244, 797]
+      ]
+    },
+    {
+      "file": "doctor-wrongCode-dark.png",
+      "source": "branches\\doctor\\wrong-code-dark.png",
+      "sha256": "6bfbba2cccb40c7a930f287e7755fb6aa282c5c0382f69074f1b1a43740fb12a",
+      "mask": "owned recipient sentence only; all other pixels preserved",
+      "maskRects": [[879, 475, 1244, 549]]
+    },
+    {
+      "file": "doctor-resend-dark.png",
+      "source": "branches\\doctor\\resend-notice-dark.png",
+      "sha256": "15f8fa2677f989b1b0ef8375590824e58d7d8c3dde3ad6945b346c903d5ff7ae",
+      "mask": "owned recipient sentence only; all other pixels preserved",
+      "maskRects": [
+        [879, 447, 1244, 521],
+        [879, 757, 1244, 797]
+      ]
+    },
+    {
+      "file": "academy-injected-network-error-light.png",
+      "source": "remaining\\academy\\injected-network-error-light.png",
+      "sha256": "06d8cae06c3cb4895d583f92af548e904b4ade546bb4e8356cd27e2cece0583d",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "academy-sms-control-light.png",
+      "source": "remaining\\academy\\sms-request-light.png",
+      "sha256": "da97e1b8ee8605cdd42b8a82ed1e2e5abafbfc797c934913682edb8cafe03f8f",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "doctor-injected-network-error-light.png",
+      "source": "remaining\\doctor\\injected-network-error-light.png",
+      "sha256": "c79f4257e048281481da7c77035d7fd4d4c846089abfd8c6e19a141224afee92",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "doctor-sms-control-light.png",
+      "source": "remaining\\doctor\\sms-request-light.png",
+      "sha256": "0b70d0e435ed27aa35492a416416b4ce3d0d8076fc81920f17f76b66507c5d1e",
+      "mask": "none",
+      "maskRects": []
+    },
+    {
+      "file": "before-after.png",
+      "source": "before/frame-001.jpg + remaining/academy/after-frame-004.jpg",
+      "mask": "none; captions added above unscaled actual frames"
+    }
+  ],
+  "artifacts": [
+    {
+      "file": "COMPARISON.md",
+      "sha256": "a1e28434bf6b202a9c14217f6c035bd01a240f07ace8043fbb5a3fc8a811cb33"
+    }
+  ],
+  "publicationNote": "The large private INTERACTIONS.json is deliberately omitted; COMPARISON.md contains the compact driven-interaction summary and evidence limits. Published screenshots retain the tested runtime source SHA above. Publication-only commits do not change that runtime."
+}

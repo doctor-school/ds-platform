@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 /**
  * 020 EARS-1 (#1764, slice 3) — the academy storefront's mount of the ONE shared
- * event page. `apps/portal/app/webinars/[slug]/page.tsx` no longer composes a
+ * event page. `apps/portal/app/webinars/[slug]/(event-page)/page.tsx` no longer composes a
  * host-local page: it is `EventPageShell` / `EventPageHero` / `EventSignupCard` /
  * `EventSpeakerCard` / `EventFormatBlock` over `EventPageView` plus the
  * server-resolved `ParticipationCta`.
@@ -68,7 +68,9 @@ test("020 EARS-1: the right column is the sign-up card with exactly one primary 
   context,
 }) => {
   await context.clearCookies();
-  await page.goto(`${BASE}/webinars/${SLUG}`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${BASE}/webinars/${SLUG}`, {
+    waitUntil: "domcontentloaded",
+  });
 
   const aside = page.getByTestId("event-page-aside");
   await expect(aside).toBeVisible();
@@ -119,8 +121,8 @@ test("020 EARS-1: an ended event renders the same composition with NO participat
   // The server said `unavailable`; the shared card renders words, not a control.
   await expect(page.getByTestId("event-signup-cta")).toHaveCount(0);
   for (const dead of ["Участвовать", "Записаться", "Смотреть эфир"]) {
-    await expect(page.getByRole("link", { name: dead, exact: true })).toHaveCount(
-      0,
-    );
+    await expect(
+      page.getByRole("link", { name: dead, exact: true }),
+    ).toHaveCount(0);
   }
 });

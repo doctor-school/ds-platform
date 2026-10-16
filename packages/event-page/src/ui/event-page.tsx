@@ -17,7 +17,6 @@ import {
   eventLifecycleCountdown,
   eventLifecyclePlate,
   eventPageChips,
-  eventPageDateLine,
   eventPageKickerParts,
   eventProgrammeContent,
   eventSignupCardProps,
@@ -41,6 +40,7 @@ import type { EventPageHostConfig } from "../host-config";
 import { fetchEventPlayback } from "../server/event-playback";
 import { RecordingGate } from "./recording-gate";
 import { RecordingPlayer } from "./recording-player";
+import { ViewerZoneTime } from "./viewer-zone-time";
 
 export interface EventPageProps {
   /** The mounting storefront's data-only event-page config (gate §4.4). */
@@ -172,6 +172,14 @@ export async function EventPage({
       />
     ) : undefined;
 
+  // 020 «Amendment — 2026-10-02» (gate row 30, D9): the server states every
+  // time in МСК; the island re-formats online/hybrid times into the viewer's
+  // zone after mount. Only the three facts it needs cross to the client.
+  const moment = {
+    startsAt: event.startsAt,
+    format: event.format,
+    durationMin: event.durationMin,
+  };
   const formatBlock = eventFormatBlockProps(event);
   const lifecyclePlate = eventLifecyclePlate(event);
   /* Canvas:171 «Скоро · через 5 дней» — the lifecycle word is the page's copy,
@@ -212,7 +220,7 @@ export async function EventPage({
             }
             kicker={<EventPageKicker {...eventPageKickerParts(event)} />}
             title={event.title}
-            dateLine={eventPageDateLine(event)}
+            dateLine={<ViewerZoneTime moment={moment} part="dateLine" />}
             chips={eventPageChips(event)}
             statusPlate={
               /* 004 EARS-4 swap: live → the «В эфире» tag; every other state
@@ -251,6 +259,11 @@ export async function EventPage({
           cta ? (
             <EventSignupCard
               {...eventSignupCardProps(event, cta)}
+              timeLabel={<ViewerZoneTime moment={moment} part="time" />}
+              dateLabel={<ViewerZoneTime moment={moment} part="date" />}
+              weekdayLabel={
+                <ViewerZoneTime moment={moment} part="weekdayLabel" />
+              }
               control={oneTap}
               pinned
             />
@@ -377,7 +390,10 @@ export async function EventPage({
           <EventFormatBlock className="mt-14" {...formatBlock} />
         ) : null}
 
-        {/* The sponsor plate — the event's declared partners, stated plainly. */}
+        {/* The sponsor plate — the event's declared partners, stated plainly.
+            020 EARS-19 (gate row 26, D5): no rendered string states who
+            finances the event, so the plate names the partners and nothing
+            else, on both hosts. */}
         {event.partners.length > 0 ? (
           <div
             data-testid="event-partners"
@@ -389,9 +405,6 @@ export async function EventPage({
             <div className="mt-2 text-base font-bold text-foreground">
               {event.partners.map((partner) => partner.label).join(" · ")}
             </div>
-            <p className="mt-2 text-caption leading-relaxed text-muted-foreground">
-              {COPY.page.sponsorNote}
-            </p>
           </div>
         ) : null}
       </EventPageShell>

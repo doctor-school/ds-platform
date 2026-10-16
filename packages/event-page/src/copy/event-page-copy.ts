@@ -46,7 +46,8 @@ export const EVENT_PAGE_COPY = {
   playerGate: {
     eyebrow: (duration: number) => `Запись эфира · ${duration} мин`,
     title: "Войдите, чтобы посмотреть запись",
-    body: "Doctor.School бесплатна для врачей. Вход — почта и специальность, две минуты.",
+    /** Owner 2026-10-16 H3 (gate row 44) — one neutral line on both hosts. */
+    body: "Вход — по почте, две минуты.",
     cta: "Войти и смотреть ↗",
     noAccount: "Нет аккаунта?",
     signUp: "Создать",
@@ -61,9 +62,15 @@ export const EVENT_PAGE_COPY = {
     program: "Программа",
     programDownload: "Скачать программу (PDF)",
     sponsorEyebrow: "При поддержке",
-    sponsorNote:
-      "Спонсор оплачивает эфир и не влияет на программу. Содержание определяют спикеры и школа.",
   },
+  /** The segment's failed read — canvas `pageState: ошибка` (gate row 28). */
+  error: {
+    title: "Не получилось загрузить событие",
+    body: "Сервер не ответил за 10 секунд. Ваша запись не потерялась — попробуйте обновить страницу.",
+    retry: "Повторить",
+  },
+  /** The segment's loading skeleton, announced to assistive tech only (row 29). */
+  loading: "Загружаем событие",
   /** The room access-branch guidance shown above the page on `?from=room`. */
   accessGuidance: {
     title: "Чтобы войти в эфир, сначала зарегистрируйтесь",

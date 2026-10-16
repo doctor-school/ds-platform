@@ -5,7 +5,7 @@ import {
   type Page,
   type Response,
 } from "@playwright/test";
-import { installCaptchaStub } from "../lib/captcha-stub.js";
+import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import {
   captureAddressedMailCheckpoint,
   fetchRecoveryCode,
@@ -70,7 +70,11 @@ Given(
         ...(httpCredentials ? { httpCredentials } : {}),
       });
       contexts.push(context);
-      await installCaptchaStub(context);
+      await prepareCaptchaForJourney(
+        context,
+        world.hostBaseUrl,
+        process.env.BOT_PROTECTION_ENABLED !== "false",
+      );
       return context.newPage();
     };
     const account = await privatePage();

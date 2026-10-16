@@ -2191,19 +2191,19 @@ tools:
   fx:
     usd_rub: 84.9048
     eur_rub: 94.9745
-    source:
-      url: "https://www.cbr.ru/scripts/XML_daily.asp?date_req=10/10/2026"
-      publisher: "ЦБ РФ — официальный курс на 10.10.2026"
-      accessed: 2026-10-12
+    sources:
+      - url: "https://www.cbr.ru/scripts/XML_daily.asp?date_req=10/10/2026"
+        publisher: "ЦБ РФ — официальный курс на 10.10.2026"
+        accessed: 2026-10-12
   payment_markup:
     default: 0.1
     range: [0.05, 0.29]
     basis: "Stripe не принимает карты российских банков — подписки OpenAI, Anthropic, Midjourney, Runway, Kling, ElevenLabs, CapCut, Adobe оплачиваются через посредника: ≈ 550 ₽ фиксировано за подписку 20 $ (≈ 26–29 %), от 50 000 ₽ — 10 %, от 100 000 ₽ — 5–7 %"
-    source:
-      url: https://vc.ru/services/2912049-kak-oplatit-chatgpt-v-rossii
-      publisher: "vc.ru — комиссии посредников за оплату зарубежных подписок"
-      period: 2026-05
-      accessed: 2026-10-12
+    sources:
+      - url: https://vc.ru/services/2912049-kak-oplatit-chatgpt-v-rossii
+        publisher: "vc.ru — комиссии посредников за оплату зарубежных подписок"
+        period: 2026-05
+        accessed: 2026-10-12
     confidence:
       { level: medium, why: "один обзор; комиссии посредников различаются" }
   opex_monthly:
@@ -2212,8 +2212,14 @@ tools:
         per: seat,
         rub_month: 1698,
         usd: 20,
-        url: "https://lenz.io/c/openai-chatgpt-business-5-dollar-price-cut-2026-72b95dee",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://lenz.io/c/openai-chatgpt-business-5-dollar-price-cut-2026-72b95dee",
+              publisher: "lenz.io — цена ChatGPT Business",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
     - {
@@ -2221,8 +2227,14 @@ tools:
         per: seat,
         rub_month: 1698,
         usd: 20,
-        url: "https://claude.com/pricing",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://claude.com/pricing",
+              publisher: "Anthropic — тарифы Claude",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: high,
       }
     - {
@@ -2230,8 +2242,14 @@ tools:
         per: seat,
         rub_month: 2547,
         usd: 30,
-        url: "https://eesel.ai/blog/midjourney-pricing",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://eesel.ai/blog/midjourney-pricing",
+              publisher: "eesel.ai — обзор тарифов Midjourney",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
     - {
@@ -2239,8 +2257,14 @@ tools:
         per: seat,
         rub_month: 2972,
         usd: 35,
-        url: "https://runway.com/pricing",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://runway.com/pricing",
+              publisher: "Runway — тарифы",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: high,
       }
     - {
@@ -2248,8 +2272,14 @@ tools:
         per: seat,
         rub_month: 3141,
         usd: 37,
-        url: "https://eesel.ai/blog/kling-ai-pricing",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://eesel.ai/blog/kling-ai-pricing",
+              publisher: "eesel.ai — обзор тарифов Kling",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: low,
       }
     - {
@@ -2257,8 +2287,14 @@ tools:
         per: team,
         rub_month: 8406,
         usd: 99,
-        url: "https://elevenlabs.io/pricing",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://elevenlabs.io/pricing",
+              publisher: "ElevenLabs — тарифы",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: high,
       }
     - {
@@ -2266,8 +2302,14 @@ tools:
         per: seat,
         rub_month: 5942,
         usd: 69.99,
-        url: "https://www.thepricer.org/how-much-does-adobe-creative-cloud-cost/",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://www.thepricer.org/how-much-does-adobe-creative-cloud-cost/",
+              publisher: "The Pricer — цена Adobe Creative Cloud",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
     - {
@@ -2275,8 +2317,14 @@ tools:
         per: seat,
         rub_month: 1697,
         usd: 19.99,
-        url: "https://vc.ru/services/2983864-kak-oplatit-capcut-pro-iz-rossii",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://vc.ru/services/2983864-kak-oplatit-capcut-pro-iz-rossii",
+              publisher: "vc.ru — оплата CapCut Pro из России",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
     - {
@@ -2284,16 +2332,28 @@ tools:
         per: seat,
         rub_month: 1358,
         usd: 16,
-        url: "https://www.figma.com/pricing/",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://www.figma.com/pricing/",
+              publisher: "Figma — тарифы",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
     - {
         item: "Яндекс 360 «Основной», 1 ТБ",
         per: seat,
         rub_month: 549,
-        url: "https://net-admin.su/blog/tarifi-yandex-360-dlya-biznesa",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://net-admin.su/blog/tarifi-yandex-360-dlya-biznesa",
+              publisher: "net-admin.su — тарифы Яндекс 360 для бизнеса",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
     - {
@@ -2301,16 +2361,28 @@ tools:
         per: team,
         rub_month: 2433,
         basis: "2,376 ₽ за ГБ в месяц × 1 024",
-        url: "https://yandex.cloud/ru/docs/storage/pricing",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://yandex.cloud/ru/docs/storage/pricing",
+              publisher: "Yandex Cloud — тарифы Object Storage",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
     - {
         item: "домен .ru, продление (Рег.ру), 999 ₽ в год",
         per: team,
         rub_month: 83,
-        url: "https://www.reg.ru/company/news/12857",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://www.reg.ru/company/news/12857",
+              publisher: "Рег.ру — цена продления домена .ru",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
   opex_one_off:
@@ -2318,51 +2390,93 @@ tools:
         item: "DaVinci Resolve Studio, бессрочная лицензия",
         price_rub: 25047,
         usd: 295,
-        url: "https://subger.com/ru/service/davinci-resolve-studio",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://subger.com/ru/service/davinci-resolve-studio",
+              publisher: "Subger — цена DaVinci Resolve Studio",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
   platform_ds_monthly:
     - {
         item: "Timeweb Cloud ru-3, 4 vCPU / 8 ГБ / 80 ГБ NVMe (prod, preset 4803) + IPv4",
         rub_month: 1980,
-        url: "infra/deploy/terraform/variables.tf (репозиторий DS; цена живого Timeweb API на apply)",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "infra/deploy/terraform/variables.tf (репозиторий DS; цена живого Timeweb API на apply)",
+              publisher: "репозиторий DS — конфигурация prod на Timeweb Cloud",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: high,
       }
     - {
         item: "Timeweb Cloud, 8 vCPU / 12 ГБ / 100 ГБ (stage, preset 4805) + IPv4",
         rub_month: 3080,
-        url: "infra/deploy/terraform/variables.tf (репозиторий DS)",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "infra/deploy/terraform/variables.tf (репозиторий DS)",
+              publisher: "репозиторий DS — конфигурация stage на Timeweb Cloud",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: high,
       }
     - {
         item: "весь prod-контур (2 VPS + NAT + S3)",
         rub_month: [4400, 4650],
-        url: "apps/docs/content/specs/tech/2026-07-02-ds-platform-prepilot-deploy-slice-design-en.md §4 (репозиторий DS, расчёт по живому API 2026-07)",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "apps/docs/content/specs/tech/2026-07-02-ds-platform-prepilot-deploy-slice-design-en.md §4 (репозиторий DS, расчёт по живому API 2026-07)",
+              publisher: "репозиторий DS — дизайн prod-контура, расчёт стоимости",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: high,
       }
     - {
         item: "Timeweb S3, тариф 100 ГБ (сверх — 4 ₽ за ГБ; исходящий трафик 1,3 ₽ за ГБ сверх 100 ГБ)",
         rub_month: 349,
-        url: "https://timeweb.cloud/services/s3-storage",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://timeweb.cloud/services/s3-storage",
+              publisher: "Timeweb Cloud — тарифы S3",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
     - {
         item: "Kinescope Super — видеохостинг и CDN (от 10 € в месяц + 0,03 € за ГБ)",
         rub_month: 950,
-        url: "https://www.kinescope.com/pricing",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://www.kinescope.com/pricing",
+              publisher: "Kinescope — тарифы",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
     - {
         item: "домены платформы (.ru, продление 999 ₽ в год за домен, ×3)",
         rub_month: 250,
-        url: "https://www.reg.ru/company/news/12857",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://www.reg.ru/company/news/12857",
+              publisher: "Рег.ру — цена продления домена .ru",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
   capex:
@@ -2370,64 +2484,112 @@ tools:
         item: "камера Sony FX30 body",
         price_rub: 137900,
         useful_life_months: 60,
-        url: "https://www.yarkiy.ru/products/sony-fx30-body-37493",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://www.yarkiy.ru/products/sony-fx30-body-37493",
+              publisher: "Яркий — цена Sony FX30",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
     - {
         item: "камера Sony ZV-E10 II kit 16–50",
         price_rub: 77500,
         useful_life_months: 60,
-        url: "https://texno-pro.ru/catalog/foto/sony_foto/fotoapparat_sony_zv_e10_ii_kit_16_50mm_f_3_5_5_6_oss_black/",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://texno-pro.ru/catalog/foto/sony_foto/fotoapparat_sony_zv_e10_ii_kit_16_50mm_f_3_5_5_6_oss_black/",
+              publisher: "Техно-Про — цена Sony ZV-E10 II",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
     - {
         item: "микрофон Shure SM7B",
         price_rub: 51890,
         useful_life_months: 60,
-        url: "https://doctorhead.ru/product/shure_sm7db_black/",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://doctorhead.ru/product/shure_sm7db_black/",
+              publisher: "Doctorhead — цена Shure SM7",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
     - {
         item: "микрофон Rode PodMic USB",
         price_rub: 19490,
         useful_life_months: 60,
-        url: "https://doctorhead.ru/brands/rode/products/pro-audio/mikrofony/",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://doctorhead.ru/brands/rode/products/pro-audio/mikrofony/",
+              publisher: "Doctorhead — микрофоны Rode",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
     - {
         item: "аудиоинтерфейс Focusrite Scarlett 2i2 4th Gen",
         price_rub: 20440,
         useful_life_months: 36,
-        url: "https://doctorhead.ru/product/focusrite_scarlett_2i2_4th_gen/",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://doctorhead.ru/product/focusrite_scarlett_2i2_4th_gen/",
+              publisher: "Doctorhead — цена Focusrite Scarlett 2i2",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
     - {
         item: "свет Godox SL60IIBi, комплект 3 шт.",
         price_rub: 43100,
         useful_life_months: 60,
-        url: "https://falcon-eyes.ru/catalog/svetodiodnye-led-paneli/osvetitel-svetodiodnyy-godox-sl60iibi/",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://falcon-eyes.ru/catalog/svetodiodnye-led-paneli/osvetitel-svetodiodnyy-godox-sl60iibi/",
+              publisher: "Falcon Eyes — цена Godox SL60IIBi",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
     - {
         item: "ноутбук для монтажа MacBook Pro 14 M5 16/512",
         price_rub: 146400,
         useful_life_months: 36,
-        url: "https://click-or-die.ru/2026/02/macbook-pro-kruto-podeshevel-aktualnyj-macbook-air-stoit-okolo-100-tysyach-rublej-vot-czeny-na-vse-kompyutery-apple-v-rossii/",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://click-or-die.ru/2026/02/macbook-pro-kruto-podeshevel-aktualnyj-macbook-air-stoit-okolo-100-tysyach-rublej-vot-czeny-na-vse-kompyutery-apple-v-rossii/",
+              publisher: "Click or Die — цены Apple в России",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
     - {
         item: 'монитор LG 27UP850N-W 27" 4K',
         price_rub: 36499,
         useful_life_months: 36,
-        url: "https://www.dns-shop.ru/product/60046b551a42ed20/27-monitor-lg-27up850n-w-belyj/",
-        accessed: 2026-10-12,
+        sources:
+          [
+            {
+              url: "https://www.dns-shop.ru/product/60046b551a42ed20/27-monitor-lg-27up850n-w-belyj/",
+              publisher: "DNS — цена LG 27UP850N-W",
+              accessed: 2026-10-12,
+            },
+          ],
         confidence: medium,
       }
   useful_life_basis: "компьютеры и ноутбуки — 2-я амортизационная группа, 25–36 мес. (ОКОФ 320.26.20.11), берётся верх 36; видеокамеры — 3-я группа, 37–60 мес. (ОКОФ 330.26.70.13), берётся 60; микрофоны и свет — точная группа не найдена, по вышестоящему коду ОКОФ вероятно 3-я (60, low); в налоговом учёте имущество до 100 000 ₽ списывается сразу (ст. 256 НК РФ) — срок здесь управленческий"
@@ -2692,14 +2854,14 @@ doctor_contacts:
       label: "прослушивание подкаста в эфире"
       weight: [0.3, 0.5]
       why: "только звук, внимание фоновое; медицинских бенчмарков по РФ нет"
-    sources:
-      - url: https://adindex.ru/publication/opinion/internet/2019/07/29/274141.phtml
-        publisher: "AdIndex — в медицинских вебинарах в среднем не более ста человек; видео — около тысячи просмотров"
-        period: 2019-07
-        accessed: 2026-10-12
-    confidence:
-      {
-        level: low,
-        why: "публичных цен за участника, просмотр или прослушивание у медплощадок нет; веса — суждение",
-      }
+  contact_types_sources:
+    - url: https://adindex.ru/publication/opinion/internet/2019/07/29/274141.phtml
+      publisher: "AdIndex — в медицинских вебинарах в среднем не более ста человек; видео — около тысячи просмотров"
+      period: 2019-07
+      accessed: 2026-10-12
+  contact_types_confidence:
+    {
+      level: low,
+      why: "публичных цен за участника, просмотр или прослушивание у медплощадок нет; веса — суждение",
+    }
   gaps: "запросить медиакиты «Врачи РФ», «Доктор на работе», Medvestnik, Remedium, МедНео"

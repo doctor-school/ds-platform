@@ -363,7 +363,7 @@ Built from `design-source/event-page.dc.html` `phase: прошло`, whose props
 
 | Canvas prop                                         | Source                                                   |
 | --------------------------------------------------- | -------------------------------------------------------- |
-| `auth: гость                                        | вошёл`\| гость`                                          | session presence |
+| `auth: гость \| вошёл`                              | session presence                                         |
 | `recording: монтаж \| только оригинал \| готовится` | `RecordingProjection.state`                              |
 | the drawn spoiler «▸ Смотреть оригинал трансляции»  | fixed — the canvas default is the operative Stage-A pick |
 

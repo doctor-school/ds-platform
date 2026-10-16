@@ -402,7 +402,13 @@ test("migrate and the branch golden seed run in the slot's own migrate image", (
     assert.equal(plan.command[0], "sudo");
   }
   assert.ok(migrateCommandPlan("pr-7").command.includes("drizzle:migrate:ci"));
-  assert.ok(seedCommandPlan("pr-7").command.includes("seed:golden"));
+  assert.deepEqual(seedCommandPlan("pr-7").command.slice(-5), [
+    "pnpm",
+    "--dir",
+    "../../packages/db",
+    "run",
+    "seed:golden",
+  ]);
 });
 
 test("the boot probe skips the one-shot migrate service instead of demanding a PORT", () => {

@@ -157,9 +157,46 @@ ssh -t <box> 'sudo docker login -u bbmacademy'   # paste the PAT at the prompt
   `cloud-init/*.yaml` or any fresh box starts anonymous — repeat the login as part of
   provisioning, before the first `compose build`.
 
-This does **not** make the deploy path use a registry: our own images are still built
-on the box from a shipped tree and never pushed or pulled. The login authenticates
-base-image pulls only.
+This does **not** make the deploy path use a registry: the images a box runs are still
+built on that box from a shipped tree (the registry below is not consumed by any box
+yet). The login authenticates base-image pulls only.
+
+## Container registry
+
+Our own images are built once per commit in GitHub Actions and pushed to a private
+Timeweb Cloud container registry (#2981, tech spec
+`apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md` §3–§4).
+
+- **A manual one-off, not Terraform.** The registry was created through the Timeweb
+  API on 2026-10-16; no Terraform resource models it, so `terraform plan` neither
+  shows nor recreates it. Endpoint: `ds-platform.registry.twcstorage.ru`.
+- **Two tokens, each scoped to the job that needs it.**
+
+  | Token | Scope       | Lives in                                                                                                                       | Used by                                                                                       |
+  | ----- | ----------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+  | push  | push + pull | GitHub Environment `build`, secret `REGISTRY_PUSH_TOKEN`                                                                       | `runtime-images.yml` `build` job only — it runs nothing but buildx after login                |
+  | pull  | pull only   | GitHub Environment `build`, secret `REGISTRY_PULL_TOKEN`; each box, `/etc/ds-platform/registry-pull-token` (0600, `root:root`) | `runtime-images.yml` `verify` job (runs PR-head code); the box's `docker login` before a pull |
+
+  The push token also still sits on ds-stage-1 at `/etc/ds-platform/registry-push-token`
+  until its removal later under #2981; after that it lives only in Environment `build`.
+
+  The registry has no per-repository scopes, so an internal PR head could still push
+  outside `pr/` with the push token. Accepted: a release takes only the digests a `main`
+  build recorded in its `images-<sha>.json`, never a tag. Fork PRs get neither token.
+
+  Login: `docker login ds-platform.registry.twcstorage.ru -u ds-platform --password-stdin`
+  with the token on stdin — the token authenticates; the username is not checked.
+  Neither token is ever written into this repo, an env file or chat.
+
+- **Image naming.** Every `main` merge pushes `ds-platform.registry.twcstorage.ru/<image>:<sha>`;
+  an internal pull request pushes `ds-platform.registry.twcstorage.ru/pr/<image>:<head-sha>`;
+  a fork pull request builds and boots its images but never logs in or pushes.
+  `<image>` ∈ `api`, `api-migrate`, `portal`, `admin`, `doctor`. The run's
+  `images-<sha>.json` artifact (90 days) maps each image to its pushed `@sha256:` digest
+  — a deploy pulls by digest, never by tag. The data-prod images (`ds-postgres`,
+  `ds-pgbackrest`) are not in the registry.
+- **Not consumed yet.** No box pulls from the registry until the stage and prod deploys
+  switch to pulling by digest (#2981 PRs 3–4); until then every box still builds on-box.
 
 ## Deploy — one command (`pnpm deploy:prod`)
 

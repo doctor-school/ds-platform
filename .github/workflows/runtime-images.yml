@@ -1,6 +1,18 @@
 name: Runtime images
 
+# Builds every production image ONCE per run, pushes it to the container registry
+# (infra/deploy/README.md → Container registry) and boots the exact pushed digest:
+#   - push to `main`: EVERY merge (no paths filter) — each releasable SHA must have
+#     digests; pushed as `<registry>/<image>:<sha>`.
+#   - internal pull_request: pushed as `<registry>/pr/<image>:<head-sha>`.
+#   - fork pull_request: built and booted, never logged in, never pushed.
+#   - workflow_dispatch: pushes like `main` only when dispatched on `main`.
+# The `images` job writes `images-<sha>.json` (artifact `images-<sha>`, 90 days) —
+# the digest manifest the stage/prod deploys read. Keep its shape.
+
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
     paths:
@@ -23,28 +35,223 @@ on:
 permissions:
   contents: read
 
+# A PR run is superseded by its next push; a `main` run is never cancelled — every
+# merged SHA keeps its own run and its own digests.
 concurrency:
-  group: runtime-images-${{ github.ref }}
-  cancel-in-progress: true
+  group: runtime-images-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  REGISTRY: ds-platform.registry.twcstorage.ru
 
 jobs:
-  images:
+  plan:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    outputs:
+      push: ${{ steps.plan.outputs.push }}
+      sha: ${{ steps.plan.outputs.sha }}
+      ref: ${{ steps.plan.outputs.ref }}
+      prefix: ${{ steps.plan.outputs.prefix }}
+    steps:
+      - id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          GIT_REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          push=false; prefix=""; ref=""; sha="$SHA"
+          if [ "$EVENT" = pull_request ]; then
+            # The image is the PR head, so a slot for pr-<N> at <head-sha> pulls it.
+            sha="$PR_HEAD_SHA"; ref="pr/$PR_NUMBER"; prefix="pr/"
+            if [ "$PR_HEAD_REPO" = "$REPO" ]; then push=true; fi
+          elif [ "$GIT_REF" = refs/heads/main ]; then
+            push=true; ref=main
+          else
+            ref="dispatch"
+          fi
+          {
+            echo "push=$push"; echo "sha=$sha"; echo "ref=$ref"; echo "prefix=$prefix"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {
+              image: api,
+              dockerfile: apps/api/Dockerfile,
+              target: runtime,
+              build-args: "",
+            }
+          - {
+              image: api-migrate,
+              dockerfile: apps/api/Dockerfile,
+              target: migrate,
+              build-args: "",
+            }
+          # API_PROXY_TARGET is a build-time constant (Next freezes rewrites() at
+          # build) and identical in every environment (DSO-100).
+          - {
+              image: portal,
+              dockerfile: apps/portal/Dockerfile,
+              target: "",
+              build-args: "API_PROXY_TARGET=http://api:3000",
+            }
+          - {
+              image: admin,
+              dockerfile: apps/admin/Dockerfile,
+              target: "",
+              build-args: "API_PROXY_TARGET=http://api:3000",
+            }
+          - {
+              image: doctor,
+              dockerfile: apps/doctor/Dockerfile,
+              target: "",
+              build-args: "API_PROXY_TARGET=http://api:3000",
+            }
+    env:
+      PUSH: ${{ needs.plan.outputs.push }}
+      # The registry host is spelled out: `env` is not available in jobs.<id>.env, so
+      # a change to env.REGISTRY must change this line too.
+      TAG: ${{ format('ds-platform.registry.twcstorage.ru/{0}{1}:{2}', needs.plan.outputs.prefix, matrix.image, needs.plan.outputs.sha) }}
+    steps:
+      - uses: actions/checkout@v7
+        with: { ref: "${{ needs.plan.outputs.sha }}" }
+      - uses: docker/setup-buildx-action@v4
+      # The push token lives only in this job. After login it runs nothing but
+      # buildx and shell steps of this workflow — no PR-head node/pnpm on the
+      # runner; the login-action post-step logs out.
+      - name: Log in to the registry (push)
+        if: needs.plan.outputs.push == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ds-platform
+          password: ${{ secrets.REGISTRY_PUSH_TOKEN }}
+      # The API Dockerfile executes the real pnpm deploy --prod --legacy path.
+      # Build the committed image, not a host bundle with repository dependencies.
+      - name: Build production image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          build-args: ${{ matrix.build-args }}
+          tags: ${{ env.TAG }}
+          push: ${{ needs.plan.outputs.push == 'true' }}
+          # Without a push the image travels to the verify job as a tar.
+          outputs: ${{ needs.plan.outputs.push != 'true' && format('type=docker,dest={0}/image.tar', runner.temp) || '' }}
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+      - name: Record the pushed digest
+        if: needs.plan.outputs.push == 'true'
+        env:
+          IMAGE: ${{ matrix.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          PREFIX: ${{ needs.plan.outputs.prefix }}
+        run: |
+          case "$DIGEST" in sha256:*) ;; *) echo "::error::no pushed digest for $IMAGE"; exit 1;; esac
+          mkdir -p digests
+          echo "$REGISTRY/$PREFIX$IMAGE@$DIGEST" > "digests/$IMAGE"
+          cat "digests/$IMAGE"
+          echo "$IMAGE: \`$REGISTRY/$PREFIX$IMAGE@$DIGEST\`" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload digest
+        if: needs.plan.outputs.push == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.image }}
+          path: digests/${{ matrix.image }}
+          if-no-files-found: error
+          retention-days: 1
+      - name: Upload image tar (no push)
+        if: needs.plan.outputs.push != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: image-${{ matrix.image }}
+          path: ${{ runner.temp }}/image.tar
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  verify:
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: build
     strategy:
       fail-fast: false
       matrix:
         app: [api, portal, admin, doctor]
+    env:
+      PUSH: ${{ needs.plan.outputs.push }}
     steps:
       - uses: actions/checkout@v7
+        with: { ref: "${{ needs.plan.outputs.sha }}" }
       - uses: actions/setup-node@v7
         with: { node-version-file: .nvmrc }
-      # The API Dockerfile executes the real pnpm deploy --prod --legacy path.
-      # Build the committed image, not a host bundle with repository dependencies.
-      - name: Build production image
+      # This job runs PR-head code (image-readiness.mjs, the booted images) after
+      # login, so it holds only the pull-only token.
+      - name: Log in to the registry (pull only)
+        if: needs.plan.outputs.push == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ds-platform
+          password: ${{ secrets.REGISTRY_PULL_TOKEN }}
+      - name: Download digests
+        if: needs.plan.outputs.push == 'true'
+        uses: actions/download-artifact@v8
+        with: { pattern: digest-*, path: digests, merge-multiple: true }
+      - name: Download image tars
+        if: needs.plan.outputs.push != 'true'
+        uses: actions/download-artifact@v8
+        with: { pattern: "image-${{ matrix.app }}*", path: tars }
+      # Boot the image that was built — when pushed, pulled back BY DIGEST, so the
+      # readiness evidence is about the exact artifact a deploy will pull.
+      - name: Load the built images
         env:
           APP: ${{ matrix.app }}
-        run: docker build -f "apps/$APP/Dockerfile" -t "ds-runtime:$APP" .
+        run: |
+          images="$APP"
+          if [ "$APP" = api ]; then images="api api-migrate"; fi
+          for image in $images; do
+            if [ "$PUSH" = true ]; then
+              ref="$(cat "digests/$image")"
+              docker pull "$ref"
+            else
+              ref="$(docker load -i "tars/image-$image/image.tar" | sed -n 's/^Loaded image: //p' | tail -n1)"
+            fi
+            test -n "$ref"
+            docker tag "$ref" "ds-runtime:$image"
+            echo "$image <- $ref" | tee -a readiness.txt
+          done
+          docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep ds-runtime | tee -a readiness.txt
+      # The migrate image carries drizzle-kit + the committed migrations, not the
+      # whole workspace install (that was 1.92 GB); the budget keeps it that way.
+      - name: Check the migrate image size budget
+        if: matrix.app == 'api'
+        run: |
+          bytes="$(docker image inspect --format '{{.Size}}' ds-runtime:api-migrate)"
+          budget=$((800 * 1000 * 1000))
+          echo "api-migrate: $bytes bytes (budget $budget)" | tee -a readiness.txt
+          if [ "$bytes" -gt "$budget" ]; then
+            echo "::error::ds-api-migrate is $bytes bytes, over the $budget budget — it must carry @ds/db's deployed tree, not the workspace install"
+            exit 1
+          fi
+      # Proves the migrate image (drizzle-kit + committed migrations only) migrates a
+      # real database, and gives the api readiness probe its schema.
       - name: Prepare isolated API database
         if: matrix.app == 'api'
         run: |
@@ -60,10 +267,45 @@ jobs:
             sleep 2
           done
           test "$ready" = true
-          docker build -f apps/api/Dockerfile --target migrate -t ds-runtime-migrate .
           docker run --rm --network host \
             -e DATABASE_URL=postgres://ds:ds@localhost:5432/ds_image \
-            ds-runtime-migrate
+            ds-runtime:api-migrate pnpm run drizzle:migrate:ci
+          docker exec ds-runtime-db psql -U ds -d ds_image -tAc \
+            'select count(*) from drizzle.__drizzle_migrations' | tee -a readiness.txt
+      # The stage box scripts run the golden seed in this same image (slot.mjs
+      # `seedCommandPlan`, golden-db.mjs `buildCommands`), so the image must run it.
+      # Same argv as those scripts; the subject ids are throwaway strings (the seed
+      # never creates IdP users) and the media goes to a throwaway S3Mock bucket
+      # (S3Mock: minio/minio is no longer pullable from Docker Hub).
+      - name: Seed the golden dataset from the migrate image
+        if: matrix.app == 'api'
+        run: |
+          docker run -d --name ds-runtime-s3 --network host adobe/s3mock:5.2.2
+          ready=false
+          for i in $(seq 1 30); do
+            if curl -sf -o /dev/null http://localhost:9090/; then ready=true; break; fi
+            sleep 2
+          done
+          test "$ready" = true
+          curl -sf -X PUT http://localhost:9090/ds-golden
+          subs=""
+          for key in DOCTOR_UNVERIFIED DOCTOR_VERIFIED DOCTOR_MFA DOCTOR_DELETED ADMIN \
+            DOCTOR_VERIFIED_W1 DOCTOR_VERIFIED_W2 DOCTOR_VERIFIED_W3 DOCTOR_VERIFIED_W4 DOCTOR_VERIFIED_W5; do
+            subs="$subs -e DS_GOLDEN_SUB_$key=ci-golden-$key"
+          done
+          docker run --rm --network host $subs \
+            -e DATABASE_URL=postgres://ds:ds@localhost:5432/ds_image \
+            -e S3_ENDPOINT=http://localhost:9090 -e S3_REGION=us-east-1 \
+            -e S3_BUCKET_UPLOADS=ds-golden -e S3_ACCESS_KEY=ci-golden \
+            -e S3_SECRET_KEY=ci-golden-secret \
+            ds-runtime:api-migrate pnpm --dir ../../packages/db run seed:golden
+          seeded="$(docker exec ds-runtime-db psql -U ds -d ds_image -tAc \
+            "select count(*) from users where zitadel_sub like 'ci-golden-%'")"
+          echo "golden accounts seeded: $seeded" | tee -a readiness.txt
+          if [ "$seeded" != 10 ]; then
+            echo "::error::the golden seed wrote $seeded of the 10 golden accounts from ds-api-migrate — the stage slot/template seed would not seed"
+            exit 1
+          fi
       - name: Boot image and verify HTTP readiness
         env:
           APP: ${{ matrix.app }}
@@ -77,7 +319,7 @@ jobs:
             "ds-runtime:$APP"
           path=/
           if [ "$APP" = api ]; then path=/v1/ready; fi
-          node tools/scripts/image-readiness.mjs "http://127.0.0.1:3000$path" > readiness.txt
+          node tools/scripts/image-readiness.mjs "http://127.0.0.1:3000$path" >> readiness.txt
           docker exec ds-runtime-app node --version >> readiness.txt
           docker inspect --format '{{.Image}}' ds-runtime-app >> readiness.txt
           cat readiness.txt
@@ -112,6 +354,45 @@ jobs:
         run: |
           docker logs ds-runtime-app || true
           docker logs ds-runtime-db || true
+          docker logs ds-runtime-s3 || true
       - name: Stop isolated containers
         if: always()
-        run: docker rm -f ds-runtime-app ds-runtime-db || true
+        run: docker rm -f ds-runtime-app ds-runtime-db ds-runtime-s3 || true
+
+  # The digest manifest, written only for pushed images that passed readiness.
+  images:
+    needs: [plan, build, verify]
+    if: needs.plan.outputs.push == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with: { pattern: digest-*, path: digests, merge-multiple: true }
+      - name: Write images-<sha>.json
+        env:
+          SHA: ${{ needs.plan.outputs.sha }}
+          REF: ${{ needs.plan.outputs.ref }}
+        run: |
+          for image in api api-migrate portal admin doctor; do
+            test -s "digests/$image" || { echo "::error::missing digest for $image"; exit 1; }
+          done
+          jq -n --arg sha "$SHA" --arg ref "$REF" \
+            --arg api "$(cat digests/api)" \
+            --arg migrate "$(cat digests/api-migrate)" \
+            --arg portal "$(cat digests/portal)" \
+            --arg admin "$(cat digests/admin)" \
+            --arg doctor "$(cat digests/doctor)" \
+            '{sha: $sha, ref: $ref, images: {api: $api, "api-migrate": $migrate, portal: $portal, admin: $admin, doctor: $doctor}}' \
+            > "images-$SHA.json"
+          {
+            echo "### images-$SHA.json"
+            echo '```json'
+            cat "images-$SHA.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "images-$SHA.json"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: images-${{ needs.plan.outputs.sha }}
+          path: images-${{ needs.plan.outputs.sha }}.json
+          if-no-files-found: error
+          retention-days: 90

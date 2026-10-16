@@ -49,6 +49,7 @@ import {
   shellVarName,
 } from "../deploy/service-set.mjs";
 import {
+  GOLDEN_SEED_ARGV,
   GOLDEN_DB_BASE,
   assertDatabaseName,
   terminateBackendsStatement,
@@ -745,11 +746,7 @@ export function seedCommandPlan(slot) {
       "run",
       "--rm",
       "migrate",
-      "pnpm",
-      "--filter",
-      "@ds/db",
-      "run",
-      "seed:golden",
+      ...GOLDEN_SEED_ARGV,
     ],
   };
 }

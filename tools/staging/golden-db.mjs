@@ -165,6 +165,21 @@ export function terminateBackendsStatement(name) {
  * compose's env override still puts the value on the same box's command line
  * (recorded in DEBT.md, 2026-09-12).
  */
+/**
+ * The golden seed, run inside the `migrate` image (CWD apps/api). That image holds a
+ * `pnpm deploy`ed @ds/db tree, not a workspace, so `pnpm --filter @ds/db` would match
+ * nothing and exit 0 without seeding; addressing the package by directory fails
+ * loudly when the script cannot run. `.github/workflows/runtime-images.yml` runs this
+ * same argv against the built image.
+ */
+export const GOLDEN_SEED_ARGV = Object.freeze([
+  "pnpm",
+  "--dir",
+  "../../packages/db",
+  "run",
+  "seed:golden",
+]);
+
 export function buildCommands(nextUrl, composeBase) {
   if (!Array.isArray(composeBase) || composeBase.length === 0) {
     throw new GoldenDbError(
@@ -191,7 +206,7 @@ export function buildCommands(nextUrl, composeBase) {
     {
       label: "seed:golden",
       kind: "sh",
-      command: oneShot("pnpm", "--filter", "@ds/db", "run", "seed:golden"),
+      command: oneShot(...GOLDEN_SEED_ARGV),
     },
   ];
 }

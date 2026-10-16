@@ -1175,3 +1175,31 @@ and makes no revoke-all claim from that absence. Existing cold `/verify`,
 unverified login, and other broader cases remain complementary. Select the one
 `@signin-first-code` Academy case on the lead-selected contour. This test coverage
 change has no render surface and needs no owner Stage-B request or staging slot.
+
+## Verification resend across owned account states (#2988)
+
+`Academy resend delivers the code fitting each account state without a private session`
+is the narrow browser projection of 003 EARS-25/16. It prepares independent
+unknown, unverified and verified addresses; only the latter two are registered.
+The verified prerequisite accepts its real registration code, checks its own
+verified profile, then logs out with HTTP 200 and absent profile/session access.
+Three guest `/verify` screens wait for their real cooldowns concurrently and
+click the actual resend control. Each request must contain only its exact
+identifier and return HTTP 200 with exactly `{ status: "resend_requested" }`.
+The approved notice, empty six-digit field and restarted cooldown stay visible.
+Fresh addressed verification mail reaches the unverified account, fresh login
+mail reaches the verified account. A pre-click complete mailbox ID checkpoint
+binds fresh positive delivery independently of client/inbox clocks; the canonical
+mail helper still validates the new message's recipient, purpose, detail and code.
+The same checkpoint proves no new addressed mail reaches the unknown address
+throughout 15 seconds. No
+reissued code is entered; all three profiles and sessions remain HTTP 401.
+
+`steps/verification-resend.steps.ts` uses the trace-off auth fixture, canonical
+registration/mail/CAPTCHA/secret-input/session helpers and owned-context cleanup.
+Its per-case 180-second timeout accommodates real setup, the unchanged 30-second
+screen cooldown and the full negative delivery horizon; no runner or clock is
+changed. The broader feature declaration remains native: API verify EARS-25/16
+owns timing, issued-only audit and no users/consent writes, API abuse tests own
+counters/rate limits, and auth-flow verify-door tests own native control and
+cooldown contracts. This case adds no accepted-code or persisted-state claim.

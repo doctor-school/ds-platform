@@ -6,6 +6,24 @@ The end-to-end regression contract of the staging/regression-contour tech spec
 feature files as the suite, and the navigation model both storefronts' chrome
 is configured from.
 
+### Email reset with a confirmed phone (003 EARS-53)
+
+`Academy keeps email reset delivery when the account also confirms a phone`
+(`steps/password-reset-email-with-phone.steps.ts`, #2962) registers and verifies
+one unique account, confirms a fresh phone through the real profile and SMS
+sink using `lib/owned-phone-confirmation.ts`, then observes and settles the
+phone-confirmation notice mailbox. An independent guest submits the email to
+`/reset` and receives the exact neutral acknowledgement. A fresh addressed
+six-digit reset email and the truthful email-code UI precede a full 20-second
+check for any addressed SMS; exactly one email is added to the settled baseline.
+The selected `@email-reset-with-phone` clause ends at delivery. The original
+fixed-address scenario, native `apps/api/test/auth/password-reset.e2e-spec.ts`
+EARS-53 email-with-phone test and existing real email/SMS reset-completion
+journeys remain complementary and unchanged. Traces stay off; cleanup revokes
+the owned session and closes owned contexts. Requires a real readable
+`E2E_SMS_SINK_URL` and Mailpit; a missing sink is an explicit skip, never proof.
+This test coverage change has no render surface or owner Stage-B slot.
+
 ## What is in here
 
 | File                   | What it is                                                                                                                                                                                           |

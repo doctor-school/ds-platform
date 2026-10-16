@@ -19,6 +19,7 @@ import {
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
+import { gatedPasswordLogin } from "../lib/gated-password-login.js";
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
 
 const SESSION = "__Host-ds_session";
@@ -352,9 +353,11 @@ When(
       )
         state.passwordRequests! += 1;
     });
-    const pending = captureResponse(guest, "/v1/auth/login");
-    await guest.getByTestId("password-login-submit").click();
-    state.refusal = await pending;
+    state.refusal = await gatedPasswordLogin(guest, async () => {
+      const pending = captureResponse(guest, "/v1/auth/login");
+      await guest.getByTestId("password-login-submit").click();
+      return pending;
+    });
     let matches = false;
     try {
       const submitted = state.refusal.response.request().postDataJSON();

@@ -34,6 +34,7 @@ import {
   smsSinkUrl,
   waitForSmsCode,
 } from "../lib/sms-sink.js";
+import { gatedPasswordLogin } from "../lib/gated-password-login.js";
 import { After, Before, Given, Then, When } from "./support/auth-fixtures.js";
 
 /**
@@ -341,9 +342,12 @@ Then(
         fresh.locator('input[autocomplete="current-password"]'),
         password,
       );
-      const pending = post(fresh, "/v1/auth/login");
-      await fresh.getByTestId("password-login-submit").click();
-      return (await pending).status();
+      const answer = await gatedPasswordLogin(fresh, async () => {
+        const pending = post(fresh, "/v1/auth/login");
+        await fresh.getByTestId("password-login-submit").click();
+        return pending;
+      });
+      return answer.status();
     };
     expect(await signIn(state.newPassword), "new password signs in").toBe(200);
     expect(await signIn(state.oldPassword), "old password refused").toBe(401);

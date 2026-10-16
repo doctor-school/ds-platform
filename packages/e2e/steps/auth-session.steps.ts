@@ -12,6 +12,7 @@ import { goldenDoctorPassword } from "../lib/golden.js";
 import { fetchLoginCode, mailpitUrlFor } from "../lib/mailpit.js";
 import { signInGoldenDoctor } from "../lib/sign-in.js";
 import { resolveWorkerGoldenDoctor } from "../lib/worker-golden.js";
+import { gatedPasswordLogin } from "../lib/gated-password-login.js";
 import { Given, Then, When, type StepWorld } from "./support/fixtures.js";
 
 const SEED = "verified-cardiologist";
@@ -253,13 +254,16 @@ When(
     await page
       .locator('input[autocomplete="current-password"]')
       .fill("wrong-password-for-staging-2431");
-    const loginResponse = page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === "/v1/auth/login" &&
-        response.request().method() === "POST",
-    );
-    await page.getByRole("button", { name: /Войти|Продолжить/i }).click();
-    refusedLoginResponses.set(page, await loginResponse);
+    const refused = await gatedPasswordLogin(page, async () => {
+      const loginResponse = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/v1/auth/login" &&
+          response.request().method() === "POST",
+      );
+      await page.getByRole("button", { name: /Войти|Продолжить/i }).click();
+      return loginResponse;
+    });
+    refusedLoginResponses.set(page, refused);
   },
 );
 

@@ -10,6 +10,7 @@ import {
   fetchPublicEventPage,
   forwardedSessionFrom,
 } from "@ds/events-storefront/server";
+import { ACADEMY_EVENT_PAGE } from "../../../../lib/events-storefront.host-config";
 import { buildRoomCopyStrings } from "./copy";
 import { RoomClient } from "./room-client";
 import { PORTAL_ROOM_ROUTES } from "./room-routes";
@@ -63,7 +64,11 @@ export default async function RoomPage({
 
   // Granted — compose the room. The event context (school / title / speakers) is
   // the public 004 projection; a live event always has one.
-  const event = await fetchPublicEventPage(slug);
+  const event = await fetchPublicEventPage(
+    slug,
+    ACADEMY_EVENT_PAGE.contentSet,
+    h,
+  );
   if (!event) notFound();
 
   // 006 EARS-14/EARS-16 — the doctor's own saved name, a self-only read. `null`

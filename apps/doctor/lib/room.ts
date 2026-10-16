@@ -22,8 +22,7 @@ import { serverApiBase, type ForwardedSession } from "@ds/auth-flow/server";
  * fingerprint-bound headers (ADR-0001 §6) the BFF requires on a server-to-server
  * read made on the doctor's behalf.
  *
- * `fetchImpl` is injected for tests only — the same convention `lib/event-page.ts`
- * uses; production callers pass nothing.
+ * `fetchImpl` is injected for tests only; production callers pass nothing.
  */
 
 /**

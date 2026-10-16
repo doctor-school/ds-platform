@@ -71,7 +71,7 @@ export interface RecordingPlayerProps {
   unavailableTitle: string;
   /** The unavailability explanation (`EVENT_PAGE_COPY.playerUnavailable.body`). */
   unavailableBody: string;
-  /** «Попробовать ещё раз» (catalog `…playerUnavailable.retry`). */
+  /** «Попробовать ещё раз» (`EVENT_PAGE_COPY.playerUnavailable.retry`, `../copy/event-page-copy.ts`). */
   retryLabel: string;
 }
 

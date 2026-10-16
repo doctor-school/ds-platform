@@ -65,6 +65,7 @@ const config: NextConfig = {
     "@ds/auth-flow",
     "@ds/congress-submissions",
     "@ds/design-system",
+    "@ds/event-page",
     "@ds/events-storefront",
     "@ds/room",
     "@ds/storefront-shell",

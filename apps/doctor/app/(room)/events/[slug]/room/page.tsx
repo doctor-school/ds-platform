@@ -1,7 +1,8 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { resolveRoomEntry } from "@ds/room/server";
-import { fetchDoctorEventPage } from "@/lib/event-page";
+import { fetchPublicEventPage } from "@ds/events-storefront/server";
+import { DOCTOR_EVENT_PAGE } from "@/lib/events-storefront.host-config";
 import { fetchDoctorDisplayName, fetchDoctorRoomConfig } from "@/lib/room";
 import { forwardedSessionFrom } from "@ds/auth-flow/server";
 import { ROOM_COPY } from "./copy";
@@ -61,7 +62,11 @@ export default async function DoctorRoomPage({
 
   // Granted — compose the room. The event context (school / title / speakers) is
   // this host's own storefront projection; a live event always has one.
-  const event = await fetchDoctorEventPage(slug, await headers());
+  const event = await fetchPublicEventPage(
+    slug,
+    DOCTOR_EVENT_PAGE.contentSet,
+    await headers(),
+  );
   if (!event) notFound();
 
   // 006 EARS-14 / EARS-16 — the doctor's own saved name, a self-only read.

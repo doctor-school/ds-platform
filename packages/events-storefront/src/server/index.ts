@@ -7,7 +7,10 @@ export {
   hasSessionCookie,
 } from "./registration-state";
 export { registerForEventAction } from "./register-action";
-export { fetchPublicEventPage } from "./public-events";
+export {
+  type PublicEventPageRead,
+  fetchPublicEventPage,
+} from "./public-events";
 export { fetchParticipationCta } from "./participation-cta";
 export { type MyEventsResult, fetchMyEvents } from "./my-events";
 export {

@@ -2,7 +2,7 @@
 
 Spec: [`specs/features/047-staff-access`](../../../docs/content/specs/features/047-staff-access/047-design.md) · ADR-0001 (authz, §10 step-up).
 
-The module owns the `platform_admin` surface that lists, grants and revokes the staff roles of `GRANTABLE_STAFF_ROLES` (`@ds/schemas`): `platform_admin`, `event-registrar` and `congress-program-committee`. A grant and a revocation each span the IdP, Postgres, the admin session store and the ledger, so each is a fixed sequence of idempotent steps (047-design §Completeness and retry, §Grant cascade, §Revoke cascade); the `auth.role.granted` / `auth.role.revoked` row is the completion mark. A revocation ends every admin session and pending admin sign-in of the person, also when its IdP step failed.
+The module owns the `platform_admin` surface that lists, grants and revokes the staff roles of `GRANTABLE_STAFF_ROLES` (`@ds/schemas`): `platform_admin`, `event-registrar` and `congress-program-committee`. A grant and a revocation each span the IdP, Postgres, the admin session store and the ledger, so each is a fixed sequence of idempotent steps (047-design §Completeness and retry, §Grant cascade, §Revoke cascade); the `auth.role.granted` / `auth.role.revoked` row is the completion mark. A revocation ends every admin session and pending admin sign-in of the person, also when its IdP step failed. Before ending them it bumps the person's admin access generation (`AdminSessionService.endAllAdminAccess`), so a sign-in already in flight with the old roles can no longer mint a session (`AdminSessionStore.createFromPending`).
 
 ## What is here
 

@@ -263,6 +263,10 @@ export class AdminSessionService {
     fingerprint: string,
     session: IdpSession,
   ): Promise<AdminLoginOutcome> {
+    // 047 EARS-7: the access generation BEFORE the roles are read — a revocation
+    // that lands after this read bumps it, and the upgrade then refuses to turn
+    // these (possibly pre-revocation) roles into a session.
+    const accessGeneration = await this.sessions.accessGeneration(session.sub);
     const tokens = await this.idp.exchangeSessionForTokens(session);
     const { sub, roles } = tokens.claims;
 
@@ -305,6 +309,7 @@ export class AdminSessionService {
       sessionToken: session.sessionToken,
       fingerprint,
       expiresAtMs: Date.now() + PENDING_TTL_SECONDS * 1000,
+      accessGeneration,
     };
     await this.pending.create(record);
 
@@ -595,7 +600,17 @@ export class AdminSessionService {
       outcome.proven,
       input.fingerprint,
     );
-    if (!upgraded) return { status: "refused" };
+    if (!upgraded) {
+      // The pending sign-in ended while the factor was checked (047 EARS-7: a
+      // revocation) — refused exactly as an already-gone pending sign-in is.
+      await this.audit.record({
+        type: "MfaChallengeFailed",
+        sub: null,
+        stage: input.stage,
+        reason: "no_pending",
+      });
+      return { status: "refused" };
+    }
     return { status: "verified", ...upgraded };
   }
 
@@ -992,10 +1007,18 @@ export class AdminSessionService {
       // that satisfies a `stepUp` route for free.
       mfaVerifiedAtMs: Date.now(),
     };
-    await this.sessions.create(session);
-    // The pending record is consumed by the upgrade — it never coexists with the
-    // session it became (design §8: "upgrades into (never coexists)").
-    await this.pending.delete(ref);
+    // One atomic step consumes the pending record and writes the session — it
+    // never coexists with the session it became (design §8: "upgrades into
+    // (never coexists)") — and only while the person's access generation is the
+    // one observed before the roles were read (047 EARS-7). A revocation that
+    // removed the pending record or bumped the generation meanwhile leaves no
+    // session: the upgrade is refused like an expired pending sign-in.
+    const created = await this.sessions.createFromPending(
+      session,
+      ref,
+      record.accessGeneration,
+    );
+    if (!created) return undefined;
     await this.audit.record({
       type: "AdminSessionEstablished",
       sub: session.sub,
@@ -1078,9 +1101,15 @@ export class AdminSessionService {
    * 047 EARS-7 — end every admin session of `sub` (force-logout) AND every
    * pending admin sign-in, so neither a live session nor a sign-in that passed
    * the password step before a role change can act on the old role snapshot.
+   *
+   * Order: bump the access generation → drop pending sign-ins → end sessions.
+   * The bump first means a sign-in already in flight (it read the old roles)
+   * can no longer mint a session even if its pending record is written after
+   * the delete, or its session write lands after the force-logout.
    */
   async endAllAdminAccess(sub: string): Promise<void> {
-    await this.forceLogout(sub);
+    await this.sessions.bumpAccessGeneration(sub);
     await this.pending.deleteBySub(sub);
+    await this.forceLogout(sub);
   }
 }

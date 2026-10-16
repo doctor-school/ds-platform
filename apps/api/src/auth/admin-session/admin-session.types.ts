@@ -62,6 +62,14 @@ export interface PendingAuthRecord {
   fingerprint: string;
   /** Epoch ms at which the pending reference expires (minutes, not hours). */
   expiresAtMs: number;
+  /**
+   * 047 EARS-7 — the person's admin access generation
+   * ({@link AdminSessionStore.accessGeneration}) observed BEFORE primary auth
+   * read the roles above. The upgrade writes a session only while the
+   * generation is still this value, so a sign-in in flight across a revocation
+   * can never turn its pre-revocation `roles` into a session.
+   */
+  accessGeneration: number;
 }
 
 /**
@@ -141,6 +149,10 @@ export interface PendingAuthStore {
 
 /** Server-side store for {@link AdminSessionRecord}s (EARS-10). */
 export interface AdminSessionStore {
+  /**
+   * Unconditional write — fixture seeding only. No service path calls it: a
+   * sign-in mints its session through {@link createFromPending} (047 EARS-7).
+   */
   create(record: AdminSessionRecord): Promise<void>;
   get(sid: string): Promise<AdminSessionRecord | undefined>;
   /** Revoke one admin session (logout). Idempotent. */
@@ -160,6 +172,26 @@ export interface AdminSessionStore {
    * force-logged-out meanwhile) — a re-verification never resurrects a session.
    */
   markMfaVerified(sid: string, atMs: number): Promise<boolean>;
+  /**
+   * 047 EARS-7 — the person's admin access generation: a counter a revocation
+   * bumps after its IdP step and before ending access. `0` when never bumped.
+   */
+  accessGeneration(sub: string): Promise<number>;
+  /** 047 EARS-7 — bump {@link accessGeneration} for `sub` (never expires). */
+  bumpAccessGeneration(sub: string): Promise<void>;
+  /**
+   * The ONLY way a session is minted from a pending sign-in (011 LD-1 upgrade,
+   * 047 EARS-7). In one atomic step: consume the pending record `pendingRef`
+   * (it must still exist) and write `session` only if the person's access
+   * generation still equals `generation`. Resolves `false`, writing no session,
+   * when the pending record was already gone or the generation moved — the
+   * sign-in is then refused like an expired pending sign-in.
+   */
+  createFromPending(
+    session: AdminSessionRecord,
+    pendingRef: string,
+    generation: number,
+  ): Promise<boolean>;
 }
 
 /** DI token the {@link AdminSessionStore} port is bound to (fake or Redis adapter). */

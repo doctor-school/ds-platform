@@ -399,11 +399,12 @@ export class StaffAccessService {
       (grant?.roleKeys.includes(role) ?? false) && !otherBinding;
 
     if (!bindingPresent && !removeFromGrant) {
-      // Nothing left to remove: complete unless a grant mark is the latest
-      // (a revocation that failed after the IdP step and awaits its repeat).
-      // No mark at all — a role never held — is refused the same way.
+      // Nothing left to remove: complete only when the latest mark is the
+      // revocation's own. No mark (a holder granted by the old runbook) or a
+      // grant mark means a revocation failed after its IdP step — the repeat
+      // finishes it: ends all admin access, re-projects, records the mark.
       const latest = await this.repo.latestRoleEvent(sub, role, eventId);
-      if (latest !== "auth.role.granted") {
+      if (latest === "auth.role.revoked") {
         throw new StaffAccessRefusal("REVOKE_ALREADY_COMPLETE");
       }
     }

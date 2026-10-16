@@ -1265,32 +1265,55 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(revoked.map((r) => r.event_type)).toEqual(["auth.role.revoked"]);
     });
 
-    it("047 EARS-7: a revocation of a role the person does not hold is refused, nothing written", async () => {
+    it("047 EARS-7: a legacy holder whose IdP role was already removed by a failed revocation (session end failed) is finished by the repeat — sessions ended, one auth.role.revoked", async () => {
       const admin = await enrolledStaff("adm", "platform_admin");
-      const eventId = await insertEvent("Конгресс 047 — не выдано");
-      const member = await signedInMember("congress-program-committee");
+      // Granted the old-runbook way: straight on the IdP, no auth.role.granted row.
+      const legacy = await signedInMember("platform_admin");
+      const since = await dbNow();
+      vi.spyOn(
+        app.get(AdminSessionService),
+        "endAllAdminAccess",
+      ).mockRejectedValueOnce(new Error("simulated session-store outage"));
+      const body = { userId: legacy.sub, role: "platform_admin" };
+
+      const failed = await revoke(admin, body);
+      expect(failed.statusCode).toBe(500);
+      expect(fake.grantedRoles(legacy.sub)).toEqual([DOCTOR_GUEST]);
+      expect(await adminSessionStatus(legacy)).toBe(200);
+      expect(await roleRows(legacy.sub, since)).toEqual([]);
+
+      const finished = await revoke(admin, body);
+      expect(finished.statusCode).toBe(204);
+      expect(await adminSessionStatus(legacy)).toBe(401);
+      expect(await pendingRecord(legacy.pendingRef)).toBeUndefined();
+      expect(await mirrorRole(legacy.sub)).toBe(DOCTOR_GUEST);
+      const revoked = await roleRows(legacy.sub, since);
+      expect(revoked.map((r) => r.event_type)).toEqual(["auth.role.revoked"]);
+    });
+
+    it("047 EARS-7: a repeat after a complete revocation is refused 409, nothing written", async () => {
+      const admin = await enrolledStaff("adm", "platform_admin");
+      const member = await signedInMember("platform_admin");
+      const body = { userId: member.sub, role: "platform_admin" };
+      const since = await dbNow();
+      expect((await revoke(admin, body)).statusCode).toBe(204);
       const update = vi.spyOn(fake, "updateProjectGrantRoles");
       const remove = vi.spyOn(fake, "removeProjectGrant");
-      const since = await dbNow();
+      const endAll = vi.spyOn(
+        app.get(AdminSessionService),
+        "endAllAdminAccess",
+      );
 
-      for (const body of [
-        { userId: member.sub, role: "event-registrar", eventId },
-        { userId: member.sub, role: "platform_admin" },
-      ]) {
-        const res = await revoke(admin, body);
-        expect(res.statusCode).toBe(409);
-        expect((res.json() as { errorCode: string }).errorCode).toBe(
-          "REVOKE_ALREADY_COMPLETE",
-        );
-      }
+      const repeat = await revoke(admin, body);
+      expect(repeat.statusCode).toBe(409);
+      expect((repeat.json() as { errorCode: string }).errorCode).toBe(
+        "REVOKE_ALREADY_COMPLETE",
+      );
       expect(update).not.toHaveBeenCalled();
       expect(remove).not.toHaveBeenCalled();
-      expect(fake.grantedRoles(member.sub).sort()).toEqual(
-        ["congress-program-committee", DOCTOR_GUEST].sort(),
-      );
-      expect(await adminSessionStatus(member)).toBe(200);
-      expect(await pendingRecord(member.pendingRef)).toBeDefined();
-      expect(await roleRows(member.sub, since)).toEqual([]);
+      expect(endAll).not.toHaveBeenCalled();
+      const rows = await roleRows(member.sub, since);
+      expect(rows.map((r) => r.event_type)).toEqual(["auth.role.revoked"]);
     });
 
     it("047 EARS-7: an IdP failure on the role removal answers 503, still ends the sessions and pending sign-in, records no revocation, and the repeat finishes it with one auth.role.revoked", async () => {

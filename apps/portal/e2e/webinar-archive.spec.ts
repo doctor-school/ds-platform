@@ -219,18 +219,17 @@ test.describe("014 EARS-4 public post-live event page (e2e)", () => {
     });
     // Degrades in place — never a 404 or a redirect (004 EARS-5, owner variant «а»).
     expect(res?.status()).toBe(200);
-    // «Скрыто» renders TWICE on a hidden event, and both are intentional:
-    // the hero lifecycle badge (`state.hidden`) and the status-card time-plate
-    // label (`statusCard.hidden.timeLabel`). Asserting the count pins that the
-    // 004 EARS-5 render is exactly those two nodes — the recording swap must
-    // not add a third or silently drop one. `exact` keeps the notice card's
-    // «Мероприятие скрыто» out of the match.
+    // «Скрыто» renders ONCE on a hidden event: the hero lifecycle badge
+    // (`state.hidden`). The sign-up card states the hidden answer as the
+    // server CTA's own reason (020 EARS-1), not as a second «Скрыто» label.
+    // Asserting the count pins that the 004 EARS-5 render is exactly that
+    // node — the recording swap must not add another or silently drop it.
+    // `exact` keeps the card's «Мероприятие скрыто» out of the match.
     const hiddenLabels = page.getByText("Скрыто", { exact: true });
-    await expect(hiddenLabels).toHaveCount(2);
-    await expect(hiddenLabels.first()).toBeVisible();
-    await expect(hiddenLabels.last()).toBeVisible();
+    await expect(hiddenLabels).toHaveCount(1);
+    await expect(hiddenLabels).toBeVisible();
     await expect(
-      page.getByText("Регистрация недоступна", { exact: true }),
+      page.getByText("Участие недоступно", { exact: true }),
     ).toBeVisible();
     await expect(page.getByTestId("recording-badge")).toHaveCount(0);
     await expect(page.getByTestId("recording-meta")).toHaveCount(0);

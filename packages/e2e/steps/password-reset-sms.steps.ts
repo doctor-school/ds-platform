@@ -23,12 +23,11 @@ import {
   inputSecret as input,
   registerOwnedCredentials,
 } from "../lib/owned-registration.js";
+import { confirmOwnedPhone } from "../lib/owned-phone-confirmation.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import {
-  PHONE_CODE_EVENT,
   RESET_CODE_EVENT,
   freshConfirmablePhone,
-  phoneConfirmationCode,
   resetSmsCode,
   smsSinkMessages,
   smsSinkUrl,
@@ -184,30 +183,7 @@ Given(
     await earlier.waitForURL((url) => url.pathname === "/account");
     await earlier.waitForLoadState("networkidle");
 
-    // EARS-47/48 through the real `/account` phone row.
-    await earlier.getByTestId("profile-phone-action").click();
-    await earlier
-      .getByTestId("profile-phone-input")
-      .pressSequentially(state.phone.slice(1));
-    const requestedAt = new Date().toISOString();
-    const requested = post(earlier, "/v1/me/phone");
-    await earlier.getByTestId("profile-phone-send").click();
-    const requestResponse = await requested;
-    expect(requestResponse.status(), "phone code requested").toBe(200);
-    expect(await requestResponse.json()).toEqual({ status: "code_sent" });
-    const phoneCode = await waitForSmsCode(
-      state.sink,
-      state.phone,
-      requestedAt,
-      phoneConfirmationCode,
-      PHONE_CODE_EVENT,
-    );
-    const confirmed = post(earlier, "/v1/me/phone/confirm");
-    await earlier
-      .getByTestId("profile-phone-code")
-      .pressSequentially(phoneCode);
-    expect((await confirmed).status(), "phone confirmed").toBe(200);
-    await expect(earlier.getByTestId("profile-phone-verified")).toBeVisible();
+    await confirmOwnedPhone(earlier, { phone: state.phone, sink: state.sink });
     expect(await profile(earlier)).toEqual({
       status: 200,
       email: state.email,

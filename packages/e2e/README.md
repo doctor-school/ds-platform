@@ -827,6 +827,30 @@ IdP: response/timing parity, no SMS/mail, no ledger row, the email path) and
 This coverage change has no render surface and requires no Stage-B request or
 slot.
 
+### Repeated confirmed-phone request (003 EARS-47/51)
+
+`Academy keeps the owned confirmed phone when its confirmation is requested again`
+registers one unique short-address Academy account, verifies its delivered mail
+code, and confirms a fresh owned phone through the real account row and SMS sink.
+`lib/owned-phone-confirmation.ts` is the canonical test-only setup shared with
+the existing SMS-reset journey; that consumer retains all its profile, mail and
+session assertions. Callers own registration, contexts and mailbox settling.
+
+`steps/confirmed-phone-noop.steps.ts` requests that exact same number through
+the ordinary phone editor and requires the complete `already_confirmed` reply.
+The confirmed row remains visible without code controls or a second phone
+command. All addressed SMS are checked for a complete 20-second delivery window,
+including a final query started at or after the deadline. A real document reload
+must preserve the same confirmed profile, verified email, private subject and
+secure host-only session cookie. Traces remain off, assertions project secrets
+to safe evidence, and cleanup revokes only the owned session and context.
+
+This is a narrow dynamic-number Academy projection. The broader fixed-number
+scenario, native `apps/api/test/me/phone.e2e-spec.ts` EARS-47 no-op proof and
+`account-profile-card.test.tsx` EARS-51 component case remain intact. Run the one
+`@confirmed-phone-noop` Academy case on the lead-selected contour; no runtime
+render source changes, owner Stage-B request or staging slot are involved.
+
 ### Existing consent preservation (003 EARS-23/41)
 
 `Re-registration never overwrites an existing platform consent` creates and

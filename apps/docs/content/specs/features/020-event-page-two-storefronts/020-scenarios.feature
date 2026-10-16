@@ -15,6 +15,25 @@
 @host:both
 Feature: One event page serves the doctor storefront and the Academy, and a doctor decides in seconds
 
+  Rule: The cross-host account journey on the golden dataset
+
+    # Executed by both storefront projects of packages/e2e against a raised slot: each
+    # project signs in on its own host and opens the event on the other one, so the
+    # doctor project drives doctor.school -> academy.doctor.school and the academy project
+    # the reverse. The event is the golden «Прошедший эфир с записью (эталон)»: a guest
+    # gets the recording sign-in gate, a signed-in doctor gets the player, which makes
+    # the signed-in render observable on either host. Needs two real hosts and one IdP,
+    # so it runs on a stage slot only.
+
+    @EARS-18 @happy
+    Scenario: 020 EARS-18: a doctor signed in on one storefront opens the same event on the other storefront and sees the signed-in render without a second sign-in
+      Given the golden doctor "verified-cardiologist" is signed in
+      When the doctor opens the golden recorded event on the other storefront
+      Then the other storefront renders the recording player, not the sign-in gate
+      And the doctor was never sent to the other storefront's sign-in screen
+
+  Rule: Remaining event-page scenarios
+
   Background:
     Given feature 017's doctor storefront shell is in place
     And feature 004's public event read, EventLifecycleState machine and one-CTA contract are in place

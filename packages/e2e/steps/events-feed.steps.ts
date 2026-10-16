@@ -1584,20 +1584,16 @@ async function retryBlock(
     }
   };
   page.on("request", onRequest);
-  // The body is read the moment the answer arrives: the retry may re-load the
-  // document, and Playwright drops a body once the page leaves it (#2683, #2956).
-  const answered = page
-    .waitForResponse(
-      (res) =>
-        res.request().method() === "POST" &&
-        res.request().headers()["next-action"] !== undefined,
-    )
-    .then((res) => res.text());
+  const answered = page.waitForResponse(
+    (res) =>
+      res.request().method() === "POST" &&
+      res.request().headers()["next-action"] !== undefined,
+  );
   await page
     .getByTestId(FAILED_BLOCK[block])
     .getByRole("button", { name: "Повторить", exact: true })
     .click();
-  const answer = await answered;
+  const answer = await (await answered).text();
   await settle(page);
   page.off("request", onRequest);
   feed.retry = { ...seen, answer };

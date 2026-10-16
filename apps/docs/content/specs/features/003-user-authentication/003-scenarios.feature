@@ -76,6 +76,17 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the user asks for a code for "+79991234567"
     Then no SMS is sent and the confirmed phone is not displaced
 
+  @EARS-47 @EARS-51 @happy @confirmed-phone-noop
+  Scenario: Academy keeps the owned confirmed phone when its confirmation is requested again
+    Given a uniquely owned Academy account confirmed a fresh phone with its delivered SMS
+    When the account requests confirmation of that same owned number through the Academy phone row
+    Then the exact already_confirmed reply leaves the confirmed row without a code step or new SMS over the full delivery horizon
+    And reloading Academy retains that same confirmed phone and secure private identity session
+    # Narrow Academy projection with a fresh owned number, not the fixed-number
+    # broader case above. confirmed-phone-noop.steps.ts uses the real SMS sink.
+    # Retain apps/api/test/me/phone.e2e-spec.ts EARS-47 native no-op coverage,
+    # and account-profile-card.test.tsx EARS-51 already_confirmed component case.
+
   @EARS-51 @failure @phone-confirmation
   Scenario: A number confirmed on another account gets the ordinary answer and no SMS
     Given another account holds "+79990001122" as its confirmed phone

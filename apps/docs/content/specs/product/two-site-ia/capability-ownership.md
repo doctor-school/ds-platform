@@ -193,25 +193,25 @@ Out of scope, as in the allowlist: `loading` / `error` / `not-found` / `template
 
 ### `apps/doctor/app`
 
-| path                                                     | package                                                                                        | until          |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------- |
-| `apps/doctor/app/(auth)/layout.tsx`                      | — brand frame per host (chromeless auth group; each `@ds/auth-flow` mount draws `AuthShell`)   | permanent      |
-| `apps/doctor/app/(auth)/login/page.tsx`                  | `@ds/auth-flow`                                                                                | mounted        |
-| `apps/doctor/app/(auth)/register/page.tsx`               | `@ds/auth-flow`                                                                                | mounted        |
-| `apps/doctor/app/(auth)/reset/page.tsx`                  | `@ds/auth-flow`                                                                                | mounted        |
-| `apps/doctor/app/(auth)/verify/page.tsx`                 | `@ds/auth-flow`                                                                                | mounted        |
-| `apps/doctor/app/(room)/events/[slug]/room/page.tsx`     | `@ds/room`                                                                                     | wave 4 (#2073) |
-| `apps/doctor/app/(room)/layout.tsx`                      | `@ds/room`                                                                                     | wave 4 (#2073) |
-| `apps/doctor/app/(storefront)/account/congress/page.tsx` | `@ds/congress-submissions`                                                                     | mounted        |
-| `apps/doctor/app/(storefront)/account/events/page.tsx`   | `@ds/events-storefront`                                                                        | mounted        |
-| `apps/doctor/app/(storefront)/account/page.tsx`          | `@ds/account`                                                                                  | wave 4 (#2073) |
-| `apps/doctor/app/(storefront)/documents/[slug]/page.tsx` | — host-only surface (legal document reading page; the 028 content package is net-new, no wave) | permanent      |
-| `apps/doctor/app/(storefront)/documents/page.tsx`        | — host-only surface (legal documents list; the 028 content package is net-new, no wave)        | permanent      |
-| `apps/doctor/app/(storefront)/events/[slug]/page.tsx`    | `@ds/event-page`                                                                               | wave 3 (#2072) |
-| `apps/doctor/app/(storefront)/events/page.tsx`           | `@ds/events-storefront`                                                                        | mounted        |
-| `apps/doctor/app/(storefront)/layout.tsx`                | — brand frame per host (`@ds/storefront-shell` + `DOCTOR_SHELL` + host session projection)     | permanent      |
-| `apps/doctor/app/(storefront)/page.tsx`                  | `@ds/events-storefront`                                                                        | wave 2 (#1485) |
-| `apps/doctor/app/layout.tsx`                             | — brand frame per host (root html/body, fonts, theme boot)                                     | permanent      |
+| path                                                     | package                                                                                                                                         | until          |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `apps/doctor/app/(auth)/layout.tsx`                      | — brand frame per host (chromeless auth group; each `@ds/auth-flow` mount draws `AuthShell`)                                                    | permanent      |
+| `apps/doctor/app/(auth)/login/page.tsx`                  | `@ds/auth-flow`                                                                                                                                 | mounted        |
+| `apps/doctor/app/(auth)/register/page.tsx`               | `@ds/auth-flow`                                                                                                                                 | mounted        |
+| `apps/doctor/app/(auth)/reset/page.tsx`                  | `@ds/auth-flow`                                                                                                                                 | mounted        |
+| `apps/doctor/app/(auth)/verify/page.tsx`                 | `@ds/auth-flow`                                                                                                                                 | mounted        |
+| `apps/doctor/app/(room)/events/[slug]/room/page.tsx`     | `@ds/room`                                                                                                                                      | wave 4 (#2073) |
+| `apps/doctor/app/(room)/layout.tsx`                      | `@ds/room`                                                                                                                                      | wave 4 (#2073) |
+| `apps/doctor/app/(storefront)/account/congress/page.tsx` | `@ds/congress-submissions`                                                                                                                      | mounted        |
+| `apps/doctor/app/(storefront)/account/events/page.tsx`   | `@ds/events-storefront`                                                                                                                         | mounted        |
+| `apps/doctor/app/(storefront)/account/page.tsx`          | `@ds/account`                                                                                                                                   | wave 4 (#2073) |
+| `apps/doctor/app/(storefront)/documents/[slug]/page.tsx` | — host-only surface (legal document reading page; the 028 content package is net-new, no wave)                                                  | permanent      |
+| `apps/doctor/app/(storefront)/documents/page.tsx`        | — host-only surface (legal documents list; the 028 content package is net-new, no wave)                                                         | permanent      |
+| `apps/doctor/app/(storefront)/events/[slug]/page.tsx`    | `@ds/event-page`                                                                                                                                | wave 3 (#2072) |
+| `apps/doctor/app/(storefront)/events/page.tsx`           | `@ds/events-storefront`                                                                                                                         | mounted        |
+| `apps/doctor/app/(storefront)/layout.tsx`                | — brand frame per host (`@ds/storefront-shell` + `DOCTOR_SHELL` + host session projection)                                                      | permanent      |
+| `apps/doctor/app/(storefront)/page.tsx`                  | — host-only surface (doctor home: hero + specialty catalog; the nearest-events block, #1485, will mount from `@ds/events-storefront` inside it) | permanent      |
+| `apps/doctor/app/layout.tsx`                             | — brand frame per host (root html/body, fonts, theme boot)                                                                                      | permanent      |
 
 ### `apps/portal/app`
 

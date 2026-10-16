@@ -14,7 +14,7 @@ lang: en
 
 ## 1. Route topology and screen composition
 
-019 owns two routes of `apps/doctor`, both inside feature 017's shell, both over one read contract (LD-3): `/events` and `/events/calendar`. The room entry a live event links into is a THIRD `apps/doctor` route, `/events/[slug]/room` (mounted at `apps/doctor/app/(room)/events/[slug]/room/`) — a sibling root route group deliberately rendered OUTSIDE the 017 shell, because the room is viewport-bounded (006 EARS-11) and a nested layout cannot remove the parent shell's `<main>`. That route is owned by feature 006 over the shared room unit `packages/room` (`@ds/room`), extraction #1722; 019 owns only the way into it.
+019 owns two routes of `apps/doctor`, both mounting `@ds/events-storefront` (the feed and the month view are the package, not route-local composition), both inside feature 017's shell, both over one read contract (LD-3): `/events` and `/events/calendar`. The room entry a live event links into is a THIRD `apps/doctor` route, `/events/[slug]/room` (mounted at `apps/doctor/app/(room)/events/[slug]/room/`) — a sibling root route group deliberately rendered OUTSIDE the 017 shell, because the room is viewport-bounded (006 EARS-11) and a nested layout cannot remove the parent shell's `<main>`. That route is owned by feature 006 over the shared room unit `packages/room` (`@ds/room`), extraction #1722; 019 owns only the way into it.
 
 ```mermaid
 graph TD
@@ -35,7 +35,7 @@ graph TD
   Mine --> Cabinet["022 — #d-lk"]
 ```
 
-`019` owns the two Doctor route compositions, not a second events engine or room. The host-specific `DoctorEventsFeed` response is a thin projection over the canonical event, room and registration services named below; it is not a parallel read model implementation. Managed specialty targeting and directed adjacency come from the landed 017 artifact #1484; 018's doctor content card and rendered adjacent-areas block are not substrates here.
+`019` owns the two Doctor routes, not a second events engine or room. The feed, the month calendar, the facet panel, the live strip, «Мои события», the data states and the МСК formatter are one package, `@ds/events-storefront`, mounted by both `apps/doctor` and `apps/portal`; the routes mount it and add nothing of their own. The host-specific `DoctorEventsFeed` response is a thin projection over the canonical event, room and registration services named below; it is not a parallel read model implementation. Managed specialty targeting and directed adjacency come from the landed 017 artifact #1484; 018's doctor content card and rendered adjacent-areas block are not substrates here.
 
 ### 1.1 Cross-front ownership and extraction matrix (EARS-15)
 
@@ -43,7 +43,7 @@ The required pre-implementation inventory is the repo-wide registry — [`capabi
 
 An implementation Issue names its row through the Issue `Reuse:` field (`canon:` / `extract-from:` / `new:`), and the implementing PR carries the `cross-front reuse:` marker the `cross-front-reuse` guard checks.
 
-Thin host projections are intentional: Academy and Doctor have different targeting and response envelopes, but both delegate to the same services/contracts. Direct `apps/doctor` → `apps/portal` imports, copied query logic, a second room, or a second lifecycle resolver fail EARS-15.
+There is one package, `@ds/events-storefront`, mounted by both hosts; the host-config values (`apps/doctor/lib/events-storefront.host-config.ts`, `apps/portal/lib/events-storefront.host-config.ts`) are the only per-host difference, and Academy and Doctor targeting and response envelopes reach the package through them. Direct `apps/doctor` → `apps/portal` imports, copied query logic, a second room, or a second lifecycle resolver fail EARS-15.
 
 ## 2. The URL is the state (LD-1)
 

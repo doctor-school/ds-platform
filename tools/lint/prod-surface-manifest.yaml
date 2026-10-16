@@ -89,7 +89,7 @@ routes:
     status: product-ready
   - app: portal
     route: /webinars/[slug]
-    file: apps/portal/app/webinars/[slug]/page.tsx
+    file: apps/portal/app/webinars/[slug]/(event-page)/page.tsx
     status: product-ready
   - app: portal
     route: /webinars/[slug]/room

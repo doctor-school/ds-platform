@@ -49,7 +49,7 @@ function comparison(key: Page): ResendComparison {
 Given(
   "three guest Academy code screens for unique unknown, unverified and verified owned addresses",
   async ({ page, browser, httpCredentials, world }) => {
-    // 003 EARS-25: real 60-second screen cooldown plus registration/mail setup
+    // 003 EARS-25: real screen cooldown plus registration/mail setup
     // and the full negative delivery horizon need a per-case budget only.
     test.setTimeout(180_000);
     expect(world.host.id).toBe("academy");
@@ -307,11 +307,62 @@ Then(
             visitor.checkpoint,
           );
         } else {
+          // 003 EARS-25: use the pre-click inbox boundary, not clocks on two
+          // machines; canonical mail parsing still validates purpose and detail.
+          const oldIds = new Set(visitor.checkpoint.messageIds);
+          const sinceCheckpoint = {
+            async get(url: string) {
+              const response = await mail.get(url);
+              if (!new URL(url).pathname.endsWith("/api/v1/search"))
+                return response;
+              return {
+                ok: () => response.ok(),
+                status: () => response.status(),
+                async json() {
+                  let payload;
+                  try {
+                    payload = await response.json();
+                  } catch {
+                    throw new Error("Malformed owned resend mailbox payload");
+                  }
+                  if (
+                    !payload ||
+                    typeof payload !== "object" ||
+                    !("messages" in payload) ||
+                    !Array.isArray(payload.messages) ||
+                    !("messages_count" in payload) ||
+                    payload.messages_count !== payload.messages.length ||
+                    !("start" in payload) ||
+                    payload.start !== 0
+                  )
+                    throw new Error("Incomplete owned resend mailbox payload");
+                  const messages = payload.messages.filter(
+                    (message: unknown) => {
+                      if (
+                        !message ||
+                        typeof message !== "object" ||
+                        !("ID" in message) ||
+                        typeof message.ID !== "string" ||
+                        !message.ID
+                      )
+                        throw new Error("Invalid owned resend mailbox message");
+                      return !oldIds.has(message.ID);
+                    },
+                  );
+                  return {
+                    ...payload,
+                    messages,
+                    messages_count: messages.length,
+                  };
+                },
+              };
+            },
+          };
           const code = await fetchRecoveryCode(
-            mail,
+            sinceCheckpoint,
             mailpit,
             visitor.email,
-            visitor.requestedAt,
+            new Date(0).toISOString(),
             visitor.kind === "unverified" ? "register" : "login",
           );
           expect(

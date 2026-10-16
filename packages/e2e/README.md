@@ -1188,13 +1188,16 @@ click the actual resend control. Each request must contain only its exact
 identifier and return HTTP 200 with exactly `{ status: "resend_requested" }`.
 The approved notice, empty six-digit field and restarted cooldown stay visible.
 Fresh addressed verification mail reaches the unverified account, fresh login
-mail reaches the verified account, and a pre-click mailbox checkpoint proves no
-new addressed mail reaches the unknown address throughout 15 seconds. No
+mail reaches the verified account. A pre-click complete mailbox ID checkpoint
+binds fresh positive delivery independently of client/inbox clocks; the canonical
+mail helper still validates the new message's recipient, purpose, detail and code.
+The same checkpoint proves no new addressed mail reaches the unknown address
+throughout 15 seconds. No
 reissued code is entered; all three profiles and sessions remain HTTP 401.
 
 `steps/verification-resend.steps.ts` uses the trace-off auth fixture, canonical
 registration/mail/CAPTCHA/secret-input/session helpers and owned-context cleanup.
-Its per-case 180-second timeout accommodates real setup, the unchanged 60-second
+Its per-case 180-second timeout accommodates real setup, the unchanged 30-second
 screen cooldown and the full negative delivery horizon; no runner or clock is
 changed. The broader feature declaration remains native: API verify EARS-25/16
 owns timing, issued-only audit and no users/consent writes, API abuse tests own

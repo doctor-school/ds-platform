@@ -462,6 +462,28 @@ describe.each(HOSTS)("the ONE recovery flow on the %s host", (_, config) => {
       expect(h.captchaProps?.requestKey).toBeNull();
     });
 
+    it("003 EARS-22: an incomplete code is refused in the browser with «Введите код.», digits kept, no request (#2899)", async () => {
+      mount();
+      const user = await requestCode();
+
+      const codeInput = screen.getByLabelText(copy.codeLabel);
+      await user.click(codeInput);
+      await user.keyboard("1234");
+      await user.type(
+        screen.getByLabelText(copy.newPasswordLabel),
+        NEW_PASSWORD,
+      );
+      await user.click(
+        screen.getByRole("button", { name: copy.completeSubmit }),
+      );
+
+      await waitFor(() =>
+        expect(screen.getByText(fields.code.invalid)).toBeTruthy(),
+      );
+      expect(codeInput).toHaveValue("1234");
+      expect(h.completePasswordReset).not.toHaveBeenCalled();
+    });
+
     it("003 EARS-38: the new-password field carries the shared reveal toggle", async () => {
       mount();
       const user = await requestCode();

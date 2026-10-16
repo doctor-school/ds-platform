@@ -128,6 +128,21 @@ describe("003 EARS-42: sign-in by code shows the one code step", () => {
   );
 
   it.each(HOSTS)(
+    "003 EARS-22: on %s an incomplete code is refused in the browser with «Введите код.», digits kept, no request (#2899)",
+    async (_host, config) => {
+      const user = await sendEmailCode(config);
+
+      const field = screen.getByRole("textbox");
+      await user.click(field);
+      await user.keyboard("1234{Enter}");
+
+      expect(await screen.findByText(COPY.otp.codeInvalid)).toBeInTheDocument();
+      expect(field).toHaveValue("1234");
+      expect(loginWithOtp).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(HOSTS)(
     "003 EARS-42: on %s the method tabs are hidden on the code step while the «Создать аккаунт» / «Забыли пароль?» footer stays",
     async (_host, config) => {
       await sendEmailCode(config);

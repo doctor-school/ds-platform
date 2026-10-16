@@ -251,6 +251,38 @@ Then(
 );
 
 Then(
+  "an incomplete four-digit sign-in code is refused in the browser without a login request",
+  async ({ page }) => {
+    // 003 EARS-22 (#2899): the code step's client rule is the six-digit
+    // contract, so Enter on four digits shows «Введите код.», keeps the digits
+    // and sends nothing to /v1/auth/login/otp.
+    const state = login(page);
+    const submitted: string[] = [];
+    const watch = (request: { url(): string }) => {
+      if (request.url().includes("/v1/auth/login/otp")) {
+        submitted.push(request.url());
+      }
+    };
+    state.page.on("request", watch);
+    try {
+      const field = state.page.locator('input[autocomplete="one-time-code"]');
+      await field.click();
+      await state.page.keyboard.type("1234");
+      await state.page.keyboard.press("Enter");
+      await expect(state.page.getByText("Введите код.")).toBeVisible();
+      await expect(field).toHaveValue("1234");
+      // The field error is the resolver's refusal: handleSubmit never reached
+      // the submit handler, so no request can still be in flight.
+      expect(submitted, "no login-code request for an incomplete code").toEqual(
+        [],
+      );
+    } finally {
+      state.page.off("request", watch);
+    }
+  },
+);
+
+Then(
   "fresh addressed sign-in mail is delivered for the verified account without verification mail",
   async ({ page, world }) => {
     const state = login(page);

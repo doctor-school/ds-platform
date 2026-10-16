@@ -391,11 +391,12 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # status/body and interleaved triad median timing within 50 ms (30 ms floor).
     # Keep the distinct verified golden EARS-6 browser journey above intact.
 
-  @EARS-34 @EARS-16 @EARS-41 @EARS-8 @happy @verified-login-email-code
+  @EARS-34 @EARS-16 @EARS-41 @EARS-8 @EARS-22 @happy @verified-login-email-code
   Scenario: A login-email-code request for a verified account arms the challenge unchanged
     Given a uniquely registered and verified Academy doctor_guest account is logged out for an email-code request
     When the owned verified account requests its email login code through the Academy form
     Then the verified-account request shows the neutral six-cell code step without a private session
+    And an incomplete four-digit sign-in code is refused in the browser without a login request
     And fresh addressed sign-in mail is delivered for the verified account without verification mail
     When the owned verified account submits that delivered sign-in code
     Then the accepted login code restores a secure private session for the same verified identity

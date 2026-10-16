@@ -1380,6 +1380,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/staff-access/revocations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["StaffAccessAdminController_revoke"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/users/{id}/mfa": {
         parameters: {
             query?: never;
@@ -3346,6 +3362,13 @@ export interface components {
                 role: "platform_admin" | "event-registrar" | "congress-program-committee";
                 userId: string;
             }[];
+        };
+        StaffAccessRevokeRequestDto: {
+            /** Format: uuid */
+            eventId?: string;
+            /** @enum {string} */
+            role: "platform_admin" | "event-registrar" | "congress-program-committee";
+            userId: string;
         };
         TransitionEventRequestDto: {
             /** @enum {string} */
@@ -5594,6 +5617,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["StaffAccessGrantResponseDto"];
                 };
+            };
+        };
+    };
+    StaffAccessAdminController_revoke: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffAccessRevokeRequestDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

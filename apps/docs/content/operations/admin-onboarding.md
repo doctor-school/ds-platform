@@ -1,65 +1,269 @@
 ---
-title: "Onboard a staff member as Academy admin"
-description: "End-to-end procedure for giving a staff member access to the Academy admin panel: find or create their Zitadel account, set a password, grant platform_admin, deliver the credentials by a Mattermost bot DM, the first login, and offboarding."
+title: "Grant and revoke staff access"
+description: "Giving a staff member access to the admin panel and taking it away in «Доступы»: the grant, the second-factor confirmation, the one-time temporary password and its delivery by a Mattermost bot DM, the first login, offboarding with «Отозвать», and the manual bootstrap of an environment's first platform administrator."
 lang: en
 ---
 
-# Onboard a staff member as Academy admin
+# Grant and revoke staff access
 
-A standalone procedure for the operator (the **Tech Lead / System Architect** in
-Phase 0) who has been asked to give a staff member access to the Academy admin
-panel at `https://admin.doctor.school`. It covers the whole path: account in
-Zitadel (`https://id.doctor.school`), password, project-role grant, credential
-delivery, the person's first login and — as the inverse — offboarding.
+A procedure for the platform administrator who has been asked to give a staff
+member access to the admin panel at `https://admin.doctor.school`, or to take it
+away. Staff access is managed in the admin section «Доступы» (`/access`,
+feature 047): the grant finds or creates the account, adds the role and the event
+binding and shows a one-time temporary password; «Отозвать» removes the role and
+ends every admin session of the person at once. The only manual path left is
+[bootstrapping the first platform administrator](#bootstrap-the-first-platform-administrator)
+of an environment, when nobody can sign in to «Доступы» yet.
 
 Roles, not names: this runbook never names a person. Placeholders are written
 as `<placeholder>`; never paste a real password, token or PAT into this document,
 a PR, an Issue, a chat or an agent transcript.
 
-Related: the `platform_admin` grant snippet in `infra/deploy/README.md` (IdP
-section, «Operator access to the product admin app») and the
-[auth operations runbook](./auth-operations.md) — especially
+Related: the [auth operations runbook](./auth-operations.md) — especially
 [Admin locked out of the admin panel](./auth-operations.md#admin-locked-out-of-the-admin-panel).
 
 ## When to use / prerequisites
 
-- **Staff access is granted in the admin, not here.** A `platform_admin` grants
-  `platform_admin`, `event-registrar` and `congress-program-committee` in the
-  admin section «Доступы» (`/access`, feature 047): it finds or creates
-  the account, adds the role to the person's grant, writes the event binding and
-  shows a one-time temporary password. This runbook is only for **bootstrapping
-  the first `platform_admin`** of an environment — the one grant «Доступы»
-  cannot make, because nobody can sign in to it yet — and for recovery when the
-  admin itself is unavailable. Steps 7–8 (credential delivery, first login)
-  apply to a «Доступы» grant as well.
-- **Owner decision first.** Onboarding grants the full `platform_admin` project
-  role — the admin panel authorizes on that role. There is **no narrower
-  events-only role**: `event-registrar` (044 EARS-17) authorizes the congress
-  roster surface only, per event, and is not a substitute. The owner must have
-  decided that this person gets full admin access.
-- **Inputs:** the person's corporate email, first and last name (Zitadel
-  requires both), their Mattermost account on `https://chat.bbm.academy`, and a
-  one-phrase description of the work they are being onboarded for (used in the
-  greeting).
-- **Access you need** (workstation ssh aliases):
-  - `ds-api-prod` — `deploy@77.233.220.222`, key `~/.ssh/ds-api-prod`; sudo is
-    needed to read the bootstrap PAT and `api.env`.
-  - `ds-data-prod` — `deploy@192.168.0.10`, key `~/.ssh/ds-data-prod`,
-    `ProxyJump ds-api-prod` (offboarding only).
-  - `tools-prod-tw` — the Mattermost box (bbm-owned infra, compose dir
-    `~/mattermost-deploy`).
-- **Why the operator creates the account:** public self-registration on
-  `id.doctor.school` is DISABLED (login-policy posture in
-  `infra/deploy/README.md`), so staff accounts are created by the operator.
+- **Owner decision first.** The roles are `platform_admin` («Администратор
+  платформы» — the full admin panel, «Доступы» included), `event-registrar`
+  (the congress roster of one event, 044 EARS-17/38) and
+  `congress-program-committee` (the submissions of the events it is bound to).
+  The owner must have decided which role, and for which event, this person gets.
+- **Inputs:** the person's corporate email, ФИО (family name first), the role,
+  the event for an event-bound role, their Mattermost account on
+  `https://chat.bbm.academy`, and a one-phrase description of the work they are
+  being given access for (used in the greeting).
+- **You need** a `platform_admin` account with an enrolled authenticator, and —
+  to deliver a temporary password — ssh access to `tools-prod-tw`, the
+  Mattermost box (bbm-owned infra, compose dir `~/mattermost-deploy`).
 
-## Workstation setup
+## Grant access
+
+1. Admin → «Доступы» → «Выдать доступ».
+2. Enter the email, the ФИО, the role and, for «Регистратор» or «Программный
+   комитет», the event. Submit.
+3. The result is one of:
+   - **A new account** — the person had no account: it is created with the email
+     marked verified, the visitor role `doctor_guest` and the granted role, and a
+     temporary password is shown once (below).
+   - **An existing account** — the role is added to the person's grant; their
+     name, their password and every role they already hold stay. An existing
+     account without a password also gets a temporary password.
+   - **A refusal at the form**, nothing changed: the person already holds this
+     access; a registrar is already bound to another event; the email of the
+     existing account is not verified (ask the person to confirm their email and
+     grant again); more than one account holds the email.
+4. «Сервис временно недоступен» with «Повторить» means the identity provider did
+   not answer. Repeat the same grant: it finishes what the first attempt started
+   and records the grant once.
+
+A staff member is a user of the sites too: `doctor_guest` is the visitor role
+(their own events, rooms, profile), the staff role the admin rights on top. Every
+participant count, roster and presence figure leaves staff accounts out — no
+manual step.
+
+## Confirm with a current code
+
+A grant and a revocation need a second factor no older than 30 minutes. When it
+is older, the admin opens the code screen instead of sending the request: enter
+the current code from your authenticator app, and the admin returns to «Доступы»
+and sends the same request again — the form keeps what you entered. Further
+grants and revocations within 30 minutes ask for no code. The code refreshes only
+the second-factor time of your current session; it does not sign you in again.
+
+## The temporary password
+
+The temporary password is shown **once**, in the grant result, with a copy
+action. It exists nowhere else: it is not stored, logged, audited or emailed, and
+it cannot be shown again. It is a working password with no forced change — the
+person keeps it (in a password manager) and enrols their authenticator at the
+first sign-in. If it is lost before delivery, the person sets a new one with the
+password reset of the sites' sign-in screen.
+
+## Deliver the credentials — Mattermost DM from the `bbmka` bot
+
+The password goes **only** in a DM from the `bbmka` bot — never from a human's
+account, never by email, never in a channel. A grant to an account that already
+had a password shows none; send only the access message then, without the
+password line.
 
 Keep every scratch file in one private directory and never print a secret to
 the terminal:
 
 ```bash
 umask 077
-W=$(mktemp -d)        # scratch dir for this onboarding; removed at the end
+W=$(mktemp -d)        # scratch dir for this delivery; removed at the end
+```
+
+Look up the ids and mint a one-off bot token; the token goes straight into the
+scratch dir, never to the screen:
+
+```bash
+MMCTL='cd ~/mattermost-deploy && sudo docker compose exec -T mattermost mmctl --local'
+ssh tools-prod-tw "$MMCTL user search '<email>'"   # -> recipient <user_id>
+ssh tools-prod-tw "$MMCTL bot list --all"          # -> <bot_id> of bbmka
+ssh tools-prod-tw "$MMCTL token generate bbmka 'one-off DM to <user> <date>'" > "$W/mm-token.out"
+# output is "<token>: <description>"
+printf 'Authorization: Bearer %s\nContent-Type: application/json\n' \
+  "$(cut -d: -f1 "$W/mm-token.out")" > "$W/mm-auth.h"
+```
+
+Write the message text (templates below) into `$W/message-1.txt` (and
+`$W/message-2.txt`), pasting the password copied from «Доступы» with an editor —
+not through the terminal. Then post:
+
+```bash
+MM=https://chat.bbm.academy
+CH=$(curl -sS -X POST "$MM/api/v4/channels/direct" -H @"$W/mm-auth.h" \
+  --data-binary '["<bot_id>","<user_id>"]' \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+
+for n in 1 2; do   # drop 2 if Message 2 is not sent
+  python3 -c 'import json,sys; print(json.dumps({"channel_id":sys.argv[1],"message":open(sys.argv[2],encoding="utf-8").read()}))' \
+    "$CH" "$W/message-$n.txt" \
+  | curl -sS -X POST "$MM/api/v4/posts" -H @"$W/mm-auth.h" --data-binary @- \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])' > "$W/post-$n.id"
+done
+```
+
+Revoke the temporary token **immediately** after posting:
+
+```bash
+ssh tools-prod-tw "$MMCTL token list bbmka --all"   # id of "one-off DM to <user> <date>"
+ssh tools-prod-tw "$MMCTL token revoke <token_id>"
+ssh tools-prod-tw "$MMCTL token list bbmka --all"   # confirm it is gone
+```
+
+- **Wrong post** (wrong recipient or text):
+  `ssh tools-prod-tw "$MMCTL post delete <postId> --confirm --permanent"`.
+- **Credential landed in the wrong place:** have the person set a new password
+  with the password reset of the sites' sign-in at once, and resend the corrected access message.
+- **After the person confirms a successful first login** (and that the password
+  is in their password manager), permanently delete Message 1 — it is the only
+  post that carries the password — with the same `post delete` command and the
+  id in `$W/post-1.id`. Then remove the scratch dir: `rm -rf "$W"`.
+
+## First login — what the person sees
+
+1. `https://admin.doctor.school` → «Электронная почта» + «Пароль» → «Войти».
+2. First time only: `/mfa/enroll` — «Подключите приложение-аутентификатор».
+   Scan the QR code (or enter the key manually) → «Код из приложения» →
+   «Подтвердить и войти».
+3. Every later login: password, then `/mfa/challenge` with the app code.
+
+There are no recovery codes. «Код не подошёл» almost always means the phone's
+clock is off — enable automatic time. A lost authenticator is reset by the
+operator: see
+[Admin locked out of the admin panel](./auth-operations.md#admin-locked-out-of-the-admin-panel).
+
+## Message templates
+
+The team uses «ты». Replace every `<placeholder>`; `<password>` is the only
+place the password ever appears.
+
+Message 1 — access and first login (always):
+
+```text
+<Имя>, привет! Тебе выдан доступ в админку платформы Doctor.School — для работы с <задача>.
+
+**Адрес:** https://admin.doctor.school
+**Логин:** <email>
+**Пароль:** <password>
+
+**Первый вход**
+1. Открой адрес, введи электронную почту и пароль, нажми «Войти».
+2. Система попросит подключить приложение-аутентификатор (Яндекс Ключ, Google Authenticator, 1Password): отсканируй QR-код (или введи ключ вручную).
+3. Введи шестизначный код из приложения в поле «Код из приложения» и нажми «Подтвердить и войти».
+
+Дальше при каждом входе: пароль + код из приложения.
+Если код «не подошёл» — проверь, что время на телефоне выставляется автоматически.
+Если потеряешь телефон с приложением — напиши @<Tech Lead handle>, он сбросит.
+Пароль лучше сохрани в менеджере паролей.
+```
+
+Message 2 — optional, for someone given access to work on events:
+
+```text
+**Коротко про эфиры в админке**
+
+Раздел «Мероприятия» открывается сразу после входа. Прошедшие эфиры — в том же списке: смотри колонку «Статус» («Завершено» / «Скрыто» / «Архивировано»). Фильтров нет — листай страницы.
+
+«Редактировать» открывает вкладки:
+- «Основное» — название, дата, описание, трансляция и кнопки статуса: Черновик → Опубликовано → В эфире → Завершено → Скрыто;
+- «Записи» — записи эфира;
+- «Эксперты» — спикеры;
+- «Проекты» / «Направления».
+
+Поправить прошедший эфир: «Основное» → изменения → «Сохранить».
+
+Запись эфира: «Записи» → «Прикрепить запись» (слот «Монтаж» или «Оригинал трансляции») → выбери провайдера и вставь ID видео (не ссылку) → «Опубликовать». Публикуется, только когда эфир в статусе «Завершено».
+Заменить запись — «Изменить источник»; убрать — «Снять с публикации» / «Отозвать».
+Записи ещё нет — укажи «Запись ожидается к».
+
+Эфир прошёл не на платформе: «Создать мероприятие» → отметь «Это архивный эфир».
+```
+
+## Post-conditions checklist
+
+- [ ] The person's row is in «Доступы» with the right role and event.
+- [ ] DM(s) delivered from `bbmka` to the right recipient.
+- [ ] Temporary bot token revoked and absent from `token list bbmka --all`.
+- [ ] The person confirmed a successful first login (authenticator enrolled).
+- [ ] Message 1 permanently deleted after that confirmation; scratch dir `$W` removed.
+
+## Offboarding
+
+Admin → «Доступы» → the person's row → «Отозвать», and confirm. One revocation
+takes away one row: for an event-bound role, the binding to that event; the role
+leaves the person's grant once no other binding of it remains. `doctor_guest` and
+every other role stay, so the person keeps their visitor account on the sites.
+To take away all staff access, revoke each of the person's rows.
+
+**Every revocation ends all admin sessions of the person at once** — and every
+admin sign-in that passed the password step but has not finished the second
+factor — even when they keep other staff roles: their next admin request sends
+them back to the login, where they sign in again with what remains. There is no
+waiting period and no manual session clean-up.
+
+- **«Сервис временно недоступен» with «Повторить».** The identity provider did
+  not apply the change. The person's admin sessions are already ended, and an
+  event binding is already removed; repeat the same «Отозвать» to finish the
+  revocation. Until then the row stays in the list (for an event-bound role, with
+  an empty event).
+- **Your own «Администратор платформы» cannot be revoked** — so the last platform
+  administrator can never lock everyone out. Another platform administrator
+  revokes it.
+- **A person leaving the organization altogether:** besides revoking their
+  rows, the identity-provider account itself can be deactivated by the operator
+  ([auth operations runbook](./auth-operations.md)); «Доступы» does not
+  deactivate accounts.
+
+Every grant and revocation is recorded in the audit ledger (`auth.role.granted`
+/ `auth.role.revoked`, with the person, the role, the event and the acting
+administrator); no separate tracker record of the offboarding is needed.
+
+## Bootstrap the first platform administrator
+
+Only for an environment with no platform administrator yet (or when the admin
+itself is unavailable): the grant «Доступы» cannot make, because nobody can sign
+in to it. Every later grant goes through «Доступы».
+
+**Access you need** (workstation ssh alias): `ds-api-prod` —
+`deploy@77.233.220.222`, key `~/.ssh/ds-api-prod`; sudo is needed to read the
+bootstrap PAT and `api.env`. Public self-registration on `id.doctor.school` is
+DISABLED (login-policy posture in `infra/deploy/README.md`), so the account is
+created by the operator. The `platform_admin` grant snippet in
+`infra/deploy/README.md` (IdP section, «Operator access to the product admin
+app») is the same call as step 5.
+
+### Workstation setup
+
+Keep every scratch file in one private directory and never print a secret to
+the terminal:
+
+```bash
+umask 077
+W=$(mktemp -d)        # scratch dir for this bootstrap; removed at the end
 ```
 
 **Running a step script on a remote box.** Plain `ssh host bash -s < file` loses
@@ -91,8 +295,6 @@ printf 'Authorization: Bearer %s\nContent-Type: application/json\n' \
 ```
 
 Request bodies go over stdin (`--data-binary @-`), never in argv.
-
-## Steps
 
 ### 1. Look up the person
 
@@ -193,7 +395,9 @@ so the value never appears in any process argv or on screen):
 ```
 
 `changeRequired: false` because the admin login surface has no forced-change
-step — a forced change would leave the person stuck.
+step — a forced change would leave the person stuck. Deliver the password as in
+[Deliver the credentials](#deliver-the-credentials--mattermost-dm-from-the-bbmka-bot),
+substituting it from `$W/pw.txt` with an editor or a script.
 
 ### 5. Grant `doctor_guest` + `platform_admin`
 
@@ -213,18 +417,12 @@ EOF
 ```
 
 Expect a grant with `roleKeys: ["doctor_guest","platform_admin"]` and state
-`USER_GRANT_STATE_ACTIVE`; note its grant `id` for offboarding. **Never grant
-Zitadel manager roles** (`IAM_*`, `ORG_*`, project-manager memberships) — they
-give IdP-administration power a product operator does not need.
+`USER_GRANT_STATE_ACTIVE`. **Never grant Zitadel manager roles** (`IAM_*`,
+`ORG_*`, project-manager memberships) — they give IdP-administration power a
+product operator does not need.
 
-A staff member is a user of the sites too: `doctor_guest` is the visitor role
-(their own events, rooms, profile), `platform_admin` the admin rights on top.
-The api marks the account as staff in the `users` mirror (`users.role`) from the
-session's roles on every signed-in request, and every participant count, roster
-and presence figure leaves staff accounts out — no manual step.
-
-An existing staff grant that holds only `platform_admin` is widened in place
-(one grant per user and project — a second POST answers «already exists»):
+An existing grant (one per user and project — a second POST answers «already
+exists») is widened in place:
 
 ```bash
 GRANT_ID='<grant id from the read-back>'
@@ -243,218 +441,26 @@ self-heal on the person's first authenticated admin request
 not the mirror row, so login works either way. Do **not** run `reconcile:sweep`
 on prod — it is a tsx dev script that is not shipped in the prod api image.
 
-### 7. Deliver the credentials — Mattermost DM from the `bbmka` bot
-
-The password goes **only** in a DM from the `bbmka` bot — never from a human's
-account, never by email, never in a channel.
-
-Look up the ids and mint a one-off bot token; the token goes straight into the
-scratch dir, never to the screen:
-
-```bash
-MMCTL='cd ~/mattermost-deploy && sudo docker compose exec -T mattermost mmctl --local'
-ssh tools-prod-tw "$MMCTL user search '<email>'"   # -> recipient <user_id>
-ssh tools-prod-tw "$MMCTL bot list --all"          # -> <bot_id> of bbmka
-ssh tools-prod-tw "$MMCTL token generate bbmka 'one-off DM to <user> <date>'" > "$W/mm-token.out"
-# output is "<token>: <description>"
-printf 'Authorization: Bearer %s\nContent-Type: application/json\n' \
-  "$(cut -d: -f1 "$W/mm-token.out")" > "$W/mm-auth.h"
-```
-
-Write the message text (templates below) into `$W/message-1.txt` (and
-`$W/message-2.txt`), substituting the password from `$W/pw.txt` with an editor
-or a script — not by copying it through the terminal. Then post:
-
-```bash
-MM=https://chat.bbm.academy
-CH=$(curl -sS -X POST "$MM/api/v4/channels/direct" -H @"$W/mm-auth.h" \
-  --data-binary '["<bot_id>","<user_id>"]' \
-  | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
-
-for n in 1 2; do   # drop 2 if Message 2 is not sent
-  python3 -c 'import json,sys; print(json.dumps({"channel_id":sys.argv[1],"message":open(sys.argv[2],encoding="utf-8").read()}))' \
-    "$CH" "$W/message-$n.txt" \
-  | curl -sS -X POST "$MM/api/v4/posts" -H @"$W/mm-auth.h" --data-binary @- \
-  | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])' > "$W/post-$n.id"
-done
-```
-
-Revoke the temporary token **immediately** after posting:
-
-```bash
-ssh tools-prod-tw "$MMCTL token list bbmka --all"   # id of "one-off DM to <user> <date>"
-ssh tools-prod-tw "$MMCTL token revoke <token_id>"
-ssh tools-prod-tw "$MMCTL token list bbmka --all"   # confirm it is gone
-```
-
-- **Wrong post** (wrong recipient or text):
-  `ssh tools-prod-tw "$MMCTL post delete <postId> --confirm --permanent"`.
-- **Credential landed in the wrong place:** rotate the password (step 4) and
-  resend the corrected message.
-- **After the person confirms a successful first login** (and that the password
-  is in their password manager), permanently delete Message 1 — it is the only
-  post that carries the password — with the same `post delete` command and the
-  id in `$W/post-1.id`. Then remove the scratch dir: `rm -rf "$W"`.
-
-### 8. First login — what the person sees
-
-1. `https://admin.doctor.school` → «Электронная почта» + «Пароль» → «Войти».
-2. First time only: `/mfa/enroll` — «Подключите приложение-аутентификатор».
-   Scan the QR code (or enter the key manually) → «Код из приложения» →
-   «Подтвердить и войти».
-3. Every later login: password, then `/mfa/challenge` with the app code.
-
-There are no recovery codes. «Код не подошёл» almost always means the phone's
-clock is off — enable automatic time. A lost authenticator is reset by the
-operator: see
-[Admin locked out of the admin panel](./auth-operations.md#admin-locked-out-of-the-admin-panel).
-
-## Message templates
-
-The team uses «ты». Replace every `<placeholder>`; `<password>` is the only
-place the password ever appears.
-
-Message 1 — access and first login (always):
-
-```text
-<Имя>, привет! Тебе выдан доступ администратора в админку платформы Doctor.School — для работы с <задача>.
-
-**Адрес:** https://admin.doctor.school
-**Логин:** <email>
-**Пароль:** <password>
-
-**Первый вход**
-1. Открой адрес, введи электронную почту и пароль, нажми «Войти».
-2. Система попросит подключить приложение-аутентификатор (Яндекс Ключ, Google Authenticator, 1Password): отсканируй QR-код (или введи ключ вручную).
-3. Введи шестизначный код из приложения в поле «Код из приложения» и нажми «Подтвердить и войти».
-
-Дальше при каждом входе: пароль + код из приложения.
-Если код «не подошёл» — проверь, что время на телефоне выставляется автоматически.
-Если потеряешь телефон с приложением — напиши @<Tech Lead handle>, он сбросит.
-Пароль лучше сохрани в менеджере паролей.
-```
-
-Message 2 — optional, for someone onboarded to work on events:
-
-```text
-**Коротко про эфиры в админке**
-
-Раздел «Мероприятия» открывается сразу после входа. Прошедшие эфиры — в том же списке: смотри колонку «Статус» («Завершено» / «Скрыто» / «Архивировано»). Фильтров нет — листай страницы.
-
-«Редактировать» открывает вкладки:
-- «Основное» — название, дата, описание, трансляция и кнопки статуса: Черновик → Опубликовано → В эфире → Завершено → Скрыто;
-- «Записи» — записи эфира;
-- «Эксперты» — спикеры;
-- «Проекты» / «Направления».
-
-Поправить прошедший эфир: «Основное» → изменения → «Сохранить».
-
-Запись эфира: «Записи» → «Прикрепить запись» (слот «Монтаж» или «Оригинал трансляции») → выбери провайдера и вставь ID видео (не ссылку) → «Опубликовать». Публикуется, только когда эфир в статусе «Завершено».
-Заменить запись — «Изменить источник»; убрать — «Снять с публикации» / «Отозвать».
-Записи ещё нет — укажи «Запись ожидается к».
-
-Эфир прошёл не на платформе: «Создать мероприятие» → отметь «Это архивный эфир».
-```
-
-## Post-conditions checklist
-
-- [ ] Step 1 search returns exactly one account for `<email>`.
-- [ ] Step 4 printed «password verified» (the throwaway session was deleted by the same script).
-- [ ] Grant read-back shows `roleKeys: ["doctor_guest","platform_admin"]`, `USER_GRANT_STATE_ACTIVE`, and no `IAM_*` / `ORG_*` memberships were added.
-- [ ] DM(s) delivered from `bbmka` to the right recipient.
-- [ ] Temporary bot token revoked and absent from `token list bbmka --all`.
-- [ ] The person confirmed a successful first login (MFA enrolled). The `users` mirror row appears on that first request (step 6).
-- [ ] Message 1 permanently deleted after that confirmation; scratch dir `$W` removed.
-
-## Offboarding
-
-**Removing the grant alone does not log the person out.** An admin session does
-not re-read Zitadel: at login the roles are copied into a server-side session
-record in Redis with a 30-day TTL
-(`apps/api/src/auth/admin-session/admin-session.service.ts`,
-`ADMIN_SESSION_TTL_SECONDS`), and every admin request is authorized from that
-record (`admin-session-auth.hook.ts`, `resolveAdminRequest`). A person whose
-grant was removed — or whose Zitadel user was deactivated — keeps full
-`platform_admin` in any live session for up to 30 days. The service has a
-force-logout primitive (`forceLogout(sub)`), but no operator path calls it
-today; that path is tracked in #2420. Until it lands, revocation is the manual
-one-off below. **This section changes when #2420 lands.**
-
-Order: remove access in Zitadel first (so no new session can be minted), then
-delete the live sessions.
-
-**1. Remove the grant (and optionally deactivate the user)** — on api-prod,
-`$W/offboard1.sh` = preamble +:
-
-```bash
-USER_ID='<user_id>'
-GRANT_ID='<grant_id>'   # from the step 5 read-back
-curl -sS -X DELETE "$B/management/v1/users/$USER_ID/grants/$GRANT_ID" -H @"$H"
-
-# If the person should lose ALL Zitadel-backed access, also deactivate the user:
-# curl -sS -X POST "$B/v2/users/$USER_ID/deactivate" -H @"$H" --data-binary '{}'
-```
-
-**2. Wait at least 5 minutes.** A login that passed the password step before the
-grant was removed holds a pending-auth record (5-minute TTL,
-`PENDING_TTL_SECONDS`) that already carries the roles; completing MFA inside
-that window would still mint a session with `platform_admin`.
-
-**3. Delete the person's admin sessions on data-prod Redis.** Sessions are keyed
-`ds:admin-session:<sid>`, and each Zitadel subject has an index set
-`ds:admin-session:sub:<sub>` listing its session ids
-(`admin-session-store.redis.ts`, the same keys `deleteBySub` uses). The subject
-is the Zitadel user id. First find the redis container name:
-
-```bash
-ssh ds-data-prod "sudo docker ps --format '{{.Names}}'"   # the data-prod compose redis service
-```
-
-Credentials: the data-prod compose runs redis without `requirepass`, bound to
-the VPC address only, and the api's `REDIS_URL` (in `/etc/ds-platform/api.env`
-on api-prod) names no password and no database index, so `redis-cli` inside the
-container reaches the right keyspace (db 0) as is. Confirm before running —
-without printing any secret — that `sudo docker inspect <redis_container>
---format '{{json .Config.Cmd}}'` shows no `--requirepass`. If a password is
-ever configured, do not pass it with `-a` on a command line; update this
-runbook first.
-
-`$W/offboard3.sh` (no preamble):
-
-```bash
-set -euo pipefail
-R='<redis_container>'
-SUB='<user_id>'
-IDX="ds:admin-session:sub:$SUB"
-rc() { sudo docker exec "$R" redis-cli "$@"; }
-
-echo "indexed sessions: $(rc SCARD "$IDX")"
-# Session ids are live credentials — delete them without printing.
-rc SMEMBERS "$IDX" | while read -r sid; do
-  if [ -n "$sid" ]; then rc DEL "ds:admin-session:$sid" >/dev/null; fi
-done
-rc DEL "$IDX" >/dev/null
-echo "index left: $(rc EXISTS "$IDX")"   # expect 0
-```
-
-Run: `run_remote ds-data-prod < "$W/offboard3.sh"`. The person's next admin
-request is refused and sends them back to login, where the missing grant stops
-them. This manual deletion writes no `auth.session.terminated` audit row (only
-`forceLogout` does) — record the offboarding, with date and operator role, in
-the tracker item that requested it.
+Bootstrap post-conditions: step 1 returns exactly one account for `<email>`;
+step 4 printed «password verified»; the grant read-back shows
+`roleKeys: ["doctor_guest","platform_admin"]`, `USER_GRANT_STATE_ACTIVE` and no
+`IAM_*` / `ORG_*` memberships; the person signs in and their row appears in
+«Доступы». Every later grant is made there.
 
 ## Security notes
 
-- The bootstrap PAT stays on api-prod: the preamble reads it with `sudo cat`
-  into a private header file that the script deletes on exit; it is never in
-  argv, never copied to the workstation, a chat or a file elsewhere.
+- The temporary password of a «Доступы» grant is shown once and exists nowhere
+  else; copy it straight into the DM draft.
+- The bootstrap PAT stays on api-prod: the bootstrap preamble reads it with
+  `sudo cat` into a private header file that the script deletes on exit; it is
+  never in argv, never copied to the workstation, a chat or a file elsewhere.
 - Where the password travels, and how each copy is cleaned up:
 
   | Where                                              | Cleanup                                                                                                                                                                        |
   | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-  | `$W/pw.txt`, `$W/message-1.txt` on the workstation | `rm -rf "$W"` at the end of step 7 (the `umask 077` dir is private meanwhile)                                                                                                  |
-  | step-4 script fed over ssh                         | streamed from the workstation, written by `run_remote` to a private temp file on api-prod and deleted after the run                                                            |
-  | `curl` calls on api-prod                           | the body goes over stdin (heredoc), never in argv                                                                                                                              |
+  | the «Доступы» grant result                         | shown once; gone when the result is closed                                                                                                                                     |
+  | `$W/pw.txt`, `$W/message-1.txt` on the workstation | `rm -rf "$W"` after the delivery (the `umask 077` dir is private meanwhile)                                                                                                    |
+  | bootstrap step-4 script fed over ssh               | streamed from the workstation, written by `run_remote` to a private temp file on api-prod and deleted after the run                                                            |
   | Zitadel                                            | stores only the password hash                                                                                                                                                  |
   | Mattermost DM (stored server-side in its DB)       | Message 1 permanently deleted after the person confirms first login; a Mattermost email/push notification of the DM, if the recipient has them enabled, is outside our control |
 
@@ -465,6 +471,6 @@ the tracker item that requested it.
   kept in the scratch dir only, and revoked right after posting — verify it is
   gone.
 - Never post credentials as a human (your own account or anyone else's).
-- Grant only the `platform_admin` project role; never Zitadel manager roles.
-- Offboarding is not complete until the live admin sessions are deleted (see
-  above).
+- Grant only the product roles; never Zitadel manager roles.
+- Offboarding is «Отозвать» in «Доступы»: it ends the person's admin sessions at
+  once.

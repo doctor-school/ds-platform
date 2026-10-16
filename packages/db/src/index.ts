@@ -16,6 +16,7 @@ export {
   listEventGrantsForUserRole,
   listStaffEventBindings,
   insertEventGrant,
+  deleteEventGrant,
 } from "./event-grants.js";
 export type {
   EventGrantBinding,

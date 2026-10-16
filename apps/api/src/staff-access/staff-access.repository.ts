@@ -3,6 +3,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { and, desc, eq, inArray, like, sql } from "drizzle-orm";
 import {
   auditLedger,
+  deleteEventGrant,
   events,
   insertEventGrant,
   listEventGrantsForUserRole,
@@ -64,6 +65,16 @@ export interface GrantCommit {
   email: string;
   fullName: string;
   /** `users.role` — `mirrorRoleFromClaims` of the account's role set after the grant. */
+  mirrorRole: string;
+  role: string;
+  eventId: string | null;
+  byAdmin: string;
+}
+
+/** What the revocation's closing DB transaction commits (047-design → Revoke cascade step 5). */
+export interface RevocationCommit {
+  sub: string;
+  /** `users.role` — `mirrorRoleFromClaims` of the account's role set after the revocation. */
   mirrorRole: string;
   role: string;
   eventId: string | null;
@@ -195,11 +206,84 @@ export class StaffAccessRepository {
    * table's unique indexes, which `commitGrant` relies on, not on the read.
    */
   async withGrantLock<T>(email: string, run: () => Promise<T>): Promise<T> {
+    return this.withAdvisoryLock(`staff-access-grant:${email}`, run);
+  }
+
+  /**
+   * 047 EARS-7 — run one revocation cascade for the account `sub` alone, under
+   * the same advisory-lock idiom as {@link withGrantLock}: two revocations of
+   * one person never interleave, so a repeat reads the state the first left.
+   * A revocation names the account, not the email, so it is keyed on `sub`.
+   */
+  async withRevokeLock<T>(sub: string, run: () => Promise<T>): Promise<T> {
+    return this.withAdvisoryLock(`staff-access-revoke:${sub}`, run);
+  }
+
+  private async withAdvisoryLock<T>(
+    key: string,
+    run: () => Promise<T>,
+  ): Promise<T> {
     return this.db.transaction(async (tx) => {
       await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`staff-access-grant:${email}`}, 0))`,
+        sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`,
       );
       return run();
+    });
+  }
+
+  /**
+   * Revoke cascade step 2 — delete the event binding when present, as one
+   * statement under the request's 010 audit context (the trigger records the
+   * delete with the administrator as actor). Idempotent.
+   */
+  async deleteBinding(binding: {
+    userId: string;
+    role: EventScopedRole;
+    eventId: string;
+  }): Promise<void> {
+    await withRequestAuditContext(this.db, (tx) =>
+      deleteEventGrant(tx, binding),
+    );
+  }
+
+  /**
+   * Revoke cascade step 5 — ONE transaction under the request's 010 audit
+   * context: re-project `users.role` from the remaining roles (when the mirror
+   * row exists) and append `auth.role.revoked` unless it is already the latest
+   * mark for (person, role, event), so a repeat writes the mark once.
+   */
+  async commitRevocation(commit: RevocationCommit): Promise<void> {
+    await withRequestAuditContext(this.db, async (tx) => {
+      await tx
+        .update(users)
+        .set({ role: commit.mirrorRole, updatedAt: new Date() })
+        .where(
+          and(
+            eq(users.zitadelSub, commit.sub),
+            sql`${users.role} <> ${commit.mirrorRole}`,
+          ),
+        );
+      const latest = await latestRoleEventIn(
+        tx,
+        commit.sub,
+        commit.role,
+        commit.eventId,
+      );
+      if (latest !== "auth.role.revoked") {
+        await tx.insert(auditLedger).values({
+          eventId: randomUUID(),
+          ...toLedgerRow(
+            {
+              type: "RoleRevoked",
+              sub: commit.sub,
+              role: commit.role,
+              eventId: commit.eventId,
+              byAdmin: commit.byAdmin,
+            },
+            noIdentifier,
+          ),
+        });
+      }
     });
   }
 

@@ -314,13 +314,18 @@ export function toLedgerRow(
         metadata: { by_admin: event.byAdmin, tier: ADMIN_TIER },
       };
     case "RoleGranted":
-      // 047 EARS-9: `auth.role.granted` with the §7.3 fields — `user_id` is the
-      // subject, `role`, `by_admin` the acting administrator, `ts` the row's
-      // `created_at`; `event_id` rides the metadata for an event-bound role (the
-      // within-a-class idiom `tier` uses). The temporary password is absent from
-      // the event SHAPE, so no edit to this mapper can leak it into a row.
+    case "RoleRevoked":
+      // 047 EARS-9: `auth.role.granted` / `auth.role.revoked` with the §7.3
+      // fields — `user_id` is the subject, `role`, `by_admin` the acting
+      // administrator, `ts` the row's `created_at`; `event_id` rides the
+      // metadata for an event-bound role (the within-a-class idiom `tier` uses).
+      // The temporary password is absent from the event SHAPE, so no edit to
+      // this mapper can leak it into a row.
       return {
-        eventType: "auth.role.granted",
+        eventType:
+          event.type === "RoleGranted"
+            ? "auth.role.granted"
+            : "auth.role.revoked",
         subjectId: event.sub,
         sid: null,
         reason: null,

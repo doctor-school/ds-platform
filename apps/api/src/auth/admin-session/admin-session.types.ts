@@ -131,6 +131,12 @@ export interface PendingAuthStore {
   get(ref: string): Promise<PendingAuthRecord | undefined>;
   /** Consumed on upgrade to a session, or on an explicit abandon. Idempotent. */
   delete(ref: string): Promise<void>;
+  /**
+   * 047 EARS-7 — drop **every** pending authentication of `sub`, so a sign-in
+   * that passed the password step before a revocation cannot mint a session
+   * from its role snapshot. Idempotent.
+   */
+  deleteBySub(sub: string): Promise<void>;
 }
 
 /** Server-side store for {@link AdminSessionRecord}s (EARS-10). */

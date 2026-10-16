@@ -273,6 +273,15 @@ export type AuthAuditEvent =
       eventId: string | null;
       byAdmin: string;
     }
+  // 047 EARS-9: `auth.role.revoked` — the completion mark of a revocation,
+  // written once after the IdP no longer grants the role.
+  | {
+      type: "RoleRevoked";
+      sub: string;
+      role: string;
+      eventId: string | null;
+      byAdmin: string;
+    }
   // 047 EARS-8: the step-up trail. `StepUpRequested` is the guard's refusal of
   // a `stepUp` route on a stale second factor; `StepUpSucceeded` /
   // `StepUpFailed` are the re-verification attempts.
@@ -337,6 +346,7 @@ export const AUTH_AUDIT_EVENT_TYPES = [
   "MfaChallengeFailed",
   "MfaFactorRemoved",
   "RoleGranted",
+  "RoleRevoked",
   "StepUpRequested",
   "StepUpSucceeded",
   "StepUpFailed",

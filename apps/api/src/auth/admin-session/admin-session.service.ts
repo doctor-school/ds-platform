@@ -1073,4 +1073,14 @@ export class AdminSessionService {
       });
     }
   }
+
+  /**
+   * 047 EARS-7 — end every admin session of `sub` (force-logout) AND every
+   * pending admin sign-in, so neither a live session nor a sign-in that passed
+   * the password step before a role change can act on the old role snapshot.
+   */
+  async endAllAdminAccess(sub: string): Promise<void> {
+    await this.forceLogout(sub);
+    await this.pending.deleteBySub(sub);
+  }
 }

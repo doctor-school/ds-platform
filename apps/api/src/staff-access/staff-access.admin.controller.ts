@@ -11,12 +11,17 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
-import { ApiCreatedResponse, ApiOkResponse } from "@nestjs/swagger";
+import {
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiOkResponse,
+} from "@nestjs/swagger";
 import { createZodDto } from "nestjs-zod";
 import {
   StaffAccessGrantRequestSchema,
   StaffAccessGrantResponseSchema,
   StaffAccessListResponseSchema,
+  StaffAccessRevokeRequestSchema,
   type StaffAccessGrantResponse,
   type StaffAccessListResponse,
 } from "@ds/schemas";
@@ -35,6 +40,11 @@ export class StaffAccessGrantResponseDto extends createZodDto(
   StaffAccessGrantResponseSchema,
 ) {}
 
+/** Body of `POST /v1/admin/staff-access/revocations` (047 EARS-7). */
+export class StaffAccessRevokeRequestDto extends createZodDto(
+  StaffAccessRevokeRequestSchema,
+) {}
+
 /** Response of `GET /v1/admin/staff-access` (047 EARS-2). */
 export class StaffAccessListResponseDto extends createZodDto(
   StaffAccessListResponseSchema,
@@ -44,9 +54,10 @@ export class StaffAccessListResponseDto extends createZodDto(
 const UNAVAILABLE = "the service is temporarily unavailable";
 
 /**
- * 047 — «Доступы»: the platform administrator's list and grant of staff roles
+ * 047 — «Доступы»: the platform administrator's list, grant and revocation of
+ * staff roles
  * (047-design §Endpoints). Every route is `platform_admin` only with live IdP
- * revalidation (EARS-1); the grant also declares `stepUp` — a second factor no
+ * revalidation (EARS-1); the grant and the revocation also declare `stepUp` — a second factor no
  * older than 30 minutes, re-verified in the same session at `STEP_UP_URL`
  * (EARS-8). An IdP fault is `503`, which the console shows with «Повторить»,
  * never as a credential refusal or an empty list.
@@ -101,6 +112,34 @@ export class StaffAccessAdminController {
     if (!caller) throw new UnauthorizedException();
     reply.header("Cache-Control", "no-store");
     return this.mapIdpFault(() => this.staff.grant(dto, caller.sub));
+  }
+
+  /**
+   * `POST /v1/admin/staff-access/revocations` — revoke a staff role (EARS-7,
+   * EARS-9). `204` once the revocation is complete. A refusal is a `403` (own
+   * `platform_admin`) or `409` (already revoked) with an `errorCode`; an IdP
+   * fault is `503` after the person's admin sessions were still ended, and the
+   * same request repeated finishes it.
+   */
+  @Post("revocations")
+  @HttpCode(204)
+  @ApiNoContentResponse()
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    revalidate: "live",
+    stepUp: true,
+    audit: "high-stakes",
+    tests: ["EARS-7", "EARS-8", "EARS-9"],
+  })
+  async revoke(
+    @Body() dto: StaffAccessRevokeRequestDto,
+    @Req() req: { user?: AdminSessionPrincipal },
+  ): Promise<void> {
+    const caller = req.user;
+    if (!caller) throw new UnauthorizedException();
+    await this.mapIdpFault(() => this.staff.revoke(dto, caller.sub));
   }
 
   private async mapIdpFault<T>(call: () => Promise<T>): Promise<T> {

@@ -52,8 +52,9 @@ const CANONICAL_ADMIN_WIRE_IDS = [
   "auth.session.created",
   "auth.session.terminated",
   "auth.session.rejected",
-  // 047 §Audit: the staff-access grant and the step-up trail, admin-tier rows.
+  // 047 §Audit: the staff-access grant, the revocation and the step-up trail, admin-tier rows.
   "auth.role.granted",
+  "auth.role.revoked",
   "auth.step_up.requested",
   "auth.step_up.succeeded",
   "auth.step_up.failed",
@@ -61,7 +62,7 @@ const CANONICAL_ADMIN_WIRE_IDS = [
 
 /**
  * 011 EARS-9 — the canonical §7.3 wire-id mapping, asserted **table-driven over
- * all ten rows** of the 011 requirements Event Model mapping table, plus the four admin-tier rows 047 §Audit adds.
+ * all ten rows** of the 011 requirements Event Model mapping table, plus the five admin-tier rows 047 §Audit adds.
  *
  * This half is a pure assertion over the single shipped mapper (`toLedgerRow`),
  * deliberately outside the DB-gated describe below: the mapping is what the EARS
@@ -173,6 +174,22 @@ describe("011 EARS-9 — canonical wire-id mapping (Event Model → Events)", ()
         role: "event-registrar",
         by_admin: "sub-1",
         event_id: "event-1",
+        tier: "admin",
+      },
+    },
+    {
+      event: {
+        type: "RoleRevoked",
+        sub: "sub-2",
+        role: "platform_admin",
+        eventId: null,
+        byAdmin: "sub-1",
+      },
+      wireId: "auth.role.revoked",
+      reason: null,
+      metadata: {
+        role: "platform_admin",
+        by_admin: "sub-1",
         tier: "admin",
       },
     },

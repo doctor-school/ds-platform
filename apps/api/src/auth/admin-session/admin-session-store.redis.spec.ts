@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { RedisLike } from "../session/session-store.redis.js";
 import { InMemoryPendingAuthStore } from "./admin-session-store.fake.js";
 import {
@@ -109,7 +109,10 @@ describe("011 EARS-10 — RedisAdminSessionStore force-logout", () => {
     // outlive its own deadline by up to a second even with real Redis expiry —
     // and the request path must refuse it for that whole window, exactly as the
     // in-memory store does.
-    await store.create({ ...record("sid-past", "sub-2"), expiresAtMs: Date.now() - 1000 });
+    await store.create({
+      ...record("sid-past", "sub-2"),
+      expiresAtMs: Date.now() - 1000,
+    });
 
     await expect(store.get("sid-past")).resolves.toBeUndefined();
     // The read prunes it, so it can never resurface.
@@ -162,4 +165,54 @@ describe("011 EARS-3 — pending-auth expiry is enforced by both bindings", () =
       });
     });
   }
+});
+
+describe("047 EARS-7 — PendingAuthStore.deleteBySub drops every pending sign-in of one person", () => {
+  function pendingOf(ref: string, sub: string): PendingAuthRecord {
+    return { ...pending(ref, Date.now() + 60_000), sub };
+  }
+
+  const bindings: [string, () => PendingAuthStore][] = [
+    ["InMemoryPendingAuthStore", () => new InMemoryPendingAuthStore()],
+    ["RedisPendingAuthStore", () => new RedisPendingAuthStore(new FakeRedis())],
+  ];
+
+  for (const [name, make] of bindings) {
+    it(`047 EARS-7: ${name} deleteBySub removes the person's pending records and keeps another person's`, async () => {
+      const store = make();
+      await store.create(pendingOf("ref-a1", "sub-a"));
+      await store.create(pendingOf("ref-a2", "sub-a"));
+      await store.create(pendingOf("ref-b1", "sub-b"));
+
+      await store.deleteBySub("sub-a");
+
+      await expect(store.get("ref-a1")).resolves.toBeUndefined();
+      await expect(store.get("ref-a2")).resolves.toBeUndefined();
+      await expect(store.get("ref-b1")).resolves.toMatchObject({
+        ref: "ref-b1",
+      });
+      // Idempotent: a repeat over an empty index is a no-op.
+      await expect(store.deleteBySub("sub-a")).resolves.toBeUndefined();
+    });
+  }
+
+  it("047 EARS-7: the Redis sub index expires with the pending record and is pruned on delete(ref)", async () => {
+    const redis = new FakeRedis();
+    const expire = vi.spyOn(redis, "expire");
+    const store = new RedisPendingAuthStore(redis);
+    await store.create(pendingOf("ref-a1", "sub-a"));
+    await store.create(pendingOf("ref-a2", "sub-a"));
+    const indexKey = "ds:admin-pending:sub:sub-a";
+    expect(expire).toHaveBeenCalledWith(indexKey, expect.any(Number));
+    const ttl = (expire.mock.calls.at(-1) as unknown[])[1] as number;
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(60);
+
+    await store.delete("ref-a1");
+    expect([...(redis.sets.get(indexKey) ?? [])]).toEqual(["ref-a2"]);
+
+    await store.deleteBySub("sub-a");
+    expect(redis.sets.has(indexKey)).toBe(false);
+    expect(redis.strings.has("ds:admin-pending:ref-a2")).toBe(false);
+  });
 });

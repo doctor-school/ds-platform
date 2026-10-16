@@ -93,4 +93,11 @@ export class InMemoryPendingAuthStore implements PendingAuthStore {
     this.byRef.delete(ref);
     return Promise.resolve();
   }
+
+  deleteBySub(sub: string): Promise<void> {
+    for (const [ref, record] of this.byRef) {
+      if (record.sub === sub) this.byRef.delete(ref);
+    }
+    return Promise.resolve();
+  }
 }

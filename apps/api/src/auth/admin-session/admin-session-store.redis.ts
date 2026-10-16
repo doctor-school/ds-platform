@@ -14,6 +14,7 @@ import type {
 const ADMIN_SESSION_PREFIX = "ds:admin-session:";
 const ADMIN_SESSION_SUB_INDEX_PREFIX = "ds:admin-session:sub:";
 const PENDING_AUTH_PREFIX = "ds:admin-pending:";
+const PENDING_AUTH_SUB_INDEX_PREFIX = "ds:admin-pending:sub:";
 
 /** Remaining lifetime in whole seconds, floored at 1 (Redis rejects `EX 0`). */
 function ttlSecondsUntil(expiresAtMs: number): number {
@@ -130,12 +131,18 @@ export class RedisPendingAuthStore implements PendingAuthStore {
   constructor(private readonly redis: RedisLike) {}
 
   async create(record: PendingAuthRecord): Promise<void> {
+    const ttl = ttlSecondsUntil(record.expiresAtMs);
     await this.redis.set(
       `${PENDING_AUTH_PREFIX}${record.ref}`,
       JSON.stringify(record),
       "EX",
-      ttlSecondsUntil(record.expiresAtMs),
+      ttl,
     );
+    // `sub → refs` index for 047 EARS-7's revocation; bumped to this member's
+    // TTL so the index cannot outlive every pending record it tracks.
+    const indexKey = `${PENDING_AUTH_SUB_INDEX_PREFIX}${record.sub}`;
+    await this.redis.sadd(indexKey, record.ref);
+    await this.redis.expire(indexKey, ttl);
   }
 
   async get(ref: string): Promise<PendingAuthRecord | undefined> {
@@ -159,6 +166,25 @@ export class RedisPendingAuthStore implements PendingAuthStore {
   }
 
   async delete(ref: string): Promise<void> {
-    await this.redis.del(`${PENDING_AUTH_PREFIX}${ref}`);
+    const key = `${PENDING_AUTH_PREFIX}${ref}`;
+    const raw = await this.redis.get(key);
+    await this.redis.del(key);
+    if (raw) {
+      const { sub } = JSON.parse(raw) as PendingAuthRecord;
+      await this.redis.srem(`${PENDING_AUTH_SUB_INDEX_PREFIX}${sub}`, ref);
+    }
+  }
+
+  async deleteBySub(sub: string): Promise<void> {
+    const indexKey = `${PENDING_AUTH_SUB_INDEX_PREFIX}${sub}`;
+    const refs = await this.redis.smembers(indexKey);
+    // A member whose record already expired by TTL is simply absent; deleting
+    // its key is a no-op, and the whole index key is dropped below.
+    if (refs.length > 0) {
+      await this.redis.del(
+        ...refs.map((ref) => `${PENDING_AUTH_PREFIX}${ref}`),
+      );
+    }
+    await this.redis.del(indexKey);
   }
 }

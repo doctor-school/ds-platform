@@ -461,13 +461,15 @@ describe("«Повторить» in a failed block (#2832)", () => {
     );
 
     expect(await screen.findByTestId("events-feed")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Все специальности" }),
-    ).toHaveAttribute("aria-pressed", "true");
+    await vi.waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Все специальности" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByTestId("events-feed-subline-scope")).toHaveTextContent(
+        "line-all",
+      );
+    });
     expect(screen.queryByText(/Применено/)).toBeNull();
-    expect(screen.getByTestId("events-feed-subline-scope")).toHaveTextContent(
-      "line-all",
-    );
   });
 
   it("EARS-7/9: a recovered panel keeps the title of an applied kind the retried read does not offer", async () => {

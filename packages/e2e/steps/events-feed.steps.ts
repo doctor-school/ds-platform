@@ -3,6 +3,7 @@ import {
   type Locator,
   type Page,
   type Request,
+  type Route,
 } from "@playwright/test";
 import {
   GOLDEN_EMPTY_SCOPE_SPECIALTY,
@@ -269,7 +270,8 @@ Then(
     const count = params(page).get("count");
     expect(count, "the wider extent is URL state").toMatch(/^\d+$/);
     expect(Number(count)).toBe(before.cards + before.step);
-    if (before.count) expect(Number(count)).toBeGreaterThan(Number(before.count));
+    if (before.count)
+      expect(Number(count)).toBeGreaterThan(Number(before.count));
     expect(
       await page.locator('section[id^="day-"]').count(),
     ).toBeGreaterThanOrEqual(before.days);
@@ -283,10 +285,9 @@ Then(
     // 019 «Amendment — 2026-10-13» (#2884, #2908): «Будущие» pages by exactly
     // 10 events; a day shared by the tenth event and later ones continues on
     // the next step.
-    expect(
-      await feedCards(page).count(),
-      "the default upcoming screen",
-    ).toBe(10);
+    expect(await feedCards(page).count(), "the default upcoming screen").toBe(
+      10,
+    );
     await expect(page.getByTestId("events-feed-show-more")).toHaveText(
       /^Показать ещё \d+ \(осталось \d+\)$/u,
     );
@@ -1344,7 +1345,9 @@ When(
     for (let step = 0; step < 40; step += 1) {
       const shownDays = await page
         .locator('section[id^="day-"]')
-        .evaluateAll((sections) => sections.map((section) => section.id.slice(4)));
+        .evaluateAll((sections) =>
+          sections.map((section) => section.id.slice(4)),
+        );
       if (shownDays.some((shown) => shown > day)) return;
       if ((await page.getByTestId("events-feed-show-more").count()) === 0) {
         return;
@@ -1584,18 +1587,40 @@ async function retryBlock(
     }
   };
   page.on("request", onRequest);
-  const answered = page.waitForResponse(
-    (res) =>
-      res.request().method() === "POST" &&
-      res.request().headers()["next-action"] !== undefined,
-  );
-  await page
-    .getByTestId(FAILED_BLOCK[block])
-    .getByRole("button", { name: "Повторить", exact: true })
-    .click();
-  const answer = await (await answered).text();
-  await settle(page);
-  page.off("request", onRequest);
+  // The retry re-renders and navigates while the action answer streams, so
+  // the browser may drop its body; read it in Node before it reaches the page.
+  let answer: string | undefined;
+  let answeredResolve: () => void = () => {};
+  const answered = new Promise<void>((resolve) => {
+    answeredResolve = resolve;
+  });
+  const onAction = async (route: Route) => {
+    const request = route.request();
+    if (
+      request.method() !== "POST" ||
+      request.headers()["next-action"] === undefined
+    )
+      return route.fallback();
+    const response = await route.fetch();
+    const body = await response.text();
+    answer ??= body;
+    answeredResolve();
+    await route.fulfill({ response, body });
+  };
+  await page.route("**/*", onAction);
+  try {
+    await page
+      .getByTestId(FAILED_BLOCK[block])
+      .getByRole("button", { name: "Повторить", exact: true })
+      .click();
+    await answered;
+    await settle(page);
+  } finally {
+    await page.unroute("**/*", onAction);
+    page.off("request", onRequest);
+  }
+  if (answer === undefined)
+    throw new Error("The retry action was not answered");
   feed.retry = { ...seen, answer };
 }
 

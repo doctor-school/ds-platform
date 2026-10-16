@@ -187,8 +187,33 @@ Shared-tooling VPS (Verdaccio + observability + IdP + Vault) — shared infra, c
 
 ---
 
+## Amendments
+
+### A1 — Доставка: registry-образы собираются один раз в GitHub Actions; релиз через Actions с одобрением в Environment; усиленный SSH с hosted runners (2026-10-16, #2976)
+
+**Context.** Топология 2-VPS docker-compose из §1 работает в production. Путь доставки в этом ADR никогда не решался: релиз — это `pnpm deploy:prod` (`tools/deploy/prod.mjs`), один foreground-процесс на рабочей станции владельца, который отправляет дерево исходников по SSH (`git archive`), собирает все образы на самих серверах и держит единственные SSH-ключи; порт 22 открыт только на `/32` этой станции. С 2026-09-15 по 2026-10-15 прошло 29 успешных и 17 упавших или прерванных релизов; сбои, которые существуют только потому, что релиз идёт с личной машины (внешний IP ушёл с `/32`, на ПК не задана переменная окружения, harness агента убил процесс посреди релиза 2026-10-13), вместе со сбоями от сборки на серверах (лимиты registry, перегрузка api-prod) превышают число настоящих продуктовых падений. На сервере ничто не отвязывает удалённую работу от клиента, поэтому умерший клиент может оставить релиз применённым наполовину.
+
+**Decision.**
+
+- **Собираем один раз.** Каждый собственный образ собирается один раз GitHub-hosted runner'ом при merge в `main`, тегируется полным SHA коммита и отправляется в Timeweb Container Registry (`ds-platform.registry.twcstorage.ru`, ru-1). Stage и production тянут один и тот же образ по digest; ни один сервер образы не собирает.
+- **Релиз через Actions.** Релиз — это `workflow_dispatch` (владелец или агент по слову владельца) для SHA, у которого уже есть зелёный check stage-сьюта; затем workflow ждёт Environment `production`, где required reviewer — владелец. Workflow пишет GitHub Deployment и для успеха, и для провала; одновременно идёт один релиз (`concurrency`).
+- **Доступ к серверам.** GitHub-hosted runners ходят на ds-api-prod и ds-stage-1 по SSH с набором усиления из §4 tech spec (только ключи, без root-логина, отдельный пользователь `deploy`, CI-ключи с forced command, ограничение частоты подключений, автоматические security-обновления); prod-ключ выдаётся только после одобрения; ds-data-prod остаётся приватным за ds-api-prod. Правило `/32` владельца упраздняется.
+- **Устойчивые шаги на сервере.** Каждый длинный шаг на сервере идёт как transient unit `systemd-run` под замком и с атомарно записываемым status-файлом, поэтому смерть клиента его не убивает, а новый runner может переподключиться.
+- **Break-glass.** Те же серверные entrypoints можно запустить вручную офлайн break-glass-ключом владельца.
+
+**Consequences.** В штатном пути релиза нет личной машины и нет секрета на ней; результаты stage-сьюта хранятся как check коммита и report-артефакт; нагрузка от сборки и её режимы отказа уходят с production; откат превращается в pull предыдущего digest. Новые зависимости: Timeweb registry (fallback — tarball'ы `docker save` в S3) и доступность GitHub Actions (fallback — break-glass). Порт 22 становится доступен из интернета под набором усиления; pull-агент остаётся задокументированной альтернативой на случай регуляторного требования закрыть админ-порты.
+
+**Why now.** Владелец попросил полный разбор пути релиза (2026-10-15) и подтвердил целевую картину (2026-10-16, «Да, всё так.») и registry («Окей, берём Container Registry Timeweb.»); модель доступа — решение лида по делегированию владельца от 2026-10-16.
+
+**Open follow-up.** Исполнение поэтапное в эпике #2975 (tech spec §8, шаги (a)–(f)): подключение registry и pull вместо сборки, entrypoints на `systemd-run`, сборка и stage-сьют в Actions, release workflow, усиление SSH, вывод из работы пути с рабочей станции. До шага (f) runbook остаётся `pnpm deploy:prod`. У registry нет ресурса Terraform (ручная разовая операция); `ds-api-migrate` (1.92 GB) предстоит уменьшить.
+
+**Affects.** Tech spec [`2026-10-16-release-pipeline-off-workstation-en.md`](../specs/tech/2026-10-16-release-pipeline-off-workstation-en.md); staging spec `2026-09-08-staging-previews-and-regression-contour-en.md` (§3 сборка на хосте, §5 сьют с машины оператора, строки §10 #2202 / #2701); skill `run-prod-deploy`; `tools/deploy/README.md`; `infra/deploy/terraform/{network,stage-1}.tf` (SSH-правила firewall); runner-топология ADR-0008.
+
+---
+
 ## Cross-references
 
+- **ADR-0012 A1** — направление release-pipeline; план: `specs/tech/2026-10-16-release-pipeline-off-workstation-en.md`.
 - **ADR-0002 OQ10** — CLOSED 2026-05-18 (DSO-53), see this ADR.
 - **ADR-0003 §8** — content lifted here; original section now a stub-pointer.
 - **ADR-0002 §5.6** (DSO-59) — v1 availability 99.0% + maintenance window source.

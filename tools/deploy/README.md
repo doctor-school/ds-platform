@@ -4,8 +4,10 @@ Idempotent, one-command production deploy for the always-on Timeweb environment
 (api-prod public + data-prod private). Formalises the on-box runbook in
 [`infra/deploy/README.md`](../../infra/deploy/README.md) §5–§10 — that README is
 the operational SSOT; this directory is the executable form of its steady-state
-steps. The **per-redeploy** path (`deploy:prod`) is **agent-run** (off-CI SSH,
-ADR-0012), driven by the D+B trigger policy (release-cycle spec §10);
+steps. The **per-redeploy** path (`deploy:prod`) is **agent-run** from the operator
+workstation over SSH (no CI job deploys today; the release-pipeline tech spec
+[`2026-10-16-release-pipeline-off-workstation-en.md`](../../apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md)
+is the plan that replaces this path), driven by the D+B trigger policy (release-cycle spec §10);
 **first-time provisioning** (Terraform, DNS, secrets, Zitadel first-boot
 bootstrap) is a one-time human setup, out of the steady-state loop.
 
@@ -525,7 +527,7 @@ does NOT reuse `labelsAreProductKind`: inclusion here is note-driven (#2241 — 
 "Note-driven inclusion" below), while the kind-label gate stays a per-PR-post rule.
 
 **Fired from CI, not from `deploy:prod` (#968).** The digest is a DEPLOY event, and
-`deploy:prod` ships off-CI (ADR-0012) where `secrets.MATTERMOST_WEBHOOK_URL` does
+`deploy:prod` ships from the operator workstation, not CI, where `secrets.MATTERMOST_WEBHOOK_URL` does
 not exist — so it never fired locally (the #950 `.env.local` fallback was a crutch,
 now retired). Instead, `.github/workflows/release-digest.yml` triggers on
 `deployment_status: success` for `environment: production` (the very Deployment the

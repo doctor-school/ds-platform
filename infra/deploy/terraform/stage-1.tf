@@ -100,9 +100,10 @@ resource "twc_server_ip" "stage_1_ipv4" {
 
 # stage-1 firewall: the api-prod public model — web open (Caddy terminates TLS for
 # every slot vhost and challenges with basic auth, step 2), SSH from the operator
-# allowlist only. NOTHING opens the box to CI: the GitHub Actions runner registers
-# OUTBOUND (it long-polls github.com), so there is no inbound CI path and no deploy
-# key — the §10 lead decision the owner may veto.
+# allowlist only. There is no runner on the box and no inbound CI path today: slots
+# are driven over SSH from the operator machine. The release-pipeline tech spec
+# (apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md)
+# plans SSH from GitHub-hosted runners with forced-command keys instead.
 resource "twc_firewall" "stage_1" {
   name        = "ds-stage-1-fw"
   description = "stage-1: web open (Caddy basic-auth vhosts), SSH admin-only, no inbound CI path. #2061."

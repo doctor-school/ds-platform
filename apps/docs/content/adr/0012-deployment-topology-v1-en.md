@@ -187,8 +187,33 @@ The shared-tooling VPS (Verdaccio + observability + IdP + Vault) is shared infra
 
 ---
 
+## Amendments
+
+### A1 — Delivery: registry images built once in GitHub Actions; release through Actions with Environment approval; hardened SSH from hosted runners (2026-10-16, #2976)
+
+**Context.** The 2-VPS docker-compose topology of §1 is running in production. Its delivery path was never decided in this ADR: releases run as `pnpm deploy:prod` (`tools/deploy/prod.mjs`), one foreground process on the owner's workstation that ships the source tree over SSH (`git archive`), builds every image on the boxes and holds the only SSH keys, with port 22 open to that workstation's `/32` only. Over 2026-09-15 → 2026-10-15 there were 29 successful and 17 failed or aborted releases; the failures that exist only because the release runs from a personal machine (egress IP drifting off the `/32`, an environment variable missing on the PC, the agent harness killing the process mid-release on 2026-10-13) and the ones caused by on-box builds (registry rate limits, api-prod overload) together outnumber real product failures. Nothing on the box detaches remote work, so a dead client can leave a release half-applied.
+
+**Decision.**
+
+- **Build once.** Each first-party image is built once by a GitHub-hosted runner on merge to `main`, tagged by the full commit SHA and pushed to the Timeweb Container Registry (`ds-platform.registry.twcstorage.ru`, ru-1). Stage and production pull the same image by digest; no box builds an image.
+- **Release through Actions.** A release is a `workflow_dispatch` (the owner, or the agent on the owner's word) for a SHA that already carries a green stage-suite check; it then waits on Environment `production`, whose required reviewer is the owner. The workflow records a GitHub Deployment for success and for failure; one release runs at a time (`concurrency`).
+- **Box access.** GitHub-hosted runners reach ds-api-prod and ds-stage-1 over SSH with the hardening set of the tech spec §4 (key-only, no root login, a dedicated `deploy` user, forced-command CI keys, rate limiting, unattended security upgrades); the prod key is released only after approval; ds-data-prod stays private behind ds-api-prod. The owner-`/32` rule is retired.
+- **Durable box steps.** Every long box step runs as a locked `systemd-run` transient unit with an atomically written status file, so client death never kills it and a fresh runner can reattach.
+- **Break-glass.** The same box entrypoints are runnable by hand with the owner's offline break-glass key.
+
+**Consequences.** No personal machine, and no secret on one, is in the normal release path; the stage suite's results are stored as a commit check and a report artifact; on-box build load and its failure modes leave production; rollback becomes a pull of the previous digest. New dependencies: the Timeweb registry (fallback: `docker save` tarballs in S3) and GitHub Actions availability (fallback: break-glass). Port 22 becomes reachable from the internet under the hardening set; a pull agent remains the documented alternative if a regulatory requirement to close admin ports appears.
+
+**Why now.** The owner asked for a full review of the release path (2026-10-15) and confirmed the target picture (2026-10-16, «Да, всё так.») and the registry («Окей, берём Container Registry Timeweb.»); the access model is a lead decision under the owner's delegation of 2026-10-16.
+
+**Open follow-up.** Execution is staged under epic #2975 (tech spec §8, steps (a)–(f)): registry wiring and pull-instead-of-build, `systemd-run` entrypoints, Actions build and stage suite, the release workflow, SSH hardening, and retirement of the workstation path. Until step (f) lands, `pnpm deploy:prod` stays the runbook. The registry has no Terraform resource (manual one-off); `ds-api-migrate` (1.92 GB) is to be shrunk.
+
+**Affects.** Tech spec [`2026-10-16-release-pipeline-off-workstation-en.md`](../specs/tech/2026-10-16-release-pipeline-off-workstation-en.md); staging spec `2026-09-08-staging-previews-and-regression-contour-en.md` (§3 host builds, §5 operator-machine suite, §10 rows #2202 / #2701); skill `run-prod-deploy`; `tools/deploy/README.md`; `infra/deploy/terraform/{network,stage-1}.tf` (SSH firewall rules); ADR-0008 runner topology.
+
+---
+
 ## Cross-references
 
+- **ADR-0012 A1** — release-pipeline direction; plan: `specs/tech/2026-10-16-release-pipeline-off-workstation-en.md`.
 - **ADR-0002 OQ10** — CLOSED 2026-05-18 (DSO-53), see this ADR.
 - **ADR-0003 §8** — content lifted here; the original section is now a stub pointer.
 - **ADR-0002 §5.6** (DSO-59) — v1 availability 99.0% + maintenance window source.

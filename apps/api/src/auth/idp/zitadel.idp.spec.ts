@@ -3567,6 +3567,31 @@ describe("ZitadelIdpClient 047 staff-access calls wire shape (V-8)", () => {
     ).rejects.toBeInstanceOf(IdpUnavailableError);
   });
 
+  it("047 EARS-7: removeProjectGrant DELETEs the user grant, org-scoped; a 404 counts as removed, another non-2xx fails loud", async () => {
+    const { fetchImpl, calls } = routedFetch({
+      "/management/v1/users/u-1/grants/g-1": {},
+    });
+    await client(fetchImpl).removeProjectGrant("u-1", "g-1");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe(`${BASE}/management/v1/users/u-1/grants/g-1`);
+    expect(calls[0]!.method).toBe("DELETE");
+    expect(calls[0]!.headers["x-zitadel-orgid"]).toBe("org-1");
+
+    const gone = routedFetch({
+      "/management/v1/users/u-1/grants/g-1": { ok: false, status: 404 },
+    });
+    await expect(
+      client(gone.fetchImpl).removeProjectGrant("u-1", "g-1"),
+    ).resolves.toBeUndefined();
+
+    const down = routedFetch({
+      "/management/v1/users/u-1/grants/g-1": { ok: false, status: 503 },
+    });
+    await expect(
+      client(down.fetchImpl).removeProjectGrant("u-1", "g-1"),
+    ).rejects.toBeInstanceOf(IdpUnavailableError);
+  });
+
   it("047 EARS-2: listProjectGrantsWithRoles searches once per role key by project and role, merging hits by grant id", async () => {
     const { fetchImpl, calls } = routedFetch({
       "/management/v1/users/grants/_search": {

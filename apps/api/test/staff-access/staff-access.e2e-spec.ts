@@ -1238,6 +1238,61 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(revoked[0]!.metadata.event_id).toBeUndefined();
     });
 
+    it("047 EARS-7: revoking the last role of a grant removes the grant, ends the sessions, records one auth.role.revoked and re-projects the mirror", async () => {
+      const admin = await enrolledStaff("adm", "platform_admin");
+      // A grant that predates EARS-4/5: platform_admin alone, no doctor_guest.
+      const solo = await enrolledStaff("solo", "platform_admin");
+      const soloGrant = await fake.getProjectGrant(solo.sub);
+      await fake.updateProjectGrantRoles(solo.sub, soloGrant!.grantId, [
+        "platform_admin",
+      ]);
+      expect(fake.grantedRoles(solo.sub)).toEqual(["platform_admin"]);
+      const update = vi.spyOn(fake, "updateProjectGrantRoles");
+      const remove = vi.spyOn(fake, "removeProjectGrant");
+      const since = await dbNow();
+
+      const res = await revoke(admin, {
+        userId: solo.sub,
+        role: "platform_admin",
+      });
+      expect(res.statusCode).toBe(204);
+      expect(update).not.toHaveBeenCalled();
+      expect(remove).toHaveBeenCalledTimes(1);
+      expect(await fake.getProjectGrant(solo.sub)).toBeNull();
+      expect(await adminSessionStatus(solo)).toBe(401);
+      expect(await mirrorRole(solo.sub)).toBe(DOCTOR_GUEST);
+      const revoked = await roleRows(solo.sub, since);
+      expect(revoked.map((r) => r.event_type)).toEqual(["auth.role.revoked"]);
+    });
+
+    it("047 EARS-7: a revocation of a role the person does not hold is refused, nothing written", async () => {
+      const admin = await enrolledStaff("adm", "platform_admin");
+      const eventId = await insertEvent("Конгресс 047 — не выдано");
+      const member = await signedInMember("congress-program-committee");
+      const update = vi.spyOn(fake, "updateProjectGrantRoles");
+      const remove = vi.spyOn(fake, "removeProjectGrant");
+      const since = await dbNow();
+
+      for (const body of [
+        { userId: member.sub, role: "event-registrar", eventId },
+        { userId: member.sub, role: "platform_admin" },
+      ]) {
+        const res = await revoke(admin, body);
+        expect(res.statusCode).toBe(409);
+        expect((res.json() as { errorCode: string }).errorCode).toBe(
+          "REVOKE_ALREADY_COMPLETE",
+        );
+      }
+      expect(update).not.toHaveBeenCalled();
+      expect(remove).not.toHaveBeenCalled();
+      expect(fake.grantedRoles(member.sub).sort()).toEqual(
+        ["congress-program-committee", DOCTOR_GUEST].sort(),
+      );
+      expect(await adminSessionStatus(member)).toBe(200);
+      expect(await pendingRecord(member.pendingRef)).toBeDefined();
+      expect(await roleRows(member.sub, since)).toEqual([]);
+    });
+
     it("047 EARS-7: an IdP failure on the role removal answers 503, still ends the sessions and pending sign-in, records no revocation, and the repeat finishes it with one auth.role.revoked", async () => {
       const admin = await enrolledStaff("adm", "platform_admin");
       const eventId = await insertEvent("Конгресс 047 — сбой");

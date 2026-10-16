@@ -795,6 +795,14 @@ export interface IdpClient {
     roleKeys: readonly string[],
   ): Promise<void>;
   /**
+   * 047 EARS-7 — remove `sub`'s project grant `grantId` outright: the revoked
+   * role was its last role key, and a grant is never rewritten to an empty
+   * role set. A grant already gone counts as removed, so a repeated
+   * revocation is idempotent. Fails loudly otherwise
+   * ({@link IdpUnavailableError}).
+   */
+  removeProjectGrant(sub: string, grantId: string): Promise<void>;
+  /**
    * 047 EARS-2 — every grant on this project carrying at least one of
    * `roleKeys`, with the holder's IdP profile where the IdP returns it. The
    * «Доступы» list is built from it: the IdP grant, not the `users.role`

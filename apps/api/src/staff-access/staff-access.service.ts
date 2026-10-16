@@ -399,8 +399,11 @@ export class StaffAccessService {
       (grant?.roleKeys.includes(role) ?? false) && !otherBinding;
 
     if (!bindingPresent && !removeFromGrant) {
+      // Nothing left to remove: complete unless a grant mark is the latest
+      // (a revocation that failed after the IdP step and awaits its repeat).
+      // No mark at all — a role never held — is refused the same way.
       const latest = await this.repo.latestRoleEvent(sub, role, eventId);
-      if (latest === "auth.role.revoked") {
+      if (latest !== "auth.role.granted") {
         throw new StaffAccessRefusal("REVOKE_ALREADY_COMPLETE");
       }
     }
@@ -416,18 +419,19 @@ export class StaffAccessService {
           eventId,
         });
       }
-      // ---- (3) The role off the IdP grant, keeping every other role.
+      // ---- (3) The role off the IdP grant, keeping every other role; a grant
+      // whose last role this was is removed (never written with no roles).
       if (removeFromGrant) {
         remaining = grant!.roleKeys.filter((key) => key !== role);
         if (remaining.length === 0) {
-          // A grant always carries `doctor_guest` beside a staff role (EARS-4/5);
-          // one holding only this role predates that, and whether the IdP
-          // accepts an empty role set is unproven — fail loud, never guess.
-          throw new Error(
-            "the grant would be left without roles; an empty role set is not written",
+          await this.idp.removeProjectGrant(sub, grant!.grantId);
+        } else {
+          await this.idp.updateProjectGrantRoles(
+            sub,
+            grant!.grantId,
+            remaining,
           );
         }
-        await this.idp.updateProjectGrantRoles(sub, grant!.grantId, remaining);
       }
     } catch (error) {
       failure = error;

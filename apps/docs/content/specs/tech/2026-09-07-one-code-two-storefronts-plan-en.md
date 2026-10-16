@@ -154,9 +154,10 @@ Everything below that a wave does not close on its way is owned by **#2075** (st
 **Docs.**
 
 - [x] `capability-ownership.md` app-local licences (month calendar, returnTo, storefront shell, msk) — rewritten in stage 1, together with the Kind definition and the host-file allowlist.
-- [ ] `019-design.md` §1.1 pointer text and `020-*` «for both storefronts» wording — reconcile with the wave-3 package; 020 EARS Issues re-labelled `track:platform`.
+- [x] `019-design.md` §1.1 pointer text.
+- [ ] `020-*` «for both storefronts» wording — reconcile with the wave-3 package; 020 EARS Issues re-labelled `track:platform`.
 - [ ] `021-requirements-{en,ru}.md` boundary table — replace «second rendition of the same contract» rows with «projection of `packages/auth-flow`; host-config diff: consents list, return context».
-- [ ] `017-design.md` / `019-design.md` sections describing doctor-local compositions of the feed / calendar block — point at the package.
+- [x] `017-design.md` / `019-design.md` sections describing doctor-local compositions of the feed / calendar block — point at the package.
 - [ ] Skills: `open-ears-issues` 2b, `request-mode-a-review`, `report-task-outcome` «reused / extract / new» rule — align vocabulary with «package / host-config / host-only».
 - [ ] Memory pointers (Claude auto-memory) collapse into one pointer to this spec.
 - [ ] DEBT.md: lines 2026-09-02 (msk ×3), 2026-09-03 (returnTo wrappers, theme-toggle, msk fourth home), 2026-09-05 (room strings, `ForwardedSession`), 2026-09-06 (`live-stand-env`, `escapeLike` ×6) — each closed by its wave, not by a separate chore.

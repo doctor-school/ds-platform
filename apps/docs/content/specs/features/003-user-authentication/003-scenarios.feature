@@ -346,6 +346,20 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And an otp.sent audit_ledger row is appended only when a code is actually issued
     And the resend is subject to the EARS-13 rate limits and writes no users or consent row
 
+  @EARS-25 @EARS-16 @happy @verification-resend
+  Scenario: Academy resend delivers the code fitting each account state without a private session
+    Given three guest Academy code screens for unique unknown, unverified and verified owned addresses
+    When each guest waits for the real cooldown and clicks the actual Academy verification resend control
+    Then all three resends return the identical neutral acknowledgement and keep the six-digit guest code screen
+    And fresh verification and login mail reach only the respective owned accounts while the unknown mailbox stays silent for 15 seconds
+    And all three resend browsers retain no private session or profile access without consuming their reissued codes
+    # Narrow Academy delivery/UI projection: verification-resend.steps.ts (#2988).
+    # Keep the broader native declaration above. apps/api/test/auth/verify.e2e-spec.ts
+    # EARS-25/16 retains timing, issued-only otp.sent audit and no users/consent
+    # writes; API abuse tests retain EARS-13 counters/rate limits.
+    # packages/auth-flow/src/verify/verify-door.test.tsx retains native resend
+    # control/cooldown contracts; accepted-code/session journeys remain distinct.
+
   @EARS-2 @EARS-16 @failure @phone-only-registration
   Scenario: Phone-only registration is not offered and never 500s
     # Zitadel cannot create a login-capable human without an email (GH #202);

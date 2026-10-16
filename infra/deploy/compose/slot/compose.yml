@@ -264,14 +264,15 @@ services:
   # --- migrate — one-shot, `--profile migrate` only -------------------------------
   # Never started by `up`: `slot up` runs it explicitly between the database clone
   # and the application start (`migrateCommandPlan` / `seedCommandPlan` in
-  # tools/staging/slot.mjs). The `migrate` target of apps/api/Dockerfile carries the
-  # FULL workspace (WORKDIR /repo/apps/api), which is what lets the same container
-  # also run the branch seed `pnpm --filter @ds/db run seed:golden`.
+  # tools/staging/slot.mjs). The `migrate` target of apps/api/Dockerfile carries a
+  # `pnpm deploy`ed @ds/db tree (drizzle-kit + tsx) and the committed migrations,
+  # not the workspace (WORKDIR /migrate/apps/api); the same container runs the
+  # branch seed as `pnpm --dir ../../packages/db run seed:golden` (GOLDEN_SEED_ARGV).
   migrate:
     build:
       context: ../../../..
       dockerfile: apps/api/Dockerfile
-      target: migrate # carries drizzle-kit + the full workspace, absent from runtime
+      target: migrate # carries drizzle-kit + tsx + migrations, absent from runtime
     image: ds-api-migrate:${DEPLOY_SHA:-local}
     container_name: ${SLOT:?}-migrate
     profiles: ["migrate"]

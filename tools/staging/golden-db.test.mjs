@@ -158,10 +158,12 @@ test("both fill steps run in the slot's migrate one-shot, never on the host", ()
     "run",
     "drizzle:migrate:ci",
   ]);
+  // A deployed @ds/db tree, not a workspace: `--filter` would match nothing and
+  // exit 0, so the seed is addressed by directory and fails loudly if absent.
   assert.deepEqual(seed.command.slice(-5), [
     "pnpm",
-    "--filter",
-    "@ds/db",
+    "--dir",
+    "../../packages/db",
     "run",
     "seed:golden",
   ]);

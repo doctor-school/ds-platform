@@ -17,7 +17,8 @@
 #           the repo's own build graph (turbo `^build`), then `pnpm deploy` assembles
 #           a self-contained prod tree (app dist + deps' dist + prod-only node_modules).
 #   migrate-tree  `pnpm deploy` of @ds/db — the package that owns drizzle.config.ts and
-#           carries drizzle-kit (devDependency) next to drizzle-orm + pg.
+#           carries drizzle-kit + tsx (devDependencies) next to drizzle-orm + pg; tsx
+#           runs the stage golden seed (`seed:golden`) from the same image.
 #   migrate one-shot drizzle-kit migrate target: that @ds/db tree + the committed
 #           migrations (apps/api/drizzle) + drizzle.config.ts, nothing else — run by
 #           `docker compose run --rm migrate` at deploy BEFORE the runtime `api`

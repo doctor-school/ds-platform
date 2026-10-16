@@ -177,6 +177,9 @@ Timeweb Cloud container registry (#2981, tech spec
   | push  | push + pull | GitHub Environment `build`, secret `REGISTRY_PUSH_TOKEN`                                                                       | `runtime-images.yml` `build` job only — it runs nothing but buildx after login                |
   | pull  | pull only   | GitHub Environment `build`, secret `REGISTRY_PULL_TOKEN`; each box, `/etc/ds-platform/registry-pull-token` (0600, `root:root`) | `runtime-images.yml` `verify` job (runs PR-head code); the box's `docker login` before a pull |
 
+  The push token also still sits on ds-stage-1 at `/etc/ds-platform/registry-push-token`
+  until its removal later under #2981; after that it lives only in Environment `build`.
+
   The registry has no per-repository scopes, so an internal PR head could still push
   outside `pr/` with the push token. Accepted: a release takes only the digests a `main`
   build recorded in its `images-<sha>.json`, never a tag. Fork PRs get neither token.

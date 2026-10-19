@@ -7,11 +7,12 @@ import { useTranslations } from "next-intl";
 import { dataProvider } from "@/providers/data-provider";
 import { authProvider } from "@/providers/auth-provider";
 import { accessControlProvider } from "@/providers/access-control-provider";
+import { ADMIN_QUERY_CLIENT_CONFIG } from "@/lib/admin-query-retry";
 
 /**
  * The Refine CSR shell (ADR-0004 §4 caveat — Refine manages its own QueryClient
  * behind this `"use client"` boundary; the admin app is effectively CSR with a
- * thin SSR layout). Wires the custom data/auth/access providers (007 EARS-8/11)
+ * thin SSR layout; its retry policy is `lib/admin-query-retry.ts`). Wires the custom data/auth/access providers (007 EARS-8/11)
  * and the taxonomy/event resources whose routes back the admin surface. The
  * i18n copy is next-intl (`useTranslations` in each page), so Refine's own
  * `i18nProvider` is not needed — every user-facing string flows through the RU
@@ -77,6 +78,8 @@ export function Providers({ children }: { children: ReactNode }) {
         syncWithLocation: true,
         warnWhenUnsavedChanges: false,
         disableTelemetry: true,
+        // #2998: a 401/403 is never retried — the sign-in redirect is immediate.
+        reactQuery: { clientConfig: ADMIN_QUERY_CLIENT_CONFIG },
       }}
     >
       {children}

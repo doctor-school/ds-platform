@@ -231,6 +231,38 @@ test.describe("011 EARS-6/7 — TOTP challenge on admin login (browser)", () => 
     });
   });
 
+  test("#2998: a Cyrillic deep URL rides to the code screen encoded once and lands back on itself", async ({
+    page,
+  }) => {
+    const { email, password } = await bootstrapAdminSession(ORIGIN);
+    const secret = await enrolOnce(page, { email, password });
+    await page.getByTestId("sign-out").click();
+    await page.waitForURL(/\/login/, { timeout: 20_000 });
+
+    // The browser reports this path and query percent-encoded (`%D1%82…`).
+    const deep = new URL("/events/тест?q=кардио", ORIGIN);
+    const landing = `${deep.pathname}${deep.search}`;
+    await page.goto(landing);
+    await page.waitForURL(/\/login\?/, { timeout: 20_000 });
+
+    await signIn(page, { email, password }, { navigate: false });
+    await page.waitForURL(/\/mfa\/challenge\?/, { timeout: 20_000 });
+    // Encoded once: the readable target, so no `%25` (an encoded `%`) in it.
+    const carried = new URL(page.url()).search;
+    expect(carried).not.toContain("%25");
+    expect(new URL(page.url()).searchParams.get("to")).toBe(
+      "/events/тест?q=кардио",
+    );
+
+    await page
+      .getByTestId("mfa-challenge-form")
+      .getByRole("textbox")
+      .fill(totpCode(secret, Date.now() + STEP_MS));
+    await page.waitForURL((url) => `${url.pathname}${url.search}` === landing, {
+      timeout: 20_000,
+    });
+  });
+
   test("#2782 security: a hostile ?to= never leaves the admin or skips the second factor", async ({
     page,
   }) => {
@@ -311,6 +343,14 @@ test.describe("011 EARS-6/7 — TOTP challenge on admin login (browser)", () => 
       if (req.isNavigationRequest() && req.frame() === page.mainFrame())
         documentLoads.push(req.url());
     });
+    // #2998: the refused read is sent once — a 401 is neither retried nor
+    // re-sent by a remount of the page while the sign-out runs, so the sign-in
+    // screen follows the first refusal.
+    const refusedReads: string[] = [];
+    page.on("response", (res) => {
+      if (/\/v1\/admin\/projects/.test(res.url()) && res.status() === 401)
+        refusedReads.push(res.url());
+    });
     const refused = page.waitForResponse(
       (res) => /\/v1\/admin\/projects/.test(res.url()) && res.status() === 401,
     );
@@ -318,6 +358,8 @@ test.describe("011 EARS-6/7 — TOTP challenge on admin login (browser)", () => 
     await page.getByRole("searchbox").press("Enter");
     await refused;
     await page.waitForURL(/\/login\?/, { timeout: 20_000 });
+    await expect(page.getByTestId("login-submit")).toBeVisible();
+    expect(refusedReads).toHaveLength(1);
     expect(documentLoads).toEqual([]);
     expect(new URL(page.url()).searchParams.get("to")).toBe(deep);
 

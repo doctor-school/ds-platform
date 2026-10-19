@@ -94,7 +94,33 @@ export function resolveAdminReturnTarget(
   );
   if (refused) return null;
 
-  return `${pathname}${url.search}${url.hash}`;
+  return readableNonAscii(`${pathname}${url.search}${url.hash}`);
+}
+
+/**
+ * #2998 — the parsed URL reports a Cyrillic path as `%D1%82…`. Carried like
+ * that, the `?to=` hop encodes it a second time (`%25D1%2582…`). The target is
+ * therefore returned with its non-ASCII escapes decoded — the readable path the
+ * browser shows — so that hop encodes it exactly once.
+ *
+ * Only runs of escaped non-ASCII bytes (`%80`–`%FF`) are decoded, after every
+ * check above has passed on the encoded form: such a character can be neither a
+ * delimiter nor `%`, and the URL parser re-encodes it to the same bytes, so the
+ * result stays a fixed point. A run that is not valid UTF-8 stays escaped, and
+ * so does each decoded character the validator refuses raw (a no-break space).
+ */
+function readableNonAscii(target: string): string {
+  return target.replace(/(?:%[89a-f][0-9a-f])+/gi, (run) => {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(run);
+    } catch {
+      return run;
+    }
+    return Array.from(decoded, (ch) =>
+      hasUnsafeCharacter(ch) ? encodeURIComponent(ch) : ch,
+    ).join("");
+  });
 }
 
 /** Where a completed sign-in lands: the valid target, else {@link ADMIN_LANDING}. */

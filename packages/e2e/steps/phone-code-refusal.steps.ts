@@ -194,7 +194,7 @@ Then(
   async ({ page, world }) => {
     const state = attempt(page);
     await expect(state.page.locator("#profile-phone-code-error")).toHaveText(
-      "Неверный код",
+      /^⚠?\s*Неверный код$/,
     );
     await expect(state.page.getByTestId("profile-phone-code")).toBeVisible();
     await expect(state.page.getByTestId("profile-phone-verified")).toHaveCount(

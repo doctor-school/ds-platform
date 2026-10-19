@@ -86,7 +86,7 @@ describe("020 EARS-1 — shared event-page view projection", () => {
     expect(eventPageDateLine(VIEW)).toBe("28 августа, 19:00 (МСК) · 90 минут");
   });
 
-  it("020 EARS-1: an online event's hero time reads in the viewer's zone with its label; an offline event stays МСК (gate row 30, Amendment 2026-10-02)", () => {
+  it("020 EARS-2: an online event's hero time reads in the viewer's zone with its label; an offline event stays МСК (gate row 30, Amendment 2026-10-02)", () => {
     const zone = "Asia/Yekaterinburg";
     expect(eventPageDateLine(VIEW, undefined, zone)).toBe(
       "28 августа, 21:00 (GMT+5) · 90 минут",

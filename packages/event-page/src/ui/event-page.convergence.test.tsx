@@ -152,7 +152,7 @@ describe.each(Object.entries(HOSTS))(
       expect(gate.textContent).not.toMatch(/бесплатн/iu);
     });
 
-    it("020 EARS-1: the server renders the hero time in МСК on both hosts (gate row 30, D9, Amendment 2026-10-02)", async () => {
+    it("020 EARS-2: the server renders the hero time in МСК on both hosts (gate row 30, D9, Amendment 2026-10-02)", async () => {
       const html = await renderPage(config);
       expect(html).toContain("28 августа, 19:00 (МСК) · 90 минут");
     });
@@ -160,7 +160,7 @@ describe.each(Object.entries(HOSTS))(
 );
 
 describe("020 Amendment 2026-10-02 (gate row 30, D9): the client island re-formats the time", () => {
-  it("EARS-1: an online event's hero time reads in the viewer's zone with its label; an offline event stays МСК (gate row 30, D9)", () => {
+  it("EARS-2: an online event's hero time reads in the viewer's zone with its label; an offline event stays МСК (gate row 30, D9)", () => {
     viewerZone.current = "Asia/Yekaterinburg";
     const { rerender } = render(
       <ViewerZoneTime moment={ENDED} part="dateLine" />,

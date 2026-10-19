@@ -221,7 +221,10 @@ Given(
     await assertSecureSession(state.page, verified.response, world.hostBaseUrl);
     await assertIdentity(state, world.hostBaseUrl);
     await state.page.clock.install();
-    await state.page.clock.pauseAt(new Date());
+    // Sample the controlled page clock, with headroom for protocol latency,
+    // before any phone countdown starts. Node's clock is independent of it.
+    const pausePoint = await state.page.evaluate(() => Date.now() + 60_000);
+    await state.page.clock.pauseAt(new Date(pausePoint));
     state.page.on("request", (request) => {
       if (
         request.method() === "POST" &&

@@ -19,7 +19,6 @@ import {
   formatServiceNames,
   parseDeployServices,
   rollbackBoundaryVerdict,
-  serviceBuildScript,
   shellVarName,
 } from "./service-set.mjs";
 
@@ -220,9 +219,9 @@ test("1896: human labels render the derived set, not a hard-coded list", () => {
 //
 // A rollback ships no tree: `docker compose up -d` runs against the compose the
 // LAST DEPLOY left on the box. A service the target predates is still declared
-// there with a `build:` section, so Compose would rebuild it from the current
-// on-box source under the rollback SHA and report success over the code being
-// reverted. The crossing must be refused before any ssh.
+// there as `ds-<svc>:${DEPLOY_SHA:?}`, and no image of it exists for the
+// rollback SHA, so a success line would be untrue for that surface. The
+// crossing must be refused before any ssh.
 
 const svc = (...names) => names.map((name) => ({ name }));
 
@@ -277,51 +276,26 @@ test("1896: service names that would break the generated verify shell are reject
   assert.ok(deployServiceSet(currentCompose).length > 0);
 });
 
-test("2283: the build script emits one `docker compose build <name>` line per service, in set order", () => {
-  const script = serviceBuildScript(svc("api", "portal", "admin", "doctor"));
-  const buildLines = script
-    .split("\n")
-    .filter((l) => l.includes("docker compose build"));
-  assert.deepEqual(buildLines, [
-    "sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build api",
-    "sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build portal",
-    "sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build admin",
-    "sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build doctor",
-  ]);
-  // Never a bare `docker compose build` — that is the #2283 outage: BuildKit
-  // running three `next build` processes at once on the live 8 GB box.
+test("2981: a profiled one-shot (migrate) is never in the swapped set, whatever its tag", () => {
+  // The api-prod migrate image is `ds-api-migrate:${DEPLOY_SHA:?}` now (pulled,
+  // SHA-tagged) — it must still not be demanded as a running container.
+  const compose =
+    "services:\n" +
+    "  api:\n    image: ds-api:${DEPLOY_SHA:?}\n" +
+    "  migrate:\n    image: ds-api-migrate:${DEPLOY_SHA:?}\n    profiles: [\"migrate\"]\n";
+  assert.deepEqual(
+    deployServiceSet(compose).map((s) => s.name),
+    ["api"],
+  );
   assert.equal(
-    buildLines.some((l) => /docker compose build\s*$/.test(l)),
+    parseDeployServices(currentCompose).some((s) => s.name === "migrate"),
     false,
   );
-  // One banner per service, so the no-output watchdog (#905) is fed between
-  // images and the transcript shows which image is being built.
-  for (const name of ["api", "portal", "admin", "doctor"]) {
-    assert.match(script, new RegExp(`^echo '── build .*${name}.*──'$`, "m"));
-  }
 });
 
-test("2283: the build script honours the caller's attestation flag", () => {
-  const script = serviceBuildScript(svc("api"), { noAttest: "FOO=1" });
-  assert.match(script, /^sudo FOO=1 docker compose build api$/m);
-});
-
-test("2283: an empty or unusable service set refuses to render a build script", () => {
-  assert.throws(() => serviceBuildScript([]), ServiceSetError);
-  assert.throws(() => serviceBuildScript(undefined), ServiceSetError);
-  // A name the generated shell cannot carry must never reach the box.
-  assert.throws(() => serviceBuildScript([{ name: "3d" }]), ServiceSetError);
-});
-
-test("2283: the prod deploy builds images one at a time, never all at once", () => {
-  const deploy = readFileSync(join(REPO_ROOT, "tools", "deploy", "prod.mjs"), "utf8");
-  // The build step renders the helper; no bare `docker compose build` survives.
-  // (`--profile migrate run --build --rm migrate` builds ONE image and is not a
-  // match for this shape.)
-  assert.equal(
-    /docker compose build\s*(\n)?`?\s*$/m.test(deploy),
-    false,
-    "prod.mjs still ships a bare `docker compose build` — it would build every image concurrently",
-  );
-  assert.match(deploy, /serviceBuildScript\(services/);
+test("2981: the rollback boundary reason no longer depends on `build:` sections", () => {
+  const verdict = rollbackBoundaryVerdict(svc("api", "doctor"), svc("api"));
+  assert.equal(verdict.ok, false);
+  assert.doesNotMatch(verdict.reason, /build:|REBUILD/);
+  assert.match(verdict.reason, /no image of theirs exists for the rollback SHA/);
 });

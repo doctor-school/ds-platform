@@ -38,11 +38,12 @@
 //               · release gate (tools/deploy/release-gate.mjs)
 //               · stage `main` check: converge the slot to the target, run
 //                 the full stage suite (tools/deploy/stage-main-check.mjs)
-//   ship        git archive <sha> → api-prod + data-prod over ssh (no registry)
+//   ship        git archive <sha> → api-prod + data-prod over ssh (compose + configs)
 //   data-prod   verify cluster/artifacts → up immutable images (no build/pull)
 //   checkpoint  pgbackrest pre-migrate incr backup  (DSO-129 — BEFORE migrate)
-//   api-prod    migrate → build the SHA-tagged images of the TARGET tree's
-//               compose (ds-<svc>:<sha>; derived, #1896) → up -d
+//   api-prod    pull the recorded `main` digests (resolved in pre-flight, #2981)
+//               as ds-<image>:<sha> → boot-verify → migrate → up -d (verify set
+//               derived from the TARGET tree's compose, #1896); nothing is built
 //   config      compare running bind mounts; restart only stale consumers (#1175)
 //   retention   keep the last 3 SHA-tagged images per repo  (DSO-127)
 //   smoke       tools/deploy/smoke-prod.mjs --expect-sha <sha>  (DSO-128)
@@ -111,9 +112,19 @@ import {
   formatServiceImages,
   formatServiceNames,
   rollbackBoundaryVerdict,
-  serviceBuildScript,
   shellVarName,
 } from "./service-set.mjs";
+import {
+  IMAGE_REGISTRY,
+  RECORDED_IMAGE_NAMES,
+  assertImageDigests,
+  imageDigestScript,
+  pullRecordedImagesScript,
+  pullTokenProbeScript,
+  pullTokenVerdict,
+  resolveRecordedImagesViaGh,
+  validateImageManifest,
+} from "./lib/registry.mjs";
 import {
   PROD_HEALTH_URL,
   STALL_BUDGET_BUILD_MS,
@@ -143,35 +154,110 @@ const DATA_PROD = process.env.DS_DATA_PROD_SSH || "ds-data-prod";
 const REMOTE_TREE = "~/ds-platform";
 const VPC_IP = process.env.DS_DATA_PROD_VPC_IP || "192.168.0.10";
 const IMAGE_RETENTION = 3;
-// #1419: build-cache cap. SINGLE SOURCE for the post-deploy prune below. The
-// daemon-level policy in `infra/deploy/cloud-init/api-prod.yaml`
-// (`builder.gc.defaultReservedSpace` in /etc/docker/daemon.json) MUST carry the
-// same figure — the two enforce one cap from different sides, and a silent
-// disagreement makes the box's real ceiling whichever is looser. Changing this
-// constant means changing the cloud-init value and the `infra/deploy/README.md`
-// "Build-cache GC" section in the same commit.
-const BUILD_CACHE_RESERVED_SPACE = "10GB";
-
-// Reproducible on-box builds (#486). By default `docker compose build` attaches a
-// BuildKit *provenance* attestation whose metadata varies per build, so the image
-// CONFIG digest (= the image ID) changes on every rebuild even when the Dockerfile
-// and context are byte-identical and every layer is cache-hit. `up -d` compares the
-// running container's image ID against the tag and RECREATES on any difference — so
-// a no-op redeploy needlessly recreated the data-prod `postgres` container (a ~24s
-// persistence blip) and would churn the SHA-tagged api/portal images on a same-SHA
-// re-run too. Disabling default attestations makes the image ID a pure function of
-// the build inputs: unchanged inputs → identical ID → `up -d` is a true no-op; a
-// real Dockerfile/context change → new ID → recreate (both verified live on
-// data-prod). We never consume the attestation (on-box build, no registry push, no
-// signature verifier), so dropping it costs nothing.
-//   Placement matters: this is `sudo VAR=val cmd` (var AFTER sudo — sudo's own
-//   env-setting syntax, which it honors), NOT `VAR=val sudo cmd` (var before sudo,
-//   which sudo's env_reset strips — the exact trap the VPC_IP `.env` sidesteps,
-//   README §7). Verified stable across repeated builds on the box.
-const NO_ATTEST = "BUILDX_NO_DEFAULT_ATTESTATIONS=1";
-
 const API_COMPOSE = `${REMOTE_TREE}/infra/deploy/compose/api-prod`;
 const DATA_COMPOSE = `${REMOTE_TREE}/infra/deploy/compose/data-prod`;
+
+// --- #2981: the recorded `main` images --------------------------------------
+// api-prod builds nothing. A release runs only the digests `runtime-images.yml`
+// recorded for a push to `main` (spec 2026-10-16-release-pipeline-off-workstation
+// §3 item 1): resolved on the operator side in pre-flight, pulled on the box by
+// digest, tagged `ds-<image>:<sha>`, and proven by RepoDigests before anything
+// boots. The shared mechanics live in ./lib/registry.mjs (the stage slots use the
+// same ones).
+export const PROD_MANIFEST_POLICY = Object.freeze({
+  acceptRefs: Object.freeze(["main"]),
+  consumer: "a production release",
+  mainOnly: true,
+  purpose: "release",
+});
+
+/** Validates a recorded manifest for a production release of `sha` (pure). */
+export function validateProdImageManifest(manifest, sha) {
+  return validateImageManifest(manifest, { ...PROD_MANIFEST_POLICY, sha });
+}
+
+/**
+ * Every repo the box holds SHA-tagged images of — the retention set. NOT
+ * target-derived on purpose (#1896): retention must reclaim tags of every repo
+ * the box has ever pulled, including one absent from a hotfix target's compose.
+ */
+export const RETAINED_IMAGE_REPOS = Object.freeze(
+  RECORDED_IMAGE_NAMES.map((name) => `ds-${name}`),
+);
+
+/**
+ * The api-prod compose's interpolation file (`.env` beside compose.yml, kept
+ * across `shipTree` by `preserved`). Every `${VAR:?}` the compose requires must
+ * be rendered here — deploy and rollback both write it before their first compose
+ * call, and every later compose call (migrate, up, runtime-config restart) reads
+ * it. Rewrites ONLY the DEPLOY_SHA line: the file also carries other non-secret
+ * interpolation vars (SMARTCAPTCHA_SITE_KEY, #729/#186) a clobbering `>` would wipe.
+ */
+export const API_PROD_ENV_RENDERED_VARS = Object.freeze(["DEPLOY_SHA"]);
+
+export function deployShaEnvScript(sha) {
+  if (!/^[0-9a-f]{40}$/.test(String(sha ?? ""))) {
+    throw new Error(`DEPLOY_SHA must be a full commit SHA, got ${JSON.stringify(sha)}`);
+  }
+  return `{ { [ -f .env ] && grep -v '^DEPLOY_SHA=' .env; } || true; printf 'DEPLOY_SHA=%s\\n' '${sha}'; } > .env.next && mv .env.next .env`;
+}
+
+/**
+ * The on-box pull step: the five recorded digests, reused when a local tag already
+ * carries them, logged out after. The token is read on the box from its root-only
+ * file — it never appears in this script.
+ */
+export function apiProdPullScript({ sha, images }) {
+  return `${pullRecordedImagesScript({ sha, images })}\n`;
+}
+
+/** The retention script: keep the newest `keep` SHA tags of every retained repo. */
+export function retentionScript(keep = IMAGE_RETENTION) {
+  return `prune_repo() {
+  repo="$1"; keep="$2"
+  # \`|| true\` on grep: under pipefail a grep that filters out EVERY line (e.g.
+  # only a legacy \`:local\` tag exists — no SHA tags) exits 1, which would abort
+  # the whole deploy. "nothing to prune" is success, not failure.
+  sudo docker images "$repo" --format '{{.CreatedAt}}\\t{{.Tag}}' \\
+    | { grep -vP '\\tlocal$' || true; } \\
+    | sort -r \\
+    | awk -v k="$keep" -F'\\t' 'NR>k{print $2}' \\
+    | while IFS= read -r tag; do
+        [ -n "$tag" ] && sudo docker rmi "$repo:$tag" >/dev/null 2>&1 || true
+      done
+}
+# \`prune_repo\` is a no-op for a repo with no images; an image a running
+# container uses is refused by \`docker rmi\` (no -f) and kept.
+${RETAINED_IMAGE_REPOS.map((repo) => `prune_repo ${repo} ${keep}`).join("\n")}
+# A pull leaves the registry digest reference (\`<registry>/<image>@sha256:…\`)
+# beside the local tag; on this box's containerd image store it is a record of
+# its own and keeps the content alive after the tag is pruned. Drop every one
+# that no kept \`ds-*\` tag shares an image ID with (a running container's image
+# is refused by \`docker rmi\` and kept).
+kept_ids=$(sudo docker images --format '{{.Repository}} {{.ID}}' | awk '$1 ~ /^ds-/ {print $2}' | sort -u)
+sudo docker images --digests --filter 'reference=${IMAGE_REGISTRY}/*' --format '{{.Repository}}@{{.Digest}} {{.ID}}' \\
+  | while read -r ref id; do
+      if printf '%s\\n' "$kept_ids" | grep -Fxq "$id"; then continue; fi
+      sudo docker rmi "$ref" >/dev/null 2>&1 || true
+    done
+echo "retained ds-api tags:"; sudo docker images ds-api --format '  {{.Tag}} ({{.CreatedAt}})'
+`;
+}
+
+/**
+ * The prod migrate + swap. The migrate image is the recorded `api-migrate` digest
+ * tagged with the same SHA, so nothing is (re)built: no `--build`.
+ * `</dev/null`: compose run attaches the container's stdin by default — never let
+ * it read this shell's stdin (see REMOTE_BASH; defense in depth).
+ */
+export function migrateAndUpScript() {
+  return `cd ${API_COMPOSE}
+echo '── migrate (drizzle-kit; idempotent) ──'
+sudo docker compose --profile migrate run --rm migrate </dev/null
+echo '── up -d ──'
+sudo docker compose up -d
+`;
+}
 
 // `shipTree` replaces the remote tree, so single-file bind mounts stay pinned
 // to the pre-deploy inodes until their containers restart. Compare the shipped
@@ -350,8 +436,8 @@ function localCap(cmd, args) {
 async function preflight(hotfixRef = null) {
   step(
     hotfixRef
-      ? `Pre-flight (HOTFIX ${REF_FLAG}): stage check prerequisites · clean tree · target on origin · descendant of prod · cherry-picks of main · green CI · no live broadcast · release gate · stage main check`
-      : "Pre-flight: stage check prerequisites · clean tree · HEAD==origin/main · green CI · no live broadcast · release gate · stage main check",
+      ? `Pre-flight (HOTFIX ${REF_FLAG}): stage check prerequisites · clean tree · target on origin · descendant of prod · cherry-picks of main · green CI · no live broadcast · release gate · recorded images · stage main check`
+      : "Pre-flight: stage check prerequisites · clean tree · HEAD==origin/main · green CI · no live broadcast · release gate · recorded images · stage main check",
   );
 
   // 0. stage `main` check prerequisites (#2806): the check is the last step, but
@@ -429,12 +515,59 @@ async function preflight(hotfixRef = null) {
   //    range, with no extra wiring.
   await assertReleaseGate(target);
 
+  // 5b. #2981: the recorded `main` digests for the target and the box's pull
+  //     token, resolved BEFORE anything touches a box — a missing / running /
+  //     failed runtime-images run or a bad manifest refuses here with its cause.
+  //     There is no build fallback: api-prod has no way to build any more.
+  const images = await resolveProdImages(target);
+
   // 6. stage `main` check (#2701, spec §10.4 item 8): converge the stage `main`
   //    slot to the target and run the full stage suite from a clean checkout of
   //    it. Last, because it is the slowest step; same owner-go bypass as step 5.
   assertStageMainCheck(target);
 
-  return target;
+  return { sha: target, images };
+}
+
+// #2981: operator-side manifest resolution (gh) + a read-only token probe on
+// api-prod. Used by the deploy pre-flight and by a rollback whose target images
+// are no longer on the box.
+async function resolveProdImages(sha) {
+  const t = Date.now();
+  let resolved;
+  try {
+    resolved = await resolveRecordedImagesViaGh({ ...PROD_MANIFEST_POLICY, sha });
+  } catch (e) {
+    die(
+      `recorded images for ${sha.slice(0, 12)}: ${e.message}\n` +
+        `  api-prod pulls only the digests a \`main\` push of runtime-images.yml recorded;` +
+        ` nothing is built on the box.`,
+    );
+  }
+  ok(`recorded \`main\` images for ${sha.slice(0, 12)} (run ${resolved.run.url})`, t);
+  const token = pullTokenVerdict(await sshCapture(API_PROD, pullTokenProbeScript()), {
+    host: API_PROD,
+  });
+  if (!token.ok) die(token.reason);
+  ok(`registry pull token provisioned on ${API_PROD}`);
+  return resolved.images;
+}
+
+// #2981: pull (or reuse) the recorded digests on api-prod as `ds-<image>:<sha>`,
+// then prove every tag carries its recorded digest — before anything boots.
+async function pullRecordedImages(sha, images, { label }) {
+  await sshScript(API_PROD, apiProdPullScript({ sha, images }), {
+    label,
+    stallBudgetMs: STALL_BUDGET_BUILD_MS,
+  });
+  try {
+    assertImageDigests(
+      await sshCapture(API_PROD, imageDigestScript({ sha, images })),
+      images,
+    );
+  } catch (e) {
+    die(`${label}: ${e.message}`);
+  }
 }
 
 // Resolve the `--ref <sha>` argument to a full commit SHA that exists on ORIGIN.
@@ -885,7 +1018,7 @@ sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; IDP_BASE_URL=${IDP_BAS
 
 // #1896: the per-service verify set of a deploy is READ from the TARGET tree's
 // compose file, not from the local checkout. `--ref <sha>` ships that commit's
-// tree, so its compose is what the on-box `docker compose build` consumes and
+// tree, so its compose is what the on-box `docker compose up` consumes and
 // therefore the only truthful source for "which SHA-tagged images must boot and
 // must be running afterwards". Fail-closed: an unreadable or empty derivation
 // dies here, before any ssh — never "probe nothing".
@@ -981,7 +1114,7 @@ done`,
 // images swapped, and the freshly started portal + admin crash-looped, so the
 // public surface 502'd until a human rolled back.
 //
-// This runs the freshly built images BEFORE anything is swapped, as throwaway
+// This runs the freshly pulled images BEFORE anything is swapped, as throwaway
 // detached containers with the SAME env_file production uses, and asserts each
 // answers non-5xx on `/` from inside the container (same probe shape as the
 // compose healthcheck). A non-booting image aborts the deploy while the OLD
@@ -1054,7 +1187,7 @@ ${probed.map((s) => `probe ${s.name} ${s.image} ${s.port}`).join("\n")}`,
   const bad = names.filter((s) => verdicts[s] !== "OK");
   if (bad.length > 0) {
     die(
-      `freshly built image(s) do NOT boot: ${bad
+      `freshly pulled image(s) do NOT boot: ${bad
         .map((s) => `${s}=${verdicts[s] ?? "NO-VERDICT"}`)
         .join(", ")}\n` +
         `  Nothing was swapped — the PREVIOUS containers are still up and serving.\n` +
@@ -1102,9 +1235,9 @@ export async function preparePostgresDeployment(
 }
 
 async function deploy(hotfixRef = null) {
-  const sha = await preflight(hotfixRef);
+  const { sha, images } = await preflight(hotfixRef);
   await assertProdApiEnvHasNoTestToken();
-  // #1896: everything per-service below (build banner, pre-swap boot probe,
+  // #1896: everything per-service below (pull banner, pre-swap boot probe,
   // truthful-success verify, smoke scope) is derived from THIS set.
   const services = resolveTargetServiceSet(
     sha,
@@ -1127,7 +1260,7 @@ async function deploy(hotfixRef = null) {
     ? `hotfix @ ${sha.slice(0, 12)}`
     : `origin/main @ ${sha.slice(0, 12)}`;
 
-  // Capture the previously-deployed prod SHA BEFORE the build/up swap — the
+  // Capture the previously-deployed prod SHA BEFORE the pull/up swap — the
   // durable deploy record IS the running api-prod container's image tag
   // `ds-api:<sha>` (no separate persistence file). This is the anchor the
   // release-notes digest ranges from (Issue #868). Non-fatal: any ssh error →
@@ -1217,36 +1350,27 @@ sudo docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info
       .join("\n"),
   );
 
-  // ORDER (#1410): build → boot-verify → migrate → up -d. The app images are
-  // built and PROVEN TO BOOT before the database is migrated and before any
+  // ORDER (#1410): pull → boot-verify → migrate → up -d. The recorded app images
+  // are pulled and PROVEN TO BOOT before the database is migrated and before any
   // container is swapped, so a #1407-class non-booting image aborts the deploy
-  // with prod untouched — no 502, and no migration applied for a build that was
+  // with prod untouched — no 502, and no migration applied for an image that was
   // never going to serve. (The pre-migrate pgbackrest checkpoint above still
-  // anchors PITR for the migrate step itself.)
+  // anchors PITR for the migrate step itself.) Nothing is built on api-prod
+  // (#2981): one `next build` beside live production is what took the site down
+  // for ~17 min on 2026-09-18 (#2283).
   step(
-    `api-prod: build ${formatServiceImages(services, "/")} :${sha.slice(0, 12)}…`,
+    `api-prod: pull recorded ${formatServiceImages(services, "/")} + ds-api-migrate :${sha.slice(0, 12)}…`,
   );
   t = Date.now();
   await sshScript(
     API_PROD,
     `cd ${API_COMPOSE}
-# Rewrite ONLY the DEPLOY_SHA line — this .env also carries other non-secret
-# compose-interpolation vars (SMARTCAPTCHA_SITE_KEY, #729/#186: the portal's and
-# — since #1723 — the doctor storefront's RUNTIME captcha site key, #2981) that a
-# clobbering '>' would silently wipe, recreating both storefronts with an empty
-# site key (the inactive captcha placeholder on every bot-protected door).
-{ { [ -f .env ] && grep -v '^DEPLOY_SHA=' .env; } || true; printf 'DEPLOY_SHA=%s\\n' '${sha}'; } > .env.next && mv .env.next .env
-echo '── build ${sha.slice(0, 12)}… : ${formatServiceImages(services)} ──'
-# ${NO_ATTEST}: reproducible image IDs so a same-SHA re-run is a true no-op (#486).
-# ONE IMAGE AT A TIME (#2283): a bare 'docker compose build' lets BuildKit run
-# three next-build processes at once beside live production on this 4 vCPU /
-# 8 GB / swapless box — that stalled the site for ~17 min on 2026-09-18. errexit
-# (REMOTE_BASH) aborts the script at the first failing service.
-${serviceBuildScript(services, { noAttest: NO_ATTEST })}
+${deployShaEnvScript(sha)}
 `,
-    { label: "api-prod build", stallBudgetMs: STALL_BUDGET_BUILD_MS },
+    { label: "api-prod DEPLOY_SHA" },
   );
-  ok("images built", t);
+  await pullRecordedImages(sha, images, { label: "api-prod pull" });
+  ok("recorded digests pulled, tagged and verified (RepoDigests)", t);
 
   step("#1410: PRE-SWAP boot verify (old containers still serving)");
   // No `t = Date.now()` here: verifyImagesBoot() prints its own `ok(...)` line
@@ -1260,20 +1384,10 @@ ${serviceBuildScript(services, { noAttest: NO_ATTEST })}
 
   step("api-prod: migrate → up -d");
   t = Date.now();
-  await sshScript(
-    API_PROD,
-    `cd ${API_COMPOSE}
-echo '── migrate (drizzle-kit; idempotent) ──'
-# --build: rebuild the migrate image from the freshly shipped tree, else the
-#   run reuses a stale ds-api-migrate:local and applies OLD migrations.
-# </dev/null: compose run attaches the container's stdin by default — never
-#   let it read this shell's stdin (see REMOTE_BASH; defense in depth).
-sudo ${NO_ATTEST} docker compose --profile migrate run --build --rm migrate </dev/null
-echo '── up -d ──'
-sudo docker compose up -d
-`,
-    { label: "api-prod deploy", stallBudgetMs: STALL_BUDGET_BUILD_MS },
-  );
+  await sshScript(API_PROD, migrateAndUpScript(), {
+    label: "api-prod deploy",
+    stallBudgetMs: STALL_BUDGET_BUILD_MS,
+  });
   ok("migrate + up -d", t);
 
   step("api-prod: apply bind-mounted Caddy + Centrifugo configs (#1175)");
@@ -1286,80 +1400,11 @@ sudo docker compose up -d
 
   step(`DSO-127: image retention (keep last ${IMAGE_RETENTION} SHA tags/repo)`);
   t = Date.now();
-  await sshScript(
-    API_PROD,
-    `prune_repo() {
-  repo="$1"; keep="$2"
-  # \`|| true\` on grep: under pipefail a grep that filters out EVERY line (e.g.
-  # only \`:local\` tags exist yet — no SHA tags) exits 1, which would abort the
-  # whole deploy. "nothing to prune" is success, not failure.
-  sudo docker images "$repo" --format '{{.CreatedAt}}\\t{{.Tag}}' \\
-    | { grep -vP '\\tlocal$' || true; } \\
-    | sort -r \\
-    | awk -v k="$keep" -F'\\t' 'NR>k{print $2}' \\
-    | while IFS= read -r tag; do
-        [ -n "$tag" ] && sudo docker rmi "$repo:$tag" >/dev/null 2>&1 || true
-      done
-}
-# NOT target-derived on purpose (#1896): retention must reclaim tags of every
-# repo the box has EVER built, including one absent from a hotfix target's
-# compose — pruning only the target's set would leak that repo's old tags.
-# \`prune_repo\` is a no-op for a repo with no images.
-prune_repo ds-api ${IMAGE_RETENTION}
-prune_repo ds-portal ${IMAGE_RETENTION}
-prune_repo ds-admin ${IMAGE_RETENTION}
-prune_repo ds-doctor ${IMAGE_RETENTION}
-echo "retained ds-api tags:"; sudo docker images ds-api --format '  {{.Tag}} ({{.CreatedAt}})'
-`,
-    { label: "retention" },
-  );
+  await sshScript(API_PROD, retentionScript(), { label: "retention" });
   ok("old images pruned", t);
 
   step("DSO-128: prod smoke (--expect-sha)");
   await runSmoke(sha, services);
-
-  // #1419: build-cache GC. The on-box build leaves 1-3 GB of BuildKit cache per
-  // deploy and nothing ever reclaimed it — api-prod reached 54.6 GB of cache /
-  // 77% disk before the 2026-08-21 manual cleanup. This caps the cache at the
-  // same figure the daemon-level `builder.gc.defaultReservedSpace` policy uses
-  // (`/etc/docker/daemon.json`, provisioned by cloud-init/api-prod.yaml) — one
-  // constant, `BUILD_CACHE_RESERVED_SPACE`; the step keeps the cap enforced on a
-  // box whose daemon config predates the policy.
-  //
-  // Placed AFTER the smoke gate on purpose: until smoke passes, the build cache
-  // is a rollback asset — a failed deploy is re-built or reverted on-box, and a
-  // cold cache turns that into a 10-20 min rebuild. Prune only once the deploy
-  // is verified good.
-  //
-  // `buildx prune --reserved-space`, NOT `builder prune --filter until=`: this
-  // daemon runs the containerd snapshotter (driver=overlayfs), where the
-  // `until=` filter can silently reclaim 0 bytes.
-  //
-  // NON-FATAL by contract: the deploy has already succeeded and been smoked, so
-  // a prune failure must never fail it — hence `|| true` plus the try/catch.
-  step(
-    `#1419: build-cache GC (cap BuildKit cache at ${BUILD_CACHE_RESERVED_SPACE})`,
-  );
-  t = Date.now();
-  try {
-    await sshScript(
-      API_PROD,
-      `sudo docker buildx prune -f --reserved-space ${BUILD_CACHE_RESERVED_SPACE} || true
-echo "build cache after prune:"; sudo docker system df --format '  {{.Type}}: {{.Size}} (reclaimable {{.Reclaimable}})' || true
-`,
-      // Build-class stall budget, not the 2-min default: pruning tens of GB of
-      // BuildKit cache walks the snapshotter's content store and can go minutes
-      // without writing a line — the first prune on a box that has never been
-      // GC'd is the slowest one. A stall abort here would only add noise to a
-      // deploy that has already passed its smoke gate.
-      { label: "build-cache prune", stallBudgetMs: STALL_BUDGET_BUILD_MS },
-    );
-    ok(`build cache capped at ${BUILD_CACHE_RESERVED_SPACE}`, t);
-  } catch (e) {
-    console.log(
-      `  ⚠ build-cache prune errored (deploy already succeeded): ${e?.message ?? String(e)}`,
-    );
-  }
 
   step("Cut the release at the deployed SHA (#996/§10.5 — Option A)");
   cutReleaseAtDeployedSha(sha, { hotfix: Boolean(hotfixRef) });
@@ -1533,9 +1578,9 @@ async function rollback(shaArg) {
 
   // …but a rollback ships NO tree: the `up -d` below runs against the compose
   // the LAST DEPLOY left on the box, which is newer than the target. A service
-  // the target predates is still declared there WITH a `build:` section, so
-  // Compose would rebuild it from the current on-box source and tag it with the
-  // rollback SHA — a green "ROLLBACK OK" over the very code being reverted.
+  // the target predates is still declared there as `ds-<svc>:${DEPLOY_SHA:?}`,
+  // and no image of it exists for the rollback SHA — a "ROLLBACK OK" would be
+  // untrue for that surface (service-set.mjs → rollbackBoundaryVerdict).
   // Compare the two sets and refuse the crossing BEFORE any state change.
   // Ground truth for "what `up -d` will consume" is the compose file ON THE
   // BOX itself, read over one read-only ssh channel — NOT `/v1/health`: an
@@ -1604,7 +1649,10 @@ async function rollback(shaArg) {
     throw err;
   }
 
-  // The target images must still be on the box (retention keeps the last 3).
+  // The target images are normally still on the box (retention keeps the last
+  // 3). A target older than that is pulled from ITS recorded `main` manifest
+  // (#2981, spec rollback floor) — never rebuilt; a target without one (no
+  // `main` runtime-images run, expired artifact) refuses with that cause.
   const present = await sshCapture(
     API_PROD,
     `for img in ${services.map((svc) => `${svc.image}:${sha}`).join(" ")}; do
@@ -1612,12 +1660,16 @@ async function rollback(shaArg) {
 done`,
   );
   if (/MISSING/.test(present)) {
-    die(
-      `target image(s) not on api-prod (pruned by retention?):\n${present}\n` +
-        `  Roll forward instead: check out that commit's main and run \`pnpm deploy:prod\`.`,
+    console.log(
+      `  ℹ target image(s) not on api-prod (pruned by retention):\n${present}\n` +
+        `    pulling them from the target's recorded \`main\` digests…`,
     );
+    const images = await resolveProdImages(sha);
+    await pullRecordedImages(sha, images, { label: "rollback pull" });
+    ok("target images pulled by their recorded digests");
+  } else {
+    ok("target images present on api-prod");
   }
-  ok("target images present on api-prod");
 
   // #1997: a rollback ships NO tree and re-runs NO provisioning. The
   // `provision.sh` converge steps are FORWARD-ONLY — read-before-write toward a
@@ -1632,13 +1684,13 @@ done`,
       "\n    the instance keeps what the last forward deploy converged it to.",
   );
 
-  step("api-prod: up -d previous tag (NO rebuild, NO migrate — app tier only)");
+  step("api-prod: up -d previous tag (NO build, NO migrate — app tier only)");
   await sshScript(
     API_PROD,
     `cd ${API_COMPOSE}
 # Same DEPLOY_SHA-only rewrite as the deploy path — never clobber the other
 # non-secret interpolation vars (SMARTCAPTCHA_SITE_KEY, #729/#186).
-{ { [ -f .env ] && grep -v '^DEPLOY_SHA=' .env; } || true; printf 'DEPLOY_SHA=%s\\n' '${sha}'; } > .env.next && mv .env.next .env
+${deployShaEnvScript(sha)}
 sudo docker compose up -d
 `,
     { label: "rollback up" },

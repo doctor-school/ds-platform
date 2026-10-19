@@ -575,9 +575,9 @@ only then, if free space on `/var/lib/docker` is below **10 GB**, additionally r
 `docker image prune -af --filter until=24h`. It is an **operator subcommand and not a
 timer**: the box runs no unit of ours, so nothing sweeps nightly — `status` prints the
 free-space figure that tells an operator to run it. The 10 GB is the same figure
-production uses as `BUILD_CACHE_RESERVED_SPACE` in `tools/deploy/prod.mjs`, by a
-**different mechanism**: there it is a BuildKit cache cap (`buildx prune
---reserved-space`), here a free-disk floor. `gc` never calls `buildx`.
+as `BUILD_CACHE_RESERVED_SPACE` (`tools/staging/slot.mjs`) and api-prod's daemon
+`builder.gc` cap, by a **different mechanism**: there it is a BuildKit cache cap
+(`buildx prune --reserved-space`), here a free-disk floor. `gc` never calls `buildx`.
 
 ## Trust boundary
 

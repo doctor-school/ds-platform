@@ -45,11 +45,24 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    provenance still blocks — see `ci-gate.mjs`, #2077) · **no live broadcast**
    (`live-broadcast-check.mjs`, fail-closed — #1000, spec §10.4 item 7; the
    `--rollback` path skips this hold) · **release gate** (`release-gate.mjs`,
-   #1662 — below) · **stage `main` check** (`stage-main-check.mjs`, #2701 —
-   below). Refuses otherwise. Fixes the deployed commit to
-   `origin/main`'s SHA — or, under `--ref <sha>`, to that commit (below).
-2. **Ship** — `git archive <sha>` streamed over SSH to both boxes (no registry,
-   no deploy key). Streams are piped in-process → Windows-safe.
+   #1662 — below) · **recorded images** (#2981 — below) · **stage `main`
+   check** (`stage-main-check.mjs`, #2701 — below). Refuses otherwise. Fixes
+   the deployed commit to `origin/main`'s SHA — or, under `--ref <sha>`, to
+   that commit (below).
+   **Recorded images (#2981).** Before anything touches a box, the operator's
+   `gh` resolves the `runtime-images.yml` run for the target SHA and reads its
+   `images-<sha>.json` manifest (`lib/registry.mjs`, shared with the stage
+   slots). A release accepts only a `main` build: a `push`/dispatch run on
+   `main`, manifest `ref: "main"`, five `main`-namespace digest references for
+   exactly that SHA. No run, a run still in progress, a failed run, an expired
+   artifact or a bad manifest refuses with its cause — there is no build
+   fallback and no flag to build. The same step checks (read-only,
+   `sudo test -s`) that api-prod holds the pull token
+   `/etc/ds-platform/registry-pull-token`, and refuses with the provisioning
+   pointer if it does not. A `--ref` hotfix commit is not a `main` push, so it
+   has no `main` manifest and is refused here.
+2. **Ship** — `git archive <sha>` streamed over SSH to both boxes (compose files
+   and configs; no deploy key). Streams are piped in-process → Windows-safe.
 3. **data-prod** — PostgreSQL guard before shipping and before persistence-plane
    mutations, then immutable inspected server/sidecar images with
    `up -d --no-build --pull never --wait`. Redis retains its normal `up` path.
@@ -57,20 +70,27 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    `backup.sh` cron runs) **before** `migrate`, so a restore anchor exists at the
    pre-migrate state. Pairs with the **expand/contract** prod migration rule
    (README) so an app rollback never needs a DB rollback.
-5. **api-prod** — `build` (one `docker compose build <service>` per service, in
-   compose order — a bare `docker compose build` would let BuildKit run three
-   `next build` processes at once beside live production on the swapless 8 GB
-   box, which stalled the site for ~17 min on 2026-09-18, #2283) → **pre-swap boot verify (#1410)** → **IdP convergence/readback (#2149)** → `migrate --build`
-   (the migrate image is rebuilt from the freshly shipped tree — a reused stale
-   image would apply old migrations) → `up -d`; images SHA-tagged
-   **`ds-api:<sha>` / `ds-portal:<sha>` / `ds-admin:<sha>` / `ds-doctor:<sha>`**
-   (DSO-127) via a `DEPLOY_SHA` `.env` the script writes beside `compose.yml`.
+5. **api-prod** — **pull** (#2981: nothing is built on the box; one `next build`
+   beside live production on the swapless 8 GB box stalled the site for ~17 min
+   on 2026-09-18, #2283): the box logs in with the pull token read from its
+   root-only file inside its own shell, pulls each of the five recorded digests,
+   tags it **`ds-api:<sha>` / `ds-api-migrate:<sha>` / `ds-portal:<sha>` /
+   `ds-admin:<sha>` / `ds-doctor:<sha>`** and logs out (trap + explicit); a tag
+   that already carries its recorded digest is reused. Every tag's RepoDigests
+   must then contain its manifest digest, or the deploy stops →
+   **pre-swap boot verify (#1410)** → **IdP convergence/readback (#2149)** →
+   `migrate` (`compose run`, no `--build`: the migrate image is the recorded
+   `api-migrate` digest of the same SHA) → `up -d`. The compose
+   (`infra/deploy/compose/api-prod/compose.yml`) has no `build:` and tags every
+   `ds-*` image `${DEPLOY_SHA:?}` from the `DEPLOY_SHA` `.env` the script writes
+   beside `compose.yml` (DSO-127) — a compose call without it is an error, never
+   a build.
    Then compare the shipped `Caddyfile` and `centrifugo/config.json` with the
    files visible through the running containers and **restart only consumers
    whose bind mount is stale**. Both mounts are compared again after apply, so
    a mismatch fails the deploy instead of requiring a manual SSH step (#1175).
-   5a. **Pre-swap boot verify (#1410)** — between `build` and `migrate`/`up -d`, the
-   freshly built **`ds-portal:<sha>`, `ds-admin:<sha>` and `ds-doctor:<sha>`**
+   5a. **Pre-swap boot verify (#1410)** — between `pull` and `migrate`/`up -d`, the
+   freshly pulled **`ds-portal:<sha>`, `ds-admin:<sha>` and `ds-doctor:<sha>`**
    (#1723) are each started as a
    throwaway detached container (`ds-bootcheck-<svc>`, no published port, no
    compose network, always removed) with the SAME `env_file` production uses, and
@@ -132,7 +152,11 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    the DSO-127 rework: a stdin-swallowed `bash -s` script silently skipped
    `build`/`up -d` while the deploy still printed success — all remote scripts
    now drain stdin fully before executing.)
-7. **Retention (DSO-127)** — keeps the last **3** SHA-tagged images per repo.
+7. **Retention (DSO-127)** — keeps the last **3** SHA-tagged images per repo
+   (`ds-api`, `ds-api-migrate`, `ds-portal`, `ds-admin`, `ds-doctor`) and drops
+   the registry digest references (`<registry>/<image>@sha256:…`) a pull left
+   behind once no kept tag shares their image — on the containerd image store
+   they are records of their own and would keep pruned content on disk.
 8. **Smoke (DSO-128)** — `smoke-prod.mjs --expect-sha <sha>`; the health probe
    requires `version` to be **present and equal** to the deployed SHA (an absent
    version is a FAIL — it means the expected build is not what's live).
@@ -149,8 +173,8 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
 connection (NAT flush, VPN flap) dies loudly in ~60s instead of hanging the
 deploy forever. On top of that, every streamed remote step (`sshScript`) runs
 under a per-step **no-output watchdog**: **5 min** for build-class steps
-(data-prod `up -d --build`, api-prod `build` and `migrate → up`), **2 min** for
-everything else. Output flowing resets the timer — a normal long build is
+(data-prod `up`, api-prod `pull` and `migrate → up`), **2 min** for
+everything else. Output flowing resets the timer — a normal long pull is
 untouched. A step whose channel goes quiet past its budget is killed and the
 deploy exits non-zero with a loud
 `STALLED: <step> — no output for <N>m; remote work MAY have completed.` line.
@@ -170,13 +194,16 @@ fetch, 30s ssh) — the probe itself can never hang; exit 0 for every verdict
 
 The **previous prod SHA** the Deployment-record digest ranges from is read from the
 running `ds-api-prod-api-1` container's image tag (`ds-api:<sha>`) **before** the
-build/up swap — the deploy record is the running image itself, no separate state
+pull/up swap — the deploy record is the running image itself, no separate state
 file. (The CI digest resolves its own prev-sha from the previous `release-*` tag —
 see "Release digest → Mattermost" below, #975.)
 
 The **deployed SHA is queryable over HTTP**: `GET /v1/health` → `{"version":…}`
-(from the api's `DEPLOY_SHA` env). `--rollback` `up -d`s an already-present prior
-image tag with **no** rebuild / migrate / DB change.
+(from the api's `DEPLOY_SHA` env). `--rollback` `up -d`s a prior image tag with
+**no** build / migrate / DB change. The tag is normally still on the box
+(retention keeps 3); a target older than that is pulled from **its** recorded
+`main` manifest exactly as a deploy pulls (same token check, digest proof and
+logout), and a target without one refuses with that cause.
 
 ### Hotfix deploy (`--ref <sha>`)
 
@@ -184,6 +211,12 @@ image tag with **no** rebuild / migrate / DB change.
 cannot be shipped without everything else merged since. When prod needs a single
 already-merged fix and the rest of `main` is not ready, `--ref <sha>` ships
 exactly that commit instead (#1881, release-cycle spec §10.11).
+
+**Currently refused at the recorded-images pre-flight (#2981).** api-prod builds
+nothing and accepts only digests a `main` push of `runtime-images.yml` recorded; a
+`hotfix/` commit is not a `main` push, so it has no `main` manifest and `--ref`
+stops before any box is touched, naming the missing run. Until a hotfix image
+source is decided (tracked on #2981), an urgent fix ships on the normal train.
 
 The target is a `hotfix/<N>-<slug>` branch cut FROM the deployed SHA carrying
 cherry-picks of already-merged squash commits — never a feature branch. On top of
@@ -216,18 +249,19 @@ for that run to go green before deploying. Ship/banner lines read
 with a `— Hotfix` title plus the cherry-picked PR list.
 
 **The per-service verify set comes from the TARGET tree** (`service-set.mjs`,
-#1896). Which SHA-tagged images the deploy builds, boot-probes before the swap
+#1896). Which SHA-tagged images the deploy boot-probes before the swap
 (#1410), asserts running afterwards (`verifyRunningSha`) and smokes is parsed out
 of `git show <target>:infra/deploy/compose/api-prod/compose.yml` — the same
-compose the on-box build consumes — not out of the local checkout. A hotfix based
+compose the on-box `up` consumes — not out of the local checkout (a profiled
+one-shot such as `migrate` is not in the set). A hotfix based
 on a SHA that predates a service therefore verifies only the services that exist
-there: a base older than the `ds-doctor` storefront (#1860) builds and verifies
+there: a base older than the `ds-doctor` storefront (#1860) verifies
 `api + portal + admin` and skips the doctor smoke probes, instead of demanding a
 fourth image that cannot exist at that SHA (the first live `--ref` run died on
 exactly that: `doctor=NOSTART`). The derivation is fail-closed — an unreadable,
 empty or port-less set dies before any ssh, never "probe nothing". Image
 retention stays box-wide on purpose: it must reclaim old tags of every repo the
-box has ever built, including one absent from the hotfix target's compose.
+box has ever pulled, including one absent from the hotfix target's compose.
 
 What stays forbidden: deploying an arbitrary branch, a feature preview, or any
 commit not yet merged to `main`. `--ref` narrows the range; it does not widen what
@@ -242,8 +276,13 @@ vhost dark. Ship a service removal on `origin/main`, never as a hotfix.
 
 ## Docker Hub login on the boxes (#2240)
 
-Step 5 builds the images **on `api-prod` itself**, so every deploy pulls base images
-from Docker Hub. Anonymous pulls are capped at **100/h keyed on the source IP**, and
+Since #2981 step 5 builds nothing on `api-prod`: our own images come from the
+project registry (`ds-platform.registry.twcstorage.ru`, pull token
+`/etc/ds-platform/registry-pull-token`, `infra/deploy/README.md` → «Container
+registry»). Docker Hub is still where the upstream pins come from — `caddy`,
+`centrifugo`, `zitadel`, `node` for the sms-aero adapter, and data-prod's base
+images — whenever one of them is bumped. When the boxes built on-box, every deploy
+also pulled base images from Docker Hub. Anonymous pulls are capped at **100/h keyed on the source IP**, and
 Timeweb hands every tenant the same shared IPv6 /64 (`2a03:6f00:a::`) — the budget is
 spent by strangers. `release-2026.09.16-1` died mid-`build` on `429 Too Many Requests`
 (also seen on stage-1, 2026-09-15/16/17). `deploy:prod` has no retry for it and should
@@ -258,14 +297,14 @@ ssh -t <box> 'sudo docker login -u bbmacademy'   # Read-only PAT, typed at the p
 
 The token is a Read-only Docker Hub Personal Access Token with no expiry; it lives only
 in `/root/.docker/config.json` on each box (docker runs via `sudo`, so the login belongs
-to root) and never in this repo, an env file or a chat. Pre-flight check when a build
-step dies on 429: `ssh <box> 'sudo docker pull node:24-slim'` must succeed, and a
+to root) and never in this repo, an env file or a chat. Pre-flight check when an
+upstream pull dies on 429: `ssh <box> 'sudo docker pull node:24-slim'` must succeed, and a
 registry token request with the box's credentials reads `ratelimit-limit: 200;w=3600` /
 `docker-ratelimit-source: bbmacademy` instead of the anonymous `100;w=3600`. A recreated
 box starts anonymous again — see `infra/deploy/README.md` → «Docker Hub login on every
-box». The login puts no registry in the deploy path: step 2 still ships the tree itself and
-step 5 still builds our own images on the box — only their base-image pulls are now
-authenticated.
+box». The Docker Hub login and the project-registry pull token are separate
+credentials: the first lives in root's docker config for upstream pins, the second
+only in its root-only file, used and logged out within each pull.
 
 ## PostgreSQL deployment guard (#2141)
 
@@ -328,11 +367,12 @@ entrypoints, external data volumes and unknown build contracts fail closed.
 
 ## The app-only rollback boundary (`--rollback`, #1896)
 
-A rollback ships **no tree**: it re-tags and restarts, so `docker compose up -d`
-runs against the compose the LAST DEPLOY left on the box — newer than the rollback
-target. A service the target predates is still declared there **with a `build:`
-section**, so Compose would rebuild it from the current on-box source, tag it with
-the rollback SHA, and report «ROLLBACK OK» over exactly the code being reverted.
+A rollback ships **no tree**: it re-points `DEPLOY_SHA` and restarts, so
+`docker compose up -d` runs against the compose the LAST DEPLOY left on the box —
+newer than the rollback target. A service the target predates is still declared
+there as `ds-<svc>:${DEPLOY_SHA:?}`, and no image of it exists for the rollback
+SHA (no recorded digest serves it), so a «ROLLBACK OK» would be untrue for that
+surface.
 So `rollback()` derives two sets — the target's compose (`git show`) and the compose
 file **on the box** (`cat …/api-prod/compose.yml` over one read-only ssh channel —
 the very file `up -d` consumes) — and refuses before any state change when the box

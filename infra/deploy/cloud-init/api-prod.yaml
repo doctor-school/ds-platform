@@ -37,12 +37,13 @@ write_files:
   # very first start.
   #
   # `defaultReservedSpace` is the modern spelling (docker 28+), matching the
-  # `--reserved-space` CLI flag the deploy-script prune uses; the legacy
-  # `defaultKeepStorage` still validates on 29.6.1 but is the older name.
+  # `--reserved-space` CLI flag; the legacy `defaultKeepStorage` still validates
+  # on 29.6.1 but is the older name.
   #
-  # The value MUST equal `BUILD_CACHE_RESERVED_SPACE` in `tools/deploy/prod.mjs`
-  # (step "#1419"), which is the belt to this braces — YAML cannot import the JS
-  # constant, so the two are kept in sync by hand and by that constant's comment.
+  # Since #2981 api-prod builds nothing (it pulls the recorded registry digests),
+  # so this cap is a harmless backstop. Its figure is kept equal to
+  # `BUILD_CACHE_RESERVED_SPACE` in `tools/staging/slot.mjs` (the stage prune) —
+  # YAML cannot import the JS constant, so the two are kept in sync by hand.
   - path: /etc/docker/daemon.json
     content: |
       {

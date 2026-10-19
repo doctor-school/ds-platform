@@ -27,10 +27,11 @@ import {
   type LoginHandoffStore,
 } from "./login-handoff/login-handoff.store.js";
 import {
-  DEFAULT_SMS_BUDGET_THRESHOLDS,
+  resolveSmsBudgetThresholds,
   SMS_BUDGET_CLOCK,
   SMS_BUDGET_THRESHOLDS,
   type Clock,
+  type SmsBudgetThresholds,
 } from "./sms-budget/sms-budget.types.js";
 
 /**
@@ -70,12 +71,25 @@ import {
       provide: RECONCILE_SWEEP_INTERVAL_MS,
       useFactory: (): number => loadEnv().RECONCILE_SWEEP_INTERVAL_MS,
     },
-    // EARS-14 SMS toll-fraud budget. Thresholds are the EARS-14 defaults bound as
-    // an injectable value (a deployment can rebind to tighten them; the e2e
-    // rebinds to drive the breaker boundary). The clock is `Date.now`, rebound to
-    // a fake in the unit spec for deterministic window-reset testing.
+    // EARS-14 SMS toll-fraud budget. Thresholds are the EARS-14 defaults, each
+    // ceiling env-overridable for a one-IP test stand (#3047, `SMS_BUDGET_*`);
+    // a malformed / ≤0 / non-integer var is ignored with one loud warn and the
+    // default kept for that field — never an unlimited budget, never a boot
+    // crash (see `resolveSmsBudgetThresholds`). The e2e rebinds the token to
+    // drive the breaker boundary. The clock is `Date.now`, rebound to a fake in
+    // the unit spec for deterministic window-reset testing.
     SmsBudgetService,
-    { provide: SMS_BUDGET_THRESHOLDS, useValue: DEFAULT_SMS_BUDGET_THRESHOLDS },
+    {
+      provide: SMS_BUDGET_THRESHOLDS,
+      useFactory: (): SmsBudgetThresholds => {
+        const logger = new Logger(SmsBudgetService.name);
+        return resolveSmsBudgetThresholds(loadEnv(), ({ envVar, rawValue }) =>
+          logger.warn(
+            `${envVar}=${JSON.stringify(rawValue)} is not a positive integer; ignoring the override and keeping the EARS-14 default for that ceiling.`,
+          ),
+        );
+      },
+    },
     { provide: SMS_BUDGET_CLOCK, useValue: (() => Date.now()) satisfies Clock },
     // 003 EARS-44 / 044 EARS-39: the Congress hand-off reference store — Redis
     // when configured (the reference must survive across API instances and

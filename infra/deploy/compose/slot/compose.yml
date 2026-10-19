@@ -90,6 +90,14 @@ services:
       RATE_LIMIT_PER_IP_15MIN: "100000"
       RATE_LIMIT_PER_USER_15MIN: "100000"
       RATE_LIMIT_PER_ASN_1H: "1000000"
+      # The 003 EARS-14 SMS budget windows, lifted for the same one-runner
+      # reason: every SMS scenario of the suite requests a code from that ONE
+      # address, so the production per-IP 10 / h (and per-ASN 100 / h) window
+      # answers a false 429 mid-run (#3047). Per-phone (3 / h; every scenario
+      # owns fresh phones) and the global daily breaker keep their EARS-14
+      # defaults; EARS-14 itself is proven by the apps/api unit and api-e2e suites.
+      SMS_BUDGET_PER_IP_1H: "100000"
+      SMS_BUDGET_PER_ASN_1H: "1000000"
     networks:
       - default
       - stg-infra

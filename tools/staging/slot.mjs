@@ -59,6 +59,11 @@ import {
 import {
   STALL_BUDGET_BUILD_MS,
   STALL_BUDGET_DEFAULT_MS,
+  releaseFinishArgv,
+  releaseForgetArgv,
+  releaseInstallScript,
+  releaseStateDir,
+  runDurableStep,
   shipTree,
   sshCapture,
   sshScript,
@@ -228,6 +233,34 @@ export function assertSlotName(slot) {
 export function previewNumber(slot) {
   assertSlotName(slot);
   return slot === "main" ? null : Number(slot.slice(3));
+}
+
+/**
+ * The slot's ds-release env (#2982): `main` → `stage-main`, `pr-<N>` → `stage-pr-<N>`.
+ * Its long box steps run as durable units `ds-<env>-<sha12>-<step>`.
+ */
+export function slotReleaseEnv(slot) {
+  assertSlotName(slot);
+  return slot === "main" ? "stage-main" : `stage-${slot}`;
+}
+
+/** Attach the release unit `step` of this converge to a plan step (or pull item). */
+function durable(slot, sha, step, planStep) {
+  return { ...planStep, durable: { env: slotReleaseEnv(slot), sha, step } };
+}
+
+/**
+ * Drop the env's recorded verdicts once what they describe is gone — a torn-down
+ * slot, or `main` re-cloned (its `migrate` must run again). Probed first, so a box
+ * that has never run ds-release stays tear-down-able.
+ */
+function forgetReleaseStep(slot) {
+  const env = slotReleaseEnv(slot);
+  return {
+    kind: "ensure-absent",
+    label: "forget the release state",
+    items: [{ probe: ["test", "-e", releaseStateDir(env)], remove: releaseForgetArgv(env) }],
+  };
 }
 
 /** Compose project name — also the slot's own network name (see below). */
@@ -758,6 +791,16 @@ export function pullCommandPlan(sha, images) {
         apply: pullAndTagArgv(ref, tag),
       };
     }),
+  };
+}
+
+/** One durable unit per image the pull fetches (#2982): `pull-<image>`. */
+function durablePulls(slot, sha, pull) {
+  return {
+    ...pull,
+    items: pull.items.map((item, index) =>
+      durable(slot, sha, `pull-${RECORDED_IMAGE_NAMES[index]}`, item),
+    ),
   };
 }
 
@@ -1489,7 +1532,7 @@ export function planSlotUp({
       }),
       mode: 0o640,
     },
-    pullCommandPlan(sha, images),
+    durablePulls(slot, sha, pullCommandPlan(sha, images)),
     registryLogoutCommand(),
     { kind: "verify-images", label: "verify recorded digests and boot", sha, slot, images },
   ];
@@ -1510,9 +1553,9 @@ export function planSlotUp({
     // objects and the api resolves its bucket at boot. Kept across a `sync`, so a
     // push to an open PR never drops what the slot has already uploaded.
     slotBucketCreateCommand(slot),
-    migrateCommandPlan(slot),
-    seedCommandPlan(slot),
-    upCommandPlan(slot),
+    durable(slot, sha, "migrate", migrateCommandPlan(slot)),
+    durable(slot, sha, "seed", seedCommandPlan(slot)),
+    durable(slot, sha, "up", upCommandPlan(slot)),
     caddyAttachCommand(slot),
     idpRedirectStep([...Object.keys(live), slot], baseDomain, { slot, membership: "include" }),
     { kind: "verify-running", label: "verify the running images", sha, slot },
@@ -1523,12 +1566,12 @@ export function planSlotUp({
       sha,
       url: `https://${hostMap.api}/v1/health`,
     },
-    {
+    durable(slot, sha, "prune", {
       kind: "prune",
       label: "prune images and build cache",
       retention: IMAGE_RETENTION,
       reservedSpace: BUILD_CACHE_RESERVED_SPACE,
-    },
+    }),
     // The slot IS live by the time this tail runs, so `planResetIdentities` is given
     // the live set it will have — not the one docker reported before the converge.
     ...planResetIdentities({
@@ -1538,6 +1581,12 @@ export function planSlotUp({
       actor,
       now,
     }).steps,
+    // #2982: only a closed release frees the env lease for another SHA.
+    {
+      kind: "sh",
+      label: "close the release",
+      command: releaseFinishArgv(slotReleaseEnv(slot), sha, "succeeded"),
+    },
   );
 
   return { slot, sha, redisDb, hosts, steps };
@@ -1613,6 +1662,10 @@ export function planSlotDown({ slot, liveSlots, baseDomain, now = new Date() }) 
       },
     );
   }
+
+  // #2982: the slot's recorded step verdicts describe containers that are gone — a
+  // later `up` at the same SHA must run every step again, not return «succeeded».
+  steps.push(forgetReleaseStep(slot));
 
   // Last, over the slots that REMAIN: the torn-down slot's callback is gone from the
   // shared app rather than left pointing at nothing.
@@ -1705,6 +1758,8 @@ export function planSlotReset({
         ...cloneDatabaseStatements("main", { bootstrap: true }),
       ],
     },
+    // #2982: the recorded `migrate`/`seed` verdicts were for the dropped database.
+    forgetReleaseStep("main"),
     ...up.steps,
   ];
   return { slot: "main", sha, redisDb: up.redisDb, hosts: up.hosts, steps };
@@ -1806,7 +1861,8 @@ export async function runSlotPlan(
           log("  ↳ already present");
           continue;
         }
-        await sh(item.apply, step);
+        // #2982: an item may carry its own durable unit (one per pulled image).
+        await sh(item.apply, item.durable ? { ...step, durable: item.durable } : step);
       }
     } else if (step.kind === "write") await write(step.path, step.contents, step.mode);
     else if (step.kind === "append") {
@@ -1847,6 +1903,26 @@ export async function runSlotPlan(
  *
  * Returns the line `main()` prints; failure is a throw, exactly as inside a plan.
  */
+/**
+ * #2982: a converge that fails closes its release as failed — best-effort, before the
+ * error propagates — so the env lease never outlives the run holding it. A step still
+ * running on the box refuses the close; a re-run of the same SHA then reattaches.
+ */
+async function runConverge(plan, effects) {
+  try {
+    return await runSlotPlan(plan, effects);
+  } catch (error) {
+    try {
+      await effects.sh(releaseFinishArgv(slotReleaseEnv(plan.slot), plan.sha, "failed"), {
+        label: "close the release as failed",
+      });
+    } catch (closeError) {
+      console.error(`  ⚠ the release stays open: ${closeError.message}`);
+    }
+    throw error;
+  }
+}
+
 export async function runSlotCommand({
   options,
   images,
@@ -1907,7 +1983,7 @@ export async function runSlotCommand({
       actor: options.actor,
       subjects,
     });
-    await runSlotPlan(plan, effects);
+    await runConverge(plan, effects);
     return (
       `slot main was reset from ${GOLDEN_DB_BASE} and re-converged on ` +
       `${shortSha(plan.sha)}: ${plan.hosts.join(", ")}`
@@ -1932,7 +2008,7 @@ export async function runSlotCommand({
     subjects,
     actor: options.actor,
   });
-  await runSlotPlan(plan, effects);
+  await runConverge(plan, effects);
   return (
     `slot ${plan.slot} converged on ${shortSha(plan.sha)} ` +
     `(redis db ${plan.redisDb}): ${plan.hosts.join(", ")}`
@@ -1944,6 +2020,14 @@ export async function runSlotCommand({
 const COMMANDS_WITH_SLOT_AND_REF = new Set(["up", "sync"]);
 const COMMANDS_WITH_SLOT = new Set(["down", "reset-identities"]);
 const COMMANDS_WITHOUT_ARGS = new Set(["status", "gc"]);
+
+// #2982: a step ds-release recorded as failed is re-run only on this explicit flag;
+// a succeeded one never is.
+const RETRY_FAILED_FLAG = "--retry-failed";
+
+function retryFailedOption(flags) {
+  return flags.includes(RETRY_FAILED_FLAG) ? { retryFailed: true } : {};
+}
 
 /** `--ref <sha>` out of a flag list, or `undefined`. Unknown flags are refused. */
 function takeRef(flags, { allowed }) {
@@ -1966,8 +2050,8 @@ export function parseArgs(argv) {
   const [command, ...rest] = argv;
   if (!command) {
     throw new SlotError(
-      "usage: ds-slot up|sync <slot> --ref <sha> | down <slot> | " +
-        "reset main --yes --ref <sha> | reset-identities <slot> | status | gc | " +
+      "usage: ds-slot up|sync <slot> --ref <sha> [--retry-failed] | down <slot> | " +
+        "reset main --yes --ref <sha> [--retry-failed] | reset-identities <slot> | status | gc | " +
         "agent-admin-code [--json]",
     );
   }
@@ -1995,14 +2079,14 @@ export function parseArgs(argv) {
           `${slot} --ref <sha>\` already is its reset.`,
       );
     }
-    const sha = takeRef(flags, { allowed: ["--yes", "--ref"] });
+    const sha = takeRef(flags, { allowed: ["--yes", "--ref", RETRY_FAILED_FLAG] });
     if (!flags.includes("--yes")) {
       throw new SlotError(
         "refusing to reset `main` without `--yes`: this DROPS `ds_main` and re-clones it " +
           "from `ds_golden`, discarding everything staging has accumulated there.",
       );
     }
-    return { command, slot, sha, yes: true };
+    return { command, slot, sha, yes: true, ...retryFailedOption(flags) };
   }
   if (COMMANDS_WITH_SLOT_AND_REF.has(command)) {
     const [slot, ...flags] = rest;
@@ -2011,13 +2095,13 @@ export function parseArgs(argv) {
     // A BARE positional SHA is an error, not a second spelling: the commit a slot is
     // converged on is the one thing the preview workflow passes by hand, and two
     // spellings is how a workflow edit ends up shipping the wrong ref silently.
-    const sha = takeRef(flags, { allowed: [] });
+    const sha = takeRef(flags, { allowed: [RETRY_FAILED_FLAG] });
     if (!sha) {
       throw new SlotError(
         `\`${command}\` requires \`--ref <sha>\` — a full 40-character commit id`,
       );
     }
-    return { command, slot, sha };
+    return { command, slot, sha, ...retryFailedOption(flags) };
   }
   if (COMMANDS_WITH_SLOT.has(command)) {
     const [slot, ...flags] = rest;
@@ -2569,13 +2653,19 @@ async function probeSlotHealth(url, headers, sha) {
  * shipped compose for its service set, so a branch that adds or drops a service is
  * verified against what that branch actually declares.
  */
-function realEffects(boxEnv) {
-  const run = (script, step) =>
+function realEffects(boxEnv, { retryFailed = false } = {}) {
+  const streamed = (script, step) =>
     sshScript(STAGE_1, script, {
       label: step?.label ?? "slot",
       stallBudgetMs:
         step?.stallBudget === "build" ? STALL_BUDGET_BUILD_MS : STALL_BUDGET_DEFAULT_MS,
     });
+  // #2982: a step carrying a `durable` unit runs through ds-release — started or
+  // attached, then polled — so a killed operator session never kills it.
+  const run = (script, step) =>
+    step?.durable
+      ? runDurableStep(STAGE_1, { ...step.durable, script, label: step.label, retryFailed })
+      : streamed(script, step);
   return {
     sql: (statement, step) =>
       run(
@@ -2629,12 +2719,15 @@ function realEffects(boxEnv) {
     // Built per step, so every command that emits no `idp` step still runs on a box
     // where the bootstrap PAT file is not readable.
     // --- the five remote-only routines ---------------------------------------
-    ship: (step) =>
-      shipTree(step.sha, STAGE_1, {
+    // The ship also installs the durable entrypoint from the tree it just shipped.
+    ship: async (step) => {
+      await shipTree(step.sha, STAGE_1, {
         liveDir: step.liveDir,
         preserved: step.preserved,
         tmpPrefix: step.tmpPrefix,
-      }),
+      });
+      await streamed(releaseInstallScript(step.liveDir), { label: "install ds-release" });
+    },
     verifyImages: async (step) => {
       const { services, bootProbe } = await readSlotServices(step.slot);
       // Every image the shipped compose runs must be one the manifest recorded: a
@@ -2687,14 +2780,14 @@ function realEffects(boxEnv) {
       console.log(`  ↳ ${verdict.reason}`);
       return verdict;
     },
+    // Build-class budget when streamed (`gc`): the first prune on a box that has never
+    // been GC'd walks the whole snapshotter content store and can go minutes without a
+    // line. Inside a converge it is the release's durable `prune` unit.
     prune: (step) =>
-      sshScript(
-        STAGE_1,
-        pruneScript({ retention: step.retention, reservedSpace: step.reservedSpace }),
-        // Build-class budget: the first prune on a box that has never been GC'd walks
-        // the whole snapshotter content store and can go minutes without a line.
-        { label: step.label, stallBudgetMs: STALL_BUDGET_BUILD_MS },
-      ),
+      run(pruneScript({ retention: step.retention, reservedSpace: step.reservedSpace }), {
+        ...step,
+        stallBudget: "build",
+      }),
     idp: async (step) => {
       const client = createIdpClient({
         fetch: globalThis.fetch,
@@ -2815,7 +2908,7 @@ async function main() {
   }
   const boxEnv = await readBoxEnvFile(STAGE_ENV_FILE);
   const liveSlots = await readLiveSlots();
-  const effects = realEffects(boxEnv);
+  const effects = realEffects(boxEnv, { retryFailed: options.retryFailed === true });
   // `up`/`sync` run a slot whose sign-in depends on the captcha trio being coherent —
   // refuse before any image is pulled (#2207).
   if (COMMANDS_WITH_SLOT_AND_REF.has(options.command)) {

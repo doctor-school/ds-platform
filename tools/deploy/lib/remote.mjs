@@ -385,6 +385,7 @@ export async function shipTree(
 // poll. The full step log stays in the unit's journal on the box.
 
 export const DS_RELEASE_BIN = "/usr/local/bin/ds-release";
+export const RELEASE_STATE_ROOT = "/var/lib/ds-platform/release";
 export const RELEASE_POLL_MS = 10 * 1000;
 export const RELEASE_POLL_MAX_FAILURES = 6;
 export const RELEASE_STEP_TIMEOUT_MS = 60 * 60 * 1000;
@@ -440,12 +441,22 @@ export function releaseStatusScript(env, sha) {
   return `${DS_RELEASE_BIN} status ${env} ${sha}`;
 }
 
-export function releaseFinishScript(env, sha, state) {
+export function releaseFinishArgv(env, sha, state) {
   assertRelease(env, sha);
   if (state !== "succeeded" && state !== "failed") {
     throw new Error(`a release finishes succeeded or failed, not ${JSON.stringify(state)}`);
   }
-  return `sudo ${DS_RELEASE_BIN} finish ${env} ${sha} ${state}`;
+  return ["sudo", DS_RELEASE_BIN, "finish", env, sha, state];
+}
+
+export function releaseFinishScript(env, sha, state) {
+  return releaseFinishArgv(env, sha, state).join(" ");
+}
+
+/** The env's status-file directory — world-readable, so a probe needs no sudo. */
+export function releaseStateDir(env) {
+  assertRelease(env, "0".repeat(40));
+  return `${RELEASE_STATE_ROOT}/${env}`;
 }
 
 export function releaseForgetArgv(env) {

@@ -19,6 +19,7 @@ import { join } from "node:path";
 
 import { GOLDEN_SUBJECTS_PATH, GOLDEN_SUBJECT_ENV_VARS } from "./idp.mjs";
 import { terminateBackendsStatement } from "./golden-db.mjs";
+import { DS_RELEASE_BIN } from "../deploy/lib/remote.mjs";
 import {
   BUILD_CACHE_RESERVED_SPACE,
   CADDY_CONTAINER,
@@ -97,6 +98,7 @@ import {
   slotHostnames,
   slotNetworkName,
   slotServiceSet,
+  slotReleaseEnv,
   slotTreeDir,
   slotsWithClosedPrs,
   verifyImagesScript,
@@ -912,6 +914,7 @@ test("up: ship → env → pull → verify → clone → bucket → migrate → 
     "write the tool-owned golden subjects",
     "flush the slot's redis logical database",
     "audit the identity reset",
+    "close the release",
   ]);
 });
 
@@ -1004,6 +1007,7 @@ test("down: env → detach → compose down → network → database → bucket 
     "remove slot images",
     "remove the slot tree",
     "remove slot env",
+    "forget the release state",
     "converge the shared IdP redirect set",
   ]);
   assert.ok(stepOf(plan, "compose down").command.includes("-v"));
@@ -1937,4 +1941,106 @@ test("EARS-4: inventory uses original requested tags when docker ps shows image 
       .remove,
     [],
   );
+});
+
+// --- #2982: durable box steps through ds-release ------------------------------
+
+test("2982: a slot's release env is stage-main or stage-pr-<N>", () => {
+  assert.equal(slotReleaseEnv("main"), "stage-main");
+  assert.equal(slotReleaseEnv("pr-2034"), "stage-pr-2034");
+  assert.throws(() => slotReleaseEnv("pr-x"), SlotError);
+});
+
+test("2982: pull, migrate, seed, up and prune run as durable units; the converge closes its release", () => {
+  const plan = upPlan();
+  const release = (step) => ({ env: "stage-pr-7", sha: SHA, step });
+  assert.deepEqual(stepOf(plan, "migrate").durable, release("migrate"));
+  assert.deepEqual(stepOf(plan, "seed:golden").durable, release("seed"));
+  assert.deepEqual(stepOf(plan, "up -d").durable, release("up"));
+  assert.deepEqual(stepOf(plan, "prune images and build cache").durable, release("prune"));
+  const pulls = stepOf(plan, "pull recorded images").items.map((item) => item.durable);
+  assert.ok(pulls.length > 0);
+  for (const durable of pulls) assert.match(durable.step, /^pull-[a-z-]+$/);
+  assert.equal(new Set(pulls.map((d) => d.step)).size, pulls.length, "one unit per image");
+  // Short, idempotent bookkeeping stays a plain ssh command.
+  assert.equal(stepOf(plan, "registry logout").durable, undefined);
+  assert.equal(stepOf(plan, "create slot bucket").durable, undefined);
+  assert.deepEqual(stepOf(plan, "close the release").command, [
+    "sudo", DS_RELEASE_BIN, "finish", "stage-pr-7", SHA, "succeeded",
+  ]);
+});
+
+test("2982: down and reset forget the release state the teardown / re-clone invalidates", () => {
+  const down = planSlotDown({ slot: "pr-7", liveSlots: live({ "pr-7": SLOT_IMAGES(SHA) }), baseDomain: BASE });
+  const forget = stepOf(down, "forget the release state");
+  assert.equal(forget.kind, "ensure-absent");
+  assert.deepEqual(forget.items[0].probe, ["test", "-e", "/var/lib/ds-platform/release/stage-pr-7"]);
+  assert.deepEqual(forget.items[0].remove, ["sudo", DS_RELEASE_BIN, "forget", "stage-pr-7"]);
+
+  const reset = planSlotReset({
+    sha: SHA, images: IMAGES, liveSlots: live({ main: [] }), baseDomain: BASE, actor: "tech-lead", subjects: SUBJECTS,
+  });
+  const names = labels(reset);
+  const at = names.indexOf("forget the release state");
+  assert.ok(at > names.indexOf("re-clone the main database from the template"));
+  assert.ok(at < names.indexOf("migrate"), "the re-cloned database is migrated again");
+  assert.deepEqual(stepOf(reset, "forget the release state").items[0].remove.at(-1), "stage-main");
+});
+
+test("2982: the executor hands an ensure-present item's own durable unit to `sh`", async () => {
+  const seen = [];
+  await runSlotPlan(
+    {
+      steps: [
+        {
+          kind: "ensure-present",
+          label: "pull",
+          items: [{ probe: ["false"], apply: ["pull", "a"], durable: { env: "stage-main", sha: SHA, step: "pull-a" } }],
+        },
+      ],
+    },
+    {
+      sh: async (command, step) => {
+        seen.push([command.join(" "), step.durable?.step, step.label]);
+        if (command[0] === "false") throw new Error("absent");
+      },
+    },
+  );
+  assert.deepEqual(seen, [["false", undefined, "pull"], ["pull a", "pull-a", "pull"]]);
+});
+
+test("2982: `--retry-failed` is an explicit operator flag of up / sync / reset", () => {
+  assert.deepEqual(parseArgs(["up", "pr-7", "--ref", SHA, "--retry-failed"]), {
+    command: "up", slot: "pr-7", sha: SHA, retryFailed: true,
+  });
+  assert.equal(parseArgs(["reset", "main", "--yes", "--ref", SHA, "--retry-failed"]).retryFailed, true);
+  assert.equal(parseArgs(["sync", "main", "--ref", SHA]).retryFailed, undefined);
+  assert.throws(() => parseArgs(["down", "pr-7", "--retry-failed"]), SlotError);
+});
+
+test("2982: a converge that fails closes its release as failed, then rethrows", async () => {
+  const commands = [];
+  const effects = {
+    sql: async () => {},
+    sh: async (command) => commands.push(command.join(" ")),
+    write: async () => {},
+    append: async () => {},
+    probe: async () => ({ ok: true, stdout: "" }),
+    idp: async (step) => (step.op === "golden-identities" ? SUBJECTS : undefined),
+    ship: async () => {},
+    verifyImages: async () => {
+      throw new SlotError("boot probe failed");
+    },
+    verifyRunning: async () => {},
+    health: async () => {},
+    prune: async () => {},
+  };
+  await assert.rejects(
+    runSlotCommand({
+      options: { command: "up", slot: "pr-7", sha: SHA, actor: "tech-lead" },
+      images: IMAGES, liveSlots: live({}), baseDomain: BASE, effects,
+    }),
+    /boot probe failed/,
+  );
+  assert.equal(commands.at(-1), `sudo ${DS_RELEASE_BIN} finish stage-pr-7 ${SHA} failed`);
 });

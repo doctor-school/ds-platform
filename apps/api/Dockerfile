@@ -7,9 +7,9 @@
 #     (infra/deploy/README.md → Container registry), with its digest recorded in the
 #     run's `images-<sha>.json` artifact;
 #   - ON-BOX, by infra/deploy/compose/api-prod/compose.yml (`build.context` = repo
-#     root, `dockerfile` = apps/api/Dockerfile). No box pulls the registry image yet
-#     (#2981: stage then prod switch to pulling by digest), so the on-box build is
-#     still what runs.
+#     root, `dockerfile` = apps/api/Dockerfile) — production only, until it too
+#     switches to pulling by digest (#2981). Stage slots already pull the recorded
+#     digest and never build (tools/staging/slot.mjs).
 # Multi-stage:
 #   base    corepack/pnpm.
 #   deps    install the whole workspace (frozen lockfile) — shared by build+migrate-tree.

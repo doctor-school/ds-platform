@@ -34,8 +34,11 @@ export const API_PROD_COMPOSE_PATH =
  */
 export const BOOT_PROBE_EXCLUDED = Object.freeze(["api"]);
 
-/** `image: ds-<repo>:${DEPLOY_SHA}` / `${DEPLOY_SHA:-local}` — the deploy-tagged shape. */
-const SHA_TAGGED_IMAGE_RE = /^(ds-[a-z0-9][a-z0-9-]*):\$\{DEPLOY_SHA(?::-[^}]*)?\}$/;
+/**
+ * `image: ds-<repo>:${DEPLOY_SHA}` / `${DEPLOY_SHA:-local}` / `${DEPLOY_SHA:?}` — the
+ * deploy-tagged shape. `:?` is the slot compose's: it pulls, so it has no `:local`.
+ */
+const SHA_TAGGED_IMAGE_RE = /^(ds-[a-z0-9][a-z0-9-]*):\$\{DEPLOY_SHA(?::[-?][^}]*)?\}$/;
 
 /**
  * Service names the generated verify shell can carry: lowercase, digit- and

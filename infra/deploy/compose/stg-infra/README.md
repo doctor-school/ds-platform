@@ -7,8 +7,8 @@ every preview slot (`main`, `pr-<N>`) is a _separate_ compose project that joins
 
 Plan of record: `apps/docs/content/specs/tech/2026-09-08-staging-previews-and-regression-contour-en.md`
 (§3 topology, §8 steps 1-2, §9 recovery). Delivery follows production's shape: an operator
-ships a committed SHA over SSH, the box builds its own images, and the edge is one host
-regexp — no slot registry, no generated include, no host Node. Phase A (this directory) is
+ships a committed SHA over SSH, the box pulls the images CI recorded for it (#2981), and
+the edge is one host regexp — no slot registry, no generated include, no host Node. Phase A (this directory) is
 #2061 and the edge is #2062 («Edge (#2062)» below); Phase B — the owner's `terraform apply`,
 the first bring-up and the live acceptance below — is tracked in **#2095**, and the live slot
 run in **#2064**.
@@ -499,9 +499,9 @@ container is attached to every slot network, so the responder must not be reacha
 from inside a preview.
 
 **What a converge does, in order.** Ship the committed tree at `--ref` into
-`$HOME/ds-platform.slots/<slot>` over SSH → write the per-slot env file → **build the
-service set on the box** (image tag = the full commit SHA, so it is global per commit and
-two slots on one commit share images) → clone the database from `ds_golden` (never for
+`$HOME/ds-platform.slots/<slot>` over SSH → write the per-slot env file → **pull the
+recorded digests and tag them** `ds-<image>:<sha>` (global per commit, so two slots on one
+commit share images) → clone the database from `ds_golden` (never for
 `main`, which is persistent and forward-migrated) → migrate and seed through the
 containerized `migrate` one-shot → `up -d` → attach this Caddy to the slot network →
 converge the golden identities and the whole redirect-URI set at the shared Zitadel →
@@ -561,13 +561,14 @@ range keeps the deterministic start (`1 + (N % 15)`) short and its collisions ra
 raising the cap would be a one-constant change (`REDIS_DB_MAX` in `tools/staging/slot.mjs`)
 if the box ever grows past three previews.
 
-**Building images.** The box builds, exactly as api-prod does. `pnpm stage:slot up|sync`
-ships the tree and runs the build there; no registry and no workflow is involved. The image bakes no
+**Images.** The box builds no product image (#2981). `pnpm stage:slot up|sync` resolves the
+digests `runtime-images.yml` recorded for the commit and the box pulls exactly those
+(`tools/staging/README.md` → «`slot.mjs` in one paragraph»). The image bakes no
 SmartCaptcha SITE key (#2981): the portal and doctor slot containers load the box env
 `/etc/ds-platform/stage.env` as `env_file`, and the `@ds/auth-flow` server mounts read its
 `SMARTCAPTCHA_SITE_KEY` per request (empty renders the inactive placeholder). It is one half of a
 coherent trio — `stage.env.example` → «Bot protection», enforced by `up|sync` (#2207) — and a key
-placed or changed after a slot is up reaches it on a container recreate, never a rebuild.
+placed or changed after a slot is up reaches it on a container recreate, never a new image.
 
 **Disk.** `pnpm stage:slot gc` removes slot-tagged images whose slot is not live, and
 only then, if free space on `/var/lib/docker` is below **10 GB**, additionally runs

@@ -157,9 +157,10 @@ ssh -t <box> 'sudo docker login -u bbmacademy'   # paste the PAT at the prompt
   `cloud-init/*.yaml` or any fresh box starts anonymous — repeat the login as part of
   provisioning, before the first `compose build`.
 
-This does **not** make the deploy path use a registry: the images a box runs are still
-built on that box from a shipped tree (the registry below is not consumed by any box
-yet). The login authenticates base-image pulls only.
+This login is for Docker Hub only. On api-prod the product images are still built on
+the box from a shipped tree; ds-stage-1 builds no product image any more — its slots
+pull them from the registry below — but it still pulls third-party images and builds
+`stg-infra`'s `postgres`, so it keeps the login too.
 
 ## Container registry
 
@@ -177,8 +178,8 @@ Timeweb Cloud container registry (#2981, tech spec
   | push  | push + pull | GitHub Environment `build`, secret `REGISTRY_PUSH_TOKEN`                                                                       | `runtime-images.yml` `build` job only — it runs nothing but buildx after login                |
   | pull  | pull only   | GitHub Environment `build`, secret `REGISTRY_PULL_TOKEN`; each box, `/etc/ds-platform/registry-pull-token` (0600, `root:root`) | `runtime-images.yml` `verify` job (runs PR-head code); the box's `docker login` before a pull |
 
-  The push token also still sits on ds-stage-1 at `/etc/ds-platform/registry-push-token`
-  until its removal later under #2981; after that it lives only in Environment `build`.
+  The push token is being removed from ds-stage-1 (`/etc/ds-platform/registry-push-token`)
+  under #2981 now that the box only pulls; after that it lives only in Environment `build`.
 
   The registry has no per-repository scopes, so an internal PR head could still push
   outside `pr/` with the push token. Accepted: a release takes only the digests a `main`
@@ -195,8 +196,15 @@ Timeweb Cloud container registry (#2981, tech spec
   `images-<sha>.json` artifact (90 days) maps each image to its pushed `@sha256:` digest
   — a deploy pulls by digest, never by tag. The data-prod images (`ds-postgres`,
   `ds-pgbackrest`) are not in the registry.
-- **Not consumed yet.** No box pulls from the registry until the stage and prod deploys
-  switch to pulling by digest (#2981 PRs 3–4); until then every box still builds on-box.
+- **Stage consumes it; production does not yet.** Every stage slot converge
+  (`tools/staging/slot.mjs up|sync|reset`) resolves the commit's `images-<sha>.json` on
+  the operator side, then ds-stage-1 logs in with its pull token, pulls each recorded
+  digest and tags it `ds-<image>:<sha>`, then logs out again (the login shell's exit trap
+  plus one unconditional `docker logout` per converge), so the token file stays the only
+  registry credential at rest on the box; nothing is built and a commit with no recorded
+  images is not staged (`tools/staging/README.md` → «`slot.mjs` in one paragraph»).
+  api-prod still builds on-box until `pnpm deploy:prod` switches to pulling by digest
+  (#2981, the last PR).
 
 ## Deploy — one command (`pnpm deploy:prod`)
 

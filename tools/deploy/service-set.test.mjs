@@ -193,6 +193,16 @@ test("1896: an empty or unparsable derivation dies before any ssh", () => {
   assert.throws(() => bootProbeSet(noPort), ServiceSetError);
 });
 
+test("2981: a required `${DEPLOY_SHA:?}` tag is the same deploy-tagged shape", () => {
+  const set = deployServiceSet(
+    "services:\n  api:\n    image: ds-api:${DEPLOY_SHA:?}\n  portal:\n    image: ds-portal:${DEPLOY_SHA:?}\n",
+  );
+  assert.deepEqual(
+    set.map((service) => service.image),
+    ["ds-api", "ds-portal"],
+  );
+});
+
 test("1896: human labels render the derived set, not a hard-coded list", () => {
   const preDoctor = deployServiceSet(PRE_DOCTOR_COMPOSE);
   assert.equal(formatServiceNames(preDoctor), "api + portal + admin");

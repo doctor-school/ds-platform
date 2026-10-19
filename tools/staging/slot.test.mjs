@@ -37,12 +37,22 @@ import {
   assertRunningVerdict,
   assertSlotName,
   basicAuthHeader,
-  buildCommandPlan,
+  IMAGE_REGISTRY,
+  REGISTRY_PULL_TOKEN_FILE,
+  assertImageDigests,
+  imageDigestScript,
+  pullCommandPlan,
+  registryLogoutCommand,
+  SLOT_DOWN_IMAGE_TAG,
+  resolveRecordedImages,
+  selectImagesRun,
+  validateImageManifest,
   caddyAttachCommand,
   caddyDetachCommand,
   caddyIsAttached,
   cloneDatabaseStatements,
   composeBase,
+  downCommandPlan,
   composeProjectName,
   containerAliases,
   databaseAction,
@@ -96,6 +106,19 @@ import {
 const BASE = "stage.doctor.school";
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 const SHA2 = "89abcdef0123456789abcdef0123456789abcdef";
+
+/** A recorded image set, as `runtime-images.yml` writes it into `images-<sha>.json`. */
+const digestOf = (hex) => `sha256:${hex.repeat(64)}`;
+const recordedImages = (prefix) =>
+  Object.freeze({
+    api: `${IMAGE_REGISTRY}/${prefix}api@${digestOf("a")}`,
+    "api-migrate": `${IMAGE_REGISTRY}/${prefix}api-migrate@${digestOf("b")}`,
+    portal: `${IMAGE_REGISTRY}/${prefix}portal@${digestOf("c")}`,
+    admin: `${IMAGE_REGISTRY}/${prefix}admin@${digestOf("d")}`,
+    doctor: `${IMAGE_REGISTRY}/${prefix}doctor@${digestOf("e")}`,
+  });
+const IMAGES = recordedImages("");
+const PR_IMAGES = recordedImages("pr/");
 
 /** The five tool-owned subject ids the golden-identity converge returns. */
 const SUBJECTS = Object.fromEntries(
@@ -376,21 +399,57 @@ test("every compose invocation is `sudo`, pinned to the slot's own shipped tree"
   assert.equal(slotEnvPath("pr-7"), `${SLOT_ENV_DIR}/pr-7.env`);
 });
 
-test("images are BUILT on the box from the shipped tree, never pulled from a registry", () => {
-  const build = buildCommandPlan("pr-7", SHA, [
-    { name: "api", image: "ds-api" },
-  ]);
-  assert.equal(build.kind, "ensure-present");
-  build.command = build.items[0].apply;
-  assert.deepEqual(build.command.slice(0, 2), [
-    "sudo",
-    "BUILDX_NO_DEFAULT_ATTESTATIONS=1",
-  ]);
-  assert.deepEqual(build.command.slice(-2), ["build", "api"]);
-  assert.equal(build.stallBudget, "build");
-  const rendered = quoteCommand(build.command);
-  assert.ok(!/ pull/.test(rendered));
-  assert.ok(!/ghcr\.io/.test(rendered));
+test("images are PULLED by their recorded digest and tagged locally, never built on the box", () => {
+  const pull = pullCommandPlan(SHA, IMAGES);
+  assert.equal(pull.kind, "ensure-present");
+  assert.equal(pull.stallBudget, "build");
+  assert.equal(pull.items.length, 5);
+  const api = pull.items[0];
+  // The probe reads the local tag's RepoDigests; only the recorded digest is a match.
+  assert.deepEqual(api.probe.slice(0, 4), ["sudo", "docker", "image", "inspect"]);
+  assert.equal(api.probe.at(-1), `ds-api:${SHA}`);
+  const rendered = quoteCommand(api.apply);
+  assert.ok(rendered.startsWith("sudo sh -c "));
+  assert.ok(rendered.includes(`docker pull ${IMAGES.api}`));
+  assert.ok(rendered.includes(`docker tag ${IMAGES.api} ds-api:${SHA}`));
+  assert.ok(!/ build\b|compose/.test(rendered), "nothing is built");
+  assert.equal(pull.items[1].probe.at(-1), `ds-api-migrate:${SHA}`);
+});
+
+test("the registry login reads the pull token ON the box; the token never reaches the command text", () => {
+  for (const item of pullCommandPlan(SHA, IMAGES).items) {
+    const rendered = quoteCommand(item.apply);
+    assert.ok(
+      rendered.includes(
+        `docker login ${IMAGE_REGISTRY} -u ds-platform --password-stdin < ${REGISTRY_PULL_TOKEN_FILE}`,
+      ),
+    );
+    assert.ok(!/--password[ =]|-p /.test(rendered), "no password argument");
+    // The login never outlives its pull, failed pulls included: the token file stays
+    // the only registry credential at rest on the box.
+    assert.ok(
+      item.apply.at(-1).startsWith(`trap 'docker logout ${IMAGE_REGISTRY} >/dev/null 2>&1' EXIT; `),
+      "the pull shell logs out on exit",
+    );
+  }
+});
+
+test("after the pulls the box is logged out of the registry, as root, without the token in the plan", () => {
+  const logout = registryLogoutCommand();
+  assert.equal(logout.kind, "sh");
+  assert.deepEqual(logout.command, ["sudo", "docker", "logout", IMAGE_REGISTRY]);
+  const plan = upPlan();
+  const order = labels(plan);
+  assert.equal(order.indexOf("registry logout"), order.indexOf("pull recorded images") + 1);
+  const text = JSON.stringify(plan.steps.flatMap((step) => [step.command, ...(step.items ?? []).map((i) => i.apply)]));
+  assert.ok(!/--password[ =]|-p /.test(text), "no password argument anywhere in the up plan");
+  assert.ok(text.includes(REGISTRY_PULL_TOKEN_FILE), "the token is read by path on the box, never inlined");
+});
+
+test("the pull refuses an image set that is not the five recorded digests", () => {
+  assert.throws(() => pullCommandPlan(SHA, { ...IMAGES, api: undefined }), SlotError);
+  assert.throws(() => pullCommandPlan(SHA, { ...IMAGES, api: `${IMAGE_REGISTRY}/api:latest` }), SlotError);
+  assert.throws(() => pullCommandPlan("deadbeef", IMAGES), SlotError);
 });
 
 test("migrate and the branch golden seed run in the slot's own migrate image", () => {
@@ -512,6 +571,7 @@ test("a `sync` keeps the bucket: the step is ensure-present, never a re-create",
   const plan = planSlotUp({
     slot: "pr-7",
     sha: SHA,
+    images: IMAGES,
     liveSlots: live({ "pr-7": [] }),
     baseDomain: BASE,
     action: "sync",
@@ -634,10 +694,68 @@ test("a teardown renders only what compose needs to ADDRESS the project", () => 
   const text = renderSlotDownEnv({ slot: "pr-7" });
   assert.match(text, /^SLOT=pr-7$/m);
   assert.match(text, /^SLOT_DB=ds_pr_7$/m);
-  // No subjects, no SHA: `down` matches containers by project label, and a teardown
-  // must stay possible on a box where the golden identities never converged.
+  // No subjects: a teardown must stay possible on a box where the golden identities
+  // never converged. And no REAL sha: `down` matches containers by project label and
+  // must work without knowing what was deployed — the tag is a fixed non-SHA filler.
   assert.ok(!/DS_GOLDEN_SUB_/.test(text));
-  assert.ok(!/DEPLOY_SHA=/.test(text));
+  assert.match(text, new RegExp(`^DEPLOY_SHA=${SLOT_DOWN_IMAGE_TAG}$`, "m"));
+  assert.ok(!/^[0-9a-f]{7,40}$/.test(SLOT_DOWN_IMAGE_TAG), "the filler is never mistaken for a commit");
+});
+
+/** `KEY=value` lines of an env file, as compose reads them. */
+const envKeys = (text) =>
+  new Set(
+    text
+      .split(/\r?\n/)
+      .map((line) => line.match(/^([A-Z][A-Z0-9_]*)=/))
+      .filter(Boolean)
+      .map((match) => match[1]),
+  );
+const SLOT_COMPOSE_TEXT = readFileSync(
+  new URL("../../infra/deploy/compose/slot/compose.yml", import.meta.url),
+  "utf8",
+);
+const STAGE_ENV_EXAMPLE_KEYS = envKeys(
+  readFileSync(new URL("../../infra/deploy/stage.env.example", import.meta.url), "utf8"),
+);
+/** Every `${NAME:?…}` the slot compose refuses to interpolate without (comments excluded). */
+const composeRequiredVars = (text) =>
+  new Set(
+    [
+      ...text
+        .split(/\r?\n/)
+        .filter((line) => !/^\s*#/.test(line))
+        .join("\n")
+        .matchAll(/\$\{([A-Z][A-Z0-9_]*):\?/g),
+    ].map((match) => match[1]),
+  );
+
+test("`down` interpolates the slot compose: stage.env + the down env supply every required variable", () => {
+  // Compose interpolates the WHOLE file on every command, `down` included, so a
+  // `${VAR:?}` neither env file sets aborts the teardown after Caddy was detached.
+  const required = composeRequiredVars(SLOT_COMPOSE_TEXT);
+  assert.ok(required.has("DEPLOY_SHA"), "the image lines require a SHA");
+  for (const slot of ["main", "pr-7"]) {
+    const supplied = new Set([...STAGE_ENV_EXAMPLE_KEYS, ...envKeys(renderSlotDownEnv({ slot }))]);
+    const missing = [...required].filter((name) => !supplied.has(name));
+    assert.deepEqual(missing, [], `slot ${slot} down would abort on ${missing.join(", ")}`);
+  }
+  const down = downCommandPlan("pr-7").command;
+  assert.deepEqual(down.slice(0, composeBase("pr-7").length), composeBase("pr-7"), "the env files above are the ones down reads");
+  assert.ok(!down.includes("--rmi"), "down never resolves the filler tag to an image");
+});
+
+test("`up` still fails loudly without a real SHA: only the up env supplies it, never stage.env", () => {
+  assert.ok(!STAGE_ENV_EXAMPLE_KEYS.has("DEPLOY_SHA"), "a stage.env SHA would mask a missing one");
+  for (const line of SLOT_COMPOSE_TEXT.split(/\r?\n/).filter((l) => /^\s*image: ds-/.test(l))) {
+    assert.match(line, /:\$\{DEPLOY_SHA:\?\}$/, `no default tag: ${line.trim()}`);
+  }
+  const required = composeRequiredVars(SLOT_COMPOSE_TEXT);
+  const upEnv = renderSlotEnv({ slot: "pr-7", sha: SHA, baseDomain: BASE, redisDb: 4, goldenSubjects: SUBJECTS });
+  const supplied = new Set([...STAGE_ENV_EXAMPLE_KEYS, ...envKeys(upEnv)]);
+  assert.deepEqual([...required].filter((name) => !supplied.has(name)), []);
+  assert.match(upEnv, new RegExp(`^DEPLOY_SHA=${SHA}$`, "m"));
+  assert.throws(() => renderSlotEnv({ slot: "pr-7", sha: undefined, baseDomain: BASE, redisDb: 4, goldenSubjects: SUBJECTS }));
 });
 
 // --- the shared IdP redirect set ---------------------------------------------
@@ -764,6 +882,7 @@ function upPlan(overrides = {}) {
   return planSlotUp({
     slot: "pr-7",
     sha: SHA,
+    images: IMAGES,
     liveSlots: live({}),
     baseDomain: BASE,
     action: "up",
@@ -773,12 +892,13 @@ function upPlan(overrides = {}) {
   });
 }
 
-test("up: ship → env → build → verify → clone → bucket → migrate → seed → up → caddy → idp → verify → health → prune → identities", () => {
+test("up: ship → env → pull → verify → clone → bucket → migrate → seed → up → caddy → idp → verify → health → prune → identities", () => {
   assert.deepEqual(labels(upPlan()), [
     "ship the tree",
     "write slot env",
-    "build images",
-    "verify images boot",
+    "pull recorded images",
+    "registry logout",
+    "verify recorded digests and boot",
     "clone database",
     "create slot bucket",
     "migrate",
@@ -805,9 +925,11 @@ test("up ships the slot's own tree at the requested SHA, into the slot's own dir
   assert.deepEqual(ship.preserved, []);
 });
 
-test("up verifies the images it built and the containers it started, against the SAME sha", () => {
+test("up verifies the images it pulled and the containers it started, against the SAME sha", () => {
   const plan = upPlan();
-  assert.equal(stepOf(plan, "verify images boot").sha, SHA);
+  assert.equal(stepOf(plan, "verify recorded digests and boot").sha, SHA);
+  assert.deepEqual(stepOf(plan, "verify recorded digests and boot").images, IMAGES);
+  assert.deepEqual(stepOf(plan, "pull recorded images").items.length, 5);
   assert.equal(stepOf(plan, "verify the running images").sha, SHA);
   const health = stepOf(plan, "health");
   assert.equal(health.kind, "health");
@@ -834,6 +956,7 @@ test("sync of main forward-migrates and never clones a fresh database", () => {
   const plan = planSlotUp({
     slot: "main",
     sha: SHA,
+    images: IMAGES,
     liveSlots: live({ main: [] }),
     baseDomain: BASE,
     action: "sync",
@@ -849,6 +972,7 @@ test("the first `up main` on an empty box bootstraps ds_main from the template",
   const plan = planSlotUp({
     slot: "main",
     sha: SHA,
+    images: IMAGES,
     liveSlots: live({}),
     baseDomain: BASE,
     action: "up",
@@ -950,6 +1074,7 @@ test("the network and image removals are planned as verify-then-remove steps", (
 test("`reset main` audits, stops the slot, then drops and re-clones `ds_main`", () => {
   const plan = planSlotReset({
     sha: SHA,
+    images: IMAGES,
     liveSlots: live({ main: [] }),
     baseDomain: BASE,
     actor: "tech-lead",
@@ -1263,7 +1388,6 @@ test("`up` converges the golden identities FIRST — its subjects are the plan's
       return step.op === "golden-identities" ? SUBJECTS : undefined;
     },
     ship: async () => {},
-    buildImages: async () => {},
     verifyImages: async () => {},
     verifyRunning: async () => {},
     health: async () => {},
@@ -1271,6 +1395,7 @@ test("`up` converges the golden identities FIRST — its subjects are the plan's
   };
   const line = await runSlotCommand({
     options: { command: "up", slot: "pr-7", sha: SHA, actor: "tech-lead" },
+    images: IMAGES,
     liveSlots: live({}),
     baseDomain: BASE,
     effects,
@@ -1579,43 +1704,179 @@ test("up|sync refuse an incoherent bot-protection test token on the box (#2605)"
   );
 });
 
-test("EARS-1: a second slot reuses existing images without rebuilding their shared tags", async () => {
+/** A `probe` whose RepoDigests answer comes from a `ds-<image>:<sha>` → digests map. */
+const repoDigestProbe = (byTag) => async (command) => {
+  const digests = byTag[command.at(-1)];
+  return digests ? { ok: true, stdout: `${digests.join("\n")}\n` } : { ok: false, stdout: "" };
+};
+
+test("EARS-1: a second slot at the same SHA reuses tags whose RepoDigests carry the recorded digest", async () => {
   const commands = [];
+  const byTag = Object.fromEntries(
+    Object.entries(IMAGES).map(([name, ref]) => [`ds-${name}:${SHA}`, [ref]]),
+  );
   await runSlotPlan(
-    {
-      steps: [
-        buildCommandPlan("pr-7", SHA, [
-          { name: "api", image: "ds-api" },
-          { name: "migrate", image: "ds-api-migrate" },
-        ]),
-      ],
-    },
-    {
-      probe: async () => ({ ok: true }),
-      sh: async (command) => commands.push(command),
-    },
+    { steps: [pullCommandPlan(SHA, IMAGES)] },
+    { probe: repoDigestProbe(byTag), sh: async (command) => commands.push(command) },
   );
   assert.deepEqual(commands, []);
 });
 
-test("EARS-2: a missing image builds only its service, preserving existing siblings", async () => {
+test("EARS-2: a missing tag, or one with a different digest, is re-pulled — siblings are kept", async () => {
   const commands = [];
-  await runSlotPlan(
-    {
-      steps: [
-        buildCommandPlan("pr-7", SHA, [
-          { name: "api", image: "ds-api" },
-          { name: "migrate", image: "ds-api-migrate" },
-        ]),
-      ],
-    },
-    {
-      probe: async (command) => ({ ok: command.at(-1) === `ds-api:${SHA}` }),
-      sh: async (command) => commands.push(command),
-    },
+  const byTag = Object.fromEntries(
+    Object.entries(IMAGES).map(([name, ref]) => [`ds-${name}:${SHA}`, [ref]]),
   );
-  assert.equal(commands.length, 1);
-  assert.deepEqual(commands[0].slice(-2), ["build", "migrate"]);
+  delete byTag[`ds-api-migrate:${SHA}`];
+  byTag[`ds-portal:${SHA}`] = [`${IMAGE_REGISTRY}/portal@${digestOf("f")}`];
+  await runSlotPlan(
+    { steps: [pullCommandPlan(SHA, IMAGES)] },
+    { probe: repoDigestProbe(byTag), sh: async (command) => commands.push(command) },
+  );
+  assert.equal(commands.length, 2);
+  assert.ok(quoteCommand(commands[0]).includes(`docker pull ${IMAGES["api-migrate"]}`));
+  assert.ok(quoteCommand(commands[1]).includes(`docker tag ${IMAGES.portal} ds-portal:${SHA}`));
+});
+
+// --- the recorded image manifest (#2981) -------------------------------------
+
+const manifestFor = (overrides = {}) => ({ sha: SHA, ref: "main", images: { ...IMAGES }, ...overrides });
+
+test("a `main` manifest for the converged SHA is accepted for slot main and for a preview", () => {
+  assert.deepEqual(validateImageManifest(manifestFor(), { slot: "main", sha: SHA }).images, IMAGES);
+  assert.equal(validateImageManifest(manifestFor(), { slot: "pr-7", sha: SHA }).ref, "main");
+});
+
+test("a preview accepts its own `pr/<N>` manifest; slot main never accepts a PR's digests", () => {
+  const pr = manifestFor({ ref: "pr/7", images: { ...PR_IMAGES } });
+  assert.deepEqual(validateImageManifest(pr, { slot: "pr-7", sha: SHA }).images, PR_IMAGES);
+  assert.throws(() => validateImageManifest(pr, { slot: "main", sha: SHA }), /only `main`/);
+  assert.throws(() => validateImageManifest(pr, { slot: "pr-8", sha: SHA }), SlotError);
+  // The ref and the reference prefix must agree.
+  assert.throws(() => validateImageManifest(manifestFor({ images: { ...PR_IMAGES } }), { slot: "main", sha: SHA }), SlotError);
+  assert.throws(() => validateImageManifest(manifestFor({ ref: "pr/7" }), { slot: "pr-7", sha: SHA }), SlotError);
+});
+
+test("a manifest for another SHA, with a missing or extra key, or a malformed digest is refused", () => {
+  assert.throws(() => validateImageManifest(manifestFor({ sha: SHA2 }), { slot: "main", sha: SHA }), /records .* not/);
+  const missing = { ...IMAGES };
+  delete missing.doctor;
+  assert.throws(() => validateImageManifest(manifestFor({ images: missing }), { slot: "main", sha: SHA }), /doctor/);
+  assert.throws(
+    () => validateImageManifest(manifestFor({ images: { ...IMAGES, extra: IMAGES.api } }), { slot: "main", sha: SHA }),
+    /extra/,
+  );
+  for (const bad of [
+    `${IMAGE_REGISTRY}/api:${SHA}`,
+    `${IMAGE_REGISTRY}/api@sha256:${"a".repeat(63)}`,
+    `${IMAGE_REGISTRY}/portal@${digestOf("a")}`,
+    `ghcr.io/x/api@${digestOf("a")}`,
+  ]) {
+    assert.throws(
+      () => validateImageManifest(manifestFor({ images: { ...IMAGES, api: bad } }), { slot: "main", sha: SHA }),
+      SlotError,
+      bad,
+    );
+  }
+  assert.throws(() => validateImageManifest(null, { slot: "main", sha: SHA }), SlotError);
+});
+
+const RUN_URL = "https://github.com/o/r/actions/runs/1";
+const run = (overrides = {}) => ({
+  databaseId: 1,
+  status: "completed",
+  conclusion: "success",
+  event: "push",
+  url: RUN_URL,
+  ...overrides,
+});
+
+test("the newest successful runtime-images run is the one whose manifest is read", () => {
+  assert.equal(selectImagesRun([run({ databaseId: 2 }), run()], { slot: "main", sha: SHA }).databaseId, 2);
+  assert.equal(
+    selectImagesRun([run({ databaseId: 3, event: "pull_request" })], { slot: "pr-7", sha: SHA }).databaseId,
+    3,
+  );
+  // Slot main reads only a `main` build: a PR run for the same commit is not a candidate.
+  assert.equal(
+    selectImagesRun([run({ databaseId: 3, event: "pull_request" }), run({ databaseId: 2 })], { slot: "main", sha: SHA })
+      .databaseId,
+    2,
+  );
+});
+
+test("no run, a run still in progress, or a failed run fails closed — nothing is built instead", () => {
+  assert.throws(() => selectImagesRun([], { slot: "pr-7", sha: SHA }), /no images recorded for .*nothing to stage/s);
+  assert.throws(
+    () => selectImagesRun([run({ event: "pull_request" })], { slot: "main", sha: SHA }),
+    /no images recorded/,
+  );
+  assert.throws(
+    () => selectImagesRun([run({ status: "in_progress", conclusion: "" })], { slot: "main", sha: SHA }),
+    (err) => err instanceof SlotError && err.message.includes(RUN_URL) && /in_progress; retry/.test(err.message),
+  );
+  assert.throws(
+    () => selectImagesRun([run({ conclusion: "failure" })], { slot: "main", sha: SHA }),
+    (err) => err instanceof SlotError && err.message.includes(RUN_URL) && /failure/.test(err.message),
+  );
+});
+
+test("the manifest is resolved through `gh` on the operator side, then validated", async () => {
+  const calls = [];
+  const gh = async (argv) => {
+    calls.push(argv);
+    return argv[1] === "list" ? JSON.stringify([run({ databaseId: 42 })]) : "";
+  };
+  const resolved = await resolveRecordedImages({
+    slot: "main",
+    sha: SHA,
+    gh,
+    tmpDir: "/tmp/x",
+    readText: async (path) => {
+      assert.equal(path.replaceAll("\\", "/"), `/tmp/x/images-${SHA}.json`);
+      return JSON.stringify(manifestFor());
+    },
+  });
+  assert.deepEqual(resolved.images, IMAGES);
+  assert.equal(resolved.run.databaseId, 42);
+  assert.deepEqual(calls[0].slice(0, 6), ["run", "list", "--workflow", "runtime-images.yml", "--commit", SHA]);
+  assert.deepEqual(calls[1], ["run", "download", "42", "-n", `images-${SHA}`, "-D", "/tmp/x"]);
+});
+
+test("a run without its artifact (expired, never uploaded) refuses by run URL", async () => {
+  await assert.rejects(
+    resolveRecordedImages({
+      slot: "main",
+      sha: SHA,
+      gh: async (argv) => {
+        if (argv[1] === "list") return JSON.stringify([run()]);
+        throw new Error("no artifact matches");
+      },
+      tmpDir: "/tmp/x",
+      readText: async () => "",
+    }),
+    (err) => err instanceof SlotError && err.message.includes(RUN_URL) && err.message.includes(`images-${SHA}`),
+  );
+});
+
+test("verify asserts every local tag's RepoDigests carry exactly the recorded digest", () => {
+  const script = imageDigestScript({ sha: SHA, images: IMAGES });
+  for (const [name, ref] of Object.entries(IMAGES)) {
+    assert.ok(script.includes(`ds-${name}:${SHA}`));
+    assert.ok(script.includes(`grep -Fxq '${ref}'`));
+  }
+  const ok = Object.keys(IMAGES).map((name) => `digest:${name}=OK`).join("\n");
+  assert.doesNotThrow(() => assertImageDigests(ok, IMAGES));
+  assert.throws(
+    () => assertImageDigests(ok.replace("digest:portal=OK", "digest:portal=MISMATCH x"), IMAGES),
+    (err) => err instanceof SlotError && /portal=MISMATCH/.test(err.message),
+  );
+  // Truncated output is a failure, never a pass.
+  assert.throws(() => assertImageDigests("digest:api=OK", IMAGES), /doctor=NO-VERDICT/);
+});
+
+test("a converge without a recorded image set is refused, never planned with a build", () => {
+  assert.throws(() => upPlan({ images: undefined }), SlotError);
 });
 
 test("EARS-3: retention preserves a shared requested tag and removes an unused old tag", () => {

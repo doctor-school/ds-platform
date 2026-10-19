@@ -117,6 +117,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And a confirmed phone the requesting account held is displaced exactly as for a free number
     And a code submitted next fails with the generic wrong-code message
 
+  # Narrow Academy projection (#3017); retain the broader EARS-51 case above.
+  # Native IdP no-write, timing, limits and audit: apps/api/test/me/phone.e2e-spec.ts.
+  @EARS-51 @EARS-49 @EARS-48 @EARS-16 @failure @phone-collision
+  Scenario: Academy neutrally accepts another owned account's confirmed phone without sending SMS
+    Given two uniquely owned verified Academy accounts have confirmed distinct fresh phones with their actual SMS codes
+    When the second Academy account requests the first account's confirmed phone through its real phone row
+    Then Academy shows the ordinary pending code state, clears only the requester's confirmed phone and sends no SMS to the holder for twenty seconds
+    When the displaced requester submits six digits for that unavailable phone confirmation
+    Then Academy refuses that code generically while both owned profiles retain their post-request phone states
+
   @EARS-53 @EARS-12 @EARS-35 @happy @sms-reset
   Scenario: Password reset by a confirmed phone delivers the code by SMS
     Given an account with a unique confirmed phone and a verified email

@@ -1,10 +1,10 @@
 # `tools/staging` — the STAGE stand's operator-side scripts
 
 Node scripts that an operator runs **from a worktree on their own machine**, never in CI
-and never on the stage box. They follow the delivery shape `tools/deploy/prod.mjs` uses
-for production: the operator ships a committed tree over SSH and **the box builds its own
-images**. There is no registry anywhere in the path, no on-box deployer, no timer, and no
-Node runtime of ours on the host — the box runs containers and nothing else.
+and never on the stage box. The operator ships a committed tree over SSH, and the box
+**pulls the images `runtime-images.yml` recorded for that commit, by digest** — it never
+builds a product image (#2981). There is no on-box deployer, no timer, and no Node
+runtime of ours on the host — the box runs containers and nothing else.
 
 | script          | what it owns                                                                                                     | Issue        |
 | --------------- | ---------------------------------------------------------------------------------------------------------------- | ------------ |
@@ -127,8 +127,10 @@ reading an old message alone does not prove delivery.
 
 ## The box must stay logged into Docker Hub (#2240)
 
-`up`/`sync` builds missing images **on stage-1**, and each build pulls its
-base images from Docker Hub. Anonymous pulls are capped at **100/h keyed on the source
+`up`/`sync` no longer builds product images — those come from the project registry
+(«`slot.mjs` in one paragraph» below). Docker Hub is still pulled for the third-party
+images: the slot's `centrifugo`, and the `stg-infra` services, whose `postgres` is the
+one image still built on the box (its base image comes from Docker Hub). Anonymous pulls are capped at **100/h keyed on the source
 IP**, and Timeweb gives every tenant on the host the same shared IPv6 /64
 (`2a03:6f00:a::`) — so a converge can die on `429 Too Many Requests` without this stand
 having pulled anything (observed 2026-09-15/16/17; the same hour killed a production
@@ -289,8 +291,19 @@ A slot is `main` or `pr-<N>`, and every name it touches — compose project, net
 database, hostnames, container aliases, tree directory under `$HOME/ds-platform.slots` —
 is DERIVED from it, so a slot can never be addressed two ways. `docker ps` on the box is
 the single authority on which slots are live; there is no registry file and nothing is
-cached. `up`/`sync` ship the tree at `--ref <sha>`, reuse existing SHA-tagged images
-and build only missing services (including the migration image) on the box, clone the slot database from
+cached. `up`/`sync` first resolve, **on the operator's machine**, the images
+`.github/workflows/runtime-images.yml` recorded for `--ref <sha>`: `gh run list --workflow
+runtime-images.yml --commit <sha>` → `gh run download <run> -n images-<sha>` → validate
+`images-<sha>.json` (its `sha` is the ref; all five of `api`, `api-migrate`, `portal`,
+`admin`, `doctor` are `ds-platform.registry.twcstorage.ru/[pr/]<image>@sha256:…`). Slot
+`main` accepts only a `main` build; `pr-<N>` accepts its own `pr/<N>` build or a `main`
+one for the same SHA. No run, a run still in progress, a failed run or an expired
+artifact stops the converge **before the box is touched** — there is no build fallback
+(«the PR head changes no image input, so runtime-images did not run — nothing to stage»).
+Then they ship the tree, log the box into the registry with the root-only
+`/etc/ds-platform/registry-pull-token` (read by the box's own shell; the token is in no
+argv, log or plan), pull each recorded digest and tag it `ds-<image>:<sha>`, assert every
+tag's `RepoDigests` carries exactly the recorded digest, boot-probe, clone the slot database from
 `ds_golden` (never for `main`, which is persistent), run migrate and the golden seed
 through the containerized `migrate` one-shot, start
 `infra/deploy/compose/slot/compose.yml`, converge the shared IdP and assert
@@ -301,17 +314,16 @@ the branch seed can write objects) and a preview's `down` drops it with
 touching a single object. `reset-identities` is folded into every `up`/`sync` and
 is idempotent, so a converge needs no second operator command.
 
-Image tags are immutable per full commit SHA and shared between slots. A second
-slot at the same ref does not rebuild or retag existing images. `down`, `gc` and
-retention preserve other containers' original requested tags (`Config.Image`), even
+Local image tags are per full commit SHA and shared between slots. A second slot at
+the same ref reuses an existing `ds-<image>:<sha>` only when its `RepoDigests` carry the
+recorded digest; a tag with any other digest is re-pulled and re-tagged. `down`, `gc`
+and retention preserve other containers' original requested tags (`Config.Image`), even
 when `docker ps` displays an image ID after a tag was moved. Retention also keeps
 the full image bundle for each live commit, including the one-shot migration image
-whose container is removed after use; cached build timestamps do not evict it.
-
-**Build inputs must stay constant for a shared SHA.** The SHA tag does not encode
-box build arguments, such as `SMARTCAPTCHA_SITE_KEY`. Changing those inputs requires
-a fresh commit ref/image set; reusing the old ref intentionally reuses its old images.
-The tool does not detect build-argument drift or rewrite an image used by another slot.
+whose container is removed after use; image timestamps do not evict it. The images
+carry no environment (#2995): stage's captcha site key and contour flag are runtime
+env, so the same digest serves every slot and, later, production. The BuildKit cache
+cap in the converge's prune stays: `stg-infra`'s `postgres` is still built on the box.
 
 `reset main --yes --ref <sha>` drops `ds_main` and re-clones it from `ds_golden`, then
 re-runs the ordinary converge on that SHA — the escape hatch for a staging database

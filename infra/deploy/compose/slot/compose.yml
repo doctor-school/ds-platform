@@ -16,18 +16,19 @@
 # into the per-slot file: `DATABASE_URL` is assembled BELOW from stage.env's
 # `POSTGRES_PASSWORD` and the slot's `SLOT_DB`, so the password lives in one file.
 #
-# IMAGES. Built ON THE BOX from the shipped tree, never pulled — the production
-# shape (api-prod precedent, `pnpm deploy:prod`): no registry, no GHCR, no build
-# half in CI (Issue #2194). `slot up` ships the worktree to the box and runs
-# `docker compose build` there, exactly as production does.
+# IMAGES. Never built on the box (#2981). `.github/workflows/runtime-images.yml`
+# builds each image once per commit, pushes it to the registry and records its
+# digest; `slot up` resolves that record, pulls exactly those digests and tags each
+# one locally as the `image:` below. No service here has a `build:` block, and
+# `up -d` runs with `--no-build`.
 #
-# The tags are `ds-<app>:${DEPLOY_SHA:-local}` — SHA-scoped but NOT slot-scoped, so
-# two slots standing on the same commit SHARE one image set instead of building it
+# The tags are `ds-<app>:${DEPLOY_SHA:?}` — SHA-scoped but NOT slot-scoped, so two
+# slots standing on the same commit SHARE one image set instead of pulling it
 # twice. That sharing is why `slot down` must subtract the images still used by
 # other live slot projects before pruning (`planSlotDown` in
 # tools/staging/slot.mjs, unit-tested there); a per-slot tag would have hidden it.
-# `:local` is the fallback for a manual `docker compose build` with no DEPLOY_SHA,
-# mirroring api-prod.
+# `:?` because there is no `:local` image to fall back to: a run without
+# DEPLOY_SHA is a mistake, not a manual build.
 #
 # NETWORKS. The project default network is NAMED `slot-<slot>` so the edge can be
 # attached to exactly this slot (`docker network connect slot-<slot>
@@ -58,10 +59,7 @@ name: slot
 services:
   # --- api — NestJS BFF/API, the only service on the shared stg-infra network -----
   api:
-    build:
-      context: ../../../.. # repo root (the tree `slot up` ships) — see .dockerignore
-      dockerfile: apps/api/Dockerfile
-    image: ds-api:${DEPLOY_SHA:-local}
+    image: ds-api:${DEPLOY_SHA:?}
     container_name: ${SLOT:?}-api
     restart: unless-stopped
     env_file:
@@ -113,15 +111,7 @@ services:
   # stage.env (env_file below), and the contour manifest is gated by the runtime
   # CONTOUR_MANIFEST flag in `environment:`.
   portal:
-    build:
-      context: ../../../..
-      dockerfile: apps/portal/Dockerfile
-      args:
-        # BUILD-time on purpose (DSO-100): Next freezes `rewrites()` destinations
-        # into .next/routes-manifest.json, so a runtime-only value is ignored and
-        # the baked localhost fallback ECONNREFUSEDs the same-origin /v1/* proxy.
-        API_PROXY_TARGET: http://api:3000
-    image: ds-portal:${DEPLOY_SHA:-local}
+    image: ds-portal:${DEPLOY_SHA:?}
     container_name: ${SLOT:?}-portal
     restart: unless-stopped
     env_file:
@@ -156,12 +146,7 @@ services:
 
   # --- doctor — Next.js standalone, the doctor storefront (doctor-<slot>.…) --------
   doctor:
-    build:
-      context: ../../../..
-      dockerfile: apps/doctor/Dockerfile
-      args:
-        API_PROXY_TARGET: http://api:3000
-    image: ds-doctor:${DEPLOY_SHA:-local}
+    image: ds-doctor:${DEPLOY_SHA:?}
     container_name: ${SLOT:?}-doctor
     restart: unless-stopped
     env_file:
@@ -189,12 +174,7 @@ services:
 
   # --- admin — Next.js + Refine standalone, the operator app (admin-<slot>.…) ------
   admin:
-    build:
-      context: ../../../..
-      dockerfile: apps/admin/Dockerfile
-      args:
-        API_PROXY_TARGET: http://api:3000
-    image: ds-admin:${DEPLOY_SHA:-local}
+    image: ds-admin:${DEPLOY_SHA:?}
     container_name: ${SLOT:?}-admin
     restart: unless-stopped
     env_file:
@@ -269,11 +249,7 @@ services:
   # not the workspace (WORKDIR /migrate/apps/api); the same container runs the
   # branch seed as `pnpm --dir ../../packages/db run seed:golden` (GOLDEN_SEED_ARGV).
   migrate:
-    build:
-      context: ../../../..
-      dockerfile: apps/api/Dockerfile
-      target: migrate # carries drizzle-kit + tsx + migrations, absent from runtime
-    image: ds-api-migrate:${DEPLOY_SHA:-local}
+    image: ds-api-migrate:${DEPLOY_SHA:?}
     container_name: ${SLOT:?}-migrate
     profiles: ["migrate"]
     restart: "no"

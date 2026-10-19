@@ -3,11 +3,10 @@
 // (Issue #2194; staging tech spec §3 «Slots» / §5 «Converge» / §8 step 4).
 //
 // A SLOT is one compose project running the product service set (`api`, `portal`,
-// `doctor`, `admin`, `centrifugo`, plus a `migrate` one-shot) from images BUILT ON
-// THE BOX out of the slot's own shipped tree — exactly as `tools/deploy/prod.mjs`
-// builds production. There is no registry to push to and none to pull from: the tag
-// is the full commit SHA, global per commit, and `docker ps` is the single authority
-// on which slots are live.
+// `doctor`, `admin`, `centrifugo`, plus a `migrate` one-shot) from images PULLED by the
+// digests `runtime-images.yml` recorded for the commit (#2981) and tagged locally
+// `ds-<image>:<full sha>`. Nothing is built on the box. The local tag is global per
+// commit, and `docker ps` is the single authority on which slots are live.
 //
 // What this module owns:
 //   * name derivation — slot → compose project, network, database, hostnames,
@@ -33,7 +32,10 @@
 // Both IdP converges — the whole redirect-URI set on every `up`/`down`, and the golden
 // identities — live in `idp.mjs` and arrive here as ONE injected `idp` effect.
 
-import { realpathSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
@@ -97,7 +99,7 @@ export const FULL_SHA_RE = /^[0-9a-f]{40}$/;
 /**
  * An image this tool may remove: `ds-<repo>:<full sha>`.
  *
- * The tag carries no slot any more (the box builds one image per COMMIT, which two
+ * The tag carries no slot any more (the box holds one image set per COMMIT, which two
  * slots converged on the same commit share), so the gc authority is the live image
  * list, not the tag. The `ds-` prefix keeps every shared-infra image — caddy,
  * postgres, zitadel — structurally out of reach of `image rm`.
@@ -167,8 +169,6 @@ export const STAGE_1 = process.env.DS_STAGE_SSH || "ds-stage-1";
  */
 export const SLOT_ONE_SHOT_SERVICES = Object.freeze(["migrate"]);
 
-/** Buildx attestations off — production's own build flag (`tools/deploy/prod.mjs`). */
-export const NO_ATTEST = "BUILDX_NO_DEFAULT_ATTESTATIONS=1";
 
 /** Production's image retention and BuildKit cache ceiling, not an invented pair. */
 export const IMAGE_RETENTION = 3;
@@ -656,29 +656,232 @@ export function composeBase(slot) {
   ];
 }
 
+// --- the recorded images (#2981) ---------------------------------------------
+//
+// Nothing is built on the box. `.github/workflows/runtime-images.yml` builds every
+// image ONCE per commit, pushes it to the registry and records the pushed digests in
+// the run artifact `images-<sha>` (`images-<sha>.json`). A slot resolves that record
+// on the OPERATOR side, before the box is touched, and the box pulls exactly those
+// digests — never a tag, which the registry could re-point (spec
+// 2026-10-16-release-pipeline-off-workstation §3 item 1).
+
+export const IMAGE_REGISTRY = "ds-platform.registry.twcstorage.ru";
+/** Root-only on ds-stage-1; read by the box's own shell, never by this tool. */
+export const REGISTRY_PULL_TOKEN_FILE = "/etc/ds-platform/registry-pull-token";
+export const IMAGES_WORKFLOW = "runtime-images.yml";
+/** The manifest keys; each is pulled and tagged locally as `ds-<key>:<sha>`. */
+export const RECORDED_IMAGE_NAMES = Object.freeze(["api", "api-migrate", "portal", "admin", "doctor"]);
+
+const imagesArtifactName = (sha) => `images-${sha}`;
+const DIGEST_REF_RE = /^ds-platform\.registry\.twcstorage\.ru\/(pr\/)?([a-z0-9][a-z0-9-]*)@sha256:[0-9a-f]{64}$/;
+
 /**
- * The images, BUILT on the box from the shipped tree.
- *
- * This is the whole shape change of #2194: production builds on its own box out of a
- * shipped tree, and staging now does the same. There is no registry in the path, so
- * there is no registry to authenticate to, none to garbage-collect and no window in
- * which the box runs an image the tree it shipped did not produce.
- *
- * `BUILDX_NO_DEFAULT_ATTESTATIONS=1` is production's flag verbatim: attestation
- * manifests make every image a multi-platform index, which `docker image inspect`
- * then cannot resolve to a single id.
+ * The five recorded references, each a digest reference of ITS OWN image. `pr` says
+ * which namespace they must all come from: `true` = `pr/`, `false` = the `main`
+ * namespace, `undefined` = either (but one for all five).
  */
-export function buildCommandPlan(slot, sha, services) {
+function assertImageRefs(images, { pr } = {}) {
+  if (!images || typeof images !== "object" || Array.isArray(images)) {
+    throw new SlotError(
+      "no recorded image set: a slot runs only the digests `runtime-images.yml` recorded " +
+        "for its commit, and nothing is built on the box",
+    );
+  }
+  const extra = Object.keys(images).filter((name) => !RECORDED_IMAGE_NAMES.includes(name));
+  if (extra.length) throw new SlotError(`recorded image set has unknown image(s): ${extra.join(", ")}`);
+  const namespaces = new Set();
+  for (const name of RECORDED_IMAGE_NAMES) {
+    const ref = images[name];
+    if (typeof ref !== "string") throw new SlotError(`recorded image set lacks \`${name}\``);
+    const match = ref.match(DIGEST_REF_RE);
+    if (!match || match[2] !== name) {
+      throw new SlotError(
+        `recorded \`${name}\` is not a digest reference of ${IMAGE_REGISTRY}/[pr/]${name}: ${ref}`,
+      );
+    }
+    namespaces.add(Boolean(match[1]));
+  }
+  if (namespaces.size > 1) throw new SlotError("recorded image set mixes `main` and `pr/` references");
+  const isPr = [...namespaces][0];
+  if (pr !== undefined && pr !== isPr) {
+    throw new SlotError(
+      `recorded image set is in the ${isPr ? "`pr/`" : "`main`"} namespace, but its manifest ` +
+        `ref says ${pr ? "a PR" : "`main`"}`,
+    );
+  }
+  return images;
+}
+
+/**
+ * Validates `images-<sha>.json` for a converge of `slot` on `sha`.
+ *
+ * Slot `main` accepts only a `main` build (a release accepts only `main` digests);
+ * a preview `pr-<N>` accepts its own `pr/<N>` build or a `main` one for the same SHA.
+ */
+export function validateImageManifest(manifest, { slot, sha }) {
+  assertSlotName(slot);
   shortSha(sha);
+  if (!manifest || typeof manifest !== "object") {
+    throw new SlotError(`the recorded image manifest for ${shortSha(sha)} is not a JSON object`);
+  }
+  if (manifest.sha !== sha) {
+    throw new SlotError(
+      `the image manifest records ${JSON.stringify(manifest.sha)}, not ${sha} — refusing to stage another commit's images`,
+    );
+  }
+  const ref = manifest.ref;
+  if (slot === "main") {
+    if (ref !== "main") {
+      throw new SlotError(
+        `slot main runs only \`main\` digests; the manifest for ${shortSha(sha)} is ${JSON.stringify(ref)}`,
+      );
+    }
+  } else if (ref !== "main" && ref !== `pr/${slot.slice("pr-".length)}`) {
+    throw new SlotError(
+      `slot ${slot} accepts a \`pr/${slot.slice("pr-".length)}\` or \`main\` manifest, not ${JSON.stringify(ref)}`,
+    );
+  }
+  const images = assertImageRefs(manifest.images, { pr: ref !== "main" });
+  return { ref, images: { ...images } };
+}
+
+/**
+ * The `runtime-images.yml` run whose artifact a converge reads — or a refusal.
+ *
+ * Fail closed: no run, a run still going or a failed run is a stop with the cause,
+ * NEVER a fallback build — the box has no way to build any more.
+ */
+export function selectImagesRun(runs, { slot, sha }) {
+  assertSlotName(slot);
+  shortSha(sha);
+  const candidates = (Array.isArray(runs) ? runs : []).filter(
+    (run) => slot !== "main" || run.event === "push" || run.event === "workflow_dispatch",
+  );
+  const success = candidates.find((run) => run.status === "completed" && run.conclusion === "success");
+  if (success) return success;
+  const running = candidates.find((run) => run.status !== "completed");
+  if (running) {
+    throw new SlotError(
+      `runtime-images run ${running.url} is ${running.status}; retry when it completes`,
+    );
+  }
+  if (candidates.length) {
+    const failed = candidates[0];
+    throw new SlotError(
+      `runtime-images run ${failed.url} concluded ${failed.conclusion}: no images recorded for ${sha}`,
+    );
+  }
+  throw new SlotError(
+    `no images recorded for ${sha}: there is no ${slot === "main" ? "`main` " : ""}` +
+      `${IMAGES_WORKFLOW} run for this commit (a PR head that changes no image input does ` +
+      "not run it) — nothing to stage",
+  );
+}
+
+/**
+ * Operator-side resolution of the recorded digests: run → artifact → validated set.
+ * `gh(argv)` resolves to stdout; `readText(path)` reads the downloaded manifest.
+ */
+export async function resolveRecordedImages({ slot, sha, gh, readText, tmpDir }) {
+  const runs = JSON.parse(
+    await gh([
+      "run",
+      "list",
+      "--workflow",
+      IMAGES_WORKFLOW,
+      "--commit",
+      sha,
+      "--json",
+      "databaseId,status,conclusion,event,url",
+      "--limit",
+      "20",
+    ]),
+  );
+  const run = selectImagesRun(runs, { slot, sha });
+  const name = imagesArtifactName(sha);
+  let text;
+  try {
+    await gh(["run", "download", String(run.databaseId), "-n", name, "-D", tmpDir]);
+    text = await readText(join(tmpDir, `${name}.json`));
+  } catch (err) {
+    throw new SlotError(
+      `runtime-images run ${run.url} has no readable artifact ${name} ` +
+        `(${err instanceof Error ? err.message.split("\n")[0] : err}) — nothing to stage`,
+    );
+  }
+  let manifest;
+  try {
+    manifest = JSON.parse(text);
+  } catch {
+    throw new SlotError(`artifact ${name} of ${run.url} is not JSON`);
+  }
+  return { ...validateImageManifest(manifest, { slot, sha }), run };
+}
+
+/** `ds-<key>:<sha>` — the local tag compose, inventory, gc and prune all read. */
+const localImageTag = (name, sha) => `ds-${name}:${sha}`;
+const REPO_DIGESTS_FORMAT = "{{range .RepoDigests}}{{println .}}{{end}}";
+
+/**
+ * The images, PULLED by their recorded digest and tagged `ds-<image>:<sha>`.
+ *
+ * A tag that already exists is reused only when its RepoDigests carry the recorded
+ * digest (two slots on one SHA share one image set); any other tag is re-pulled and
+ * re-tagged. The login reads the pull token from its root-only file INSIDE the box's
+ * shell — the token is never in an argv, a log line or this plan.
+ */
+export function pullCommandPlan(sha, images) {
+  shortSha(sha);
+  assertImageRefs(images);
+  const login = `docker login ${IMAGE_REGISTRY} -u ds-platform --password-stdin < ${REGISTRY_PULL_TOKEN_FILE}`;
   return {
     kind: "ensure-present",
-    label: "build missing images",
+    label: "pull recorded images",
     stallBudget: "build",
-    items: services.map(({ name, image }) => ({
-      probe: ["sudo", "docker", "image", "inspect", `${image}:${sha}`],
-      apply: ["sudo", NO_ATTEST, ...composeBase(slot).slice(1), "build", name],
-    })),
+    items: RECORDED_IMAGE_NAMES.map((name) => {
+      const ref = images[name];
+      const tag = localImageTag(name, sha);
+      return {
+        probe: ["sudo", "docker", "image", "inspect", "--format", REPO_DIGESTS_FORMAT, tag],
+        match: (stdout) => stdout.split(/\r?\n/).some((line) => line.trim() === ref),
+        apply: ["sudo", "sh", "-c", `${login} >/dev/null && docker pull ${ref} && docker tag ${ref} ${tag}`],
+      };
+    }),
   };
+}
+
+/** Prints `digest:<image>=OK` per image whose local tag carries its recorded digest. */
+export function imageDigestScript({ sha, images }) {
+  shortSha(sha);
+  assertImageRefs(images);
+  return RECORDED_IMAGE_NAMES.map((name) => {
+    const ref = images[name];
+    return [
+      `d=$(sudo docker image inspect --format '${REPO_DIGESTS_FORMAT}' ${localImageTag(name, sha)} 2>/dev/null) || d=ABSENT`,
+      `if printf '%s\\n' "$d" | grep -Fxq '${ref}'; then echo "digest:${name}=OK"; ` +
+        `else echo "digest:${name}=MISMATCH $(printf '%s' "$d" | tr '\\n' ' ')"; fi`,
+    ].join("\n");
+  }).join("\n");
+}
+
+/** A missing verdict is a failure: truncated output must not read as «all match». */
+export function assertImageDigests(stdout, images) {
+  const verdicts = Object.fromEntries(
+    String(stdout ?? "")
+      .split(/\r?\n/)
+      .map((line) => line.trim().match(/^digest:([a-z0-9-]+)=(\w+)/))
+      .filter(Boolean)
+      .map((match) => [match[1], match[2]]),
+  );
+  const bad = Object.keys(images).filter((name) => verdicts[name] !== "OK");
+  if (bad.length) {
+    throw new SlotError(
+      `the local images do NOT carry the recorded digests: ${bad
+        .map((name) => `${name}=${verdicts[name] ?? "NO-VERDICT"}`)
+        .join(", ")}`,
+    );
+  }
+  return verdicts;
 }
 
 export function upCommandPlan(slot) {
@@ -1237,7 +1440,7 @@ export function slotsWithClosedPrs(liveSlots, openPrNumbers) {
  * The second, CONDITIONAL half of gc — see `GC_FREE_SPACE_FLOOR`.
  *
  * Above the floor nothing runs: an unconditional prune on a healthy box throws away
- * the build cache the next slot build would reuse.
+ * the BuildKit cache the next stg-infra `postgres` build would reuse.
  */
 export function planPruneByFreeSpace({ freeBytes }) {
   if (freeBytes >= GC_FREE_SPACE_FLOOR_BYTES) return { commands: [] };
@@ -1327,8 +1530,8 @@ export function planResetIdentities({ slot, liveSlots, subjects, actor, now = ne
 /**
  * `up` / `sync` — the converge, in the only order that is safe.
  *
- * The tree ships FIRST: everything after it — the build, the migrate image, the
- * compose file itself — comes out of that tree, so a ship that failed must stop the
+ * The tree ships FIRST: everything after it — the compose file, the migrate
+ * profile, the env file it reads — comes out of that tree, so a ship that failed must stop the
  * converge before anything on the box changes.
  *
  * The IdP converge comes AFTER `up -d` and the Caddy attach: a callback registered
@@ -1340,6 +1543,7 @@ export function planResetIdentities({ slot, liveSlots, subjects, actor, now = ne
 export function planSlotUp({
   slot,
   sha,
+  images,
   liveSlots,
   baseDomain,
   action = "up",
@@ -1350,6 +1554,7 @@ export function planSlotUp({
 }) {
   assertSlotName(slot);
   shortSha(sha);
+  assertImageRefs(images);
   assertBaseDomain(baseDomain);
   if (action !== "up" && action !== "sync") {
     throw new SlotError(`unknown converge action: ${JSON.stringify(action)}`);
@@ -1384,8 +1589,8 @@ export function planSlotUp({
       }),
       mode: 0o640,
     },
-    { kind: "build-images", label: "build images", sha, slot },
-    { kind: "verify-images", label: "verify images boot", sha, slot },
+    pullCommandPlan(sha, images),
+    { kind: "verify-images", label: "verify recorded digests and boot", sha, slot, images },
   ];
 
   const dbAction = databaseAction({ slot, action, exists: databaseExists });
@@ -1549,6 +1754,7 @@ export function resetLogLine({ actor, sha, now = new Date() }) {
  */
 export function planSlotReset({
   sha,
+  images,
   liveSlots,
   baseDomain,
   actor,
@@ -1568,6 +1774,7 @@ export function planSlotReset({
   const up = planSlotUp({
     slot: "main",
     sha,
+    images,
     liveSlots,
     baseDomain,
     action: "up",
@@ -1607,7 +1814,6 @@ export function planSlotReset({
 /** The remote-only step kinds, each naming the effect that must supply it. */
 const REMOTE_ONLY_KINDS = Object.freeze({
   ship: "ship",
-  "build-images": "buildImages",
   "verify-images": "verifyImages",
   "verify-running": "verifyRunning",
   health: "health",
@@ -1645,7 +1851,6 @@ export async function runSlotPlan(
     probe,
     idp,
     ship,
-    buildImages,
     verifyImages,
     verifyRunning,
     health,
@@ -1655,7 +1860,6 @@ export async function runSlotPlan(
 ) {
   const remoteEffects = {
     ship,
-    buildImages,
     verifyImages,
     verifyRunning,
     health,
@@ -1744,6 +1948,7 @@ export async function runSlotPlan(
  */
 export async function runSlotCommand({
   options,
+  images,
   liveSlots,
   baseDomain,
   effects,
@@ -1795,6 +2000,7 @@ export async function runSlotCommand({
   if (options.command === "reset") {
     const plan = planSlotReset({
       sha: options.sha,
+      images,
       liveSlots,
       baseDomain,
       actor: options.actor,
@@ -1817,6 +2023,7 @@ export async function runSlotCommand({
   const plan = planSlotUp({
     slot: options.slot,
     sha: options.sha,
+    images,
     liveSlots,
     baseDomain,
     action: options.command,
@@ -2047,7 +2254,7 @@ async function boxDatabaseExists(name) {
 /**
  * PRE-SWAP boot verify — `tools/deploy/prod.mjs` `verifyImagesBoot`, slot-scoped.
  *
- * The freshly built images are run as throwaway DETACHED containers with the same two
+ * The freshly pulled images are run as throwaway DETACHED containers with the same two
  * `env_file`s the slot compose gives them, and each must answer non-5xx on `/` from
  * inside the container. An image that does not boot aborts the converge while the
  * slot's PREVIOUS containers are still up — the reviewer's preview never sees it.
@@ -2111,7 +2318,7 @@ export function assertImagesBoot(stdout, services) {
   const bad = names.filter((name) => verdicts[name] !== "OK");
   if (bad.length > 0) {
     throw new SlotError(
-      `freshly built image(s) do NOT boot: ${bad
+      `recorded image(s) do NOT boot: ${bad
         .map((name) => `${name}=${verdicts[name] ?? "NO-VERDICT"}`)
         .join(", ")}\n` +
         "  Nothing was swapped — the slot's PREVIOUS containers are still up.",
@@ -2359,7 +2566,7 @@ export function assertCaptchaCoherent(boxEnv) {
  * resolves the widget with it), so it is meaningful only while bot protection is ON;
  * and the api env schema refuses to boot on a token shorter than 32 characters or
  * one set without a non-production `SENTRY_ENVIRONMENT` — refused here by name before
- * any build minute is spent. Empty means "no token".
+ * any image is pulled. Empty means "no token".
  */
 const TEST_TOKEN_MIN_LENGTH = 32;
 const NON_PRODUCTION_SENTRY_ENVIRONMENTS = ["stage", "development", "test"];
@@ -2454,9 +2661,9 @@ async function probeSlotHealth(url, headers, sha) {
  * public edge the way a reviewer does.
  *
  * The five REMOTE-ONLY ones are the routines above: `ship` streams a `git archive` of
- * the committed SHA into the slot's disposable tree, `verifyImages` boot-probes the
- * freshly built images BEFORE the swap, `verifyRunning` proves the running containers
- * carry that SHA and are healthy AFTER it, `health` asserts the public api serves it,
+ * the committed SHA into the slot's disposable tree, `verifyImages` asserts the pulled
+ * images carry their recorded digests and boot-probes them BEFORE the swap,
+ * `verifyRunning` proves the running containers carry that SHA and are healthy AFTER it, `health` asserts the public api serves it,
  * and `prune` caps the box's images and BuildKit cache. Each one reads the slot's own
  * shipped compose for its service set, so a branch that adds or drops a service is
  * verified against what that branch actually declares.
@@ -2527,15 +2734,21 @@ function realEffects(boxEnv) {
         preserved: step.preserved,
         tmpPrefix: step.tmpPrefix,
       }),
-    buildImages: async (step) => {
-      const { services } = await readSlotServices(step.slot);
-      return runSlotPlan(
-        { steps: [buildCommandPlan(step.slot, step.sha, services)] },
-        realEffects(boxEnv),
-      );
-    },
     verifyImages: async (step) => {
-      const { bootProbe } = await readSlotServices(step.slot);
+      const { services, bootProbe } = await readSlotServices(step.slot);
+      // Every image the shipped compose runs must be one the manifest recorded: a
+      // service outside it would have nothing to pull and no build to fall back to.
+      const unrecorded = services
+        .map((service) => service.image)
+        .filter((image) => !RECORDED_IMAGE_NAMES.includes(image.replace(/^ds-/, "")));
+      if (unrecorded.length) {
+        throw new SlotError(
+          `the slot compose runs image(s) no recorded manifest carries: ${unrecorded.join(", ")}`,
+        );
+      }
+      const digests = await sshCapture(STAGE_1, imageDigestScript({ sha: step.sha, images: step.images }));
+      console.log(digests.split(/\r?\n/).map((line) => `  ${line}`).join("\n"));
+      assertImageDigests(digests, step.images);
       const out = await sshCapture(
         STAGE_1,
         verifyImagesScript({ slot: step.slot, sha: step.sha, services: bootProbe }),
@@ -2658,6 +2871,28 @@ export function requiredBaseDomain(boxEnv) {
   return assertBaseDomain(baseDomain);
 }
 
+/** `resolveRecordedImages` through the operator's own `gh`, in a throwaway temp dir. */
+async function resolveRecordedImagesViaGh({ slot, sha }) {
+  const tmpDir = mkdtempSync(join(tmpdir(), "ds-slot-images-"));
+  try {
+    return await resolveRecordedImages({
+      slot,
+      sha,
+      tmpDir,
+      readText: async (path) => readFileSync(path, "utf8"),
+      gh: (argv) =>
+        new Promise((resolve, reject) => {
+          execFile("gh", argv, { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+            if (err) reject(new Error(`gh ${argv.slice(0, 2).join(" ")}: ${(stderr || err.message).trim()}`));
+            else resolve(stdout);
+          });
+        }),
+    });
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.command === "agent-admin-code") {
@@ -2684,11 +2919,20 @@ async function main() {
     }
     return;
   }
+  // The recorded digests are resolved BEFORE the box is touched: a commit with no
+  // recorded images stops here, with nothing changed on ds-stage-1.
+  let images;
+  if ((COMMANDS_WITH_SLOT_AND_REF.has(options.command) || options.command === "reset") && options.sha) {
+    const resolved = await resolveRecordedImagesViaGh({ slot: options.slot, sha: options.sha });
+    images = resolved.images;
+    console.log(`# recorded images for ${shortSha(options.sha)} (${resolved.ref}, ${resolved.run.url})`);
+    for (const name of RECORDED_IMAGE_NAMES) console.log(`  ${name}: ${images[name]}`);
+  }
   const boxEnv = await readBoxEnvFile(STAGE_ENV_FILE);
   const liveSlots = await readLiveSlots();
   const effects = realEffects(boxEnv);
-  // `up`/`sync` build and run a slot whose sign-in depends on the captcha trio being
-  // coherent — refuse before any build minute is spent (#2207).
+  // `up`/`sync` run a slot whose sign-in depends on the captcha trio being coherent —
+  // refuse before any image is pulled (#2207).
   if (COMMANDS_WITH_SLOT_AND_REF.has(options.command)) {
     const captcha = assertCaptchaCoherent(boxEnv);
     const testToken = (boxEnv.BOT_PROTECTION_TEST_TOKEN ?? "").trim() !== "";
@@ -2728,6 +2972,7 @@ async function main() {
   console.log(
     await runSlotCommand({
       options: { ...options, actor: process.env.SUDO_USER || process.env.USER },
+      images,
       liveSlots,
       baseDomain: requiredBaseDomain(boxEnv),
       effects,

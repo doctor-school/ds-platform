@@ -499,6 +499,19 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then Zitadel otp_sms verifies it
     And a BFF session is established
 
+  @EARS-7 @EARS-8 @happy @login-sms-confirmed
+  Scenario: Academy signs in the same owned doctor with the confirmed phone SMS code
+    Given an owned Academy doctor verifies email and confirms a fresh phone through the real account UI
+    When that doctor logs out and requests an SMS sign-in code as a genuine Academy guest
+    And the guest enters the actual six-digit SMS login code and it auto-submits
+    Then the SMS session belongs to that same confirmed-phone Academy doctor and logout removes private access
+    # Narrow browser projection: real registration, phone confirmation, addressed
+    # session.otp.sms.challenged delivery, code acceptance and same-identity session.
+    # Native apps/api/test/auth/login-otp.e2e-spec.ts owns IdP check delegation
+    # and the global budget breaker; apps/api/src/auth/sms-budget/
+    # sms-budget.service.spec.ts owns EARS-14 per-phone, IP and ASN thresholds.
+    # This journey neither exhausts nor claims to inspect fraud-budget counters.
+
   @EARS-14 @failure
   Scenario: SMS send refused when the daily budget circuit-breaker is open
     Given the global daily SMS budget has been exhausted

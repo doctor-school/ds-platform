@@ -6,34 +6,6 @@ The end-to-end regression contract of the staging/regression-contour tech spec
 feature files as the suite, and the navigation model both storefronts' chrome
 is configured from.
 
-### Successful-login counter forgiveness (003 EARS-13/5/8)
-
-`Academy successful password login forgives the real per-user window`
-(`steps/login-counter-reset.steps.ts`, #3036) registers and verifies one unique
-owned account, then logs out. Two actual wrong-password submissions receive the
-generic 401 and ordinary sign-in error without private access. The correct
-password next opens that same verified subject with a fresh secure host-only
-session. The canonical cross-worker password gate encloses these three attempts;
-the target success itself closes the challenge window. No golden credentials or
-extra successful authentication can clear the tested counter afterwards.
-
-After logout, ten real reset-form sending requests for that exact identifier
-must return the neutral 200, and the eleventh must return the generic 429, all
-inside the original 15-minute window. Those sending doors share the per-user
-counter with password login while avoiding additional IdP password failures.
-Without forgiveness the two failures plus successful login would leave only
-seven admissions. No reset is completed and no threshold, clock, counter or IP
-is changed. Run the selected `@login-counter-reset` case serially on a lead-owned
-runtime with the real default ten-attempt user ceiling and source-address budget
-available. CAPTCHA preparation uses the canonical provider adapter, not an
-invented token; missing prerequisites fail. Trace-off fixtures, secret-safe
-inputs and owned-session/context cleanup are retained.
-
-The broader native declaration remains intact. Source-IP/ASN no-forgiveness is
-owned by `apps/api/src/auth/rate-limit/rate-limit.service.spec.ts` EARS-13
-`reset() forgives ONLY` tests, rather than inferred from browser admission.
-This coverage change has no render surface and requires no Stage-B slot.
-
 ### Actual phone-code resend (003 EARS-47/48/42)
 
 `Academy resends the actual phone SMS and confirms the same owner with its newest delivery`

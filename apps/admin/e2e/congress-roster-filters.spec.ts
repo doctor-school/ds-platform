@@ -32,7 +32,7 @@ import { visible } from "./support/visible";
  * source `feature-044-roster-filters-v1`: `roster-filters-closed`, `-open`,
  * `-applied`, `-date-error` (the inverted date range) at 1440 and `-narrow` at
  * 390, light and dark; plus `roster-hide-staff-off` / `-on` (003 EARS-26,
- * #2518) at 1440.
+ * #2518) at 1440 and `-narrow` at 390.
  */
 const SHOT_DIR = process.env.E2E_SHOT_DIR;
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
@@ -107,6 +107,14 @@ async function setPalette(page: Page, palette: "light" | "dark") {
   await page.evaluate(() =>
     Promise.all(document.getAnimations().map((a) => a.finished)),
   );
+}
+
+/** The same state at the 390 phone width, then back to the desk's 1440. */
+async function shotNarrow(page: Page, name: string): Promise<void> {
+  if (!SHOT_DIR) return;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await shot(page, `${name}-narrow`);
+  await page.setViewportSize({ width: 1440, height: 900 });
 }
 
 async function shot(page: Page, name: string): Promise<void> {
@@ -471,6 +479,7 @@ test.describe("044 EARS-23 — the roster's column filters (F1)", () => {
     const hideStaff = page.getByTestId("roster-filter-hide-staff");
     await expect(hideStaff).not.toBeChecked();
     await shot(page, "roster-hide-staff-off");
+    await shotNarrow(page, "roster-hide-staff-off");
 
     // On: the row and the count leave together, the address and a chip carry it.
     // The switch's checkbox is visually hidden — the label is what is pressed.
@@ -481,6 +490,7 @@ test.describe("044 EARS-23 — the roster's column filters (F1)", () => {
     await expect(page).toHaveURL(/hideStaff=true/);
     await expect(chip(page, "Скрыть сотрудников")).toBeVisible();
     await shot(page, "roster-hide-staff-on");
+    await shotNarrow(page, "roster-hide-staff-on");
 
     // A reload keeps it.
     await page.reload();

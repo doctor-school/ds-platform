@@ -43,6 +43,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the same generic failure is shown each time
     And users.phone and phone_verified are unchanged and no notice email is sent
 
+  # Actual resend Academy projection (#3035); retain broader declarations.
+  # Only the browser UI cooldown clock advances; no IdP expiry claim.
+  @EARS-47 @EARS-48 @EARS-42 @happy @phone-code-resend
+  Scenario: Academy resends the actual phone SMS and confirms the same owner with its newest delivery
+    Given an owned verified Academy account receives its initial actual phone SMS and has disabled resend
+    When only the browser's thirty-second resend cooldown is advanced and the owner clicks the actual resend control
+    Then the newest actual resend SMS confirms that same Academy phone with the original secure owner session
+
   # Wrong-code Academy projection only (#3007); retain the broader case above.
   # Native reuse, audit and counters: apps/api/test/me/phone.e2e-spec.ts EARS-48.
   # This native file makes no phone-code expiry proof claim.

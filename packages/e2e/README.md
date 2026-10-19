@@ -64,6 +64,32 @@ owned by `apps/api/src/auth/rate-limit/rate-limit.service.spec.ts` EARS-13
 `reset() forgives ONLY` tests, rather than inferred from browser admission.
 This coverage change has no render surface and requires no Stage-B slot.
 
+### Actual phone-code resend (003 EARS-47/48/42)
+
+`Academy resends the actual phone SMS and confirms the same owner with its newest delivery`
+(`steps/phone-code-resend.steps.ts`, #3035) registers and verifies a unique owned
+account and requests a phone code through the real Academy profile UI. It reads
+one actual recipient/event-bound SMS and its stable sink delivery ID, then
+requires the actual resend control to be disabled. Playwright's page clock runs
+only the existing thirty UI countdown ticks; no wall-clock cooldown wait, server
+clock, provider lifetime, stored challenge or counter is changed. Advancing the
+UI timer itself must make no phone request.
+
+Clicking the real enabled resend must send exactly the second phone request for
+the same number, return the ordinary acknowledgement, restart the disabled
+cooldown and clear the code field. A distinct stable SMS ID proves a new actual
+recipient/event-bound delivery even if randomly generated code digits
+coincide. A complete delivery-ID checkpoint observed immediately before each
+request establishes freshness independently of runner/sink clock differences;
+received timestamps must still be valid. Submitting only that newest delivered code must confirm the same phone,
+subject and original secure host-only session, including a reload. Missing sink
+access fails proof. Traces remain off; cleanup revokes only the owned session
+and closes its context on failure. Native service EARS-47 resend and the shared
+countdown/component contracts remain complementary; this browser case makes no
+IdP expiry or real-time cooldown-duration claim. Run the single
+`@phone-code-resend` case on the lead-owned runtime. This test-only coverage has
+no render surface or owner Stage-B slot.
+
 ### Consumed phone confirmation code (003 EARS-48/16)
 
 `Academy refuses the consumed phone code without changing its verified owner`

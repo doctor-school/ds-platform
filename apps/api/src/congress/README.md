@@ -34,7 +34,7 @@ Spec: `apps/docs/content/specs/features/044-congress-signup/`.
 
 ## Configuration
 
-All seven keys are validated at request time and a missing or malformed value
+All six keys are validated at request time and a missing or malformed value
 refuses the intake generically — the endpoint never runs with a half-configured meaning.
 
 | Env key                            | Meaning                                                                                                                                                                                                                                                |

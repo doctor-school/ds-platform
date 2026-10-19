@@ -205,13 +205,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return mailer.congressConfirmations.filter((sent) => sent.to === email);
     }
 
+    // 044 EARS-13: the desk mail must carry THIS venue, read from the event row.
+    const DESK_EVENT_VENUE = "Москва, тестовая площадка";
+
     async function insertEvent(id: string, slug: string, title: string) {
       await pool.query(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
             specialties, partner_ref, program_pdf_ref, state, venue,
             participation_format, kind_id, audience)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, 'Москва, тестовая площадка','offline', ${eventClassificationSql()})`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'offline', ${eventClassificationSql()})`,
         [
           id,
           slug,
@@ -224,6 +227,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "sponsor:congress",
           null,
           "published",
+          DESK_EVENT_VENUE,
         ],
       );
     }
@@ -350,6 +354,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const [dispatched] = confirmationsFor(email);
       expect(dispatched).not.toHaveProperty("cabinetUrl");
+      expect(dispatched!.eventVenue).toBe(DESK_EVENT_VENUE);
       const message = congressConfirmationMessage({
         eventTitle: dispatched!.eventTitle,
         eventDate: formatCongressEventDate(dispatched!.eventStartsAt),

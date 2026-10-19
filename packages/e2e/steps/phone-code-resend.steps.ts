@@ -24,7 +24,7 @@ interface ResentPhone {
   sink: string;
   code: string;
   firstMessageId?: number;
-  requestedAt: string;
+  initialMessageIds: number[];
   requests: number;
   subject?: string;
   cookie?: string;
@@ -37,46 +37,48 @@ function journey(page: Page): ResentPhone {
   return state;
 }
 
-async function actualDelivery(
-  state: ResentPhone,
-  after: string,
-  exclude?: number,
-) {
+async function deliveryCheckpoint(state: ResentPhone) {
+  // Sink and runner clocks differ. Stable IDs observed before the request
+  // establish causality without comparing timestamps from different machines.
+  const messages = await smsSinkMessages(
+    state.sink,
+    state.phone,
+    new Date(0).toISOString(),
+    PHONE_CODE_EVENT,
+  );
+  return messages.map((message) => {
+    const id = (message as typeof message & { id?: unknown }).id;
+    const receivedAt = (message as typeof message & { receivedAt?: unknown })
+      .receivedAt;
+    if (
+      !Number.isSafeInteger(id) ||
+      Number(id) <= 0 ||
+      typeof receivedAt !== "string" ||
+      !Number.isFinite(Date.parse(receivedAt)) ||
+      message.json?.contextInfo?.eventType !== PHONE_CODE_EVENT
+    )
+      throw new Error("Invalid owned SMS delivery metadata");
+    return { id: Number(id), message };
+  });
+}
+
+async function actualDelivery(state: ResentPhone, before: readonly number[]) {
   let code = "";
   let id = 0;
   await expect
     .poll(
       async () => {
-        const messages = await smsSinkMessages(
-          state.sink,
-          state.phone,
-          after,
-          PHONE_CODE_EVENT,
+        const delivered = (await deliveryCheckpoint(state)).filter(
+          (entry) => !before.includes(entry.id),
         );
-        const delivered = messages
-          .map((message) => ({
-            message,
-            id: (message as typeof message & { id?: unknown }).id,
-            receivedAt: (message as typeof message & { receivedAt?: unknown })
-              .receivedAt,
-          }))
-          .filter(
-            (entry) =>
-              Number.isSafeInteger(entry.id) &&
-              Number(entry.id) > 0 &&
-              entry.id !== exclude &&
-              typeof entry.receivedAt === "string" &&
-              Date.parse(entry.receivedAt) >= Date.parse(after) &&
-              entry.message.json?.contextInfo?.eventType === PHONE_CODE_EVENT,
-          );
         if (delivered.length !== 1) return false;
         code = phoneConfirmationCode(delivered[0]!.message) ?? "";
-        id = Number(delivered[0]!.id);
+        id = delivered[0]!.id;
         return /^\d{6}$/.test(code);
       },
       {
         message:
-          "one fresh recipient/time/event-bound SMS with a distinct stable delivery ID",
+          "one actual recipient/event-bound SMS beyond the pre-request delivery-ID checkpoint",
         timeout: 20_000,
       },
     )
@@ -192,7 +194,7 @@ Given(
       phone: freshConfirmablePhone(),
       sink,
       code: "",
-      requestedAt: "",
+      initialMessageIds: [],
       requests: 0,
     };
     journeys.set(page, state);
@@ -231,7 +233,8 @@ Given(
     await state.page
       .getByTestId("profile-phone-input")
       .pressSequentially(state.phone.slice(1));
-    state.requestedAt = new Date().toISOString();
+    const before = (await deliveryCheckpoint(state)).map((entry) => entry.id);
+    state.initialMessageIds = before;
     const pending = captureResponse(state.page, "/v1/me/phone");
     await state.page.getByTestId("profile-phone-send").click();
     const requested = await pending;
@@ -239,7 +242,7 @@ Given(
       status: requested.response.status(),
       body: requested.body,
     }).toEqual({ status: 200, body: '{"status":"code_sent"}' });
-    const delivery = await actualDelivery(state, state.requestedAt);
+    const delivery = await actualDelivery(state, before);
     state.firstMessageId = delivery.id;
     await expect(state.page.getByTestId("profile-phone-resend")).toBeDisabled();
     expect(state.requests, "only the initial real phone request").toBe(1);
@@ -263,7 +266,12 @@ When(
     await expect(resend).toBeEnabled();
     expect(state.requests, "advancing the UI timer sends nothing").toBe(1);
     await assertIdentity(state, world.hostBaseUrl);
-    const requestedAt = new Date().toISOString();
+    const before = (await deliveryCheckpoint(state)).map((entry) => entry.id);
+    expect(
+      before.filter((id) => !state.initialMessageIds.includes(id)).length ===
+        1 && before.includes(state.firstMessageId!),
+      "only the first actual SMS precedes resend",
+    ).toBe(true);
     const pending = captureResponse(state.page, "/v1/me/phone");
     await resend.click();
     const requested = await pending;
@@ -286,11 +294,7 @@ When(
       samePhone: true,
       requests: 2,
     });
-    const delivery = await actualDelivery(
-      state,
-      requestedAt,
-      state.firstMessageId,
-    );
+    const delivery = await actualDelivery(state, before);
     expect(
       delivery.id !== state.firstMessageId,
       "resend is a new actual SMS even when random code digits coincide",

@@ -24,8 +24,8 @@
  *   to the section) the request is discarded, never sent;
  * - **within {@link STEP_UP_REPLAY_TTL_MS}**, shorter than the 30-minute step-up
  *   window;
- * - **cleared on sign-out** — `authProvider.logout`, which the 401 path also
- *   runs ({@link clearStepUpRequest}).
+ * - **cleared on sign-out** — the shared `signOut()` in the auth provider, run
+ *   by both `authProvider.logout` and the 401 path ({@link clearStepUpRequest}).
  *
  * Storage is optional: blocked or cleared, nothing is saved, the screen opens as
  * usual on return and the administrator repeats the action — inside the fresh

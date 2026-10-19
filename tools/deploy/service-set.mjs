@@ -18,9 +18,10 @@
 // (`service-set.test.mjs`); no git, no ssh, no I/O.
 //
 // A service belongs to the set iff its `image:` is SHA-tagged by the deploy,
-// i.e. `ds-<repo>:${DEPLOY_SHA…}`. That is exactly the "built and swapped by
-// this deploy" contract: upstream pins (zitadel, centrifugo, node) and the
-// one-shot `ds-api-migrate:local` runner are not in it.
+// i.e. `ds-<repo>:${DEPLOY_SHA…}`, and `up` starts it (no `profiles:`). That is
+// exactly the "pulled and swapped by this deploy" contract: upstream pins
+// (zitadel, centrifugo, node) and the one-shot `ds-api-migrate:<sha>` runner
+// (profile `migrate`) are not in it.
 
 /** Path of the api-prod compose file inside the repo tree (git-show ref path). */
 export const API_PROD_COMPOSE_PATH =
@@ -36,7 +37,8 @@ export const BOOT_PROBE_EXCLUDED = Object.freeze(["api"]);
 
 /**
  * `image: ds-<repo>:${DEPLOY_SHA}` / `${DEPLOY_SHA:-local}` / `${DEPLOY_SHA:?}` — the
- * deploy-tagged shape. `:?` is the slot compose's: it pulls, so it has no `:local`.
+ * deploy-tagged shape. `:?` is what the pulling composes use (stage slots and api-prod,
+ * #2981): an image that is only ever pulled has no `:local` fallback.
  */
 const SHA_TAGGED_IMAGE_RE = /^(ds-[a-z0-9][a-z0-9-]*):\$\{DEPLOY_SHA(?::[-?][^}]*)?\}$/;
 
@@ -92,10 +94,17 @@ export function parseDeployServices(composeText) {
 
     const header = /^ {2}([A-Za-z0-9][A-Za-z0-9._-]*):\s*$/.exec(line);
     if (header) {
-      current = { name: header[1], image: null, port: null };
+      current = { name: header[1], image: null, port: null, profiled: false };
       continue;
     }
     if (!current) continue;
+
+    // A profiled service is a one-shot `compose run` target (migrate), never
+    // started by `up` — it has no running container to verify.
+    if (/^ {4}profiles:/.test(line)) {
+      current.profiled = true;
+      continue;
+    }
 
     const image = /^ {4}image:\s*(\S+)/.exec(line);
     if (image) {
@@ -112,7 +121,9 @@ export function parseDeployServices(composeText) {
     if (port && current.image) current.port = Number(port[1]);
   }
 
-  return found.map(({ name, image, port }) => ({ name, image, port }));
+  return found
+    .filter(({ profiled }) => !profiled)
+    .map(({ name, image, port }) => ({ name, image, port }));
 }
 
 /**
@@ -165,13 +176,14 @@ export function deployServiceSet(composeText, { source } = {}) {
 }
 
 /**
- * The app-only rollback boundary (#1896). `rollback()` re-tags and restarts
- * containers; it does NOT ship a tree, so `docker compose up -d` runs against
- * the compose ALREADY on the box — the one the last deploy shipped, which is
- * newer than the rollback target. A service the target predates is therefore
- * still declared on the box with a `build:` section, and Compose would happily
- * REBUILD it from the newer on-box source and tag it with the old SHA: a green
- * "ROLLBACK OK" while that surface serves exactly the code being reverted.
+ * The app-only rollback boundary (#1896). `rollback()` re-points `DEPLOY_SHA`
+ * and restarts containers; it does NOT ship a tree, so `docker compose up -d`
+ * runs against the compose ALREADY on the box — the one the last deploy
+ * shipped, which is newer than the rollback target. A service the target
+ * predates is still declared there as `ds-<svc>:${DEPLOY_SHA:?}`, so the
+ * rollback would demand a `ds-<svc>:<target>` image that was never produced for
+ * that SHA (no recorded digest serves it), and that surface would stay on — or
+ * be torn off — the very release being reverted.
  *
  * So an app-only rollback may not cross a service-introduction boundary. Pure
  * verdict over the two derived sets; the caller dies on `ok: false` before any
@@ -194,10 +206,10 @@ export function rollbackBoundaryVerdict(liveServices, targetServices) {
     reason:
       `an app-only rollback cannot cross a service-introduction boundary:` +
       ` prod currently runs service(s) the rollback target does not declare —` +
-      ` ${extra.join(", ")}. Their containers are declared on the box with a` +
-      ` \`build:\` section, so \`docker compose up -d\` would REBUILD them from` +
-      ` the current on-box source and tag the result with the rollback SHA:` +
-      ` "ROLLBACK OK" while that surface serves the very code being reverted.` +
+      ` ${extra.join(", ")}. The box's compose still declares them as` +
+      ` \`ds-<svc>:\${DEPLOY_SHA}\`, and no image of theirs exists for the` +
+      ` rollback SHA: \`docker compose up -d\` cannot put that surface back on` +
+      ` the target, so a "ROLLBACK OK" would be untrue for it.` +
       ` Ship a forward fix, or \`pnpm deploy:prod --ref <sha>\` a tree that` +
       ` actually declares the state you want.`,
   };
@@ -243,60 +255,3 @@ export function formatServiceImages(services, sep = " + ") {
   return (services ?? []).map((s) => s.image).join(sep);
 }
 
-/**
- * `sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build <name>` — the
- * attestation-free build invocation (#486: reproducible image IDs, so a
- * same-SHA re-run is a true no-op). Kept here as the default so the rendered
- * script can never lose the flag on one service.
- */
-export const BUILD_ENV_PREFIX = "BUILDX_NO_DEFAULT_ATTESTATIONS=1";
-
-/**
- * The on-box build commands for a deploy's service set — ONE image at a time
- * (#2283).
- *
- * Why. A bare `docker compose build` lets BuildKit start every service
- * concurrently, i.e. three simultaneous `next build` runs (portal, admin,
- * doctor) plus the api on the live api-prod box: 4 vCPU, 8 GB, no swap. On
- * 2026-09-18 that saturated the box and the production site was unreachable for
- * ~17 min DURING the build, before anything was even swapped. Building one
- * service at a time keeps at most one `next build` beside live production.
- *
- * Fail-closed like the rest of this module: an empty set, or a name the
- * generated shell cannot carry, throws rather than rendering a script that
- * builds nothing (and would then "succeed" into a swap of stale images).
- *
- * Stopping at the FIRST failing build is not this string's job and is not left
- * to chance: every remote script runs under `bash --norc -euo pipefail`
- * (`REMOTE_BASH`, `lib/remote.mjs`), so a non-zero build aborts the script there
- * and `sshScript` surfaces the non-zero exit.
- *
- * @param {{ name: string }[]} services in compose/set order
- * @param {{ noAttest?: string }} [opts] attestation-suppressing env prefix
- * @returns {string} newline-joined banner+build lines, no trailing newline
- */
-export function serviceBuildScript(services, { noAttest } = {}) {
-  const names = (services ?? []).map((s) => s?.name);
-  if (names.length === 0) {
-    throw new ServiceSetError(
-      `refusing to render an EMPTY api-prod build script — a deploy that` +
-        ` builds nothing would swap stale images (#2283).`,
-    );
-  }
-  const illegal = names.filter((n) => !SERVICE_NAME_RE.test(String(n ?? "")));
-  if (illegal.length > 0) {
-    throw new ServiceSetError(
-      `service name(s) unusable in the generated build script:` +
-        ` ${illegal.join(", ")} — expected \`[a-z][a-z0-9-]*\`.`,
-    );
-  }
-  const env = noAttest ?? BUILD_ENV_PREFIX;
-  const total = names.length;
-  return names
-    .map(
-      (name, i) =>
-        `echo '── build ${i + 1}/${total}: ${name} ──'\n` +
-        `sudo ${env} docker compose build ${name}`,
-    )
-    .join("\n");
-}

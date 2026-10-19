@@ -32,11 +32,29 @@
 // Both IdP converges — the whole redirect-URI set on every `up`/`down`, and the golden
 // identities — live in `idp.mjs` and arrive here as ONE injected `idp` effect.
 
-import { execFile } from "node:child_process";
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+
+import {
+  IMAGE_REGISTRY,
+  IMAGES_WORKFLOW,
+  RECORDED_IMAGE_NAMES,
+  REGISTRY_PULL_TOKEN_FILE,
+  RegistryError,
+  assertImageDigests as registryAssertImageDigests,
+  assertImageRefs as registryAssertImageRefs,
+  imageDigestScript as registryImageDigestScript,
+  localImageTag,
+  pullAndTagArgv,
+  RELEASE_MANIFEST_REFS,
+  registryLogoutArgv,
+  repoDigestsMatch,
+  repoDigestsProbeArgv,
+  resolveRecordedImages as registryResolveRecordedImages,
+  resolveRecordedImagesViaGh as registryResolveRecordedImagesViaGh,
+  selectImagesRun as registrySelectImagesRun,
+  validateImageManifest as registryValidateImageManifest,
+} from "../deploy/lib/registry.mjs";
 
 import {
   STALL_BUDGET_BUILD_MS,
@@ -658,188 +676,75 @@ export function composeBase(slot) {
 
 // --- the recorded images (#2981) ---------------------------------------------
 //
-// Nothing is built on the box. `.github/workflows/runtime-images.yml` builds every
-// image ONCE per commit, pushes it to the registry and records the pushed digests in
-// the run artifact `images-<sha>` (`images-<sha>.json`). A slot resolves that record
-// on the OPERATOR side, before the box is touched, and the box pulls exactly those
-// digests — never a tag, which the registry could re-point (spec
-// 2026-10-16-release-pipeline-off-workstation §3 item 1).
+// Nothing is built on the box. The record, its validation, the pull and the digest
+// proof are shared with the production deploy (`tools/deploy/lib/registry.mjs`);
+// this section binds them to slot semantics and rethrows a refusal as `SlotError`.
 
-export const IMAGE_REGISTRY = "ds-platform.registry.twcstorage.ru";
-/** Root-only on ds-stage-1; read by the box's own shell, never by this tool. */
-export const REGISTRY_PULL_TOKEN_FILE = "/etc/ds-platform/registry-pull-token";
 /** The `DEPLOY_SHA` a teardown interpolates the slot compose with — not a SHA, names no image. */
 export const SLOT_DOWN_IMAGE_TAG = "teardown";
-export const IMAGES_WORKFLOW = "runtime-images.yml";
-/** The manifest keys; each is pulled and tagged locally as `ds-<key>:<sha>`. */
-export const RECORDED_IMAGE_NAMES = Object.freeze(["api", "api-migrate", "portal", "admin", "doctor"]);
+export { IMAGE_REGISTRY, IMAGES_WORKFLOW, RECORDED_IMAGE_NAMES, REGISTRY_PULL_TOKEN_FILE };
 
-const imagesArtifactName = (sha) => `images-${sha}`;
-const DIGEST_REF_RE = /^ds-platform\.registry\.twcstorage\.ru\/(pr\/)?([a-z0-9][a-z0-9-]*)@sha256:[0-9a-f]{64}$/;
-
-/**
- * The five recorded references, each a digest reference of ITS OWN image. `pr` says
- * which namespace they must all come from: `true` = `pr/`, `false` = the `main`
- * namespace, `undefined` = either (but one for all five).
- */
-function assertImageRefs(images, { pr } = {}) {
-  if (!images || typeof images !== "object" || Array.isArray(images)) {
-    throw new SlotError(
-      "no recorded image set: a slot runs only the digests `runtime-images.yml` recorded " +
-        "for its commit, and nothing is built on the box",
-    );
-  }
-  const extra = Object.keys(images).filter((name) => !RECORDED_IMAGE_NAMES.includes(name));
-  if (extra.length) throw new SlotError(`recorded image set has unknown image(s): ${extra.join(", ")}`);
-  const namespaces = new Set();
-  for (const name of RECORDED_IMAGE_NAMES) {
-    const ref = images[name];
-    if (typeof ref !== "string") throw new SlotError(`recorded image set lacks \`${name}\``);
-    const match = ref.match(DIGEST_REF_RE);
-    if (!match || match[2] !== name) {
-      throw new SlotError(
-        `recorded \`${name}\` is not a digest reference of ${IMAGE_REGISTRY}/[pr/]${name}: ${ref}`,
-      );
-    }
-    namespaces.add(Boolean(match[1]));
-  }
-  if (namespaces.size > 1) throw new SlotError("recorded image set mixes `main` and `pr/` references");
-  const isPr = [...namespaces][0];
-  if (pr !== undefined && pr !== isPr) {
-    throw new SlotError(
-      `recorded image set is in the ${isPr ? "`pr/`" : "`main`"} namespace, but its manifest ` +
-        `ref says ${pr ? "a PR" : "`main`"}`,
-    );
-  }
-  return images;
-}
-
-/**
- * Validates `images-<sha>.json` for a converge of `slot` on `sha`.
- *
- * Slot `main` accepts only a `main` build (a release accepts only `main` digests);
- * a preview `pr-<N>` accepts its own `pr/<N>` build or a `main` one for the same SHA.
- */
-export function validateImageManifest(manifest, { slot, sha }) {
-  assertSlotName(slot);
-  shortSha(sha);
-  if (!manifest || typeof manifest !== "object") {
-    throw new SlotError(`the recorded image manifest for ${shortSha(sha)} is not a JSON object`);
-  }
-  if (manifest.sha !== sha) {
-    throw new SlotError(
-      `the image manifest records ${JSON.stringify(manifest.sha)}, not ${sha} — refusing to stage another commit's images`,
-    );
-  }
-  const ref = manifest.ref;
-  if (slot === "main") {
-    if (ref !== "main") {
-      throw new SlotError(
-        `slot main runs only \`main\` digests; the manifest for ${shortSha(sha)} is ${JSON.stringify(ref)}`,
-      );
-    }
-  } else if (ref !== "main" && ref !== `pr/${slot.slice("pr-".length)}`) {
-    throw new SlotError(
-      `slot ${slot} accepts a \`pr/${slot.slice("pr-".length)}\` or \`main\` manifest, not ${JSON.stringify(ref)}`,
-    );
-  }
-  const images = assertImageRefs(manifest.images, { pr: ref !== "main" });
-  return { ref, images: { ...images } };
-}
-
-/**
- * The `runtime-images.yml` run whose artifact a converge reads — or a refusal.
- *
- * Fail closed: no run, a run still going or a failed run is a stop with the cause,
- * NEVER a fallback build — the box has no way to build any more.
- */
-export function selectImagesRun(runs, { slot, sha }) {
-  assertSlotName(slot);
-  shortSha(sha);
-  const candidates = (Array.isArray(runs) ? runs : []).filter(
-    (run) => slot !== "main" || run.event === "push" || run.event === "workflow_dispatch",
-  );
-  const success = candidates.find((run) => run.status === "completed" && run.conclusion === "success");
-  if (success) return success;
-  const running = candidates.find((run) => run.status !== "completed");
-  if (running) {
-    throw new SlotError(
-      `runtime-images run ${running.url} is ${running.status}; retry when it completes`,
-    );
-  }
-  if (candidates.length) {
-    const failed = candidates[0];
-    throw new SlotError(
-      `runtime-images run ${failed.url} concluded ${failed.conclusion}: no images recorded for ${sha}`,
-    );
-  }
-  throw new SlotError(
-    `no images recorded for ${sha}: there is no ${slot === "main" ? "`main` " : ""}` +
-      `${IMAGES_WORKFLOW} run for this commit (a PR head that changes no image input does ` +
-      "not run it) — nothing to stage",
-  );
-}
-
-/**
- * Operator-side resolution of the recorded digests: run → artifact → validated set.
- * `gh(argv)` resolves to stdout; `readText(path)` reads the downloaded manifest.
- */
-export async function resolveRecordedImages({ slot, sha, gh, readText, tmpDir }) {
-  const runs = JSON.parse(
-    await gh([
-      "run",
-      "list",
-      "--workflow",
-      IMAGES_WORKFLOW,
-      "--commit",
-      sha,
-      "--json",
-      "databaseId,status,conclusion,event,url",
-      "--limit",
-      "20",
-    ]),
-  );
-  const run = selectImagesRun(runs, { slot, sha });
-  const name = imagesArtifactName(sha);
-  let text;
+/** Runs `fn`, rethrowing a `RegistryError` as a `SlotError` with the same message. */
+function asSlotError(fn) {
+  const convert = (err) => {
+    throw err instanceof RegistryError ? new SlotError(err.message) : err;
+  };
   try {
-    await gh(["run", "download", String(run.databaseId), "-n", name, "-D", tmpDir]);
-    text = await readText(join(tmpDir, `${name}.json`));
+    const result = fn();
+    return result && typeof result.then === "function" ? result.catch(convert) : result;
   } catch (err) {
-    throw new SlotError(
-      `runtime-images run ${run.url} has no readable artifact ${name} ` +
-        `(${err instanceof Error ? err.message.split("\n")[0] : err}) — nothing to stage`,
-    );
+    return convert(err);
   }
-  let manifest;
-  try {
-    manifest = JSON.parse(text);
-  } catch {
-    throw new SlotError(`artifact ${name} of ${run.url} is not JSON`);
-  }
-  return { ...validateImageManifest(manifest, { slot, sha }), run };
 }
 
-/** `ds-<key>:<sha>` — the local tag compose, inventory, gc and prune all read. */
-const localImageTag = (name, sha) => `ds-${name}:${sha}`;
-const REPO_DIGESTS_FORMAT = "{{range .RepoDigests}}{{println .}}{{end}}";
+const assertImageRefs = (images, options) => asSlotError(() => registryAssertImageRefs(images, options));
+
+/**
+ * Slot `main` runs only what a release may run — a `main` or `hotfix/<N>-<slug>`
+ * build (the release pre-flight converges it to a `--ref` hotfix target too); a
+ * preview its own `pr/<N>` build or a `main` one.
+ */
+function slotManifestPolicy(slot) {
+  assertSlotName(slot);
+  return {
+    acceptRefs: slot === "main" ? RELEASE_MANIFEST_REFS : ["main", `pr/${slot.slice("pr-".length)}`],
+    consumer: `slot ${slot}`,
+    mainOnly: slot === "main",
+    purpose: "stage",
+  };
+}
+
+/** Validates `images-<sha>.json` for a converge of `slot` on `sha`. */
+export function validateImageManifest(manifest, { slot, sha }) {
+  const { acceptRefs, consumer } = slotManifestPolicy(slot);
+  shortSha(sha);
+  return asSlotError(() => registryValidateImageManifest(manifest, { sha, acceptRefs, consumer }));
+}
+
+/** The `runtime-images.yml` run whose artifact a converge reads — or a refusal. */
+export function selectImagesRun(runs, { slot, sha }) {
+  const { mainOnly, purpose } = slotManifestPolicy(slot);
+  shortSha(sha);
+  return asSlotError(() => registrySelectImagesRun(runs, { sha, mainOnly, purpose }));
+}
+
+/** Operator-side resolution of the recorded digests: run → artifact → validated set. */
+export function resolveRecordedImages({ slot, sha, gh, readText, tmpDir }) {
+  const policy = slotManifestPolicy(slot);
+  return asSlotError(() => registryResolveRecordedImages({ ...policy, sha, gh, readText, tmpDir }));
+}
 
 /**
  * The images, PULLED by their recorded digest and tagged `ds-<image>:<sha>`.
  *
  * A tag that already exists is reused only when its RepoDigests carry the recorded
  * digest (two slots on one SHA share one image set); any other tag is re-pulled and
- * re-tagged. The login reads the pull token from its root-only file INSIDE the box's
- * shell — the token is never in an argv, a log line or this plan. The same shell
- * logs out on exit, a failed pull included, so `docker login` never leaves a second
- * copy of the token in root's docker config: the token file stays the only registry
- * credential at rest on the box ({@link registryLogoutCommand} closes the plan).
+ * re-tagged. The pull shell reads the token on the box and logs out on exit
+ * (`pullAndTagArgv`); {@link registryLogoutCommand} closes the plan.
  */
 export function pullCommandPlan(sha, images) {
   shortSha(sha);
   assertImageRefs(images);
-  const logoutOnExit = `trap 'docker logout ${IMAGE_REGISTRY} >/dev/null 2>&1' EXIT;`;
-  const login = `${logoutOnExit} docker login ${IMAGE_REGISTRY} -u ds-platform --password-stdin < ${REGISTRY_PULL_TOKEN_FILE}`;
   return {
     kind: "ensure-present",
     label: "pull recorded images",
@@ -848,55 +753,27 @@ export function pullCommandPlan(sha, images) {
       const ref = images[name];
       const tag = localImageTag(name, sha);
       return {
-        probe: ["sudo", "docker", "image", "inspect", "--format", REPO_DIGESTS_FORMAT, tag],
-        match: (stdout) => stdout.split(/\r?\n/).some((line) => line.trim() === ref),
-        apply: ["sudo", "sh", "-c", `${login} >/dev/null && docker pull ${ref} && docker tag ${ref} ${tag}`],
+        probe: repoDigestsProbeArgv(tag),
+        match: (stdout) => repoDigestsMatch(stdout, ref),
+        apply: pullAndTagArgv(ref, tag),
       };
     }),
   };
 }
 
-/**
- * Unconditional, after the pulls: a converge where every tag was reused never runs a
- * pull shell, and a credential an older tool version left in root's docker config
- * must not survive it either. `docker logout` without a stored login is a no-op.
- */
+/** Unconditional, after the pulls (see `registryLogoutArgv`). */
 export function registryLogoutCommand() {
-  return { kind: "sh", label: "registry logout", command: ["sudo", "docker", "logout", IMAGE_REGISTRY] };
+  return { kind: "sh", label: "registry logout", command: registryLogoutArgv() };
 }
 
 /** Prints `digest:<image>=OK` per image whose local tag carries its recorded digest. */
 export function imageDigestScript({ sha, images }) {
-  shortSha(sha);
-  assertImageRefs(images);
-  return RECORDED_IMAGE_NAMES.map((name) => {
-    const ref = images[name];
-    return [
-      `d=$(sudo docker image inspect --format '${REPO_DIGESTS_FORMAT}' ${localImageTag(name, sha)} 2>/dev/null) || d=ABSENT`,
-      `if printf '%s\\n' "$d" | grep -Fxq '${ref}'; then echo "digest:${name}=OK"; ` +
-        `else echo "digest:${name}=MISMATCH $(printf '%s' "$d" | tr '\\n' ' ')"; fi`,
-    ].join("\n");
-  }).join("\n");
+  return asSlotError(() => registryImageDigestScript({ sha, images }));
 }
 
 /** A missing verdict is a failure: truncated output must not read as «all match». */
 export function assertImageDigests(stdout, images) {
-  const verdicts = Object.fromEntries(
-    String(stdout ?? "")
-      .split(/\r?\n/)
-      .map((line) => line.trim().match(/^digest:([a-z0-9-]+)=(\w+)/))
-      .filter(Boolean)
-      .map((match) => [match[1], match[2]]),
-  );
-  const bad = Object.keys(images).filter((name) => verdicts[name] !== "OK");
-  if (bad.length) {
-    throw new SlotError(
-      `the local images do NOT carry the recorded digests: ${bad
-        .map((name) => `${name}=${verdicts[name] ?? "NO-VERDICT"}`)
-        .join(", ")}`,
-    );
-  }
-  return verdicts;
+  return asSlotError(() => registryAssertImageDigests(stdout, images));
 }
 
 export function upCommandPlan(slot) {
@@ -2896,25 +2773,9 @@ export function requiredBaseDomain(boxEnv) {
 }
 
 /** `resolveRecordedImages` through the operator's own `gh`, in a throwaway temp dir. */
-async function resolveRecordedImagesViaGh({ slot, sha }) {
-  const tmpDir = mkdtempSync(join(tmpdir(), "ds-slot-images-"));
-  try {
-    return await resolveRecordedImages({
-      slot,
-      sha,
-      tmpDir,
-      readText: async (path) => readFileSync(path, "utf8"),
-      gh: (argv) =>
-        new Promise((resolve, reject) => {
-          execFile("gh", argv, { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
-            if (err) reject(new Error(`gh ${argv.slice(0, 2).join(" ")}: ${(stderr || err.message).trim()}`));
-            else resolve(stdout);
-          });
-        }),
-    });
-  } finally {
-    rmSync(tmpDir, { recursive: true, force: true });
-  }
+function resolveRecordedImagesViaGh({ slot, sha }) {
+  const policy = slotManifestPolicy(slot);
+  return asSlotError(() => registryResolveRecordedImagesViaGh({ ...policy, sha }));
 }
 
 async function main() {

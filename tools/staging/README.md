@@ -296,7 +296,8 @@ cached. `up`/`sync` first resolve, **on the operator's machine**, the images
 runtime-images.yml --commit <sha>` → `gh run download <run> -n images-<sha>` → validate
 `images-<sha>.json` (its `sha` is the ref; all five of `api`, `api-migrate`, `portal`,
 `admin`, `doctor` are `ds-platform.registry.twcstorage.ru/[pr/]<image>@sha256:…`). Slot
-`main` accepts only a `main` build; `pr-<N>` accepts its own `pr/<N>` build or a `main`
+`main` accepts only a release build — `main`, or the `hotfix/<N>-<slug>` build a `--ref`
+release pre-flight converges it to; `pr-<N>` accepts its own `pr/<N>` build or a `main`
 one for the same SHA. No run, a run still in progress, a failed run or an expired
 artifact stops the converge **before the box is touched** — there is no build fallback
 («the PR head changes no image input, so runtime-images did not run — nothing to stage»).

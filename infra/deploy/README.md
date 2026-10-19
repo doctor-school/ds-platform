@@ -196,15 +196,28 @@ Timeweb Cloud container registry (#2981, tech spec
   `images-<sha>.json` artifact (90 days) maps each image to its pushed `@sha256:` digest
   — a deploy pulls by digest, never by tag. The data-prod images (`ds-postgres`,
   `ds-pgbackrest`) are not in the registry.
-- **Stage consumes it; production does not yet.** Every stage slot converge
-  (`tools/staging/slot.mjs up|sync|reset`) resolves the commit's `images-<sha>.json` on
-  the operator side, then ds-stage-1 logs in with its pull token, pulls each recorded
-  digest and tags it `ds-<image>:<sha>`, then logs out again (the login shell's exit trap
-  plus one unconditional `docker logout` per converge), so the token file stays the only
-  registry credential at rest on the box; nothing is built and a commit with no recorded
-  images is not staged (`tools/staging/README.md` → «`slot.mjs` in one paragraph»).
-  api-prod still builds on-box until `pnpm deploy:prod` switches to pulling by digest
-  (#2981, the last PR).
+- **Stage and production both consume it; neither box builds.** The shared mechanics
+  live in `tools/deploy/lib/registry.mjs`: the commit's `images-<sha>.json` is resolved
+  on the operator side, then the box logs in with its pull token, pulls each recorded
+  digest and tags it `ds-<image>:<sha>`, then logs out again (the login shell's exit
+  trap plus one unconditional `docker logout`), so the token file stays the only
+  registry credential at rest on the box, and each tag's RepoDigests must carry its
+  recorded digest.
+  - **Stage** — every slot converge (`tools/staging/slot.mjs up|sync|reset`); a commit
+    with no recorded images is not staged (`tools/staging/README.md` → «`slot.mjs` in
+    one paragraph»).
+  - **Production** — `pnpm deploy:prod` resolves the manifest in its pre-flight and
+    accepts only a release build (`ref: "main"`, or `ref: "hotfix/<N>-<slug>"` for a
+    `--ref` hotfix — `runtime-images.yml` also runs on `hotfix/**` pushes; release-namespace
+    digests, never `pr/`; the exact release SHA); it also checks that `/etc/ds-platform/registry-pull-token` exists on
+    ds-api-prod and refuses with this section as the pointer if not. The api-prod
+    compose has no `build:` and tags every `ds-*` image `${DEPLOY_SHA:?}`; an app-only
+    rollback whose target tags were pruned pulls that SHA's recorded release digests
+    (`tools/deploy/README.md` → steps 1 and 5).
+  - **Provisioning the pull token on a box** is a once-per-box step by the lead: the
+    read-only pull token goes to `/etc/ds-platform/registry-pull-token` as `root:root`
+    `0600`, never through chat, an env file or this repo. Check without printing it:
+    `ssh <box> 'sudo test -s /etc/ds-platform/registry-pull-token && echo ok'`.
 
 ## Deploy — one command (`pnpm deploy:prod`)
 
@@ -226,27 +239,31 @@ Pipeline (`tools/deploy/prod.mjs`), fail-closed and stops at the first red step:
    **both** boxes; only after successful extraction does it replace
    `~/ds-platform`. The gitignored api-prod compose `.env` (the non-secret
    `DEPLOY_SHA` / `SMARTCAPTCHA_SITE_KEY` interpolation file) is the single
-   carried-forward file; other untracked files are not preserved. No registry,
-   no deploy key (README step 5).
+   carried-forward file; other untracked files are not preserved. The tree needs
+   no deploy key (README step 5); the api-prod images come from the registry (step 5 below).
 3. **data-prod** — `docker compose up -d --build` (idempotent). Builds run with
    **`BUILDX_NO_DEFAULT_ATTESTATIONS=1`** so an unchanged build yields a
    byte-identical image ID: a no-op redeploy is a **true no-op** and does NOT
    recreate the `postgres` container (#486 — without it, BuildKit's default
    provenance attestation churns the image digest every build → `up -d` recreates
    → a ~24s persistence blip). A real Dockerfile/context change still rebuilds and
-   recreates. The same flag guards the api-prod `build`/`migrate` (step 5).
+   recreates. (api-prod builds nothing since #2981 — step 5.)
 4. **Checkpoint (DSO-129)** — a pgbackrest **pre-migrate `incr` backup** (the
    same `backup.sh` cron runs) **before** any migration, so a restore point
    exists at the pre-migrate state. See [Prod migration rule](#prod-migration-rule--expandcontract).
-5. **api-prod** — `migrate` (idempotent drizzle-kit) → `build` → `up -d`. Images
-   are SHA-tagged **`ds-api:<sha>` / `ds-portal:<sha>`** (DSO-127) — the compose
-   `image:` reads `DEPLOY_SHA` from a `.env` the script writes beside `compose.yml`.
+5. **api-prod** — `pull` (the recorded `main`/`hotfix/*` digests, see «Container registry»;
+   nothing is built) → pre-swap boot verify → `migrate` (idempotent drizzle-kit,
+   the pulled `ds-api-migrate:<sha>`) → `up -d`. Images are SHA-tagged
+   **`ds-api:<sha>` / `ds-api-migrate:<sha>` / `ds-portal:<sha>` / `ds-admin:<sha>` /
+   `ds-doctor:<sha>`** (DSO-127) — the compose `image:` reads `${DEPLOY_SHA:?}` from
+   a `.env` the script writes beside `compose.yml`.
    The script then compares the shipped `Caddyfile` and
    `centrifugo/config.json` with the files visible through the running containers
    and **restarts only consumers whose bind mount is stale**. It verifies both
    mounts again after apply; a mismatch fails the deploy (#1175).
-6. **Retention (DSO-127)** — keeps the **last 3** SHA-tagged images per repo,
-   prunes older (never `:local`, never the running one).
+6. **Retention (DSO-127)** — keeps the **last 3** SHA-tagged images per repo
+   (`ds-api-migrate` included), prunes older (never `:local`, never the running
+   one) and drops the registry digest references of pruned images.
 7. **Smoke (DSO-128)** — `tools/deploy/smoke-prod.mjs --expect-sha <sha>`; a red
    smoke fails the deploy loud and prints the rollback pointer.
 
@@ -300,7 +317,9 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    cutover section's retirement marker below).
    Root `doctor.school` A-record is untouched. Email records (MX/SPF/DKIM/DMARC)
    are already live (memory `reference_doctor_school_email_dns`).
-5. **Get the committed `main` source onto both boxes (images build on-box, no registry).**
+5. **Get the committed `main` source onto both boxes.** (Since #2981 the api-prod
+   images are not built from this tree — they are pulled from the registry, see
+   «Container registry»; the tree carries compose files and configs.)
 
    > **DSO-100 on-box finding:** deploy keys are **disabled org-wide** for
    > `doctor-school` (GitHub Free org policy; no REST API to toggle, and enabling it
@@ -322,7 +341,8 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    > `GIT_SSH_COMMAND='ssh -i ~/.ssh/ds-deploy -o IdentitiesOnly=yes' git clone
 --depth 1 git@github.com:doctor-school/ds-platform.git ~/ds-platform`.
 
-   Both boxes need the tree: api-prod builds api/portal + runs migrations from it;
+   Both boxes need the tree: api-prod runs its compose and configs from it (the
+   images are pulled in step 8);
    data-prod builds the Postgres + pgbackrest images from `infra/deploy/compose/data-prod/`
    (and the api-prod compose bind-mounts `infra/dev-stand/sms-aero-adapter/server.mjs`).
 
@@ -414,10 +434,43 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
    >   via `environment:` (which outranks env_file). If a deployed `api.env` still
    >   carries `PORT=3000`, delete that line.
 
+   **First pull the release images and pin `DEPLOY_SHA`** (#2981). The api-prod
+   compose has no `build:` and names every `ds-*` image `ds-<image>:${DEPLOY_SHA:?}`,
+   so every `docker compose` call below (and in step 9) refuses until the box `.env`
+   names a SHA whose five images are present. On a steady-state box `pnpm deploy:prod`
+   does this itself, but on a fresh or rebuilt box it cannot run before this step and
+   step 9, so do it by hand once. This is the same pull `tools/deploy/lib/registry.mjs`
+   performs: the SHA step 5 shipped, its `main` manifest from `runtime-images.yml`,
+   pulled by digest. Prerequisite: the pull token is on the box («Container registry»).
+
+   ```bash
+   # Workstation, repo root, authenticated gh. SHA = the commit step 5 shipped.
+   SHA=$(git rev-parse origin/main)
+   RUN=$(gh run list --workflow runtime-images.yml --commit "$SHA" --event push \
+     --status success --json databaseId --jq '.[0].databaseId')   # empty → no recorded images; stop
+   gh run download "$RUN" -n "images-$SHA" -D "images-$SHA"
+   # Refuse another commit's or a pr/ manifest; emit one pull-by-digest + tag line per image.
+   node -e 'const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+     if (m.sha !== process.argv[2] || m.ref !== "main") throw new Error(`manifest ${m.sha} ref ${m.ref}: not the main record of this SHA`);
+     for (const [name, ref] of Object.entries(m.images)) console.log(`docker pull ${ref} && docker tag ${ref} ds-${name}:${m.sha}`);' \
+     "images-$SHA/images-$SHA.json" "$SHA" > "images-$SHA/pull.sh"
+   cat "images-$SHA/pull.sh"   # five lines (api, api-migrate, portal, admin, doctor), each `…@sha256:<digest>`
+   # ds-api-prod, as root: log in from the token file (never argv), pull + tag, log out on exit.
+   ssh ds-api-prod "sudo sh -ec 'trap \"docker logout ds-platform.registry.twcstorage.ru >/dev/null 2>&1\" EXIT
+     docker login ds-platform.registry.twcstorage.ru -u ds-platform --password-stdin < /etc/ds-platform/registry-pull-token >/dev/null
+     sh -e'" < "images-$SHA/pull.sh"
+   # Pin DEPLOY_SHA in the compose .env, keeping every other line (SMARTCAPTCHA_SITE_KEY, #729).
+   ssh ds-api-prod "cd ~/ds-platform/infra/deploy/compose/api-prod && \
+     { grep -v '^DEPLOY_SHA=' .env 2>/dev/null; echo DEPLOY_SHA=$SHA; } > .env.new && mv .env.new .env && \
+     sudo docker image ls --filter 'reference=ds-*:$SHA'"   # five ds-<image>:<sha> rows
+   rm -rf "images-$SHA"
+   ```
+
    ```bash
    cd ~/ds-platform/infra/deploy/compose/api-prod
-   sudo docker compose --profile migrate run --rm migrate # applies apps/api/drizzle/0000..0004
-   sudo docker compose build                              # api + portal (~10-20 min on 4 vCPU); zitadel/login/sms pulled
+   # zitadel / zitadel-login / sms-aero-adapter / caddy / centrifugo are upstream images
+   # and pull on first use; every ds-* image is the one pulled above.
+   sudo docker compose --profile migrate run --rm migrate # applies apps/api/drizzle/*
    # NOTE: do NOT `up -d` the whole stack yet — Zitadel must first-boot ALONE with the
    # FIRSTINSTANCE block set, so the ds-bootstrap PAT exists before zitadel-login
    # (whose PAT bind-mount is fail-closed) and caddy start. See step 9.
@@ -581,11 +634,11 @@ The webinars wave-1 increment onto the already-live 003 stand: admin app
 (`admin.doctor.school`), Centrifugo room chat, S3 `uploads` bucket, prod
 SmartCaptcha (#186). The repo payload (compose/Caddy/Terraform/env templates) is
 apply-ready; the steps below cover **initial provisioning or recovery** — after
-them, `pnpm deploy:prod` covers steady-state redeploys (it already builds every
-`build:` service, admin included, and the migrate step picks up the wave-1
+them, `pnpm deploy:prod` covers steady-state redeploys (it pulls every recorded
+`ds-*` image, admin included, and the migrate step picks up the wave-1
 events/rooms migrations like any other). Out-of-band provider resources and
 on-box values still have to satisfy the invariants below before each affected
-image build.
+deploy.
 
 > Steps marked **[OWNER-GATED]** are irreversible/paid provider actions or
 > product-owner calls — they need an explicit owner "go" (AGENTS.md §6,
@@ -702,21 +755,13 @@ image build.
      in `api.env` and `SMARTCAPTCHA_SITE_KEY=ysc1_…` in the compose `.env`, run
      the keypair-identifier checks in step 3, then `pnpm deploy:prod`.
 
-5. **Ship source + build images.** Ship the merged `origin/main` tree to the
-   boxes (Apply order step 5 / `pnpm deploy:prod` does this), then on api-prod:
-
-   ```bash
-   cd ~/ds-platform/infra/deploy/compose/api-prod
-   # ONE IMAGE AT A TIME (#2283): never `build admin portal api` in one command —
-   # BuildKit would run three `next build` processes at once beside live
-   # production on this swapless 8 GB box and stall the site (~17 min, 2026-09-18).
-   sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build admin
-   sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build portal
-   sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build api
-   # admin is NEW; portal and api rebuild to the wave-1 code (the captcha site
-   # key is runtime env, #2981 — no image bakes it).
-   # centrifugo is pulled (centrifugo/centrifugo:v6).
-   ```
+5. **Ship source + pull images.** Ship the merged `origin/main` tree to the boxes
+   (Apply order step 5 / `pnpm deploy:prod` does this), then bring that SHA's five
+   recorded images (admin included) onto api-prod and pin `DEPLOY_SHA` exactly as
+   Apply order step 8 «First pull the release images and pin `DEPLOY_SHA`» does —
+   api-prod builds nothing since #2981, and every compose call in steps 6–7 refuses
+   without that `.env` line and those images. The captcha site key is runtime env
+   (#2981 — no image bakes it); centrifugo is an upstream pull (`centrifugo/centrifugo:v6`).
 
 6. **One-shot migrations.** The wave-1 events/rooms migrations are ordinary
    Drizzle migrations through the existing one-shot service — no new mechanism.
@@ -824,11 +869,13 @@ conflate them:
   pnpm deploy:prod --rollback <previous-sha>
   ```
 
-  It `up -d`s the already-present `ds-api:<sha>` / `ds-portal:<sha>` images (kept
-  by retention — the **last 3** SHAs), rewrites the `DEPLOY_SHA` `.env`, and
-  re-smokes. It does **not** rebuild, migrate, or touch the DB. If the target SHA
-  was already pruned, roll **forward** instead (check out that commit's `main`,
-  `pnpm deploy:prod`). Manual equivalent on the box: edit the `DEPLOY_SHA=` line
+  It `up -d`s the `ds-*:<sha>` images (kept by retention — the **last 3** SHAs;
+  a pruned target is pulled again from its recorded `main`/`hotfix/*` manifest,
+  and a target without one refuses), rewrites the `DEPLOY_SHA` `.env`, and
+  re-smokes. It does **not** build, migrate, or touch the DB. Manual equivalent on
+  the box, only while all five `ds-*:<sha>` tags of the target are present
+  (`sudo docker image ls --filter 'reference=ds-*:<sha>'`; otherwise pull them first
+  as in Apply order step 8): edit the `DEPLOY_SHA=` line
   in `~/ds-platform/infra/deploy/compose/api-prod/.env` (do NOT `printf … > .env`
   — the file also carries `SMARTCAPTCHA_SITE_KEY`, #729) then
   `sudo docker compose up -d`.
@@ -1196,27 +1243,29 @@ Order:
 
 ## Build-cache GC on `api-prod` (#1419)
 
-`api-prod` builds the `ds-api` / `ds-portal` / `ds-admin` / `ds-doctor` images **on the box**, so
-every `pnpm deploy:prod` adds 1–3 GB of BuildKit cache. Nothing reclaimed it: the
-cache reached **54.6 GB / 77% disk** before the 2026-08-21 manual cleanup dropped
-the box back to 28%. (SHA-tagged _images_ were already bounded — `prod.mjs` keeps
-the last 3 tags per repo, DSO-127 — the _build cache_ was the unbounded half.)
+**Since #2981 nothing is built on `api-prod`**: `pnpm deploy:prod` pulls the recorded
+registry digests (see «Container registry»), so a deploy adds no BuildKit cache and
+the post-deploy `buildx prune` step is gone from `tools/deploy/prod.mjs`. What
+remains is the cache the on-box builds left behind, reclaimed once by hand
+(`sudo docker buildx prune -af` on ds-api-prod after the first pulled release), and
+the daemon-level cap below, which stays as a harmless backstop.
 
-The policy is a 10 GB cap enforced from two sides:
+History: when `api-prod` built the `ds-api` / `ds-portal` / `ds-admin` / `ds-doctor`
+images on the box, every deploy added 1–3 GB of BuildKit cache; it reached
+**54.6 GB / 77% disk** before the 2026-08-21 manual cleanup dropped the box back to
+28%. (SHA-tagged _images_ were already bounded — `prod.mjs` keeps the last 3 tags per
+repo, DSO-127 — the _build cache_ was the unbounded half.)
 
-| Layer                                                 | Where                                 | Applies                                          |
-| ----------------------------------------------------- | ------------------------------------- | ------------------------------------------------ |
-| Daemon GC — `builder.gc.defaultReservedSpace: "10GB"` | `/etc/docker/daemon.json`             | continuously, in dockerd, deploy or no deploy    |
-| Post-deploy prune — `buildx prune --reserved-space`   | `tools/deploy/prod.mjs`, step `#1419` | once per successful deploy, after the smoke gate |
+| Layer                                                 | Where                     | Applies                                       |
+| ----------------------------------------------------- | ------------------------- | --------------------------------------------- |
+| Daemon GC — `builder.gc.defaultReservedSpace: "10GB"` | `/etc/docker/daemon.json` | continuously, in dockerd, deploy or no deploy |
 
-Both sides carry the **same 10 GB figure**. In code it is the single constant
-`BUILD_CACHE_RESERVED_SPACE` (`tools/deploy/prod.mjs`); YAML cannot import a JS
-constant, so the cloud-init value is kept in sync by hand — change one, change
-all three (constant, cloud-init, this section) in the same commit, or the box's
-real ceiling silently becomes whichever is looser.
+The figure is kept equal to the stage box's cap (`BUILD_CACHE_RESERVED_SPACE` in
+`tools/staging/slot.mjs`, which still prunes after a converge); YAML cannot import a
+JS constant, so the cloud-init value is kept in sync by hand.
 
 `defaultReservedSpace` is the modern (docker 28+) spelling, matching the
-`--reserved-space` CLI flag the prune step uses. **Validated on `ds-api-prod`
+`--reserved-space` CLI flag. **Validated on `ds-api-prod`
 (docker 29.6.1) on 2026-08-21: `sudo dockerd --validate --config-file …` returns
 `configuration OK` for BOTH `defaultReservedSpace` and the legacy
 `defaultKeepStorage`.** The modern key is chosen for forward-compatibility, not
@@ -1224,9 +1273,9 @@ because the legacy one is rejected.
 
 **`cloud-init/api-prod.yaml` writes `daemon.json` only on box (re-)creation.** It
 never retro-applies to a running box — the live `api-prod` was provisioned before
-this policy existed, so its daemon still has no `builder.gc` block. Until the
-one-time apply below is done, the deploy-script prune step is what keeps the box
-under the cap (it runs on every successful deploy and needs no daemon change).
+this policy existed, so its daemon still has no `builder.gc` block. With nothing
+built on the box any more, that gap no longer grows; the one-time apply below is
+optional.
 
 **One-time apply on the EXISTING box.** Restarting dockerd restarts every
 container — do it in a deploy window, not during traffic. Brief downtime of the

@@ -4,15 +4,19 @@ name: Runtime images
 # (infra/deploy/README.md → Container registry) and boots the exact pushed digest:
 #   - push to `main`: EVERY merge (no paths filter) — each releasable SHA must have
 #     digests; pushed as `<registry>/<image>:<sha>`.
+#   - push to `hotfix/<N>-<slug>` (the `pnpm deploy:prod --ref` target, cut from the
+#     live prod SHA): pushed like `main`, manifest ref `hotfix/<N>-<slug>`. Any other
+#     `hotfix/` branch name fails the plan — production refuses it anyway.
 #   - internal pull_request: pushed as `<registry>/pr/<image>:<head-sha>`.
 #   - fork pull_request: built and booted, never logged in, never pushed.
-#   - workflow_dispatch: pushes like `main` only when dispatched on `main`.
+#   - workflow_dispatch: pushes like `main` only when dispatched on `main` or on a
+#     `hotfix/<N>-<slug>` branch.
 # The `images` job writes `images-<sha>.json` (artifact `images-<sha>`, 90 days) —
 # the digest manifest the stage/prod deploys read. Keep its shape.
 
 on:
   push:
-    branches: [main]
+    branches: [main, "hotfix/**"]
   pull_request:
     branches: [main]
     paths:
@@ -70,6 +74,15 @@ jobs:
             if [ "$PR_HEAD_REPO" = "$REPO" ]; then push=true; fi
           elif [ "$GIT_REF" = refs/heads/main ]; then
             push=true; ref=main
+          elif [ "${GIT_REF#refs/heads/hotfix/}" != "$GIT_REF" ]; then
+            # A hotfix pushes under the release namespace (no `pr/` prefix); the
+            # ref names the branch so production can tell it from `main`.
+            ref="${GIT_REF#refs/heads/}"
+            if ! [[ "$ref" =~ ^hotfix/[0-9]+-[a-z0-9-]+$ ]]; then
+              echo "::error::$ref is not hotfix/<N>-<slug> — production accepts no other hotfix ref"
+              exit 1
+            fi
+            push=true
           else
             ref="dispatch"
           fi

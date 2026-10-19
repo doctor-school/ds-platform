@@ -307,7 +307,7 @@ describe(
         "bash",
         [
           "-c",
-          `exec 9>"${join(root, "lock", "ds-stage-main.lock")}"; flock -n 9; bash "${DS_RELEASE}" release stage-main ${SHA_A} up "${scriptFile("up", "true\n")}"`,
+          `exec 8>"${join(root, "lock", "ds-stage-main.lock")}"; flock -n 8; bash "${DS_RELEASE}" release stage-main ${SHA_A} up "${scriptFile("up", "true\n")}"`,
         ],
         { env, encoding: "utf8" },
       );

@@ -35,6 +35,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the same generic failure is shown each time
     And users.phone and phone_verified are unchanged and no notice email is sent
 
+  # Wrong-code Academy projection only (#3007); retain the broader case above.
+  # Native expiry/reuse, audit and counters: apps/api/test/me/phone.e2e-spec.ts EARS-48.
+  # Generic refusal UI: packages/design-system/src/blocks/account-profile-card.test.tsx EARS-48.
+  @EARS-48 @EARS-16 @EARS-52 @failure @phone-code-refusal
+  Scenario: Academy refuses a wrong phone code and accepts the retained real code
+    Given an owned verified Academy account requests a fresh phone code and receives its actual SMS
+    When the owner submits a different six-digit phone code through the Academy code field
+    Then Academy shows the generic phone-code refusal and the same owner stays unconfirmed with no addressed mail for 15 seconds
+    And the retained real SMS code confirms that phone on the same Academy account
+
   @EARS-50 @happy @phone-confirmation
   Scenario: A congress participant sees the form's number prefilled
     Given a signed-in user whose latest congress registration answers hold the contact phone "8 (999) 123-45-67"

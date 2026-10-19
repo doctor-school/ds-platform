@@ -9,6 +9,7 @@ import {
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import {
+  captureSmsCheckpoint,
   freshConfirmablePhone,
   smsSinkUrl,
   waitForSmsCode,
@@ -184,7 +185,7 @@ When(
     );
     await state.page.getByTestId("otp-channel-sms").click();
     await inputSecret(state.page.getByTestId("otp-identifier"), state.phone);
-    const requestedAt = new Date().toISOString();
+    const requestedAt = await captureSmsCheckpoint(state.sink, state.phone);
     const pending = captureResponse(state.page, "/v1/auth/login/otp/request");
     await state.page.getByTestId("otp-send").click();
     const sent = await pending;

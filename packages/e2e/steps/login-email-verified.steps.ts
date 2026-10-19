@@ -9,9 +9,11 @@ import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
 import {
   assertNoVerificationMail,
+  captureAddressedMailCheckpoint,
   fetchRecoveryCode,
   mailpitUrlFor,
   nativeRecoveryMail,
+  type AddressedMailCheckpoint,
 } from "../lib/mailpit.js";
 import {
   assertNoPrivateRegistrationAccess,
@@ -30,7 +32,7 @@ interface VerifiedLogin extends OwnedCredentials {
   page: Page;
   subject?: string;
   priorCookies: string[];
-  requestedAt?: string;
+  before?: AddressedMailCheckpoint;
   code?: string;
   request?: { response: Response; matches: boolean };
   accepted?: { response: Response; matches: boolean };
@@ -198,7 +200,11 @@ When(
     await state.page.getByTestId("login-method-otp").click();
     await state.page.getByTestId("otp-channel-email").click();
     await inputSecret(state.page.getByTestId("otp-identifier"), state.email);
-    state.requestedAt = new Date().toISOString();
+    state.before = await captureAddressedMailCheckpoint(
+      nativeRecoveryMail(),
+      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+      state.email,
+    );
     const requested = captureResponse(
       state.page,
       "/v1/auth/login/otp/request",
@@ -286,8 +292,10 @@ Then(
   "fresh addressed sign-in mail is delivered for the verified account without verification mail",
   async ({ page, world }) => {
     const state = login(page);
-    if (!state.requestedAt)
-      throw new Error("Verified login-code request time was not captured");
+    if (!state.before)
+      throw new Error(
+        "Verified login-code mailbox checkpoint was not captured",
+      );
     const mail = nativeRecoveryMail();
     const mailpit =
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl);
@@ -295,19 +303,14 @@ Then(
       mail,
       mailpit,
       state.email,
-      state.requestedAt,
+      state.before,
       "login",
     );
     expect(
       /^\d{6}$/.test(state.code),
       "fresh addressed sign-in code has six digits",
     ).toBe(true);
-    await assertNoVerificationMail(
-      mail,
-      mailpit,
-      state.email,
-      state.requestedAt,
-    );
+    await assertNoVerificationMail(mail, mailpit, state.email, state.before);
   },
 );
 

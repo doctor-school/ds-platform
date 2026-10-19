@@ -4,14 +4,17 @@ import { installCaptchaStub } from "../lib/captcha-stub.js";
 import { resolveWorkerGoldenDoctor } from "../lib/worker-golden.js";
 import {
   assertNoAddressedMail,
+  captureAddressedMailCheckpoint,
   mailpitUrlFor,
+  nativeRecoveryMail,
   waitForResetMail,
+  type AddressedMailCheckpoint,
 } from "../lib/mailpit.js";
 import { Then, When } from "./support/fixtures.js";
 
 interface ResetObservation {
   email: string;
-  requestedAt: string;
+  before: AddressedMailCheckpoint;
   body: unknown;
 }
 const observations = new WeakMap<Page, ResetObservation[]>();
@@ -29,7 +32,11 @@ When(
       await page.goto(`${world.hostBaseUrl}/reset`, { waitUntil: "load" });
       await page.waitForLoadState("networkidle");
       await page.locator('input[autocomplete="username"]').fill(email);
-      const requestedAt = new Date().toISOString();
+      const before = await captureAddressedMailCheckpoint(
+        nativeRecoveryMail(),
+        process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+        email,
+      );
       const responsePending = page.waitForResponse(
         (response) =>
           new URL(response.url()).pathname === "/v1/auth/password/reset" &&
@@ -82,7 +89,7 @@ When(
         ),
         "private profile remains inaccessible",
       ).toBe(401);
-      results.push({ email, requestedAt, body });
+      results.push({ email, before, body });
     }
     observations.set(page, results);
   },
@@ -107,12 +114,7 @@ Then(
     const known = results![0]!;
     const unknown = results![1]!;
     // Positive delivery first prevents a dead pipeline from proving absence.
-    await waitForResetMail(request, root, known.email, known.requestedAt);
-    await assertNoAddressedMail(
-      request,
-      root,
-      unknown.email,
-      unknown.requestedAt,
-    );
+    await waitForResetMail(request, root, known.email, known.before);
+    await assertNoAddressedMail(request, root, unknown.email, unknown.before);
   },
 );

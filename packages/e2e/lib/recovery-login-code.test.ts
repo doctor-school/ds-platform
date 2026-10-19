@@ -3,6 +3,8 @@ import { fetchRecoveryCode } from "./mailpit.js";
 
 const email = "owned@example.test";
 const after = "2026-10-07T00:00:00Z";
+// #3057: freshness is the Mailpit IDs unseen before the request, not Created.
+const checkpoint = { recipient: email, messageIds: ["stale"] };
 const mail = {
   ID: "login",
   Created: after,
@@ -27,7 +29,13 @@ describe("owned recovery account login mail", () => {
   it("EARS-35: reads only the fresh addressed login code", async () => {
     vi.useFakeTimers();
     const assertion = expect(
-      fetchRecoveryCode(client(), "https://mail.test", email, after, "login"),
+      fetchRecoveryCode(
+        client(),
+        "https://mail.test",
+        email,
+        checkpoint,
+        "login",
+      ),
     ).resolves.toBe("123456");
     await Promise.all([assertion, vi.advanceTimersByTimeAsync(15_000)]);
   });
@@ -35,7 +43,7 @@ describe("owned recovery account login mail", () => {
     { ...mail, Subject: "123456 — код подтверждения Doctor.School" },
     { ...mail, Subject: "123456 — код сброса пароля Doctor.School" },
     { ...mail, To: [{ Address: "other@example.test" }] },
-    { ...mail, Created: "2026-10-06T00:00:00Z" },
+    { ...mail, ID: "stale", Created: "2026-10-08T00:00:00Z" },
   ])(
     "EARS-35: rejects the wrong purpose, recipient or stale arrival %#",
     async (search) => {
@@ -45,7 +53,7 @@ describe("owned recovery account login mail", () => {
           client(search, search),
           "https://mail.test",
           email,
-          after,
+          checkpoint,
           "login",
         ),
       ).rejects.toThrow("No fresh addressed");
@@ -65,7 +73,7 @@ describe("owned recovery account login mail", () => {
           client(mail, detail),
           "https://mail.test",
           email,
-          after,
+          checkpoint,
           "login",
         ),
       ).rejects.toThrow("did not match");
@@ -85,7 +93,7 @@ describe("owned recovery account login mail", () => {
           client(malformed, malformed),
           "https://mail.test",
           email,
-          after,
+          checkpoint,
           "login",
         ),
       ).rejects.toThrow("subject is malformed");

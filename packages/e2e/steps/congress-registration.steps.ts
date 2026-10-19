@@ -9,6 +9,7 @@ import {
   type CapturedResponse,
 } from "../lib/captured-response.js";
 import {
+  captureAddressedMailCheckpoint,
   fetchRecoveryMail,
   mailpitUrlFor,
   nativeRecoveryMail,
@@ -322,7 +323,13 @@ When(
         .getByTestId("registration-form")
         .getByText(/^Продолжая, вы соглашаетесь/),
     ).toBeVisible();
-    const sentAt = new Date().toISOString();
+    const mailbox =
+      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl);
+    const before = await captureAddressedMailCheckpoint(
+      nativeRecoveryMail(),
+      mailbox,
+      state.email,
+    );
     const pending = captureResponse(owned, "/v1/auth/register");
     await owned.getByTestId("register-submit").click();
     const submitted = await pending;
@@ -355,9 +362,9 @@ When(
     );
     const mail = await fetchRecoveryMail(
       nativeRecoveryMail(),
-      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+      mailbox,
       state.email,
-      sentAt,
+      before,
       "login",
     );
     state.code = mail.code;

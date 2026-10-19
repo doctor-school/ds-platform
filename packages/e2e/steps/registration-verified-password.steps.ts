@@ -6,9 +6,11 @@ import {
   type CapturedResponse,
 } from "../lib/captured-response.js";
 import {
+  captureAddressedMailCheckpoint,
   fetchRecoveryMail,
   mailpitUrlFor,
   nativeRecoveryMail,
+  type AddressedMailCheckpoint,
 } from "../lib/mailpit.js";
 import {
   assertNoPrivateRegistrationAccess,
@@ -32,7 +34,7 @@ interface VerifiedRegistration extends OwnedCredentials {
   subject?: string;
   priorCookies: string[];
   authPosts: string[];
-  requestedAt?: string;
+  before?: AddressedMailCheckpoint;
   code?: string;
   accepted?: CapturedResponse;
 }
@@ -286,7 +288,11 @@ When(
         .getByTestId("registration-form")
         .getByText(/^Продолжая, вы соглашаетесь/),
     ).toBeVisible();
-    state.requestedAt = new Date().toISOString();
+    state.before = await captureAddressedMailCheckpoint(
+      nativeRecoveryMail(),
+      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+      state.email,
+    );
     const pending = captureResponse(guest, "/v1/auth/register");
     await guest.getByTestId("register-submit").click();
     const registered = await pending;
@@ -328,7 +334,7 @@ Then(
   "fresh addressed mail says already registered and password unchanged in both complete bodies with an unconsumed six-digit code",
   async ({ page, world }) => {
     const state = registration(page);
-    if (!state.requestedAt)
+    if (!state.before)
       throw new Error(
         "Owned verified re-registration request was not observed",
       );
@@ -336,7 +342,7 @@ Then(
       nativeRecoveryMail(),
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
-      state.requestedAt,
+      state.before,
       "login",
     );
     state.code = mail.code;

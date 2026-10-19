@@ -22,6 +22,7 @@ import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 
 interface RegistrationObservation {
   requestedAt: string;
+  before: AddressedMailCheckpoint;
   status: number;
   evidence: ReturnType<typeof registrationEvidence>;
 }
@@ -29,7 +30,7 @@ interface RegistrationObservation {
 interface DuplicateRegistration extends OwnedCredentials {
   context: BrowserContext;
   page: Page;
-  initial?: Omit<RegistrationObservation, "requestedAt">;
+  initial?: Omit<RegistrationObservation, "requestedAt" | "before">;
   firstDuplicate?: RegistrationObservation;
   repeated?: RegistrationObservation;
   beforeRepeat?: AddressedMailCheckpoint;
@@ -55,6 +56,12 @@ async function submitDuplicate(
     page.locator('input[autocomplete="new-password"]'),
     state.password,
   );
+  const before = await captureAddressedMailCheckpoint(
+    nativeRecoveryMail(),
+    process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(base),
+    state.email,
+  );
+  // Runner-local: compared only with other runner-local request instants.
   const requestedAt = new Date().toISOString();
   const pending = captureResponse(page, "/v1/auth/register");
   await page.getByTestId("register-submit").click();
@@ -86,7 +93,12 @@ async function submitDuplicate(
     (await captured.response.headerValue("set-cookie")) ?? "",
     state,
   );
-  return { requestedAt, status: captured.response.status(), evidence };
+  return {
+    requestedAt,
+    before,
+    status: captured.response.status(),
+    evidence,
+  };
 }
 
 Given(
@@ -156,7 +168,7 @@ Given(
       nativeRecoveryMail(),
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
-      state.firstDuplicate.requestedAt,
+      state.firstDuplicate.before,
       "login",
     );
     const duplicateCopy = "Этот адрес уже зарегистрирован в Doctor.School";
@@ -226,7 +238,6 @@ Then(
       nativeRecoveryMail(),
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
-      state.repeated.requestedAt,
       state.beforeRepeat,
     );
     expect(

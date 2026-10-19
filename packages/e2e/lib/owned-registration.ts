@@ -5,6 +5,7 @@
   type Response,
 } from "@playwright/test";
 import {
+  captureAddressedMailCheckpoint,
   fetchRecoveryCode,
   mailpitUrlFor,
   nativeRecoveryMail,
@@ -238,7 +239,12 @@ export async function registerOwnedCredentials(
     page.locator('input[autocomplete="new-password"]'),
     account.password,
   );
-  const sentAt = new Date().toISOString();
+  const mailbox = process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(base);
+  const before = await captureAddressedMailCheckpoint(
+    nativeRecoveryMail(),
+    mailbox,
+    account.email,
+  );
   const registered = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === "/v1/auth/register" &&
@@ -251,9 +257,9 @@ export async function registerOwnedCredentials(
   await page.waitForLoadState("networkidle");
   const code = await fetchRecoveryCode(
     nativeRecoveryMail(),
-    process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(base),
+    mailbox,
     account.email,
-    sentAt,
+    before,
     "register",
   );
   return { response, code };

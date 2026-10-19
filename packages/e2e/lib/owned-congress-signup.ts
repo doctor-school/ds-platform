@@ -114,12 +114,6 @@ export async function createOwnedCongressSignup(
       message.Subject.length > "Doctor.School — вы зарегистрированы на ".length,
     "the pre-handoff delivery is the real congress notice, not an auth-code mail",
   ).toBe(true);
-  await assertNoAddressedMail(
-    mail,
-    mailpit,
-    email,
-    new Date().toISOString(),
-    notice,
-  );
+  await assertNoAddressedMail(mail, mailpit, email, notice);
   return { email, reference: accepted.reference!, notice };
 }

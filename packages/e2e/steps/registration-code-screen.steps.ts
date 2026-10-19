@@ -3,6 +3,7 @@ import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
 import {
+  captureAddressedMailCheckpoint,
   fetchRecoveryCode,
   mailpitUrlFor,
   nativeRecoveryMail,
@@ -227,7 +228,13 @@ When(
         .getByText(/^Продолжая, вы соглашаетесь/)
         .innerText();
       await expect(owned.getByRole("checkbox")).toHaveCount(0);
-      const sentAt = new Date().toISOString();
+      const mailbox =
+        process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl);
+      const before = await captureAddressedMailCheckpoint(
+        nativeRecoveryMail(),
+        mailbox,
+        visitor.email.toLowerCase(),
+      );
       const registration = captureResponse(owned, "/v1/auth/register");
       await owned.getByTestId("register-submit").click();
       const registered = await registration;
@@ -253,9 +260,9 @@ When(
       await observeCodeStep(visitor, world.hostBaseUrl);
       const code = await fetchRecoveryCode(
         nativeRecoveryMail(),
-        process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+        mailbox,
         visitor.email.toLowerCase(),
-        sentAt,
+        before,
         visitor.kind === "existing" ? "login" : "register",
       );
       expect(

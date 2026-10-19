@@ -18,6 +18,7 @@ import {
   type CapturedResponse,
 } from "../lib/captured-response.js";
 import {
+  captureAddressedMailCheckpoint,
   fetchRecoveryCode,
   mailpitUrlFor,
   nativeRecoveryMail,
@@ -188,15 +189,21 @@ When(
     state.recovered = reset;
     await open(reset, `${world.hostBaseUrl}/reset`);
     await input(reset.locator('input[autocomplete="username"]'), state.email);
-    const requestedAt = new Date().toISOString();
+    const mailbox =
+      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl);
+    const before = await captureAddressedMailCheckpoint(
+      nativeRecoveryMail(),
+      mailbox,
+      state.email,
+    );
     const requested = post(reset, "/v1/auth/password/reset");
     await reset.getByTestId("reset-request-submit").click();
     expect((await requested).status(), "reset request accepted").toBe(200);
     const code = await fetchRecoveryCode(
       nativeRecoveryMail(),
-      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+      mailbox,
       state.email,
-      requestedAt,
+      before,
       "reset",
     );
     const submittedCode =
@@ -421,15 +428,21 @@ When(
       `${world.hostBaseUrl}/login?method=code&returnTo=%2Faccount`,
     );
     await input(reset.getByTestId("otp-identifier"), state.email);
-    const requestedAt = new Date().toISOString();
+    const mailbox =
+      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl);
+    const before = await captureAddressedMailCheckpoint(
+      nativeRecoveryMail(),
+      mailbox,
+      state.email,
+    );
     const requested = post(reset, "/v1/auth/login/otp/request");
     await reset.getByTestId("otp-send").click();
     expect((await requested).status(), "login code requested").toBe(200);
     const code = await fetchRecoveryCode(
       nativeRecoveryMail(),
-      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+      mailbox,
       state.email,
-      requestedAt,
+      before,
       "login",
     );
     const completed = captureResponse(reset, "/v1/auth/login/otp");

@@ -12,9 +12,11 @@ import {
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import {
+  captureSmsCheckpoint,
   freshConfirmablePhone,
   smsSinkMessages,
   smsSinkUrl,
+  type SmsCheckpoint,
 } from "../lib/sms-sink.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 
@@ -26,7 +28,7 @@ interface OwnedPhone {
   sink: string;
   cookie?: string;
   subject?: string;
-  requestedAt?: string;
+  requestedAt?: SmsCheckpoint;
   repeated?: CapturedResponse;
   phonePosts: string[];
 }
@@ -189,7 +191,7 @@ When(
         window as typeof window & { __dsPhoneNoop?: typeof observation }
       ).__dsPhoneNoop = observation;
     });
-    state.requestedAt = new Date().toISOString();
+    state.requestedAt = await captureSmsCheckpoint(state.sink, state.phone);
     const pending = captureResponse(state.page, "/v1/me/phone");
     await state.page.getByTestId("profile-phone-send").click();
     state.repeated = await pending;

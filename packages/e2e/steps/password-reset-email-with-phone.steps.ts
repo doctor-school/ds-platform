@@ -20,9 +20,11 @@ import {
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import {
+  captureSmsCheckpoint,
   freshConfirmablePhone,
   smsSinkMessages,
   smsSinkUrl,
+  type SmsCheckpoint,
 } from "../lib/sms-sink.js";
 import { After, Before, Given, Then, When } from "./support/auth-fixtures.js";
 
@@ -35,7 +37,7 @@ interface EmailReset {
   account: Page;
   guest: Page;
   mailbox?: AddressedMailCheckpoint;
-  requestedAt?: string;
+  requestedAt?: { mail: AddressedMailCheckpoint; sms: SmsCheckpoint };
 }
 const resets = new WeakMap<Page, EmailReset>();
 function stateFor(page: Page): EmailReset {
@@ -162,7 +164,14 @@ When(
       state.guest.locator('input[autocomplete="username"]'),
       state.email,
     );
-    state.requestedAt = new Date().toISOString();
+    state.requestedAt = {
+      mail: await captureAddressedMailCheckpoint(
+        nativeRecoveryMail(),
+        state.mailpit,
+        state.email,
+      ),
+      sms: await captureSmsCheckpoint(state.sink, state.phone),
+    };
     const pending = post(state.guest, "/v1/auth/password/reset");
     await state.guest.getByTestId("reset-request-submit").click();
     const response = await pending;
@@ -184,7 +193,7 @@ Then(
       nativeRecoveryMail(),
       state.mailpit,
       state.email,
-      state.requestedAt,
+      state.requestedAt.mail,
       "reset",
     );
     expect(
@@ -214,7 +223,7 @@ Then(
     while (true) {
       const finalObservation = Date.now() >= deadline;
       expect(
-        (await smsSinkMessages(state.sink, state.phone, state.requestedAt))
+        (await smsSinkMessages(state.sink, state.phone, state.requestedAt.sms))
           .length,
         "no addressed SMS after email reset",
       ).toBe(0);

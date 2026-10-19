@@ -31,7 +31,6 @@ interface VerificationMail extends OwnedCredentials {
   page: Page;
   authPosts: string[];
   before?: AddressedMailCheckpoint;
-  requestedAt: string;
   code?: string;
   mail?: Awaited<ReturnType<typeof fetchRecoveryMail>>;
   accepted?: CapturedResponse;
@@ -63,7 +62,6 @@ Given(
       context,
       page: owned,
       authPosts: [],
-      requestedAt: new Date().toISOString(),
     };
     registrations.set(page, state);
     state.before = await captureAddressedMailCheckpoint(
@@ -129,11 +127,13 @@ When(
   "the real BFF verification mail arrives for that owned Academy registration",
   async ({ page, world }) => {
     const state = registration(page);
+    if (!state.before)
+      throw new Error("Pre-registration mail checkpoint is missing");
     state.mail = await fetchRecoveryMail(
       nativeRecoveryMail(),
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
-      state.requestedAt,
+      state.before,
       "register",
     );
     expect(
@@ -171,7 +171,6 @@ Then(
       nativeRecoveryMail(),
       base,
       state.email,
-      state.requestedAt,
       delivered,
     );
     await test.info().attach("verification-mail-checkpoint", {

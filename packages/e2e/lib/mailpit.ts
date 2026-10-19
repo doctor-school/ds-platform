@@ -29,20 +29,20 @@ export function mailpitUrlFor(hostBaseUrl: string): string {
   return url.origin;
 }
 
+/** The newest login mail unseen at the checkpoint (#3057: IDs, not clocks). */
 export function selectLoginMail(
   messages: MailSummary[],
-  afterIso: string,
+  checkpoint: AddressedMailCheckpoint,
 ): MailSummary | null {
-  const after = Date.parse(afterIso);
-  if (!Number.isFinite(after))
-    throw new Error("Invalid login-code request time");
+  const seen = new Set(checkpoint.messageIds);
   return (
     messages
       .filter(
         (message) =>
           message.ID &&
+          !seen.has(message.ID) &&
           message.Created &&
-          Date.parse(message.Created) >= after &&
+          Number.isFinite(Date.parse(message.Created)) &&
           message.Subject?.includes(LOGIN_SUBJECT),
       )
       .sort((a, b) => Date.parse(b.Created!) - Date.parse(a.Created!))[0] ??
@@ -61,8 +61,9 @@ export async function fetchLoginCode(
   request: APIRequestContext,
   baseUrl: string,
   email: string,
-  afterIso: string,
+  checkpoint: AddressedMailCheckpoint,
 ): Promise<string> {
+  assertCheckpoint(checkpoint, email);
   const root = baseUrl.replace(/\/$/, "");
   for (let attempt = 0; attempt < 30; attempt++) {
     const search = await request.get(
@@ -72,7 +73,7 @@ export async function fetchLoginCode(
       throw new Error(`Mailpit search failed with HTTP ${search.status()}`);
     }
     const list = (await search.json()) as { messages?: MailSummary[] };
-    const hit = selectLoginMail(list.messages ?? [], afterIso);
+    const hit = selectLoginMail(list.messages ?? [], checkpoint);
     if (hit?.ID) {
       const detail = await request.get(
         `${root}/api/v1/message/${encodeURIComponent(hit.ID)}`,
@@ -212,16 +213,35 @@ async function addressedMail(
   );
 }
 
+function assertCheckpoint(
+  checkpoint: AddressedMailCheckpoint,
+  email: string,
+): Set<string> {
+  if (
+    !checkpoint ||
+    checkpoint.recipient !== email.toLowerCase() ||
+    !Array.isArray(checkpoint.messageIds) ||
+    checkpoint.messageIds.some((id) => typeof id !== "string" || !id)
+  ) {
+    throw new Error("Invalid addressed-mail checkpoint");
+  }
+  return new Set(checkpoint.messageIds);
+}
+
+/**
+ * Addressed mail beyond the pre-action checkpoint (#3057). Mailpit's `Created`
+ * is the inbox host's clock and the request instant would be the runner's, so
+ * freshness is the Mailpit IDs unseen before the action, never a timestamp.
+ */
 async function freshAddressedMail(
   request: MailRequest,
   baseUrl: string,
   email: string,
-  afterIso: string,
+  checkpoint: AddressedMailCheckpoint,
 ): Promise<AddressedMail[]> {
-  const after = Date.parse(afterIso);
-  if (!Number.isFinite(after)) throw new Error("Invalid mail request time");
+  const seen = assertCheckpoint(checkpoint, email);
   return (await addressedMail(request, baseUrl, email)).filter(
-    (message) => Date.parse(message.Created!) >= after,
+    (message) => !seen.has(message.ID!),
   );
 }
 
@@ -244,12 +264,12 @@ export async function waitForResetMail(
   request: APIRequestContext,
   baseUrl: string,
   email: string,
-  afterIso: string,
+  checkpoint: AddressedMailCheckpoint,
 ): Promise<void> {
   const deadline = Date.now() + DELIVERY_WINDOW_MS;
   while (true) {
     const hit = (
-      await freshAddressedMail(request, baseUrl, email, afterIso)
+      await freshAddressedMail(request, baseUrl, email, checkpoint)
     ).find((message) => message.Subject?.endsWith(RESET_SUBJECT));
     if (hit) {
       const detail = await request.get(
@@ -285,29 +305,21 @@ export async function assertNoAddressedMail(
   request: MailRequest,
   baseUrl: string,
   email: string,
-  afterIso: string,
-  checkpoint?: AddressedMailCheckpoint,
+  checkpoint: AddressedMailCheckpoint,
 ): Promise<void> {
-  if (
-    checkpoint &&
-    (checkpoint.recipient !== email.toLowerCase() ||
-      !Array.isArray(checkpoint.messageIds) ||
-      checkpoint.messageIds.some((id) => typeof id !== "string" || !id))
-  ) {
-    throw new Error("Invalid addressed-mail checkpoint");
-  }
-  const seenIds = checkpoint ? new Set(checkpoint.messageIds) : undefined;
+  assertCheckpoint(checkpoint, email);
   const deadline = Date.now() + DELIVERY_WINDOW_MS;
   while (true) {
     const finalObservation = Date.now() >= deadline;
-    const messages = seenIds
-      ? await addressedMail(request, baseUrl, email)
-      : await freshAddressedMail(request, baseUrl, email, afterIso);
-    if (messages.some((message) => !seenIds || !seenIds.has(message.ID!))) {
+    const messages = await freshAddressedMail(
+      request,
+      baseUrl,
+      email,
+      checkpoint,
+    );
+    if (messages.length > 0) {
       throw new Error(
-        seenIds
-          ? "Unexpected addressed mail after observed mailbox checkpoint"
-          : "Unexpected addressed mail after unknown reset request",
+        "Unexpected addressed mail after observed mailbox checkpoint",
       );
     }
     if (finalObservation) return;
@@ -321,7 +333,7 @@ export async function assertNoVerificationMail(
   request: MailRequest,
   baseUrl: string,
   email: string,
-  afterIso: string,
+  checkpoint: AddressedMailCheckpoint,
 ): Promise<void> {
   const deadline = Date.now() + DELIVERY_WINDOW_MS;
   while (true) {
@@ -329,7 +341,7 @@ export async function assertNoVerificationMail(
       request,
       baseUrl,
       email,
-      afterIso,
+      checkpoint,
     );
     if (messages.some((message) => typeof message.Subject !== "string"))
       throw new Error("Invalid Mailpit search payload");
@@ -351,10 +363,10 @@ export async function fetchRecoveryCode(
   request: MailRequest,
   baseUrl: string,
   email: string,
-  afterIso: string,
+  checkpoint: AddressedMailCheckpoint,
   purpose: "register" | "reset" | "login",
 ): Promise<string> {
-  return (await fetchRecoveryMail(request, baseUrl, email, afterIso, purpose))
+  return (await fetchRecoveryMail(request, baseUrl, email, checkpoint, purpose))
     .code;
 }
 
@@ -363,7 +375,7 @@ export async function fetchRecoveryMail(
   request: MailRequest,
   baseUrl: string,
   email: string,
-  afterIso: string,
+  checkpoint: AddressedMailCheckpoint,
   purpose: "register" | "reset" | "login",
 ): Promise<{ code: string; text: unknown; html: unknown }> {
   const suffix = {
@@ -374,7 +386,7 @@ export async function fetchRecoveryMail(
   const deadline = Date.now() + DELIVERY_WINDOW_MS;
   while (true) {
     const hit = (
-      await freshAddressedMail(request, baseUrl, email, afterIso)
+      await freshAddressedMail(request, baseUrl, email, checkpoint)
     ).find(
       (message) =>
         typeof message.Subject === "string" && message.Subject.endsWith(suffix),

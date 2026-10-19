@@ -15,6 +15,7 @@ import {
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import {
+  captureSmsCheckpoint,
   freshConfirmablePhone,
   PHONE_CODE_EVENT,
   phoneConfirmationCode,
@@ -31,7 +32,6 @@ interface PhoneAttempt {
   code: string;
   subject?: string;
   checkpoint?: AddressedMailCheckpoint;
-  attemptedAt?: string;
 }
 const attempts = new WeakMap<Page, PhoneAttempt>();
 function attempt(key: Page): PhoneAttempt {
@@ -133,7 +133,7 @@ Given(
     await state.page
       .getByTestId("profile-phone-input")
       .pressSequentially(state.phone.slice(1));
-    const requestedAt = new Date().toISOString();
+    const requestedAt = await captureSmsCheckpoint(sink, state.phone);
     const requesting = captureResponse(state.page, "/v1/me/phone");
     await state.page.getByTestId("profile-phone-send").click();
     const requested = await requesting;
@@ -167,7 +167,6 @@ When(
       /^\d{6}$/.test(wrong) && wrong !== state.code,
       "well-formed code differs from the real delivery",
     ).toBe(true);
-    state.attemptedAt = new Date().toISOString();
     const pending = captureResponse(state.page, "/v1/me/phone/confirm");
     await inputSecret(state.page.getByTestId("profile-phone-code"), wrong);
     const refused = await pending;
@@ -211,13 +210,11 @@ Then(
       phoneVerified: null,
       sameSubject: true,
     });
-    if (!state.checkpoint || !state.attemptedAt)
-      throw new Error("Wrong-code mail boundary absent");
+    if (!state.checkpoint) throw new Error("Wrong-code mail boundary absent");
     await assertNoAddressedMail(
       nativeRecoveryMail(),
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
-      state.attemptedAt,
       state.checkpoint,
     );
     const { subject: _afterSubject, ...after } = await identity(state);

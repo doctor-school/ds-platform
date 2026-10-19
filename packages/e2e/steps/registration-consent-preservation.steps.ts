@@ -8,9 +8,11 @@ import {
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
 import {
+  captureAddressedMailCheckpoint,
   fetchRecoveryMail,
   mailpitUrlFor,
   nativeRecoveryMail,
+  type AddressedMailCheckpoint,
 } from "../lib/mailpit.js";
 import {
   readOwnedConsentSnapshot,
@@ -40,7 +42,7 @@ interface ConsentRegistration extends OwnedCredentials {
   baseline?: OwnedConsentSnapshot;
   priorCookies: string[];
   authPosts: string[];
-  requestedAt?: string;
+  before?: AddressedMailCheckpoint;
   code?: string;
   accepted?: Response;
 }
@@ -280,7 +282,11 @@ When(
         .getByTestId("registration-form")
         .getByText(/^Продолжая, вы соглашаетесь/),
     ).toBeVisible();
-    state.requestedAt = new Date().toISOString();
+    state.before = await captureAddressedMailCheckpoint(
+      nativeRecoveryMail(),
+      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+      state.email,
+    );
     const pending = captureResponse(state.page, "/v1/auth/register");
     await state.page.getByTestId("register-submit").click();
     const registered = await pending;
@@ -324,13 +330,13 @@ Then(
   "fresh addressed re-registration mail is delivered while the original consent and private-access refusal remain unchanged",
   async ({ page, world }) => {
     const state = registration(page);
-    if (!state.requestedAt)
+    if (!state.before)
       throw new Error("Owned re-registration request was not observed");
     const mail = await fetchRecoveryMail(
       nativeRecoveryMail(),
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
-      state.requestedAt,
+      state.before,
       "login",
     );
     state.code = mail.code;

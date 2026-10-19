@@ -1,8 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { expect, type BrowserContext, type Page } from "@playwright/test";
+import {
+  expect,
+  request,
+  type BrowserContext,
+  type Page,
+} from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
-import { gatedPasswordLogin } from "../lib/gated-password-login.js";
+import { runGatedLoginAttempt } from "../lib/login-failure-gate.js";
 import { confirmOwnedPhone } from "../lib/owned-phone-confirmation.js";
 import {
   inputSecret,
@@ -122,11 +127,43 @@ async function passwordSignIn(state: AbandonedPhone, base: string) {
     state.page.locator('input[autocomplete="current-password"]'),
     state.password,
   );
-  const accepted = await gatedPasswordLogin(state.page, async () => {
-    const pending = captureResponse(state.page, "/v1/auth/login");
-    await state.page.getByTestId("password-login-submit").click();
-    return pending;
-  });
+  const accepted = await runGatedLoginAttempt(
+    {
+      close: async () => {
+        const user = process.env.E2E_HTTP_USER;
+        const password = process.env.E2E_HTTP_PASS;
+        const closing = await request.newContext({
+          baseURL: base,
+          ...(user && password
+            ? { httpCredentials: { username: user, password } }
+            : {}),
+        });
+        try {
+          const response = await closing.post("/v1/auth/login", {
+            data: { identifier: state.email, password: state.password },
+          });
+          expect(
+            response.status(),
+            "owned successful sign-in closes the failure window",
+          ).toBe(200);
+        } finally {
+          try {
+            const revoked = await closing.post("/v1/auth/logout");
+            expect(revoked.status(), "owned closing session is revoked").toBe(
+              200,
+            );
+          } finally {
+            await closing.dispose();
+          }
+        }
+      },
+    },
+    async () => {
+      const pending = captureResponse(state.page, "/v1/auth/login");
+      await state.page.getByTestId("password-login-submit").click();
+      return pending;
+    },
+  );
   expect(accepted.response.status(), "email password still signs in").toBe(200);
   await state.page.waitForURL((url) => url.pathname === "/account");
   await state.page.waitForLoadState("networkidle");

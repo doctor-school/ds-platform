@@ -11,13 +11,16 @@
 #   ds-release release [--retry-failed] <env> <sha> <step> <script-file>
 #   ds-release status  <env> <sha>
 #   ds-release finish  <env> <sha> succeeded|failed
+#   ds-release check   <env>
+#   ds-release supersede <env> [<script-file>]
 #   ds-release forget  <env>
 #
 # <env> is prod, stage-main or stage-pr-<N>. Installed as /usr/local/bin/ds-release
 # from the shipped tree (infra/deploy/bin/ds-release) at the start of every
 # operator run; run through sudo.
 #
-# Exit codes: 0 ok · 1 the step failed · 2 usage · 3 refused (lock, lease, live unit).
+# Exit codes: 0 ok · 1 the step failed · 2 usage · 3 refused (lock, lease, live unit,
+# corrupt status file).
 set -euo pipefail
 
 STATE_ROOT=${DS_RELEASE_STATE_ROOT:-/var/lib/ds-platform/release}
@@ -28,6 +31,7 @@ ENV_RE='^(prod|stage-main|stage-pr-[1-9][0-9]*)$'
 SHA_RE='^[0-9a-f]{40}$'
 STEP_RE='^[a-z][a-z0-9-]{0,31}$'
 USER_RE='^[a-z_][a-z0-9_-]*$'
+RECORD_RE='^[0-9a-f]{40}\.json$' # a SHA's current attempt; archives carry a stamp
 
 say() { printf 'ds-release: %s\n' "$*"; }
 usage() { printf 'ds-release: %s\n' "$*" >&2; exit 2; }
@@ -69,14 +73,29 @@ reap_unit() {
   systemctl reset-failed "$1" >/dev/null 2>&1 || true
 }
 
-# The finished units of one env, except those of the SHA `$2` (empty = all).
-reap_env_units() {
+# The step units of one env, except those of the SHA `$2` (empty = all).
+env_units() {
   local env=$1 keep=$2 unit re="^ds-$1-[0-9a-f]{12}-[a-z][a-z0-9-]*\.service\$"
   while read -r unit _; do
     [[ $unit =~ $re ]] || continue
     [[ -n $keep && $unit == "ds-$env-$keep-"* ]] && continue
-    reap_unit "$unit"
+    printf '%s\n' "$unit"
   done < <(systemctl list-units --all --plain --no-legend --type=service "ds-$env-*" 2>/dev/null || true)
+}
+
+reap_env_units() {
+  local unit
+  while read -r unit; do reap_unit "$unit"; done < <(env_units "$1" "$2")
+}
+
+# Read-only: refuse while a step unit of the env (except the SHA `$2`'s own) still
+# runs — `active (exited)` is a finished --remain-after-exit unit, not a running one.
+refuse_live_units() {
+  local unit
+  while read -r unit; do
+    unit_alive "$unit" && refuse "$unit is still running (sudo journalctl -fu $unit); wait for it to end"
+  done < <(env_units "$1" "$2")
+  return 0
 }
 
 # The status file (§5 shape) is read and written only here. Every write goes to
@@ -85,9 +104,11 @@ reap_env_units() {
 # complete document, never a torn one.
 js() {
   python3 - "$@" <<'PY'
-import glob, json, os, sys, time
+import glob, json, os, re, sys, tempfile, time
 
 op, args = sys.argv[1], sys.argv[2:]
+TERMINAL = ("succeeded", "failed", "superseded")
+RECORD_RE = re.compile(r"^[0-9a-f]{40}\.json$")
 
 def now():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -95,28 +116,53 @@ def now():
 def load(path):
     try:
         with open(path, encoding="utf-8") as f:
-            return json.load(f)
+            doc = json.load(f)
     except FileNotFoundError:
         return None
+    except ValueError as error:  # JSONDecodeError and UnicodeDecodeError alike
+        sys.stderr.write(
+            "ds-release: corrupt status file %s (%s). Read it, move it aside, then re-run.\n"
+            % (path, error)
+        )
+        sys.exit(3)
+    if not isinstance(doc, dict) or not isinstance(doc.get("steps"), list):
+        sys.stderr.write("ds-release: corrupt status file %s (not a release record)\n" % path)
+        sys.exit(3)
+    return doc
 
-def save(path, doc):
-    doc["updatedAt"] = now()
-    folder = os.path.dirname(path)
-    os.makedirs(folder, exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(doc, f, indent=2)
-        f.write("\n")
-        f.flush()
-        os.fsync(f.fileno())
-    os.chmod(tmp, 0o644)
-    os.replace(tmp, path)
+def records(folder):
+    """The current attempt of every SHA in the env — archived attempts excluded."""
+    return [p for p in sorted(glob.glob(os.path.join(folder, "*.json")))
+            if RECORD_RE.match(os.path.basename(p))]
+
+def sync_dir(folder):
     if hasattr(os, "O_DIRECTORY"):  # POSIX: make the rename itself durable
         fd = os.open(folder, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(fd)
         finally:
             os.close(fd)
+
+def save(path, doc):
+    doc["updatedAt"] = now()
+    folder = os.path.dirname(path)
+    os.makedirs(folder, exist_ok=True)
+    # A unique temp name: a verdict recorded without the lock (see _exec) never
+    # shares a temp file with a lock holder's write.
+    fd, tmp = tempfile.mkstemp(dir=folder, prefix="." + os.path.basename(path) + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(doc, f, indent=2)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+    sync_dir(folder)
 
 def entry(doc, step):
     for item in reversed((doc or {}).get("steps", [])):
@@ -139,11 +185,40 @@ elif op == "running-step":  # <file> -> "<step> <unit>" of the step still marked
             print(item["name"], item["unit"])
             break
 elif op == "lease":  # <dir> <sha> -> the sha of ANOTHER release still running in this env
-    for path in sorted(glob.glob(os.path.join(args[0], "*.json"))):
+    for path in records(args[0]):
         doc = load(path)
         if doc and doc.get("sha") != args[1] and doc.get("state") == "running":
             print(doc["sha"])
             break
+elif op == "open":  # <dir> <sha> -> the attempt a `release` of <sha> works in
+    folder, sha = args
+    path = os.path.join(folder, sha + ".json")
+    doc = load(path)
+    if doc is not None and doc.get("state") in TERMINAL:
+        # A closed attempt never answers for a new one: archive it, start fresh.
+        stamp = re.sub(r"[^0-9A-Za-z-]", "", str(doc.get("startedAt") or now()))
+        archive, n = os.path.join(folder, "%s.%s.json" % (sha, stamp)), 1
+        while os.path.exists(archive):
+            n += 1
+            archive = os.path.join(folder, "%s.%s-%d.json" % (sha, stamp, n))
+        os.replace(path, archive)
+        sync_dir(folder)
+        print("archived %s" % os.path.basename(archive))
+        doc = None
+    if doc is None:  # a new attempt supersedes the env's last closed one
+        for other in records(folder):
+            prev = load(other)
+            if prev and prev.get("sha") != sha and prev.get("state") in ("succeeded", "failed"):
+                prev["state"] = "superseded"
+                save(other, prev)
+                print("superseded %s" % prev["sha"][:12])
+elif op == "supersede":  # <dir> -> every current attempt of the env is superseded
+    for path in records(args[0]):
+        doc = load(path)
+        if doc and doc.get("state") != "superseded":
+            doc["state"] = "superseded"
+            save(path, doc)
+            print("superseded %s" % doc["sha"][:12])
 elif op == "start-step":  # <file> <env> <sha> <step> <unit>
     path, env, sha, step, unit = args
     doc = load(path) or {
@@ -162,8 +237,7 @@ elif op == "end-step":  # <file> <step> <rc> [error]
         sys.exit(0)
     item["endedAt"] = now()
     item["rc"] = int(rc)
-    if item["rc"] != 0:
-        doc["state"] = "failed"
+    if item["rc"] != 0:  # the release stays open: only `finish` closes it
         doc["error"] = args[3] if len(args) > 3 else "step %s exited %s" % (step, rc)
     save(path, doc)
 elif op == "finish":  # <file> succeeded|failed
@@ -192,21 +266,27 @@ caller_user() {
   printf '%s' "$user"
 }
 
-# release: read the status file FIRST. A succeeded step returns its verdict and is
-# never re-run (backup and migrate are never repeated); a running one is attached
-# to by unit name; a failed one returns `failed` unless --retry-failed; an absent
-# one starts.
+# release: read the status file FIRST. Verdicts answer only within one attempt:
+# while the SHA's release is `running` (the operator has not closed it — its
+# client died) a succeeded step returns its verdict and is never re-run (backup and
+# migrate are never repeated), a running one is attached to by unit name, a failed
+# one returns `failed` unless --retry-failed, an absent one starts. A closed
+# (`succeeded`/`failed`/`superseded`) release is archived as `<sha>.<startedAt>.json`
+# and a fresh attempt starts; a new attempt supersedes the env's last closed one.
 cmd_release() {
   local retry=0
   if [[ ${1:-} == --retry-failed ]]; then retry=1; shift; fi
   [[ $# -eq 4 ]] || usage "usage: ds-release release [--retry-failed] <env> <sha> <step> <script-file>"
-  local env=$1 sha=$2 step=$3 src=$4 dir file unit other state
+  local env=$1 sha=$2 step=$3 src=$4 dir file unit other opened state
   check_env "$env"; check_sha "$sha"; check_step "$step"
   take_lock "$env"
   dir=$(env_dir "$env"); file="$dir/$sha.json"; unit=$(unit_name "$env" "$sha" "$step")
+  refuse_live_units "$env" "${sha:0:12}"
   other=$(js lease "$dir" "$sha")
   [[ -z $other ]] || refuse "env $env is leased by release ${other:0:12}, which has not finished;" \
     "re-run that SHA to complete it, or close it: sudo ds-release finish $env $other failed"
+  opened=$(js open "$dir" "$sha")
+  [[ -z $opened ]] || say "$opened"
   state=$(js step-state "$file" "$step")
   if [[ $state == running ]]; then
     if unit_alive "$unit"; then say "$unit running (attached)"; return 0; fi
@@ -243,24 +323,31 @@ start_unit() {
   say "$unit started"
 }
 
-# _exec: the unit's own process. Runs the step script as the calling operator
-# user (the scripts are written for that user's $HOME and its `sudo docker`),
-# then records the verdict under the env lock.
-cmd_exec() {
-  [[ $# -eq 4 ]] || usage "usage: ds-release _exec <env> <sha> <step> <user>"
-  local env=$1 sha=$2 step=$3 user=$4 dir file script home rc
-  check_env "$env"; check_sha "$sha"; check_step "$step"
-  [[ $user =~ $USER_RE ]] || usage "unusable user: $user"
-  dir=$(env_dir "$env"); file="$dir/$sha.json"; script="$dir/$sha.$step.sh"
+# Run a step script as the operator user `$1` (the scripts are written for that
+# user's $HOME and its `sudo docker`) with the semantics of a streamed ssh step.
+run_as() {
+  local user=$1 script=$2 home
   home=$(getent passwd "$user" | cut -d: -f6 || true)
   [[ -n $home ]] || home=/
-  set +e
   if [[ $user == "$(id -un)" ]]; then
     (cd "$home" && HOME=$home bash --norc -euo pipefail -c "$(cat "$script")")
   else
     (cd "$home" && runuser -u "$user" -- env HOME="$home" USER="$user" LOGNAME="$user" \
       bash --norc -euo pipefail -c "$(cat "$script")")
   fi
+}
+
+# _exec: the unit's own process. Runs the step script as the calling operator
+# user (the scripts are written for that user's $HOME and its `sudo docker`),
+# then records the verdict under the env lock.
+cmd_exec() {
+  [[ $# -eq 4 ]] || usage "usage: ds-release _exec <env> <sha> <step> <user>"
+  local env=$1 sha=$2 step=$3 user=$4 dir file script rc
+  check_env "$env"; check_sha "$sha"; check_step "$step"
+  [[ $user =~ $USER_RE ]] || usage "unusable user: $user"
+  dir=$(env_dir "$env"); file="$dir/$sha.json"; script="$dir/$sha.$step.sh"
+  set +e
+  run_as "$user" "$script"
   rc=$?
   set -e
   exec 9>"$LOCK_DIR/ds-$env.lock"
@@ -326,6 +413,38 @@ cmd_forget() {
   say "release state of $1 forgotten"
 }
 
+# check: read-only, lock-free — refuses (exit 3, naming the unit) while any step
+# unit of the env still runs. The rollback runs it before its first state change.
+cmd_check() {
+  [[ $# -eq 1 ]] || usage "usage: ds-release check <env>"
+  check_env "$1"
+  refuse_live_units "$1" ""
+  say "no ds-$1-* step unit is running"
+}
+
+# supersede: a converge that moves the env off its recorded SHAs outside a release
+# (the app-only rollback). Under the env lock, refused while any step unit still
+# runs: every current attempt of the env becomes `superseded` — so a later release
+# of any of those SHAs starts afresh — then the optional script runs, streamed, as
+# the operator, still holding the lock.
+cmd_supersede() {
+  [[ $# -eq 1 || $# -eq 2 ]] || usage "usage: ds-release supersede <env> [<script-file>]"
+  check_env "$1"
+  local env=$1 src=${2:-} dir file out
+  [[ -z $src || -r $src ]] || usage "script file not readable: $src"
+  take_lock "$env"
+  refuse_live_units "$env" ""
+  dir=$(env_dir "$env")
+  for file in "$dir"/*.json; do
+    [[ -e $file && $(basename "$file") =~ $RECORD_RE ]] || continue
+    settle_running "$file"
+  done
+  out=$(js supersede "$dir")
+  [[ -z $out ]] || say "$out"
+  [[ -n $src ]] || return 0
+  run_as "$(caller_user)" "$src"
+}
+
 main() {
   local cmd=${1:-}
   [[ $# -gt 0 ]] && shift
@@ -333,9 +452,11 @@ main() {
     release) cmd_release "$@" ;;
     status) cmd_status "$@" ;;
     finish) cmd_finish "$@" ;;
+    check) cmd_check "$@" ;;
+    supersede) cmd_supersede "$@" ;;
     forget) cmd_forget "$@" ;;
     _exec) cmd_exec "$@" ;;
-    *) usage "usage: ds-release release|status|finish|forget …" ;;
+    *) usage "usage: ds-release release|status|finish|check|supersede|forget …" ;;
   esac
 }
 

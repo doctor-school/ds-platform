@@ -129,8 +129,10 @@ import {
 import {
   PROD_HEALTH_URL,
   STALL_BUDGET_BUILD_MS,
+  releaseCheckScript,
   releaseFinishScript,
   releaseInstallScript,
+  releaseSupersedeScript,
   runDurableStep,
   shipTree,
   sshBaseArgs,
@@ -1741,6 +1743,18 @@ async function rollback(shaArg) {
     throw err;
   }
 
+  // #2982: a release step outlives the operator session that started it. A
+  // rollback racing a still-running `migrate` (whose `up -d` would put the SHA
+  // being rolled off back) is refused, read-only, before the first state change.
+  for (const host of [API_PROD, DATA_PROD]) {
+    try {
+      await sshCapture(host, releaseCheckScript(RELEASE_ENV), { stderr: "pipe" });
+    } catch (e) {
+      die(`--rollback refused on ${host}: ${e.message}`);
+    }
+  }
+  ok("no release step is running on either box");
+
   // The target images are normally still on the box (retention keeps the last
   // 3). A target older than that is pulled from ITS recorded release manifest
   // (#2981, spec rollback floor) — never rebuilt; a target without one (no
@@ -1776,15 +1790,25 @@ done`,
       "\n    the instance keeps what the last forward deploy converged it to.",
   );
 
+  // #2982: the rollback moves prod off the SHAs the boxes recorded, so it
+  // supersedes their release records under the env lock (refused while a step
+  // unit runs): a later deploy of the SHA rolled off then runs every step again
+  // instead of answering from verdicts that no longer describe the containers.
+  await sshScript(DATA_PROD, releaseSupersedeScript(RELEASE_ENV), {
+    label: "supersede the data-prod release record",
+  });
   step("api-prod: up -d previous tag (NO build, NO migrate — app tier only)");
   await sshScript(
     API_PROD,
-    `cd ${API_COMPOSE}
+    releaseSupersedeScript(
+      RELEASE_ENV,
+      `cd ${API_COMPOSE}
 # Same DEPLOY_SHA-only rewrite as the deploy path — never clobber the other
 # non-secret interpolation vars (SMARTCAPTCHA_SITE_KEY, #729/#186).
 ${deployShaEnvScript(sha)}
 sudo docker compose up -d
 `,
+    ),
     { label: "rollback up" },
   );
 

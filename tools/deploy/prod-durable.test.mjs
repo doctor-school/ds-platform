@@ -77,7 +77,7 @@ test("2982: the rollback refuses while a box step still runs, then supersedes th
   const rollback = SOURCE.slice(SOURCE.indexOf("async function rollback("));
   const check = rollback.indexOf("releaseCheckScript(RELEASE_ENV)");
   const pull = rollback.indexOf('label: "rollback pull"');
-  const up = rollback.indexOf("releaseSupersedeScript(RELEASE_ENV, ");
+  const up = rollback.search(/releaseSupersedeScript\(\s*RELEASE_ENV,/);
   assert.ok(check > 0, "a read-only live-unit check on both boxes");
   assert.ok(check < pull, "the check runs before the first state change");
   assert.ok(pull < up, "the up -d runs inside `ds-release supersede` (env lock held)");

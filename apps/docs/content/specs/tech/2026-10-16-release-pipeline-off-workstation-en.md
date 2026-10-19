@@ -178,17 +178,17 @@ Today the push token is stored only on ds-stage-1 (`/etc/ds-platform/registry-pu
 
 A release spans two production boxes plus operator-side steps (the IdP converge over HTTPS, the smoke, the release cut and the Deployment record), so no single unit on one box can run it whole. Instead every long box step (pull, backup, migrate, up, prune) runs inside its own transient systemd unit on the box it changes, driven by the entrypoint `/usr/local/bin/ds-release`. The caller's death — a cancelled runner, a network cut, a killed workstation — never kills the step. Operator-side steps and the short read-only probes (boot verify, running-SHA verify) stay where they are.
 
-- **Entrypoint.** `ds-release release [--retry-failed] <env> <sha> <step> <script-file>`, `status <env> <sha>`, `finish <env> <sha> succeeded|failed` and `forget <env>`, where `<env>` is one of `prod`, `stage-main` or `stage-pr-<N>`. It ships in the tree (`infra/deploy/bin/ds-release`) and every operator run installs it with `sudo install -m 0755` right after the ship, before any box step; cloud-init creates its state directory on a new box.
+- **Entrypoint.** `ds-release release [--retry-failed] <env> <sha> <step> <script-file>`, `status <env> <sha>`, `finish <env> <sha> succeeded|failed`, `check <env>`, `supersede <env> [<script-file>]` and `forget <env>`, where `<env>` is one of `prod`, `stage-main` or `stage-pr-<N>`. It ships in the tree (`infra/deploy/bin/ds-release`) and every operator run installs it with `sudo install -m 0755` right after the ship, before any box step; cloud-init creates its state directory on a new box.
 - **Unit name.** `systemd-run --unit=ds-<env>-<sha12>-<step> --remain-after-exit -p KillMode=mixed`, which runs the step script as the calling operator user. A second start under the same name fails fast, so the name itself deduplicates. Finished units of the env are stopped and reset by a later call for that env: only after it has taken the lock, and only for units no longer running.
-- **Lock and lease.** Every mutating call holds `flock -n /run/lock/ds-<env>.lock` for its whole (short) life. A release stays open from its first step until `finish`; while one SHA's release is open for an env, `release` for a different SHA of the same env is refused and names the open SHA. A failing operator run closes its release as `failed`; one that cannot (the box is unreachable) leaves the exact `finish` command in its output. The workflow `concurrency` group is the first line of defence and the lease the last.
-- **Status file — the authority.** Each box keeps `/var/lib/ds-platform/release/<env>/<sha>.json` for the steps it ran. The entrypoint writes it atomically (write to `*.tmp`, `fsync`, `rename`, `fsync` of the directory) at every step boundary:
+- **Lock and lease.** Every mutating call holds `flock -n /run/lock/ds-<env>.lock` for its whole (short) life. A release stays open from its first step until `finish`; while one SHA's release is open for an env, `release` for a different SHA of the same env is refused and names the open SHA. Any start is also refused while a step unit of another SHA of the env is still running (`activating`, or `active` with sub-state `running` — not the `active (exited)` every finished `--remain-after-exit` unit shows), and the error names that unit. The operator closes every run explicitly: `finish … succeeded` at the end of the deploy or the slot converge, `finish … failed` on any failure exit. One that cannot (the box is unreachable) leaves the exact `finish` command in its output. The workflow `concurrency` group is the first line of defence and the lease the last.
+- **Status file — the authority.** Each box keeps `/var/lib/ds-platform/release/<env>/<sha>.json` for the current attempt of each SHA it ran steps for; a closed attempt is archived beside it as `<sha>.<startedAt>.json`. The entrypoint writes the file atomically (write to a unique temp file in the same directory, `fsync`, `rename`, `fsync` of the directory) at every step boundary, so even a verdict recorded without the lock never shares a temp file with another write. A file that does not parse stops every call that reads it with `ds-release: corrupt status file <path>` and a non-zero exit, and the poller reports it as such, never as lost contact:
 
   ```json
   {
     "env": "prod",
     "sha": "<full sha>",
     "unit": "ds-prod-<sha12>-<step>",
-    "state": "running | succeeded | failed",
+    "state": "running | succeeded | failed | superseded",
     "step": "pull | backup | migrate | up | verify | prune",
     "steps": [
       {
@@ -205,17 +205,20 @@ A release spans two production boxes plus operator-side steps (the IdP converge 
   }
   ```
 
-  `state` is `running` while the release is open, `failed` as soon as a step fails, and `succeeded` only through `finish`, which refuses while any step lacks a success verdict.
+  `state` is the release-level record. It is `running` while the attempt is open — a failed step records its error but leaves the attempt open — and `succeeded` or `failed` only through `finish`, whose `succeeded` refuses while any step lacks a success verdict. `superseded` marks an attempt the env has moved off: starting a new SHA marks the env's previous closed attempt `superseded`, and so does the app-only rollback (below).
 
-- **Reattach.** The runner never streams a step: it starts the unit, then polls `status <env> <sha>`, which reads the status file and reports whether the running step's unit is still alive. Each poll prints one status line into the job log (§4); it never tails the journal. `release` reads the status file first:
-  - step `succeeded`: it returns that verdict without starting a unit. A re-run never repeats backup or migrate.
-  - step `failed`: it returns `failed`. Only an explicit `--retry-failed` re-runs a failed step; nothing re-runs a succeeded one.
-  - step `running`: it attaches to the existing unit by name. A unit that died without recording a verdict (a reboot) is recorded as `failed`.
-  - absent: it starts the unit.
+- **Reattach.** The runner never streams a step: it starts the unit, then polls `status <env> <sha>`, which reads the status file and reports whether the running step's unit is still alive. Each poll prints one status line into the job log (§4); it never tails the journal. Recorded verdicts answer only within the attempt that recorded them. `release` for SHA X reads X's record first:
+  - record `running` (the attempt was never closed — its client died): X resumes in that attempt, step by step:
+    - step `succeeded`: it returns that verdict without starting a unit, so a resumed attempt never repeats backup or migrate.
+    - step `failed`: it returns `failed`. Only an explicit `--retry-failed` re-runs a failed step; nothing re-runs a succeeded one.
+    - step `running`: it attaches to the existing unit by name. A unit that died without recording a verdict (a reboot) is recorded as `failed`.
+    - step absent: it starts the unit.
+  - record `succeeded`, `failed` or `superseded`: the closed attempt is archived and a fresh attempt starts, running every step again. This is what makes deploy B → rollback A → deploy B again, and stage B → C → B, converge for real.
+  - record absent: a fresh attempt starts.
 
-  Losing the box while polling ends only the wait: the unit keeps running, and a re-run of the same SHA reattaches. Every step stays idempotent, as the `pnpm deploy:prod` steps are today. A stage slot's verdicts are dropped (`forget`) when what they describe is gone: on `down`, and on `reset main` before the re-cloned database is migrated again.
+  Losing the box while polling ends only the wait: the unit keeps running, and a re-run of the same SHA reattaches. The poller tolerates a few consecutive polls that read the step's unit as gone (a transient `systemctl` failure on the box) before it asks `release` to settle it; when the box then answers that the unit still runs, the unit is left running and the reattach command printed. Every step stays idempotent, as the `pnpm deploy:prod` steps are today. A stage slot's verdicts are dropped (`forget`) when what they describe is gone: on `down`, and on `reset main` before the re-cloned database is migrated again.
 
-- **Rollback floor.** This is unchanged from today: the pre-migrate pgbackrest backup and the app-only rollback to the previous image digest (`run-prod-deploy` → rollback). The rollback stays outside `ds-release`, so it never waits on the lease of the release it reverts. With registry images, the rollback becomes a pull of the previous SHA's recorded digest instead of a rebuild.
+- **Rollback floor.** This is unchanged from today: the pre-migrate pgbackrest backup and the app-only rollback to the previous image digest (`run-prod-deploy` → rollback). The rollback takes no lease, so it never waits on the release it reverts, but a step outlives its operator session: before its first state change the rollback runs the read-only `check prod` on both boxes and refuses, naming the unit, while any `ds-prod-*` step unit still runs (a still-running `migrate` would otherwise reach its `up -d` and put the rolled-off SHA back). Its `up -d` then runs through `supersede prod` on api-prod — under the env lock, refused while a step unit runs — which marks the recorded attempts `superseded`; data-prod's records are superseded the same way. With registry images, the rollback becomes a pull of the previous SHA's recorded digest instead of a rebuild.
 
 ## 6. What this replaces
 

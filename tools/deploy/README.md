@@ -177,17 +177,22 @@ session no longer kills the step. The deploy starts (or attaches to) the unit, t
 `sudo ds-release status prod <sha>` every 10 s and prints one status line per poll; the
 full step log stays in the box's journal (`sudo journalctl -u ds-prod-<sha12>-<step>`).
 Each box keeps its status file `/var/lib/ds-platform/release/prod/<sha>.json` (tech spec
-2026-10-16 release pipeline §5). A re-run of the same SHA returns each recorded verdict —
-backup and migrate are never repeated — or reattaches to a step still running; a step
-recorded as `failed` re-runs only under `pnpm deploy:prod --retry-failed`. The release
-stays open from the first box step until it is closed after the smoke; any failure exit
-closes it as `failed`. While it is open, a deploy of another SHA is refused and names the
-open SHA; if a failed run could not close it (the box was unreachable), close it by hand:
-`ssh ds-api-prod 'sudo ds-release finish prod <sha> failed'` (and the same on
-ds-data-prod). Because a recorded step is never repeated, re-running the same SHA does
-not re-apply a changed `/etc/ds-platform/*.env`; `--rollback` stays outside
-`ds-release`, so it never waits on the lease of the release it reverts. The IdP converge,
-the boot and running-SHA verifies, runtime configs and the smoke are unchanged.
+2026-10-16 release pipeline §5). The release stays open from the first box step until it
+is closed after the smoke; any failure exit closes it as `failed`. Recorded verdicts
+answer only within that open attempt: a re-run of the same SHA whose run never closed it
+(the operator session died) returns each recorded verdict — backup and migrate are never
+repeated — or reattaches to a step still running, and a step recorded as `failed` re-runs
+only under `pnpm deploy:prod --retry-failed`. A closed attempt is archived
+(`<sha>.<startedAt>.json`) and the next deploy of that SHA runs every step again; a deploy
+of a new SHA marks the previous one `superseded`. While a release is open, a deploy of
+another SHA is refused and names the open SHA; if a failed run could not close it (the box
+was unreachable), close it by hand: `ssh ds-api-prod 'sudo ds-release finish prod <sha>
+failed'` (and the same on ds-data-prod). `--rollback` takes no lease, but it refuses,
+naming the unit, while any `ds-prod-*` step unit still runs on either box
+(`ds-release check prod`), and its `up -d` runs through `ds-release supersede prod`, under
+the env lock, marking the recorded attempts `superseded` — so deploying the rolled-off SHA
+again runs every step. The IdP converge, the boot and running-SHA verifies, runtime
+configs and the smoke are unchanged.
 
 **Stall detector (#905).** Every ssh channel carries keepalive flags
 (`ServerAliveInterval=15` / `ServerAliveCountMax=4`), so a half-open TCP

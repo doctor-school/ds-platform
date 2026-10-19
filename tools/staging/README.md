@@ -337,15 +337,17 @@ the slot's own tree, and every long box step of a converge — each image pull
 `ds-stage-main-<sha12>-<step>` / `ds-stage-pr-<N>-<sha12>-<step>` instead of a streamed ssh
 command. The operator starts it, then polls `ds-release status`, one status line per
 poll; the step's log stays in its journal on the box (`sudo journalctl -u <unit>`). A
-killed operator session leaves the unit running, and a re-run at the same SHA returns
-each recorded verdict (never re-running a succeeded step) or reattaches; a step recorded
-as failed re-runs only with `--retry-failed` on `up` / `sync` / `reset`. The converge
-closes its release (`finish`) as its last step, or as failed when it throws; until it is
-closed, a converge of the same slot at another SHA is refused and names the open one.
-Because a recorded `up` is never repeated, re-applying a changed `/etc/ds-platform/*.env`
-at the same SHA goes through `down` + `up`: `down` drops the slot's verdicts
-(`ds-release forget`), and `reset main` drops them before the re-cloned database is
-migrated again. Spec: `apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md` §5.
+killed operator session leaves the unit running, and a re-run at the same SHA — while
+that converge's release is still open — returns each recorded verdict (never re-running a
+succeeded step) or reattaches; a step recorded as failed re-runs only with
+`--retry-failed` on `up` / `sync` / `reset`. The converge closes its release (`finish`) as
+its last step, or as failed when it throws; until it is closed, a converge of the same
+slot at another SHA is refused and names the open one. A closed release answers for
+nothing: the next converge at that SHA archives it and runs every step again, and a
+converge at a new SHA marks the previous one `superseded` (so `main` B → C → B converges
+for real). `down` drops the slot's verdicts (`ds-release forget`) as its first step —
+refused while a step unit still runs, before anything is torn down — and `reset main`
+drops them before the re-cloned database is migrated again. Spec: `apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md` §5.
 
 `reset main --yes --ref <sha>` drops `ds_main` and re-clones it from `ds_golden`, then
 re-runs the ordinary converge on that SHA — the escape hatch for a staging database

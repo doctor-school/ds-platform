@@ -1609,6 +1609,11 @@ export function planSlotDown({ slot, liveSlots, baseDomain, now = new Date() }) 
   const live = liveSlots ?? {};
 
   const steps = [
+    // #2982: the slot's recorded step verdicts describe containers about to go — a
+    // later `up` at the same SHA must run every step again, not return «succeeded».
+    // First, because `forget` refuses while a step unit still runs: a refused
+    // teardown then leaves the slot and the shared IdP redirect set intact.
+    forgetReleaseStep(slot),
     {
       kind: "write",
       label: "ensure slot env",
@@ -1662,10 +1667,6 @@ export function planSlotDown({ slot, liveSlots, baseDomain, now = new Date() }) 
       },
     );
   }
-
-  // #2982: the slot's recorded step verdicts describe containers that are gone — a
-  // later `up` at the same SHA must run every step again, not return «succeeded».
-  steps.push(forgetReleaseStep(slot));
 
   // Last, over the slots that REMAIN: the torn-down slot's callback is gone from the
   // shared app rather than left pointing at nothing.

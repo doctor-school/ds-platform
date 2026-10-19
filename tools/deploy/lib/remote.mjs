@@ -388,6 +388,7 @@ export const DS_RELEASE_BIN = "/usr/local/bin/ds-release";
 export const RELEASE_STATE_ROOT = "/var/lib/ds-platform/release";
 export const RELEASE_POLL_MS = 10 * 1000;
 export const RELEASE_POLL_MAX_FAILURES = 6;
+export const RELEASE_POLL_MAX_LOST = 3;
 export const RELEASE_STEP_TIMEOUT_MS = 60 * 60 * 1000;
 
 const RELEASE_ENV_RE = /^(prod|stage-main|stage-pr-[1-9][0-9]*)$/;
@@ -423,16 +424,38 @@ export function releaseInstallScript(liveDir = "$HOME/ds-platform") {
  */
 export function releaseStartScript({ env, sha, step, script, retryFailed = false }) {
   assertRelease(env, sha, step);
+  const retry = retryFailed ? " --retry-failed" : "";
+  return withScriptFile(script, `sudo ${DS_RELEASE_BIN} release${retry} ${env} ${sha} ${step} "$f"`);
+}
+
+function withScriptFile(script, command) {
   const body = script.endsWith("\n") ? script : `${script}\n`;
   const delimiter = `DS_RELEASE_STEP_${createHash("sha256").update(body).digest("hex").slice(0, 16)}`;
-  const retry = retryFailed ? " --retry-failed" : "";
   return [
     'f=$(mktemp)',
     `trap 'rm -f "$f"' EXIT`,
     `cat > "$f" <<'${delimiter}'`,
     `${body}${delimiter}`,
-    `sudo ${DS_RELEASE_BIN} release${retry} ${env} ${sha} ${step} "$f"`,
+    command,
   ].join("\n");
+}
+
+/** Read-only: refuses (exit 3, naming the unit) while any step unit of `env` runs. */
+export function releaseCheckScript(env) {
+  assertRelease(env, "0".repeat(40));
+  return `sudo ${DS_RELEASE_BIN} check ${env}`;
+}
+
+/**
+ * Supersede every recorded attempt of `env` under its lock — refused while a step
+ * unit still runs — then run `script` (streamed) still holding the lock. The
+ * app-only rollback's `up -d` goes through it, so a later release of the SHA rolled
+ * off starts a fresh attempt instead of answering from stale verdicts.
+ */
+export function releaseSupersedeScript(env, script) {
+  assertRelease(env, "0".repeat(40));
+  const command = `sudo ${DS_RELEASE_BIN} supersede ${env}`;
+  return script === undefined ? command : withScriptFile(script, `${command} "$f"`);
 }
 
 /**
@@ -494,6 +517,7 @@ export function releaseStepVerdict(status, step) {
 }
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const lastLine = (text) => String(text).trim().split(/\r?\n/).at(-1);
 
 /**
  * Run one long box step durably: start or attach through `ds-release release`, then
@@ -517,6 +541,7 @@ export async function runDurableStep(
     pollMs = RELEASE_POLL_MS,
     timeoutMs = RELEASE_STEP_TIMEOUT_MS,
     maxPollFailures = RELEASE_POLL_MAX_FAILURES,
+    maxLostReads = RELEASE_POLL_MAX_LOST,
     now = Date.now,
   },
 ) {
@@ -531,10 +556,16 @@ export async function runDurableStep(
       cause: error,
     });
   }
-  log(`  ↳ ${host}: ${String(started).trim().split(/\r?\n/).at(-1)}`);
+  const answer = lastLine(started);
+  log(`  ↳ ${host}: ${answer}`);
+  // A verdict the box already recorded for this attempt needs no poll.
+  if (answer.endsWith(`${unit} succeeded (recorded verdict; not re-run)`)) {
+    return { state: "succeeded", unit, rc: 0, error: null };
+  }
   const reattach = `re-run the same SHA to reattach (box status: ${releaseStatusScript(env, sha)})`;
   const t0 = now();
   let failures = 0;
+  let lostReads = 0;
   for (;;) {
     await sleep(pollMs);
     const elapsed = Math.round((now() - t0) / 1000);
@@ -548,6 +579,11 @@ export async function runDurableStep(
       );
       failures = 0;
     } catch (error) {
+      // The box answered: its record is unreadable. Not lost contact, not transient.
+      const corrupt = error.message.indexOf("ds-release: corrupt status file");
+      if (corrupt >= 0) {
+        throw new Error(`${label}: ${host}: ${error.message.slice(corrupt)}`, { cause: error });
+      }
       failures += 1;
       log(`  ⋯ ${host} ${unit} poll failed (${failures}/${maxPollFailures}): ${error.message}`);
       if (failures >= maxPollFailures) {
@@ -567,13 +603,23 @@ export async function runDurableStep(
           `Full log on the box: sudo journalctl -u ${unit}`,
       );
     }
+    if (verdict.state !== "lost") lostReads = 0;
     if (verdict.state === "lost") {
-      // `release` settles a dead unit's step as failed under the env lock.
+      // A `systemctl show` hiccup on the box reads as «lost»: only N in a row count.
+      lostReads += 1;
+      if (lostReads < maxLostReads) continue;
+      // `release` settles a dead unit's step as failed under the env lock — or
+      // answers that it still runs, and then the unit is left running.
       let detail;
       try {
-        detail = await start();
+        detail = lastLine(await start());
       } catch (error) {
         detail = error.message;
+      }
+      if (detail.endsWith("running (attached)")) {
+        throw new Error(
+          `${label}: ${unit} on ${host} read as lost ${lostReads} times, but the box reports it running; it is left running; ${reattach}`,
+        );
       }
       throw new Error(
         `${label}: ${unit} on ${host} ended without a verdict (${detail}). Full log on the box: sudo journalctl -u ${unit}`,

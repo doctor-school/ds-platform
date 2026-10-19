@@ -1361,3 +1361,30 @@ and the global circuit-breaker; `sms-budget.service.spec.ts` owns EARS-14
 thresholds. This narrow browser case consumes
 ordinary sends without exhausting or claiming to inspect those counters. No
 runtime surface changes or owner Stage-B request are involved.
+
+### Unusable congress handoff (003 EARS-44/16)
+
+`Academy falls back silently for unknown, malformed and exhausted handoff references`
+(`steps/handoff-unusable.steps.ts`, #3026) mints a real owned congress reference
+and exhausts it through exactly three legitimate guest page-load redemptions.
+Each returns the original address and adds one fresh recipient/time-bound code
+mail to the owned congress-notice checkpoint. No code is entered or counter
+seeded. Independent guest pages then open a unique well-formed unknown reference,
+a malformed reference and the exhausted reference. Unknown and exhausted return
+byte-identical neutral `handoff_refused` bodies without an address; malformed
+input deliberately makes zero redemption calls, matching the approved mount
+contract. Every fallback keeps empty selected email-code entry, the password
+option and the same-origin `/account` return target, with no alert, owned address,
+private session/profile or reference in the address bar or Chromium history.
+
+Complete owned-recipient mail checkpoints and full 15-second absence horizons,
+including final queries at or after each deadline, exclude new addressed mail.
+Trace-off fixtures and canonical congress/mail/captured-response helpers are
+reused; cleanup revokes any unexpected owned session and closes its context even
+on failure. Missing intake or Mailpit prerequisites fail. The broader feature
+scenario remains intact. Native `apps/api/test/auth/login-handoff.e2e-spec.ts`
+`:257/278/286` retains exhaustion, expiry and statistical timing proof;
+`packages/auth-flow/src/login/login-door.handoff.test.tsx:145/181` retains fallback
+and malformed zero-call proof. This browser projection makes no expiry or
+statistical timing claim. Select the single `@handoff-unusable` case on the
+lead-owned runtime. This coverage change has no render surface or Stage-B slot.

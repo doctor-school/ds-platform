@@ -16,6 +16,7 @@ import {
   eventSocialProof,
   eventSpeakerCards,
   eventViewersMeta,
+  eventAiredMeta,
 } from "./event-page-view";
 
 /**
@@ -104,6 +105,7 @@ describe("020 EARS-1 — shared event-page view projection", () => {
     expect(eventPageTimeParts(VIEW, zone)).toEqual({
       time: "21:00",
       date: "28 августа",
+      dateWithYear: "28 августа 2026",
       weekday: "пятница",
       zoneLabel: "GMT+5",
     });
@@ -597,6 +599,16 @@ describe("020 wave-3 PR 3.3 — format, seats, social proof, viewers", () => {
     expect(
       eventViewersMeta({ ...VIEW, state: "ended", viewers: null }),
     ).toBeNull();
+  });
+
+  it("020 H2: the ended meta row states «Эфир прошёл» with the event's date and year, and nothing before the end", () => {
+    expect(eventAiredMeta({ ...VIEW, state: "ended" })).toEqual({
+      label: "Эфир прошёл",
+      value: "28 августа 2026",
+    });
+    expect(eventAiredMeta({ ...VIEW, state: "published" })).toBeNull();
+    expect(eventAiredMeta({ ...VIEW, state: "live" })).toBeNull();
+    expect(eventPageTimeParts(VIEW).dateWithYear).toBe("28 августа 2026");
   });
 
   it("020 EARS-19: the ended sign-up card carries no participation-cost row — never «Бесплатно для врача»", () => {

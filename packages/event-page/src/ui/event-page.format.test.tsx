@@ -340,6 +340,17 @@ describe.each(Object.entries(HOSTS))(
       expect(root.textContent).not.toMatch(/Смотрели/u);
     });
 
+    it("020 H2: the ended meta row states «Эфир прошёл» with the date, with or without a viewers count; never before the end", async () => {
+      const ended: EventPageView = { ...BASE, state: "ended", viewers: null };
+      const root = await renderPage(config, ended, "unavailable");
+      expect(byTestId(root, "event-meta-aired")?.textContent).toBe(
+        "Эфир прошёл28 августа 2026",
+      );
+      const upcoming = await renderPage(config, BASE, "register");
+      expect(byTestId(upcoming, "event-meta-aired")).toBeNull();
+      expect(upcoming.textContent).not.toMatch(/Эфир прошёл/u);
+    });
+
     it("020 EARS-19: the ended page's sign-up card shows no «Бесплатно для врача» row", async () => {
       const root = await renderPage(
         config,

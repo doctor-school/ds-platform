@@ -127,6 +127,8 @@ export interface EventPageCopy {
    */
   signUpsTotal: readonly [one: string, few: string, many: string];
   signUpsAdjacent: readonly [one: string, few: string, many: string];
+  /** Wave-3 gate H2 (row 43) — the ended meta row's «Эфир прошёл» date label. */
+  airedLabel: string;
   /** Wave-3 gate H2 (row 43) — the ended meta row's «Смотрели N коллег». */
   viewersLabel: string;
   colleagues: readonly [one: string, few: string, many: string];
@@ -182,6 +184,7 @@ export const EVENT_PAGE_COPY: EventPageCopy = {
     "в том числе {n} врача смежных специальностей",
     "в том числе {n} врачей смежных специальностей",
   ],
+  airedLabel: "Эфир прошёл",
   viewersLabel: "Смотрели",
   colleagues: ["{n} коллега", "{n} коллеги", "{n} коллег"],
 };
@@ -208,6 +211,8 @@ export interface EventPageTimeParts {
   time: string;
   /** «28 августа» */
   date: string;
+  /** «28 августа 2026» — the ended meta row's date (canvas «Эфир прошёл»). */
+  dateWithYear: string;
   /** «пятница» */
   weekday: string;
   /** «МСК», «GMT+5» — the zone the time is stated in (004 EARS-12). */
@@ -226,12 +231,19 @@ export function eventPageTimeParts(
   view: EventPageMoment,
   viewerZone: string = MOSCOW_TIME_ZONE,
 ): EventPageTimeParts {
-  const { time, date, weekday, zoneLabel } = formatEventTime({
+  const { time, date, dateWithYear, weekday, zoneLabel } = formatEventTime({
     startsAt: view.startsAt,
     participationFormat: view.format,
     viewerZone,
   });
-  return { time, date, weekday, zoneLabel };
+  return {
+    time,
+    date,
+    // ICU appends «г.» to a ru-RU date with a year; the canvas states none.
+    dateWithYear: dateWithYear.replace(/\s*г\.$/u, ""),
+    weekday,
+    zoneLabel,
+  };
 }
 
 /**
@@ -643,6 +655,23 @@ export function eventSocialProof(
       adjacentSpecialties > 0
         ? plural(copy.signUpsAdjacent, adjacentSpecialties)
         : null,
+  };
+}
+
+/**
+ * Wave-3 gate H2 (row 43) — the ended meta row's «Эфир прошёл · 28 августа
+ * 2026»: the event's own date, which every read carries, so it is stated on
+ * every ended page and on no other. The value is the МСК rendering; the page
+ * re-formats it in the viewer's zone through the time island (gate D9).
+ */
+export function eventAiredMeta(
+  view: EventPageView,
+  copy: EventPageCopy = EVENT_PAGE_COPY,
+): { label: string; value: string } | null {
+  if (view.state !== "ended") return null;
+  return {
+    label: copy.airedLabel,
+    value: eventPageTimeParts(view).dateWithYear,
   };
 }
 

@@ -20,14 +20,18 @@ export function ViewerZoneTime({
   part,
 }: {
   moment: EventPageMoment & { durationMin: number };
-  /** Which rendering of the instant: the hero line or one sign-up card label. */
-  part: "dateLine" | "time" | "date" | "weekdayLabel";
+  /** Which rendering of the instant: the hero line, a sign-up card label or the ended meta row's date. */
+  part: "dateLine" | "time" | "date" | "dateWithYear" | "weekdayLabel";
 }) {
   const zone = useViewerZone();
   if (part === "dateLine")
     return <>{eventPageDateLine(moment, undefined, zone)}</>;
-  const { time, date, weekday, zoneLabel } = eventPageTimeParts(moment, zone);
+  const { time, date, dateWithYear, weekday, zoneLabel } = eventPageTimeParts(
+    moment,
+    zone,
+  );
   if (part === "time") return <>{time}</>;
   if (part === "date") return <>{date}</>;
+  if (part === "dateWithYear") return <>{dateWithYear}</>;
   return <>{`${weekday} · ${zoneLabel}`}</>;
 }

@@ -266,6 +266,7 @@ export {
   eventSignupCardProps,
   eventSocialProof,
   eventSpeakerCards,
+  eventAiredMeta,
   eventViewersMeta,
 } from "./event-page-view";
 export type {

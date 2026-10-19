@@ -25,6 +25,7 @@ import {
   eventSignupCardProps,
   eventSocialProof,
   eventSpeakerCards,
+  eventAiredMeta,
   eventViewersMeta,
 } from "@ds/design-system/blocks";
 import {
@@ -237,18 +238,31 @@ export async function EventPage({
   };
   const socialProof = eventSocialProof(event);
   const viewersMeta = eventViewersMeta(event);
-  // Wave-3 gate H2 (row 43) — the ended meta row under the player: «Смотрели
-  // N коллег», absent when the read carries no count.
-  const metaRow = viewersMeta ? (
+  const airedMeta = eventAiredMeta(event);
+  // Wave-3 gate H2 (row 43) — the ended meta row under the player: «Эфир
+  // прошёл» with the date (every ended read carries it) and «Смотрели N
+  // коллег» when the read carries a count. Canvas «Доступна ещё» has no data
+  // on the read, so it is not drawn (no stand-in).
+  const metaRow = airedMeta ? (
     <dl className="flex flex-wrap items-center gap-x-10 gap-y-4">
-      <div data-testid="event-meta-viewers">
+      <div data-testid="event-meta-aired">
         <dt className="text-2xs font-extrabold uppercase tracking-micro text-faint">
-          {viewersMeta.label}
+          {airedMeta.label}
         </dt>
         <dd className="mt-1 text-base font-bold text-foreground">
-          {viewersMeta.value}
+          <ViewerZoneTime moment={moment} part="dateWithYear" />
         </dd>
       </div>
+      {viewersMeta ? (
+        <div data-testid="event-meta-viewers">
+          <dt className="text-2xs font-extrabold uppercase tracking-micro text-faint">
+            {viewersMeta.label}
+          </dt>
+          <dd className="mt-1 text-base font-bold text-foreground">
+            {viewersMeta.value}
+          </dd>
+        </div>
+      ) : null}
     </dl>
   ) : null;
   const lifecyclePlate = eventLifecyclePlate(event);

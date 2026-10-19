@@ -1287,6 +1287,15 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the handoff parameter is removed from the address bar
     And the three responses are identical in status, body and timing within 50 ms
 
+  # Narrow Academy projection (#3026); retain the broader native case above.
+  # Native expiry/exhaustion/statistical timing: apps/api/test/auth/login-handoff.e2e-spec.ts:257/278/286.
+  # Native fallback and malformed zero-call contract: packages/auth-flow/src/login/login-door.handoff.test.tsx:145/181.
+  @EARS-44 @EARS-16 @failure @handoff-unusable
+  Scenario: Academy falls back silently for unknown, malformed and exhausted handoff references
+    Given an owned Academy congress reference has sent three fresh addressed code mails through three legitimate guest page loads
+    When Academy guests open a unique unknown reference, a malformed reference and the exhausted reference with the account return target
+    Then all three unusable handoffs leave ordinary empty email-code entry with a password option and no mail, private access or reference in history
+
   @EARS-44 @EARS-13 @failure
   Scenario: A rate-limited redemption is refused like any code request
     Given the per-account or per-IP code-request window is exhausted

@@ -86,7 +86,7 @@ async function assertSameIdentity(
     emailVerified: true,
     sameSubject: true,
     expectedPhone: true,
-    phoneVerified: !pending,
+    phoneVerified: pending ? null : true,
   });
   const cookie = (await state.context.cookies()).find(
     (candidate) => candidate.name === "__Host-ds_session",
@@ -183,10 +183,9 @@ Given(
     const cookie = (await context.cookies()).find(
       (cookie) => cookie.name === "__Host-ds_session",
     )?.value;
-    expect(
-      Boolean(cookie),
-      "owned session exists before displacement",
-    ).toBe(true);
+    expect(Boolean(cookie), "owned session exists before displacement").toBe(
+      true,
+    );
     if (!cookie) throw new Error("The owned session cookie is missing");
     state.cookie = cookie;
   },

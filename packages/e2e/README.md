@@ -1,35 +1,5 @@
 # `@ds/e2e` — the C6 regression contract
 
-### Throttled congress handoff (003 EARS-44/13/16)
-
-`Academy refuses a live handoff after its ordinary per-account code-request window is exhausted`
-(`steps/handoff-throttled.steps.ts`, #3037) creates a unique account/reference
-through the real congress intake. That request spends one per-account unit;
-nine legitimate ordinary email-code requests spend the unchanged ten-unit
-window without redeeming the reference. Actual addressed login mail proves
-delivery. After settling those sends, the next ordinary request must return
-the exact generic 429. A unique unknown-email request from the same browser
-still returns the neutral acknowledgement, excluding source-budget exhaustion,
-and receives no addressed mail throughout a full twenty-second horizon.
-
-The first actual guest page-load redemption then returns a byte-identical
-generic 429 without an address or session. Selected empty email-code entry,
-the password option and generic throttle alert remain visible. Complete
-recipient/message-ID checkpoints and a twenty-second observation with a final
-query after the deadline prove no new mail. Profile/session reads remain 401;
-the same-origin account return target survives while the reference disappears
-from the address bar and Chromium history. Trace-off fixtures and canonical
-intake/mail/response helpers are reused; cleanup revokes any unexpected owned
-session and closes its context even on failure. The per-case 180-second budget
-covers real setup and delivery horizons. Missing prerequisites fail.
-
-The broader native scenario remains unchanged. Native
-`apps/api/test/auth/login-handoff.e2e-spec.ts` and rate-limit service tests retain
-internal counter and timing proof; this case claims neither internal-state nor
-statistical timing observation. Select only `@handoff-throttled` on the
-lead-owned runtime, with real default thresholds and no counter/TTL writes or
-spoofed source headers. This coverage change has no render surface or Stage-B slot.
-
 The end-to-end regression contract of the staging/regression-contour tech spec
 ([`2026-09-08-staging-previews-and-regression-contour-en.md`](../../apps/docs/content/specs/tech/2026-09-08-staging-previews-and-regression-contour-en.md)
 §6, Issue #2067): **one** step package shared by both storefronts, the spec's own

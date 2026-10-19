@@ -72,3 +72,15 @@ test("2982: the rollback pull stays streamed — never behind the lease of the r
     /pullRecordedImages\(sha, images, \{ label: "rollback pull" \}\)/,
   );
 });
+
+test("2982: the rollback refuses while a box step still runs, then supersedes the release under the env lock", () => {
+  const rollback = SOURCE.slice(SOURCE.indexOf("async function rollback("));
+  const check = rollback.indexOf("releaseCheckScript(RELEASE_ENV)");
+  const pull = rollback.indexOf('label: "rollback pull"');
+  const up = rollback.indexOf("releaseSupersedeScript(RELEASE_ENV, ");
+  assert.ok(check > 0, "a read-only live-unit check on both boxes");
+  assert.ok(check < pull, "the check runs before the first state change");
+  assert.ok(pull < up, "the up -d runs inside `ds-release supersede` (env lock held)");
+  assert.match(rollback, /for \(const host of \[API_PROD, DATA_PROD\]\)[\s\S]{0,200}releaseCheckScript/);
+  assert.match(rollback, /releaseSupersedeScript\(RELEASE_ENV\)[\s\S]{0,80}DATA_PROD|DATA_PROD[\s\S]{0,200}releaseSupersedeScript\(RELEASE_ENV\)/);
+});

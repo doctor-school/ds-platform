@@ -239,7 +239,7 @@ test("2982: a lost unit is settled through the entrypoint and fails the step", a
   });
   box.lines = [];
   await assert.rejects(
-    runDurableStep("api", base(box)),
+    runDurableStep("api", base(box, { maxLostReads: 1 })),
     /ended without a verdict/,
   );
   assert.deepEqual(
@@ -289,4 +289,75 @@ test("2982: a step past its deadline is left running and reported, not killed", 
     ),
     /still running after .*re-run the same SHA to reattach/s,
   );
+});
+
+test("2982: a step the box already recorded as succeeded resolves at once, without a poll", async () => {
+  const box = fakeBox({
+    starts: [
+      "ds-release: ds-prod-0123456789ab-pull succeeded (recorded verdict; not re-run)",
+    ],
+  });
+  box.lines = [];
+  let slept = 0;
+  const verdict = await runDurableStep(
+    "api",
+    base(box, { sleep: async () => void (slept += 1) }),
+  );
+  assert.equal(verdict.state, "succeeded");
+  assert.equal(slept, 0, "no poll wait for a recorded verdict");
+  assert.deepEqual(box.calls.map((c) => c.kind), ["start"]);
+});
+
+test("2982: a corrupt status file is reported as such, never as lost contact", async () => {
+  const box = fakeBox({
+    starts: ["started"],
+    polls: [
+      new Error(
+        "ssh capture on api exited 3: ds-release: corrupt status file /var/lib/ds-platform/release/prod/x.json",
+      ),
+    ],
+  });
+  box.lines = [];
+  await assert.rejects(runDurableStep("api", base(box)), (error) => {
+    assert.match(error.message, /corrupt status file \/var\/lib\/ds-platform\/release\/prod\/x\.json/);
+    assert.doesNotMatch(error.message, /lost contact/);
+    return true;
+  });
+  assert.equal(box.calls.filter((c) => c.kind === "status").length, 1);
+});
+
+test("2982: transient «lost» reads are tolerated; the poll goes on", async () => {
+  const lostRead = { release: doc([item("pull", null, null)]), unitAlive: false };
+  const box = fakeBox({
+    starts: ["started"],
+    polls: [lostRead, lostRead, { release: doc([item("pull", "t", 0)]), unitAlive: null }],
+  });
+  box.lines = [];
+  const verdict = await runDurableStep("api", base(box, { maxLostReads: 3 }));
+  assert.equal(verdict.state, "succeeded");
+  assert.deepEqual(box.calls.map((c) => c.kind), ["start", "status", "status", "status"]);
+});
+
+test("2982: «lost» reads that the box answers «running (attached)» leave the unit running", async () => {
+  const lostRead = { release: doc([item("pull", null, null)]), unitAlive: false };
+  const box = fakeBox({
+    starts: ["started", "ds-release: ds-prod-0123456789ab-pull running (attached)"],
+    polls: [lostRead, lostRead],
+  });
+  box.lines = [];
+  await assert.rejects(
+    runDurableStep("api", base(box, { maxLostReads: 2 })),
+    /left running.*re-run the same SHA to reattach/s,
+  );
+  assert.deepEqual(box.calls.map((c) => c.kind), ["start", "status", "status", "start"]);
+});
+
+test("2982: the rollback builders — a read-only live-unit check and supersede under the env lock", async () => {
+  const { releaseCheckScript, releaseSupersedeScript } = await import("./remote.mjs");
+  assert.equal(releaseCheckScript("prod"), `sudo ${DS_RELEASE_BIN} check prod`);
+  assert.equal(releaseSupersedeScript("prod"), `sudo ${DS_RELEASE_BIN} supersede prod`);
+  const up = releaseSupersedeScript("prod", "cd x\nsudo docker compose up -d\n");
+  assert.match(up, /cat > "\$f" <<'DS_RELEASE_STEP_[0-9a-f]{16}'\ncd x\nsudo docker compose up -d\nDS_RELEASE_STEP_/);
+  assert.match(up, /sudo \/usr\/local\/bin\/ds-release supersede prod "\$f"$/);
+  assert.throws(() => releaseCheckScript("production"));
 });

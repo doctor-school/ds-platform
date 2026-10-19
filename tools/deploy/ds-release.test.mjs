@@ -25,6 +25,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const DS_RELEASE = resolve(here, "../../infra/deploy/bin/ds-release");
 const SHA_A = "a".repeat(40);
 const SHA_B = "b".repeat(40);
+const SHA_C = "c".repeat(40);
 
 const toolsPresent =
   spawnSync(
@@ -81,6 +82,14 @@ esac
 exit 0
 `;
 
+// The real boxes run every step as the calling operator through `runuser -u`.
+const RUNUSER_STUB = `#!/usr/bin/env bash
+echo "$*" >> "$STUB_DIR/runuser.log"
+[[ $1 == -u ]] && shift 2
+[[ $1 == -- ]] && shift
+exec "$@"
+`;
+
 let root;
 let env;
 
@@ -96,6 +105,7 @@ function setup() {
   mkdirSync(join(root, "units"));
   writeExecutable(join(bin, "systemd-run"), SYSTEMD_RUN_STUB);
   writeExecutable(join(bin, "systemctl"), SYSTEMCTL_STUB);
+  writeExecutable(join(bin, "runuser"), RUNUSER_STUB);
   env = {
     ...process.env,
     PATH: `${bin}${delimiter}${process.env.PATH}`,
@@ -148,7 +158,7 @@ function assertShape(doc, releaseEnv, sha) {
   ]);
   assert.equal(doc.env, releaseEnv);
   assert.equal(doc.sha, sha);
-  assert.match(doc.state, /^(running|succeeded|failed)$/);
+  assert.match(doc.state, /^(running|succeeded|failed|superseded)$/);
   assert.match(
     doc.unit,
     new RegExp(`^ds-${releaseEnv}-${sha.slice(0, 12)}-${doc.step}$`),
@@ -310,7 +320,7 @@ describe(
       const script = scriptFile("prune", `[ -e "${flag}" ] || exit 7\n`);
       assert.equal(ds(["release", "prod", SHA_B, "prune", script]).code, 0);
       const doc = waitStep("prod", SHA_B, "prune");
-      assert.equal(doc.state, "failed");
+      assert.equal(doc.state, "running", "a failed step leaves the release open until `finish`");
       assert.equal(doc.steps.at(-1).rc, 7);
       assert.match(doc.error, /prune exited 7/);
 
@@ -358,7 +368,8 @@ describe(
       const settled = ds(["release", "stage-main", SHA_A, "verify", script]);
       assert.equal(settled.code, 1);
       const doc = readShape("stage-main", SHA_A);
-      assert.equal(doc.state, "failed");
+      assert.equal(doc.state, "running");
+      assert.equal(doc.steps.at(-1).rc, -1);
       assert.match(doc.error, /ended without recording a verdict/);
     });
 
@@ -397,6 +408,137 @@ describe(
       assert.equal(ds(["release", "prod", SHA_A, "Up;rm", script]).code, 2);
       assert.equal(ds(["finish", "prod", SHA_A, "maybe"]).code, 2);
       assert.equal(ds(["bogus"]).code, 2);
+    });
+  },
+);
+
+function editRecord(releaseEnv, sha, patch) {
+  const path = statusFile(releaseEnv, sha);
+  const doc = JSON.parse(readFileSync(path, "utf8"));
+  writeFileSync(path, JSON.stringify({ ...doc, ...patch }), "utf8");
+}
+
+const runs = (path) => (existsSync(path) ? readFileSync(path, "utf8") : "");
+
+describe(
+  "ds-release attempts, rollback and robustness (systemd stubbed)",
+  { skip: !toolsPresent && "needs bash + flock + python3 + getent" },
+  () => {
+    before(setup);
+    after(() => rmSync(root, { recursive: true, force: true }));
+
+    it("re-deploys a SHA after a rollback off it: B → rollback A → B runs every step again", () => {
+      const counter = join(root, "migrate-b-runs");
+      const up = scriptFile("up-a", "true\n");
+      const migrate = scriptFile("migrate-b", `echo run >> "${counter}"\n`);
+      assert.equal(ds(["release", "prod", SHA_A, "up", up]).code, 0);
+      waitStep("prod", SHA_A, "up");
+      assert.equal(ds(["finish", "prod", SHA_A, "succeeded"]).code, 0);
+
+      assert.equal(ds(["release", "prod", SHA_B, "migrate", migrate]).code, 0);
+      waitStep("prod", SHA_B, "migrate");
+      assert.equal(readShape("prod", SHA_A).state, "superseded", "a new SHA supersedes the last one");
+      assert.equal(ds(["finish", "prod", SHA_B, "failed"]).code, 0, "smoke RED closes B as failed");
+
+      const marker = join(root, "rolled-back");
+      const rollback = ds(["supersede", "prod", scriptFile("rollback-up", `echo "$HOME" > "${marker}"\n`)]);
+      assert.equal(rollback.code, 0, rollback.err);
+      assert.ok(existsSync(marker), "the rollback script ran under the env lock");
+      assert.equal(readShape("prod", SHA_B).state, "superseded");
+
+      const again = ds(["release", "prod", SHA_B, "migrate", migrate]);
+      assert.equal(again.code, 0, again.err);
+      assert.match(again.out, /ds-prod-bbbbbbbbbbbb-migrate started/);
+      const fresh = waitStep("prod", SHA_B, "migrate");
+      assert.equal(fresh.state, "running");
+      assert.equal(fresh.steps.length, 1);
+      assert.equal(runs(counter), "run\nrun\n", "a fresh attempt re-runs the step");
+      const archived = readdirSync(join(root, "state", "prod")).filter(
+        (f) =>
+          f.startsWith(`${SHA_B}.`) &&
+          f.endsWith(".json") &&
+          f !== `${SHA_B}.json`,
+      );
+      assert.equal(archived.length, 1, "the closed attempt is archived, not lost");
+      const old = JSON.parse(readFileSync(join(root, "state", "prod", archived[0]), "utf8"));
+      assert.equal(old.state, "superseded");
+      assert.equal(ds(["finish", "prod", SHA_B, "succeeded"]).code, 0);
+    });
+
+    it("converges stage back to an earlier SHA: B → C → B runs `up` again", () => {
+      const counter = join(root, "up-runs");
+      const up = scriptFile("up-stage", `echo run >> "${counter}"\n`);
+      for (const sha of [SHA_B, SHA_C, SHA_B]) {
+        const r = ds(["release", "stage-main", sha, "up", up]);
+        assert.equal(r.code, 0, r.err);
+        assert.match(r.out, /started/);
+        waitStep("stage-main", sha, "up");
+        assert.equal(ds(["finish", "stage-main", sha, "succeeded"]).code, 0);
+      }
+      assert.equal(runs(counter), "run\nrun\nrun\n");
+      assert.equal(readShape("stage-main", SHA_C).state, "superseded");
+      assert.equal(readShape("stage-main", SHA_B).state, "succeeded");
+    });
+
+    it("refuses a rollback, a check and any other SHA's start while a unit runs — and never reaps it", () => {
+      const gate = join(root, "seed3-gate");
+      const seed = scriptFile("seed3", `while [ ! -e "${gate}" ]; do sleep 0.05; done\n`);
+      assert.equal(ds(["release", "stage-pr-3", SHA_A, "seed", seed]).code, 0);
+      const marker = join(root, "rollback3");
+      const refused = ds(["supersede", "stage-pr-3", scriptFile("rb3", `touch "${marker}"\n`)]);
+      assert.equal(refused.code, 3);
+      assert.match(refused.err, /ds-stage-pr-3-aaaaaaaaaaaa-seed\.service is still running/);
+      assert.ok(!existsSync(marker), "nothing ran");
+      assert.equal(readShape("stage-pr-3", SHA_A).state, "running", "nothing changed");
+      const check = ds(["check", "stage-pr-3"]);
+      assert.equal(check.code, 3);
+      assert.match(check.err, /ds-stage-pr-3-aaaaaaaaaaaa-seed\.service is still running/);
+
+      // Even with its record closed under it, a live unit of another SHA blocks a start.
+      editRecord("stage-pr-3", SHA_A, { state: "failed" });
+      rmSync(join(root, "systemctl.log"), { force: true });
+      const other = ds(["release", "stage-pr-3", SHA_B, "pull", scriptFile("p3", "true\n")]);
+      assert.equal(other.code, 3);
+      assert.match(other.err, /ds-stage-pr-3-aaaaaaaaaaaa-seed\.service is still running/);
+      assert.ok(!existsSync(statusFile("stage-pr-3", SHA_B)));
+      assert.doesNotMatch(runs(join(root, "systemctl.log")), /ds-stage-pr-3-aaaaaaaaaaaa-seed/);
+
+      writeFileSync(gate, "");
+      waitStep("stage-pr-3", SHA_A, "seed");
+      assert.equal(ds(["check", "stage-pr-3"]).code, 0);
+    });
+
+    it("names a corrupt status file instead of a traceback", () => {
+      const dir = join(root, "state", "stage-pr-9");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, `${SHA_A}.json`), "{not json", "utf8");
+      for (const args of [
+        ["status", "stage-pr-9", SHA_A],
+        ["release", "stage-pr-9", SHA_A, "up", scriptFile("up9", "true\n")],
+      ]) {
+        const r = ds(args);
+        assert.notEqual(r.code, 0);
+        assert.match(r.err, /^ds-release: corrupt status file .*stage-pr-9\/a{40}\.json/m);
+        assert.doesNotMatch(r.err, /Traceback/);
+      }
+    });
+
+    it("writes every record through a unique temp file", () => {
+      const dir = join(root, "state", "stage-pr-11");
+      mkdirSync(join(dir, `${SHA_A}.json.tmp`), { recursive: true });
+      const r = ds(["release", "stage-pr-11", SHA_A, "up", scriptFile("up11", "true\n")]);
+      assert.equal(r.code, 0, r.err);
+      assert.equal(waitStep("stage-pr-11", SHA_A, "up").steps[0].rc, 0);
+    });
+
+    it("runs the step as the calling operator through runuser, as on the real boxes", () => {
+      const out = join(root, "runuser-out");
+      const script = scriptFile("up13", `echo "$HOME $USER" > "${out}"\n`);
+      const r = ds(["release", "stage-pr-13", SHA_A, "up", script], { SUDO_USER: "dsop" });
+      assert.equal(r.code, 0, r.err);
+      assert.equal(waitStep("stage-pr-13", SHA_A, "up").steps[0].rc, 0);
+      assert.match(runs(join(root, "runuser.log")), /^-u dsop -- env HOME=\/ USER=dsop LOGNAME=dsop bash --norc/m);
+      assert.equal(runs(out), "/ dsop\n");
     });
   },
 );

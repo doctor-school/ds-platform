@@ -998,6 +998,7 @@ test("down: env → detach → compose down → network → database → bucket 
     baseDomain: BASE,
   });
   assert.deepEqual(labels(plan), [
+    "forget the release state",
     "ensure slot env",
     "detach caddy",
     "compose down",
@@ -1007,7 +1008,6 @@ test("down: env → detach → compose down → network → database → bucket 
     "remove slot images",
     "remove the slot tree",
     "remove slot env",
-    "forget the release state",
     "converge the shared IdP redirect set",
   ]);
   assert.ok(stepOf(plan, "compose down").command.includes("-v"));
@@ -1976,6 +1976,9 @@ test("2982: down and reset forget the release state the teardown / re-clone inva
   assert.equal(forget.kind, "ensure-absent");
   assert.deepEqual(forget.items[0].probe, ["sudo", "test", "-e", "/var/lib/ds-platform/release/stage-pr-7"]);
   assert.deepEqual(forget.items[0].remove, ["sudo", DS_RELEASE_BIN, "forget", "stage-pr-7"]);
+  // `forget` refuses while a unit still runs — before any container is gone, so a
+  // refused teardown leaves the slot (and the IdP redirect set) intact.
+  assert.equal(labels(down)[0], "forget the release state");
 
   const reset = planSlotReset({
     sha: SHA, images: IMAGES, liveSlots: live({ main: [] }), baseDomain: BASE, actor: "tech-lead", subjects: SUBJECTS,

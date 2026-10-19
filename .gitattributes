@@ -6,3 +6,6 @@
 # design-source/manifest.json, #2389): git must never EOL-normalise them.
 design-source/**/*.dc.html -text
 design-source/**/*.js -text
+# PR screenshot evidence is read by CI from the Actions checkout only; keep it
+# out of `git archive`, the tree shipped to the boxes (#3032).
+.github/ui-evidence/** export-ignore

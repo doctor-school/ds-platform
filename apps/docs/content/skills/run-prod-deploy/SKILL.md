@@ -142,7 +142,7 @@ The target images must still be on the box (retention keeps the last 3). Rollbac
 
 Use when prod needs ONE already-merged fix and the rest of `main` is not ready to ship. Not for unmerged work, not for a feature preview — land the fix on `main` first, always.
 
-api-prod builds nothing (#2981): pushing the hotfix branch runs `runtime-images.yml` for it, which records the branch's images under `ref: "hotfix/<N>-<slug>"` — the manifest the release pre-flight and the stage `main` check accept for that SHA. Wait for that run as for CI (step 2).
+api-prod builds nothing (#2981): pushing the hotfix branch runs `runtime-images.yml` for it, which records the branch's images under `ref: "hotfix/<N>-<slug>"` — the manifest the release pre-flight and the stage `main` check accept for that SHA. Wait for that run as for CI (step 2). Until the first release that contains #3039 is live, a hotfix cut from the deployed SHA carries the older `runtime-images.yml`, which neither runs on `hotfix/**` nor records a hotfix manifest, so its release refuses; cherry-pick #3039's squash commit onto the hotfix branch as well, or release `main` first.
 
 ```bash
 # 0. facts: what is actually running, and the squash SHA of the merged fix

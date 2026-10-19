@@ -45,10 +45,11 @@ export function sshBaseArgs(host, extraOptions = []) {
 }
 
 // Per-step no-output budgets for the sshScript inactivity watchdog (#905).
-// Build-class steps (the api-prod build, which runs `docker compose build
-// <service>` once per service — one image at a time since #2283) legitimately go
-// minutes between log lines; everything else (compose up, pgbackrest, caddy
-// reload, retention) prints within seconds when healthy.
+// Long-silence steps legitimately go minutes between log lines: the api-prod image
+// pull (#2981 — `docker pull` of each recorded digest, a multi-hundred-MB layer
+// download prints nothing until it completes), the data-prod `up -d --build`, the
+// migrate/up swap, the IdP converge and the stage slot builds. Everything else
+// (pgbackrest, caddy reload, retention) prints within seconds when healthy.
 export const STALL_BUDGET_BUILD_MS = 5 * 60 * 1000;
 export const STALL_BUDGET_DEFAULT_MS = 2 * 60 * 1000;
 

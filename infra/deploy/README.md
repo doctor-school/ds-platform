@@ -239,8 +239,8 @@ Pipeline (`tools/deploy/prod.mjs`), fail-closed and stops at the first red step:
    **both** boxes; only after successful extraction does it replace
    `~/ds-platform`. The gitignored api-prod compose `.env` (the non-secret
    `DEPLOY_SHA` / `SMARTCAPTCHA_SITE_KEY` interpolation file) is the single
-   carried-forward file; other untracked files are not preserved. No registry,
-   no deploy key (README step 5).
+   carried-forward file; other untracked files are not preserved. The tree needs
+   no deploy key (README step 5); the api-prod images come from the registry (step 5 below).
 3. **data-prod** — `docker compose up -d --build` (idempotent). Builds run with
    **`BUILDX_NO_DEFAULT_ATTESTATIONS=1`** so an unchanged build yields a
    byte-identical image ID: a no-op redeploy is a **true no-op** and does NOT
@@ -341,7 +341,8 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    > `GIT_SSH_COMMAND='ssh -i ~/.ssh/ds-deploy -o IdentitiesOnly=yes' git clone
 --depth 1 git@github.com:doctor-school/ds-platform.git ~/ds-platform`.
 
-   Both boxes need the tree: api-prod builds api/portal + runs migrations from it;
+   Both boxes need the tree: api-prod runs its compose and configs from it (the
+   images are pulled in step 8);
    data-prod builds the Postgres + pgbackrest images from `infra/deploy/compose/data-prod/`
    (and the api-prod compose bind-mounts `infra/dev-stand/sms-aero-adapter/server.mjs`).
 
@@ -433,11 +434,42 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
    >   via `environment:` (which outranks env_file). If a deployed `api.env` still
    >   carries `PORT=3000`, delete that line.
 
+   **First pull the release images and pin `DEPLOY_SHA`** (#2981). The api-prod
+   compose has no `build:` and names every `ds-*` image `ds-<image>:${DEPLOY_SHA:?}`,
+   so every `docker compose` call below (and in step 9) refuses until the box `.env`
+   names a SHA whose five images are present. On a steady-state box `pnpm deploy:prod`
+   does this itself, but on a fresh or rebuilt box it cannot run before this step and
+   step 9, so do it by hand once. This is the same pull `tools/deploy/lib/registry.mjs`
+   performs: the SHA step 5 shipped, its `main` manifest from `runtime-images.yml`,
+   pulled by digest. Prerequisite: the pull token is on the box («Container registry»).
+
+   ```bash
+   # Workstation, repo root, authenticated gh. SHA = the commit step 5 shipped.
+   SHA=$(git rev-parse origin/main)
+   RUN=$(gh run list --workflow runtime-images.yml --commit "$SHA" --event push \
+     --status success --json databaseId --jq '.[0].databaseId')   # empty → no recorded images; stop
+   gh run download "$RUN" -n "images-$SHA" -D "images-$SHA"
+   # Refuse another commit's or a pr/ manifest; emit one pull-by-digest + tag line per image.
+   node -e 'const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+     if (m.sha !== process.argv[2] || m.ref !== "main") throw new Error(`manifest ${m.sha} ref ${m.ref}: not the main record of this SHA`);
+     for (const [name, ref] of Object.entries(m.images)) console.log(`docker pull ${ref} && docker tag ${ref} ds-${name}:${m.sha}`);' \
+     "images-$SHA/images-$SHA.json" "$SHA" > "images-$SHA/pull.sh"
+   cat "images-$SHA/pull.sh"   # five lines (api, api-migrate, portal, admin, doctor), each `…@sha256:<digest>`
+   # ds-api-prod, as root: log in from the token file (never argv), pull + tag, log out on exit.
+   ssh ds-api-prod "sudo sh -ec 'trap \"docker logout ds-platform.registry.twcstorage.ru >/dev/null 2>&1\" EXIT
+     docker login ds-platform.registry.twcstorage.ru -u ds-platform --password-stdin < /etc/ds-platform/registry-pull-token >/dev/null
+     sh -e'" < "images-$SHA/pull.sh"
+   # Pin DEPLOY_SHA in the compose .env, keeping every other line (SMARTCAPTCHA_SITE_KEY, #729).
+   ssh ds-api-prod "cd ~/ds-platform/infra/deploy/compose/api-prod && \
+     { grep -v '^DEPLOY_SHA=' .env 2>/dev/null; echo DEPLOY_SHA=$SHA; } > .env.new && mv .env.new .env && \
+     sudo docker image ls --filter 'reference=ds-*:$SHA'"   # five ds-<image>:<sha> rows
+   rm -rf "images-$SHA"
+   ```
+
    ```bash
    cd ~/ds-platform/infra/deploy/compose/api-prod
-   # Since #2981 the ds-* images are pulled, never built here: the first
-   # `pnpm deploy:prod` pulls the recorded digests and writes DEPLOY_SHA into .env
-   # (compose refuses to interpolate without it). zitadel/login/sms are upstream pulls.
+   # zitadel / zitadel-login / sms-aero-adapter / caddy / centrifugo are upstream images
+   # and pull on first use; every ds-* image is the one pulled above.
    sudo docker compose --profile migrate run --rm migrate # applies apps/api/drizzle/*
    # NOTE: do NOT `up -d` the whole stack yet — Zitadel must first-boot ALONE with the
    # FIRSTINSTANCE block set, so the ds-bootstrap PAT exists before zitadel-login
@@ -602,11 +634,11 @@ The webinars wave-1 increment onto the already-live 003 stand: admin app
 (`admin.doctor.school`), Centrifugo room chat, S3 `uploads` bucket, prod
 SmartCaptcha (#186). The repo payload (compose/Caddy/Terraform/env templates) is
 apply-ready; the steps below cover **initial provisioning or recovery** — after
-them, `pnpm deploy:prod` covers steady-state redeploys (it already builds every
-`build:` service, admin included, and the migrate step picks up the wave-1
+them, `pnpm deploy:prod` covers steady-state redeploys (it pulls every recorded
+`ds-*` image, admin included, and the migrate step picks up the wave-1
 events/rooms migrations like any other). Out-of-band provider resources and
 on-box values still have to satisfy the invariants below before each affected
-image build.
+deploy.
 
 > Steps marked **[OWNER-GATED]** are irreversible/paid provider actions or
 > product-owner calls — they need an explicit owner "go" (AGENTS.md §6,
@@ -723,23 +755,13 @@ image build.
      in `api.env` and `SMARTCAPTCHA_SITE_KEY=ysc1_…` in the compose `.env`, run
      the keypair-identifier checks in step 3, then `pnpm deploy:prod`.
 
-5. **Ship source + build images.** (Historical wave-1 record: since #2981 api-prod
-   builds nothing and `pnpm deploy:prod` pulls the recorded images instead.) Ship
-   the merged `origin/main` tree to the boxes (Apply order step 5 / `pnpm
-deploy:prod` does this), then on api-prod:
-
-   ```bash
-   cd ~/ds-platform/infra/deploy/compose/api-prod
-   # ONE IMAGE AT A TIME (#2283): never `build admin portal api` in one command —
-   # BuildKit would run three `next build` processes at once beside live
-   # production on this swapless 8 GB box and stall the site (~17 min, 2026-09-18).
-   sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build admin
-   sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build portal
-   sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build api
-   # admin is NEW; portal and api rebuild to the wave-1 code (the captcha site
-   # key is runtime env, #2981 — no image bakes it).
-   # centrifugo is pulled (centrifugo/centrifugo:v6).
-   ```
+5. **Ship source + pull images.** Ship the merged `origin/main` tree to the boxes
+   (Apply order step 5 / `pnpm deploy:prod` does this), then bring that SHA's five
+   recorded images (admin included) onto api-prod and pin `DEPLOY_SHA` exactly as
+   Apply order step 8 «First pull the release images and pin `DEPLOY_SHA`» does —
+   api-prod builds nothing since #2981, and every compose call in steps 6–7 refuses
+   without that `.env` line and those images. The captcha site key is runtime env
+   (#2981 — no image bakes it); centrifugo is an upstream pull (`centrifugo/centrifugo:v6`).
 
 6. **One-shot migrations.** The wave-1 events/rooms migrations are ordinary
    Drizzle migrations through the existing one-shot service — no new mechanism.
@@ -847,11 +869,13 @@ conflate them:
   pnpm deploy:prod --rollback <previous-sha>
   ```
 
-  It `up -d`s the already-present `ds-api:<sha>` / `ds-portal:<sha>` images (kept
-  by retention — the **last 3** SHAs), rewrites the `DEPLOY_SHA` `.env`, and
-  re-smokes. It does **not** rebuild, migrate, or touch the DB. If the target SHA
-  was already pruned, roll **forward** instead (check out that commit's `main`,
-  `pnpm deploy:prod`). Manual equivalent on the box: edit the `DEPLOY_SHA=` line
+  It `up -d`s the `ds-*:<sha>` images (kept by retention — the **last 3** SHAs;
+  a pruned target is pulled again from its recorded `main`/`hotfix/*` manifest,
+  and a target without one refuses), rewrites the `DEPLOY_SHA` `.env`, and
+  re-smokes. It does **not** build, migrate, or touch the DB. Manual equivalent on
+  the box, only while all five `ds-*:<sha>` tags of the target are present
+  (`sudo docker image ls --filter 'reference=ds-*:<sha>'`; otherwise pull them first
+  as in Apply order step 8): edit the `DEPLOY_SHA=` line
   in `~/ds-platform/infra/deploy/compose/api-prod/.env` (do NOT `printf … > .env`
   — the file also carries `SMARTCAPTCHA_SITE_KEY`, #729) then
   `sudo docker compose up -d`.

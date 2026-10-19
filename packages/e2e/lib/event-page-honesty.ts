@@ -78,8 +78,21 @@ export async function offlineSoldOutFindings(page: Page): Promise<string[]> {
     if (document.querySelector('[data-testid="event-format-tabs"]')) {
       findings.push("a format tab on a pure offline event");
     }
-    if (/лист ожидания|очеред|ожидани|уведомить|сообщим/iu.test(text)) {
-      findings.push("a waiting-list affordance");
+    // An AFFORDANCE is an offer to join or be notified — a control naming the
+    // list, or the offer in words. The api's honest «…лист ожидания не
+    // ведётся» states the opposite and is not one.
+    for (const control of document.querySelectorAll("a, button, input")) {
+      const label = `${control.textContent ?? ""} ${control.getAttribute("aria-label") ?? ""}`;
+      if (/ожидани|очеред|уведом|сообщ/iu.test(label)) {
+        findings.push(`a waiting-list control «${label.trim()}»`);
+      }
+    }
+    if (
+      /(встать|записаться|запишитесь|встаньте) в (лист ожидания|очередь)|уведомить меня|сообщим,? когда/iu.test(
+        text,
+      )
+    ) {
+      findings.push("a waiting-list offer");
     }
     return findings;
   });

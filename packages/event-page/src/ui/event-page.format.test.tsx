@@ -143,10 +143,18 @@ async function renderPage(
   config: EventPageHostConfig,
   event: EventPageView,
   action: ParticipationCta["action"],
-  opts: { auth?: "guest" | "signed-in"; mode?: string; from?: string } = {},
+  opts: {
+    auth?: "guest" | "signed-in";
+    mode?: string;
+    from?: string;
+    /** Keep a CTA the test mocked itself instead of the default for `action`. */
+    keepCta?: boolean;
+  } = {},
 ): Promise<HTMLElement> {
   fetchPublicEventPage.mockResolvedValue(event);
-  fetchParticipationCta.mockResolvedValue(cta(action, config));
+  if (!opts.keepCta) {
+    fetchParticipationCta.mockResolvedValue(cta(action, config));
+  }
   const signedIn = opts.auth === "signed-in";
   headers.mockResolvedValue(signedIn ? SIGNED_IN : GUEST);
   fetchEventRegistrationState.mockResolvedValue(
@@ -309,11 +317,16 @@ describe.each(Object.entries(HOSTS))(
 
     it("020 EARS-9: a sold-out offline event renders «мест нет», no control and no waiting-list affordance on both hosts (gate row 35)", async () => {
       for (const auth of ["guest", "signed-in"] as const) {
+        fetchParticipationCta.mockResolvedValue({
+          ...cta("sold-out", config),
+          // The api resolver's own sold-out reason (participation-cta.resolver).
+          reason: "Очные места закончились, лист ожидания не ведётся",
+        });
         const root = await renderPage(
           config,
           { ...BASE, format: "offline", seatsLeft: 0 },
           "sold-out",
-          { auth },
+          { auth, keepCta: true },
         );
         // «мест нет» stated, in the card and on the format block.
         expect(byTestId(root, "event-page-aside")?.textContent, auth).toMatch(
@@ -332,10 +345,18 @@ describe.each(Object.entries(HOSTS))(
           auth,
         ).toBe(0);
         expect(byTestId(root, "event-format-tabs"), auth).toBeNull();
-        // No waiting list on the page, in any wording.
+        // No waiting list offered: no control naming one, no offer in words —
+        // the honest «лист ожидания не ведётся» states the opposite.
+        expect(
+          [...root.querySelectorAll("a, button, input")].filter((node) =>
+            /ожидани|очеред|уведом|сообщ/iu.test(node.textContent ?? ""),
+          ),
+          auth,
+        ).toEqual([]);
         expect(root.textContent, auth).not.toMatch(
-          /лист ожидания|очеред|ожидани|уведомить|сообщим/iu,
+          /(встать|записаться|запишитесь|встаньте) в (лист ожидания|очередь)|уведомить меня|сообщим,? когда/iu,
         );
+        expect(root.textContent, auth).toContain("лист ожидания не ведётся");
       }
     });
 

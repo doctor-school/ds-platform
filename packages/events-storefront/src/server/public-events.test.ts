@@ -73,3 +73,37 @@ describe("004 EARS-1 fetchPublicEventPage — the public projection read", () =>
     ).rejects.toThrow(/public event page fetch failed \(503\)/);
   });
 });
+
+describe("020 EARS-19 the event-page read gives up after 10 seconds", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("EARS-19: a read the api never answers rejects at 10 s, so the page renders its error state", async () => {
+    vi.useFakeTimers();
+    // A hung api: the response never arrives; only an abort ends the call.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () =>
+              reject(init.signal?.reason ?? new Error("aborted")),
+            );
+          }),
+      ),
+    );
+
+    let settled: "pending" | "rejected" | "resolved" = "pending";
+    const read = fetchPublicEventPage("x", ACADEMY_READ, new Headers()).then(
+      () => (settled = "resolved"),
+      () => (settled = "rejected"),
+    );
+
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(settled).toBe("pending");
+    await vi.advanceTimersByTimeAsync(1);
+    await read;
+    expect(settled).toBe("rejected");
+  });
+});

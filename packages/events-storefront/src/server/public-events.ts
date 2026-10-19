@@ -28,6 +28,13 @@ export type PublicEventPageRead = {
 };
 
 /**
+ * 020 EARS-19 — the page's error state tells the viewer the server did not
+ * answer within 10 seconds; the read holds to that: a hung api aborts here and
+ * the host's `error.tsx` renders `EventPageError`.
+ */
+const EVENT_PAGE_READ_TIMEOUT_MS = 10_000;
+
+/**
  * Fetch the publish-safe projection at `${pagePath}/:slug`, or `null` when the
  * event is not publicly reachable (404 — draft/unknown).
  */
@@ -37,6 +44,11 @@ export async function fetchPublicEventPage(
   incoming: Headers,
 ): Promise<PublicEventPage | null> {
   const relay = relayOnly(incoming.get("cookie") ?? "", read.relayCookie);
+  const abort = new AbortController();
+  const timer = setTimeout(
+    () => abort.abort(new Error("public event page read timed out")),
+    EVENT_PAGE_READ_TIMEOUT_MS,
+  );
   const res = await fetch(
     `${API_BASE}${read.pagePath}/${encodeURIComponent(idOrSlug)}`,
     {
@@ -52,8 +64,9 @@ export async function fetchPublicEventPage(
       // invalidated ON the lifecycle transition (on-demand revalidation), never
       // by timer.
       cache: "no-store",
+      signal: abort.signal,
     },
-  );
+  ).finally(() => clearTimeout(timer));
   if (res.status === 404) return null;
   if (!res.ok) {
     throw new Error(`public event page fetch failed (${res.status})`);

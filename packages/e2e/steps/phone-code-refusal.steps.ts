@@ -229,8 +229,12 @@ Then(
   "the retained real SMS code confirms that phone on the same Academy account",
   async ({ page }) => {
     const state = attempt(page);
+    const field = state.page.getByTestId("profile-phone-code");
+    await field.press("ControlOrMeta+A");
+    await field.press("Backspace");
+    await expect(field).toHaveValue("");
     const pending = captureResponse(state.page, "/v1/me/phone/confirm");
-    await inputSecret(state.page.getByTestId("profile-phone-code"), state.code);
+    await inputSecret(field, state.code);
     const accepted = await pending;
     expect(
       accepted.response.status(),

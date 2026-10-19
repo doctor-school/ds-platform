@@ -1388,3 +1388,31 @@ scenario remains intact. Native `apps/api/test/auth/login-handoff.e2e-spec.ts`
 and malformed zero-call proof. This browser projection makes no expiry or
 statistical timing claim. Select the single `@handoff-unusable` case on the
 lead-owned runtime. This coverage change has no render surface or Stage-B slot.
+
+### Phone-confirmation security notice (003 EARS-47/48/52)
+
+`Academy receives one safe phone-confirmation notice for the same verified account`
+(`steps/phone-confirmation-notice.steps.ts`, #3027) registers and email-verifies
+one unique owned Academy account, then confirms one fresh phone through the
+actual profile UI and its addressed SMS using the canonical phone helper.
+A complete addressed mailbox-ID checkpoint precedes the action. The scenario
+requires one fresh phone-success notice throughout a full 20-second observation,
+with the final query started at or after the deadline, then reads that exact
+message's complete actual text and HTML. Both bodies name the phone addition or
+change, the same truthful Moscow date/time within the action interval, and the
+existing password-reset advice that all sessions end. Neither body carries a
+six-digit code, the phone number, a link or a button. Existing layout CSS hex
+colors are excluded from the raw-HTML numeric-code scan; complete rendered text
+is still checked. The recipient must be exactly the owned account email.
+
+The same subject, secure session cookie, verified email and confirmed phone
+survive notice observation and a profile reload. Trace-off auth fixtures and
+boolean evidence keep credentials, codes, phone numbers and message bodies out
+of diagnostics; no screenshots are taken. Cleanup revokes only the owned session
+and closes its context even on failure. Missing Mailpit or SMS access fails.
+Retain the broader profile-confirmation scenario and native
+`apps/api/test/me/phone.e2e-spec.ts` EARS-48/52 IdP, mirror, audit and notice
+exclusion contracts; this browser proof claims only the actual delivered
+artifact and account/session outcome. Select the single
+`@phone-confirmation-notice` Academy case on the lead-owned runtime. This test
+coverage change has no render surface and requires no owner Stage-B slot.

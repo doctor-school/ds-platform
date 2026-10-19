@@ -28,6 +28,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And a notice email without code, link or number is sent to the account email
     And one "auth.phone.confirmed" audit row is appended
 
+  # Actual delivered notice projection (#3027); broader native case stays above.
+  # Native IdP, mirror and audit: apps/api/test/me/phone.e2e-spec.ts EARS-48/52.
+  @EARS-47 @EARS-48 @EARS-52 @happy @phone-confirmation-notice
+  Scenario: Academy receives one safe phone-confirmation notice for the same verified account
+    Given an owned verified Academy account is ready to confirm one fresh phone for its security notice
+    When that account confirms the fresh phone through its profile with the actual addressed SMS
+    Then exactly one addressed phone-success notice over twenty seconds has truthful time and recovery advice without a code phone or link
+
   @EARS-48 @EARS-16 @failure @phone-confirmation
   Scenario: A wrong, expired or reused phone code confirms nothing
     Given a signed-in user who requested a phone code

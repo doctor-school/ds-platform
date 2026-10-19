@@ -13,7 +13,9 @@ import {
   eventPageTimeParts,
   eventProgrammeContent,
   eventSignupCardProps,
+  eventSocialProof,
   eventSpeakerCards,
+  eventViewersMeta,
 } from "./event-page-view";
 
 /**
@@ -358,11 +360,6 @@ describe("020 EARS-1 — shared event-page view projection", () => {
     });
   });
 
-  it("020 EARS-1: offline and hybrid render NO format block until EARS-8 (#1771)", () => {
-    expect(eventFormatBlockProps({ ...VIEW, format: "offline" })).toBeNull();
-    expect(eventFormatBlockProps({ ...VIEW, format: "hybrid" })).toBeNull();
-  });
-
   it("020 EARS-18: a host copy override changes words, never the mapping shape", () => {
     const doctorCopy = { ...EVENT_PAGE_COPY, priceFree: "бесплатно" };
     const shared = eventSignupCardProps(VIEW, REGISTER_CTA);
@@ -445,5 +442,180 @@ describe("020 EARS-2 — the registration-free decision set", () => {
     // Never «скоро», never an empty answer (EARS-19 / NG-1).
     expect(EVENT_PAGE_COPY.programmePending).not.toMatch(/скоро/iu);
     expect(EVENT_PAGE_COPY.programmeNeverPublished.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Wave-3 PR 3.3 (#2072) — the format block per format (020 EARS-8, gate rows
+ * 41, 33), the seats-exhausted switch (EARS-9, row 34), the social proof
+ * (EARS-3, row 36), the ended meta row's viewers count (H2, row 43) and the
+ * ended card's conditions (#2072 comment 6217460822).
+ */
+describe("020 wave-3 PR 3.3 — format, seats, social proof, viewers", () => {
+  const SWITCH_CTA: ParticipationCta = {
+    action: "switch-to-online",
+    label: "Участвовать онлайн",
+    href: "/register?returnTo=%2Fwebinars%2Fprp-gonartroz",
+    reason: null,
+    presenceCount: null,
+  };
+
+  it("020 EARS-8: an offline event renders the remaining seats, and no ticket or QR", () => {
+    const block = eventFormatBlockProps({
+      ...VIEW,
+      format: "offline",
+      seatsLeft: 12,
+    });
+    expect(block).toEqual({
+      kind: "offline",
+      heading: EVENT_PAGE_COPY.formatHeading.offline,
+      seatsLine: "Осталось 12 мест",
+    });
+    expect(JSON.stringify(block)).not.toMatch(/билет|QR/iu);
+  });
+
+  it("020 EARS-8: the seats line agrees in number", () => {
+    const line = (seatsLeft: number) => {
+      const block = eventFormatBlockProps({
+        ...VIEW,
+        format: "offline",
+        seatsLeft,
+      });
+      return block?.kind === "offline" ? block.seatsLine : null;
+    };
+    expect(line(1)).toBe("Осталось 1 место");
+    expect(line(3)).toBe("Осталось 3 места");
+    expect(line(21)).toBe("Осталось 21 место");
+    expect(line(0)).toBe("Мест не осталось");
+  });
+
+  it("020 EARS-19: an offline event with no seat limit renders no empty format block", () => {
+    expect(
+      eventFormatBlockProps({ ...VIEW, format: "offline", seatsLeft: null }),
+    ).toBeNull();
+  });
+
+  it("020 EARS-8: a hybrid event carries both halves as tabs, defaulting to «очно» while seats remain", () => {
+    const block = eventFormatBlockProps(
+      { ...VIEW, format: "hybrid", seatsLeft: 12 },
+      REGISTER_CTA,
+    );
+    expect(block).toMatchObject({
+      kind: "hybrid",
+      defaultMode: "offline",
+      tabs: { offline: "Очно", online: "Онлайн" },
+      seatsLine: "Осталось 12 мест",
+      room: { roomOpensLine: EVENT_PAGE_COPY.roomOpensLine },
+      statement: null,
+    });
+  });
+
+  it("020 EARS-9: a hybrid event with no seats opens on «онлайн» and says why", () => {
+    const block = eventFormatBlockProps(
+      { ...VIEW, format: "hybrid", seatsLeft: 0 },
+      SWITCH_CTA,
+    );
+    expect(block).toMatchObject({
+      kind: "hybrid",
+      defaultMode: "online",
+      seatsLine: "Мест не осталось",
+      statement: {
+        title: EVENT_PAGE_COPY.hybridSoldOut.title,
+        body: EVENT_PAGE_COPY.hybridSoldOut.body,
+      },
+    });
+  });
+
+  it("020 EARS-8: a hybrid event with no seat limit renders the online half alone, never an empty «очно» tab", () => {
+    expect(
+      eventFormatBlockProps({ ...VIEW, format: "hybrid", seatsLeft: null }),
+    ).toMatchObject({ kind: "online" });
+  });
+
+  it("020 EARS-19: «Комната эфира откроется…» renders only before the start", () => {
+    const live = eventFormatBlockProps({ ...VIEW, state: "live" });
+    expect(live).toEqual({
+      kind: "online",
+      heading: EVENT_PAGE_COPY.formatHeading.online,
+      duringLine: EVENT_PAGE_COPY.duringLine,
+    });
+    for (const state of ["ended", "hidden"] as const) {
+      for (const format of ["online", "offline", "hybrid"] as const) {
+        expect(
+          eventFormatBlockProps({ ...VIEW, state, format, seatsLeft: 4 }),
+        ).toBeNull();
+      }
+    }
+  });
+
+  it("020 EARS-3: the social proof states the total and, separately, the adjacent specialties", () => {
+    expect(
+      eventSocialProof({
+        ...VIEW,
+        signUps: { total: 51, sameSpecialty: 37, adjacentSpecialties: 14 },
+      }),
+    ).toEqual({
+      total: "Уже записался 51 коллега",
+      adjacent: "в том числе 14 врачей смежных специальностей",
+    });
+    expect(
+      eventSocialProof({
+        ...VIEW,
+        signUps: { total: 3, sameSpecialty: 1, adjacentSpecialties: 2 },
+      }),
+    ).toEqual({
+      total: "Уже записались 3 коллеги",
+      adjacent: "в том числе 2 врача смежных специальностей",
+    });
+  });
+
+  it("020 EARS-3: no adjacent line at zero adjacent sign-ups, no proof at all without sign-ups or on an ended page", () => {
+    expect(
+      eventSocialProof({
+        ...VIEW,
+        signUps: { total: 12, sameSpecialty: 12, adjacentSpecialties: 0 },
+      }),
+    ).toEqual({ total: "Уже записались 12 коллег", adjacent: null });
+    expect(eventSocialProof({ ...VIEW, signUps: null })).toBeNull();
+    expect(
+      eventSocialProof({
+        ...VIEW,
+        state: "ended",
+        signUps: { total: 12, sameSpecialty: 12, adjacentSpecialties: 0 },
+      }),
+    ).toBeNull();
+  });
+
+  it("020 H2: the ended meta row reads «Смотрели N коллег» from the read, and nothing when it is absent", () => {
+    expect(eventViewersMeta({ ...VIEW, state: "ended", viewers: 214 })).toEqual(
+      { label: "Смотрели", value: "214 коллег" },
+    );
+    expect(eventViewersMeta({ ...VIEW, state: "ended", viewers: 1 })).toEqual({
+      label: "Смотрели",
+      value: "1 коллега",
+    });
+    expect(
+      eventViewersMeta({ ...VIEW, state: "ended", viewers: null }),
+    ).toBeNull();
+  });
+
+  it("020 EARS-19: the ended sign-up card carries no participation-cost row — never «Бесплатно для врача»", () => {
+    const UNAVAILABLE: ParticipationCta = {
+      action: "unavailable",
+      label: "Участие недоступно",
+      href: null,
+      reason: "Событие завершилось",
+      presenceCount: null,
+    };
+    for (const pulCost of [0, 50]) {
+      const card = eventSignupCardProps(
+        { ...VIEW, state: "ended", pulCost },
+        UNAVAILABLE,
+      );
+      expect(card.conditions?.map((row) => row.label)).not.toContain(
+        EVENT_PAGE_COPY.conditionPrice,
+      );
+      expect(JSON.stringify(card)).not.toMatch(/бесплатн|Pul/iu);
+    }
   });
 });

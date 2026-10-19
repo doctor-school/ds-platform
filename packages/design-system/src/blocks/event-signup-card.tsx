@@ -72,7 +72,7 @@ export interface EventSignupCardProps {
   cta: ParticipationCta;
   /** «Нужна регистрация — вернём вас на эту страницу.» — host-supplied. */
   note?: React.ReactNode;
-  /** Social-proof slot; filled by EARS-3 (#1767), empty until then. */
+  /** Social-proof slot (020 EARS-3); absent when the read carries no count. */
   proof?: React.ReactNode;
   /** Sticks to the viewport on desktop only (canvas «Развилка 1 · вариант А»). */
   pinned?: boolean;
@@ -121,16 +121,20 @@ export function EventSignupCard({
   const linked = LINKED_ACTIONS.has(cta.action) && cta.href !== null;
   // The host slot substitutes for the generated link ONLY inside the branch the
   // policy already opened; it can never open one of its own.
-  const control = !linked ? null : (
-    (hostControl ?? (
-      <Button asChild className="mt-3.5 w-full" data-testid="event-signup-cta">
-        <a href={cta.href as string}>
-          {cta.label}
-          <span aria-hidden="true">↗</span>
-        </a>
-      </Button>
-    ))
-  );
+  const control = !linked
+    ? null
+    : (hostControl ?? (
+        <Button
+          asChild
+          className="mt-3.5 w-full"
+          data-testid="event-signup-cta"
+        >
+          <a href={cta.href as string}>
+            {cta.label}
+            <span aria-hidden="true">↗</span>
+          </a>
+        </Button>
+      ));
 
   // 020 EARS-7 — the presence line belongs to room entry and to nothing else:
   // `presenceCount` is `null` on every other action by contract, so no other
@@ -177,7 +181,9 @@ export function EventSignupCard({
               key={index}
               className="flex items-baseline justify-between gap-3 border-b border-hairline py-2.5 last:border-b-0"
             >
-              <span className="text-xs font-bold text-faint">{condition.label}</span>
+              <span className="text-xs font-bold text-faint">
+                {condition.label}
+              </span>
               <span
                 data-tone={condition.tone ?? "default"}
                 className={cn(

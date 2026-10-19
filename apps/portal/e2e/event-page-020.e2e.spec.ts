@@ -1,4 +1,7 @@
+import { eventPageHonestyFindings } from "@ds/e2e";
 import { expect, test, type Page } from "@playwright/test";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * 020 EARS-1 (#1764, slice 3) — the academy storefront's mount of the ONE shared
@@ -137,4 +140,168 @@ test("020 EARS-1: an ended event renders the same composition with NO participat
       page.getByRole("link", { name: dead, exact: true }),
     ).toHaveCount(0);
   }
+});
+
+/** `E2E_SHOT_DIR` opts into the Stage-B evidence PNGs; unset, the spec still asserts. */
+const SHOT_DIR = process.env.E2E_SHOT_DIR;
+const DESKTOP = { width: 1440, height: 900 };
+const MOBILE = { width: 390, height: 844 };
+
+async function shoot(page: Page, name: string) {
+  if (!SHOT_DIR) return;
+  mkdirSync(SHOT_DIR, { recursive: true });
+  await page.screenshot({
+    path: join(SHOT_DIR, `${name}.png`),
+    fullPage: true,
+  });
+}
+
+/**
+ * Wave-3 PR 3.3 (#2072) — the format block, the seats statement and the
+ * EARS-19 honest-state sweep on the live stand (gate rows 33, 34, 38, 40, 41).
+ *
+ * Env (each block skips without its own):
+ *   E2E_SWEEP_SLUGS          comma-separated slugs covering format × phase
+ *                            (online / offline / hybrid · upcoming / ended …)
+ *   E2E_HYBRID_SLUG          a hybrid event with seats left
+ *   E2E_HYBRID_SOLDOUT_SLUG  a hybrid event with `seats_left = 0`
+ */
+const SWEEP_SLUGS = (process.env.E2E_SWEEP_SLUGS ?? "")
+  .split(",")
+  .map((slug) => slug.trim())
+  .filter(Boolean);
+const HYBRID_SLUG = process.env.E2E_HYBRID_SLUG;
+const HYBRID_SOLDOUT_SLUG = process.env.E2E_HYBRID_SOLDOUT_SLUG;
+
+test.describe("020 EARS-8/9/19 — wave-3 PR 3.3 on the academy host", () => {
+  test.use({ timezoneId: "Asia/Yekaterinburg" });
+  test.skip(!process.env.E2E_PORTAL_URL, "requires a live academy app");
+
+  test("020 EARS-19: a state sweep over format × phase × auth finds no «скоро», no empty labelled box, no disabled control and no Pul statement", async ({
+    page,
+    context,
+  }) => {
+    test.skip(SWEEP_SLUGS.length === 0, "set E2E_SWEEP_SLUGS");
+    for (const slug of SWEEP_SLUGS) {
+      for (const auth of ["guest", "session"] as const) {
+        await context.clearCookies();
+        if (auth === "session") {
+          await context.addCookies([
+            {
+              name: "__Host-ds_session",
+              value: "e2e-honesty-sweep-probe",
+              domain: new URL(BASE).hostname,
+              path: "/",
+              secure: true,
+            },
+          ]);
+        }
+        const response = await page.goto(`${BASE}/webinars/${slug}`, {
+          waitUntil: "domcontentloaded",
+        });
+        expect(response?.status(), slug).toBe(200);
+        await expect(page.getByTestId("event-page-open-part")).toBeVisible();
+        expect(
+          await eventPageHonestyFindings(page),
+          `${slug} · ${auth}`,
+        ).toEqual([]);
+      }
+    }
+  });
+
+  test("020 EARS-8: the hybrid tab is written to the URL, survives reload and back, and defaults to the policy's half", async ({
+    page,
+    context,
+  }) => {
+    test.skip(!HYBRID_SLUG, "set E2E_HYBRID_SLUG");
+    await context.clearCookies();
+    await page.setViewportSize(DESKTOP);
+    await page.goto(`${BASE}/webinars/${HYBRID_SLUG}`, {
+      waitUntil: "domcontentloaded",
+    });
+    const tabs = page.getByTestId("event-format-tabs");
+    // Seats remain → the policy offers registration → «очно» by default.
+    await expect(tabs).toHaveAttribute("data-mode", "offline");
+    await expect(page.getByTestId("event-format-seats")).toBeVisible();
+
+    await page.getByRole("tab", { name: "Онлайн" }).click();
+    await expect(page).toHaveURL(/[?&]mode=online\b/u);
+    await expect(tabs).toHaveAttribute("data-mode", "online");
+    await shoot(page, "academy-hybrid-tab-online-desktop-light");
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("event-format-tabs")).toHaveAttribute(
+      "data-mode",
+      "online",
+    );
+    // LD-9 — the guest's registration handoff returns to the tab.
+    const handoff = page
+      .getByTestId("event-signup-card")
+      .locator('a[href*="returnTo"]')
+      .first();
+    const href = (await handoff.getAttribute("href")) ?? "";
+    expect(new URL(href, BASE).searchParams.get("returnTo")).toBe(
+      `/webinars/${HYBRID_SLUG}?mode=online`,
+    );
+
+    // Keyboard: arrow keys move between the tabs and the URL follows.
+    await page.getByRole("tab", { name: "Онлайн" }).focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(page).toHaveURL(/[?&]mode=offline\b/u);
+    await expect(page.getByRole("tab", { name: "Очно" })).toBeFocused();
+    await shoot(page, "academy-hybrid-tab-keyboard-focus-desktop-light");
+
+    // Back moves between tabs, not off the page.
+    await page.goBack();
+    await expect(page).toHaveURL(/[?&]mode=online\b/u);
+    await expect(page.getByTestId("event-format-tabs")).toHaveAttribute(
+      "data-mode",
+      "online",
+    );
+  });
+
+  test("020 EARS-9: a hybrid event with no seats opens on «онлайн» and says why", async ({
+    page,
+    context,
+  }) => {
+    test.skip(!HYBRID_SOLDOUT_SLUG, "set E2E_HYBRID_SOLDOUT_SLUG");
+    await context.clearCookies();
+    await page.goto(`${BASE}/webinars/${HYBRID_SOLDOUT_SLUG}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(page.getByTestId("event-format-tabs")).toHaveAttribute(
+      "data-mode",
+      "online",
+    );
+    await expect(page.getByTestId("event-format-statement")).toContainText(
+      "Очных мест не осталось",
+    );
+  });
+
+  test("Stage-B evidence: every swept state at desktop and mobile in light and dark", async ({
+    page,
+    context,
+  }) => {
+    test.skip(!SHOT_DIR || SWEEP_SLUGS.length === 0, "evidence capture");
+    await context.clearCookies();
+    for (const slug of SWEEP_SLUGS) {
+      for (const shot of [
+        { name: "desktop-light", size: DESKTOP, theme: "light" },
+        { name: "desktop-dark", size: DESKTOP, theme: "dark" },
+        { name: "mobile-light", size: MOBILE, theme: "light" },
+        { name: "mobile-dark", size: MOBILE, theme: "dark" },
+      ] as const) {
+        await page.setViewportSize(shot.size);
+        await page.emulateMedia({ colorScheme: shot.theme });
+        await page.goto(`${BASE}/webinars/${slug}`, {
+          waitUntil: "domcontentloaded",
+        });
+        await page.evaluate((theme) => {
+          document.documentElement.classList.toggle("dark", theme === "dark");
+        }, shot.theme);
+        await expect(page.getByTestId("event-page-open-part")).toBeVisible();
+        await shoot(page, `academy-${slug}-${shot.name}`);
+      }
+    }
+  });
 });

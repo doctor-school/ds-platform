@@ -231,7 +231,11 @@ export { RecordingSpoiler } from "./recording-spoiler";
 export type { RecordingSpoilerProps } from "./recording-spoiler";
 export { EventSpeakerCard } from "./event-speaker-card";
 export type { EventSpeakerCardProps } from "./event-speaker-card";
-export { EventFormatBlock } from "./event-format-block";
+export {
+  EventFormatBlock,
+  EventFormatRoomPanel,
+  EventFormatSeatsPanel,
+} from "./event-format-block";
 export type { EventFormatBlockProps } from "./event-format-block";
 // 020 EARS-2 — the shared left-flow sections + the link-aware hero kicker
 // (#1765). Both storefronts mounted hand-composed copies of these until this
@@ -260,9 +264,14 @@ export {
   eventPageTimeParts,
   eventProgrammeContent,
   eventSignupCardProps,
+  eventSocialProof,
   eventSpeakerCards,
+  eventViewersMeta,
 } from "./event-page-view";
 export type {
+  EventFormatMode,
+  EventFormatModel,
+  EventFormatRoom,
   EventLifecyclePlate,
   EventPageCopy,
   EventPageKickerParts,

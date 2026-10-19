@@ -3915,14 +3915,14 @@ const EVENT_PAGE_PROPS: PropRow[] = [
     type: "ReactNode",
     required: false,
     description:
-      "Social-proof slot, empty until EARS-3 (#1767) supplies its content.",
+      "Social-proof slot — 020 EARS-3: the colleagues already registered and, separately, the adjacent specialties; absent when the read carries no count.",
   },
   {
     name: "kind",
-    type: '"online"',
+    type: '"online" | "offline" | "hybrid"',
     required: true,
     description:
-      "EventFormatBlock — a single-member union on purpose; offline and hybrid are EARS-8 (#1771), not a placeholder branch here.",
+      "EventFormatBlock — online: the room panel; offline: the remaining seats (no ticket, QR or venue lines); hybrid: the page-supplied «очно / онлайн» switcher over EventFormatSeatsPanel / EventFormatRoomPanel, with the EARS-9 statement when the seats are gone (020 EARS-8/EARS-9).",
   },
 ];
 
@@ -4002,6 +4002,12 @@ function EventPagePreview({
         kind="online"
         roomOpensLine="Комната эфира откроется за 10 минут до начала"
         duringLine="Во время эфира: вопрос лектору · опросы с живым графиком · отметки присутствия для НМО (90 минут и 2 отметки)"
+      />
+      <EventFormatBlock
+        className="mt-18"
+        kind="offline"
+        heading="Места"
+        seatsLine="Осталось 12 мест"
       />
     </EventPageShell>
   );

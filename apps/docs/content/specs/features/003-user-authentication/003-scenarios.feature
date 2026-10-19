@@ -134,6 +134,15 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And no SMS and no email is sent
     And the unconfirmed-phone counter for flow "reset" increases once per request and no audit ledger row is written
 
+  # Academy delivery/UI projection only (#3018); retain the native case above.
+  # Native status/body/timing against confirmed phones, counter and absent audit:
+  # apps/api/test/auth/password-reset.e2e-spec.ts EARS-53/16/56.
+  @EARS-53 @EARS-16 @failure @reset-unconfirmed-phones
+  Scenario: Academy silently accepts reset for unknown, congress-contact and pending phones
+    Given Academy owns distinct unknown, congress-contact and pending-confirmation phones for reset
+    When independent Academy guests request password reset through the actual form for all three phones
+    Then all three Academy reset guests remain private-session-free and receive no addressed delivery throughout twenty seconds
+
   @EARS-53 @EARS-58 @failure @sms-reset
   Scenario: A mirror that still confirms a number the IdP no longer holds verified sends nothing
     Given the mirror holds "+79991234567" as a confirmed phone of an account

@@ -43,6 +43,37 @@ the owned session and closes owned contexts. Requires a real readable
 `E2E_SMS_SINK_URL` and Mailpit; a missing sink is an explicit skip, never proof.
 This test coverage change has no render surface or owner Stage-B slot.
 
+### Reset with unconfirmed phone states (003 EARS-53/16)
+
+`Academy silently accepts reset for unknown, congress-contact and pending phones`
+(`steps/reset-unconfirmed-phones.steps.ts`, #3018) prepares three distinct fresh
+numbers: unknown, raw contact phone accepted by the real congress intake, and a
+phone requested through a real verified account's profile but never confirmed.
+The pending confirmation SMS is observed without submitting its code. Three
+independent guests submit the actual reset form and require the same exact
+`reset_requested` acknowledgement and ordinary conditional SMS code step.
+
+Complete addressed mail-ID checkpoints for both known accounts are captured
+immediately before each request. All addressed SMS and both addressed mailboxes
+are observed over a full 20-second horizon, including final queries started at
+or after the deadline. No reset code is submitted and every guest remains
+without private profile/session access. The per-case 180-second budget covers
+real congress mail, registration and negative delivery horizons. Traces stay
+off; cleanup revokes the owned registration session and closes every owned
+context even after failure. Missing intake, Mailpit or sink prerequisites fail.
+
+The broader native declaration remains unchanged. The browser claims no 50 ms
+timing parity, internal counter or audit observation. Native
+`apps/api/test/auth/password-reset.e2e-spec.ts` EARS-53/16 proves response/timing
+parity and absent reset audit rows. Unit tests in
+`apps/api/src/auth/sms-unconfirmed-counter.spec.ts` EARS-56 prove increments by
+flow, including reset; `apps/api/test/auth/login-otp.e2e-spec.ts` separately proves
+request-level sign-in counting. These pointers claim no reset request-level
+counter proof. Confirmed-phone reset delivery and completion remain separate
+existing journeys. Run only the
+`@reset-unconfirmed-phones` case on the lead-selected contour. This test-only
+coverage has no render surface and needs no owner Stage-B request or slot.
+
 ### Reset SMS hint and email transition (003 EARS-54/55)
 
 `Academy reset explains SMS eligibility and returns to email without claiming delivery`

@@ -36,7 +36,8 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And users.phone and phone_verified are unchanged and no notice email is sent
 
   # Wrong-code Academy projection only (#3007); retain the broader case above.
-  # Native expiry/reuse, audit and counters: apps/api/test/me/phone.e2e-spec.ts EARS-48.
+  # Native reuse, audit and counters: apps/api/test/me/phone.e2e-spec.ts EARS-48.
+  # This native file makes no phone-code expiry proof claim.
   # Generic refusal UI: packages/design-system/src/blocks/account-profile-card.test.tsx EARS-48.
   @EARS-48 @EARS-16 @EARS-52 @failure @phone-code-refusal
   Scenario: Academy refuses a wrong phone code and accepts the retained real code
@@ -44,6 +45,15 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the owner submits a different six-digit phone code through the Academy code field
     Then Academy shows the generic phone-code refusal and the same owner stays unconfirmed with no addressed mail for 15 seconds
     And the retained real SMS code confirms that phone on the same Academy account
+
+  # Consumed-code Academy projection (#3025); retain the broader case above.
+  # Native consumed refusal: apps/api/test/me/phone.e2e-spec.ts:127;
+  # native write/audit/notice exclusions remain there. No expiry claim here.
+  @EARS-48 @EARS-16 @failure @phone-code-reuse
+  Scenario: Academy refuses the consumed phone code without changing its verified owner
+    Given an owned Academy account has actually consumed its only phone SMS code through the profile UI
+    When that authenticated Academy browser replays exactly the consumed phone code without requesting another challenge
+    Then the same verified Academy phone profile and secure session persist with no second addressed notice for 20 seconds
 
   @EARS-50 @happy @phone-confirmation
   Scenario: A congress participant sees the form's number prefilled

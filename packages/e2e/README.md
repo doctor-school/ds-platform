@@ -6,6 +6,28 @@ The end-to-end regression contract of the staging/regression-contour tech spec
 feature files as the suite, and the navigation model both storefronts' chrome
 is configured from.
 
+### Consumed phone confirmation code (003 EARS-48/16)
+
+`Academy refuses the consumed phone code without changing its verified owner`
+(`steps/phone-code-reuse.steps.ts`, #3025) registers and verifies one uniquely
+owned account, then confirms its fresh phone through the real account UI and
+one actual addressed SMS. It retains that exact consumed six-digit code in
+memory. The same authenticated page replays it through the ordinary
+`/v1/me/phone/confirm` endpoint without requesting another challenge, requiring
+the exact generic 400. The verified phone row, complete profile, subject and
+original secure host-only session must survive, including a real reload.
+
+An addressed mailbox checkpoint first observes the original phone-success
+notice; no additional addressed mail may arrive over the full 20-second replay
+observation, including a final query started at or after its deadline. Traces
+stay off and assertions expose only safe projections; cleanup revokes the owned
+session and closes its context even after failure. Missing SMS/Mailpit access
+fails proof. Run only `@phone-code-reuse` on the lead-owned runtime. The broader
+wrong/expired/reused declaration remains retained; native consumed refusal and
+write/audit/notice exclusions remain in `apps/api/test/me/phone.e2e-spec.ts`
+EARS-48. This browser case makes no expiry, internal counter or audit claim.
+This test coverage change has no render surface or owner Stage-B slot.
+
 ### Another account's confirmed phone (003 EARS-51/49/48/16)
 
 `Academy neutrally accepts another owned account's confirmed phone without sending SMS`

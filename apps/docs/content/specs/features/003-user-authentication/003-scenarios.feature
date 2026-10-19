@@ -63,6 +63,17 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then users.phone is "+79997654321" and phone_verified is true
     And one "auth.phone.confirmed" audit row and one notice email are produced
 
+  # Narrow live profile/session projection; retain the broader native case above.
+  # Lookup refusal, abandonment, audit and notice content remain in the native
+  # apps/api/test/me/phone.e2e-spec.ts and account-profile-card.test.tsx contracts.
+  @EARS-49 @EARS-47 @EARS-48 @happy @phone-change
+  Scenario: Academy clears the old confirmed phone while confirming its replacement
+    Given an owned verified Academy account has confirmed its original phone through an actual SMS
+    When that Academy account requests a code for a different fresh phone through its phone row
+    Then the phone awaits confirmation and the same Academy profile immediately has no confirmed phone
+    When the account enters the actual confirmation SMS delivered to its replacement phone
+    Then reloading Academy retains only the verified replacement phone on that same account and session
+
   @EARS-49 @EARS-58 @failure @phone-confirmation
   Scenario: An abandoned change leaves the account with no confirmed phone
     Given a signed-in user with the confirmed phone "+79991234567" who requested a code for "+79997654321" and never entered it

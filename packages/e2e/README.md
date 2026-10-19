@@ -908,6 +908,25 @@ scenario, native `apps/api/test/me/phone.e2e-spec.ts` EARS-47 no-op proof and
 `@confirmed-phone-noop` Academy case on the lead-selected contour; no runtime
 render source changes, owner Stage-B request or staging slot are involved.
 
+### Confirmed phone replacement (003 EARS-49/47/48)
+
+`Academy clears the old confirmed phone while confirming its replacement`
+(`steps/phone-change.steps.ts`, #3009) registers and email-verifies one unique
+owned account, then confirms phone A through the actual account row and SMS
+sink. Requesting a fresh phone B must immediately clear the profile phone: the
+public self-profile API returns `phone: null` and `phoneVerified: null` for that
+absent identifier, while the existing code-step UI awaits confirmation. The
+same verified email, private subject and secure host-only session cookie remain.
+The actual six-digit confirmation SMS addressed to phone B completes the
+change; the profile must retain only verified B, including after a real reload.
+Traces stay off and cleanup revokes only the owned session and context.
+
+This narrow `@phone-change` Academy projection preserves the broader native
+scenario. Phone-identifier sign-in/reset refusal for both numbers, abandonment,
+internal audit and notice content remain attributed to the native phone API
+suites and `packages/design-system/src/blocks/account-profile-card.test.tsx`.
+It changes no runtime render source and needs no owner Stage-B request or slot.
+
 ### Existing consent preservation (003 EARS-23/41)
 
 `Re-registration never overwrites an existing platform consent` creates and

@@ -6,8 +6,6 @@ const labels = {
   programDownloadLabel: 'Скачать программу (PDF)',
   speakersLabel: 'Спикеры',
   sponsorEyebrow: 'Партнёрский материал · Партнёр',
-  sponsorNote:
-    'Партнёр не влияет на программу: содержание определяют спикеры.',
 };
 
 export const FullWithPartnerAndProgram = () => (

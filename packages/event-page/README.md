@@ -9,13 +9,15 @@ composition blocks» in
 `apps/docs/content/specs/tech/2026-10-16-event-page-wave-3-entry-gate-en.md`.
 
 Since wave-3 PR 3.1 the package holds the Academy composition moved unchanged
-from `apps/portal/app/webinars/[slug]/page.tsx`: the event read, the
+from `apps/portal/app/webinars/[slug]/(event-page)/page.tsx`: the event read, the
 server-resolved participation card with the one-tap slot, the hero status plate
 with the recording badge, the room access-branch guidance (`?from=room`), the
 recording plaque / guest gate / player / raw-original spoiler, the about and
 programme sections, the speakers, the format block and the partners plate. The
-Academy mounts it at `/webinars/[slug]`; the doctor storefront mounts it in PR
-3.2.
+Academy mounts it at `/webinars/[slug]` (`ACADEMY_EVENT_PAGE`); since PR 3.2 the
+doctor storefront mounts it at `/events/[slug]` (`DOCTOR_EVENT_PAGE`). The page
+read forwards the client chain and only the host's `contentSet.relayCookie`
+(017's remembered specialty on the doctor host); never the session.
 
 ## Why a package of its own (gate D1)
 

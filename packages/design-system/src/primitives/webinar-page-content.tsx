@@ -24,7 +24,7 @@ import { cn } from "../lib/utils";
  * card's strong 6px cast.
  *
  * ALL user-facing copy is injected (EARS-13): the page resolves the section
- * labels and the sponsor note through the 003 message catalog and passes them in
+ * labels and the sponsor eyebrow through the 003 message catalog and passes them in
  * — no string is hardcoded here. МСК time and the hero (title, kicker, start
  * time, specialty chips) belong to the page shell (EARS-1); the status card + CTA
  * are siblings EARS-3/4/5 and are intentionally NOT rendered here.
@@ -69,8 +69,6 @@ export interface WebinarPageContentProps
   speakersLabel: string;
   /** «При поддержке» sponsor-plate eyebrow (copy from the catalog). */
   sponsorEyebrow: string;
-  /** The sponsor-independence note copy (copy from the catalog). */
-  sponsorNote: string;
 }
 
 /** Uppercase 1–2-letter initials for the speaker avatar (`Анна Соколова` → `АС`). */
@@ -133,7 +131,6 @@ const WebinarPageContent = React.forwardRef<
       programDownloadLabel,
       speakersLabel,
       sponsorEyebrow,
-      sponsorNote,
       ...props
     },
     ref,
@@ -181,9 +178,6 @@ const WebinarPageContent = React.forwardRef<
             <div className="mt-2 text-base font-bold text-foreground">
               {partners.map((partner) => partner.label).join(" · ")}
             </div>
-            <p className="mt-2 text-caption leading-relaxed text-muted-foreground">
-              {sponsorNote}
-            </p>
           </div>
         ) : null}
       </div>

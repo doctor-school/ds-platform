@@ -23,8 +23,6 @@ const COPY = {
   programDownloadLabel: "Скачать программу (PDF)",
   speakersLabel: "Спикеры",
   sponsorEyebrow: "При поддержке",
-  sponsorNote:
-    "Спонсор оплачивает эфир и не влияет на программу. Содержание определяют спикеры и школа.",
 };
 
 const BASE = {
@@ -55,11 +53,13 @@ describe("WebinarPageContent — content set (EARS-2)", () => {
     expect(screen.getByText("Хирург, профессор")).toBeInTheDocument();
   });
 
-  it("EARS-2: renders the backing partner label under «При поддержке»", () => {
-    render(<WebinarPageContent {...BASE} />);
+  it("EARS-2: renders the backing partner label under «При поддержке», with no financing note (wave-3 gate D5)", () => {
+    const { container } = render(<WebinarPageContent {...BASE} />);
     expect(screen.getByText(COPY.sponsorEyebrow)).toBeInTheDocument();
-    expect(screen.getByText("Acme Pharma")).toBeInTheDocument();
-    expect(screen.getByText(COPY.sponsorNote)).toBeInTheDocument();
+    const partner = screen.getByText("Acme Pharma");
+    const plate = partner.parentElement!;
+    expect(plate.querySelector("p")).toBeNull();
+    expect(container.textContent).not.toMatch(/оплачивает/);
   });
 
   it("EARS-2: exposes the program PDF as a download link when the event carries one", () => {

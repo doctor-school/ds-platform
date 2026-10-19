@@ -35,7 +35,7 @@ const API_BASE = (
 export async function fetchParticipationCta(
   idOrSlug: string,
   session: ForwardedSession,
-  pagePath = "/v1/public/events",
+  pagePath: string,
 ): Promise<ParticipationCta | null> {
   const res = await fetch(
     `${API_BASE}${pagePath}/${encodeURIComponent(idOrSlug)}/participation`,

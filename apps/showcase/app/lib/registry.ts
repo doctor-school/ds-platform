@@ -155,6 +155,9 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "EventList", section: "blocks" },
   // 020 EARS-1 — event-page composition (archive/archive-event-page-variant-a.dc.html), #1764
   { id: "EventPageShell", section: "blocks" },
+  // 020 EARS-19 (#2072 wave 3) — the page's loading state and the error/loading frame
+  { id: "EventPageSkeleton", section: "blocks" },
+  { id: "EventPageStateFrame", section: "blocks" },
   { id: "EventPageHero", section: "blocks" },
   { id: "EventSectionHeading", section: "blocks" },
   { id: "EventSignupCard", section: "blocks" },

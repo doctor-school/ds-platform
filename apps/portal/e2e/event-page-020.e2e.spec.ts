@@ -1,8 +1,8 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 /**
  * 020 EARS-1 (#1764, slice 3) — the academy storefront's mount of the ONE shared
- * event page. `apps/portal/app/webinars/[slug]/page.tsx` no longer composes a
+ * event page. `apps/portal/app/webinars/[slug]/(event-page)/page.tsx` no longer composes a
  * host-local page: it is `EventPageShell` / `EventPageHero` / `EventSignupCard` /
  * `EventSpeakerCard` / `EventFormatBlock` over `EventPageView` plus the
  * server-resolved `ParticipationCta`.
@@ -28,6 +28,16 @@ test.skip(
   !process.env.E2E_PORTAL_URL || !SLUG,
   "requires a live portal + a seeded event slug",
 );
+test.use({ timezoneId: "Asia/Yekaterinburg" });
+
+// Gate row 30 (D9, 004 «Amendment — 2026-10-02»): the browser runs in Asia/Yekaterinburg.
+// After hydration an online or hybrid event states its time in that zone with
+// its label; an offline event stays МСК. The server bytes stay МСК.
+async function expectedZoneLabel(page: Page): Promise<string> {
+  const kicker =
+    (await page.getByTestId("event-page-kicker").textContent()) ?? "";
+  return /Очно/u.test(kicker) ? "МСК" : "GMT+5";
+}
 
 test("020 EARS-1: a guest reads the whole event server-side, composed from the shared blocks", async ({
   page,
@@ -48,7 +58,9 @@ test("020 EARS-1: a guest reads the whole event server-side, composed from the s
   // Title + kicker + the date/time line, all in the hero.
   const heading = page.getByRole("heading", { level: 1 });
   await expect(heading).toBeVisible();
-  await expect(page.getByTestId("event-page-hero")).toContainText("МСК");
+  await expect(page.getByTestId("event-page-hero")).toContainText(
+    `(${await expectedZoneLabel(page)})`,
+  );
 
   // Specialty chips (the read model's `specialties`).
   await expect(page.getByTestId("event-page-hero-chips")).toBeVisible();
@@ -68,7 +80,9 @@ test("020 EARS-1: the right column is the sign-up card with exactly one primary 
   context,
 }) => {
   await context.clearCookies();
-  await page.goto(`${BASE}/webinars/${SLUG}`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${BASE}/webinars/${SLUG}`, {
+    waitUntil: "domcontentloaded",
+  });
 
   const aside = page.getByTestId("event-page-aside");
   await expect(aside).toBeVisible();
@@ -119,8 +133,8 @@ test("020 EARS-1: an ended event renders the same composition with NO participat
   // The server said `unavailable`; the shared card renders words, not a control.
   await expect(page.getByTestId("event-signup-cta")).toHaveCount(0);
   for (const dead of ["Участвовать", "Записаться", "Смотреть эфир"]) {
-    await expect(page.getByRole("link", { name: dead, exact: true })).toHaveCount(
-      0,
-    );
+    await expect(
+      page.getByRole("link", { name: dead, exact: true }),
+    ).toHaveCount(0);
   }
 });

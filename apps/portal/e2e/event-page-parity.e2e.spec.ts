@@ -2,12 +2,7 @@ import path from "node:path";
 
 import AxeBuilder from "@axe-core/playwright";
 import { MAIN_LANDMARK_RULES } from "@ds/e2e";
-import {
-  test,
-  expect,
-  type Locator,
-  type Page,
-} from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 
 /**
  * 020 EARS-20 (#1777) — the Academy's mount of the ONE shared event page at BOTH
@@ -110,15 +105,18 @@ async function signIn(page: Page): Promise<void> {
   const outcome = await page.evaluate<
     { status: number; body: string },
     [string, string]
-  >(async ([id, pw]) => {
-    const response = await fetch("/v1/auth/login", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ identifier: id, password: pw }),
-    });
-    return { status: response.status, body: await response.text() };
-  }, [DOCTOR_EMAIL!, DOCTOR_PASSWORD!]);
+  >(
+    async ([id, pw]) => {
+      const response = await fetch("/v1/auth/login", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ identifier: id, password: pw }),
+      });
+      return { status: response.status, body: await response.text() };
+    },
+    [DOCTOR_EMAIL!, DOCTOR_PASSWORD!],
+  );
 
   expect(
     outcome.status,
@@ -155,7 +153,8 @@ async function tabTo(page: Page, target: Locator, label: string) {
   });
   for (let step = 0; step < 200; step += 1) {
     await page.keyboard.press("Tab");
-    if (await target.evaluate((node) => node === document.activeElement)) return;
+    if (await target.evaluate((node) => node === document.activeElement))
+      return;
   }
   throw new Error(`${label} was never reached by the TAB key within 200 steps`);
 }
@@ -316,7 +315,9 @@ let caseNumber = 0;
 for (const viewport of VIEWPORTS) {
   for (const theme of THEMES) {
     test.describe(`020 EARS-20: academy at ${viewport.label} × ${theme}`, () => {
-      test.use({ viewport: { width: viewport.width, height: viewport.height } });
+      test.use({
+        viewport: { width: viewport.width, height: viewport.height },
+      });
 
       for (const spec of CASES) {
         caseNumber += 1;
@@ -344,6 +345,9 @@ for (const viewport of VIEWPORTS) {
             waitUntil: "domcontentloaded",
           });
           expect(response?.status(), "the event page is a 200").toBe(200);
+          // Gate row 29 (D8): the segment streams its skeleton first, so the
+          // page is measured once the composition has replaced it.
+          await expect(page.getByTestId("event-page-shell")).toBeVisible();
 
           // (a) the theme actually painted is the one asked for.
           const html = page.locator("html");
@@ -407,16 +411,19 @@ for (const viewport of VIEWPORTS) {
             await expect(statement, "the card states the fact").toBeVisible();
             if (spec.statement) {
               expect(
-                ((await statement.textContent()) ?? "").replace(/\s+/g, " ").trim(),
+                ((await statement.textContent()) ?? "")
+                  .replace(/\s+/g, " ")
+                  .trim(),
                 "the statement carries the server's own copy",
               ).toContain(spec.statement);
             }
           } else {
             // The single-CTA invariant: exactly ONE participation control,
             // whichever kind this host's policy resolved for this viewer.
-            expect(controls + commands, "exactly one participation control").toBe(
-              1,
-            );
+            expect(
+              controls + commands,
+              "exactly one participation control",
+            ).toBe(1);
             await expectOperable(
               page,
               commands === 1 ? oneTap : linkCta,

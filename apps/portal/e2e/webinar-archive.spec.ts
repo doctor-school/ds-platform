@@ -133,9 +133,11 @@ test.describe("014 EARS-4 public post-live event page (e2e)", () => {
     // The 004 projection still renders whole: title, school, description and the
     // speaker list are the page's substance, not a recording teaser.
     await expect(page.getByRole("heading", { level: 1 })).not.toBeEmpty();
-    await expect(page.getByText("О чём событие", { exact: true })).toBeVisible();
-    // `exact` because the sponsor disclaimer prose also contains the word
-    // «спикеры» — the assertion is about the section LABEL, not the substring.
+    await expect(
+      page.getByText("О чём событие", { exact: true }),
+    ).toBeVisible();
+    // `exact` because the assertion is about the section LABEL, not a
+    // substring other prose on the page may carry.
     await expect(page.getByText("Спикеры", { exact: true })).toBeVisible();
 
     // The exactly-one-CTA invariant holds in the ended state: no participation
@@ -409,10 +411,13 @@ test.describe("014 EARS-5 the login gate and the mounted player (e2e)", () => {
     const gate = page.getByTestId("recording-gate");
     await expect(gate).toBeVisible();
     await expect(gate).toContainText("Войдите, чтобы посмотреть запись");
-    await expect(gate).toContainText("бесплатна для врачей");
-    // The gate is an invitation, not a paywall: the recording IS free, so any
-    // price/subscription framing would be a lie about the product, not a
-    // styling choice. Asserted on the gate's own text, not the whole page.
+    // Gate row 44 (owner 2026-10-16 H3): the sub-line is the one neutral line
+    // both hosts render, and it carries no «бесплатн» (Pul is not money).
+    await expect(gate).toContainText("Вход — по почте, две минуты.");
+    await expect(gate).not.toContainText(/бесплатн/i);
+    // The gate is an invitation, not a paywall: any price/subscription framing
+    // would be a lie about the product, not a styling choice. Asserted on the
+    // gate's own text, not the whole page.
     await expect(gate).not.toContainText(/₽|подписк|оплат/i);
 
     // No player, and no source to play — the gate is not a soft wall over a
@@ -472,6 +477,10 @@ test.describe("014 EARS-5 the login gate and the mounted player (e2e)", () => {
       waitUntil: "domcontentloaded",
     });
 
+    // Gate row 29 (D8): the page now streams behind its skeleton, and the
+    // player's native listener exists only once its boundary hydrated.
+    await page.waitForLoadState("load");
+    await page.waitForLoadState("networkidle");
     await expect(page.locator("iframe")).toHaveCount(1);
     // Dispatched as a plain `Event` inside the page rather than through
     // Playwright's `dispatchEvent("error")` helper, which synthesizes its own

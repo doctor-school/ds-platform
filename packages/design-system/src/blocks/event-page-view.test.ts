@@ -10,6 +10,7 @@ import {
   eventPageDateLine,
   eventPageKicker,
   eventPageKickerParts,
+  eventPageTimeParts,
   eventProgrammeContent,
   eventSignupCardProps,
   eventSpeakerCards,
@@ -81,8 +82,27 @@ const REGISTER_CTA: ParticipationCta = {
 };
 
 describe("020 EARS-1 — shared event-page view projection", () => {
-  it("020 EARS-1: the hero date line carries date, МСК time and duration in one string", () => {
+  it("020 EARS-1: the server's hero date line (no viewer zone yet) carries date, МСК time and duration in one string", () => {
     expect(eventPageDateLine(VIEW)).toBe("28 августа, 19:00 (МСК) · 90 минут");
+  });
+
+  it("020 EARS-2: an online event's hero time reads in the viewer's zone with its label; an offline event stays МСК (gate row 30, Amendment 2026-10-02)", () => {
+    const zone = "Asia/Yekaterinburg";
+    expect(eventPageDateLine(VIEW, undefined, zone)).toBe(
+      "28 августа, 21:00 (GMT+5) · 90 минут",
+    );
+    expect(
+      eventPageDateLine({ ...VIEW, format: "hybrid" }, undefined, zone),
+    ).toBe("28 августа, 21:00 (GMT+5) · 90 минут");
+    expect(
+      eventPageDateLine({ ...VIEW, format: "offline" }, undefined, zone),
+    ).toBe("28 августа, 19:00 (МСК) · 90 минут");
+    expect(eventPageTimeParts(VIEW, zone)).toEqual({
+      time: "21:00",
+      date: "28 августа",
+      weekday: "пятница",
+      zoneLabel: "GMT+5",
+    });
   });
 
   it("020 EARS-1: the kicker joins the school with the participation format", () => {

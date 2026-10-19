@@ -1,7 +1,11 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { EventPageHero, EventPageShell } from "./event-page-shell";
+import {
+  EventPageHero,
+  EventPageShell,
+  EventPageStateFrame,
+} from "./event-page-shell";
 
 afterEach(cleanup);
 
@@ -157,5 +161,28 @@ describe("#2664 one main landmark per page", () => {
     expect(screen.queryByRole("main")).toBeNull();
     // The grid keeps its test id on the non-landmark element.
     expect(screen.getByTestId("event-page-main").tagName).toBe("DIV");
+  });
+});
+
+describe("<EventPageStateFrame>", () => {
+  it("020 EARS-19: the error and loading states sit under the navy poster band, overlapping it by 80px (canvas pageState ошибка / загрузка)", () => {
+    render(
+      <EventPageStateFrame>
+        <div data-testid="state-card" />
+      </EventPageStateFrame>,
+    );
+    const frame = screen.getByTestId("event-page-state-frame");
+    const band = frame.firstElementChild as HTMLElement;
+    expect(band).toHaveAttribute("aria-hidden", "true");
+    // The hero's own band: navy surface and its bottom room for the overlap.
+    expect(band.className).toContain("bg-hero");
+    expect(band.className).toContain("pb-32");
+    const body = screen.getByTestId("state-card").closest(".-mt-20");
+    expect(body).not.toBeNull();
+    expect(body!.className).toContain("relative");
+    expect(body!.className).toContain("z-10");
+    expect(screen.getByTestId("state-card").parentElement!.className).toContain(
+      "max-w-content",
+    );
   });
 });

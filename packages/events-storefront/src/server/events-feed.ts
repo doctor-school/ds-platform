@@ -20,7 +20,8 @@ const API_BASE = (
   process.env.API_PROXY_TARGET ?? "http://localhost:3000"
 ).replace(/\/$/, "");
 
-function relayOnly(cookie: string, name: string | undefined): string {
+/** The one `name=value` pair of the host's relay cookie in a raw `Cookie` header, or `""`. */
+export function relayOnly(cookie: string, name: string | undefined): string {
   if (name === undefined) return "";
   return (
     cookie

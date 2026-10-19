@@ -23,10 +23,7 @@ export { useResendCooldown } from "./use-resend-cooldown";
 // #1666 slice A — the ONE canonical sign-in composition both storefronts mount
 // (AGENTS.md §6 cross-front reuse). Lifted verbatim from the portal `/login` page;
 // copy, resolvers, transport, routing and the captcha element stay app glue.
-export {
-  LoginCard,
-  LOGIN_RESEND_COOLDOWN_SECONDS,
-} from "./login-card";
+export { LoginCard, LOGIN_RESEND_COOLDOWN_SECONDS } from "./login-card";
 export type {
   LoginCardProps,
   LoginCardCopy,
@@ -164,6 +161,9 @@ export type {
 } from "./event-list";
 export { EmptyState } from "./empty-state";
 export type { EmptyStateProps, EmptyStateVariant } from "./empty-state";
+// 020 EARS-19 (wave-3 gate row 29) — the event page's canvas loading skeleton.
+export { EventPageSkeleton } from "./event-page-skeleton";
+export type { EventPageSkeletonProps } from "./event-page-skeleton";
 export { FilterBar, FilterBarTextField } from "./filter-bar";
 export type {
   FilterBarProps,
@@ -214,11 +214,13 @@ export type {
 export {
   EventPageHero,
   EventPageShell,
+  EventPageStateFrame,
   EventSectionHeading,
 } from "./event-page-shell";
 export type {
   EventPageHeroProps,
   EventPageShellProps,
+  EventPageStateFrameProps,
 } from "./event-page-shell";
 export { EventSignupCard } from "./event-signup-card";
 export type {
@@ -264,6 +266,7 @@ export type {
   EventLifecyclePlate,
   EventPageCopy,
   EventPageKickerParts,
+  EventPageMoment,
   EventPageTimeParts,
   EventProgrammeContent,
 } from "./event-page-view";

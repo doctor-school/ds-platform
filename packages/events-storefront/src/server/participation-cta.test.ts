@@ -12,6 +12,9 @@ function jsonResponse(body: unknown, status = 200) {
   } as unknown as Response;
 }
 
+/** The Academy host's `contentSet.pagePath` (wave-3 gate §4.4). */
+const ACADEMY_PATH = "/v1/public/events";
+
 const GUEST = {
   cookie: "",
   userAgent: "UA",
@@ -30,7 +33,9 @@ describe("020 EARS-1 fetchParticipationCta — one read for guest and doctor", (
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(fetchParticipationCta("cardio-2026", GUEST)).resolves.toEqual({
+    await expect(
+      fetchParticipationCta("cardio-2026", GUEST, ACADEMY_PATH),
+    ).resolves.toEqual({
       kind: "register",
     });
     const [url, init] = fetchMock.mock.calls[0]!;
@@ -45,10 +50,14 @@ describe("020 EARS-1 fetchParticipationCta — one read for guest and doctor", (
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await fetchParticipationCta("cardio-2026", {
-      ...GUEST,
-      cookie: "__Host-ds_session=s",
-    });
+    await fetchParticipationCta(
+      "cardio-2026",
+      {
+        ...GUEST,
+        cookie: "__Host-ds_session=s",
+      },
+      ACADEMY_PATH,
+    );
     expect(fetchMock.mock.calls[0]![1]?.headers).toMatchObject({
       cookie: "__Host-ds_session=s",
       "user-agent": "UA",
@@ -60,15 +69,17 @@ describe("020 EARS-1 fetchParticipationCta — one read for guest and doctor", (
       "fetch",
       vi.fn(async () => jsonResponse({}, 404)),
     );
-    await expect(fetchParticipationCta("draft", GUEST)).resolves.toBeNull();
+    await expect(
+      fetchParticipationCta("draft", GUEST, ACADEMY_PATH),
+    ).resolves.toBeNull();
 
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => jsonResponse({}, 503)),
     );
-    await expect(fetchParticipationCta("x", GUEST)).rejects.toThrow(
-      /participation cta fetch failed \(503\)/,
-    );
+    await expect(
+      fetchParticipationCta("x", GUEST, ACADEMY_PATH),
+    ).rejects.toThrow(/participation cta fetch failed \(503\)/);
   });
 });
 

@@ -66,7 +66,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
      * carries a published recording — the 014 post-live end state, seeded
      * directly as `my-events.e2e-spec.ts` does.
      */
-    async function insertArchivedEvent(): Promise<{ id: string; slug: string }> {
+    async function insertArchivedEvent(): Promise<{
+      id: string;
+      slug: string;
+    }> {
       const slug = `a-1608-${randomUUID()}`;
       const { rows } = await pool.query<{ id: string }>(
         `INSERT INTO events
@@ -197,7 +200,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await deleteEventFixture(pool, id);
       const expertIds = createdExpertIds.splice(0);
       for (const id of expertIds)
-        await pool.query("DELETE FROM event_experts WHERE expert_id = $1", [id]);
+        await pool.query("DELETE FROM event_experts WHERE expert_id = $1", [
+          id,
+        ]);
       await deleteExpertFixtures(pool, expertIds);
     });
 
@@ -306,7 +311,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "apps/api/src/taxonomy/speaker-projection.service.ts",
         "apps/api/src/taxonomy/speaker-projection.repository.ts",
         "apps/api/src/events/events.service.ts",
-        "apps/portal/app/webinars/[slug]/page.tsx",
+        "apps/portal/app/webinars/[slug]/(event-page)/page.tsx",
         "packages/design-system/src/blocks/event-page-view.ts",
       ];
       // The tokens a fallback would HAVE to name: the dropped table, a legacy

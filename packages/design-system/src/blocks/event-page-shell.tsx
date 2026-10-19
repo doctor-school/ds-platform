@@ -171,6 +171,39 @@ export function EventPageShell({
   );
 }
 
+export interface EventPageStateFrameProps {
+  /** The state card — the error card or the loading skeleton. */
+  children?: React.ReactNode;
+  className?: string;
+}
+
+/**
+ * 020 EARS-19 (wave-3 gate rows 28–29) — the frame of the page's error and
+ * loading states: the canvas draws both cards under the navy poster band with
+ * the body's -80px overlap (`design-source/event-page.dc.html` `pageState:
+ * ошибка` / `загрузка`). The band is the hero's own surface and bottom room,
+ * left empty: in these states the page has no event to put in it yet.
+ */
+export function EventPageStateFrame({
+  children,
+  className,
+}: EventPageStateFrameProps) {
+  return (
+    <div
+      data-testid="event-page-state-frame"
+      className={cn("bg-background", className)}
+    >
+      <div
+        aria-hidden="true"
+        className="bg-hero px-4 pb-32 pt-6 layout:px-gutter layout:pt-9"
+      />
+      <div className="relative z-10 -mt-20 px-4 pb-16 layout:px-gutter layout:pb-24">
+        <div className="mx-auto max-w-content">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * The canvas's section rule — an uppercase micro-label followed by a 2px
  * hairline that runs to the column edge. Shared page chrome for the left-flow

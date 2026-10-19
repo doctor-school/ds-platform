@@ -7,7 +7,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./page": "./src/ui/event-page.tsx",
-    "./host-config": "./src/host-config.ts"
+    "./host-config": "./src/host-config.ts",
+    "./error": "./src/ui/event-page-error.tsx",
+    "./skeleton": "./src/ui/event-page-skeleton.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

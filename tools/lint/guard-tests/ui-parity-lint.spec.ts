@@ -85,7 +85,7 @@ const hiddenRelabelPaths = [
   "apps/admin/components/lifecycle-actions.tsx",
   "apps/admin/messages/ru.json",
   "apps/portal/app/account/events/page.tsx",
-  "apps/portal/app/webinars/[slug]/page.tsx",
+  "apps/portal/app/webinars/[slug]/(event-page)/page.tsx",
   "apps/portal/app/webinars/[slug]/room/page.tsx",
   "apps/portal/messages/ru.json",
 ];

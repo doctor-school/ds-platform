@@ -1,5 +1,6 @@
 import { adaptDoctorEventsFeed } from "@ds/events-storefront/adapters";
 import type { EventsStorefrontHostConfig } from "@ds/events-storefront/host-config";
+import type { EventPageHostConfig } from "@ds/event-page/host-config";
 
 /**
  * What the doctor storefront states about itself so the shared events pages can
@@ -40,3 +41,27 @@ export const DOCTOR_EVENTS_STOREFRONT = {
     accountEvents: "/account/events",
   },
 } satisfies EventsStorefrontHostConfig;
+
+/**
+ * What the doctor storefront states about itself so the ONE event page
+ * (`@ds/event-page`) can serve it at `/events/:slug` (#2072, epic #2020 wave 3;
+ * gate §4.4). DATA only: the storefront read path, the one cookie the page read
+ * relays (017's remembered specialty, gate D4), the routes this host serves and
+ * its breadcrumb word. Every rule and every other sentence lives in
+ * `@ds/event-page`.
+ */
+export const DOCTOR_EVENT_PAGE = {
+  contentSet: {
+    pagePath: "/v1/storefront/doctor/events",
+    relayCookie: DOCTOR_EVENTS_STOREFRONT.contentSet.relayCookie,
+  },
+  routes: {
+    listing: DOCTOR_EVENTS_STOREFRONT.routes.listing,
+    eventPage: DOCTOR_EVENTS_STOREFRONT.routes.eventPage,
+    login: DOCTOR_EVENTS_STOREFRONT.routes.login,
+    register: "/register",
+  },
+  copy: {
+    breadcrumb: "События",
+  },
+} satisfies EventPageHostConfig;

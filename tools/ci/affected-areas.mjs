@@ -52,7 +52,7 @@ export const HEAVY_JOBS = {
     packages: ["@ds/api"],
     extraInputs: [
       // apps/api/test/taxonomy/archived-speakers.e2e-spec.ts scans these sources.
-      /^apps\/portal\/app\/webinars\/\[slug\]\/page\.tsx$/,
+      /^apps\/portal\/app\/webinars\/\[slug\]\/\(event-page\)\/page\.tsx$/,
       /^packages\/design-system\/src\/blocks\/event-page-view\.ts$/,
       // apps/api/test/events/hidden-rename.e2e-spec.ts reads the SDK snapshot.
       /^packages\/api-client\/openapi\.snapshot\.json$/,

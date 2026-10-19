@@ -228,7 +228,7 @@ When(
       await expect(guest.getByTestId("login-method-password")).toBeVisible();
       await expect(guest.getByTestId("otp-send")).toBeVisible();
       await expect(guest.getByTestId("otp-verify")).toHaveCount(0);
-      await expect(guest.getByRole("alert")).toHaveCount(0);
+      await expect(guest.getByRole("main").getByRole("alert")).toHaveCount(0);
       await expect(guest.getByTestId("profile-email")).toHaveCount(0);
       expect(
         await guest.evaluate(

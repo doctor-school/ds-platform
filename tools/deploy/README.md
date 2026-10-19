@@ -52,15 +52,15 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    **Recorded images (#2981).** Before anything touches a box, the operator's
    `gh` resolves the `runtime-images.yml` run for the target SHA and reads its
    `images-<sha>.json` manifest (`lib/registry.mjs`, shared with the stage
-   slots). A release accepts only a `main` build: a `push`/dispatch run on
-   `main`, manifest `ref: "main"`, five `main`-namespace digest references for
-   exactly that SHA. No run, a run still in progress, a failed run, an expired
+   slots). A release accepts only a release build: a `push`/dispatch run on
+   `main` (manifest `ref: "main"`) or on the `--ref` target's
+   `hotfix/<N>-<slug>` branch (manifest `ref: "hotfix/<N>-<slug>"`), five
+   release-namespace digest references (never `pr/`) for exactly that SHA. No run, a run still in progress, a failed run, an expired
    artifact or a bad manifest refuses with its cause — there is no build
    fallback and no flag to build. The same step checks (read-only,
    `sudo test -s`) that api-prod holds the pull token
    `/etc/ds-platform/registry-pull-token`, and refuses with the provisioning
-   pointer if it does not. A `--ref` hotfix commit is not a `main` push, so it
-   has no `main` manifest and is refused here.
+   pointer if it does not. A `pr/<N>` manifest never reaches production.
 2. **Ship** — `git archive <sha>` streamed over SSH to both boxes (compose files
    and configs; no deploy key). Streams are piped in-process → Windows-safe.
 3. **data-prod** — PostgreSQL guard before shipping and before persistence-plane
@@ -202,7 +202,7 @@ The **deployed SHA is queryable over HTTP**: `GET /v1/health` → `{"version":�
 (from the api's `DEPLOY_SHA` env). `--rollback` `up -d`s a prior image tag with
 **no** build / migrate / DB change. The tag is normally still on the box
 (retention keeps 3); a target older than that is pulled from **its** recorded
-`main` manifest exactly as a deploy pulls (same token check, digest proof and
+`main`/`hotfix/*` manifest exactly as a deploy pulls (same token check, digest proof and
 logout), and a target without one refuses with that cause.
 
 ### Hotfix deploy (`--ref <sha>`)
@@ -212,11 +212,14 @@ cannot be shipped without everything else merged since. When prod needs a single
 already-merged fix and the rest of `main` is not ready, `--ref <sha>` ships
 exactly that commit instead (#1881, release-cycle spec §10.11).
 
-**Currently refused at the recorded-images pre-flight (#2981).** api-prod builds
-nothing and accepts only digests a `main` push of `runtime-images.yml` recorded; a
-`hotfix/` commit is not a `main` push, so it has no `main` manifest and `--ref`
-stops before any box is touched, naming the missing run. Until a hotfix image
-source is decided (tracked on #2981), an urgent fix ships on the normal train.
+**Images come from the hotfix branch's own `runtime-images` run (#2981).** api-prod
+builds nothing; `runtime-images.yml` also runs on every push to `hotfix/**`, pushes
+the five images under the release namespace (no `pr/` prefix) and records
+`images-<sha>.json` with `ref: "hotfix/<N>-<slug>"` (a branch name of any other
+shape fails that run). The release pre-flight — and the stage `main` check, which
+converges slot `main` to the same target — accepts that manifest for exactly the
+target SHA. The manifest proves the images; the `--ref` invariants below still
+prove the cherry-pick ancestry, independently.
 
 The target is a `hotfix/<N>-<slug>` branch cut FROM the deployed SHA carrying
 cherry-picks of already-merged squash commits — never a feature branch. On top of
@@ -244,7 +247,10 @@ seams + `hotfix-ref.test.mjs`):
 
 CI for a hotfix branch comes from `gh workflow run ci.yml --ref hotfix/<N>-<slug>`
 (the `workflow_dispatch` trigger takes the same non-PR path as `push: main`); wait
-for that run to go green before deploying. Ship/banner lines read
+for that run to go green before deploying. Pushing the branch starts its
+`runtime-images` run on its own; wait for it to succeed too (`gh run list
+--workflow runtime-images.yml --branch hotfix/<N>-<slug> --limit 1`) — until it
+has, the pre-flight refuses with «retry when it completes». Ship/banner lines read
 `hotfix @ <sha> (base <deployed>)`, never `origin/main`, and the release is cut
 with a `— Hotfix` title plus the cherry-picked PR list.
 

@@ -1747,6 +1747,13 @@ test("a `main` manifest for the converged SHA is accepted for slot main and for 
   assert.equal(validateImageManifest(manifestFor(), { slot: "pr-7", sha: SHA }).ref, "main");
 });
 
+test("slot main accepts a `hotfix/<N>-<slug>` manifest (the `--ref` release pre-flight converges it); a preview does not", () => {
+  const hotfix = manifestFor({ ref: "hotfix/2981-pull-token" });
+  assert.equal(validateImageManifest(hotfix, { slot: "main", sha: SHA }).ref, "hotfix/2981-pull-token");
+  assert.throws(() => validateImageManifest(hotfix, { slot: "pr-7", sha: SHA }), SlotError);
+  assert.throws(() => validateImageManifest(manifestFor({ ref: "hotfix/pull-token" }), { slot: "main", sha: SHA }), SlotError);
+});
+
 test("a preview accepts its own `pr/<N>` manifest; slot main never accepts a PR's digests", () => {
   const pr = manifestFor({ ref: "pr/7", images: { ...PR_IMAGES } });
   assert.deepEqual(validateImageManifest(pr, { slot: "pr-7", sha: SHA }).images, PR_IMAGES);

@@ -41,7 +41,7 @@
 //   ship        git archive <sha> → api-prod + data-prod over ssh (compose + configs)
 //   data-prod   verify cluster/artifacts → up immutable images (no build/pull)
 //   checkpoint  pgbackrest pre-migrate incr backup  (DSO-129 — BEFORE migrate)
-//   api-prod    pull the recorded `main` digests (resolved in pre-flight, #2981)
+//   api-prod    pull the recorded `main`/`hotfix/*` digests (resolved in pre-flight, #2981)
 //               as ds-<image>:<sha> → boot-verify → migrate → up -d (verify set
 //               derived from the TARGET tree's compose, #1896); nothing is built
 //   config      compare running bind mounts; restart only stale consumers (#1175)
@@ -117,6 +117,7 @@ import {
 import {
   IMAGE_REGISTRY,
   RECORDED_IMAGE_NAMES,
+  RELEASE_MANIFEST_REFS,
   assertImageDigests,
   imageDigestScript,
   pullRecordedImagesScript,
@@ -157,15 +158,18 @@ const IMAGE_RETENTION = 3;
 const API_COMPOSE = `${REMOTE_TREE}/infra/deploy/compose/api-prod`;
 const DATA_COMPOSE = `${REMOTE_TREE}/infra/deploy/compose/data-prod`;
 
-// --- #2981: the recorded `main` images --------------------------------------
+// --- #2981: the recorded release images ------------------------------------
 // api-prod builds nothing. A release runs only the digests `runtime-images.yml`
-// recorded for a push to `main` (spec 2026-10-16-release-pipeline-off-workstation
-// §3 item 1): resolved on the operator side in pre-flight, pulled on the box by
-// digest, tagged `ds-<image>:<sha>`, and proven by RepoDigests before anything
-// boots. The shared mechanics live in ./lib/registry.mjs (the stage slots use the
-// same ones).
+// recorded for a push to `main` or to a `hotfix/<N>-<slug>` branch (the `--ref`
+// path) — spec 2026-10-16-release-pipeline-off-workstation §3 item 1; `pr/`
+// digests never reach production. Resolved on the operator side in pre-flight,
+// pulled on the box by digest, tagged `ds-<image>:<sha>`, and proven by
+// RepoDigests before anything boots. The shared mechanics live in
+// ./lib/registry.mjs (the stage slots use the same ones). The manifest proves the
+// images only; the hotfix pre-flight (./hotfix-ref.mjs) still proves the
+// cherry-pick ancestry on its own.
 export const PROD_MANIFEST_POLICY = Object.freeze({
-  acceptRefs: Object.freeze(["main"]),
+  acceptRefs: RELEASE_MANIFEST_REFS,
   consumer: "a production release",
   mainOnly: true,
   purpose: "release",
@@ -515,7 +519,7 @@ async function preflight(hotfixRef = null) {
   //    range, with no extra wiring.
   await assertReleaseGate(target);
 
-  // 5b. #2981: the recorded `main` digests for the target and the box's pull
+  // 5b. #2981: the recorded release (`main`/`hotfix/*`) digests for the target and the box's pull
   //     token, resolved BEFORE anything touches a box — a missing / running /
   //     failed runtime-images run or a bad manifest refuses here with its cause.
   //     There is no build fallback: api-prod has no way to build any more.
@@ -540,11 +544,12 @@ async function resolveProdImages(sha) {
   } catch (e) {
     die(
       `recorded images for ${sha.slice(0, 12)}: ${e.message}\n` +
-        `  api-prod pulls only the digests a \`main\` push of runtime-images.yml recorded;` +
+        `  api-prod pulls only the digests a \`main\` or \`hotfix/<N>-<slug>\` push of` +
+        ` runtime-images.yml recorded (a hotfix: push the branch, wait for its run);` +
         ` nothing is built on the box.`,
     );
   }
-  ok(`recorded \`main\` images for ${sha.slice(0, 12)} (run ${resolved.run.url})`, t);
+  ok(`recorded \`${resolved.ref}\` images for ${sha.slice(0, 12)} (run ${resolved.run.url})`, t);
   const token = pullTokenVerdict(await sshCapture(API_PROD, pullTokenProbeScript()), {
     host: API_PROD,
   });
@@ -1650,9 +1655,9 @@ async function rollback(shaArg) {
   }
 
   // The target images are normally still on the box (retention keeps the last
-  // 3). A target older than that is pulled from ITS recorded `main` manifest
+  // 3). A target older than that is pulled from ITS recorded release manifest
   // (#2981, spec rollback floor) — never rebuilt; a target without one (no
-  // `main` runtime-images run, expired artifact) refuses with that cause.
+  // `main`/`hotfix/*` runtime-images run, expired artifact) refuses with that cause.
   const present = await sshCapture(
     API_PROD,
     `for img in ${services.map((svc) => `${svc.image}:${sha}`).join(" ")}; do

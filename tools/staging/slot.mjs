@@ -46,6 +46,7 @@ import {
   imageDigestScript as registryImageDigestScript,
   localImageTag,
   pullAndTagArgv,
+  RELEASE_MANIFEST_REFS,
   registryLogoutArgv,
   repoDigestsMatch,
   repoDigestsProbeArgv,
@@ -698,11 +699,15 @@ function asSlotError(fn) {
 
 const assertImageRefs = (images, options) => asSlotError(() => registryAssertImageRefs(images, options));
 
-/** Slot `main` runs only a `main` build; a preview its own `pr/<N>` build or a `main` one. */
+/**
+ * Slot `main` runs only what a release may run — a `main` or `hotfix/<N>-<slug>`
+ * build (the release pre-flight converges it to a `--ref` hotfix target too); a
+ * preview its own `pr/<N>` build or a `main` one.
+ */
 function slotManifestPolicy(slot) {
   assertSlotName(slot);
   return {
-    acceptRefs: slot === "main" ? ["main"] : ["main", `pr/${slot.slice("pr-".length)}`],
+    acceptRefs: slot === "main" ? RELEASE_MANIFEST_REFS : ["main", `pr/${slot.slice("pr-".length)}`],
     consumer: `slot ${slot}`,
     mainOnly: slot === "main",
     purpose: "stage",

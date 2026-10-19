@@ -88,7 +88,7 @@ Owner-confirmed 2026-10-16 (chat): «Да, всё так.» The design is measur
    - On merge to `main`, a GitHub-hosted runner builds each first-party image once, tags it with the full commit SHA and pushes it to `ds-platform.registry.twcstorage.ru`.
    - The build job records each image's digest for that SHA as a job output and an uploaded manifest.
    - Stage and prod pull the **same** image by that recorded digest. A release never re-resolves a tag.
-   - PR-head images go under a separate `pr/` repository prefix, and a release accepts only digests recorded by a `main` build.
+   - PR-head images go under a separate `pr/` repository prefix, and a release accepts only digests recorded by a `main` or `hotfix/*` build; `pr/` digests never reach production.
    - No box builds an image.
    - Images are environment-agnostic: a build bakes no per-environment value. Per-environment values (the SmartCaptcha site key `SMARTCAPTCHA_SITE_KEY`, the staging-contour flag `CONTOUR_MANIFEST`) are runtime env. Only a build-time value identical in every environment stays a build arg — `API_PROXY_TARGET=http://api:3000`, because Next freezes `rewrites()` at build (DSO-100).
 2. **Stage `main` converges automatically.** (P4, P7)

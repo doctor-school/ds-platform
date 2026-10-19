@@ -207,11 +207,12 @@ Timeweb Cloud container registry (#2981, tech spec
     with no recorded images is not staged (`tools/staging/README.md` → «`slot.mjs` in
     one paragraph»).
   - **Production** — `pnpm deploy:prod` resolves the manifest in its pre-flight and
-    accepts only a `main` build (`ref: "main"`, `main`-namespace digests, the exact
-    release SHA); it also checks that `/etc/ds-platform/registry-pull-token` exists on
+    accepts only a release build (`ref: "main"`, or `ref: "hotfix/<N>-<slug>"` for a
+    `--ref` hotfix — `runtime-images.yml` also runs on `hotfix/**` pushes; release-namespace
+    digests, never `pr/`; the exact release SHA); it also checks that `/etc/ds-platform/registry-pull-token` exists on
     ds-api-prod and refuses with this section as the pointer if not. The api-prod
     compose has no `build:` and tags every `ds-*` image `${DEPLOY_SHA:?}`; an app-only
-    rollback whose target tags were pruned pulls that SHA's recorded `main` digests
+    rollback whose target tags were pruned pulls that SHA's recorded release digests
     (`tools/deploy/README.md` → steps 1 and 5).
   - **Provisioning the pull token on a box** is a once-per-box step by the lead: the
     read-only pull token goes to `/etc/ds-platform/registry-pull-token` as `root:root`
@@ -250,7 +251,7 @@ Pipeline (`tools/deploy/prod.mjs`), fail-closed and stops at the first red step:
 4. **Checkpoint (DSO-129)** — a pgbackrest **pre-migrate `incr` backup** (the
    same `backup.sh` cron runs) **before** any migration, so a restore point
    exists at the pre-migrate state. See [Prod migration rule](#prod-migration-rule--expandcontract).
-5. **api-prod** — `pull` (the recorded `main` digests, see «Container registry»;
+5. **api-prod** — `pull` (the recorded `main`/`hotfix/*` digests, see «Container registry»;
    nothing is built) → pre-swap boot verify → `migrate` (idempotent drizzle-kit,
    the pulled `ds-api-migrate:<sha>`) → `up -d`. Images are SHA-tagged
    **`ds-api:<sha>` / `ds-api-migrate:<sha>` / `ds-portal:<sha>` / `ds-admin:<sha>` /

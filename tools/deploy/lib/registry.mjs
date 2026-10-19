@@ -58,8 +58,9 @@ export function shellQuote(text) {
 
 /**
  * The five recorded references, each a digest reference of ITS OWN image. `pr` says
- * which namespace they must all come from: `true` = `pr/`, `false` = the `main`
- * namespace, `undefined` = either (but one for all five).
+ * which namespace they must all come from: `true` = `pr/`, `false` = the release
+ * namespace (no prefix: `main` and `hotfix/*` pushes), `undefined` = either (but one
+ * for all five).
  */
 export function assertImageRefs(images, { pr } = {}) {
   if (!images || typeof images !== "object" || Array.isArray(images)) {
@@ -82,21 +83,34 @@ export function assertImageRefs(images, { pr } = {}) {
     }
     namespaces.add(Boolean(match[1]));
   }
-  if (namespaces.size > 1) throw new RegistryError("recorded image set mixes `main` and `pr/` references");
+  if (namespaces.size > 1) throw new RegistryError("recorded image set mixes release and `pr/` references");
   const isPr = [...namespaces][0];
   if (pr !== undefined && pr !== isPr) {
     throw new RegistryError(
-      `recorded image set is in the ${isPr ? "`pr/`" : "`main`"} namespace, but its manifest ` +
-        `ref says ${pr ? "a PR" : "`main`"}`,
+      `recorded image set is in the ${isPr ? "`pr/`" : "release"} namespace, but its manifest ` +
+        `ref says ${pr ? "a PR" : "a release branch"}`,
     );
   }
   return images;
 }
 
 /**
+ * The refs whose digests may run a production release — and the stage `main` slot
+ * the release pre-flight converges to that same target: a `main` push and a
+ * `hotfix/<N>-<slug>` push (the `pnpm deploy:prod --ref` target). Both live in the
+ * release namespace; a `pr/<N>` build never does.
+ */
+export const HOTFIX_MANIFEST_REF_RE = /^hotfix\/[0-9]+-[a-z0-9-]+$/;
+export const RELEASE_MANIFEST_REFS = Object.freeze(["main", HOTFIX_MANIFEST_REF_RE]);
+
+const describeRef = (want) => (want instanceof RegExp ? `\`${want.source}\`` : `\`${want}\``);
+
+/**
  * Validates `images-<sha>.json` for `sha`. `acceptRefs` lists the manifest refs the
- * consumer runs (`["main"]` for a release and for slot `main`); `consumer` names it
- * in the refusal. The references must sit in the namespace the ref says.
+ * consumer runs — exact strings or anchored RegExps (`["main"]` for slot `main`;
+ * a release adds the `hotfix/<N>-<slug>` shape); `consumer` names it in the refusal.
+ * The references must sit in the namespace the ref says: `pr/` for a `pr/<N>` ref,
+ * the release namespace (no prefix) for every other ref.
  */
 export function validateImageManifest(manifest, { sha, acceptRefs, consumer }) {
   const short = assertFullSha(sha);
@@ -112,13 +126,14 @@ export function validateImageManifest(manifest, { sha, acceptRefs, consumer }) {
     );
   }
   const ref = manifest.ref;
-  if (!acceptRefs.includes(ref)) {
+  const accepted = (want) => (want instanceof RegExp ? want.test(ref) : want === ref);
+  if (typeof ref !== "string" || !acceptRefs.some(accepted)) {
     throw new RegistryError(
-      `${consumer} accepts only ${acceptRefs.map((r) => `\`${r}\``).join(" or ")} manifests; ` +
+      `${consumer} accepts only ${acceptRefs.map(describeRef).join(" or ")} manifests; ` +
         `the manifest for ${short} is ${JSON.stringify(ref)}`,
     );
   }
-  const images = assertImageRefs(manifest.images, { pr: ref !== "main" });
+  const images = assertImageRefs(manifest.images, { pr: ref.startsWith("pr/") });
   return { ref, images: { ...images } };
 }
 
@@ -126,8 +141,9 @@ export function validateImageManifest(manifest, { sha, acceptRefs, consumer }) {
  * The `runtime-images.yml` run whose artifact is read — or a refusal.
  *
  * Fail closed: no run, a run still going or a failed run is a stop with the cause,
- * NEVER a fallback build — no box builds any more. `mainOnly` keeps only `main`
- * builds (push / dispatch); `purpose` is the verb of the refusal («stage», «release»).
+ * NEVER a fallback build — no box builds any more. `mainOnly` keeps only branch
+ * builds (push / dispatch — `main`, or a `hotfix/*` branch; the manifest ref decides
+ * which the consumer accepts); `purpose` is the verb of the refusal («stage», «release»).
  */
 export function selectImagesRun(runs, { sha, mainOnly, purpose }) {
   assertFullSha(sha);
@@ -147,10 +163,10 @@ export function selectImagesRun(runs, { sha, mainOnly, purpose }) {
     );
   }
   throw new RegistryError(
-    `no images recorded for ${sha}: there is no ${mainOnly ? "`main` " : ""}` +
+    `no images recorded for ${sha}: there is no ${mainOnly ? "branch-push " : ""}` +
       `${IMAGES_WORKFLOW} run for this commit (${
         mainOnly
-          ? "only a push to `main` records the digests this consumer accepts"
+          ? "only a branch push (`main`, or a `hotfix/*` branch for a release) records the digests this consumer accepts"
           : "a PR head that changes no image input does not run it"
       }) — nothing to ${purpose}`,
   );

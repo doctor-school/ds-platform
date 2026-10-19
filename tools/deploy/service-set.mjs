@@ -37,7 +37,8 @@ export const BOOT_PROBE_EXCLUDED = Object.freeze(["api"]);
 
 /**
  * `image: ds-<repo>:${DEPLOY_SHA}` / `${DEPLOY_SHA:-local}` / `${DEPLOY_SHA:?}` — the
- * deploy-tagged shape. `:?` is the slot compose's: it pulls, so it has no `:local`.
+ * deploy-tagged shape. `:?` is what the pulling composes use (stage slots and api-prod,
+ * #2981): an image that is only ever pulled has no `:local` fallback.
  */
 const SHA_TAGGED_IMAGE_RE = /^(ds-[a-z0-9][a-z0-9-]*):\$\{DEPLOY_SHA(?::[-?][^}]*)?\}$/;
 

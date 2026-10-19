@@ -71,6 +71,37 @@ test("2981: a release refuses a PR manifest, another SHA's manifest, and `pr/` r
   assert.throws(() => validateProdImageManifest(null, SHA), RegistryError);
 });
 
+test("2981: a `--ref` hotfix release accepts the `hotfix/<N>-<slug>` manifest recorded for its SHA", () => {
+  const resolved = validateProdImageManifest(manifestFor({ ref: "hotfix/2981-pull-token" }), SHA);
+  assert.equal(resolved.ref, "hotfix/2981-pull-token");
+  assert.deepEqual(resolved.images, IMAGES);
+  // The hotfix manifest proves the images; its references stay in the release
+  // namespace — `pr/` references under a hotfix ref are refused.
+  assert.throws(
+    () => validateProdImageManifest(manifestFor({ ref: "hotfix/2981-pull-token", images: { ...PR_IMAGES } }), SHA),
+    RegistryError,
+  );
+});
+
+test("2981: a release refuses a hotfix ref of the wrong shape", () => {
+  for (const ref of [
+    "hotfix/pull-token",
+    "hotfix/2981",
+    "hotfix/2981-Pull_Token",
+    "hotfix/2981-x/y",
+    "refs/heads/hotfix/2981-x",
+    "xhotfix/2981-x",
+    "dispatch",
+    "pr/2981",
+  ]) {
+    assert.throws(
+      () => validateProdImageManifest(manifestFor({ ref }), SHA),
+      (err) => err instanceof RegistryError && /a production release accepts only `main` or /.test(err.message),
+      ref,
+    );
+  }
+});
+
 const RUN_URL = "https://github.com/o/r/actions/runs/1";
 const run = (overrides = {}) => ({
   databaseId: 1,

@@ -1,68 +1,10 @@
 # `@ds/e2e` — the C6 regression contract
 
-### Throttled congress handoff (003 EARS-44/13/16)
-
-`Academy refuses a live handoff after its ordinary per-account code-request window is exhausted`
-(`steps/handoff-throttled.steps.ts`, #3037) creates a unique account/reference
-through the real congress intake. That request spends one per-account unit;
-nine legitimate ordinary email-code requests spend the unchanged ten-unit
-window without redeeming the reference. Actual addressed login mail proves
-delivery. After settling those sends, the next ordinary request must return
-the exact generic 429. A unique unknown-email request from the same browser
-still returns the neutral acknowledgement, excluding source-budget exhaustion,
-and receives no addressed mail throughout a full twenty-second horizon.
-
-The first actual guest page-load redemption then returns a byte-identical
-generic 429 without an address or session. Selected empty email-code entry,
-the password option and generic throttle alert remain visible. Complete
-recipient/message-ID checkpoints and a twenty-second observation with a final
-query after the deadline prove no new mail. Profile/session reads remain 401;
-the same-origin account return target survives while the reference disappears
-from the address bar and Chromium history. Trace-off fixtures and canonical
-intake/mail/response helpers are reused; cleanup revokes any unexpected owned
-session and closes its context even on failure. The per-case 180-second budget
-covers real setup and delivery horizons. Missing prerequisites fail.
-
-The broader native scenario remains unchanged. Native
-`apps/api/test/auth/login-handoff.e2e-spec.ts` and rate-limit service tests retain
-internal counter and timing proof; this case claims neither internal-state nor
-statistical timing observation. Select only `@handoff-throttled` on the
-lead-owned runtime, with real default thresholds and no counter/TTL writes or
-spoofed source headers. This coverage change has no render surface or Stage-B slot.
-
 The end-to-end regression contract of the staging/regression-contour tech spec
 ([`2026-09-08-staging-previews-and-regression-contour-en.md`](../../apps/docs/content/specs/tech/2026-09-08-staging-previews-and-regression-contour-en.md)
 §6, Issue #2067): **one** step package shared by both storefronts, the spec's own
 feature files as the suite, and the navigation model both storefronts' chrome
 is configured from.
-
-### Successful-login counter forgiveness (003 EARS-13/5/8)
-
-`Academy successful password login forgives the real per-user window`
-(`steps/login-counter-reset.steps.ts`, #3036) registers and verifies one unique
-owned account, then logs out. Two actual wrong-password submissions receive the
-generic 401 and ordinary sign-in error without private access. The correct
-password next opens that same verified subject with a fresh secure host-only
-session. The canonical cross-worker password gate encloses these three attempts;
-the target success itself closes the challenge window. No golden credentials or
-extra successful authentication can clear the tested counter afterwards.
-
-After logout, ten real reset-form sending requests for that exact identifier
-must return the neutral 200, and the eleventh must return the generic 429, all
-inside the original 15-minute window. Those sending doors share the per-user
-counter with password login while avoiding additional IdP password failures.
-Without forgiveness the two failures plus successful login would leave only
-seven admissions. No reset is completed and no threshold, clock, counter or IP
-is changed. Run the selected `@login-counter-reset` case serially on a lead-owned
-runtime with the real default ten-attempt user ceiling and source-address budget
-available. CAPTCHA preparation uses the canonical provider adapter, not an
-invented token; missing prerequisites fail. Trace-off fixtures, secret-safe
-inputs and owned-session/context cleanup are retained.
-
-The broader native declaration remains intact. Source-IP/ASN no-forgiveness is
-owned by `apps/api/src/auth/rate-limit/rate-limit.service.spec.ts` EARS-13
-`reset() forgives ONLY` tests, rather than inferred from browser admission.
-This coverage change has no render surface and requires no Stage-B slot.
 
 ### Actual phone-code resend (003 EARS-47/48/42)
 

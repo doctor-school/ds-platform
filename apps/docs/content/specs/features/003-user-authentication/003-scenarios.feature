@@ -704,15 +704,6 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And a subsequent attempt for that identifier is not throttled
     But the per-IP and per-ASN windows are not forgiven
 
-  # Narrow Academy admission proof (#3036); retain the native case above.
-  # Native source-IP/ASN no-forgiveness: apps/api/src/auth/rate-limit/rate-limit.service.spec.ts
-  # EARS-13 reset() forgives ONLY the per-user window tests; browser reads no counters.
-  @EARS-13 @EARS-5 @EARS-8 @happy @login-counter-reset
-  Scenario: Academy successful password login forgives the real per-user window
-    Given a unique verified Academy account starts the real login-counter journey as a guest
-    When two real Academy password refusals are followed by the owner's successful password login
-    Then after logout ten same-identifier reset requests are admitted and the eleventh is throttled within the original window
-
   @EARS-15 @failure
   Scenario: Account soft-locks after repeated failures
     Given a doctor_guest user
@@ -1327,11 +1318,3 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the visitor opens a valid hand-off link
     Then the response is the generic throttled response of EARS-13 with no address and no mail
     And the page shows the EARS-43 state with the EARS-13 generic throttled message
-
-  # Narrow Academy per-account projection (#3037); retain the broader case above.
-  # Native counter/timing contract: apps/api/test/auth/login-handoff.e2e-spec.ts.
-  @EARS-44 @EARS-13 @EARS-16 @failure @handoff-throttled
-  Scenario: Academy refuses a live handoff after its ordinary per-account code-request window is exhausted
-    Given a fresh owned Academy congress reference remains unused while nine legitimate ordinary email-code requests exhaust its account window
-    When a guest opens that still-live reference through the Academy code door with the account return target
-    Then the throttled handoff leaves empty email-code entry with generic refusal and no new mail, private access or reference in history

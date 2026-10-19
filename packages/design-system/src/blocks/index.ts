@@ -214,11 +214,13 @@ export type {
 export {
   EventPageHero,
   EventPageShell,
+  EventPageStateFrame,
   EventSectionHeading,
 } from "./event-page-shell";
 export type {
   EventPageHeroProps,
   EventPageShellProps,
+  EventPageStateFrameProps,
 } from "./event-page-shell";
 export { EventSignupCard } from "./event-signup-card";
 export type {

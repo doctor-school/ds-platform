@@ -12,4 +12,10 @@ describe("020 EARS-19 (wave-3 gate row 29) EventPageSkeleton", () => {
     // Canvas L42–L54: 3 blocks in the card, 4 reading lines, 2 aside blocks.
     expect(region.querySelectorAll('[aria-hidden="true"]')).toHaveLength(9);
   });
+
+  it("EARS-19: the skeleton sits under the poster band, in the canvas's -80px overlap", () => {
+    render(<EventPageSkeleton label="Загружаем событие" />);
+    const frame = screen.getByTestId("event-page-state-frame");
+    expect(frame).toContainElement(screen.getByRole("status"));
+  });
 });

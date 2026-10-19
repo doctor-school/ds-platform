@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { EventPageStateFrame } from "@ds/design-system/blocks";
 import { Button } from "@ds/design-system/button";
 
 import { EVENT_PAGE_COPY as COPY } from "../copy/event-page-copy";
@@ -9,7 +10,8 @@ import { EVENT_PAGE_COPY as COPY } from "../copy/event-page-copy";
 /**
  * 020 EARS-19 (wave-3 gate row 28, D8) — the event page's failed read: the
  * canvas `pageState: ошибка` card (`design-source/event-page.dc.html` L60–L64),
- * mounted as each host's event-page `error.tsx` and nothing else.
+ * mounted as each host's event-page `error.tsx` and nothing else. The card sits
+ * under the poster band in the canvas's -80px overlap (`EventPageStateFrame`).
  *
  * «Повторить» re-runs the segment's server reads: `router.refresh()` asks the
  * server for a fresh render and `reset()` clears this boundary inside the same
@@ -24,7 +26,7 @@ export function EventPageError({ reset }: { reset: () => void }) {
       reset();
     });
   return (
-    <div className="mx-auto max-w-content px-4 py-16 layout:px-gutter">
+    <EventPageStateFrame>
       <div
         role="alert"
         data-testid="event-page-error"
@@ -45,6 +47,6 @@ export function EventPageError({ reset }: { reset: () => void }) {
           {COPY.error.retry}
         </Button>
       </div>
-    </div>
+    </EventPageStateFrame>
   );
 }

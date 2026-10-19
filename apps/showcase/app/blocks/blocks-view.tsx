@@ -17,6 +17,8 @@ import {
   EventList,
   EventPageHero,
   EventPageShell,
+  EventPageSkeleton,
+  EventPageStateFrame,
   EventSignupCard,
   EventSpeakerCard,
   LiveEventStrip,
@@ -4098,7 +4100,7 @@ function EventPageSection() {
   return (
     <BlockSection
       title="Event page"
-      exportsLine="EventPageShell · EventPageHero · EventPageKicker · EventSignupCard · EventAboutSection · EventProgrammeSection · EventSpeakerCard · EventFormatBlock"
+      exportsLine="EventPageShell · EventPageHero · EventPageKicker · EventSignupCard · EventAboutSection · EventProgrammeSection · EventSpeakerCard · EventFormatBlock · EventPageStateFrame · EventPageSkeleton"
     >
       <SubRow label="Preview">
         <WideCanvas>
@@ -4153,6 +4155,30 @@ function EventPageSection() {
             </div>
           </StateCase>
         </div>
+      </SubRow>
+      <SubRow label="Page states (loading · error frame)">
+        <WideCanvas>
+          <div className="grid w-full gap-6" data-testid="event-page-states">
+            <StateCase
+              label="EventPageSkeleton"
+              note="the page's reads are in flight: the canvas skeleton under the empty poster band, the label is screen-reader only"
+            >
+              <EventPageSkeleton label="Загружаем событие" />
+            </StateCase>
+            <StateCase
+              label="EventPageStateFrame"
+              note="the poster band and the -80px overlap the error card sits in; the card itself is the host page's"
+            >
+              <EventPageStateFrame>
+                <div className="border-2 border-border bg-card px-7 py-10 text-center shadow-lg">
+                  <p className="text-xl font-extrabold tracking-tight text-foreground">
+                    Не получилось загрузить событие
+                  </p>
+                </div>
+              </EventPageStateFrame>
+            </StateCase>
+          </div>
+        </WideCanvas>
       </SubRow>
     </BlockSection>
   );

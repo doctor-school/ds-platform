@@ -8,7 +8,7 @@ const { default: ErrorBoundary } = await import("./error");
 const { default: Loading } = await import("./loading");
 
 describe("020 EARS-19 (gate rows 28–29, D8): this host's event-page segment states", () => {
-  it("a failing read renders the canvas error with «Повторить», and the retry re-renders on success", () => {
+  it("EARS-19: a failing read renders the canvas error with «Повторить», and the retry re-renders on success (gate row 28, D8)", () => {
     const reset = vi.fn();
     render(<ErrorBoundary error={new Error("read failed")} reset={reset} />);
     expect(screen.getByRole("alert").textContent).toContain(
@@ -19,7 +19,7 @@ describe("020 EARS-19 (gate rows 28–29, D8): this host's event-page segment st
     expect(reset).toHaveBeenCalledTimes(1);
   });
 
-  it("the route segment's loading state is the canvas skeleton", () => {
+  it("EARS-19: the route segment's loading state is the canvas skeleton (gate row 29, D8)", () => {
     render(<Loading />);
     expect(
       screen.getByTestId("event-page-skeleton").getAttribute("aria-busy"),

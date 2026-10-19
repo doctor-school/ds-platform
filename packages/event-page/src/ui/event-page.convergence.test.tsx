@@ -136,14 +136,14 @@ beforeEach(() => {
 describe.each(Object.entries(HOSTS))(
   "wave-3 PR 3.2 convergences on the %s mount",
   (_host, config) => {
-    it("020 EARS-19 (gate row 26, D5): the partners plate names the partners and states no financing on both hosts", async () => {
+    it("020 EARS-19: the partners plate names the partners and states no financing on both hosts (gate row 26, D5)", async () => {
       const html = await renderPage(config);
       const plate = html.slice(html.indexOf('data-testid="event-partners"'));
       expect(plate).toContain("Партнёр А · Партнёр Б");
       expect(html).not.toMatch(/оплачивает|финансир|Спонсор/u);
     });
 
-    it("020 EARS-10 (gate row 44, H3): the guest gate's sub-line reads «Вход — по почте, две минуты.» on both hosts and carries no «бесплатн»", async () => {
+    it("020 EARS-10: the guest gate's sub-line reads «Вход — по почте, две минуты.» on both hosts and carries no «бесплатн» (gate row 44, H3)", async () => {
       // The gate is asserted as its own subtree: the sign-up card's «Бесплатно
       // для врача» condition is the Pul-cost fact (020 EARS-12), not the gate.
       document.body.innerHTML = await renderPage(config);
@@ -152,7 +152,7 @@ describe.each(Object.entries(HOSTS))(
       expect(gate.textContent).not.toMatch(/бесплатн/iu);
     });
 
-    it("020 Amendment 2026-10-02 (gate row 30, D9): the server renders the hero time in МСК on both hosts", async () => {
+    it("020 EARS-1: the server renders the hero time in МСК on both hosts (gate row 30, D9, Amendment 2026-10-02)", async () => {
       const html = await renderPage(config);
       expect(html).toContain("28 августа, 19:00 (МСК) · 90 минут");
     });
@@ -160,7 +160,7 @@ describe.each(Object.entries(HOSTS))(
 );
 
 describe("020 Amendment 2026-10-02 (gate row 30, D9): the client island re-formats the time", () => {
-  it("an online event's hero time reads in the viewer's zone with its label; an offline event stays МСК", () => {
+  it("EARS-1: an online event's hero time reads in the viewer's zone with its label; an offline event stays МСК (gate row 30, D9)", () => {
     viewerZone.current = "Asia/Yekaterinburg";
     const { rerender } = render(
       <ViewerZoneTime moment={ENDED} part="dateLine" />,
@@ -188,18 +188,22 @@ describe("020 Amendment 2026-10-02 (gate row 30, D9): the client island re-forma
 });
 
 describe("020 EARS-19 (gate rows 28–29, D8): the segment's error and loading states", () => {
-  it("a failing read renders the canvas error with «Повторить», and the retry re-renders the segment", () => {
+  it("EARS-19: a failing read renders the canvas error with «Повторить», and the retry re-renders the segment (gate row 28, D8)", () => {
     const reset = vi.fn();
     render(<EventPageError reset={reset} />);
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Не получилось загрузить событие",
+    );
+    // Canvas `pageState: ошибка`: the card sits under the poster band.
+    expect(screen.getByTestId("event-page-state-frame")).toContainElement(
+      screen.getByRole("alert"),
     );
     fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(reset).toHaveBeenCalledTimes(1);
   });
 
-  it("the route segment's loading state is the canvas skeleton", () => {
+  it("EARS-19: the route segment's loading state is the canvas skeleton (gate row 29, D8)", () => {
     render(<EventPageSkeleton />);
     const region = screen.getByRole("status");
     expect(region).toHaveAttribute("aria-busy", "true");
@@ -209,3 +213,55 @@ describe("020 EARS-19 (gate rows 28–29, D8): the segment's error and loading s
     ).toBeGreaterThanOrEqual(8);
   });
 });
+
+describe.each(Object.entries(HOSTS))(
+  "020 EARS-18 (gate §3.6, #1775 clause 4): no event-page link targets an admin host — %s mount",
+  (_host, config) => {
+    /** The public origins the read itself carries (program PDF, community). */
+    const PUBLIC = [
+      "https://storage.doctor.school/programs/prp.pdf",
+      "https://t.me/doctorschool",
+    ];
+    const LINKED: EventPageView = {
+      ...ENDED,
+      state: "published",
+      programPdfUrl: PUBLIC[0],
+      links: {
+        school: { label: "Школа ортобиологии", href: "/schools/ortho" },
+        speakerPages: [],
+        communityHref: PUBLIC[1],
+      },
+    };
+    const REGISTER: ParticipationCta = {
+      action: "register",
+      label: "Записаться",
+      href: `${config.routes.eventPage}/${ENDED.slug}`,
+      reason: null,
+      presenceCount: null,
+    };
+
+    it.each([
+      ["ended, guest", ENDED, UNAVAILABLE],
+      ["upcoming with every link, guest", LINKED, REGISTER],
+    ] as const)(
+      "EARS-18: %s — every href is same-host or a public origin of the read, never an admin host",
+      async (_state, view, cta) => {
+        fetchPublicEventPage.mockResolvedValue(view);
+        fetchParticipationCta.mockResolvedValue(cta);
+        const html = await renderPage(config);
+        const hrefs = [...html.matchAll(/href="([^"]*)"/g)].map((m) =>
+          m[1]!.replace(/&amp;/g, "&"),
+        );
+        expect(hrefs.length).toBeGreaterThan(0);
+        for (const href of hrefs) {
+          const url = new URL(href, "https://host.invalid");
+          expect(url.hostname, href).not.toMatch(/(^|\.)admin\./u);
+          expect(url.pathname, href).not.toMatch(/^\/admin(\/|$)/u);
+          if (url.origin !== "https://host.invalid") {
+            expect(PUBLIC, href).toContain(href);
+          }
+        }
+      },
+    );
+  },
+);

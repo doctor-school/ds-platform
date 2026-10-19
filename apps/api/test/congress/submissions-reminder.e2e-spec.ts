@@ -6,7 +6,7 @@ import {
 } from "@nestjs/platform-fastify";
 import { VersioningType } from "@nestjs/common";
 import { SchedulerRegistry } from "@nestjs/schedule";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type pg from "pg";
 import { CONGRESS_SUBMISSION_KIND_GENITIVE_PLURAL } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
@@ -38,8 +38,9 @@ import { eventClassificationSql } from "../setup/event-classification.js";
  * Verification row V-13.
  *
  * The sweep body is driven directly (`runOnce()`) on the REAL module against
- * the dev-stand Postgres; the 15-minute cron itself is stopped for the run so
- * a tick cannot claim a fixture between a seed and an assertion. Closing
+ * the dev-stand Postgres; the 15-minute cron itself is kept stopped by the
+ * shared runner setup in every suite, so no tick — here or in another suite —
+ * can claim a fixture between a seed and an assertion. Closing
  * instants are seeded relative to now. Letters are read per recipient, so a
  * due kind of another fixture never disturbs an assertion.
  *
@@ -190,10 +191,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await app.getHttpAdapter().getInstance().ready();
       pool = app.get<pg.Pool>(DRIZZLE_POOL);
       sweep = app.get(CongressSubmissionReminderService);
-      app
-        .get(SchedulerRegistry)
-        .getCronJob(CONGRESS_SUBMISSION_REMINDER_JOB)
-        .stop();
+      // The shared runner setup (`test/setup/test-env.ts`) keeps this job
+      // stopped in every suite; pin that here by the exported name.
+      expect(
+        app.get(SchedulerRegistry).getCronJob(CONGRESS_SUBMISSION_REMINDER_JOB)
+          .isActive,
+      ).toBe(false);
     });
 
     afterAll(async () => {
@@ -399,6 +402,106 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         last_letter_kind: "reminder",
         last_letter_status: "failed",
       });
+    });
+
+    it("EARS-33: when two accounts hold drafts of the same kind, the system shall send each account its own reminder", async () => {
+      const eventId = await congress({ oral: closingIn(30) });
+      const first = await doctor("rem-acc-a");
+      const second = await doctor("rem-acc-b");
+      await submission(
+        first,
+        eventId,
+        await register(first, eventId),
+        "oral",
+        "Тема первого",
+      );
+      await submission(
+        second,
+        eventId,
+        await register(second, eventId),
+        "oral",
+        "Тема второго",
+      );
+
+      await sweep.runOnce();
+
+      expect(reminders(first).map((r) => r.titles)).toEqual([["Тема первого"]]);
+      expect(reminders(second).map((r) => r.titles)).toEqual([
+        ["Тема второго"],
+      ]);
+    });
+
+    it("EARS-33: when claiming one kind fails, the system shall still remind the drafts of the other closing kinds", async () => {
+      const broken = await congress({ oral: closingIn(1) });
+      const healthy = await congress({ oral: closingIn(2) });
+      const a = await doctor("rem-iso-a");
+      const b = await doctor("rem-iso-b");
+      await submission(a, broken, await register(a, broken), "oral", "Тема");
+      await submission(b, healthy, await register(b, healthy), "oral", "Тема");
+
+      const target = sweep as unknown as {
+        claim: (eventId: string, ...rest: unknown[]) => Promise<unknown>;
+      };
+      const original = target.claim.bind(sweep);
+      const spy = vi
+        .spyOn(target, "claim")
+        .mockImplementation((eventId, ...rest) =>
+          eventId === broken
+            ? Promise.reject(new Error("claim failed"))
+            : original(eventId, ...rest),
+        );
+      try {
+        await sweep.runOnce();
+      } finally {
+        spy.mockRestore();
+      }
+
+      expect(reminders(a)).toHaveLength(0);
+      expect(reminders(b)).toHaveLength(1);
+    });
+
+    it("EARS-33: when the closing instant moves between the sweep's read and its claim, the system shall claim and name the current instant", async () => {
+      const eventId = await congress({ oral: closingIn(24) });
+      const d = await doctor("rem-race");
+      const draft = await submission(
+        d,
+        eventId,
+        await register(d, eventId),
+        "oral",
+        "Тема",
+      );
+      const moved = new Date(Date.now() + 60 * HOUR);
+
+      const target = sweep as unknown as {
+        claim: (eventId: string, ...rest: unknown[]) => Promise<unknown>;
+      };
+      const original = target.claim.bind(sweep);
+      const spy = vi
+        .spyOn(target, "claim")
+        .mockImplementation(async (claimedEvent, ...rest) => {
+          if (claimedEvent === eventId)
+            await pool.query(
+              `UPDATE congress_submission_kind_settings SET closes_at = $2
+                WHERE event_id = $1 AND kind = 'oral'`,
+              [eventId, moved],
+            );
+          return original(claimedEvent, ...rest);
+        });
+      try {
+        await sweep.runOnce();
+      } finally {
+        spy.mockRestore();
+      }
+
+      expect(reminders(d).map((r) => r.closesAt)).toEqual([moved]);
+      const { rows } = await pool.query<{ reminded_for_closes_at: Date }>(
+        `SELECT reminded_for_closes_at FROM congress_submissions WHERE id = $1`,
+        [draft],
+      );
+      expect(rows[0]!.reminded_for_closes_at).toEqual(moved);
+
+      await sweep.runOnce();
+      expect(reminders(d)).toHaveLength(1);
     });
   },
 );

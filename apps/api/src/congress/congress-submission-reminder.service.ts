@@ -10,7 +10,7 @@ import {
   CONGRESS_SUBMISSION_KIND_GENITIVE_PLURAL,
   type CongressSubmissionKind,
 } from "@ds/schemas";
-import { and, eq, gt, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { MAILER, type Mailer } from "../mailer/mailer.types.js";
@@ -32,6 +32,8 @@ type ClaimedDraft = {
   userId: string;
   title: string;
   createdAt: Date;
+  /** The kind's closing instant the claim bound to — the letter's date. */
+  closesAt: Date;
 };
 
 /**
@@ -79,7 +81,11 @@ export class CongressSubmissionReminderService {
     }
   }
 
-  /** One sweep over every open kind closing within 72 hours (EARS-33). */
+  /**
+   * One sweep over every open kind closing within 72 hours (EARS-33). Each
+   * (event, kind) is isolated: a failure while claiming or reminding one is
+   * logged and the sweep goes on with the rest, earliest closing first.
+   */
   async runOnce(): Promise<void> {
     const now = this.now();
     const horizon = new Date(now.getTime() + REMINDER_HORIZON_MS);
@@ -87,49 +93,75 @@ export class CongressSubmissionReminderService {
       .select({
         eventId: congressSubmissionKindSettings.eventId,
         kind: congressSubmissionKindSettings.kind,
-        closesAt: congressSubmissionKindSettings.closesAt,
       })
       .from(congressSubmissionKindSettings)
-      .where(
-        and(
-          isNotNull(congressSubmissionKindSettings.opensAt),
-          lte(congressSubmissionKindSettings.opensAt, now),
-          gt(congressSubmissionKindSettings.closesAt, now),
-          lte(congressSubmissionKindSettings.closesAt, horizon),
-        ),
+      .where(this.closingWithin(now, horizon))
+      .orderBy(
+        asc(congressSubmissionKindSettings.closesAt),
+        asc(congressSubmissionKindSettings.eventId),
+        asc(congressSubmissionKindSettings.kind),
       );
 
-    for (const { eventId, kind, closesAt } of closing) {
-      if (closesAt === null) continue;
-      const claimed = await this.claim(eventId, kind, closesAt);
-      await this.remind(kind, closesAt, claimed);
+    for (const { eventId, kind } of closing) {
+      try {
+        const claimed = await this.claim(eventId, kind, now, horizon);
+        await this.remind(kind, claimed);
+      } catch (err) {
+        this.logger.error(
+          `congress submission reminder failed for event ${eventId}, kind ${kind}`,
+          err instanceof Error ? err.stack : String(err),
+        );
+      }
     }
   }
 
-  /** The conditional update that makes the reminder at-most-once. */
+  /** An open kind whose closing instant falls within (now, horizon]. */
+  private closingWithin(now: Date, horizon: Date) {
+    const k = congressSubmissionKindSettings;
+    return and(
+      isNotNull(k.opensAt),
+      lte(k.opensAt, now),
+      gt(k.closesAt, now),
+      lte(k.closesAt, horizon),
+    );
+  }
+
+  /**
+   * The conditional update that makes the reminder at-most-once. It joins the
+   * kind's settings row in the same statement, so the claim binds to the
+   * kind's CURRENT closing instant (and to the kind still being open and due)
+   * — never to a value read earlier — and returns that instant with each
+   * claimed draft for the letter to name.
+   */
   private claim(
     eventId: string,
     kind: CongressSubmissionKind,
-    closesAt: Date,
+    now: Date,
+    horizon: Date,
   ): Promise<ClaimedDraft[]> {
     const s = congressSubmissions;
+    const k = congressSubmissionKindSettings;
     return withRequestAuditContext(this.db, (tx) =>
       tx
         .update(s)
-        .set({ remindedForClosesAt: closesAt })
+        .set({ remindedForClosesAt: sql`${k.closesAt}` })
+        .from(k)
         .where(
           and(
+            eq(k.eventId, s.eventId),
+            eq(k.kind, s.kind),
+            this.closingWithin(now, horizon),
             eq(s.eventId, eventId),
             eq(s.kind, kind),
             eq(s.status, "draft"),
             eq(s.recordStatus, "active"),
-            sql`${s.remindedForClosesAt} IS DISTINCT FROM ${closesAt}`,
+            sql`${s.remindedForClosesAt} IS DISTINCT FROM ${k.closesAt}`,
             sql`NOT EXISTS (
               SELECT 1 FROM congress_submissions AS reminded
                WHERE reminded.user_id = ${s.userId}
-                 AND reminded.event_id = ${eventId}
-                 AND reminded.kind = ${kind}
-                 AND reminded.reminded_for_closes_at = ${closesAt}
+                 AND reminded.event_id = ${s.eventId}
+                 AND reminded.kind = ${s.kind}
+                 AND reminded.reminded_for_closes_at = ${k.closesAt}
             )`,
           ),
         )
@@ -138,14 +170,22 @@ export class CongressSubmissionReminderService {
           userId: s.userId,
           title: s.title,
           createdAt: s.createdAt,
+          closesAt: k.closesAt,
         }),
+    ).then((rows) =>
+      rows.flatMap((r) =>
+        r.closesAt === null ? [] : [{ ...r, closesAt: r.closesAt }],
+      ),
     );
   }
 
-  /** One letter per claiming account; the outcome on each listed draft. */
+  /**
+   * One letter per claiming account; the outcome on each listed draft. When
+   * the recipients cannot be read after the claim committed, every claimed
+   * draft records `failed`, so no claimed draft is left without an outcome.
+   */
   private async remind(
     kind: CongressSubmissionKind,
-    closesAt: Date,
     claimed: ClaimedDraft[],
   ): Promise<void> {
     if (claimed.length === 0) return;
@@ -155,11 +195,20 @@ export class CongressSubmissionReminderService {
       drafts.push(draft);
       byAccount.set(draft.userId, drafts);
     }
-    const accounts = await this.db
-      .select({ id: users.id, email: users.email })
-      .from(users)
-      .where(inArray(users.id, [...byAccount.keys()]));
-    const emailOf = new Map(accounts.map((a) => [a.id, a.email]));
+    let emailOf: Map<string, string | null>;
+    try {
+      const accounts = await this.db
+        .select({ id: users.id, email: users.email })
+        .from(users)
+        .where(inArray(users.id, [...byAccount.keys()]));
+      emailOf = new Map(accounts.map((a) => [a.id, a.email]));
+    } catch (err) {
+      await this.recordOutcome(
+        claimed.map((d) => d.id),
+        "failed",
+      );
+      throw err;
+    }
 
     for (const [userId, drafts] of byAccount) {
       drafts.sort(
@@ -173,7 +222,7 @@ export class CongressSubmissionReminderService {
           email: emailOf.get(userId) ?? "",
           kindGenitivePlural: CONGRESS_SUBMISSION_KIND_GENITIVE_PLURAL[kind],
           titles: drafts.map((d) => d.title),
-          closesAt,
+          closesAt: drafts[0]!.closesAt,
         });
       } catch {
         // The mailer's own diagnostics carry the sanitized provider outcome;
@@ -183,27 +232,33 @@ export class CongressSubmissionReminderService {
           `congress submission reminder rejected for account ${userId}`,
         );
       }
-      try {
-        await withRequestAuditContext(this.db, (tx) =>
-          tx
-            .update(congressSubmissions)
-            .set({
-              lastLetterKind: "reminder",
-              lastLetterStatus: status,
-              lastLetterAt: new Date(),
-            })
-            .where(
-              inArray(
-                congressSubmissions.id,
-                drafts.map((d) => d.id),
-              ),
-            ),
-        );
-      } catch {
-        this.logger.warn(
-          `congress submission reminder outcome could not be recorded for account ${userId}`,
-        );
-      }
+      await this.recordOutcome(
+        drafts.map((d) => d.id),
+        status,
+      );
+    }
+  }
+
+  /** The letter's outcome on the listed drafts; a write failure is logged. */
+  private async recordOutcome(
+    ids: string[],
+    status: "sent" | "failed",
+  ): Promise<void> {
+    try {
+      await withRequestAuditContext(this.db, (tx) =>
+        tx
+          .update(congressSubmissions)
+          .set({
+            lastLetterKind: "reminder",
+            lastLetterStatus: status,
+            lastLetterAt: new Date(),
+          })
+          .where(inArray(congressSubmissions.id, ids)),
+      );
+    } catch {
+      this.logger.warn(
+        `congress submission reminder outcome could not be recorded for ${ids.length} draft(s)`,
+      );
     }
   }
 }

@@ -26,6 +26,26 @@ and audit coverage remain unchanged. Select the single `@phone-collision` case
 on the lead-owned runtime. This coverage change has no render surface or
 owner Stage-B slot.
 
+### Abandoned phone replacement (003 EARS-49/58)
+
+`Academy abandons phone replacement without restoring either phone as an SMS identifier`
+(`steps/phone-abandoned.steps.ts`, #3016) verifies one uniquely owned Academy
+account and confirms phone A through real mail and SMS. It requests replacement
+B, observes its actual delivered confirmation SMS without entering it, logs out
+and signs in by email/password. A reload must retain the same subject and verified
+email with null profile phone and phoneVerified. Guest SMS sign-in requests for
+both numbers receive the exact neutral acknowledgement, no private access and
+no addressed SMS over the full 20-second horizon, including a final sink query
+at or after the deadline. Returning by email/password permits another actual
+confirmation SMS request for B; that fresh code also remains unconsumed.
+The BFF keeps no pending-phone record, so this case makes no claim that the
+unconfirmed number remains rendered after navigation. Native phone lookup,
+SMS reset and audit proofs remain in `apps/api/test/me/phone.e2e-spec.ts`.
+Trace-off fixtures and canonical registration/phone/session helpers are reused;
+cleanup revokes the owned session and closes its context even on failure.
+Missing mail or SMS access fails proof. Select `@phone-abandoned` on the
+lead-owned runtime. This test coverage change has no render surface or Stage-B slot.
+
 ### Wrong phone confirmation code (003 EARS-48/16/52)
 
 `Academy refuses a wrong phone code and accepts the retained real code`

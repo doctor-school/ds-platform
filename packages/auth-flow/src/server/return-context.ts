@@ -226,7 +226,11 @@ export function resolveReturnLandingPath(
   const landOnly = parseLandOnlyReturnTarget(returnTo);
   const intent = parseReturnTarget(landOnly ? landOnly.page : returnTo);
   if (!intent) return null;
-  return intent.returnTo.startsWith(RETURN_TARGET_PREFIX)
-    ? host.routes.eventPathTemplate.replace(":slug", intent.eventSlug)
-    : intent.returnTo;
+  if (!intent.returnTo.startsWith(RETURN_TARGET_PREFIX)) return intent.returnTo;
+  // 020 LD-9 / EARS-5 — the re-homed page keeps the hybrid tab the guard
+  // reconstructed (`?mode=offline|online`, the shape's one query), so the door
+  // lands the doctor on the tab they left, not on the policy default.
+  const queryAt = intent.returnTo.indexOf("?");
+  const tab = queryAt === -1 ? "" : intent.returnTo.slice(queryAt);
+  return `${host.routes.eventPathTemplate.replace(":slug", intent.eventSlug)}${tab}`;
 }

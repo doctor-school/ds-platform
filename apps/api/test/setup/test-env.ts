@@ -1,3 +1,5 @@
+import { SchedulerRegistry } from "@nestjs/schedule";
+
 // Vitest setupFile — runs in EVERY test file's environment, before the file.
 //
 // 044 EARS-7: the congress intake pads every response to a route-specific
@@ -37,3 +39,17 @@ process.env["CONGRESS_SIGNUP_WINDOW_CLOSES_AT"] ??=
 // without them, and the desk's attendance mark validates against them). The
 // runner supplies the congress's own two days; the attendance suite pins them.
 process.env["CONGRESS_SIGNUP_EVENT_DAYS"] ??= "2027-04-23,2027-04-24";
+
+// 046 EARS-33: the deadline reminder is a 15-minute `@Cron` on the booted app,
+// and every suite that boots `AppModule` would otherwise carry it, so a tick in
+// an unrelated suite could claim the reminder suite's fixtures (or stamp the
+// reminder outcome on another suite's drafts) against the shared database. The
+// runner keeps that one job stopped the moment the scheduler registers it; the
+// reminder suite drives the sweep body itself and pins that the job it finds
+// by its exported name is not running (so this literal cannot drift).
+const CONGRESS_SUBMISSION_REMINDER_JOB = "congress-submission-reminder";
+const addCronJob = SchedulerRegistry.prototype.addCronJob;
+SchedulerRegistry.prototype.addCronJob = function (name, job) {
+  addCronJob.call(this, name, job);
+  if (name === CONGRESS_SUBMISSION_REMINDER_JOB) job.stop();
+};

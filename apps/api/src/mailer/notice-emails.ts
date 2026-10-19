@@ -1,6 +1,7 @@
 import {
   MOSCOW_TIME_ZONE,
   formatEventTime,
+  lastDayOfClosingInstant,
   revisionLastDay,
 } from "@ds/schemas";
 
@@ -207,6 +208,74 @@ export type CongressSubmissionDecisionContent = {
 export function formatRevisionLastDay(revisionDueAt: Date): string {
   const [year, month, day] = revisionLastDay(revisionDueAt).split("-");
   return `${day}.${month}.${year}`;
+}
+
+const GENITIVE_MONTHS = [
+  "января",
+  "февраля",
+  "марта",
+  "апреля",
+  "мая",
+  "июня",
+  "июля",
+  "августа",
+  "сентября",
+  "октября",
+  "ноября",
+  "декабря",
+] as const;
+
+/**
+ * 046 EARS-33 — «{дата}» of the deadline reminder: the last day a stored
+ * closing instant keeps open (the instant itself is exclusive), as the Moscow
+ * calendar date «15 января 2027».
+ */
+export function formatClosingLastDay(closesAt: Date): string {
+  const [year, month, day] = lastDayOfClosingInstant(closesAt).split("-");
+  return `${Number(day)} ${GENITIVE_MONTHS[Number(month) - 1]} ${year}`;
+}
+
+/** 046 EARS-33 — what the deadline reminder is rendered from. */
+export interface CongressSubmissionReminderContent {
+  /** «{вида}» — the kind in the genitive plural («устных докладов»). */
+  kindGenitivePlural: string;
+  /** The titles of the author's drafts of that kind; an empty one is untitled. */
+  titles: readonly string[];
+  /** «{дата}» — already rendered, see {@link formatClosingLastDay}. */
+  lastDay: string;
+}
+
+/**
+ * 046 EARS-33 — the deadline reminder: one letter per account listing its
+ * unsent drafts of a kind whose intake closes within 72 hours, and the last
+ * day. A product notice with no link, button or URL; like every author letter
+ * it ends with the cabinet-entry paragraph (EARS-14 amended). An untitled
+ * draft is named «черновик без названия».
+ */
+export function congressSubmissionReminderMessage(
+  content: CongressSubmissionReminderContent,
+): EmailMessage {
+  const list = content.titles
+    .map((title) =>
+      title.trim() === "" ? "черновик без названия" : `«${title.trim()}»`,
+    )
+    .join(", ");
+  const single = content.titles.length === 1;
+  const intro = single
+    ? `У вас есть неотправленный черновик: ${list}. Отправить его можно до ` +
+      `${content.lastDay} включительно.`
+    : `У вас есть неотправленные черновики: ${list}. Отправить их можно до ` +
+      `${content.lastDay} включительно.`;
+  const subject =
+    `Doctor.School — приём ${content.kindGenitivePlural} заканчивается ` +
+    content.lastDay;
+  return composeEmail({
+    subject,
+    preheader: `Приём ${content.kindGenitivePlural} заканчивается ${content.lastDay}`,
+    intro,
+    paragraphs: [CONGRESS_AUTHOR_CABINET_ENTRY],
+    footer: ["Команда Doctor.School"],
+  });
 }
 
 /**

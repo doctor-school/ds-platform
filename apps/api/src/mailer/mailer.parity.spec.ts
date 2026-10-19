@@ -13,6 +13,7 @@ import {
   congressConfirmationMessage,
   congressSubmissionDecisionMessage,
   congressSubmissionReceiptMessage,
+  congressSubmissionReminderMessage,
 } from "./notice-emails.js";
 
 // Contract parity (a test fake must be no more permissive than the real
@@ -62,6 +63,14 @@ describe("transactional HTML/plain-text content parity", () => {
         letter: "needs_revision",
         comment: "Сократите аннотацию",
         lastDay: "19.02.2027",
+      }),
+    ],
+    [
+      "congress-submission-reminder",
+      congressSubmissionReminderMessage({
+        kindGenitivePlural: "устных докладов",
+        titles: ["Ранняя реабилитация", ""],
+        lastDay: "15 января 2027",
       }),
     ],
   ] as const) {
@@ -318,6 +327,42 @@ describe("046 EARS-29: submission-decision FakeMailer ↔ SmtpMailer contract pa
     ).resolves.toBeUndefined();
     expect(fake.congressSubmissionDecisions).toEqual([
       { ...DECISION, email: VALID_EMAIL, to: VALID_EMAIL },
+    ]);
+  });
+});
+
+// 046 EARS-33: the deadline reminder joins the same parity contract.
+describe("046 EARS-33: deadline-reminder FakeMailer ↔ SmtpMailer contract parity", () => {
+  const REMINDER = {
+    kindGenitivePlural: "устных докладов",
+    titles: ["Ранняя реабилитация", ""],
+    closesAt: new Date("2027-01-15T21:00:00.000Z"),
+  };
+
+  it("046 EARS-33: when the recipient is invalid, both adapters shall reject", async () => {
+    const fake = new FakeMailer();
+    const smtp = buildSmtp();
+    for (const bad of INVALID_EMAILS) {
+      await expect(
+        fake.sendCongressSubmissionReminder({ ...REMINDER, email: bad }),
+      ).rejects.toThrow();
+      await expect(
+        smtp.sendCongressSubmissionReminder({ ...REMINDER, email: bad }),
+      ).rejects.toThrow();
+    }
+  });
+
+  it("046 EARS-33: when the recipient is valid, both adapters shall accept; the fake records the send", async () => {
+    const fake = new FakeMailer();
+    const smtp = buildSmtp();
+    await expect(
+      fake.sendCongressSubmissionReminder({ ...REMINDER, email: VALID_EMAIL }),
+    ).resolves.toBeUndefined();
+    await expect(
+      smtp.sendCongressSubmissionReminder({ ...REMINDER, email: VALID_EMAIL }),
+    ).resolves.toBeUndefined();
+    expect(fake.congressSubmissionReminders).toEqual([
+      { ...REMINDER, email: VALID_EMAIL, to: VALID_EMAIL },
     ]);
   });
 });

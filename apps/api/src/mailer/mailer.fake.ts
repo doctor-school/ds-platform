@@ -4,6 +4,7 @@ import {
   type CongressConfirmationRequest,
   type CongressSubmissionDecisionRequest,
   type CongressSubmissionReceiptRequest,
+  type CongressSubmissionReminderRequest,
   type Mailer,
 } from "./mailer.types.js";
 import type { CodeLifetime, ReRegistrationCopyInput } from "./code-emails.js";
@@ -57,6 +58,12 @@ export class FakeMailer implements Mailer {
   > = [];
   /** When set, the NEXT decision or extension letter rejects with it. */
   private nextSubmissionDecisionFailure: Error | undefined;
+  /** Every accepted 046 EARS-33 deadline reminder, in order. */
+  readonly congressSubmissionReminders: Array<
+    CongressSubmissionReminderRequest & { to: string }
+  > = [];
+  /** When set, the NEXT deadline reminder rejects with it. */
+  private nextSubmissionReminderFailure: Error | undefined;
   /** When set, the NEXT code send rejects with it (models a transport outage). */
   private nextCodeSendFailure: Error | undefined;
   /** When set, the NEXT congress confirmation rejects with it (044 EARS-12). */
@@ -205,6 +212,29 @@ export class FakeMailer implements Mailer {
       throw failure;
     }
     this.congressSubmissionDecisions.push({
+      ...input,
+      to: input.email.trim().toLowerCase(),
+    });
+  }
+
+  /**
+   * Test control for 046 EARS-33: make the NEXT deadline reminder reject with
+   * `error`, then clear itself (one-shot).
+   */
+  failNextSubmissionReminder(error: Error): void {
+    this.nextSubmissionReminderFailure = error;
+  }
+
+  async sendCongressSubmissionReminder(
+    input: CongressSubmissionReminderRequest,
+  ): Promise<void> {
+    assertSendableEmail(input.email);
+    if (this.nextSubmissionReminderFailure) {
+      const failure = this.nextSubmissionReminderFailure;
+      this.nextSubmissionReminderFailure = undefined;
+      throw failure;
+    }
+    this.congressSubmissionReminders.push({
       ...input,
       to: input.email.trim().toLowerCase(),
     });

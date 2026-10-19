@@ -199,7 +199,9 @@ Timeweb Cloud container registry (#2981, tech spec
 - **Stage consumes it; production does not yet.** Every stage slot converge
   (`tools/staging/slot.mjs up|sync|reset`) resolves the commit's `images-<sha>.json` on
   the operator side, then ds-stage-1 logs in with its pull token, pulls each recorded
-  digest and tags it `ds-<image>:<sha>`; nothing is built and a commit with no recorded
+  digest and tags it `ds-<image>:<sha>`, then logs out again (the login shell's exit trap
+  plus one unconditional `docker logout` per converge), so the token file stays the only
+  registry credential at rest on the box; nothing is built and a commit with no recorded
   images is not staged (`tools/staging/README.md` → «`slot.mjs` in one paragraph»).
   api-prod still builds on-box until `pnpm deploy:prod` switches to pulling by digest
   (#2981, the last PR).

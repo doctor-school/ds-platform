@@ -40,7 +40,8 @@ services:
   # Same image source as the dev stand (infra/dev-stand/postgres/Dockerfile:
   # pgvector/pgvector:pg17 + postgresql-17-partman), NOT the data-prod build — that
   # one adds pgbackrest for archive_command, which this box deliberately has no use
-  # for. Built on-box, no registry (the whole stand builds on the box).
+  # for. Built on-box, no registry: the stand's ONE on-box build (the slot images are
+  # pulled by their recorded digests — tools/staging/README.md).
   #
   # It holds: `zitadel` (the shared IdP's own database), `ds_golden` (the template
   # built by `pnpm seed:golden`, step 3 / #2063) and one database per live slot,

@@ -302,7 +302,9 @@ artifact stops the converge **before the box is touched** — there is no build 
 («the PR head changes no image input, so runtime-images did not run — nothing to stage»).
 Then they ship the tree, log the box into the registry with the root-only
 `/etc/ds-platform/registry-pull-token` (read by the box's own shell; the token is in no
-argv, log or plan), pull each recorded digest and tag it `ds-<image>:<sha>`, assert every
+argv, log or plan), pull each recorded digest and tag it `ds-<image>:<sha>`, log the box
+out again (a failed pull included — the token file stays the only registry credential at
+rest), assert every
 tag's `RepoDigests` carries exactly the recorded digest, boot-probe, clone the slot database from
 `ds_golden` (never for `main`, which is persistent), run migrate and the golden seed
 through the containerized `migrate` one-shot, start
@@ -316,7 +318,10 @@ is idempotent, so a converge needs no second operator command.
 
 Local image tags are per full commit SHA and shared between slots. A second slot at
 the same ref reuses an existing `ds-<image>:<sha>` only when its `RepoDigests` carry the
-recorded digest; a tag with any other digest is re-pulled and re-tagged. `down`, `gc`
+recorded digest; a tag with any other digest is re-pulled and re-tagged. One SHA staged
+both as a preview from its `pr/` digests and as `main` from the `main` digests therefore
+re-pulls on every converge of either slot, as the tag moves between the two digests;
+running containers keep their image IDs, so nothing breaks. `down`, `gc`
 and retention preserve other containers' original requested tags (`Config.Image`), even
 when `docker ps` displays an image ID after a tag was moved. Retention also keeps
 the full image bundle for each live commit, including the one-shot migration image

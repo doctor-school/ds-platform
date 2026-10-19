@@ -42,6 +42,8 @@ import {
   assertImageDigests,
   imageDigestScript,
   pullCommandPlan,
+  registryLogoutCommand,
+  SLOT_DOWN_IMAGE_TAG,
   resolveRecordedImages,
   selectImagesRun,
   validateImageManifest,
@@ -50,6 +52,7 @@ import {
   caddyIsAttached,
   cloneDatabaseStatements,
   composeBase,
+  downCommandPlan,
   composeProjectName,
   containerAliases,
   databaseAction,
@@ -422,7 +425,25 @@ test("the registry login reads the pull token ON the box; the token never reache
       ),
     );
     assert.ok(!/--password[ =]|-p /.test(rendered), "no password argument");
+    // The login never outlives its pull, failed pulls included: the token file stays
+    // the only registry credential at rest on the box.
+    assert.ok(
+      item.apply.at(-1).startsWith(`trap 'docker logout ${IMAGE_REGISTRY} >/dev/null 2>&1' EXIT; `),
+      "the pull shell logs out on exit",
+    );
   }
+});
+
+test("after the pulls the box is logged out of the registry, as root, without the token in the plan", () => {
+  const logout = registryLogoutCommand();
+  assert.equal(logout.kind, "sh");
+  assert.deepEqual(logout.command, ["sudo", "docker", "logout", IMAGE_REGISTRY]);
+  const plan = upPlan();
+  const order = labels(plan);
+  assert.equal(order.indexOf("registry logout"), order.indexOf("pull recorded images") + 1);
+  const text = JSON.stringify(plan.steps.flatMap((step) => [step.command, ...(step.items ?? []).map((i) => i.apply)]));
+  assert.ok(!/--password[ =]|-p /.test(text), "no password argument anywhere in the up plan");
+  assert.ok(text.includes(REGISTRY_PULL_TOKEN_FILE), "the token is read by path on the box, never inlined");
 });
 
 test("the pull refuses an image set that is not the five recorded digests", () => {
@@ -673,10 +694,68 @@ test("a teardown renders only what compose needs to ADDRESS the project", () => 
   const text = renderSlotDownEnv({ slot: "pr-7" });
   assert.match(text, /^SLOT=pr-7$/m);
   assert.match(text, /^SLOT_DB=ds_pr_7$/m);
-  // No subjects, no SHA: `down` matches containers by project label, and a teardown
-  // must stay possible on a box where the golden identities never converged.
+  // No subjects: a teardown must stay possible on a box where the golden identities
+  // never converged. And no REAL sha: `down` matches containers by project label and
+  // must work without knowing what was deployed — the tag is a fixed non-SHA filler.
   assert.ok(!/DS_GOLDEN_SUB_/.test(text));
-  assert.ok(!/DEPLOY_SHA=/.test(text));
+  assert.match(text, new RegExp(`^DEPLOY_SHA=${SLOT_DOWN_IMAGE_TAG}$`, "m"));
+  assert.ok(!/^[0-9a-f]{7,40}$/.test(SLOT_DOWN_IMAGE_TAG), "the filler is never mistaken for a commit");
+});
+
+/** `KEY=value` lines of an env file, as compose reads them. */
+const envKeys = (text) =>
+  new Set(
+    text
+      .split(/\r?\n/)
+      .map((line) => line.match(/^([A-Z][A-Z0-9_]*)=/))
+      .filter(Boolean)
+      .map((match) => match[1]),
+  );
+const SLOT_COMPOSE_TEXT = readFileSync(
+  new URL("../../infra/deploy/compose/slot/compose.yml", import.meta.url),
+  "utf8",
+);
+const STAGE_ENV_EXAMPLE_KEYS = envKeys(
+  readFileSync(new URL("../../infra/deploy/stage.env.example", import.meta.url), "utf8"),
+);
+/** Every `${NAME:?…}` the slot compose refuses to interpolate without (comments excluded). */
+const composeRequiredVars = (text) =>
+  new Set(
+    [
+      ...text
+        .split(/\r?\n/)
+        .filter((line) => !/^\s*#/.test(line))
+        .join("\n")
+        .matchAll(/\$\{([A-Z][A-Z0-9_]*):\?/g),
+    ].map((match) => match[1]),
+  );
+
+test("`down` interpolates the slot compose: stage.env + the down env supply every required variable", () => {
+  // Compose interpolates the WHOLE file on every command, `down` included, so a
+  // `${VAR:?}` neither env file sets aborts the teardown after Caddy was detached.
+  const required = composeRequiredVars(SLOT_COMPOSE_TEXT);
+  assert.ok(required.has("DEPLOY_SHA"), "the image lines require a SHA");
+  for (const slot of ["main", "pr-7"]) {
+    const supplied = new Set([...STAGE_ENV_EXAMPLE_KEYS, ...envKeys(renderSlotDownEnv({ slot }))]);
+    const missing = [...required].filter((name) => !supplied.has(name));
+    assert.deepEqual(missing, [], `slot ${slot} down would abort on ${missing.join(", ")}`);
+  }
+  const down = downCommandPlan("pr-7").command;
+  assert.deepEqual(down.slice(0, composeBase("pr-7").length), composeBase("pr-7"), "the env files above are the ones down reads");
+  assert.ok(!down.includes("--rmi"), "down never resolves the filler tag to an image");
+});
+
+test("`up` still fails loudly without a real SHA: only the up env supplies it, never stage.env", () => {
+  assert.ok(!STAGE_ENV_EXAMPLE_KEYS.has("DEPLOY_SHA"), "a stage.env SHA would mask a missing one");
+  for (const line of SLOT_COMPOSE_TEXT.split(/\r?\n/).filter((l) => /^\s*image: ds-/.test(l))) {
+    assert.match(line, /:\$\{DEPLOY_SHA:\?\}$/, `no default tag: ${line.trim()}`);
+  }
+  const required = composeRequiredVars(SLOT_COMPOSE_TEXT);
+  const upEnv = renderSlotEnv({ slot: "pr-7", sha: SHA, baseDomain: BASE, redisDb: 4, goldenSubjects: SUBJECTS });
+  const supplied = new Set([...STAGE_ENV_EXAMPLE_KEYS, ...envKeys(upEnv)]);
+  assert.deepEqual([...required].filter((name) => !supplied.has(name)), []);
+  assert.match(upEnv, new RegExp(`^DEPLOY_SHA=${SHA}$`, "m"));
+  assert.throws(() => renderSlotEnv({ slot: "pr-7", sha: undefined, baseDomain: BASE, redisDb: 4, goldenSubjects: SUBJECTS }));
 });
 
 // --- the shared IdP redirect set ---------------------------------------------
@@ -818,6 +897,7 @@ test("up: ship → env → pull → verify → clone → bucket → migrate → 
     "ship the tree",
     "write slot env",
     "pull recorded images",
+    "registry logout",
     "verify recorded digests and boot",
     "clone database",
     "create slot bucket",

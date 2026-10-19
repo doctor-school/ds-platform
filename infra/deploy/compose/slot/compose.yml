@@ -28,7 +28,11 @@
 # other live slot projects before pruning (`planSlotDown` in
 # tools/staging/slot.mjs, unit-tested there); a per-slot tag would have hidden it.
 # `:?` because there is no `:local` image to fall back to: a run without
-# DEPLOY_SHA is a mistake, not a manual build.
+# DEPLOY_SHA is a mistake, not a manual build. Compose interpolates this whole
+# file on `down` too, so `slot down` writes the fixed filler `DEPLOY_SHA=teardown`
+# (`renderSlotDownEnv`): a teardown matches containers by project label and must
+# not need the deployed SHA. Every `${VAR:?}` here must come from stage.env or the
+# slot env — slot.test.mjs parses this file and pins both up and down.
 #
 # NETWORKS. The project default network is NAMED `slot-<slot>` so the edge can be
 # attached to exactly this slot (`docker network connect slot-<slot>

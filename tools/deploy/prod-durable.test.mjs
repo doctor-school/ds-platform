@@ -10,7 +10,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const SOURCE = readFileSync(join(import.meta.dirname, "prod.mjs"), "utf8");
-const deployBody = SOURCE.slice(SOURCE.indexOf("async function deploy("), SOURCE.indexOf("function cutReleaseAtDeployedSha("));
+const deployBody = SOURCE.slice(
+  SOURCE.indexOf("async function deploy("),
+  SOURCE.indexOf("function cutReleaseAtDeployedSha("),
+);
 
 test("2982: data-prod up, the pre-migrate backup, the pull, migrate+up and the prune are durable units", () => {
   for (const [host, step] of [
@@ -19,13 +22,29 @@ test("2982: data-prod up, the pre-migrate backup, the pull, migrate+up and the p
     ["API_PROD", "migrate"],
     ["API_PROD", "prune"],
   ]) {
-    assert.match(deployBody, new RegExp(`boxStep\\(\\s*${host},\\s*sha,\\s*"${step}"`), `${host} ${step}`);
+    assert.match(
+      deployBody,
+      new RegExp(`boxStep\\(\\s*${host},\\s*sha,\\s*"${step}"`),
+      `${host} ${step}`,
+    );
   }
-  assert.match(SOURCE, /if \(durable\) await boxStep\(API_PROD, sha, "pull", script, label\);/);
-  for (const streamed of ["migrateAndUpScript()", "retentionScript()", "backup.sh incr", "up -d --no-build --pull never"]) {
+  assert.match(
+    SOURCE,
+    /if \(durable\) await boxStep\(API_PROD, sha, "pull", script, label\);/,
+  );
+  for (const streamed of [
+    "migrateAndUpScript()",
+    "retentionScript()",
+    "backup.sh incr",
+    "up -d --no-build --pull never",
+  ]) {
     const at = deployBody.indexOf(streamed);
     assert.ok(at > 0, streamed);
-    assert.doesNotMatch(deployBody.slice(Math.max(0, at - 400), at), /sshScript\(\s*(API_PROD|DATA_PROD)[^)]*$/, `${streamed} is no longer streamed`);
+    assert.doesNotMatch(
+      deployBody.slice(Math.max(0, at - 400), at),
+      /sshScript\(\s*(API_PROD|DATA_PROD)[^)]*$/,
+      `${streamed} is no longer streamed`,
+    );
   }
 });
 
@@ -36,12 +55,20 @@ test("2982: the entrypoint is installed after the ship, the release opened, and 
   const shipped = deployBody.indexOf("shipTree(sha, DATA_PROD)");
   const smoke = deployBody.indexOf("await runSmoke(sha, services);");
   const finish = deployBody.indexOf("await finishReleaseSucceeded(sha);");
-  assert.ok(shipped > 0 && shipped < install && install < opened && opened < firstStep);
+  assert.ok(
+    shipped > 0 && shipped < install && install < opened && opened < firstStep,
+  );
   assert.ok(smoke > 0 && smoke < finish);
   // Every failure exit — die() included — closes the open release as failed.
-  assert.match(SOURCE, /function die\(msg[^\n]*\n[^\n]*\n {2}closeOpenReleaseAsFailed\(\);/);
+  assert.match(
+    SOURCE,
+    /function die\(msg[^\n]*\n[^\n]*\n {2}closeOpenReleaseAsFailed\(\);/,
+  );
 });
 
 test("2982: the rollback pull stays streamed — never behind the lease of the release it reverts", () => {
-  assert.match(SOURCE, /pullRecordedImages\(sha, images, \{ label: "rollback pull" \}\)/);
+  assert.match(
+    SOURCE,
+    /pullRecordedImages\(sha, images, \{ label: "rollback pull" \}\)/,
+  );
 });

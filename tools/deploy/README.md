@@ -168,13 +168,35 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    `success` status fires the `release-digest.yml` CI workflow, which posts it (see
    below, #968).
 
+**Durable box steps (#2982).** Right after the ship, both boxes install
+`/usr/local/bin/ds-release` from the shipped tree, and the long box steps — data-prod
+`up`, the pgbackrest pre-migrate `backup`, api-prod `pull`, `migrate` (migrate → up -d)
+and the retention `prune` — each run as their own transient systemd unit
+`ds-prod-<sha12>-<step>` instead of a streamed ssh command, so killing the operator
+session no longer kills the step. The deploy starts (or attaches to) the unit, then polls
+`sudo ds-release status prod <sha>` every 10 s and prints one status line per poll; the
+full step log stays in the box's journal (`sudo journalctl -u ds-prod-<sha12>-<step>`).
+Each box keeps its status file `/var/lib/ds-platform/release/prod/<sha>.json` (tech spec
+2026-10-16 release pipeline §5). A re-run of the same SHA returns each recorded verdict —
+backup and migrate are never repeated — or reattaches to a step still running; a step
+recorded as `failed` re-runs only under `pnpm deploy:prod --retry-failed`. The release
+stays open from the first box step until it is closed after the smoke; any failure exit
+closes it as `failed`. While it is open, a deploy of another SHA is refused and names the
+open SHA; if a failed run could not close it (the box was unreachable), close it by hand:
+`ssh ds-api-prod 'sudo ds-release finish prod <sha> failed'` (and the same on
+ds-data-prod). Because a recorded step is never repeated, re-running the same SHA does
+not re-apply a changed `/etc/ds-platform/*.env`; `--rollback` stays outside
+`ds-release`, so it never waits on the lease of the release it reverts. The IdP converge,
+the boot and running-SHA verifies, runtime configs and the smoke are unchanged.
+
 **Stall detector (#905).** Every ssh channel carries keepalive flags
 (`ServerAliveInterval=15` / `ServerAliveCountMax=4`), so a half-open TCP
 connection (NAT flush, VPN flap) dies loudly in ~60s instead of hanging the
 deploy forever. On top of that, every streamed remote step (`sshScript`) runs
 under a per-step **no-output watchdog**: **5 min** for build-class steps
-(data-prod `up`, api-prod `pull` and `migrate → up`), **2 min** for
-everything else. Output flowing resets the timer — a normal long pull is
+(the IdP converge), **2 min** for everything else. The durable steps above are
+not streamed and so carry no watchdog: their poll tolerates six failed reads in a row,
+then stops waiting — the unit keeps running and a re-run reattaches. Output flowing resets the timer — a normal long pull is
 untouched. A step whose channel goes quiet past its budget is killed and the
 deploy exits non-zero with a loud
 `STALLED: <step> — no output for <N>m; remote work MAY have completed.` line.

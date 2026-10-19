@@ -259,7 +259,7 @@ function forgetReleaseStep(slot) {
   return {
     kind: "ensure-absent",
     label: "forget the release state",
-    items: [{ probe: ["test", "-e", releaseStateDir(env)], remove: releaseForgetArgv(env) }],
+    items: [{ probe: ["sudo", "test", "-e", releaseStateDir(env)], remove: releaseForgetArgv(env) }],
   };
 }
 

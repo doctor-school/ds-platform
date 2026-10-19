@@ -1974,7 +1974,7 @@ test("2982: down and reset forget the release state the teardown / re-clone inva
   const down = planSlotDown({ slot: "pr-7", liveSlots: live({ "pr-7": SLOT_IMAGES(SHA) }), baseDomain: BASE });
   const forget = stepOf(down, "forget the release state");
   assert.equal(forget.kind, "ensure-absent");
-  assert.deepEqual(forget.items[0].probe, ["test", "-e", "/var/lib/ds-platform/release/stage-pr-7"]);
+  assert.deepEqual(forget.items[0].probe, ["sudo", "test", "-e", "/var/lib/ds-platform/release/stage-pr-7"]);
   assert.deepEqual(forget.items[0].remove, ["sudo", DS_RELEASE_BIN, "forget", "stage-pr-7"]);
 
   const reset = planSlotReset({

@@ -176,34 +176,46 @@ Today the push token is stored only on ds-stage-1 (`/etc/ds-platform/registry-pu
 
 ## 5. Durable box steps
 
-Every long box step (pull, backup, migrate, up, prune) runs inside a transient systemd unit. The caller's death — a cancelled runner, a network cut, a killed workstation — never kills the step.
+A release spans two production boxes plus operator-side steps (the IdP converge over HTTPS, the smoke, the release cut and the Deployment record), so no single unit on one box can run it whole. Instead every long box step (pull, backup, migrate, up, prune) runs inside its own transient systemd unit on the box it changes, driven by the entrypoint `/usr/local/bin/ds-release`. The caller's death — a cancelled runner, a network cut, a killed workstation — never kills the step. Operator-side steps and the short read-only probes (boot verify, running-SHA verify) stay where they are.
 
-- **Unit name.** `systemd-run --unit=ds-<env>-<sha12> --remain-after-exit -p KillMode=mixed /usr/local/bin/ds-release <env> <sha>`, where `<env>` is one of `prod`, `stage-main` or `stage-pr-<N>`. A second start under the same name fails fast, so the name itself deduplicates. Finished units are cleaned up by the next run for that env: only after it has taken the lock, and only for units already in a finished state, it resets the previous unit before starting its own.
-- **Lock.** The entrypoint holds `flock -n /run/lock/ds-<env>.lock` for its whole life. While one SHA runs for an env, a different SHA for the same env is refused. The workflow `concurrency` group is the first line of defence and the lock the last.
-- **Status file — the authority.** The file is `/var/lib/ds-platform/release/<env>/<sha>.json`. The entrypoint writes it atomically (write to `*.tmp`, `fsync`, `rename`) after every step:
+- **Entrypoint.** `ds-release release [--retry-failed] <env> <sha> <step> <script-file>`, `status <env> <sha>`, `finish <env> <sha> succeeded|failed` and `forget <env>`, where `<env>` is one of `prod`, `stage-main` or `stage-pr-<N>`. It ships in the tree (`infra/deploy/bin/ds-release`) and every operator run installs it with `sudo install -m 0755` right after the ship, before any box step; cloud-init creates its state directory on a new box.
+- **Unit name.** `systemd-run --unit=ds-<env>-<sha12>-<step> --remain-after-exit -p KillMode=mixed`, which runs the step script as the calling operator user. A second start under the same name fails fast, so the name itself deduplicates. Finished units of the env are stopped and reset by a later call for that env: only after it has taken the lock, and only for units no longer running.
+- **Lock and lease.** Every mutating call holds `flock -n /run/lock/ds-<env>.lock` for its whole (short) life. A release stays open from its first step until `finish`; while one SHA's release is open for an env, `release` for a different SHA of the same env is refused and names the open SHA. A failing operator run closes its release as `failed`; one that cannot (the box is unreachable) leaves the exact `finish` command in its output. The workflow `concurrency` group is the first line of defence and the lease the last.
+- **Status file — the authority.** Each box keeps `/var/lib/ds-platform/release/<env>/<sha>.json` for the steps it ran. The entrypoint writes it atomically (write to `*.tmp`, `fsync`, `rename`, `fsync` of the directory) at every step boundary:
 
   ```json
   {
     "env": "prod",
     "sha": "<full sha>",
-    "unit": "ds-prod-<sha12>",
+    "unit": "ds-prod-<sha12>-<step>",
     "state": "running | succeeded | failed",
     "step": "pull | backup | migrate | up | verify | prune",
-    "steps": [{ "name": "pull", "startedAt": "…", "endedAt": "…", "rc": 0 }],
+    "steps": [
+      {
+        "name": "pull",
+        "unit": "ds-prod-<sha12>-pull",
+        "startedAt": "…",
+        "endedAt": "…",
+        "rc": 0
+      }
+    ],
     "startedAt": "…",
     "updatedAt": "…",
     "error": null
   }
   ```
 
-- **Reattach.** The runner never streams the step: it starts the unit, then polls `status <env> <sha>`, which reads the status file. Each poll prints one status line into the job log (§4); it never tails the journal. `release <env> <sha>` reads the status file first:
-  - `succeeded` or `failed`: it returns that verdict without starting a unit. A re-run never repeats backup or migrate.
-  - `running`: it attaches to the existing unit by name.
+  `state` is `running` while the release is open, `failed` as soon as a step fails, and `succeeded` only through `finish`, which refuses while any step lacks a success verdict.
+
+- **Reattach.** The runner never streams a step: it starts the unit, then polls `status <env> <sha>`, which reads the status file and reports whether the running step's unit is still alive. Each poll prints one status line into the job log (§4); it never tails the journal. `release` reads the status file first:
+  - step `succeeded`: it returns that verdict without starting a unit. A re-run never repeats backup or migrate.
+  - step `failed`: it returns `failed`. Only an explicit `--retry-failed` re-runs a failed step; nothing re-runs a succeeded one.
+  - step `running`: it attaches to the existing unit by name. A unit that died without recording a verdict (a reboot) is recorded as `failed`.
   - absent: it starts the unit.
 
-  Every step stays idempotent, as the `pnpm deploy:prod` steps are today.
+  Losing the box while polling ends only the wait: the unit keeps running, and a re-run of the same SHA reattaches. Every step stays idempotent, as the `pnpm deploy:prod` steps are today. A stage slot's verdicts are dropped (`forget`) when what they describe is gone: on `down`, and on `reset main` before the re-cloned database is migrated again.
 
-- **Rollback floor.** This is unchanged from today: the pre-migrate pgbackrest backup and the app-only rollback to the previous image digest (`run-prod-deploy` → rollback). With registry images, the rollback becomes a pull of the previous SHA's recorded digest instead of a rebuild.
+- **Rollback floor.** This is unchanged from today: the pre-migrate pgbackrest backup and the app-only rollback to the previous image digest (`run-prod-deploy` → rollback). The rollback stays outside `ds-release`, so it never waits on the lease of the release it reverts. With registry images, the rollback becomes a pull of the previous SHA's recorded digest instead of a rebuild.
 
 ## 6. What this replaces
 
@@ -236,7 +248,7 @@ The plan is staged. Each step is independently valuable and ships as its own sub
 | Step | Scope                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Value on its own                                                                                  |
 | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | (a)  | **Build once and pull instead of build.** An Actions build-once job on merge to `main` (and on internal PR heads under the `pr/` prefix) pushes SHA-tagged images to the registry and records their digests. It needs only HTTPS from the runner to the registry, so no ssh is involved. Compose files reference `ds-platform.registry.twcstorage.ru/<image>@<digest>`. The boxes log in with the pull token and pull instead of build. Stage comes first, through the existing operator path (`slot.mjs` / `pnpm deploy:prod` from the workstation), then prod through the same path. Shrink `ds-api-migrate` to production dependencies. The push token moves into the build Environment and leaves ds-stage-1 | removes on-box builds: the api-prod overload, the ~192 s build and Docker Hub 429s on base layers |
-| (b)  | **Durable box entrypoints.** `ds-release` (`release` / `status`) on `systemd-run` + `flock` + the status file (§5). The existing operator path calls them                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | client death no longer kills a box step, even from the workstation                                |
+| (b)  | **Durable box entrypoints.** `ds-release` (`release` / `status` / `finish` / `forget`) on `systemd-run` + `flock` + the status file (§5), one unit per long box step. The existing operator path (`pnpm deploy:prod`, `slot.mjs`) calls them                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | client death no longer kills a box step, even from the workstation                                |
 | (c)  | **ssh hardening on all boxes** (§4): `PermitRootLogin no`; new CI keys on the `deploy` user restricted by forced command to the allowlisted entrypoint (the existing operator key and its sudo stay as they are, so the workstation runbook keeps working); a break-glass admin user; `MaxStartups` + fail2ban, `unattended-upgrades`. Port 22 on ds-stage-1 opens to GitHub-hosted runners. Environment `stage` (deployment branches `main`) holds the stage key, `STAGE_BASIC_AUTH_PASS` and the test tokens                                                                                                                                                                                                   | runners can reach stage, and the boxes are hardened before any port opens                         |
 | (d)  | **Stage in Actions.** A stage `main` converge job and a stage-suite job run after the build; the verdict is a commit check carrying only the summary; the full report goes over ssh to ds-stage-1 (§4)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | stored suite results; stage always on `main`; no PC RAM in the loop                               |
 | (e)  | **Release workflow.** `workflow_dispatch` → green stage-suite check required → Environment `production` (deployment branches `main` only, owner as required reviewer) → deploy using the recorded digests → smoke → Deployment record for success and failure; `concurrency` allows one release. Port 22 on ds-api-prod opens to GitHub-hosted runners. The agent-side permission deny rule for the approval API (§3 item 3) lands in the Claude Code and Codex configurations in the same step. Prerequisite: the agent's own non-reviewer GitHub identity exists (§10)                                                                                                                                         | a release no longer needs the workstation                                                         |

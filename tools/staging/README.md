@@ -331,6 +331,22 @@ carry no environment (#2995): stage's captcha site key and contour flag are runt
 env, so the same digest serves every slot and, later, production. The BuildKit cache
 cap in the converge's prune stays: `stg-infra`'s `postgres` is still built on the box.
 
+**Durable box steps (#2982).** The ship also installs `/usr/local/bin/ds-release` from
+the slot's own tree, and every long box step of a converge — each image pull
+(`pull-<image>`), `migrate`, `seed`, `up` and `prune` — runs as its own systemd unit
+`ds-stage-main-<sha12>-<step>` / `ds-stage-pr-<N>-<sha12>-<step>` instead of a streamed ssh
+command. The operator starts it, then polls `ds-release status`, one status line per
+poll; the step's log stays in its journal on the box (`sudo journalctl -u <unit>`). A
+killed operator session leaves the unit running, and a re-run at the same SHA returns
+each recorded verdict (never re-running a succeeded step) or reattaches; a step recorded
+as failed re-runs only with `--retry-failed` on `up` / `sync` / `reset`. The converge
+closes its release (`finish`) as its last step, or as failed when it throws; until it is
+closed, a converge of the same slot at another SHA is refused and names the open one.
+Because a recorded `up` is never repeated, re-applying a changed `/etc/ds-platform/*.env`
+at the same SHA goes through `down` + `up`: `down` drops the slot's verdicts
+(`ds-release forget`), and `reset main` drops them before the re-cloned database is
+migrated again. Spec: `apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md` §5.
+
 `reset main --yes --ref <sha>` drops `ds_main` and re-clones it from `ds_golden`, then
 re-runs the ordinary converge on that SHA — the escape hatch for a staging database
 someone has poisoned. It is the **only** resettable slot (a preview's database is

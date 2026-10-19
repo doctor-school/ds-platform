@@ -435,10 +435,14 @@ export function releaseStartScript({ env, sha, step, script, retryFailed = false
   ].join("\n");
 }
 
-/** Read-only, no sudo: the status file is world-readable and replaced atomically. */
+/**
+ * Read-only and lock-free (the file is replaced atomically). Through sudo all the
+ * same: a box's /var/lib/ds-platform may be root-only (ds-stage-1 keeps its e2e
+ * reports there), and the read must not depend on a parent directory's mode.
+ */
 export function releaseStatusScript(env, sha) {
   assertRelease(env, sha);
-  return `${DS_RELEASE_BIN} status ${env} ${sha}`;
+  return `sudo ${DS_RELEASE_BIN} status ${env} ${sha}`;
 }
 
 export function releaseFinishArgv(env, sha, state) {
@@ -453,7 +457,7 @@ export function releaseFinishScript(env, sha, state) {
   return releaseFinishArgv(env, sha, state).join(" ");
 }
 
-/** The env's status-file directory — world-readable, so a probe needs no sudo. */
+/** The env's status-file directory on the box. */
 export function releaseStateDir(env) {
   assertRelease(env, "0".repeat(40));
   return `${RELEASE_STATE_ROOT}/${env}`;

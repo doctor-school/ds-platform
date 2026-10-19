@@ -2520,7 +2520,6 @@ function WebinarPageContentSection() {
               programDownloadLabel="Скачать программу (PDF)"
               speakersLabel="Спикеры"
               sponsorEyebrow="При поддержке"
-              sponsorNote="Спонсор оплачивает эфир и не влияет на программу. Содержание определяют спикеры и школа."
             />
           </div>
         )}

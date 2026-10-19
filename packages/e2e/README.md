@@ -64,32 +64,29 @@ owned by `apps/api/src/auth/rate-limit/rate-limit.service.spec.ts` EARS-13
 `reset() forgives ONLY` tests, rather than inferred from browser admission.
 This coverage change has no render surface and requires no Stage-B slot.
 
-### Naturally expired phone confirmation code (003 EARS-48/16/52)
+### Actual phone-code resend (003 EARS-47/48/42)
 
-`Academy refuses the naturally expired phone code and accepts a fresh control`
-(`steps/phone-code-expiry.steps.ts`, #3035) registers and email-verifies one
-uniquely owned account, requests a fresh phone through the real profile UI and
-retains its actual addressed SMS. A read-only Node-side IdP admin GET reads the
-live `SECRET_GENERATOR_TYPE_VERIFY_PHONE_CODE` lifetime using `IDP_ISSUER` and
-`IDP_SERVICE_TOKEN`; the token never enters the browser. Missing credentials,
-unreadable policy or an invalid/nonpositive lifetime fails proof. The unchanged
-six-digit generator may carry up to one day; the test timeout follows that real
-lifetime. It waits the entire natural lifetime after delivery plus two seconds,
-reads the lifetime again to require it unchanged, then submits exactly the
-received digits through the actual code field. No clock, provider lifetime,
-stored challenge or counter is changed.
+`Academy resends the actual phone SMS and confirms the same owner with its newest delivery`
+(`steps/phone-code-resend.steps.ts`, #3035) registers and verifies a unique owned
+account and requests a phone code through the real Academy profile UI. It reads
+one actual recipient/time/event-bound SMS and its stable sink delivery ID, then
+requires the actual resend control to be disabled. Playwright's page clock runs
+only the existing thirty UI countdown ticks; no wall-clock cooldown wait, server
+clock, provider lifetime, stored challenge or counter is changed. Advancing the
+UI timer itself must make no phone request.
 
-The exact generic 400 and existing generic UI refusal preserve the complete
-unconfirmed profile, subject and secure host-only session. A complete addressed
-mailbox checkpoint and full 20-second negative horizon, with a final query at or
-after the deadline, exclude a success notice. After a real reload, a second UI
-request and fresh actual SMS must successfully confirm that same owner's phone
-as the positive control. Traces stay off; cleanup revokes only the owned session
-and closes its context even on failure. Native IdP delegation, mirror writes,
-audit and counter proofs remain in `apps/api/test/me/phone.e2e-spec.ts` EARS-48;
-the broader original declaration remains retained. Select only
-`@phone-code-expiry` on the lead-owned runtime and allow its complete real wait.
-This coverage change has no render surface or owner Stage-B slot.
+Clicking the real enabled resend must send exactly the second phone request for
+the same number, return the ordinary acknowledgement, restart the disabled
+cooldown and clear the code field. A distinct stable SMS ID proves a new actual
+recipient/time/event-bound delivery even if randomly generated code digits
+coincide. Submitting only that newest delivered code must confirm the same phone,
+subject and original secure host-only session, including a reload. Missing sink
+access fails proof. Traces remain off; cleanup revokes only the owned session
+and closes its context on failure. Native service EARS-47 resend and the shared
+countdown/component contracts remain complementary; this browser case makes no
+IdP expiry or real-time cooldown-duration claim. Run the single
+`@phone-code-resend` case on the lead-owned runtime. This test-only coverage has
+no render surface or owner Stage-B slot.
 
 ### Consumed phone confirmation code (003 EARS-48/16)
 
@@ -567,7 +564,7 @@ scenario: it is proven in CI `api-e2e` by
 Zitadel carries a short `SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE` lifetime
 (`IDP_VERIFY_EMAIL_CODE_TTL_S`, read back before the suite and again by the spec),
 so the real delivered code expires in seconds; staging and production keep 3600s.
-A staging slot run does not wait out the email-code lifetime. The browser refusal
+A staging slot run therefore never waits out a code lifetime. The browser refusal
 UI for a refused code is covered by the wrong-code scenario; OTP limiter debit is
 separate HTTP evidence in `apps/api/test/auth/abuse-limits.e2e-spec.ts` (EARS-13).
 

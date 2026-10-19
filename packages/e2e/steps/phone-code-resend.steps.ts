@@ -3,13 +3,6 @@ import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
 import {
-  captureAddressedMailCheckpoint,
-  mailpitUrlFor,
-  nativeRecoveryMail,
-  type AddressedMailCheckpoint,
-} from "../lib/mailpit.js";
-import { confirmOwnedPhone } from "../lib/owned-phone-confirmation.js";
-import {
   inputSecret,
   registerOwnedCredentials,
 } from "../lib/owned-registration.js";
@@ -18,71 +11,81 @@ import {
   freshConfirmablePhone,
   PHONE_CODE_EVENT,
   phoneConfirmationCode,
+  smsSinkMessages,
   smsSinkUrl,
-  waitForSmsCode,
 } from "../lib/sms-sink.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 
-interface ExpiringPhone {
+interface ResentPhone {
   context: BrowserContext;
   page: Page;
   email: string;
   phone: string;
   sink: string;
-  mailpit: string;
   code: string;
-  ttlMs: number;
-  deliveredAt: number;
+  firstMessageId?: number;
+  requestedAt: string;
+  requests: number;
   subject?: string;
   cookie?: string;
   profile?: string;
-  checkpoint?: AddressedMailCheckpoint;
 }
-const journeys = new WeakMap<Page, ExpiringPhone>();
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-function journey(page: Page): ExpiringPhone {
+const journeys = new WeakMap<Page, ResentPhone>();
+function journey(page: Page): ResentPhone {
   const state = journeys.get(page);
-  if (!state) throw new Error("Owned phone-expiry journey missing");
+  if (!state) throw new Error("Owned phone-resend journey missing");
   return state;
 }
 
-/** Read only: no lifetime writes, stored-code aging or clock substitution. */
-async function livePhoneLifetimeMs(): Promise<number> {
-  const issuer = process.env.IDP_ISSUER;
-  const token = process.env.IDP_SERVICE_TOKEN;
-  if (!issuer || !token)
-    throw new Error("Phone expiry requires IDP_ISSUER and IDP_SERVICE_TOKEN");
-  let payload: { secretGenerator?: { expiry?: string; length?: number } };
-  try {
-    const response = await fetch(
-      `${issuer.replace(/\/$/, "")}/admin/v1/secretgenerators/SECRET_GENERATOR_TYPE_VERIFY_PHONE_CODE`,
-      {
-        headers: { authorization: `Bearer ${token}` },
-        redirect: "error",
-        signal: AbortSignal.timeout(10_000),
+async function actualDelivery(
+  state: ResentPhone,
+  after: string,
+  exclude?: number,
+) {
+  let code = "";
+  let id = 0;
+  await expect
+    .poll(
+      async () => {
+        const messages = await smsSinkMessages(
+          state.sink,
+          state.phone,
+          after,
+          PHONE_CODE_EVENT,
+        );
+        const delivered = messages
+          .map((message) => ({
+            message,
+            id: (message as typeof message & { id?: unknown }).id,
+            receivedAt: (message as typeof message & { receivedAt?: unknown })
+              .receivedAt,
+          }))
+          .filter(
+            (entry) =>
+              Number.isSafeInteger(entry.id) &&
+              Number(entry.id) > 0 &&
+              entry.id !== exclude &&
+              typeof entry.receivedAt === "string" &&
+              Date.parse(entry.receivedAt) >= Date.parse(after) &&
+              entry.message.json?.contextInfo?.eventType === PHONE_CODE_EVENT,
+          );
+        if (delivered.length !== 1) return false;
+        code = phoneConfirmationCode(delivered[0]!.message) ?? "";
+        id = Number(delivered[0]!.id);
+        return /^\d{6}$/.test(code);
       },
-    );
-    if (response.status !== 200) throw new Error("Generator read refused");
-    payload = await response.json();
-  } catch {
-    throw new Error("Live phone-code generator could not be read");
-  }
-  const generator = payload?.secretGenerator;
-  const seconds = Number(
-    /^([0-9]+(?:\.[0-9]+)?)s$/.exec(generator?.expiry ?? "")?.[1],
-  );
-  expect(
-    generator?.length === 6 &&
-      Number.isFinite(seconds) &&
-      seconds > 0 &&
-      seconds <= 86_400,
-    "live six-digit phone generator has a positive lifetime within one day",
-  ).toBe(true);
-  return seconds * 1000;
+      {
+        message:
+          "one fresh recipient/time/event-bound SMS with a distinct stable delivery ID",
+        timeout: 20_000,
+      },
+    )
+    .toBe(true);
+  return { code, id };
 }
 
 async function assertIdentity(
-  state: ExpiringPhone,
+  state: ResentPhone,
   base: string,
   confirmed = false,
 ) {
@@ -141,7 +144,7 @@ async function assertIdentity(
     sameSubject: true,
     unchangedProfile: true,
   });
-  if (!result.subject) throw new Error("Owned expiry subject missing");
+  if (!result.subject) throw new Error("Owned resend subject missing");
   state.subject ??= result.subject;
   state.profile ??= result.profile;
   const cookie = (await state.context.cookies()).find(
@@ -167,33 +170,30 @@ async function assertIdentity(
     path: "/",
     host: true,
   });
-  if (!cookie) throw new Error("Owned expiry cookie missing");
+  if (!cookie) throw new Error("Owned resend cookie missing");
   state.cookie ??= cookie.value;
 }
 
 Given(
-  "an owned verified Academy account receives a phone SMS under the live unchanged generator lifetime",
+  "an owned verified Academy account receives its initial actual phone SMS and has disabled resend",
   async ({ page, browser, httpCredentials, world }) => {
     test.setTimeout(180_000);
     expect(world.host.id).toBe("academy");
     const sink = smsSinkUrl();
-    if (!sink) throw new Error("Phone expiry requires E2E_SMS_SINK_URL");
-    const ttlMs = await livePhoneLifetimeMs();
-    test.setTimeout(ttlMs + 240_000);
+    if (!sink) throw new Error("Phone resend requires E2E_SMS_SINK_URL");
     const context = await browser.newContext({
       locale: "ru-RU",
       ...(httpCredentials ? { httpCredentials } : {}),
     });
-    const state: ExpiringPhone = {
+    const state: ResentPhone = {
       context,
       page: await context.newPage(),
-      email: `phone-expiry-3035-${randomUUID()}@example.test`,
+      email: `phone-resend-3035-${randomUUID()}@example.test`,
       phone: freshConfirmablePhone(),
       sink,
-      mailpit: process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       code: "",
-      ttlMs,
-      deliveredAt: 0,
+      requestedAt: "",
+      requests: 0,
     };
     journeys.set(page, state);
     await prepareCaptchaForJourney(
@@ -218,121 +218,124 @@ Given(
     await state.page.waitForLoadState("networkidle");
     await assertSecureSession(state.page, verified.response, world.hostBaseUrl);
     await assertIdentity(state, world.hostBaseUrl);
+    await state.page.clock.install();
+    await state.page.clock.pauseAt(new Date());
+    state.page.on("request", (request) => {
+      if (
+        request.method() === "POST" &&
+        new URL(request.url()).pathname === "/v1/me/phone"
+      )
+        state.requests += 1;
+    });
     await state.page.getByTestId("profile-phone-action").click();
     await state.page
       .getByTestId("profile-phone-input")
       .pressSequentially(state.phone.slice(1));
-    const requestedAt = new Date().toISOString();
-    const requesting = captureResponse(state.page, "/v1/me/phone");
+    state.requestedAt = new Date().toISOString();
+    const pending = captureResponse(state.page, "/v1/me/phone");
     await state.page.getByTestId("profile-phone-send").click();
-    const requested = await requesting;
-    expect(requested.response.status()).toBe(200);
-    expect(requested.body).toBe('{"status":"code_sent"}');
-    state.code = await waitForSmsCode(
-      sink,
-      state.phone,
-      requestedAt,
-      phoneConfirmationCode,
-      PHONE_CODE_EVENT,
-    );
-    expect(/^\d{6}$/.test(state.code), "actual addressed phone code").toBe(
-      true,
-    );
-    state.deliveredAt = performance.now();
-    state.checkpoint = await captureAddressedMailCheckpoint(
-      nativeRecoveryMail(),
-      state.mailpit,
-      state.email,
-    );
+    const requested = await pending;
+    expect({
+      status: requested.response.status(),
+      body: requested.body,
+    }).toEqual({ status: 200, body: '{"status":"code_sent"}' });
+    const delivery = await actualDelivery(state, state.requestedAt);
+    state.firstMessageId = delivery.id;
+    await expect(state.page.getByTestId("profile-phone-resend")).toBeDisabled();
+    expect(state.requests, "only the initial real phone request").toBe(1);
   },
 );
 
 When(
-  "the owner waits the complete natural phone-code lifetime and submits exactly that received SMS in Academy",
-  async ({ page }) => {
+  "only the browser's thirty-second resend cooldown is advanced and the owner clicks the actual resend control",
+  async ({ page, world }) => {
     const state = journey(page);
-    const deadline = state.deliveredAt + state.ttlMs + 2000;
-    while (performance.now() < deadline)
-      await sleep(Math.min(30_000, deadline - performance.now()));
+    const resend = state.page.getByTestId("profile-phone-resend");
+    await expect(resend).toBeDisabled();
+    // The shared countdown decrements once per interval and React render. Only
+    // this page's clock advances; server/IdP clocks and code lifetimes are real.
+    for (let second = 0; second < 30; second++) {
+      await state.page.clock.runFor(1000);
+      await state.page.evaluate(
+        () => new Promise<void>((resolve) => queueMicrotask(resolve)),
+      );
+    }
+    await expect(resend).toBeEnabled();
+    expect(state.requests, "advancing the UI timer sends nothing").toBe(1);
+    await assertIdentity(state, world.hostBaseUrl);
+    const requestedAt = new Date().toISOString();
+    const pending = captureResponse(state.page, "/v1/me/phone");
+    await resend.click();
+    const requested = await pending;
+    let samePhone = false;
+    try {
+      samePhone =
+        JSON.parse(requested.response.request().postData() ?? "{}").phone ===
+        state.phone;
+    } catch {
+      /* Discard private body diagnostics. */
+    }
+    expect({
+      status: requested.response.status(),
+      body: requested.body,
+      samePhone,
+      requests: state.requests,
+    }).toEqual({
+      status: 200,
+      body: '{"status":"code_sent"}',
+      samePhone: true,
+      requests: 2,
+    });
+    const delivery = await actualDelivery(
+      state,
+      requestedAt,
+      state.firstMessageId,
+    );
     expect(
-      performance.now() - state.deliveredAt > state.ttlMs,
-      "full real lifetime elapsed after delivery",
+      delivery.id !== state.firstMessageId,
+      "resend is a new actual SMS even when random code digits coincide",
     ).toBe(true);
-    expect(
-      await livePhoneLifetimeMs(),
-      "live generator lifetime remained unchanged",
-    ).toBe(state.ttlMs);
+    state.code = delivery.code;
+    await expect(resend).toBeDisabled();
+    await expect(state.page.getByTestId("profile-phone-code")).toHaveValue("");
+    await assertIdentity(state, world.hostBaseUrl);
+    await state.page.clock.resume();
+  },
+);
+
+Then(
+  "the newest actual resend SMS confirms that same Academy phone with the original secure owner session",
+  async ({ page, world }) => {
+    const state = journey(page);
     const pending = captureResponse(state.page, "/v1/me/phone/confirm");
     await inputSecret(state.page.getByTestId("profile-phone-code"), state.code);
-    const refused = await pending;
-    let generic = false;
+    const confirmed = await pending;
+    let samePhone = false;
     try {
-      const body = JSON.parse(refused.body);
-      generic =
-        Object.keys(body).length === 3 &&
-        body.statusCode === 400 &&
-        body.message === "the request could not be completed" &&
-        body.error === "Bad Request";
+      const body = JSON.parse(confirmed.body);
+      samePhone =
+        body.status === "confirmed" &&
+        body.phone === state.phone &&
+        Object.keys(body).length === 2;
     } catch {
-      /* Do not retain code-bearing response diagnostics. */
+      /* Discard private body diagnostics. */
     }
-    expect({ status: refused.response.status(), generic }).toEqual({
-      status: 400,
-      generic: true,
+    expect({ status: confirmed.response.status(), samePhone }).toEqual({
+      status: 200,
+      samePhone: true,
     });
-  },
-);
-
-Then(
-  "the expired code shows generic refusal and preserves the same unconfirmed secure owner with no addressed mail for twenty seconds",
-  async ({ page, world }) => {
-    const state = journey(page);
-    await expect(state.page.locator("#profile-phone-code-error")).toHaveText(
-      /^⚠?\s*Неверный код$/,
-    );
-    await expect(state.page.getByTestId("profile-phone-code")).toBeVisible();
-    await expect(state.page.getByTestId("profile-phone-verified")).toHaveCount(
-      0,
-    );
-    await assertIdentity(state, world.hostBaseUrl);
-    if (!state.checkpoint)
-      throw new Error("Phone-expiry mailbox checkpoint missing");
-    const deadline = Date.now() + 20_000;
-    while (true) {
-      const finalObservation = Date.now() >= deadline;
-      const current = await captureAddressedMailCheckpoint(
-        nativeRecoveryMail(),
-        state.mailpit,
-        state.email,
-      );
-      expect(
-        current.messageIds.some(
-          (id) => !state.checkpoint!.messageIds.includes(id),
-        ),
-        "no addressed mail through full expiry refusal horizon",
-      ).toBe(false);
-      if (finalObservation) break;
-      await sleep(Math.min(500, Math.max(1, deadline - Date.now())));
-    }
+    await expect(
+      state.page.getByTestId("profile-phone-verified"),
+    ).toBeVisible();
+    await assertIdentity(state, world.hostBaseUrl, true);
     await state.page.reload({ waitUntil: "load" });
     await state.page.waitForLoadState("networkidle");
-    await assertIdentity(state, world.hostBaseUrl);
-  },
-);
-
-Then(
-  "a newly requested actual SMS promptly confirms the same Academy owner's phone as the fresh control",
-  async ({ page, world }) => {
-    const state = journey(page);
-    await confirmOwnedPhone(state.page, {
-      phone: state.phone,
-      sink: state.sink,
-    });
     await assertIdentity(state, world.hostBaseUrl, true);
+    expect(state.requests, "exactly initial request and real resend").toBe(2);
   },
 );
 
-After("@phone-code-expiry", async ({ page }) => {
+After("@phone-code-resend", async ({ page }) => {
   const state = journeys.get(page);
   if (!state) return;
   try {
@@ -361,7 +364,7 @@ After("@phone-code-expiry", async ({ page }) => {
             session: session.status,
           };
         }),
-        "owned phone-expiry session revoked",
+        "owned phone-resend session revoked",
       ).toEqual({ logout: 200, profile: 401, session: 401 });
     }
   } finally {

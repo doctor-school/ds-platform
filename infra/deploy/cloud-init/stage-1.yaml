@@ -91,3 +91,10 @@ runcmd:
   - ufw --force enable
   - systemctl enable --now fail2ban
   - install -d -m 0700 -o root -g root /etc/ds-platform
+  # #2982: state dir of the durable release entrypoint /usr/local/bin/ds-release
+  # (status files /var/lib/ds-platform/release/<env>/<sha>.json).
+  # The entrypoint itself needs the shipped tree, so every operator run
+  # (`pnpm deploy:prod`, `pnpm stage:slot`) installs it from
+  # infra/deploy/bin/ds-release right after the ship, before any box step.
+  # It relies on systemd-run, flock, runuser and python3 from the base image.
+  - install -d -m 0755 -o root -g root /var/lib/ds-platform/release

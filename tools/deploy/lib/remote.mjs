@@ -15,6 +15,7 @@
 // byte-identical remote script it rendered before the move.
 
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -372,5 +373,263 @@ export async function shipTree(
     });
   } finally {
     await rm(tmp, { force: true });
+  }
+}
+
+// --- durable box steps (Issue #2982; tech spec 2026-10-16 release pipeline §5) ---
+//
+// A long box step is never streamed over ssh: killing a streamed client kills the
+// remote command within ~2 s. `/usr/local/bin/ds-release` runs each step in its own
+// transient systemd unit (`ds-<env>-<sha12>-<step>`); the operator starts or
+// attaches to it, then polls the box's status file, printing one status line per
+// poll. The full step log stays in the unit's journal on the box.
+
+export const DS_RELEASE_BIN = "/usr/local/bin/ds-release";
+export const RELEASE_STATE_ROOT = "/var/lib/ds-platform/release";
+export const RELEASE_POLL_MS = 10 * 1000;
+export const RELEASE_POLL_MAX_FAILURES = 6;
+export const RELEASE_POLL_MAX_LOST = 3;
+export const RELEASE_STEP_TIMEOUT_MS = 60 * 60 * 1000;
+
+const RELEASE_ENV_RE = /^(prod|stage-main|stage-pr-[1-9][0-9]*)$/;
+const RELEASE_SHA_RE = /^[0-9a-f]{40}$/;
+const RELEASE_STEP_RE = /^[a-z][a-z0-9-]{0,31}$/;
+
+function assertRelease(env, sha, step) {
+  if (!RELEASE_ENV_RE.test(String(env))) {
+    throw new Error(`ds-release env must be prod, stage-main or stage-pr-<N>, not ${JSON.stringify(env)}`);
+  }
+  if (!RELEASE_SHA_RE.test(String(sha))) {
+    throw new Error(`ds-release sha must be the full 40-hex commit id, not ${JSON.stringify(sha)}`);
+  }
+  if (step !== undefined && !RELEASE_STEP_RE.test(String(step))) {
+    throw new Error(`ds-release step name is unusable: ${JSON.stringify(step)}`);
+  }
+}
+
+export function releaseUnitName(env, sha, step) {
+  assertRelease(env, sha, step);
+  return `ds-${env}-${sha.slice(0, 12)}-${step}`;
+}
+
+/** Install the entrypoint from the tree just shipped to the box (every run). */
+export function releaseInstallScript(liveDir = "$HOME/ds-platform") {
+  return `sudo install -m 0755 "${liveDir}/infra/deploy/bin/ds-release" ${DS_RELEASE_BIN}`;
+}
+
+/**
+ * Start (or attach to) one step. The step script reaches the box inside a quoted
+ * heredoc — no expansion, its delimiter derived from the script itself — and
+ * `ds-release` copies it root-only before the unit runs it.
+ */
+export function releaseStartScript({ env, sha, step, script, retryFailed = false }) {
+  assertRelease(env, sha, step);
+  const retry = retryFailed ? " --retry-failed" : "";
+  return withScriptFile(script, `sudo ${DS_RELEASE_BIN} release${retry} ${env} ${sha} ${step} "$f"`);
+}
+
+function withScriptFile(script, command) {
+  const body = script.endsWith("\n") ? script : `${script}\n`;
+  const delimiter = `DS_RELEASE_STEP_${createHash("sha256").update(body).digest("hex").slice(0, 16)}`;
+  return [
+    'f=$(mktemp)',
+    `trap 'rm -f "$f"' EXIT`,
+    `cat > "$f" <<'${delimiter}'`,
+    `${body}${delimiter}`,
+    command,
+  ].join("\n");
+}
+
+/** Read-only: refuses (exit 3, naming the unit) while any step unit of `env` runs. */
+export function releaseCheckScript(env) {
+  assertRelease(env, "0".repeat(40));
+  return `sudo ${DS_RELEASE_BIN} check ${env}`;
+}
+
+/**
+ * Supersede every recorded attempt of `env` under its lock — refused while a step
+ * unit still runs — then run `script` (streamed) still holding the lock. The
+ * app-only rollback's `up -d` goes through it, so a later release of the SHA rolled
+ * off starts a fresh attempt instead of answering from stale verdicts.
+ */
+export function releaseSupersedeScript(env, script) {
+  assertRelease(env, "0".repeat(40));
+  const command = `sudo ${DS_RELEASE_BIN} supersede ${env}`;
+  return script === undefined ? command : withScriptFile(script, `${command} "$f"`);
+}
+
+/**
+ * Read-only and lock-free (the file is replaced atomically). Through sudo all the
+ * same: a box's /var/lib/ds-platform may be root-only (ds-stage-1 keeps its e2e
+ * reports there), and the read must not depend on a parent directory's mode.
+ */
+export function releaseStatusScript(env, sha) {
+  assertRelease(env, sha);
+  return `sudo ${DS_RELEASE_BIN} status ${env} ${sha}`;
+}
+
+export function releaseFinishArgv(env, sha, state) {
+  assertRelease(env, sha);
+  if (state !== "succeeded" && state !== "failed") {
+    throw new Error(`a release finishes succeeded or failed, not ${JSON.stringify(state)}`);
+  }
+  return ["sudo", DS_RELEASE_BIN, "finish", env, sha, state];
+}
+
+export function releaseFinishScript(env, sha, state) {
+  return releaseFinishArgv(env, sha, state).join(" ");
+}
+
+/** The env's status-file directory on the box. */
+export function releaseStateDir(env) {
+  assertRelease(env, "0".repeat(40));
+  return `${RELEASE_STATE_ROOT}/${env}`;
+}
+
+export function releaseForgetArgv(env) {
+  assertRelease(env, "0".repeat(40));
+  return ["sudo", DS_RELEASE_BIN, "forget", env];
+}
+
+/** `{ release, unitAlive }` from one `ds-release status` line. */
+export function parseReleaseStatus(stdout) {
+  const parsed = JSON.parse(String(stdout).trim());
+  if (!parsed || typeof parsed !== "object" || !("release" in parsed)) {
+    throw new Error(`unreadable ds-release status: ${String(stdout).slice(0, 200)}`);
+  }
+  return parsed;
+}
+
+/**
+ * The poller's decision for one step: `absent` (no record), `running`, `lost` (still
+ * marked running but its unit is gone — `release` settles it as failed),
+ * `succeeded` or `failed`.
+ */
+export function releaseStepVerdict(status, step) {
+  const release = status?.release ?? null;
+  const entry = [...(release?.steps ?? [])].reverse().find((s) => s.name === step);
+  if (!entry) return { state: "absent", unit: undefined, rc: null, error: null };
+  const base = { unit: entry.unit, rc: entry.rc ?? null, error: release.error ?? null };
+  if (entry.endedAt == null) {
+    return { ...base, state: status.unitAlive === false ? "lost" : "running" };
+  }
+  return { ...base, state: entry.rc === 0 ? "succeeded" : "failed" };
+}
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const lastLine = (text) => String(text).trim().split(/\r?\n/).at(-1);
+
+/**
+ * Run one long box step durably: start or attach through `ds-release release`, then
+ * poll `ds-release status`, one status line per poll. A succeeded step resolves
+ * (also when a re-run finds it already recorded — it is never repeated); a failed or
+ * lost one rejects with the journal pointer. Losing the box, or the deadline, ends
+ * only the WAIT: the unit keeps running and a re-run of the same SHA reattaches.
+ */
+export async function runDurableStep(
+  host,
+  {
+    env,
+    sha,
+    step,
+    script,
+    label = step,
+    retryFailed = false,
+    capture = sshCapture,
+    sleep = delay,
+    log = (line) => console.log(line),
+    pollMs = RELEASE_POLL_MS,
+    timeoutMs = RELEASE_STEP_TIMEOUT_MS,
+    maxPollFailures = RELEASE_POLL_MAX_FAILURES,
+    maxLostReads = RELEASE_POLL_MAX_LOST,
+    now = Date.now,
+  },
+) {
+  const unit = releaseUnitName(env, sha, step);
+  const start = () =>
+    capture(host, releaseStartScript({ env, sha, step, script, retryFailed }), { stderr: "pipe" });
+  let started;
+  try {
+    started = await start();
+  } catch (error) {
+    throw new Error(`${label}: ds-release on ${host} did not run ${unit}: ${error.message}`, {
+      cause: error,
+    });
+  }
+  const answer = lastLine(started);
+  log(`  ↳ ${host}: ${answer}`);
+  // A verdict the box already recorded for this attempt needs no poll.
+  if (answer.endsWith(`${unit} succeeded (recorded verdict; not re-run)`)) {
+    return { state: "succeeded", unit, rc: 0, error: null };
+  }
+  const reattach = `re-run the same SHA to reattach (box status: ${releaseStatusScript(env, sha)})`;
+  const t0 = now();
+  let failures = 0;
+  let lostReads = 0;
+  for (;;) {
+    await sleep(pollMs);
+    const elapsed = Math.round((now() - t0) / 1000);
+    let status;
+    try {
+      status = parseReleaseStatus(
+        await capture(host, releaseStatusScript(env, sha), {
+          sshOptions: ["-o", "ConnectTimeout=15"],
+          stderr: "pipe",
+        }),
+      );
+      failures = 0;
+    } catch (error) {
+      // The box answered: its record is unreadable. Not lost contact, not transient.
+      const corrupt = error.message.indexOf("ds-release: corrupt status file");
+      if (corrupt >= 0) {
+        throw new Error(`${label}: ${host}: ${error.message.slice(corrupt)}`, { cause: error });
+      }
+      failures += 1;
+      log(`  ⋯ ${host} ${unit} poll failed (${failures}/${maxPollFailures}): ${error.message}`);
+      if (failures >= maxPollFailures) {
+        throw new Error(
+          `${label}: lost contact with ${host} while polling ${unit}. The unit still runs on the box; ${reattach}`,
+          { cause: error },
+        );
+      }
+      continue;
+    }
+    const verdict = releaseStepVerdict(status, step);
+    log(`  ⋯ ${host} ${unit} ${verdict.state} ${elapsed}s`);
+    if (verdict.state === "succeeded") return verdict;
+    if (verdict.state === "failed") {
+      throw new Error(
+        `${label}: ${unit} on ${host} failed (rc ${verdict.rc}${verdict.error ? `: ${verdict.error}` : ""}). ` +
+          `Full log on the box: sudo journalctl -u ${unit}`,
+      );
+    }
+    if (verdict.state !== "lost") lostReads = 0;
+    if (verdict.state === "lost") {
+      // A `systemctl show` hiccup on the box reads as «lost»: only N in a row count.
+      lostReads += 1;
+      if (lostReads < maxLostReads) continue;
+      // `release` settles a dead unit's step as failed under the env lock — or
+      // answers that it still runs, and then the unit is left running.
+      let detail;
+      try {
+        detail = lastLine(await start());
+      } catch (error) {
+        detail = error.message;
+      }
+      if (detail.endsWith("running (attached)")) {
+        throw new Error(
+          `${label}: ${unit} on ${host} read as lost ${lostReads} times, but the box reports it running; it is left running; ${reattach}`,
+        );
+      }
+      throw new Error(
+        `${label}: ${unit} on ${host} ended without a verdict (${detail}). Full log on the box: sudo journalctl -u ${unit}`,
+      );
+    }
+    if (verdict.state === "absent") {
+      throw new Error(`${label}: ${host} holds no record of ${unit} after starting it`);
+    }
+    if (now() - t0 >= timeoutMs) {
+      throw new Error(`${label}: ${unit} on ${host} is still running after ${elapsed}s and is left running; ${reattach}`);
+    }
   }
 }

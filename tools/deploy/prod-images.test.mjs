@@ -181,7 +181,7 @@ test("2981: a missing or unverifiable pull token refuses with the provisioning i
 
 test("2981: the deploy pulls (never builds), migrates without --build and drops the build-cache step", () => {
   assert.doesNotMatch(PROD_SOURCE, /docker compose build|run --build|serviceBuildScript|buildx prune|BUILDX_NO_DEFAULT_ATTESTATIONS/);
-  assert.match(PROD_SOURCE, /pullRecordedImages\(sha, images, \{ label: "api-prod pull" \}\)/);
+  assert.match(PROD_SOURCE, /pullRecordedImages\(sha, images, \{ label: "api-prod pull", durable: true \}\)/);
   assert.match(PROD_SOURCE, /pullRecordedImages\(sha, images, \{ label: "rollback pull" \}\)/);
   const migrate = migrateAndUpScript();
   assert.match(migrate, /docker compose --profile migrate run --rm migrate <\/dev\/null/);
@@ -243,7 +243,7 @@ test("2981: every `${VAR:?}` the api-prod compose requires is rendered by every 
   // the deploy before the pull/migrate/up/runtime-config steps, the rollback
   // before its `up -d`. Runtime-config compare/restart only run after a deploy.
   const deployEnvAt = PROD_SOURCE.indexOf("${deployShaEnvScript(sha)}\n`,\n    { label: \"api-prod DEPLOY_SHA\" }");
-  const migrateAt = PROD_SOURCE.indexOf("await sshScript(API_PROD, migrateAndUpScript()");
+  const migrateAt = PROD_SOURCE.indexOf('await boxStep(API_PROD, sha, "migrate", migrateAndUpScript()');
   const runtimeAt = PROD_SOURCE.indexOf("await applyRuntimeConfigs();");
   assert.ok(deployEnvAt > 0 && deployEnvAt < migrateAt && migrateAt < runtimeAt);
   const rollbackAt = PROD_SOURCE.indexOf("async function rollback(");

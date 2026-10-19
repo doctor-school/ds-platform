@@ -129,7 +129,13 @@ import {
 import {
   PROD_HEALTH_URL,
   STALL_BUDGET_BUILD_MS,
+  releaseCheckScript,
+  releaseFinishScript,
+  releaseInstallScript,
+  releaseSupersedeScript,
+  runDurableStep,
   shipTree,
+  sshBaseArgs,
   sshCapture,
   sshScript,
 } from "./lib/remote.mjs";
@@ -413,6 +419,7 @@ function ok(msg, since) {
 }
 function die(msg, { rollbackHint } = {}) {
   console.error(`\n✗ DEPLOY FAILED: ${msg}`);
+  closeOpenReleaseAsFailed();
   if (rollbackHint) {
     console.error(
       `\n  Rollback pointer: the prod boxes were NOT hand-patched. To revert the\n` +
@@ -560,11 +567,19 @@ async function resolveProdImages(sha) {
 
 // #2981: pull (or reuse) the recorded digests on api-prod as `ds-<image>:<sha>`,
 // then prove every tag carries its recorded digest — before anything boots.
-async function pullRecordedImages(sha, images, { label }) {
-  await sshScript(API_PROD, apiProdPullScript({ sha, images }), {
-    label,
-    stallBudgetMs: STALL_BUDGET_BUILD_MS,
-  });
+//
+// `durable` (#2982) runs the pull as the release's `pull` unit through ds-release;
+// the rollback pull stays streamed — it must never wait on the lease of the very
+// release it reverts.
+async function pullRecordedImages(sha, images, { label, durable = false }) {
+  const script = apiProdPullScript({ sha, images });
+  if (durable) await boxStep(API_PROD, sha, "pull", script, label);
+  else {
+    await sshScript(API_PROD, script, {
+      label,
+      stallBudgetMs: STALL_BUDGET_BUILD_MS,
+    });
+  }
   try {
     assertImageDigests(
       await sshCapture(API_PROD, imageDigestScript({ sha, images })),
@@ -572,6 +587,58 @@ async function pullRecordedImages(sha, images, { label }) {
     );
   } catch (e) {
     die(`${label}: ${e.message}`);
+  }
+}
+
+// #2982 (tech spec 2026-10-16 release pipeline §5): every long box step of a
+// release runs in its own systemd unit through /usr/local/bin/ds-release, so a
+// killed operator session never kills it. A re-run of the same SHA returns each
+// recorded verdict (backup and migrate are never repeated) or reattaches; a step
+// recorded as failed re-runs only under `--retry-failed`.
+const RELEASE_ENV = "prod";
+const RETRY_FAILED = process.argv.includes("--retry-failed");
+
+function boxStep(host, sha, step, script, label) {
+  return runDurableStep(host, {
+    env: RELEASE_ENV,
+    sha,
+    step,
+    script,
+    label,
+    retryFailed: RETRY_FAILED,
+  });
+}
+
+// The SHA whose release is open on the boxes (first durable step → finish). Only a
+// finished release frees the env lease for another SHA, so every failure exit closes
+// it as failed — `die()` included, which is synchronous and exits.
+let openReleaseSha = null;
+
+async function finishReleaseSucceeded(sha) {
+  for (const host of [API_PROD, DATA_PROD]) {
+    await sshScript(host, releaseFinishScript(RELEASE_ENV, sha, "succeeded"), {
+      label: "ds-release finish",
+    });
+  }
+  openReleaseSha = null;
+}
+
+// Best-effort: a step still running on a box is refused by `finish` and stays
+// open, which is right — a re-run of the same SHA reattaches to it.
+function closeOpenReleaseAsFailed() {
+  if (!openReleaseSha) return;
+  const script = releaseFinishScript(RELEASE_ENV, openReleaseSha, "failed");
+  openReleaseSha = null;
+  for (const host of [API_PROD, DATA_PROD]) {
+    const r = spawnSync(
+      "ssh",
+      [...sshBaseArgs(host, ["-o", "ConnectTimeout=15", "-o", "BatchMode=yes"]), script],
+      { stdio: ["ignore", "inherit", "pipe"], encoding: "utf8", timeout: 60_000 },
+    );
+    if (r.status !== 0) {
+      const why = (r.stderr || "").trim().split(/\r?\n/)[0] || r.error?.message || `exit ${r.status}`;
+      console.error(`  ⚠ ${host}: the release stays open (${why}). Close it: ssh ${host} '${script}'`);
+    }
   }
 }
 
@@ -1306,19 +1373,39 @@ async function deploy(hotfixRef = null) {
   t = Date.now();
   await postgres.run(() => shipTree(sha, DATA_PROD));
   ok(`archive → ${DATA_PROD}`, t);
+  // #2982: the durable entrypoint comes from the tree just shipped, every run.
+  for (const host of [API_PROD, DATA_PROD]) {
+    await sshScript(host, releaseInstallScript(), { label: "install ds-release" });
+  }
+  ok("ds-release installed on both boxes");
+  openReleaseSha = sha;
 
   step("data-prod: bring up persistence plane (idempotent)");
   t = Date.now();
+  // The compose interpolation files live INSIDE the shipped tree, which every ship
+  // replaces — so they are rewritten on every run, outside the durable unit: a
+  // re-run whose `up` returns its recorded verdict still leaves them in place for
+  // the compose calls after it (#2982).
   await postgres.run(({ live }) =>
     sshScript(
       DATA_PROD,
       `cd ${DATA_COMPOSE}
 printf 'VPC_IP=%s\\n' '${VPC_IP}' > .env
 printf '%s\\n' '${postgresImageOverride(live)}' > .postgres-artifacts.json
+`,
+      { label: "data-prod compose env" },
+    ),
+  );
+  await postgres.run(() =>
+    boxStep(
+      DATA_PROD,
+      sha,
+      "up",
+      `cd ${DATA_COMPOSE}
 sudo docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest
 sudo docker compose up -d --no-deps redis
 `,
-      { label: "data-prod up", stallBudgetMs: STALL_BUDGET_BUILD_MS },
+      "data-prod up",
     ),
   );
   await postgres.run(({ live, sourceHash }) =>
@@ -1334,12 +1421,14 @@ sudo docker compose up -d --no-deps redis
   // correct pre-migrate anchor at the pre-pilot's near-zero write volume —
   // combined with synchronous WAL archiving it yields PITR to just-before-migrate
   // so an app-only rollback never needs a DB rollback.
-  await sshScript(
+  await boxStep(
     DATA_PROD,
+    sha,
+    "backup",
     `cd ${DATA_COMPOSE}
 sudo docker compose exec -T pgbackrest /usr/local/bin/backup.sh incr
 `,
-    { label: "pgbackrest checkpoint" },
+    "pgbackrest checkpoint",
   );
   const info = await sshCapture(
     DATA_PROD,
@@ -1374,7 +1463,7 @@ ${deployShaEnvScript(sha)}
 `,
     { label: "api-prod DEPLOY_SHA" },
   );
-  await pullRecordedImages(sha, images, { label: "api-prod pull" });
+  await pullRecordedImages(sha, images, { label: "api-prod pull", durable: true });
   ok("recorded digests pulled, tagged and verified (RepoDigests)", t);
 
   step("#1410: PRE-SWAP boot verify (old containers still serving)");
@@ -1389,10 +1478,7 @@ ${deployShaEnvScript(sha)}
 
   step("api-prod: migrate → up -d");
   t = Date.now();
-  await sshScript(API_PROD, migrateAndUpScript(), {
-    label: "api-prod deploy",
-    stallBudgetMs: STALL_BUDGET_BUILD_MS,
-  });
+  await boxStep(API_PROD, sha, "migrate", migrateAndUpScript(), "api-prod deploy");
   ok("migrate + up -d", t);
 
   step("api-prod: apply bind-mounted Caddy + Centrifugo configs (#1175)");
@@ -1405,11 +1491,14 @@ ${deployShaEnvScript(sha)}
 
   step(`DSO-127: image retention (keep last ${IMAGE_RETENTION} SHA tags/repo)`);
   t = Date.now();
-  await sshScript(API_PROD, retentionScript(), { label: "retention" });
+  await boxStep(API_PROD, sha, "prune", retentionScript(), "retention");
   ok("old images pruned", t);
 
   step("DSO-128: prod smoke (--expect-sha)");
   await runSmoke(sha, services);
+
+  step("#2982: close the release on both boxes (frees the env lease)");
+  await finishReleaseSucceeded(sha);
 
   step("Cut the release at the deployed SHA (#996/§10.5 — Option A)");
   cutReleaseAtDeployedSha(sha, { hotfix: Boolean(hotfixRef) });
@@ -1654,6 +1743,18 @@ async function rollback(shaArg) {
     throw err;
   }
 
+  // #2982: a release step outlives the operator session that started it. A
+  // rollback racing a still-running `migrate` (whose `up -d` would put the SHA
+  // being rolled off back) is refused, read-only, before the first state change.
+  for (const host of [API_PROD, DATA_PROD]) {
+    try {
+      await sshCapture(host, releaseCheckScript(RELEASE_ENV), { stderr: "pipe" });
+    } catch (e) {
+      die(`--rollback refused on ${host}: ${e.message}`);
+    }
+  }
+  ok("no release step is running on either box");
+
   // The target images are normally still on the box (retention keeps the last
   // 3). A target older than that is pulled from ITS recorded release manifest
   // (#2981, spec rollback floor) — never rebuilt; a target without one (no
@@ -1689,15 +1790,25 @@ done`,
       "\n    the instance keeps what the last forward deploy converged it to.",
   );
 
+  // #2982: the rollback moves prod off the SHAs the boxes recorded, so it
+  // supersedes their release records under the env lock (refused while a step
+  // unit runs): a later deploy of the SHA rolled off then runs every step again
+  // instead of answering from verdicts that no longer describe the containers.
+  await sshScript(DATA_PROD, releaseSupersedeScript(RELEASE_ENV), {
+    label: "supersede the data-prod release record",
+  });
   step("api-prod: up -d previous tag (NO build, NO migrate — app tier only)");
   await sshScript(
     API_PROD,
-    `cd ${API_COMPOSE}
+    releaseSupersedeScript(
+      RELEASE_ENV,
+      `cd ${API_COMPOSE}
 # Same DEPLOY_SHA-only rewrite as the deploy path — never clobber the other
 # non-secret interpolation vars (SMARTCAPTCHA_SITE_KEY, #729/#186).
 ${deployShaEnvScript(sha)}
 sudo docker compose up -d
 `,
+    ),
     { label: "rollback up" },
   );
 

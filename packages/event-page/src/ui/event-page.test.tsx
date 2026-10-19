@@ -67,6 +67,8 @@ const ENDED_WITH_RECORDING: EventPageView = {
   },
   format: "online",
   seatsLeft: null,
+  signUps: null,
+  viewers: null,
   links: { speakerPages: [] },
 };
 

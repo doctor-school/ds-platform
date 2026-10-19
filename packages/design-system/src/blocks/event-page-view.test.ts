@@ -68,6 +68,8 @@ const VIEW: EventPageView = {
   },
   format: "online",
   seatsLeft: null,
+  signUps: null,
+  viewers: null,
   // 020 EARS-2 — the link set BOTH hosts resolve today: every key absent,
   // because neither storefront mounts a school, expert or community route.
   links: { speakerPages: [] },

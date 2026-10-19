@@ -3465,6 +3465,34 @@
               }
             ]
           },
+          "signUps": {
+            "anyOf": [
+              {
+                "properties": {
+                  "adjacentSpecialties": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "sameSpecialty": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "total": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  }
+                },
+                "required": ["total", "sameSpecialty", "adjacentSpecialties"],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "slug": {
             "type": "string"
           },
@@ -3537,6 +3565,18 @@
           },
           "title": {
             "type": "string"
+          },
+          "viewers": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -3556,6 +3596,8 @@
           "recording",
           "format",
           "seatsLeft",
+          "signUps",
+          "viewers",
           "links"
         ],
         "type": "object"

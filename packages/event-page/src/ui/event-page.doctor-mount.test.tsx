@@ -87,6 +87,8 @@ const EVENT: EventPageView = {
   },
   format: "online",
   seatsLeft: null,
+  signUps: null,
+  viewers: null,
   links: { speakerPages: [] },
 };
 

@@ -60,6 +60,8 @@ const VIEW: HostFreeEventPageView = {
   },
   format: "online",
   seatsLeft: null,
+  signUps: null,
+  viewers: null,
 };
 
 describe("resolveAroundEvent", () => {

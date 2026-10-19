@@ -59,6 +59,8 @@ const EVENT = {
   state: "published",
   format: "online",
   seatsLeft: null,
+  signUps: null,
+  viewers: null,
   recording: {
     state: "preparing",
     primaryKind: null,

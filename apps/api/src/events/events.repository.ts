@@ -43,7 +43,8 @@ import {
 } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { eventsOnActiveDirections } from "./event-direction-restriction.js";
-import { countEventSignUps } from "./event-sign-ups.js";
+import { countEventSignUps, partitionEventSignUps } from "./event-sign-ups.js";
+import { countEventViewers } from "./event-viewers.js";
 import {
   academyFacetClauses,
   academyFacetOptions,
@@ -251,6 +252,18 @@ export class EventsRepository {
   /** Wave-2 entry gate §4.2 (A2) — the colleagues' sign-up count of a page of events, in ONE read. */
   countSignUps(ids: readonly string[]): Promise<Map<string, number>> {
     return countEventSignUps(this.db, ids);
+  }
+
+  /** 020 EARS-3 (#1767) — the same/adjacent specialty split of ONE event's colleague sign-ups. */
+  partitionSignUps(
+    eventId: string,
+  ): Promise<{ sameSpecialty: number; adjacentSpecialties: number }> {
+    return partitionEventSignUps(this.db, eventId);
+  }
+
+  /** Wave-3 gate H2 (row 43) — the distinct participants who were in the room of ONE event. */
+  countViewers(eventId: string): Promise<number> {
+    return countEventViewers(this.db, eventId);
   }
 
   async insert(event: NewEvent): Promise<EventAggregate> {

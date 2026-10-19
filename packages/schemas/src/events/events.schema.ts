@@ -399,6 +399,12 @@ export const CreateEventRequestSchema = z.object({
   /** Sponsor / partner reference (free text in wave 1). */
   partnerRef: z.string().trim().max(300).nullish(),
   /**
+   * Where the event takes place (free text, #2517). Optional for every event;
+   * 044 EARS-13 names it in the congress confirmation email and refuses a
+   * congress sign-up whose event has none.
+   */
+  venue: z.string().trim().max(300).nullish(),
+  /**
    * 012 EARS-26 (#2509) — exactly one kind of the event-kind dictionary: a
    * published, non-retired `event_kinds` id (checked by the server, which owns
    * the dictionary). Never a free-text string.
@@ -495,6 +501,8 @@ export const UpdateEventRequestSchema = z.object({
   specialties: z.array(z.string().trim().min(1).max(100)).max(100).optional(),
   /** `null` clears the sponsor/partner reference; an omitted key leaves it. */
   partnerRef: z.string().trim().max(300).nullish(),
+  /** `null` clears the venue (#2517); an omitted key leaves it. */
+  venue: z.string().trim().max(300).nullish(),
   /**
    * 014 EARS-1 (#1339) — the day the operator promises the recording by
    * (`YYYY-MM-DD`), rendered on the post-live «запись готовится» plaque. `null`
@@ -543,6 +551,8 @@ export const EventAdminDetailSchema = z.object({
   description: z.string(),
   specialties: z.array(z.string()),
   partnerRef: z.string().nullable(),
+  /** Where the event takes place (#2517); `null` when unset. */
+  venue: z.string().nullable(),
   programPdfRef: z.string().nullable(),
   programPdfUrl: z.string().nullable(),
   /** The stream config the 006 room consumes (EARS-3); `null` until configured. */

@@ -336,6 +336,7 @@ export class EventsRepository {
         | "description"
         | "specialties"
         | "partnerRef"
+        | "venue"
         | "programPdfRef"
         | "recordingExpectedBy"
         | "kindId"

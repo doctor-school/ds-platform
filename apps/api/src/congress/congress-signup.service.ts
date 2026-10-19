@@ -82,6 +82,15 @@ export const CONGRESS_SIGN_UP_UNAVAILABLE = {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** EARS-5 / EARS-13 — the registrable event a submission is written against. */
+interface RegistrableCongressEvent {
+  id: string;
+  title: string;
+  startsAt: Date;
+  /** The event's own venue, trimmed and non-blank (#2517). */
+  venue: string;
+}
+
 /**
  * 044 EARS-35 — which door a congress submission came through. It is a
  * PARAMETER of the one intake, never a second intake: both doors run the same
@@ -182,7 +191,7 @@ export class CongressSignUpService {
     // EARS-28 requires of the window check.
     //
     // EARS-35 — the desk still reads the settings (the consent version it
-    // stamps and the venue the letter names), but the window is the PUBLIC
+    // stamps), but the window is the PUBLIC
     // form's and is not asked, and the event is the admin route's, not the
     // configured one.
     const settings = this.settingsOrRefuse();
@@ -278,7 +287,7 @@ export class CongressSignUpService {
       email: request.email,
       eventTitle: event.title,
       eventStartsAt: event.startsAt,
-      eventVenue: settings.eventVenue,
+      eventVenue: event.venue,
     });
 
     if (!outcome) throw new Error("intake transaction produced no outcome");
@@ -518,22 +527,31 @@ export class CongressSignUpService {
    * account is created, so a misconfigured event id cannot leave a credential-
    * less account behind with no registration to justify it.
    *
-   * EARS-13 - it also returns the title and the start instant, read on the SAME
-   * hop rather than by the mail dispatch a moment later. That dispatch runs off
-   * the response path, where a second query would be a second thing able to
-   * fail after the participant has already been told "accepted"; reading both
-   * here also guarantees the mail describes the very event the registration was
-   * checked against.
+   * EARS-13 - it also returns the title, the start instant and the venue, read
+   * on the SAME hop rather than by the mail dispatch a moment later. That
+   * dispatch runs off the response path, where a second query would be a second
+   * thing able to fail after the participant has already been told "accepted";
+   * reading them here also guarantees the mail describes the very event the
+   * registration was checked against.
+   *
+   * EARS-13 (#2517) - the venue is the EVENT's (`events.venue`, set in the
+   * admin event form), and an event without one is refused here, BEFORE any
+   * side effect, through the same generic refusal as an unregistrable event:
+   * the venue is only read once the registration has committed and the mail is
+   * being built, so an event nobody gave a venue would otherwise register
+   * participants and only then discover it cannot tell them where to come.
+   * Failing closed keeps «accepted» meaning «and you will be told where».
    */
   private async loadRegistrableEvent(
     eventId: string,
-  ): Promise<{ id: string; title: string; startsAt: Date }> {
+  ): Promise<RegistrableCongressEvent> {
     const [event] = await this.db
       .select({
         id: events.id,
         state: events.state,
         title: events.title,
         startsAt: events.startsAt,
+        venue: events.venue,
       })
       .from(events)
       .where(eq(events.id, eventId))
@@ -548,7 +566,20 @@ export class CongressSignUpService {
       throw new UnprocessableEntityException(CONGRESS_SIGN_UP_UNAVAILABLE);
     }
 
-    return { id: event.id, title: event.title, startsAt: event.startsAt };
+    const venue = event.venue?.trim();
+    if (venue == null || venue === "") {
+      this.logger.error(
+        `congress sign-up refused: event ${eventId} has no venue (set «Место проведения» in the admin event form)`,
+      );
+      throw new UnprocessableEntityException(CONGRESS_SIGN_UP_UNAVAILABLE);
+    }
+
+    return {
+      id: event.id,
+      title: event.title,
+      startsAt: event.startsAt,
+      venue,
+    };
   }
 
   /**
@@ -559,7 +590,7 @@ export class CongressSignUpService {
    */
   private async loadDeskEvent(
     eventKey: string,
-  ): Promise<{ id: string; title: string; startsAt: Date }> {
+  ): Promise<RegistrableCongressEvent> {
     const [found] = await this.db
       .select({ id: events.id })
       .from(events)

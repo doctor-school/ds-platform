@@ -95,6 +95,13 @@ export const events = pgTable(
     specialties: text("specialties").array().notNull().default([]),
     /** Sponsor / partner reference (free text in wave 1). */
     partnerRef: text("partner_ref"),
+    /**
+     * Where the event takes place, as the admin typed it (free text, trimmed,
+     * ≤300 chars by the request schema); null when the admin left it empty.
+     * 044 EARS-13 reads it for the congress confirmation email's «{место}»
+     * and refuses a congress sign-up whose event has none (#2517).
+     */
+    venue: text("venue"),
     /** Object-storage key for the current program PDF; null until one is uploaded. */
     programPdfRef: text("program_pdf_ref"),
     state: eventLifecycleState("state").notNull().default("draft"),

@@ -120,3 +120,51 @@ test.describe("007 EARS-12 — «Скрыть число записавшихс�
     }
   });
 });
+
+/**
+ * 044 EARS-13 (#2517), browser half — «Место проведения» in the event editor.
+ * The API e2e (`apps/api/test/admin/edit-event.e2e-spec.ts`) proves the column
+ * and the null/blank clear; the browser proves the operator's round trip: an
+ * event created with the box empty reopens empty, a typed place is saved and
+ * reopened, an over-long place is refused on the field, and clearing the box
+ * saves the venue away.
+ */
+test.describe("044 EARS-13 — «Место проведения» in the event editor", () => {
+  const VENUE = "Москва, ГК «Милан», ул. Шипиловская, д. 28А";
+
+  test("044 EARS-13: empty → filled and saved, reopened with the value; too long refused; cleared → saved empty", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+    const id = await createPublishedEvent(page, `Место ${Date.now()}`, {
+      venue: null,
+    });
+    try {
+      const venue = page.locator("#venue");
+      await expect(page.getByLabel("Место проведения")).toBeVisible();
+      await expect(venue).toHaveValue("");
+      await venue.scrollIntoViewIfNeeded();
+      await evidenceShot(page, "admin-venue-empty");
+
+      // Reject: more than 300 characters is refused on the field, nothing saved.
+      await venue.fill("м".repeat(301));
+      await page.getByTestId("submit-event").click();
+      await expect(page.getByTestId("edit-ok")).toHaveCount(0);
+      await expect(venue).toHaveAttribute("aria-invalid", "true");
+
+      // Accept: a typed place is saved and the reopened editor shows it.
+      await venue.fill(`  ${VENUE}  `);
+      await saveAndReopen(page, id);
+      await expect(page.locator("#venue")).toHaveValue(VENUE);
+      await page.locator("#venue").scrollIntoViewIfNeeded();
+      await evidenceShot(page, "admin-venue-filled");
+
+      // Cleared: the emptied box saves the venue away.
+      await page.locator("#venue").fill("");
+      await saveAndReopen(page, id);
+      await expect(page.locator("#venue")).toHaveValue("");
+    } finally {
+      await retireEventFromStorefronts(page, id);
+    }
+  });
+});

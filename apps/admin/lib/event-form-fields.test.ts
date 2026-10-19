@@ -29,9 +29,14 @@ const detail = {
   durationMin: 90,
   description: "Описание",
   partnerRef: "partner-1",
+  venue: "Москва, ГК «Милан»",
   specialties: ["cardiology", "therapy"],
   streamConfig: { provider: "rutube", embedRef: "abc123" },
-  kind: { id: "44444444-4444-4444-8444-444444444444", slug: "efir", title: "Эфир" },
+  kind: {
+    id: "44444444-4444-4444-8444-444444444444",
+    slug: "efir",
+    title: "Эфир",
+  },
   participationFormat: "online",
   audience: "experts",
 } as unknown as EventAdminDetail;
@@ -46,6 +51,8 @@ describe("007 EARS-2/EARS-3 form fields projection (#1593)", () => {
     expect(fields.durationMin).toBe(90);
     expect(fields.description).toBe("Описание");
     expect(fields.partnerRef).toBe("partner-1");
+    // 044 EARS-13 (#2517) — «Место проведения».
+    expect(fields.venue).toBe("Москва, ГК «Милан»");
     expect(fields.specialtiesText).toBe("cardiology, therapy");
   });
 
@@ -63,6 +70,7 @@ describe("007 EARS-2/EARS-3 form fields projection (#1593)", () => {
       durationMin: 60,
       description: "",
       partnerRef: "",
+      venue: "",
       specialtiesText: "",
       legacy: false,
       recording: { kind: "edited", provider: "rutube", embedRef: "" },
@@ -89,7 +97,11 @@ describe("007 EARS-2/EARS-3 form fields projection (#1593)", () => {
   it("012 EARS-26/29: the edit fields project the event's kind id, participation format and audience", () => {
     const fields = eventFormFields({
       ...detail,
-      kind: { id: "22222222-2222-4222-8222-222222222222", slug: "vebinar", title: "Вебинар" },
+      kind: {
+        id: "22222222-2222-4222-8222-222222222222",
+        slug: "vebinar",
+        title: "Вебинар",
+      },
       participationFormat: "offline",
       audience: "doctors",
     });

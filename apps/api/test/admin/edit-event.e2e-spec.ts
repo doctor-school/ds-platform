@@ -459,6 +459,68 @@ describe.skipIf(
     expect(rows[0]?.hide_sign_up_count).toBe(true);
   });
 
+  it("044 EARS-13: «Место проведения» is optional on create, set trimmed by create and update, survives an edit that omits it, and is cleared by null or a blank value (#2517)", async () => {
+    const cookie = await session(uniqueEmail("admin"), "platform_admin");
+    const detail = async (id: string) => {
+      const res = await app.inject({
+        method: "GET",
+        url: `/v1/admin/events/${id}`,
+        headers: { ...device, ...authHeaders(cookie) },
+      });
+      expect(res.statusCode).toBe(200);
+      return res.json() as Record<string, unknown>;
+    };
+    const patch = async (id: string, payload: Record<string, unknown>) => {
+      const edit = multipartBody({ payload: JSON.stringify(payload) });
+      const res = await app.inject({
+        method: "PATCH",
+        url: `/v1/admin/events/${id}`,
+        headers: admHeaders(cookie, edit.contentType),
+        payload: edit.body,
+      });
+      expect(res.statusCode).toBe(200);
+      return res.json() as Record<string, unknown>;
+    };
+    const stored = async (id: string) =>
+      (
+        await pool.query<{ venue: string | null }>(
+          "SELECT venue FROM events WHERE id = $1",
+          [id],
+        )
+      ).rows[0]?.venue;
+
+    // Optional: an event created without one has none.
+    const plain = await createEvent(cookie);
+    expect(plain.venue).toBeNull();
+    expect((await detail(plain.id as string)).venue).toBeNull();
+
+    // Set on create, trimmed.
+    const placed = await createEvent(cookie, {
+      venue: "  Москва, ГК «Милан», ул. Шипиловская, д. 28А  ",
+    });
+    const id = placed.id as string;
+    expect(placed.venue).toBe("Москва, ГК «Милан», ул. Шипиловская, д. 28А");
+    expect((await detail(id)).venue).toBe(
+      "Москва, ГК «Милан», ул. Шипиловская, д. 28А",
+    );
+
+    // An edit that omits the key leaves it; an explicit value moves it.
+    expect((await patch(id, { title: "Конгресс с местом" })).venue).toBe(
+      "Москва, ГК «Милан», ул. Шипиловская, д. 28А",
+    );
+    expect((await patch(id, { venue: "Казань, Казань Экспо" })).venue).toBe(
+      "Казань, Казань Экспо",
+    );
+    expect(await stored(id)).toBe("Казань, Казань Экспо");
+
+    // A blank value and an explicit null both clear it — stored as null, never "".
+    expect((await patch(id, { venue: "   " })).venue).toBeNull();
+    expect(await stored(id)).toBeNull();
+    await patch(id, { venue: "Казань, Казань Экспо" });
+    expect((await patch(id, { venue: null })).venue).toBeNull();
+    expect(await stored(id)).toBeNull();
+  });
+
   it("EARS-2: an edit to a hidden event is refused (409) — editing is a pre-hide action", async () => {
     const cookie = await session(uniqueEmail("admin"), "platform_admin");
     const created = await createEvent(cookie);

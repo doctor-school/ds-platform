@@ -112,25 +112,25 @@ It is deliberately absent from the `@ds/db` root barrel: the api imports that
 barrel for the specialty book seed, and a staging fixture — accounts, events,
 consent records — has no business in the production module graph.
 
-| Path                                         | Row                                                                                                               |
-| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `golden.doctors.unverified`                  | signed up, address unconfirmed                                                                                    |
-| `golden.doctors.verifiedCardiologist`        | the default doctor; primary specialty «Кардиология»                                                               |
-| `golden.doctors.mfaEnrolled`                 | verified + second factor; primary specialty «Неврология»                                                          |
-| `golden.doctors.deleted`                     | `record_status = 'retired'`, `deleted_at` stamped                                                                 |
-| `golden.admins.platform`                     | the `platform_admin`                                                                                              |
-| `golden.experts.published` / `.draft`        | published expert (on three events + curator of the school) / draft expert                                         |
-| `golden.projects.publishedSchool` / `.draft` | published `school` / draft `media`                                                                                |
-| `golden.events.draft`                        | `draft`                                                                                                           |
-| `golden.events.upcoming`                     | `published`, starts `+14d`, seats left — the registration happy path; a configured congress (046 intake settings) |
-| `golden.events.live`                         | `live`, started `-15m`, `live_at` stamped, `stream_config` attached — the doctor storefront room (`doctors`)      |
-| `golden.events.academyLive`                  | same shape — the Academy room (`experts`)                                                                         |
-| `golden.events.hidden`                       | `hidden`                                                                                                          |
-| `golden.events.pastWithRecording`            | `ended` at `-30d`, carries the recordings below                                                                   |
-| `golden.events.archived`                     | `in_archive`, `origin = legacy`                                                                                   |
-| `golden.recordings.pastEdited`               | published edited recording (poster + duration)                                                                    |
-| `golden.recordings.pastRawDraft`             | draft raw recording — admin-only                                                                                  |
-| `golden.registrations.*`                     | verified doctor on upcoming / live / academyLive / past; MFA doctor on live                                       |
+| Path                                         | Row                                                                                                                          |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `golden.doctors.unverified`                  | signed up, address unconfirmed                                                                                               |
+| `golden.doctors.verifiedCardiologist`        | the default doctor; primary specialty «Кардиология»                                                                          |
+| `golden.doctors.mfaEnrolled`                 | verified + second factor; primary specialty «Неврология»                                                                     |
+| `golden.doctors.deleted`                     | `record_status = 'retired'`, `deleted_at` stamped                                                                            |
+| `golden.admins.platform`                     | the `platform_admin`                                                                                                         |
+| `golden.experts.published` / `.draft`        | published expert (on three events + curator of the school) / draft expert                                                    |
+| `golden.projects.publishedSchool` / `.draft` | published `school` / draft `media`                                                                                           |
+| `golden.events.draft`                        | `draft`                                                                                                                      |
+| `golden.events.upcoming`                     | `published`, starts `+14d`, seats left — the registration happy path; a configured congress (046 intake settings, 044 venue) |
+| `golden.events.live`                         | `live`, started `-15m`, `live_at` stamped, `stream_config` attached — the doctor storefront room (`doctors`)                 |
+| `golden.events.academyLive`                  | same shape — the Academy room (`experts`)                                                                                    |
+| `golden.events.hidden`                       | `hidden`                                                                                                                     |
+| `golden.events.pastWithRecording`            | `ended` at `-30d`, carries the recordings below                                                                              |
+| `golden.events.archived`                     | `in_archive`, `origin = legacy`                                                                                              |
+| `golden.recordings.pastEdited`               | published edited recording (poster + duration)                                                                               |
+| `golden.recordings.pastRawDraft`             | draft raw recording — admin-only                                                                                             |
+| `golden.registrations.*`                     | verified doctor on upcoming / live / academyLive / past; MFA doctor on live                                                  |
 
 Every `golden.events.*` row except `live` is an Academy event (`audience =
 experts`, kind «Эфир»): the Academy listing, archive and month view read only

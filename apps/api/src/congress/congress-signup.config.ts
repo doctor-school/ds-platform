@@ -74,18 +74,6 @@ export interface CongressSignUpSettings {
   /** The version stamped on the personal-data consent row (EARS-9). */
   consentVersion: string;
   /**
-   * 044 EARS-13 — the «{место}» line of the confirmation email.
-   *
-   * Configuration and NOT an `events` column: this is one congress, and the
-   * venue is a constant of it. Adding a venue column to `events` would put
-   * a field on every webinar in the catalogue — none of which has a place —
-   * purely so one mail can name one address, and 044 explicitly adds no new
-   * admin-editable setting. It is trimmed and required: a confirmation email
-   * that says «зарегистрированы на …: 12 марта, .» is worse than a refused
-   * submission the operator can see in the log.
-   */
-  eventVenue: string;
-  /**
    * 044 EARS-28 — the registration window, as the operator CONFIGURED it.
    *
    * Kept as the configured strings rather than `Date`s because the opening
@@ -98,8 +86,8 @@ export interface CongressSignUpSettings {
   /**
    * 044 EARS-34 — the congress days, ascending ISO `YYYY-MM-DD` dates. The
    * registrar marks attendance per day, and only on these days: a mark for any
-   * other date is refused. Configuration rather than an `events` column for the
-   * venue's reason — the catalogue's other events are single-session webinars.
+   * other date is refused. Configuration rather than an `events` column: the
+   * catalogue's other events are single-session webinars.
    */
   eventDays: readonly string[];
 }
@@ -110,7 +98,6 @@ export type CongressSignUpConfigProblem =
   | "event-id-malformed"
   | "consent-version-unset"
   | "consent-version-malformed"
-  | "event-venue-unset"
   | "window-opens-at-unset"
   | "window-opens-at-malformed"
   | "window-closes-at-unset"
@@ -140,7 +127,6 @@ export type CongressSignUpEnv = Pick<
   Partial<ApiEnv>,
   | "CONGRESS_SIGNUP_EVENT_ID"
   | "CONGRESS_SIGNUP_CONSENT_VERSION"
-  | "CONGRESS_SIGNUP_EVENT_VENUE"
   | "CONGRESS_SIGNUP_WINDOW_OPENS_AT"
   | "CONGRESS_SIGNUP_WINDOW_CLOSES_AT"
   | "CONGRESS_SIGNUP_TIMING_FLOOR_MS"
@@ -168,7 +154,8 @@ export function resolveCongressSignUpTimingFloorMs(
   if (raw == null || raw === "") {
     return { ok: true, floorMs: CONGRESS_SIGN_UP_DEFAULT_TIMING_FLOOR_MS };
   }
-  if (!/^\d+$/.test(raw)) return { ok: false, reason: "timing-floor-malformed" };
+  if (!/^\d+$/.test(raw))
+    return { ok: false, reason: "timing-floor-malformed" };
   const floorMs = Number(raw);
   if (!Number.isSafeInteger(floorMs)) {
     return { ok: false, reason: "timing-floor-malformed" };
@@ -209,8 +196,7 @@ export function readCongressSignUpTimingFloorMs(): number {
 
 /** One configured window instant, or why it is unusable. */
 type WindowInstantResult =
-  | { ok: true; value: string }
-  | { ok: false; kind: "unset" | "malformed" };
+  { ok: true; value: string } | { ok: false; kind: "unset" | "malformed" };
 
 /**
  * 044 EARS-28 — read ONE configured window instant.
@@ -300,17 +286,6 @@ export function resolveCongressSignUpSettings(
     return { ok: false, reason: "consent-version-malformed" };
   }
 
-  // EARS-13 — validated HERE with the rest, and BEFORE any side effect: the
-  // venue is only read once the registration has committed and the mail is
-  // being built, so a deployment that forgot the key would otherwise register
-  // participants for weeks and only then discover it cannot describe the event
-  // to them. Failing the submission closed instead keeps «accepted» meaning
-  // «and you will be told where to come».
-  const eventVenue = env.CONGRESS_SIGNUP_EVENT_VENUE?.trim();
-  if (eventVenue == null || eventVenue === "") {
-    return { ok: false, reason: "event-venue-unset" };
-  }
-
   // EARS-28 — the window is configuration like the rest, and validated HERE so
   // an unusable window refuses the submission through the SAME generic refusal
   // rather than through a window refusal: «регистрация ещё не открыта» to every
@@ -336,7 +311,7 @@ export function resolveCongressSignUpSettings(
   const timingFloor = resolveCongressSignUpTimingFloorMs(env);
   if (!timingFloor.ok) return { ok: false, reason: timingFloor.reason };
 
-  // EARS-34 — required like the venue: a deployment that forgot the congress
+  // EARS-34 — required: a deployment that forgot the congress
   // days would accept registrations it could never mark present at the desk.
   const eventDays = resolveCongressEventDays(env.CONGRESS_SIGNUP_EVENT_DAYS);
   if (!eventDays.ok) return { ok: false, reason: eventDays.reason };
@@ -346,7 +321,6 @@ export function resolveCongressSignUpSettings(
     settings: {
       eventId,
       consentVersion,
-      eventVenue,
       windowOpensAt: opensAt.value,
       windowClosesAt: closesAt.value,
       eventDays: eventDays.days,

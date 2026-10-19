@@ -278,13 +278,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(rows[0]).toBeDefined();
       // 003 EARS-58: the mirror holds an IdP phone only while the IdP holds
       // it verified, so the payload carries the verified flag the IdP would.
-      await app
-        .get(UserMirrorService)
-        .upsert({
-          zitadelSub: rows[0]!.zitadel_sub,
-          phone,
-          phoneVerified: true,
-        });
+      await app.get(UserMirrorService).upsert({
+        zitadelSub: rows[0]!.zitadel_sub,
+        phone,
+        phoneVerified: true,
+      });
 
       const registered = await app.inject({
         method: "POST",
@@ -347,9 +345,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await pool.query(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
-            specialties, partner_ref, program_pdf_ref, state,
+            specialties, partner_ref, program_pdf_ref, state, venue,
             participation_format, kind_id, audience)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'offline', ${eventClassificationSql()})`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, 'Москва, тестовая площадка','offline', ${eventClassificationSql()})`,
         [
           eventId,
           eventSlug,

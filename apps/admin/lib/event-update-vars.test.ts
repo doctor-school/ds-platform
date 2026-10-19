@@ -22,6 +22,7 @@ const base: EventFormValues = {
   description: "",
   specialties: [],
   partnerRef: null,
+  venue: null,
   programPdf: null,
   legacy: false,
   recording: null,
@@ -65,6 +66,7 @@ describe("eventUpdateVars", () => {
       description: "Описание",
       specialties: ["cardiology"],
       partnerRef: "ACME",
+      venue: "Москва, ГК «Милан»",
     };
     expect(eventUpdateVars(values, { legacy: false })).toEqual({
       title: "Эфир",
@@ -74,6 +76,7 @@ describe("eventUpdateVars", () => {
       description: "Описание",
       specialties: ["cardiology"],
       partnerRef: "ACME",
+      venue: "Москва, ГК «Милан»",
       programPdf: null,
       kindId: "22222222-2222-4222-8222-222222222222",
       participationFormat: "online",

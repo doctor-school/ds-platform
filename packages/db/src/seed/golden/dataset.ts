@@ -298,17 +298,23 @@ export function buildGoldenDataset(
       updated: created,
       specialties: ["Кардиология"],
     }),
-    baseEvent({
-      id: golden.events.upcoming.id,
-      slug: golden.events.upcoming.slug,
-      title: "Предстоящий эфир (эталон)",
-      startsAt: at({ days: 14 }),
-      state: "published",
-      created,
-      updated: at({ days: -20 }),
-      specialties: ["Кардиология", "Терапия"],
-      seatsLeft: 120,
-    }),
+    {
+      ...baseEvent({
+        id: golden.events.upcoming.id,
+        slug: golden.events.upcoming.slug,
+        title: "Предстоящий эфир (эталон)",
+        startsAt: at({ days: 14 }),
+        state: "published",
+        created,
+        updated: at({ days: -20 }),
+        specialties: ["Кардиология", "Терапия"],
+        seatsLeft: 120,
+      }),
+      // 044 EARS-13 (#2517) — the configured congress of every seeded box: the
+      // intake refuses a congress event with no venue, and the confirmation
+      // email names this one.
+      venue: "Москва, тестовая площадка (эталон)",
+    },
     {
       ...baseEvent({
         id: golden.events.live.id,

@@ -562,6 +562,8 @@ export class EventsService {
       description: input.description,
       specialties: input.specialties,
       partnerRef: input.partnerRef ?? null,
+      // #2517 — a blank venue is stored as "no venue", never as "".
+      venue: input.venue || null,
       programPdfRef,
       state: "draft",
       // 012 EARS-26 / EARS-29 — the kind (checked against the format inside the
@@ -647,6 +649,7 @@ export class EventsService {
         | "description"
         | "specialties"
         | "partnerRef"
+        | "venue"
         | "programPdfRef"
         | "recordingExpectedBy"
         | "kindId"
@@ -672,6 +675,8 @@ export class EventsService {
     if (input.specialties !== undefined) patch.specialties = input.specialties;
     // `null` clears the reference, a string sets it, `undefined` leaves it.
     if (input.partnerRef !== undefined) patch.partnerRef = input.partnerRef;
+    // #2517 — the same, with a blank string meaning «no venue» (stored null).
+    if (input.venue !== undefined) patch.venue = input.venue || null;
     // 014 EARS-1 (#1339) — the operator's recording-readiness date. `null` clears
     // the promise, a `YYYY-MM-DD` string sets it, `undefined` leaves it. Stored as
     // a `date`, so the value round-trips as the day the operator typed.
@@ -1593,6 +1598,7 @@ export class EventsService {
       description: e.description,
       specialties: e.specialties,
       partnerRef: e.partnerRef,
+      venue: e.venue,
       programPdfRef: e.programPdfRef,
       programPdfUrl: e.programPdfRef
         ? await this.storage.urlFor(e.programPdfRef)

@@ -110,6 +110,9 @@ export function eventFormSchema({
       // before the box was checked must not fail a submit on a field the operator
       // can no longer see or clear.
       partnerRef: z.string(),
+      // «Место проведения» (#2517) — platform-only like the partner reference,
+      // and validated in the refinement below for the same reason.
+      venue: z.string(),
       // 012 EARS-26/29/30 (#2509) — three required choices the form offers from
       // closed lists: the kind (published kinds), the participation format (only
       // those the chosen kind allows) and the audience. An empty select is the
@@ -172,6 +175,13 @@ export function eventFormSchema({
             ctx.addIssue({ ...rest, path: ["partnerRef"] } as never);
           }
         }
+        const venue = create.venue.safeParse(values.venue);
+        if (!venue.success) {
+          for (const issue of venue.error.issues) {
+            const { message: _resolved, ...rest } = issue;
+            ctx.addIssue({ ...rest, path: ["venue"] } as never);
+          }
+        }
       }
 
       // The recording block is authored WITH the эфир and only then: on the edit
@@ -215,6 +225,8 @@ export interface EventFormFields {
   durationMin: number;
   description: string;
   partnerRef: string;
+  /** «Место проведения» (#2517) — "" when unset. */
+  venue: string;
   specialtiesText: string;
   /** 014 EARS-24 — «Это архивный эфир» (server-assigned `legacy` origin). */
   legacy: boolean;

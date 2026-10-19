@@ -32,6 +32,9 @@ function mskInput(offsetMs: number): string {
  *   air window, e.g. a few minutes ahead.
  * @param options.kindTitle / options.audience The 012 classification
  *   (default: the Academy «Эфир» for experts, {@link chooseEventClassification}).
+ * @param options.venue «Место проведения» (default: a test place; `null` leaves
+ *   the box empty). Filled by default because the 044 congress intake — the
+ *   registrar's desk included — refuses an event with no venue (#2517).
  */
 export async function createPublishedEvent(
   page: Page,
@@ -40,6 +43,7 @@ export async function createPublishedEvent(
     startsInMs?: number;
     kindTitle?: string;
     audience?: "experts" | "doctors";
+    venue?: string | null;
   } = {},
 ): Promise<string> {
   await page.goto("/events/create");
@@ -50,6 +54,9 @@ export async function createPublishedEvent(
     .locator("#startsAtMsk")
     .fill(mskInput(options.startsInMs ?? 7 * DAY_MS));
   await page.locator("#durationMin").fill("90");
+  const venue =
+    options.venue === undefined ? "Москва, тестовая площадка" : options.venue;
+  if (venue !== null) await page.locator("#venue").fill(venue);
   await page.getByTestId("program-pdf").setInputFiles({
     name: "program.pdf",
     mimeType: "application/pdf",

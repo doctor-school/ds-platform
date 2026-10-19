@@ -21,7 +21,6 @@ process.env["CONGRESS_SIGNUP_TIMING_FLOOR_MS"] ??= "5";
 // three suites that drive the intake care about the OTHER settings, and the one
 // suite that asserts the mail copy sets its own venue in `beforeAll` - so the
 // runner supplies a neutral default the same way it supplies the floor.
-process.env["CONGRESS_SIGNUP_EVENT_VENUE"] ??= "Москва, тестовая площадка";
 
 // 044 EARS-28: the registration window is now two REQUIRED keys, so without
 // them `resolveCongressSignUpSettings` refuses every submission and the suites

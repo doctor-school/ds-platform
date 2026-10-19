@@ -31,6 +31,7 @@ export function eventFormFields(detail?: EventAdminDetail): EventFormFields {
     durationMin: detail?.durationMin ?? 60,
     description: detail?.description ?? "",
     partnerRef: detail?.partnerRef ?? "",
+    venue: detail?.venue ?? "",
     // Copied, not aliased: the field array mutates these rows in place, and a
     // projection that shared them with the fetched DTO would let an edit leak
     // into the cached detail (and back out on the next re-projection).

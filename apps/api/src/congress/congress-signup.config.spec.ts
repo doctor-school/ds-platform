@@ -11,7 +11,6 @@ import {
 
 const EVENT_ID = "6f1c0a2e-6a7b-4d2f-9b1e-0c3d4e5f6a7b";
 const CONSENT_VERSION = `2026-09-20.sha256-${"a1b2c3d4".repeat(8)}`;
-const VENUE = "Москва, Крокус Экспо, зал 3";
 const OPENS_AT = "2026-10-01T00:00:00.000+03:00";
 const CLOSES_AT = "2027-01-01T00:00:00.000+03:00";
 
@@ -41,7 +40,6 @@ describe("044 congress sign-up — server configuration", () => {
       ...WINDOW_ENV,
       CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
       CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
-      CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
     });
 
     expect(resolved).toEqual({
@@ -49,7 +47,6 @@ describe("044 congress sign-up — server configuration", () => {
       settings: {
         eventId: EVENT_ID,
         consentVersion: CONSENT_VERSION,
-        eventVenue: VENUE,
         ...WINDOW_SETTINGS,
       },
     });
@@ -59,7 +56,6 @@ describe("044 congress sign-up — server configuration", () => {
     expect(
       resolveCongressSignUpSettings({
         CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
-        CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
       }),
     ).toEqual({ ok: false, reason: "event-id-unset" });
 
@@ -67,7 +63,6 @@ describe("044 congress sign-up — server configuration", () => {
       resolveCongressSignUpSettings({
         CONGRESS_SIGNUP_EVENT_ID: "the-congress",
         CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
-        CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
       }),
     ).toEqual({ ok: false, reason: "event-id-malformed" });
   });
@@ -92,44 +87,6 @@ describe("044 congress sign-up — server configuration", () => {
         }),
       ).toEqual({ ok: false, reason: "consent-version-malformed" });
     }
-  });
-
-  it("EARS-13: when the congress venue is unset or blank, system shall report the configuration unusable rather than send a confirmation that names no place", () => {
-    // The venue is read at MAIL time, long after the registration has
-    // committed, so a deployment that forgot the key would otherwise accept
-    // submissions for weeks and only then discover it cannot tell anyone where
-    // to come. Failing closed at configuration time is what keeps "accepted"
-    // meaning "and you will be told where to come".
-    for (const missing of [undefined, "", "   "]) {
-      expect(
-        resolveCongressSignUpSettings({
-          CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
-          CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
-          ...(missing === undefined
-            ? {}
-            : { CONGRESS_SIGNUP_EVENT_VENUE: missing }),
-        }),
-      ).toEqual({ ok: false, reason: "event-venue-unset" });
-    }
-  });
-
-  it("EARS-13: when the configured venue carries surrounding whitespace, system shall resolve it trimmed", () => {
-    expect(
-      resolveCongressSignUpSettings({
-        ...WINDOW_ENV,
-        CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
-        CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
-        CONGRESS_SIGNUP_EVENT_VENUE: `  ${VENUE}  `,
-      }),
-    ).toEqual({
-      ok: true,
-      settings: {
-        eventId: EVENT_ID,
-        consentVersion: CONSENT_VERSION,
-        eventVenue: VENUE,
-        ...WINDOW_SETTINGS,
-      },
-    });
   });
 
   it("EARS-7: when no route timing floor is configured, system shall resolve the conservative default so every runtime boots unchanged", () => {
@@ -190,7 +147,6 @@ describe("044 congress sign-up — server configuration", () => {
         ...WINDOW_ENV,
         CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
         CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
-        CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
         CONGRESS_SIGNUP_TIMING_FLOOR_MS: "1s",
       }),
     ).toEqual({ ok: false, reason: "timing-floor-malformed" });
@@ -203,7 +159,6 @@ describe("044 congress sign-up — server configuration", () => {
         ...WINDOW_ENV,
         CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
         CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
-        CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
         CONGRESS_SIGNUP_TIMING_FLOOR_MS: "2500",
       }),
     ).toEqual({
@@ -211,7 +166,6 @@ describe("044 congress sign-up — server configuration", () => {
       settings: {
         eventId: EVENT_ID,
         consentVersion: CONSENT_VERSION,
-        eventVenue: VENUE,
         ...WINDOW_SETTINGS,
       },
     });
@@ -298,7 +252,6 @@ describe("044 congress sign-up — server configuration", () => {
       resolveCongressSignUpSettings({
         CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
         CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
-        CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
         CONGRESS_SIGNUP_WINDOW_OPENS_AT: OPENS_AT,
         CONGRESS_SIGNUP_WINDOW_CLOSES_AT: CLOSES_AT,
         CONGRESS_SIGNUP_EVENT_DAYS: WINDOW_ENV.CONGRESS_SIGNUP_EVENT_DAYS,
@@ -308,7 +261,6 @@ describe("044 congress sign-up — server configuration", () => {
       settings: {
         eventId: EVENT_ID,
         consentVersion: CONSENT_VERSION,
-        eventVenue: VENUE,
         windowOpensAt: OPENS_AT,
         windowClosesAt: CLOSES_AT,
         eventDays: WINDOW_SETTINGS.eventDays,
@@ -326,7 +278,6 @@ describe("044 congress sign-up — server configuration", () => {
       resolveCongressSignUpSettings({
         CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
         CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
-        CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
         CONGRESS_SIGNUP_WINDOW_CLOSES_AT: CLOSES_AT,
       }),
     ).toEqual({ ok: false, reason: "window-opens-at-unset" });
@@ -335,7 +286,6 @@ describe("044 congress sign-up — server configuration", () => {
       resolveCongressSignUpSettings({
         CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
         CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
-        CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
         CONGRESS_SIGNUP_WINDOW_OPENS_AT: OPENS_AT,
         CONGRESS_SIGNUP_WINDOW_CLOSES_AT: "   ",
       }),
@@ -359,7 +309,6 @@ describe("044 congress sign-up — server configuration", () => {
         resolveCongressSignUpSettings({
           CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
           CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
-          CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
           CONGRESS_SIGNUP_WINDOW_OPENS_AT: bad,
           CONGRESS_SIGNUP_WINDOW_CLOSES_AT: CLOSES_AT,
         }),
@@ -369,7 +318,6 @@ describe("044 congress sign-up — server configuration", () => {
         resolveCongressSignUpSettings({
           CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
           CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
-          CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
           CONGRESS_SIGNUP_WINDOW_OPENS_AT: OPENS_AT,
           CONGRESS_SIGNUP_WINDOW_CLOSES_AT: bad,
         }),
@@ -382,7 +330,6 @@ describe("044 congress sign-up — server configuration", () => {
       resolveCongressSignUpSettings({
         CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
         CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
-        CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
         CONGRESS_SIGNUP_WINDOW_OPENS_AT: "2026-09-30T21:00:00Z",
         CONGRESS_SIGNUP_WINDOW_CLOSES_AT: CLOSES_AT,
         CONGRESS_SIGNUP_EVENT_DAYS: WINDOW_ENV.CONGRESS_SIGNUP_EVENT_DAYS,
@@ -392,7 +339,6 @@ describe("044 congress sign-up — server configuration", () => {
       settings: {
         eventId: EVENT_ID,
         consentVersion: CONSENT_VERSION,
-        eventVenue: VENUE,
         windowOpensAt: "2026-09-30T21:00:00Z",
         windowClosesAt: CLOSES_AT,
         eventDays: WINDOW_SETTINGS.eventDays,
@@ -409,7 +355,6 @@ describe("044 congress sign-up — server configuration", () => {
         resolveCongressSignUpSettings({
           CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
           CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
-          CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
           CONGRESS_SIGNUP_WINDOW_OPENS_AT: OPENS_AT,
           CONGRESS_SIGNUP_WINDOW_CLOSES_AT: closesAt,
         }),
@@ -422,7 +367,6 @@ describe("044 congress sign-up — server configuration", () => {
       ...WINDOW_ENV,
       CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
       CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
-      CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
     };
 
     it("044 EARS-34: when the days are configured as ascending ISO dates, system shall resolve them in order, trimmed", () => {

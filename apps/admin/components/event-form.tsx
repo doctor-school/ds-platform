@@ -65,6 +65,8 @@ export interface EventFormValues {
   description: string;
   specialties: string[];
   partnerRef: string | null;
+  /** «Место проведения» (#2517) — trimmed; null when left empty. */
+  venue: string | null;
   programPdf: File | null;
   /**
    * 014 EARS-24 — «Это архивный эфир». The page picks the ROUTE off this flag
@@ -113,12 +115,13 @@ function legacySubmission(
   values: EventFormFields,
 ): Pick<
   EventFormValues,
-  "legacy" | "recording" | "partnerRef" | "programPdf"
+  "legacy" | "recording" | "partnerRef" | "venue" | "programPdf"
 > | null {
   if (!values.legacy) return null;
   return {
     legacy: true,
     partnerRef: null,
+    venue: null,
     programPdf: null,
     recording: {
       kind: values.recording.kind,
@@ -236,6 +239,8 @@ export function EventForm({
       partnerRef: fieldsValue.partnerRef.trim()
         ? fieldsValue.partnerRef.trim()
         : null,
+      // #2517 — an emptied box clears the venue (null), never stores "".
+      venue: fieldsValue.venue.trim() ? fieldsValue.venue.trim() : null,
       programPdf,
       legacy: false,
       recording: null,
@@ -450,6 +455,27 @@ export function EventForm({
                 </FormLabel>
                 <FormControl>
                   <Input id="partnerRef" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
+        {/* «Место проведения» (#2517) — optional for every platform event; the
+            congress confirmation email names it (044 EARS-13). Not on an
+            архивный эфир: the legacy body has no `venue` either. */}
+        {legacyVariant ? null : (
+          <FormField
+            control={form.control}
+            name="venue"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel htmlFor="venue">
+                  {t("events.fields.venue")}
+                </FormLabel>
+                <FormControl>
+                  <Input id="venue" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

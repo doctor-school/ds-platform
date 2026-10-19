@@ -194,6 +194,11 @@ describe("020 EARS-19 (gate rows 28–29, D8): the segment's error and loading s
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Не получилось загрузить событие",
     );
+    // One text true for every read failure (timeout, 5xx, network), the feed's
+    // error body — owner + lead 2026-10-19; the canvas text was a timeout placeholder.
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Сервер не ответил. Проверьте соединение и попробуйте снова.",
+    );
     // Canvas `pageState: ошибка`: the card sits under the poster band.
     expect(screen.getByTestId("event-page-state-frame")).toContainElement(
       screen.getByRole("alert"),

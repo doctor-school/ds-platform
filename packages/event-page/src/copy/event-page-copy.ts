@@ -63,10 +63,14 @@ export const EVENT_PAGE_COPY = {
     programDownload: "Скачать программу (PDF)",
     sponsorEyebrow: "При поддержке",
   },
-  /** The segment's failed read — canvas `pageState: ошибка` (gate row 28). */
+  /**
+   * The segment's failed read — canvas `pageState: ошибка` (gate row 28). One
+   * body true for every read failure (timeout, 5xx, network), the same sentence
+   * as the feed's and listing's error body.
+   */
   error: {
     title: "Не получилось загрузить событие",
-    body: "Сервер не ответил за 10 секунд. Ваша запись не потерялась — попробуйте обновить страницу.",
+    body: "Сервер не ответил. Проверьте соединение и попробуйте снова.",
     retry: "Повторить",
   },
   /** The segment's loading skeleton, announced to assistive tech only (row 29). */

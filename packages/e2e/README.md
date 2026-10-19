@@ -6,6 +6,25 @@ The end-to-end regression contract of the staging/regression-contour tech spec
 feature files as the suite, and the navigation model both storefronts' chrome
 is configured from.
 
+### Wrong phone confirmation code (003 EARS-48/16/52)
+
+`Academy refuses a wrong phone code and accepts the retained real code`
+(`steps/phone-code-refusal.steps.ts`, #3007) registers and verifies a unique
+owned account through the real Academy UI, requests a fresh phone and reads its
+actual six-digit confirmation SMS. A guaranteed different six-digit code must
+receive the exact generic refusal and keep the existing code screen; the same
+private identity and unconfirmed profile remain unchanged. A complete addressed
+mail-ID checkpoint before submission and the full 15-second negative horizon
+prove no notice mail. Only afterwards does the retained real SMS code confirm
+that phone on the same account. Traces stay off and cleanup revokes only the
+owned session and closes its context. Missing SMS or Mailpit access fails proof.
+This narrow browser projection leaves the broader wrong/expired/reused scenario,
+native `apps/api/test/me/phone.e2e-spec.ts` EARS-48 audit/counter/state proofs
+and `account-profile-card.test.tsx` EARS-48 component coverage intact. It makes
+no browser expiry, reuse, IdP-internal or notice-artifact claim. Run the selected
+`@phone-code-refusal` case on the lead-owned runtime. This coverage change has
+no render surface or owner Stage-B slot.
+
 ### Email reset with a confirmed phone (003 EARS-53)
 
 `Academy keeps email reset delivery when the account also confirms a phone`

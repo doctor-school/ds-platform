@@ -167,6 +167,19 @@ export const ApiEnvSchema = z.looseObject({
   RATE_LIMIT_PER_IP_15MIN: z.string().optional(),
   RATE_LIMIT_PER_ASN_1H: z.string().optional(),
 
+  // EARS-14 SMS toll-fraud budget ceilings (design §10) — test-stand overrides
+  // (#3047), the sibling of the EARS-13 vars above with the same fail-SAFE
+  // contract (`resolveSmsBudgetThresholds`, sms-budget.types.ts). UNSET ⇒ the
+  // byte-identical EARS-14 defaults: per-phone 3 / h, per-IP 10 / h, per-ASN
+  // 100 / h, global 2000 / day. The stage slots lift the per-IP / per-ASN
+  // ceilings because `pnpm e2e:stage` plays every SMS scenario from ONE runner
+  // address; production sets none of them. Raw optional strings BY DESIGN, for
+  // the same no-boot-crash reason as the rate-limit ceilings.
+  SMS_BUDGET_PER_PHONE_1H: z.string().optional(),
+  SMS_BUDGET_PER_IP_1H: z.string().optional(),
+  SMS_BUDGET_PER_ASN_1H: z.string().optional(),
+  SMS_BUDGET_GLOBAL_1D: z.string().optional(),
+
   // #1655 client-IP resolution: the comma-separated list of reverse proxies the
   // api trusts to have set `x-forwarded-for`. Entries are IP addresses, CIDR
   // blocks, or the `proxy-addr` preset names `loopback` / `linklocal` /

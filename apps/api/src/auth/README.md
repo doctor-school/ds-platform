@@ -393,7 +393,17 @@ IdP to send, so a refused send never reaches the provider and never costs money.
   that same in-memory→Redis seam. Rebinding either leaves the call sites untouched
   (the SESSION_STORE fake/Redis pattern). Thresholds are an injectable
   value (`SMS_BUDGET_THRESHOLDS`) so a deployment can tighten them and the e2e can
-  drive the breaker boundary without 2000 round-trips; the clock
+  drive the breaker boundary without 2000 round-trips.
+- **Env overrides** (#3047) — each ceiling is env-overridable, the sibling of
+  the EARS-13 `RATE_LIMIT_*` vars with the same fail-SAFE contract
+  (`resolveSmsBudgetThresholds`): `SMS_BUDGET_PER_PHONE_1H`,
+  `SMS_BUDGET_PER_IP_1H`, `SMS_BUDGET_PER_ASN_1H`, `SMS_BUDGET_GLOBAL_1D`. Unset ⇒
+  the byte-identical defaults; a positive integer overrides only that ceiling; a
+  malformed / ≤0 / non-integer value is ignored with one loud warn and the
+  default kept — never an unlimited budget, never a boot crash. The stage slots
+  (`infra/deploy/compose/slot/compose.yml`) lift per-IP / per-ASN because
+  `pnpm e2e:stage` plays every SMS scenario from ONE runner address; production
+  sets none of them. The clock
   (`SMS_BUDGET_CLOCK`) is `Date.now`, faked in the unit spec for window-reset
   determinism. **Decision-debt:** EARS-14 also covers registration **verification**
   SMS (EARS-2), whose send-site is not yet gated — see #87's follow-up.

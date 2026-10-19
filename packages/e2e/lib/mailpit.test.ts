@@ -31,11 +31,11 @@ describe("stage login mail selection", () => {
     ).toThrow();
   });
 
-  it("EARS-6: selects the newest login message after the request", () => {
+  it("EARS-6: selects the newest login message unseen before the request", () => {
     const messages = [
       {
         ID: "old",
-        Created: "2026-09-29T06:00:00Z",
+        Created: "2026-09-29T06:02:00Z",
         Subject: "193746 — код для входа в Doctor.School",
       },
       {
@@ -49,8 +49,13 @@ describe("stage login mail selection", () => {
         Subject: "550271 — код для входа в Doctor.School",
       },
     ];
-    expect(selectLoginMail(messages, "2026-09-29T06:01:00Z")?.ID).toBe("new");
-    expect(selectLoginMail(messages, "2026-09-29T06:02:00Z")).toBeNull();
+    const recipient = "login@example.test";
+    expect(
+      selectLoginMail(messages, { recipient, messageIds: ["old"] })?.ID,
+    ).toBe("new");
+    expect(
+      selectLoginMail(messages, { recipient, messageIds: ["old", "new"] }),
+    ).toBeNull();
   });
 
   it("EARS-6: accepts only the six-character login code in its subject", () => {
@@ -98,59 +103,55 @@ afterEach(() => vi.useRealTimers());
 describe("duplicate-registration mail checkpoint", () => {
   const checkpoint = { recipient: email, messageIds: ["seen"] };
 
-  it.each(["checkpoint", "timestamp"] as const)(
-    "EARS-23: %s absence cannot pass from a pre-deadline snapshot whose response arrives after the horizon",
-    async (mode) => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date(after));
-      const startedAt = Date.now();
-      const queryStarts: number[] = [];
-      const messages: unknown[] = [
-        addressedMessage({ ID: "seen", Created: "2026-10-11T00:00:00Z" }),
-      ];
-      const request = {
-        get: async () => {
-          const elapsed = Date.now() - startedAt;
-          queryStarts.push(elapsed);
-          const snapshot = [...messages];
-          if (elapsed === 14_500)
-            await new Promise((resolve) => setTimeout(resolve, 700));
-          return {
-            ok: () => true,
-            status: () => 200,
-            json: async () => ({
-              messages_count: snapshot.length,
-              start: 0,
-              messages: snapshot,
-            }),
-          };
-        },
-      };
-      setTimeout(() => {
-        messages.push(
-          addressedMessage({
-            ID: "late",
-            Created: new Date(startedAt + 14_900).toISOString(),
+  it("EARS-23: checkpoint absence cannot pass from a pre-deadline snapshot whose response arrives after the horizon", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(after));
+    const startedAt = Date.now();
+    const queryStarts: number[] = [];
+    const messages: unknown[] = [
+      addressedMessage({ ID: "seen", Created: "2026-10-11T00:00:00Z" }),
+    ];
+    const request = {
+      get: async () => {
+        const elapsed = Date.now() - startedAt;
+        queryStarts.push(elapsed);
+        const snapshot = [...messages];
+        if (elapsed === 14_500)
+          await new Promise((resolve) => setTimeout(resolve, 700));
+        return {
+          ok: () => true,
+          status: () => 200,
+          json: async () => ({
+            messages_count: snapshot.length,
+            start: 0,
+            messages: snapshot,
           }),
-        );
-      }, 14_900);
-      const result = assertNoAddressedMail(
-        request,
-        "https://mailpit.example.test",
-        email,
-        after,
-        mode === "checkpoint" ? checkpoint : undefined,
-      ).then(
-        () => null,
-        (error: unknown) => error,
+        };
+      },
+    };
+    setTimeout(() => {
+      messages.push(
+        addressedMessage({
+          ID: "late",
+          Created: new Date(startedAt + 14_900).toISOString(),
+        }),
       );
-      await vi.advanceTimersByTimeAsync(15_200);
-      const error = await result;
-      expect(error).toBeInstanceOf(Error);
-      expect(queryStarts.some((elapsed) => elapsed >= 15_000)).toBe(true);
-      expect(queryStarts).toHaveLength(31);
-    },
-  );
+    }, 14_900);
+    const result = assertNoAddressedMail(
+      request,
+      "https://mailpit.example.test",
+      email,
+      checkpoint,
+    ).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await vi.advanceTimersByTimeAsync(15_200);
+    const error = await result;
+    expect(error).toBeInstanceOf(Error);
+    expect(queryStarts.some((elapsed) => elapsed >= 15_000)).toBe(true);
+    expect(queryStarts).toHaveLength(31);
+  });
 
   it("EARS-23: captures only exact-recipient IDs without filtering them by the client clock", async () => {
     await expect(
@@ -172,16 +173,10 @@ describe("duplicate-registration mail checkpoint", () => {
   it("EARS-23: rejects a checkpoint bound to another recipient before reading mail", async () => {
     const request = verificationMailClient([]);
     await expect(
-      assertNoAddressedMail(
-        request,
-        "https://mailpit.example.test",
-        email,
-        after,
-        {
-          recipient: "other@example.test",
-          messageIds: ["seen"],
-        },
-      ),
+      assertNoAddressedMail(request, "https://mailpit.example.test", email, {
+        recipient: "other@example.test",
+        messageIds: ["seen"],
+      }),
     ).rejects.toThrow(/^Invalid addressed-mail checkpoint$/);
     expect(request.get).not.toHaveBeenCalled();
   });
@@ -202,7 +197,6 @@ describe("duplicate-registration mail checkpoint", () => {
           request,
           "https://mailpit.example.test",
           email,
-          after,
           checkpoint,
         ),
       ).rejects.toThrow("search payload");
@@ -225,7 +219,6 @@ describe("duplicate-registration mail checkpoint", () => {
           request,
           "https://mailpit.example.test",
           email,
-          after,
           checkpoint,
         ),
       ).rejects.toThrow("search payload");
@@ -274,7 +267,6 @@ describe("duplicate-registration mail checkpoint", () => {
         request,
         "https://mailpit.example.test",
         email,
-        after,
         checkpoint,
       ).catch((error: unknown) => error);
       expect(captureError).toBeInstanceOf(Error);
@@ -300,7 +292,6 @@ describe("duplicate-registration mail checkpoint", () => {
       request,
       "https://mailpit.example.test",
       email.toUpperCase(),
-      after,
       checkpoint,
     ).then(
       () => {
@@ -331,7 +322,6 @@ describe("duplicate-registration mail checkpoint", () => {
       ]),
       "https://mailpit.example.test",
       email,
-      after,
       checkpoint,
     ).then(
       () => null,
@@ -354,7 +344,6 @@ describe("duplicate-registration mail checkpoint", () => {
       verificationMailClient(messages),
       "https://mailpit.example.test",
       email,
-      after,
       checkpoint,
     ).then(
       () => null,
@@ -373,43 +362,9 @@ describe("duplicate-registration mail checkpoint", () => {
   });
 });
 
-describe("timestamp-based addressed-mail absence compatibility", () => {
-  it("EARS-16: still ignores stale mail and waits the full delivery horizon without a checkpoint", async () => {
-    vi.useFakeTimers();
-    let settled = false;
-    const result = assertNoAddressedMail(
-      verificationMailClient([
-        addressedMessage({ Created: "2026-10-11T00:00:00Z" }),
-      ]),
-      "https://mailpit.example.test",
-      email,
-      after,
-    ).then(() => {
-      settled = true;
-    });
-    await vi.advanceTimersByTimeAsync(14_999);
-    expect(settled).toBe(false);
-    await vi.advanceTimersByTimeAsync(1);
-    await result;
-    expect(settled).toBe(true);
-  });
-
-  it("EARS-16: still rejects fresh addressed mail without a checkpoint", async () => {
-    await expect(
-      assertNoAddressedMail(
-        verificationMailClient([addressedMessage()]),
-        "https://mailpit.example.test",
-        email,
-        after,
-      ),
-    ).rejects.toThrow(
-      /^Unexpected addressed mail after unknown reset request$/,
-    );
-  });
-});
-
 describe("fresh recovery-mail detail", () => {
   const subject = "123456 — код для входа в Doctor.School";
+  const checkpoint = { recipient: email, messageIds: ["stale"] };
   function client(detail: Record<string, unknown>) {
     return {
       get: vi.fn(async (url: string) => ({
@@ -453,7 +408,7 @@ describe("fresh recovery-mail detail", () => {
         request,
         "https://mailpit.example.test",
         email.toUpperCase(),
-        after,
+        checkpoint,
         "login",
       ),
     ).resolves.toEqual({
@@ -469,7 +424,7 @@ describe("fresh recovery-mail detail", () => {
         client(detail),
         "https://mailpit.example.test",
         email,
-        after,
+        checkpoint,
         "login",
       ),
     ).resolves.toBe("123456");
@@ -494,7 +449,7 @@ describe("fresh recovery-mail detail", () => {
           }),
           "https://mailpit.example.test",
           email,
-          after,
+          checkpoint,
           "login",
         ),
       ).rejects.toThrow(
@@ -505,11 +460,13 @@ describe("fresh recovery-mail detail", () => {
 });
 
 describe("verified-account login excludes verification mail", () => {
+  const checkpoint = { recipient: email, messageIds: ["stale"] };
+
   it("EARS-34: permits login mail and ignores stale or differently addressed verification mail through the full delivery horizon", async () => {
     vi.useFakeTimers();
     const request = verificationMailClient([
       addressedMessage({ Subject: "123456 — код для входа в Doctor.School" }),
-      addressedMessage({ Created: "2026-10-11T00:00:00Z" }),
+      addressedMessage({ ID: "stale", Created: "2026-10-13T00:00:00Z" }),
       addressedMessage({ To: [{ Address: "other@example.test" }] }),
     ]);
     let settled = false;
@@ -517,7 +474,7 @@ describe("verified-account login excludes verification mail", () => {
       request,
       "https://mailpit.example.test",
       email,
-      after,
+      checkpoint,
     ).then(() => {
       settled = true;
     });
@@ -535,7 +492,7 @@ describe("verified-account login excludes verification mail", () => {
       verificationMailClient([addressedMessage()]),
       "https://mailpit.example.test",
       email.toUpperCase(),
-      after,
+      checkpoint,
     ).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toBe(
@@ -550,7 +507,7 @@ describe("verified-account login excludes verification mail", () => {
       verificationMailClient(messages),
       "https://mailpit.example.test",
       email,
-      after,
+      checkpoint,
     );
     const assertion = expect(result).rejects.toThrow(
       "Unexpected verification mail",
@@ -568,7 +525,7 @@ describe("verified-account login excludes verification mail", () => {
           verificationMailClient([], metadata),
           "https://mailpit.example.test",
           email,
-          after,
+          checkpoint,
         ),
       ).rejects.toThrow("search payload");
     },
@@ -585,7 +542,7 @@ describe("verified-account login excludes verification mail", () => {
         request,
         "https://mailpit.example.test",
         email,
-        after,
+        checkpoint,
       ),
     ).rejects.toThrow(/^Mailpit request failed$/);
   });
@@ -601,7 +558,7 @@ describe("verified-account login excludes verification mail", () => {
         verificationMailClient([addressedMessage(overrides)]),
         "https://mailpit.example.test",
         email,
-        after,
+        checkpoint,
       ),
     ).rejects.toThrow("search payload");
   });
@@ -619,7 +576,7 @@ describe("verified-account login excludes verification mail", () => {
         unsuccessful,
         "https://mailpit.example.test",
         email,
-        after,
+        checkpoint,
       ),
     ).rejects.toThrow("Mailpit search failed with HTTP 503");
     const malformed = {
@@ -636,7 +593,7 @@ describe("verified-account login excludes verification mail", () => {
         malformed,
         "https://mailpit.example.test",
         email,
-        after,
+        checkpoint,
       ),
     ).rejects.toThrow(/^Malformed Mailpit JSON payload$/);
   });

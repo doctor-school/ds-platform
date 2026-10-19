@@ -27,11 +27,13 @@ import { confirmOwnedPhone } from "../lib/owned-phone-confirmation.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import {
   RESET_CODE_EVENT,
+  captureSmsCheckpoint,
   freshConfirmablePhone,
   resetSmsCode,
   smsSinkMessages,
   smsSinkUrl,
   waitForSmsCode,
+  type SmsCheckpoint,
 } from "../lib/sms-sink.js";
 import { gatedPasswordLogin } from "../lib/gated-password-login.js";
 import { After, Before, Given, Then, When } from "./support/auth-fixtures.js";
@@ -61,7 +63,7 @@ interface SmsReset {
   /** The account's mailbox once phone confirmation settled (EARS-52 notice). */
   mailbox?: AddressedMailCheckpoint;
   reset?: Page;
-  requestedAt?: string;
+  requestedAt?: SmsCheckpoint;
   code?: string;
   completion?: CapturedResponse;
 }
@@ -211,7 +213,7 @@ When(
     await reset
       .locator('input[autocomplete="username"]')
       .pressSequentially(state.phone);
-    state.requestedAt = new Date().toISOString();
+    state.requestedAt = await captureSmsCheckpoint(state.sink, state.phone);
     const requested = post(reset, "/v1/auth/password/reset");
     await reset.getByTestId("reset-request-submit").click();
     const response = await requested;
@@ -243,8 +245,7 @@ Then(
       request,
       state.mailpit,
       state.email,
-      state.requestedAt!,
-      state.mailbox,
+      state.mailbox!,
     );
     const delivered = await smsSinkMessages(
       state.sink,

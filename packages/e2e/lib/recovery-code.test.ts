@@ -4,6 +4,8 @@ import { fetchRecoveryCode, nativeRecoveryMail } from "./mailpit.js";
 
 const email = "owned@example.test";
 const after = "2026-10-07T00:00:00Z";
+// #3057: freshness is the Mailpit IDs unseen before the request, not Created.
+const checkpoint = { recipient: email, messageIds: ["stale"] };
 const mail = {
   ID: "fresh",
   Created: after,
@@ -90,7 +92,7 @@ describe("owned reset account mail", () => {
         request,
         "https://mail.test",
         email,
-        after,
+        checkpoint,
         "reset",
       ).catch((failure: unknown) => failure);
       expect(error).toBeInstanceOf(Error);
@@ -118,7 +120,7 @@ describe("owned reset account mail", () => {
         request,
         "https://mail.test",
         email,
-        after,
+        checkpoint,
         "reset",
       ).catch((failure: unknown) => failure);
       expect(error).toBeInstanceOf(Error);
@@ -134,7 +136,19 @@ describe("owned reset account mail", () => {
         client({ ...detail, Date: "2026-10-06T23:59:59Z" }),
         "https://mail.test",
         email,
-        after,
+        checkpoint,
+        "reset",
+      ),
+    ).resolves.toBe("AB12CD");
+  });
+  it("#3057: reads the fresh code even when the inbox clock stamped it before the runner's request instant", async () => {
+    const early = { ...mail, Created: "2026-10-06T23:59:59Z" };
+    await expect(
+      fetchRecoveryCode(
+        client(early, 200, { messages: [early] }),
+        "https://mail.test",
+        email,
+        checkpoint,
         "reset",
       ),
     ).resolves.toBe("AB12CD");
@@ -144,11 +158,11 @@ describe("owned reset account mail", () => {
     const assertion = expect(
       fetchRecoveryCode(
         client(mail, 200, {
-          messages: [{ ...mail, Created: "2026-10-06T00:00:00Z" }],
+          messages: [{ ...mail, ID: "stale", Created: "2026-10-08T00:00:00Z" }],
         }),
         "https://mail.test",
         email,
-        after,
+        checkpoint,
         "reset",
       ),
     ).rejects.toThrow("No fresh addressed");
@@ -164,14 +178,20 @@ describe("owned reset account mail", () => {
         client(confirmation, 200, { messages: [confirmation] }),
         "https://mail.test",
         email,
-        after,
+        checkpoint,
         "register",
       ),
     ).resolves.toBe("XYZ123");
   });
   it("EARS-12: reads the real fresh addressed reset code", async () => {
     await expect(
-      fetchRecoveryCode(client(), "https://mail.test", email, after, "reset"),
+      fetchRecoveryCode(
+        client(),
+        "https://mail.test",
+        email,
+        checkpoint,
+        "reset",
+      ),
     ).resolves.toBe("AB12CD");
   });
   it.each([
@@ -190,7 +210,7 @@ describe("owned reset account mail", () => {
           client(detail),
           "https://mail.test",
           email,
-          after,
+          checkpoint,
           "reset",
         ),
       ).rejects.toThrow();
@@ -202,7 +222,7 @@ describe("owned reset account mail", () => {
         client(mail, 503),
         "https://mail.test",
         email,
-        after,
+        checkpoint,
         "reset",
       ),
     ).rejects.toThrow("HTTP 503");
@@ -211,7 +231,7 @@ describe("owned reset account mail", () => {
         client(mail, 200, { messages_count: 2 }),
         "https://mail.test",
         email,
-        after,
+        checkpoint,
         "reset",
       ),
     ).rejects.toThrow("incomplete");

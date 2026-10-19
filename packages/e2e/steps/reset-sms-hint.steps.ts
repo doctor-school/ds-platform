@@ -8,9 +8,12 @@ import {
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
 import {
+  captureSmsCheckpoint,
   freshConfirmablePhone,
+  smsOrigin,
   smsSinkMessages,
   smsSinkUrl,
+  type SmsCheckpoint,
 } from "../lib/sms-sink.js";
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
 
@@ -24,7 +27,7 @@ interface HintJourney extends OwnedCredentials {
   phone: string;
   sink: string;
   commands: string[];
-  requestedAt?: string;
+  requestedAt?: SmsCheckpoint;
   setCookie: string;
 }
 
@@ -71,8 +74,7 @@ Given(
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
     expect(
-      (await smsSinkMessages(sink, state.phone, new Date(0).toISOString()))
-        .length,
+      (await smsSinkMessages(sink, state.phone, smsOrigin(state.phone))).length,
       "fresh owned phone has no prior SMS in the real sink",
     ).toBe(0);
     await visitor.goto(`${world.hostBaseUrl}/reset`, { waitUntil: "load" });
@@ -116,7 +118,7 @@ When(
   "the Academy guest requests a reset code for that unknown phone",
   async ({ page }) => {
     const state = journey(page);
-    state.requestedAt = new Date().toISOString();
+    state.requestedAt = await captureSmsCheckpoint(state.sink, state.phone);
     const pending = captureResponse(state.visitor, "/v1/auth/password/reset");
     await state.visitor.getByTestId("reset-request-submit").click();
     const captured = await pending;

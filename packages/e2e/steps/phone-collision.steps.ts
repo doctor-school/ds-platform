@@ -9,9 +9,12 @@ import {
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import {
+  captureSmsCheckpoint,
   freshConfirmablePhone,
+  smsOrigin,
   smsSinkMessages,
   smsSinkUrl,
+  type SmsCheckpoint,
 } from "../lib/sms-sink.js";
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
 
@@ -25,7 +28,7 @@ interface Owner {
 interface Collision {
   owners: Owner[];
   sink: string;
-  requestedAt?: string;
+  requestedAt?: SmsCheckpoint;
 }
 const collisions = new WeakMap<Page, Collision>();
 function collision(page: Page): Collision {
@@ -109,7 +112,7 @@ Given(
       };
       state.owners.push(owner);
       expect(
-        (await smsSinkMessages(sink, phone, new Date(0).toISOString())).length,
+        (await smsSinkMessages(sink, phone, smsOrigin(phone))).length,
         "fresh owned phone has no previous SMS",
       ).toBe(0);
       await prepareCaptchaForJourney(
@@ -159,7 +162,7 @@ When(
     await requester.page
       .getByTestId("profile-phone-input")
       .pressSequentially(holder.phone.slice(1));
-    state.requestedAt = new Date().toISOString();
+    state.requestedAt = await captureSmsCheckpoint(state.sink, holder.phone);
     const requesting = captureResponse(requester.page, "/v1/me/phone");
     await requester.page.getByTestId("profile-phone-send").click();
     const response = await requesting;

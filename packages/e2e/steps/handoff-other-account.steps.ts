@@ -35,7 +35,7 @@ interface SwitchHandoff {
   oldEmail?: string;
   oldMail?: AddressedMailCheckpoint;
   oldRevoked?: boolean;
-  requestedAt?: string;
+  requested?: AddressedMailCheckpoint;
   code?: string;
   redeemed?: CapturedResponse;
   accepted?: CapturedResponse;
@@ -191,7 +191,11 @@ When(
       handoff: state.reference,
       returnTo: "/account",
     }).toString();
-    state.requestedAt = new Date().toISOString();
+    state.requested = await captureAddressedMailCheckpoint(
+      nativeRecoveryMail(),
+      mailpitFor(world.hostBaseUrl),
+      state.email,
+    );
     const pending = captureResponse(state.page, "/v1/auth/login/otp/handoff");
     await state.page.goto(target.toString(), { waitUntil: "load" });
     state.redeemed = await pending;
@@ -204,7 +208,7 @@ Then(
     const state = stateFor(page);
     if (
       !state.redeemed ||
-      !state.requestedAt ||
+      !state.requested ||
       !state.oldEmail ||
       !state.oldMail
     )
@@ -228,7 +232,7 @@ Then(
       nativeRecoveryMail(),
       mailpitFor(world.hostBaseUrl),
       state.email,
-      state.requestedAt,
+      state.requested,
       "login",
     );
     const delivered = await captureAddressedMailCheckpoint(
@@ -248,14 +252,12 @@ Then(
         nativeRecoveryMail(),
         mailpitFor(world.hostBaseUrl),
         state.email,
-        state.requestedAt,
         delivered,
       ),
       assertNoAddressedMail(
         nativeRecoveryMail(),
         mailpitFor(world.hostBaseUrl),
         state.oldEmail,
-        state.requestedAt,
         state.oldMail,
       ),
     ]);

@@ -15,12 +15,14 @@ import {
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import {
+  captureSmsCheckpoint,
   freshConfirmablePhone,
   PHONE_CODE_EVENT,
   phoneConfirmationCode,
   smsSinkMessages,
   smsSinkUrl,
   waitForSmsCode,
+  type SmsCheckpoint,
 } from "../lib/sms-sink.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 
@@ -175,7 +177,7 @@ async function requestReplacement(state: AbandonedPhone) {
   await state.page
     .getByTestId("profile-phone-input")
     .pressSequentially(state.replacement.slice(1));
-  const after = new Date().toISOString();
+  const after = await captureSmsCheckpoint(state.sink, state.replacement);
   const pending = captureResponse(state.page, "/v1/me/phone");
   await state.page.getByTestId("profile-phone-send").click();
   const answer = await pending;
@@ -271,7 +273,11 @@ Then(
       0,
     );
     await logout(state);
-    const boundaries: { phone: string; after: string; deadline: number }[] = [];
+    const boundaries: {
+      phone: string;
+      after: SmsCheckpoint;
+      deadline: number;
+    }[] = [];
     for (const phone of [state.original, state.replacement]) {
       await state.page.goto(
         `${world.hostBaseUrl}/login?method=code&returnTo=%2Faccount`,
@@ -280,7 +286,7 @@ Then(
       await state.page.waitForLoadState("networkidle");
       await state.page.getByTestId("otp-channel-sms").click();
       await inputSecret(state.page.getByTestId("otp-identifier"), phone);
-      const after = new Date().toISOString();
+      const after = await captureSmsCheckpoint(state.sink, phone);
       const pending = captureResponse(state.page, "/v1/auth/login/otp/request");
       await state.page.getByTestId("otp-send").click();
       const answer = await pending;

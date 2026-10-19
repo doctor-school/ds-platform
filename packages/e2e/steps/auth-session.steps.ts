@@ -9,7 +9,12 @@ import {
 import { installCaptchaStub } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
 import { goldenDoctorPassword } from "../lib/golden.js";
-import { fetchLoginCode, mailpitUrlFor } from "../lib/mailpit.js";
+import {
+  captureAddressedMailCheckpoint,
+  fetchLoginCode,
+  mailpitUrlFor,
+  nativeRecoveryMail,
+} from "../lib/mailpit.js";
 import { signInGoldenDoctor } from "../lib/sign-in.js";
 import { resolveWorkerGoldenDoctor } from "../lib/worker-golden.js";
 import { gatedPasswordLogin } from "../lib/gated-password-login.js";
@@ -37,7 +42,13 @@ async function submitDeliveredEmailCode(
 ): Promise<void> {
   const doctor = resolveWorkerGoldenDoctor(SEED);
   await page.getByTestId("otp-identifier").fill(doctor.email);
-  const requestedAt = new Date().toISOString();
+  const mailbox =
+    process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl);
+  const before = await captureAddressedMailCheckpoint(
+    nativeRecoveryMail(),
+    mailbox,
+    doctor.email,
+  );
   const requestResponse = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === "/v1/auth/login/otp/request" &&
@@ -45,12 +56,7 @@ async function submitDeliveredEmailCode(
   );
   await page.getByTestId("otp-send").click();
   otpRequestResponses.set(page, await requestResponse);
-  const code = await fetchLoginCode(
-    request,
-    process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
-    doctor.email,
-    requestedAt,
-  );
+  const code = await fetchLoginCode(request, mailbox, doctor.email, before);
   const loginResponse = captureResponse(page, "/v1/auth/login/otp");
   // The sixth character auto-submits the shipped OTP form.
   await page.locator('input[autocomplete="one-time-code"]').fill(code);

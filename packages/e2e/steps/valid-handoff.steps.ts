@@ -23,7 +23,7 @@ interface Handoff {
   reference?: string;
   authPosts: string[];
   beforeHandoff?: AddressedMailCheckpoint;
-  requestedAt?: string;
+  requested?: AddressedMailCheckpoint;
   code?: string;
   redeemed?: CapturedResponse;
   accepted?: CapturedResponse;
@@ -80,7 +80,11 @@ When(
       handoff: state.reference,
       returnTo: "/account",
     }).toString();
-    state.requestedAt = new Date().toISOString();
+    state.requested = await captureAddressedMailCheckpoint(
+      nativeRecoveryMail(),
+      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+      state.email,
+    );
     const pending = captureResponse(state.page, "/v1/auth/login/otp/handoff");
     const response = await state.page.goto(target.toString(), {
       waitUntil: "load",
@@ -94,7 +98,7 @@ Then(
   "exactly one fresh sign-in code mail is issued to that hand-off account without another request",
   async ({ page, world }) => {
     const state = handoff(page);
-    if (!state.redeemed || !state.requestedAt || !state.beforeHandoff)
+    if (!state.redeemed || !state.requested || !state.beforeHandoff)
       throw new Error("Handoff redemption was not observed");
     let correct = false;
     try {
@@ -117,7 +121,7 @@ Then(
       nativeRecoveryMail(),
       mailpit,
       state.email,
-      state.requestedAt,
+      state.requested,
       "login",
     );
     expect(/^\d{6}$/.test(state.code), "delivered code has six digits").toBe(
@@ -150,7 +154,6 @@ Then(
       nativeRecoveryMail(),
       mailpit,
       state.email,
-      state.requestedAt,
       delivered,
     );
     expect(state.authPosts, "no second code request or resend").toEqual([

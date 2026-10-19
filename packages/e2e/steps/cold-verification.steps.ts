@@ -7,7 +7,13 @@ import {
 } from "@playwright/test";
 import { installCaptchaStub } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
-import { assertNoAddressedMail, mailpitUrlFor } from "../lib/mailpit.js";
+import {
+  assertNoAddressedMail,
+  captureAddressedMailCheckpoint,
+  mailpitUrlFor,
+  nativeRecoveryMail,
+  type AddressedMailCheckpoint,
+} from "../lib/mailpit.js";
 import {
   assertNoPrivateRegistrationAccess,
   coldVerificationEvidence,
@@ -27,7 +33,7 @@ interface ColdVerification extends OwnedCredentials {
   code?: string;
   authPosts: string[];
   visitedLogin: boolean;
-  submittedAt?: string;
+  submitted?: AddressedMailCheckpoint;
   verification?: Response;
   evidence?: ReturnType<typeof coldVerificationEvidence>;
   guest?: Page;
@@ -148,7 +154,7 @@ Then(
 
 When(
   "the registrant enters that same delivered six-digit code once on the cold step",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const state = verification(page);
     const pending = captureResponse(state.page, "/v1/auth/verify").then(
       ({ response, body }) => {
@@ -161,7 +167,11 @@ When(
         return response;
       },
     );
-    state.submittedAt = new Date().toISOString();
+    state.submitted = await captureAddressedMailCheckpoint(
+      nativeRecoveryMail(),
+      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+      state.email,
+    );
     await inputSecret(
       state.page.locator('input[autocomplete="one-time-code"]'),
       state.code!,
@@ -247,7 +257,7 @@ Then(
       request,
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
-      state.submittedAt!,
+      state.submitted!,
     );
     expect(
       state.authPosts,

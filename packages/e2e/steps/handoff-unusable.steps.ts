@@ -94,7 +94,11 @@ Given(
         if (request.method() === "POST" && path.startsWith("/v1/auth/"))
           posts.push(path);
       });
-      const requestedAt = new Date().toISOString();
+      const requested = await captureAddressedMailCheckpoint(
+        mail,
+        mailpit,
+        state.email,
+      );
       const pending = captureResponse(guest, ENDPOINT);
       await guest.goto(target(world.hostBaseUrl, state.reference), {
         waitUntil: "load",
@@ -122,7 +126,7 @@ Given(
         mail,
         mailpit,
         state.email,
-        requestedAt,
+        requested,
         "login",
       );
       expect(
@@ -182,7 +186,6 @@ When(
         mailpit,
         state.email,
       );
-      const requestedAt = new Date().toISOString();
       const pending =
         kind === "malformed" ? undefined : captureResponse(guest, ENDPOINT);
       await guest.goto(target(world.hostBaseUrl, reference), {
@@ -238,13 +241,7 @@ When(
         "fallback discloses no owned account address",
       ).toBe(false);
       await guest.waitForLoadState("networkidle");
-      await assertNoAddressedMail(
-        mail,
-        mailpit,
-        state.email,
-        requestedAt,
-        checkpoint,
-      );
+      await assertNoAddressedMail(mail, mailpit, state.email, checkpoint);
       await assertGuest(guest);
       expect(
         posts,

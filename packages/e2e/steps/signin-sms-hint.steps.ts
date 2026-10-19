@@ -10,7 +10,13 @@ import {
   readOwnedPhoneAccountCount,
   type OwnedAuthContour,
 } from "../lib/owned-auth-observation.js";
-import { smsSinkMessages, smsSinkUrl } from "../lib/sms-sink.js";
+import {
+  captureSmsCheckpoint,
+  smsOrigin,
+  smsSinkMessages,
+  smsSinkUrl,
+  type SmsCheckpoint,
+} from "../lib/sms-sink.js";
 import { Given, Then, When, test } from "./support/auth-fixtures.js";
 
 const SMS_HINT =
@@ -20,7 +26,7 @@ interface SmsVisitor {
   sink: string;
   email: string;
   password: string;
-  requestedAt?: string;
+  requestedAt?: SmsCheckpoint;
   setCookie?: string;
 }
 const visitors = new WeakMap<Page, SmsVisitor>();
@@ -84,8 +90,7 @@ Given(
     });
     // A missing or unreadable sink must fail before it can prove absence.
     expect(
-      (await smsSinkMessages(sink, state.phone, new Date().toISOString()))
-        .length,
+      (await smsSinkMessages(sink, state.phone, smsOrigin(state.phone))).length,
     ).toBe(0);
     const target = new URL(
       "/login?method=code&returnTo=%2Faccount",
@@ -157,7 +162,7 @@ When(
   "the Academy guest requests an SMS sign-in code for that phone",
   async ({ page }) => {
     const state = visitor(page);
-    state.requestedAt = new Date().toISOString();
+    state.requestedAt = await captureSmsCheckpoint(state.sink, state.phone);
     const pending = captureResponse(page, "/v1/auth/login/otp/request");
     await page.getByTestId("otp-send").click();
     const captured = await pending;

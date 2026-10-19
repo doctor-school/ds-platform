@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  captureSmsCheckpoint,
   freshConfirmablePhone,
   phoneConfirmationCode,
   resetSmsCode,
   smsSinkMessages,
   smsSinkUrl,
+  waitForSmsCode,
 } from "./sms-sink.js";
 
 const RU_RESET =
@@ -66,38 +68,144 @@ describe("SMS sink reads for the 003 SMS reset journey", () => {
     );
   });
 
-  it("EARS-53: lists the messages to a phone after a cutoff through the sink API", async () => {
+  it("EARS-53: lists the messages to a phone beyond its pre-request checkpoint through the sink API", async () => {
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
       Response.json({
-        messages: [{ id: 1, receivedAt: "x", body: RU_RESET, json: null }],
+        messages: [
+          {
+            id: 2,
+            receivedAt: "2026-10-13T00:00:02.000Z",
+            body: RU_RESET,
+            json: null,
+          },
+          {
+            id: 1,
+            receivedAt: "2026-10-13T00:00:01.000Z",
+            body: RU_RESET,
+            json: null,
+          },
+        ],
       }),
     );
     vi.stubGlobal("fetch", fetchMock);
     const messages = await smsSinkMessages(
       "http://sink:8090",
       "+79991234567",
-      "2026-10-13T00:00:00.000Z",
+      { phone: "+79991234567", messageIds: [1] },
       "user.human.phone.code.added",
     );
-    expect(messages).toHaveLength(1);
+    expect(messages.map((message) => message.id)).toEqual([2]);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      "http://sink:8090/api/messages?to=%2B79991234567&after=2026-10-13T00%3A00%3A00.000Z&event=user.human.phone.code.added",
+      "http://sink:8090/api/messages?to=%2B79991234567&event=user.human.phone.code.added",
     );
   });
 
+  it("#3057: a delivery the sink stamped before the runner's clock reading still counts — no cross-machine timestamp comparison", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // The runner clock runs ahead of the sink box: the sink's receivedAt of the
+    // delivery caused by the request predates the runner's request instant.
+    vi.setSystemTime(new Date("2026-10-19T17:46:24.646Z"));
+    let delivered = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          messages: delivered
+            ? [
+                {
+                  id: 160,
+                  receivedAt: "2026-10-19T17:46:24.617Z",
+                  body: RU_RESET,
+                  json: JSON.parse(RU_RESET),
+                },
+              ]
+            : [],
+        }),
+      ),
+    );
+    const checkpoint = await captureSmsCheckpoint(
+      "http://sink:8090",
+      "+79991234567",
+    );
+    expect(checkpoint).toEqual({ phone: "+79991234567", messageIds: [] });
+    delivered = true;
+    await expect(
+      waitForSmsCode(
+        "http://sink:8090",
+        "+79991234567",
+        checkpoint,
+        resetSmsCode,
+        "user.human.password.code.added",
+      ),
+    ).resolves.toBe("482913");
+    vi.useRealTimers();
+  });
+
+  it("#3057: the checkpoint holds every delivery to the phone, of any event, and ignores none of them later", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      Response.json({
+        messages: [
+          {
+            id: 7,
+            receivedAt: "2099-01-01T00:00:00.000Z",
+            body: RU_RESET,
+            json: null,
+          },
+          {
+            id: 3,
+            receivedAt: "2000-01-01T00:00:00.000Z",
+            body: RU_RESET,
+            json: null,
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      captureSmsCheckpoint("http://sink:8090", "+79991234567"),
+    ).resolves.toEqual({ phone: "+79991234567", messageIds: [7, 3] });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "http://sink:8090/api/messages?to=%2B79991234567",
+    );
+  });
+
+  it("#3057: a checkpoint bound to another phone is refused before any read", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ messages: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      smsSinkMessages("http://sink:8090", "+79991234567", {
+        phone: "+79990000000",
+        messageIds: [],
+      }),
+    ).rejects.toThrow("SMS checkpoint belongs to another phone");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([{ id: "1" }, { id: 0 }, { id: 1.5 }, {}])(
+    "#3057: a sink message without a positive integer delivery id fails closed (%o)",
+    async (bad) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          Response.json({
+            messages: [{ receivedAt: "x", body: RU_RESET, json: null, ...bad }],
+          }),
+        ),
+      );
+      await expect(
+        captureSmsCheckpoint("http://sink:8090", "+79991234567"),
+      ).rejects.toThrow("Invalid SMS sink delivery id");
+    },
+  );
+
   it("EARS-53: sends the stage basic-auth pair to a gated sink, and none on a bare one (#2878)", async () => {
-    const fetchMock = vi.fn(
-      async (_url: string, _init?: RequestInit) =>
-        Response.json({ messages: [] }),
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      Response.json({ messages: [] }),
     );
     vi.stubGlobal("fetch", fetchMock);
     vi.stubEnv("E2E_HTTP_USER", "stage");
     vi.stubEnv("E2E_HTTP_PASS", "s3cret");
-    await smsSinkMessages(
-      "https://sms-sink.stage.test",
-      "+79991234567",
-      "2026-10-13T00:00:00Z",
-    );
+    await captureSmsCheckpoint("https://sms-sink.stage.test", "+79991234567");
     const gated = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
     expect(gated.get("authorization")).toBe(
       `Basic ${Buffer.from("stage:s3cret").toString("base64")}`,
@@ -107,11 +215,7 @@ describe("SMS sink reads for the 003 SMS reset journey", () => {
 
     vi.stubEnv("E2E_HTTP_USER", "");
     vi.stubEnv("E2E_HTTP_PASS", "");
-    await smsSinkMessages(
-      "http://localhost:8090",
-      "+79991234567",
-      "2026-10-13T00:00:00Z",
-    );
+    await captureSmsCheckpoint("http://localhost:8090", "+79991234567");
     const bare = new Headers(fetchMock.mock.calls[1]?.[1]?.headers);
     expect(bare.has("authorization")).toBe(false);
   });
@@ -122,11 +226,7 @@ describe("SMS sink reads for the 003 SMS reset journey", () => {
       vi.fn(async () => new Response("", { status: 503 })),
     );
     await expect(
-      smsSinkMessages(
-        "http://sink:8090",
-        "+79991234567",
-        "2026-10-13T00:00:00Z",
-      ),
+      captureSmsCheckpoint("http://sink:8090", "+79991234567"),
     ).rejects.toThrow("SMS sink answered HTTP 503");
   });
 });

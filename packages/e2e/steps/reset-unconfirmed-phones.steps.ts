@@ -16,11 +16,14 @@ import {
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import {
+  captureSmsCheckpoint,
   freshConfirmablePhone,
   PHONE_CODE_EVENT,
   RESET_CODE_EVENT,
+  smsOrigin,
   smsSinkMessages,
   smsSinkUrl,
+  type SmsCheckpoint,
 } from "../lib/sms-sink.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 
@@ -29,7 +32,7 @@ interface ResetTarget {
   email?: string;
   checkpoint?: AddressedMailCheckpoint;
   guest?: Page;
-  requestedAt?: string;
+  requestedAt?: SmsCheckpoint;
   setCookie?: string;
 }
 interface ResetJourney {
@@ -81,7 +84,7 @@ Given(
     };
     for (const target of state.targets) {
       expect(
-        (await smsSinkMessages(sink, target.phone, new Date(0).toISOString()))
+        (await smsSinkMessages(sink, target.phone, smsOrigin(target.phone)))
           .length,
         "fresh owned number has no earlier SMS",
       ).toBe(0);
@@ -126,7 +129,7 @@ Given(
     await state.owner
       .getByTestId("profile-phone-input")
       .pressSequentially(pending.phone.slice(1));
-    const phoneRequestedAt = new Date().toISOString();
+    const phoneRequestedAt = await captureSmsCheckpoint(sink, pending.phone);
     const requesting = captureResponse(state.owner, "/v1/me/phone");
     await state.owner.getByTestId("profile-phone-send").click();
     const requested = await requesting;
@@ -207,7 +210,7 @@ When(
           state.mailpit,
           target.email,
         );
-      target.requestedAt = new Date().toISOString();
+      target.requestedAt = await captureSmsCheckpoint(state.sink, target.phone);
       const requesting = captureResponse(guest, "/v1/auth/password/reset");
       await guest.getByTestId("reset-request-submit").click();
       const captured = await requesting;

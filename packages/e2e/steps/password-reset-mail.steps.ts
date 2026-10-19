@@ -36,7 +36,6 @@ interface ResetMail extends OwnedCredentials {
   httpCredentials: BrowserContextOptions["httpCredentials"];
   reset?: Page;
   before?: AddressedMailCheckpoint;
-  requestedAt?: string;
   mail?: Awaited<ReturnType<typeof fetchRecoveryMail>>;
   completion?: CapturedResponse;
   resetPosts: string[];
@@ -190,7 +189,6 @@ When(
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
     );
-    state.requestedAt = new Date().toISOString();
     const pending = captureResponse(reset, "/v1/auth/password/reset");
     await reset.getByTestId("reset-request-submit").click();
     const requested = await pending;
@@ -230,13 +228,13 @@ Then(
   "the fresh recipient-bound reset mail has a leading six-digit code matching both complete branded bodies and footer",
   async ({ page, world }) => {
     const state = resetMail(page);
-    if (!state.requestedAt || !state.before)
+    if (!state.before)
       throw new Error("Pre-reset recipient checkpoint was not captured");
     state.mail = await fetchRecoveryMail(
       nativeRecoveryMail(),
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
-      state.requestedAt,
+      state.before,
       "reset",
     );
     const delivered = await captureAddressedMailCheckpoint(

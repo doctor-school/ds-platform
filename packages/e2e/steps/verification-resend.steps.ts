@@ -27,7 +27,6 @@ interface ResendVisitor extends OwnedCredentials {
   page: Page;
   authPosts: string[];
   checkpoint?: AddressedMailCheckpoint;
-  requestedAt?: string;
   response?: {
     status: number;
     neutralBody: boolean;
@@ -214,7 +213,6 @@ When(
           mailpit,
           visitor.email,
         );
-        visitor.requestedAt = new Date().toISOString();
         const pending = captureResponse(visitor.page, "/v1/auth/verify/resend");
         await resend.click();
         const captured = await pending;
@@ -296,14 +294,13 @@ Then(
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl);
     await Promise.all(
       comparison(page).visitors.map(async (visitor) => {
-        if (!visitor.requestedAt || !visitor.checkpoint)
+        if (!visitor.checkpoint)
           throw new Error("Owned resend mail boundary absent");
         if (visitor.kind === "unknown") {
           await assertNoAddressedMail(
             mail,
             mailpit,
             visitor.email,
-            visitor.requestedAt,
             visitor.checkpoint,
           );
         } else {
@@ -362,7 +359,7 @@ Then(
             sinceCheckpoint,
             mailpit,
             visitor.email,
-            new Date(0).toISOString(),
+            visitor.checkpoint,
             visitor.kind === "unverified" ? "register" : "login",
           );
           expect(

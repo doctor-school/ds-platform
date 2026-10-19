@@ -2,6 +2,7 @@ import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
 import {
+  captureAddressedMailCheckpoint,
   fetchRecoveryCode,
   mailpitUrlFor,
   nativeRecoveryMail,
@@ -10,9 +11,11 @@ import { createOwnedCongressSignup } from "../lib/owned-congress-signup.js";
 import { inputSecret } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import {
+  captureSmsCheckpoint,
   freshConfirmablePhone,
   smsSinkMessages,
   smsSinkUrl,
+  type SmsCheckpoint,
 } from "../lib/sms-sink.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 
@@ -26,7 +29,8 @@ interface Prefill {
   email: string;
   editedPhone: string;
   sink: string;
-  startedAt: string;
+  /** Per-phone sink checkpoints taken at the scenario start (suggested, edited). */
+  startedAt: SmsCheckpoint[];
   phoneWrites: string[];
   authPosts: string[];
   observeEditing: boolean;
@@ -85,13 +89,18 @@ Given(
       ...(httpCredentials ? { httpCredentials } : {}),
     });
     const owned = await context.newPage();
+    const editedPhone = freshConfirmablePhone();
     const state: Prefill = {
       context,
       page: owned,
       email: "",
-      editedPhone: freshConfirmablePhone(),
+      editedPhone,
       sink,
-      startedAt: new Date().toISOString(),
+      startedAt: await Promise.all(
+        [NORMALIZED_PHONE, editedPhone].map((phone) =>
+          captureSmsCheckpoint(sink, phone),
+        ),
+      ),
       phoneWrites: [],
       authPosts: [],
       observeEditing: false,
@@ -139,7 +148,13 @@ Given(
     await owned.waitForLoadState("networkidle");
     await owned.getByTestId("otp-channel-email").click();
     await inputSecret(owned.getByTestId("otp-identifier"), state.email);
-    const requestedAt = new Date().toISOString();
+    const mailbox =
+      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl);
+    const requestedAt = await captureAddressedMailCheckpoint(
+      nativeRecoveryMail(),
+      mailbox,
+      state.email,
+    );
     const requested = captureResponse(owned, "/v1/auth/login/otp/request");
     await owned.getByTestId("otp-send").click();
     const response = await requested;
@@ -153,7 +168,7 @@ Given(
     ).toBe(true);
     const code = await fetchRecoveryCode(
       nativeRecoveryMail(),
-      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+      mailbox,
       state.email,
       requestedAt,
       "login",
@@ -240,16 +255,16 @@ Then(
     // Match the complete 40 x 500ms delivery horizon of sms-sink.waitForSmsCode.
     for (let sample = 0; sample <= 40; sample++) {
       const counts = await Promise.all(
-        [NORMALIZED_PHONE, state.editedPhone].map(
-          async (phone) =>
-            (await smsSinkMessages(state.sink, phone, state.startedAt)).length,
+        state.startedAt.map(
+          async (checkpoint) =>
+            (await smsSinkMessages(state.sink, checkpoint.phone, checkpoint))
+              .length,
         ),
       );
       expect(counts, "no addressed SMS for suggestion or edited draft").toEqual(
         [0, 0],
       );
-      if (sample < 40)
-        await new Promise((resolve) => setTimeout(resolve, 500));
+      if (sample < 40) await new Promise((resolve) => setTimeout(resolve, 500));
     }
     state.observeEditing = false;
     expect(state.editingRequests, "editing and canceling are local-only").toBe(

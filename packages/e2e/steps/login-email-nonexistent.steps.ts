@@ -4,9 +4,11 @@ import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
 import {
   assertNoAddressedMail,
+  captureAddressedMailCheckpoint,
   fetchRecoveryCode,
   mailpitUrlFor,
   nativeRecoveryMail,
+  type AddressedMailCheckpoint,
 } from "../lib/mailpit.js";
 import {
   assertNoPrivateRegistrationAccess,
@@ -19,7 +21,7 @@ import { assertSecureSession } from "../lib/secure-session.js";
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
 
 interface RequestObservation {
-  requestedAt: string;
+  before: AddressedMailCheckpoint;
   status: number;
   neutralBody: boolean;
   setCookie: string;
@@ -82,7 +84,11 @@ async function requestThroughAcademy(
   );
   await page.getByTestId("otp-channel-email").click();
   await inputSecret(page.getByTestId("otp-identifier"), email);
-  const requestedAt = new Date().toISOString();
+  const before = await captureAddressedMailCheckpoint(
+    nativeRecoveryMail(),
+    process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(base),
+    email,
+  );
   const pending = captureResponse(page, "/v1/auth/login/otp/request");
   await page.getByTestId("otp-send").click();
   const captured = await pending;
@@ -133,7 +139,7 @@ async function requestThroughAcademy(
     0,
   );
   return {
-    requestedAt,
+    before,
     status: captured.response.status(),
     neutralBody: statusOnlyBody(captured.body, "otp_sent"),
     setCookie: (await captured.response.headerValue("set-cookie")) ?? "",
@@ -203,7 +209,7 @@ Given(
       nativeRecoveryMail(),
       mailpit,
       state.email,
-      unverified.requestedAt,
+      unverified.before,
       "login",
     );
     const accepted = captureResponse(owned, "/v1/auth/login/otp");
@@ -260,7 +266,7 @@ Given(
       nativeRecoveryMail(),
       mailpit,
       state.email,
-      verified.requestedAt,
+      verified.before,
       "login",
     );
     const visitorContext = await browser.newContext({
@@ -319,7 +325,7 @@ Then(
       nativeRecoveryMail(),
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.unknownEmail,
-      state.unknown.requestedAt,
+      state.unknown.before,
     );
   },
 );

@@ -522,6 +522,15 @@ and prints the verdict block the operator pastes into the PR body or the release
 `--project walks` selects the derived walks alone (the two storefront a11y legs belong to
 the host projects, so that selection runs neither).
 
+The suite runs on the operator's machine while Mailpit and the SMS sink stamp
+deliveries with the stage box's clock, so no delivery reader compares a runner
+instant with a store timestamp (#3057): a runner clock a few hundred
+milliseconds ahead hid every code its own request caused. Every reader takes the
+store-side checkpoint observed just before the triggering action —
+`captureAddressedMailCheckpoint` (recipient-bound Mailpit IDs) or
+`captureSmsCheckpoint` (phone-bound sink IDs; `smsOrigin(phone)` when every
+delivery counts) — and a delivery is fresh exactly when its ID is not in it.
+
 ### Registration without consent (003 EARS-20)
 
 `Registration is refused without consent` uses unique owned credentials and a

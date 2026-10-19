@@ -6,9 +6,11 @@ import {
   type CapturedResponse,
 } from "../lib/captured-response.js";
 import {
+  captureAddressedMailCheckpoint,
   fetchRecoveryMail,
   mailpitUrlFor,
   nativeRecoveryMail,
+  type AddressedMailCheckpoint,
 } from "../lib/mailpit.js";
 import {
   assertNoPrivateRegistrationAccess,
@@ -30,7 +32,7 @@ interface AbandonedRegistration extends OwnedCredentials {
   page: Page;
   contexts: BrowserContext[];
   authPosts: string[];
-  requestedAt?: string;
+  before?: AddressedMailCheckpoint;
   repeated?: CapturedResponse;
   code?: string;
   accepted?: CapturedResponse;
@@ -184,7 +186,11 @@ When(
       state.page.locator('input[autocomplete="new-password"]'),
       state.password,
     );
-    state.requestedAt = new Date().toISOString();
+    state.before = await captureAddressedMailCheckpoint(
+      nativeRecoveryMail(),
+      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+      state.email,
+    );
     const pending = captureResponse(state.page, "/v1/auth/register");
     await state.page.getByTestId("register-submit").click();
     state.repeated = await pending;
@@ -232,7 +238,7 @@ Then(
       nativeRecoveryMail(),
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
-      state.requestedAt!,
+      state.before!,
       "login",
     );
     state.code = mail.code;
@@ -408,11 +414,9 @@ Then(
         ).toBe(true);
         expect(new URL(guest.url()).pathname).toBe("/login");
         await expect(
-          guest
-            .getByRole("alert")
-            .filter({
-              hasText: "Не удалось войти. Проверьте данные и попробуйте снова.",
-            }),
+          guest.getByRole("alert").filter({
+            hasText: "Не удалось войти. Проверьте данные и попробуйте снова.",
+          }),
         ).toBeVisible();
         await assertNoPrivateRegistrationAccess(
           guest,

@@ -9,11 +9,13 @@ import {
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import {
+  captureSmsCheckpoint,
   freshConfirmablePhone,
   PHONE_CODE_EVENT,
   phoneConfirmationCode,
   smsSinkUrl,
   waitForSmsCode,
+  type SmsCheckpoint,
 } from "../lib/sms-sink.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 
@@ -26,7 +28,7 @@ interface PhoneChange {
   sink: string;
   subject?: string;
   cookie?: string;
-  requestedAt?: string;
+  requestedAt?: SmsCheckpoint;
 }
 
 const changes = new WeakMap<Page, PhoneChange>();
@@ -199,7 +201,10 @@ When(
     await state.page
       .getByTestId("profile-phone-input")
       .pressSequentially(state.replacementPhone.slice(1));
-    state.requestedAt = new Date().toISOString();
+    state.requestedAt = await captureSmsCheckpoint(
+      state.sink,
+      state.replacementPhone,
+    );
     const requested = captureResponse(state.page, "/v1/me/phone");
     await state.page.getByTestId("profile-phone-send").click();
     const response = await requested;

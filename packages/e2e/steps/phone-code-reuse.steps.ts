@@ -15,6 +15,7 @@ import {
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import {
+  captureSmsCheckpoint,
   freshConfirmablePhone,
   PHONE_CODE_EVENT,
   phoneConfirmationCode,
@@ -185,7 +186,7 @@ Given(
       state.mailpit,
       state.email,
     );
-    const requestedAt = new Date().toISOString();
+    const requestedAt = await captureSmsCheckpoint(sink, state.phone);
     await confirmOwnedPhone(state.page, { phone: state.phone, sink });
     const messages = await smsSinkMessages(
       sink,

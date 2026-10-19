@@ -4,6 +4,8 @@ import { assertNoAddressedMail, waitForResetMail } from "./mailpit.js";
 
 const after = "2026-10-06T00:00:00Z";
 const email = "reset-test@example.test";
+// #3057: freshness is the Mailpit IDs unseen before the request, not Created.
+const checkpoint = { recipient: email, messageIds: ["stale"] };
 const message = (overrides = {}) => ({
   ID: "fresh",
   Created: after,
@@ -43,7 +45,7 @@ describe("reset delivery evidence", () => {
         client([message()]),
         "https://mailpit.example.test",
         email,
-        after,
+        checkpoint,
       ),
     ).resolves.toBeUndefined();
   });
@@ -53,7 +55,7 @@ describe("reset delivery evidence", () => {
       client([]),
       "https://mailpit.example.test",
       email,
-      after,
+      checkpoint,
     );
     const assertion = expect(result).resolves.toBeUndefined();
     await Promise.all([assertion, vi.advanceTimersByTimeAsync(15_000)]);
@@ -66,22 +68,26 @@ describe("reset delivery evidence", () => {
     { messages_count: "0" },
     { start: 1 },
     { start: undefined },
-  ])("EARS-16: rejects incomplete or malformed query metadata %j", async (metadata) => {
-    vi.useFakeTimers();
-    const assertion = expect(
-      assertNoAddressedMail(
-        client([], 200, 200, { total: 0, ...metadata }),
-        "https://mailpit.example.test",
-        email,
-        after,
-      ),
-    ).rejects.toThrow("search payload");
-    await Promise.all([assertion, vi.advanceTimersByTimeAsync(15_000)]);
-  });
+  ])(
+    "EARS-16: rejects incomplete or malformed query metadata %j",
+    async (metadata) => {
+      vi.useFakeTimers();
+      const assertion = expect(
+        assertNoAddressedMail(
+          client([], 200, 200, { total: 0, ...metadata }),
+          "https://mailpit.example.test",
+          email,
+          checkpoint,
+        ),
+      ).rejects.toThrow("search payload");
+      await Promise.all([assertion, vi.advanceTimersByTimeAsync(15_000)]);
+    },
+  );
   it("EARS-11: ignores stale, unrelated-subject and wrong-recipient mail before fresh reset delivery", async () => {
     vi.useFakeTimers();
     const messages = [
-      message({ Created: "2026-10-05T00:00:00Z" }),
+      // Already observed before the request, though stamped after it.
+      message({ ID: "stale", Created: "2026-10-07T00:00:00Z" }),
       message({ Subject: "login" }),
       message({ To: [{ Address: "other@example.test" }] }),
     ];
@@ -90,12 +96,22 @@ describe("reset delivery evidence", () => {
       request,
       "https://mailpit.example.test",
       email,
-      after,
+      checkpoint,
     );
     await vi.advanceTimersByTimeAsync(500);
     messages.push(message());
     await vi.advanceTimersByTimeAsync(500);
     await expect(result).resolves.toBeUndefined();
+  });
+  it("#3057: accepts the fresh reset mail even when the inbox clock stamped it before the runner's request instant", async () => {
+    await expect(
+      waitForResetMail(
+        client([message({ ID: "caused", Created: "2026-10-05T23:59:59Z" })]),
+        "https://mailpit.example.test",
+        email,
+        checkpoint,
+      ),
+    ).resolves.toBeUndefined();
   });
   it("EARS-11: requires successful message read", async () => {
     await expect(
@@ -103,7 +119,7 @@ describe("reset delivery evidence", () => {
         client([message()], 200, 503),
         "https://mailpit.example.test",
         email,
-        after,
+        checkpoint,
       ),
     ).rejects.toThrow("message read failed");
   });
@@ -114,7 +130,7 @@ describe("reset delivery evidence", () => {
       client(messages),
       "https://mailpit.example.test",
       email,
-      after,
+      checkpoint,
     );
     const assertion = expect(result).rejects.toThrow(
       "Unexpected addressed mail",
@@ -128,12 +144,12 @@ describe("reset delivery evidence", () => {
     vi.useFakeTimers();
     const result = assertNoAddressedMail(
       client([
-        message({ Created: "2026-10-05T00:00:00Z" }),
+        message({ ID: "stale", Created: "2026-10-07T00:00:00Z" }),
         message({ To: [{ Address: "other@example.test" }] }),
       ]),
       "https://mailpit.example.test",
       email,
-      after,
+      checkpoint,
     );
     await vi.advanceTimersByTimeAsync(15_000);
     await expect(result).resolves.toBeUndefined();
@@ -144,7 +160,7 @@ describe("reset delivery evidence", () => {
         client([], 503),
         "https://mailpit.example.test",
         email,
-        after,
+        checkpoint,
       ),
     ).rejects.toThrow("search failed");
   });
@@ -157,7 +173,7 @@ describe("reset delivery evidence", () => {
         request,
         "https://mailpit.example.test",
         email,
-        after,
+        checkpoint,
       ),
     ).rejects.toThrow("search payload");
   });

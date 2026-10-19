@@ -11,6 +11,7 @@ import {
   freshConfirmablePhone,
   PHONE_CODE_EVENT,
   phoneConfirmationCode,
+  smsOrigin,
   smsSinkMessages,
   smsSinkUrl,
 } from "../lib/sms-sink.js";
@@ -43,13 +44,11 @@ async function deliveryCheckpoint(state: ResentPhone) {
   const messages = await smsSinkMessages(
     state.sink,
     state.phone,
-    new Date(0).toISOString(),
+    smsOrigin(state.phone),
     PHONE_CODE_EVENT,
   );
   return messages.map((message) => {
-    const id = (message as typeof message & { id?: unknown }).id;
-    const receivedAt = (message as typeof message & { receivedAt?: unknown })
-      .receivedAt;
+    const { id, receivedAt } = message;
     if (
       !Number.isSafeInteger(id) ||
       Number(id) <= 0 ||

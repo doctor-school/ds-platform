@@ -2,6 +2,7 @@ import { expect, type Page, type Response } from "@playwright/test";
 import { inputSecret } from "./owned-registration.js";
 import {
   PHONE_CODE_EVENT,
+  captureSmsCheckpoint,
   phoneConfirmationCode,
   waitForSmsCode,
 } from "./sms-sink.js";
@@ -23,7 +24,7 @@ export async function confirmOwnedPhone(
   await page
     .getByTestId("profile-phone-input")
     .pressSequentially(phone.slice(1));
-  const requestedAt = new Date().toISOString();
+  const before = await captureSmsCheckpoint(sink, phone);
   const requested = post(page, "/v1/me/phone");
   await page.getByTestId("profile-phone-send").click();
   const response = await requested;
@@ -32,7 +33,7 @@ export async function confirmOwnedPhone(
   const code = await waitForSmsCode(
     sink,
     phone,
-    requestedAt,
+    before,
     phoneConfirmationCode,
     PHONE_CODE_EVENT,
   );

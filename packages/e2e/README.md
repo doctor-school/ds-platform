@@ -63,9 +63,14 @@ off; cleanup revokes the owned registration session and closes every owned
 context even after failure. Missing intake, Mailpit or sink prerequisites fail.
 
 The broader native declaration remains unchanged. The browser claims no 50 ms
-timing parity, internal counter or audit observation; those remain attributed to
-`apps/api/test/auth/password-reset.e2e-spec.ts` EARS-53/16/56. Confirmed-phone
-reset delivery and completion remain separate existing journeys. Run only the
+timing parity, internal counter or audit observation. Native
+`apps/api/test/auth/password-reset.e2e-spec.ts` EARS-53/16 proves response/timing
+parity and absent reset audit rows. Unit tests in
+`apps/api/src/auth/sms-unconfirmed-counter.spec.ts` EARS-56 prove increments by
+flow, including reset; `apps/api/test/auth/login-otp.e2e-spec.ts` separately proves
+request-level sign-in counting. These pointers claim no reset request-level
+counter proof. Confirmed-phone reset delivery and completion remain separate
+existing journeys. Run only the
 `@reset-unconfirmed-phones` case on the lead-selected contour. This test-only
 coverage has no render surface and needs no owner Stage-B request or slot.
 

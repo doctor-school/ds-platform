@@ -6,6 +6,26 @@ The end-to-end regression contract of the staging/regression-contour tech spec
 feature files as the suite, and the navigation model both storefronts' chrome
 is configured from.
 
+### Another account's confirmed phone (003 EARS-51/49/48/16)
+
+`Academy neutrally accepts another owned account's confirmed phone without sending SMS`
+(`steps/phone-collision.steps.ts`, #3017) registers and verifies two unique owned
+accounts and confirms distinct fresh phones through the actual Academy UI and
+SMS sink. The second account requests the first account's confirmed phone:
+exactly the ordinary `code_sent` acknowledgement and pending controls must
+appear, its own confirmed phone must clear to null API phone/verification fields,
+and the first account must retain its confirmed phone and private identity.
+A complete 20-second recipient/time-bound sink horizon, including a final
+query started at or after the deadline, proves no SMS to the holder.
+Submitting six digits next must produce only the generic wrong-code response and
+UI while both owned profiles retain their post-request phone states.
+Traces stay off; cleanup revokes both owned sessions and closes both contexts,
+even on failure. Missing real Mailpit or SMS prerequisites fail the proof.
+The broader original scenario and native phone API IdP no-write, timing, limits
+and audit coverage remain unchanged. Select the single `@phone-collision` case
+on the lead-owned runtime. This coverage change has no render surface or
+owner Stage-B slot.
+
 ### Wrong phone confirmation code (003 EARS-48/16/52)
 
 `Academy refuses a wrong phone code and accepts the retained real code`

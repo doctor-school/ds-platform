@@ -1205,3 +1205,25 @@ changed. The broader feature declaration remains native: API verify EARS-25/16
 owns timing, issued-only audit and no users/consent writes, API abuse tests own
 counters/rate limits, and auth-flow verify-door tests own native control and
 cooldown contracts. This case adds no accepted-code or persisted-state claim.
+
+### Confirmed-phone SMS sign-in (003 EARS-7/8)
+
+`Academy signs in the same owned doctor with the confirmed phone SMS code`
+(`steps/login-sms-confirmed.steps.ts`, #3008) registers a unique Academy doctor,
+verifies the actual email code and confirms a fresh phone through the account
+UI and delivered SMS. The registration session is revoked with logout HTTP 200
+and profile/session HTTP 401 before the real `/login?method=code` SMS request.
+The neutral acknowledgement grants no private access. The sink lookup binds the
+actual six-digit login code to the owned recipient, request time and
+`session.otp.sms.challenged` event, separately from phone confirmation.
+
+Entering that code must auto-submit, return only the authentication status,
+mint a fresh secure host-only BFF cookie and restore the same subject, verified
+email and confirmed phone. Final logout proves private access is removed.
+Traces are off; assertion evidence projects secrets to booleans and cleanup
+revokes only the owned session/context. The broader native SMS-budget scenario
+remains intact: `apps/api/test/auth/login-otp.e2e-spec.ts` owns IdP delegation
+and the global circuit-breaker; `sms-budget.service.spec.ts` owns EARS-14
+thresholds. This narrow browser case consumes
+ordinary sends without exhausting or claiming to inspect those counters. No
+runtime surface changes or owner Stage-B request are involved.

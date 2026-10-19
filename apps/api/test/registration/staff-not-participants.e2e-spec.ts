@@ -13,12 +13,13 @@ import {
 } from "../setup/fixture-cleanup.js";
 import { eventClassificationSql } from "../setup/event-classification.js";
 
-// #2456 — a staff account is a user (it holds the visitor role, so it can sign
-// up and enter a room like anyone), but it is NEVER a participant: its
-// registrations and presence must not inflate the «сколько коллег записалось»
-// figure, the congress roster (rows and total), the roster read model, or the
-// live room population / presence minutes. The staff marker is the `users.role`
-// mirror the session keeps in step with the project-roles claim.
+// #2456 / #2518 — a staff account is a user (it holds the visitor role, so it
+// can sign up and enter a room like anyone) and a participant, but never a
+// statistic: its registration is recorded and listed (the roster rows and total,
+// unless the registrar hides staff), while the «сколько коллег записалось»
+// figure, the live room population and presence minutes leave it out. The staff
+// marker is the `users.role` mirror the session keeps in step with the
+// project-roles claim.
 //
 // Seeds rows directly and reads through the real repositories against the
 // dev-stand Postgres; skips when DATABASE_URL or IDP_ISSUER is absent, like the
@@ -129,20 +130,41 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(counts.get(eventId)).toBe(1);
     });
 
-    it("EARS-26: the roster read model lists only participants", async () => {
-      const { eventId, doctorId } = await mixedEvent();
+    it("EARS-26: the roster read model records every registration, staff included; a statistics consumer asks for participants only", async () => {
+      const { eventId, doctorId, staffId } = await mixedEvent();
 
-      const roster = await registrationRepo.findEventRoster(eventId);
+      const everyone = await registrationRepo.findEventRoster(eventId, {
+        excludeStaff: false,
+      });
+      const participants = await registrationRepo.findEventRoster(eventId, {
+        excludeStaff: true,
+      });
 
-      expect(roster.map((r) => r.userId)).toEqual([doctorId]);
+      expect(everyone.map((r) => r.userId).sort()).toEqual(
+        [doctorId, staffId].sort(),
+      );
+      expect(participants.map((r) => r.userId)).toEqual([doctorId]);
     });
 
-    it("EARS-26: the registrar's roster page excludes staff rows from both the rows and the total", async () => {
+    it("EARS-26: the registrar's roster page shows a staff registration in the rows and the total (#2518)", async () => {
       const { eventId } = await mixedEvent();
 
       const page = await registrationRepo.findEventRosterPage(
         eventId,
-        { page: 1, pageSize: 50 },
+        { page: 1, pageSize: 50, hideStaff: false },
+        [],
+      );
+
+      expect(page.items).toHaveLength(2);
+      expect(page.total).toBe(2);
+    });
+
+    it("EARS-26: the roster page's hide-staff filter drops staff from the rows and the total", async () => {
+      const { eventId } = await mixedEvent();
+
+      const page = await registrationRepo.findEventRosterPage(
+        eventId,
+        { page: 1, pageSize: 50, hideStaff: true },
         [],
       );
 

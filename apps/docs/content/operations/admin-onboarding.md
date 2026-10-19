@@ -58,9 +58,11 @@ Related: the [auth operations runbook](./auth-operations.md) — especially
    and records the grant once.
 
 A staff member is a user of the sites too: `doctor_guest` is the visitor role
-(their own events, rooms, profile), the staff role the admin rights on top. Every
-participant count, roster and presence figure leaves staff accounts out — no
-manual step.
+(their own events, rooms, profile), the staff role the admin rights on top. A
+staff member's registration is recorded and shown in the event roster like any
+other; the roster's «Скрыть сотрудников» filter hides it when needed. Only the
+statistics — the storefront sign-up count, the room's online count, watch
+minutes and partner statistics — leave staff accounts out, with no manual step.
 
 ## Confirm with a current code
 

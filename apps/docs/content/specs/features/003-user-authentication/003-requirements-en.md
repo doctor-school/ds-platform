@@ -80,6 +80,15 @@ This amendment overrides only the `doctor_guest`-only account statements in Scop
 
 Verification: `apps/api/test/me/profile.e2e-spec.ts` (`EARS-27`, `EARS-16` and `EARS-26` staff cases), `apps/api/src/auth/mirror-self-heal.service.spec.ts` and `apps/api/src/auth/staff-role.spec.ts` (`EARS-26`), `apps/api/test/registration/staff-not-participants.e2e-spec.ts` (`EARS-26`). The staff `/account` render is a live-stand Playwright tier on both storefronts plus the Stage-B owner gate.
 
+## Production amendment — staff are participants, not statistics (2026-10-19, #2518)
+
+This amendment overrides only the «Participants exclude staff» bullet of the 2026-09-30 amendment above; its other bullets stand. Owner decision on #2518: the fact of a registration is always recorded and shown, even for a test or service account; only the counters of doctors in a room and partner statistics leave staff out.
+
+- **Statistics exclude staff (EARS-26).** Figures count only accounts whose mirror row carries `doctor_guest`: the storefront sign-up count, the live room population with its expiry, derived presence minutes (006), and partner/sponsor statistics.
+- **Lists show staff (EARS-26).** The registrar roster page lists every registration, staff accounts' included, in its rows, its total and its «возможный дубль» population (044 EARS-30). When the registrar turns on the roster filter «Скрыть сотрудников» (off by default), the roster shall leave staff accounts' registrations out of the rows, the total and the duplicate population; turning it off shows them again. The roster read model's caller states whether it excludes staff: admission and lists do not, statistics do.
+
+Verification: `apps/api/test/registration/staff-not-participants.e2e-spec.ts`, `packages/schemas/src/congress/congress-roster.schema.spec.ts` (`EARS-26`), `apps/api/test/congress/roster-filters.e2e-spec.ts` (044 `EARS-31.7`), `apps/admin/e2e/congress-roster-filters.spec.ts` (the filter, live).
+
 ## Production amendment — one email code (2026-10-02, #2552 / #2553)
 
 This amendment overrides: EARS-3 (verification ends in a session); EARS-6 and EARS-7 (code format only — the SMS-OTP login flow and its toll-fraud guard are unchanged); EARS-22 (the «fixed-length numeric OTP» mask); EARS-23 (account-exists notice without a code); EARS-24 (existence-agnostic `/verify` with co-equal Sign in / Reset); EARS-25 (resend issues only for an unverified registrant); EARS-29 («Preserve each Zitadel generator's format»); EARS-34 (verify-then-sign-in out-of-band); EARS-39 (cold-step password replay and `/login` routing); the Invariants lines on enumeration and on code transit; the Verification rows 6, 23, 24, 25, 29, 34 and 39, and the «masked address» of row 40 (row 7 keeps its SMS-login and toll-fraud scope with the new code format). It adds EARS-41…43. The running-production baseline is retained below. Design mechanics: design production amendment of the same date.

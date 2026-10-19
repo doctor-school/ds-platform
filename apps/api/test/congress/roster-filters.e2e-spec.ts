@@ -627,7 +627,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       }
     });
 
-    it("044 EARS-31.7: a phone shared only with a staff account's registration marks nobody — the roster never shows that row (#2456), so neither the list, the yes filter nor the card counts it", async () => {
+    it("044 EARS-31.7: a phone shared with a staff account's registration marks both rows — staff are roster rows (#2518) — and hiding staff unmarks the participant, because a hidden row counts toward no shown row's duplicate", async () => {
       // S signs up through the desk with A's phone, then its account is staff.
       await deskEntry("S", {
         surname: "Штатная",
@@ -647,10 +647,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           [staffEmail],
         );
         expect(await marked("")).toEqual({
+          rows: ["A:true", "B:false", "C:false", "D:false", "S:true"],
+          total: 5,
+        });
+        expect(await marked("possibleDuplicate=yes")).toEqual({
+          rows: ["A:true", "S:true"],
+          total: 2,
+        });
+        // Staff hidden: S is no roster row, so it marks nobody.
+        expect(await marked("hideStaff=true")).toEqual({
           rows: ["A:false", "B:false", "C:false", "D:false"],
           total: 4,
         });
-        expect(await marked("possibleDuplicate=yes")).toEqual({
+        expect(await marked("hideStaff=true&possibleDuplicate=yes")).toEqual({
           rows: [],
           total: 0,
         });
@@ -662,9 +671,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(card.statusCode, card.body).toBe(200);
         expect(
           (card.json() as { possibleDuplicate?: unknown }).possibleDuplicate,
-        ).toBe(false);
-        // The staff registration has no row in the participant-only
-        // subquery; its own card still opens (left join), unmarked (coalesce).
+        ).toBe(true);
+        // The staff registration's own card carries the same marker.
         const sId = [...letterOf].find(([, l]) => l === "S")![0];
         const staffCard = await app.inject({
           method: "GET",
@@ -675,7 +683,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(
           (staffCard.json() as { possibleDuplicate?: unknown })
             .possibleDuplicate,
-        ).toBe(false);
+        ).toBe(true);
       } finally {
         await deleteUserFixture(pool, "email", staffEmail);
       }

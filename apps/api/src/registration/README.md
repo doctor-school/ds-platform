@@ -73,6 +73,10 @@ state, recording, participationFormat, roomHref }`. `roomHref` is the CALLING
   exposed on a 004 public surface, and it selects only the three record columns
   (no join to the `users` mirror), so no registrant PII is ever read or leaked
   (EARS-8, EARS-10; cross-checked against the public projection).
+  The caller passes a required `{ excludeStaff }` (003 EARS-26, #2518 amendment:
+  staff are participants, not statistics): admission and lists pass `false`,
+  so a staff account's registration is read like any other; the sponsor report
+  (statistics) passes `true`.
 - **044 EARS-30 — `possibleDuplicate`.** The entry carries one DERIVED boolean
   beside the three record columns: `true` when another registration of the same
   event holds the same normalised contact phone (the comparison key 044 EARS-29
@@ -97,11 +101,15 @@ never a widening of the one above:
   the EARS-23 per-column filters and the EARS-31 `possibleDuplicate` filter.
   Each row carries the EARS-30 `possibleDuplicate` marker.
 - «Возможный дубль» (EARS-30/EARS-31): the marker comes from
-  `eventDuplicates(eventId)` — the event-scoped subquery the participant card
-  joins too — joined by registration id, so the window counts the event's
-  participant registrations (#2456: a staff account's registration marks
-  nobody) before the search, the filters, the sort and the page
-  apply; a filter that hides one row of a sharing pair never unmarks the other.
+  `eventDuplicates(eventId, { hideStaff })` — the event-scoped subquery the
+  participant card joins too — joined by registration id, so the window counts
+  every registration the roster shows (staff accounts' included, unless the
+  `hideStaff` filter drops them — 003 EARS-26, #2518) before the search, the
+  other filters, the sort and the page apply; a filter that hides one row of a
+  sharing pair never unmarks the other.
+- «Скрыть сотрудников» (`hideStaff=true`, 003 EARS-26 #2518 amendment): drops
+  staff accounts' registrations from the rows, the total and the duplicate
+  population together. Absent or `false` lists every registration.
   `possibleDuplicate=yes` / `no` is one more conjunct over that joined marker
   (any other value is a 400); absent, no filter.
 - The filters (EARS-23), each one more conjunct of the WHERE the count shares,
@@ -235,10 +243,10 @@ never a widening of the one above:
     congress consent rows (`consent_records`: purpose, version, captured-at,
     `paper` origin), `confirmationMail { status, at }`, the read-time
     `possibleDuplicate` (the SAME window expression as `findEventRoster`,
-    read from `eventDuplicates` — computed over the event's participants
-    (#2456: a staff account's registration never marks anyone) and then
-    narrowed to the row, exactly as the roster list reads it; a staff
-    registration's own card reads `false`) and, per configured
+    read from `eventDuplicates` — computed over every registration of the
+    event, staff accounts' included (the roster's default population, #2518),
+    and then narrowed to the row, exactly as the default roster list reads it)
+    and, per configured
     congress day, the current mark (`null` = never marked) plus its `history`
     of changes.
   - **History = the 010 audit.** The first reader of `audit_ledger`: the

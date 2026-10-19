@@ -4972,6 +4972,7 @@ export interface operations {
                 city?: string;
                 dir?: "asc" | "desc";
                 email?: string;
+                hideStaff?: boolean;
                 mailStatus?: "sent" | "failed" | "none";
                 name?: string;
                 page?: number;

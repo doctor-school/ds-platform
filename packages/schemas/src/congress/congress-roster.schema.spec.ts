@@ -419,3 +419,21 @@ describe("044 EARS-31 — «возможный дубль» on the roster contra
     }
   });
 });
+
+describe("003 EARS-26 — the roster's hide-staff filter (#2518)", () => {
+  it("EARS-26: hideStaff is a URL boolean — absent shows staff, true hides them, false shows them, anything else is refused", () => {
+    expect(CongressRosterQuerySchema.parse({}).hideStaff).toBeUndefined();
+    expect(CongressRosterQuerySchema.parse({ hideStaff: "true" }).hideStaff).toBe(
+      true,
+    );
+    expect(
+      CongressRosterQuerySchema.parse({ hideStaff: "false" }).hideStaff,
+    ).toBe(false);
+    for (const bad of ["yes", "1", ""]) {
+      expect(
+        CongressRosterQuerySchema.safeParse({ hideStaff: bad }).success,
+        bad,
+      ).toBe(false);
+    }
+  });
+});

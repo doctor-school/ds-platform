@@ -178,10 +178,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await register(slug, cookieB);
 
       // The roster reads back both current registrations — durable, not in-memory.
-      const roster = await service.eventRoster(slug);
+      const roster = await service.eventRoster(slug, { excludeStaff: false });
       expect(roster).toHaveLength(2);
       // A second, independent read returns the same persisted set (durability).
-      const rereadById = await service.eventRoster(eventId);
+      const rereadById = await service.eventRoster(eventId, { excludeStaff: false });
       expect(rereadById).toHaveLength(2);
       expect(new Set(rereadById.map((e) => e.registeredAt))).toEqual(
         new Set(roster.map((e) => e.registeredAt)),
@@ -196,7 +196,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const cookie = await doctorSession(email);
       await register(slug, cookie);
 
-      const roster = await service.eventRoster(slug);
+      const roster = await service.eventRoster(slug, { excludeStaff: false });
       expect(roster).toHaveLength(1);
       const [entry] = roster;
 
@@ -231,10 +231,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       // The roster holds exactly one current row for the doctor — no duplicate,
       // and (no cancelled state exists) nothing is filtered out either.
-      const roster = await service.eventRoster(slug);
+      const roster = await service.eventRoster(slug, { excludeStaff: false });
       expect(roster).toHaveLength(1);
       // The registration is still current on a subsequent read — durable.
-      expect(await service.eventRoster(slug)).toHaveLength(1);
+      expect(await service.eventRoster(slug, { excludeStaff: false })).toHaveLength(1);
     });
 
     it("EARS-8/10: no registrant PII appears on any public 004 endpoint — the public projection stays content-identical for guest and principal", async () => {
@@ -244,7 +244,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await register(slug, cookie);
 
       // The roster HAS the registrant server-side …
-      expect(await service.eventRoster(slug)).toHaveLength(1);
+      expect(await service.eventRoster(slug, { excludeStaff: false })).toHaveLength(1);
 
       // … but neither public 004 route surfaces any of it. Drive the real routes.
       const guestPage = await app.inject({

@@ -230,8 +230,9 @@ export class RegistrationService {
    * the fact it always did.
    *
    * #2518 — staff are participants, not statistics: the caller states whether
-   * staff accounts' registrations belong in its read. Admission and listing
-   * pass `excludeStaff: false`; partner/sponsor statistics pass `true`.
+   * staff accounts' registrations belong in its read. No runtime consumer
+   * reads it today; a future one passes `excludeStaff: true` only for a
+   * statistic and `false` when it admits or lists people.
    */
   async eventRoster(
     idOrSlug: string,

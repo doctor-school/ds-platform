@@ -34,7 +34,7 @@ The #2456 participant predicate is running in production. This amendment changes
 
 - **Statistics.** `isParticipant(userId)` applies only to figures: `DoctorEventsRepository.countSignUps` (the storefront «сколько коллег записалось»), `PresenceRepository.countLivePresence`, its expiry query and `deriveEventMinutes`, and partner/sponsor statistics. `statistics.countDoctors` still filters on `users.role`.
 - **Lists.** A staff account's registration is recorded and listed. `RegistrationRepository.findEventRosterPage` (rows, total and the 044 EARS-30 «возможный дубль» population) includes staff unless the registrar's roster query carries `hideStaff=true` (`CongressRosterQuerySchema`, `GET /v1/admin/events/:idOrSlug/roster`), which applies `isParticipant` to the rows, the total and the duplicate population together. The participant card computes its marker over the default population (staff included).
-- **Roster read model.** `RegistrationRepository.findEventRoster` / `RegistrationService.eventRoster` take a required `{ excludeStaff }`: a consumer that admits or lists people passes `false`, a statistics consumer (the partner/sponsor report) passes `true`.
+- **Roster read model.** `RegistrationRepository.findEventRoster` / `RegistrationService.eventRoster` take a required `{ excludeStaff }`. No runtime consumer reads them today (room admission does not); the rule for a future consumer: pass `true` only when the read feeds a statistic, `false` when it admits or lists people.
 - **Admin UI.** The roster filter panel carries one `Switch` from `@ds/design-system`, «Скрыть сотрудников», off by default and kept in the page address like the other filters.
 
 ## Production amendment — one email code (2026-10-02, #2552 / #2553)

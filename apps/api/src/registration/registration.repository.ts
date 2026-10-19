@@ -457,10 +457,11 @@ export class RegistrationRepository {
    * guard every answer-less row on an event would mark every other one.
    *
    * #2518 — staff are participants, not statistics: every caller states
-   * whether staff accounts' registrations belong in its read. A consumer that
-   * admits or lists people passes `excludeStaff: false` (the registration is
-   * recorded and shown, even for a service account); a statistics consumer
-   * (the partner/sponsor report) passes `true`. The marker's window runs over
+   * whether staff accounts' registrations belong in its read. No runtime
+   * consumer reads this model today; the rule for a future one: pass
+   * `excludeStaff: true` only when the read feeds a statistic, `false` when it
+   * admits or lists people (the registration is recorded and shown, even for a
+   * service account). The marker's window runs over
    * the same selected rows, so a staff row left out marks nobody.
    */
   async findEventRoster(

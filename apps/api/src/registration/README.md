@@ -74,9 +74,10 @@ state, recording, participationFormat, roomHref }`. `roomHref` is the CALLING
   (no join to the `users` mirror), so no registrant PII is ever read or leaked
   (EARS-8, EARS-10; cross-checked against the public projection).
   The caller passes a required `{ excludeStaff }` (003 EARS-26, #2518 amendment:
-  staff are participants, not statistics): admission and lists pass `false`,
-  so a staff account's registration is read like any other; the sponsor report
-  (statistics) passes `true`.
+  staff are participants, not statistics). It has no runtime caller today; a
+  future caller passes `true` only when the read feeds a statistic, and `false`
+  when it admits or lists people, so a staff account's registration is read like
+  any other.
 - **044 EARS-30 — `possibleDuplicate`.** The entry carries one DERIVED boolean
   beside the three record columns: `true` when another registration of the same
   event holds the same normalised contact phone (the comparison key 044 EARS-29

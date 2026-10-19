@@ -279,7 +279,7 @@ test("EARS-11: a spec .feature runs admin-e2e (bddgen taxonomy project) and noth
 
 test("EARS-12: files a job reads outside its dependency closure run that job", () => {
   // archived-speakers.e2e-spec.ts scans these; @ds/api depends on neither.
-  assert.ok(pr(["apps/portal/app/webinars/[slug]/page.tsx"]).jobs["api-e2e"]);
+  assert.ok(pr(["apps/portal/app/webinars/[slug]/(event-page)/page.tsx"]).jobs["api-e2e"]);
   assert.ok(
     pr(["packages/design-system/src/blocks/event-page-view.ts"]).jobs[
       "api-e2e"

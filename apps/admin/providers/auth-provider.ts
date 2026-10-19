@@ -44,6 +44,21 @@ const LOGIN_PATH = "/login";
 const ENROLL_PATH = "/mfa/enroll";
 const CHALLENGE_PATH = "/mfa/challenge";
 
+/**
+ * End the session here and in this tab: the server-side sign-out, the cached
+ * session read and a pending step-up grant. Shared by `logout` and the 401
+ * path of `onError`.
+ */
+async function signOut(): Promise<void> {
+  await adminLogout();
+  // 044 EARS-20: the cached session read (nav + `can`) belongs to the principal
+  // who just left; the next sign-in in this tab re-reads its own.
+  clearAdminSession();
+  // 047 EARS-8: a grant the step-up interrupted belongs to this session only;
+  // it is never sent under the next one (the 401 path signs out through here).
+  clearStepUpRequest(browserStepUpStorage());
+}
+
 export const authProvider: AuthProvider = {
   login: async ({
     email,
@@ -93,13 +108,7 @@ export const authProvider: AuthProvider = {
   },
 
   logout: async () => {
-    await adminLogout();
-    // 044 EARS-20: the cached session read (nav + `can`) belongs to the principal
-    // who just left; the next sign-in in this tab re-reads its own.
-    clearAdminSession();
-    // 047 EARS-8: a grant the step-up interrupted belongs to this session only;
-    // it is never sent under the next one (the 401 path signs out through here).
-    clearStepUpRequest(browserStepUpStorage());
+    await signOut();
     return { success: true, redirectTo: LOGIN_PATH };
   },
 
@@ -135,6 +144,13 @@ export const authProvider: AuthProvider = {
    * #2782: the 401 carries the page the operator was on (`?to=`), so the sign-in
    * returns them there — the same parameter `<Authenticated>` appends for an
    * unauthenticated page load. A sign-in screen is never carried (no loops).
+   *
+   * #2998: the 401 path signs out itself and returns only the redirect — never
+   * `logout: true`. Refine's logout hook invalidates the auth store while the
+   * refused page is still mounted, so `<Authenticated>` unmounts and remounts
+   * it; the remount re-sends the refused read, whose 401 signs out again — a
+   * burst of identical refused requests until the navigation commits. Here the
+   * refused read is sent once and the redirect follows it.
    */
   onError: async (error) => {
     const { statusCode: status, errorCode } = error as {
@@ -145,8 +161,8 @@ export const authProvider: AuthProvider = {
       return { error };
     }
     if (status === 401) {
+      await signOut();
       return {
-        logout: true,
         redirectTo: withAdminReturnTarget(
           LOGIN_PATH,
           currentPageAsReturnTarget(),

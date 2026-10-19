@@ -74,12 +74,28 @@ describe("authProvider.login — refusal mapping", () => {
 
 describe("authProvider.onError — which refusal ends the session", () => {
   it("044 EARS-38: a 401 (session gone) signs the operator out and routes to /login", async () => {
+    respondWith(200, {});
     const error = { statusCode: 401, message: "x" };
     await expect(authProvider.onError(error)).resolves.toEqual({
-      logout: true,
       redirectTo: "/login",
       error,
     });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/v1\/admin\/auth\/logout$/),
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  // #2998: Refine's logout hook invalidates the auth store while the refused
+  // page is still mounted; `<Authenticated>` then unmounts and remounts it, the
+  // remount re-sends the refused read, its 401 signs out again — a request
+  // storm until the navigation commits. The 401 path signs out itself and
+  // hands Refine only the redirect.
+  it("#2998: the 401 sign-out is done here, not handed to Refine's logout (no auth-store invalidation on a mounted page)", async () => {
+    respondWith(200, {});
+    const verdict = await authProvider.onError({ statusCode: 401, message: "x" });
+    expect(verdict).not.toHaveProperty("logout");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 
   it("044 EARS-38: a 403 (a live session refused this action) keeps the session and surfaces the error to the screen", async () => {
@@ -159,9 +175,9 @@ describe("authProvider — #2782 return target", () => {
 
   it("#2782: a 401 on an admin page routes to /login carrying that page and its query", async () => {
     onPage("/events/123?tab=x");
+    respondWith(200, {});
     const error = { statusCode: 401, message: "x" };
     await expect(authProvider.onError(error)).resolves.toEqual({
-      logout: true,
       redirectTo: "/login?to=%2Fevents%2F123%3Ftab%3Dx",
       error,
     });
@@ -169,6 +185,7 @@ describe("authProvider — #2782 return target", () => {
 
   it("#2782: a 401 while already on a sign-in screen carries nothing (no /login loop)", async () => {
     onPage("/login?to=%2Fevents");
+    respondWith(200, {});
     await expect(
       authProvider.onError({ statusCode: 401, message: "x" }),
     ).resolves.toMatchObject({ redirectTo: "/login" });

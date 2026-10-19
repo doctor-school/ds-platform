@@ -98,6 +98,37 @@ describe("resolveAdminReturnTarget — what a carried target may be", () => {
     expect(resolveAdminReturnTarget(once)).toBe(once);
   });
 
+  // #2998: the browser reports a Cyrillic path percent-encoded; the target is
+  // carried in its readable form, so the `?to=` hop encodes it exactly once.
+  it.each([
+    ["an encoded Cyrillic path", "/events/%D1%82%D0%B5%D1%81%D1%82", "/events/тест"],
+    ["a raw Cyrillic path", "/events/тест", "/events/тест"],
+    [
+      "an encoded Cyrillic query and hash",
+      "/projects?q=%D0%BA%D0%B0%D1%80%D0%B4%D0%B8%D0%BE#%D1%8F",
+      "/projects?q=кардио#я",
+    ],
+    [
+      "an encoded no-break space in the query encoded",
+      "/projects?q=%D1%8F%C2%A0x",
+      "/projects?q=я%C2%A0x",
+    ],
+    ["an ASCII escape encoded", "/events/a%2Fb%25", "/events/a%2Fb%25"],
+  ])("#2998: keeps %s readable", (_label, raw, expected) => {
+    expect(resolveAdminReturnTarget(raw)).toBe(expected);
+  });
+
+  it.each([
+    "/events/%D1%82%D0%B5%D1%81%D1%82",
+    "/events/тест?q=%D0%BA#%D1%8F",
+    "/projects?q=%D1%8F%C2%A0x",
+    "/projects?q=%D1%82%E0",
+  ])("#2998: validation is idempotent for the Cyrillic target %s", (raw) => {
+    const once = resolveAdminReturnTarget(raw);
+    expect(once).not.toBeNull();
+    expect(resolveAdminReturnTarget(once)).toBe(once);
+  });
+
   it("#2782 security: `//` inside the query is data, not a host — kept", () => {
     expect(resolveAdminReturnTarget("/events/1?x=//evil.com")).toBe(
       "/events/1?x=//evil.com",
@@ -138,6 +169,22 @@ describe("withAdminReturnTarget / returnTargetFromSearch — carrying it across 
     expect(href).toBe("/mfa/challenge?to=%2Fevents%2F123%3Ftab%3Dx");
     expect(returnTargetFromSearch(href.slice(href.indexOf("?")))).toBe(
       "/events/123?tab=x",
+    );
+  });
+
+  it("#2998: a Cyrillic target is encoded once on the hop and lands on the same page", () => {
+    const href = withAdminReturnTarget(
+      "/mfa/challenge",
+      "/events/%D1%82%D0%B5%D1%81%D1%82",
+    );
+    expect(href).toBe(
+      "/mfa/challenge?to=%2Fevents%2F%D1%82%D0%B5%D1%81%D1%82",
+    );
+    expect(href).not.toContain("%25");
+    const carried = returnTargetFromSearch(href.slice(href.indexOf("?")));
+    expect(carried).toBe("/events/тест");
+    expect(new URL(carried ?? "", "https://admin.invalid").pathname).toBe(
+      "/events/%D1%82%D0%B5%D1%81%D1%82",
     );
   });
 

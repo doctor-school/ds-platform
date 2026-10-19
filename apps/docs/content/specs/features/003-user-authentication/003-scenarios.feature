@@ -93,7 +93,9 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   # Academy projection (#3016); the broader abandonment declaration stays above.
   # No pending-phone persistence claim: the BFF holds no pending-phone record.
-  # Native lookup/reset/audit: apps/api/test/me/phone.e2e-spec.ts EARS-49/58.
+  # Native displacement/password lookup/audit: apps/api/test/me/phone.e2e-spec.ts EARS-49.
+  # Generic reset equality: same file EARS-51; unconfirmed reset/no-SMS/no-email:
+  # apps/api/test/auth/password-reset.e2e-spec.ts EARS-53/16.
   @EARS-49 @EARS-58 @failure @phone-abandoned
   Scenario: Academy abandons phone replacement without restoring either phone as an SMS identifier
     Given an owned Academy account confirms phone A and receives but never enters a replacement phone B code

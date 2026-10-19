@@ -39,8 +39,11 @@ no addressed SMS over the full 20-second horizon, including a final sink query
 at or after the deadline. Returning by email/password permits another actual
 confirmation SMS request for B; that fresh code also remains unconsumed.
 The BFF keeps no pending-phone record, so this case makes no claim that the
-unconfirmed number remains rendered after navigation. Native phone lookup,
-SMS reset and audit proofs remain in `apps/api/test/me/phone.e2e-spec.ts`.
+unconfirmed number remains rendered after navigation. Native displacement,
+password-identifier lookup and audit proofs remain in
+`apps/api/test/me/phone.e2e-spec.ts` EARS-49, with generic reset-response equality
+in EARS-51. Unconfirmed-phone reset refusal with no SMS or email remains in
+`apps/api/test/auth/password-reset.e2e-spec.ts` EARS-53/16.
 Trace-off fixtures and canonical registration/phone/session helpers are reused;
 cleanup revokes the owned session and closes its context even on failure.
 Missing mail or SMS access fails proof. Select `@phone-abandoned` on the

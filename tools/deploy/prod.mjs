@@ -1380,14 +1380,26 @@ async function deploy(hotfixRef = null) {
 
   step("data-prod: bring up persistence plane (idempotent)");
   t = Date.now();
+  // The compose interpolation files live INSIDE the shipped tree, which every ship
+  // replaces — so they are rewritten on every run, outside the durable unit: a
+  // re-run whose `up` returns its recorded verdict still leaves them in place for
+  // the compose calls after it (#2982).
   await postgres.run(({ live }) =>
+    sshScript(
+      DATA_PROD,
+      `cd ${DATA_COMPOSE}
+printf 'VPC_IP=%s\\n' '${VPC_IP}' > .env
+printf '%s\\n' '${postgresImageOverride(live)}' > .postgres-artifacts.json
+`,
+      { label: "data-prod compose env" },
+    ),
+  );
+  await postgres.run(() =>
     boxStep(
       DATA_PROD,
       sha,
       "up",
       `cd ${DATA_COMPOSE}
-printf 'VPC_IP=%s\\n' '${VPC_IP}' > .env
-printf '%s\\n' '${postgresImageOverride(live)}' > .postgres-artifacts.json
 sudo docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest
 sudo docker compose up -d --no-deps redis
 `,

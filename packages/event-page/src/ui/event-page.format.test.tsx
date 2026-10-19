@@ -179,7 +179,7 @@ describe.each(Object.entries(HOSTS))(
   (_host, config) => {
     const page = `${config.routes.eventPage}/prp-gonartroz`;
 
-    it("020 EARS-8: an offline event renders the seat count and the remaining seats, and no ticket or QR, on both hosts", async () => {
+    it("020 EARS-8: an offline event renders the remaining seats, and no ticket or QR, on both hosts", async () => {
       const root = await renderPage(
         config,
         { ...BASE, format: "offline", seatsLeft: 12 },

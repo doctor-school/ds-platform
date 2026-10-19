@@ -91,6 +91,18 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the profile shows the phone as awaiting confirmation and no account resolves from either number
     And the user can request a code again, which restarts the flow
 
+  # Academy projection (#3016); the broader abandonment declaration stays above.
+  # No pending-phone persistence claim: the BFF holds no pending-phone record.
+  # Native displacement/password lookup/audit: apps/api/test/me/phone.e2e-spec.ts EARS-49.
+  # Generic reset equality: same file EARS-51; unconfirmed reset/no-SMS/no-email:
+  # apps/api/test/auth/password-reset.e2e-spec.ts EARS-53/16.
+  @EARS-49 @EARS-58 @failure @phone-abandoned
+  Scenario: Academy abandons phone replacement without restoring either phone as an SMS identifier
+    Given an owned Academy account confirms phone A and receives but never enters a replacement phone B code
+    When the owner abandons replacement and signs into Academy again by email and password
+    Then the same reloaded Academy identity has no confirmed phone and neither A nor B can request an SMS sign-in code
+    And the email owner can return to the profile and request a fresh actual confirmation SMS for B
+
   @EARS-47 @happy @phone-confirmation
   Scenario: Requesting a code for the already-confirmed number is a no-op
     Given a signed-in user with the confirmed phone "+79991234567"

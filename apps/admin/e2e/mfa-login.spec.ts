@@ -258,10 +258,9 @@ test.describe("011 EARS-6/7 — TOTP challenge on admin login (browser)", () => 
       .getByTestId("mfa-challenge-form")
       .getByRole("textbox")
       .fill(totpCode(secret, Date.now() + STEP_MS));
-    await page.waitForURL(
-      (url) => `${url.pathname}${url.search}` === landing,
-      { timeout: 20_000 },
-    );
+    await page.waitForURL((url) => `${url.pathname}${url.search}` === landing, {
+      timeout: 20_000,
+    });
   });
 
   test("#2782 security: a hostile ?to= never leaves the admin or skips the second factor", async ({

@@ -14,7 +14,10 @@ import {
 describe("adminQueryRetry — which failed admin data reads are retried", () => {
   it.each([
     ["401 (session gone)", { statusCode: 401 }],
-    ["401 STEP_UP_REQUIRED", { statusCode: 401, errorCode: "STEP_UP_REQUIRED" }],
+    [
+      "401 STEP_UP_REQUIRED",
+      { statusCode: 401, errorCode: "STEP_UP_REQUIRED" },
+    ],
     ["403 (no access)", { statusCode: 403 }],
   ])("#2998: never retries a %s", (_label, error) => {
     expect(adminQueryRetry(0, error)).toBe(false);

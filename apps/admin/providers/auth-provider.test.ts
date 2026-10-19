@@ -93,7 +93,10 @@ describe("authProvider.onError — which refusal ends the session", () => {
   // hands Refine only the redirect.
   it("#2998: the 401 sign-out is done here, not handed to Refine's logout (no auth-store invalidation on a mounted page)", async () => {
     respondWith(200, {});
-    const verdict = await authProvider.onError({ statusCode: 401, message: "x" });
+    const verdict = await authProvider.onError({
+      statusCode: 401,
+      message: "x",
+    });
     expect(verdict).not.toHaveProperty("logout");
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });

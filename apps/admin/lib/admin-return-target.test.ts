@@ -101,7 +101,11 @@ describe("resolveAdminReturnTarget — what a carried target may be", () => {
   // #2998: the browser reports a Cyrillic path percent-encoded; the target is
   // carried in its readable form, so the `?to=` hop encodes it exactly once.
   it.each([
-    ["an encoded Cyrillic path", "/events/%D1%82%D0%B5%D1%81%D1%82", "/events/тест"],
+    [
+      "an encoded Cyrillic path",
+      "/events/%D1%82%D0%B5%D1%81%D1%82",
+      "/events/тест",
+    ],
     ["a raw Cyrillic path", "/events/тест", "/events/тест"],
     [
       "an encoded Cyrillic query and hash",
@@ -177,9 +181,7 @@ describe("withAdminReturnTarget / returnTargetFromSearch — carrying it across 
       "/mfa/challenge",
       "/events/%D1%82%D0%B5%D1%81%D1%82",
     );
-    expect(href).toBe(
-      "/mfa/challenge?to=%2Fevents%2F%D1%82%D0%B5%D1%81%D1%82",
-    );
+    expect(href).toBe("/mfa/challenge?to=%2Fevents%2F%D1%82%D0%B5%D1%81%D1%82");
     expect(href).not.toContain("%25");
     const carried = returnTargetFromSearch(href.slice(href.indexOf("?")));
     expect(carried).toBe("/events/тест");

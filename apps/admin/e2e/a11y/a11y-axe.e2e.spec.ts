@@ -163,6 +163,7 @@ async function scan(page: Page, theme: (typeof THEMES)[number]) {
   // Light is the only reachable admin theme (see THEMES) — ensure no stray `.dark`.
   void theme;
   await page.evaluate(() => document.documentElement.classList.remove("dark"));
+  await expect(page).toHaveTitle(/\S/);
   const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
   const summary = results.violations.map((v) => ({
     id: v.id,

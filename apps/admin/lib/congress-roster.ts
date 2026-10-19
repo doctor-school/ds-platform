@@ -214,7 +214,8 @@ export function rosterSortQuery(sort: RosterSort): {
 
 /**
  * 044 EARS-23 — the per-column filters (owner layout F1, #2316), plus the
- * EARS-31 «возможный дубль» yes/no select. They live in the ADDRESS under the
+ * EARS-31 «возможный дубль» yes/no select and the 003 EARS-26 «Скрыть
+ * сотрудников» switch (#2518; `"true"` = on). They live in the ADDRESS under the
  * route's own param names, so a filtered roster is linkable and survives a
  * reload; `""` = not applied.
  */
@@ -230,15 +231,17 @@ export const ROSTER_FILTER_KEYS = [
   "registeredFrom",
   "registeredTo",
   "possibleDuplicate",
+  "hideStaff",
 ] as const;
 export type RosterFilterKey = (typeof ROSTER_FILTER_KEYS)[number];
 
 export type RosterColumnFilters = Record<
-  Exclude<RosterFilterKey, "mailStatus" | "possibleDuplicate">,
+  Exclude<RosterFilterKey, "mailStatus" | "possibleDuplicate" | "hideStaff">,
   string
 > & {
   mailStatus: CongressRosterMailStatusFilter | "";
   possibleDuplicate: CongressRosterPossibleDuplicateFilter | "";
+  hideStaff: "true" | "";
 };
 
 export const ROSTER_FILTERS_EMPTY: RosterColumnFilters = {
@@ -253,6 +256,7 @@ export const ROSTER_FILTERS_EMPTY: RosterColumnFilters = {
   registeredFrom: "",
   registeredTo: "",
   possibleDuplicate: "",
+  hideStaff: "",
 };
 
 const CALENDAR_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -317,6 +321,7 @@ export function rosterFiltersFromAddress(
     registeredFrom,
     registeredTo,
     possibleDuplicate: duplicate.success ? duplicate.data : "",
+    hideStaff: read("hideStaff") === "true" ? "true" : "",
   };
 }
 

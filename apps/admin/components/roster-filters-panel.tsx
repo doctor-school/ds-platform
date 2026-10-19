@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Input, Label, NativeSelect } from "@ds/design-system";
+import { Input, Label, NativeSelect, Switch } from "@ds/design-system";
 import { FormError } from "@ds/design-system/form";
 import {
   Combobox,
@@ -28,7 +28,7 @@ const REGION_ANY_VALUE = "__any__";
  * 044 EARS-23 — the controls of the roster's «Все фильтры» panel (owner layout
  * F1, #2316), laid on the `FilterBar` panel grid: ФИО · Место работы · Город ·
  * Регион / Телефон · Email · Специальность · Статус письма / Возможный дубль
- * (EARS-31) · Дата регистрации.
+ * (EARS-31) · Дата регистрации / Скрыть сотрудников (003 EARS-26, #2518).
  * Text filters commit on the bar's debounce; the books (город, регион,
  * специальность) are searchable selectors over the same directories the desk
  * entry uses (owner refinement); everything else applies on change.
@@ -277,6 +277,21 @@ export function RosterFiltersPanel({
             ) : null}
           </div>
         </div>
+      </div>
+      {/* 003 EARS-26 (#2518) — the same `h-11` centre line as the
+          `AdminDataList` include-retired switch; `self-end` drops the cell to
+          the row's control line, since its neighbours carry a label above. */}
+      <div className="flex h-11 items-center self-end">
+        <Switch
+          id="roster-filter-hide-staff"
+          checked={filters.hideStaff === "true"}
+          data-testid="roster-filter-hide-staff"
+          onChange={(event) =>
+            set("hideStaff", event.target.checked ? "true" : "")
+          }
+        >
+          {t("congressRoster.filters.hideStaff")}
+        </Switch>
       </div>
     </>
   );

@@ -365,6 +365,7 @@ describe("044 EARS-23 roster column filters", () => {
       registeredFrom: "2026-10-01",
       registeredTo: "2026-10-15",
       possibleDuplicate: "",
+      hideStaff: "",
     });
     expect(
       rosterFiltersFromAddress(
@@ -535,5 +536,37 @@ describe("044 EARS-31 roster possible-duplicate filter", () => {
     expect(
       rosterFiltersAppliedCount({ ...filters, mailStatus: "failed" }),
     ).toBe(2);
+  });
+});
+
+describe("003 EARS-26 roster hide-staff filter (#2518)", () => {
+  it("EARS-26: reads «Скрыть сотрудников» from the address as true; anything else is off, so staff are shown by default", () => {
+    expect(ROSTER_FILTERS_EMPTY.hideStaff).toBe("");
+    expect(
+      rosterFiltersFromAddress(new URLSearchParams("hideStaff=true")),
+    ).toEqual({ ...ROSTER_FILTERS_EMPTY, hideStaff: "true" });
+    for (const bad of ["false", "1", "yes", ""]) {
+      expect(
+        rosterFiltersFromAddress(new URLSearchParams(`hideStaff=${bad}`)),
+        bad,
+      ).toEqual(ROSTER_FILTERS_EMPTY);
+    }
+  });
+
+  it("EARS-26: writes the switch into the address, sends hideStaff=true to the route and counts it on the toggle badge; off removes it", () => {
+    const filters = { ...ROSTER_FILTERS_EMPTY, hideStaff: "true" as const };
+    expect(rosterFiltersHref("/events/e1/roster", "sort=city", filters)).toBe(
+      "/events/e1/roster?sort=city&hideStaff=true",
+    );
+    expect(
+      rosterFiltersHref(
+        "/events/e1/roster",
+        "hideStaff=true",
+        ROSTER_FILTERS_EMPTY,
+      ),
+    ).toBe("/events/e1/roster");
+    expect(rosterFiltersQuery(filters)).toEqual({ hideStaff: "true" });
+    expect(rosterFiltersQuery(ROSTER_FILTERS_EMPTY)).toEqual({});
+    expect(rosterFiltersAppliedCount(filters)).toBe(1);
   });
 });

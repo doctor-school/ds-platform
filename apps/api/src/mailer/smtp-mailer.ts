@@ -6,6 +6,8 @@ import {
   type CongressSubmissionDecisionContent,
   congressSubmissionDecisionMessage,
   congressSubmissionReceiptMessage,
+  congressSubmissionReminderMessage,
+  formatClosingLastDay,
   formatCongressEventDate,
   formatRevisionLastDay,
 } from "./notice-emails.js";
@@ -28,6 +30,7 @@ import {
   type CongressConfirmationRequest,
   type CongressSubmissionDecisionRequest,
   type CongressSubmissionReceiptRequest,
+  type CongressSubmissionReminderRequest,
   type Mailer,
 } from "./mailer.types.js";
 import type { ChannelReadiness, ReadinessState } from "./mailer-readiness.js";
@@ -275,6 +278,20 @@ export class SmtpMailer implements Mailer {
       input.email,
       congressSubmissionDecisionMessage(decisionContent(input)),
       "congress submission decision",
+    );
+  }
+  async sendCongressSubmissionReminder(
+    input: CongressSubmissionReminderRequest,
+  ): Promise<void> {
+    assertSendableEmail(input.email);
+    await this.dispatch(
+      input.email,
+      congressSubmissionReminderMessage({
+        kindGenitivePlural: input.kindGenitivePlural,
+        titles: input.titles,
+        lastDay: formatClosingLastDay(input.closesAt),
+      }),
+      "congress submission reminder",
     );
   }
 

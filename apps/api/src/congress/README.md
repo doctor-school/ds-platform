@@ -314,6 +314,30 @@ asserted over the real router).
   outcome lands in `last_letter_*`, and a relay failure keeps the status and the
   deadline. `in_review` sends none. The date in the letters is `ДД.ММ.ГГГГ`.
 
+## Deadline reminder (feature 046, EARS-33)
+
+`CongressSubmissionReminderService` is a `@Cron` job every 15 minutes
+(registered as `congress-submission-reminder`; `ScheduleModule.forRoot()` stays
+the single one in `AuthModule`). `runOnce()` is the sweep body, driven directly
+by `test/congress/submissions-reminder.e2e-spec.ts` (V-13).
+
+- **Which kinds.** Every open kind (`opens_at ≤ now < closes_at`) whose closing
+  instant is at most 72 hours away; a kind with no window is never reminded.
+- **Claim = idempotency.** One conditional update per kind sets
+  `reminded_for_closes_at = closes_at` on the active drafts where it still
+  differs and no row of the same account, event and kind already carries that
+  instant, `RETURNING` the claimed drafts. A second run or a parallel api
+  instance claims nothing; a draft added after the reminder is not reminded
+  again for the same instant; a moved closing instant re-arms the kind.
+- **Letter.** After the claim commits, one letter per claiming account
+  («Doctor.School — приём {вида} заканчивается {дата}», `sendCongressSubmissionReminder`,
+  `notice-emails.ts`) lists its drafts (an empty title reads «черновик без
+  названия») and the last day («15 января 2027» — the day before the exclusive
+  closing instant), with no link and the cabinet-entry paragraph. The kind's
+  genitive plural is `CONGRESS_SUBMISSION_KIND_GENITIVE_PLURAL`. The outcome
+  lands on every listed draft — `last_letter_kind = 'reminder'`, `sent` |
+  `failed`, `last_letter_at` — and never touches the status; no retry.
+
 ### Binding a committee member to an event (runbook, until #2378)
 
 The member's account must exist and hold the `congress-program-committee`

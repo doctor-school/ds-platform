@@ -357,6 +357,8 @@ describe("AuthService.register — re-registration code mail (003 EARS-23)", () 
         Promise.reject(new Error("smtp down")),
       sendCongressSubmissionDecision: () =>
         Promise.reject(new Error("smtp down")),
+      sendCongressSubmissionReminder: () =>
+        Promise.reject(new Error("smtp down")),
     };
     const { service } = build(exploding);
 
@@ -1030,6 +1032,8 @@ describe("AuthService.requestLoginOtp — email unverified out-of-band recovery 
       sendCongressSubmissionReceipt: () =>
         Promise.reject(new Error("smtp down")),
       sendCongressSubmissionDecision: () =>
+        Promise.reject(new Error("smtp down")),
+      sendCongressSubmissionReminder: () =>
         Promise.reject(new Error("smtp down")),
     };
     const idp = new FakeIdpClient(exploding);

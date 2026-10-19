@@ -42,6 +42,21 @@ export const CONGRESS_SUBMISSION_KIND_LABELS: Record<
   abstract: "Тезисы",
 };
 
+/**
+ * 046 EARS-33 — the kind in the genitive plural, as the deadline reminder's
+ * subject names the closing intake: «приём устных докладов заканчивается …».
+ * Kept next to {@link CONGRESS_SUBMISSION_KIND_LABELS} so a kind's names live
+ * in one place.
+ */
+export const CONGRESS_SUBMISSION_KIND_GENITIVE_PLURAL: Record<
+  CongressSubmissionKind,
+  string
+> = {
+  oral: "устных докладов",
+  poster: "постерных докладов",
+  abstract: "тезисов",
+};
+
 /** The age-limit range the administrator may set (EARS-2). */
 export const CONGRESS_MIN_AGE_LIMIT = 18;
 export const CONGRESS_MAX_AGE_LIMIT = 99;

@@ -65,6 +65,22 @@ export type CongressSubmissionDecisionRequest = {
   | { letter: "revision_extended"; revisionDueAt: Date }
 );
 
+/**
+ * 046 EARS-33 — what the deadline reminder is rendered from: one letter per
+ * account and kind, listing that account's unsent drafts. The closing instant
+ * arrives as stored; rendering its last day is presentation, the mail layer's.
+ */
+export interface CongressSubmissionReminderRequest {
+  /** The account email of the drafts' author. */
+  email: string;
+  /** The kind in the genitive plural («устных докладов»). */
+  kindGenitivePlural: string;
+  /** The drafts' titles («тема»), in the order they were created. */
+  titles: string[];
+  /** The kind's stored (exclusive) closing instant. */
+  closesAt: Date;
+}
+
 export interface Mailer {
   /**
    * EARS-29: dispatch the §13.3 email-verification artifact — the one-time
@@ -173,6 +189,18 @@ export interface Mailer {
    */
   sendCongressSubmissionDecision(
     input: CongressSubmissionDecisionRequest,
+  ): Promise<void>;
+
+  /**
+   * 046 EARS-33: send the author the deadline reminder listing their unsent
+   * drafts of a kind whose intake closes within 72 hours — a **product
+   * notice**, sent by the scheduled sweep after its claim commits, with the
+   * outcome recorded on every listed draft. Resolves on acceptance, rejects on
+   * a relay failure after failover; MUST reject an invalid email like the
+   * receipt.
+   */
+  sendCongressSubmissionReminder(
+    input: CongressSubmissionReminderRequest,
   ): Promise<void>;
 }
 

@@ -13,6 +13,7 @@ import {
 import { CongressSubmissionsService } from "./congress-submissions.service.js";
 import { CongressSubmissionsAdminController } from "./congress-submissions.admin.controller.js";
 import { CongressSubmissionsAdminService } from "./congress-submissions.admin.service.js";
+import { CongressSubmissionReminderService } from "./congress-submission-reminder.service.js";
 import { EventGrantPolicy } from "../authz/event-grant.policy.js";
 import {
   CONGRESS_SIGN_UP_CLOCK,
@@ -51,6 +52,8 @@ import {
     CongressIntakeSettingsService,
     CongressSubmissionsService,
     CongressSubmissionsAdminService,
+    // 046 EARS-33: the scheduled deadline-reminder sweep (every 15 minutes).
+    CongressSubmissionReminderService,
     EventGrantPolicy,
     {
       provide: CONGRESS_SIGN_UP_CLOCK,

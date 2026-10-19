@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { CONGRESS_SUBMISSION_KIND_GENITIVE_PLURAL } from "@ds/schemas";
 import {
   congressConfirmationMessage,
   congressSubmissionDecisionMessage,
   congressSubmissionReceiptMessage,
+  congressSubmissionReminderMessage,
   endSentence,
+  formatClosingLastDay,
   formatCongressEventDate,
   formatRevisionLastDay,
   phoneConfirmedNoticeMessage,
@@ -327,5 +330,50 @@ describe("003 EARS-52 phone confirmed notice", () => {
       expect(part).not.toMatch(/\b\d{6}\b/);
     }
     expect(message.html).not.toMatch(/href=|<a\b|<button\b/i);
+  });
+});
+
+describe("046 EARS-33: the deadline reminder", () => {
+  const CABINET_ENTRY =
+    "Чтобы открыть заявку, зайдите на сайт Конгресса orthobio.ru. В разделе " +
+    "«Участникам» найдите «Как подать материалы» и нажмите «Войти в кабинет». " +
+    "Войти можно по коду из письма, пароль не нужен.";
+  // 00:00 Moscow of 16 January 2027 — the intake stays open through 15 January.
+  const CLOSES_AT = new Date("2027-01-15T21:00:00.000Z");
+
+  it("EARS-33: the last day is the Moscow day before the exclusive closing instant", () => {
+    expect(formatClosingLastDay(CLOSES_AT)).toBe("15 января 2027");
+    expect(formatClosingLastDay(new Date("2027-03-01T21:00:00.000Z"))).toBe(
+      "1 марта 2027",
+    );
+  });
+
+  it("EARS-33: the reminder lists every draft and the last day, with no link and the cabinet-entry paragraph", () => {
+    const message = congressSubmissionReminderMessage({
+      kindGenitivePlural: CONGRESS_SUBMISSION_KIND_GENITIVE_PLURAL.oral,
+      titles: ["Ранняя реабилитация", "Эндопротезирование"],
+      lastDay: formatClosingLastDay(CLOSES_AT),
+    });
+
+    expect(message.subject).toContain("15 января 2027");
+    for (const part of [message.text, message.html]) {
+      expect(part).toContain("Ранняя реабилитация");
+      expect(part).toContain("Эндопротезирование");
+      expect(part).toContain("15 января 2027");
+    }
+    expect(message.text).toContain(CABINET_ENTRY);
+    expectNoLinkOnlyTheDomainAsText(message);
+  });
+
+  it("EARS-33: an untitled draft is still listed", () => {
+    const message = congressSubmissionReminderMessage({
+      kindGenitivePlural: CONGRESS_SUBMISSION_KIND_GENITIVE_PLURAL.poster,
+      titles: [""],
+      lastDay: "15 января 2027",
+    });
+
+    expect(message.text).not.toContain("«»");
+    expect(message.text).toContain("черновик без названия");
+    expectNoLinkOnlyTheDomainAsText(message);
   });
 });

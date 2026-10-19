@@ -1,4 +1,7 @@
-import { eventPageHonestyFindings } from "@ds/e2e";
+import {
+  eventPageHonestyFindings,
+  offlineSoldOutFindings,
+} from "@ds/e2e";
 import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -165,6 +168,7 @@ async function shoot(page: Page, name: string) {
  *                            (online / offline / hybrid · upcoming / ended …)
  *   E2E_HYBRID_SLUG          a hybrid event with seats left
  *   E2E_HYBRID_SOLDOUT_SLUG  a hybrid event with `seats_left = 0`
+ *   E2E_OFFLINE_SOLDOUT_SLUG a pure offline event with `seats_left = 0`
  */
 const SWEEP_SLUGS = (process.env.E2E_SWEEP_SLUGS ?? "")
   .split(",")
@@ -172,6 +176,7 @@ const SWEEP_SLUGS = (process.env.E2E_SWEEP_SLUGS ?? "")
   .filter(Boolean);
 const HYBRID_SLUG = process.env.E2E_HYBRID_SLUG;
 const HYBRID_SOLDOUT_SLUG = process.env.E2E_HYBRID_SOLDOUT_SLUG;
+const OFFLINE_SOLDOUT_SLUG = process.env.E2E_OFFLINE_SOLDOUT_SLUG;
 
 test.describe("020 EARS-8/9/19 — wave-3 PR 3.3 on the academy host", () => {
   test.use({ timezoneId: "Asia/Yekaterinburg" });
@@ -276,6 +281,34 @@ test.describe("020 EARS-8/9/19 — wave-3 PR 3.3 on the academy host", () => {
     await expect(page.getByTestId("event-format-statement")).toContainText(
       "Очных мест не осталось",
     );
+  });
+
+  test("020 EARS-9: a sold-out offline event renders «мест нет», no control and no waiting-list affordance (gate row 35)", async ({
+    page,
+    context,
+  }) => {
+    test.skip(!OFFLINE_SOLDOUT_SLUG, "set E2E_OFFLINE_SOLDOUT_SLUG");
+    for (const auth of ["guest", "session"] as const) {
+      await context.clearCookies();
+      if (auth === "session") {
+        await context.addCookies([
+          {
+            name: "__Host-ds_session",
+            value: "e2e-honesty-sweep-probe",
+            domain: new URL(BASE).hostname,
+            path: "/",
+            secure: true,
+          },
+        ]);
+      }
+      await page.goto(`${BASE}/webinars/${OFFLINE_SOLDOUT_SLUG}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(page.getByTestId("event-format-seats")).toHaveText(
+        "Мест не осталось",
+      );
+      expect(await offlineSoldOutFindings(page), auth).toEqual([]);
+    }
   });
 
   test("Stage-B evidence: every swept state at desktop and mobile in light and dark", async ({

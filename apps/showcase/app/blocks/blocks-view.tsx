@@ -3915,7 +3915,7 @@ const EVENT_PAGE_PROPS: PropRow[] = [
     type: "ReactNode",
     required: false,
     description:
-      "Social-proof slot — 020 EARS-3: the colleagues already registered and, separately, the adjacent specialties; absent when the read carries no count.",
+      "Social-proof slot — 020 EARS-3: the colleagues already registered and, separately, the adjacent specialties, rendered as its own box under the card; absent when the read carries no count.",
   },
   {
     name: "kind",

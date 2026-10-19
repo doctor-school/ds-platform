@@ -202,7 +202,12 @@ export async function EventPage({
     formatBlock?.kind === "hybrid"
       ? (parseFormatMode(query.mode) ?? formatBlock.defaultMode)
       : null;
+  // The return target carries the tab and nothing else — the one page state
+  // the same-origin guard admits (LD-9). A tab SWITCH keeps the arrival's own
+  // `from=room` too, so the room access-branch guidance survives it.
   const tabUrl = (half: EventFormatMode) => `${pageUrl}?mode=${half}`;
+  const tabHref = (half: EventFormatMode) =>
+    `${pageUrl}?${fromRoom ? "from=room&" : ""}mode=${half}`;
   const gateReturnTo = mode ? tabUrl(mode) : pageUrl;
   const cta =
     serverCta?.href && mode
@@ -497,7 +502,7 @@ export async function EventPage({
               <FormatTabs
                 mode={mode}
                 tabs={formatBlock.tabs}
-                hrefs={{ offline: tabUrl("offline"), online: tabUrl("online") }}
+                hrefs={{ offline: tabHref("offline"), online: tabHref("online") }}
                 offline={
                   <EventFormatSeatsPanel seatsLine={formatBlock.seatsLine} />
                 }

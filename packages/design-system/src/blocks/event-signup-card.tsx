@@ -72,7 +72,10 @@ export interface EventSignupCardProps {
   cta: ParticipationCta;
   /** «Нужна регистрация — вернём вас на эту страницу.» — host-supplied. */
   note?: React.ReactNode;
-  /** Social-proof slot (020 EARS-3); absent when the read carries no count. */
+  /**
+   * Social-proof slot (020 EARS-3), rendered as its own box under the card;
+   * absent when the read carries no count.
+   */
   proof?: React.ReactNode;
   /** Sticks to the viewport on desktop only (canvas «Развилка 1 · вариант А»). */
   pinned?: boolean;
@@ -160,7 +163,10 @@ export function EventSignupCard({
       data-cta-action={cta.action}
       className={cn(pinned && "layout:sticky layout:top-5", className)}
     >
-      <div className="border-2 border-border bg-card shadow-lg">
+      <div
+        data-testid="event-signup-box"
+        className="border-2 border-border bg-card shadow-lg"
+      >
         <div className="flex items-center gap-3.5 border-b-2 border-border bg-tint px-6 py-5">
           <span className="text-3xl font-extrabold leading-none tracking-tight tabular-nums text-tint-foreground">
             {timeLabel}
@@ -220,16 +226,19 @@ export function EventSignupCard({
               {note}
             </div>
           ) : null}
-          {proof ? (
-            <div
-              data-testid="event-signup-proof"
-              className="mt-2.5 border-t border-hairline pt-3 text-caption font-extrabold text-card-foreground"
-            >
-              {proof}
-            </div>
-          ) : null}
         </div>
       </div>
+      {/* 020 EARS-3 — the social proof is its own box in the column, under the
+          card and inside its sticky wrapper (canvas aside, event-page.dc.html
+          L412: 2px border, surface, hard 4px cast). */}
+      {proof ? (
+        <div
+          data-testid="event-signup-proof"
+          className="mt-6 border-2 border-border bg-card px-5.5 py-4.5 text-caption font-extrabold text-card-foreground shadow-md"
+        >
+          {proof}
+        </div>
+      ) : null}
     </div>
   );
 }

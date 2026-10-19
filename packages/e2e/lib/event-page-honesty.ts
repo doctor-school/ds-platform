@@ -55,3 +55,32 @@ export async function eventPageHonestyFindings(page: Page): Promise<string[]> {
     return findings;
   });
 }
+
+/**
+ * 020 EARS-9 / F-020-3 Б (wave-3 gate row 35) — a sold-out PURE OFFLINE event
+ * states «мест нет» and offers nothing to act on: no participation control in
+ * the sign-up column, no hybrid tab to switch to, and no waiting list in any
+ * wording. Same contract as {@link eventPageHonestyFindings}: pure DOM reads,
+ * the violations returned as readable strings.
+ */
+export async function offlineSoldOutFindings(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const findings: string[] = [];
+    const aside = document.querySelector('[data-testid="event-page-aside"]');
+    const text = document.body.textContent ?? "";
+    if (!/Мест нет/u.test(aside?.textContent ?? "")) {
+      findings.push("the sign-up card does not state «Мест нет»");
+    }
+    const controls = aside?.querySelectorAll("a, button").length ?? 0;
+    if (controls > 0) {
+      findings.push(`${controls} participation control(s) in the sign-up card`);
+    }
+    if (document.querySelector('[data-testid="event-format-tabs"]')) {
+      findings.push("a format tab on a pure offline event");
+    }
+    if (/лист ожидания|очеред|ожидани|уведомить|сообщим/iu.test(text)) {
+      findings.push("a waiting-list affordance");
+    }
+    return findings;
+  });
+}

@@ -33,4 +33,7 @@ export {
   type RoutePattern,
 } from "./route-params.js";
 export { MAIN_LANDMARK_RULES } from "./lib/axe-landmarks.js";
-export { eventPageHonestyFindings } from "./lib/event-page-honesty.js";
+export {
+  eventPageHonestyFindings,
+  offlineSoldOutFindings,
+} from "./lib/event-page-honesty.js";

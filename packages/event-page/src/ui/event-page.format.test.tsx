@@ -143,7 +143,7 @@ async function renderPage(
   config: EventPageHostConfig,
   event: EventPageView,
   action: ParticipationCta["action"],
-  opts: { auth?: "guest" | "signed-in"; mode?: string } = {},
+  opts: { auth?: "guest" | "signed-in"; mode?: string; from?: string } = {},
 ): Promise<HTMLElement> {
   fetchPublicEventPage.mockResolvedValue(event);
   fetchParticipationCta.mockResolvedValue(cta(action, config));
@@ -156,7 +156,10 @@ async function renderPage(
     await EventPage({
       config,
       params: Promise.resolve({ slug: event.slug }),
-      searchParams: Promise.resolve(opts.mode ? { mode: opts.mode } : {}),
+      searchParams: Promise.resolve({
+        ...(opts.mode ? { mode: opts.mode } : {}),
+        ...(opts.from ? { from: opts.from } : {}),
+      }),
     }),
   );
   const host = document.createElement("div");
@@ -302,6 +305,67 @@ describe.each(Object.entries(HOSTS))(
       const statement = byTestId(root, "event-format-statement");
       expect(statement?.textContent).toContain("Очных мест не осталось");
       expect(statement?.textContent).toContain("Участвуйте онлайн");
+    });
+
+    it("020 EARS-9: a sold-out offline event renders «мест нет», no control and no waiting-list affordance on both hosts (gate row 35)", async () => {
+      for (const auth of ["guest", "signed-in"] as const) {
+        const root = await renderPage(
+          config,
+          { ...BASE, format: "offline", seatsLeft: 0 },
+          "sold-out",
+          { auth },
+        );
+        // «мест нет» stated, in the card and on the format block.
+        expect(byTestId(root, "event-page-aside")?.textContent, auth).toMatch(
+          /Мест нет/u,
+        );
+        expect(byTestId(root, "event-format-seats")?.textContent, auth).toBe(
+          "Мест не осталось",
+        );
+        // No participation control of any kind — no link, no button, no
+        // one-tap, no tab to switch to.
+        expect(byTestId(root, "event-signup-cta"), auth).toBeNull();
+        expect(root.querySelector('a[href^="/register"]'), auth).toBeNull();
+        expect(
+          byTestId(root, "event-page-aside")?.querySelectorAll("a, button")
+            .length,
+          auth,
+        ).toBe(0);
+        expect(byTestId(root, "event-format-tabs"), auth).toBeNull();
+        // No waiting list on the page, in any wording.
+        expect(root.textContent, auth).not.toMatch(
+          /лист ожидания|очеред|ожидани|уведомить|сообщим/iu,
+        );
+      }
+    });
+
+    it("020 EARS-8: a hybrid tab switch keeps the room-arrival `from=room` param in the pushed URL", async () => {
+      const element = await (async () => {
+        fetchPublicEventPage.mockResolvedValue({
+          ...BASE,
+          format: "hybrid",
+          seatsLeft: 12,
+        });
+        fetchParticipationCta.mockResolvedValue(cta("register", config));
+        headers.mockResolvedValue(SIGNED_IN);
+        fetchEventRegistrationState.mockResolvedValue({ registered: false });
+        return EventPage({
+          config,
+          params: Promise.resolve({ slug: "prp-gonartroz" }),
+          searchParams: Promise.resolve({ from: "room" }),
+        });
+      })();
+      document.body.replaceChildren();
+      render(element);
+      act(() => {
+        fireEvent.mouseDown(screen.getByRole("tab", { name: "Онлайн" }), {
+          button: 0,
+          ctrlKey: false,
+        });
+      });
+      expect(push).toHaveBeenLastCalledWith(`${page}?from=room&mode=online`, {
+        scroll: false,
+      });
     });
 
     it("020 EARS-3: the page count equals the feed card count for one event; zero sign-ups and the hide option render no count; a guest and a signed-in doctor see the same line", async () => {

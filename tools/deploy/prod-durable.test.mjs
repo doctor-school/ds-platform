@@ -144,11 +144,15 @@ test("3054: the operator checkout's HEAD carries the entrypoint the rollback ins
   assert.match(source.subarray(0, 64).toString("utf8"), /^#!\/usr\/bin\/env bash\n/);
 });
 
-test("2984: the rollback installs ds-deploy-entrypoint beside ds-release, both HEAD's blobs", () => {
+test("2984/2985: the rollback installs every box entrypoint, each HEAD's blob", () => {
   const sources = committedReleaseSources();
   assert.deepEqual(
     sources.map(({ dest }) => dest),
-    ["/usr/local/bin/ds-release", "/usr/local/bin/ds-deploy-entrypoint"],
+    [
+      "/usr/local/bin/ds-release",
+      "/usr/local/bin/ds-deploy-entrypoint",
+      "/usr/local/lib/ds-platform/release-driver",
+    ],
   );
   for (const { source } of sources) {
     assert.match(source.subarray(0, 64).toString("utf8"), /^#!\/usr\/bin\/env bash\n/);

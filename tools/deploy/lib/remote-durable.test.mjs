@@ -16,6 +16,7 @@ import {
   releaseFinishScript,
   releaseForgetArgv,
   DS_DEPLOY_ENTRYPOINT_BIN,
+  RELEASE_DRIVER_BIN,
   releaseInstallFromSourceScript,
   releaseInstallScript,
   releaseStartScript,
@@ -41,14 +42,17 @@ test("2982: unit names are ds-<env>-<sha12>-<step> and refuse anything else", ()
   assert.throws(() => releaseUnitName("prod", SHA, "up;rm"), /step/);
 });
 
-test("2982/2984: both box entrypoints are installed from the shipped tree, idempotently", () => {
+test("2982/2984/2985: every box entrypoint is installed from the shipped tree, idempotently", () => {
   assert.equal(
     releaseInstallScript(),
     [
+      "sudo install -d -m 0755 -o root -g root /usr/local/lib/ds-platform",
       `sudo install -m 0755 "$HOME/ds-platform/infra/deploy/bin/ds-release" ${DS_RELEASE_BIN}`,
       `sudo install -m 0755 "$HOME/ds-platform/infra/deploy/bin/ds-deploy-entrypoint" ${DS_DEPLOY_ENTRYPOINT_BIN}`,
+      `sudo install -m 0755 "$HOME/ds-platform/infra/deploy/bin/release-driver" ${RELEASE_DRIVER_BIN}`,
     ].join("\n"),
   );
+  assert.equal(RELEASE_DRIVER_BIN, "/usr/local/lib/ds-platform/release-driver");
   const slot = releaseInstallScript("$HOME/ds-platform.slots/pr-7");
   assert.match(slot, /"\$HOME\/ds-platform\.slots\/pr-7\/infra\/deploy\/bin\/ds-release"/);
   assert.match(slot, /"\$HOME\/ds-platform\.slots\/pr-7\/infra\/deploy\/bin\/ds-deploy-entrypoint"/);

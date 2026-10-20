@@ -12,6 +12,7 @@
 #   ds-release status  <env> <sha>
 #   ds-release finish  <env> <sha> succeeded|failed
 #   ds-release check   <env>
+#   ds-release lease   <env> <sha>
 #   ds-release supersede <env> [<script-file>]
 #   ds-release forget  <env>
 #
@@ -446,6 +447,20 @@ cmd_supersede() {
   run_as "$(caller_user)" "$src"
 }
 
+# lease: read-only, lock-free — refuses (exit 3) while another SHA holds the env: a
+# release of it still open, or a unit of it still running. The stage release driver
+# (#2985) asks before it starts a converge, so a refusal reaches its caller at once
+# instead of from the converge's first step.
+cmd_lease() {
+  [[ $# -eq 2 ]] || usage "usage: ds-release lease <env> <sha>"
+  check_env "$1"; check_sha "$2"
+  local other
+  refuse_live_units "$1" "${2:0:12}"
+  other=$(js lease "$(env_dir "$1")" "$2")
+  [[ -z $other ]] || refuse "env $1 is leased by release ${other:0:12}, which has not finished"
+  say "env $1 is free for ${2:0:12}"
+}
+
 main() {
   local cmd=${1:-}
   [[ $# -gt 0 ]] && shift
@@ -454,10 +469,11 @@ main() {
     status) cmd_status "$@" ;;
     finish) cmd_finish "$@" ;;
     check) cmd_check "$@" ;;
+    lease) cmd_lease "$@" ;;
     supersede) cmd_supersede "$@" ;;
     forget) cmd_forget "$@" ;;
     _exec) cmd_exec "$@" ;;
-    *) usage "usage: ds-release release|status|finish|check|supersede|forget …" ;;
+    *) usage "usage: ds-release release|status|finish|check|lease|supersede|forget …" ;;
   esac
 }
 

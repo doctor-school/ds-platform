@@ -9,8 +9,10 @@
 # SSH_ORIGINAL_COMMAND. It is split on single spaces into words — never `eval`d,
 # never handed to a shell — and must be exactly one of:
 #
-#   status <env> <sha>     -> sudo /usr/local/bin/ds-release status <env> <sha>
+#   status <env> <sha>     -> sudo /usr/local/bin/ds-release status <env> <sha>, with
+#                             the release driver's unit state added as `driver`
 #   release <env> <sha>    -> /usr/local/lib/ds-platform/release-driver <env> <sha>
+#                             (stdin = the images-<sha>.json manifest)
 #   upload-report <sha>    -> a tar stream on stdin into
 #                             /var/lib/ds-platform/e2e-reports/<sha>/ (stage box only)
 #
@@ -182,13 +184,29 @@ upload_report() {
   printf '%s: report %s stored\n' "$TAG" "$sha"
 }
 
+# status: ds-release's one JSON line with the release driver's unit added as
+# `driver` (#2985): {"release", "unitAlive", "driver": {"unit", "active", "rc"}}.
+# Without an installed driver there is no driver unit: `absent`.
+release_status() {
+  local env=$1 sha=$2 line driver
+  line=$(sudo "$DS_RELEASE" status "$env" "$sha")
+  [[ $line == '{"release":'*'}' ]] || { printf '%s\n' "$line"; exit 1; }
+  if [[ -x $RELEASE_DRIVER ]]; then
+    driver=$("$RELEASE_DRIVER" unit-state "$env" "$sha")
+  else
+    driver=$(printf '{"unit":"ds-%s-%s-driver","active":"absent","rc":null}' "$env" "${sha:0:12}")
+  fi
+  [[ $driver == '{"unit":'*'}' ]] || refuse "the release driver reported no unit state"
+  printf '%s,"driver":%s}\n' "${line%\}}" "$driver"
+}
+
 case "$verb" in
   status)
     [[ ${#words[@]} -eq 3 ]] || reject "usage: status <env> <sha>"
     check_env "${words[1]}"
     check_sha "${words[2]}"
     accepted
-    exec sudo "$DS_RELEASE" status "${words[1]}" "${words[2]}"
+    release_status "${words[1]}" "${words[2]}"
     ;;
   release)
     [[ ${#words[@]} -eq 3 ]] || reject "usage: release <env> <sha>"

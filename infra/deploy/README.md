@@ -147,8 +147,10 @@ the image's `PermitRootLogin yes` in `/etc/ssh/sshd_config` commented out, root'
 `ds-deploy-entrypoint` is installed beside `ds-release` by every operator run (forward
 deploy and slot runs from the shipped tree, `--rollback` from the operator checkout).
 Its `release` verb execs the box-side release driver
-`/usr/local/lib/ds-platform/release-driver`, which lands with #2985 (stage) / #2986 (prod);
-until then it exits 3. Reports uploaded on stage-1 land in
+`/usr/local/lib/ds-platform/release-driver` (installed by every operator run beside
+`ds-release`): on stage-1 it converges `stage-main` from the stdin `images-<sha>.json` in the
+unit `ds-stage-main-<sha12>-driver` (tech spec §5 «Stage `main` release driver»); on prod it
+refuses until #2986 lands. `status` adds that unit's state as `driver`. Reports uploaded on stage-1 land in
 `/var/lib/ds-platform/e2e-reports/<sha>/` (root-only, pruned after 14 days; validated and
 extracted with python3 `tarfile`, plain tar only; a stream over
 512 MiB, an archive unpacking past 2 GiB or holding more than 20000 entries is refused).
@@ -176,6 +178,20 @@ It runs `sshd -t` before `systemctl reload ssh` and restores the sshd files with
 reload when the check fails, then proves the effective values with `sshd -T`. The existing
 operator line of `deploy`'s `authorized_keys` stays byte-identical; a CI key is matched by
 its key body, so re-running with the same key changes nothing.
+
+**Node on stage-1 (post-boot, once):** the release driver runs `tools/staging/slot.mjs` on
+the box, so stage-1 carries one pinned Node runtime. `infra/deploy/bin/install-node.sh`
+downloads the official `linux-x64.tar.xz` of the pinned Node 24 LTS release, refuses it
+unless it matches the pinned sha256, installs it under `/usr/local/lib/nodejs/<version>`
+and links `/usr/local/bin/node`; a second run prints `nothing to change`. It is a
+provisioning step on the running box, next to `harden-ssh.sh`, never cloud-init `runcmd`
+(Timeweb hard-resets a box whose first boot runs long, `cloud-init/stage-1.yaml`).
+
+```bash
+# copy the script over, then on the box:
+sudo bash install-node.sh --dry-run
+sudo bash install-node.sh
+```
 
 ## Docker Hub login on every box (#2240)
 

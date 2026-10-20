@@ -344,6 +344,13 @@
       "when": 1791890118776,
       "tag": "0048_events_hide_sign_up_count",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1792411428911,
+      "tag": "0049_events_venue",
+      "breakpoints": true
     }
   ]
 }

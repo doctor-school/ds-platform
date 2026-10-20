@@ -97,7 +97,7 @@ export interface CongressConfirmationContent {
   eventTitle: string;
   /** Already rendered for a human — see {@link formatCongressEventDate}. */
   eventDate: string;
-  /** The congress venue, a per-deployment constant of THIS congress. */
+  /** The registered event's own venue, `events.venue` (044 EARS-13, amendment 2026-10-19). */
   eventVenue: string;
 }
 

@@ -219,9 +219,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await pool.query(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
-            specialties, partner_ref, program_pdf_ref, state,
+            specialties, partner_ref, program_pdf_ref, state, venue,
             participation_format, kind_id, audience)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'offline', ${eventClassificationSql()})`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, 'Москва, тестовая площадка','offline', ${eventClassificationSql()})`,
         [
           eventId,
           slug,
@@ -353,10 +353,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(await rows(`workplace=${enc("50%")}`)).toBe("A");
       } finally {
         for (const row of before)
-          await pool.query("UPDATE registrations SET answers = $2 WHERE id = $1", [
-            row.id,
-            row.answers,
-          ]);
+          await pool.query(
+            "UPDATE registrations SET answers = $2 WHERE id = $1",
+            [row.id, row.answers],
+          );
       }
     });
 
@@ -429,10 +429,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         // after B (7 900 000-00-00), never last as the raw «8…» digits would.
         expect(await rows("sort=phone&dir=asc")).toBe("BDCA");
       } finally {
-        await pool.query("UPDATE registrations SET answers = $2 WHERE id = $1", [
-          d,
-          original.answers,
-        ]);
+        await pool.query(
+          "UPDATE registrations SET answers = $2 WHERE id = $1",
+          [d, original.answers],
+        );
         await pool.query("UPDATE users SET phone = $2 WHERE id = $1", [
           original.user_id,
           original.phone,
@@ -536,10 +536,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await body();
       } finally {
         for (const row of before)
-          await pool.query("UPDATE registrations SET answers = $2 WHERE id = $1", [
-            row.id,
-            row.answers,
-          ]);
+          await pool.query(
+            "UPDATE registrations SET answers = $2 WHERE id = $1",
+            [row.id, row.answers],
+          );
       }
     }
 
@@ -612,7 +612,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           ),
         ).toEqual({ rows: ["C:true"], total: 2 });
         expect(
-          await marked(`possibleDuplicate=yes&city=${enc("москва")}&mailStatus=none`),
+          await marked(
+            `possibleDuplicate=yes&city=${enc("москва")}&mailStatus=none`,
+          ),
         ).toEqual({ rows: ["C:true"], total: 1 });
       });
     });

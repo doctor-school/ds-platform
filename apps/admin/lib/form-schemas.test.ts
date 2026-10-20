@@ -21,6 +21,7 @@ function fields(over: Partial<EventFormFields> = {}): EventFormFields {
     durationMin: 60,
     description: "",
     partnerRef: "",
+    venue: "",
     specialtiesText: "",
     legacy: false,
     recording: { kind: "edited", provider: "rutube", embedRef: "" },
@@ -43,6 +44,23 @@ describe("EventFormSchema — «Скрыть число записавшихся
     ).toBe(true);
     const { hideSignUpCount: _omit, ...withoutOption } = fields();
     expect(EventFormSchema.safeParse(withoutOption).success).toBe(false);
+  });
+});
+
+describe("EventFormSchema — «Место проведения» (044 EARS-13, #2517)", () => {
+  it("044 EARS-13: the venue is optional — empty and a typed place both validate, more than 300 characters is refused on the field", () => {
+    expect(EventFormSchema.safeParse(fields({ venue: "" })).success).toBe(true);
+    expect(
+      EventFormSchema.safeParse(fields({ venue: "Москва, ГК «Милан»" }))
+        .success,
+    ).toBe(true);
+    const tooLong = EventFormSchema.safeParse(
+      fields({ venue: "м".repeat(301) }),
+    );
+    expect(tooLong.success).toBe(false);
+    expect(tooLong.error!.issues.map((i) => i.path.join("."))).toEqual([
+      "venue",
+    ]);
   });
 });
 

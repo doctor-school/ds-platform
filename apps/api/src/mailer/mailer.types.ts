@@ -30,7 +30,7 @@ export interface CongressConfirmationRequest {
   eventTitle: string;
   /** `events.starts_at` as the instant it is; rendered in `Europe/Moscow`. */
   eventStartsAt: Date;
-  /** The congress venue (a per-deployment constant, 044 EARS-13). */
+  /** `events.venue` of the registered event (044 EARS-13, amendment 2026-10-19). */
   eventVenue: string;
 }
 

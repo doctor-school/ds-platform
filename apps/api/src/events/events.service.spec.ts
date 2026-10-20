@@ -7,10 +7,7 @@ import type {
   StorageProbeResult,
   StoredObject,
 } from "../storage/index.js";
-import type {
-  EventsRepository,
-  EventAggregate,
-} from "./events.repository.js";
+import type { EventsRepository, EventAggregate } from "./events.repository.js";
 import type { SpeakerProjectionService } from "../taxonomy/speaker-projection.service.js";
 import type { RecordingsProjectionService } from "../recordings/recordings.projection.js";
 import { EventsService, type UploadedPdf } from "./events.service.js";
@@ -48,6 +45,7 @@ function baseEvent(programPdfRef: string | null): Event {
     description: "",
     specialties: ["cardiology"],
     partnerRef: null,
+    venue: null,
     programPdfRef,
     state: "published",
     // 020 (#1764) — attendance mode + remaining offline seats. The fixture is a

@@ -210,9 +210,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await pool.query(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
-            specialties, partner_ref, program_pdf_ref, state,
+            specialties, partner_ref, program_pdf_ref, state, venue,
             participation_format, kind_id, audience)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'offline', ${eventClassificationSql()})`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, 'Москва, тестовая площадка','offline', ${eventClassificationSql()})`,
         [
           eventId,
           slug,

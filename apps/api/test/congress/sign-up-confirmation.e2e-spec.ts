@@ -27,6 +27,7 @@ import {
   formatCongressEventDate,
 } from "../../src/mailer/notice-emails.js";
 import { CONGRESS_SIGN_UP_CLOCK } from "../../src/congress/congress-signup.tokens.js";
+import { CONGRESS_SIGN_UP_UNAVAILABLE } from "../../src/congress/congress-signup.service.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -42,8 +43,8 @@ import { eventClassificationSql } from "../setup/event-classification.js";
  * 044 slice 4 - the participant's confirmation email (EARS-11/12/13).
  *
  * Its own file rather than more cases in `sign-up.e2e-spec.ts`: this suite
- * needs the mailer token overridden with a controllable fake and the venue key
- * set, and - unlike every other congress case - it asserts something that
+ * needs the mailer token overridden with a controllable fake and an event that
+ * carries a venue (#2517), and - unlike every other congress case - it asserts something that
  * happens AFTER the response, so each test polls the outcome column instead of
  * reading the answer.
  *
@@ -77,8 +78,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const createdEmails: string[] = [];
     /** Inside the 044 EARS-28 registration window. */
     let now = new Date("2026-11-01T10:00:00.000+03:00");
-    /** The runner's default venue, restored so the next file keeps it. */
-    let venueBefore: string | undefined;
 
     const SPECIALTY_ID = randomUUID();
 
@@ -162,8 +161,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     beforeAll(async () => {
       process.env.CONGRESS_SIGNUP_EVENT_ID = eventId;
       process.env.CONGRESS_SIGNUP_CONSENT_VERSION = CONSENT_VERSION;
-      venueBefore = process.env.CONGRESS_SIGNUP_EVENT_VENUE;
-      process.env.CONGRESS_SIGNUP_EVENT_VENUE = EVENT_VENUE;
       // See `sign-up.e2e-spec.ts`: the EARS-7 floor is a production
       // calibration, and this suite asserts body/DB facts, not latency.
       process.env.CONGRESS_SIGNUP_TIMING_FLOOR_MS = "5";
@@ -192,8 +189,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await pool.query(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
-            specialties, partner_ref, program_pdf_ref, state, kind_id, audience)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, ${eventClassificationSql()})`,
+            specialties, partner_ref, program_pdf_ref, state, venue, kind_id,
+            audience)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, ${eventClassificationSql()})`,
         [
           eventId,
           `congress-mail-${eventId.slice(0, 8)}`,
@@ -206,6 +204,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "sponsor:congress",
           null,
           "published",
+          EVENT_VENUE,
         ],
       );
     });
@@ -216,16 +215,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       }
       mailer.congressConfirmations.length = 0;
       now = new Date("2026-11-01T10:00:00.000+03:00");
+      await pool.query(`UPDATE events SET venue = $2 WHERE id = $1`, [
+        eventId,
+        EVENT_VENUE,
+      ]);
     });
 
     afterAll(async () => {
       if (pool) await deleteEventFixture(pool, eventId);
       if (app) await app.close();
-      if (venueBefore === undefined) {
-        delete process.env.CONGRESS_SIGNUP_EVENT_VENUE;
-      } else {
-        process.env.CONGRESS_SIGNUP_EVENT_VENUE = venueBefore;
-      }
     });
 
     it("044 EARS-11: when the confirmation email cannot be delivered, system shall still accept the submission and keep the registration", async () => {
@@ -401,6 +399,61 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           eventVenue: EVENT_VENUE,
         }),
       );
+    });
+
+    it("044 EARS-13.4: when the admin changes the event's venue, the next confirmation shall name the new venue with no redeploy", async () => {
+      // #2517 — the venue is the event's own field. The admin form's PATCH is
+      // proven by the events admin e2e; here the column is written directly,
+      // and the SAME running app must pick it up on the very next submission.
+      const before = uniqueEmail("congress-mail-venue-before");
+      expect((await post(submission(before))).statusCode).toBe(200);
+      await waitForMailOutcome(before, "sent");
+      expect(confirmationsFor(before)[0]).toMatchObject({
+        eventVenue: EVENT_VENUE,
+      });
+
+      const moved = "Санкт-Петербург, ЭФ «Экспофорум», зал D";
+      await pool.query(`UPDATE events SET venue = $2 WHERE id = $1`, [
+        eventId,
+        moved,
+      ]);
+      const after = uniqueEmail("congress-mail-venue-after");
+      expect((await post(submission(after))).statusCode).toBe(200);
+      await waitForMailOutcome(after, "sent");
+
+      const [dispatched] = confirmationsFor(after);
+      expect(dispatched).toMatchObject({ email: after, eventVenue: moved });
+      expect(
+        congressConfirmationMessage({
+          eventTitle: dispatched!.eventTitle,
+          eventDate: formatCongressEventDate(dispatched!.eventStartsAt),
+          eventVenue: dispatched!.eventVenue,
+        }).text,
+      ).toContain(`12 марта 2027 г. в 10:00, ${moved}.`);
+    });
+
+    it("044 EARS-13.5: when the congress event has no venue, system shall refuse the submission generically before creating any account and send no email", async () => {
+      // A confirmation that names no place is worse than a refusal the operator
+      // sees in the log: the venue is only read once the registration has
+      // committed, so the gate has to stand BEFORE any side effect.
+      for (const missing of [null, "", "   "]) {
+        await pool.query(`UPDATE events SET venue = $2 WHERE id = $1`, [
+          eventId,
+          missing,
+        ]);
+        const email = uniqueEmail("congress-mail-no-venue");
+
+        const res = await post(submission(email));
+
+        expect(res.statusCode).toBe(422);
+        expect(JSON.parse(res.payload)).toEqual(CONGRESS_SIGN_UP_UNAVAILABLE);
+        const { rows } = await pool.query<{ n: number }>(
+          `SELECT count(*)::int AS n FROM users WHERE email = $1`,
+          [email],
+        );
+        expect(rows[0]!.n).toBe(0);
+        expect(confirmationsFor(email)).toHaveLength(0);
+      }
     });
 
     it("046 EARS-15: the confirmation from the site form carries no link, no button and no URL — neither /account/congress nor any href — in the HTML and the text part", async () => {

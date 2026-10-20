@@ -47,6 +47,8 @@ export function eventUpdateVars(
     description: values.description,
     specialties: values.specialties,
     partnerRef: values.partnerRef,
+    // #2517 — always sent: null clears the venue, a string sets it.
+    venue: values.venue,
     programPdf: values.programPdf,
     // 012 EARS-26/29 — always sent: the kind, the format the kind allows and
     // the audience. The project link is never part of the event body.

@@ -196,9 +196,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await pool.query(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
-            specialties, partner_ref, program_pdf_ref, state,
+            specialties, partner_ref, program_pdf_ref, state, venue,
             participation_format, kind_id, audience)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'offline', ${eventClassificationSql()})`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, 'Москва, тестовая площадка','offline', ${eventClassificationSql()})`,
         [
           id,
           slug,
@@ -245,8 +245,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await insertEvent(eventA, slugA, "Конгресс А");
       await insertEvent(eventB, slugB, "Конгресс Б");
 
-      registrarA = await adminPrincipal("att-registrar-a", "event-registrar", eventA);
-      registrarB = await adminPrincipal("att-registrar-b", "event-registrar", eventB);
+      registrarA = await adminPrincipal(
+        "att-registrar-a",
+        "event-registrar",
+        eventA,
+      );
+      registrarB = await adminPrincipal(
+        "att-registrar-b",
+        "event-registrar",
+        eventB,
+      );
       admin = await adminPrincipal("att-admin", "platform_admin");
 
       ivanova = await deskEntry(registrarA.headers, slugA, "Иванова");
@@ -262,7 +270,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await deleteEventFixture(pool, eventB);
       }
       if (app) await app.close();
-      if (daysBefore === undefined) delete process.env.CONGRESS_SIGNUP_EVENT_DAYS;
+      if (daysBefore === undefined)
+        delete process.env.CONGRESS_SIGNUP_EVENT_DAYS;
       else process.env.CONGRESS_SIGNUP_EVENT_DAYS = daysBefore;
     });
 
@@ -313,10 +322,22 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("044 EARS-34.3: writing the value a day already holds answers 200 and appends NO ledger row", async () => {
       const before = await ledgerRows(ivanova);
 
-      const cleared = await mark(registrarA.headers, slugA, ivanova, DAY_1, false);
+      const cleared = await mark(
+        registrarA.headers,
+        slugA,
+        ivanova,
+        DAY_1,
+        false,
+      );
       expect(cleared.statusCode, cleared.body).toBe(200);
       // A never-marked day cleared is a no-op too: no row, no ledger entry.
-      const neverMarked = await mark(registrarA.headers, slugA, ivanova, DAY_2, false);
+      const neverMarked = await mark(
+        registrarA.headers,
+        slugA,
+        ivanova,
+        DAY_2,
+        false,
+      );
       expect(neverMarked.statusCode, neverMarked.body).toBe(200);
       expect(neverMarked.json()).toEqual({
         registrationId: ivanova,
@@ -341,31 +362,69 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("044 EARS-34.4: a day outside the configured congress days is refused with 422 CONGRESS_DAY_UNKNOWN, a non-date with 400, and nothing is written", async () => {
       const before = await attendanceRows(petrov);
 
-      const offCalendar = await mark(registrarA.headers, slugA, petrov, "2027-05-01", true);
+      const offCalendar = await mark(
+        registrarA.headers,
+        slugA,
+        petrov,
+        "2027-05-01",
+        true,
+      );
       expect(offCalendar.statusCode, offCalendar.body).toBe(422);
-      expect(offCalendar.json()).toMatchObject({ code: "CONGRESS_DAY_UNKNOWN" });
+      expect(offCalendar.json()).toMatchObject({
+        code: "CONGRESS_DAY_UNKNOWN",
+      });
 
-      const notADate = await mark(registrarA.headers, slugA, petrov, "23-04-2027", true);
+      const notADate = await mark(
+        registrarA.headers,
+        slugA,
+        petrov,
+        "23-04-2027",
+        true,
+      );
       expect(notADate.statusCode, notADate.body).toBe(400);
 
-      const badBody = await mark(registrarA.headers, slugA, petrov, DAY_1, "yes");
+      const badBody = await mark(
+        registrarA.headers,
+        slugA,
+        petrov,
+        DAY_1,
+        "yes",
+      );
       expect(badBody.statusCode, badBody.body).toBe(400);
 
       expect(await attendanceRows(petrov)).toEqual(before);
     });
 
     it("044 EARS-34.5: a registration of another event addressed through this event's URL is a 404, and nothing is written", async () => {
-      const res = await mark(registrarA.headers, slugA, otherEvent, DAY_1, true);
+      const res = await mark(
+        registrarA.headers,
+        slugA,
+        otherEvent,
+        DAY_1,
+        true,
+      );
       expect(res.statusCode, res.body).toBe(404);
 
-      const unknown = await mark(registrarA.headers, slugA, randomUUID(), DAY_1, true);
+      const unknown = await mark(
+        registrarA.headers,
+        slugA,
+        randomUUID(),
+        DAY_1,
+        true,
+      );
       expect(unknown.statusCode, unknown.body).toBe(404);
 
       expect(await attendanceRows(otherEvent)).toEqual([]);
     });
 
     it("044 EARS-38: a registrar bound to event B is refused event A's attendance (403); the platform administrator marks any event (200)", async () => {
-      const refused = await mark(registrarB.headers, slugA, petrov, DAY_1, true);
+      const refused = await mark(
+        registrarB.headers,
+        slugA,
+        petrov,
+        DAY_1,
+        true,
+      );
       expect(refused.statusCode, refused.body).toBe(403);
       expect(await attendanceRows(petrov)).toEqual([]);
 
@@ -395,14 +454,22 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const unmarkedDay1 = CongressRosterListSchema.parse(
         (
-          await roster(registrarA.headers, `attendanceDay=${DAY_1}&present=unmarked`)
+          await roster(
+            registrarA.headers,
+            `attendanceDay=${DAY_1}&present=unmarked`,
+          )
         ).json(),
       );
-      expect(unmarkedDay1.items.map((r) => r.registrationId)).toEqual([ivanova]);
+      expect(unmarkedDay1.items.map((r) => r.registrationId)).toEqual([
+        ivanova,
+      ]);
 
       const markedDay2 = CongressRosterListSchema.parse(
         (
-          await roster(registrarA.headers, `attendanceDay=${DAY_2}&present=marked`)
+          await roster(
+            registrarA.headers,
+            `attendanceDay=${DAY_2}&present=marked`,
+          )
         ).json(),
       );
       expect(markedDay2.items.map((r) => r.registrationId).sort()).toEqual(
@@ -475,7 +542,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(second.items).toHaveLength(1);
       expect(second.page).toBe(2);
       expect(
-        [first.items[0]!.registrationId, second.items[0]!.registrationId].sort(),
+        [
+          first.items[0]!.registrationId,
+          second.items[0]!.registrationId,
+        ].sort(),
       ).toEqual([ivanova, petrov].sort());
 
       const beyond = CongressRosterListSchema.parse(
@@ -502,7 +572,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           code: "CONGRESS_DAYS_UNCONFIGURED",
         });
 
-        const markRes = await mark(registrarA.headers, slugA, petrov, DAY_1, false);
+        const markRes = await mark(
+          registrarA.headers,
+          slugA,
+          petrov,
+          DAY_1,
+          false,
+        );
         expect(markRes.statusCode, markRes.body).toBe(503);
         expect(markRes.json()).toMatchObject({
           code: "CONGRESS_DAYS_UNCONFIGURED",

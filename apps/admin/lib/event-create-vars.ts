@@ -18,6 +18,7 @@ export function eventCreateVars(values: EventFormValues): CreateEventVars {
     description: values.description,
     specialties: values.specialties,
     partnerRef: values.partnerRef,
+    venue: values.venue,
     programPdf: values.programPdf,
     kindId: values.kindId,
     participationFormat: values.participationFormat,

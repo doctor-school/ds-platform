@@ -160,12 +160,14 @@ Today the push token is stored only on ds-stage-1 (`/etc/ds-platform/registry-pu
 
 - key-only authentication (already in place: `PasswordAuthentication no`);
 - `PermitRootLogin no` (today it is `yes`);
-- a dedicated `deploy` user. The CI keys in its `authorized_keys` carry `command="/usr/local/bin/ds-deploy-entrypoint",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding`. The entrypoint parses `SSH_ORIGINAL_COMMAND` against a strict allowlist (`release <env> <sha>`, `status <env> <sha>`) and rejects anything else, so a CI key never reaches a shell;
+- a dedicated `deploy` user. The CI keys in its `authorized_keys` carry `command="/usr/local/bin/ds-deploy-entrypoint",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding`. The entrypoint (`infra/deploy/bin/ds-deploy-entrypoint`, installed beside `ds-release` by every operator run) splits `SSH_ORIGINAL_COMMAND` on single spaces, never through a shell, and matches it against a strict allowlist with exact arity and the `ds-release` argument checks: `status <env> <sha>` (→ `ds-release status`), `release <env> <sha>` (→ the box-side release driver of steps (d)/(e); refused with exit 3 while none is installed) and, on ds-stage-1 only, `upload-report <sha>` (the report tar stream of the paragraph below; absolute paths, `..` and links are refused). Anything else exits 2 and is logged to the auth journal, so a CI key never reaches a shell;
 - the existing operator key of `deploy` keeps its current sudo until step (f), so `pnpm deploy:prod` and `slot.mjs` keep working unchanged; once the workstation path is retired to break-glass, `deploy`'s sudo is narrowed from NOPASSWD-all to the entrypoint alone;
-- break-glass uses a separate admin user. Its key is held offline by the owner, carries no forced command, and has full sudo; it is the only interactive admin path once root login is off;
-- connection rate limiting: `MaxStartups` plus fail2ban on the sshd journal;
+- break-glass uses a separate admin user `breakglass`. Its key is held offline by the owner, carries no forced command, and has full sudo; it is the only interactive admin path once root login is off, and root holds no key;
+- connection rate limiting: `MaxStartups 10:30:60` plus fail2ban on the sshd journal;
 - `unattended-upgrades` for security patches;
-- ds-data-prod keeps no public ssh; it is reached through ds-api-prod as a jump host.
+- ds-data-prod keeps no public ssh; it is reached through ds-api-prod as a jump host. It gets the same `PermitRootLogin no`, break-glass user and root-key removal, and no CI key.
+
+The settings live in the drop-in `/etc/ssh/sshd_config.d/10-ds-hardening.conf` (read before the main `sshd_config`, whose image-default `PermitRootLogin yes` is commented out; sshd takes the first value it reads). A new box gets this end state from its cloud-init file; a running box converges to it with `infra/deploy/bin/harden-ssh.sh` (idempotent, `sshd -t` before the reload).
 
 **Public logs and artifacts (ADR-0011 channel 3).** The repository is public. ADR-0011 channel 3 allows build, test and deploy automation in Actions only with no runtime personal data in logs. Under that rule:
 

@@ -129,6 +129,7 @@ import {
 import {
   PROD_HEALTH_URL,
   STALL_BUDGET_BUILD_MS,
+  BOX_ENTRYPOINTS,
   releaseCheckScript,
   releaseFinishScript,
   releaseInstallFromSourceScript,
@@ -160,7 +161,8 @@ export {
 const API_PROD = process.env.DS_API_PROD_SSH || "ds-api-prod";
 const DATA_PROD = process.env.DS_DATA_PROD_SSH || "ds-data-prod";
 // #3054: the entrypoint a run that ships no tree (`--rollback`) installs on the
-// boxes, read from the operator checkout's HEAD commit.
+// boxes, read from the operator checkout's HEAD commit (with ds-deploy-entrypoint,
+// #2984: BOX_ENTRYPOINTS).
 const DS_RELEASE_PATH = "infra/deploy/bin/ds-release";
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
 const REMOTE_TREE = "~/ds-platform";
@@ -1378,11 +1380,12 @@ async function deploy(hotfixRef = null) {
   t = Date.now();
   await postgres.run(() => shipTree(sha, DATA_PROD));
   ok(`archive → ${DATA_PROD}`, t);
-  // #2982: the durable entrypoint comes from the tree just shipped, every run.
+  // #2982: the durable entrypoint comes from the tree just shipped, every run (with
+  // the CI keys' forced command ds-deploy-entrypoint, #2984).
   for (const host of [API_PROD, DATA_PROD]) {
     await sshScript(host, releaseInstallScript(), { label: "install ds-release" });
   }
-  ok("ds-release installed on both boxes");
+  ok("ds-release + ds-deploy-entrypoint installed on both boxes");
   openReleaseSha = sha;
 
   step("data-prod: bring up persistence plane (idempotent)");
@@ -1664,16 +1667,24 @@ function runSmoke(sha, services) {
  * uncommitted local edit never reaches prod: `rollback()` runs no clean-tree
  * pre-flight.
  */
-export function committedReleaseSource(repoRoot = REPO_ROOT, ref = "HEAD") {
-  const r = spawnSync("git", ["-C", repoRoot, "cat-file", "blob", `${ref}:${DS_RELEASE_PATH}`], {
+export function committedReleaseSource(repoRoot = REPO_ROOT, ref = "HEAD", path = DS_RELEASE_PATH) {
+  const r = spawnSync("git", ["-C", repoRoot, "cat-file", "blob", `${ref}:${path}`], {
     maxBuffer: 16 * 1024 * 1024,
   });
   if (r.status !== 0) {
     throw new Error(
-      `cannot read ${ref}:${DS_RELEASE_PATH} from ${repoRoot}: ${String(r.stderr || "").trim() || `git exited ${r.status}`}`,
+      `cannot read ${ref}:${path} from ${repoRoot}: ${String(r.stderr || "").trim() || `git exited ${r.status}`}`,
     );
   }
   return r.stdout;
+}
+
+/** Every box entrypoint's committed blob at `ref`, as `[{ source, dest }]` (#2984). */
+export function committedReleaseSources(repoRoot = REPO_ROOT, ref = "HEAD") {
+  return BOX_ENTRYPOINTS.map(({ dest, path }) => ({
+    source: committedReleaseSource(repoRoot, ref, path),
+    dest,
+  }));
 }
 
 async function rollback(shaArg) {
@@ -1770,22 +1781,22 @@ async function rollback(shaArg) {
   // checkout's HEAD — every run, like the forward path (tech spec §5 Entrypoint) —
   // and a box the forward path never reached still gets it before its first call.
   // The install is the one write before the read-only check below.
-  let releaseSource;
+  let releaseSources;
   try {
-    releaseSource = committedReleaseSource();
+    releaseSources = committedReleaseSources();
   } catch (e) {
     die(`--rollback: ${e.message}`);
   }
   for (const host of [API_PROD, DATA_PROD]) {
     try {
-      await sshScript(host, releaseInstallFromSourceScript(releaseSource), {
+      await sshScript(host, releaseInstallFromSourceScript(releaseSources), {
         label: "install ds-release",
       });
     } catch (e) {
       die(`--rollback: cannot install ds-release on ${host} (${e.message}); prod was not rolled back`);
     }
   }
-  ok("ds-release installed on both boxes from the operator checkout");
+  ok("ds-release + ds-deploy-entrypoint installed on both boxes from the operator checkout");
 
   // #2982: a release step outlives the operator session that started it. A
   // rollback racing a still-running `migrate` (whose `up -d` would put the SHA

@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# ds-deploy-entrypoint — the forced command of every CI key (Issue #2984; tech spec
+# apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md §4,
+# §8 step (c)).
+#
+# A CI key in deploy's authorized_keys carries
+#   command="/usr/local/bin/ds-deploy-entrypoint",no-pty,no-port-forwarding,...
+# so sshd runs this file whatever the client asked for, and the request arrives in
+# SSH_ORIGINAL_COMMAND. It is split on single spaces into words — never `eval`d,
+# never handed to a shell — and must be exactly one of:
+#
+#   status <env> <sha>     -> sudo /usr/local/bin/ds-release status <env> <sha>
+#   release <env> <sha>    -> /usr/local/lib/ds-platform/release-driver <env> <sha>
+#   upload-report <sha>    -> a tar stream on stdin into
+#                             /var/lib/ds-platform/e2e-reports/<sha>/ (stage box only)
+#
+# <env> and <sha> are checked with the regexes of ds-release (ENV_RE / SHA_RE below
+# are a copy; tools/deploy/ds-deploy-entrypoint.test.mjs pins them equal). Anything
+# else exits 2 and is logged at auth.warning; accepted commands log at auth.info.
+# The client sees status lines only (spec §4, public logs).
+#
+# Installed as /usr/local/bin/ds-deploy-entrypoint beside ds-release, by the same
+# install step of every operator run.
+#
+# Exit codes: 0 ok · 1 the command failed · 2 rejected (usage) · 3 refused (the box
+# cannot serve it: no release driver, not the stage box, an unsafe archive).
+set -euo pipefail
+
+# A test root prefix; empty on a box. sshd passes no client environment to a forced
+# command beyond AcceptEnv (LANG/LC_* on Ubuntu), so a client cannot set it.
+ROOT=${DS_ENTRYPOINT_ROOT:-}
+DS_RELEASE=$ROOT/usr/local/bin/ds-release
+RELEASE_DRIVER=$ROOT/usr/local/lib/ds-platform/release-driver
+BOX_ROLE_FILE=$ROOT/etc/ds-platform/box-role
+REPORTS_ROOT=$ROOT/var/lib/ds-platform/e2e-reports
+REPORT_RETENTION_DAYS=14
+
+ENV_RE='^(prod|stage-main|stage-pr-[1-9][0-9]*)$'
+SHA_RE='^[0-9a-f]{40}$'
+# The whole request, before it is split: words of the characters the verbs, envs and
+# SHAs use, joined by single spaces. A shell metacharacter, a tab, a newline, a
+# doubled, leading or trailing space is rejected outright.
+COMMAND_RE='^[a-z0-9-]+( [a-z0-9-]+)*$'
+COMMAND_MAX=200
+
+TAG=ds-deploy-entrypoint
+request=${SSH_ORIGINAL_COMMAND-}
+
+# Printable, length-capped copy of the request for the log line.
+sanitised() { printf '%s' "$request" | LC_ALL=C tr -c '[:alnum:] ._/=-' '?' | head -c 120; }
+
+reject() {
+  logger -t "$TAG" -p auth.warning "rejected: $(sanitised)" || true
+  printf '%s: rejected: %s\n' "$TAG" "$1" >&2
+  exit 2
+}
+refuse() {
+  printf '%s: %s\n' "$TAG" "$1" >&2
+  exit 3
+}
+accepted() { logger -t "$TAG" -p auth.info "accepted: $(sanitised)" || true; }
+
+[[ -n $request ]] || reject "no command (this key runs only the allowlisted deploy commands)"
+[[ ${#request} -le $COMMAND_MAX && $request =~ $COMMAND_RE ]] ||
+  reject "unexpected characters in the command"
+
+IFS=' ' read -r -a words <<<"$request"
+verb=${words[0]-}
+
+check_env() { [[ $1 =~ $ENV_RE ]] || reject "bad env (want prod, stage-main or stage-pr-<N>)"; }
+check_sha() { [[ $1 =~ $SHA_RE ]] || reject "bad sha (want the full 40-hex commit id)"; }
+
+upload_report() {
+  local sha=$1 role dest listing
+  role=$(sudo cat "$BOX_ROLE_FILE" 2>/dev/null || true)
+  [[ $role == stage ]] || refuse "upload-report is served by the stage box only"
+
+  archive=$(mktemp) # global: the EXIT trap outlives this function
+  trap 'rm -f "${archive:-}"' EXIT
+  cat >"$archive"
+
+  # Pre-list the archive as stored (-P: no silent stripping of a leading /): only
+  # plain files and directories, relative paths, no `..`. --touch on extract keeps
+  # an archived `./` from back-dating the report past the retention window.
+  listing=$(tar -tvPf "$archive") || refuse "the report is not a readable tar stream"
+  local type
+  while IFS= read -r line; do
+    type=${line:0:1}
+    [[ $type == - || $type == d ]] || refuse "the report holds a link or special file"
+  done <<<"$listing"
+  local name
+  while IFS= read -r name; do
+    [[ -n $name ]] || continue
+    [[ $name != /* ]] || refuse "the report holds an absolute path"
+    [[ ! $name =~ (^|/)\.\.(/|$) ]] || refuse "the report holds a .. path"
+  done < <(tar -tPf "$archive")
+
+  dest=$REPORTS_ROOT/$sha
+  sudo install -d -m 0700 -o root -g root "$REPORTS_ROOT"
+  sudo rm -rf -- "$dest"
+  sudo install -d -m 0700 -o root -g root "$dest"
+  sudo tar -xf "$archive" -C "$dest" --no-same-owner --no-same-permissions --touch
+  sudo chmod -R go-rwx "$dest"
+  # Retention: the next upload removes reports older than the window.
+  sudo find "$REPORTS_ROOT" -mindepth 1 -maxdepth 1 -type d -mtime "+$REPORT_RETENTION_DAYS" \
+    -exec rm -rf -- {} +
+  printf '%s: report %s stored\n' "$TAG" "$sha"
+}
+
+case "$verb" in
+  status)
+    [[ ${#words[@]} -eq 3 ]] || reject "usage: status <env> <sha>"
+    check_env "${words[1]}"
+    check_sha "${words[2]}"
+    accepted
+    exec sudo "$DS_RELEASE" status "${words[1]}" "${words[2]}"
+    ;;
+  release)
+    [[ ${#words[@]} -eq 3 ]] || reject "usage: release <env> <sha>"
+    check_env "${words[1]}"
+    check_sha "${words[2]}"
+    accepted
+    [[ -x $RELEASE_DRIVER ]] ||
+      refuse "release driver not installed (lands with #2985 stage / #2986 prod)"
+    exec "$RELEASE_DRIVER" "${words[1]}" "${words[2]}"
+    ;;
+  upload-report)
+    [[ ${#words[@]} -eq 2 ]] || reject "usage: upload-report <sha>"
+    check_sha "${words[1]}"
+    accepted
+    upload_report "${words[1]}"
+    ;;
+  *)
+    reject "unknown command (allowed: status, release, upload-report)"
+    ;;
+esac

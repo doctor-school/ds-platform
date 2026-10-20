@@ -72,9 +72,11 @@ resource "twc_server" "stage_1" {
   # provider hard-resets a new box mid-first-boot, so a long runcmd never finishes
   # (#2121). See ../cloud-init/stage-1.yaml.
   # templatefile: injects the operator public key so the non-root `deploy` user is
-  # reachable from first boot (Timeweb installs the key for root only).
+  # reachable from first boot (Timeweb installs the key for root only), and the
+  # break-glass admin key (#2984).
   cloud_init = templatefile("${path.module}/../cloud-init/stage-1.yaml", {
-    deploy_ssh_pubkey = trimspace(file(pathexpand(var.stage_1_ssh_pubkey_path)))
+    deploy_ssh_pubkey     = trimspace(file(pathexpand(var.stage_1_ssh_pubkey_path)))
+    breakglass_ssh_pubkey = trimspace(file(pathexpand(var.stage_1_breakglass_ssh_pubkey_path)))
   })
 
   # Join the STAGE VPC (never twc_vpc.ds). mode=no_nat: the port carries VPC-local
@@ -130,10 +132,15 @@ resource "twc_firewall_rule" "stage_1_https" {
   cidr        = "0.0.0.0/0"
 }
 
+# Port 22 opens to the internet (release-pipeline spec §4, §8 step (c), #2984):
+# GitHub-hosted runners have no fixed address range. The box takes keys only, root
+# login is off, and a CI key reaches nothing but the forced command
+# /usr/local/bin/ds-deploy-entrypoint (infra/deploy/README.md → ssh access model).
+# api_ssh (network.tf) stays on var.admin_ssh_cidr until step (e).
 resource "twc_firewall_rule" "stage_1_ssh" {
   firewall_id = twc_firewall.stage_1.id
   direction   = "ingress"
   protocol    = "tcp"
   port        = 22
-  cidr        = var.admin_ssh_cidr
+  cidr        = "0.0.0.0/0"
 }

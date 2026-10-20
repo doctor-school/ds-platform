@@ -22,12 +22,44 @@ users:
     sudo: ["ALL=(ALL) NOPASSWD:ALL"]
     ssh_authorized_keys:
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMhbEUW92rTm3l3HgO0ipwRSg1UnTRJrWYqit5Z2ViBV deploy@ds-api-prod"
+  # #2984: the break-glass admin (release-pipeline spec §4). Its key is held
+  # offline by the owner, carries no forced command and has full sudo (its own
+  # sudoers file below); it is the only interactive admin path once root login is
+  # off. The public key is rendered from var.prod_breakglass_ssh_pubkey_path (templatefile, api-prod.tf).
+  - name: breakglass
+    groups: [sudo]
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - "${breakglass_ssh_pubkey}"
 
 write_files:
   # Directory for out-of-band secrets — filled by the provisioning runbook, never baked here.
   - path: /etc/ds-platform/.keep
     content: ""
     permissions: "0700"
+  # #2984: ssh hardening (release-pipeline spec §4, §8 step (c)). The same bytes as
+  # the drop-in of infra/deploy/bin/harden-ssh.sh, the converge for boxes that already
+  # run (tools/deploy/harden-ssh.test.mjs pins them equal). The `PermitRootLogin yes`
+  # of the image's main sshd_config is commented out in runcmd below.
+  - path: /etc/ssh/sshd_config.d/10-ds-hardening.conf
+    permissions: "0644"
+    content: |
+      # ds-platform ssh hardening (Issue #2984; release-pipeline spec §4).
+      # Sorted before 50-cloud-init.conf and read before the main sshd_config:
+      # sshd takes the first value it reads for each keyword.
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      MaxStartups 10:30:60
+  - path: /etc/sudoers.d/91-ds-breakglass
+    permissions: "0440"
+    content: |
+      breakglass ALL=(ALL) NOPASSWD:ALL
+  # What this box serves; ds-deploy-entrypoint serves `upload-report` on `stage` only.
+  - path: /etc/ds-platform/box-role
+    permissions: "0644"
+    content: |
+      prod
   # Standing build-cache GC (#1419). `pnpm deploy:prod` builds the api/portal
   # images ON THIS BOX, and BuildKit keeps every layer it ever produced: the
   # cache grew unbounded to 54.6 GB / 77% disk before the 2026-08-21 cleanup.
@@ -82,3 +114,17 @@ runcmd:
   # infra/deploy/bin/ds-release right after the ship, before any box step.
   # It relies on systemd-run, flock, runuser and python3 from the base image.
   - install -d -m 0755 -o root -g root /var/lib/ds-platform/release
+  # #2984: ssh hardening, the end state of infra/deploy/bin/harden-ssh.sh. Root
+  # login is off (the drop-in above) and root holds no key; the CI keys of deploy
+  # (forced command /usr/local/bin/ds-deploy-entrypoint, installed by every operator
+  # run beside ds-release) are added by the lead with harden-ssh.sh, never baked here.
+  - [
+      "sed",
+      "-E",
+      "-i",
+      's/^[[:space:]]*(PermitRootLogin[[:space:]]+yes.*)$/# \1  # ds-platform: set by sshd_config.d\/10-ds-hardening.conf/',
+      "/etc/ssh/sshd_config",
+    ]
+  - truncate -s 0 /root/.ssh/authorized_keys
+  - systemctl enable --now unattended-upgrades
+  - sshd -t && systemctl reload ssh

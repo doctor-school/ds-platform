@@ -28,9 +28,11 @@ resource "twc_server" "data_prod" {
 
   # templatefile: injects the NAT-router gateway for the host's default route
   # (data-prod has no public IP — egress exists only via the router; the route
-  # must be applied before any first-boot package work, see the yaml NOTE).
+  # must be applied before any first-boot package work, see the yaml NOTE) and the
+  # break-glass admin key (#2984).
   cloud_init = templatefile("${path.module}/../cloud-init/data-prod.yaml", {
-    router_gateway_ip = var.vpc_router_gateway_ip
+    router_gateway_ip     = var.vpc_router_gateway_ip
+    breakglass_ssh_pubkey = trimspace(file(pathexpand(var.prod_breakglass_ssh_pubkey_path)))
   })
 
   # Join the private VPC with a static address. mode=no_nat: "only local network

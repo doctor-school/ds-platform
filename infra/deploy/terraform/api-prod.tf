@@ -21,8 +21,11 @@ resource "twc_server" "api_prod" {
   ssh_keys_ids              = [tonumber(twc_ssh_key.api_prod.id)]
   is_root_password_required = false
 
-  # Base VPS hardening on first boot (non-root deploy user, ufw, docker+compose).
-  cloud_init = file("${path.module}/../cloud-init/api-prod.yaml")
+  # Base VPS hardening on first boot (non-root deploy user, ufw, docker+compose,
+  # ssh hardening). templatefile: injects the break-glass admin key (#2984).
+  cloud_init = templatefile("${path.module}/../cloud-init/api-prod.yaml", {
+    breakglass_ssh_pubkey = trimspace(file(pathexpand(var.prod_breakglass_ssh_pubkey_path)))
+  })
 
   # Join the private VPC with a static address. mode=no_nat: "only local network
   # traffic allowed" on this port. api-prod's own public IPv4 (twc_server_ip below)

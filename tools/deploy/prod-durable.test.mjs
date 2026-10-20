@@ -11,7 +11,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { committedReleaseSource } from "./prod.mjs";
+import { committedReleaseSource, committedReleaseSources } from "./prod.mjs";
 
 const SOURCE = readFileSync(join(import.meta.dirname, "prod.mjs"), "utf8");
 const deployBody = SOURCE.slice(
@@ -101,7 +101,7 @@ test("3054: the rollback installs ds-release on both boxes from the operator che
     beforeCheck,
     /for \(const host of \[API_PROD, DATA_PROD\]\)[\s\S]{0,200}releaseInstallFromSourceScript\(/,
   );
-  assert.match(beforeCheck, /committedReleaseSource\(\)/, "the bytes are HEAD's blob");
+  assert.match(beforeCheck, /committedReleaseSources\(\)/, "the bytes are HEAD's blobs");
   assert.doesNotMatch(beforeCheck, /readFileSync\(/, "never the working-tree file");
   // A failed install names the host through die(), like the check loop.
   assert.match(
@@ -142,4 +142,15 @@ test("3054: the rollback's ds-release bytes are the committed blob, never an unc
 test("3054: the operator checkout's HEAD carries the entrypoint the rollback installs", () => {
   const source = committedReleaseSource();
   assert.match(source.subarray(0, 64).toString("utf8"), /^#!\/usr\/bin\/env bash\n/);
+});
+
+test("2984: the rollback installs ds-deploy-entrypoint beside ds-release, both HEAD's blobs", () => {
+  const sources = committedReleaseSources();
+  assert.deepEqual(
+    sources.map(({ dest }) => dest),
+    ["/usr/local/bin/ds-release", "/usr/local/bin/ds-deploy-entrypoint"],
+  );
+  for (const { source } of sources) {
+    assert.match(source.subarray(0, 64).toString("utf8"), /^#!\/usr\/bin\/env bash\n/);
+  }
 });

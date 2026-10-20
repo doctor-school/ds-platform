@@ -64,7 +64,15 @@ export function AccountCabinet({
   saveErrors,
 }: AccountCabinetProps) {
   const router = useRouter();
-  const authClient = useMemo(() => createAuthClient(api), [api]);
+  // Keyed on the VALUES of `api`, never its identity: `api` is a serialised
+  // server prop, so every `router.refresh()` (the display-name save calls one)
+  // hands a new but equal object. An identity key would rebuild the client,
+  // re-run `load` and fire an extra profile read after every save.
+  const { basePath, registerPath, verifyPath } = api;
+  const authClient = useMemo(
+    () => createAuthClient({ basePath, registerPath, verifyPath }),
+    [basePath, registerPath, verifyPath],
+  );
   // 003 EARS-47/48/59 — the shared phone-row transport over this host's client.
   const phoneActions = useMemo(
     () => accountPhoneActions(authClient),

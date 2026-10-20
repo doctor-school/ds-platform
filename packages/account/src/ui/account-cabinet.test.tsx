@@ -159,6 +159,22 @@ describe("003 EARS-28 /account profile surface", () => {
     expect(h.createAuthClient).toHaveBeenCalledWith(ACADEMY_FIXTURE.api);
   });
 
+  it("gate D2: a server re-render handing new but equal props (router.refresh after a save) re-reads neither the profile nor the congress section", async () => {
+    const props = accountCabinetProps(WITH_CONGRESS);
+    const view = render(<AccountCabinet {...props} />);
+    await screen.findByTestId("profile-name");
+    await waitFor(() => expect(h.fetchSection).toHaveBeenCalledTimes(1));
+
+    // The RSC payload is deserialised afresh: every object prop is a new
+    // identity carrying the same values.
+    view.rerender(<AccountCabinet {...structuredClone(props)} />);
+    await screen.findByTestId("profile-name");
+
+    expect(h.createAuthClient).toHaveBeenCalledTimes(1);
+    expect(h.profile).toHaveBeenCalledTimes(1);
+    expect(h.fetchSection).toHaveBeenCalledTimes(1);
+  });
+
   it("carries NO raw session claims in the DOM — no sub, no roles, no mfa (requirements Invariants)", async () => {
     h.profile.mockResolvedValue({ ...PROFILE, displayName: null });
     const { container } = renderCabinet();

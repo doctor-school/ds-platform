@@ -156,9 +156,9 @@ extracted with python3 `tarfile`, plain tar only; a stream over
 **New box:** cloud-init (`cloud-init/*.yaml`) writes the same drop-in, sudoers file and
 role marker and creates `breakglass` from the key at `var.prod_breakglass_ssh_pubkey_path`
 / `var.stage_1_breakglass_ssh_pubkey_path` (public halves only). CI keys are never baked in.
-The resulting in-place `twc_server.*.cloud_init` diffs on the three running servers are
-expected (cloud-init runs on first boot only) and must not be applied to them: apply
-`-target=twc_firewall_rule.stage_1_ssh` only.
+cloud-init runs on first boot only, so the `twc_server.*` resources ignore `cloud_init`
+changes: an edit to `cloud-init/*.yaml` never shows in the plan for a running server and
+reaches a box only when it is created (replace/rebuild).
 
 **Running box:** converge it with `infra/deploy/bin/harden-ssh.sh` (idempotent; a second
 run prints `nothing to change`). Keep a second session open on the box while it runs.

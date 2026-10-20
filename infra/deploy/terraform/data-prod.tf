@@ -35,6 +35,14 @@ resource "twc_server" "data_prod" {
     breakglass_ssh_pubkey = trimspace(file(pathexpand(var.prod_breakglass_ssh_pubkey_path)))
   })
 
+  # cloud-init runs on first boot only: a changed cloud-init file reaches a NEW
+  # server (replace/rebuild), never a running one. The provider's in-place
+  # cloud_init update is undocumented, so it is never planned against a live box
+  # (#2984).
+  lifecycle {
+    ignore_changes = [cloud_init]
+  }
+
   # Join the private VPC with a static address. mode=no_nat: "only local network
   # traffic allowed" on this port — data-prod has no public IP of its own, so its
   # internet egress comes from the network router NATing the VPC (twc_router.ds in

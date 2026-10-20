@@ -515,6 +515,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # API EARS-5 test owns the IdP failed-attempt increment assertion. The browser
     # verifies the live refusal without claiming to read Zitadel's native counter.
 
+  @EARS-5 @EARS-8 @EARS-16 @failure @password-owner-preservation
+  Scenario: Academy refuses a wrong password without disturbing the independently authenticated owner
+    Given a uniquely owned verified Academy password account keeps its original private session
+    When an independent Academy guest submits one wrong password while that owner remains signed in
+    Then the correct owned password still signs in that guest as the same Academy doctor
+    # Retain the generic wrong-password declaration and native EARS-5/8/16 contracts.
+    # This browser projection asserts owner continuity, not provider counters.
+
   @EARS-8 @EARS-43 @happy @login-unsafe-return
   Scenario: Academy discards an external return target after successful owned-account password login
     Given a uniquely owned verified Academy account has logged out before the unsafe-return login

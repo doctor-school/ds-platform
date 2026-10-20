@@ -11,8 +11,8 @@ import react from "@vitejs/plugin-react";
  * shell components rendered to STATIC SERVER MARKUP (`react-dom/server`) — the
  * level EARS-1 actually constrains (what reaches the HTML), which needs no DOM
  * either. The DEFAULT stays node for that reason; the app gained its first test
- * of client-side BEHAVIOUR with #1958 (`components/account-screen.test.tsx`),
- * and that file opts itself into jsdom with a `@vitest-environment jsdom`
+ * of client-side BEHAVIOUR with #1958 (the account screen, since moved into
+ * `@ds/account` by #2073), and such a file opts itself into jsdom with a `@vitest-environment jsdom`
  * docblock rather than flipping the whole app onto a DOM it does not need — see
  * apps/docs/content/architecture/component-testing.md for that tier.
  *

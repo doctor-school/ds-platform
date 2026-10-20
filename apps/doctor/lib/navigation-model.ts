@@ -20,7 +20,7 @@ import type { NavigationItem, NavigationModel } from "@ds/e2e/navigation-model";
  * `landing` carries the §6.2 evidence — the `h1` each destination paints
  * (`components/storefront-hero.tsx`, the `/login` door,
  * `app/(storefront)/events/page.tsx` → `DOCTOR_EVENTS_FEED_COPY.title`,
- * `components/account-screen.tsx`).
+ * `@ds/account`, mounted at `app/(storefront)/account/page.tsx`).
  *
  * A destination the chrome does NOT paint has no row here. `/register` is the
  * standing example: the canvas guest cluster is one combined «Войти /

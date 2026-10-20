@@ -1,0 +1,224 @@
+// tools/deploy/lib/registry-retention.mjs — what the container registry keeps (#3110).
+//
+// The registry has a fixed quota; every `main` merge and every internal PR head
+// pushes five images (`registry.mjs`), so without retention it fills and every
+// push fails. The owner's policy (2026-10-20, #3110): keep the production build
+// and at most a couple of previous ones for rollback. Concretely, per release repo
+// (`api`, `api-migrate`, `portal`, `admin`, `doctor`): the targets of the latest
+// RELEASES_KEPT `release-*` releases (prod + rollback targets — `pnpm deploy:prod
+// --rollback` re-pulls a pruned SHA's recorded digests) ∪ the newest MAIN_SHAS_KEPT
+// first-parent `main` commits that have an image (the next release candidate and
+// stage `main`). Per `pr/*` repo: the heads of the open PRs (their stage slots).
+//
+// Deletion is by manifest digest (Docker Registry v2 has no tag delete), which
+// removes every tag pointing at that digest — hence the digest guard: a digest any
+// kept or non-SHA tag of the same repo resolves to is never deleted. Every unusable
+// input throws a `RetentionError`, so the caller deletes nothing (fail closed).
+//
+// Pure: the I/O lives in `tools/deploy/registry-retention.mjs`.
+
+import { RECORDED_IMAGE_NAMES } from "./registry.mjs";
+
+export class RetentionError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "RetentionError";
+  }
+}
+
+export const RELEASES_KEPT = 3;
+export const MAIN_SHAS_KEPT = 3;
+
+const FULL_SHA_RE = /^[0-9a-f]{40}$/;
+const DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
+const RELEASE_TAG_RE = /^release-(\d{4})\.(\d{2})\.(\d{2})-(\d+)$/;
+
+/** The repositories retention manages, release namespace first. */
+export function retentionRepos() {
+  return [
+    ...RECORDED_IMAGE_NAMES,
+    ...RECORDED_IMAGE_NAMES.map((name) => `pr/${name}`),
+  ];
+}
+
+function releaseOrderKey(tag) {
+  const m = tag.match(RELEASE_TAG_RE);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])] : null;
+}
+
+function compareKeysDesc(a, b) {
+  for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return b[i] - a[i];
+  return 0;
+}
+
+/** SHAs of the latest `keep` `release-YYYY.MM.DD-N` releases, newest first. */
+function latestReleaseShas(releases, keep) {
+  if (!Array.isArray(releases) || releases.length === 0) {
+    throw new RetentionError(
+      "no releases listed — refusing to decide what production may roll back to",
+    );
+  }
+  const ordered = releases
+    .map((r) => ({ ...r, key: releaseOrderKey(String(r?.tag ?? "")) }))
+    .filter((r) => r.key)
+    .sort((a, b) => compareKeysDesc(a.key, b.key));
+  if (ordered.length === 0) {
+    throw new RetentionError(
+      "no release-YYYY.MM.DD-N release listed — refusing to decide what production runs",
+    );
+  }
+  return ordered.slice(0, keep).map((r) => {
+    if (!FULL_SHA_RE.test(String(r.sha ?? ""))) {
+      throw new RetentionError(
+        `release ${r.tag} targets ${JSON.stringify(r.sha)}, not a full 40-character SHA — cannot resolve what it deployed`,
+      );
+    }
+    return r.sha;
+  });
+}
+
+function assertShaList(list, what) {
+  if (!Array.isArray(list))
+    throw new RetentionError(
+      `${what} not listed — refusing to delete anything`,
+    );
+  for (const s of list) {
+    if (!FULL_SHA_RE.test(String(s ?? ""))) {
+      throw new RetentionError(
+        `${what}: ${JSON.stringify(s)} is not a full 40-character SHA`,
+      );
+    }
+  }
+}
+
+function assertTagListing(tags, repos) {
+  if (!tags || typeof tags !== "object")
+    throw new RetentionError("no registry tag listing");
+  for (const repo of repos) {
+    const list = tags[repo];
+    if (!Array.isArray(list))
+      throw new RetentionError(`no tag listing for repository ${repo}`);
+    for (const entry of list) {
+      if (typeof entry?.tag !== "string" || !entry.tag) {
+        throw new RetentionError(
+          `repository ${repo}: a tag entry has no tag name`,
+        );
+      }
+      if (!DIGEST_RE.test(String(entry.digest ?? ""))) {
+        throw new RetentionError(
+          `repository ${repo}: tag ${entry.tag} resolved to ${JSON.stringify(entry.digest)}, not a sha256 digest`,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * @param {object} input
+ * @param {Record<string, {tag: string, digest: string}[]>} input.tags every repo of
+ *   `retentionRepos()` → its tags, each resolved to its manifest digest
+ * @param {{tag: string, sha: string}[]} input.releases GitHub Releases (any order)
+ * @param {string[]} input.mainHistory first-parent `main` commits, newest first
+ * @param {string[]} input.openPrHeads head SHAs of the open PRs
+ */
+export function planRetention({ tags, releases, mainHistory, openPrHeads }) {
+  const repos = retentionRepos();
+  assertTagListing(tags, repos);
+  const releaseShas = latestReleaseShas(releases, RELEASES_KEPT);
+  assertShaList(mainHistory, "main history");
+  if (mainHistory.length === 0)
+    throw new RetentionError(
+      "main history is empty — refusing to delete anything",
+    );
+  assertShaList(openPrHeads, "open PR heads");
+
+  const releaseRepos = repos.filter((r) => !r.startsWith("pr/"));
+  const inRegistry = new Set(
+    releaseRepos.flatMap((repo) => tags[repo].map((t) => t.tag)),
+  );
+  const mainShas = mainHistory
+    .filter((s) => inRegistry.has(s))
+    .slice(0, MAIN_SHAS_KEPT);
+
+  const releaseKeep = new Map();
+  for (const s of releaseShas) releaseKeep.set(s, "release");
+  for (const s of mainShas) if (!releaseKeep.has(s)) releaseKeep.set(s, "main");
+  const prKeep = new Map(openPrHeads.map((s) => [s, "open PR"]));
+
+  const plan = repos.map((repo) => {
+    const keepSet = repo.startsWith("pr/") ? prKeep : releaseKeep;
+    const keep = [];
+    const ignored = [];
+    const candidates = [];
+    for (const entry of tags[repo]) {
+      if (!FULL_SHA_RE.test(entry.tag))
+        ignored.push({ tag: entry.tag, digest: entry.digest });
+      else if (keepSet.has(entry.tag))
+        keep.push({
+          tag: entry.tag,
+          digest: entry.digest,
+          reason: keepSet.get(entry.tag),
+        });
+      else candidates.push({ tag: entry.tag, digest: entry.digest });
+    }
+    const protectedDigests = new Set(
+      [...keep, ...ignored].map((t) => t.digest),
+    );
+    const guarded = [];
+    const byDigest = new Map();
+    for (const c of candidates) {
+      if (protectedDigests.has(c.digest)) guarded.push(c);
+      else byDigest.set(c.digest, [...(byDigest.get(c.digest) ?? []), c.tag]);
+    }
+    const del = [...byDigest.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([digest, tagList]) => ({ digest, tags: tagList.sort() }));
+    return {
+      repo,
+      total: tags[repo].length,
+      keep,
+      delete: del,
+      guarded,
+      ignored,
+    };
+  });
+
+  return { releaseShas, mainShas, openPrHeads: [...openPrHeads], repos: plan };
+}
+
+/** Markdown for `$GITHUB_STEP_SUMMARY` and the log. */
+export function renderPlanSummary(plan, { dryRun }) {
+  const lines = [
+    `### Registry retention — ${dryRun ? "dry run (nothing deleted)" : "deleting"}`,
+    "",
+    `- Releases kept (latest ${RELEASES_KEPT}): ${plan.releaseShas.map((s) => `\`${s}\``).join(", ")}`,
+    `- Main SHAs kept (newest ${MAIN_SHAS_KEPT} with an image): ${plan.mainShas.map((s) => `\`${s}\``).join(", ") || "none"}`,
+    `- Open PR heads kept: ${plan.openPrHeads.length}`,
+    "",
+    "| repo | tags | kept tags | deleted tags | digests to delete | guarded tags | non-SHA tags |",
+    "| ---- | ---- | --------- | ------------ | ----------------- | ------------ | ------------ |",
+  ];
+  for (const r of plan.repos) {
+    const deletedTags = r.delete.reduce((n, d) => n + d.tags.length, 0);
+    lines.push(
+      `| ${r.repo} | ${r.total} | ${r.keep.length} | ${deletedTags} | ${r.delete.length} | ${r.guarded.length} | ${r.ignored.length} |`,
+    );
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+/** The `rel="next"` target of a registry `Link` header, or null. */
+export function parseNextLink(header) {
+  if (!header) return null;
+  const m = String(header).match(/<([^>]+)>\s*;\s*rel="?next"?/);
+  return m ? m[1] : null;
+}
+
+/** `{realm, service, scope}` of a `WWW-Authenticate: Bearer …` challenge, or null. */
+export function parseBearerChallenge(header) {
+  const text = String(header ?? "");
+  if (!/^Bearer\s/i.test(text)) return null;
+  const out = {};
+  for (const m of text.matchAll(/(\w+)="([^"]*)"/g)) out[m[1]] = m[2];
+  return out;
+}

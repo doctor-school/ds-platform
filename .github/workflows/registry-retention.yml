@@ -1,0 +1,56 @@
+name: Registry retention
+
+# Prunes the container registry to the retention policy (#3110;
+# infra/deploy/README.md → Container registry; planner
+# tools/deploy/lib/registry-retention.mjs): per release repo the latest 3 releases
+# and the newest 3 `main` commits with an image, per `pr/*` repo the open PR heads.
+#   - schedule: daily.
+#   - workflow_run: after every `main` Runtime images run, so a merged PR's `pr/*`
+#     tags go as soon as its `main` images exist.
+#   - workflow_dispatch: `dry_run` (default true) prints the plan and deletes nothing.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_run:
+    workflows: ["Runtime images"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the plan only; delete nothing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# One run at a time; a queued run waits rather than cancelling one mid-delete.
+concurrency:
+  group: registry-retention
+  cancel-in-progress: false
+
+jobs:
+  retention:
+    # The push token can delete images; only `main`'s copy of this code may hold it
+    # (a dispatch on another branch would run that branch's code).
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: build
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          filter: tree:0
+      - uses: actions/setup-node@v7
+        with: { node-version-file: .nvmrc }
+      - name: Plan and prune
+        env:
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_PUSH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+        run: node tools/deploy/registry-retention.mjs

@@ -264,6 +264,30 @@ Timeweb Cloud container registry (#2981, tech spec
   `images-<sha>.json` artifact (90 days) maps each image to its pushed `@sha256:` digest
   — a deploy pulls by digest, never by tag. The data-prod images (`ds-postgres`,
   `ds-pgbackrest`) are not in the registry.
+- **Retention — the registry keeps production and its rollback targets only** (#3110).
+  The registry has a fixed quota (25 GB); once full, every push fails. Workflow
+  `registry-retention.yml` (Environment `build`, the push token) prunes it to:
+  - per release repo (`<image>`): the target SHAs of the latest 3 `release-*`
+    GitHub Releases (production + 2 rollback targets) ∪ the newest 3 first-parent
+    `main` commits that have an image (the next release candidate, stage `main`);
+  - per `pr/<image>` repo: the heads of the currently open pull requests;
+  - everything else is deleted (`DELETE /v2/<repo>/manifests/<digest>`). Tags that are
+    not 40-hex SHAs are left alone, and a digest any kept tag of the same repo resolves
+    to is never deleted (identical rebuilds share a digest). If the releases, the open
+    PRs or `main` cannot be listed, or a release target is not a full SHA, nothing is
+    deleted and the run fails; a refused DELETE stops the run and fails it.
+
+  It runs daily, after every `main` Runtime images run (whatever its conclusion —
+  a run that failed on a full registry is exactly when space is needed), and by hand:
+  `gh workflow run registry-retention.yml --ref main` prints the plan only
+  (`dry_run` defaults to true); `-f dry_run=false` deletes. Each run writes the plan
+  (kept SHAs, per-repo counts) to its step summary. The job runs only on `main`, so no
+  branch's code holds the push token's delete right. A deleted manifest's layers are
+  freed when the registry's garbage collection runs, not at the DELETE. Consequence:
+  `pnpm deploy:prod --rollback <sha>` can reach only the last 3 releases — an older
+  SHA's recorded digests are gone. Policy and planner:
+  `tools/deploy/lib/registry-retention.mjs`; runner: `tools/deploy/registry-retention.mjs`.
+
 - **Stage and production both consume it; neither box builds.** The shared mechanics
   live in `tools/deploy/lib/registry.mjs`: the commit's `images-<sha>.json` is resolved
   on the operator side, then the box logs in with its pull token, pulls each recorded
@@ -281,7 +305,8 @@ Timeweb Cloud container registry (#2981, tech spec
     ds-api-prod and refuses with this section as the pointer if not. The api-prod
     compose has no `build:` and tags every `ds-*` image `${DEPLOY_SHA:?}`; an app-only
     rollback whose target tags were pruned pulls that SHA's recorded release digests
-    (`tools/deploy/README.md` → steps 1 and 5).
+    (`tools/deploy/README.md` → steps 1 and 5) — present in the registry for the last
+    3 releases only (Retention, below).
   - **Provisioning the pull token on a box** is a once-per-box step by the lead: the
     read-only pull token goes to `/etc/ds-platform/registry-pull-token` as `root:root`
     `0600`, never through chat, an env file or this repo. Check without printing it:

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   expect,
+  request,
   type Browser,
   type BrowserContext,
   type BrowserContextOptions,
@@ -8,7 +9,7 @@ import {
 } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
-import { gatedPasswordLogin } from "../lib/gated-password-login.js";
+import { runGatedLoginAttempt } from "../lib/login-failure-gate.js";
 import {
   captureAddressedMailCheckpoint,
   fetchRecoveryCode,
@@ -134,11 +135,80 @@ async function passwordLogin(
     page.locator('input[autocomplete="current-password"]'),
     password,
   );
-  return gatedPasswordLogin(page, async () => {
-    const pending = captureResponse(page, "/v1/auth/login");
-    await page.getByTestId("password-login-submit").click();
-    return pending;
-  });
+  let attemptFailed = false;
+  return runGatedLoginAttempt(
+    {
+      close: async () => {
+        let closingFailed = false;
+        let closing: Awaited<ReturnType<typeof request.newContext>>;
+        try {
+          closing = await request.newContext({
+            baseURL: base,
+            ...(state.httpCredentials
+              ? { httpCredentials: state.httpCredentials }
+              : {}),
+          });
+        } catch {
+          if (!attemptFailed)
+            throw new Error("Owned login closure context could not be created");
+          test
+            .info()
+            .annotations.push({
+              type: "cleanup-failed",
+              description:
+                "Owned login closure context failed; original password attempt failure retained.",
+            });
+          return;
+        }
+        try {
+          const accepted = await closing.post("/v1/auth/login", {
+            data: { identifier: state.email, password: state.acceptedPassword },
+          });
+          expect(
+            accepted.status(),
+            "owned successful sign-in closes the failure window",
+          ).toBe(200);
+        } catch {
+          closingFailed = true;
+        } finally {
+          try {
+            const revoked = await closing.post("/v1/auth/logout");
+            expect(
+              revoked.status(),
+              "exact owned closing session is revoked",
+            ).toBe(200);
+          } catch {
+            closingFailed = true;
+          } finally {
+            await closing.dispose().catch(() => {
+              closingFailed = true;
+            });
+          }
+        }
+        if (closingFailed) {
+          if (!attemptFailed)
+            throw new Error(
+              "Owned successful-login closure or its session cleanup failed",
+            );
+          test.info().annotations.push({
+            type: "cleanup-failed",
+            description:
+              "Owned login closure failed; original password attempt failure retained; lead must inspect scoped cleanup.",
+          });
+        }
+      },
+    },
+    async () => {
+      try {
+        const pending = captureResponse(page, "/v1/auth/login");
+        await page.getByTestId("password-login-submit").click();
+        return await pending;
+      } catch (error) {
+        attemptFailed = true;
+        throw error;
+      }
+    },
+  );
 }
 
 Given(

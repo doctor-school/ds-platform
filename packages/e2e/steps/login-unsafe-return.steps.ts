@@ -180,9 +180,12 @@ When(
     await state.page.getByRole("button", { name: /Войти|Продолжить/i }).click();
     const accepted = await pending;
     expect(
-      { status: accepted.response.status(), body: accepted.body },
+      {
+        status: accepted.response.status(),
+        acknowledgementMatches: accepted.body === '{"status":"authenticated"}',
+      },
       "real password login succeeds",
-    ).toEqual({ status: 200, body: '{"status":"authenticated"}' });
+    ).toEqual({ status: 200, acknowledgementMatches: true });
     // Academy host config landing.afterLogin and HOSTS.academy.eventsPath agree.
     await state.page.waitForURL(
       (url) =>

@@ -21,6 +21,8 @@ import {
   sensitivity,
   breakEvenSeries,
   budgetFit,
+  placementDirectory,
+  MANDATORY_ARTICLES,
   pick,
   GRADES,
   GRADE_MIX,
@@ -45,7 +47,6 @@ const {
   useRef,
   useContext,
   useCallback,
-  useDeferredValue,
   memo,
   createContext,
 } = React;
@@ -73,24 +74,80 @@ const PRESET_LABEL = {
   model: "Как в модели",
 };
 const VP_LABEL = { own: "своя команда", contractor: "подрядчик" };
+const MODE_LABEL = { fixed: "фиксированное", dynamic: "динамическое" };
+const TIER_LABEL = {
+  anchor: "якорное",
+  niche: "нишевое",
+  both: "якорное или нишевое",
+};
+const PLACEMENT_FIELD_LABEL = {
+  weight: "вес",
+  creation_share: "доля создания",
+  replacement_hours: "часы смены",
+};
 
 // One map of every term and abbreviation the page uses; <Term> shows it as a styled tooltip on hover
 // and on keyboard focus (a native title is neither styled nor reachable from the keyboard).
 const GLOSSARY = {
   себестоимость:
     "Полная себестоимость единицы: прямые часы × ставки + накладные + резерв актуализации + внешние затраты + доля пула инструментов + неиспользованная мощность штата.",
-  цена: "Сумма, которую платит спонсор за продукт: аванс + оплата за контакты по плану.",
-  прибыль: "Цена − полная себестоимость, ₽.",
+  цена: "Сумма, которую платит партнёр за продукт: аванс + оплата за контакты по плану (с лимитом партнёра).",
+  прибыль:
+    "Выручка продукта − полная себестоимость со сменами мест, при плане контактов: выручка = аванс + оплата за контакты − фонд DS.",
   наценка:
     "Наценка (markup) = прибыль ÷ себестоимость. Потолка нет: наценка 50 % — это маржа ≈ 33 %.",
   маржа:
     "Маржа (margin) = прибыль ÷ цена. Всегда меньше 100 %; маржа 20 % — это наценка 25 %.",
   множитель: "Множитель = цена ÷ себестоимость. Множитель 1,3 = наценка 30 %.",
   "ведущий способ":
-    "Чем задаётся цена: множителем, наценкой, маржой или суммой в ₽. Остальные метрики пересчитываются из неё.",
+    "Чем задаётся наценка фиксированных мест: множителем, наценкой, маржой или суммой в ₽. Сумма фиксированного места = доля создания × себестоимость × множитель.",
   аванс:
-    "Часть цены, которую спонсор платит независимо от результата: цена − план контактов × цена контакта.",
-  результат: "Часть цены за контакты: контакты × цена контакта.",
+    "Деньги партнёра на создание, независимо от контактов: Σ фиксированных мест + доля аванса × обязательная часть. Сверх оплаты за контакты, не в зачёт её.",
+  результат:
+    "Часть цены за контакты: по каждому динамическому месту контакты × цена контакта × вес места, не выше лимита партнёра.",
+  "рекламное место":
+    "Место продукта партнёра в уроке из справочника мест: фон, крупный план, сюжетная ветка, научная рубрика, дополнительные активности. У места — вес, доля создания и часы смены.",
+  "фиксированное место":
+    "Рекламное место, оплаченное один раз: доля создания × себестоимость × множитель цены. Сумма входит в аванс; место остаётся в эпизоде навсегда.",
+  "динамическое место":
+    "Рекламное место, оплачиваемое за контакты за срок размещения: контакты × цена контакта × вес места. После срока место переходит к следующему партнёру или к нейтральной версии DS.",
+  "вес места":
+    "Ценность места относительно полного контакта: цена контакта места = цена контакта × вес. Якорные места легче, нишевые — тяжелее.",
+  "доля создания":
+    "Какая часть себестоимости эпизода приходится на создание этого места (кадры, генерация, монтаж).",
+  "смена места":
+    "Операция «Сменить рекламное место»: бриф → перегенерация эпизода → рендер → загрузка → отметка в отчёте партнёру. Две смены за срок (в начале и в конце) — наша затрата, партнёру не выставляется.",
+  "срок размещения":
+    "Срок динамического места, не меньше квартала; контакты «мало – план – много» считаются за срок.",
+  "обязательная часть":
+    "Затраты, без которых урок не выйдет: ФОТ штата, внештатные исполнители, эксперты и спикеры, внешние затраты.",
+  "доля аванса":
+    "Какую долю обязательной части партнёр платит авансом сверх фиксированных мест: 0 — без предоплаты, 1 — вся обязательная часть.",
+  "вклад инвестора":
+    "Чего не покрывает аванс: полная себестоимость со сменами мест − аванс. Возвращается инвестору первым из выручки за контакты.",
+  "фонд DS":
+    "Доля валовой выручки за контакты, которая уходит первой — на офлайн-мероприятия и бесплатное образование DS (по умолчанию 2/7). Копится по всему продукту.",
+  окупаемость:
+    "Фаза до возврата вклада инвестора: выручка за контакты после фонда DS сначала гасит номинал вклада.",
+  "профит-шеринг":
+    "Делёж прибыли после окупаемости в долях a : b : c : d (инвесторы 4, автор 2, пул команды 1, BBM 0): x = (прибыль − роялти) ÷ (a + b + c + d).",
+  роялти: "Доля r прибыли автору сверху его доли b: роялти = r × прибыль.",
+  "пул команды":
+    "Доля c прибыли команде продукта; внутри — по вкладу «часы × ставка». Зарплаты при этом остаются в себестоимости.",
+  "фонд развития BBM":
+    "Часть инвесторской доли a·x сверх возврата первоинвестору (по канону 3 из 4).",
+  "офлайн-мероприятие":
+    "Очное мероприятие из фонда DS: клуб, практическая школа или кадаверный курс. Мест = min(максимум группы, фонд ÷ цена участника); проводится от минимальной группы.",
+  очередь:
+    "Врачи, которые захотят на офлайн, но не получат места: онлайн-участники × конверсия − места.",
+  "лимит партнёра":
+    "Сколько партнёр платит за контакты одного динамического места за срок. Лимит жёсткий: контакты сверх него не оплачиваются, место переходит к следующему партнёру очереди или к нейтральному DS.",
+  "точка переключения":
+    "Число контактов, на котором оплата места упирается в лимит партнёра: лимит ÷ (цена контакта × вес места).",
+  "якорное место":
+    "Место в любом уроке (фон, крупный план) — дешевле, ниже вес. Нишевое — только там, где сюжет про метод лечения, — дороже.",
+  "рекламная маркировка":
+    "Нужна ли пометка «реклама» у места по закону о рекламе.",
   контакт:
     "Врач, который досмотрел или дослушал продукт либо участвовал в живом эфире — то, за что платит спонсор.",
   "цена контакта":
@@ -98,11 +155,9 @@ const GLOSSARY = {
   "тип контакта":
     "Каким способом врач встретился с продуктом (эфир, просмотр урока, серия). Вес типа отражает ценность контакта.",
   безубыточность:
-    "Сколько контактов нужно, чтобы выручка покрыла полную себестоимость: (себестоимость − аванс) ÷ цена контакта.",
-  "потолок бюджета":
-    "Сколько спонсор готов заплатить за продукт. Жёсткий — выручка не выше потолка; со скидкой — контакты сверх потолка оплачиваются со скидкой.",
+    "Сколько контактов нужно, чтобы аванс + оплата за контакты после фонда DS покрыли полную себестоимость со сменами мест (вклад инвестора возвращён).",
   "золотая цена":
-    "Полоса разумной цены: от полной себестоимости (маржа 0) до меньшего из верхней границы рынка и потолка бюджета. Задана правилом, а не опросом покупателей.",
+    "Полоса разумной цены: от полной себестоимости со сменами мест (маржа 0) до меньшего из верхней границы рынка и максимума партнёра (аванс + лимит × динамические места). Задана правилом, а не опросом покупателей.",
   "рыночный ориентир":
     "Диапазон цен похожих продуктов на рынке (rates.yaml market_references); можно поправить двумя полями.",
   "разрыв с рынком":
@@ -170,12 +225,10 @@ const GLOSSARY = {
     "Себестоимость без неиспользованной мощности штата: только загруженные часы.",
   "с полным фондом оплаты":
     "Себестоимость с неиспользованной мощностью штата — рабочая база цены.",
-  "авторская доля":
-    "Доля маржи продукта автору курса — распределение прибыли, не себестоимость.",
   "расширенная кампания":
     "Опция пакета: платное привлечение врачей — цена привлечения контакта × контакты плана; работа кампании пока чёрный ящик.",
   торнадо:
-    "Каждый драйвер меняется отдельно, остальные остаются как есть; бары отсортированы по размаху. Взаимодействия драйверов не показывает.",
+    "Каждый драйвер меняется отдельно, остальные остаются как есть; бар идёт от значения метрики при низком входе до значения при высоком, бары отсортированы по размаху. Взаимодействия драйверов не показывает.",
   "масштаб статьи":
     "Множитель к статье затрат: 100 % — как в модели, 80 % — бюджет на статью на 20 % меньше.",
   "₽/ч": "Рублей за час.",
@@ -192,7 +245,7 @@ const GLOSSARY = {
   "продакшн видеоподкаста":
     "Своя команда — свои часы монтажа, обложек и клипов и студийный час с работой студии. Подрядчик — пять компонентов подрядчика вместо этих часов и голая аренда студии.",
   "период счетов":
-    "Как часто выставляются счета за срок производства: раз в месяц или в квартал.",
+    "Как часто партнёру выставляются счета за фактические контакты за срок размещения: раз в месяц или в квартал.",
   КП: "Коммерческое предложение.",
   база: "Снимок метрик, с которым сравниваются текущие: модель без правок или запомненный кнопкой «Запомнить как базу».",
 };
@@ -351,7 +404,10 @@ function baseValue(model, key) {
     case "fte":
       return model.teamRoles.find((m) => m.role === name)?.fte ?? null;
     case "var":
-      return model.vars[name];
+      // The offer is a list of { placement, mode } records: compute validates it itself.
+      return name === "placement_offer" ? undefined : model.vars[name];
+    case "placement":
+      return model.placements[name]?.[field];
     case "param":
       return model.params[name]?.[field];
     case "external":
@@ -492,6 +548,8 @@ function describer(model, inputs) {
         return `${productLabel(id)}: ${String(field).replaceAll("_", " ")}`;
       case "external":
         return `Внешняя затрата: ${model.externals[id]?.name ?? id}`;
+      case "placement":
+        return `Рекламное место «${model.placements[id]?.name ?? id}»: ${PLACEMENT_FIELD_LABEL[field] ?? field}`;
       case "plan":
         return `План: ${productLabel(id)} в месяц`;
       default:
@@ -511,6 +569,15 @@ function describer(model, inputs) {
   };
   const value = (key, v) => {
     const [kind, id, field] = key.split(":");
+    if (kind === "var" && id === "placement_offer")
+      return Array.isArray(v) && v.length
+        ? v
+            .map(
+              (o) =>
+                `${model.placements[o?.placement]?.name ?? o?.placement} (${MODE_LABEL[o?.mode] ?? o?.mode})`,
+            )
+            .join("; ")
+        : "без рекламных мест";
     if (kind === "var" && VAR_OPTIONS[id])
       return VAR_OPTIONS[id].find(([k]) => k === (v ?? ""))?.[1] ?? shape(v);
     if (kind === "engage")
@@ -1405,7 +1472,8 @@ function metricsOf(r) {
   return {
     cost: p.cost,
     price: p.price,
-    profit: p.price - p.cost,
+    // A snapshot remembered by an older page has no outcomes: its profit is unknown, not zero.
+    profit: p.outcomes?.plan.margin ?? null,
     markup: p.derived.markup,
     margin: p.derived.margin,
     multiplier: p.derived.multiplier,
@@ -1507,13 +1575,17 @@ const short = (v) =>
 function GoldenBand({ r }) {
   const g = r.golden;
   const mk = r.market;
-  const cap = r.price.budgetCap.value;
+  const cap = r.price.budgetCap.partnerTotal;
   const marks = [
-    { v: r.price.cost, label: "себестоимость (пол)", cls: "m-cost" },
+    {
+      v: r.price.totalCost,
+      label: "себестоимость со сменами (пол)",
+      cls: "m-cost",
+    },
     { v: r.price.price, label: "цена", cls: "m-price" },
     mk && { v: mk.min, label: "рынок мин", cls: "m-market" },
     mk && { v: mk.max, label: "рынок макс", cls: "m-market" },
-    cap != null && { v: cap, label: "потолок бюджета", cls: "m-cap" },
+    cap != null && { v: cap, label: "максимум партнёра", cls: "m-cap" },
   ].filter(Boolean);
   const top = niceMax(Math.max(...marks.map((m) => m.v)) * 1.08);
   const L = 16;
@@ -1522,8 +1594,19 @@ function GoldenBand({ r }) {
   const H = 70 + marks.length * 16;
   const sorted = [...marks].sort((a, b) => a.v - b.v);
   return view`<figure class="chart" data-testid="chart-golden">
-    <svg viewBox=${`0 0 ${W} ${H}`} role="img" aria-label="Золотая цена: полоса, цена, рынок и потолок бюджета">
-      ${mk ? view`<rect x=${x(mk.min)} y="20" width=${Math.max(1, x(mk.max) - x(mk.min))} height="10" class="c-market" />` : null}
+    <svg viewBox=${`0 0 ${W} ${H}`} role="img" aria-label="Золотая цена: полоса, цена, рынок и максимум партнёра">
+      ${
+        mk
+          ? view`<rect x=${x(mk.min)} y="20" width=${Math.max(1, x(mk.max) - x(mk.min))} height="10" class="c-market" />
+              <text
+                x=${(x(mk.min) + x(mk.max)) / 2}
+                y="14"
+                text-anchor="middle"
+                class="lbl m-market"
+                data-testid="market-band-label"
+              >рыночный ориентир</text>`
+          : null
+      }
       ${
         g.band
           ? view`<rect x=${x(g.band[0])} y="34" width=${Math.max(1, x(g.band[1]) - x(g.band[0]))} height="14" class="c-band" />`
@@ -1551,10 +1634,10 @@ function GoldenBand({ r }) {
           ? view`Полоса <${Term} t="золотая цена">золотой цены<//>: ${rub(g.band[0])} – ${rub(g.band[1])};
               цена ${g.priceInBand ? view`<b class="ok">в полосе</b>` : view`<b class="err">вне полосы</b>`}.`
           : g.max == null
-            ? "Верхней границы нет: нет рыночного ориентира и потолка бюджета."
-            : view`<b class="err">Полосы нет:</b> себестоимость ${rub(g.min)} выше потолка ${rub(g.max)} — продукт дороже рынка или бюджета.`
+            ? "Верхней границы нет: нет рыночного ориентира и лимита партнёра."
+            : view`<b class="err">Полосы нет:</b> себестоимость ${rub(g.min)} выше потолка ${rub(g.max)} — продукт дороже рынка или лимита партнёра.`
       }
-      ${" "}Серая полоса — рыночный ориентир, зелёная — золотая цена.
+      ${" "}Серая полоса — рыночный ориентир, зелёная — золотая цена; максимум партнёра — аванс + лимит × динамические места.
     </figcaption>
   </figure>`;
 }
@@ -1614,10 +1697,10 @@ function Tornado({ sens, metric }) {
 /** Break-even by contacts: studio cost (flat), revenue = advance + contacts × price per contact. */
 function BreakEven({ r, series }) {
   const p = r.price;
-  const cap = p.budgetCap.value;
+  const sw = p.budgetCap.switchContacts;
   const top = series.at(-1).contacts || 1;
   const ymax = niceMax(
-    Math.max(...series.map((s) => s.revenue), p.cost, cap ?? 0) * 1.08,
+    Math.max(...series.map((s) => s.revenue), p.totalCost) * 1.08,
   );
   const L = 64;
   const R = W - 16;
@@ -1652,13 +1735,23 @@ function BreakEven({ r, series }) {
             </g>`
           : null,
       )}
-      ${cap != null && cap <= ymax ? view`<line x1=${L} x2=${R} y1=${y(cap)} y2=${y(cap)} class="mark m-cap" /><text x=${R} y=${y(cap) - 4} text-anchor="end" class="lbl m-cap">потолок бюджета ${rub(cap)}</text>` : null}
-      <line x1=${L} x2=${R} y1=${y(p.cost)} y2=${y(p.cost)} class="line-cost" />
-      <text x=${L + 4} y=${y(p.cost) - 4} class="lbl m-cost">себестоимость ${rub(p.cost)}</text>
+      ${
+        sw != null && sw <= top
+          ? view`<line x1=${x(sw)} x2=${x(sw)} y1=${T + 14} y2=${B} class="mark m-cap" />
+              <text
+                x=${x(sw) < L + 160 ? x(sw) + 4 : x(sw) - 4}
+                y=${B - 6}
+                text-anchor=${x(sw) < L + 160 ? "start" : "end"}
+                class="lbl m-cap"
+              >лимит партнёра: ${f0.format(Math.ceil(sw))}</text>`
+          : null
+      }
+      <line x1=${L} x2=${R} y1=${y(p.totalCost)} y2=${y(p.totalCost)} class="line-cost" />
+      <text x=${L + 4} y=${y(p.totalCost) - 4} class="lbl m-cost">себестоимость со сменами ${rub(p.totalCost)}</text>
       <path d=${path} class="line-revenue" />
       ${
         be != null && be <= top
-          ? view`<circle cx=${x(be)} cy=${y(p.cost)} r="5" class="dot" />`
+          ? view`<circle cx=${x(be)} cy=${y(p.totalCost)} r="5" class="dot" />`
           : null
       }
       <line x1=${L} x2=${R} y1=${B} y2=${B} class="axis" />
@@ -1667,8 +1760,9 @@ function BreakEven({ r, series }) {
     <figcaption class="small">
       <b>${be == null ? "Безубыточность не достигается" : `Безубыточность: ${f0.format(Math.ceil(be))} контактов`}</b>
       <span class="muted">
-        ${" "}— синяя линия: выручка = аванс ${rub(p.advance)} + контакты ×${" "}
-        ${rub(p.pricePerContact.value ?? 0)}; серая — себестоимость.</span
+        ${" "}— синяя линия: выручка продукта = аванс ${rub(p.advance)} + оплата за контакты${" "}
+        (${rub(p.rubPerContact)} за контакт по всем динамическим местам, до лимита партнёра) − фонд DS;
+        ${" "}серая — себестоимость со сменами мест.</span
       >
     </figcaption>
   </figure>`;
@@ -1683,16 +1777,20 @@ function CostVsMargin({ r, base }) {
     { k: "externals", label: "внешние", v: q.externalCost },
     { k: "tools", label: "инструменты", v: q.tools.cost },
     { k: "idle", label: "простой штата", v: q.idle.cost },
+    { k: "replacement", label: "смены мест", v: q.price.replacementCost ?? 0 },
+    { k: "dsFund", label: "фонд DS", v: q.price.outcomes?.plan.dsFund ?? 0 },
   ];
   const parts = seg(r);
   const before = base
     ? Object.fromEntries(seg(base).map((s) => [s.k, s.v]))
     : {};
-  const profit = r.price.price - r.price.cost;
-  const cap = r.price.budgetCap.value;
+  // Price = total cost with replacements + DS fund + profit at the plan contacts.
+  const profit = r.price.outcomes.plan.margin;
+  const floor = r.price.totalCost + r.price.outcomes.plan.dsFund;
+  const cap = r.price.budgetCap.partnerTotal;
   const mk = r.market;
   const top = niceMax(
-    Math.max(r.price.price, r.price.cost, mk?.max ?? 0, cap ?? 0) * 1.05,
+    Math.max(r.price.price, floor, mk?.max ?? 0, cap ?? 0) * 1.05,
   );
   const L = 16;
   const R = W - 16;
@@ -1711,8 +1809,8 @@ function CostVsMargin({ r, base }) {
       )}
       ${
         profit >= 0
-          ? view`<rect x=${x(r.price.cost)} y="18" width=${Math.max(0, x(r.price.price) - x(r.price.cost))} height="26" class="c-profit" />`
-          : view`<rect x=${x(r.price.price)} y="46" width=${x(r.price.cost) - x(r.price.price)} height="6" class="c-loss" />`
+          ? view`<rect x=${x(floor)} y="18" width=${Math.max(0, x(r.price.price) - x(floor))} height="26" class="c-profit" />`
+          : view`<rect x=${x(r.price.price)} y="46" width=${Math.max(0, x(floor) - x(r.price.price))} height="6" class="c-loss" />`
       }
       ${mk ? view`<rect x=${x(mk.min)} y="8" width=${Math.max(1, x(mk.max) - x(mk.min))} height="6" class="c-market" />` : null}
       ${cap != null ? view`<line x1=${x(cap)} x2=${x(cap)} y1="4" y2="58" class="mark m-cap" />` : null}
@@ -1732,7 +1830,7 @@ function CostVsMargin({ r, base }) {
       })}
       <li><i class=${profit >= 0 ? "c-profit" : "c-loss"}></i>${profit >= 0 ? "прибыль" : "убыток"} ${rub(profit)}</li>
       ${mk ? view`<li><i class="c-market"></i>рынок ${rub(mk.min)} – ${rub(mk.max)}</li>` : null}
-      ${cap != null ? view`<li><i class="m-cap-key"></i>потолок бюджета ${rub(cap)}</li>` : null}
+      ${cap != null ? view`<li><i class="m-cap-key"></i>максимум партнёра ${rub(cap)}</li>` : null}
     </ul>
   </figure>`;
 }
@@ -1750,7 +1848,7 @@ function Matrix({ model, productName, ctx, setCtx }) {
               k,
               cost: p.cost,
               price: p.price,
-              margin: p.derived.margin,
+              margin: p.outcomes.plan.marginShare,
             };
           } catch {
             return { g, k, cost: null, price: null, margin: null };
@@ -1781,7 +1879,7 @@ function Matrix({ model, productName, ctx, setCtx }) {
                     <button class="cell" onClick=${() => setCtx({ grade: c.g, course: c.k })}>
                       <span>цена ${rub(c.price)}</span>
                       <span class="small muted">себест. ${rub(c.cost)}</span>
-                      <span class="small muted">маржа ${pct(c.margin)}</span>
+                      <span class="small muted">маржа при плане ${pct(c.margin)}</span>
                     </button>
                   </td>`,
               )}
@@ -1831,13 +1929,18 @@ const Drivers = memo(function Drivers({
         )}
       </span>
     </div>
+    <ul class="chart-legend small" data-testid="tornado-legend">
+      <li><span class="key c-low"></span>метрика при низком значении драйвера</li>
+      <li><span class="key c-high"></span>метрика при высоком значении драйвера</li>
+      <li>вертикальная линия — база, текущее значение метрики</li>
+      <li>числа на концах — значение метрики на краях; длина бара — размах</li>
+    </ul>
     ${sens ? view`<${Tornado} sens=${sens} metric=${metric} />` : view`<p class="err">Чувствительность не посчитана.</p>`}
     <p class="small muted">
       Каждый драйвер меняется отдельно, остальные — как сейчас. Грейд и ход
       работы — свои крайние значения; статьи затрат — ±${pct(step)} к масштабу
-      статьи; рынок — его мин и макс. <span class="key c-low"></span> низкое
-      значение входа, <span class="key c-high"></span> высокое. Взаимодействие
-      драйверов торнадо не показывает — для него матрица ниже.
+      статьи; рынок — его мин и макс. Взаимодействие драйверов торнадо не
+      показывает — для него матрица ниже.
     </p>
     <h3>Себестоимость и маржа</h3>
     <${CostVsMargin} r=${r} base=${base} />
@@ -1912,7 +2015,6 @@ function PriceBlock({ r, productName, model }) {
         PRICE_MODES.map((m) => [key(m), m === mode ? value : undefined]),
       ),
     );
-  const pc = p.pricePerContact;
   return view`<section class="card" data-testid="price">
     <h2><${Term} t="цена">Цена<//></h2>
     <div class="form">
@@ -1942,38 +2044,51 @@ function PriceBlock({ r, productName, model }) {
           <td class="num"><b>${rub(p.cost)}</b></td>
           <td class="small muted">полная, с простоем штата; «по загрузке» ${rub(r.total.byLoad)}</td>
         </tr>
+        ${
+          p.replacementCost
+            ? view`<tr>
+                <td>+ <${Term} t="смена места">смены мест<//></td>
+                <td class="num">${rub(p.replacementCost)}</td>
+                <td class="small muted">${`итого ${rub(p.totalCost)} — наша затрата, партнёру не выставляется`}</td>
+              </tr>`
+            : null
+        }
         <tr>
           <td><${Term} t="цена">Цена<//></td>
           <td class="num"><b>${rub(p.price)}</b></td>
           <td class="small muted">
             <div class="line">
-              = <${Term} t="аванс">аванс<//> ${rub(p.advance)} (${pct(p.advanceShare)})
+              = <${Term} t="аванс">аванс<//> ${rub(p.advance)}
             </div>
             <div class="line two">
-              + <${Term} t="результат">результат<//>:${" "}
-              ${`${f0.format(p.contacts.plan)} контактов × ${rub(pc.value ?? 0)} = ${rub(p.resultAtPlan)}`}
+              + <${Term} t="результат">оплата за контакты<//> при плане ${f0.format(p.contacts.plan)}:${" "}
+              ${rub(p.outcomes.plan.gross)}
             </div>
           </td>
         </tr>
         <tr>
           <td><${Term} t="прибыль">Прибыль<//></td>
-          <td class="num">${rub(p.price - p.cost)}</td>
-          <td class="small muted">цена − себестоимость</td>
+          <td class="num">
+            <span class=${p.outcomes.plan.margin < 0 ? "err" : ""}>${rub(p.outcomes.plan.margin)}</span>
+          </td>
+          <td class="small muted">
+            аванс + оплата за контакты − <${Term} t="фонд DS">фонд DS<//> − себестоимость со сменами мест
+          </td>
         </tr>
         <tr class=${p.mode === "multiplier" ? "lead" : ""}>
           <td><${Term} t="множитель">Множитель<//></td>
           <td class="num">× ${n2(p.derived.multiplier)}</td>
-          <td class="small muted">цена ÷ себестоимость</td>
+          <td class="small muted">${view`задаёт сумму <${Term} t="фиксированное место">фиксированного места<//>`}</td>
         </tr>
         <tr class=${p.mode === "markup" ? "lead" : ""}>
           <td><${Term} t="наценка">Наценка<//></td>
           <td class="num">${pct(p.derived.markup)}</td>
-          <td class="small muted">прибыль ÷ себестоимость</td>
+          <td class="small muted">множитель − 1</td>
         </tr>
         <tr class=${p.mode === "margin" ? "lead" : ""}>
           <td><${Term} t="маржа">Маржа<//></td>
           <td class="num">${pct(p.derived.margin)}</td>
-          <td class="small muted">прибыль ÷ цена</td>
+          <td class="small muted">наценка ÷ множитель</td>
         </tr>
       </tbody>
     </table>
@@ -1992,17 +2107,6 @@ function PriceBlock({ r, productName, model }) {
       <${Row} label=${view`<${Term} t="рыночный ориентир">Рынок<//>, мин – макс`} help="пусто — у продукта нет ориентира">
         <${Field} k=${`market:${productName}`} base=${c.base.marketRefs[productName]?.rub ?? null} label="рыночный ориентир" wide=${true} unit="₽" />
       <//>
-      <${Row} label=${view`<${Term} t="потолок бюджета">Потолок бюджета<//>`} help="пусто — потолка нет">
-        <${Field} k="var:budget_cap" base=${c.base.vars.budget_cap} label="потолок бюджета спонсора" wide=${true} unit="₽" />
-        <${Field} k="var:budget_cap_mode" base=${c.base.vars.budget_cap_mode} label="вид потолка" options=${VAR_OPTIONS.budget_cap_mode} />
-      <//>
-      ${
-        c.model.vars.budget_cap_mode === "tiered"
-          ? view`<${Row} label="Скидка сверх потолка" help="доля скидки на контакты сверх потолка">
-              <${Field} k="var:budget_tier_discount" base=${c.base.vars.budget_tier_discount} label="скидка сверх потолка" />
-            <//>`
-          : null
-      }
     </div>
     ${
       r.market
@@ -2028,17 +2132,18 @@ function ContactsBlock({ r, inputs }) {
     ? inputs.rates.doctor_contacts.contact_types[pc.type]
     : null;
   const cap = p.budgetCap.value;
+  const dynamic = p.offer.filter((l) => l.rubPerContact != null);
   return view`<section class="card" data-testid="contacts">
     <h2><${Term} t="контакт">Контакты<//> и выручка</h2>
-    <p>
+    <p data-testid="contact-type">
       ${
         type
-          ? view`<${Term} t="тип контакта">Тип контакта<//>: <b>${type.label}</b>.
-              ${" "}<${Term} t="цена контакта">Цена контакта<//> <b>${rub(pc.value)}</b>${" "}
+          ? view`<${Term} t="цена контакта">Цена контакта<//> <b>${rub(pc.value)}</b>
+              ${" "}— <${Term} t="тип контакта">тип<//> «${type.label}», вес типа ${n2(pick(type.weight, "mid"))};${" "}
               <span class="small muted"
                 >${pc.source}${pc.band ? ` · полоса «${pc.band}» ${rub(pc.bandRub)} × вес ${n2(pc.weight)}` : ""}</span
               >`
-          : view`<span class="muted">У продукта нет оплаты за контакты — цена целиком аванс.</span>`
+          : view`<span class="muted">У продукта нет оплаты за контакты — партнёр платит только аванс.</span>`
       }
     </p>
     <div class="form">
@@ -2051,6 +2156,35 @@ function ContactsBlock({ r, inputs }) {
       <${Row} label="Аудитория специальности" help="выбирает полосу цены контакта">
         <${Field} k="var:audience_doctors" base=${c.base.vars.audience_doctors} label="размер аудитории" wide=${true} unit="врачей" />
       <//>
+      <${Row}
+        label=${view`<${Term} t="лимит партнёра">Лимит партнёра<//>`}
+        help="₽ за контакты одного динамического места за срок; пусто — без лимита. Лимит всегда жёсткий."
+      >
+        <${Field} k="var:budget_cap" base=${c.base.vars.budget_cap} label="лимит партнёра" wide=${true} unit="₽" />
+      <//>
+    </div>
+    <div data-testid="switch-point">
+      ${
+        cap == null
+          ? view`<p class="small muted">Лимита нет — все контакты оплачиваются.</p>`
+          : !dynamic.length
+            ? view`<p class="small muted">В предложении нет динамических мест — лимит не действует.</p>`
+            : view`<ul class="flags plain">
+                ${dynamic.map(
+                  (l) =>
+                    view`<li key=${l.placement}>
+                      «${l.name}»: <${Term} t="точка переключения">переключается<//> на${" "}
+                      <b>${f0.format(Math.ceil(l.switchContacts))} контактах</b>
+                      <span class="small muted">${` (${rub(cap)} ÷ ${rub(l.rubPerContact)} за контакт)`}</span> —
+                      дальше место у следующего партнёра или у нейтральной версии DS${
+                        l.switchContacts < p.contacts.plan
+                          ? view`; <span class="warn">план ${f0.format(p.contacts.plan)} выше лимита</span>`
+                          : null
+                      }
+                    </li>`,
+                )}
+              </ul>`
+      }
     </div>
     <h3>Исходы</h3>
     <div class="scroll">
@@ -2065,12 +2199,25 @@ function ContactsBlock({ r, inputs }) {
         </thead>
         <tbody>
           ${[
-            ["контактов", (o) => f0.format(o.contacts)],
+            ["контактов за срок", (o) => f0.format(o.contacts)],
             [
-              "цена за контакт для спонсора",
-              (o) => (o.contacts ? rub(o.revenue / o.contacts) : "—"),
+              view`<${Term} t="результат">оплата за контакты<//>`,
+              (o) => rub(o.gross),
             ],
-            ["выручка", (o) => rub(o.revenue)],
+            [
+              view`не оплачено (сверх <${Term} t="лимит партнёра">лимита<//>)`,
+              (o) => {
+                const n = Math.max(0, ...Object.values(o.unbilledContacts));
+                return n > 0
+                  ? view`<span class="warn">${f0.format(Math.ceil(n))} конт.</span>`
+                  : "—";
+              },
+            ],
+            [view`− <${Term} t="фонд DS">фонд DS<//>`, (o) => rub(o.dsFund)],
+            [
+              view`выручка продукта <span class="small muted">(аванс + остаток)</span>`,
+              (o) => rub(o.revenue),
+            ],
             [
               "прибыль",
               (o) =>
@@ -2078,17 +2225,9 @@ function ContactsBlock({ r, inputs }) {
             ],
             ["маржа", (o) => pct(o.marginShare)],
             [
-              view`<${Term} t="авторская доля">авторская доля<//>`,
-              (o) => rub(o.authorShare),
-            ],
-            [
-              view`<${Term} t="потолок бюджета">потолок бюджета<//>`,
+              "цена за контакт для партнёра",
               (o) =>
-                cap == null
-                  ? "нет"
-                  : p.advance + o.contacts * (pc.value ?? 0) > cap
-                    ? view`<span class="warn">упёрлись в потолок</span>`
-                    : view`<span class="ok">влезает</span>`,
+                o.contacts ? rub((p.advance + o.gross) / o.contacts) : "—",
             ],
           ].map(
             ([label, f], i) =>
@@ -2109,16 +2248,410 @@ function ContactsBlock({ r, inputs }) {
       <//>
       <${Row}
         label=${view`<${Term} t="период счетов">Счета<//>`}
-        help=${`срок ${f1.format(p.billing.leadMonths)} мес. · ${p.billing.invoices} ${plural(p.billing.invoices, ["счёт", "счёта", "счетов"])} по ${rub(p.billing.perInvoice)} при плане`}
+        help=${`срок размещения ${f0.format(p.billing.termMonths)} мес. · ${p.billing.invoices} ${plural(p.billing.invoices, ["счёт", "счёта", "счетов"])} по ${rub(p.billing.perInvoice)} за контакты при плане; аванс — до производства`}
         testid="billing"
       >
         <${Field} k="var:billing_period" base=${c.base.vars.billing_period} label="период счетов" options=${VAR_OPTIONS.billing_period} />
       <//>
-      <${Row} label=${view`<${Term} t="авторская доля">Авторская доля<//>`} help="доля маржи автору курса: 0,1 — 10 %; распределение прибыли, не себестоимость">
-        <${Field} k="var:author_share" base=${c.base.vars.author_share} label="авторская доля" unit="доли маржи" />
+    </div>
+  </section>`;
+}
+
+/** Three outcome columns (мало / план / много) of rows [label, (outcome) → cell]. */
+function OutcomeTable({ rows, testid, outcomes }) {
+  return view`<div class="scroll">
+    <table data-testid=${testid}>
+      <thead>
+        <tr>
+          <th></th>
+          <th class="num">мало</th>
+          <th class="num">план</th>
+          <th class="num">много</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(
+          ([label, f, cls], i) =>
+            view`<tr key=${i} class=${cls ?? ""}>
+              <td>${label}</td>
+              ${["low", "plan", "high"].map((k) => view`<td key=${k} class="num">${f(outcomes[k])}</td>`)}
+            </tr>`,
+        )}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+/** Offer builder: which directory placements the partner gets, fixed or dynamic, and the term. */
+function PlacementsBlock({ r }) {
+  const c = useContext(Ctx);
+  const p = r.price;
+  const dir = placementDirectory(c.model);
+  const offer = c.model.vars.placement_offer ?? [];
+  const chosen = new Map(offer.map((o) => [o.placement, o.mode]));
+  const lines = new Map(p.offer.map((l) => [l.placement, l]));
+  const setOffer = (map) => {
+    const next = dir
+      .filter((d) => map.has(d.id))
+      .map((d) => ({ placement: d.id, mode: map.get(d.id) }));
+    if (JSON.stringify(next) === JSON.stringify(c.base.vars.placement_offer))
+      c.reset("var:placement_offer");
+    else c.set("var:placement_offer", next);
+  };
+  const toggle = (d, on) => {
+    const map = new Map(chosen);
+    if (on) map.set(d.id, d.modes.includes("dynamic") ? "dynamic" : d.modes[0]);
+    else map.delete(d.id);
+    setOffer(map);
+  };
+  const setMode = (id, mode) => setOffer(new Map(chosen).set(id, mode));
+  const edited = Object.hasOwn(c.ov, "var:placement_offer");
+  return view`<section class="card" data-testid="placements">
+    <h2>
+      <${Term} t="рекламное место">Рекламные места<//> в предложении
+      ${edited ? view` <button class="link" onClick=${() => c.reset("var:placement_offer")}>↺ как в модели</button>` : null}
+    </h2>
+    <p class="section-note">
+      Отметьте места, которые получает партнёр, и вид оплаты:${" "}
+      <${Term} t="фиксированное место">фиксированное<//> — разовая сумма в авансе,${" "}
+      <${Term} t="динамическое место">динамическое<//> — оплата за контакты за срок.
+      ${p.episodes > 1 ? ` Эпизодов с местом: ${p.episodes} — смена места перегенерирует каждый.` : ""}
+    </p>
+    <div class="scroll">
+      <table data-testid="offer">
+        <thead>
+          <tr>
+            <th>Место</th>
+            <th>Вид</th>
+            <th class="num"><${Term} t="вес места">Вес<//></th>
+            <th class="num"><${Term} t="доля создания">Доля создания<//></th>
+            <th class="num">Партнёр платит</th>
+            <th class="num"><${Term} t="смена места">Смены за срок<//></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${dir.map((d) => {
+            const on = chosen.has(d.id);
+            const l = lines.get(d.id);
+            return view`<tr key=${d.id} class=${on ? "" : "muted"}>
+              <td>
+                <label class="pick">
+                  <input
+                    type="checkbox"
+                    checked=${on}
+                    data-testid=${`offer-${d.id}`}
+                    aria-label=${`место «${d.name}» в предложении`}
+                    onChange=${(e) => toggle(d, e.target.checked)}
+                  />
+                  <span>${d.name}</span>
+                </label>
+                <div class="small muted">
+                  <${Term} t="якорное место" extra=${`примеры места: ${d.examples}`}>${TIER_LABEL[d.tier] ?? d.tier}<//>
+                </div>
+              </td>
+              <td>
+                ${
+                  on && d.modes.length > 1
+                    ? view`<select
+                        aria-label=${`вид места «${d.name}»`}
+                        value=${chosen.get(d.id)}
+                        data-testid=${`offer-mode-${d.id}`}
+                        onChange=${(e) => setMode(d.id, e.target.value)}
+                      >
+                        ${d.modes.map((m) => view`<option key=${m} value=${m}>${MODE_LABEL[m]}</option>`)}
+                      </select>`
+                    : on
+                      ? MODE_LABEL[chosen.get(d.id)]
+                      : d.modes.map((m) => MODE_LABEL[m]).join(" / ")
+                }
+              </td>
+              <td class="num">${n2(d.weight)}</td>
+              <td class="num">${pct(d.creationShare)}${l ? view`<div class="small muted">${rub(l.creationCost)}</div>` : null}</td>
+              <td class="num">
+                ${
+                  !l
+                    ? "—"
+                    : l.mode === "fixed"
+                      ? view`${rub(l.fixedSum)}<div class="small muted">разово, в аванс</div>`
+                      : l.rubPerContact == null
+                        ? view`<span class="muted">нет оплаты за контакты</span>`
+                        : view`${rub(l.rubPerContact)}<div class="small muted">за контакт</div>`
+                }
+              </td>
+              <td class="num">
+                ${
+                  l && l.mode === "dynamic"
+                    ? view`${rub(l.replacementTotal)}
+                        <div class=${`small ${l.replacementFlag ? "warn" : "muted"}`}>
+                          ${`${l.replacements} × ${rub(l.replacementCost)}`}${l.replacementFlag ? " · дороже доли создания" : ""}
+                        </div>`
+                    : "—"
+                }
+              </td>
+            </tr>`;
+          })}
+        </tbody>
+      </table>
+    </div>
+    <div class="form">
+      <${Row} label=${view`<${Term} t="срок размещения">Срок размещения<//>`} help="динамического места; не меньше 1 квартала">
+        <${Field} k="var:placement_term_quarters" base=${c.base.vars.placement_term_quarters} label="срок размещения" unit="кварт." />
+      <//>
+      <${Row} label=${view`<${Term} t="смена места">Смен места за срок<//>`} help="в начале и в конце срока; наша затрата, партнёру не выставляется">
+        <${Field} k="var:replacements_per_term" base=${c.base.vars.replacements_per_term} label="смен места за срок" unit="смен" />
+      <//>
+    </div>
+    <p class="small muted">
+      Справочник мест (вес, доля создания, часы смены) — вкладка «Рекламные места» в деталях ниже.
+    </p>
+  </section>`;
+}
+
+/** Advance = Σ fixed placements + advance share × mandatory part; the investor covers the rest. */
+function AdvanceBlock({ r }) {
+  const c = useContext(Ctx);
+  const p = r.price;
+  const share = c.model.vars.advance_share;
+  const setShare = (v) =>
+    Math.abs(v - c.base.vars.advance_share) < 1e-9
+      ? c.reset("var:advance_share")
+      : c.set("var:advance_share", v);
+  return view`<section class="card" data-testid="advance">
+    <h2><${Term} t="аванс">Аванс<//> и <${Term} t="вклад инвестора">вклад инвестора<//></h2>
+    <div class="form">
+      <${Row}
+        label=${view`<${Term} t="доля аванса">Доля обязательной части в авансе<//>`}
+        help="0 — без предоплаты; 1 — партнёр авансом оплачивает всю обязательную часть"
+        testid="advance-share"
+      >
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          value=${share}
+          aria-label="доля обязательной части в авансе"
+          aria-valuetext=${pct(share)}
+          data-testid="slider-advance-share"
+          onInput=${(e) => setShare(Number(e.target.value))}
+          onChange=${(e) => setShare(Number(e.target.value))}
+        />
+        <${Field} k="var:advance_share" base=${c.base.vars.advance_share} label="доля аванса" unit=${`доли · ${pct(share)}`} />
+      <//>
+    </div>
+    <table class="derived">
+      <tbody>
+        <tr>
+          <td><${Term} t="фиксированное место">Фиксированные места<//></td>
+          <td class="num">${rub(p.fixedSum)}</td>
+          <td class="small muted">разовые суммы мест</td>
+        </tr>
+        <tr>
+          <td><${Term} t="обязательная часть">Обязательная часть<//></td>
+          <td class="num">${rub(p.mandatory.total)}</td>
+          <td class="small muted">
+            ${MANDATORY_ARTICLES.map((a) => `${ARTICLE_LABELS[a]} ${rub(p.mandatory[a])}`).join(" · ")}
+          </td>
+        </tr>
+        <tr class="lead">
+          <td><${Term} t="аванс">Аванс<//></td>
+          <td class="num" data-testid="advance-sum"><b>${rub(p.advance)}</b></td>
+          <td class="small muted">${`${rub(p.fixedSum)} + ${pct(share)} × ${rub(p.mandatory.total)}`}</td>
+        </tr>
+        <tr>
+          <td>Себестоимость со сменами мест</td>
+          <td class="num">${rub(p.totalCost)}</td>
+          <td class="small muted">${`${rub(p.cost)} + смены ${rub(p.replacementCost)}`}</td>
+        </tr>
+        <tr>
+          <td><${Term} t="вклад инвестора">Вклад инвестора<//></td>
+          <td class="num" data-testid="investor-contribution"><b>${rub(p.investorContribution)}</b></td>
+          <td class="small muted">
+            ${
+              p.investorContribution <= 0
+                ? "аванс покрывает себестоимость"
+                : p.investorRecoverContacts == null
+                  ? view`<span class="warn">за контакты не возвращается при текущих лимите и местах</span>`
+                  : `возвращается за ${f0.format(Math.ceil(p.investorRecoverContacts))} контактов`
+            }
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>`;
+}
+
+/** Gross contact revenue → DS fund → payback of the investor → profit-sharing a:b:c:d with royalty. */
+function DistributionBlock({ r }) {
+  const c = useContext(Ctx);
+  const p = r.price;
+  const v = c.model.vars;
+  const W = v.share_investors + v.share_author + v.share_pool + v.share_bbm;
+  const rows = [
+    [view`<${Term} t="результат">оплата за контакты<//>`, (o) => rub(o.gross)],
+    [
+      view`1. <${Term} t="фонд DS">фонд DS<//> ${pct(v.ds_fund_share)}`,
+      (o) => rub(o.dsFund),
+    ],
+    ["остаток в продукт", (o) => rub(o.net)],
+    [
+      view`2. <${Term} t="окупаемость">возврат вклада инвестора<//>`,
+      (o) =>
+        o.investorShortfall > 0
+          ? view`${rub(o.payback)}<div class="small warn">${`не хватает ${rub(o.investorShortfall)}`}</div>`
+          : rub(o.payback),
+    ],
+    [view`3. <b>прибыль к делёжу</b>`, (o) => view`<b>${rub(o.profit)}</b>`],
+    [
+      view`<${Term} t="роялти">роялти автора<//> ${pct(v.royalty)}`,
+      (o) => rub(o.royalty),
+    ],
+    [`одна доля x (из ${f0.format(W)})`, (o) => rub(o.x)],
+    [
+      view`инвесторы, a = ${f0.format(v.share_investors)}`,
+      (o) => rub(o.shares.investors),
+      "lead",
+    ],
+    ["· возврат первоинвестору", (o) => rub(o.shares.investorReturn)],
+    [
+      view`· <${Term} t="фонд развития BBM">фонд развития BBM<//>`,
+      (o) => rub(o.shares.bbmDevelopment),
+    ],
+    [
+      view`автор, b = ${f0.format(v.share_author)} + роялти`,
+      (o) => rub(o.shares.author),
+      "lead",
+    ],
+    [
+      view`<${Term} t="пул команды">пул команды<//>, c = ${f0.format(v.share_pool)}`,
+      (o) => rub(o.shares.pool),
+      "lead",
+    ],
+    [`BBM, d = ${f0.format(v.share_bbm)}`, (o) => rub(o.shares.bbm), "lead"],
+  ];
+  return view`<section class="card" data-testid="distribution">
+    <h2>Распределение выручки</h2>
+    <p class="section-note">
+      Оплата за контакты идёт по порядку: сначала <${Term} t="фонд DS">фонд DS<//>, затем${" "}
+      <${Term} t="окупаемость">возврат вклада инвестора<//>, затем${" "}
+      <${Term} t="профит-шеринг">профит-шеринг<//> ${`${f0.format(v.share_investors)} : ${f0.format(v.share_author)} : ${f0.format(v.share_pool)} : ${f0.format(v.share_bbm)}`}${" "}
+      с роялти автора. Аванс идёт на создание продукта.
+    </p>
+    <${OutcomeTable} rows=${rows} outcomes=${p.outcomes} testid="distribution-table" />
+    <div class="form">
+      <${Row} label=${view`<${Term} t="фонд DS">Доля фонда DS<//>`} help="доля валовой оплаты за контакты; канон — 2/7">
+        <${Field} k="var:ds_fund_share" base=${c.base.vars.ds_fund_share} label="доля фонда DS" unit="доли" />
+      <//>
+      <${Row} label=${view`Доли <${Term} t="профит-шеринг">профит-шеринга<//>`} help="инвесторы a · автор b · пул команды c · BBM d">
+        <${Field} k="var:share_investors" base=${c.base.vars.share_investors} label="доля инвесторов a" />
+        <${Field} k="var:share_author" base=${c.base.vars.share_author} label="доля автора b" />
+        <${Field} k="var:share_pool" base=${c.base.vars.share_pool} label="доля пула команды c" />
+        <${Field} k="var:share_bbm" base=${c.base.vars.share_bbm} label="доля BBM d" />
+      <//>
+      <${Row} label=${view`<${Term} t="роялти">Роялти автора<//>`} help="доля прибыли автору сверх его доли">
+        <${Field} k="var:royalty" base=${c.base.vars.royalty} label="роялти автора" unit="доли прибыли" />
+      <//>
+      <${Row} label="Возврат первоинвестору" help="доля инвесторской части; остальное — фонд развития BBM">
+        <${Field} k="var:investor_return_share" base=${c.base.vars.investor_return_share} label="доля возврата первоинвестору" unit="доли" />
       <//>
     </div>
   </section>`;
+}
+
+/** Offline event bought from the DS fund: seats, queue and the fund needed to clear it. */
+function OfflineBlock({ r }) {
+  const c = useContext(Ctx);
+  const p = r.price;
+  const o = p.outcomes;
+  const plan = o.plan.offline;
+  const toMin =
+    o.plan.dsFund > 0 ? Math.ceil(plan.fundForMinGroup / o.plan.dsFund) : null;
+  const rows = [
+    [
+      view`<${Term} t="фонд DS">фонд DS<//> этого продукта`,
+      (x) => rub(x.offline.fund),
+    ],
+    ["хватает на участников", (x) => f0.format(x.offline.affordable)],
+    [
+      "мест на мероприятии",
+      (x) =>
+        x.offline.held
+          ? view`<b class="ok">${f0.format(x.offline.seats)}</b>`
+          : view`<span class="warn">не проводится</span>`,
+    ],
+    ["хотят прийти", (x) => f0.format(Math.round(x.offline.demand))],
+    [
+      view`<${Term} t="очередь">очередь<//>`,
+      (x) => f0.format(Math.round(x.offline.queue)),
+    ],
+    ["фонд, чтобы закрыть очередь", (x) => rub(x.offline.fundToClearQueue)],
+  ];
+  return view`<section class="card" data-testid="offline">
+    <h2><${Term} t="офлайн-мероприятие">Офлайн-мероприятие<//> из фонда DS</h2>
+    <div class="form">
+      <${Row} label="Формат" help=${`${rub(plan.costPerParticipant)} на участника · группа ${plan.groupMin}–${plan.groupMax}`}>
+        <${Field} k="var:offline_format" base=${c.base.vars.offline_format} label="формат офлайн-мероприятия" options=${VAR_OPTIONS.offline_format} />
+      <//>
+      <${Row} label="Онлайн-участников" help="пусто — контакты продукта на том же уровне «мало – план – много»">
+        <${Field} k="var:offline_online_participants" base=${c.base.vars.offline_online_participants} label="онлайн-участников" wide=${true} unit="врачей" />
+      <//>
+    </div>
+    <${OutcomeTable} rows=${rows} outcomes=${o} testid="offline-table" />
+    <p class="small" data-testid="offline-note">
+      Фонд DS копится по всему продукту и по всем продуктам направления, а не по одному уроку.${" "}
+      На минимальную группу ${`(${plan.groupMin} чел.)`} нужно ${rub(plan.fundForMinGroup)}${
+        toMin == null
+          ? " — у продукта нет оплаты за контакты, фонд не пополняется."
+          : toMin <= 1
+            ? " — фонда этого продукта при плане хватает."
+            : ` — это фонд ${toMin} ${plural(toMin, ["такого продукта", "таких продуктов", "таких продуктов"])} при плане.`
+      }
+    </p>
+  </section>`;
+}
+
+/** Placement directory (products.yaml placements): weight, creation share and switch hours are editable. */
+function PlacementsPanel() {
+  const c = useContext(Ctx);
+  return view`<div class="scroll">
+    <table data-testid="placement-directory">
+      <thead>
+        <tr>
+          <th>Место</th>
+          <th>Виды</th>
+          <th><${Term} t="вес места">Вес<//></th>
+          <th><${Term} t="доля создания">Доля создания<//></th>
+          <th><${Term} t="смена места">Часы смены<//></th>
+          <th><${Term} t="рекламная маркировка">Маркировка<//></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${placementDirectory(c.base).map(
+          (d) =>
+            view`<tr key=${d.id}>
+              <td>
+                ${d.name} <span class="small muted">${d.category === d.name ? "" : `· ${d.category}`}</span>
+                <div class="small muted">${TIER_LABEL[d.tier] ?? d.tier} · ${d.examples}</div>
+                <div class="small muted">${d.basis ?? ""}</div>
+              </td>
+              <td>${d.modes.map((m) => MODE_LABEL[m]).join(" / ")}</td>
+              <td><${Field} k=${`placement:${d.id}:weight`} base=${d.weight} label=${`вес места ${d.name}`} /></td>
+              <td><${Field} k=${`placement:${d.id}:creation_share`} base=${d.creationShare} label=${`доля создания места ${d.name}`} /></td>
+              <td>
+                <${Field}
+                  k=${`placement:${d.id}:replacement_hours`}
+                  base=${d.replacementHours}
+                  label=${`часы смены места ${d.name}`}
+                  slots=${Array.isArray(d.replacementHours) ? COURSE_SLOTS[d.replacementHours.length] : undefined}
+                  unit="ч"
+                />
+              </td>
+              <td>${d.adLabel}</td>
+            </tr>`,
+        )}
+      </tbody>
+    </table>
+  </div>`;
 }
 
 /** Level 1 controls that belong to the product: video-podcast production, extended campaign. */
@@ -2193,8 +2726,8 @@ function BudgetPanel({ r, model, ctx }) {
       <thead>
         <tr>
           <th>Статья</th>
-          <th>Масштаб</th>
-          <th class="num"></th>
+          <th>Масштаб, %</th>
+          <th class="num">%</th>
           <th class="num">Сумма в единице</th>
         </tr>
       </thead>
@@ -2636,9 +3169,10 @@ const VAR_OPTIONS = {
     ["msp_priority", "МСП"],
   ],
   price_mode: PRICE_MODES.map((m) => [m, PRICE_MODE_LABEL[m]]),
-  budget_cap_mode: [
-    ["hard", "жёсткий потолок"],
-    ["tiered", "сверх потолка — со скидкой"],
+  offline_format: [
+    ["club", "клуб"],
+    ["school", "практическая школа"],
+    ["cadaver", "кадаверный курс"],
   ],
   billing_period: [
     ["month", "раз в месяц"],
@@ -2841,10 +3375,20 @@ const PRICE_VARS = [
   "audience_doctors",
   "price_per_contact",
   "budget_cap",
-  "budget_cap_mode",
-  "budget_tier_discount",
   "billing_period",
-  "author_share",
+  "placement_offer",
+  "placement_term_quarters",
+  "replacements_per_term",
+  "advance_share",
+  "ds_fund_share",
+  "share_investors",
+  "share_author",
+  "share_pool",
+  "share_bbm",
+  "royalty",
+  "investor_return_share",
+  "offline_format",
+  "offline_online_participants",
   "market_gap_threshold",
   "sensitivity_step",
   "extended_campaign",
@@ -2862,6 +3406,7 @@ function tabOf(key) {
     return "experts";
   if (kind === "param") return "params";
   if (kind === "external") return "externals";
+  if (kind === "placement") return "placements";
   if (
     kind === "fte" ||
     kind === "plan" ||
@@ -2882,6 +3427,7 @@ const TABS = [
   ["loops", "Петли одобрения"],
   ["params", "Параметры продукта"],
   ["externals", "Внешние затраты"],
+  ["placements", "Рекламные места"],
   ["tools", "Инструменты"],
   ["price", "Цена и контакты"],
   ["vars", "Прочие переменные"],
@@ -2922,9 +3468,10 @@ function Calibration({ r, plan, model, inputs, productName, ctx }) {
     loops: () => view`<${LoopsPanel} ctx=${ctx} />`,
     params: () => view`<${ParamsPanel} productName=${productName} />`,
     externals: () => view`<${ExternalsPanel} />`,
+    placements: () => view`<${PlacementsPanel} />`,
     tools: () => view`<${VariablesPanel} inputs=${inputs} only=${TOOL_VARS} />`,
     price: () =>
-      view`<${VariablesPanel} inputs=${inputs} only=${PRICE_VARS} />`,
+      view`<${VariablesPanel} inputs=${inputs} only=${PRICE_VARS} skip=${["placement_offer"]} />`,
     vars: () =>
       view`<${VariablesPanel}
         inputs=${inputs}
@@ -3170,14 +3717,6 @@ function App({ inputs }) {
   const baseNote = remembered
     ? `запомнена ${remembered.at} (${GRADE_LABELS[remembered.ctx.grade]}, ${COURSE_LABELS[remembered.ctx.course]})`
     : "модель без правок при тех же грейде и ходе работы";
-  // The charts recompute the model dozens of times (tornado, matrix, break-even): they follow a
-  // dragged slider in a deferred render, so the slider and the key numbers stay instant.
-  const heavy = useMemo(
-    () => ({ r, model, base: baseline }),
-    [r, model, baseline],
-  );
-  const lazy = useDeferredValue(heavy);
-  const charts = lazy.r && lazy.model ? lazy : heavy;
   // Sticky offsets follow the real height of the top bar (it wraps on narrow screens).
   const topRef = useRef(null);
   useEffect(() => {
@@ -3371,12 +3910,18 @@ function App({ inputs }) {
               <div class="cols2">
                 <div class="col">
                   <${PriceBlock} r=${r} productName=${productName} model=${model} />
+                  <${PlacementsBlock} r=${r} />
+                  <${AdvanceBlock} r=${r} />
                   <${ContactsBlock} r=${r} inputs=${inputs} />
                   <${BudgetPanel} r=${r} model=${model} ctx=${ctx} />
                 </div>
                 <div class="col sticky">
-                  <${Drivers} r=${charts.r} base=${charts.base} model=${charts.model} productName=${productName} ctx=${ctx} setCtx=${setCtx} />
+                  <${Drivers} r=${r} base=${baseline} model=${model} productName=${productName} ctx=${ctx} setCtx=${setCtx} />
                 </div>
+              </div>
+              <div class="cols2">
+                <div class="col"><${DistributionBlock} r=${r} /></div>
+                <div class="col"><${OfflineBlock} r=${r} /></div>
               </div>
               <${Breakdown} r=${r} plan=${plan} model=${model} ctx=${ctx} />
               <${Calibration}
@@ -3417,6 +3962,13 @@ function snapshotOf(r) {
       derived: r.price.derived,
       contacts: r.price.contacts,
       breakEvenContacts: r.price.breakEvenContacts,
+      replacementCost: r.price.replacementCost,
+      outcomes: {
+        plan: {
+          margin: r.price.outcomes.plan.margin,
+          dsFund: r.price.outcomes.plan.dsFund,
+        },
+      },
     },
     direct: { cost: r.direct.cost },
     overhead: { cost: r.overhead.cost },

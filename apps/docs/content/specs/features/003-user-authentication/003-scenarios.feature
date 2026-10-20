@@ -1379,3 +1379,12 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the visitor opens a valid hand-off link
     Then the response is the generic throttled response of EARS-13 with no address and no mail
     And the page shows the EARS-43 state with the EARS-13 generic throttled message
+
+  @EARS-5 @EARS-8 @EARS-58 @happy @login-phone-password
+  Scenario: Academy signs in the same owned doctor with the confirmed phone and password
+    Given an owned Academy password account verifies email and confirms its fresh phone
+    When that doctor logs out and submits the confirmed phone and password through Academy's password form
+    Then the same confirmed-phone doctor persists after account reload and owned logout removes private access
+    # Mapping: login-phone-password.steps.ts (#3086). Retain native password,
+    # identifier-resolution and phone-confirmation coverage; this projection
+    # adds the real confirmed-phone password form and same-account browser proof.

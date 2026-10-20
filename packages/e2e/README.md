@@ -1611,3 +1611,27 @@ cooldown, limit ceiling or configuration override is involved; the same selected
 `apps/api/src/auth/idp/zitadel.idp.spec.ts` EARS-6 single-use challenge coverage and
 the broader wrong-code/timing and verified-request journeys remain complementary.
 This test coverage change has no render surface or owner Stage-B slot.
+
+### Confirmed-phone password login (003 EARS-5/8/58)
+
+`Academy signs in the same owned doctor with the confirmed phone and password`
+(`steps/login-phone-password.steps.ts`, #3086, `@login-phone-password`) registers
+and verifies a unique owned password account through the real UI and addressed
+email, then confirms a fresh phone through the real account UI and SMS. After
+actual logout, the Academy password form submits that confirmed phone with the
+owned password. The actual password endpoint must accept the exact command and
+mint a fresh secure opaque session. The original subject, email and verified
+phone must survive account reload; final owned logout denies session and profile
+reads and removes the private cookie.
+
+The default cross-worker login gate closes with a real successful owned login
+and revokes that separate session; no golden password is needed. Trace-off auth
+fixtures and boolean assertions keep credentials, OTPs and session values out of
+diagnostics. Every owned browser/request context remains reachable for cleanup
+on failure, which preserves the original failure. No expiry wait, limit ceiling,
+counter override or helper/config change is involved, so this single Academy
+selection runs unchanged with stage's raised ceilings and basic authentication.
+Retain the broader password scenario, native IdP phone identifier resolution,
+and the existing confirmed-phone SMS login/phone-change cases: those remain
+complementary and do not submit the confirmed phone through the password form.
+No render surface or owner Stage-B slot is introduced.

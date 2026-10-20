@@ -10,7 +10,7 @@
 <helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}a{color:#2D84F2}a:hover{color:#114D9E}</style></helmet>
 
 <div style="min-height:100vh;background:{{ pageBg }};display:flex;flex-direction:column">
-  <dc-import name="ds-shell" host="academy" loggedIn="{{ true }}" dark="{{ dark }}" onTheme="{{ toggleTheme }}" embedded="{{ true }}">
+  <dc-import name="ds-shell" host="{{ shellHost }}" loggedIn="{{ true }}" dark="{{ dark }}" onTheme="{{ toggleTheme }}" embedded="{{ true }}">
 
   <!-- ═══ Вариант 1 · Анкета ═══ -->
   <sc-if value="{{ isAnketa }}" hint-placeholder-val="{{ true }}">
@@ -106,6 +106,12 @@
               <span style="{{ valueStyle }}">Мои события</span>
               <span style="{{ chevron }}">→</span>
             </a>
+            <sc-if value="{{ showCongress }}" hint-placeholder-val="{{ false }}">
+            <a href="doctor-lk-congress.dc.html" style="{{ zoneRow }};text-decoration:none;border-top:1px solid {{ hairline }}" style-hover="background:{{ hoverBg }}">
+              <span style="{{ valueStyle }}">Мои заявки на Конгресс</span>
+              <span style="{{ chevron }}">→</span>
+            </a>
+            </sc-if>
             <button onClick="{{ noop }}" style="{{ logoutRow }}" style-hover="background:{{ hoverBg }}">Выйти из аккаунта</button>
           </div>
         </div>
@@ -222,6 +228,13 @@
           </span>
           <span style="{{ chevron }}">→</span>
         </a>
+        <sc-if value="{{ showCongress }}" hint-placeholder-val="{{ false }}">
+        <a href="doctor-lk-congress.dc.html" style="{{ rowFlatNext }};text-decoration:none;cursor:pointer" style-hover="background:{{ hoverBg }}">
+          <span style="{{ congLabelCell }}"></span>
+          <span style="{{ valueStyle }};min-width:0">Мои заявки на Конгресс</span>
+          <span style="{{ congChevron }}">→</span>
+        </a>
+        </sc-if>
         <button onClick="{{ noop }}" style="{{ logoutFlatRuled }}" style-hover="background:{{ hoverBg }}">Выйти из аккаунта</button>
       </div>
     </main>
@@ -312,6 +325,13 @@
           </span>
           <span style="{{ chevron }}">→</span>
         </a>
+        <sc-if value="{{ showCongress }}" hint-placeholder-val="{{ false }}">
+        <a href="doctor-lk-congress.dc.html" style="{{ rowFlatNext }};text-decoration:none;cursor:pointer" style-hover="background:{{ hoverBg }}">
+          <span style="{{ congLabelCell }}"></span>
+          <span style="{{ valueStyle }};min-width:0">Мои заявки на Конгресс</span>
+          <span style="{{ congChevron }}">→</span>
+        </a>
+        </sc-if>
         <div style="{{ secHeader }}">
           <h2 style="{{ secTitle }}">Сессия</h2>
           <span style="{{ secRule }}"></span>
@@ -324,7 +344,7 @@
   </dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:900},&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Анкета&quot;,&quot;Разделы&quot;,&quot;Визитка&quot;],&quot;default&quot;:&quot;Разделы&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Композиция&quot;},&quot;phone&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;не указан&quot;,&quot;из заявки&quot;,&quot;ввод номера&quot;,&quot;код отправлен&quot;,&quot;не подтверждён&quot;,&quot;подтверждён&quot;],&quot;default&quot;:&quot;из заявки&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Телефон&quot;},&quot;error&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;нет&quot;,&quot;неверный код&quot;,&quot;лимит&quot;],&quot;default&quot;:&quot;нет&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Телефон&quot;},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Тема&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:900},&quot;host&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Академия&quot;,&quot;витрина врача&quot;],&quot;default&quot;:&quot;Академия&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Витрина&quot;},&quot;congress&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;есть заявка&quot;,&quot;нет заявки&quot;],&quot;default&quot;:&quot;есть заявка&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Витрина&quot;},&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Анкета&quot;,&quot;Разделы&quot;,&quot;Визитка&quot;],&quot;default&quot;:&quot;Разделы&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Композиция&quot;},&quot;phone&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;не указан&quot;,&quot;из заявки&quot;,&quot;ввод номера&quot;,&quot;код отправлен&quot;,&quot;не подтверждён&quot;,&quot;подтверждён&quot;],&quot;default&quot;:&quot;из заявки&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Телефон&quot;},&quot;error&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;нет&quot;,&quot;неверный код&quot;,&quot;лимит&quot;],&quot;default&quot;:&quot;нет&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Телефон&quot;},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Тема&quot;}}">
 class Component extends DCLogic {
   state = {
     dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
@@ -362,6 +382,8 @@ class Component extends DCLogic {
   renderVals() {
     const d = this.state.dark, m = this.state.isMobile;
     const variant = this.props.variant ?? 'Анкета';
+    const isDoctor = (this.props.host ?? 'Академия') === 'витрина врача';
+    const showCongress = isDoctor && (this.props.congress ?? 'есть заявка') === 'есть заявка';
 
     const ink = d ? '#fff' : 'oklch(.21 .02 250)';
     const surface = d ? 'oklch(.21 .02 250)' : '#fff';
@@ -479,6 +501,9 @@ class Component extends DCLogic {
 
     return {
       dark: d, isMobile: m, isDesktop: !m,
+      shellHost: isDoctor ? 'doctor' : 'academy', showCongress, hairline,
+      congLabelCell: m ? 'display:none' : '',
+      congChevron: 'font-size:18px;font-weight:800;color:' + accent + ';grid-column:-2',
       isAnketa: variant === 'Анкета', isSections: variant === 'Разделы', isMasthead: variant === 'Визитка',
       name, initials,
       email: 'v.kovalev@omgmu.ru',

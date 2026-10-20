@@ -69,12 +69,15 @@ export function EventPageHero({
               the whole page a horizontal scroll at 320–360 px. `break-words`
               (inherited by the kicker, the h1 and the date line) lets the word
               break at the measure instead — the plate keeps the canvas
-              geometry, the title keeps the viewport. */}
+              geometry, the title keeps the viewport. `hyphens-auto` on the h1
+              moves that break to a syllable boundary with a visible hyphen
+              (the document `lang` picks the Russian dictionary), as the legal
+              document title already does. */}
           <div className="min-w-0 max-w-3xl break-words">
             <div className="text-eyebrow font-extrabold uppercase tracking-micro text-hero-muted">
               {kicker}
             </div>
-            <h1 className="mt-4 text-3xl font-extrabold leading-tight tracking-tight text-balance text-hero-foreground layout:text-4xl">
+            <h1 className="mt-4 text-3xl font-extrabold leading-tight tracking-tight text-balance hyphens-auto text-hero-foreground layout:text-4xl">
               {title}
             </h1>
             <div className="mt-4 text-base font-bold tabular-nums text-hero-muted layout:text-lg">

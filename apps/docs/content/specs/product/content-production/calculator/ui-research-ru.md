@@ -73,7 +73,7 @@ _Источник:_ https://www.nngroup.com/articles/tooltip-guidelines/
 **R12. Блок «Что двигает цену» — это торнадо: каждый драйвер меняется отдельно, бары отсортированы по размаху, есть линия базового значения.**
 Подробная спецификация — в разделе 4.
 _Почему:_ таковы конвенции торнадо-диаграмм в health economics и финансах. Их ограничение: торнадо не показывает взаимодействие параметров, поэтому рядом нужна комбинированная матрица сценариев (R10).
-_Источники:_ https://docs.oracle.com/cd/E36352_01/epm.1112/cb_oq_user/apas04.html , https://www.yhec.co.uk/glossary-term/tornado-diagram/ (статья SumProduct «Tornado charts» закрыта от автоматической проверки ссылок и не цитируется)
+_Источники:_ https://docs.oracle.com/cd/E36352_01/epm.1112/cb_oq_user/apas04.html , https://web.archive.org/web/20251124020151/https://www.yhec.co.uk/glossary-term/tornado-diagram/ (статья SumProduct «Tornado charts» закрыта от автоматической проверки ссылок и не цитируется)
 
 **R13. Состав цены показывается водопадом с 5–7 сгруппированными шагами, а не 15–20 барами.**
 Шаги: ФОТ → внешние → накладные → инструменты → себестоимость (подитог) → прибыль → цена.
@@ -171,7 +171,7 @@ _Источники:_ https://conjointly.com/products/van-westendorp/ , https://
 - **Сортировка:** по размаху (|high − low|) по убыванию, самый широкий бар сверху. Показываются топ-8–10 драйверов, остальные сворачиваются в «прочие».
 - **Цвета:** левая половина бара — «низкое значение входа», правая — «высокое». Цвет кодирует направление входа, а не знак эффекта. На концах баров подписаны значения входа (например, «900 ₽/ч | 1 600 ₽/ч») и выхода.
 - **Что движется при правке:** базовая линия и все бары пересчитываются. Порядок баров может меняться, и перестановка должна идти плавным переходом (≤200 мс), чтобы глаз отследил её. Бар правленого драйвера кратко подсвечивается (R5).
-- _Источники:_ https://docs.oracle.com/cd/E36352_01/epm.1112/cb_oq_user/apas04.html , https://www.yhec.co.uk/glossary-term/tornado-diagram/ (статья SumProduct «Tornado charts» закрыта от автоматической проверки ссылок и не цитируется)
+- _Источники:_ https://docs.oracle.com/cd/E36352_01/epm.1112/cb_oq_user/apas04.html , https://web.archive.org/web/20251124020151/https://www.yhec.co.uk/glossary-term/tornado-diagram/ (статья SumProduct «Tornado charts» закрыта от автоматической проверки ссылок и не цитируется)
 
 ### 4.2 Безубыточность
 
@@ -223,7 +223,7 @@ _Источники:_ https://conjointly.com/products/van-westendorp/ , https://
 - Pigment — сценарии: https://kb.pigment.com/docs/compare-scenarios , https://kb.pigment.com/docs/versions-scenarios
 - Causal: https://web.archive.org/web/20251208201124/https://docs.causal.app/formulas/values-with-uncertainty (Causal вошёл в Lucanet, документация доступна только в архиве)
 - Excel Goal Seek / data tables: https://support.microsoft.com/kb/282851
-- Торнадо: https://docs.oracle.com/cd/E36352_01/epm.1112/cb_oq_user/apas04.html , https://www.yhec.co.uk/glossary-term/tornado-diagram/ (статья SumProduct «Tornado charts» закрыта от автоматической проверки ссылок и не цитируется)
+- Торнадо: https://docs.oracle.com/cd/E36352_01/epm.1112/cb_oq_user/apas04.html , https://web.archive.org/web/20251124020151/https://www.yhec.co.uk/glossary-term/tornado-diagram/ (статья SumProduct «Tornado charts» закрыта от автоматической проверки ссылок и не цитируется)
 - Безубыточность: https://ecampusontario.pressbooks.pub/financemath/chapter/6-4-break-even-chart/ , https://www.accountingtools.com/articles/break-even-chart
 - Waterfall: https://deckary.com/blog/waterfall-charts-powerpoint , https://www.think-cell.com/en/content/how-to-build-waterfall-chart-excel.html
 - Связанные слайдеры: https://www.bennadel.com/blog/3739-creating-linked-slider-inputs-constrained-to-a-given-total-in-angular-9-0-0-rc-5.htm , https://connect.superhuman.com/t/linked-slider-controls/740

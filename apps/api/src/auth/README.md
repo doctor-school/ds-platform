@@ -476,7 +476,11 @@ consumedIpWindow)` beside `reset(...)`. The guard leaves a receipt on the
   own per-IP window under the `auth:sending` bucket, 60/15 min
   (`AUTH_SENDING_DOOR_PER_IP_15MIN`, the congress-intake sizing). The per-ASN
   key is not split (one window for both doors). `RATE_LIMIT_PER_IP_15MIN` sets
-  both per-IP ceilings.
+  both per-IP ceilings. The read-only hand-off ownership check
+  (`login/otp/handoff/own`, #2951 — session-required, sends nothing, verifies
+  no credential) is neither door: it is scoped
+  (`LOGIN_HANDOFF_OWNERSHIP_RATE_LIMIT_SCOPE`) so a `/login` page view never
+  spends an EARS-13 auth window, while its own bucket still bounds probing.
   **What the windows do in the deployed system** (#1655) — the per-IP window is
   keyed on `request.ip`, which resolves to the REAL client: the Fastify adapter is
   constructed with `trustProxy` set to the trusted proxy addresses

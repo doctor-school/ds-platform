@@ -12,6 +12,7 @@ import {
   readReturnEvent,
   resolveArrivalLanding,
   resolveReturnLandingPath,
+  resolveOwnHandoff,
   resolveReturnTargetPath,
   resolveServerAuth,
 } from "../server";
@@ -102,11 +103,19 @@ export async function LoginRoute({
   // the arrival rule alone and that round-trip would answer a question nobody
   // asks. A gate arrival genuinely needs both facts and pays for both.
   // 003 EARS-44 (#2659) — a well-formed hand-off reference is the exception: the
-  // link names ONE account, maybe not this session's, so the door mounts and
-  // the api decides (same account ⇒ the carried target, another ⇒ the code).
+  // link names ONE account, maybe not this session's. #2951 — the server asks
+  // the api first (read-only: nothing redeemed, nothing sent): the session's
+  // OWN link is no exception at all, so the visitor is redirected like any
+  // signed-in arrival before a byte of login HTML. Only a link the check did
+  // not settle as theirs mounts the door, and the door's redemption decides
+  // (another account ⇒ the code step).
   const auth = await resolveServerAuth(requestHeaders);
   const authenticated = auth.status === "doctor";
-  const carriesHandoff = handoffRef !== null;
+  const ownHandoff =
+    authenticated && handoffRef !== null
+      ? await resolveOwnHandoff(handoffRef, requestHeaders)
+      : false;
+  const carriesHandoff = handoffRef !== null && !ownHandoff;
   if (authenticated && !landingTarget && !carriesHandoff) {
     guardAuthRoute({
       authenticated,

@@ -28,6 +28,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const {
   redirect,
   resolveServerAuth,
+  resolveOwnHandoff,
   readReturnEvent,
   specialtyFetch,
   push,
@@ -38,6 +39,7 @@ const {
     throw new Error(`NEXT_REDIRECT:${path}`);
   }),
   resolveServerAuth: vi.fn(),
+  resolveOwnHandoff: vi.fn(),
   readReturnEvent: vi.fn(),
   specialtyFetch: vi.fn(),
   push: vi.fn(),
@@ -74,6 +76,7 @@ vi.mock("../server", async (importOriginal) => {
   return {
     ...actual,
     resolveServerAuth,
+    resolveOwnHandoff,
     readReturnEvent,
     resolveArrivalLanding: (
       host: Parameters<typeof actual.resolveArrivalLanding>[0],
@@ -206,6 +209,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   forgetsSpecialty();
   readReturnEvent.mockResolvedValue(GONE);
+  // #2951 — unless a test says otherwise, a hand-off link is not this
+  // session's own (another account's, or the check did not settle).
+  resolveOwnHandoff.mockResolvedValue(false);
 });
 
 afterEach(cleanup);
@@ -924,7 +930,7 @@ describe("003 EARS-44: /login hands a well-formed hand-off reference to the door
     ["doctor", DOCTOR_FIXTURE],
     ["Academy", ACADEMY_FIXTURE],
   ] as const) {
-    it(`003 EARS-44 (#2659): on the ${host} host, a SIGNED-IN visitor with a hand-off link gets the door (no redirect), handed the reference, the carried landing and the signed-in flag`, async () => {
+    it(`003 EARS-44 (#2659): on the ${host} host, a SIGNED-IN visitor with a link that is NOT their own gets the door (no redirect), handed the reference, the carried landing and the signed-in flag`, async () => {
       resolveServerAuth.mockResolvedValue(DOCTOR);
 
       const door = (await doorOf(config, {
@@ -943,6 +949,48 @@ describe("003 EARS-44: /login hands a well-formed hand-off reference to the door
       expect(door.props.signedIn).toBe(true);
     });
   }
+
+  for (const [host, config] of [
+    ["doctor", DOCTOR_FIXTURE],
+    ["Academy", ACADEMY_FIXTURE],
+  ] as const) {
+    it(`003 EARS-44 (#2951): on the ${host} host, a SIGNED-IN visitor opening their OWN hand-off link is redirected by the server to the carried target — no login page is rendered`, async () => {
+      resolveServerAuth.mockResolvedValue(DOCTOR);
+      resolveOwnHandoff.mockResolvedValue(true);
+
+      expect(
+        await landingOf(config, {
+          method: "code",
+          handoff: REF,
+          returnTo: "/account/congress",
+        }),
+      ).toBe("/account/congress");
+      // The ownership question is asked with the reference and the request's
+      // own headers (the fingerprint-bound session rides them).
+      expect(resolveOwnHandoff).toHaveBeenCalledWith(REF, expect.any(Headers));
+    });
+
+    it(`003 EARS-44 (#2951): on the ${host} host, an OWN link without a carried target lands where the door would have sent them — this host's arrival landing`, async () => {
+      resolveServerAuth.mockResolvedValue(DOCTOR);
+      resolveOwnHandoff.mockResolvedValue(true);
+
+      expect(await landingOf(config, { method: "code", handoff: REF })).toBe(
+        config.landing.afterLogin,
+      );
+    });
+  }
+
+  it("003 EARS-44 (#2951): a guest's hand-off link never asks the ownership question — there is no session to own it", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+
+    await doorOf(DOCTOR_FIXTURE, {
+      method: "code",
+      handoff: REF,
+      returnTo: "/account/congress",
+    });
+    expect(resolveOwnHandoff).not.toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
+  });
 
   it("003 EARS-44 (#2659): a signed-in visitor with a MALFORMED reference is still sent off /login (#1955)", async () => {
     resolveServerAuth.mockResolvedValue(DOCTOR);

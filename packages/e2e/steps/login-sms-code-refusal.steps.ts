@@ -291,7 +291,17 @@ When(
     }).toEqual({ profile: 401, session: 401, noCookie: true });
     await expect(field, "refused SMS code cleared").toHaveValue("");
     await expect(field, "first code cell refocused").toBeFocused();
-    await expect(state.page.getByRole("alert")).toContainText("Код не подошёл");
+    const refusalPlate = state.page.getByRole("alert").filter({
+      hasText: "Код не подошёл. Проверьте его или запросите новый.",
+    });
+    await expect(
+      refusalPlate,
+      "one SMS-code operation refusal plate",
+    ).toHaveCount(1);
+    await expect(refusalPlate).toBeVisible();
+    await expect(refusalPlate).toHaveText(
+      /^⚠\s*Код не подошёл\. Проверьте его или запросите новый\.$/,
+    );
   },
 );
 
@@ -412,12 +422,10 @@ After("@login-sms-code-refusal", async ({ page, world }) => {
   if (failed) {
     if (test.info().status === test.info().expectedStatus)
       throw new Error("Owned SMS refusal session cleanup failed");
-    test
-      .info()
-      .annotations.push({
-        type: "cleanup-failed",
-        description:
-          "Owned SMS refusal session cleanup failed; original scenario failure retained.",
-      });
+    test.info().annotations.push({
+      type: "cleanup-failed",
+      description:
+        "Owned SMS refusal session cleanup failed; original scenario failure retained.",
+    });
   }
 });

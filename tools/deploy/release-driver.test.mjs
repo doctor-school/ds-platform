@@ -217,8 +217,10 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       join(stubs, "docker"),
       [
         'echo "$*" >> "$STUB_DIR/docker.log"',
+        'echo "${DOCKER_CONFIG:-unset} $(stat -c %a "${DOCKER_CONFIG:-/nonexistent}" 2>/dev/null)" >> "$STUB_DIR/docker.config"',
         "case $1 in",
-        '  login) cat > "$STUB_DIR/docker.login-stdin"; [[ -f $STUB_DIR/login-fails ]] && exit 1; exit 0 ;;',
+        '  login) cat > "$STUB_DIR/docker.login-stdin"; [[ -f $STUB_DIR/login-fails ]] && exit 1',
+        '    echo "{}" > "$DOCKER_CONFIG/config.json"; exit 0 ;;',
         "  logout) exit 0 ;;",
         "  manifest) ref=${!#}; f=$STUB_DIR/registry/${ref//[\\/:]/_}.json",
         '    [[ -f $f ]] || { echo "no such manifest" >&2; exit 1; }; cat "$f" ;;',
@@ -356,6 +358,24 @@ describe("2985: release-driver", { skip: SKIP }, () => {
     const r = run(["stage-main", SHA]);
     assert.equal(r.status, 0, r.stderr);
     assert.equal(r.stdout, `ds-release-driver: attached ${UNIT}\n`);
+    notStarted();
+  });
+
+  it("attaches to a running unit of the SHA before asking GitHub or the registry", () => {
+    setUnit({
+      LoadState: "loaded",
+      ActiveState: "active",
+      SubState: "running",
+      ExecMainCode: 0,
+      ExecMainStatus: 0,
+    });
+    rmSync(join(dir, "compare.json")); // a GitHub rate limit or outage
+    writeFileSync(join(dir, "login-fails"), ""); // and a registry outage
+    const r = run(["stage-main", SHA]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, `ds-release-driver: attached ${UNIT}\n`);
+    assert.equal(log("curl.log"), "", "GitHub is not asked");
+    assert.equal(log("docker.log"), "", "the registry is not asked");
     notStarted();
   });
 
@@ -503,6 +523,40 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       /s3cr3t-pull-value/,
       "the token is never in an argv",
     );
+  });
+
+  it("logs in to the registry under a docker config dir of its own, root-only and removed after", () => {
+    const r = run(["stage-main", SHA]);
+    assert.equal(r.status, 0, r.stderr);
+    const configs = log("docker.config").trim().split("\n");
+    const [first] = configs;
+    const [path, mode] = first.split(" ");
+    assert.notEqual(path, "unset", "DOCKER_CONFIG is set for the probe");
+    assert.notEqual(path, join(home, ".docker"), "not the shared docker login");
+    assert.equal(mode, "700", "the probe's config dir is root-only");
+    assert.ok(
+      configs.every((c) => c.split(" ")[0] === path),
+      "login, every inspect and the logout share that one dir",
+    );
+    assert.equal(existsSync(path), false, "the dir is removed on exit");
+    assert.equal(existsSync(join(home, ".docker")), false);
+  });
+
+  it("removes the probe's docker config dir when the login fails", () => {
+    writeFileSync(join(dir, "login-fails"), "");
+    assert.equal(run(["stage-main", SHA]).status, 3);
+    const [path] = log("docker.config").trim().split(" ");
+    assert.notEqual(path, "unset");
+    assert.equal(existsSync(path), false);
+  });
+
+  it("keeps only the saved manifest of the SHA it starts", () => {
+    const saved = join(root, "var/lib/ds-platform/release-driver");
+    mkdirSync(saved, { recursive: true });
+    writeFileSync(join(saved, `${"b".repeat(40)}.json`), "{}");
+    const r = run(["stage-main", SHA]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(readdirSync(saved), [`${SHA}.json`]);
   });
 
   it("refuses a manifest digest the registry does not serve for the SHA", () => {

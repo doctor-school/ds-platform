@@ -8,9 +8,11 @@
 #
 #   release-driver <env> <sha>        < images-<sha>.json
 #       Validates the env against /etc/ds-platform/box-role and the manifest on
-#       stdin, checks that <sha> is on main (GitHub compare) and that every manifest
-#       digest is the one the registry serves for <image>:<sha>, asks ds-release whether another SHA holds the env, saves the manifest
-#       root-only and starts — or attaches to — the transient unit
+#       stdin; attaches to a running unit of <sha> before anything else is asked;
+#       otherwise checks that <sha> is on main (GitHub compare) and that every
+#       manifest digest is the one the registry serves for <image>:<sha>, asks
+#       ds-release whether another SHA holds the env, saves the manifest root-only
+#       and starts the transient unit
 #       ds-<env>-<sha12>-driver, then returns: ONE status line on stdout,
 #         ds-release-driver: started <unit> | attached <unit> | already-succeeded
 #       exit 0. A refusal is one line on stderr and exit 3; usage exit 2.
@@ -180,11 +182,15 @@ check_on_main() {
 # <registry>/<image>:<sha> in the release namespace (no `pr/`): only the build
 # Environment holds the push token for it, so a manifest cannot name another image.
 # The box's own pull credential logs in inside root's shell — the token is never in an
-# argv — and the same shell logs out on exit, as slot.mjs's pull steps do.
+# argv — under a docker config dir of its own (mktemp -d: root-only, removed on exit),
+# so this login and its logout never touch root's shared docker login that concurrent
+# pull units (slot.mjs's pull steps) rely on between their own login and pull.
 read -r -d '' REGISTRY_SH <<'SH' || true
 reg=$1 token=$2 tag=$3
 shift 3
-trap 'docker logout "$reg" >/dev/null 2>&1' EXIT
+DOCKER_CONFIG=$(mktemp -d) || exit 7
+export DOCKER_CONFIG
+trap 'docker logout "$reg" >/dev/null 2>&1; rm -rf -- "$DOCKER_CONFIG"' EXIT
 docker login "$reg" -u ds-platform --password-stdin <"$token" >/dev/null 2>&1 || exit 7
 for name; do
   printf '%s ' "$name"
@@ -255,6 +261,14 @@ cmd_release() {
   (($(stat -c %s "$manifest") <= MANIFEST_MAX_BYTES)) || refuse "refused: the manifest exceeds $MANIFEST_MAX_BYTES bytes"
   reason=$(python3 -I -c "$VALIDATE_PY" "$manifest" "$sha" "$IMAGE_NAMES" "$MANIFEST_REF_RE" "$IMAGE_REF_RE")
   [[ -z $reason ]] || refuse "refused: bad manifest: $reason"
+  # A running converge of this SHA was itself started only after both provenance
+  # checks passed: attaching to it needs neither, so a GitHub rate limit or a registry
+  # outage never fails a converge that is already running. Re-checked under the lock.
+  read -r state rc < <(unit_state "$unit")
+  if [[ $state == active || $state == activating ]]; then
+    say "attached $unit"
+    return 0
+  fi
   command -v curl >/dev/null || fail "curl is not installed"
   check_on_main "$sha"
   check_registry_digests "$sha" "$manifest"
@@ -293,6 +307,9 @@ cmd_release() {
   user=$(id -un)
   [[ $user =~ $USER_RE ]] || usage "unusable caller user"
   sudo install -d -m 0700 -o root -g root "$MANIFEST_DIR"
+  # Only this SHA's manifest is kept: systemd opened every other unit's stdin when it
+  # started, and a restart of another SHA saves that SHA's manifest again.
+  sudo find "$MANIFEST_DIR" -maxdepth 1 -type f -name '*.json' ! -name "$sha.json" -delete
   sudo install -m 0600 -o root -g root "$manifest" "$MANIFEST_DIR/$sha.json"
   # systemd opens the root-only manifest as the unit's stdin before it drops to the
   # deploy user; the journal takes the unit's output.

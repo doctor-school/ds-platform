@@ -15,7 +15,9 @@
 # first boot runs long (infra/deploy/cloud-init/stage-1.yaml).
 #
 # NODE_ROOT (a path prefix, empty on a box) and NODE_DIST (the download origin) let
-# the tests run it against a fixture tree with a local tarball.
+# the tests run it against a fixture tree with a local tarball; NODE_FIXTURE_SHA256
+# replaces the pinned sha256 of such a fixture tarball, honoured only with a NODE_ROOT
+# prefix, so it can never install an unpinned node into the box's /usr/local.
 #
 # Exit codes: 0 installed or already current · 1 a step failed (download, checksum) · 2 usage.
 set -euo pipefail
@@ -25,6 +27,7 @@ NODE_VERSION=v24.21.0
 NODE_SHA256=fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6
 
 ROOT=${NODE_ROOT:-}
+[[ -n $ROOT && -n ${NODE_FIXTURE_SHA256:-} ]] && NODE_SHA256=$NODE_FIXTURE_SHA256
 DIST=${NODE_DIST:-https://nodejs.org/dist}
 TARBALL=node-$NODE_VERSION-linux-x64.tar.xz
 PREFIX=$ROOT/usr/local/lib/nodejs

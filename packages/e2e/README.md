@@ -877,6 +877,29 @@ The golden verified EARS-6 journey remains distinct. Run this selected scenario
 on the lead-selected stand; this test-only change requires no owner Stage-B
 request or new slot.
 
+### Copied session fingerprint refusal (003 EARS-8)
+
+`Academy refuses a copied session cookie from a different browser fingerprint while its owner stays signed in`
+(`steps/session-fingerprint.steps.ts`, #3060) registers and verifies one uniquely
+owned Academy account with its actual addressed email code. It copies only that
+account's real opaque session cookie into a fresh context with a different
+User-Agent, retaining the language, Academy origin and staging basic credentials.
+Both actual private session and profile requests must carry that cookie and the
+changed User-Agent, receive the complete generic 401, and disclose no private
+identity or tokens. The original browser must retain the same complete profile,
+subject and secure cookie, including after a real document reload.
+
+Trace-off auth fixtures and existing registration, delivery-ID checkpoint and
+secure-session helpers are reused. Cleanup logs out only the original owned
+session and closes both contexts even after failure; any cleanup failure remains
+visible without masking the original test failure. Native
+`apps/api/test/auth/session.e2e-spec.ts` EARS-8 and design section 3 remain the
+complementary session-binding contract. This case claims neither IP spoofing
+protection nor server-side refresh-chain behavior. It assumes no rate-limit
+ceiling, waits for no lifetime or window, and runs unchanged in the Academy stage
+suite. Select `@session-fingerprint` on the lead-selected contour. This test-only
+coverage has no render surface or owner Stage-B slot.
+
 ### SMS sign-in eligibility hint (003 EARS-55 / EARS-56)
 
 `Academy shows the static SMS sign-in hint and neutrally accepts an unconfirmed phone`

@@ -497,6 +497,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And neither the login response nor JavaScript-readable browser stores expose access or refresh tokens
     # API EARS-5/EARS-8 tests own IdP password-check and Redis refresh-token proof.
 
+  # Fingerprint-bound Academy projection (#3060); native binding remains in
+  # apps/api/test/auth/session.e2e-spec.ts EARS-8 and design section 3.
+  @EARS-8 @failure @session-fingerprint
+  Scenario: Academy refuses a copied session cookie from a different browser fingerprint while its owner stays signed in
+    Given an owned verified Academy account has its original fingerprint-bound private session
+    Then a fresh browser sending that copied cookie with a different user agent receives only generic private-read refusals
+    And the original Academy browser still reads the same owner and profile with its unchanged secure session
+
   @EARS-5 @EARS-16 @failure
   Scenario: Wrong password returns a generic error without a private session
     Given the golden doctor "verified-cardiologist" is available for password sign-in

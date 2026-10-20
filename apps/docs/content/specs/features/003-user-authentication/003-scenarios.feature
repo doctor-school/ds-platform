@@ -515,6 +515,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # API EARS-5 test owns the IdP failed-attempt increment assertion. The browser
     # verifies the live refusal without claiming to read Zitadel's native counter.
 
+  @EARS-8 @EARS-43 @happy @login-unsafe-return
+  Scenario: Academy discards an external return target after successful owned-account password login
+    Given a uniquely owned verified Academy account has logged out before the unsafe-return login
+    When that owner signs in through the actual Academy password form carrying an external HTTPS return target
+    Then Academy uses its current local default landing with the same private owner and attempts no external target request
+    # 014 EARS-6 platform return-target boundary; Academy projection (#3061).
+    # Retain packages/auth-flow/src/login/login-door.test.tsx unsafe-target test
+    # and packages/auth-flow/src/verify/verify-door.test.tsx return-target tests.
+    # They own parser/door branches; this real browser proves the shipped path.
+
   @EARS-6 @EARS-8 @EARS-41 @happy
   Scenario: Passwordless login with an email OTP code
     Given the golden doctor "verified-cardiologist" has a verified email for code sign-in

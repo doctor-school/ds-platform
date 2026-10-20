@@ -838,6 +838,31 @@ strict CAPTCHA preparation and owned-session cleanup follow existing journeys.
 Run this selected case on the lead-selected stand; a test-only PR requires no
 owner Stage-B request or new slot.
 
+### Unsafe login return target (003 EARS-8/43; 014 EARS-6)
+
+`Academy discards an external return target after successful owned-account password login`
+(`steps/login-unsafe-return.steps.ts`, #3061) creates and email-verifies a unique
+owned account through the real registration form and store-side addressed-mail
+ID checkpoint, proves its private subject, and revokes that prerequisite session.
+It opens the actual password-login route with a cross-origin HTTPS `.invalid`
+`returnTo`, submits the same owned credentials, and requires Academy's current
+default listing (`HOSTS.academy.eventsPath`, matching the host config's
+`landing.afterLogin`). A context request observer counts attempts to the hostile
+host even when DNS fails; navigation observation complements it. No auth or
+navigation response is mocked. The scenario requires zero hostile-host attempts,
+a fresh secure host-only opaque session cookie, and the same verified subject
+and email through both private endpoints and the rendered account page.
+
+Trace-off auth fixtures and boolean evidence keep secrets out of diagnostics.
+The successful journey logs out; failure cleanup revokes only its owned session
+and closes the owned context, retaining any original failure. No real TTL waits,
+rate-limit ceilings or environment overrides are involved, so the same case runs
+unchanged in the Academy stage suite. Retain native unsafe-target coverage in
+`packages/auth-flow/src/login/login-door.test.tsx` and
+`packages/auth-flow/src/verify/verify-door.test.tsx`; this browser case complements
+their parser/door branches. Select `@login-unsafe-return`. This test coverage
+change has no render surface and requires no owner Stage-B slot.
+
 ### Verified-account login-code request (003 EARS-34/16/41/8)
 
 `A login-email-code request for a verified account arms the challenge unchanged`

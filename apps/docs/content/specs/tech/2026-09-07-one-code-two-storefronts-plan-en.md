@@ -129,6 +129,8 @@ Order rationale: wave 1 carries the most escalations and is prod-critical; wave 
    ↑              ↑
       @ds/auth-flow                     (wave 1; may import room + events-storefront)
             ↑
+      @ds/congress-submissions          (046; may import auth-flow)
+            ↑
       @ds/account (wave 4)              (may import all of the above)
 ```
 

@@ -343,7 +343,6 @@ export default [
       "apps/doctor/components/account-screen.tsx",
       "apps/doctor/components/specialty-catalog-view.tsx",
       "apps/portal/app/academy-home-view.tsx",
-      "apps/portal/app/account/account-profile.tsx",
       "apps/portal/app/documents/page.tsx",
       // The recording gate, moved unchanged from
       // `apps/portal/app/webinars/[slug]/recording-gate.tsx` by #2072 (wave-3 PR 3.1).

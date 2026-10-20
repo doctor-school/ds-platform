@@ -1,3 +1,4 @@
+import type { AccountHostConfig } from "@ds/account/host-config";
 import type {
   AuthFlowApiConfig,
   AuthFlowHostConfig,
@@ -111,3 +112,18 @@ export const ACADEMY_AUTH_FLOW = {
     wordingVersion: "2026-01",
   },
 } satisfies AuthFlowHostConfig;
+
+/**
+ * The Academy's account cabinet config (#2073, wave-4 gate D1) — a second export
+ * of this file because the cabinet reads the auth-flow config above, and a host
+ * config may not import another host module. `/account` mounts `@ds/account`
+ * with it.
+ */
+export const ACADEMY_ACCOUNT = {
+  authFlow: ACADEMY_AUTH_FLOW,
+  // The `events-storefront` `routes.accountEvents` value (gate row 13), stated
+  // as a literal for the same reason; a test pins the two equal.
+  eventsHref: "/account/events",
+  // 046 EARS-4 is a doctor-storefront section: the Academy mounts none (row 14).
+  congress: null,
+} satisfies AccountHostConfig;

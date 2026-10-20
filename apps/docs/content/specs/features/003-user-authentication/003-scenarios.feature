@@ -1343,6 +1343,21 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then no code is sent and no redemption of the reference is counted
     And the visitor is taken to "/account/congress" without seeing a sign-in form
 
+  @EARS-44 @happy @handoff-own-account
+  Scenario: Academy bypasses a hand-off while signed in as its own congress account
+    Given a uniquely owned Academy congress account has a real hand-off reference and an independent ordinary-code session
+    When that signed-in congress account opens its own Academy hand-off with the account return target
+    Then the hand-off document answer redirects straight to the account target with no sign-in page, auth command or addressed mail
+    And that unchanged secure session opens its own Academy account without displaying a sign-in form
+    # Academy projection uses its actual /account; the Doctor /account/congress
+    # contract above remains. The portal server's read-only ownership check
+    # answers the hand-off document with a 3xx to the carried target (#2951):
+    # no sign-in page, no browser auth command, no mail. Browser proof is
+    # distinct from the internal redemption counter: retain apps/api/test/auth/
+    # login-handoff.e2e-spec.ts EARS-44 same-account budget test (#2659).
+    # Migration mapping: handoff-own-account.steps.ts adds this narrow host proof;
+    # keep native budget and app-local broader handoff journeys.
+
   @EARS-44 @happy
   Scenario: A hand-off link opened while signed in as another account signs in the reference's account
     Given a congress sign-up was accepted for account Y and returned a hand-off reference

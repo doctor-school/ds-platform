@@ -1659,3 +1659,33 @@ Retain the broader password scenario, native IdP phone identifier resolution,
 and the existing confirmed-phone SMS login/phone-change cases: those remain
 complementary and do not submit the confirmed phone through the password form.
 No render surface or owner Stage-B slot is introduced.
+
+### Same-account congress handoff (003 EARS-44)
+
+`@handoff-own-account` is the Academy projection of the same-account handoff
+contract; the broader Doctor `/account/congress` scenario remains unchanged.
+`steps/handoff-own-account.steps.ts` uses `lib/owned-congress-signup.ts`, the
+canonical real configured-event intake also used by `@valid-handoff`, with a
+unique `handoff-own-2942-` address. It independently authenticates through the
+ordinary Academy email-code form and its actual addressed delivery before
+opening the still-unconsumed handoff reference with `returnTo=/account`.
+
+The portal server's read-only ownership check (#2951) must answer the hand-off
+document request with a 3xx whose Location is the carried `/account` target; the
+step keeps only that status and a target match, never the reference-bearing URL.
+The `/login` page is never committed, the browser sends no auth command at all
+(no handoff redemption, code request, resend or acceptance), and the mailbox
+checkpoint (congress notice plus independent sign-in code) remains unchanged for
+the full 15-second delivery horizon. Passive DOM observation from document
+creation checks that no sign-in form becomes visible during the transition. The private profile, session subject
+and original secure cookie still identify the same owned account at `/account`.
+Only that owned session is revoked on cleanup; traces are disabled and the account
+capture stays in the selected run's private artifacts.
+
+No mail and no handoff request do not inspect the internal redemption count.
+Retain `apps/api/test/auth/login-handoff.e2e-spec.ts`, EARS-44 same-account test
+(#2659): four signed-in answers leave all three guest redemptions available.
+That native test owns the exact counter proof, while this case adds actual
+Academy browser/request/mail/session evidence. Broader app-local and Doctor
+handoff journeys remain. This test-only coverage has no render surface and needs
+no owner Stage-B request or slot.

@@ -116,4 +116,40 @@ describe("NativeSelect — official shadcn native semantics with DS Input parity
 
     expect(contentBox).toBeGreaterThanOrEqual(TEXT_SM_LINE_PX);
   });
+
+  it("EARS-8: when wrapValue is set, the system shall render the chosen option in full on a wrapping line over the still-native select (#2838)", async () => {
+    const user = userEvent.setup();
+    function Controlled() {
+      const [value, setValue] = React.useState("Партнёр");
+      return (
+        <RoleSelect
+          wrapValue
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+        />
+      );
+    }
+    const { container } = render(<Controlled />);
+    const select = screen.getByRole("combobox", { name: "Роль" });
+    const shown = container.querySelector("[data-slot='native-select-value']");
+    if (!(shown instanceof HTMLElement)) throw new Error("no shown value");
+
+    expect(shown).toHaveTextContent("Партнёр");
+    expect(shown).toHaveAttribute("aria-hidden", "true");
+    expect(shown.className).toContain("whitespace-normal");
+    expect(shown.className).toContain("min-h-11");
+    // The real control stays the native select, laid over the visible box.
+    expect(select.className).toContain("opacity-0");
+    expect(select.className).toContain("absolute");
+
+    await user.selectOptions(select, "Участник подкаста");
+    expect(shown).toHaveTextContent("Участник подкаста");
+  });
+
+  it("EARS-8: without wrapValue the system shall render no separate value line", () => {
+    const { container } = render(<RoleSelect />);
+    expect(
+      container.querySelector("[data-slot='native-select-value']"),
+    ).toBeNull();
+  });
 });

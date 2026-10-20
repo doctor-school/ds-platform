@@ -437,6 +437,29 @@ test.describe("044 EARS-21 — the congress roster in admin", () => {
     await expect(select.locator("option[value='registeredAt:asc']")).toHaveText(
       "По умолчанию — Дата регистрации, старые сверху",
     );
+    // #2838: the CHOSEN value reads in full at 390 — the longest label wraps
+    // instead of being cut to «…», and the page itself never scrolls sideways.
+    await select.selectOption("registeredAt:asc");
+    await expect(page).not.toHaveURL(/[?&](sort|dir)=/);
+    await expect(select).toHaveValue("registeredAt:asc");
+    const shownValue = page
+      .getByTestId("roster-table")
+      .locator("[data-slot='native-select-value']");
+    await expect(shownValue).toBeVisible();
+    await expect(shownValue).toHaveText(
+      "По умолчанию — Дата регистрации, старые сверху",
+    );
+    expect(
+      await shownValue.evaluate((node) => node.scrollWidth <= node.clientWidth),
+    ).toBe(true);
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+    await shot(page, "roster-sort-select-narrow-default");
     await select.selectOption("fullName:asc");
     await expect(page).toHaveURL(/[?&]sort=fullName&dir=asc/);
     const cardNames = visible(

@@ -8,7 +8,8 @@
 #
 #   release-driver <env> <sha>        < images-<sha>.json
 #       Validates the env against /etc/ds-platform/box-role and the manifest on
-#       stdin, asks ds-release whether another SHA holds the env, saves the manifest
+#       stdin, checks that <sha> is on main (GitHub compare) and that every manifest
+#       digest is the one the registry serves for <image>:<sha>, asks ds-release whether another SHA holds the env, saves the manifest
 #       root-only and starts — or attaches to — the transient unit
 #       ds-<env>-<sha12>-driver, then returns: ONE status line on stdout,
 #         ds-release-driver: started <unit> | attached <unit> | already-succeeded
@@ -46,6 +47,8 @@ BOX_ROLE_FILE=$ROOT/etc/ds-platform/box-role
 MANIFEST_DIR=$ROOT/var/lib/ds-platform/release-driver
 LOCK_DIR=$(override DS_DRIVER_LOCK_DIR /run/lock)
 CODELOAD=$(override DS_DRIVER_CODELOAD https://codeload.github.com/doctor-school/ds-platform/tar.gz)
+GITHUB_API=$(override DS_DRIVER_GITHUB_API https://api.github.com/repos/doctor-school/ds-platform)
+REGISTRY_PULL_TOKEN=$ROOT/etc/ds-platform/registry-pull-token
 MANIFEST_MAX_BYTES=65536
 
 # A copy of ds-release's (tools/deploy/release-driver.test.mjs pins them equal).
@@ -56,6 +59,7 @@ USER_RE='^[a-z_][a-z0-9_-]*$'
 # release namespace of its digest reference, RELEASE_MANIFEST_REFS) — pinned equal by
 # the same test. slot.mjs validates the manifest again before it pulls anything.
 IMAGE_NAMES='api api-migrate portal admin doctor'
+IMAGE_REGISTRY='ds-platform.registry.twcstorage.ru'
 IMAGE_REF_RE='^ds-platform\.registry\.twcstorage\.ru/([a-z0-9][a-z0-9-]*)@sha256:[0-9a-f]{64}$'
 MANIFEST_REF_RE='^(main|hotfix/[0-9]+-[a-z0-9-]+)$'
 
@@ -152,6 +156,76 @@ for name in names:
         stop("the manifest image " + name + " is not a sha256 digest reference of " + name)
 PY
 
+# Tree provenance. GitHub serves a fork-network commit through this repository's own
+# codeload URL, so a SHA alone does not say whose code the unit would run. The box asks
+# GitHub — public API, no token, no client data — whether <sha> is on `main`: the
+# compare main...<sha> must be `behind` (an ancestor of main) or `identical`. Anything
+# else — `ahead`, `diverged`, 404, a rate limit, a network error — refuses (fail closed).
+check_on_main() {
+  local sha=$1 body status
+  if ! body=$(curl -fsS --proto '=https' --max-time 30 -H 'Accept: application/vnd.github+json' \
+    "$GITHUB_API/compare/main...$sha" 2>/dev/null); then
+    refuse "refused: cannot confirm $sha is on main (GitHub compare unavailable)"
+  fi
+  status=$(printf '%s' "$body" |
+    python3 -I -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status","") if isinstance(d,dict) else "")' \
+      2>/dev/null || true)
+  case $status in
+    behind | identical) ;;
+    *) refuse "refused: $sha is not on main (compare status: ${status:-unknown})" ;;
+  esac
+}
+
+# Manifest provenance. Every recorded digest must be the one the registry serves for
+# <registry>/<image>:<sha> in the release namespace (no `pr/`): only the build
+# Environment holds the push token for it, so a manifest cannot name another image.
+# The box's own pull credential logs in inside root's shell — the token is never in an
+# argv — and the same shell logs out on exit, as slot.mjs's pull steps do.
+read -r -d '' REGISTRY_SH <<'SH' || true
+reg=$1 token=$2 tag=$3
+shift 3
+trap 'docker logout "$reg" >/dev/null 2>&1' EXIT
+docker login "$reg" -u ds-platform --password-stdin <"$token" >/dev/null 2>&1 || exit 7
+for name; do
+  printf '%s ' "$name"
+  docker manifest inspect --verbose "$reg/$name:$tag" 2>/dev/null | tr -d '\n'
+  echo
+done
+SH
+
+read -r -d '' DIGESTS_PY <<'PY' || true
+import json, sys
+path, served = sys.argv[1:3]
+images = json.load(open(path, encoding="utf-8"))["images"]
+seen = {}
+for line in served.splitlines():
+    name, _, text = line.partition(" ")
+    seen[name] = text
+for name in sorted(images):
+    want = images[name].split("@", 1)[1]
+    try:
+        doc = json.loads(seen.get(name) or "null")
+        got = doc["Descriptor"]["digest"] if isinstance(doc, dict) else None
+    except (ValueError, KeyError, TypeError):
+        got = None
+    if got is None:
+        print("the registry serves no single-manifest " + name + " tag of this commit")
+        break
+    if got != want:
+        print("the manifest digest of " + name + " is not the one the registry serves for this commit")
+        break
+PY
+
+check_registry_digests() {
+  local sha=$1 manifest=$2 served reason
+  # shellcheck disable=SC2086 # IMAGE_NAMES is a word list
+  if ! served=$(sudo sh -c "$REGISTRY_SH" sh "$IMAGE_REGISTRY" "$REGISTRY_PULL_TOKEN" "$sha" $IMAGE_NAMES 2>/dev/null); then
+    refuse "refused: cannot read the registry with the box's pull credential"
+  fi
+  reason=$(python3 -I -c "$DIGESTS_PY" "$manifest" "$served")
+  [[ -z $reason ]] || refuse "refused: $reason"
+}
+
 box_role() { sudo cat "$BOX_ROLE_FILE" 2>/dev/null | tr -d '[:space:]' || true; }
 
 check_role() {
@@ -181,6 +255,9 @@ cmd_release() {
   (($(stat -c %s "$manifest") <= MANIFEST_MAX_BYTES)) || refuse "refused: the manifest exceeds $MANIFEST_MAX_BYTES bytes"
   reason=$(python3 -I -c "$VALIDATE_PY" "$manifest" "$sha" "$IMAGE_NAMES" "$MANIFEST_REF_RE" "$IMAGE_REF_RE")
   [[ -z $reason ]] || refuse "refused: bad manifest: $reason"
+  command -v curl >/dev/null || fail "curl is not installed"
+  check_on_main "$sha"
+  check_registry_digests "$sha" "$manifest"
 
   # One driver call per env at a time: two triggers of one SHA must not both start it.
   mkdir -p "$LOCK_DIR"

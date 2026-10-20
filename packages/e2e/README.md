@@ -6,6 +6,29 @@ The end-to-end regression contract of the staging/regression-contour tech spec
 feature files as the suite, and the navigation model both storefronts' chrome
 is configured from.
 
+### Wrong password preserves the independent owner (003 EARS-5/8/16)
+
+`Academy refuses a wrong password without disturbing the independently authenticated owner`
+(`steps/password-owner-preservation.steps.ts`, #3084,
+`@password-owner-preservation`) registers and verifies a uniquely owned password
+account through the actual UI and addressed delivered email. A separate guest
+submits one valid-format wrong password through the actual password form. The
+exact generic 401 sets no session cookie and denies private session/profile
+reads. Before any later successful login, the original owner survives reload
+with the identical opaque cookie, subject and complete private profile. The
+actual correct owned password then authenticates that guest as the same doctor,
+persists through reload and leaves the original session intact.
+
+The default cross-worker login gate closes with a real successful owned-account
+login and exact logout; it needs no golden password. Trace-off fixtures and safe
+boolean evidence protect credentials and private data. Cleanup revokes exact
+owned sessions in every context, supports local HTTP and stage HTTPS origins,
+and preserves an original failure. No TTL/window waits, default rate-limit
+ceiling, counter mutation or refresh-chain claim is involved; the case runs
+unchanged in the stage Academy suite. Retain the broader generic wrong-password
+declaration and native EARS-5/8/16 contracts in the API auth/session suites.
+This test-only projection has no render surface or owner Stage-B slot.
+
 ### Independent-session logout isolation (003 EARS-10)
 
 `Academy logout revokes only its requested independently established session`

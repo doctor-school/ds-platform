@@ -580,6 +580,15 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # login mail, absent verification mail and acceptance, not native IdP reads
     # or statistical timing. Keep the golden verified EARS-6 journey distinct.
 
+  @EARS-6 @EARS-17 @EARS-34 @EARS-41 @EARS-42 @happy @login-email-resend
+  Scenario: Academy resends the email login code and accepts the newest delivery for the same owner
+    Given a uniquely registered and verified Academy doctor_guest account is logged out for an email-code resend
+    When the resend owner requests an initial real Academy email login code with its resend button disabled
+    When only that browser's thirty-second login cooldown advances before the actual email resend click
+    Then the newest actual email delivery authenticates the same Academy owner through reload and exact logout
+    # Actual recipient-bound mail IDs project EARS-6/17; only browser cooldown
+    # time advances. No server/provider clock, quota or old-code expiry claim.
+
   @EARS-6 @EARS-41 @EARS-16 @failure @login-email-code-reuse
   Scenario: Academy refuses a consumed email login code without disturbing its original session
     Given a uniquely registered and verified Academy doctor_guest account is logged out for an email-code request for consumed-code replay

@@ -716,6 +716,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # PasswordResetCompleted evidence: apps/api/src/auth/auth.service.spec.ts EARS-12.
     # API session proof: apps/api/test/auth/password-reset.e2e-spec.ts EARS-12.
 
+  @EARS-12 @EARS-16 @failure @password-reset-code-reuse
+  Scenario: Academy refuses a consumed password reset code and preserves the accepted password
+    Given a uniquely owned verified Academy account completes a delivered password reset once
+    When a guest Academy browser replays that consumed reset code with a different private password
+    Then the accepted password still opens the same Academy account while the replay password cannot sign in
+    # One-time delivered-code proof; native EARS-12 reset/session and EARS-16
+    # generic failure contracts remain in apps/api/test/auth/password-reset.e2e-spec.ts.
+
   @EARS-35 @EARS-12 @happy @password-reset-complete
   Scenario: A proven password reset marks the email verified and unblocks login-by-code
     Given a uniquely registered Academy account remains on verification with its confirmation code unconsumed

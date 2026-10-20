@@ -202,8 +202,8 @@
       "remotePath": "ds-shell.dc.html"
     },
     "event-page.dc.html": {
-      "sha256": "64bc6dded58e2c048e358f1f8728e4fae9f86be632250e9818277ec09a262f20",
-      "pulledAt": "2026-10-16T09:50:46.506Z",
+      "sha256": "f9f7c1e4db8d2b841a26e92625729303e5db46482ecfdb8a92042a4101fcb1ab",
+      "pulledAt": "2026-10-20T03:10:13.656Z",
       "remotePath": "event-page.dc.html"
     },
     "events-feed-kit.js": {

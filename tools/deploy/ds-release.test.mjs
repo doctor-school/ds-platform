@@ -276,6 +276,12 @@ describe(
         "nothing recorded for the refused SHA",
       );
       assert.equal(startCount("ds-prod-bbbbbbbbbbbb"), 0);
+      // #2985: the read-only `lease` answers the same question before any start.
+      const leased = ds(["lease", "prod", SHA_B]);
+      assert.equal(leased.code, 3);
+      assert.match(leased.err, /^ds-release: refused: env prod is leased by release aaaaaaaaaaaa, which has not finished$/);
+      assert.equal(ds(["lease", "prod", SHA_A]).code, 0, "the holder's own SHA is not refused");
+      assert.equal(ds(["lease", "stage-main", SHA_B]).code, 0, "nothing holds an env with no record");
 
       // Another env is independent.
       const stage = ds(["release", "stage-pr-12", SHA_B, "pull", other]);
@@ -284,6 +290,7 @@ describe(
       const finished = ds(["finish", "prod", SHA_A, "succeeded"]);
       assert.equal(finished.code, 0, finished.err);
       assert.equal(readShape("prod", SHA_A).state, "succeeded");
+      assert.equal(ds(["lease", "prod", SHA_B]).code, 0, "a finished release frees the env");
       rmSync(join(root, "systemctl.log"), { force: true });
       const next = ds(["release", "prod", SHA_B, "pull", other]);
       assert.equal(next.code, 0, next.err);

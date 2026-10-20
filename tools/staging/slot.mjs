@@ -32,8 +32,8 @@
 // Both IdP converges — the whole redirect-URI set on every `up`/`down`, and the golden
 // identities — live in `idp.mjs` and arrive here as ONE injected `idp` effect.
 
-import { realpathSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { readFileSync, realpathSync } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   IMAGE_REGISTRY,
@@ -57,6 +57,7 @@ import {
 } from "../deploy/lib/registry.mjs";
 
 import {
+  LOCAL_EXECUTOR,
   STALL_BUDGET_BUILD_MS,
   STALL_BUDGET_DEFAULT_MS,
   releaseFinishArgv,
@@ -179,8 +180,18 @@ export const STAGE_ENV_FILE = "/etc/ds-platform/stage.env";
  */
 export const SLOT_TREE_ROOT = "$HOME/ds-platform.slots";
 
-/** The ssh destination of the staging box; overridable for an ad-hoc stand. */
-export const STAGE_1 = process.env.DS_STAGE_SSH || "ds-stage-1";
+/**
+ * The ssh destination of the staging box; overridable for an ad-hoc stand. A `--local`
+ * run (#2985: the box's own release driver) sets it to `LOCAL_EXECUTOR` before the box
+ * is touched, so every step runs through the same transport on the box itself.
+ */
+export let STAGE_1 = process.env.DS_STAGE_SSH || "ds-stage-1";
+
+/** The stand's basic-auth plaintext, root-only on the box (the box-local health check reads it). */
+export const STAGE_BASIC_AUTH_FILE = "/etc/ds-platform/stage-basic-auth.txt";
+
+/** The root of the tree this module runs from — what a `--local` run ships as the slot tree. */
+export const SELF_TREE = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\\/]+$/, "");
 
 /**
  * Compose services that run once and exit.
@@ -2025,6 +2036,39 @@ const COMMANDS_WITHOUT_ARGS = new Set(["status", "gc"]);
 // #2982: a step ds-release recorded as failed is re-run only on this explicit flag;
 // a succeeded one never is.
 const RETRY_FAILED_FLAG = "--retry-failed";
+const LOCAL_FLAG = "--local";
+const IMAGES_FILE_FLAG = "--images-file";
+
+/**
+ * #2985: `--local --images-file <path>` — the converge runs ON the box (the stage
+ * release driver), with the recorded digests from that file instead of the operator's
+ * `gh`. Only `up main`: PR slots stay operator-driven (release-pipeline spec §3 item 8).
+ * Returns the remaining flags and the local options.
+ */
+function takeLocal(command, slot, flags) {
+  const rest = [];
+  let local = false;
+  let imagesFile;
+  for (let index = 0; index < flags.length; index += 1) {
+    if (flags[index] === LOCAL_FLAG) {
+      local = true;
+    } else if (flags[index] === IMAGES_FILE_FLAG) {
+      imagesFile = flags[index + 1];
+      index += 1;
+      if (!imagesFile) throw new SlotError("`--images-file` requires a path");
+    } else {
+      rest.push(flags[index]);
+    }
+  }
+  if (!local && imagesFile === undefined) return { flags: rest, local: {} };
+  if (!local || imagesFile === undefined) {
+    throw new SlotError("`--local` and `--images-file <path>` go together");
+  }
+  if (command !== "up" || slot !== "main") {
+    throw new SlotError("`--local` converges only `up main` (PR slots stay operator-driven)");
+  }
+  return { flags: rest, local: { local: true, imagesFile } };
+}
 
 function retryFailedOption(flags) {
   return flags.includes(RETRY_FAILED_FLAG) ? { retryFailed: true } : {};
@@ -2051,7 +2095,8 @@ export function parseArgs(argv) {
   const [command, ...rest] = argv;
   if (!command) {
     throw new SlotError(
-      "usage: ds-slot up|sync <slot> --ref <sha> [--retry-failed] | down <slot> | " +
+      "usage: ds-slot up|sync <slot> --ref <sha> [--retry-failed] | " +
+        "up main --ref <sha> --local --images-file <path> | down <slot> | " +
         "reset main --yes --ref <sha> [--retry-failed] | reset-identities <slot> | status | gc | " +
         "agent-admin-code [--json]",
     );
@@ -2096,13 +2141,14 @@ export function parseArgs(argv) {
     // A BARE positional SHA is an error, not a second spelling: the commit a slot is
     // converged on is the one thing the preview workflow passes by hand, and two
     // spellings is how a workflow edit ends up shipping the wrong ref silently.
-    const sha = takeRef(flags, { allowed: [RETRY_FAILED_FLAG] });
+    const { flags: refFlags, local } = takeLocal(command, slot, flags);
+    const sha = takeRef(refFlags, { allowed: [RETRY_FAILED_FLAG] });
     if (!sha) {
       throw new SlotError(
         `\`${command}\` requires \`--ref <sha>\` — a full 40-character commit id`,
       );
     }
-    return { command, slot, sha, ...retryFailedOption(flags) };
+    return { command, slot, sha, ...retryFailedOption(refFlags), ...local };
   }
   if (COMMANDS_WITH_SLOT.has(command)) {
     const [slot, ...flags] = rest;
@@ -2654,7 +2700,10 @@ async function probeSlotHealth(url, headers, sha) {
  * shipped compose for its service set, so a branch that adds or drops a service is
  * verified against what that branch actually declares.
  */
-function realEffects(boxEnv, { retryFailed = false } = {}) {
+function realEffects(
+  boxEnv,
+  { retryFailed = false, operatorPassword = async () => requiredOperatorPassword(process.env) } = {},
+) {
   const streamed = (script, step) =>
     sshScript(STAGE_1, script, {
       label: step?.label ?? "slot",
@@ -2726,6 +2775,9 @@ function realEffects(boxEnv, { retryFailed = false } = {}) {
         liveDir: step.liveDir,
         preserved: step.preserved,
         tmpPrefix: step.tmpPrefix,
+        // #2985: on the box there is no checkout; the tree this run came from (the
+        // codeload tarball of the SHA the driver extracted) is the one installed.
+        ...(STAGE_1 === LOCAL_EXECUTOR ? { sourceDir: SELF_TREE } : {}),
       });
       await streamed(releaseInstallScript(step.liveDir), { label: "install ds-release" });
     },
@@ -2765,7 +2817,7 @@ function realEffects(boxEnv, { retryFailed = false } = {}) {
     health: async (step) => {
       const user = requiredBasicAuthUser(boxEnv);
       const headers = {
-        authorization: basicAuthHeader(user, requiredOperatorPassword(process.env)),
+        authorization: basicAuthHeader(user, await operatorPassword()),
         accept: "application/json",
       };
       const deadline = Date.now() + HEALTH_DEADLINE_MS;
@@ -2866,6 +2918,38 @@ export function requiredBaseDomain(boxEnv) {
   return assertBaseDomain(baseDomain);
 }
 
+/**
+ * #2985: the recorded digests of a `--local` converge, from the `images-<sha>.json` the
+ * release driver received on stdin. Strict: exactly the manifest's three keys, its `sha`
+ * equal to the converged one, a release ref, and every image a digest reference of its
+ * own recorded name (`validateImageManifest`). Which `runtime-images.yml` run the file
+ * came from — a `main`/`hotfix/*` push, never a PR build — is the CALLER's check (the
+ * stage-main workflow that triggers the driver); this file carries no run to select.
+ */
+export function readImagesFile({ slot, sha, path, readText = (file) => readFileSync(file, "utf8") }) {
+  let manifest;
+  try {
+    manifest = JSON.parse(readText(path));
+  } catch (error) {
+    throw new SlotError(`the image manifest ${path} is not readable JSON (${error.message})`);
+  }
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+    throw new SlotError(`the image manifest ${path} is not a JSON object`);
+  }
+  const keys = Object.keys(manifest).sort().join(",");
+  if (keys !== "images,ref,sha") {
+    throw new SlotError(`the image manifest ${path} carries keys ${keys}, not exactly sha, ref, images`);
+  }
+  return validateImageManifest(manifest, { slot, sha });
+}
+
+/** #2985: the stand's basic-auth plaintext, read on the box by a `--local` converge. */
+async function readBoxBasicAuthPass() {
+  const pass = (await sshCapture(STAGE_1, `sudo cat ${STAGE_BASIC_AUTH_FILE}`)).trim();
+  if (!pass) throw new SlotError(`${STAGE_BASIC_AUTH_FILE} is empty on ${STAGE_1}`);
+  return pass;
+}
+
 /** `resolveRecordedImages` through the operator's own `gh`, in a throwaway temp dir. */
 function resolveRecordedImagesViaGh({ slot, sha }) {
   const policy = slotManifestPolicy(slot);
@@ -2874,6 +2958,8 @@ function resolveRecordedImagesViaGh({ slot, sha }) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  // #2985: the box's own release driver — every step through the local executor.
+  if (options.local) STAGE_1 = LOCAL_EXECUTOR;
   if (options.command === "agent-admin-code") {
     // Reads the root-only secrets file and prints to THIS terminal only — never into
     // the slot log, a PR or a comment.
@@ -2902,14 +2988,20 @@ async function main() {
   // recorded images stops here, with nothing changed on ds-stage-1.
   let images;
   if ((COMMANDS_WITH_SLOT_AND_REF.has(options.command) || options.command === "reset") && options.sha) {
-    const resolved = await resolveRecordedImagesViaGh({ slot: options.slot, sha: options.sha });
+    const resolved = options.local
+      ? readImagesFile({ slot: options.slot, sha: options.sha, path: options.imagesFile })
+      : await resolveRecordedImagesViaGh({ slot: options.slot, sha: options.sha });
     images = resolved.images;
-    console.log(`# recorded images for ${shortSha(options.sha)} (${resolved.ref}, ${resolved.run.url})`);
+    const source = options.local ? options.imagesFile : resolved.run.url;
+    console.log(`# recorded images for ${shortSha(options.sha)} (${resolved.ref}, ${source})`);
     for (const name of RECORDED_IMAGE_NAMES) console.log(`  ${name}: ${images[name]}`);
   }
   const boxEnv = await readBoxEnvFile(STAGE_ENV_FILE);
   const liveSlots = await readLiveSlots();
-  const effects = realEffects(boxEnv, { retryFailed: options.retryFailed === true });
+  const effects = realEffects(boxEnv, {
+    retryFailed: options.retryFailed === true,
+    ...(options.local ? { operatorPassword: readBoxBasicAuthPass } : {}),
+  });
   // `up`/`sync` run a slot whose sign-in depends on the captcha trio being coherent —
   // refuse before any image is pulled (#2207).
   if (COMMANDS_WITH_SLOT_AND_REF.has(options.command)) {

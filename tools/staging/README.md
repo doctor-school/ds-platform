@@ -1,10 +1,11 @@
 # `tools/staging` — the STAGE stand's operator-side scripts
 
-Node scripts that an operator runs **from a worktree on their own machine**, never in CI
-and never on the stage box. The operator ships a committed tree over SSH, and the box
-**pulls the images `runtime-images.yml` recorded for that commit, by digest** — it never
-builds a product image (#2981). There is no on-box deployer, no timer, and no Node
-runtime of ours on the host — the box runs containers and nothing else.
+Node scripts that an operator runs **from a worktree on their own machine**, never in CI.
+The operator ships a committed tree over SSH, and the box **pulls the images
+`runtime-images.yml` recorded for that commit, by digest** — it never builds a product
+image (#2981). The one run on the box itself is the stage `main` converge of the release
+driver, which runs this same `slot.mjs` with `--local` (below); there is no timer, and the
+box's only Node runtime is the pinned one `infra/deploy/bin/install-node.sh` installs.
 
 | script          | what it owns                                                                                                     | Issue        |
 | --------------- | ---------------------------------------------------------------------------------------------------------------- | ------------ |
@@ -348,6 +349,17 @@ converge at a new SHA marks the previous one `superseded` (so `main` B → C →
 for real). `down` drops the slot's verdicts (`ds-release forget`) as its first step —
 refused while a step unit still runs, before anything is torn down — and `reset main`
 drops them before the re-cloned database is migrated again. Spec: `apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md` §5.
+
+`up main --ref <sha> --local --images-file <path>` is the same converge run **on the box**
+by its release driver (`infra/deploy/bin/release-driver`, #2985), from the codeload tarball
+of exactly that SHA: every ssh script, capture and ship goes through a local `bash -c`
+instead of `ssh` (same stdin, quoting and watchdog — `LOCAL_EXECUTOR` in
+`tools/deploy/lib/remote.mjs`), the ship installs the tree the run came from as the slot
+tree, the digests come from the `images-<sha>.json` file (validated strictly; which
+`runtime-images.yml` run it came from is the caller's check) instead of `gh`, and the
+health check reads the basic-auth plaintext from `/etc/ds-platform/stage-basic-auth.txt`.
+The plan and its steps are the operator's, which `slot-local.test.mjs` pins. Only `up main`
+takes `--local`: PR slots stay operator-driven. Spec: release-pipeline spec §5.
 
 `reset main --yes --ref <sha>` drops `ds_main` and re-clones it from `ds_golden`, then
 re-runs the ordinary converge on that SHA — the escape hatch for a staging database

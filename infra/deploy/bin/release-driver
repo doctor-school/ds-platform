@@ -1,0 +1,257 @@
+#!/usr/bin/env bash
+# release-driver — the box-side release driver (Issue #2985; tech spec
+# apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md §3
+# item 2, §5 «Entrypoint», §8 step (d)).
+#
+# The entrypoint's `release <env> <sha>` execs this file with the client's stdin. On
+# the stage box it converges the `main` slot to <sha> without an operator machine:
+#
+#   release-driver <env> <sha>        < images-<sha>.json
+#       Validates the env against /etc/ds-platform/box-role and the manifest on
+#       stdin, asks ds-release whether another SHA holds the env, saves the manifest
+#       root-only and starts — or attaches to — the transient unit
+#       ds-<env>-<sha12>-driver, then returns: ONE status line on stdout,
+#         ds-release-driver: started <unit> | attached <unit> | already-succeeded
+#       exit 0. A refusal is one line on stderr and exit 3; usage exit 2.
+#   release-driver unit-state <env> <sha>
+#       One JSON object {"unit", "active", "rc"} — the entrypoint's `status` adds it
+#       to the ds-release status line as `driver`.
+#   release-driver _run <env> <sha>   (the unit's own process, as the deploy user)
+#       Downloads the codeload tarball of exactly <sha>, extracts it and runs
+#         node <tree>/tools/staging/slot.mjs up main --ref <sha> --local --images-file /dev/stdin
+#       — the operator's converge, step for step, through the box-local executor.
+#
+# The unit survives the client (systemd-run, KillMode=mixed, --remain-after-exit
+# keeps its exit status for `unit-state`); its whole log stays in its journal and
+# nothing of it reaches the client, whose stderr is a public Actions log (spec §4).
+# PR slots stay operator-driven (spec §3 item 8); the prod driver lands with #2986.
+#
+# Installed as /usr/local/lib/ds-platform/release-driver beside ds-release and the
+# entrypoint, by the same install step (tools/deploy/lib/remote.mjs BOX_ENTRYPOINTS).
+set -euo pipefail
+export LC_ALL=C
+
+SELF_PATH=/usr/local/lib/ds-platform/release-driver
+# Test hooks: a root prefix and a few overrides, honoured only when this file runs
+# from anywhere but its installed path.
+ROOT=
+if [[ ${BASH_SOURCE[0]} != "$SELF_PATH" ]]; then
+  ROOT=${DS_DRIVER_ROOT:-}
+fi
+override() { [[ -n $ROOT ]] && printf '%s' "${!1:-$2}" || printf '%s' "$2"; }
+SELF=$(override DS_DRIVER_SELF "$SELF_PATH")
+DS_RELEASE=$ROOT/usr/local/bin/ds-release
+NODE=$ROOT/usr/local/bin/node
+BOX_ROLE_FILE=$ROOT/etc/ds-platform/box-role
+MANIFEST_DIR=$ROOT/var/lib/ds-platform/release-driver
+LOCK_DIR=$(override DS_DRIVER_LOCK_DIR /run/lock)
+CODELOAD=$(override DS_DRIVER_CODELOAD https://codeload.github.com/doctor-school/ds-platform/tar.gz)
+MANIFEST_MAX_BYTES=65536
+
+# A copy of ds-release's (tools/deploy/release-driver.test.mjs pins them equal).
+ENV_RE='^(prod|stage-main|stage-pr-[1-9][0-9]*)$'
+SHA_RE='^[0-9a-f]{40}$'
+USER_RE='^[a-z_][a-z0-9_-]*$'
+# The recorded image set of tools/deploy/lib/registry.mjs (RECORDED_IMAGE_NAMES, the
+# release namespace of its digest reference, RELEASE_MANIFEST_REFS) — pinned equal by
+# the same test. slot.mjs validates the manifest again before it pulls anything.
+IMAGE_NAMES='api api-migrate portal admin doctor'
+IMAGE_REF_RE='^ds-platform\.registry\.twcstorage\.ru/([a-z0-9][a-z0-9-]*)@sha256:[0-9a-f]{64}$'
+MANIFEST_REF_RE='^(main|hotfix/[0-9]+-[a-z0-9-]+)$'
+
+TAG=ds-release-driver
+say() { printf '%s: %s\n' "$TAG" "$*"; }
+usage() { printf '%s: %s\n' "$TAG" "$*" >&2; exit 2; }
+refuse() { printf '%s: %s\n' "$TAG" "$*" >&2; exit 3; }
+fail() { printf '%s: %s\n' "$TAG" "$*" >&2; exit 1; }
+
+check_args() {
+  [[ $# -eq 2 ]] || usage "usage: release-driver <env> <sha>"
+  [[ $1 =~ $ENV_RE ]] || usage "bad env (want prod, stage-main or stage-pr-<N>)"
+  [[ $2 =~ $SHA_RE ]] || usage "bad sha (want the full 40-hex commit id)"
+}
+
+unit_name() { printf 'ds-%s-%s-driver' "$1" "${2:0:12}"; }
+
+# The unit's state as the interface reports it. `active` is the PROCESS: a finished
+# --remain-after-exit unit stays `active (exited)` in systemd's terms and reads
+# `inactive` here, with its exit status; a non-zero exit leaves systemd's `failed`.
+# A unit systemd does not know (never started, reset, reboot) is `absent`.
+unit_state() {
+  local unit=$1 key value load= active= sub= code= status=
+  while IFS='=' read -r key value; do
+    case $key in
+      LoadState) load=$value ;;
+      ActiveState) active=$value ;;
+      SubState) sub=$value ;;
+      ExecMainCode) code=$value ;;
+      ExecMainStatus) status=$value ;;
+    esac
+  done < <(systemctl show --property=LoadState,ActiveState,SubState,ExecMainCode,ExecMainStatus \
+    "$unit.service" 2>/dev/null || true)
+  local state rc=null
+  case $load/$active/$sub in
+    loaded/active/exited | loaded/inactive/*) state=inactive ;;
+    loaded/active/*) state=active ;;
+    loaded/activating/* | loaded/reloading/*) state=activating ;;
+    loaded/deactivating/*) state=active ;;
+    loaded/failed/*) state=failed ;;
+    *) state=absent ;;
+  esac
+  if [[ $state == inactive || $state == failed ]]; then
+    # ExecMainCode: 1 exited (status = exit code), 2 killed / 3 dumped (status = signal).
+    case $code in
+      1) [[ $status =~ ^[0-9]+$ ]] && rc=$status ;;
+      2 | 3) [[ $status =~ ^[0-9]+$ ]] && rc=$((128 + status)) ;;
+    esac
+    # A loaded unit that never ran a process is no driver run at all.
+    [[ $code == 0 || -z $code ]] && [[ $state == inactive ]] && state=absent
+  fi
+  printf '%s %s\n' "$state" "$rc"
+}
+
+cmd_unit_state() {
+  check_args "$@"
+  local unit state rc
+  unit=$(unit_name "$1" "$2")
+  read -r state rc < <(unit_state "$unit")
+  printf '{"unit":"%s","active":"%s","rc":%s}\n' "$unit" "$state" "$rc"
+}
+
+# The manifest on stdin, checked before anything is started. Prints the reason of a
+# refusal on stdout, nothing when it is a manifest of <sha>'s release images.
+read -r -d '' VALIDATE_PY <<'PY' || true
+import json, re, sys
+path, sha, names, ref_re, image_re = sys.argv[1:6]
+names = names.split()
+
+def stop(reason):
+    print(reason)
+    sys.exit(0)
+
+try:
+    with open(path, encoding="utf-8") as f:
+        doc = json.load(f)
+except (OSError, ValueError):
+    stop("the manifest is not JSON")
+if not isinstance(doc, dict) or sorted(doc) != ["images", "ref", "sha"]:
+    stop("the manifest is not {sha, ref, images}")
+if doc["sha"] != sha:
+    stop("the manifest records another commit")
+if not isinstance(doc["ref"], str) or not re.fullmatch(ref_re, doc["ref"]):
+    stop("the manifest ref is not main or hotfix/<N>-<slug>")
+images = doc["images"]
+if not isinstance(images, dict) or sorted(images) != sorted(names):
+    stop("the manifest images are not exactly " + ", ".join(names))
+for name in names:
+    m = re.fullmatch(image_re, images[name]) if isinstance(images[name], str) else None
+    if not m or m.group(1) != name:
+        stop("the manifest image " + name + " is not a sha256 digest reference of " + name)
+PY
+
+box_role() { sudo cat "$BOX_ROLE_FILE" 2>/dev/null | tr -d '[:space:]' || true; }
+
+check_role() {
+  local env=$1 role
+  role=$(box_role)
+  case $role in
+    stage)
+      [[ $env == stage-main ]] && return 0
+      [[ $env == stage-pr-* ]] && refuse "refused: PR slots stay operator-driven (ds-slot up $env)"
+      refuse "refused: the stage box serves stage-main, not $env"
+      ;;
+    prod) refuse "refused: prod release driver lands with #2986" ;;
+    *) refuse "refused: this box has no known role" ;;
+  esac
+}
+
+cmd_release() {
+  check_args "$@"
+  local env=$1 sha=$2 unit manifest reason state rc out user record
+  check_role "$env"
+  unit=$(unit_name "$env" "$sha")
+
+  work=$(mktemp -d) # global: the EXIT trap outlives this function
+  trap 'rm -rf -- "${work:-}"' EXIT
+  manifest=$work/images.json
+  head -c "$((MANIFEST_MAX_BYTES + 1))" >"$manifest"
+  (($(stat -c %s "$manifest") <= MANIFEST_MAX_BYTES)) || refuse "refused: the manifest exceeds $MANIFEST_MAX_BYTES bytes"
+  reason=$(python3 -I -c "$VALIDATE_PY" "$manifest" "$sha" "$IMAGE_NAMES" "$MANIFEST_REF_RE" "$IMAGE_REF_RE")
+  [[ -z $reason ]] || refuse "refused: bad manifest: $reason"
+
+  # One driver call per env at a time: two triggers of one SHA must not both start it.
+  mkdir -p "$LOCK_DIR"
+  exec 8>"$LOCK_DIR/ds-release-driver-$env.lock"
+  flock -n 8 || refuse "refused: another release-driver call for $env is in progress"
+
+  read -r state rc < <(unit_state "$unit")
+  if [[ $state == active || $state == activating ]]; then
+    say "attached $unit"
+    return 0
+  fi
+
+  # Another SHA's open release or running unit holds the env (ds-release's lease).
+  if ! out=$(sudo "$DS_RELEASE" lease "$env" "$sha" 2>&1); then
+    refuse "refused: ${out##*refused: }"
+  fi
+
+  if [[ $state == inactive || $state == failed ]]; then
+    record=$(sudo "$DS_RELEASE" status "$env" "$sha" 2>/dev/null |
+      python3 -I -c 'import json,sys; r=json.load(sys.stdin).get("release") or {}; print(r.get("state",""))' ||
+      true)
+    if [[ $rc == 0 && $record == succeeded ]]; then
+      say "already-succeeded"
+      return 0
+    fi
+    # A finished run of this SHA is started again; ds-release's attempt semantics
+    # decide what it re-runs (an open attempt keeps its succeeded steps, a closed one
+    # starts afresh).
+    sudo systemctl stop "$unit.service" >/dev/null 2>&1 || true
+    sudo systemctl reset-failed "$unit.service" >/dev/null 2>&1 || true
+  fi
+
+  user=$(id -un)
+  [[ $user =~ $USER_RE ]] || usage "unusable caller user"
+  sudo install -d -m 0700 -o root -g root "$MANIFEST_DIR"
+  sudo install -m 0600 -o root -g root "$manifest" "$MANIFEST_DIR/$sha.json"
+  # systemd opens the root-only manifest as the unit's stdin before it drops to the
+  # deploy user; the journal takes the unit's output.
+  if ! sudo systemd-run --quiet --unit="$unit" --remain-after-exit -p KillMode=mixed \
+    --uid="$user" -p StandardInput="file:$MANIFEST_DIR/$sha.json" \
+    -p StandardOutput=journal -p StandardError=journal \
+    --description="ds-release-driver $env ${sha:0:12}" \
+    "$SELF" _run "$env" "$sha" >/dev/null 2>&1; then
+    fail "systemd-run could not start $unit"
+  fi
+  say "started $unit"
+}
+
+# The unit's process: the operator converge, run on the box from the SHA's own tree.
+cmd_run() {
+  check_args "$@"
+  local env=$1 sha=$2
+  [[ $env == stage-main ]] || usage "the driver converges stage-main only"
+  command -v curl >/dev/null || fail "curl is not installed"
+  [[ -x $NODE ]] || fail "node is not installed at $NODE (infra/deploy/bin/install-node.sh)"
+  work=$(mktemp -d "${HOME:-/tmp}/ds-release-driver.XXXXXX") # global, for the EXIT trap
+  trap 'rm -rf -- "${work:-}"' EXIT
+  mkdir "$work/tree"
+  echo "downloading $CODELOAD/$sha"
+  curl -fsSL --proto '=https' --retry 3 --max-time 600 -o "$work/tree.tar.gz" "$CODELOAD/$sha"
+  tar xzf "$work/tree.tar.gz" --strip-components=1 -C "$work/tree"
+  set +e
+  "$NODE" "$work/tree/tools/staging/slot.mjs" up main --ref "$sha" --local --images-file /dev/stdin
+  local rc=$?
+  set -e
+  exit "$rc"
+}
+
+main() {
+  case ${1:-} in
+    unit-state) shift; cmd_unit_state "$@" ;;
+    _run) shift; cmd_run "$@" ;;
+    *) cmd_release "$@" ;;
+  esac
+}
+
+main "$@"

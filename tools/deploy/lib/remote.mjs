@@ -19,7 +19,7 @@ import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 // Prod health endpoint — the verify-over-HTTP pointer of the stall message
 // (#942/#927). `tools/deploy/prod.mjs` re-exports it: the status record's
@@ -138,6 +138,21 @@ export function createStallWatchdog({
 const REMOTE_BASH =
   'script=$(cat); exec bash --norc -euo pipefail -c "$script"';
 
+// #2985: the box-local executor. A run ON the box (the stage release driver,
+// `infra/deploy/bin/release-driver`) addresses the box as this host: `boxSpawnArgs`
+// then runs the very command an ssh session would hand the box's login shell —
+// `REMOTE_BASH` for a script, `shipTreeCommand` for a ship — through a local
+// `bash -c`, with the same stdin, quoting and watchdog. Nothing above the transport
+// knows the difference: the plan, its steps and its ds-release units are the same.
+// (`local` is not an ssh destination this repository uses; `DS_STAGE_SSH` names one.)
+export const LOCAL_EXECUTOR = "local";
+
+/** `[command, argv]` that hand `remoteCommand` to the box's shell — over ssh, or locally. */
+export function boxSpawnArgs(host, remoteCommand, extraOptions = []) {
+  if (host === LOCAL_EXECUTOR) return ["bash", ["-c", remoteCommand]];
+  return ["ssh", [...sshBaseArgs(host, extraOptions), remoteCommand]];
+}
+
 // Inactivity watchdog (#905): stdout/stderr are PIPED (not inherited) so the
 // parent observes every remote byte — chunks are forwarded verbatim to the
 // local streams (same live-streaming UX as before) and each one resets the
@@ -151,7 +166,7 @@ export function sshScript(
   { label, stallBudgetMs, probeHint } = {},
 ) {
   return new Promise((resolve, reject) => {
-    const child = spawn("ssh", [...sshBaseArgs(host), REMOTE_BASH], {
+    const child = spawn(...boxSpawnArgs(host, REMOTE_BASH), {
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stalled = false;
@@ -206,11 +221,9 @@ export function sshScript(
 export function sshCapture(host, script, options = {}) {
   const { sshOptions = [], signal, stderr = "inherit" } = options;
   return new Promise((resolve, reject) => {
-    const child = spawn(
-      "ssh",
-      [...sshBaseArgs(host, sshOptions), REMOTE_BASH],
-      { stdio: ["pipe", "pipe", stderr] },
-    );
+    const child = spawn(...boxSpawnArgs(host, REMOTE_BASH, sshOptions), {
+      stdio: ["pipe", "pipe", stderr],
+    });
     let out = "";
     let err = "";
     child.stdout.on("data", (d) => (out += d.toString("utf8")));
@@ -337,34 +350,39 @@ trap - EXIT HUP INT TERM`;
  * `tmpPrefix` names the LOCAL temp tarball: two slots of the same operator
  * machine may be shipped at the same SHA, and one shared temp name would have
  * them overwrite each other mid-stream.
+ *
+ * #2985: on the {@link LOCAL_EXECUTOR} there is no checkout to `git archive` — the
+ * release driver runs from the codeload tarball of the SHA, extracted into
+ * `sourceDir` — so the archive is a `tar` of that directory (one top-level
+ * directory, stripped by the same `--strip-components=1`) and the same
+ * `shipTreeCommand` installs it. codeload and `git archive` both honour
+ * `export-ignore`, so both carry the same files.
  */
 export async function shipTree(
   sha,
   host,
-  { liveDir, preserved, tmpPrefix = "ds-deploy" } = {},
+  { liveDir, preserved, tmpPrefix = "ds-deploy", sourceDir } = {},
 ) {
   const tmp = join(tmpdir(), `${tmpPrefix}-${sha.slice(0, 12)}.tar.gz`);
+  const local = host === LOCAL_EXECUTOR;
+  if (local && !sourceDir) throw new Error("a local ship needs the tree directory it ships");
   await new Promise((resolve, reject) => {
     const out = createWriteStream(tmp);
-    const gitp = spawn("git", [
-      "archive",
-      "--format=tar.gz",
-      "--prefix=ds-platform/",
-      sha,
-    ]);
-    gitp.stdout.pipe(out);
-    gitp.on("error", reject);
-    gitp.on("close", (c) =>
-      c === 0 ? resolve() : reject(new Error(`git archive exited ${c}`)),
+    const [command, argv] = local
+      ? ["tar", ["czf", "-", "-C", dirname(sourceDir), basename(sourceDir)]]
+      : ["git", ["archive", "--format=tar.gz", "--prefix=ds-platform/", sha]];
+    const archiver = spawn(command, argv);
+    archiver.stdout.pipe(out);
+    archiver.on("error", reject);
+    archiver.on("close", (c) =>
+      c === 0 ? resolve() : reject(new Error(`${command} ${argv[0]} exited ${c}`)),
     );
   });
   try {
     await new Promise((resolve, reject) => {
-      const child = spawn(
-        "ssh",
-        [...sshBaseArgs(host), shipTreeCommand({ liveDir, preserved })],
-        { stdio: ["pipe", "inherit", "inherit"] },
-      );
+      const child = spawn(...boxSpawnArgs(host, shipTreeCommand({ liveDir, preserved })), {
+        stdio: ["pipe", "inherit", "inherit"],
+      });
       child.on("error", reject);
       child.on("close", (c) =>
         c === 0 ? resolve() : reject(new Error(`tar x on ${host} exited ${c}`)),
@@ -388,10 +406,13 @@ export const DS_RELEASE_BIN = "/usr/local/bin/ds-release";
 // #2984: the forced command of every CI key, installed beside ds-release by the
 // same install step (its allowlisted verbs call ds-release).
 export const DS_DEPLOY_ENTRYPOINT_BIN = "/usr/local/bin/ds-deploy-entrypoint";
+// #2985: the box-side release driver the entrypoint's `release` verb execs.
+export const RELEASE_DRIVER_BIN = "/usr/local/lib/ds-platform/release-driver";
 /** Box binary → its path in the repository tree, in install order. */
 export const BOX_ENTRYPOINTS = [
   { dest: DS_RELEASE_BIN, path: "infra/deploy/bin/ds-release" },
   { dest: DS_DEPLOY_ENTRYPOINT_BIN, path: "infra/deploy/bin/ds-deploy-entrypoint" },
+  { dest: RELEASE_DRIVER_BIN, path: "infra/deploy/bin/release-driver" },
 ];
 export const RELEASE_STATE_ROOT = "/var/lib/ds-platform/release";
 export const RELEASE_POLL_MS = 10 * 1000;
@@ -421,13 +442,23 @@ export function releaseUnitName(env, sha, step) {
 }
 
 /**
- * Install the box entrypoints (ds-release, ds-deploy-entrypoint) from the tree just
- * shipped to the box (every run).
+ * Install the box entrypoints (ds-release, ds-deploy-entrypoint, release-driver) from
+ * the tree just shipped to the box (every run).
  */
 export function releaseInstallScript(liveDir = "$HOME/ds-platform") {
-  return BOX_ENTRYPOINTS.map(({ dest, path }) => `sudo install -m 0755 "${liveDir}/${path}" ${dest}`).join(
-    "\n",
-  );
+  return [
+    ...installDirLines(BOX_ENTRYPOINTS.map(({ dest }) => dest)),
+    ...BOX_ENTRYPOINTS.map(({ dest, path }) => `sudo install -m 0755 "${liveDir}/${path}" ${dest}`),
+  ].join("\n");
+}
+
+// A binary outside /usr/local/bin (the release driver, #2985) needs its directory
+// first; /usr/local/bin exists on every box and gets no line.
+function installDirLines(dests) {
+  const dirs = [...new Set(dests.map((dest) => dest.slice(0, dest.lastIndexOf("/"))))];
+  return dirs
+    .filter((dir) => dir !== "/usr/local/bin")
+    .map((dir) => `sudo install -d -m 0755 -o root -g root ${dir}`);
 }
 
 /**
@@ -457,6 +488,7 @@ export function releaseInstallFromSourceScript(sources) {
         ` { echo "${dest} install: checksum mismatch, nothing installed" >&2; exit 1; }`,
     );
   });
+  lines.push(...installDirLines(files.map(({ dest }) => dest)));
   files.forEach(({ dest }, i) => lines.push(`sudo install -m 0755 "$${vars[i]}" ${dest}`));
   return lines.join("\n");
 }

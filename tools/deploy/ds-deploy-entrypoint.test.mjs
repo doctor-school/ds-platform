@@ -111,7 +111,10 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       ].join("\n"),
     );
     stub(join(stubs, "logger"), 'echo "$*" >> "$STUB_DIR/logger.log"');
-    stub(join(root, "usr/local/bin/ds-release"), 'echo "ds-release-called $*"');
+    stub(
+      join(root, "usr/local/bin/ds-release"),
+      `echo "ds-release-called $*" >> "$STUB_DIR/ds-release.log"; echo '{"release":null,"unitAlive":null}'`,
+    );
   });
 
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -133,10 +136,10 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     const p = join(dir, `${name}.log`);
     return existsSync(p) ? readFileSync(p, "utf8") : "";
   };
-  const installDriver = () => {
+  const installDriver = (body = 'echo "driver-called $*"') => {
     const driver = join(root, "usr/local/lib/ds-platform/release-driver");
     mkdirSync(dirname(driver), { recursive: true });
-    writeFileSync(driver, '#!/usr/bin/env bash\necho "driver-called $*"\n');
+    writeFileSync(driver, `#!/usr/bin/env bash\n${body}\n`);
     chmodSync(driver, 0o755);
   };
   const setRole = (role) => writeFileSync(join(root, "etc/ds-platform/box-role"), `${role}\n`);
@@ -144,7 +147,12 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
   it("status dispatches to sudo ds-release status with the validated args", () => {
     const r = run(`status stage-pr-42 ${SHA}`);
     assert.equal(r.status, 0, r.stderr);
-    assert.equal(r.stdout, `ds-release-called status stage-pr-42 ${SHA}\n`);
+    assert.equal(log("ds-release"), `ds-release-called status stage-pr-42 ${SHA}\n`);
+    // #2985: no driver installed ⇒ no driver unit.
+    assert.equal(
+      r.stdout,
+      `{"release":null,"unitAlive":null,"driver":{"unit":"ds-stage-pr-42-${SHA.slice(0, 12)}-driver","active":"absent","rc":null}}\n`,
+    );
     assert.match(log("sudo"), new RegExp(`/usr/local/bin/ds-release status stage-pr-42 ${SHA}`));
     assert.match(log("logger"), new RegExp(`-p auth.info accepted: status stage-pr-42 ${SHA}`));
   });
@@ -161,6 +169,34 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(r.status, 0, r.stderr);
     assert.equal(r.stdout, `driver-called stage-main ${SHA}\n`);
     assert.match(log("logger"), /auth\.info accepted: release stage-main/);
+  });
+
+  it("2985: release hands the driver the client's stdin (the images manifest)", () => {
+    installDriver('cat > "$STUB_DIR/driver-stdin.log"; echo "driver-called $*"');
+    const r = run(`release stage-main ${SHA}`, { input: '{"sha":"x"}' });
+    assert.equal(r.status, 0, String(r.stderr));
+    assert.equal(log("driver-stdin"), '{"sha":"x"}');
+  });
+
+  it("2985: status adds the installed driver's unit state as `driver`, on one JSON line", () => {
+    installDriver(
+      `[[ $1 == unit-state ]] && printf '{"unit":"ds-%s-%s-driver","active":"failed","rc":3}\\n' "$2" "\${3:0:12}"`,
+    );
+    const r = run(`status stage-main ${SHA}`);
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout), {
+      release: null,
+      unitAlive: null,
+      driver: { unit: `ds-stage-main-${SHA.slice(0, 12)}-driver`, active: "failed", rc: 3 },
+    });
+    assert.equal(r.stdout.split("\n").length, 2, "one line");
+  });
+
+  it("2985: status refuses a driver that answers no unit state", () => {
+    installDriver('echo "garbage"');
+    const r = run(`status stage-main ${SHA}`);
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /reported no unit state/);
   });
 
   const rejected = [

@@ -33,3 +33,8 @@
  * the same silence in the Docker build if it were left undeclared.
  */
 @source "../../../packages/event-page/src";
+
+/*
+ * And `@ds/account` (#2073), the one account cabinet `/account` mounts.
+ */
+@source "../../../packages/account/src";

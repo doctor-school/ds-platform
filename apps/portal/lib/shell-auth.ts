@@ -7,7 +7,7 @@ import {
   serverApiBase,
 } from "@ds/auth-flow/server";
 
-import { initialsFromDisplayName } from "@/lib/display-name";
+import { initialsFromDisplayName } from "@ds/room/display-name";
 import { LOGIN_HREF, MY_EVENTS_HREF, PROFILE_HREF } from "@/lib/shell-config";
 
 /**

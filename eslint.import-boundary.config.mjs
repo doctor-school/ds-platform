@@ -40,12 +40,11 @@ const localRules = {
  *
  *   @ds/schemas, @ds/design-system      base — import no feature package
  *   @ds/room, @ds/events-storefront     base only; NOT each other
- *   @ds/auth-flow  (wave 1, not yet)    base + room + events-storefront
- *   @ds/account    (wave 4, not yet)    all of the above
+ *   @ds/auth-flow                       base + room + events-storefront
+ *   @ds/account                         all of the above + congress-submissions
  *
- * The two not-yet-existing packages are listed on purpose: the answer key is
- * complete before the code lands, so wave 1 cannot invent a new edge silently.
- * A package absent from this table (db, api-client, utils, hooks, glossary,
+ * Every edge is listed before the code that uses it lands, so a wave cannot
+ * invent a new edge silently. A package absent from this table (db, api-client, utils, hooks, glossary,
  * legal-content, llm-utils, observability, tsconfig, eslint-config) makes no
  * direction claim — it is still forbidden to import `apps/**`.
  */
@@ -66,12 +65,17 @@ export const PACKAGE_GRAPH = {
   // that dependency through their shell.
   "storefront-shell": ["schemas", "design-system"],
   "auth-flow": ["schemas", "design-system", "room", "events-storefront"],
+  // The one account cabinet (#2073, wave-4 gate D1): it sits above both
+  // `auth-flow` and `congress-submissions`, whose section read the doctor's
+  // «Мои заявки на Конгресс» row makes (046 EARS-4) — inside `auth-flow` the
+  // cabinet would close a cycle. Nothing imports `account`.
   account: [
     "schemas",
     "design-system",
     "room",
     "events-storefront",
     "auth-flow",
+    "congress-submissions",
   ],
 };
 

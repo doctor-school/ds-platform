@@ -16,8 +16,9 @@
 #   ds-release forget  <env>
 #
 # <env> is prod, stage-main or stage-pr-<N>. Installed as /usr/local/bin/ds-release
-# from the shipped tree (infra/deploy/bin/ds-release) at the start of every
-# operator run; run through sudo.
+# at the start of every operator run: from the shipped tree (infra/deploy/bin/ds-release)
+# on a forward run, from the operator checkout's committed file on a `--rollback`,
+# which ships no tree; run through sudo.
 #
 # Exit codes: 0 ok · 1 the step failed · 2 usage · 3 refused (lock, lease, live unit,
 # corrupt status file).

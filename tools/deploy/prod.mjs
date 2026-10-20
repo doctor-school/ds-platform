@@ -159,17 +159,10 @@ export {
 
 const API_PROD = process.env.DS_API_PROD_SSH || "ds-api-prod";
 const DATA_PROD = process.env.DS_DATA_PROD_SSH || "ds-data-prod";
-// #3054: the entrypoint in the operator checkout — what a run that ships no tree
-// (`--rollback`) installs on the boxes.
-const DS_RELEASE_SOURCE = join(
-  import.meta.dirname,
-  "..",
-  "..",
-  "infra",
-  "deploy",
-  "bin",
-  "ds-release",
-);
+// #3054: the entrypoint a run that ships no tree (`--rollback`) installs on the
+// boxes, read from the operator checkout's HEAD commit.
+const DS_RELEASE_PATH = "infra/deploy/bin/ds-release";
+const REPO_ROOT = join(import.meta.dirname, "..", "..");
 const REMOTE_TREE = "~/ds-platform";
 const VPC_IP = process.env.DS_DATA_PROD_VPC_IP || "192.168.0.10";
 const IMAGE_RETENTION = 3;
@@ -1665,6 +1658,24 @@ function runSmoke(sha, services) {
 
 // --- rollback (app-only; DSO-127) -----------------------------------------
 
+/**
+ * The committed `ds-release` blob at `ref`, byte-exact. `git cat-file blob` (not
+ * the working-tree file, not `git show`, which may apply a textconv) so an
+ * uncommitted local edit never reaches prod: `rollback()` runs no clean-tree
+ * pre-flight.
+ */
+export function committedReleaseSource(repoRoot = REPO_ROOT, ref = "HEAD") {
+  const r = spawnSync("git", ["-C", repoRoot, "cat-file", "blob", `${ref}:${DS_RELEASE_PATH}`], {
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  if (r.status !== 0) {
+    throw new Error(
+      `cannot read ${ref}:${DS_RELEASE_PATH} from ${repoRoot}: ${String(r.stderr || "").trim() || `git exited ${r.status}`}`,
+    );
+  }
+  return r.stdout;
+}
+
 async function rollback(shaArg) {
   if (!/^[0-9a-f]{7,40}$/.test(shaArg)) {
     die(`--rollback needs a git SHA (7–40 hex chars), got: ${shaArg}`);
@@ -1756,13 +1767,23 @@ async function rollback(shaArg) {
   }
 
   // #3054: a rollback ships no tree, so the entrypoint comes from the operator
-  // checkout — every run, like the forward path (tech spec §5 Entrypoint) — and a
-  // box the forward path never reached still gets it before its first call.
-  const releaseSource = readFileSync(DS_RELEASE_SOURCE);
+  // checkout's HEAD — every run, like the forward path (tech spec §5 Entrypoint) —
+  // and a box the forward path never reached still gets it before its first call.
+  // The install is the one write before the read-only check below.
+  let releaseSource;
+  try {
+    releaseSource = committedReleaseSource();
+  } catch (e) {
+    die(`--rollback: ${e.message}`);
+  }
   for (const host of [API_PROD, DATA_PROD]) {
-    await sshScript(host, releaseInstallFromSourceScript(releaseSource), {
-      label: "install ds-release",
-    });
+    try {
+      await sshScript(host, releaseInstallFromSourceScript(releaseSource), {
+        label: "install ds-release",
+      });
+    } catch (e) {
+      die(`--rollback: cannot install ds-release on ${host} (${e.message}); prod was not rolled back`);
+    }
   }
   ok("ds-release installed on both boxes from the operator checkout");
 

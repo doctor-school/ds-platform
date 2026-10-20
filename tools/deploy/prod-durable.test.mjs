@@ -6,8 +6,12 @@
 // and lib/remote-durable.test.mjs.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { committedReleaseSource } from "./prod.mjs";
 
 const SOURCE = readFileSync(join(import.meta.dirname, "prod.mjs"), "utf8");
 const deployBody = SOURCE.slice(
@@ -97,9 +101,45 @@ test("3054: the rollback installs ds-release on both boxes from the operator che
     beforeCheck,
     /for \(const host of \[API_PROD, DATA_PROD\]\)[\s\S]{0,200}releaseInstallFromSourceScript\(/,
   );
+  assert.match(beforeCheck, /committedReleaseSource\(\)/, "the bytes are HEAD's blob");
+  assert.doesNotMatch(beforeCheck, /readFileSync\(/, "never the working-tree file");
+  // A failed install names the host through die(), like the check loop.
   assert.match(
-    SOURCE,
-    /const DS_RELEASE_SOURCE = join\(\s*import\.meta\.dirname,\s*"\.\.",\s*"\.\.",\s*"infra",\s*"deploy",\s*"bin",\s*"ds-release",?\s*\);/,
+    beforeCheck,
+    /releaseInstallFromSourceScript\([\s\S]{0,200}catch \(e\) \{\s*die\(\s*`--rollback: cannot install ds-release on \$\{host\}/,
   );
-  assert.match(beforeCheck, /readFileSync\(DS_RELEASE_SOURCE\)/);
+});
+
+test("3054: the rollback's ds-release bytes are the committed blob, never an uncommitted edit", () => {
+  const repo = mkdtempSync(join(tmpdir(), "ds-release-src-"));
+  try {
+    const git = (...args) => {
+      const r = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" });
+      assert.equal(r.status, 0, r.stderr);
+    };
+    git("init", "-q");
+    git("config", "core.autocrlf", "false");
+    mkdirSync(join(repo, "infra", "deploy", "bin"), { recursive: true });
+    const file = join(repo, "infra", "deploy", "bin", "ds-release");
+    const committed = Buffer.concat([
+      Buffer.from("#!/usr/bin/env bash\necho committed\n"),
+      Buffer.from([0x00, 0xff]),
+    ]);
+    writeFileSync(file, committed);
+    git("add", "infra/deploy/bin/ds-release");
+    git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "c");
+    writeFileSync(file, "#!/usr/bin/env bash\necho UNCOMMITTED\n");
+    assert.ok(committedReleaseSource(repo).equals(committed), "HEAD's bytes, not the edited file");
+    assert.throws(
+      () => committedReleaseSource(repo, "no-such-ref"),
+      /cannot read no-such-ref:infra\/deploy\/bin\/ds-release/,
+    );
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test("3054: the operator checkout's HEAD carries the entrypoint the rollback installs", () => {
+  const source = committedReleaseSource();
+  assert.match(source.subarray(0, 64).toString("utf8"), /^#!\/usr\/bin\/env bash\n/);
 });

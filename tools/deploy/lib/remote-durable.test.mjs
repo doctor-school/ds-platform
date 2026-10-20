@@ -7,7 +7,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
@@ -79,7 +79,9 @@ function runInstall(script) {
       env: { ...process.env, PATH: `${dir}${delimiter}${process.env.PATH}`, DS_TEST_OUT: out },
       encoding: "utf8",
     });
-    if (run.status !== 0) return { status: run.status, stderr: run.stderr };
+    if (run.status !== 0) {
+      return { status: run.status, stderr: run.stderr, installed: existsSync(out) };
+    }
     return { status: 0, bytes: readFileSync(out), dest: readFileSync(`${out}.dest`, "utf8") };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -110,6 +112,7 @@ test("3054: bytes damaged in transit are refused before anything is installed", 
   const result = runInstall(damaged);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /checksum/);
+  assert.equal(result.installed, false, "the stand-in install never ran");
 });
 
 test("3054: an empty entrypoint source is refused", () => {

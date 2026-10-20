@@ -118,3 +118,16 @@ design-source/support\.js
 # in the tree before #1913 and is not part of its diff. Same crawler-hostile
 # false-positive class as the npmjs / GOV.UK entries above; verified manually.
 ^https://yandex\.cloud($|/.*$)
+
+# Research citations in
+# apps/docs/content/specs/product/content-production/calculator/ui-research-ru.md
+# (merged with #2894) on hosts whose bot-blocking fronts reject unauthenticated
+# CI user agents. York Health Economics Consortium (tornado-diagram glossary):
+# HTTP 522 from its Cloudflare front on three consecutive attempts of run
+# 39381185783 (PR #3081, which does not touch the file; 2026-10-20 06:31, 06:43,
+# 06:48 UTC), 403 to a residential curl. Signal v. Noise archive: 403 on PR
+# #3077's first run (2026-10-20 ~05:5x UTC), green on rerun. The citations stay
+# inline for readers and were verified manually. Same crawler-hostile
+# false-positive class as the npmjs / GOV.UK / Yandex Cloud entries above.
+^https://www\.yhec\.co\.uk/.*$
+^https://signalvnoise\.com/.*$

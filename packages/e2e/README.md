@@ -1513,6 +1513,30 @@ thresholds. This narrow browser case consumes
 ordinary sends without exhausting or claiming to inspect those counters. No
 runtime surface changes or owner Stage-B request are involved.
 
+### Wrong SMS login code with retained-code recovery (003 EARS-7/8/41/16)
+
+`Academy refuses a wrong SMS login code and accepts the retained real code for the same owner`
+(`steps/login-sms-code-refusal.steps.ts`, #3085) registers a uniquely owned
+verified Academy doctor, confirms a fresh phone through actual UI/SMS, then
+revokes that registration session. A genuine guest requests an SMS login code;
+the sink checkpoint binds its fresh delivery to the owned recipient and
+`session.otp.sms.challenged` event using store-side message IDs.
+
+A different valid six-digit code must receive the exact generic HTTP 401,
+without Set-Cookie or private session/profile access. The operation plate shows
+the refusal while the code cells clear and refocus. Without resend, the retained
+actual code must establish a fresh secure session for the same subject, verified
+email and confirmed phone, persisting through reload. Exact owned logout removes
+private access, including failure-path cleanup on the configured HTTP/HTTPS
+origin. Traces are off and secret assertions use booleans.
+
+The case uses one ordinary rejected attempt and two normal SMS deliveries; it
+assumes no default rate-limit ceiling, changes no counters and waits for no
+TTL/window. Native `apps/api/test/auth/login-otp.e2e-spec.ts` owns IdP delegation
+and enumeration timing; `apps/api/src/auth/sms-budget/sms-budget.service.spec.ts`
+owns EARS-14 thresholds. Existing broader scenarios remain intact. This adds no
+runtime or visual change and requires no owner Stage-B slot.
+
 ### Unusable congress handoff (003 EARS-44/16)
 
 `Academy falls back silently for unknown, malformed and exhausted handoff references`

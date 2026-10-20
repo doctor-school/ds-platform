@@ -629,6 +629,18 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # sms-budget.service.spec.ts owns EARS-14 per-phone, IP and ASN thresholds.
     # This journey neither exhausts nor claims to inspect fraud-budget counters.
 
+  @EARS-7 @EARS-8 @EARS-41 @EARS-16 @failure @login-sms-code-refusal
+  Scenario: Academy refuses a wrong SMS login code and accepts the retained real code for the same owner
+    Given an owned Academy SMS-code refusal doctor verifies email and confirms a fresh phone
+    When that owned refusal doctor logs out and retains the newly delivered SMS login code
+    And the SMS login guest submits a different valid six-digit code and receives the generic refusal
+    And the refused SMS login guest enters the retained actual code without requesting another
+    Then the recovered SMS login session persists for the same confirmed-phone doctor through reload
+    # Narrow browser projection: delivered login challenge, generic wrong-code refusal,
+    # cleared/refocused code field, retained-code recovery and same-owner session.
+    # Native apps/api/test/auth/login-otp.e2e-spec.ts owns IdP delegation and timing;
+    # sms-budget.service.spec.ts owns EARS-14 thresholds. No exhaustion or expiry claim.
+
   @EARS-14 @failure
   Scenario: SMS send refused when the daily budget circuit-breaker is open
     Given the global daily SMS budget has been exhausted

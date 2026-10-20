@@ -234,6 +234,35 @@ deploy:prod` runs it as its last pre-flight step, from a clean detached checkout
 target SHA, right after `stage:slot up main --ref <sha>` converged the slot
 (`tools/deploy/README.md` → «Stage `main` check»). Nothing is written to GitHub.
 
+### The same check in Actions: `.github/workflows/stage.yml` (#2985)
+
+Every successful `runtime-images.yml` run of a push to `main` triggers
+`.github/workflows/stage.yml` (one run at a time, group `stage-main`, never cancelled):
+
+1. **`converge`** (environment `stage`) sets the commit status `stage-suite` to
+   `pending`, downloads `images-<sha>.json` from the triggering run and sends it over
+   ssh to the box's forced command, `release stage-main <sha>`. The release driver on
+   the box runs the converge in its own `systemd-run` unit, so the job dying never
+   kills it; the job then polls `status stage-main <sha>` every 15 s (45 min limit),
+   printing one line per poll: driver state, exit code, release step, release state.
+2. **`suite`** (environment `stage`) checks out the SHA and runs
+   `node tools/staging/e2e-stage.mjs main --expect-sha <sha>` with `STAGE_BASE_DOMAIN`,
+   `E2E_HTTP_USER` and the stage secrets (basic-auth password, captcha test token, the
+   four golden passwords) exported — the no-SSH mode above, so the suite never reads the
+   box — plus `CI=1` and **`E2E_PUBLIC_LOG=1`**. In that mode the console reporter is
+   `packages/e2e/reporters/summary.ts` (one line per test: status, project, title path,
+   duration, retry — no error text, no test output, no URL), the two axe legs get the
+   same reporter, and the HTML + JSON report is written only into the report dir. The
+   step summary records the run's peak memory (`/usr/bin/time -v` max RSS and sampled
+   `free -m`), the number `E2E_WORKERS` is set from.
+3. Always, pass or fail, the report dir is streamed as a tar to `upload-report <sha>`:
+   it lands on the box at `/var/lib/ds-platform/e2e-reports/<sha>/` (14-day retention).
+   Nothing is uploaded as an Actions artifact — the repository's logs and artifacts are
+   public (release-pipeline spec §4).
+4. The commit status `stage-suite` becomes `success` / `failure` with counts only
+   (`412 passed, 3 failed, 12 skipped`). A failed converge sets it to `failure` and the
+   suite does not run.
+
 Every slot (incl. `main`) runs the api with the CI test-runner auth ceilings (`RATE_LIMIT_*`
 in `infra/deploy/compose/slot/compose.yml`): the suite signs in hundreds of times from one
 runner address, which the production per-IP window throttles into a false 429; the rate

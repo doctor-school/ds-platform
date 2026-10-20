@@ -176,6 +176,29 @@ export function releaseCheckEnvRefusal(env) {
 }
 
 /**
+ * Public-log mode (`E2E_PUBLIC_LOG=1`, set only by `.github/workflows/stage.yml`,
+ * #2985): the run's console is a PUBLIC Actions log. The suite config then swaps
+ * its console reporter for `packages/e2e/reporters/summary.ts`
+ * (`packages/e2e/lib/reporters.ts`), and the two axe legs — whose configs print
+ * with `list`, error text included — get the same reporter on their command line.
+ * This command's own lines never carry a response body or a credential in either
+ * mode: the pre-flight reports a status or a fixed reason, never the body.
+ */
+export const SUMMARY_REPORTER_PATH = path
+  .join(REPO_ROOT, "packages", "e2e", "reporters", "summary.ts")
+  .split(path.sep)
+  .join("/");
+
+export function publicLogEnabled(env) {
+  return env?.E2E_PUBLIC_LOG === "1";
+}
+
+/** The axe leg's extra argv: the summary reporter in public mode, nothing otherwise. */
+export function publicReporterArgs(env) {
+  return publicLogEnabled(env) ? [`--reporter=${SUMMARY_REPORTER_PATH}`] : [];
+}
+
+/**
  * The env the suites read (§6.6): one base URL per storefront plus the stand's
  * basic-auth pair, which `packages/e2e/playwright.config.ts` turns into Playwright
  * `httpCredentials`. The portal serves under `academy-<slot>`, never `portal-`.
@@ -513,6 +536,8 @@ export async function runE2eStage(
     E2E_REPORT_DIR: path.resolve(REPO_ROOT, reportDir),
   };
   if (options.grep) suiteEnv.E2E_GREP = options.grep;
+  if (publicLogEnabled(env)) suiteEnv.E2E_PUBLIC_LOG = "1";
+  const reporterArgs = publicReporterArgs(env);
 
   const legs = [];
   const suiteArgv = ["pnpm", "--filter", "@ds/e2e", "test:e2e"];
@@ -537,9 +562,10 @@ export async function runE2eStage(
       legs.push({
         name: "axe/academy",
         ok:
-          effects.run(["pnpm", "--filter", "@ds/portal", "test:axe"], {
-            env: suiteEnv,
-          }).status === 0,
+          effects.run(
+            ["pnpm", "--filter", "@ds/portal", "test:axe", ...reporterArgs],
+            { env: suiteEnv },
+          ).status === 0,
       });
     }
     if (axeHost("doctor")) {
@@ -556,6 +582,7 @@ export async function runE2eStage(
               "test",
               "--config=playwright.room.config.ts",
               "a11y/room-axe",
+              ...reporterArgs,
             ],
             { env: suiteEnv },
           ).status === 0,

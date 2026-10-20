@@ -590,6 +590,12 @@ and prints the verdict block the operator pastes into the PR body or the release
 `--project walks` selects the derived walks alone (the two storefront a11y legs belong to
 the host projects, so that selection runs neither).
 
+`E2E_PUBLIC_LOG=1` (set only by `.github/workflows/stage.yml`, whose log is public)
+replaces the console reporter `list` with `reporters/summary.ts` — one line per test:
+status, project, title path, duration, retry; never an error message, test output,
+attachment or URL — and requires `E2E_REPORT_DIR`, the only place the JSON and HTML
+reports are then written (`lib/reporters.ts`). Unset, the console stays `list`.
+
 The suite runs on the operator's machine while Mailpit and the SMS sink stamp
 deliveries with the stage box's clock, so no delivery reader compares a runner
 instant with a store timestamp (#3057): a runner clock a few hundred

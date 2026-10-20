@@ -359,7 +359,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       # Unused by the step (`gh api …/statuses` only); the `workflow-auth` guard
-      # requires it on every job that runs `gh`.
+      # requires it (with `contents: read`) on every job that runs `gh`.
+      contents: read
       pull-requests: read
       statuses: write
     steps:

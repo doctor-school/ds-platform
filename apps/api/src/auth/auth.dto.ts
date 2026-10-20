@@ -1,5 +1,6 @@
 import { createZodDto } from "nestjs-zod";
 import {
+  LoginHandoffOwnershipRequestSchema,
   LoginHandoffRequestSchema,
   LoginRequestSchema,
   OtpRequestSchema,
@@ -21,6 +22,9 @@ export class LoginRequestDto extends createZodDto(LoginRequestSchema) {}
 export class OtpRequestDto extends createZodDto(OtpRequestSchema) {}
 export class LoginHandoffRequestDto extends createZodDto(
   LoginHandoffRequestSchema,
+) {}
+export class LoginHandoffOwnershipRequestDto extends createZodDto(
+  LoginHandoffOwnershipRequestSchema,
 ) {}
 export class OtpVerifyDto extends createZodDto(OtpVerifySchema) {}
 export class VerifyRequestDto extends createZodDto(VerifyRequestSchema) {}

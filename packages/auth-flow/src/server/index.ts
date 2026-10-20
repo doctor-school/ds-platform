@@ -26,6 +26,7 @@ export {
   type AuthRouteGuardInput,
 } from "./auth-route-guard";
 export { parkReturnTarget } from "./return-target-parking";
+export { resolveOwnHandoff } from "./handoff-ownership";
 /**
  * Row 32 / #1987 - the account shape of the LANDING codec. It rides on the
  * server subpath because its only consumers are the hosts' server-side landing

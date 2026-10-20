@@ -477,6 +477,11 @@ export function LoginDoor({
   // with an empty field; an EARS-13 refusal shows the request's own sentence.
   // The ref guard keeps it to ONE call per page load, StrictMode included.
   const [handoffPending, setHandoffPending] = useState(false);
+  // 003 EARS-44: a signed-in hand-off renders a form only if the answer
+  // requires sign-in. This must also hold in server HTML and while routing.
+  const [handoffNeedsSignIn, setHandoffNeedsSignIn] = useState(
+    !signedIn || !handoffRef,
+  );
   const handoffRedeemed = useRef(false);
   useEffect(() => {
     // Right after reading it, whatever happens next: a reload must not redeem
@@ -491,6 +496,7 @@ export function LoginDoor({
         if (answer.status === "otp_sent") {
           setSentIdentifier(answer.identifier);
           setResendNonce(0);
+          setHandoffNeedsSignIn(true);
           return;
         }
         // #2659 — signed in already: the reference's own account answers
@@ -503,9 +509,10 @@ export function LoginDoor({
           router.refresh();
         }
       })
-      .catch((err: unknown) =>
-        setOtpRequestError(authErrorMessage(err, errors, failed.otpRequest)),
-      )
+      .catch((err: unknown) => {
+        setOtpRequestError(authErrorMessage(err, errors, failed.otpRequest));
+        setHandoffNeedsSignIn(true);
+      })
       .finally(() => setHandoffPending(false));
     // Once per page load by design: the reference is read at mount only.
   }, []);
@@ -555,6 +562,8 @@ export function LoginDoor({
       {...fieldProps}
     />
   );
+
+  if (!handoffNeedsSignIn) return null;
 
   return (
     <div

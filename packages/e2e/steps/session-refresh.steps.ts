@@ -183,9 +183,9 @@ When(
       noTokens: true,
     });
     expect(
-      await refreshed.response.headerValue("set-cookie"),
+      (await refreshed.response.headerValue("set-cookie")) === null,
       "server-side refresh issues no new browser cookie",
-    ).toBeNull();
+    ).toBe(true);
     await assertSameOwner(state, world.hostBaseUrl);
     await state.page.reload({ waitUntil: "load" });
     await state.page.waitForLoadState("networkidle");
@@ -246,9 +246,9 @@ Then(
         profile: 401,
       });
       expect(
-        await response.response.headerValue("set-cookie"),
+        (await response.response.headerValue("set-cookie")) === null,
         "anonymous refusal mints no session",
-      ).toBeNull();
+      ).toBe(true);
       expect(
         (await anonymous.cookies()).some((cookie) => cookie.name === SESSION),
       ).toBe(false);

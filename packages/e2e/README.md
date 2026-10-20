@@ -6,6 +6,30 @@ The end-to-end regression contract of the staging/regression-contour tech spec
 feature files as the suite, and the navigation model both storefronts' chrome
 is configured from.
 
+### Independent-session logout isolation (003 EARS-10)
+
+`Academy logout revokes only its requested independently established session`
+(`steps/logout-session-isolation.steps.ts`, #3071, `@logout-session-isolation`)
+registers and verifies one uniquely owned account using the shared addressed
+mail delivery-ID checkpoint helper. After discarding the registration session,
+two independent browser contexts each sign in through the actual password form.
+Both private reads must succeed simultaneously with distinct opaque cookies.
+Logging out the first clears its cookie and denies private session/profile reads;
+replaying that exact retained cookie with its original browser fingerprint is
+also generically refused. The second browser keeps its identical secure cookie,
+subject and complete private profile through reload, renders its own account,
+and then logs out with denied private reads.
+
+Trace-off fixtures and boolean evidence keep passwords, cookies and private
+bodies out of diagnostics. Cleanup revokes only exact owned sessions, closes
+both contexts on every outcome and preserves any original scenario failure.
+No TTL/window waits, rate-limit assumptions, cloned second session or session
+store changes are used; the same case runs unchanged in the stage Academy suite.
+Retain the broader account-control logout scenario and native
+`apps/api/src/auth/session/session.service.spec.ts` revocation/audit contracts.
+This browser projection makes no refresh-chain or internal-audit claim and has
+no render surface or Stage-B slot.
+
 ### Actual phone-code resend (003 EARS-47/48/42)
 
 `Academy resends the actual phone SMS and confirms the same owner with its newest delivery`

@@ -693,6 +693,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the logout response clears the __Host-ds_session cookie
     And the old session cookie cannot read the doctor's private profile
 
+  @EARS-10 @happy @logout-session-isolation
+  Scenario: Academy logout revokes only its requested independently established session
+    Given a uniquely owned verified Academy account has two independently password-authenticated browser sessions
+    When the first Academy session logs out and its retained cookie is replayed from that same browser
+    Then only that first session is revoked while the second unchanged Academy session and private account survive reload
+    # Native session-service tests retain server-side revocation/audit contracts.
+    # Retain the broader account-control logout scenario above.
+
   @EARS-11 @EARS-16 @happy
   Scenario: Password reset request is enumeration-resistant
     When a guest requests password resets through Academy for a seeded and a unique unregistered email

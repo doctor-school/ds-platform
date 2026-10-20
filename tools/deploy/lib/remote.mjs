@@ -418,6 +418,30 @@ export function releaseInstallScript(liveDir = "$HOME/ds-platform") {
 }
 
 /**
+ * Install the entrypoint from bytes the operator holds, for a run that ships no
+ * tree (`--rollback`, #3054). The bytes travel base64-encoded in a quoted heredoc
+ * — the base64 alphabet cannot form the delimiter — and are checked against their
+ * sha256 before `install` touches the binary, so a damaged transfer refuses
+ * instead of installing a broken entrypoint.
+ */
+export function releaseInstallFromSourceScript(source) {
+  const bytes = Buffer.from(source);
+  if (bytes.length === 0) throw new Error("ds-release source is empty");
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const encoded = bytes.toString("base64").match(/.{1,76}/g);
+  return [
+    'f=$(mktemp)',
+    `trap 'rm -f "$f"' EXIT`,
+    `base64 -d > "$f" <<'DS_RELEASE_B64'`,
+    ...encoded,
+    "DS_RELEASE_B64",
+    `printf '%s  %s\\n' ${sha256} "$f" | sha256sum -c --status - ||` +
+      ` { echo "ds-release install: checksum mismatch, nothing installed" >&2; exit 1; }`,
+    `sudo install -m 0755 "$f" ${DS_RELEASE_BIN}`,
+  ].join("\n");
+}
+
+/**
  * Start (or attach to) one step. The step script reaches the box inside a quoted
  * heredoc — no expansion, its delimiter derived from the script itself — and
  * `ds-release` copies it root-only before the unit runs it.

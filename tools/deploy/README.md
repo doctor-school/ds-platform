@@ -187,7 +187,9 @@ only under `pnpm deploy:prod --retry-failed`. A closed attempt is archived
 of a new SHA marks the previous one `superseded`. While a release is open, a deploy of
 another SHA is refused and names the open SHA; if a failed run could not close it (the box
 was unreachable), close it by hand: `ssh ds-api-prod 'sudo ds-release finish prod <sha>
-failed'` (and the same on ds-data-prod). `--rollback` takes no lease, but it refuses,
+failed'` (and the same on ds-data-prod). `--rollback` ships no tree, so it first installs
+`/usr/local/bin/ds-release` on both boxes from the operator checkout's
+`infra/deploy/bin/ds-release` (streamed over ssh, sha256-checked). It takes no lease, but it refuses,
 naming the unit, while any `ds-prod-*` step unit still runs on either box
 (`ds-release check prod`), and its `up -d` runs through `ds-release supersede prod`, under
 the env lock, marking the recorded attempts `superseded` — so deploying the rolled-off SHA

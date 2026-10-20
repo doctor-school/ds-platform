@@ -6,11 +6,16 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
 
 import {
   DS_RELEASE_BIN,
   releaseFinishScript,
   releaseForgetArgv,
+  releaseInstallFromSourceScript,
   releaseInstallScript,
   releaseStartScript,
   releaseStatusScript,
@@ -44,6 +49,74 @@ test("2982: the entrypoint is installed from the shipped tree, idempotently", ()
     releaseInstallScript("$HOME/ds-platform.slots/pr-7"),
     /"\$HOME\/ds-platform\.slots\/pr-7\/infra\/deploy\/bin\/ds-release"/,
   );
+});
+
+// #3054: a rollback ships no tree, so it installs the entrypoint from the
+// operator checkout's bytes, streamed over the ssh channel. The script runs for
+// real here against a `sudo` stand-in that copies the installed file out, so a
+// box with no /usr/local/bin/ds-release is shown to end up with the exact bytes.
+const HAS_BASH =
+  spawnSync("bash", ["-c", "command -v base64 && command -v sha256sum"]).status === 0;
+const NO_BASH = !HAS_BASH && "no bash/base64/sha256sum on this machine";
+
+function runInstall(script) {
+  const dir = mkdtempSync(join(tmpdir(), "ds-release-install-"));
+  try {
+    const out = join(dir, "installed");
+    const sudo = join(dir, "sudo");
+    writeFileSync(
+      sudo,
+      [
+        "#!/usr/bin/env bash",
+        '[ "$1 $2 $3" = "install -m 0755" ] || exit 9',
+        'cp "$4" "$DS_TEST_OUT"',
+        'printf %s "$5" > "$DS_TEST_OUT.dest"',
+        "",
+      ].join("\n"),
+    );
+    chmodSync(sudo, 0o755);
+    const run = spawnSync("bash", ["--norc", "-euo", "pipefail", "-c", script], {
+      env: { ...process.env, PATH: `${dir}${delimiter}${process.env.PATH}`, DS_TEST_OUT: out },
+      encoding: "utf8",
+    });
+    if (run.status !== 0) {
+      return { status: run.status, stderr: run.stderr, installed: existsSync(out) };
+    }
+    return { status: 0, bytes: readFileSync(out), dest: readFileSync(`${out}.dest`, "utf8") };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test("3054: the entrypoint installs from the operator's bytes onto a box without it", { skip: NO_BASH }, () => {
+  const source = Buffer.concat([
+    Buffer.from("#!/usr/bin/env bash\r\necho \"$HOME\" '$x' `id`\nDS_RELEASE_B64\nEOF\n", "utf8"),
+    Buffer.from([0xc3, 0xa9, 0x00, 0xff]),
+    Buffer.from("tail-without-newline", "utf8"),
+  ]);
+  const script = releaseInstallFromSourceScript(source);
+  assert.doesNotMatch(script, /infra\/deploy\/bin|ds-platform/, "no shipped tree is read");
+  const result = runInstall(script);
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(result.bytes.equals(source), "the installed bytes are exactly the operator's");
+  assert.equal(result.dest, DS_RELEASE_BIN);
+});
+
+test("3054: bytes damaged in transit are refused before anything is installed", { skip: NO_BASH }, () => {
+  const script = releaseInstallFromSourceScript(Buffer.from("#!/bin/sh\necho ok\n"));
+  const damaged = script.replace(
+    /\n([A-Za-z0-9+/=]+)\nDS_RELEASE_B64\n/,
+    (_m, line) => `\n${line.startsWith("A") ? "B" : "A"}${line.slice(1)}\nDS_RELEASE_B64\n`,
+  );
+  assert.notEqual(damaged, script);
+  const result = runInstall(damaged);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /checksum/);
+  assert.equal(result.installed, false, "the stand-in install never ran");
+});
+
+test("3054: an empty entrypoint source is refused", () => {
+  assert.throws(() => releaseInstallFromSourceScript(Buffer.alloc(0)), /empty/);
 });
 
 test("2982: the start script hands the step script over a quoted heredoc, never streams it", () => {

@@ -66,7 +66,8 @@ const copy: LoginCardCopy = {
       email: "copy.otp.verifyTitle.email",
       sms: "copy.otp.verifyTitle.sms",
     },
-    sentTo: (destination) => `copy.otp.sentTo:${destination}`,
+    sentTo: (destination, channel) =>
+      `copy.otp.sentTo.${channel}:${destination}`,
     codeLabel: {
       email: "copy.otp.codeLabel.email",
       sms: "copy.otp.codeLabel.sms",
@@ -74,7 +75,8 @@ const copy: LoginCardCopy = {
     verifySubmit: "copy.otp.verifySubmit",
     resend: "copy.otp.resend",
     resendCountdown: (seconds) => `copy.otp.resendIn:${seconds}`,
-    resentTo: (destination) => `copy.otp.resentTo:${destination}`,
+    resentTo: (destination, channel) =>
+      `copy.otp.resentTo.${channel}:${destination}`,
     changeMethod: "copy.otp.changeMethod",
   },
 };
@@ -389,7 +391,7 @@ describe("<LoginCard>", () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("copy.otp.sentTo:doc@example.com"),
+      screen.getByText("copy.otp.sentTo.email:doc@example.com"),
     ).toBeInTheDocument();
     expect(screen.queryByText("copy.title")).toBeNull();
     expect(screen.queryByRole("tablist")).toBeNull();
@@ -427,9 +429,10 @@ describe("<LoginCard>", () => {
       }),
     ).toBeInTheDocument();
     expect(screen.getByText("copy.otp.codeLabel.sms")).toBeInTheDocument();
-    // #2607: the visitor's own number, exactly as sent — never masked.
+    // #2607: the visitor's own number, exactly as sent — never masked; the
+    // sentence is picked per channel (#2997).
     expect(
-      screen.getByText("copy.otp.sentTo:+79991234567"),
+      screen.getByText("copy.otp.sentTo.sms:+79991234567"),
     ).toBeInTheDocument();
   });
 
@@ -440,7 +443,7 @@ describe("<LoginCard>", () => {
       expect(screen.queryByTestId("otp-resend-notice")).toBeNull();
       rerender(<Card sentIdentifier="doc@example.com" resendNonce={1} />);
       expect(screen.getByTestId("otp-resend-notice")).toHaveTextContent(
-        "copy.otp.resentTo:doc@example.com",
+        "copy.otp.resentTo.email:doc@example.com",
       );
     } finally {
       vi.useRealTimers();

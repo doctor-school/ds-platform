@@ -95,7 +95,12 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
       // Canvas «ШАГ КОДА» (`design-source/auth.dc.html` 64-85, 394-397, 501-503):
       // the one code step, shared with the registration confirmation (003 EARS-42).
       verifyTitle: { email: "Проверьте почту", sms: "Проверьте телефон" },
-      sentTo: "Мы отправили код на {destination}.",
+      // #2997: the step cannot know whether the number is on file (EARS-56
+      // keeps one response), so the SMS sentence states the send conditionally.
+      sentTo: {
+        email: "Мы отправили код на {destination}.",
+        sms: "Если номер {destination} подтверждён в профиле, мы отправили на него код.",
+      },
       codeLabel: { email: "Код из письма", sms: "Код из сообщения" },
       // Canvas `codeLifetimeHint` (#2882): the sign-in code lives 300 s. An
       // unverified account's code lives longer, but the step cannot tell it
@@ -109,7 +114,10 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
       verifySubmit: "Подтвердить и войти",
       resend: "Отправить снова",
       resendCountdown: "Отправить снова · {seconds} с",
-      resentTo: "Мы отправили новый код на {destination}.",
+      resentTo: {
+        email: "Мы отправили новый код на {destination}.",
+        sms: "Если номер {destination} подтверждён в профиле, мы отправили на него новый код.",
+      },
       changeMethod: "← Изменить способ",
     },
     failed: {

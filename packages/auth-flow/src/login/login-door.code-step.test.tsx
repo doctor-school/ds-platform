@@ -235,6 +235,53 @@ describe("003 EARS-42: sign-in by code shows the one code step", () => {
   });
 
   it.each(HOSTS)(
+    "003 EARS-42 (#2997): on %s the SMS sign-in step states the send conditionally — first sentence and resend note — while e-mail keeps «Мы отправили код на …»",
+    async (_host, config) => {
+      const PHONE = "+79991234567";
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+        render(<LoginDoor config={config} landing="/" />);
+        await user.click(screen.getByTestId("login-method-otp"));
+        await user.click(screen.getByTestId("otp-channel-sms"));
+        await user.type(screen.getByLabelText(COPY.otp.phoneLabel), PHONE);
+        await user.click(screen.getByTestId("otp-send"));
+        await screen.findByTestId("otp-verify");
+
+        // The step cannot know whether the number is on file (EARS-56 keeps
+        // one response), so it never asserts the SMS went out.
+        const number = screen.getByText(PHONE);
+        expect(number.tagName).toBe("STRONG");
+        expect(number.parentElement).toHaveTextContent(
+          `Если номер ${PHONE} подтверждён в профиле, мы отправили на него код.`,
+        );
+        expect(screen.queryByText(/Мы отправили код на/)).toBeNull();
+
+        act(() => vi.advanceTimersByTime(60_000));
+        await user.click(screen.getByTestId("otp-resend"));
+        await waitFor(() => expect(requestOtp).toHaveBeenCalledTimes(2));
+        const notice = await screen.findByTestId("otp-resend-notice");
+        expect(notice).toHaveTextContent(
+          `Если номер ${PHONE} подтверждён в профиле, мы отправили на него новый код.`,
+        );
+        expect(notice.querySelector("strong")?.textContent).toBe(PHONE);
+
+        // The e-mail branch is unchanged.
+        await user.click(screen.getByTestId("otp-change-method"));
+        await user.click(screen.getByTestId("otp-channel-email"));
+        await user.type(screen.getByLabelText(COPY.otp.emailLabel), EMAIL);
+        await user.click(screen.getByTestId("otp-send"));
+        await screen.findByTestId("otp-verify");
+        expect(screen.getByText(EMAIL).parentElement).toHaveTextContent(
+          `Мы отправили код на ${EMAIL}.`,
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it.each(HOSTS)(
     "003 EARS-22 (#2881): on %s the caret is in the first code cell once the code is sent",
     async (_host, config) => {
       await sendEmailCode(config);

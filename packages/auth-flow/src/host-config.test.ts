@@ -70,14 +70,18 @@ describe("#2027 PR 1.5 host config — the sign-in door data", () => {
   });
 
   it("row 33: login copy crosses the server→client boundary — templates are strings with placeholders", () => {
-    expectTypeOf<AuthFlowLoginCopy["otp"]["sentTo"]>().toEqualTypeOf<string>();
+    expectTypeOf<
+      AuthFlowLoginCopy["otp"]["sentTo"]["sms"]
+    >().toEqualTypeOf<string>();
     expectTypeOf<
       AuthFlowLoginCopy["otp"]["resendCountdown"]
     >().toEqualTypeOf<string>();
     for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
-      expect(resolveAuthFlowCopy(config).login.otp.sentTo).toContain(
-        "{destination}",
-      );
+      for (const channel of ["email", "sms"] as const) {
+        expect(resolveAuthFlowCopy(config).login.otp.sentTo[channel]).toContain(
+          "{destination}",
+        );
+      }
       expect(resolveAuthFlowCopy(config).login.otp.resendCountdown).toContain(
         "{seconds}",
       );
@@ -145,14 +149,21 @@ describe("#2027 PR 1.7 host config — the confirmation step", () => {
         email: "Проверьте почту",
         sms: "Проверьте телефон",
       });
-      expect(otp.sentTo).toBe("Мы отправили код на {destination}.");
+      // #2997: the SMS sentence never asserts a send the step cannot know.
+      expect(otp.sentTo).toEqual({
+        email: "Мы отправили код на {destination}.",
+        sms: "Если номер {destination} подтверждён в профиле, мы отправили на него код.",
+      });
       expect(otp.codeLabel).toEqual({
         email: "Код из письма",
         sms: "Код из сообщения",
       });
       expect(otp.verifySubmit).toBe("Подтвердить и войти");
       expect(otp.changeMethod).toBe("← Изменить способ");
-      expect(otp.resentTo).toBe("Мы отправили новый код на {destination}.");
+      expect(otp.resentTo).toEqual({
+        email: "Мы отправили новый код на {destination}.",
+        sms: "Если номер {destination} подтверждён в профиле, мы отправили на него новый код.",
+      });
       // Canvas `errText()` «код» — the one refusal of the one code step.
       expect(resolveAuthFlowCopy(config).login.failed.otpVerify).toBe(
         "Код не подошёл. Проверьте его или запросите новый.",

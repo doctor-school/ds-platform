@@ -80,10 +80,10 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "account-profile.dc.html": {
-      "sha256": "98d448c2918e88ae3f2d377d07af1dca3ba5454042a26c026f4540da0162326b",
-      "pulledAt": "2026-10-12T04:19:58.228Z",
-      "remotePath": null,
-      "note": "#2449 Stage A: owner redraw 2026-10-12 (rev 2) — unconfirmed state, no number-taken error, reset-by-email link"
+      "sha256": "c1fc281a743643a1efdf92bc17c4bdbf595aa6d37cca572c96155d64a0f0c876",
+      "pulledAt": "2026-10-20T06:31:04.389Z",
+      "remotePath": "account-profile.dc.html",
+      "note": "#3078: owner redraw 2026-10-20 — host prop (Академия | витрина врача) drives ds-shell; doctor-only «Мои заявки на Конгресс» row (congress switch), 046 EARS-4"
     },
     "archive/archive-auth-v1.dc.html": {
       "sha256": "1bdd6860724481d8461e0c72c21f84076ba24d7cc627e3664b420749d2337def",

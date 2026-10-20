@@ -25,10 +25,18 @@
 # Exit codes: 0 ok · 1 the command failed · 2 rejected (usage) · 3 refused (the box
 # cannot serve it: no release driver, not the stage box, an unsafe archive).
 set -euo pipefail
+# The bracket ranges of the checks below must not follow a client-chosen collation
+# (sshd's AcceptEnv passes LC_*).
+export LC_ALL=C
 
-# A test root prefix; empty on a box. sshd passes no client environment to a forced
-# command beyond AcceptEnv (LANG/LC_* on Ubuntu), so a client cannot set it.
-ROOT=${DS_ENTRYPOINT_ROOT:-}
+# Test hooks: a root prefix and the DS_ENTRYPOINT_* cap overrides below. The
+# installed entrypoint never reads them, whatever sshd's AcceptEnv /
+# PermitUserEnvironment (pinned `no` by the hardening drop-in) let through.
+ROOT=
+if [[ ${BASH_SOURCE[0]} != /usr/local/bin/ds-deploy-entrypoint ]]; then
+  ROOT=${DS_ENTRYPOINT_ROOT:-}
+fi
+override() { [[ -n $ROOT ]] && printf '%s' "${!1:-$2}" || printf '%s' "$2"; }
 DS_RELEASE=$ROOT/usr/local/bin/ds-release
 RELEASE_DRIVER=$ROOT/usr/local/lib/ds-platform/release-driver
 BOX_ROLE_FILE=$ROOT/etc/ds-platform/box-role
@@ -38,11 +46,14 @@ REPORT_RETENTION_DAYS=14
 # Upload caps. A Playwright report of our suite, traces included, is tens of MB; the
 # caps sit an order of magnitude above it, and well inside the stage disk, so a
 # CI key can neither fill the disk with one stream nor unpack a tar bomb. The
-# DS_ENTRYPOINT_* overrides exist for the tests (unreachable from a client, as ROOT).
-MAX_REPORT_BYTES=${DS_ENTRYPOINT_MAX_REPORT_BYTES:-$((512 * 1024 * 1024))}           # 512 MiB stream
-MAX_REPORT_UNPACKED_BYTES=${DS_ENTRYPOINT_MAX_UNPACKED_BYTES:-$((2 * 1024 * 1024 * 1024))} # 2 GiB unpacked
-MAX_REPORT_ENTRIES=${DS_ENTRYPOINT_MAX_REPORT_ENTRIES:-20000}                       # archive members
-REPORT_FREE_MARGIN_BYTES=${DS_ENTRYPOINT_FREE_MARGIN_BYTES:-$((1024 * 1024 * 1024))} # left free after unpacking
+# DS_ENTRYPOINT_* overrides are honoured only under a test root prefix.
+MAX_REPORT_BYTES=$(override DS_ENTRYPOINT_MAX_REPORT_BYTES $((512 * 1024 * 1024)))             # 512 MiB stream
+MAX_REPORT_UNPACKED_BYTES=$(override DS_ENTRYPOINT_MAX_UNPACKED_BYTES $((2 * 1024 * 1024 * 1024))) # 2 GiB unpacked
+MAX_REPORT_ENTRIES=$(override DS_ENTRYPOINT_MAX_REPORT_ENTRIES 20000)                          # archive members
+REPORT_FREE_MARGIN_BYTES=$(override DS_ENTRYPOINT_FREE_MARGIN_BYTES $((1024 * 1024 * 1024)))   # left free after unpacking
+[[ $MAX_REPORT_BYTES =~ ^[0-9]+$ && $MAX_REPORT_UNPACKED_BYTES =~ ^[0-9]+$ &&
+  $MAX_REPORT_ENTRIES =~ ^[0-9]+$ && $REPORT_FREE_MARGIN_BYTES =~ ^[0-9]+$ ]] ||
+  { echo "ds-deploy-entrypoint: bad cap override" >&2; exit 2; }
 
 ENV_RE='^(prod|stage-main|stage-pr-[1-9][0-9]*)$'
 SHA_RE='^[0-9a-f]{40}$'
@@ -93,29 +104,33 @@ def stop(code, reason):
     print(reason)
     sys.exit(code)
 
+root = os.path.realpath(dest)
+members = []
+total = 0
 try:
     # "r:" = uncompressed only: gzip/bz2/xz are refused, so the stream cap also
-    # bounds what is unpacked.
+    # bounds what is unpacked. Headers are read one at a time, so the entry cap
+    # stops a header flood before it is all parsed.
     tar = tarfile.open(archive, mode="r:")
-    members = tar.getmembers()
+    for m in tar:
+        if len(members) >= max_entries:
+            stop(2, f"the report holds more than {max_entries} entries")
+        if not (m.isreg() or m.isdir()):
+            stop(3, "the report holds a link or special file")
+        name = m.name
+        if name.startswith("/") or ".." in name.split("/"):
+            stop(3, "the report holds an absolute or .. path")
+        target = os.path.realpath(os.path.join(root, name))
+        if target != root and not target.startswith(root + os.sep):
+            stop(3, "the report holds a path outside its directory")
+        if m.isreg() and target == root:
+            stop(3, "the report holds a file in place of its directory")
+        total += m.size
+        if total > max_unpacked:
+            stop(2, f"the report unpacks to more than {max_unpacked} bytes")
+        members.append(m)
 except (tarfile.TarError, EOFError, OSError):
     stop(3, "the report is not a readable tar stream")
-root = os.path.realpath(dest)
-total = 0
-for count, m in enumerate(members, start=1):
-    if count > max_entries:
-        stop(2, f"the report holds more than {max_entries} entries")
-    if not (m.isreg() or m.isdir()):
-        stop(3, "the report holds a link or special file")
-    name = m.name
-    if name.startswith("/") or ".." in name.split("/"):
-        stop(3, "the report holds an absolute or .. path")
-    target = os.path.realpath(os.path.join(root, name))
-    if target != root and not target.startswith(root + os.sep):
-        stop(3, "the report holds a path outside its directory")
-    total += m.size
-    if total > max_unpacked:
-        stop(2, f"the report unpacks to more than {max_unpacked} bytes")
 os.makedirs(os.path.dirname(root), exist_ok=True)
 if shutil.disk_usage(os.path.dirname(root)).free < total + margin:
     stop(3, "not enough free space on the reports filesystem")
@@ -125,10 +140,14 @@ for m in members:
     m.uid = m.gid = 0
     m.uname = m.gname = "root"
     m.mode = 0o700 if m.isdir() else 0o600
-if hasattr(tarfile, "data_filter"):
-    tar.extractall(root, members=members, filter="data")
-else:
-    tar.extractall(root, members=members)
+# A status line, never a traceback: the client's stderr is a public Actions log.
+try:
+    if hasattr(tarfile, "data_filter"):
+        tar.extractall(root, members=members, filter="data")
+    else:
+        tar.extractall(root, members=members)
+except Exception:
+    stop(3, "the report could not be extracted")
 PY
 
 upload_report() {

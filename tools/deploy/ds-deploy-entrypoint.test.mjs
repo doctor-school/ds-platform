@@ -245,6 +245,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     ["an absolute path", [{ name: "/tmp/escape", body: "x" }]],
     ["a symlink", [{ name: "link", type: "2", link: "/etc/passwd" }]],
     ["a hard link", [{ name: "f", body: "x" }, { name: "hard", type: "1", link: "f" }]],
+    ["a regular file in place of the report directory", [{ name: ".", body: "x" }]],
   ];
   for (const [what, entries] of unsafe) {
     it(`upload-report refuses an archive with ${what} and extracts nothing`, () => {

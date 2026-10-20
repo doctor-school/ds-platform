@@ -86,6 +86,7 @@ test("2984: the drop-in turns root and password login off and caps MaxStartups",
     "PasswordAuthentication no",
     "KbdInteractiveAuthentication no",
     "MaxStartups 10:30:60",
+    "PermitUserEnvironment no",
   ]);
 });
 
@@ -136,7 +137,8 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
       [
         'case $1 in',
         '  -t) exit "${STUB_SSHD_T_RC:-0}" ;;',
-        "  -T) printf '%s\\n' 'permitrootlogin no' 'passwordauthentication no' 'kbdinteractiveauthentication no' 'maxstartups 10:30:60' ;;",
+        '  -T) [[ -n ${STUB_SSHD_T_WEAK:-} ]] && exit 0',
+        "      printf '%s\\n' 'permitrootlogin no' 'passwordauthentication no' 'kbdinteractiveauthentication no' 'maxstartups 10:30:60' 'permituserenvironment no' ;;",
         "esac",
       ].join("\n"),
     );
@@ -156,6 +158,7 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
         "prefix=",
         '[[ $1 == --prefix ]] && prefix=$2',
         'echo "breakglass:x:1001:1001::/home/breakglass:/bin/bash" >> "$prefix/etc/passwd"',
+        '[[ -z ${STUB_USERADD_FAIL:-} ]] || exit 1',
         'mkdir -p "$prefix/home/breakglass"',
       ].join("\n"),
     );
@@ -240,10 +243,29 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
     );
   });
 
-  it("puts a CI key that was added without the forced command behind it", () => {
-    writeFileSync(join(root, "home/deploy/.ssh/authorized_keys"), `${OPERATOR}\n${CI_STAGE}\n`);
-    assert.equal(run(stageArgs()).status, 0);
-    assert.equal(read("home/deploy/.ssh/authorized_keys"), `${OPERATOR}\n${FORCED} ${CI_STAGE}\n`);
+  it("refuses a --ci-pubkey already on an unrestricted deploy line (the operator key), changing nothing", () => {
+    writeFileSync(join(keys, "operator.pub"), `${OPERATOR}\n`);
+    const before = snapshot();
+    const r = run(["--role", "stage", "--breakglass-pubkey", join(keys, "breakglass.pub"), "--ci-pubkey", join(keys, "operator.pub")]);
+    assert.equal(r.status, 2, r.out);
+    assert.match(r.out, /already an unrestricted key of deploy/);
+    assert.deepEqual(snapshot(), before);
+    assert.equal(calls(), "");
+  });
+
+  it("empties root's keys only after breakglass is in place: a failed useradd leaves them", () => {
+    const r = run(stageArgs(), { STUB_USERADD_FAIL: "1" });
+    assert.notEqual(r.status, 0, r.out);
+    assert.equal(read("root/.ssh/authorized_keys"), `${OPERATOR}\n`);
+  });
+
+  it("does not reload, and restores the sshd files, when sshd -T misses a hardened value", () => {
+    const r = run(stageArgs(), { STUB_SSHD_T_WEAK: "1" });
+    assert.equal(r.status, 1, r.out);
+    assert.match(r.out, /sshd -T does not show/);
+    assert.doesNotMatch(calls(), /reload/);
+    assert.ok(!existsSync(join(root, "etc/ssh/sshd_config.d/10-ds-hardening.conf")), "drop-in removed");
+    assert.equal(read("etc/ssh/sshd_config"), SSHD_CONFIG, "main config restored byte for byte");
   });
 
   it("does not reload, and restores the sshd files, when sshd -t fails", () => {
@@ -260,6 +282,7 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
     assert.equal(r.status, 1, r.out);
     assert.ok(!existsSync(join(root, "etc/sudoers.d/91-ds-breakglass")));
     assert.doesNotMatch(calls(), /reload/);
+    assert.equal(read("root/.ssh/authorized_keys"), `${OPERATOR}\n`, "root's keys untouched");
   });
 
   it("--dry-run prints the intended changes and changes nothing", () => {

@@ -51,6 +51,7 @@ write_files:
       PasswordAuthentication no
       KbdInteractiveAuthentication no
       MaxStartups 10:30:60
+      PermitUserEnvironment no
   - path: /etc/sudoers.d/91-ds-breakglass
     permissions: "0440"
     content: |

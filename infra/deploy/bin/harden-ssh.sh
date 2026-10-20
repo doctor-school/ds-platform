@@ -13,12 +13,13 @@
 #   - every active `PermitRootLogin` other than `no` in /etc/ssh/sshd_config
 #     commented out (sshd takes the first value it reads; the effective set is
 #     proven with `sshd -T` afterwards);
-#   - /root/.ssh/authorized_keys emptied;
 #   - user `breakglass` (bash, group sudo, its own NOPASSWD sudoers file checked
 #     with `visudo -cf`, authorized_keys = the break-glass key);
+#   - /root/.ssh/authorized_keys emptied, only once breakglass is verified in place;
 #   - each CI key in deploy's authorized_keys behind the forced command
 #     /usr/local/bin/ds-deploy-entrypoint (matched by key body; every other line,
-#     the operator key above all, stays byte-identical);
+#     the operator key above all, stays byte-identical; a key already on an
+#     unrestricted deploy line is refused);
 #   - /etc/ds-platform/box-role = the role;
 #   - fail2ban and unattended-upgrades enabled and running.
 # `sshd -t` runs BEFORE `systemctl reload ssh`; on failure the sshd files are
@@ -55,6 +56,7 @@ PermitRootLogin no
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 MaxStartups 10:30:60
+PermitUserEnvironment no
 '
 # END DS-HARDENING-DROPIN
 
@@ -95,6 +97,12 @@ for f in ${ci_files[@]+"${ci_files[@]}"}; do
   [[ $(key_body "$k") != "$(key_body "$breakglass_key")" ]] ||
     usage "$f is the break-glass key; a CI key must be a distinct key"
   ci_keys+=("$k")
+  # A CI key already on an unrestricted deploy line is the operator key passed by
+  # mistake: putting it behind the forced command would lock the operator out.
+  if [[ -f $DEPLOY_KEYS ]] && grep -F -- " $(key_body "$k")" "$DEPLOY_KEYS" |
+    grep -qv '^command="/usr/local/bin/ds-deploy-entrypoint",'; then
+    usage "$f is already an unrestricted key of deploy (the operator key?); a CI key must be a new key"
+  fi
 done
 
 changed=0 sshd_changed=0
@@ -157,12 +165,6 @@ if [[ -f $SSHD_CONFIG ]] && grep -E "$ROOTLOGIN_RE" "$SSHD_CONFIG" | grep -Eqv "
   sshd_changed=1
 fi
 
-# --- root keys ------------------------------------------------------------------------
-if [[ -s $ROOT_KEYS ]]; then
-  note "empty $ROOT_KEYS"
-  [[ $dry_run == 1 ]] || : >"$ROOT_KEYS"
-fi
-
 # --- breakglass user ----------------------------------------------------------------
 if ! grep -q '^breakglass:' "$PASSWD" 2>/dev/null; then
   note "create user breakglass (bash, group sudo)"
@@ -186,6 +188,18 @@ if converge_file "$BREAKGLASS_HOME/.ssh/authorized_keys" 0600 "$breakglass_key"$
   chown -R breakglass:breakglass "$BREAKGLASS_HOME/.ssh"
 fi
 
+# --- root keys: only once break-glass is proven in place ------------------------------
+if [[ -s $ROOT_KEYS ]]; then
+  note "empty $ROOT_KEYS"
+  if [[ $dry_run == 0 ]]; then
+    grep -q '^breakglass:' "$PASSWD" &&
+      [[ $(cat "$BREAKGLASS_HOME/.ssh/authorized_keys" 2>/dev/null) == "$breakglass_key" ]] &&
+      [[ $(cat "$BREAKGLASS_SUDOERS" 2>/dev/null; printf x) == "${sudoers_line}x" ]] ||
+      fail "breakglass is not in place; root's keys were left as they are"
+    : >"$ROOT_KEYS"
+  fi
+fi
+
 # --- CI keys on deploy ----------------------------------------------------------------
 for key in ${ci_keys[@]+"${ci_keys[@]}"}; do
   body=$(key_body "$key")
@@ -196,10 +210,12 @@ for key in ${ci_keys[@]+"${ci_keys[@]}"}; do
   fi
   note "add CI key ${body:0:16}… to $DEPLOY_KEYS behind the forced command"
   if [[ $dry_run == 0 ]]; then
+    # Same-directory temp file carrying the original owner and mode, then a rename:
+    # a full disk mid-write never truncates deploy's keys.
     rest=$(grep -vF -- " $body" "$DEPLOY_KEYS" || true)
+    cp -p "$DEPLOY_KEYS" "$DEPLOY_KEYS.ds-harden.new"
     { [[ -z $rest ]] || printf '%s\n' "$rest"; printf '%s\n' "$want"; } >"$DEPLOY_KEYS.ds-harden.new"
-    cat "$DEPLOY_KEYS.ds-harden.new" >"$DEPLOY_KEYS"
-    rm -f "$DEPLOY_KEYS.ds-harden.new"
+    mv -f "$DEPLOY_KEYS.ds-harden.new" "$DEPLOY_KEYS"
   fi
 done
 
@@ -223,11 +239,15 @@ if ! sshd -t -f "$SSHD_CONFIG"; then
   restore_sshd_files
   fail "sshd -t rejected the config; sshd files restored, ssh NOT reloaded"
 fi
-drop_backups
-effective=$(sshd -T -f "$SSHD_CONFIG" -C user=deploy,host=localhost,addr=127.0.0.1)
-for want in 'permitrootlogin no' 'passwordauthentication no' 'kbdinteractiveauthentication no' 'maxstartups 10:30:60'; do
-  grep -qxF "$want" <<<"$effective" || fail "sshd -T does not show '$want' (ssh not reloaded)"
+effective=$(sshd -T -f "$SSHD_CONFIG" -C user=deploy,host=localhost,addr=127.0.0.1) || effective=
+for want in 'permitrootlogin no' 'passwordauthentication no' 'kbdinteractiveauthentication no' \
+  'maxstartups 10:30:60' 'permituserenvironment no'; do
+  if ! grep -qxF "$want" <<<"$effective"; then
+    restore_sshd_files
+    fail "sshd -T does not show '$want'; sshd files restored, ssh NOT reloaded"
+  fi
 done
+drop_backups
 if [[ $sshd_changed == 1 ]]; then
   systemctl reload ssh
   say "ssh reloaded"

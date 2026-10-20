@@ -803,6 +803,51 @@ test("3068-8: billing per quarter by default; author grade defaults to «лид�
   assert.equal(roleHourlyCost(model, "Пул экспертов — амбассадор", U).expertGrade, "лидер мнений");
 });
 
+test("3068-9: markup, margin and multiplier of the plan come from the same outcome as price and profit", () => {
+  for (const product of ["урок", "курс"]) {
+    const p = priceProduct(model, product, U);
+    const o = p.outcomes.plan;
+    // price = total cost with replacements + DS fund + profit at the plan contacts
+    const outlay = p.totalCost + o.dsFund;
+    near(p.price, outlay + o.margin, 1e-6);
+    near(p.ratios.outlay, outlay, 1e-6);
+    near(p.ratios.markup, o.margin / outlay, 1e-12);
+    near(p.ratios.margin, o.margin / p.price, 1e-12);
+    near(p.ratios.multiplier, p.price / outlay, 1e-12);
+    near(p.ratios.multiplier, 1 + p.ratios.markup, 1e-12);
+    assert.equal(Math.sign(p.ratios.margin), Math.sign(o.margin), product);
+    near(o.marginShare, p.ratios.margin, 1e-12); // the scenario table's «маржа» is the same ratio
+    const lowO = p.outcomes.low;
+    near(lowO.marginShare, lowO.margin / (p.advance + lowO.gross), 1e-12);
+  }
+  // the leading mode still sets only the fixed-placement factor, not the plan ratios
+  const p = priceProduct(model, "урок", U);
+  near(p.derived.multiplier, 1.3, 1e-9);
+  assert.ok(Math.abs(p.ratios.markup - p.derived.markup) > 1e-3);
+});
+
+test("3068-10: golden floor = (S′ − f·advance) ÷ (1 − f) — the price at which the DS fund leaves zero margin", () => {
+  for (const product of ["урок", "курс"]) {
+    const p = priceProduct(model, product, U);
+    const g = goldenPrice(model, product, U);
+    const f = model.vars.ds_fund_share;
+    assert.ok(f > 0 && f < 1);
+    near(g.min, (p.totalCost - f * p.advance) / (1 - f), 1e-6);
+    // at the floor, revenue = advance + (floor − advance) after the fund = total cost
+    near(p.advance + (g.min - p.advance) * (1 - f), p.totalCost, 1e-6);
+    assert.ok(g.min > p.totalCost, product);
+  }
+  // an advance above the total cost: the floor is the advance (price never falls below it)
+  const rich = buildModel(inputs, {
+    "var:advance_share": 1,
+    "var:price_mode": "multiplier",
+    "var:price_value": 20,
+  });
+  const pr = priceProduct(rich, "урок", U);
+  assert.ok(pr.advance > pr.totalCost);
+  near(goldenPrice(rich, "урок", U).min, pr.advance, 1e-6);
+});
+
 // ── 2661-9 Market reference ──
 
 test("2661-9: market reference per product → gap vs cost and price, flagged above the threshold", () => {
@@ -886,7 +931,9 @@ test("2661-11: a scale per cost article; below-market roles listed; golden price
   );
   near(sumArticles, unitCost(model, "урок", U).total.fullPayroll, 1e-3);
   const g = goldenPrice(model, "курс", U);
-  near(g.min, priceProduct(model, "курс", U).totalCost, 1e-6);
+  const course = priceProduct(model, "курс", U);
+  const f = model.vars.ds_fund_share;
+  near(g.min, (course.totalCost - f * course.advance) / (1 - f), 1e-6);
   assert.equal(g.max, inputs.rates.market_references["курс"].rub[1]);
   const cap = g.min * 2;
   const capped = goldenPrice(buildModel(inputs, { "var:budget_cap": cap }), "курс", U);

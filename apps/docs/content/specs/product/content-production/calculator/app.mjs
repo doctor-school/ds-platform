@@ -95,12 +95,13 @@ const GLOSSARY = {
   прибыль:
     "Выручка продукта − полная себестоимость со сменами мест, при плане контактов: выручка = аванс + оплата за контакты − фонд DS.",
   наценка:
-    "Наценка (markup) = прибыль ÷ себестоимость. Потолка нет: наценка 50 % — это маржа ≈ 33 %.",
+    "Наценка (markup) при плане контактов = прибыль ÷ затраты, где затраты = себестоимость со сменами мест + фонд DS. Потолка нет: наценка 50 % — это маржа ≈ 33 %. Убыток даёт отрицательную наценку.",
   маржа:
-    "Маржа (margin) = прибыль ÷ цена. Всегда меньше 100 %; маржа 20 % — это наценка 25 %.",
-  множитель: "Множитель = цена ÷ себестоимость. Множитель 1,3 = наценка 30 %.",
+    "Маржа (margin) при плане контактов = прибыль ÷ цена. Всегда меньше 100 %; маржа 20 % — это наценка 25 %. Убыток даёт отрицательную маржу.",
+  множитель:
+    "Множитель при плане контактов = цена ÷ затраты (себестоимость со сменами мест + фонд DS). Множитель 1,3 = наценка 30 %; меньше 1 — убыток.",
   "ведущий способ":
-    "Чем задаётся наценка фиксированных мест: множителем, наценкой, маржой или суммой в ₽. Сумма фиксированного места = доля создания × себестоимость × множитель.",
+    "Задаёт только сумму фиксированных мест: множителем, наценкой, маржой или суммой в ₽ от себестоимости. Сумма фиксированного места = доля создания × себестоимость × коэффициент. Цену продукта, прибыль, наценку, маржу и множитель плана это не задаёт — они следуют из аванса и оплаты за контакты.",
   аванс:
     "Деньги партнёра на создание, независимо от контактов: Σ фиксированных мест + доля аванса × обязательная часть. Сверх оплаты за контакты, не в зачёт её.",
   результат:
@@ -157,7 +158,7 @@ const GLOSSARY = {
   безубыточность:
     "Сколько контактов нужно, чтобы аванс + оплата за контакты после фонда DS покрыли полную себестоимость со сменами мест (вклад инвестора возвращён).",
   "золотая цена":
-    "Полоса разумной цены: от полной себестоимости со сменами мест (маржа 0) до меньшего из верхней границы рынка и максимума партнёра (аванс + лимит × динамические места). Задана правилом, а не опросом покупателей.",
+    "Полоса разумной цены: от пола — цены, при которой после фонда DS прибыль 0: (себестоимость со сменами мест − доля фонда × аванс) ÷ (1 − доля фонда), не ниже аванса — до меньшего из верхней границы рынка и максимума партнёра (аванс + лимит × динамические места). Задана правилом, а не опросом покупателей.",
   "рыночный ориентир":
     "Диапазон цен похожих продуктов на рынке (rates.yaml market_references); можно поправить двумя полями.",
   "разрыв с рынком":
@@ -1474,9 +1475,10 @@ function metricsOf(r) {
     price: p.price,
     // A snapshot remembered by an older page has no outcomes: its profit is unknown, not zero.
     profit: p.outcomes?.plan.margin ?? null,
-    markup: p.derived.markup,
-    margin: p.derived.margin,
-    multiplier: p.derived.multiplier,
+    // The same plan outcome as price and profit; an older remembered snapshot has none.
+    markup: p.ratios?.markup ?? null,
+    margin: p.ratios?.margin ?? null,
+    multiplier: p.ratios?.multiplier ?? null,
     perContact: plan ? p.price / plan : null,
     breakEven: p.breakEvenContacts,
   };
@@ -1531,16 +1533,15 @@ function splitUnit(text) {
 function KpiBar({ r, base, baseNote, onRemember, onForget, remembered }) {
   const m = metricsOf(r);
   const b = metricsOf(base) ?? {};
-  const mode = r.price.mode;
   const be = (v) =>
     v == null ? "не достигается" : `${f0.format(Math.ceil(v))} контактов`;
   return view`<section class="kpibar" data-testid="kpi">
     <${Kpi} label="Себестоимость" term="себестоимость" value=${m.cost} base=${b.cost} fmt=${rub} dfmt=${dRub} primary=${true} testid="kpi-cost" />
-    <${Kpi} label="Цена" term="цена" value=${m.price} base=${b.price} fmt=${rub} dfmt=${dRub} lead=${mode === "fixed"} primary=${true} testid="kpi-price" />
+    <${Kpi} label="Цена" term="цена" value=${m.price} base=${b.price} fmt=${rub} dfmt=${dRub} primary=${true} testid="kpi-price" />
     <${Kpi} label="Прибыль" term="прибыль" value=${m.profit} base=${b.profit} fmt=${rub} dfmt=${dRub} primary=${true} testid="kpi-profit" />
-    <${Kpi} label="Наценка" hint="прибыль ÷ себест." term="наценка" value=${m.markup} base=${b.markup} fmt=${pct} dfmt=${dPct} lead=${mode === "markup"} testid="kpi-markup" />
-    <${Kpi} label="Маржа" hint="прибыль ÷ цена" term="маржа" value=${m.margin} base=${b.margin} fmt=${pct} dfmt=${dPct} lead=${mode === "margin"} testid="kpi-margin" />
-    <${Kpi} label="Множитель" term="множитель" value=${m.multiplier} base=${b.multiplier} fmt=${(v) => (fin(v) ? `× ${f2.format(v)}` : "—")} dfmt=${dNum} lead=${mode === "multiplier"} testid="kpi-multiplier" />
+    <${Kpi} label="Наценка" hint="прибыль ÷ (себест. со сменами + фонд DS), при плане" term="наценка" value=${m.markup} base=${b.markup} fmt=${pct} dfmt=${dPct} testid="kpi-markup" />
+    <${Kpi} label="Маржа" hint="прибыль ÷ цена, при плане" term="маржа" value=${m.margin} base=${b.margin} fmt=${pct} dfmt=${dPct} testid="kpi-margin" />
+    <${Kpi} label="Множитель" hint="цена ÷ (себест. со сменами + фонд DS), при плане" term="множитель" value=${m.multiplier} base=${b.multiplier} fmt=${(v) => (fin(v) ? `× ${f2.format(v)}` : "—")} dfmt=${dNum} testid="kpi-multiplier" />
     <${Kpi} label="Цена контакта" hint="цена за контакт для спонсора при плановом числе контактов" term="контакт" value=${m.perContact} base=${b.perContact} fmt=${(v) => (v == null ? "нет контактов" : rub(v))} dfmt=${dRub} testid="kpi-per-contact" />
     <${Kpi} label="Безубыточность" term="безубыточность" value=${m.breakEven} base=${b.breakEven} fmt=${be} dfmt=${(v) => `${sign(v)}${f0.format(Math.abs(v))}`} testid="kpi-break-even" />
     <div class="kpi baseline">
@@ -1578,15 +1579,15 @@ function GoldenBand({ r }) {
   const cap = r.price.budgetCap.partnerTotal;
   const marks = [
     {
-      v: r.price.totalCost,
-      label: "себестоимость со сменами (пол)",
+      v: g.min,
+      label: "пол: прибыль 0 после фонда DS",
       cls: "m-cost",
     },
     { v: r.price.price, label: "цена", cls: "m-price" },
     mk && { v: mk.min, label: "рынок мин", cls: "m-market" },
     mk && { v: mk.max, label: "рынок макс", cls: "m-market" },
     cap != null && { v: cap, label: "максимум партнёра", cls: "m-cap" },
-  ].filter(Boolean);
+  ].filter((m) => m && Number.isFinite(m.v));
   const top = niceMax(Math.max(...marks.map((m) => m.v)) * 1.08);
   const L = 16;
   const R = W - 16;
@@ -1635,7 +1636,7 @@ function GoldenBand({ r }) {
               цена ${g.priceInBand ? view`<b class="ok">в полосе</b>` : view`<b class="err">вне полосы</b>`}.`
           : g.max == null
             ? "Верхней границы нет: нет рыночного ориентира и лимита партнёра."
-            : view`<b class="err">Полосы нет:</b> себестоимость ${rub(g.min)} выше потолка ${rub(g.max)} — продукт дороже рынка или лимита партнёра.`
+            : view`<b class="err">Полосы нет:</b> пол цены ${rub(g.min)} выше потолка ${rub(g.max)} — продукт дороже рынка или лимита партнёра.`
       }
       ${" "}Серая полоса — рыночный ориентир, зелёная — золотая цена; максимум партнёра — аванс + лимит × динамические места.
     </figcaption>
@@ -1786,7 +1787,7 @@ function CostVsMargin({ r, base }) {
     : {};
   // Price = total cost with replacements + DS fund + profit at the plan contacts.
   const profit = r.price.outcomes.plan.margin;
-  const floor = r.price.totalCost + r.price.outcomes.plan.dsFund;
+  const floor = r.price.ratios.outlay;
   const cap = r.price.budgetCap.partnerTotal;
   const mk = r.market;
   const top = niceMax(
@@ -2018,7 +2019,10 @@ function PriceBlock({ r, productName, model }) {
   return view`<section class="card" data-testid="price">
     <h2><${Term} t="цена">Цена<//></h2>
     <div class="form">
-      <${Row} label=${view`<${Term} t="ведущий способ">Задаю цену через<//>`}>
+      <${Row}
+        label=${view`<${Term} t="ведущий способ">Сумму фиксированных мест задаю через<//>`}
+        help="задаёт только сумму фиксированных мест; цена, прибыль, наценка, маржа и множитель плана следуют из аванса и оплаты за контакты"
+      >
         <span class="seg" role="group" aria-label="ведущий способ цены">
           ${PRICE_MODES.map(
             (m) =>
@@ -2075,20 +2079,25 @@ function PriceBlock({ r, productName, model }) {
             аванс + оплата за контакты − <${Term} t="фонд DS">фонд DS<//> − себестоимость со сменами мест
           </td>
         </tr>
-        <tr class=${p.mode === "multiplier" ? "lead" : ""}>
+        <tr>
           <td><${Term} t="множитель">Множитель<//></td>
-          <td class="num">× ${n2(p.derived.multiplier)}</td>
-          <td class="small muted">${view`задаёт сумму <${Term} t="фиксированное место">фиксированного места<//>`}</td>
+          <td class="num">× ${n2(p.ratios.multiplier)}</td>
+          <td class="small muted">цена ÷ (себестоимость со сменами мест + фонд DS ${rub(p.outcomes.plan.dsFund)})</td>
         </tr>
-        <tr class=${p.mode === "markup" ? "lead" : ""}>
+        <tr>
           <td><${Term} t="наценка">Наценка<//></td>
-          <td class="num">${pct(p.derived.markup)}</td>
-          <td class="small muted">множитель − 1</td>
+          <td class="num">${pct(p.ratios.markup)}</td>
+          <td class="small muted">прибыль ÷ те же затраты = множитель − 1</td>
         </tr>
-        <tr class=${p.mode === "margin" ? "lead" : ""}>
+        <tr>
           <td><${Term} t="маржа">Маржа<//></td>
-          <td class="num">${pct(p.derived.margin)}</td>
-          <td class="small muted">наценка ÷ множитель</td>
+          <td class="num">${pct(p.ratios.margin)}</td>
+          <td class="small muted">прибыль ÷ цена</td>
+        </tr>
+        <tr class="lead">
+          <td><${Term} t="ведущий способ">Коэффициент фиксированных мест<//></td>
+          <td class="num">× ${n2(p.derived.multiplier)}</td>
+          <td class="small muted">${view`задаёт только сумму <${Term} t="фиксированное место">фиксированного места<//>, наценка ${pct(p.derived.markup)}, маржа ${pct(p.derived.margin)} от себестоимости`}</td>
         </tr>
       </tbody>
     </table>

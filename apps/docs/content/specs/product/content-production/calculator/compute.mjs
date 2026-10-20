@@ -1580,6 +1580,21 @@ function distribute(model, profit) {
 }
 
 /**
+ * Markup, margin and multiplier of the plan outcome — the same one «Цена» and «Прибыль» show. The
+ * price splits into outlay (total cost with replacements + DS fund) and profit, so the ratios are
+ * taken against that outlay: multiplier = 1 + markup, and a loss gives a negative margin.
+ */
+export function planRatios(price, totalCost, plan) {
+  const outlay = totalCost + plan.dsFund;
+  return {
+    outlay,
+    markup: outlay ? plan.margin / outlay : null,
+    margin: price ? plan.margin / price : null,
+    multiplier: outlay ? price / outlay : null,
+  };
+}
+
+/**
  * Price engine (cost-model-ru.md, «Цена, контакты и выручка»): the offer is a set of placements —
  * fixed ones are one-off sums (creation share × unit cost × the leading price factor) paid in the
  * advance; dynamic ones are paid per contact (contact price × weight) up to the hard partner limit
@@ -1638,7 +1653,8 @@ export function priceProduct(model, productName, ctx) {
         net,
         revenue,
         margin,
-        marginShare: revenue ? margin / revenue : null,
+        // margin ÷ the price at these contacts — the same «маржа» as the plan KPI (planRatios)
+        marginShare: advance + b.gross ? margin / (advance + b.gross) : null,
         payback: Math.min(investorContribution, net),
         investorShortfall: Math.max(0, investorContribution - net),
         profit,
@@ -1675,6 +1691,7 @@ export function priceProduct(model, productName, ctx) {
       investorContribution,
       investorRecoverContacts: breakEvenContacts,
       price: advance + outcomes.plan.gross,
+      ratios: planRatios(advance + outcomes.plan.gross, totalCost, outcomes.plan),
       contacts: { low, plan, high },
       outcomes,
       breakEvenContacts,
@@ -1866,7 +1883,9 @@ export function budgetFit(model, ctx) {
 }
 
 /**
- * «Золотая цена»: from the price floor (total cost with replacements — zero margin) to the ceiling
+ * «Золотая цена»: from the price floor (zero margin: the DS fund comes off the contact billing
+ * first, the advance is outside the fund base, so P = (S′ − f·advance) ÷ (1 − f), never below the
+ * advance itself) to the ceiling
  * (the lower of the market reference max and the most the partner pays under its limit: advance +
  * limit × dynamic placements); null when the floor is above the ceiling.
  */
@@ -1875,7 +1894,9 @@ export function goldenPrice(model, productName, ctx) {
   const p = priceProduct(model, productName, c);
   const ref = model.market[productName] ?? model.marketRefs[productName]?.rub;
   const ceilings = [ref?.[1], p.budgetCap.partnerTotal].filter((x) => x != null);
-  const min = p.totalCost;
+  const f = model.vars.ds_fund_share;
+  const zeroMargin = f < 1 ? (p.totalCost - f * p.advance) / (1 - f) : Infinity;
+  const min = p.advance >= p.totalCost ? p.advance : zeroMargin;
   const max = ceilings.length ? Math.min(...ceilings) : null;
   const band = max != null && min <= max ? [min, max] : null;
   return {

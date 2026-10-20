@@ -259,7 +259,7 @@ When(
       generic =
         Object.keys(body).length === 3 &&
         body.statusCode === 401 &&
-        body.message === "the request could not be completed" &&
+        body.message === "invalid credentials" &&
         body.error === "Unauthorized";
       const request = refused.response.request().postDataJSON();
       submittedWrongSmsCode =

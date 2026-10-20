@@ -4,11 +4,15 @@ import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import {
   ADMIN_ORIGIN,
   bootstrapRegistrarAccount,
+  bootstrapRegistrarCommitteeAccount,
   createPublishedEvent,
   eventSlugFromRoster,
   signInAsAdmin,
 } from "@ds/e2e/admin-events";
-import { bindRegistrarToEvent } from "./support/event-grants";
+import {
+  bindCommitteeToEvent,
+  bindRegistrarToEvent,
+} from "./support/event-grants";
 
 /**
  * 044 EARS-20 / EARS-38 — the admin navigation of a congress registrar bound to
@@ -61,6 +65,7 @@ test.describe.configure({ mode: "serial" });
 test.describe("044 EARS-20 / EARS-38 — the registrar's admin is its event's roster", () => {
   let eventA = "";
   let eventB = "";
+  let slugA = "";
   /**
    * The registrar's own browser, signed in ONCE: its TOTP factor is enrolled by
    * that sign-in, and the shared helper can only answer a later challenge from a
@@ -84,7 +89,7 @@ test.describe("044 EARS-20 / EARS-38 — the registrar's admin is its event's ro
     await signInAsAdmin(page);
     eventA = await createPublishedEvent(page, `Конгресс A ${Date.now()}`);
     eventB = await createPublishedEvent(page, `Конгресс B ${Date.now()}`);
-    const slugA = await eventSlugFromRoster(page, eventA);
+    slugA = await eventSlugFromRoster(page, eventA);
     await page.goto("/events");
     await expect(headerLinks(page)).toHaveCount(ADMIN_SECTIONS.length);
     for (const testId of ADMIN_SECTIONS) {
@@ -184,5 +189,80 @@ test.describe("044 EARS-20 / EARS-38 — the registrar's admin is its event's ro
       { a: eventA, b: eventB },
     );
     expect(statuses).toEqual({ list: 403, otherRoster: 403, ownRoster: 200 });
+  });
+
+  test("044 EARS-20: a registrar who also sits on the event's programme committee lands on the roster first", async ({
+    browser,
+  }) => {
+    test.setTimeout(300_000);
+    // A real account holding both roles, each bound to event A (#3098).
+    const staff = await bootstrapRegistrarCommitteeAccount(ADMIN_ORIGIN);
+    await bindRegistrarToEvent(staff.email, slugA);
+    await bindCommitteeToEvent(staff.email, slugA);
+
+    const context = await browser.newContext({ baseURL: ADMIN_ORIGIN });
+    try {
+      const both = await context.newPage();
+      await both.setViewportSize({ width: 1440, height: 900 });
+      // The sign-in lands on `/events`, which neither role may open: the chrome
+      // sends it to the first link of its navigation — the roster.
+      await signInAsAdmin(both, staff);
+      await both.waitForURL(new RegExp(`/events/${eventA}/roster$`));
+      await expect(both.getByTestId("access-refused")).toHaveCount(0);
+
+      // Two links, roster first: «Реестр участников», then «Заявки».
+      await expect(headerLinks(both)).toHaveCount(2);
+      await expect(headerLinks(both)).toHaveText([
+        "Реестр участников",
+        "Заявки",
+      ]);
+      await expect(both.getByTestId("nav-roster")).toHaveAttribute(
+        "href",
+        `/events/${eventA}/roster`,
+      );
+      await expect(both.getByTestId("nav-submissions")).toHaveAttribute(
+        "href",
+        `/events/${eventA}/submissions`,
+      );
+      await expect(both.getByRole("heading", { level: 1 })).toHaveText(
+        "Реестр участников",
+      );
+      await expect(both.getByTestId("roster-total")).toHaveText("Найдено: 0");
+
+      for (const { name, width, height } of [
+        { name: "desktop", width: 1440, height: 900 },
+        { name: "mobile", width: 390, height: 844 },
+      ]) {
+        await both.setViewportSize({ width, height });
+        for (const colorScheme of ["light", "dark"] as const) {
+          await both.emulateMedia({ colorScheme });
+          await expect(headerLinks(both)).toHaveCount(2);
+          await shot(both, `dual-role-landing-${name}-${colorScheme}`);
+        }
+      }
+      await both.emulateMedia({ colorScheme: "light" });
+      await both.setViewportSize({ width: 1440, height: 900 });
+
+      // Every admin landing leads to the roster, however it is reached.
+      for (const landing of ["/", "/events"]) {
+        await both.goto(landing);
+        await both.waitForURL(new RegExp(`/events/${eventA}/roster$`));
+        await expect(both.getByTestId("access-refused")).toHaveCount(0);
+      }
+
+      // «Заявки» opens the event's submissions registry.
+      await both.getByTestId("nav-submissions").click();
+      await both.waitForURL(new RegExp(`/events/${eventA}/submissions$`));
+      await expect(both.getByTestId("access-refused")).toHaveCount(0);
+      await expect(both.getByTestId("submissions-total")).toBeVisible();
+
+      // A direct navigation elsewhere keeps the refusal (EARS-38.7).
+      await both.goto(`/events/${eventB}/roster`);
+      await expect(both.getByTestId("access-refused")).toHaveText(
+        "У этой учётной записи нет прав администратора.",
+      );
+    } finally {
+      await context.close();
+    }
   });
 });

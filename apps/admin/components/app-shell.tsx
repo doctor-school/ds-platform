@@ -26,9 +26,9 @@ import { useAdminAccess } from "@/lib/use-admin-access";
  * A route the principal may not open — every route but its bound roster, for a
  * congress registrar — renders the existing refusal copy in place of the page;
  * the server refuses that page's data regardless (EARS-19/38), so this gate only
- * keeps the screen honest, it never replaces the refusal. A principal with
- * exactly one link who lands on an admin landing it may not open (every sign-in
- * lands on `/events`) is sent to that link instead (`landingRedirect`).
+ * keeps the screen honest, it never replaces the refusal. A principal with at
+ * least one link who lands on an admin landing it may not open (every sign-in
+ * lands on `/events`) is sent to its first link instead (`landingRedirect`).
  *
  * Until the session read answers, the chrome renders without nav links and the
  * page body stays empty — no placeholder copy, nothing drawn on a guess.

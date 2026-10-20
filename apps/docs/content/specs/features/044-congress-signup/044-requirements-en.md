@@ -132,6 +132,16 @@ This amendment overrides only the source of «{место}» in the EARS-13 conf
 | V-35 | Vitest e2e — `apps/api`    | The admin create/edit commands store «Место проведения» trimmed, leave it on an edit that omits it, and clear it on `null` or a blank value (EARS-13).                                                                                                          |
 | V-36 | Playwright / E2E — `admin` | The event editor shows «Место проведения» empty on a new event; a typed place is saved and shown on reopen; more than 300 characters is refused on the field; an emptied field saves the venue away (EARS-13).                                                  |
 
+## Production amendment — staff land on their first link after sign-in (2026-10-20, #3098)
+
+This amendment adds a landing rule to the admin navigation of EARS-20; the navigation contents, the server refusals of EARS-19 and EARS-38 and every other handler are unchanged, and the running-production baseline of EARS-20 is retained below. Every admin sign-in lands on the event list, which only the platform administrator may open. Until now only a principal with exactly one navigation entry was sent on to it; a registrar who also sits on the programme committee of 046 (two entries), or a committee member bound to two events, saw the refusal «У этой учётной записи нет прав администратора.» right after a successful sign-in. The product owner asked on 2026-10-20 that such staff land on their own screen, the roster first when they hold both roles.
+
+- **EARS-20 landing amended** (`realizes: US-8, US-16`) — THE SYSTEM SHALL render the admin navigation as EARS-20 describes, and SHALL send a principal who reaches an admin landing it may not open to its first navigation entry — the roster before the submissions registry; a principal with no navigation entry keeps the refusal, and a direct navigation to any other refused route keeps the refusal of EARS-38.
+
+| ID   | Test type                  | Proves                                                                                                                                                                                                                                                                                                 |
+| ---- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| V-37 | Playwright / E2E — `admin` | A real account holding `event-registrar` and `congress-program-committee`, both bound to one event, signs in and lands on that event's roster with «Реестр участников» and «Заявки» in the navigation and no refusal; «Заявки» opens the registry; another event's roster keeps the refusal (EARS-20). |
+
 ## Outcomes
 
 - A congress sign-up submitted on the congress site becomes, in one transaction, a Doctor.School account and a registration on the existing `registrations` table — the participant never registers a second time.

@@ -1689,3 +1689,24 @@ That native test owns the exact counter proof, while this case adds actual
 Academy browser/request/mail/session evidence. Broader app-local and Doctor
 handoff journeys remain. This test-only coverage has no render surface and needs
 no owner Stage-B request or slot.
+
+### Academy email login resend (#3102)
+
+The single `@login-email-resend` scenario
+(`steps/login-email-resend.steps.ts`) projects 003 EARS-6/17/34/41/42. It registers
+and verifies a unique owned account through actual Academy UI and addressed mail,
+logs out, then requests and resends a real email login code. Mailpit message-ID
+checkpoints prove each recipient-bound delivery without cross-machine timestamp
+comparisons. Only the owning page clock advances its thirty-second UI cooldown;
+server/provider clocks and ordinary quotas remain unchanged. The actual resend
+click sends exactly the second request, restarts the disabled countdown, and
+creates a delivery beyond the immediately preceding mailbox checkpoint.
+
+The newest delivered code restores the original verified subject and unchanged
+profile through reload, followed by exact owned logout. Before acceptance both
+requests leave private profile/session access unavailable. Codes may randomly
+coincide; this test asserts fresh delivery IDs, not differing digits or old-code
+expiry. Cleanup revokes only owned sessions on every outcome and preserves the
+original failure. Authentication traces remain disabled and secret assertions
+use only boolean evidence. The scenario runs unchanged in the Academy stage
+suite, without skipped paths, mocked authentication or real TTL/window waits.

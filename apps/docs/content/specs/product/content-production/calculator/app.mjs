@@ -105,13 +105,13 @@ const GLOSSARY = {
   аванс:
     "Деньги партнёра на создание, независимо от контактов: Σ фиксированных мест + доля аванса × обязательная часть. Сверх оплаты за контакты, не в зачёт её.",
   результат:
-    "Часть цены за контакты: по каждому динамическому месту контакты × цена контакта × вес места, не выше лимита партнёра.",
+    "Часть цены за контакты: по каждому динамическому месту контакты (врачи × уроки) × цена контакта × вес места, не выше лимита партнёра.",
   "рекламное место":
     "Место продукта партнёра в уроке из справочника мест: фон, крупный план, сюжетная ветка, научная рубрика, дополнительные активности. У места — вес, доля создания и часы смены.",
   "фиксированное место":
     "Рекламное место, оплаченное один раз: доля создания × себестоимость × множитель цены. Сумма входит в аванс; место остаётся в эпизоде навсегда.",
   "динамическое место":
-    "Рекламное место, оплачиваемое за контакты за срок размещения: контакты × цена контакта × вес места. После срока место переходит к следующему партнёру или к нейтральной версии DS.",
+    "Рекламное место, оплачиваемое за контакты за срок размещения: контакты × цена контакта × вес места. В модуле, курсе, специальности место стоит в каждом уроке: контакты = врачи × уроки. После срока место переходит к следующему партнёру или к нейтральной версии DS.",
   "вес места":
     "Ценность места относительно полного контакта: цена контакта места = цена контакта × вес. Якорные места легче, нишевые — тяжелее.",
   "доля создания":
@@ -144,19 +144,21 @@ const GLOSSARY = {
   "лимит партнёра":
     "Сколько партнёр платит за контакты одного динамического места за срок. Лимит жёсткий: контакты сверх него не оплачиваются, место переходит к следующему партнёру очереди или к нейтральному DS.",
   "точка переключения":
-    "Число контактов, на котором оплата места упирается в лимит партнёра: лимит ÷ (цена контакта × вес места).",
+    "Число врачей, на котором оплата места упирается в лимит партнёра: лимит ÷ (цена контакта × вес места × уроки продукта).",
+  "врачи × уроки":
+    "Динамическое место в модуле, курсе или специальности стоит в каждом уроке, и каждый урок, увиденный врачом, — отдельный контакт: контакты = врачи × уроки (модуль 6, курс 18, специальность 72; урок 1), цена контакта — по типу контакта урока. Эпизоды подкаста, вебинары и клубы платятся по своему типу контакта, без умножения. Лимит партнёра действует на сумму за все уроки за срок.",
   "якорное место":
     "Место в любом уроке (фон, крупный план) — дешевле, ниже вес. Нишевое — только там, где сюжет про метод лечения, — дороже.",
   "рекламная маркировка":
     "Нужна ли пометка «реклама» у места по закону о рекламе.",
   контакт:
-    "Врач, который досмотрел или дослушал продукт либо участвовал в живом эфире — то, за что платит спонсор.",
+    "Встреча врача с рекламным местом — досмотренный урок, дослушанный эпизод или участие в живом эфире; то, за что платит спонсор. В модуле, курсе, специальности место стоит в каждом уроке: контакты = врачи × уроки.",
   "цена контакта":
-    "₽ за один контакт: середина полосы цены по размеру аудитории специальности × вес типа контакта продукта.",
+    "₽ за один контакт: середина полосы цены по размеру аудитории специальности × вес типа контакта продукта (у модуля, курса, специальности — урока).",
   "тип контакта":
-    "Каким способом врач встретился с продуктом (эфир, просмотр урока, серия). Вес типа отражает ценность контакта.",
+    "Каким способом врач встретился с продуктом (эфир, просмотр урока, прослушивание подкаста). Вес типа отражает ценность контакта.",
   безубыточность:
-    "Сколько контактов нужно, чтобы аванс + оплата за контакты после фонда DS покрыли полную себестоимость со сменами мест (вклад инвестора возвращён).",
+    "Сколько врачей нужно, чтобы аванс + оплата за контакты после фонда DS покрыли полную себестоимость со сменами мест (вклад инвестора возвращён).",
   "золотая цена":
     "Полоса разумной цены: от пола — цены, при которой после фонда DS прибыль 0: (себестоимость со сменами мест − доля фонда × аванс) ÷ (1 − доля фонда), не ниже аванса — до меньшего из верхней границы рынка и максимума партнёра (аванс + лимит × динамические места). Задана правилом, а не опросом покупателей.",
   "рыночный ориентир":
@@ -1479,7 +1481,8 @@ function metricsOf(r) {
     markup: p.ratios?.markup ?? null,
     margin: p.ratios?.margin ?? null,
     multiplier: p.ratios?.multiplier ?? null,
-    perContact: plan ? p.price / plan : null,
+    // per billed contact: doctors × lessons (an older remembered snapshot has no lessons — one per doctor)
+    perContact: plan ? p.price / (plan * (p.lessons ?? 1)) : null,
     breakEven: p.breakEvenContacts,
   };
 }
@@ -1525,7 +1528,7 @@ function Kpi({
 /** "656 442 ₽" → ["656 442", "₽"]; "не достигается" → ["—", "не достигается"]. */
 function splitUnit(text) {
   const s = String(text);
-  const m = /^(.*\d)\s(₽|%|контактов)$/.exec(s);
+  const m = /^(.*\d)\s(₽|%|врачей)$/.exec(s);
   if (m) return [m[1], m[2]];
   return /\d/.test(s) || s === "—" ? [s, null] : ["—", s];
 }
@@ -1534,7 +1537,7 @@ function KpiBar({ r, base, baseNote, onRemember, onForget, remembered }) {
   const m = metricsOf(r);
   const b = metricsOf(base) ?? {};
   const be = (v) =>
-    v == null ? "не достигается" : `${f0.format(Math.ceil(v))} контактов`;
+    v == null ? "не достигается" : `${f0.format(Math.ceil(v))} врачей`;
   return view`<section class="kpibar" data-testid="kpi">
     <${Kpi} label="Себестоимость" term="себестоимость" value=${m.cost} base=${b.cost} fmt=${rub} dfmt=${dRub} primary=${true} testid="kpi-cost" />
     <${Kpi} label="Цена" term="цена" value=${m.price} base=${b.price} fmt=${rub} dfmt=${dRub} primary=${true} testid="kpi-price" />
@@ -1542,7 +1545,7 @@ function KpiBar({ r, base, baseNote, onRemember, onForget, remembered }) {
     <${Kpi} label="Наценка" hint="прибыль ÷ (себест. со сменами + фонд DS), при плане" term="наценка" value=${m.markup} base=${b.markup} fmt=${pct} dfmt=${dPct} testid="kpi-markup" />
     <${Kpi} label="Маржа" hint="прибыль ÷ цена, при плане" term="маржа" value=${m.margin} base=${b.margin} fmt=${pct} dfmt=${dPct} testid="kpi-margin" />
     <${Kpi} label="Множитель" hint="цена ÷ (себест. со сменами + фонд DS), при плане" term="множитель" value=${m.multiplier} base=${b.multiplier} fmt=${(v) => (fin(v) ? `× ${f2.format(v)}` : "—")} dfmt=${dNum} testid="kpi-multiplier" />
-    <${Kpi} label="Цена контакта" hint="цена за контакт для спонсора при плановом числе контактов" term="контакт" value=${m.perContact} base=${b.perContact} fmt=${(v) => (v == null ? "нет контактов" : rub(v))} dfmt=${dRub} testid="kpi-per-contact" />
+    <${Kpi} label="Цена контакта" hint="цена ÷ контакты плана (врачи × уроки)" term="контакт" value=${m.perContact} base=${b.perContact} fmt=${(v) => (v == null ? "нет контактов" : rub(v))} dfmt=${dRub} testid="kpi-per-contact" />
     <${Kpi} label="Безубыточность" term="безубыточность" value=${m.breakEven} base=${b.breakEven} fmt=${be} dfmt=${(v) => `${sign(v)}${f0.format(Math.abs(v))}`} testid="kpi-break-even" />
     <div class="kpi baseline">
       <div class="label"><${Term} t="база">База сравнения<//></div>
@@ -1715,7 +1718,7 @@ function BreakEven({ r, series }) {
   const be = p.breakEvenContacts;
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   return view`<figure class="chart" data-testid="chart-break-even">
-    <svg viewBox=${`0 0 ${W} 240`} role="img" aria-label="Безубыточность по контактам">
+    <svg viewBox=${`0 0 ${W} 240`} role="img" aria-label="Безубыточность по врачам">
       ${ticks.map(
         (t) => view`<g key=${t}>
           <line x1=${L} x2=${R} y1=${y(ymax * t)} y2=${y(ymax * t)} class="grid" />
@@ -1756,13 +1759,15 @@ function BreakEven({ r, series }) {
           : null
       }
       <line x1=${L} x2=${R} y1=${B} y2=${B} class="axis" />
-      <text x=${R} y=${B + 32} text-anchor="end" class="tick">контакты</text>
+      <text x=${R} y=${B + 32} text-anchor="end" class="tick">врачи</text>
     </svg>
     <figcaption class="small">
-      <b>${be == null ? "Безубыточность не достигается" : `Безубыточность: ${f0.format(Math.ceil(be))} контактов`}</b>
+      <b>${be == null ? "Безубыточность не достигается" : `Безубыточность: ${f0.format(Math.ceil(be))} врачей`}</b>
       <span class="muted">
         ${" "}— синяя линия: выручка продукта = аванс ${rub(p.advance)} + оплата за контакты${" "}
-        (${rub(p.rubPerContact)} за контакт по всем динамическим местам, до лимита партнёра) − фонд DS;
+        (${rub(p.rubPerContact)} за контакт по всем динамическим местам${
+          p.lessons > 1 ? ` × ${p.lessons} уроков = ${rub(p.rubPerDoctor)} за врача` : ""
+        }, до лимита партнёра) − фонд DS;
         ${" "}серая — себестоимость со сменами мест.</span
       >
     </figcaption>
@@ -1945,7 +1950,7 @@ const Drivers = memo(function Drivers({
     </p>
     <h3>Себестоимость и маржа</h3>
     <${CostVsMargin} r=${r} base=${base} />
-    <h3><${Term} t="безубыточность">Безубыточность<//> по контактам</h3>
+    <h3><${Term} t="безубыточность">Безубыточность<//> по врачам</h3>
     ${series ? view`<${BreakEven} r=${r} series=${series} />` : null}
     <h3>Матрица «Грейд» × «Ход работы»</h3>
     <${Matrix} model=${model} productName=${productName} ctx=${ctx} setCtx=${setCtx} />
@@ -2065,7 +2070,9 @@ function PriceBlock({ r, productName, model }) {
               = <${Term} t="аванс">аванс<//> ${rub(p.advance)}
             </div>
             <div class="line two">
-              + <${Term} t="результат">оплата за контакты<//> при плане ${f0.format(p.contacts.plan)}:${" "}
+              + <${Term} t="результат">оплата за контакты<//> при плане ${f0.format(p.contacts.plan)} врачей${
+                p.lessons > 1 ? ` × ${p.lessons} уроков = ${f0.format(p.outcomes.plan.billedContacts)} контактов` : ""
+              }:${" "}
               ${rub(p.outcomes.plan.gross)}
             </div>
           </td>
@@ -2151,13 +2158,23 @@ function ContactsBlock({ r, inputs }) {
               ${" "}— <${Term} t="тип контакта">тип<//> «${type.label}», вес типа ${n2(pick(type.weight, "mid"))};${" "}
               <span class="small muted"
                 >${pc.source}${pc.band ? ` · полоса «${pc.band}» ${rub(pc.bandRub)} × вес ${n2(pc.weight)}` : ""}</span
-              >`
+              >${
+                p.lessons > 1
+                  ? view`<br /><span data-testid="contacts-per-lesson"
+                      ><${Term} t="врачи × уроки">контакты = врачи × уроки<//>: динамическое место стоит в каждом из ${p.lessons} уроков —
+                      врач даёт ${p.lessons} контактов</span
+                    >`
+                  : null
+              }`
           : view`<span class="muted">У продукта нет оплаты за контакты — партнёр платит только аванс.</span>`
       }
     </p>
     <div class="form">
-      <${Row} label="Контакты: мало – план – много">
-        <${Field} k="var:contacts" base=${c.base.vars.contacts} label="контакты" slots=${["мало", "план", "много"]} unit="контактов" />
+      <${Row}
+        label="Врачи: мало – план – много"
+        help=${p.lessons > 1 ? `врачей, увидевших продукт; контакты = врачи × ${p.lessons} уроков` : "врачей, увидевших продукт; один контакт на врача"}
+      >
+        <${Field} k="var:contacts" base=${c.base.vars.contacts} label="врачи" slots=${["мало", "план", "много"]} unit="врачей" />
       <//>
       <${Row} label=${view`<${Term} t="цена контакта">Цена контакта<//>`} help="пусто — середина полосы аудитории × вес типа контакта">
         <${Field} k="var:price_per_contact" base=${c.base.vars.price_per_contact} label="цена контакта" unit="₽" />
@@ -2183,8 +2200,12 @@ function ContactsBlock({ r, inputs }) {
                   (l) =>
                     view`<li key=${l.placement}>
                       «${l.name}»: <${Term} t="точка переключения">переключается<//> на${" "}
-                      <b>${f0.format(Math.ceil(l.switchContacts))} контактах</b>
-                      <span class="small muted">${` (${rub(cap)} ÷ ${rub(l.rubPerContact)} за контакт)`}</span> —
+                      <b>${f0.format(Math.ceil(l.switchContacts))} врачах</b>
+                      <span class="small muted">${
+                        l.lessons > 1
+                          ? ` (${rub(cap)} ÷ (${rub(l.rubPerContact)} за контакт × ${l.lessons} уроков))`
+                          : ` (${rub(cap)} ÷ ${rub(l.rubPerContact)} за контакт)`
+                      }</span> —
                       дальше место у следующего партнёра или у нейтральной версии DS${
                         l.switchContacts < p.contacts.plan
                           ? view`; <span class="warn">план ${f0.format(p.contacts.plan)} выше лимита</span>`
@@ -2208,7 +2229,15 @@ function ContactsBlock({ r, inputs }) {
         </thead>
         <tbody>
           ${[
-            ["контактов за срок", (o) => f0.format(o.contacts)],
+            ["врачей за срок", (o) => f0.format(o.contacts)],
+            ...(p.lessons > 1
+              ? [
+                  [
+                    view`контактов: <${Term} t="врачи × уроки">врачи × ${p.lessons} уроков<//>`,
+                    (o) => f0.format(o.billedContacts),
+                  ],
+                ]
+              : []),
             [
               view`<${Term} t="результат">оплата за контакты<//>`,
               (o) => rub(o.gross),
@@ -2218,7 +2247,7 @@ function ContactsBlock({ r, inputs }) {
               (o) => {
                 const n = Math.max(0, ...Object.values(o.unbilledContacts));
                 return n > 0
-                  ? view`<span class="warn">${f0.format(Math.ceil(n))} конт.</span>`
+                  ? view`<span class="warn">${f0.format(Math.ceil(n))} врач.</span>`
                   : "—";
               },
             ],
@@ -2236,7 +2265,7 @@ function ContactsBlock({ r, inputs }) {
             [
               "цена за контакт для партнёра",
               (o) =>
-                o.contacts ? rub((p.advance + o.gross) / o.contacts) : "—",
+                o.billedContacts ? rub((p.advance + o.gross) / o.billedContacts) : "—",
             ],
           ].map(
             ([label, f], i) =>
@@ -2252,7 +2281,7 @@ function ContactsBlock({ r, inputs }) {
     <div class="form">
       <${Row} label=${view`<${Term} t="безубыточность">Безубыточность<//>`}>
         <b class="value-out" data-testid="break-even"
-          >${p.breakEvenContacts == null ? "не достигается" : `${f0.format(Math.ceil(p.breakEvenContacts))} контактов`}</b
+          >${p.breakEvenContacts == null ? "не достигается" : `${f0.format(Math.ceil(p.breakEvenContacts))} врачей`}</b
         >
       <//>
       <${Row}
@@ -2323,7 +2352,12 @@ function PlacementsBlock({ r }) {
     <p class="section-note">
       Отметьте места, которые получает партнёр, и вид оплаты:${" "}
       <${Term} t="фиксированное место">фиксированное<//> — разовая сумма в авансе,${" "}
-      <${Term} t="динамическое место">динамическое<//> — оплата за контакты за срок.
+      <${Term} t="динамическое место">динамическое<//> — оплата за контакты за срок${
+        p.lessons > 1
+          ? view`; место стоит в каждом из ${p.lessons} уроков, поэтому${" "}
+              <b data-testid="offer-contacts-rule"><${Term} t="врачи × уроки">контакты = врачи × уроки<//></b>`
+          : ""
+      }.
       ${p.episodes > 1 ? ` Эпизодов с местом: ${p.episodes} — смена места перегенерирует каждый.` : ""}
     </p>
     <div class="scroll">
@@ -2384,7 +2418,11 @@ function PlacementsBlock({ r }) {
                       ? view`${rub(l.fixedSum)}<div class="small muted">разово, в аванс</div>`
                       : l.rubPerContact == null
                         ? view`<span class="muted">нет оплаты за контакты</span>`
-                        : view`${rub(l.rubPerContact)}<div class="small muted">за контакт</div>`
+                        : l.lessons > 1
+                          ? view`${rub(l.rubPerContact)}<div class="small muted">
+                              за контакт · <${Term} t="врачи × уроки">× ${l.lessons} уроков<//> = ${rub(l.rubPerDoctor)} за врача
+                            </div>`
+                          : view`${rub(l.rubPerContact)}<div class="small muted">за контакт</div>`
                 }
               </td>
               <td class="num">
@@ -2481,7 +2519,7 @@ function AdvanceBlock({ r }) {
                 ? "аванс покрывает себестоимость"
                 : p.investorRecoverContacts == null
                   ? view`<span class="warn">за контакты не возвращается при текущих лимите и местах</span>`
-                  : `возвращается за ${f0.format(Math.ceil(p.investorRecoverContacts))} контактов`
+                  : `возвращается за ${f0.format(Math.ceil(p.investorRecoverContacts))} врачей`
             }
           </td>
         </tr>
@@ -3971,6 +4009,7 @@ function snapshotOf(r) {
       derived: r.price.derived,
       contacts: r.price.contacts,
       breakEvenContacts: r.price.breakEvenContacts,
+      lessons: r.price.lessons,
       replacementCost: r.price.replacementCost,
       outcomes: {
         plan: {

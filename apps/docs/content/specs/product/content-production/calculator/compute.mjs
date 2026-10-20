@@ -1484,9 +1484,8 @@ export function offlineEvent(model, fund, onlineParticipants, ctx) {
   };
 }
 
-function offerLines(model, productName, cost, factor, episodes, ctx) {
+function offerLines(model, per, cost, factor, episodes, lessons, ctx) {
   const offer = model.vars.placement_offer ?? [];
-  const per = pricePerContact(model, productName).value;
   const hour = roleHourlyCost(model, model.leaves.get(REPLACEMENT_LEAF).role, ctx).value ?? 0;
   const replacements = model.vars.replacements_per_term;
   return offer.map(({ placement, mode }) => {
@@ -1497,6 +1496,7 @@ function offerLines(model, productName, cost, factor, episodes, ctx) {
     const creationCost = p.creation_share * cost;
     const dynamic = mode === "dynamic";
     const rubPerContact = dynamic && per != null ? per * p.weight : null;
+    const rubPerDoctor = rubPerContact == null ? null : rubPerContact * lessons;
     const replacementCost = byCourse(p.replacement_hours, ctx) * hour;
     const cap = model.vars.budget_cap;
     return {
@@ -1510,25 +1510,30 @@ function offerLines(model, productName, cost, factor, episodes, ctx) {
       creationCost,
       fixedSum: dynamic ? null : creationCost * factor,
       rubPerContact,
+      lessons,
+      rubPerDoctor,
       replacementHours: byCourse(p.replacement_hours, ctx),
       replacementCost,
       episodes,
       replacements: dynamic ? replacements * episodes : 0,
       replacementTotal: dynamic ? replacements * episodes * replacementCost : 0,
       replacementFlag: dynamic && episodes * replacementCost > creationCost,
-      switchContacts: cap != null && rubPerContact ? cap / rubPerContact : null,
+      switchContacts: cap != null && rubPerDoctor ? cap / rubPerDoctor : null,
     };
   });
 }
 
-/** Contact revenue of the dynamic placements at `contacts`: per placement min(limit, contacts × ₽). */
+/**
+ * Contact revenue of the dynamic placements at `contacts` doctors: per placement
+ * min(limit, doctors × lessons × ₽ per contact) — the limit holds on the summed billing of the term.
+ */
 function billing(model, lines, contacts) {
   const cap = model.vars.budget_cap;
   const billed = {};
   const unbilledContacts = {};
   for (const l of lines) {
-    if (l.rubPerContact == null) continue;
-    const raw = contacts * l.rubPerContact;
+    if (l.rubPerDoctor == null) continue;
+    const raw = contacts * l.rubPerDoctor;
     billed[l.placement] = cap == null ? raw : Math.min(cap, raw);
     unbilledContacts[l.placement] =
       l.switchContacts == null ? 0 : Math.max(0, contacts - l.switchContacts);
@@ -1536,10 +1541,10 @@ function billing(model, lines, contacts) {
   return { billed, unbilledContacts, gross: sum(Object.values(billed)) };
 }
 
-/** Contacts at which advance + net contact revenue covers `target`; null when the limits never get there. */
+/** Doctors at which advance + net contact revenue covers `target`; null when the limits never get there. */
 function contactsFor(model, lines, target, keep) {
   if (target <= 0) return 0;
-  const dyn = lines.filter((l) => l.rubPerContact);
+  const dyn = lines.filter((l) => l.rubPerDoctor);
   if (!dyn.length) return null;
   const cap = model.vars.budget_cap;
   if (cap != null && keep * cap * dyn.length < target - 1e-9) return null;
@@ -1548,7 +1553,7 @@ function contactsFor(model, lines, target, keep) {
   let from = 0;
   let reached = 0;
   for (const to of points) {
-    const slope = keep * sum(dyn.filter((l) => (l.switchContacts ?? Infinity) > from).map((l) => l.rubPerContact));
+    const slope = keep * sum(dyn.filter((l) => (l.switchContacts ?? Infinity) > from).map((l) => l.rubPerDoctor));
     if (slope > 0) {
       if (reached + slope * (to - from) >= target - 1e-9) return from + (target - reached) / slope;
       reached += slope * (to - from);
@@ -1597,8 +1602,8 @@ export function planRatios(price, totalCost, plan) {
 /**
  * Price engine (cost-model-ru.md, «Цена, контакты и выручка»): the offer is a set of placements —
  * fixed ones are one-off sums (creation share × unit cost × the leading price factor) paid in the
- * advance; dynamic ones are paid per contact (contact price × weight) up to the hard partner limit
- * and carry 2 replacements per term as our cost. Advance = Σ fixed + advance share × mandatory part;
+ * advance; dynamic ones are paid per contact (contact price × weight) — doctors × lessons of the
+ * product, since the placement sits in every lesson — up to the hard partner limit and carry 2 replacements per term as our cost. Advance = Σ fixed + advance share × mandatory part;
  * investor contribution = total cost − advance. Gross contact revenue → DS fund → lesson P&L →
  * payback of the investor → profit-sharing 4/2/1 (+d) with royalty; an offline event from the fund.
  */
@@ -1618,10 +1623,15 @@ export function priceProduct(model, productName, ctx) {
       margin: (leading - cost) / leading,
       fixed: leading,
     };
-    const pc = pricePerContact(model, productName);
+    const lessonUnits = sum(u.units.filter((x) => x.product === LESSON).map((x) => x.qty));
     // A switch re-generates every lesson episode that carries the placement; a non-lesson product is one episode.
-    const episodes = sum(u.units.filter((x) => x.product === LESSON).map((x) => x.qty)) || 1;
-    const offer = offerLines(model, productName, cost, derived.multiplier, episodes, c);
+    const episodes = lessonUnits || 1;
+    // cost-model-ru.md, «Цена, контакты и выручка»: a compound product without its own contact type
+    // carries the dynamic placement in every lesson — a doctor gives it one lesson view per lesson.
+    const ownType = model.products[productName]?.contact_type != null;
+    const lessons = !ownType && lessonUnits ? lessonUnits : 1;
+    const pc = pricePerContact(model, ownType || !lessonUnits ? productName : LESSON);
+    const offer = offerLines(model, pc.value, cost, derived.multiplier, episodes, lessons, c);
     const flags = [];
     for (const l of offer)
       if (l.replacementFlag)
@@ -1648,6 +1658,7 @@ export function priceProduct(model, productName, ctx) {
       const online = model.vars.offline_online_participants ?? contacts;
       return {
         contacts,
+        billedContacts: contacts * lessons,
         ...b,
         dsFund,
         net,
@@ -1677,6 +1688,7 @@ export function priceProduct(model, productName, ctx) {
       cost,
       replacementCost,
       episodes,
+      lessons,
       totalCost,
       mode: lead.mode,
       value: lead.value,
@@ -1684,6 +1696,7 @@ export function priceProduct(model, productName, ctx) {
       pricePerContact: pc,
       offer,
       rubPerContact: sum(offer.map((l) => l.rubPerContact ?? 0)),
+      rubPerDoctor: sum(offer.map((l) => l.rubPerDoctor ?? 0)),
       fixedSum,
       mandatory,
       advanceShare,

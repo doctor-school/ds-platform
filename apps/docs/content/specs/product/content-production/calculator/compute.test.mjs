@@ -848,6 +848,52 @@ test("3068-10: golden floor = (S′ − f·advance) ÷ (1 − f) — the price a
   near(goldenPrice(rich, "урок", U).min, pr.advance, 1e-6);
 });
 
+test("3068-11: a dynamic placement sits in every lesson of a compound product — billed contacts = doctors × lessons", () => {
+  const lesson = priceProduct(model, "урок", U);
+  assert.equal(lesson.lessons, 1);
+  near(lesson.outcomes.plan.billedContacts, pv.contacts.draft[1], 1e-9);
+  for (const [product, lessons] of [["модуль", 6], ["курс", 18], ["специальность", 72]]) {
+    const p = priceProduct(model, product, U);
+    assert.equal(p.lessons, lessons, product);
+    // contact price by the lesson's contact type
+    assert.equal(p.pricePerContact.type, "single_lesson_view", product);
+    near(p.pricePerContact.value, lesson.pricePerContact.value, 1e-9);
+    for (const l of p.offer.filter((x) => x.mode === "dynamic")) {
+      const ll = lesson.offer.find((x) => x.placement === l.placement);
+      near(l.rubPerContact, ll.rubPerContact, 1e-9);
+      near(l.rubPerDoctor, lessons * l.rubPerContact, 1e-9);
+    }
+    near(p.rubPerDoctor, lessons * p.rubPerContact, 1e-9);
+    for (const level of ["low", "plan", "high"]) {
+      const o = p.outcomes[level];
+      near(o.billedContacts, o.contacts * lessons, 1e-9);
+      near(o.gross, lessons * lesson.outcomes[level].gross, 1e-6);
+    }
+    // fixed placements stay one-off sums per product
+    const sci = p.offer.find((l) => l.placement === "science_inn");
+    near(sci.fixedSum, dir.science_inn.creation_share * p.cost * p.derived.multiplier, 1e-6);
+    assert.equal(sci.rubPerDoctor, null);
+    // break-even in doctors: advance + net billing of doctors × lessons covers the total cost
+    near(p.advance + p.breakEvenContacts * p.rubPerDoctor * (1 - pv.ds_fund_share.draft), p.totalCost, 1e-3);
+  }
+  const course = priceProduct(model, "курс", U);
+  // podcast episodes, webinars and clubs keep their own contact type, one contact per participant
+  for (const [product, type] of [["эпизод подкаста", "podcast_live"], ["вебинар", "webinar_live"], ["клуб", "webinar_live"]]) {
+    const p = priceProduct(model, product, U);
+    assert.equal(p.lessons, 1, product);
+    assert.equal(p.pricePerContact.type, type, product);
+    near(p.outcomes.plan.gross, pv.contacts.draft[1] * p.rubPerContact, 1e-6);
+  }
+  // the partner limit per placement per term applies to the summed billing of all lessons
+  const branch = course.offer.find((l) => l.placement === "plot_branch");
+  const cap = branch.rubPerDoctor * 500;
+  const capped = priceProduct(buildModel(inputs, { "var:budget_cap": cap }), "курс", U);
+  const b = capped.offer.find((l) => l.placement === "plot_branch");
+  near(b.switchContacts, 500, 1e-9);
+  near(capped.outcomes.plan.billed.plot_branch, cap, 1e-6);
+  near(capped.outcomes.plan.unbilledContacts.plot_branch, pv.contacts.draft[1] - 500, 1e-9);
+});
+
 // ── 2661-9 Market reference ──
 
 test("2661-9: market reference per product → gap vs cost and price, flagged above the threshold", () => {
@@ -893,9 +939,11 @@ test("2661-10: break-even series — contacts → gross, lesson P&L revenue (aft
   near(series[0].revenue, p.advance, 1e-6);
   for (const pt of series) {
     near(pt.cost, p.totalCost, 1e-9);
-    near(pt.gross, pt.contacts * p.rubPerContact, 1e-6);
+    // doctors × 18 lessons × ₽ per contact
+    near(pt.gross, pt.contacts * p.rubPerDoctor, 1e-6);
     near(pt.revenue, p.advance + pt.gross * (1 - pv.ds_fund_share.draft), 1e-6);
   }
+  near(p.rubPerDoctor, 18 * p.rubPerContact, 1e-9);
   assert.ok(series.at(-1).contacts >= p.breakEvenContacts);
 });
 

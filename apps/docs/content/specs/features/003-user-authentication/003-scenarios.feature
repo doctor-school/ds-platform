@@ -640,6 +640,12 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the portal preserves entered form values and shows localized CAPTCHA-specific feedback
     And a later successful solve clears only the CAPTCHA-specific feedback
 
+  @EARS-8 @EARS-9 @happy @session-explicit-refresh
+  Scenario: Academy explicitly refreshes the same private session through its real provider
+    Given a uniquely owned verified Academy account has a real private session for explicit refresh
+    When that Academy browser explicitly refreshes its actual provider-backed session
+    Then a cookie-free Academy browser cannot refresh while the original refreshed owner remains signed in
+    # Native refresh/logout and session-service tests retain token-chain and expiry invariants.
   @EARS-9 @happy
   Scenario: Refresh rotation issues a new access token
     Given an authenticated session whose access token has expired

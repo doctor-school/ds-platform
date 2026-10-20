@@ -1,8 +1,6 @@
 import { expect, type BrowserContext, type Page } from "@playwright/test";
-import {
-  captureResponse,
-  type CapturedResponse,
-} from "../lib/captured-response.js";
+import { installCaptchaStub } from "../lib/captcha-stub.js";
+import { captureResponse } from "../lib/captured-response.js";
 import {
   assertNoAddressedMail,
   captureAddressedMailCheckpoint,
@@ -26,7 +24,9 @@ interface OwnHandoff {
   before?: AddressedMailCheckpoint;
   authPosts: string[];
   formSeen: boolean;
-  redeemed?: CapturedResponse;
+  committed: string[];
+  documentStatus?: number;
+  documentToTarget?: boolean;
 }
 const states = new WeakMap<Page, OwnHandoff>();
 function ownHandoff(key: Page): OwnHandoff {
@@ -43,6 +43,8 @@ Given(
       locale: "ru-RU",
       ...(httpCredentials ? { httpCredentials } : {}),
     });
+    if (process.env.BOT_PROTECTION_ENABLED !== "false")
+      await installCaptchaStub(context);
     const owned = await context.newPage();
     const state: OwnHandoff = {
       context,
@@ -50,6 +52,7 @@ Given(
       email: "",
       authPosts: [],
       formSeen: false,
+      committed: [],
     };
     states.set(page, state);
     owned.on("request", (request) => {
@@ -75,7 +78,11 @@ Given(
     await owned.waitForLoadState("networkidle");
     await owned.getByTestId("otp-channel-email").click();
     await inputSecret(owned.getByTestId("otp-identifier"), state.email);
-    const sentAt = new Date().toISOString();
+    const sentFrom = await captureAddressedMailCheckpoint(
+      nativeRecoveryMail(),
+      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+      state.email,
+    );
     const requested = captureResponse(owned, "/v1/auth/login/otp/request");
     await owned.getByTestId("otp-send").click();
     const request = await requested;
@@ -88,7 +95,7 @@ Given(
       nativeRecoveryMail(),
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
-      sentAt,
+      sentFrom,
       "login",
     );
     const accepted = captureResponse(owned, "/v1/auth/login/otp");
@@ -179,46 +186,65 @@ When(
       document.addEventListener("DOMContentLoaded", observe);
     });
     state.authPosts = [];
+    state.page.on("framenavigated", (frame) => {
+      if (frame === state.page.mainFrame())
+        state.committed.push(new URL(frame.url()).pathname);
+    });
     const target = new URL("/login", world.hostBaseUrl);
     target.search = new URLSearchParams({
       method: "code",
       handoff: state.reference!,
       returnTo: "/account",
     }).toString();
-    const pending = captureResponse(state.page, "/v1/auth/login/otp/handoff");
-    await state.page.goto(target.toString(), { waitUntil: "load" });
-    state.redeemed = await pending;
+    const landed = await state.page.goto(target.toString(), {
+      waitUntil: "load",
+    });
+    // The hand-off document request is the first hop of the navigation chain;
+    // only its status and whether Location names the carried target are kept,
+    // never the reference-bearing URL (EARS-18 redaction).
+    let handoffRequest = landed?.request();
+    while (handoffRequest?.redirectedFrom())
+      handoffRequest = handoffRequest.redirectedFrom()!;
+    const handoffDocument = await handoffRequest?.response();
+    state.documentStatus = handoffDocument?.status() ?? 0;
+    const redirectTo = handoffDocument?.headers()["location"];
+    if (redirectTo) {
+      const next = new URL(redirectTo, target);
+      state.documentToTarget =
+        next.origin === target.origin &&
+        next.pathname === "/account" &&
+        !next.searchParams.has("handoff");
+    }
   },
 );
 
 Then(
-  "the same-account hand-off returns already_signed_in and adds no addressed mail or extra auth command",
+  "the hand-off document answer redirects straight to the account target with no sign-in page, auth command or addressed mail",
   async ({ page, world }) => {
     const state = ownHandoff(page);
-    const redeemed = state.redeemed!;
-    let exact = false;
-    try {
-      const body = redeemed.response.request().postDataJSON();
-      exact =
-        Object.keys(body).length === 1 &&
-        body.ref === state.reference &&
-        redeemed.body === '{"status":"already_signed_in"}';
-    } catch {
-      /* Reference-bearing parser diagnostics must not be retained. */
-    }
-    expect(redeemed.response.status()).toBe(200);
-    expect(exact, "real same-account handoff acknowledgement").toBe(true);
+    const status = state.documentStatus ?? 0;
+    expect(
+      status >= 300 && status < 400,
+      `hand-off document answer is a redirect (status ${status})`,
+    ).toBe(true);
+    expect(
+      state.documentToTarget,
+      "redirect Location is the carried /account target",
+    ).toBe(true);
+    expect(
+      state.committed.includes("/login"),
+      "the sign-in page is never committed",
+    ).toBe(false);
+    expect(
+      state.authPosts,
+      "no hand-off redemption, code request, resend or acceptance",
+    ).toEqual([]);
     await assertNoAddressedMail(
       nativeRecoveryMail(),
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
-      new Date().toISOString(),
-      state.before,
+      state.before!,
     );
-    expect(
-      state.authPosts,
-      "no ordinary request, resend, or code acceptance",
-    ).toEqual(["/v1/auth/login/otp/handoff"]);
   },
 );
 

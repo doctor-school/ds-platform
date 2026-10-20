@@ -1670,16 +1670,19 @@ unique `handoff-own-2942-` address. It independently authenticates through the
 ordinary Academy email-code form and its actual addressed delivery before
 opening the still-unconsumed handoff reference with `returnTo=/account`.
 
-The real request must return exactly `already_signed_in`. Its one handoff POST
-is the only auth command after arrival; the mailbox checkpoint (congress notice
-plus independent sign-in code) remains unchanged for the full 15-second delivery
-horizon. Passive DOM observation from document creation checks that no sign-in
-form becomes visible during the transition. The private profile, session subject
+The portal server's read-only ownership check (#2951) must answer the hand-off
+document request with a 3xx whose Location is the carried `/account` target; the
+step keeps only that status and a target match, never the reference-bearing URL.
+The `/login` page is never committed, the browser sends no auth command at all
+(no handoff redemption, code request, resend or acceptance), and the mailbox
+checkpoint (congress notice plus independent sign-in code) remains unchanged for
+the full 15-second delivery horizon. Passive DOM observation from document
+creation checks that no sign-in form becomes visible during the transition. The private profile, session subject
 and original secure cookie still identify the same owned account at `/account`.
 Only that owned session is revoked on cleanup; traces are disabled and the account
 capture stays in the selected run's private artifacts.
 
-No mail and one handoff request do not inspect the internal redemption count.
+No mail and no handoff request do not inspect the internal redemption count.
 Retain `apps/api/test/auth/login-handoff.e2e-spec.ts`, EARS-44 same-account test
 (#2659): four signed-in answers leave all three guest redemptions available.
 That native test owns the exact counter proof, while this case adds actual

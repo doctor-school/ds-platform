@@ -1,0 +1,74 @@
+[
+  {
+    "host": "doctor",
+    "vp": "mobile",
+    "theme": "light",
+    "channel": "email",
+    "sentOk": true,
+    "sentText": "Мы отправили код на drive-2997-12@example.com."
+  },
+  {
+    "host": "doctor",
+    "vp": "desktop",
+    "theme": "light",
+    "channel": "email",
+    "sentOk": true,
+    "sentText": "Мы отправили код на drive-2997-9@example.com."
+  },
+  {
+    "host": "academy",
+    "vp": "mobile",
+    "theme": "light",
+    "channel": "email",
+    "sentOk": true,
+    "sentText": "Мы отправили код на drive-2997-6@example.com."
+  },
+  {
+    "host": "academy",
+    "vp": "desktop",
+    "theme": "light",
+    "channel": "email",
+    "sentOk": true,
+    "sentText": "Мы отправили код на drive-2997-3@example.com."
+  },
+  {
+    "host": "doctor",
+    "vp": "mobile",
+    "theme": "dark",
+    "channel": "sms",
+    "htmlDark": true,
+    "sentOk": true,
+    "resentOk": true,
+    "sentText": "Если номер +79990002911 подтверждён в профиле, мы отправили на него код.",
+    "noticeText": "Если номер +79990002911 подтверждён в профиле, мы отправили на него новый код."
+  },
+  {
+    "host": "doctor",
+    "vp": "desktop",
+    "theme": "dark",
+    "channel": "sms",
+    "htmlDark": true,
+    "sentOk": true,
+    "resentOk": true,
+    "sentText": "Если номер +79990002908 подтверждён в профиле, мы отправили на него код.",
+    "noticeText": "Если номер +79990002908 подтверждён в профиле, мы отправили на него новый код."
+  },
+  {
+    "error": "TimeoutError: locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('otp-resend-notice') to be visible\u001b[22m\n"
+  },
+  {
+    "error": "TimeoutError: locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('otp-resend-notice') to be visible\u001b[22m\n"
+  },
+  {
+    "error": "TimeoutError: locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('otp-resend-notice') to be visible\u001b[22m\n"
+  },
+  {
+    "error": "TimeoutError: locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('otp-resend-notice') to be visible\u001b[22m\n"
+  },
+  {
+    "error": "TimeoutError: locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('otp-resend-notice') to be visible\u001b[22m\n"
+  },
+  {
+    "error": "TimeoutError: locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('otp-resend-notice') to be visible\u001b[22m\n"
+  }
+]

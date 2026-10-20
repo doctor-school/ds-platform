@@ -1,0 +1,68 @@
+[
+  {
+    "host": "doctor",
+    "vp": "mobile",
+    "theme": "light",
+    "channel": "sms",
+    "htmlDark": false,
+    "sentOk": true,
+    "resentOk": true,
+    "sentText": "Если номер +79990002906 подтверждён в профиле, мы отправили на него код.",
+    "noticeText": "Если номер +79990002906 подтверждён в профиле, мы отправили на него новый код."
+  },
+  {
+    "host": "doctor",
+    "vp": "desktop",
+    "theme": "light",
+    "channel": "sms",
+    "htmlDark": false,
+    "sentOk": true,
+    "resentOk": true,
+    "sentText": "Если номер +79990002905 подтверждён в профиле, мы отправили на него код.",
+    "noticeText": "Если номер +79990002905 подтверждён в профиле, мы отправили на него новый код."
+  },
+  {
+    "host": "academy",
+    "vp": "mobile",
+    "theme": "dark",
+    "channel": "sms",
+    "htmlDark": true,
+    "sentOk": true,
+    "resentOk": true,
+    "sentText": "Если номер +79990002904 подтверждён в профиле, мы отправили на него код.",
+    "noticeText": "Если номер +79990002904 подтверждён в профиле, мы отправили на него новый код."
+  },
+  {
+    "host": "academy",
+    "vp": "desktop",
+    "theme": "light",
+    "channel": "sms",
+    "htmlDark": false,
+    "sentOk": true,
+    "resentOk": true,
+    "sentText": "Если номер +79990002901 подтверждён в профиле, мы отправили на него код.",
+    "noticeText": "Если номер +79990002901 подтверждён в профиле, мы отправили на него новый код."
+  },
+  {
+    "host": "academy",
+    "vp": "desktop",
+    "theme": "dark",
+    "channel": "sms",
+    "htmlDark": true,
+    "sentOk": true,
+    "resentOk": true,
+    "sentText": "Если номер +79990002902 подтверждён в профиле, мы отправили на него код.",
+    "noticeText": "Если номер +79990002902 подтверждён в профиле, мы отправили на него новый код."
+  },
+  {
+    "host": "academy",
+    "vp": "mobile",
+    "theme": "light",
+    "channel": "sms",
+    "htmlDark": false,
+    "sentOk": true,
+    "resentOk": true,
+    "sentText": "Если номер +79990002903 подтверждён в профиле, мы отправили на него код.",
+    "noticeText": "Если номер +79990002903 подтверждён в профиле, мы отправили на него новый код."
+  }
+]

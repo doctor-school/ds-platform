@@ -276,16 +276,31 @@ function isE2eRunnerScript(path: string): boolean {
 }
 
 /**
+ * #2985: e2e modules Playwright loads by PATH STRING, not by `import` — the
+ * public-log console reporter (`SUMMARY_REPORTER` in `lib/reporters.ts`, and the
+ * axe legs' `--reporter=` in `tools/staging/e2e-stage.mjs`). It decides what
+ * reaches the public Actions log, so it is not a test source; an import walk
+ * cannot find it, so it is named here and pinned by `change-tier.spec.ts`.
+ */
+export const E2E_PATH_LOADED_MODULES: readonly string[] = [
+  "packages/e2e/reporters/summary.ts",
+];
+
+/**
  * #2819: run-selection modules — the `e2e/` files that
  * `packages/e2e/playwright.config.ts` and `packages/e2e/bin/*` import at
- * runtime: the Playwright projects (`hosts.ts`) and the per-project tag
- * expression + bddgen host-tag gate (`lib/host-tags.ts`). They choose what CI
- * runs, so they are not test sources. The tier sees paths only, so the set is
- * named here and pinned to the real import graph by `change-tier.spec.ts`.
+ * runtime: the Playwright projects (`hosts.ts`), the per-project tag
+ * expression + bddgen host-tag gate (`lib/host-tags.ts`) and the reporter
+ * selection (`lib/reporters.ts`, #2985) — plus the path-loaded modules above.
+ * They choose what CI runs and what its public log prints, so they are not
+ * test sources. The tier sees paths only, so the set is named here and pinned
+ * to the real import graph by `change-tier.spec.ts`.
  */
 export const E2E_RUN_SELECTION_MODULES: readonly string[] = [
   "packages/e2e/hosts.ts",
   "packages/e2e/lib/host-tags.ts",
+  "packages/e2e/lib/reporters.ts",
+  ...E2E_PATH_LOADED_MODULES,
 ];
 
 /** Test sources: excluded from the ship size cap and may be added. */

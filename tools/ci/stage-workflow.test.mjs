@@ -84,4 +84,24 @@ describe("stage.yml", () => {
     assert.equal(ship.if, "always()");
     assert.match(ship.run, /upload-report \$SHA/);
   });
+
+  it("ships the report under pipefail and surfaces a failed upload as a warning", () => {
+    const ship = stage.jobs.suite.steps.find(
+      (s) => s.name === "Ship the report to the box",
+    );
+    assert.match(ship.run, /set -o pipefail/);
+    assert.match(ship.run, /::warning::report upload failed/);
+    assert.match(ship.run, /GITHUB_STEP_SUMMARY/);
+  });
+
+  it("closes a stage-suite status the suite job never reached", () => {
+    const close = stage.jobs["close-status"];
+    assert.deepEqual(close.needs, ["converge", "suite"]);
+    assert.match(close.if, /always\(\)/);
+    assert.match(close.if, /needs\.converge\.result == 'success'/);
+    assert.match(close.if, /needs\.suite\.result != 'success'/);
+    assert.match(close.if, /needs\.suite\.result != 'failure'/);
+    assert.equal(environmentOf(close), undefined);
+    assert.match(close.steps[0].run, /state=failure/);
+  });
 });

@@ -257,11 +257,14 @@ Every successful `runtime-images.yml` run of a push to `main` triggers
    `free -m`), the number `E2E_WORKERS` is set from.
 3. Always, pass or fail, the report dir is streamed as a tar to `upload-report <sha>`:
    it lands on the box at `/var/lib/ds-platform/e2e-reports/<sha>/` (14-day retention).
+   The axe legs write their own JSON + HTML + traces under `axe-<host>/` in the same dir.
+   A failed upload is a warning and a step-summary line, never the suite verdict.
    Nothing is uploaded as an Actions artifact — the repository's logs and artifacts are
    public (release-pipeline spec §4).
 4. The commit status `stage-suite` becomes `success` / `failure` with counts only
    (`412 passed, 3 failed, 12 skipped`). A failed converge sets it to `failure` and the
-   suite does not run.
+   suite does not run; a run cancelled between the two jobs is closed as `failure` by
+   the `close-status` job, so the status is never left pending.
 
 Every slot (incl. `main`) runs the api with the CI test-runner auth ceilings (`RATE_LIMIT_*`
 in `infra/deploy/compose/slot/compose.yml`): the suite signs in hundreds of times from one

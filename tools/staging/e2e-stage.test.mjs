@@ -9,7 +9,7 @@ import {
   exitCodeFor,
   parseE2eArgs,
   preflightVerdict,
-  publicReporterArgs,
+  publicAxeLeg,
   renderVerdictBlock,
   runE2eStage,
   slotE2eEnv,
@@ -696,8 +696,25 @@ describe("E2E_PUBLIC_LOG=1 — the run's console is a public Actions log", () =>
     assert.equal(code, 0);
     assert.equal(calls[0].env.E2E_PUBLIC_LOG, "1");
     assert.equal(calls.length, 3);
-    for (const axe of calls.slice(1)) {
-      assert.equal(axe.argv.at(-1), `--reporter=${SUMMARY_REPORTER_PATH}`);
+    const reportDir = calls[0].env.E2E_REPORT_DIR.split(path.sep).join("/");
+    for (const [axe, host] of [
+      [calls[1], "academy"],
+      [calls[2], "doctor"],
+    ]) {
+      assert.deepEqual(axe.argv.slice(-2), [
+        `--reporter=${SUMMARY_REPORTER_PATH},json,html`,
+        `--output=${reportDir}/axe-${host}/artifacts`,
+      ]);
+      assert.equal(
+        axe.env.PLAYWRIGHT_JSON_OUTPUT_FILE,
+        `${reportDir}/axe-${host}/results.json`,
+      );
+      assert.equal(
+        axe.env.PLAYWRIGHT_HTML_OUTPUT_DIR,
+        `${reportDir}/axe-${host}/html`,
+      );
+      assert.equal(axe.env.PLAYWRIGHT_HTML_OPEN, "never");
+      assertShellInert(axe.argv);
     }
     assert.match(
       SUMMARY_REPORTER_PATH,
@@ -742,8 +759,11 @@ describe("E2E_PUBLIC_LOG=1 — the run's console is a public Actions log", () =>
   });
 
   it("without the flag the axe legs keep their own reporter", async () => {
-    assert.deepEqual(publicReporterArgs({}), []);
-    assert.deepEqual(publicReporterArgs({ E2E_PUBLIC_LOG: "0" }), []);
+    assert.deepEqual(publicAxeLeg({}, "/r", "doctor"), { args: [], env: {} });
+    assert.deepEqual(publicAxeLeg({ E2E_PUBLIC_LOG: "0" }, "/r", "doctor"), {
+      args: [],
+      env: {},
+    });
     const { calls, effects } = harness({ issueState: () => "CLOSED" });
     await runE2eStage(["main"], {
       env: { STAGE_BASIC_AUTH_PASS: "s3cret" },

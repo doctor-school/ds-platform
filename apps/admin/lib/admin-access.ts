@@ -197,13 +197,15 @@ export function canAccessResource(
 const LANDING_PATHS = new Set(["/", "/events", "/events/"]);
 
 /**
- * 044 EARS-20: where a principal whose access yields exactly ONE link lands.
+ * 044 EARS-20: where a principal sent to an admin landing it may not open lands.
  *
- * A registrar reaching an admin landing it may not open (the sign-in always
- * lands on `/events`) is sent straight to its one roster instead of a refusal
- * with one link to click. Any other refused route — a direct navigation — keeps
- * the refusal (EARS-38.7), and a principal with zero or several links is never
- * redirected: there is no single place that is obviously theirs.
+ * Every sign-in lands on `/events`; a staff member without the platform role is
+ * sent straight to the FIRST link of its navigation instead of a refusal with
+ * links to click — the order of `adminNavItems`, so a registrar who also sits on
+ * the programme committee opens the roster before the submissions registry. Any
+ * other refused route — a direct navigation — keeps the refusal (EARS-38.7), and
+ * a principal with zero links (unbound, unreadable session) is never redirected:
+ * there is nowhere that is theirs.
  */
 export function landingRedirect(
   access: AdminAccess,
@@ -212,6 +214,5 @@ export function landingRedirect(
   if (canAccessPath(access, pathname) || !LANDING_PATHS.has(pathname)) {
     return null;
   }
-  const items = adminNavItems(access);
-  return items.length === 1 ? items[0]!.href : null;
+  return adminNavItems(access)[0]?.href ?? null;
 }

@@ -194,8 +194,44 @@ describe("046 EARS-31 programme committee access projection", () => {
     expect(canAccessResource(access, "congress-roster", { id: EVENT_A })).toBe(
       false,
     );
-    // Several entries: no single obvious landing.
-    expect(landingRedirect(access, "/events")).toBeNull();
+    // Several entries: the sign-in landing leads to the first one.
+    expect(landingRedirect(access, "/events")).toBe(
+      `/events/${EVENT_A}/submissions`,
+    );
+    expect(landingRedirect(access, "/")).toBe(`/events/${EVENT_A}/submissions`);
+    // A direct navigation elsewhere keeps the refusal.
+    expect(landingRedirect(access, `/events/${EVENT_A}/roster`)).toBeNull();
+  });
+
+  it("046 EARS-31 / 044 EARS-20: a registrar who also sits on the event's committee lands on the roster first", () => {
+    const access = adminAccess({
+      roles: ["event-registrar", "congress-program-committee"],
+      eventGrants: [
+        { role: "event-registrar", eventId: EVENT_A, eventSlug: "congress-a" },
+        {
+          role: "congress-program-committee",
+          eventId: EVENT_A,
+          eventSlug: "congress-a",
+        },
+      ],
+    });
+    const roster = `/events/${EVENT_A}/roster`;
+
+    expect(adminNavItems(access).map(({ href }) => href)).toEqual([
+      roster,
+      `/events/${EVENT_A}/submissions`,
+    ]);
+    expect(landingRedirect(access, "/events")).toBe(roster);
+    expect(landingRedirect(access, "/events/")).toBe(roster);
+    expect(landingRedirect(access, "/")).toBe(roster);
+    // Both screens are open — nothing to redirect.
+    expect(landingRedirect(access, roster)).toBeNull();
+    expect(
+      landingRedirect(access, `/events/${EVENT_A}/submissions`),
+    ).toBeNull();
+    // Direct navigations elsewhere keep the refusal (044 EARS-38.7).
+    expect(landingRedirect(access, "/projects")).toBeNull();
+    expect(landingRedirect(access, `/events/${EVENT_B}/roster`)).toBeNull();
   });
 
   it("046 EARS-31: a committee member bound to one event lands on its «Заявки»", () => {

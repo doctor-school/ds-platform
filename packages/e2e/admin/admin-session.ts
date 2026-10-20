@@ -240,3 +240,21 @@ export async function bootstrapCommitteeAccount(
   await new Promise((r) => setTimeout(r, 2500));
   return { email, password: E2E_PASSWORD };
 }
+
+/**
+ * Provision a congress registrar who also sits on the programme committee
+ * (044 EARS-20, 046 EARS-26): register → grant BOTH project roles on the IdP.
+ * The caller binds each role to its events (`bindRegistrarToEvent`,
+ * `bindCommitteeToEvent`) and signs in through `signInAsAdmin`.
+ */
+export async function bootstrapRegistrarCommitteeAccount(
+  adminOrigin: string,
+): Promise<BootstrapResult> {
+  const email = uniqueEmail("registrar-committee");
+  await register(adminOrigin, email, E2E_PASSWORD);
+  const sub = await resolveSub(email);
+  await grantProjectRole(sub, REGISTRAR_ROLE);
+  await grantProjectRole(sub, COMMITTEE_ROLE);
+  await new Promise((r) => setTimeout(r, 2500));
+  return { email, password: E2E_PASSWORD };
+}

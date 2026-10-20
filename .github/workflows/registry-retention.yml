@@ -2,11 +2,14 @@ name: Registry retention
 
 # Prunes the container registry to the retention policy (#3110;
 # infra/deploy/README.md → Container registry; planner
-# tools/deploy/lib/registry-retention.mjs): per release repo the latest 3 releases
-# and the newest 3 `main` commits with an image, per `pr/*` repo the open PR heads.
-#   - schedule: daily.
+# tools/deploy/lib/registry-retention.mjs): per release repo the latest 3 releases,
+# the newest 3 `main` commits with an image, the latest successful production
+# deployment, the open `hotfix/*` heads and the open PR heads; per `pr/*` repo the
+# open PR heads.
+#   - schedule: daily (deletes).
 #   - workflow_run: after every `main` Runtime images run, so a merged PR's `pr/*`
-#     tags go as soon as its `main` images exist.
+#     tags go as soon as its `main` images exist (deletes — the merge of this file
+#     itself starts the first such run).
 #   - workflow_dispatch: `dry_run` (default true) prints the plan and deletes nothing.
 
 on:
@@ -26,6 +29,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  deployments: read
 
 # One run at a time; a queued run waits rather than cancelling one mid-delete.
 concurrency:

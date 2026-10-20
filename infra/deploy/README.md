@@ -268,24 +268,32 @@ Timeweb Cloud container registry (#2981, tech spec
   The registry has a fixed quota (25 GB); once full, every push fails. Workflow
   `registry-retention.yml` (Environment `build`, the push token) prunes it to:
   - per release repo (`<image>`): the target SHAs of the latest 3 `release-*`
-    GitHub Releases (production + 2 rollback targets) ∪ the newest 3 first-parent
-    `main` commits that have an image (the next release candidate, stage `main`);
+    GitHub Releases (production + 2 rollback targets) ∪ the SHA of the latest
+    successful production GitHub Deployment (a deploy whose release cut failed still
+    keeps its images) ∪ the newest 3 first-parent `main` commits that have an image
+    (the next release candidate, stage `main`) ∪ the heads of the open `hotfix/*`
+    branches (a pending `pnpm deploy:prod --ref` candidate) ∪ the open PR heads;
   - per `pr/<image>` repo: the heads of the currently open pull requests;
   - everything else is deleted (`DELETE /v2/<repo>/manifests/<digest>`). Tags that are
     not 40-hex SHAs are left alone, and a digest any kept tag of the same repo resolves
-    to is never deleted (identical rebuilds share a digest). If the releases, the open
-    PRs or `main` cannot be listed, or a release target is not a full SHA, nothing is
-    deleted and the run fails; a refused DELETE stops the run and fails it.
+    to is never deleted (identical rebuilds share a digest). If the releases, the
+    production deployment, the hotfix branches, the open PRs or `main` cannot be
+    listed, a release target is not a full SHA, or a tag listing cannot be proven
+    complete (a Link-less page is confirmed by a `last=` probe), nothing is deleted
+    and the run fails; a refused DELETE stops the run and fails it.
 
-  It runs daily, after every `main` Runtime images run (whatever its conclusion —
-  a run that failed on a full registry is exactly when space is needed), and by hand:
+  It runs daily and after every `main` Runtime images run (whatever its conclusion —
+  a run that failed on a full registry is exactly when space is needed); both
+  triggers delete, so the push to `main` that merges this workflow starts its first
+  deleting run. By hand:
   `gh workflow run registry-retention.yml --ref main` prints the plan only
   (`dry_run` defaults to true); `-f dry_run=false` deletes. Each run writes the plan
   (kept SHAs, per-repo counts) to its step summary. The job runs only on `main`, so no
   branch's code holds the push token's delete right. A deleted manifest's layers are
   freed when the registry's garbage collection runs, not at the DELETE. Consequence:
   `pnpm deploy:prod --rollback <sha>` can reach only the last 3 releases — an older
-  SHA's recorded digests are gone. Policy and planner:
+  SHA's recorded digests are gone, unless it is still the latest successful production
+  deployment or among the newest 3 `main` images. Policy and planner:
   `tools/deploy/lib/registry-retention.mjs`; runner: `tools/deploy/registry-retention.mjs`.
 
 - **Stage and production both consume it; neither box builds.** The shared mechanics
@@ -306,7 +314,7 @@ Timeweb Cloud container registry (#2981, tech spec
     compose has no `build:` and tags every `ds-*` image `${DEPLOY_SHA:?}`; an app-only
     rollback whose target tags were pruned pulls that SHA's recorded release digests
     (`tools/deploy/README.md` → steps 1 and 5) — present in the registry for the last
-    3 releases only (Retention, below).
+    3 releases and the latest production deployment only (Retention, above).
   - **Provisioning the pull token on a box** is a once-per-box step by the lead: the
     read-only pull token goes to `/etc/ds-platform/registry-pull-token` as `root:root`
     `0600`, never through chat, an env file or this repo. Check without printing it:

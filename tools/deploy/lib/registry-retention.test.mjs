@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import {
   RetentionError,
   parseBearerChallenge,
+  nextTagRequest,
   parseNextLink,
   planRetention,
   renderPlanSummary,
@@ -42,6 +43,8 @@ function baseInput(overrides = {}) {
     ),
     mainHistory,
     openPrHeads: [],
+    hotfixHeads: [],
+    productionSha: sha(10),
     ...overrides,
   };
 }
@@ -183,6 +186,136 @@ test("a digest shared by an ignored (non-SHA) tag is not deleted either", () => 
   const plan = planRetention(input);
   const api = plan.repos.find((r) => r.repo === "api");
   assert.ok(!api.delete.some((x) => x.digest === d));
+});
+
+test("release repos keep the heads of open hotfix branches — a pending hotfix's images survive until deploy", () => {
+  // A hotfix SHA is cut from production, so it is neither a release nor on
+  // first-parent `main`; its images live in the release namespace.
+  const plan = planRetention(baseInput({ hotfixHeads: [sha(2)] }));
+  for (const name of RELEASE_REPOS) {
+    const repo = plan.repos.find((r) => r.repo === name);
+    const kept = repo.keep.find((k) => k.tag === sha(2));
+    assert.ok(kept, `${name} keeps the hotfix head`);
+    assert.equal(kept.reason, "hotfix branch");
+    assert.ok(!repo.delete.some((d) => d.tags.includes(sha(2))));
+  }
+  assert.deepEqual(plan.hotfixHeads, [sha(2)]);
+});
+
+test("release repos keep open PR heads too", () => {
+  const plan = planRetention(baseInput({ openPrHeads: [sha(3)] }));
+  const api = plan.repos.find((r) => r.repo === "api");
+  assert.equal(api.keep.find((k) => k.tag === sha(3))?.reason, "open PR");
+});
+
+test("release repos keep the latest successful production deployment even without a release", () => {
+  const plan = planRetention(baseInput({ productionSha: sha(5) }));
+  assert.equal(plan.productionSha, sha(5));
+  const admin = plan.repos.find((r) => r.repo === "admin");
+  assert.equal(
+    admin.keep.find((k) => k.tag === sha(5))?.reason,
+    "production deployment",
+  );
+});
+
+test("fail closed: hotfix branches not listed, or a head that is not a full SHA", () => {
+  assert.throws(
+    () => planRetention(baseInput({ hotfixHeads: undefined })),
+    /hotfix/,
+  );
+  assert.throws(
+    () => planRetention(baseInput({ hotfixHeads: ["main"] })),
+    /hotfix/,
+  );
+});
+
+test("fail closed: the production deployment SHA is missing or not a full SHA", () => {
+  assert.throws(
+    () => planRetention(baseInput({ productionSha: undefined })),
+    /production deployment/,
+  );
+  assert.throws(
+    () => planRetention(baseInput({ productionSha: "abc" })),
+    /production deployment/,
+  );
+});
+
+test("nextTagRequest follows a Link header", () => {
+  const known = new Set();
+  const step = nextTagRequest({
+    repo: "api",
+    page: ["a", "b"],
+    known,
+    link: "/v2/api/tags/list?last=b&n=2",
+    probed: false,
+    pageSize: 2,
+  });
+  assert.deepEqual(step, {
+    next: "/v2/api/tags/list?last=b&n=2",
+    probe: false,
+    fresh: ["a", "b"],
+  });
+});
+
+test("nextTagRequest confirms the end of a Link-less listing with a last= probe", () => {
+  const step = nextTagRequest({
+    repo: "pr/api",
+    page: ["a", "b"],
+    known: new Set(),
+    link: null,
+    probed: false,
+    pageSize: 100,
+  });
+  assert.deepEqual(step, {
+    next: "/v2/pr/api/tags/list?n=100&last=b",
+    probe: true,
+    fresh: ["a", "b"],
+  });
+});
+
+test("nextTagRequest: an empty probe page ends the listing", () => {
+  assert.deepEqual(
+    nextTagRequest({
+      repo: "api",
+      page: [],
+      known: new Set(["a", "b"]),
+      link: null,
+      probed: true,
+      pageSize: 100,
+    }),
+    { next: null, probe: false, fresh: [] },
+  );
+});
+
+test("nextTagRequest: a probe that finds new tags (a silently truncated page) keeps listing", () => {
+  const step = nextTagRequest({
+    repo: "api",
+    page: ["c"],
+    known: new Set(["a", "b"]),
+    link: null,
+    probed: true,
+    pageSize: 100,
+  });
+  assert.deepEqual(step, {
+    next: "/v2/api/tags/list?n=100&last=c",
+    probe: true,
+    fresh: ["c"],
+  });
+});
+
+test("fail closed: a probe answered with only known tags — the registry ignores last=, completeness unprovable", () => {
+  assert.throws(
+    () =>
+      nextTagRequest({
+        repo: "api",
+        page: ["a", "b"],
+        known: new Set(["a", "b"]),
+        link: null,
+        probed: true,
+        pageSize: 100,
+      }),
+    /api.*last=/,
+  );
 });
 
 test("fail closed: no release listed", () => {

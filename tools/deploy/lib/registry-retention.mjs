@@ -8,7 +8,12 @@
 // RELEASES_KEPT `release-*` releases (prod + rollback targets — `pnpm deploy:prod
 // --rollback` re-pulls a pruned SHA's recorded digests) ∪ the newest MAIN_SHAS_KEPT
 // first-parent `main` commits that have an image (the next release candidate and
-// stage `main`). Per `pr/*` repo: the heads of the open PRs (their stage slots).
+// stage `main`) ∪ the SHA of the latest successful production GitHub Deployment
+// (the release cut is non-fatal to a deploy, so a running SHA may have no release)
+// ∪ the heads of the open `hotfix/*` branches (a hotfix is cut from production and
+// pushes under the release namespace, so its pending images are on neither of the
+// other lists) ∪ the open PR heads. Per `pr/*` repo: the heads of the open PRs
+// (their stage slots).
 //
 // Deletion is by manifest digest (Docker Registry v2 has no tag delete), which
 // removes every tag pointing at that digest — hence the digest guard: a digest any
@@ -120,8 +125,18 @@ function assertTagListing(tags, repos) {
  * @param {{tag: string, sha: string}[]} input.releases GitHub Releases (any order)
  * @param {string[]} input.mainHistory first-parent `main` commits, newest first
  * @param {string[]} input.openPrHeads head SHAs of the open PRs
+ * @param {string[]} input.hotfixHeads head SHAs of the `hotfix/*` branches
+ * @param {string} input.productionSha SHA of the latest successful production
+ *   GitHub Deployment
  */
-export function planRetention({ tags, releases, mainHistory, openPrHeads }) {
+export function planRetention({
+  tags,
+  releases,
+  mainHistory,
+  openPrHeads,
+  hotfixHeads,
+  productionSha,
+}) {
   const repos = retentionRepos();
   assertTagListing(tags, repos);
   const releaseShas = latestReleaseShas(releases, RELEASES_KEPT);
@@ -131,6 +146,12 @@ export function planRetention({ tags, releases, mainHistory, openPrHeads }) {
       "main history is empty — refusing to delete anything",
     );
   assertShaList(openPrHeads, "open PR heads");
+  assertShaList(hotfixHeads, "hotfix branch heads");
+  if (!FULL_SHA_RE.test(String(productionSha ?? ""))) {
+    throw new RetentionError(
+      `latest successful production deployment: ${JSON.stringify(productionSha)} is not a full 40-character SHA — refusing to decide what production runs`,
+    );
+  }
 
   const releaseRepos = repos.filter((r) => !r.startsWith("pr/"));
   const inRegistry = new Set(
@@ -142,7 +163,13 @@ export function planRetention({ tags, releases, mainHistory, openPrHeads }) {
 
   const releaseKeep = new Map();
   for (const s of releaseShas) releaseKeep.set(s, "release");
-  for (const s of mainShas) if (!releaseKeep.has(s)) releaseKeep.set(s, "main");
+  const keepOnce = (s, reason) => {
+    if (!releaseKeep.has(s)) releaseKeep.set(s, reason);
+  };
+  keepOnce(productionSha, "production deployment");
+  for (const s of mainShas) keepOnce(s, "main");
+  for (const s of hotfixHeads) keepOnce(s, "hotfix branch");
+  for (const s of openPrHeads) keepOnce(s, "open PR");
   const prKeep = new Map(openPrHeads.map((s) => [s, "open PR"]));
 
   const plan = repos.map((repo) => {
@@ -183,7 +210,14 @@ export function planRetention({ tags, releases, mainHistory, openPrHeads }) {
     };
   });
 
-  return { releaseShas, mainShas, openPrHeads: [...openPrHeads], repos: plan };
+  return {
+    releaseShas,
+    mainShas,
+    productionSha,
+    hotfixHeads: [...hotfixHeads],
+    openPrHeads: [...openPrHeads],
+    repos: plan,
+  };
 }
 
 /** Markdown for `$GITHUB_STEP_SUMMARY` and the log. */
@@ -193,7 +227,9 @@ export function renderPlanSummary(plan, { dryRun }) {
     "",
     `- Releases kept (latest ${RELEASES_KEPT}): ${plan.releaseShas.map((s) => `\`${s}\``).join(", ")}`,
     `- Main SHAs kept (newest ${MAIN_SHAS_KEPT} with an image): ${plan.mainShas.map((s) => `\`${s}\``).join(", ") || "none"}`,
-    `- Open PR heads kept: ${plan.openPrHeads.length}`,
+    `- Latest successful production deployment kept: \`${plan.productionSha}\``,
+    `- Hotfix branch heads kept: ${plan.hotfixHeads.map((s) => `\`${s}\``).join(", ") || "none"}`,
+    `- Open PR heads kept (release and \`pr/\` repos): ${plan.openPrHeads.length}`,
     "",
     "| repo | tags | kept tags | deleted tags | digests to delete | guarded tags | non-SHA tags |",
     "| ---- | ---- | --------- | ------------ | ----------------- | ------------ | ------------ |",
@@ -212,6 +248,35 @@ export function parseNextLink(header) {
   if (!header) return null;
   const m = String(header).match(/<([^>]+)>\s*;\s*rel="?next"?/);
   return m ? m[1] : null;
+}
+
+/**
+ * The next `tags/list` request for `repo`, or `next: null` when the listing is
+ * complete. Some registries cap a page without a `Link` header, so a Link-less page
+ * does not prove the end: it is confirmed by a `last=` probe (the Registry v2
+ * pagination parameter), which must come back empty. A probe answered with only
+ * already-listed tags means the registry ignores `last=` — completeness cannot be
+ * proven, and an incomplete listing would let an unlisted kept tag's digest be
+ * deleted, so that throws.
+ *
+ * @returns {{next: string|null, probe: boolean, fresh: string[]}} `fresh` = the
+ *   page's tags not listed before
+ */
+export function nextTagRequest({ repo, page, known, link, probed, pageSize }) {
+  const fresh = page.filter((t) => !known.has(t));
+  if (probed && page.length > 0 && fresh.length === 0) {
+    throw new RetentionError(
+      `listing ${repo}: the registry ignored last= and repeated known tags — cannot prove the tag listing is complete`,
+    );
+  }
+  if (link) return { next: link, probe: false, fresh };
+  if (page.length === 0) return { next: null, probe: false, fresh };
+  const last = page[page.length - 1];
+  return {
+    next: `/v2/${repo}/tags/list?n=${pageSize}&last=${encodeURIComponent(last)}`,
+    probe: true,
+    fresh,
+  };
 }
 
 /** `{realm, service, scope}` of a `WWW-Authenticate: Bearer …` challenge, or null. */

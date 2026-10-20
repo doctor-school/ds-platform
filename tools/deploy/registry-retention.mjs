@@ -5,15 +5,17 @@
 //
 // Environment:
 //   REGISTRY_TOKEN     the push token (push + pull + delete); required
-//   GITHUB_REPOSITORY  owner/name whose releases and open PRs set the keep-set
-//   GH_TOKEN           for `gh api` (contents: read, pull-requests: read)
+//   GITHUB_REPOSITORY  owner/name whose releases, production deployments, hotfix
+//                      branches and open PRs set the keep-set
+//   GH_TOKEN           for `gh api` (contents, pull-requests, deployments: read)
 //   DRY_RUN            "true" prints the plan only; anything else deletes
 //   GITHUB_STEP_SUMMARY optional; the plan and the result are appended to it
 //
-// Order matters: the registry is listed BEFORE the releases, the open PRs and
-// `main`, so any tag in the snapshot was pushed after its commit became visible —
-// an open PR's current head or a `main` commit can never be missing from the
-// keep-set while its own tag is in the delete list.
+// Order matters: the registry is listed BEFORE the releases, deployments, hotfix
+// branches, open PRs and `main`, so any tag in the snapshot was pushed after its
+// commit became visible — an open PR's or hotfix branch's current head or a `main`
+// commit can never be missing from the keep-set while its own tag is in the delete
+// list.
 //
 // Any failure exits non-zero. Before the first DELETE that is a delete of nothing;
 // a refused DELETE (e.g. 405 UNSUPPORTED — the registry does not allow deletion)
@@ -27,6 +29,7 @@ import { promisify } from "node:util";
 import { IMAGE_REGISTRY } from "./lib/registry.mjs";
 import {
   RetentionError,
+  nextTagRequest,
   parseBearerChallenge,
   parseNextLink,
   planRetention,
@@ -43,6 +46,7 @@ const MANIFEST_ACCEPT = [
 ].join(", ");
 const REGISTRY_USER = "ds-platform";
 const LOOKUP_CONCURRENCY = 8;
+const TAG_PAGE_SIZE = 100;
 
 function env(name) {
   const value = process.env[name];
@@ -103,7 +107,9 @@ async function failure(res, what) {
 
 async function listTags(request, repo) {
   const tags = [];
-  let next = `/v2/${repo}/tags/list?n=100`;
+  const known = new Set();
+  let next = `/v2/${repo}/tags/list?n=${TAG_PAGE_SIZE}`;
+  let probed = false;
   while (next) {
     const res = await request(next);
     if (res.status === 404) {
@@ -116,8 +122,18 @@ async function listTags(request, repo) {
     }
     if (!res.ok) throw await failure(res, `listing ${repo}`);
     const body = await res.json();
-    tags.push(...(body.tags ?? []));
-    next = parseNextLink(res.headers.get("link"));
+    const step = nextTagRequest({
+      repo,
+      page: body.tags ?? [],
+      known,
+      link: parseNextLink(res.headers.get("link")),
+      probed,
+      pageSize: TAG_PAGE_SIZE,
+    });
+    for (const tag of step.fresh) known.add(tag);
+    tags.push(...step.fresh);
+    next = step.next;
+    probed = step.probe;
   }
   return tags;
 }
@@ -194,6 +210,40 @@ async function listOpenPrHeads(repo) {
   ]);
 }
 
+async function listHotfixHeads(repo) {
+  return ghLines([
+    "api",
+    "--paginate",
+    `repos/${repo}/git/matching-refs/heads/hotfix/`,
+    "--jq",
+    ".[].object.sha",
+  ]);
+}
+
+/** The SHA of the newest production Deployment (`deployment-record.mjs`) whose
+ *  latest status is `success`; throws when none can be read. */
+async function latestProductionSha(repo) {
+  const deployments = await ghLines([
+    "api",
+    `repos/${repo}/deployments?environment=production&per_page=100`,
+    "--jq",
+    ".[] | {id, sha}",
+  ]);
+  for (const line of deployments) {
+    const { id, sha } = JSON.parse(line);
+    const [state] = await ghLines([
+      "api",
+      `repos/${repo}/deployments/${id}/statuses?per_page=1`,
+      "--jq",
+      ".[].state",
+    ]);
+    if (state === "success") return sha;
+  }
+  throw new RetentionError(
+    "no successful production GitHub Deployment found — refusing to decide what production runs",
+  );
+}
+
 async function mainHistory() {
   await run("git", ["fetch", "--quiet", "--filter=tree:0", "origin", "main"]);
   const { stdout } = await run(
@@ -217,16 +267,21 @@ async function main() {
   const request = registryClient(token);
 
   const tags = await snapshotRegistry(request);
-  const [releases, openPrHeads, history] = await Promise.all([
-    listReleases(repo),
-    listOpenPrHeads(repo),
-    mainHistory(),
-  ]);
+  const [releases, openPrHeads, hotfixHeads, productionSha, history] =
+    await Promise.all([
+      listReleases(repo),
+      listOpenPrHeads(repo),
+      listHotfixHeads(repo),
+      latestProductionSha(repo),
+      mainHistory(),
+    ]);
   const plan = planRetention({
     tags,
     releases,
     mainHistory: history,
     openPrHeads,
+    hotfixHeads,
+    productionSha,
   });
   summarize(renderPlanSummary(plan, { dryRun }));
   if (dryRun) return;

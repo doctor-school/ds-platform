@@ -1474,3 +1474,26 @@ exclusion contracts; this browser proof claims only the actual delivered
 artifact and account/session outcome. Select the single
 `@phone-confirmation-notice` Academy case on the lead-owned runtime. This test
 coverage change has no render surface and requires no owner Stage-B slot.
+
+### Explicit provider-backed session refresh (003 EARS-8/9)
+
+`Academy explicitly refreshes the same private session through its real provider`
+(`steps/session-refresh.steps.ts`, #3059, `@session-explicit-refresh`) registers
+and verifies one uniquely owned account using actual addressed email and the
+shared store-side delivery-ID checkpoint helper. The authenticated browser calls
+`POST /v1/auth/refresh` without waiting for token expiry. The actual provider-backed
+endpoint must return exactly `{status: "refreshed"}`, no token and no new cookie.
+The same secure opaque cookie, subject and complete private verified profile
+survive refresh and page reload. A fresh cookie-free context receives generic401
+and cannot read a session or profile; the original owner remains authenticated.
+
+Trace-off fixtures and boolean diagnostics keep private values out of evidence.
+The after-hook logs out only the owned session, verifies denied private reads and
+closes its context even on failure; cleanup failure annotates an existing test
+failure without replacing it. This case neither depends on rate-limit ceilings
+nor waits for an expiry window, so the same selection runs unchanged in the
+stage Academy suite. Native `apps/api/test/auth/refresh-logout.e2e-spec.ts:92`
+and session service/adapter tests retain token rotation/reuse invariants. The
+broader automatic-expiry and consumed-token scenarios remain intact: this
+projection proves explicit endpoint refresh, not automatic expiry-triggered
+rotation or server-only token-chain reuse. No render surface or Stage-B slot.

@@ -131,6 +131,7 @@ import {
   STALL_BUDGET_BUILD_MS,
   releaseCheckScript,
   releaseFinishScript,
+  releaseInstallFromSourceScript,
   releaseInstallScript,
   releaseSupersedeScript,
   runDurableStep,
@@ -158,6 +159,17 @@ export {
 
 const API_PROD = process.env.DS_API_PROD_SSH || "ds-api-prod";
 const DATA_PROD = process.env.DS_DATA_PROD_SSH || "ds-data-prod";
+// #3054: the entrypoint in the operator checkout — what a run that ships no tree
+// (`--rollback`) installs on the boxes.
+const DS_RELEASE_SOURCE = join(
+  import.meta.dirname,
+  "..",
+  "..",
+  "infra",
+  "deploy",
+  "bin",
+  "ds-release",
+);
 const REMOTE_TREE = "~/ds-platform";
 const VPC_IP = process.env.DS_DATA_PROD_VPC_IP || "192.168.0.10";
 const IMAGE_RETENTION = 3;
@@ -1742,6 +1754,17 @@ async function rollback(shaArg) {
     }
     throw err;
   }
+
+  // #3054: a rollback ships no tree, so the entrypoint comes from the operator
+  // checkout — every run, like the forward path (tech spec §5 Entrypoint) — and a
+  // box the forward path never reached still gets it before its first call.
+  const releaseSource = readFileSync(DS_RELEASE_SOURCE);
+  for (const host of [API_PROD, DATA_PROD]) {
+    await sshScript(host, releaseInstallFromSourceScript(releaseSource), {
+      label: "install ds-release",
+    });
+  }
+  ok("ds-release installed on both boxes from the operator checkout");
 
   // #2982: a release step outlives the operator session that started it. A
   // rollback racing a still-running `migrate` (whose `up -d` would put the SHA

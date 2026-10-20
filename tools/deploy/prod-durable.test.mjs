@@ -84,3 +84,22 @@ test("2982: the rollback refuses while a box step still runs, then supersedes th
   assert.match(rollback, /for \(const host of \[API_PROD, DATA_PROD\]\)[\s\S]{0,200}releaseCheckScript/);
   assert.match(rollback, /releaseSupersedeScript\(RELEASE_ENV\)[\s\S]{0,80}DATA_PROD|DATA_PROD[\s\S]{0,200}releaseSupersedeScript\(RELEASE_ENV\)/);
 });
+
+test("3054: the rollback installs ds-release on both boxes from the operator checkout before its first check", () => {
+  const rollback = SOURCE.slice(SOURCE.indexOf("async function rollback("));
+  const install = rollback.indexOf("releaseInstallFromSourceScript(");
+  const check = rollback.indexOf("releaseCheckScript(RELEASE_ENV)");
+  assert.ok(install > 0, "the rollback installs the entrypoint");
+  assert.ok(install < check, "the install precedes the first ds-release call");
+  const beforeCheck = rollback.slice(0, check);
+  assert.doesNotMatch(beforeCheck, /releaseInstallScript\(|shipTree\(/, "never from a shipped tree");
+  assert.match(
+    beforeCheck,
+    /for \(const host of \[API_PROD, DATA_PROD\]\)[\s\S]{0,200}releaseInstallFromSourceScript\(/,
+  );
+  assert.match(
+    SOURCE,
+    /const DS_RELEASE_SOURCE = join\(\s*import\.meta\.dirname,\s*"\.\.",\s*"\.\.",\s*"infra",\s*"deploy",\s*"bin",\s*"ds-release",?\s*\);/,
+  );
+  assert.match(beforeCheck, /readFileSync\(DS_RELEASE_SOURCE\)/);
+});

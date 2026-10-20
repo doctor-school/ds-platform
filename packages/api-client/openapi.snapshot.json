@@ -3962,6 +3962,14 @@
         ],
         "type": "object"
       },
+      "LoginHandoffOwnershipRequestDto": {
+        "properties": {
+          "ref": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "LoginHandoffRequestDto": {
         "properties": {
           "ref": {
@@ -7948,6 +7956,28 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/LoginHandoffRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Auth"]
+      }
+    },
+    "/v1/auth/login/otp/handoff/own": {
+      "post": {
+        "operationId": "AuthController_checkLoginHandoffOwnership",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginHandoffOwnershipRequestDto"
               }
             }
           },

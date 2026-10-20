@@ -267,6 +267,31 @@ export class AuthService {
   }
 
   /**
+   * 003 EARS-44 (#2951): is `ref` a LIVE hand-off reference naming the very
+   * account `sessionSub` belongs to. Read-only by construction — the store is
+   * only peeked, so nothing is redeemed and nothing is sent; `false` for no
+   * session, a missing/malformed/unknown/expired/exhausted reference and
+   * another account's reference alike. The `/login` server door asks it (via
+   * `POST /v1/auth/login/otp/handoff/own`) to redirect a signed-in visitor
+   * opening their own link before any login HTML is sent, and the redemption
+   * above asks it so the two can never disagree. The reference is never logged.
+   */
+  async isOwnLoginHandoff(
+    ref: string | undefined,
+    sessionSub: string | undefined,
+  ): Promise<boolean> {
+    if (ref === undefined || sessionSub === undefined) return false;
+    const live = await this.handoffs.peek(ref);
+    if (live === null) return false;
+    const [owner] = await this.db
+      .select({ sub: users.zitadelSub })
+      .from(users)
+      .where(eq(users.id, live.accountId))
+      .limit(1);
+    return owner?.sub === sessionSub;
+  }
+
+  /**
    * 003 EARS-44: resolve a Congress hand-off reference to the address its code
    * goes to, counting one redemption. The address is the one stored with the
    * reference — exactly as typed in the sign-up form — and NEVER `users.email`:
@@ -288,16 +313,8 @@ export class AuthService {
     sessionSub?: string,
   ): Promise<LoginHandoffResolution> {
     if (ref === undefined) return null;
-    if (sessionSub !== undefined) {
-      const live = await this.handoffs.peek(ref);
-      if (live !== null) {
-        const [owner] = await this.db
-          .select({ sub: users.zitadelSub })
-          .from(users)
-          .where(eq(users.id, live.accountId))
-          .limit(1);
-        if (owner?.sub === sessionSub) return { kind: "already_signed_in" };
-      }
+    if (await this.isOwnLoginHandoff(ref, sessionSub)) {
+      return { kind: "already_signed_in" };
     }
     const entry = await this.handoffs.redeem(ref);
     if (entry === null) return null;

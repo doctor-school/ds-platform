@@ -1460,6 +1460,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/login/otp/handoff/own": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AuthController_checkLoginHandoffOwnership"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/login/otp/request": {
         parameters: {
             query?: never;
@@ -3172,6 +3188,9 @@ export interface components {
             /** @default [] */
             specialties: string[];
             title: string;
+        };
+        LoginHandoffOwnershipRequestDto: {
+            ref?: string;
         };
         LoginHandoffRequestDto: {
             ref?: string;
@@ -5723,6 +5742,27 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["LoginHandoffRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AuthController_checkLoginHandoffOwnership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginHandoffOwnershipRequestDto"];
             };
         };
         responses: {

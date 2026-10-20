@@ -6,7 +6,10 @@ import {
 import { VersioningType } from "@nestjs/common";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
-import { LoginHandoffResponseSchema } from "@ds/schemas";
+import {
+  LoginHandoffOwnershipResponseSchema,
+  LoginHandoffResponseSchema,
+} from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
@@ -416,6 +419,71 @@ describe.skipIf(!process.env.DATABASE_URL)(
         status: 200,
         body: FALLBACK,
       });
+      expect(h.mailer.loginCodeEmails).toEqual([]);
+    });
+
+    // ---- #2951: the read-only ownership check the /login server door asks ----
+
+    async function own(
+      ref: unknown,
+      cookie?: string,
+    ): Promise<{ status: number; body: unknown }> {
+      const res = await h.app.inject({
+        method: "POST",
+        url: "/v1/auth/login/otp/handoff/own",
+        payload: ref === undefined ? {} : { ref },
+        ...(cookie ? { headers: { cookie } } : {}),
+      });
+      return { status: res.statusCode, body: res.json() };
+    }
+
+    it("003 EARS-44: the ownership check answers own=true for the session's own reference, redeems nothing and sends nothing (#2951)", async () => {
+      const { email, ref } = await accountWithReference("own-check", true);
+      const cookie = await signIn(email);
+      clearMail();
+
+      for (let i = 0; i < 4; i++) {
+        expect(await own(ref, cookie)).toEqual({
+          status: 200,
+          body: LoginHandoffOwnershipResponseSchema.parse({ own: true }),
+        });
+      }
+      expect(h.mailer.loginCodeEmails).toEqual([]);
+      expect(h.mailer.verificationCodeEmails).toEqual([]);
+
+      // Zero redemptions counted: all three are still there.
+      for (let i = 1; i <= 3; i++) {
+        expect((await redeem(ref)).body).toEqual({
+          status: "otp_sent",
+          identifier: email,
+        });
+      }
+    });
+
+    it("003 EARS-44: the ownership check answers own=false for another account's reference, an unknown one and garbage (#2951)", async () => {
+      const other = await accountWithReference("own-other", true);
+      const owner = await accountWithReference("own-owner", true);
+      const cookie = await signIn(other.email);
+      clearMail();
+
+      for (const ref of [owner.ref, "Y".repeat(43), "not a ref", "", undefined]) {
+        expect(await own(ref, cookie)).toEqual({
+          status: 200,
+          body: { own: false },
+        });
+      }
+      expect(h.mailer.loginCodeEmails).toEqual([]);
+      // The other account's reference was only peeked: still three redemptions.
+      for (let i = 1; i <= 3; i++) {
+        expect((await redeem(owner.ref)).body).toMatchObject({
+          status: "otp_sent",
+        });
+      }
+    });
+
+    it("003 EARS-44: the ownership check without a session is the standard 401 (#2951)", async () => {
+      const { ref } = await accountWithReference("own-guest", true);
+      expect((await own(ref)).status).toBe(401);
       expect(h.mailer.loginCodeEmails).toEqual([]);
     });
   },

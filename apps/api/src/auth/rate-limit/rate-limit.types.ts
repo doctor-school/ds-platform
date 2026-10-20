@@ -260,3 +260,13 @@ export function resolveRateLimitThresholds(
   }
   return resolved;
 }
+
+/**
+ * Scope tag for the 003 EARS-44 hand-off OWNERSHIP check (#2951) — the
+ * read-only door the `/login` server render asks for a signed-in visitor. It
+ * sends nothing and verifies no credential, so it consumes neither auth door's
+ * window: a page view must never spend the budget EARS-13 keeps for code
+ * requests or failed verifications. Its own per-address bucket still bounds
+ * how fast one origin can probe references.
+ */
+export const LOGIN_HANDOFF_OWNERSHIP_RATE_LIMIT_SCOPE = "auth:handoff-ownership";

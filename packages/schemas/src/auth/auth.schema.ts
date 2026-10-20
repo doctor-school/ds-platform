@@ -342,6 +342,34 @@ export const LoginHandoffResponseSchema = z.discriminatedUnion("status", [
 export type LoginHandoffResponse = z.infer<typeof LoginHandoffResponseSchema>;
 
 /**
+ * 003 EARS-44 (#2951) — the read-only ownership check the `/login` SERVER door
+ * asks before it sends any login HTML to a signed-in visitor carrying a
+ * hand-off reference: «is this reference live for the account this session
+ * belongs to». Same unconstrained `ref` as the redemption, for the same reason:
+ * a missing or malformed reference must get the one ordinary answer, never a
+ * distinguishable validation error.
+ */
+export const LoginHandoffOwnershipRequestSchema = z.object({
+  ref: z.string().optional(),
+});
+export type LoginHandoffOwnershipRequest = z.infer<
+  typeof LoginHandoffOwnershipRequestSchema
+>;
+
+/**
+ * `own: true` only for a live reference naming the session's own account;
+ * unknown, expired, exhausted, malformed and another account's references all
+ * answer the ONE `own: false`, so the check discloses nothing beyond «not
+ * yours». It never redeems the reference and never sends a code.
+ */
+export const LoginHandoffOwnershipResponseSchema = z.strictObject({
+  own: z.boolean(),
+});
+export type LoginHandoffOwnershipResponse = z.infer<
+  typeof LoginHandoffOwnershipResponseSchema
+>;
+
+/**
  * Submit a passwordless login code (EARS-6 step 2 / EARS-7 step 2). On success
  * the BFF establishes a session exactly as password login does (design §6),
  * returning {@link LoginResponseSchema} with a `__Host-` cookie and no token;

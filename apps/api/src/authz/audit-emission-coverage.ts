@@ -177,6 +177,16 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
       coveredBy:
         "login-handoff.e2e (EARS-44): a live redemption appends exactly one auth.otp.sent row; a refused reference appends none",
     },
+    "POST /v1/auth/login/otp/handoff/own": {
+      // 003 EARS-44 (#2951): the /login server door's ownership question. It
+      // only peeks the hand-off store — no redemption, no send, no session
+      // change — so there is no command whose terminal row could be owed.
+      noneBySpec: {
+        reason:
+          "read-only ownership check of a hand-off reference: it redeems nothing, sends nothing and changes no session, so no auth_audit event exists for it",
+        spec: "003-design.md EARS-44 (own-link server redirect)",
+      },
+    },
     "POST /v1/auth/logout": {
       emits: ["SessionRevoked"],
       coveredBy:

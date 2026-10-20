@@ -14,6 +14,7 @@ import {
 } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 import type {
+  LoginHandoffOwnershipResponse,
   LoginHandoffResponse,
   LoginResponse,
   LogoutResponse,
@@ -31,6 +32,7 @@ import { Authz, Public } from "../authz/index.js";
 import { BotProtected } from "../bot-protection/index.js";
 import {
   ConsumedIpWindow,
+  LOGIN_HANDOFF_OWNERSHIP_RATE_LIMIT_SCOPE,
   RateLimited,
   RateLimitService,
 } from "./rate-limit/index.js";
@@ -42,6 +44,7 @@ import {
 } from "./login-challenge/index.js";
 import { AuthService, GENERIC_THROTTLED } from "./auth.service.js";
 import {
+  LoginHandoffOwnershipRequestDto,
   LoginHandoffRequestDto,
   LoginRequestDto,
   OtpRequestDto,
@@ -262,6 +265,42 @@ export class AuthController {
       { ip, asn },
     );
     return { status: "otp_sent", identifier: email };
+  }
+
+  /**
+   * 003 EARS-44 (#2951): the read-only ownership check behind the `/login`
+   * SERVER door. A signed-in visitor opening their OWN hand-off link is
+   * redirected by the server to the carried target before any login HTML is
+   * sent; this answers the one question that decision needs — «is this live
+   * reference this session's own account's» — and nothing else.
+   *
+   * Session-required (no session ⇒ the standard 401 from the guard), and a
+   * session-self question, so either baseline role is admitted like
+   * `GET /auth/session`. It only PEEKS the store: no redemption is counted, no
+   * code is sent, the reference is never logged. Every other reference —
+   * missing, malformed, unknown, expired, exhausted, another account's —
+   * answers the one `{ own: false }`, floored by `@TimingEqualized` so the
+   * account lookup a live foreign reference costs is no oracle either. Its
+   * own rate-limit bucket: a page view spends neither EARS-13 auth window.
+   */
+  @Post("login/otp/handoff/own")
+  @RateLimited(LOGIN_HANDOFF_OWNERSHIP_RATE_LIMIT_SCOPE)
+  @TimingEqualized()
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["doctor_guest", "platform_admin"],
+    check: "fast-path",
+    audit: "high-stakes",
+    tests: ["EARS-44"],
+  })
+  async checkLoginHandoffOwnership(
+    @Body() dto: LoginHandoffOwnershipRequestDto,
+    @Req() req: { user?: SessionClaims },
+  ): Promise<LoginHandoffOwnershipResponse> {
+    return {
+      own: await this.auth.isOwnLoginHandoff(dto.ref, req.user?.sub),
+    };
   }
 
   /**

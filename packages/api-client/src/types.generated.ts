@@ -3082,6 +3082,11 @@ export interface components {
             };
             school: string;
             seatsLeft: number | null;
+            signUps: {
+                adjacentSpecialties: number;
+                sameSpecialty: number;
+                total: number;
+            } | null;
             slug: string;
             speakers: {
                 credentials: string;
@@ -3100,6 +3105,7 @@ export interface components {
             /** @enum {string} */
             state: "published" | "live" | "ended" | "hidden" | "in_archive";
             title: string;
+            viewers: number | null;
         };
         ExpertAdminDetailDto: {
             affiliation: string | null;

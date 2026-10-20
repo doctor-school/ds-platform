@@ -340,12 +340,19 @@ describe.skipIf(!process.env.DATABASE_URL)(
           "recording",
           "school",
           "seatsLeft",
+          // 020 EARS-3 (#1767): the social proof — aggregate counts only, never
+          // a registrant identity, and the same for every viewer, so the
+          // guest/principal byte-identity below is untouched.
+          "signUps",
           "slug",
           "specialties",
           "speakers",
           "startsAt",
           "state",
           "title",
+          // Wave-3 gate H2 (row 43): «Смотрели N коллег» — one aggregate
+          // integer over the durable room presence, never the roster.
+          "viewers",
         ].sort(),
       );
     });

@@ -59,6 +59,8 @@ const EVENT = {
   state: "published",
   format: "online",
   seatsLeft: null,
+  signUps: null,
+  viewers: null,
   recording: {
     state: "preparing",
     primaryKind: null,
@@ -451,6 +453,37 @@ describe("014 EARS-6 (#2487): the doors carry the land-only return end-to-end", 
         "/webinars/prp-pri-gonartroze?intent=land",
       ),
     ).toBe("/events/prp-pri-gonartroze");
+  });
+
+  it("020 EARS-5 (LD-9): the hybrid tab survives the landing on the Academy, where the academy shape is re-homed", () => {
+    // The sign-in door navigates to THIS landing (`completionTargetAction`), so
+    // a tab dropped here sends the doctor back to the default «Очно» tab.
+    expect(
+      resolveReturnLandingPath(
+        ACADEMY_FIXTURE,
+        "/webinars/prp-pri-gonartroze?mode=online",
+      ),
+    ).toBe("/webinars/prp-pri-gonartroze?mode=online");
+    expect(
+      resolveReturnLandingPath(
+        ACADEMY_FIXTURE,
+        "/webinars/prp-pri-gonartroze?mode=online&intent=land",
+      ),
+    ).toBe("/webinars/prp-pri-gonartroze?mode=online");
+    // The doctor host re-homes the academy shape onto its own route, tab kept.
+    expect(
+      resolveReturnLandingPath(
+        DOCTOR_FIXTURE,
+        "/webinars/prp-pri-gonartroze?mode=offline",
+      ),
+    ).toBe("/events/prp-pri-gonartroze?mode=offline");
+    // Anything outside the closed tab set is not a tab and is not carried.
+    expect(
+      resolveReturnLandingPath(
+        ACADEMY_FIXTURE,
+        "/webinars/prp-pri-gonartroze?mode=evil",
+      ),
+    ).toBeNull();
   });
 
   it("014 EARS-6: a land-only value never becomes the эфир registration target, nor an intent a land-only one", () => {

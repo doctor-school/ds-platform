@@ -79,6 +79,28 @@ export const AroundEventSchema = z.object({
 });
 export type AroundEvent = z.infer<typeof AroundEventSchema>;
 
+/**
+ * 020 EARS-3 (#1767) — the social proof of the sign-up count
+ * (020-requirements «Read models»). `total` is the SAME colleagues' count the
+ * 019 feed card projects as `signUpCount` — one count query feeds both, so the
+ * card and the page a doctor opens from it cannot disagree. `sameSpecialty`
+ * and `adjacentSpecialties` partition those registrants by their profile
+ * specialty against the event's directions through 017's managed targeting:
+ * a registrant whose specialty owns one of the event's directions is «same»;
+ * otherwise one whose own directions reach an event direction through an
+ * active adjacency edge is «adjacent»; anyone else (no specialty chosen, an
+ * unrelated one) counts in `total` only.
+ *
+ * `total` is positive by construction: zero sign-ups are no `SignUpProof` at
+ * all (the read's `signUps` is `null`), never a zero-shaped object.
+ */
+export const SignUpProofSchema = z.object({
+  total: z.number().int().positive(),
+  sameSpecialty: z.number().int().nonnegative(),
+  adjacentSpecialties: z.number().int().nonnegative(),
+});
+export type SignUpProof = z.infer<typeof SignUpProofSchema>;
+
 export const EventPageViewBaseSchema = z.object({
   id: z.uuid(),
   slug: z.string(),
@@ -160,6 +182,23 @@ export const EventPageViewBaseSchema = z.object({
    * unable to tell «no seat limit» from «this read does not know».
    */
   seatsLeft: z.number().int().nonnegative().nullable(),
+  /**
+   * 020 EARS-3 (#1767) — the social proof, identical for a guest and a
+   * signed-in reader (it is a fact of the event, not of the viewer). `null` —
+   * absent, never zero-shaped — when the event has no colleague sign-up yet
+   * and while its «Скрыть число записавшихся» option (007 EARS-12) is on: a
+   * hidden count is not read at all, so the number never reaches the client.
+   */
+  signUps: SignUpProofSchema.nullable(),
+  /**
+   * Wave-3 entry gate H2 (row 43) — «Смотрели N коллег»: the number of
+   * DISTINCT participants with an accepted room presence beat for the event
+   * (006 EARS-4's durable `presence_beats`, the participant filter of the live
+   * room count, no freshness window). `null` unless the event is `ended` and
+   * that number is above zero — an upcoming or live page carries no viewers
+   * count, and an эфир no colleague watched renders no «0».
+   */
+  viewers: z.number().int().positive().nullable(),
 });
 
 /**

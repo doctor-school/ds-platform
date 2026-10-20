@@ -84,6 +84,10 @@ const EVENT = {
   state: "published",
   format: "online",
   seatsLeft: null,
+  // Wave-3 gate rows 36 / 43 (#2072 PR 3.3): the read carries both, `null` when
+  // there is nothing to state — the double serves the honest-absent shape.
+  signUps: null,
+  viewers: null,
   recording: {
     state: "preparing",
     primaryKind: null,

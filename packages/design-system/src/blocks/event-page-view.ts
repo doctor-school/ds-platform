@@ -1,4 +1,4 @@
-import { MOSCOW_TIME_ZONE, formatEventTime } from "@ds/schemas";
+import { MOSCOW_TIME_ZONE, formatEventTime, isRegistrable } from "@ds/schemas";
 import type {
   EventPageView,
   EventParticipationFormat,
@@ -10,7 +10,6 @@ import type {
   EventSignupCardProps,
   EventSignupCondition,
 } from "./event-signup-card";
-import type { EventFormatBlockProps } from "./event-format-block";
 import type { EventSpeakerCardProps } from "./event-speaker-card";
 
 /**
@@ -110,6 +109,29 @@ export interface EventPageCopy {
   /** `EventFormatBlock` (online) lines; its heading is the canvas default «Эфир». */
   roomOpensLine: string;
   duringLine: string;
+  /** 020 EARS-8 — the format block's section label per kind. */
+  formatHeading: Record<EventParticipationFormat, string>;
+  /** The hybrid tabs' labels — «очно / онлайн» (F-020-2 Б). */
+  formatTab: Record<EventFormatMode, string>;
+  /**
+   * 020 EARS-8 — the remaining offline seats, an RU plural triple
+   * (one · few · many) around `{n}`, and the exhausted reading.
+   */
+  seatsLeft: readonly [one: string, few: string, many: string];
+  seatsNone: string;
+  /** 020 EARS-9 — the plain statement a full hybrid event makes on its block. */
+  hybridSoldOut: { title: string; body: string };
+  /**
+   * 020 EARS-3 — the social proof: the total of colleagues registered, and
+   * separately those from adjacent specialties. RU plural triples.
+   */
+  signUpsTotal: readonly [one: string, few: string, many: string];
+  signUpsAdjacent: readonly [one: string, few: string, many: string];
+  /** Wave-3 gate H2 (row 43) — the ended meta row's «Эфир прошёл» date label. */
+  airedLabel: string;
+  /** Wave-3 gate H2 (row 43) — the ended meta row's «Смотрели N коллег». */
+  viewersLabel: string;
+  colleagues: readonly [one: string, few: string, many: string];
 }
 
 export const EVENT_PAGE_COPY: EventPageCopy = {
@@ -140,7 +162,42 @@ export const EVENT_PAGE_COPY: EventPageCopy = {
   roomOpensLine: "Комната эфира откроется за 10 минут до начала",
   duringLine:
     "Во время эфира: вопрос лектору · опросы с живым графиком · отметки присутствия",
+  formatHeading: {
+    online: "Эфир",
+    offline: "Места",
+    hybrid: "Как участвовать",
+  },
+  formatTab: { offline: "Очно", online: "Онлайн" },
+  seatsLeft: ["Осталось {n} место", "Осталось {n} места", "Осталось {n} мест"],
+  seatsNone: "Мест не осталось",
+  hybridSoldOut: {
+    title: "Очных мест не осталось",
+    body: "Участвуйте онлайн — эфир тот же.",
+  },
+  signUpsTotal: [
+    "Уже записался {n} коллега",
+    "Уже записались {n} коллеги",
+    "Уже записались {n} коллег",
+  ],
+  signUpsAdjacent: [
+    "в том числе {n} врач смежной специальности",
+    "в том числе {n} врача смежных специальностей",
+    "в том числе {n} врачей смежных специальностей",
+  ],
+  airedLabel: "Эфир прошёл",
+  viewersLabel: "Смотрели",
+  colleagues: ["{n} коллега", "{n} коллеги", "{n} коллег"],
 };
+
+/** Pick the RU plural form of a `{n}` triple and fill in the number. */
+function plural(
+  forms: readonly [one: string, few: string, many: string],
+  n: number,
+): string {
+  const form = RU_PLURAL.select(n);
+  const pick = form === "one" ? forms[0] : form === "few" ? forms[1] : forms[2];
+  return pick.replace("{n}", String(n));
+}
 
 /**
  * The facts of an event the page's times are formatted from — the instant and
@@ -154,6 +211,8 @@ export interface EventPageTimeParts {
   time: string;
   /** «28 августа» */
   date: string;
+  /** «28 августа 2026» — the ended meta row's date (canvas «Эфир прошёл»). */
+  dateWithYear: string;
   /** «пятница» */
   weekday: string;
   /** «МСК», «GMT+5» — the zone the time is stated in (004 EARS-12). */
@@ -172,12 +231,19 @@ export function eventPageTimeParts(
   view: EventPageMoment,
   viewerZone: string = MOSCOW_TIME_ZONE,
 ): EventPageTimeParts {
-  const { time, date, weekday, zoneLabel } = formatEventTime({
+  const { time, date, dateWithYear, weekday, zoneLabel } = formatEventTime({
     startsAt: view.startsAt,
     participationFormat: view.format,
     viewerZone,
   });
-  return { time, date, weekday, zoneLabel };
+  return {
+    time,
+    date,
+    // ICU appends «г.» to a ru-RU date with a year; the canvas states none.
+    dateWithYear: dateWithYear.replace(/\s*г\.$/u, ""),
+    weekday,
+    zoneLabel,
+  };
 }
 
 /**
@@ -369,13 +435,26 @@ export function eventSignupCardProps(
   // keeps the default tone. The fourth row now comes from the read model
   // (`view.nmo`, #1766) and is ABSENT when the event credits nothing: «нет» or
   // a greyed placeholder would be a claim the page has no business making.
+  //
+  // An ENDED event offers no participation, so it states no participation
+  // cost: canvas `phase: прошло` carries no «Участие» row, and «Бесплатно для
+  // врача» under «Событие завершилось» would price a thing nobody can take
+  // (020 EARS-19, #2072 comment 6217460822).
   const conditions: EventSignupCondition[] = [
-    view.pulCost === 0
-      ? { label: copy.conditionPrice, value: copy.priceFree, tone: "success" }
-      : {
-          label: copy.conditionPrice,
-          value: `${view.pulCost} ${copy.pulUnit}`,
-        },
+    ...(view.state === "ended"
+      ? []
+      : [
+          view.pulCost === 0
+            ? ({
+                label: copy.conditionPrice,
+                value: copy.priceFree,
+                tone: "success",
+              } satisfies EventSignupCondition)
+            : {
+                label: copy.conditionPrice,
+                value: `${view.pulCost} ${copy.pulUnit}`,
+              },
+        ]),
     { label: copy.conditionFormat, value: copy.formatDetail[view.format] },
     {
       label: copy.conditionDuration,
@@ -461,20 +540,153 @@ function initialsOf(name: string): string {
     .join("");
 }
 
+/** The two halves of a hybrid event — the tab a hybrid format block opens on. */
+export type EventFormatMode = "offline" | "online";
+
 /**
- * The «как это проходит» block — ONLINE only. `offline` and `hybrid` carry an
- * address, a map and the «очно / онлайн» tabs, which are EARS-8 (#1771): until
- * that lands, an offline/hybrid event renders NO format block rather than an
- * online block that lies about where the doctor should go.
+ * The online half: when the room opens (before the start only) and what
+ * happens inside.
+ */
+export interface EventFormatRoom {
+  roomOpensLine?: string;
+  duringLine: string;
+}
+
+/**
+ * 020 EARS-8 — the format block, the only part of the page that differs
+ * between formats. JSX-free: the page composes the block (and, for a hybrid
+ * event, its URL-bound tabs) from this model.
+ */
+export type EventFormatModel =
+  | ({ kind: "online"; heading: string } & EventFormatRoom)
+  | { kind: "offline"; heading: string; seatsLine: string }
+  | {
+      kind: "hybrid";
+      heading: string;
+      tabs: Record<EventFormatMode, string>;
+      room: EventFormatRoom;
+      seatsLine: string;
+      /** The tab the policy resolves: «онлайн» once the seats are gone. */
+      defaultMode: EventFormatMode;
+      /** EARS-9 — the plain statement of a full hybrid event, else `null`. */
+      statement: { title: string; body: string } | null;
+    };
+
+/**
+ * The format block for one viewer on one event (020 EARS-8 / EARS-9, wave-3
+ * gate rows 33, 34, 41).
+ *
+ * - **online** — the room block: «Комната эфира откроется…» only BEFORE the
+ *   start (canvas `beforeStart`), the during-эфир line while the event is
+ *   upcoming or live.
+ * - **offline** — the remaining seats; no ticket, no QR, no door-scan
+ *   affordance (EARS-15 is wave 2) and no venue lines (gate row 32, #1771).
+ * - **hybrid** — both halves as «очно / онлайн» tabs; the default tab is the
+ *   policy's: `switch-to-online` (or no seats left) opens on «онлайн» and the
+ *   block says why.
+ *
+ * An event that offers no participation (`ended`, `hidden`) has no format
+ * block — the canvas draws none under `phase: прошло` — and a half with
+ * nothing true to say is absent rather than an empty labelled box (EARS-19):
+ * an offline event without a seat limit renders no block, a hybrid one only
+ * its online half.
+ *
+ * It decides nothing about participation: the default tab READS the server
+ * CTA's action and the event's seat fact; it never re-derives eligibility.
  */
 export function eventFormatBlockProps(
   view: EventPageView,
+  cta: ParticipationCta | null = null,
   copy: EventPageCopy = EVENT_PAGE_COPY,
-): EventFormatBlockProps | null {
-  if (view.format !== "online") return null;
-  return {
+): EventFormatModel | null {
+  if (!isRegistrable(view.state)) return null;
+  const room: EventFormatRoom =
+    view.state === "published"
+      ? { roomOpensLine: copy.roomOpensLine, duringLine: copy.duringLine }
+      : { duringLine: copy.duringLine };
+  const online = (): EventFormatModel => ({
     kind: "online",
-    roomOpensLine: copy.roomOpensLine,
-    duringLine: copy.duringLine,
+    heading: copy.formatHeading.online,
+    ...room,
+  });
+  if (view.format === "online") return online();
+  const seatsLine =
+    view.seatsLeft === null
+      ? null
+      : view.seatsLeft === 0
+        ? copy.seatsNone
+        : plural(copy.seatsLeft, view.seatsLeft);
+  if (view.format === "offline") {
+    return seatsLine === null
+      ? null
+      : { kind: "offline", heading: copy.formatHeading.offline, seatsLine };
+  }
+  if (seatsLine === null) return online();
+  const soldOut = view.seatsLeft === 0;
+  return {
+    kind: "hybrid",
+    heading: copy.formatHeading.hybrid,
+    tabs: copy.formatTab,
+    room,
+    seatsLine,
+    defaultMode:
+      soldOut || cta?.action === "switch-to-online" ? "online" : "offline",
+    statement: soldOut ? copy.hybridSoldOut : null,
+  };
+}
+
+/**
+ * 020 EARS-3 (gate row 36) — the social proof under the sign-up card: the
+ * colleagues already registered and, separately, those from adjacent
+ * specialties. The same for a guest and a signed-in doctor (it is a fact of
+ * the public read). Absent — never «0» — when the read carries no
+ * `SignUpProof` (no sign-ups yet, or the hide option on), and on an ended
+ * page, which the canvas draws without it (`notPast`).
+ */
+export function eventSocialProof(
+  view: EventPageView,
+  copy: EventPageCopy = EVENT_PAGE_COPY,
+): { total: string; adjacent: string | null } | null {
+  if (view.signUps === null || view.state === "ended") return null;
+  const { total, adjacentSpecialties } = view.signUps;
+  return {
+    total: plural(copy.signUpsTotal, total),
+    adjacent:
+      adjacentSpecialties > 0
+        ? plural(copy.signUpsAdjacent, adjacentSpecialties)
+        : null,
+  };
+}
+
+/**
+ * Wave-3 gate H2 (row 43) — the ended meta row's «Эфир прошёл · 28 августа
+ * 2026»: the event's own date, which every read carries, so it is stated on
+ * every ended page and on no other. The value is the МСК rendering; the page
+ * re-formats it in the viewer's zone through the time island (gate D9).
+ */
+export function eventAiredMeta(
+  view: EventPageView,
+  copy: EventPageCopy = EVENT_PAGE_COPY,
+): { label: string; value: string } | null {
+  if (view.state !== "ended") return null;
+  return {
+    label: copy.airedLabel,
+    value: eventPageTimeParts(view).dateWithYear,
+  };
+}
+
+/**
+ * Wave-3 gate H2 (row 43) — the ended meta row's «Смотрели N коллег», from the
+ * read's distinct-viewer count. No count and no stand-in when the read carries
+ * none (EARS-19).
+ */
+export function eventViewersMeta(
+  view: EventPageView,
+  copy: EventPageCopy = EVENT_PAGE_COPY,
+): { label: string; value: string } | null {
+  if (view.viewers === null) return null;
+  return {
+    label: copy.viewersLabel,
+    value: plural(copy.colleagues, view.viewers),
   };
 }

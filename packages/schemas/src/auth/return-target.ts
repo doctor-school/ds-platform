@@ -43,6 +43,51 @@ export const MAX_RETURN_TARGET_LENGTH = 512;
 export const LAND_ONLY_RETURN_QUERY = "intent=land";
 
 /**
+ * 020 LD-9 / EARS-5 — the hybrid event page's active tab (`?mode=…`, 020
+ * LD-4), the second and last query the guard keeps. A doctor who registers
+ * from the «онлайн» tab must land back on it, so the carried page keeps its
+ * tab through parking and completion. Like the land-only marker it is a CLOSED
+ * value — exactly one of these literals, compared raw (never decoded) — so it
+ * can carry no attacker-authored state either.
+ */
+export const RETURN_TARGET_MODES = ["offline", "online"] as const;
+
+/** The hybrid tab a return target may carry. */
+export type ReturnTargetMode = (typeof RETURN_TARGET_MODES)[number];
+
+/**
+ * The kept query of a return target, canonical: `mode=…` first, the land-only
+ * marker last — or `""` when the raw query is not exactly a combination of the
+ * two allowlisted params, each at most once. Anything else (an unknown key, a
+ * value outside the allowlist, a repeat, an empty pair) drops the WHOLE query,
+ * the marker included, exactly as before the tab was admitted.
+ */
+export function canonicalReturnTargetQuery(rawQuery: string): string {
+  if (rawQuery.length === 0) return "";
+  let mode: ReturnTargetMode | null = null;
+  let landOnly = false;
+  for (const pair of rawQuery.split("&")) {
+    if (pair === LAND_ONLY_RETURN_QUERY && !landOnly) {
+      landOnly = true;
+      continue;
+    }
+    const value = pair.startsWith("mode=") ? pair.slice("mode=".length) : null;
+    if (
+      value !== null &&
+      mode === null &&
+      (RETURN_TARGET_MODES as readonly string[]).includes(value)
+    ) {
+      mode = value as ReturnTargetMode;
+      continue;
+    }
+    return "";
+  }
+  return [mode === null ? null : `mode=${mode}`, landOnly ? LAND_ONLY_RETURN_QUERY : null]
+    .filter((part): part is string => part !== null)
+    .join("&");
+}
+
+/**
  * Characters that never belong in a same-origin path and are classic redirect
  * bypasses: any C0 control character or space (a raw tab/newline is stripped by
  * browsers when parsing a URL, so a `/<TAB>/evil` can re-form as `//evil`), DEL,
@@ -79,12 +124,15 @@ function hasUnsafeChar(value: string): boolean {
  * including their percent-encoded forms); an empty inner segment that re-forms
  * `//`; and a malformed percent-escape.
  *
- * The returned target carries NO fragment and NO query but the one fixed
- * {@link LAND_ONLY_RETURN_QUERY} marker. The return target is a page, not page
- * state, and dropping both removes redirect chaining outright: the page a visitor
- * is landed on can never be handed an attacker-authored `?next=` to follow
- * onward. The marker survives so the parked copy of a land-only return (014
- * EARS-6) is still land-only when read back, never a registration intent.
+ * The returned target carries NO fragment and NO query but the two closed
+ * params {@link canonicalReturnTargetQuery} admits: the fixed
+ * {@link LAND_ONLY_RETURN_QUERY} marker and the hybrid tab `mode=offline|online`
+ * (020 LD-9). Dropping everything else removes redirect chaining outright: the
+ * page a visitor is landed on can never be handed an attacker-authored `?next=`
+ * to follow onward. The marker survives so the parked copy of a land-only
+ * return (014 EARS-6) is still land-only when read back, never a registration
+ * intent; the tab survives so registration lands the doctor on the tab they
+ * were reading (020 EARS-5).
  */
 export function parseSameOriginReturnTarget(returnTo: unknown): string | null {
   if (typeof returnTo !== "string") return null;
@@ -97,8 +145,8 @@ export function parseSameOriginReturnTarget(returnTo: unknown): string | null {
   // is a protocol-relative URL and would leave the origin).
   if (!returnTo.startsWith("/") || returnTo.startsWith("//")) return null;
 
-  // Strip the fragment, then the query — neither survives into the canonical
-  // target (see the doc comment above).
+  // Strip the fragment, then the query — only the allowlisted params survive
+  // into the canonical target (see the doc comment above).
   const hashAt = returnTo.indexOf("#");
   const withoutHash = hashAt === -1 ? returnTo : returnTo.slice(0, hashAt);
   const queryAt = withoutHash.indexOf("?");
@@ -128,8 +176,10 @@ export function parseSameOriginReturnTarget(returnTo: unknown): string | null {
   // Return the ORIGINAL (still-encoded) path, not the decoded form: it is now
   // proven to be a same-origin absolute-path reference, and re-emitting the
   // decoded text would corrupt a legitimately encoded segment.
-  const query = queryAt === -1 ? "" : withoutHash.slice(queryAt + 1);
-  return query === LAND_ONLY_RETURN_QUERY ? `${path}?${query}` : path;
+  const query = canonicalReturnTargetQuery(
+    queryAt === -1 ? "" : withoutHash.slice(queryAt + 1),
+  );
+  return query === "" ? path : `${path}?${query}`;
 }
 
 /** `true` iff `returnTo` is a safe same-origin return target (014 EARS-6). */

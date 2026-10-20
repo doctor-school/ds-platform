@@ -400,3 +400,76 @@ describe("014 EARS-6 (#2487): the land-only event return", () => {
     ).toBe("/events/ahilles-042");
   });
 });
+
+describe("020 LD-9 / EARS-5: the hybrid tab rides the return target", () => {
+  it("020 EARS-5: the same-origin guard keeps a validated `mode=offline|online`, alone or with the land-only marker", () => {
+    expect(parseSameOriginReturnTarget("/events/ahilles-042?mode=online")).toBe(
+      "/events/ahilles-042?mode=online",
+    );
+    expect(
+      parseSameOriginReturnTarget("/webinars/ahilles-042?mode=offline#top"),
+    ).toBe("/webinars/ahilles-042?mode=offline");
+    // Combined with the marker, in either order → one canonical order.
+    expect(
+      parseSameOriginReturnTarget("/events/ahilles-042?intent=land&mode=online"),
+    ).toBe("/events/ahilles-042?mode=online&intent=land");
+    expect(
+      parseSameOriginReturnTarget("/events/ahilles-042?mode=online&intent=land"),
+    ).toBe("/events/ahilles-042?mode=online&intent=land");
+  });
+
+  it("020 EARS-5: any other `mode` value, a repeated key or an extra param drops the whole query", () => {
+    for (const raw of [
+      "/events/ahilles-042?mode=ONLINE",
+      "/events/ahilles-042?mode=hybrid",
+      "/events/ahilles-042?mode=",
+      "/events/ahilles-042?mode",
+      "/events/ahilles-042?mode=online%26next%3D%2F%2Fevil",
+      "/events/ahilles-042?mode=online&mode=offline",
+      "/events/ahilles-042?mode=online&next=//evil",
+      "/events/ahilles-042?mode=online&intent=land&intent=land",
+      "/events/ahilles-042?mode=online&&intent=land",
+      "/events/ahilles-042?from=room&mode=online",
+    ]) {
+      expect(parseSameOriginReturnTarget(raw), raw).toBe("/events/ahilles-042");
+    }
+    // The path guarantees are unchanged by a valid query.
+    for (const raw of [
+      "//evil/events/x?mode=online",
+      "/events/../account?mode=online",
+      "https://evil/events/x?mode=online",
+    ]) {
+      expect(parseSameOriginReturnTarget(raw), raw).toBeNull();
+    }
+  });
+
+  it("020 EARS-5: an event page carrying the tab is still a registration intent on its own host, rebuilt canonically", () => {
+    expect(parseDoctorEventReturnTarget("/events/ahilles-042?mode=online")).toEqual({
+      eventSlug: "ahilles-042",
+      returnTo: "/events/ahilles-042?mode=online",
+    });
+    expect(
+      parseAcademyEventReturnTarget("/webinars/ahilles-042?mode=offline"),
+    ).toEqual({
+      eventSlug: "ahilles-042",
+      returnTo: "/webinars/ahilles-042?mode=offline",
+    });
+    for (const raw of [
+      "/events/ahilles-042?mode=hybrid",
+      "/events/ahilles-042?mode=online&next=x",
+      "/events/ahilles-042?tab=online",
+      "/events/ahilles-042?mode=online#x",
+    ]) {
+      expect(parseDoctorEventReturnTarget(raw), raw).toBeNull();
+    }
+    // The tabbed page under the land-only marker stays land-only, never a
+    // registration intent.
+    const landOnly = "/events/ahilles-042?mode=online&intent=land";
+    expect(parseDoctorEventReturnTarget(landOnly)).toBeNull();
+    expect(parseLandOnlyReturnTarget(landOnly)).toEqual({
+      eventSlug: "ahilles-042",
+      page: "/events/ahilles-042?mode=online",
+      returnTo: landOnly,
+    });
+  });
+});

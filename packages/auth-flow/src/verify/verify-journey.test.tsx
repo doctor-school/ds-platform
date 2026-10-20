@@ -94,6 +94,8 @@ const EVENT_PAGE = {
   state: "ended",
   format: "online",
   seatsLeft: null,
+  signUps: null,
+  viewers: null,
   recording: {
     state: "preparing",
     primaryKind: null,
@@ -143,7 +145,12 @@ beforeEach(() => {
   setPendingRegistration({
     identifier: EMAIL,
     registration: { password: "Sup3rSecret!", consent: [] },
-    form: { email: EMAIL, password: "Sup3rSecret!", promoCode: "", consents: {} },
+    form: {
+      email: EMAIL,
+      password: "Sup3rSecret!",
+      promoCode: "",
+      consents: {},
+    },
   });
   document.elementFromPoint = () => document.body;
 });

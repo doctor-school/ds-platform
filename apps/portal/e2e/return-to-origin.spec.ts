@@ -45,6 +45,9 @@ const LIVE_OIDC =
 const ORIGIN_SLUG = process.env.E2E_WEBINAR_SLUG ?? "seed-005-upcoming";
 const ORIGIN_PATH = `/webinars/${ORIGIN_SLUG}`;
 
+/** 020 LD-9 — a hybrid event with seats left, whose tab the sign-in must keep. */
+const HYBRID_SLUG = process.env.E2E_HYBRID_SLUG;
+
 /** The post-login default landing when no valid target exists (013 EARS-15). */
 const DEFAULT_LANDING = "/webinars";
 
@@ -282,6 +285,63 @@ test.describe("014 EARS-6 platform-wide return-to-origin", () => {
     await page.context().clearCookies();
     await loginFrom(page, "/login", email, password);
     await expect(page).toHaveURL(new RegExp(`${DEFAULT_LANDING}$`));
+  });
+
+  test("020 EARS-5 (LD-9): signing in from a hybrid event's «Онлайн» tab lands back on that tab", async ({
+    page,
+  }) => {
+    test.skip(!HYBRID_SLUG, "set E2E_HYBRID_SLUG (a hybrid event with seats)");
+    // A provisioned doctor when the stand names one (no signup spent), else
+    // the account the registration journey created.
+    const { email, password } =
+      process.env.E2E_DOCTOR_EMAIL && process.env.E2E_DOCTOR_PASSWORD
+        ? {
+            email: process.env.E2E_DOCTOR_EMAIL,
+            password: process.env.E2E_DOCTOR_PASSWORD,
+          }
+        : account();
+    await page.context().clearCookies();
+
+    // The real path: the guest picks «Онлайн», takes the card's sign-in link
+    // (the server-resolved CTA carries the tab), and passes the sign-in door.
+    const hybridPath = `/webinars/${HYBRID_SLUG}`;
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(hybridPath);
+    await page.getByRole("tab", { name: "Онлайн" }).click();
+    await expect(page).toHaveURL(/[?&]mode=online\b/u);
+    const returnTo = `${hybridPath}?mode=online`;
+    const handoff = page
+      .getByTestId("event-signup-card")
+      .locator('a[href*="returnTo"]')
+      .first();
+    const href = (await handoff.getAttribute("href")) ?? "";
+    expect(new URL(href, page.url()).searchParams.get("returnTo")).toBe(
+      returnTo,
+    );
+    // The sign-in door with that carried value (the register door's «Войти»
+    // hands the same value on; the account already exists).
+    await page.goto(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+    await submitLogin(page, email, password);
+
+    // The door's landing keeps the tab — never the bare page, whose default
+    // is «Очно» while seats remain.
+    await expect
+      .poll(() => {
+        const landed = new URL(page.url());
+        return `${landed.pathname}${landed.search}`;
+      })
+      .toBe(returnTo);
+    await expect(page.getByTestId("event-format-tabs")).toHaveAttribute(
+      "data-mode",
+      "online",
+    );
+    // PR evidence when the run names a capture directory.
+    if (process.env.E2E_SHOT_DIR) {
+      await page.screenshot({
+        path: `${process.env.E2E_SHOT_DIR}/academy-hybrid-tab-signin-return-desktop-light.png`,
+        fullPage: true,
+      });
+    }
   });
 
   test("EARS-6: a hostile return target is dropped rather than followed", async ({

@@ -193,6 +193,24 @@ describe("<EventSignupCard>", () => {
     );
   });
 
+  it("020 EARS-3: the social proof is its own box under the sign-up card, not a row inside it (canvas aside, event-page.dc.html:412)", () => {
+    render(
+      <EventSignupCard
+        {...base}
+        cta={cta()}
+        proof={<span>Уже записались 37</span>}
+        pinned
+      />,
+    );
+    const proof = screen.getByTestId("event-signup-proof");
+    const box = screen.getByTestId("event-signup-box");
+    // Outside the card's bordered box, after it, inside the same sticky column.
+    expect(box.contains(proof)).toBe(false);
+    expect(box.nextElementSibling).toBe(proof);
+    expect(screen.getByTestId("event-signup-card").contains(proof)).toBe(true);
+    expect(proof.className).toContain("border-2");
+  });
+
   it("020 EARS-1: the host control shall replace the generated link only where the policy already opened one", () => {
     render(
       <EventSignupCard

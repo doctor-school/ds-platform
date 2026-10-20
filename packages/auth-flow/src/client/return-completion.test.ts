@@ -175,3 +175,44 @@ describe("021 EARS-10: a target the server mount already resolved (the /verify s
     },
   );
 });
+
+describe("020 LD-9 / EARS-5: registration lands the doctor back on the hybrid tab", () => {
+  it("020 EARS-5: a carried tabbed event page registers that event and lands on the same tab, on both hosts", async () => {
+    await expect(
+      completeReturnTarget(DOCTOR_FIXTURE, "/events/ahilles-042?mode=online"),
+    ).resolves.toBe("/events/ahilles-042?mode=online");
+    expect(registerForEvent).toHaveBeenLastCalledWith("ahilles-042");
+
+    await expect(
+      completeReturnTarget(ACADEMY_FIXTURE, "/webinars/ahilles-042?mode=offline"),
+    ).resolves.toBe("/webinars/ahilles-042?mode=offline");
+    expect(registerForEvent).toHaveBeenLastCalledWith("ahilles-042");
+    expect(registerForEvent).toHaveBeenCalledTimes(2);
+  });
+
+  it("020 EARS-5: the parked copy of a tabbed target keeps the tab when the hop lost the query", async () => {
+    park("/events/ahilles-042?mode=online");
+    await expect(completeReturnTarget(DOCTOR_FIXTURE, null)).resolves.toBe(
+      "/events/ahilles-042?mode=online",
+    );
+    expect(registerForEvent).toHaveBeenCalledWith("ahilles-042");
+  });
+
+  it("020 EARS-5: the registration journey's server-resolved tabbed target lands on the tab (021 EARS-10)", async () => {
+    await expect(
+      completeResolvedReturnTarget(
+        DOCTOR_FIXTURE,
+        "/events/ahilles-042?mode=online",
+        "/events",
+      ),
+    ).resolves.toBe("/events/ahilles-042?mode=online");
+    expect(registerForEvent).toHaveBeenCalledWith("ahilles-042");
+  });
+
+  it("020 EARS-5: a tab value outside the allowlist is dropped — the page on the policy default, still registered", async () => {
+    await expect(
+      completeReturnTarget(DOCTOR_FIXTURE, "/events/ahilles-042?mode=evil"),
+    ).resolves.toBe("/events/ahilles-042");
+    expect(registerForEvent).toHaveBeenCalledWith("ahilles-042");
+  });
+});

@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { LAND_ONLY_RETURN_QUERY } from "../auth/return-target.js";
+import {
+  LAND_ONLY_RETURN_QUERY,
+  RETURN_TARGET_MODES,
+} from "../auth/return-target.js";
 import {
   encodeDoctorEventsFeedQueryEntries,
   parseDoctorEventsFeedQuery,
@@ -155,11 +158,34 @@ function parseShapeStrictly(
   return parseShape(returnTo);
 }
 
+/**
+ * 020 LD-9 / EARS-5 — the ONE query an event-page shape admits: the hybrid tab
+ * `?mode=offline|online` (020 LD-4), so a doctor who registers from a tab lands
+ * back on it. Splits `<slug segment>[?mode=<tab>]` into the raw slug segment and
+ * the canonical tab suffix (`""` when absent), or `null` when the query is
+ * anything but exactly one allowlisted tab — an unknown key, a second param or a
+ * value outside {@link RETURN_TARGET_MODES} is not of the shape at all, never
+ * a tab silently dropped.
+ */
+function splitEventPageTab(
+  rest: string,
+): { segment: string; tab: string } | null {
+  const queryAt = rest.indexOf("?");
+  if (queryAt === -1) return { segment: rest, tab: "" };
+  const query = rest.slice(queryAt + 1);
+  const value = query.startsWith("mode=") ? query.slice("mode=".length) : null;
+  if (value === null) return null;
+  if (!(RETURN_TARGET_MODES as readonly string[]).includes(value)) return null;
+  return { segment: rest.slice(0, queryAt), tab: `?mode=${value}` };
+}
+
 /** 1. `academy-event` — `/webinars/<slug>`, the 005 public event page. */
 function parseAcademyEventTarget(returnTo: string): RegistrationIntent | null {
   if (!returnTo.startsWith(RETURN_TARGET_PREFIX)) return null;
 
-  const rest = returnTo.slice(RETURN_TARGET_PREFIX.length);
+  const split = splitEventPageTab(returnTo.slice(RETURN_TARGET_PREFIX.length));
+  if (split === null) return null;
+  const rest = split.segment;
   // Exactly one path segment: no further slash (`/webinars/a/b`, `/webinars//x`).
   if (rest.length === 0 || rest.includes("/")) return null;
 
@@ -176,7 +202,10 @@ function parseAcademyEventTarget(returnTo: string): RegistrationIntent | null {
   // Reconstruct the canonical return path from the validated slug rather than
   // trusting the raw input verbatim — the slug is `SLUG_RE`-safe, so this is a
   // stable, injection-free same-origin path.
-  return { eventSlug: slug, returnTo: `${RETURN_TARGET_PREFIX}${slug}` };
+  return {
+    eventSlug: slug,
+    returnTo: `${RETURN_TARGET_PREFIX}${slug}${split.tab}`,
+  };
 }
 
 /**
@@ -202,17 +231,22 @@ export const DOCTOR_EVENT_RETURN_TARGET_PREFIX = "/events/";
  * rejecting any query or hash outright, and the accepted value REBUILT from the
  * validated slug rather than echoed from the input.
  *
- * The shape carries NO query. 020's page has a `?tab=…` state, but a tab is a
- * view preference rather than the point of interest the doctor came for, and
- * every admitted query key is a key an attacker gets to put in front of the
- * guard — so the declared shape is the bare page, and a target that carries a
- * tab is simply not of this shape. Widening it is a declared increment here,
- * never a call-site relaxation.
+ * The shape carries ONE query: the hybrid tab `?mode=offline|online` (020
+ * LD-9 / EARS-5 — registration lands the doctor back on the tab they were
+ * reading), admitted as a closed literal by {@link splitEventPageTab} and
+ * rebuilt rather than echoed. Every other query key is a key an attacker gets
+ * to put in front of the guard, so a target carrying one is simply not of this
+ * shape; any further widening is a declared increment here, never a call-site
+ * relaxation.
  */
 function parseDoctorEventTarget(returnTo: string): RegistrationIntent | null {
   if (!returnTo.startsWith(DOCTOR_EVENT_RETURN_TARGET_PREFIX)) return null;
 
-  const rest = returnTo.slice(DOCTOR_EVENT_RETURN_TARGET_PREFIX.length);
+  const split = splitEventPageTab(
+    returnTo.slice(DOCTOR_EVENT_RETURN_TARGET_PREFIX.length),
+  );
+  if (split === null) return null;
+  const rest = split.segment;
   // Exactly one path segment: no further slash (`/events/a/b`, `/events//x`).
   if (rest.length === 0 || rest.includes("/")) return null;
 
@@ -228,7 +262,7 @@ function parseDoctorEventTarget(returnTo: string): RegistrationIntent | null {
 
   return {
     eventSlug: slug,
-    returnTo: `${DOCTOR_EVENT_RETURN_TARGET_PREFIX}${slug}`,
+    returnTo: `${DOCTOR_EVENT_RETURN_TARGET_PREFIX}${slug}${split.tab}`,
   };
 }
 
@@ -504,7 +538,7 @@ export interface LandOnlyReturn {
   readonly eventSlug: string;
   /** The canonical event page, where the visitor lands. */
   readonly page: string;
-  /** The canonical carried value: `page` + `?intent=land`. */
+  /** The canonical carried value: `page` + the marker (`?intent=land`, or `&intent=land` after a tab). */
   readonly returnTo: string;
 }
 
@@ -521,7 +555,16 @@ function parseEventPage(page: unknown): RegistrationIntent | null {
  */
 export function formatLandOnlyReturnTarget(page: unknown): string | null {
   const intent = parseEventPage(page);
-  return intent ? `${intent.returnTo}?${LAND_ONLY_RETURN_QUERY}` : null;
+  return intent ? withLandOnlyMarker(intent.returnTo) : null;
+}
+
+/**
+ * The land-only marker appended to a canonical event page, LAST: `?intent=land`
+ * on a bare page, `&intent=land` after the page's hybrid tab (020 LD-9) — the
+ * order the same-origin guard canonicalises to.
+ */
+function withLandOnlyMarker(page: string): string {
+  return `${page}${page.includes("?") ? "&" : "?"}${LAND_ONLY_RETURN_QUERY}`;
 }
 
 /**
@@ -533,14 +576,19 @@ export function parseLandOnlyReturnTarget(
 ): LandOnlyReturn | null {
   if (typeof returnTo !== "string") return null;
   if (returnTo.length > MAX_RETURN_TARGET_LENGTH) return null;
-  const suffix = `?${LAND_ONLY_RETURN_QUERY}`;
-  if (!returnTo.endsWith(suffix)) return null;
-  const intent = parseEventPage(returnTo.slice(0, -suffix.length));
+  // The marker is the LAST param: after `?` on a bare page, after `&` on a
+  // page carrying its hybrid tab (020 LD-9).
+  const marker = LAND_ONLY_RETURN_QUERY;
+  if (!returnTo.endsWith(marker)) return null;
+  const page = returnTo.slice(0, -marker.length - 1);
+  const joiner = returnTo.charAt(returnTo.length - marker.length - 1);
+  if (joiner !== (page.includes("?") ? "&" : "?")) return null;
+  const intent = parseEventPage(page);
   if (!intent) return null;
   return {
     eventSlug: intent.eventSlug,
     page: intent.returnTo,
-    returnTo: `${intent.returnTo}${suffix}`,
+    returnTo: withLandOnlyMarker(intent.returnTo),
   };
 }
 

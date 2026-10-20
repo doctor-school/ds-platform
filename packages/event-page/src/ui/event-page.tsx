@@ -7,6 +7,9 @@ import { WebinarRecordingPlaque } from "@ds/design-system/webinar-recording-plaq
 import {
   EventAboutSection,
   EventFormatBlock,
+  EventFormatRoomPanel,
+  EventFormatSeatsPanel,
+  type EventFormatMode,
   EventPageHero,
   EventPageKicker,
   EventPageShell,
@@ -20,7 +23,10 @@ import {
   eventPageKickerParts,
   eventProgrammeContent,
   eventSignupCardProps,
+  eventSocialProof,
   eventSpeakerCards,
+  eventAiredMeta,
+  eventViewersMeta,
 } from "@ds/design-system/blocks";
 import {
   resolvePlayerCard,
@@ -38,6 +44,7 @@ import { withReturnTarget } from "@ds/schemas";
 import { EVENT_PAGE_COPY as COPY } from "../copy/event-page-copy";
 import type { EventPageHostConfig } from "../host-config";
 import { fetchEventPlayback } from "../server/event-playback";
+import { FormatTabs } from "./format-tabs";
 import { RecordingGate } from "./recording-gate";
 import { RecordingPlayer } from "./recording-player";
 import { ViewerZoneTime } from "./viewer-zone-time";
@@ -46,7 +53,38 @@ export interface EventPageProps {
   /** The mounting storefront's data-only event-page config (gate §4.4). */
   config: EventPageHostConfig;
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ from?: string | string[] }>;
+  searchParams: Promise<{
+    from?: string | string[];
+    /** The hybrid format tab, LD-4 — `offline` | `online`; anything else is ignored. */
+    mode?: string | string[];
+  }>;
+}
+
+/** The `mode` URL codec of the hybrid tabs (LD-4): a known half or nothing. */
+function parseFormatMode(
+  raw: string | string[] | undefined,
+): EventFormatMode | null {
+  return raw === "offline" || raw === "online" ? raw : null;
+}
+
+/**
+ * LD-9 — the return target carries the active hybrid tab. The server CTA's
+ * auth handoff returns to the bare event page; on a hybrid event the page
+ * re-points that SAME return target at the tab the doctor is reading, so
+ * registration brings them back to it. The action, the label and the entry
+ * path stay the server's; only the page's own URL inside `returnTo` grows the
+ * tab, and only when it is exactly this page.
+ */
+function withTabInReturnTarget(
+  href: string,
+  pageUrl: string,
+  tabUrl: string,
+): string {
+  const url = new URL(href, "https://page.invalid");
+  if (url.origin !== "https://page.invalid") return href;
+  if (url.searchParams.get("returnTo") !== pageUrl) return href;
+  url.searchParams.set("returnTo", tabUrl);
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 /**
@@ -115,7 +153,8 @@ export async function EventPage({
   // Access-branch guidance: a doctor bounced from the room for being unregistered
   // arrives with `?from=room`. The guidance is surfaced above the page so the
   // routing is a truthful, guided front door.
-  const fromRoom = (await searchParams).from === "room";
+  const query = await searchParams;
+  const fromRoom = query.from === "room";
 
   // The session is fingerprint-bound (ADR-0001 §6) — the shared builder carries
   // the same surface the browser bound at login, forwarded client address
@@ -125,7 +164,7 @@ export async function EventPage({
   // The ONE participation decision, resolved server-side for this
   // viewer on this event. A `null` here would mean the event vanished between
   // the two reads; the page keeps rendering and simply carries no control.
-  const cta = await fetchParticipationCta(
+  const serverCta = await fetchParticipationCta(
     slug,
     session,
     config.contentSet.pagePath,
@@ -154,7 +193,29 @@ export async function EventPage({
   );
   // Both gate actions carry THIS page as a same-origin returnTo,
   // built by the shared guard so a hostile slug can never surface an open redirect.
-  const gateReturnTo = `${config.routes.eventPage}/${encodeURIComponent(slug)}`;
+  const pageUrl = `${config.routes.eventPage}/${encodeURIComponent(slug)}`;
+  // 020 EARS-8 / EARS-9 — the format block. On a hybrid event the active tab
+  // is the URL's (LD-4) or, absent, the policy's half; it rides into every
+  // return target the page builds (LD-9).
+  const formatBlock = eventFormatBlockProps(event, serverCta);
+  const mode =
+    formatBlock?.kind === "hybrid"
+      ? (parseFormatMode(query.mode) ?? formatBlock.defaultMode)
+      : null;
+  // The return target carries the tab and nothing else — the one page state
+  // the same-origin guard admits (LD-9). A tab SWITCH keeps the arrival's own
+  // `from=room` too, so the room access-branch guidance survives it.
+  const tabUrl = (half: EventFormatMode) => `${pageUrl}?mode=${half}`;
+  const tabHref = (half: EventFormatMode) =>
+    `${pageUrl}?${fromRoom ? "from=room&" : ""}mode=${half}`;
+  const gateReturnTo = mode ? tabUrl(mode) : pageUrl;
+  const cta =
+    serverCta?.href && mode
+      ? {
+          ...serverCta,
+          href: withTabInReturnTarget(serverCta.href, pageUrl, tabUrl(mode)),
+        }
+      : serverCta;
   // The room access-branch guidance shows ONLY when the doctor
   // arrived from the room AND the register front door is actually what renders.
   const showRoomAccessGuidance =
@@ -180,7 +241,35 @@ export async function EventPage({
     format: event.format,
     durationMin: event.durationMin,
   };
-  const formatBlock = eventFormatBlockProps(event);
+  const socialProof = eventSocialProof(event);
+  const viewersMeta = eventViewersMeta(event);
+  const airedMeta = eventAiredMeta(event);
+  // Wave-3 gate H2 (row 43) — the ended meta row under the player: «Эфир
+  // прошёл» with the date (every ended read carries it) and «Смотрели N
+  // коллег» when the read carries a count. Canvas «Доступна ещё» has no data
+  // on the read, so it is not drawn (no stand-in).
+  const metaRow = airedMeta ? (
+    <dl className="flex flex-wrap items-center gap-x-10 gap-y-4">
+      <div data-testid="event-meta-aired">
+        <dt className="text-2xs font-extrabold uppercase tracking-micro text-faint">
+          {airedMeta.label}
+        </dt>
+        <dd className="mt-1 text-base font-bold text-foreground">
+          <ViewerZoneTime moment={moment} part="dateWithYear" />
+        </dd>
+      </div>
+      {viewersMeta ? (
+        <div data-testid="event-meta-viewers">
+          <dt className="text-2xs font-extrabold uppercase tracking-micro text-faint">
+            {viewersMeta.label}
+          </dt>
+          <dd className="mt-1 text-base font-bold text-foreground">
+            {viewersMeta.value}
+          </dd>
+        </div>
+      ) : null}
+    </dl>
+  ) : null;
   const lifecyclePlate = eventLifecyclePlate(event);
   /* Canvas:171 «Скоро · через 5 дней» — the lifecycle word is the page's copy,
      the countdown is the shared mapper's fact about `startsAt` (#1779). */
@@ -265,6 +354,20 @@ export async function EventPage({
                 <ViewerZoneTime moment={moment} part="weekdayLabel" />
               }
               control={oneTap}
+              // 020 EARS-3 (gate row 36) — the card's social-proof slot: the
+              // total, and separately the adjacent specialties.
+              proof={
+                socialProof ? (
+                  <>
+                    {socialProof.total}
+                    {socialProof.adjacent ? (
+                      <span className="mt-1 block text-xs font-semibold text-faint">
+                        {socialProof.adjacent}
+                      </span>
+                    ) : null}
+                  </>
+                ) : undefined
+              }
               pinned
             />
           ) : null
@@ -364,7 +467,10 @@ export async function EventPage({
                 ) : null}
               </>
             )}
+            {metaRow ? <div className="mt-5">{metaRow}</div> : null}
           </div>
+        ) : metaRow ? (
+          <div className="mb-14">{metaRow}</div>
         ) : null}
 
         <EventAboutSection
@@ -386,8 +492,39 @@ export async function EventPage({
           <EventSpeakerCard key={index} className="mt-14" {...speaker} />
         ))}
 
-        {formatBlock ? (
-          <EventFormatBlock className="mt-14" {...formatBlock} />
+        {formatBlock?.kind === "hybrid" && mode ? (
+          <EventFormatBlock
+            className="mt-14"
+            kind="hybrid"
+            heading={formatBlock.heading}
+            statement={formatBlock.statement}
+            switcher={
+              <FormatTabs
+                mode={mode}
+                tabs={formatBlock.tabs}
+                hrefs={{ offline: tabHref("offline"), online: tabHref("online") }}
+                offline={
+                  <EventFormatSeatsPanel seatsLine={formatBlock.seatsLine} />
+                }
+                online={<EventFormatRoomPanel {...formatBlock.room} />}
+              />
+            }
+          />
+        ) : formatBlock?.kind === "online" ? (
+          <EventFormatBlock
+            className="mt-14"
+            kind="online"
+            heading={formatBlock.heading}
+            roomOpensLine={formatBlock.roomOpensLine}
+            duringLine={formatBlock.duringLine}
+          />
+        ) : formatBlock?.kind === "offline" ? (
+          <EventFormatBlock
+            className="mt-14"
+            kind="offline"
+            heading={formatBlock.heading}
+            seatsLine={formatBlock.seatsLine}
+          />
         ) : null}
 
         {/* The sponsor plate — the event's declared partners, stated plainly.

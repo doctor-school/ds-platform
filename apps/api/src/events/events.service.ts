@@ -24,6 +24,7 @@ import {
   mskMonthRange,
   mskYearRange,
   type HostFreeEventPageView,
+  type SignUpProof,
   type PublicEventPageSpeaker,
   type PublicEventState,
   slugifyTaxonomyTitle,
@@ -1577,6 +1578,12 @@ export class EventsService {
       // is a different answer from `0` («мест нет»).
       format: e.participationFormat,
       seatsLeft: e.seatsLeft,
+      // 020 EARS-3 (#1767): a fact of the event, so one answer for a guest and
+      // a signed-in reader on both hosts — the 019 card's own count, split.
+      signUps: await this.signUpProof(e),
+      // Wave-3 gate H2 (row 43): «Смотрели N коллег» belongs to an ended эфир
+      // only; an upcoming or live page carries none, and zero renders nothing.
+      viewers: await this.viewersOf(e.id, state),
     };
     // Omit (not null) the field when the event carries no program PDF (EARS-2).
     // Signed at read time — the bucket is private, an unsigned URL is dead (#842).
@@ -1584,6 +1591,30 @@ export class EventsService {
       page.programPdfUrl = await this.storage.urlFor(e.programPdfRef);
     }
     return page;
+  }
+
+  /**
+   * 020 EARS-3 (#1767) — the event page's {@link SignUpProof}. `total` is read
+   * through the ONE `countSignUps` the 019 feed card and the Academy listing
+   * card read, so the page and the card cannot disagree; the split is added on
+   * top. A hidden count (007 EARS-12 / 019 EARS-19) is not read at all, and
+   * zero colleagues is no proof — both are `null`, never a zero-shaped object.
+   */
+  private async signUpProof(e: Event): Promise<SignUpProof | null> {
+    if (e.hideSignUpCount) return null;
+    const total = (await this.repo.countSignUps([e.id])).get(e.id) ?? 0;
+    if (total === 0) return null;
+    return { total, ...(await this.repo.partitionSignUps(e.id)) };
+  }
+
+  /** Wave-3 gate H2 (row 43) — the viewers count of an ended event, else `null`. */
+  private async viewersOf(
+    eventId: string,
+    state: EventLifecycleState,
+  ): Promise<number | null> {
+    if (state !== "ended") return null;
+    const viewers = await this.repo.countViewers(eventId);
+    return viewers > 0 ? viewers : null;
   }
 
   private async toDetail(a: EventAggregate): Promise<EventAdminDetail> {

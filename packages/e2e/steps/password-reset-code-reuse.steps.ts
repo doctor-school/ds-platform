@@ -151,13 +151,11 @@ async function passwordLogin(
         } catch {
           if (!attemptFailed)
             throw new Error("Owned login closure context could not be created");
-          test
-            .info()
-            .annotations.push({
-              type: "cleanup-failed",
-              description:
-                "Owned login closure context failed; original password attempt failure retained.",
-            });
+          test.info().annotations.push({
+            type: "cleanup-failed",
+            description:
+              "Owned login closure context failed; original password attempt failure retained.",
+          });
           return;
         }
         try {
@@ -434,62 +432,85 @@ Then(
   },
 );
 
-After("@password-reset-code-reuse", async ({ page }) => {
+After("@password-reset-code-reuse", async ({ page, world }) => {
   const state = journeys.get(page);
   if (!state) return;
-  let cleanupFailed = false;
+  const failures: string[] = [];
+  const origin = new URL(world.hostBaseUrl).origin;
   try {
-    for (const context of state.contexts) {
+    for (const [index, context] of state.contexts.entries()) {
+      let operation = "cookies";
+      let statuses:
+        { logout: number; session: number; profile: number } | undefined;
       try {
         if ((await context.cookies()).some((c) => c.name === SESSION)) {
+          operation = "same-origin-page";
           const active = context
             .pages()
-            .find((p) => p.url().startsWith("https://"));
+            .find((p) => new URL(p.url()).origin === origin);
           if (!active)
             throw new Error("Owned reset-reuse session has no cleanup page");
-          expect(
-            await active.evaluate(async () => {
-              const logout = await fetch("/v1/auth/logout", {
-                method: "POST",
-                credentials: "include",
-              });
-              const session = await fetch("/v1/auth/session", {
-                credentials: "include",
-                cache: "no-store",
-              });
-              const profile = await fetch("/v1/me/profile", {
-                credentials: "include",
-                cache: "no-store",
-              });
-              return {
-                logout: logout.status,
-                session: session.status,
-                profile: profile.status,
-              };
-            }),
-            "exact owned reset-reuse session revoked",
-          ).toEqual({ logout: 200, session: 401, profile: 401 });
+          operation = "logout-and-private-refusal";
+          statuses = await active.evaluate(async () => {
+            const logout = await fetch("/v1/auth/logout", {
+              method: "POST",
+              credentials: "include",
+            });
+            const session = await fetch("/v1/auth/session", {
+              credentials: "include",
+              cache: "no-store",
+            });
+            const profile = await fetch("/v1/me/profile", {
+              credentials: "include",
+              cache: "no-store",
+            });
+            return {
+              logout: logout.status,
+              session: session.status,
+              profile: profile.status,
+            };
+          });
+          expect(statuses, "exact owned reset-reuse session revoked").toEqual({
+            logout: 200,
+            session: 401,
+            profile: 401,
+          });
         }
-      } catch {
-        cleanupFailed = true;
+      } catch (error) {
+        failures.push(
+          JSON.stringify({
+            context: index,
+            operation,
+            statuses,
+            failure:
+              error instanceof Error && error.name === "TimeoutError"
+                ? "timeout"
+                : "operation-failed",
+          }),
+        );
       } finally {
         await context.close().catch(() => {
-          cleanupFailed = true;
+          failures.push(
+            JSON.stringify({
+              context: index,
+              operation: "close-context",
+              failure: "operation-failed",
+            }),
+          );
         });
       }
     }
   } finally {
     journeys.delete(page);
   }
-  if (cleanupFailed) {
+  if (failures.length > 0) {
     if (test.info().status === test.info().expectedStatus)
       throw new Error(
-        "Owned reset-reuse session cleanup failed; lead must inspect scoped cleanup",
+        `Owned reset-reuse session cleanup failed: ${failures.join("; ")}`,
       );
     test.info().annotations.push({
       type: "cleanup-failed",
-      description:
-        "Owned reset-reuse logout failed; original scenario failure retained; lead must inspect scoped cleanup.",
+      description: `Owned reset-reuse cleanup failed; original scenario failure retained: ${failures.join("; ")}`,
     });
   }
 });

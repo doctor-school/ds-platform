@@ -32,8 +32,16 @@ ROOT=${DS_ENTRYPOINT_ROOT:-}
 DS_RELEASE=$ROOT/usr/local/bin/ds-release
 RELEASE_DRIVER=$ROOT/usr/local/lib/ds-platform/release-driver
 BOX_ROLE_FILE=$ROOT/etc/ds-platform/box-role
-REPORTS_ROOT=$ROOT/var/lib/ds-platform/e2e-reports
+REPORTS_PARENT=$ROOT/var/lib/ds-platform
+REPORTS_ROOT=$REPORTS_PARENT/e2e-reports
 REPORT_RETENTION_DAYS=14
+# Upload caps. A Playwright report of our suite, traces included, is tens of MB; the
+# caps sit an order of magnitude above it, and well inside the stage disk, so a
+# CI key can neither fill the disk with one stream nor unpack a tar bomb. The
+# DS_ENTRYPOINT_* overrides exist for the tests (unreachable from a client, as ROOT).
+MAX_REPORT_BYTES=${DS_ENTRYPOINT_MAX_REPORT_BYTES:-$((512 * 1024 * 1024))}           # 512 MiB stream
+MAX_REPORT_UNPACKED_BYTES=${DS_ENTRYPOINT_MAX_UNPACKED_BYTES:-$((2 * 1024 * 1024 * 1024))} # 2 GiB unpacked
+MAX_REPORT_ENTRIES=${DS_ENTRYPOINT_MAX_REPORT_ENTRIES:-20000}                       # archive members
 
 ENV_RE='^(prod|stage-main|stage-pr-[1-9][0-9]*)$'
 SHA_RE='^[0-9a-f]{40}$'
@@ -71,32 +79,43 @@ check_env() { [[ $1 =~ $ENV_RE ]] || reject "bad env (want prod, stage-main or s
 check_sha() { [[ $1 =~ $SHA_RE ]] || reject "bad sha (want the full 40-hex commit id)"; }
 
 upload_report() {
-  local sha=$1 role dest listing
+  local sha=$1 role dest listing size
   role=$(sudo cat "$BOX_ROLE_FILE" 2>/dev/null || true)
   [[ $role == stage ]] || refuse "upload-report is served by the stage box only"
 
-  archive=$(mktemp) # global: the EXIT trap outlives this function
-  trap 'rm -f "${archive:-}"' EXIT
-  cat >"$archive"
+  # The stream lands root-only beside the reports (same filesystem, never /tmp), and
+  # at most one byte past the cap is read, so a stream cannot fill the disk.
+  sudo install -d -m 0700 -o root -g root "$REPORTS_ROOT"
+  archive=$(sudo mktemp -p "$REPORTS_PARENT" .e2e-report-upload.XXXXXX) # global: the EXIT trap outlives this function
+  trap 'sudo rm -f -- "${archive:-}"' EXIT
+  head -c "$((MAX_REPORT_BYTES + 1))" | sudo tee -- "$archive" >/dev/null
+  size=$(sudo stat -c %s -- "$archive")
+  ((size <= MAX_REPORT_BYTES)) || reject "the report stream exceeds $MAX_REPORT_BYTES bytes"
 
   # Pre-list the archive as stored (-P: no silent stripping of a leading /): only
-  # plain files and directories, relative paths, no `..`. --touch on extract keeps
-  # an archived `./` from back-dating the report past the retention window.
-  listing=$(tar -tvPf "$archive") || refuse "the report is not a readable tar stream"
-  local type
-  while IFS= read -r line; do
-    type=${line:0:1}
-    [[ $type == - || $type == d ]] || refuse "the report holds a link or special file"
+  # plain files and directories, relative paths, no `..`, and within the entry and
+  # unpacked-size caps (a tar bomb is refused before anything is extracted).
+  # --touch on extract keeps an archived `./` from back-dating the report past the
+  # retention window.
+  listing=$(sudo tar -tvPf "$archive") || refuse "the report is not a readable tar stream"
+  local mode _owner member_size entries=0 total=0
+  while read -r mode _owner member_size _; do
+    [[ -n $mode ]] || continue
+    [[ ${mode:0:1} == - || ${mode:0:1} == d ]] || refuse "the report holds a link or special file"
+    [[ $member_size =~ ^[0-9]{1,15}$ ]] || refuse "the report listing is unreadable"
+    entries=$((entries + 1))
+    total=$((total + 10#$member_size))
+    ((entries <= MAX_REPORT_ENTRIES)) || reject "the report holds more than $MAX_REPORT_ENTRIES entries"
+    ((total <= MAX_REPORT_UNPACKED_BYTES)) || reject "the report unpacks to more than $MAX_REPORT_UNPACKED_BYTES bytes"
   done <<<"$listing"
   local name
   while IFS= read -r name; do
     [[ -n $name ]] || continue
     [[ $name != /* ]] || refuse "the report holds an absolute path"
     [[ ! $name =~ (^|/)\.\.(/|$) ]] || refuse "the report holds a .. path"
-  done < <(tar -tPf "$archive")
+  done < <(sudo tar -tPf "$archive")
 
   dest=$REPORTS_ROOT/$sha
-  sudo install -d -m 0700 -o root -g root "$REPORTS_ROOT"
   sudo rm -rf -- "$dest"
   sudo install -d -m 0700 -o root -g root "$dest"
   sudo tar -xf "$archive" -C "$dest" --no-same-owner --no-same-permissions --touch

@@ -114,12 +114,13 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
 
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-  const run = (command, { input } = {}) => {
+  const run = (command, { input, env: extra = {} } = {}) => {
     const env = {
       ...process.env,
       PATH: `${stubs}${delimiter}${process.env.PATH}`,
       STUB_DIR: dir,
       DS_ENTRYPOINT_ROOT: root,
+      ...extra,
     };
     if (command === undefined) delete env.SSH_ORIGINAL_COMMAND;
     else env.SSH_ORIGINAL_COMMAND = command;
@@ -252,6 +253,52 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       assert.doesNotMatch(log("sudo"), /tar -xf/);
     });
   }
+
+  const parent = () => join(root, "var/lib/ds-platform");
+  const overCap = [
+    [
+      "a stream over the byte cap",
+      { DS_ENTRYPOINT_MAX_REPORT_BYTES: "4096" },
+      [{ name: "big.bin", body: "x".repeat(8192) }],
+    ],
+    [
+      "members whose sizes sum over the unpacked cap",
+      { DS_ENTRYPOINT_MAX_UNPACKED_BYTES: "1000" },
+      [
+        { name: "a.bin", body: "x".repeat(600) },
+        { name: "b.bin", body: "x".repeat(600) },
+      ],
+    ],
+    [
+      "more entries than the entry cap",
+      { DS_ENTRYPOINT_MAX_REPORT_ENTRIES: "3" },
+      ["1", "2", "3", "4", "5"].map((n) => ({ name: `f${n}`, body: n })),
+    ],
+  ];
+  for (const [what, env, entries] of overCap) {
+    it(`upload-report rejects ${what}: exit 2, auth.warning, nothing extracted, no temp left`, () => {
+      setRole("stage");
+      const r = run(`upload-report ${SHA}`, { input: tarArchive(entries), env });
+      assert.equal(r.status, 2, r.stderr);
+      assert.match(r.stderr, /^ds-deploy-entrypoint: rejected: the report/);
+      assert.match(log("logger"), new RegExp(`auth\\.warning rejected: upload-report ${SHA}`));
+      assert.ok(!existsSync(join(root, "var/lib/ds-platform/e2e-reports", SHA)), "no report dir");
+      assert.doesNotMatch(log("sudo"), /tar -xf/);
+      assert.deepEqual(
+        readdirSync(parent()).filter((f) => f.startsWith(".e2e-report-upload")),
+        [],
+        "the temp file is removed",
+      );
+    });
+  }
+
+  it("upload-report reads the stream into a temp file beside the reports, never /tmp", () => {
+    setRole("stage");
+    const r = run(`upload-report ${SHA}`, { input: tarArchive([{ name: "r.json", body: "{}" }]) });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(log("sudo"), new RegExp(`mktemp -p ${parent().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} `));
+    assert.deepEqual(readdirSync(parent()).sort(), ["e2e-reports"]);
+  });
 
   it("upload-report refuses a stream that is not a tar archive", () => {
     setRole("stage");

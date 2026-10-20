@@ -219,7 +219,9 @@ describe("<DataTable>", () => {
   });
 
   it("keeps a card field whose column defines no full value, whatever it renders", () => {
-    const rows: Row[] = [{ id: "zero", title: "Ноль", parent: "Терапия", count: 0 }];
+    const rows: Row[] = [
+      { id: "zero", title: "Ноль", parent: "Терапия", count: 0 },
+    ];
     const { container } = renderTable({ rows });
     const terms = Array.from(container.querySelectorAll("dl dt")).map(
       (dt) => dt.textContent,
@@ -647,6 +649,25 @@ describe("<DataTable> sortable columns (044 EARS-22)", () => {
     });
   });
 
+  it("044 EARS-22: the «Сортировка» select shows its chosen option in a wrapping line, so a long label is never cut to «…» (#2838)", () => {
+    const { container } = renderTable({
+      columns: SORTABLE,
+      sort: { key: "parent", direction: "asc" },
+      onSortChange: () => {},
+      sortSelect: {
+        label: "Сортировка",
+        optionLabel: (column, direction) =>
+          `По умолчанию — ${column.header}, ${direction === "asc" ? "старые сверху" : "новые сверху"}`,
+      },
+    });
+    const shown = container.querySelector("[data-slot='native-select-value']");
+    expect(shown).not.toBeNull();
+    expect(shown).toHaveTextContent(
+      "По умолчанию — Родительское направление, старые сверху",
+    );
+    expect(shown?.className).toContain("whitespace-normal");
+  });
+
   /** The desktop grid's body cells of one column (record = 0, then `columns`). */
   function bodyCells(columnIndex: number): HTMLElement[] {
     const table = first(screen.getAllByRole("table"));
@@ -713,7 +734,9 @@ describe("<DataTable> sortable columns (044 EARS-22)", () => {
       element
         .getAttribute("class")!
         .split(/\s+/)
-        .filter((token) => /(^|:)(transition|duration-|ease-|delay-)/.test(token));
+        .filter((token) =>
+          /(^|:)(transition|duration-|ease-|delay-)/.test(token),
+        );
     const cell = first(bodyCells(2));
     const row = cell.closest("tr")!;
     expect(transitions(row)).toEqual([]);

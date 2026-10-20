@@ -202,6 +202,12 @@ uses `border-hairline text-muted-foreground`, filled uses
 `border-destructive bg-destructive-tint`, and disabled uses
 `border-hairline bg-muted text-muted-foreground`. Use a disabled empty option as
 the placeholder; never preselect a real answer in a required field.
+A browser never wraps a select's own value, so a control whose option labels
+are product copy that can outgrow a narrow column passes `wrapValue`: the
+visible box becomes a pointer-inert, `aria-hidden` mirror of the chosen option
+(`min-h-11`, wrapping, same token states via `peer-*`) and the real select is
+laid transparently over it — still the native control for every interaction.
+`DataTable`'s below-`md` «Сортировка» select uses it (#2838).
 
 **One error-style source.** The error look (`text-xs text-destructive`,
 `role="alert"`) lives in **one place** — `FormMessage` (field-level) and

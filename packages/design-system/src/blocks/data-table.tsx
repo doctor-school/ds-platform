@@ -682,8 +682,11 @@ export function DataTable<Row>({
         {sortSelect && sort && onSortChange && sortColumns.length > 0 ? (
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={sortSelectId}>{sortSelect.label}</Label>
+            {/* Option labels are product copy that outgrow a 390px column —
+                the chosen one wraps instead of being cut to «…» (#2838). */}
             <NativeSelect
               id={sortSelectId}
+              wrapValue
               value={`${sort.key}:${sort.direction}`}
               onChange={(event) => {
                 const value = event.target.value;

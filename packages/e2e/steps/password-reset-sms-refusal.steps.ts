@@ -45,6 +45,7 @@ interface ResetRefusal {
   subject?: string;
   cookie?: string | undefined;
   code?: string;
+  resetCompleted?: boolean;
   resetPosts: string[];
 }
 const journeys = new WeakMap<Page, ResetRefusal>();
@@ -128,6 +129,35 @@ async function revoke(context: APIRequestContext, base: string) {
     "exact owned session revoked or already invalidated",
   ).toEqual({ logout: 200, session: 401, profile: 401 });
 }
+async function revokeBrowser(page: Page) {
+  const result = await page.evaluate(async () => {
+    const logout = await fetch("/v1/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    });
+    const session = await fetch("/v1/auth/session", {
+      credentials: "include",
+      cache: "no-store",
+    });
+    const profile = await fetch("/v1/me/profile", {
+      credentials: "include",
+      cache: "no-store",
+    });
+    return {
+      logout: logout.status,
+      session: session.status,
+      profile: profile.status,
+    };
+  });
+  expect(
+    result,
+    "same-browser fingerprint revokes the exact owned session",
+  ).toEqual({ logout: 200, session: 401, profile: 401 });
+  expect(
+    (await page.context().cookies()).some((c) => c.name === SESSION),
+    "logout removes the private browser cookie",
+  ).toBe(false);
+}
 async function passwordSignIn(
   page: Page,
   state: ResetRefusal,
@@ -176,13 +206,11 @@ async function passwordSignIn(
         if (failed) {
           if (!attemptFailed)
             throw new Error("Owned password closure or cleanup failed");
-          test
-            .info()
-            .annotations.push({
-              type: "cleanup-failed",
-              description:
-                "Owned password closure failed; original attempt failure retained.",
-            });
+          test.info().annotations.push({
+            type: "cleanup-failed",
+            description:
+              "Owned password closure failed; original attempt failure retained.",
+          });
         }
       },
     },
@@ -237,16 +265,14 @@ Given(
       resetPosts: [],
     };
     journeys.set(page, state);
-    await test
-      .info()
-      .attach("owned-fixture", {
-        body: JSON.stringify({
-          issue: 3101,
-          email: state.email,
-          phone: state.phone,
-        }),
-        contentType: "application/json",
-      });
+    await test.info().attach("owned-fixture", {
+      body: JSON.stringify({
+        issue: 3101,
+        email: state.email,
+        phone: state.phone,
+      }),
+      contentType: "application/json",
+    });
     const owner = await privatePage(browser, state, world.hostBaseUrl);
     state.owner = owner;
     const { code } = await registerOwnedCredentials(
@@ -400,7 +426,7 @@ Then(
     // 003 EARS-12; ZitadelIdpClient.completePasswordReset owns the User-v2
     // challenge independently from the Session-v2 password-login check.
     await passwordSignIn(unchanged, state, world.hostBaseUrl, state.password);
-    await revoke(unchanged.context().request, world.hostBaseUrl);
+    await revokeBrowser(unchanged);
   },
 );
 
@@ -452,6 +478,7 @@ When(
       exactCommand,
       tokenFree: completed.body === '{"status":"reset_completed"}',
     }).toEqual({ status: 200, exactCommand: true, tokenFree: true });
+    state.resetCompleted = true;
     await reset.waitForURL((url) => url.pathname === "/account");
     await sameOwner(reset, state);
     await assertSecureSession(reset, completed.response, world.hostBaseUrl, [
@@ -497,8 +524,8 @@ Then(
       "/v1/auth/password/reset/complete",
       "/v1/auth/password/reset/complete",
     ]);
-    await revoke(fresh.context().request, world.hostBaseUrl);
-    await revoke(state.reset.context().request, world.hostBaseUrl);
+    await revokeBrowser(fresh);
+    await revokeBrowser(state.reset);
   },
 );
 
@@ -508,8 +535,37 @@ After("@sms-reset-code-refusal", async ({ page, world }) => {
   const failures: string[] = [];
   for (const context of state.contexts) {
     try {
-      if ((await context.cookies()).some((c) => c.name === SESSION))
-        await revoke(context.request, world.hostBaseUrl);
+      if ((await context.cookies()).some((c) => c.name === SESSION)) {
+        const origin = new URL(world.hostBaseUrl).origin;
+        const active = context.pages().find((owned) => {
+          try {
+            return new URL(owned.url()).origin === origin;
+          } catch {
+            return false;
+          }
+        });
+        if (!active) throw new Error("Owned SMS reset cleanup page missing");
+        if (state.resetCompleted && context === state.owner?.context()) {
+          const denied = await active.evaluate(async () => ({
+            session: (
+              await fetch("/v1/auth/session", {
+                credentials: "include",
+                cache: "no-store",
+              })
+            ).status,
+            profile: (
+              await fetch("/v1/me/profile", {
+                credentials: "include",
+                cache: "no-store",
+              })
+            ).status,
+          }));
+          expect(
+            denied,
+            "completed reset already revoked the original owner session",
+          ).toEqual({ session: 401, profile: 401 });
+        } else await revokeBrowser(active);
+      }
     } catch {
       failures.push("owned-browser-session-revocation");
     } finally {
@@ -534,11 +590,9 @@ After("@sms-reset-code-refusal", async ({ page, world }) => {
     const message = `Owned SMS reset refusal cleanup failed: ${failures.join(", ")}`;
     if (test.info().status === test.info().expectedStatus)
       throw new Error(message);
-    test
-      .info()
-      .annotations.push({
-        type: "cleanup-failed",
-        description: `${message}; original scenario failure retained.`,
-      });
+    test.info().annotations.push({
+      type: "cleanup-failed",
+      description: `${message}; original scenario failure retained.`,
+    });
   }
 });

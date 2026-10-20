@@ -58,6 +58,9 @@ jobs:
     timeout-minutes: 55
     permissions:
       actions: read
+      contents: read
+      # The repo-wide workflow-auth pattern for every `gh`-running job.
+      pull-requests: read
       statuses: write
     steps:
       - name: Check the SHA
@@ -182,6 +185,7 @@ jobs:
       contents: read
       # `e2e-stage.mjs` reads the axe-gate Issue's state (`gh issue view`).
       issues: read
+      pull-requests: read
       statuses: write
     env:
       CI: "1"

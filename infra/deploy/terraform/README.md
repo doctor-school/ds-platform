@@ -89,6 +89,7 @@ no copied operational addresses, self-reference or new infrastructure resource.
 
 All plans returned exit 2 (changes present), with no create/delete/replacement.
 The pre-existing server `cloud_init` drift was not applied or fixed by this
-provider update. This is baseline-equivalent compatibility, not a globally
+provider update; the servers now ignore `cloud_init` changes (#2984), so it no
+longer shows in a plan. This is baseline-equivalent compatibility, not a globally
 clean plan. No apply, import, source-state write, cloud resource change or
 service operation was performed; this change authorizes none of those actions.

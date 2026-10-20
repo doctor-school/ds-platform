@@ -97,9 +97,9 @@ runcmd:
   - install -d -m 0700 -o root -g root /etc/ds-platform
   # #2982: state dir of the durable release entrypoint /usr/local/bin/ds-release
   # (status files /var/lib/ds-platform/release/<env>/<sha>.json).
-  # The entrypoint itself needs the shipped tree, so every operator run
-  # (`pnpm deploy:prod`, `pnpm stage:slot`) installs it from
-  # infra/deploy/bin/ds-release right after the ship, before any box step.
+  # The box carries no tree of its own, so every operator run (`pnpm deploy:prod`,
+  # `pnpm stage:slot`) installs it from infra/deploy/bin/ds-release before any box
+  # step: right after the ship, or from the operator checkout on `--rollback`.
   # It relies on systemd-run, flock, runuser and python3 from the base image.
   - install -d -m 0755 -o root -g root /var/lib/ds-platform/release
   # #2984: ssh hardening, the end state of infra/deploy/bin/harden-ssh.sh. Root

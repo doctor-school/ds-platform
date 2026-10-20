@@ -27,6 +27,14 @@ resource "twc_server" "api_prod" {
     breakglass_ssh_pubkey = trimspace(file(pathexpand(var.prod_breakglass_ssh_pubkey_path)))
   })
 
+  # cloud-init runs on first boot only: a changed cloud-init file reaches a NEW
+  # server (replace/rebuild), never a running one. The provider's in-place
+  # cloud_init update is undocumented, so it is never planned against a live box
+  # (#2984).
+  lifecycle {
+    ignore_changes = [cloud_init]
+  }
+
   # Join the private VPC with a static address. mode=no_nat: "only local network
   # traffic allowed" on this port. api-prod's own public IPv4 (twc_server_ip below)
   # handles ALL public in/out (ACME, image pulls, inbound web + SSH); the VPC port

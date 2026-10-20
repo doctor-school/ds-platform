@@ -79,6 +79,14 @@ resource "twc_server" "stage_1" {
     breakglass_ssh_pubkey = trimspace(file(pathexpand(var.stage_1_breakglass_ssh_pubkey_path)))
   })
 
+  # cloud-init runs on first boot only: a changed cloud-init file reaches a NEW
+  # server (replace/rebuild), never a running one. The provider's in-place
+  # cloud_init update is undocumented, so it is never planned against a live box
+  # (#2984).
+  lifecycle {
+    ignore_changes = [cloud_init]
+  }
+
   # Join the STAGE VPC (never twc_vpc.ds). mode=no_nat: the port carries VPC-local
   # traffic only; all public in/out rides the server's own public IPv4 below — the
   # api-prod pattern, and the reason this VPC needs no twc_router.

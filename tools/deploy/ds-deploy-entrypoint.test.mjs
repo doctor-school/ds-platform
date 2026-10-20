@@ -4,7 +4,7 @@
 // (DS_ENTRYPOINT_ROOT) with `sudo` and `logger` stubbed on PATH, a fake ds-release
 // and a fake release driver, so the allowlist, the argument checks, the log lines
 // and the report upload are exercised end to end.
-// Needs bash, tar and find — CI Linux; skipped where they are absent.
+// Needs bash, python3, find and install — CI Linux; skipped on Windows and where absent.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
@@ -22,6 +22,7 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, it, test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ENTRYPOINT = resolve(here, "../../infra/deploy/bin/ds-deploy-entrypoint");
@@ -30,10 +31,10 @@ const SHA = "0123456789abcdef0123456789abcdef01234567";
 
 const toolsPresent =
   process.platform !== "win32" &&
-  spawnSync("bash", ["-c", "command -v tar && command -v find && command -v install"], {
+  spawnSync("bash", ["-c", "command -v python3 && command -v find && command -v install"], {
     stdio: "ignore",
   }).status === 0;
-const SKIP = !toolsPresent && "needs Linux bash, tar, find and install";
+const SKIP = !toolsPresent && "needs Linux bash, python3, find and install";
 
 test("2984: the entrypoint checks env and sha with ds-release's own regexes", () => {
   const pick = (file, name) => {
@@ -52,7 +53,7 @@ test("2984: the entrypoint checks env and sha with ds-release's own regexes", ()
 // well-behaved `tar -c` would refuse or normalise, which is the point.
 function tarArchive(entries) {
   const blocks = [];
-  for (const { name, type = "0", link = "", body = "" } of entries) {
+  for (const { name, type = "0", link = "", body = "", uname = "" } of entries) {
     const data = Buffer.from(body);
     const header = Buffer.alloc(512, 0);
     header.write(name, 0, 100, "utf8");
@@ -66,6 +67,7 @@ function tarArchive(entries) {
     header.write(link, 157, 100, "utf8");
     header.write("ustar\0", 257, 6, "ascii");
     header.write("00", 263, 2, "ascii");
+    header.write(uname, 265, 32, "utf8");
     let sum = 0;
     for (const b of header) sum += b;
     header.write(`${sum.toString(8).padStart(6, "0")}\0 `, 148, 8, "ascii");
@@ -234,7 +236,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(readFileSync(join(reports, SHA, "results.json"), "utf8"), '{"ok":true}');
     assert.equal(readFileSync(join(reports, SHA, "trace/t.zip"), "utf8"), "zip");
     assert.deepEqual(readdirSync(reports).sort(), ["b".repeat(40), SHA].sort());
-    assert.match(log("sudo"), /--no-same-owner/);
+    assert.match(log("sudo"), /python3 -I -c /, "validated and extracted by tarfile");
   });
 
   const unsafe = [
@@ -296,8 +298,40 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     setRole("stage");
     const r = run(`upload-report ${SHA}`, { input: tarArchive([{ name: "r.json", body: "{}" }]) });
     assert.equal(r.status, 0, r.stderr);
-    assert.match(log("sudo"), new RegExp(`mktemp -p ${parent().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} `));
+    assert.match(log("sudo"), new RegExp(`mktemp -p ${`${root}/var/lib/ds-platform`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} `));
     assert.deepEqual(readdirSync(parent()).sort(), ["e2e-reports"]);
+  });
+
+  it("upload-report: an owner name with spaces cannot shift the size past the unpacked cap", () => {
+    setRole("stage");
+    const r = run(`upload-report ${SHA}`, {
+      input: tarArchive([{ name: "big.bin", body: "x".repeat(1200), uname: "a b 1 2 3" }]),
+      env: { DS_ENTRYPOINT_MAX_UNPACKED_BYTES: "1000" },
+    });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /unpacks to more than 1000 bytes/);
+    assert.ok(!existsSync(join(root, "var/lib/ds-platform/e2e-reports", SHA)), "no report dir");
+  });
+
+  it("upload-report refuses a compressed (gzip) archive: plain tar only", () => {
+    setRole("stage");
+    const r = run(`upload-report ${SHA}`, {
+      input: gzipSync(tarArchive([{ name: "r.json", body: "{}" }])),
+    });
+    assert.equal(r.status, 3, r.stderr);
+    assert.match(r.stderr, /not a readable tar stream/);
+    assert.ok(!existsSync(join(root, "var/lib/ds-platform/e2e-reports", SHA)), "no report dir");
+  });
+
+  it("upload-report refuses when the reports filesystem lacks room for the unpacked report", () => {
+    setRole("stage");
+    const r = run(`upload-report ${SHA}`, {
+      input: tarArchive([{ name: "r.json", body: "{}" }]),
+      env: { DS_ENTRYPOINT_FREE_MARGIN_BYTES: String(2 ** 62) },
+    });
+    assert.equal(r.status, 3, r.stderr);
+    assert.match(r.stderr, /not enough free space/);
+    assert.ok(!existsSync(join(root, "var/lib/ds-platform/e2e-reports", SHA)), "no report dir");
   });
 
   it("upload-report refuses a stream that is not a tar archive", () => {

@@ -149,7 +149,8 @@ deploy and slot runs from the shipped tree, `--rollback` from the operator check
 Its `release` verb execs the box-side release driver
 `/usr/local/lib/ds-platform/release-driver`, which lands with #2985 (stage) / #2986 (prod);
 until then it exits 3. Reports uploaded on stage-1 land in
-`/var/lib/ds-platform/e2e-reports/<sha>/` (root-only, pruned after 14 days; a stream over
+`/var/lib/ds-platform/e2e-reports/<sha>/` (root-only, pruned after 14 days; validated and
+extracted with python3 `tarfile`, plain tar only; a stream over
 512 MiB, an archive unpacking past 2 GiB or holding more than 20000 entries is refused).
 
 **New box:** cloud-init (`cloud-init/*.yaml`) writes the same drop-in, sudoers file and

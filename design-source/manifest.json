@@ -127,10 +127,9 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "auth.dc.html": {
-      "sha256": "2a552dbf828a41c2df479405556929d8d1012f41ce9a67a87997784d8aa0c033",
-      "pulledAt": "2026-10-15T12:25:13.256Z",
-      "remotePath": null,
-      "note": "#2710 lead edit: return-context eyebrow inkFaint→inkMuted (AA on light band); sectionGray light .972→.955 = bg-section"
+      "sha256": "7ea419ff4388393b3b45fa99bae6bd8ea1467948c4ab93704ecea47ed1c6974e",
+      "pulledAt": "2026-10-20T09:04:57.300Z",
+      "remotePath": null
     },
     "doctor-cabinet.dc.html": {
       "sha256": "2792e7a0b64cf42d431889e5a4335e00bc0ab647775c00a09b8db86e1e70bff9",

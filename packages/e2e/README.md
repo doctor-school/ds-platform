@@ -30,6 +30,27 @@ Retain the broader account-control logout scenario and native
 This browser projection makes no refresh-chain or internal-audit claim and has
 no render surface or Stage-B slot.
 
+### Consumed password-reset code (003 EARS-12/16)
+
+`Academy refuses a consumed password reset code and preserves the accepted password`
+(`steps/password-reset-code-reuse.steps.ts`, #3070) registers and verifies one
+unique owned account, logs out its registration session, and completes the real
+Academy reset form with an addressed delivered code and a distinct password.
+An independent guest replays that exact consumed code through the ordinary
+browser endpoint without requesting a replacement. The exact generic 400 must
+mint no session or private access; the recovered owner's same subject and cookie
+must survive a reload before further sign-ins. The replay-proposed password is
+refused, the accepted password signs in independently to the same owner, and the
+recovered session still survives. This asserts no rate-limit ceiling or expiry
+duration and uses no TTL wait, provider mutation or manufactured challenge.
+
+The broader reset declarations and native EARS-12/16 contracts in
+`apps/api/test/auth/password-reset.e2e-spec.ts` remain complementary. Traces stay
+off, secret-bearing assertions use safe projections, and cleanup revokes exact
+owned sessions and closes every owned context while preserving an original
+failure. Run the single `@password-reset-code-reuse` case on the lead-owned real
+runtime. This test-only change has no render surface or owner Stage-B slot.
+
 ### Actual phone-code resend (003 EARS-47/48/42)
 
 `Academy resends the actual phone SMS and confirms the same owner with its newest delivery`

@@ -81,7 +81,7 @@
                 <button onClick="{{ resend }}" data-link style="{{ resendStyle }}">{{ resendLabel }}</button>
               </div>
               <sc-if value="{{ notice }}" hint-placeholder-val="{{ false }}">
-                <p style="margin:0;font-size:12.5px;line-height:1.5;color:{{ inkMuted }}">Мы отправили новый код на <b style="overflow-wrap:anywhere">{{ maskedDest }}</b>.</p>
+                <p style="margin:0;font-size:12.5px;line-height:1.5;color:{{ inkMuted }}">{{ resentNote }}</p>
               </sc-if>
             </div>
           </sc-if>
@@ -408,7 +408,15 @@ class Component extends DCLogic {
     // Шаг кода — один экран для входа по коду, регистрации и повторной регистрации (владелец 2026-10-02, #2552)
     const loginCodeStep = s.screen === 'login' && s.loginTab === 'otp' && s.otpSent;
     const isCodeStep = loginCodeStep || s.screen === 'verify';
-    const codeStepHead = [smsStep ? 'Проверьте телефон' : 'Проверьте почту', R('span', null, 'Мы отправили код на ', destEl, '.')];
+    // SMS-шаг входа не утверждает факт отправки: номер может быть не подтверждён в профиле (lead 2026-10-20, #2997; EARS-56 — ответ одинаков для любых номеров)
+    const smsCodeStep = loginCodeStep && smsStep;
+    const codeStepHead = smsCodeStep
+      ? ['Проверьте телефон', R('span', null, 'Если номер ', destEl, ' подтверждён в профиле, мы отправили на него код.')]
+      : ['Проверьте почту', R('span', null, 'Мы отправили код на ', destEl, '.')];
+    const resentDest = R('b', { style: { overflowWrap: 'anywhere' } }, maskedDest);
+    const resentNote = smsCodeStep
+      ? R('span', null, 'Если номер ', resentDest, ' подтверждён в профиле, мы отправили на него новый код.')
+      : R('span', null, 'Мы отправили новый код на ', resentDest, '.');
     const titles = {
       login: loginCodeStep ? codeStepHead : ['Вход', 'Доступ к вашему аккаунту Doctor.School.'],
       register: ['Создание аккаунта', 'Бесплатно, за две минуты — нужны только e-mail и пароль.'],
@@ -581,7 +589,7 @@ class Component extends DCLogic {
         this.flash(s.screen === 'reset' ? 'reset' : 'login');
       },
       // подтверждение
-      verified: s.verified, notice: s.notice, maskedDest, resendLabel, resendStyle,
+      verified: s.verified, notice: s.notice, maskedDest, resentNote, resendLabel, resendStyle,
       resend: () => { if (s.cooldown > 0) return; this.setState({ notice: true, verified: false, otp: Array(6).fill(''), values: Object.assign({}, s.values, { code: '' }) }); this.startCd(); },
       // сброс
       resetIsPhone,

@@ -114,8 +114,9 @@ Note: redis runs AOF with **no `maxmemory` / eviction policy set yet** — fine 
   with the token sourced: `set -a; . ../.env; set +a` (`TWC_TOKEN` lives in
   `infra/deploy/.env`, gitignored). Never ask the owner for Timeweb keys — they
   are already on the workstation.
-- **SSH to the boxes is gated by `admin_ssh_cidr`** (gitignored
-  `terraform.tfvars`): the api-prod firewall allows port 22 only from that /32.
+- **SSH to api-prod is gated by `admin_ssh_cidr`** (gitignored
+  `terraform.tfvars`): the api-prod firewall allows port 22 only from that /32
+  (stage-1 takes 22 from anywhere since #2984, see [SSH access model](#ssh-access-model-2984)).
   An SSH **timeout** with a green `https://api.doctor.school/v1/health` almost
   always means the workstation's egress IP changed (verify: `curl
 https://api.ipify.org`), NOT a downed box — update `admin_ssh_cidr` in
@@ -124,6 +125,57 @@ https://api.ipify.org`), NOT a downed box — update `admin_ssh_cidr` in
   is dynamic): `184.22.76.93` → `27.130.223.208` (2026-07-12, #729 wave-1 apply)
   → `27.130.220.41` (2026-07-18, `release-2026.07.18-1` deploy). Runbook
   failure-mode: `run-prod-deploy` SKILL → Failure modes.
+
+## SSH access model (#2984)
+
+Tech spec `apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md`
+§4, §8 step (c). Three kinds of key reach a box, and root reaches none:
+
+| Key                              | User         | What it can do                                                                                                                                                                                                                                          |
+| -------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Operator key (unchanged)         | `deploy`     | an interactive shell with `NOPASSWD:ALL` sudo: `pnpm deploy:prod`, `pnpm stage:slot`. Narrowed in step (f).                                                                                                                                             |
+| CI keys (one per Environment)    | `deploy`     | only the forced command `/usr/local/bin/ds-deploy-entrypoint` (`no-pty`, no forwarding): `status <env> <sha>`, `release <env> <sha>`, and `upload-report <sha>` on stage-1. Anything else exits 2 and is logged (`journalctl -t ds-deploy-entrypoint`). |
+| Break-glass key (owner, offline) | `breakglass` | an interactive shell with full sudo, no forced command — the admin path once root login is off.                                                                                                                                                         |
+
+Settings: `/etc/ssh/sshd_config.d/10-ds-hardening.conf` (`PermitRootLogin no`,
+`PasswordAuthentication no`, `KbdInteractiveAuthentication no`, `MaxStartups 10:30:60`),
+the image's `PermitRootLogin yes` in `/etc/ssh/sshd_config` commented out, root's
+`authorized_keys` empty, fail2ban (`sshd` jail) and unattended-upgrades on,
+`/etc/ds-platform/box-role` = `prod` / `stage` / `data`. ds-api-prod's port 22 stays on
+`admin_ssh_cidr` until step (e); ds-data-prod stays VPC-only and holds no CI key.
+
+`ds-deploy-entrypoint` is installed beside `ds-release` by every operator run (forward
+deploy and slot runs from the shipped tree, `--rollback` from the operator checkout).
+Its `release` verb execs the box-side release driver
+`/usr/local/lib/ds-platform/release-driver`, which lands with #2985 (stage) / #2986 (prod);
+until then it exits 3. Reports uploaded on stage-1 land in
+`/var/lib/ds-platform/e2e-reports/<sha>/` (root-only, pruned after 14 days; validated and
+extracted with python3 `tarfile`, plain tar only; a stream over
+512 MiB, an archive unpacking past 2 GiB or holding more than 20000 entries is refused).
+
+**New box:** cloud-init (`cloud-init/*.yaml`) writes the same drop-in, sudoers file and
+role marker and creates `breakglass` from the key at `var.prod_breakglass_ssh_pubkey_path`
+/ `var.stage_1_breakglass_ssh_pubkey_path` (public halves only). CI keys are never baked in.
+The resulting in-place `twc_server.*.cloud_init` diffs on the three running servers are
+expected (cloud-init runs on first boot only) and must not be applied to them: apply
+`-target=twc_firewall_rule.stage_1_ssh` only.
+
+**Running box:** converge it with `infra/deploy/bin/harden-ssh.sh` (idempotent; a second
+run prints `nothing to change`). Keep a second session open on the box while it runs.
+
+```bash
+# copy the script and the PUBLIC keys over, then on the box:
+sudo bash harden-ssh.sh --role stage --breakglass-pubkey breakglass-stage-1.pub \
+  --ci-pubkey ci-stage.pub --dry-run          # read the plan
+sudo bash harden-ssh.sh --role stage --breakglass-pubkey breakglass-stage-1.pub \
+  --ci-pubkey ci-stage.pub
+# prod: --role prod (CI key with step (e)); data-prod: --role data, no --ci-pubkey
+```
+
+It runs `sshd -t` before `systemctl reload ssh` and restores the sshd files without a
+reload when the check fails, then proves the effective values with `sshd -T`. The existing
+operator line of `deploy`'s `authorized_keys` stays byte-identical; a CI key is matched by
+its key body, so re-running with the same key changes nothing.
 
 ## Docker Hub login on every box (#2240)
 
@@ -286,7 +338,8 @@ per-deploy. Run them once; from then on `pnpm deploy:prod` is the whole deploy.
 1. **Prereqs:** `cp .env.example .env` and set `TWC_TOKEN` (an account-level Timeweb
    token; project-scoped tokens do not exist). Confirm/create the `ds-platform`
    Timeweb project and set `project_id`. Generate deploy SSH keypairs and set the
-   `*_ssh_pubkey_path` + real pubkeys in `cloud-init/*.yaml`. Set `admin_ssh_cidr`.
+   `*_ssh_pubkey_path` + real pubkeys in `cloud-init/*.yaml`; the owner's break-glass
+   public keys at `*_breakglass_ssh_pubkey_path` (#2984). Set `admin_ssh_cidr`.
 2. **Value-preflight (BEFORE `plan`/`apply`).** Attribute-shape `validate`-green
    does NOT cover value-level availability — enumerate these from the **live
    provider API** (not a repo mapping), else you learn them via failed applies:

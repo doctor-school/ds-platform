@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+# ds-deploy-entrypoint — the forced command of every CI key (Issue #2984; tech spec
+# apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md §4,
+# §8 step (c)).
+#
+# A CI key in deploy's authorized_keys carries
+#   command="/usr/local/bin/ds-deploy-entrypoint",no-pty,no-port-forwarding,...
+# so sshd runs this file whatever the client asked for, and the request arrives in
+# SSH_ORIGINAL_COMMAND. It is split on single spaces into words — never `eval`d,
+# never handed to a shell — and must be exactly one of:
+#
+#   status <env> <sha>     -> sudo /usr/local/bin/ds-release status <env> <sha>
+#   release <env> <sha>    -> /usr/local/lib/ds-platform/release-driver <env> <sha>
+#   upload-report <sha>    -> a tar stream on stdin into
+#                             /var/lib/ds-platform/e2e-reports/<sha>/ (stage box only)
+#
+# <env> and <sha> are checked with the regexes of ds-release (ENV_RE / SHA_RE below
+# are a copy; tools/deploy/ds-deploy-entrypoint.test.mjs pins them equal). Anything
+# else exits 2 and is logged at auth.warning; accepted commands log at auth.info.
+# The client sees status lines only (spec §4, public logs).
+#
+# Installed as /usr/local/bin/ds-deploy-entrypoint beside ds-release, by the same
+# install step of every operator run.
+#
+# Exit codes: 0 ok · 1 the command failed · 2 rejected (usage) · 3 refused (the box
+# cannot serve it: no release driver, not the stage box, an unsafe archive).
+set -euo pipefail
+# The bracket ranges of the checks below must not follow a client-chosen collation
+# (sshd's AcceptEnv passes LC_*).
+export LC_ALL=C
+
+# Test hooks: a root prefix and the DS_ENTRYPOINT_* cap overrides below. The
+# installed entrypoint never reads them, whatever sshd's AcceptEnv /
+# PermitUserEnvironment (pinned `no` by the hardening drop-in) let through.
+ROOT=
+if [[ ${BASH_SOURCE[0]} != /usr/local/bin/ds-deploy-entrypoint ]]; then
+  ROOT=${DS_ENTRYPOINT_ROOT:-}
+fi
+override() { [[ -n $ROOT ]] && printf '%s' "${!1:-$2}" || printf '%s' "$2"; }
+DS_RELEASE=$ROOT/usr/local/bin/ds-release
+RELEASE_DRIVER=$ROOT/usr/local/lib/ds-platform/release-driver
+BOX_ROLE_FILE=$ROOT/etc/ds-platform/box-role
+REPORTS_PARENT=$ROOT/var/lib/ds-platform
+REPORTS_ROOT=$REPORTS_PARENT/e2e-reports
+REPORT_RETENTION_DAYS=14
+# Upload caps. A Playwright report of our suite, traces included, is tens of MB; the
+# caps sit an order of magnitude above it, and well inside the stage disk, so a
+# CI key can neither fill the disk with one stream nor unpack a tar bomb. The
+# DS_ENTRYPOINT_* overrides are honoured only under a test root prefix.
+MAX_REPORT_BYTES=$(override DS_ENTRYPOINT_MAX_REPORT_BYTES $((512 * 1024 * 1024)))             # 512 MiB stream
+MAX_REPORT_UNPACKED_BYTES=$(override DS_ENTRYPOINT_MAX_UNPACKED_BYTES $((2 * 1024 * 1024 * 1024))) # 2 GiB unpacked
+MAX_REPORT_ENTRIES=$(override DS_ENTRYPOINT_MAX_REPORT_ENTRIES 20000)                          # archive members
+REPORT_FREE_MARGIN_BYTES=$(override DS_ENTRYPOINT_FREE_MARGIN_BYTES $((1024 * 1024 * 1024)))   # left free after unpacking
+[[ $MAX_REPORT_BYTES =~ ^[0-9]+$ && $MAX_REPORT_UNPACKED_BYTES =~ ^[0-9]+$ &&
+  $MAX_REPORT_ENTRIES =~ ^[0-9]+$ && $REPORT_FREE_MARGIN_BYTES =~ ^[0-9]+$ ]] ||
+  { echo "ds-deploy-entrypoint: bad cap override" >&2; exit 2; }
+
+ENV_RE='^(prod|stage-main|stage-pr-[1-9][0-9]*)$'
+SHA_RE='^[0-9a-f]{40}$'
+# The whole request, before it is split: words of the characters the verbs, envs and
+# SHAs use, joined by single spaces. A shell metacharacter, a tab, a newline, a
+# doubled, leading or trailing space is rejected outright.
+COMMAND_RE='^[a-z0-9-]+( [a-z0-9-]+)*$'
+COMMAND_MAX=200
+
+TAG=ds-deploy-entrypoint
+request=${SSH_ORIGINAL_COMMAND-}
+
+# Printable, length-capped copy of the request for the log line.
+sanitised() { printf '%s' "$request" | LC_ALL=C tr -c '[:alnum:] ._/=-' '?' | head -c 120; }
+
+reject() {
+  logger -t "$TAG" -p auth.warning "rejected: $(sanitised)" || true
+  printf '%s: rejected: %s\n' "$TAG" "$1" >&2
+  exit 2
+}
+refuse() {
+  printf '%s: %s\n' "$TAG" "$1" >&2
+  exit 3
+}
+accepted() { logger -t "$TAG" -p auth.info "accepted: $(sanitised)" || true; }
+
+[[ -n $request ]] || reject "no command (this key runs only the allowlisted deploy commands)"
+[[ ${#request} -le $COMMAND_MAX && $request =~ $COMMAND_RE ]] ||
+  reject "unexpected characters in the command"
+
+IFS=' ' read -r -a words <<<"$request"
+verb=${words[0]-}
+
+check_env() { [[ $1 =~ $ENV_RE ]] || reject "bad env (want prod, stage-main or stage-pr-<N>)"; }
+check_sha() { [[ $1 =~ $SHA_RE ]] || reject "bad sha (want the full 40-hex commit id)"; }
+
+# Validates AND extracts in one python3 `tarfile` pass (python3 is on every box:
+# ds-release needs it), never from a parsed `tar -tv` listing, whose columns shift
+# with an owner name holding spaces. argv: archive dest max_unpacked max_entries
+# min_free_margin. Exit 0 extracted · 2 over a cap · 3 unsafe or unreadable (the
+# reason on stdout, nothing extracted).
+read -r -d '' EXTRACT_PY <<'PY' || true
+import os, shutil, sys, tarfile
+archive, dest = sys.argv[1], sys.argv[2]
+max_unpacked, max_entries, margin = (int(v) for v in sys.argv[3:6])
+
+def stop(code, reason):
+    print(reason)
+    sys.exit(code)
+
+root = os.path.realpath(dest)
+members = []
+total = 0
+try:
+    # "r:" = uncompressed only: gzip/bz2/xz are refused, so the stream cap also
+    # bounds what is unpacked. Headers are read one at a time, so the entry cap
+    # stops a header flood before it is all parsed.
+    tar = tarfile.open(archive, mode="r:")
+    for m in tar:
+        if len(members) >= max_entries:
+            stop(2, f"the report holds more than {max_entries} entries")
+        if not (m.isreg() or m.isdir()):
+            stop(3, "the report holds a link or special file")
+        name = m.name
+        if name.startswith("/") or ".." in name.split("/"):
+            stop(3, "the report holds an absolute or .. path")
+        target = os.path.realpath(os.path.join(root, name))
+        if target != root and not target.startswith(root + os.sep):
+            stop(3, "the report holds a path outside its directory")
+        if m.isreg() and target == root:
+            stop(3, "the report holds a file in place of its directory")
+        total += m.size
+        if total > max_unpacked:
+            stop(2, f"the report unpacks to more than {max_unpacked} bytes")
+        members.append(m)
+except (tarfile.TarError, EOFError, OSError):
+    stop(3, "the report is not a readable tar stream")
+os.makedirs(os.path.dirname(root), exist_ok=True)
+if shutil.disk_usage(os.path.dirname(root)).free < total + margin:
+    stop(3, "not enough free space on the reports filesystem")
+os.makedirs(root, mode=0o700, exist_ok=True)
+# Owner and mode come from us, never from the archive.
+for m in members:
+    m.uid = m.gid = 0
+    m.uname = m.gname = "root"
+    m.mode = 0o700 if m.isdir() else 0o600
+# A status line, never a traceback: the client's stderr is a public Actions log.
+try:
+    if hasattr(tarfile, "data_filter"):
+        tar.extractall(root, members=members, filter="data")
+    else:
+        tar.extractall(root, members=members)
+except Exception:
+    stop(3, "the report could not be extracted")
+PY
+
+upload_report() {
+  local sha=$1 role dest size reason rc
+  role=$(sudo cat "$BOX_ROLE_FILE" 2>/dev/null || true)
+  [[ $role == stage ]] || refuse "upload-report is served by the stage box only"
+
+  # The stream lands root-only beside the reports (same filesystem, never /tmp), and
+  # at most one byte past the cap is read, so a stream cannot fill the disk.
+  sudo install -d -m 0700 -o root -g root "$REPORTS_ROOT"
+  archive=$(sudo mktemp -p "$REPORTS_PARENT" .e2e-report-upload.XXXXXX) # global: the EXIT trap outlives this function
+  trap 'sudo rm -f -- "${archive:-}"' EXIT
+  head -c "$((MAX_REPORT_BYTES + 1))" | sudo tee -- "$archive" >/dev/null
+  size=$(sudo stat -c %s -- "$archive")
+  ((size <= MAX_REPORT_BYTES)) || reject "the report stream exceeds $MAX_REPORT_BYTES bytes"
+
+  dest=$REPORTS_ROOT/$sha
+  sudo rm -rf -- "$dest"
+  rc=0
+  reason=$(sudo python3 -I -c "$EXTRACT_PY" "$archive" "$dest" \
+    "$MAX_REPORT_UNPACKED_BYTES" "$MAX_REPORT_ENTRIES" "$REPORT_FREE_MARGIN_BYTES") || rc=$?
+  if ((rc != 0)); then
+    sudo rm -rf -- "$dest"
+    ((rc == 2)) && reject "$reason"
+    refuse "${reason:-the report could not be extracted}"
+  fi
+  # Retention: the next upload removes reports older than the window. python sets
+  # each member's mtime from the archive, so the dir itself is touched to now.
+  sudo touch -- "$dest"
+  sudo find "$REPORTS_ROOT" -mindepth 1 -maxdepth 1 -type d -mtime "+$REPORT_RETENTION_DAYS" \
+    -exec rm -rf -- {} +
+  printf '%s: report %s stored\n' "$TAG" "$sha"
+}
+
+case "$verb" in
+  status)
+    [[ ${#words[@]} -eq 3 ]] || reject "usage: status <env> <sha>"
+    check_env "${words[1]}"
+    check_sha "${words[2]}"
+    accepted
+    exec sudo "$DS_RELEASE" status "${words[1]}" "${words[2]}"
+    ;;
+  release)
+    [[ ${#words[@]} -eq 3 ]] || reject "usage: release <env> <sha>"
+    check_env "${words[1]}"
+    check_sha "${words[2]}"
+    accepted
+    [[ -x $RELEASE_DRIVER ]] ||
+      refuse "release driver not installed (lands with #2985 stage / #2986 prod)"
+    exec "$RELEASE_DRIVER" "${words[1]}" "${words[2]}"
+    ;;
+  upload-report)
+    [[ ${#words[@]} -eq 2 ]] || reject "usage: upload-report <sha>"
+    check_sha "${words[1]}"
+    accepted
+    upload_report "${words[1]}"
+    ;;
+  *)
+    reject "unknown command (allowed: status, release, upload-report)"
+    ;;
+esac

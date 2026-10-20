@@ -15,6 +15,7 @@ import {
   DS_RELEASE_BIN,
   releaseFinishScript,
   releaseForgetArgv,
+  DS_DEPLOY_ENTRYPOINT_BIN,
   releaseInstallFromSourceScript,
   releaseInstallScript,
   releaseStartScript,
@@ -40,15 +41,17 @@ test("2982: unit names are ds-<env>-<sha12>-<step> and refuse anything else", ()
   assert.throws(() => releaseUnitName("prod", SHA, "up;rm"), /step/);
 });
 
-test("2982: the entrypoint is installed from the shipped tree, idempotently", () => {
+test("2982/2984: both box entrypoints are installed from the shipped tree, idempotently", () => {
   assert.equal(
     releaseInstallScript(),
-    `sudo install -m 0755 "$HOME/ds-platform/infra/deploy/bin/ds-release" ${DS_RELEASE_BIN}`,
+    [
+      `sudo install -m 0755 "$HOME/ds-platform/infra/deploy/bin/ds-release" ${DS_RELEASE_BIN}`,
+      `sudo install -m 0755 "$HOME/ds-platform/infra/deploy/bin/ds-deploy-entrypoint" ${DS_DEPLOY_ENTRYPOINT_BIN}`,
+    ].join("\n"),
   );
-  assert.match(
-    releaseInstallScript("$HOME/ds-platform.slots/pr-7"),
-    /"\$HOME\/ds-platform\.slots\/pr-7\/infra\/deploy\/bin\/ds-release"/,
-  );
+  const slot = releaseInstallScript("$HOME/ds-platform.slots/pr-7");
+  assert.match(slot, /"\$HOME\/ds-platform\.slots\/pr-7\/infra\/deploy\/bin\/ds-release"/);
+  assert.match(slot, /"\$HOME\/ds-platform\.slots\/pr-7\/infra\/deploy\/bin\/ds-deploy-entrypoint"/);
 });
 
 // #3054: a rollback ships no tree, so it installs the entrypoint from the
@@ -69,8 +72,10 @@ function runInstall(script) {
       [
         "#!/usr/bin/env bash",
         '[ "$1 $2 $3" = "install -m 0755" ] || exit 9',
-        'cp "$4" "$DS_TEST_OUT"',
-        'printf %s "$5" > "$DS_TEST_OUT.dest"',
+        'n=$(cat "$DS_TEST_OUT.n" 2>/dev/null || echo 0)',
+        'cp "$4" "$DS_TEST_OUT.$n"',
+        'printf %s "$5" > "$DS_TEST_OUT.$n.dest"',
+        'echo $((n + 1)) > "$DS_TEST_OUT.n"',
         "",
       ].join("\n"),
     );
@@ -80,9 +85,13 @@ function runInstall(script) {
       encoding: "utf8",
     });
     if (run.status !== 0) {
-      return { status: run.status, stderr: run.stderr, installed: existsSync(out) };
+      return { status: run.status, stderr: run.stderr, installed: existsSync(`${out}.n`) };
     }
-    return { status: 0, bytes: readFileSync(out), dest: readFileSync(`${out}.dest`, "utf8") };
+    const files = Array.from({ length: Number(readFileSync(`${out}.n`, "utf8")) }, (_, i) => ({
+      bytes: readFileSync(`${out}.${i}`),
+      dest: readFileSync(`${out}.${i}.dest`, "utf8"),
+    }));
+    return { status: 0, files, bytes: files[0].bytes, dest: files[0].dest };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -117,6 +126,43 @@ test("3054: bytes damaged in transit are refused before anything is installed", 
 
 test("3054: an empty entrypoint source is refused", () => {
   assert.throws(() => releaseInstallFromSourceScript(Buffer.alloc(0)), /empty/);
+  assert.throws(() => releaseInstallFromSourceScript([]), /no entrypoint source/);
+});
+
+test("2984: the rollback install carries both entrypoints, each byte-exact at its own path", { skip: NO_BASH }, () => {
+  const release = Buffer.from("#!/usr/bin/env bash\necho release\n");
+  const entry = Buffer.from("#!/usr/bin/env bash\necho entry\nDS_RELEASE_B64\n");
+  const result = runInstall(
+    releaseInstallFromSourceScript([
+      { source: release, dest: DS_RELEASE_BIN },
+      { source: entry, dest: DS_DEPLOY_ENTRYPOINT_BIN },
+    ]),
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.files.length, 2);
+  assert.ok(result.files[0].bytes.equals(release));
+  assert.equal(result.files[0].dest, DS_RELEASE_BIN);
+  assert.ok(result.files[1].bytes.equals(entry));
+  assert.equal(result.files[1].dest, DS_DEPLOY_ENTRYPOINT_BIN);
+});
+
+test("2984: one damaged file refuses the whole install, before either binary is touched", { skip: NO_BASH }, () => {
+  const script = releaseInstallFromSourceScript([
+    { source: Buffer.from("#!/bin/sh\necho one\n"), dest: DS_RELEASE_BIN },
+    { source: Buffer.from("#!/bin/sh\necho two\n"), dest: DS_DEPLOY_ENTRYPOINT_BIN },
+  ]);
+  // Damage the SECOND file's payload: the first must not be installed either.
+  const parts = script.split("\nDS_RELEASE_B64\n");
+  assert.equal(parts.length, 3);
+  const payload = parts[1].split("\n");
+  const last = payload.length - 1;
+  payload[last] = (payload[last].startsWith("A") ? "B" : "A") + payload[last].slice(1);
+  const damaged = [parts[0], payload.join("\n"), parts[2]].join("\nDS_RELEASE_B64\n");
+  assert.notEqual(damaged, script);
+  const result = runInstall(damaged);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /ds-deploy-entrypoint install: checksum mismatch/);
+  assert.equal(result.installed, false, "the first file was not installed either");
 });
 
 test("2982: the start script hands the step script over a quoted heredoc, never streams it", () => {

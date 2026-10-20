@@ -169,7 +169,10 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    below, #968).
 
 **Durable box steps (#2982).** Right after the ship, both boxes install
-`/usr/local/bin/ds-release` from the shipped tree, and the long box steps — data-prod
+`/usr/local/bin/ds-release` from the shipped tree — together with
+`/usr/local/bin/ds-deploy-entrypoint`, the forced command of the CI keys (#2984,
+`infra/deploy/README.md` → SSH access model), by the same install step on the forward
+run, the `--rollback` and every slot run — and the long box steps — data-prod
 `up`, the pgbackrest pre-migrate `backup`, api-prod `pull`, `migrate` (migrate → up -d)
 and the retention `prune` — each run as their own transient systemd unit
 `ds-prod-<sha12>-<step>` instead of a streamed ssh command, so killing the operator

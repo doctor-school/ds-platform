@@ -385,6 +385,14 @@ export async function shipTree(
 // poll. The full step log stays in the unit's journal on the box.
 
 export const DS_RELEASE_BIN = "/usr/local/bin/ds-release";
+// #2984: the forced command of every CI key, installed beside ds-release by the
+// same install step (its allowlisted verbs call ds-release).
+export const DS_DEPLOY_ENTRYPOINT_BIN = "/usr/local/bin/ds-deploy-entrypoint";
+/** Box binary → its path in the repository tree, in install order. */
+export const BOX_ENTRYPOINTS = [
+  { dest: DS_RELEASE_BIN, path: "infra/deploy/bin/ds-release" },
+  { dest: DS_DEPLOY_ENTRYPOINT_BIN, path: "infra/deploy/bin/ds-deploy-entrypoint" },
+];
 export const RELEASE_STATE_ROOT = "/var/lib/ds-platform/release";
 export const RELEASE_POLL_MS = 10 * 1000;
 export const RELEASE_POLL_MAX_FAILURES = 6;
@@ -412,33 +420,45 @@ export function releaseUnitName(env, sha, step) {
   return `ds-${env}-${sha.slice(0, 12)}-${step}`;
 }
 
-/** Install the entrypoint from the tree just shipped to the box (every run). */
+/**
+ * Install the box entrypoints (ds-release, ds-deploy-entrypoint) from the tree just
+ * shipped to the box (every run).
+ */
 export function releaseInstallScript(liveDir = "$HOME/ds-platform") {
-  return `sudo install -m 0755 "${liveDir}/infra/deploy/bin/ds-release" ${DS_RELEASE_BIN}`;
+  return BOX_ENTRYPOINTS.map(({ dest, path }) => `sudo install -m 0755 "${liveDir}/${path}" ${dest}`).join(
+    "\n",
+  );
 }
 
 /**
- * Install the entrypoint from bytes the operator holds, for a run that ships no
- * tree (`--rollback`, #3054). The bytes travel base64-encoded in a quoted heredoc
- * — the base64 alphabet cannot form the delimiter — and are checked against their
- * sha256 before `install` touches the binary, so a damaged transfer refuses
- * instead of installing a broken entrypoint.
+ * Install the box entrypoints from bytes the operator holds, for a run that ships
+ * no tree (`--rollback`, #3054). `sources` is `[{ source, dest }]` (a bare Buffer
+ * means ds-release alone). The bytes travel base64-encoded in quoted heredocs — the
+ * base64 alphabet cannot form a delimiter — and every file is checked against its
+ * sha256 before `install` touches any binary, so a damaged transfer refuses instead
+ * of installing a broken entrypoint.
  */
-export function releaseInstallFromSourceScript(source) {
-  const bytes = Buffer.from(source);
-  if (bytes.length === 0) throw new Error("ds-release source is empty");
-  const sha256 = createHash("sha256").update(bytes).digest("hex");
-  const encoded = bytes.toString("base64").match(/.{1,76}/g);
-  return [
-    'f=$(mktemp)',
-    `trap 'rm -f "$f"' EXIT`,
-    `base64 -d > "$f" <<'DS_RELEASE_B64'`,
-    ...encoded,
-    "DS_RELEASE_B64",
-    `printf '%s  %s\\n' ${sha256} "$f" | sha256sum -c --status - ||` +
-      ` { echo "ds-release install: checksum mismatch, nothing installed" >&2; exit 1; }`,
-    `sudo install -m 0755 "$f" ${DS_RELEASE_BIN}`,
-  ].join("\n");
+export function releaseInstallFromSourceScript(sources) {
+  const files = Buffer.isBuffer(sources) ? [{ source: sources, dest: DS_RELEASE_BIN }] : sources;
+  if (!Array.isArray(files) || files.length === 0) throw new Error("no entrypoint source to install");
+  const lines = [];
+  const vars = files.map((_, i) => `f${i}`);
+  lines.push(...vars.map((v) => `${v}=$(mktemp)`));
+  lines.push(`trap 'rm -f ${vars.map((v) => `"$${v}"`).join(" ")}' EXIT`);
+  files.forEach(({ source, dest }, i) => {
+    const bytes = Buffer.from(source);
+    if (bytes.length === 0) throw new Error(`${dest} source is empty`);
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    lines.push(
+      `base64 -d > "$${vars[i]}" <<'DS_RELEASE_B64'`,
+      ...bytes.toString("base64").match(/.{1,76}/g),
+      "DS_RELEASE_B64",
+      `printf '%s  %s\\n' ${sha256} "$${vars[i]}" | sha256sum -c --status - ||` +
+        ` { echo "${dest} install: checksum mismatch, nothing installed" >&2; exit 1; }`,
+    );
+  });
+  files.forEach(({ dest }, i) => lines.push(`sudo install -m 0755 "$${vars[i]}" ${dest}`));
+  return lines.join("\n");
 }
 
 /**

@@ -50,8 +50,14 @@ variable "data_prod_ssh_pubkey_path" {
   default     = "~/.ssh/ds-data-prod.pub"
 }
 
+variable "prod_breakglass_ssh_pubkey_path" {
+  description = "Path to the PUBLIC half of the owner's offline break-glass key for api-prod and data-prod (user `breakglass`, full sudo, no forced command; release-pipeline spec §4, #2984). The private key never sits on an operator machine."
+  type        = string
+  default     = "~/.ssh/ds-breakglass-prod.pub"
+}
+
 variable "admin_ssh_cidr" {
-  description = "CIDR allowed to reach SSH (22) on both VPSes. Set to the operator's admin IP/CIDR — NOT 0.0.0.0/0."
+  description = "CIDR allowed to reach SSH (22) on api-prod (stage-1 takes 22 from anywhere since #2984, behind key-only auth and forced-command CI keys). Set to the operator's admin IP/CIDR — NOT 0.0.0.0/0."
   type        = string
   # no default — force an explicit, non-open value.
 }
@@ -98,6 +104,12 @@ variable "stage_1_ssh_pubkey_path" {
   description = "Path to the operator SSH public key for stage-1. A DISTINCT key from the production ones: nothing that reaches stage-1 may also open api-prod/data-prod."
   type        = string
   default     = "~/.ssh/ds-stage-1.pub"
+}
+
+variable "stage_1_breakglass_ssh_pubkey_path" {
+  description = "Path to the PUBLIC half of the owner's offline break-glass key for stage-1 (user `breakglass`, #2984). A DISTINCT key from the production break-glass key, for the same reason as var.stage_1_ssh_pubkey_path."
+  type        = string
+  default     = "~/.ssh/ds-breakglass-stage-1.pub"
 }
 
 variable "stage_vpc_cidr" {

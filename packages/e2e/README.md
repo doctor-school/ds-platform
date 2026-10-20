@@ -1716,3 +1716,25 @@ expiry. Cleanup revokes only owned sessions on every outcome and preserves the
 original failure. Authentication traces remain disabled and secret assertions
 use only boolean evidence. The scenario runs unchanged in the Academy stage
 suite, without skipped paths, mocked authentication or real TTL/window waits.
+
+### Wrong email login code with retained-code recovery (003 EARS-6/8/16/34/41)
+
+`Academy refuses a wrong email login code and accepts the retained real code for the same owner`
+(`steps/login-email-code-refusal.steps.ts`, #3100) registers and verifies one
+unique owned account through actual UI and addressed mail, then revokes its
+registration session. A store-side recipient/message-ID checkpoint binds the
+fresh ordinary email login code to that request. A guaranteed different valid
+six-digit code must receive the exact generic HTTP 401 without Set-Cookie or
+private profile/session access. The exact operation refusal plate is visible,
+the six code cells clear and the first cell refocuses.
+
+Without a resend or replacement challenge, the same retained delivered code
+must authenticate the original verified subject with a fresh secure session;
+reload preserves the verified profile. Exact owned logout denies private reads.
+Trace-off fixtures and boolean assertions protect credentials, codes and session
+values; failure cleanup revokes only the owned session/context and preserves
+the original failure. No TTL/window wait, provider mutation or limit override
+is used, and the selection runs unchanged with stage configuration.
+Native `apps/api/test/auth/login-otp.e2e-spec.ts` retains IdP and timing proof;
+the existing verified-request, incomplete-code and consumed-replay scenarios
+remain complementary. No runtime or render surface changes, Stage-B or slot.

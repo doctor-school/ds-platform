@@ -250,16 +250,16 @@ function loginCardCopyOf(config: AuthFlowHostConfig): LoginCardCopy {
       sendCode: copy.otp.sendCode,
       verifyTitle: copy.otp.verifyTitle,
       // Canvas 394 — the typed destination stands bold inside the sentence.
-      sentTo: (destination) =>
-        withBoldDestination(copy.otp.sentTo, destination),
+      sentTo: (destination, channel) =>
+        withBoldDestination(copy.otp.sentTo[channel], destination),
       codeLabel: copy.otp.codeLabel,
       codeHint: copy.otp.codeLifetimeHint,
       verifySubmit: copy.otp.verifySubmit,
       resend: copy.otp.resend,
       resendCountdown: (seconds) =>
         copy.otp.resendCountdown.replace("{seconds}", String(seconds)),
-      resentTo: (destination) =>
-        withBoldDestination(copy.otp.resentTo, destination),
+      resentTo: (destination, channel) =>
+        withBoldDestination(copy.otp.resentTo[channel], destination),
       changeMethod: copy.otp.changeMethod,
     },
   };

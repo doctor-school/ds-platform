@@ -119,8 +119,11 @@ export interface LoginCardCopy {
     sendCode: React.ReactNode;
     /** The code step's card heading per channel (canvas «Проверьте почту / телефон»). */
     verifyTitle: Record<LoginCardOtpChannel, React.ReactNode>;
-    /** The code step's description «Мы отправили код на {destination}» — the destination as typed. */
-    sentTo: (destination: string) => React.ReactNode;
+    /** The code step's description «Мы отправили код на {destination}» — the destination as typed, per channel. */
+    sentTo: (
+      destination: string,
+      channel: LoginCardOtpChannel,
+    ) => React.ReactNode;
     /** The code label per channel (canvas «Код из письма / из сообщения»). */
     codeLabel: Record<LoginCardOtpChannel, string>;
     /** The line under the cells per channel — the code's lifetime (#2882); absent = none. */
@@ -128,8 +131,11 @@ export interface LoginCardCopy {
     verifySubmit: React.ReactNode;
     resend: React.ReactNode;
     resendCountdown: (seconds: number) => React.ReactNode;
-    /** The after-resend notice «Мы отправили новый код на {destination}». */
-    resentTo: (destination: string) => React.ReactNode;
+    /** The after-resend notice «Мы отправили новый код на {destination}», per channel. */
+    resentTo: (
+      destination: string,
+      channel: LoginCardOtpChannel,
+    ) => React.ReactNode;
     changeMethod: React.ReactNode;
   };
 }
@@ -300,7 +306,7 @@ export function LoginCard({
       }
       description={
         sentIdentifier !== null
-          ? copy.otp.sentTo(sentIdentifier)
+          ? copy.otp.sentTo(sentIdentifier, channel)
           : copy.description
       }
       footer={
@@ -791,7 +797,7 @@ function OtpVerifyForm({
             cooldownSeconds={cooldownSeconds}
             resendNonce={resendNonce}
             isSubmitting={verifyForm.formState.isSubmitting}
-            notice={resent ? copy.resentTo(identifier) : null}
+            notice={resent ? copy.resentTo(identifier, channel) : null}
             rejection={rejection}
             autoFocus={autoFocus}
             onComplete={onCodeComplete}

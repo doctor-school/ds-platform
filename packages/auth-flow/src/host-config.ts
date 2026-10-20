@@ -260,14 +260,17 @@ export type AuthFlowLoginCopy = {
     readonly sendCode: string;
     /** The code step's heading per channel (003 EARS-42 «Проверьте почту / телефон»). */
     readonly verifyTitle: { readonly email: string; readonly sms: string };
-    /** Template with `{destination}` — the address exactly as typed (#2607); the door bolds it. */
-    readonly sentTo: string;
+    /**
+     * Template per channel with `{destination}` — the address exactly as typed
+     * (#2607); the door bolds it. The SMS sentence is conditional (#2997).
+     */
+    readonly sentTo: { readonly email: string; readonly sms: string };
     /** The code label per channel («Код из письма / из сообщения»). */
     readonly codeLabel: { readonly email: string; readonly sms: string };
     /** The line under the cells per channel (canvas `codeLifetimeHint`, #2882). */
     readonly codeLifetimeHint: { readonly email: string; readonly sms: string };
-    /** Template with `{destination}` — the after-resend notice (canvas 81-83). */
-    readonly resentTo: string;
+    /** Template per channel with `{destination}` — the after-resend notice (canvas 81-83). */
+    readonly resentTo: { readonly email: string; readonly sms: string };
     /** The malformed sign-in code (the registration confirmation sentence differs). */
     readonly codeInvalid: string;
     readonly verifySubmit: string;

@@ -158,7 +158,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     /** The roster of the congress event, indexed by the registrant user id. */
     async function markers(): Promise<Map<string, boolean>> {
-      const roster = await service.eventRoster(eventId);
+      const roster = await service.eventRoster(eventId, { excludeStaff: false });
       // The canonical contract validates and round-trips on every read.
       expect(EventRosterSchema.parse(roster)).toEqual(roster);
       return new Map(roster.map((e) => [e.userId, e.possibleDuplicate]));

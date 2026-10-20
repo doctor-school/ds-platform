@@ -45,8 +45,10 @@ export function mirrorRoleFromClaims(roles: readonly string[]): string {
 
 /**
  * SQL predicate: the account behind `userIdColumn` is a participant (its mirror
- * row carries the visitor role, not a staff role). One `EXISTS` over `users`, so
- * it composes into any participant count/list without changing the query's
+ * row carries the visitor role, not a staff role) — the statistics population
+ * (003 EARS-26, #2518 amendment: staff are participants, not statistics; lists
+ * apply it only on an explicit staff-hiding filter). One `EXISTS` over `users`,
+ * so it composes into any count or list without changing the query's
  * join shape (inside the subquery `users` resolves to the inner table even when
  * the outer query already joins `users`).
  */

@@ -6956,6 +6956,14 @@
           },
           {
             "in": "query",
+            "name": "hideStaff",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
             "name": "possibleDuplicate",
             "required": false,
             "schema": {

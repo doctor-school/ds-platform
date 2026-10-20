@@ -194,11 +194,21 @@ export const CongressRosterQuerySchema = z
     registeredTo: MskCalendarDaySchema.optional(),
     /**
      * 044 EARS-31 — возможный дубль: `yes` / `no` over the EARS-30 marker,
-     * which is derived over the event's participant registrations (#2456: a
-     * staff account's registration marks nobody), so a row keeps
-     * its marker whatever the other filters leave on the page.
+     * which is derived over every registration the roster shows (staff
+     * included unless `hideStaff` hides them), so a row keeps its marker
+     * whatever the other filters leave on the page.
      */
     possibleDuplicate: CongressRosterPossibleDuplicateFilterSchema.optional(),
+    /**
+     * #2518 (003 EARS-26 amendment) — «Скрыть сотрудников»: `true` drops staff
+     * accounts' registrations from the rows, the total and the «возможный
+     * дубль» population. Absent or `false` shows every registration — staff
+     * are participants, only statistics leave them out.
+     */
+    hideStaff: z
+      .union([z.boolean(), z.enum(["true", "false"])])
+      .transform((v) => v === true || v === "true")
+      .optional(),
   })
   .refine((q) => q.present === undefined || q.attendanceDay !== undefined, {
     message: "present requires attendanceDay",
@@ -254,10 +264,10 @@ export const CongressRosterRowSchema = z.object({
   /** 044 EARS-27 — the confirmation-letter outcome; `null` before any attempt. */
   confirmationMailStatus: z.enum(["sent", "failed"]).nullable(),
   /**
-   * 044 EARS-30/EARS-31 — «возможный дубль»: two or more of the event's
-   * participant registrations share this row's normalised contact phone
-   * (#2456: a staff account's registration marks nobody). Derived at read
-   * time, never stored; `false` for a row with no answers.
+   * 044 EARS-30/EARS-31 — «возможный дубль»: two or more of the
+   * registrations the roster shows share this row's normalised contact phone
+   * (staff accounts' included unless `hideStaff` hides them, #2518). Derived
+   * at read time, never stored; `false` for a row with no answers.
    */
   possibleDuplicate: z.boolean(),
   /**

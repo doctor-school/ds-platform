@@ -228,10 +228,18 @@ export class RegistrationService {
    * method. The registrar's HTTP surface is {@link eventRosterPage} below, a
    * sibling read on its own contract, so the room gate keeps consuming exactly
    * the fact it always did.
+   *
+   * #2518 — staff are participants, not statistics: the caller states whether
+   * staff accounts' registrations belong in its read. No runtime consumer
+   * reads it today; a future one passes `excludeStaff: true` only for a
+   * statistic and `false` when it admits or lists people.
    */
-  async eventRoster(idOrSlug: string): Promise<EventRoster> {
+  async eventRoster(
+    idOrSlug: string,
+    options: { excludeStaff: boolean },
+  ): Promise<EventRoster> {
     const event = await this.resolveEvent(idOrSlug);
-    return this.repo.findEventRoster(event.id);
+    return this.repo.findEventRoster(event.id, options);
   }
 
   /**

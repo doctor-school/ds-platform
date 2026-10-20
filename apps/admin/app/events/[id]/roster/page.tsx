@@ -439,10 +439,14 @@ export default function CongressRosterPage() {
       .filter(([key]) => key !== "registeredFrom" && key !== "registeredTo")
       .map(([key, value]) => ({
         id: `filter-${key}`,
-        label: filterChip(
-          key === "specialtyId" ? "specialty" : key,
-          filterValueLabel(key, value),
-        ),
+        // A switch has no «field: value» — its chip is the switch's own label.
+        label:
+          key === "hideStaff"
+            ? t("congressRoster.filters.hideStaff")
+            : filterChip(
+                key === "specialtyId" ? "specialty" : key,
+                filterValueLabel(key, value),
+              ),
         onRemove: () => changeFilters(() => ({ [key]: "" })),
       })),
     ...(registeredRange

@@ -455,8 +455,19 @@ export class RegistrationRepository {
    * platform-origin registration, EARS-16, has no answers at all) are forced to
    * `false` by the `CASE`: SQL partitions all NULLs together, so without that
    * guard every answer-less row on an event would mark every other one.
+   *
+   * #2518 — staff are participants, not statistics: every caller states
+   * whether staff accounts' registrations belong in its read. No runtime
+   * consumer reads this model today; the rule for a future one: pass
+   * `excludeStaff: true` only when the read feeds a statistic, `false` when it
+   * admits or lists people (the registration is recorded and shown, even for a
+   * service account). The marker's window runs over
+   * the same selected rows, so a staff row left out marks nobody.
    */
-  async findEventRoster(eventId: string): Promise<EventRosterEntry[]> {
+  async findEventRoster(
+    eventId: string,
+    options: { excludeStaff: boolean },
+  ): Promise<EventRosterEntry[]> {
     const rows = await this.db
       .select({
         userId: registrations.userId,
@@ -468,8 +479,9 @@ export class RegistrationRepository {
       .where(
         and(
           eq(registrations.eventId, eventId),
-          // #2456 — staff sign-ups are not participants.
-          isParticipant(registrations.userId),
+          options.excludeStaff
+            ? isParticipant(registrations.userId)
+            : undefined,
         ),
       )
       .orderBy(asc(registrations.registeredAt));
@@ -506,10 +518,12 @@ export class RegistrationRepository {
    * that a page boundary is stable when two rows share an instant. The per-column
    * filters are EARS-23 ({@link rosterColumnFilterPredicates}). The «возможный
    * дубль» marker (EARS-30) and its yes/no filter (EARS-31) read
-   * {@link eventDuplicates}, joined by id: the marker is computed over the
-   * event's participant registrations (#2456: a staff account's registration
-   * marks nobody) BEFORE the search, the filters, the sort and the page apply, so a filter that hides one row of a sharing pair never unmarks
-   * the other.
+   * {@link eventDuplicates}, joined by id: the marker is computed over every
+   * registration the roster shows — staff accounts' included, unless the
+   * #2518 «Скрыть сотрудников» filter (`hideStaff`) drops them, and then they
+   * mark nobody — BEFORE the search, the other filters, the sort and the page
+   * apply, so a filter that hides one row of a sharing pair never unmarks the
+   * other.
    */
   async findEventRosterPage(
     eventId: string,
@@ -527,13 +541,14 @@ export class RegistrationRepository {
       string | null
     >`nullif(${registrations.answers}->>'contactPhoneNormalised', '')`;
 
-    const duplicates = this.eventDuplicates(eventId);
+    const hideStaff = query.hideStaff === true;
+    const duplicates = this.eventDuplicates(eventId, { hideStaff });
 
     const where = and(
       eq(registrations.eventId, eventId),
-      // #2456 — a staff account's registration is not a roster row (and not in
-      // the pager's total).
-      isParticipant(registrations.userId),
+      // #2518 — a staff account's registration is a roster row (and in the
+      // pager's total) unless the registrar hides staff.
+      hideStaff ? isParticipant(registrations.userId) : undefined,
       this.rosterSearchPredicate(
         query.q,
         {
@@ -633,14 +648,17 @@ export class RegistrationRepository {
 
   /**
    * 044 EARS-30 — the event-scoped «возможный дубль» subquery: one row per
-   * participant registration of the event with its marker
+   * registration of the event with its marker
    * ({@link possibleDuplicateOverScope}), the window running over the WHOLE
-   * event's participants because nothing but the event and #2456's
-   * participant rule scope this subquery — the same population the roster
-   * shows. The participant card and the roster list both join it by id, so the card, the row and the EARS-31 filter can never disagree,
-   * and no outer filter or page can change a marker.
+   * event's registrations — the same population the roster shows, so nothing
+   * but the event and the #2518 `hideStaff` filter scope it. With staff shown
+   * (the default) a staff registration counts like any row; with staff hidden
+   * it is no roster row and makes no participant a «возможный дубль». The
+   * participant card (always the default population) and the roster list both
+   * join it by id, so on the default view the card, the row and the EARS-31
+   * filter can never disagree, and no other filter or page can change a marker.
    */
-  private eventDuplicates(eventId: string) {
+  private eventDuplicates(eventId: string, options: { hideStaff: boolean }) {
     return this.db
       .select({
         id: registrations.id,
@@ -650,9 +668,7 @@ export class RegistrationRepository {
       .where(
         and(
           eq(registrations.eventId, eventId),
-          // #2456 — a staff registration is never a roster row, so it never
-          // makes a participant a «возможный дубль» either.
-          isParticipant(registrations.userId),
+          options.hideStaff ? isParticipant(registrations.userId) : undefined,
         ),
       )
       .as("duplicates");
@@ -877,10 +893,10 @@ export class RegistrationRepository {
    *   roster's own definitions; the name parts are the answers alone (the
    *   account has only a display name, which `fullName` already falls back to).
    * - «возможный дубль» is {@link possibleDuplicateOverScope} computed over the
-   *   event's participant registrations in a subquery (#2456: a staff
-   *   account's registration marks nobody), THEN narrowed to this registration
-   *   — the window has to see every participant of the event to count a shared
-   *   phone.
+   *   event's registrations in a subquery — staff accounts' included, the
+   *   roster's default population (#2518) — THEN narrowed to this
+   *   registration: the window has to see every registration of the event to
+   *   count a shared phone.
    * - Consents are the participant's congress sign-up consent rows.
    * - Attendance is the current `registration_attendance` value per configured
    *   day (`null` = never marked) plus the day's 010 audit history
@@ -894,7 +910,7 @@ export class RegistrationRepository {
     congressDays: readonly string[],
   ): Promise<CongressParticipantCard | undefined> {
     const cells = registrationCells();
-    const duplicates = this.eventDuplicates(eventId);
+    const duplicates = this.eventDuplicates(eventId, { hideStaff: false });
     const [row] = await this.db
       .select({
         registrationId: registrations.id,

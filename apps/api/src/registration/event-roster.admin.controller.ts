@@ -183,6 +183,13 @@ export class EventRosterAdminController {
     required: false,
     enum: [...CONGRESS_ROSTER_POSSIBLE_DUPLICATE_FILTERS],
   })
+  // #2518 — «Скрыть сотрудников»: `true` drops staff accounts' registrations
+  // from the rows, the total and the «возможный дубль» population.
+  @ApiQuery({
+    name: "hideStaff",
+    required: false,
+    type: Boolean,
+  })
   @ApiOkResponse({ type: CongressRosterListDto })
   // `audit: low-stakes` — a read that writes no domain state owes no terminal
   // ledger row (endpoint-authz design §3), exactly like the 007 admin reads.

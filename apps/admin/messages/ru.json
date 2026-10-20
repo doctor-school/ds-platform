@@ -1814,6 +1814,7 @@
           "no": "нет"
         }
       },
+      "hideStaff": "Скрыть сотрудников",
       "registeredFrom": "с",
       "registeredTo": "по",
       "registeredFromLabel": "Дата регистрации с",

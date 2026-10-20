@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import pg from "pg";
 import {
   ADMIN_ORIGIN,
   createPublishedEvent,
@@ -24,13 +25,14 @@ import { visible } from "./support/visible";
  * Dev-stand-gated like the rest of `apps/admin/e2e` (flows tier):
  *
  *   E2E_ADMIN_URL=http://localhost:3200 IDP_ISSUER=… IDP_SERVICE_TOKEN=… \
- *   IDP_PROJECT_ID=… pnpm --filter @ds/admin exec playwright test \
+ *   IDP_PROJECT_ID=… DATABASE_URL=… pnpm --filter @ds/admin exec playwright test \
  *     --config=playwright.flows.config.ts e2e/congress-roster-filters.spec.ts
  *
  * `E2E_SHOT_DIR` opts into the evidence screenshots of the approved-non-canvas
  * source `feature-044-roster-filters-v1`: `roster-filters-closed`, `-open`,
  * `-applied`, `-date-error` (the inverted date range) at 1440 and `-narrow` at
- * 390, light and dark.
+ * 390, light and dark; plus `roster-hide-staff-off` / `-on` (003 EARS-26,
+ * #2518) at 1440 and `-narrow` at 390.
  */
 const SHOT_DIR = process.env.E2E_SHOT_DIR;
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
@@ -105,6 +107,14 @@ async function setPalette(page: Page, palette: "light" | "dark") {
   await page.evaluate(() =>
     Promise.all(document.getAnimations().map((a) => a.finished)),
   );
+}
+
+/** The same state at the 390 phone width, then back to the desk's 1440. */
+async function shotNarrow(page: Page, name: string): Promise<void> {
+  if (!SHOT_DIR) return;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await shot(page, `${name}-narrow`);
+  await page.setViewportSize({ width: 1440, height: 900 });
 }
 
 async function shot(page: Page, name: string): Promise<void> {
@@ -443,4 +453,82 @@ test.describe("044 EARS-23 — the roster's column filters (F1)", () => {
     await shot(page, "roster-filters-narrow");
     await page.setViewportSize({ width: 1440, height: 900 });
   });
+
+  test("003 EARS-26: a staff account's registration is listed and counted; «Скрыть сотрудников» hides it with the total following, and turning it off shows it again", async () => {
+    test.skip(!eventId, "depends on the event seeded above");
+    test.setTimeout(180_000);
+    const page = desk;
+    const staff = {
+      surname: "Служебная",
+      firstName: "Анна",
+      patronymic: "Игоревна",
+      phone: "+7 916 700-11-22",
+      email: `roster-filters-${RUN}-staff@example.ru`,
+    };
+    await page.goto(`/events/${eventId}/roster`);
+    expect(await addDeskParticipant(page, staff)).toBe("accepted");
+    await markStaff(staff.email);
+    const staffName = `${staff.surname} ${staff.firstName} ${staff.patronymic}`;
+    const everyone = PEOPLE.length + 1;
+
+    // Default: the switch is off and the staff registration is a roster row.
+    await page.goto(`/events/${eventId}/roster`);
+    await expect(total(page)).toHaveText(`Найдено: ${everyone}`);
+    await expect(nameCells(page).filter({ hasText: staffName })).toHaveCount(1);
+    await toggle(page).click();
+    const hideStaff = page.getByTestId("roster-filter-hide-staff");
+    await expect(hideStaff).not.toBeChecked();
+    await shot(page, "roster-hide-staff-off");
+    await shotNarrow(page, "roster-hide-staff-off");
+
+    // On: the row and the count leave together, the address and a chip carry it.
+    // The switch's checkbox is visually hidden — the label is what is pressed.
+    await hideStaff.locator("xpath=ancestor::label[1]").click();
+    await expect(hideStaff).toBeChecked();
+    await expect(total(page)).toHaveText(`Найдено: ${PEOPLE.length}`);
+    await expect(nameCells(page).filter({ hasText: staffName })).toHaveCount(0);
+    await expect(page).toHaveURL(/hideStaff=true/);
+    await expect(chip(page, "Скрыть сотрудников")).toBeVisible();
+    await shot(page, "roster-hide-staff-on");
+    await shotNarrow(page, "roster-hide-staff-on");
+
+    // A reload keeps it.
+    await page.reload();
+    await expect(total(page)).toHaveText(`Найдено: ${PEOPLE.length}`);
+
+    // Off again: the staff row is back.
+    if ((await toggle(page).getAttribute("aria-expanded")) !== "true") {
+      await toggle(page).click();
+    }
+    await expect(hideStaff).toBeChecked();
+    await hideStaff.locator("xpath=ancestor::label[1]").click();
+    await expect(hideStaff).not.toBeChecked();
+    await expect(total(page)).toHaveText(`Найдено: ${everyone}`);
+    await expect(nameCells(page).filter({ hasText: staffName })).toHaveCount(1);
+    await expect(page).not.toHaveURL(/hideStaff=/);
+  });
 });
+
+/**
+ * Make the desk-created account a staff account. The production marker is the
+ * session layer mirroring the IdP's project-roles claim into `users.role`
+ * (003 EARS-26); this walk-in never signs in, so its mirror row is set the way
+ * that layer would set it, on the stand database (`DATABASE_URL`).
+ */
+async function markStaff(email: string): Promise<void> {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("E2E requires DATABASE_URL in the environment");
+  }
+  const client = new pg.Client({ connectionString });
+  await client.connect();
+  try {
+    const result = await client.query(
+      "UPDATE users SET role = 'platform_admin' WHERE email = $1",
+      [email],
+    );
+    expect(result.rowCount, `staff marker for ${email}`).toBe(1);
+  } finally {
+    await client.end();
+  }
+}

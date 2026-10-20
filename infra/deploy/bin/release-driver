@@ -73,10 +73,11 @@ check_args() {
 
 unit_name() { printf 'ds-%s-%s-driver' "$1" "${2:0:12}"; }
 
-# The unit's state as the interface reports it. `active` is the PROCESS: a finished
-# --remain-after-exit unit stays `active (exited)` in systemd's terms and reads
-# `inactive` here, with its exit status; a non-zero exit leaves systemd's `failed`.
-# A unit systemd does not know (never started, reset, reboot) is `absent`.
+# The unit's state as the interface reports it. `active` is the PROCESS, not systemd's
+# ActiveState (a finished --remain-after-exit unit stays `active (exited)` there): a
+# running process -> `active` (`activating` while starting); exited with ExecMainStatus
+# 0 -> `inactive`, rc 0; exited non-zero, or systemd's `failed` -> `failed`, rc =
+# ExecMainStatus; a unit systemd does not know (never started, reset) -> `absent`.
 unit_state() {
   local unit=$1 key value load= active= sub= code= status=
   while IFS='=' read -r key value; do
@@ -90,23 +91,25 @@ unit_state() {
   done < <(systemctl show --property=LoadState,ActiveState,SubState,ExecMainCode,ExecMainStatus \
     "$unit.service" 2>/dev/null || true)
   local state rc=null
+  [[ $status =~ ^[0-9]+$ ]] || status=
   case $load/$active/$sub in
-    loaded/active/exited | loaded/inactive/*) state=inactive ;;
-    loaded/active/*) state=active ;;
     loaded/activating/* | loaded/reloading/*) state=activating ;;
-    loaded/deactivating/*) state=active ;;
-    loaded/failed/*) state=failed ;;
+    loaded/active/running | loaded/deactivating/*) state=active ;;
+    loaded/failed/*) state=failed rc=${status:-null} ;;
+    loaded/active/exited | loaded/inactive/*)
+      # The process ended. ExecMainCode 0 = it never ran (no driver run at all);
+      # otherwise its ExecMainStatus is the verdict: 0 succeeded, anything else failed.
+      if [[ -z $code || $code == 0 || -z $status ]]; then
+        state=absent
+      elif [[ $status == 0 ]]; then
+        state=inactive rc=0
+      else
+        state=failed rc=$status
+      fi
+      ;;
+    loaded/active/*) state=active ;;
     *) state=absent ;;
   esac
-  if [[ $state == inactive || $state == failed ]]; then
-    # ExecMainCode: 1 exited (status = exit code), 2 killed / 3 dumped (status = signal).
-    case $code in
-      1) [[ $status =~ ^[0-9]+$ ]] && rc=$status ;;
-      2 | 3) [[ $status =~ ^[0-9]+$ ]] && rc=$((128 + status)) ;;
-    esac
-    # A loaded unit that never ran a process is no driver run at all.
-    [[ $code == 0 || -z $code ]] && [[ $state == inactive ]] && state=absent
-  fi
   printf '%s %s\n' "$state" "$rc"
 }
 

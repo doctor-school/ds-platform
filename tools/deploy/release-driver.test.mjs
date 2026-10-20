@@ -335,7 +335,11 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       ["a running unit", { LoadState: "loaded", ActiveState: "active", SubState: "running", ExecMainCode: 0, ExecMainStatus: 0 }, "active", null],
       ["an rc-0 finished unit", { LoadState: "loaded", ActiveState: "active", SubState: "exited", ExecMainCode: 1, ExecMainStatus: 0 }, "inactive", 0],
       ["a failed unit", { LoadState: "loaded", ActiveState: "failed", SubState: "failed", ExecMainCode: 1, ExecMainStatus: 3 }, "failed", 3],
-      ["a killed unit", { LoadState: "loaded", ActiveState: "failed", SubState: "failed", ExecMainCode: 2, ExecMainStatus: 9 }, "failed", 137],
+      ["a killed unit", { LoadState: "loaded", ActiveState: "failed", SubState: "failed", ExecMainCode: 2, ExecMainStatus: 9 }, "failed", 9],
+      ["a non-zero exit systemd still shows active (exited)", { LoadState: "loaded", ActiveState: "active", SubState: "exited", ExecMainCode: 1, ExecMainStatus: 4 }, "failed", 4],
+      ["an rc-0 unit systemd shows inactive (dead)", { LoadState: "loaded", ActiveState: "inactive", SubState: "dead", ExecMainCode: 1, ExecMainStatus: 0 }, "inactive", 0],
+      ["a deactivating unit", { LoadState: "loaded", ActiveState: "deactivating", SubState: "stop-sigterm", ExecMainCode: 0, ExecMainStatus: 0 }, "active", null],
+      ["a unit systemd does not know", { LoadState: "not-found", ActiveState: "inactive", SubState: "dead", ExecMainCode: 0, ExecMainStatus: 0 }, "absent", null],
       ["a loaded unit that never ran", { LoadState: "loaded", ActiveState: "inactive", SubState: "dead", ExecMainCode: 0, ExecMainStatus: 0 }, "absent", null],
     ]) {
       it(`reports ${what} as ${active}`, () => {

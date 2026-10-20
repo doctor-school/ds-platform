@@ -62,7 +62,7 @@ async function plannedCalls(options) {
   const calls = [];
   const record = (kind) => async (...args) => {
     // The audit line's wall-clock stamp is the one value two runs cannot share.
-    const stable = JSON.stringify(args).replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z/g, "<now>");
+    const stable = JSON.stringify(args).replace(/\d{4}-\d\d-\d\dT[0-9:.]+Z/g, "<now>");
     calls.push([kind, JSON.parse(stable)]);
     if (kind === "idp" && args[0].op === "golden-identities") return SUBJECTS;
     return undefined;

@@ -1522,3 +1522,24 @@ and session service/adapter tests retain token rotation/reuse invariants. The
 broader automatic-expiry and consumed-token scenarios remain intact: this
 projection proves explicit endpoint refresh, not automatic expiry-triggered
 rotation or server-only token-chain reuse. No render surface or Stage-B slot.
+
+### Consumed email login code (003 EARS-6/41/16)
+
+`Academy refuses a consumed email login code without disturbing its original session`
+(`steps/login-email-code-reuse.steps.ts`, #3069) registers and verifies one unique
+owned account through real UI and addressed mail. It signs out, requests a fresh
+email login code using a store-side recipient/message-ID checkpoint, and accepts
+that exact delivered code once through the actual six-cell form. An independent
+cookie-free guest then submits the retained consumed code to the ordinary BFF
+endpoint without requesting another challenge: exact generic 401, no new cookie
+and denied private session/profile access are required. Reloading the original
+owner must retain the same verified subject, rendered email and secure cookie.
+
+Trace-off fixtures, canonical registration/mail/session helpers and safe boolean
+assertions are reused. Cleanup revokes only the owned session and closes its
+contexts even after failure, preserving the original failure. No expiry wait,
+cooldown, limit ceiling or configuration override is involved; the same selected
+`@login-email-code-reuse` case runs unchanged in the Academy stage suite. Native
+`apps/api/src/auth/idp/zitadel.idp.spec.ts` EARS-6 single-use challenge coverage and
+the broader wrong-code/timing and verified-request journeys remain complementary.
+This test coverage change has no render surface or owner Stage-B slot.

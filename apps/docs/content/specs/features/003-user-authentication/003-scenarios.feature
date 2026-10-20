@@ -572,6 +572,19 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # login mail, absent verification mail and acceptance, not native IdP reads
     # or statistical timing. Keep the golden verified EARS-6 journey distinct.
 
+  @EARS-6 @EARS-41 @EARS-16 @failure @login-email-code-reuse
+  Scenario: Academy refuses a consumed email login code without disturbing its original session
+    Given a uniquely registered and verified Academy doctor_guest account is logged out for an email-code request for consumed-code replay
+    When the owned verified account requests its email login code through the Academy form for consumed-code replay
+    Then the verified-account request shows the neutral six-cell code step without a private session for consumed-code replay
+    And fresh addressed sign-in mail is delivered for the consumed-code owner
+    When the owned verified account submits that delivered sign-in code for consumed-code replay
+    Then the accepted login code restores a secure private session for the same verified identity for consumed-code replay
+    And an independent Academy guest cannot reuse that consumed email code and the original owner survives reload
+    # Actual provider single-use projection (#3069), no expiry/window wait.
+    # Retain zitadel.idp.spec.ts EARS-6 consumed-challenge native proof and
+    # the broader wrong-code/timing and verified-account request journeys.
+
   @EARS-34 @EARS-16 @failure @login-email-nonexistent
   Scenario: A login-email-code request for a nonexistent identifier is a silent no-op
     Given a unique unknown Academy address and owned unverified and verified login-code observations

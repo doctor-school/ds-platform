@@ -207,8 +207,11 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       join(stubs, "curl"),
       [
         'echo "$*" >> "$STUB_DIR/curl.log"',
-        "[[ -f $STUB_DIR/compare.json ]] || exit 22",
-        'cat "$STUB_DIR/compare.json"',
+        // #3157: compare main...<sha> answers from compare.json, any other base (the
+        // live prod SHA) from compare-live.json.
+        "case ${!#} in */compare/main...*) f=$STUB_DIR/compare.json ;; *) f=$STUB_DIR/compare-live.json ;; esac",
+        "[[ -f $f ]] || exit 22",
+        'cat "$f"',
       ].join("\n"),
     );
     // docker: login reads the token on stdin; `manifest inspect --verbose <ref>`
@@ -222,6 +225,8 @@ describe("2985: release-driver", { skip: SKIP }, () => {
         '  login) cat > "$STUB_DIR/docker.login-stdin"; [[ -f $STUB_DIR/login-fails ]] && exit 1',
         '    echo "{}" > "$DOCKER_CONFIG/config.json"; exit 0 ;;',
         "  logout) exit 0 ;;",
+        // #3157: the running api container's image, from $STUB_DIR/live-image.
+        '  inspect) [[ -f $STUB_DIR/live-image ]] || exit 1; cat "$STUB_DIR/live-image" ;;',
         "  manifest) ref=${!#}; f=$STUB_DIR/registry/${ref//[\\/:]/_}.json",
         '    [[ -f $f ]] || { echo "no such manifest" >&2; exit 1; }; cat "$f" ;;',
         "esac",
@@ -612,7 +617,71 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       ExecMainCode: 1,
       ExecMainStatus: status,
     });
-    beforeEach(() => setRole("prod"));
+    const LIVE = "d".repeat(40);
+    const setLive = (status, image = `ds-api:${LIVE}`) => {
+      writeFileSync(join(dir, "live-image"), `${image}\n`);
+      writeFileSync(join(dir, "compare-live.json"), JSON.stringify({ status }));
+    };
+    const DOWNGRADE = `ds-release-driver: refused: ${SHA} does not descend from the live prod SHA ${LIVE.slice(0, 12)} — a downgrade is a rollback (pnpm deploy:prod --rollback)\n`;
+    beforeEach(() => {
+      setRole("prod");
+      setLive("ahead");
+    });
+
+    it("asks GitHub whether the SHA descends from the live prod SHA it reads from the running api", () => {
+      const r = run(["prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.match(
+        log("docker.log"),
+        /^inspect ds-api-prod-api-1 --format \{\{\.Config\.Image\}\}$/m,
+      );
+      assert.match(
+        log("curl.log"),
+        new RegExp(`/compare/${LIVE}\\.\\.\\.${SHA}`),
+      );
+    });
+
+    it("starts a re-run of the live SHA itself (identical)", () => {
+      setLive("identical");
+      const r = run(["prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, `ds-release-driver: started ${PROD_UNIT}\n`);
+    });
+
+    it("refuses a downgrade: a SHA that does not descend from the live prod SHA", () => {
+      for (const status of ["behind", "diverged"]) {
+        setLive(status);
+        const r = run(["prod", SHA]);
+        assert.equal(r.status, 3, status);
+        assert.equal(r.stderr, DOWNGRADE, status);
+      }
+      rmSync(join(dir, "compare-live.json")); // GitHub cannot answer: closed
+      const r = run(["prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.equal(r.stderr, DOWNGRADE);
+      notStarted();
+    });
+
+    it("refuses when the live prod SHA is unknown (no running api)", () => {
+      for (const image of [null, "ds-api:local", "absent"]) {
+        if (image === null) rmSync(join(dir, "live-image"));
+        else setLive("ahead", image);
+        const r = run(["prod", SHA]);
+        assert.equal(r.status, 3, String(image));
+        assert.equal(
+          r.stderr,
+          "ds-release-driver: refused: the live prod SHA is unknown (no running ds-api-prod-api-1) — release it from the workstation path\n",
+        );
+      }
+      notStarted();
+    });
+
+    it("never asks the live SHA on the stage box", () => {
+      setRole("stage");
+      const r = run(["stage-main", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.doesNotMatch(log("docker.log"), /inspect/);
+    });
 
     it("starts the release unit for prod on a prod-role box, after the lease", () => {
       const r = run(["prod", SHA]);
@@ -776,6 +845,11 @@ describe("2985: release-driver", { skip: SKIP }, () => {
 
     it("drops another SHA's recorded basis when a release starts", () => {
       setRole("prod");
+      writeFileSync(join(dir, "live-image"), `ds-api:${PREVIOUS}\n`);
+      writeFileSync(
+        join(dir, "compare-live.json"),
+        JSON.stringify({ status: "ahead" }),
+      );
       const dirOf = join(root, "var/lib/ds-platform/release-driver");
       mkdirSync(dirOf, { recursive: true });
       writeFileSync(join(dirOf, `${OTHER}.previous`), `${PREVIOUS}\n`);

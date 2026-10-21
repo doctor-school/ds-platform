@@ -198,18 +198,51 @@ PY
 # GitHub — public API, no token, no client data — whether <sha> is on `main`: the
 # compare main...<sha> must be `behind` (an ancestor of main) or `identical`. Anything
 # else — `ahead`, `diverged`, 404, a rate limit, a network error — refuses (fail closed).
+# compare <base>...<head>'s `status`; exit 1 when GitHub cannot answer.
+compare_status() {
+  local body
+  body=$(curl -fsS --proto '=https' --max-time 30 -H 'Accept: application/vnd.github+json' \
+    "$GITHUB_API/compare/$1...$2" 2>/dev/null) || return 1
+  printf '%s' "$body" |
+    python3 -I -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status","") if isinstance(d,dict) else "")' \
+      2>/dev/null || true
+}
+
 check_on_main() {
-  local sha=$1 body status
-  if ! body=$(curl -fsS --proto '=https' --max-time 30 -H 'Accept: application/vnd.github+json' \
-    "$GITHUB_API/compare/main...$sha" 2>/dev/null); then
+  local sha=$1 status
+  if ! status=$(compare_status main "$sha"); then
     refuse "refused: cannot confirm $sha is on main (GitHub compare unavailable)"
   fi
-  status=$(printf '%s' "$body" |
-    python3 -I -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status","") if isinstance(d,dict) else "")' \
-      2>/dev/null || true)
   case $status in
     behind | identical) ;;
     *) refuse "refused: $sha is not on main (compare status: ${status:-unknown})" ;;
+  esac
+}
+
+# Prod only (#3157): a release moves production forward. A SHA that does not descend
+# from the one production runs is a downgrade — a rollback, which goes through
+# `pnpm deploy:prod --rollback` and its migration floor, never through a release.
+# The live SHA is the running api container's image tag `ds-api:<sha>`, the same read
+# as prod.mjs's previous-SHA step; compare <live>...<sha> must be `ahead` or
+# `identical` (a re-run). An unknown live SHA (no running api: a fresh box) refuses —
+# that release stays on the workstation path.
+LIVE_IMAGE_RE='^ds-api:([0-9a-f]{7,40})$'
+live_prod_sha() {
+  local image
+  image=$(sudo docker inspect ds-api-prod-api-1 --format '{{.Config.Image}}' 2>/dev/null |
+    tr -d '[:space:]' || true)
+  if [[ $image =~ $LIVE_IMAGE_RE ]]; then printf '%s' "${BASH_REMATCH[1]}"; fi
+}
+
+check_descends_from_live() {
+  local sha=$1 live status
+  live=$(live_prod_sha)
+  [[ -n $live ]] ||
+    refuse "refused: the live prod SHA is unknown (no running ds-api-prod-api-1) — release it from the workstation path"
+  status=$(compare_status "$live" "$sha") || status=
+  case $status in
+    ahead | identical) ;;
+    *) refuse "refused: $sha does not descend from the live prod SHA ${live:0:12} — a downgrade is a rollback (pnpm deploy:prod --rollback)" ;;
   esac
 }
 
@@ -309,6 +342,7 @@ cmd_release() {
   fi
   command -v curl >/dev/null || fail "curl is not installed"
   check_on_main "$sha"
+  [[ $env != prod ]] || check_descends_from_live "$sha"
   check_registry_digests "$sha" "$manifest"
 
   # One driver call per env at a time: two triggers of one SHA must not both start it.

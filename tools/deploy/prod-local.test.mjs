@@ -18,7 +18,9 @@ import { dirname, join } from "node:path";
 import {
   DEPLOY_PLAN,
   OPERATOR_ONLY_STEPS,
+  compareStatus,
   deployPlan,
+  descendsFromLiveVerdict,
   localProdHosts,
   parseLocalFlags,
   planWalker,
@@ -269,5 +271,90 @@ test("3157: the PostgreSQL target reads the same from the extracted tree as from
   assert.throws(
     () => readPostgresTargetFromTree(SHA, join(tmpdir(), "ds-no-such-tree")),
     /cannot read the target source tree/,
+  );
+});
+
+test("3157: a box-local release refuses a SHA that does not descend from the live prod SHA", () => {
+  const live = "c".repeat(40);
+  for (const status of ["ahead", "identical"]) {
+    assert.deepEqual(
+      descendsFromLiveVerdict({ live, sha: SHA, status }),
+      { ok: true },
+      status,
+    );
+  }
+  const downgrade = `${SHA} does not descend from the live prod SHA ${live.slice(0, 12)} — a downgrade is a rollback (pnpm deploy:prod --rollback)`;
+  for (const status of ["behind", "diverged", null, "", "weird"]) {
+    assert.deepEqual(
+      descendsFromLiveVerdict({ live, sha: SHA, status }),
+      { ok: false, reason: downgrade },
+      String(status),
+    );
+  }
+  assert.deepEqual(
+    descendsFromLiveVerdict({ live: null, sha: SHA, status: "ahead" }),
+    {
+      ok: false,
+      reason:
+        "the live prod SHA is unknown (no running ds-api-prod-api-1) — release it from the workstation path",
+    },
+  );
+});
+
+test("3157: the descent is GitHub's compare <live>...<sha>, unauthenticated, failing closed", async () => {
+  const live = "c".repeat(40);
+  const calls = [];
+  const answer = (response) => async (url, init) => {
+    calls.push({ url, init });
+    if (response instanceof Error) throw response;
+    return response;
+  };
+  const json = (status, body) => ({
+    ok: status === 200,
+    status,
+    json: async () => body,
+  });
+  assert.equal(
+    await compareStatus(live, SHA, {
+      fetchImpl: answer(json(200, { status: "ahead" })),
+    }),
+    "ahead",
+  );
+  assert.equal(
+    calls[0].url,
+    `https://api.github.com/repos/doctor-school/ds-platform/compare/${live}...${SHA}`,
+  );
+  assert.equal(calls[0].init.headers.Authorization, undefined, "no token");
+  assert.equal(
+    await compareStatus(live, SHA, { fetchImpl: answer(json(404, {})) }),
+    null,
+  );
+  assert.equal(
+    await compareStatus(live, SHA, { fetchImpl: answer(json(200, [])) }),
+    null,
+  );
+  assert.equal(
+    await compareStatus(live, SHA, { fetchImpl: answer(new Error("offline")) }),
+    null,
+  );
+});
+
+test("3157: the --local run checks the descent right after its previous-SHA read, before it records or ships", () => {
+  const previous = deployBody.slice(
+    deployBody.indexOf('walk.phase("previous-sha")'),
+  );
+  const phase = previous.slice(0, previous.indexOf('walk.phase("ship")'));
+  const guard = phase.search(
+    /descendsFromLiveVerdict\(\{\s*live: prevSha,\s*sha,/,
+  );
+  const read = phase.indexOf("docker inspect ds-api-prod-api-1");
+  const record = phase.indexOf("recordPreviousShaScript(sha, prevSha)");
+  assert.ok(
+    read > 0 && read < guard && guard < record,
+    "read → guard → record",
+  );
+  assert.match(
+    phase.slice(guard),
+    /if \(!descent\.ok\) die\(descent\.reason\);/,
   );
 });

@@ -339,6 +339,11 @@ stay on the operator path above.
   data-prod is `deploy@<data-prod VPC IP>` (`DS_DATA_PROD_VPC_IP`, default `192.168.0.10`)
   with `-i /etc/ds-platform/data-prod-ssh-key`, `IdentitiesOnly`, `BatchMode` and
   `StrictHostKeyChecking=yes` (`hopDestination`) — the hop the operator's ProxyJump takes.
+- **No downgrade.** The driver (before it starts the unit) and the run itself (right
+  after its previous-SHA read) refuse a SHA that does not descend from the live prod SHA,
+  the running `ds-api:<sha>` tag: GitHub `compare <live>...<sha>` must answer `ahead` or
+  `identical`. A downgrade is a rollback (`--rollback` and its migration floor); an
+  unknown live SHA (no running api) releases from the workstation path.
 - **The target from the tree.** The service set, the IdP expectations and the PostgreSQL
   target are read from the extracted tree instead of `git show` (codeload honours
   `export-ignore` as `git archive` does), and the ship tars that tree to both boxes.

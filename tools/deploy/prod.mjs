@@ -363,6 +363,48 @@ export function recordPreviousShaScript(sha, prevSha) {
   return `${RELEASE_DRIVER_BIN} record-previous prod ${sha} ${prevSha ?? "none"}\n`;
 }
 
+// A release moves production forward: a SHA that does not descend from the live one
+// is a downgrade — a rollback, which goes through `--rollback` and its migration floor
+// (`assertRollbackAllowed`), never through a release. The release driver refuses it
+// before it starts the unit; the unit refuses it again, so a direct `--local` run
+// cannot skip the check (spec §5 «Prod release driver»).
+const GITHUB_COMPARE_API = "https://api.github.com/repos/doctor-school/ds-platform/compare";
+
+/** GitHub's unauthenticated `compare <base>...<head>` status, or null when it cannot answer. */
+export async function compareStatus(base, head, { fetchImpl = fetch } = {}) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 30_000);
+  try {
+    const response = await fetchImpl(`${GITHUB_COMPARE_API}/${base}...${head}`, {
+      headers: { Accept: "application/vnd.github+json" },
+      signal: ac.signal,
+    });
+    if (!response.ok) return null;
+    const body = await response.json();
+    return body && !Array.isArray(body) && typeof body.status === "string" ? body.status : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Pure: may a release of `sha` replace the live prod SHA `live`? (compare `ahead`/`identical`) */
+export function descendsFromLiveVerdict({ live, sha, status }) {
+  if (!live) {
+    return {
+      ok: false,
+      reason:
+        "the live prod SHA is unknown (no running ds-api-prod-api-1) — release it from the workstation path",
+    };
+  }
+  if (status === "ahead" || status === "identical") return { ok: true };
+  return {
+    ok: false,
+    reason: `${sha} does not descend from the live prod SHA ${live.slice(0, 12)} — a downgrade is a rollback (pnpm deploy:prod --rollback)`,
+  };
+}
+
 /**
  * Every repo the box holds SHA-tagged images of — the retention set. NOT
  * target-derived on purpose (#1896): retention must reclaim tags of every repo
@@ -1526,8 +1568,15 @@ async function deploy(hotfixRef = null, local = null) {
       `  ⚠ could not read the previous prod SHA (${e.message}) — release-notes range disabled for this deploy.`,
     );
   }
-  // #3157: the runner cuts the release from `status prod <sha>`, without box access.
+  // #3157: the box-local run refuses a downgrade, then records the release-notes
+  // basis — the runner cuts the release from `status prod <sha>`, without box access.
   if (local) {
+    const descent = descendsFromLiveVerdict({
+      live: prevSha,
+      sha,
+      status: prevSha ? await compareStatus(prevSha, sha) : null,
+    });
+    if (!descent.ok) die(descent.reason);
     try {
       await sshScript(API_PROD, recordPreviousShaScript(sha, prevSha), {
         label: "record the previous SHA",

@@ -21,8 +21,10 @@
 #       to the ds-release status line as `driver`.
 #   release-driver _run <env> <sha>   (the unit's own process, as the deploy user)
 #       Downloads the codeload tarball of exactly <sha>, extracts it and runs
-#         node <tree>/tools/staging/slot.mjs up main --ref <sha> --local --images-file /dev/stdin
+#         node <tree>/tools/staging/slot.mjs up main --ref <sha> --local --images-file -
 #       — the operator's converge, step for step, through the box-local executor.
+#       `-` reads the inherited fd 0: the manifest is root-only and the unit runs as
+#       deploy, so re-opening it as /dev/stdin (via /proc/self/fd/0) is EACCES.
 #
 # The unit survives the client (systemd-run, KillMode=mixed, --remain-after-exit
 # keeps its exit status for `unit-state`); its whole log stays in its journal and
@@ -337,7 +339,7 @@ cmd_run() {
   curl -fsSL --proto '=https' --retry 3 --max-time 600 -o "$work/tree.tar.gz" "$CODELOAD/$sha"
   tar xzf "$work/tree.tar.gz" --strip-components=1 -C "$work/tree"
   set +e
-  "$NODE" "$work/tree/tools/staging/slot.mjs" up main --ref "$sha" --local --images-file /dev/stdin
+  "$NODE" "$work/tree/tools/staging/slot.mjs" up main --ref "$sha" --local --images-file -
   local rc=$?
   set -e
   exit "$rc"

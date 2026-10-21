@@ -29,12 +29,12 @@ const IMAGES = Object.freeze({
 const SUBJECTS = Object.fromEntries(GOLDEN_SUBJECT_ENV_VARS.map((name, i) => [name, `sub-${i + 1}`]));
 
 test("2985: `--local --images-file` parses for `up main` only, and only as a pair", () => {
-  assert.deepEqual(parseArgs(["up", "main", "--ref", SHA, "--local", "--images-file", "/dev/stdin"]), {
+  assert.deepEqual(parseArgs(["up", "main", "--ref", SHA, "--local", "--images-file", "-"]), {
     command: "up",
     slot: "main",
     sha: SHA,
     local: true,
-    imagesFile: "/dev/stdin",
+    imagesFile: "-",
   });
   assert.deepEqual(parseArgs(["up", "main", "--local", "--images-file", "m.json", "--ref", SHA, "--retry-failed"]), {
     command: "up",
@@ -91,7 +91,7 @@ async function plannedCalls(options) {
 test("2985: the local converge plans exactly the operator's steps, in order", async () => {
   const operator = await plannedCalls(parseArgs(["up", "main", "--ref", SHA]));
   const local = await plannedCalls(
-    parseArgs(["up", "main", "--ref", SHA, "--local", "--images-file", "/dev/stdin"]),
+    parseArgs(["up", "main", "--ref", SHA, "--local", "--images-file", "-"]),
   );
   assert.ok(operator.calls.length > 10, "a real plan ran");
   assert.ok(operator.calls.some(([kind]) => kind === "ship"));
@@ -123,6 +123,42 @@ test("2985: the stdin manifest is the images-<sha>.json of the SHA, validated st
   assert.throws(() => readWith(manifest({ extra: 1 })), /not exactly sha, ref, images/);
   assert.throws(() => readWith("not json"), SlotError);
   assert.throws(() => readWith("[]"), /not a JSON object/);
+});
+
+// #3114: the driver unit runs as `deploy` with the root-only manifest as its stdin.
+// Opening `/dev/stdin` re-opens that file through /proc/self/fd/0 and re-checks its
+// permissions (EACCES); `-` reads the already-open fd 0 and opens no path.
+test("3114: `--images-file -` reads the inherited fd 0, never a path", () => {
+  const sources = [];
+  const read = (path) =>
+    readImagesFile({
+      slot: "main",
+      sha: SHA,
+      path,
+      readText: (source) => {
+        sources.push(source);
+        return manifest();
+      },
+    });
+  assert.deepEqual(read("-"), { ref: "main", images: { ...IMAGES } });
+  assert.deepEqual(read("m.json"), { ref: "main", images: { ...IMAGES } });
+  assert.deepEqual(sources, [0, "m.json"]);
+  assert.throws(
+    () => readImagesFile({ slot: "main", sha: SHA, path: "-", readText: () => "not json" }),
+    /the image manifest on stdin is not readable JSON/,
+  );
+});
+
+test("3114: the default reader takes `-` from the process's real stdin", () => {
+  const script =
+    `import { readImagesFile } from ${JSON.stringify(new URL("./slot.mjs", import.meta.url).href)};` +
+    `process.stdout.write(JSON.stringify(readImagesFile({ slot: "main", sha: ${JSON.stringify(SHA)}, path: "-" })));`;
+  const run = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+    input: manifest(),
+    encoding: "utf8",
+  });
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(JSON.parse(run.stdout), { ref: "main", images: { ...IMAGES } });
 });
 
 test("2985: a local run ships the tree it runs from", () => {

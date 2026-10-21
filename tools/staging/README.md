@@ -382,12 +382,13 @@ for real). `down` drops the slot's verdicts (`ds-release forget`) as its first s
 refused while a step unit still runs, before anything is torn down — and `reset main`
 drops them before the re-cloned database is migrated again. Spec: `apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md` §5.
 
-`up main --ref <sha> --local --images-file <path>` is the same converge run **on the box**
+`up main --ref <sha> --local --images-file <path|->` is the same converge run **on the box**
 by its release driver (`infra/deploy/bin/release-driver`, #2985), from the codeload tarball
 of exactly that SHA: every ssh script, capture and ship goes through a local `bash -c`
 instead of `ssh` (same stdin, quoting and watchdog — `LOCAL_EXECUTOR` in
 `tools/deploy/lib/remote.mjs`), the ship installs the tree the run came from as the slot
-tree, the digests come from the `images-<sha>.json` file (validated strictly; which
+tree, the digests come from the `images-<sha>.json` file (`-` reads it from the inherited stdin,
+fd 0, without opening a path — the driver's manifest is root-only; validated strictly; which
 `runtime-images.yml` run it came from is the caller's check) instead of `gh`, and the
 health check reads the basic-auth plaintext from `/etc/ds-platform/stage-basic-auth.txt`.
 The plan and its steps are the operator's, which `slot-local.test.mjs` pins. Only `up main`

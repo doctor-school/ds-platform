@@ -856,7 +856,7 @@ describe("2985: release-driver", { skip: SKIP }, () => {
         SHA,
         "--local",
         "--images-file",
-        "/dev/stdin",
+        "-",
       ]);
       assert.equal(
         log("node.saw-tree"),

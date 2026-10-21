@@ -655,6 +655,16 @@ describe("#2808: auth, server endpoints and server actions are Ask paths", () =>
 });
 
 describe("#2819: CI runner scripts under e2e/ are not test paths", () => {
+  it("EARS-1: default auth-limit selection is Ask, not a test-only exemption", () => {
+    const path = "packages/e2e/lib/default-auth-limits.ts";
+    const result = classifyChangeTier([mod(path)]);
+    expect(isTestPath(path)).toBe(false);
+    expect(isNonRuntimePath(path)).toBe(false);
+    expect(result.minimum).toBe("ask");
+    expect(result.testOnly ?? false).toBe(false);
+    expect(resolveTier(SHIP, [mod(path)]).effective).toBeNull();
+  });
+
   it("EARS-1: a PR changing only an e2e runner script is neither test-only nor ship", () => {
     for (const path of [
       "apps/doctor/e2e/run-ci-tiers.mjs",

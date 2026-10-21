@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import { Logger, Module } from "@nestjs/common";
 import { Redis } from "ioredis";
 import { AuthModule } from "../auth/auth.module.js";
+import { SessionModule } from "../auth/session/session.module.js";
+import { StorefrontModule } from "../storefront/storefront.module.js";
 import { loadEnv } from "../config/env.schema.js";
 import {
   resolveSignInHostSettings,
@@ -17,6 +19,7 @@ import {
 import { SignInHostRecordPurge } from "./sign-in-host-record.purge.js";
 import { SignInHostRecordStore } from "./sign-in-host-record.store.js";
 import { SignInHostService } from "./sign-in-host.service.js";
+import { SignInHostSubjectRevocation } from "./sign-in-host-subject-revocation.js";
 import {
   InMemorySignInHostStateStore,
   RedisSignInHostStateStore,
@@ -42,7 +45,10 @@ import {
  * the form state and intents when `REDIS_URL` is set, memory otherwise.
  */
 @Module({
-  imports: [AuthModule],
+  // SessionModule: the one subject-revocation hook the records join;
+  // StorefrontModule: the doctor storefront's register / verify command the
+  // host's doctor registration door runs (003 EARS-24 amended).
+  imports: [AuthModule, SessionModule, StorefrontModule],
   controllers: [SignInHostController],
   providers: [
     {
@@ -104,6 +110,7 @@ import {
     SignInHostRecordStore,
     SignInHostService,
     SignInHostRecordPurge,
+    SignInHostSubjectRevocation,
   ],
   exports: [SIGN_IN_HOST_STATE_STORE],
 })

@@ -1,5 +1,7 @@
 import { createZodDto } from "nestjs-zod";
 import {
+  SignInHostDoctorRegisterRequestSchema,
+  SignInHostDoctorVerifyRequestSchema,
   SignInHostEntryQuerySchema,
   SignInHostHandoffRequestSchema,
   SignInHostOtpRequestSchema,
@@ -7,6 +9,7 @@ import {
   SignInHostPasswordRequestSchema,
   SignInHostPasswordResetCompleteRequestSchema,
   SignInHostPasswordResetRequestSchema,
+  SignInHostRegisterRequestSchema,
   SignInHostVerifyRequestSchema,
 } from "@ds/schemas";
 
@@ -35,4 +38,13 @@ export class SignInHostPasswordResetRequestDto extends createZodDto(
 ) {}
 export class SignInHostPasswordResetCompleteRequestDto extends createZodDto(
   SignInHostPasswordResetCompleteRequestSchema,
+) {}
+export class SignInHostRegisterRequestDto extends createZodDto(
+  SignInHostRegisterRequestSchema,
+) {}
+export class SignInHostDoctorRegisterRequestDto extends createZodDto(
+  SignInHostDoctorRegisterRequestSchema,
+) {}
+export class SignInHostDoctorVerifyRequestDto extends createZodDto(
+  SignInHostDoctorVerifyRequestSchema,
 ) {}

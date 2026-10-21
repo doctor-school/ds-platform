@@ -16,6 +16,7 @@ import {
   type SessionRecord,
   type SessionStore,
 } from "./session.types.js";
+import { SubjectRevocationHub } from "./subject-revocation.js";
 
 /**
  * Outcome of a refresh attempt (EARS-9). `rotated` carries the (unchanged)
@@ -47,6 +48,8 @@ export class SessionService {
     @Inject(IDP_CLIENT) private readonly idp: IdpClient,
     @Inject(SESSION_STORE) private readonly store: SessionStore,
     @Inject(AUTH_AUDIT) private readonly audit: AuthAuditLog,
+    @Inject(SubjectRevocationHub)
+    private readonly revocations: SubjectRevocationHub = new SubjectRevocationHub(),
   ) {}
 
   /**
@@ -165,7 +168,7 @@ export class SessionService {
    * still records the event (the reset did complete).
    */
   async revokeAllForSub(sub: string): Promise<void> {
-    await this.store.deleteBySub(sub);
+    await this.revokeSubject(sub);
     await this.audit.record({ type: "PasswordResetCompleted", sub });
   }
 
@@ -175,6 +178,17 @@ export class SessionService {
    * row of that command is `auth.account.verified`, written by the caller.
    */
   async revokeAllBeforeVerification(sub: string): Promise<void> {
+    await this.revokeSubject(sub);
+  }
+
+  /**
+   * The one «every session of `sub` ends» step both revocations above share:
+   * the storefront session store, then every other holder registered on the
+   * {@link SubjectRevocationHub} (the sign-in host's records, 003 EARS-64), so
+   * no path can revoke one and leave the other live.
+   */
+  private async revokeSubject(sub: string): Promise<void> {
     await this.store.deleteBySub(sub);
+    await this.revocations.revoke(sub);
   }
 }

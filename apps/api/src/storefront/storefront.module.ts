@@ -110,6 +110,9 @@ import { TargetingService } from "./targeting.service.js";
   // THIS membership mechanism and THIS remembered choice rather than re-deriving
   // either one.
   exports: [
+    // The sign-in host's doctor registration door (003 EARS-24 amended) runs
+    // this very command and code step, never a copy.
+    DoctorRegisterService,
     SpecialtiesService,
     SpecialtyChoiceService,
     StatisticsService,

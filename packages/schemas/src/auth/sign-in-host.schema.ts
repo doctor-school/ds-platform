@@ -5,8 +5,13 @@ import {
   OtpVerifySchema,
   PasswordResetCompleteRequestSchema,
   PasswordResetRequestSchema,
+  RegisterRequestSchema,
   VerifyRequestSchema,
 } from "./auth.schema.js";
+import {
+  DoctorRegisterRequestSchema,
+  DoctorVerifyRequestSchema,
+} from "../storefront/doctor-register.schema.js";
 
 /**
  * 003 EARS-5 (amended) / 60 / 64 / 66 / 67 / 68 / 69 / 70 / 71, ADR-0015 §4 — the
@@ -101,6 +106,31 @@ export const SignInHostVerifyRequestSchema =
   VerifyRequestSchema.extend(FormPostFields);
 export type SignInHostVerifyRequest = z.infer<
   typeof SignInHostVerifyRequestSchema
+>;
+
+/**
+ * EARS-24 (amended) — the registration door on the sign-in host, one per
+ * originating storefront: each is that storefront's own register / verify body
+ * (its field set, consents and their version) plus the form-post fields, and
+ * the API refuses a body whose route does not match the storefront the form
+ * state recorded (the `client_id` chose it, never the browser).
+ */
+export const SignInHostRegisterRequestSchema =
+  RegisterRequestSchema.extend(FormPostFields);
+export type SignInHostRegisterRequest = z.infer<
+  typeof SignInHostRegisterRequestSchema
+>;
+
+export const SignInHostDoctorRegisterRequestSchema =
+  DoctorRegisterRequestSchema.extend(FormPostFields);
+export type SignInHostDoctorRegisterRequest = z.infer<
+  typeof SignInHostDoctorRegisterRequestSchema
+>;
+
+export const SignInHostDoctorVerifyRequestSchema =
+  DoctorVerifyRequestSchema.extend(FormPostFields);
+export type SignInHostDoctorVerifyRequest = z.infer<
+  typeof SignInHostDoctorVerifyRequestSchema
 >;
 
 export const SignInHostPasswordResetRequestSchema =

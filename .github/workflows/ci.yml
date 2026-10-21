@@ -378,6 +378,13 @@ jobs:
       # resolve on a runner, so the URLs are declared here, not defaulted.
       MAILPIT_URL: http://localhost:8025
       SMS_SINK_URL: http://localhost:8090
+      # The sign-in host's API block (003 EARS-60/64, ADR-0015 §4). The two
+      # storefront client ids come from provision.sh below; these are the
+      # dev-stand ports and a CI-only record key (no data outlives the job).
+      IDP_SIGN_IN_BASE_URI: http://localhost:3005
+      SIGN_IN_ACADEMY_LOGIN_URL: http://localhost:3001/login
+      SIGN_IN_DOCTOR_LOGIN_URL: http://localhost:3004/login
+      SIGN_IN_RECORD_KEY: Y2ktb25seS1zaWduLWluLXJlY29yZC1rZXktMzJieXQ=
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
@@ -543,7 +550,7 @@ jobs:
           fi
           client_secret="$(grep -E '^IDP_CLIENT_SECRET=' ./idp-provision.out | cut -d= -f2- || true)"
           if [ -n "$client_secret" ]; then echo "::add-mask::$client_secret"; fi
-          grep -E '^IDP_(PROJECT_ID|CLIENT_ID|CLIENT_SECRET)=' ./idp-provision.out >> "$GITHUB_ENV"
+          grep -E '^IDP_(PROJECT_ID|CLIENT_ID|CLIENT_SECRET|ACADEMY_CLIENT_ID|DOCTOR_CLIENT_ID)=' ./idp-provision.out >> "$GITHUB_ENV"
 
       # 003 EARS-3 expired-code proof (#2764): THIS throw-away IdP carries a
       # short email-verification code lifetime so

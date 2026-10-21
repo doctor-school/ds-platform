@@ -9,6 +9,7 @@ import { RedisSessionStore } from "./session-store.redis.js";
 import { AUTH_AUDIT } from "./auth-audit.types.js";
 import { DrizzleAuthAuditLog } from "./auth-audit.ledger.js";
 import { SessionService } from "./session.service.js";
+import { SubjectRevocationHub } from "./subject-revocation.js";
 import { SessionAuthHook } from "./session-auth.hook.js";
 
 /**
@@ -53,6 +54,7 @@ import { SessionAuthHook } from "./session-auth.hook.js";
       },
     },
     SessionService,
+    SubjectRevocationHub,
     SessionAuthHook,
     UserMirrorService,
     MirrorSelfHealService,
@@ -66,6 +68,7 @@ import { SessionAuthHook } from "./session-auth.hook.js";
   // second healer.
   exports: [
     SessionService,
+    SubjectRevocationHub,
     AUTH_AUDIT,
     UserMirrorService,
     MirrorSelfHealService,

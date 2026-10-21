@@ -45,6 +45,9 @@ export const signInHostRecords = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   },
   (table) => [
+    // Revoking every session of a subject (reset, first verification) ends
+    // that subject's records by this index (003 EARS-12 / EARS-41).
+    index("sign_in_host_records_subject_idx").on(table.subject),
     index("sign_in_host_records_expires_at_idx").on(table.expiresAt),
     index("sign_in_host_records_last_finalised_at_idx").on(
       table.lastFinalisedAt,

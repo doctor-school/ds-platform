@@ -39,13 +39,29 @@ export interface FormState {
 }
 
 export interface SignInHostStateStore {
-  putForm(cookieId: string, state: FormState, ttlSeconds: number): Promise<void>;
+  putForm(
+    cookieId: string,
+    state: FormState,
+    ttlSeconds: number,
+  ): Promise<void>;
   getForm(cookieId: string): Promise<FormState | null>;
   deleteForm(cookieId: string): Promise<void>;
   /** Store an intent for `ttlSeconds`; returns its fresh opaque id (32 random bytes). */
   putIntent(intent: EntryIntent, ttlSeconds: number): Promise<string>;
   /** Read and delete in one step: a second read of the same id is `null`. */
   takeIntent(id: string): Promise<EntryIntent | null>;
+  /**
+   * 003 EARS-12 / EARS-41 defence in depth — the moment every session of
+   * `subject` was last revoked, kept for as long as any record can live; a
+   * record whose credential step precedes it is refused even if its row
+   * survived the delete (a concurrent write that raced the revocation).
+   */
+  markSubjectRevoked(
+    subject: string,
+    at: Date,
+    ttlSeconds: number,
+  ): Promise<void>;
+  subjectRevokedAt(subject: string): Promise<Date | null>;
 }
 
 /** A fresh opaque id: 32 random bytes, base64url (≥128 random bits). */
@@ -55,6 +71,13 @@ export function newOpaqueId(): string {
 
 const FORM_PREFIX = "sign-in-host:form:";
 const INTENT_PREFIX = "sign-in-host:intent:";
+const REVOKED_PREFIX = "sign-in-host:revoked:";
+
+function parseInstant(raw: string | null): Date | null {
+  if (raw === null) return null;
+  const ms = Number(raw);
+  return Number.isFinite(ms) ? new Date(ms) : null;
+}
 const hashed = (prefix: string, id: string): string =>
   `${prefix}${createHash("sha256").update(id).digest("hex")}`;
 
@@ -138,11 +161,7 @@ export interface StateRedisLike {
   set(key: string, value: string, mode: "EX", ttl: number): Promise<unknown>;
   get(key: string): Promise<string | null>;
   del(key: string): Promise<unknown>;
-  eval(
-    script: string,
-    numKeys: number,
-    ...args: string[]
-  ): Promise<unknown>;
+  eval(script: string, numKeys: number, ...args: string[]): Promise<unknown>;
 }
 
 const TAKE_SCRIPT =
@@ -195,12 +214,28 @@ export class RedisSignInHostStateStore implements SignInHostStateStore {
       return null;
     }
   }
+
+  async markSubjectRevoked(subject: string, at: Date, ttlSeconds: number) {
+    await this.redis.set(
+      hashed(REVOKED_PREFIX, subject),
+      String(at.getTime()),
+      "EX",
+      ttlSeconds,
+    );
+  }
+
+  async subjectRevokedAt(subject: string): Promise<Date | null> {
+    return parseInstant(await this.redis.get(hashed(REVOKED_PREFIX, subject)));
+  }
 }
 
 /** In-memory binding (dev-stand without Redis, CI, unit specs); same contract. */
 export class InMemorySignInHostStateStore implements SignInHostStateStore {
   private readonly codec: StateCodec;
-  private readonly entries = new Map<string, { value: string; until: number }>();
+  private readonly entries = new Map<
+    string,
+    { value: string; until: number }
+  >();
 
   constructor(
     key: Buffer,
@@ -243,7 +278,11 @@ export class InMemorySignInHostStateStore implements SignInHostStateStore {
   putIntent(intent: EntryIntent, ttlSeconds: number): Promise<string> {
     const id = newOpaqueId();
     const k = hashed(INTENT_PREFIX, id);
-    this.write(k, JSON.stringify(this.codec.encodeIntent(intent, k)), ttlSeconds);
+    this.write(
+      k,
+      JSON.stringify(this.codec.encodeIntent(intent, k)),
+      ttlSeconds,
+    );
     return Promise.resolve(id);
   }
 
@@ -259,6 +298,21 @@ export class InMemorySignInHostStateStore implements SignInHostStateStore {
     } catch {
       return Promise.resolve(null);
     }
+  }
+
+  markSubjectRevoked(subject: string, at: Date, ttlSeconds: number) {
+    this.write(
+      hashed(REVOKED_PREFIX, subject),
+      String(at.getTime()),
+      ttlSeconds,
+    );
+    return Promise.resolve();
+  }
+
+  subjectRevokedAt(subject: string): Promise<Date | null> {
+    return Promise.resolve(
+      parseInstant(this.read(hashed(REVOKED_PREFIX, subject))),
+    );
   }
 
   /** Test seam: every stored value, to prove no plain reference is kept. */

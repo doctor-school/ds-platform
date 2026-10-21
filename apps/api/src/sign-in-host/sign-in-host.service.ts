@@ -13,7 +13,12 @@ import type {
   SignInHostEntryResponse,
   SignInHostStorefront,
 } from "@ds/schemas";
-import { IDP_CLIENT, type IdpClient, type IdpSession } from "../auth/idp/idp.types.js";
+import { AuthService } from "../auth/auth.service.js";
+import {
+  IDP_CLIENT,
+  type IdpClient,
+  type IdpSession,
+} from "../auth/idp/idp.types.js";
 import {
   clearRecordCookie,
   FORM_STATE_TTL_SECONDS,
@@ -94,6 +99,7 @@ export class SignInHostService {
     @Inject(SIGN_IN_HOST_CLOCK) private readonly clock: SignInHostClock,
     @Inject(SignInHostRecordStore)
     private readonly records: SignInHostRecordStore,
+    @Inject(AuthService) private readonly auth: AuthService,
   ) {}
 
   /** The module is disabled until every sign-in-host key is set: 404, as if the route did not exist. */
@@ -164,21 +170,31 @@ export class SignInHostService {
     );
 
     const door: SignInHostDoor =
-      intent?.door ?? (request.prompt.includes("create") ? "register" : "login");
-    // A form-only entry — registration, reset, or a hand-off whose reference
-    // must never ride someone else's live record (lead decision 2) — and the
-    // EARS-68 fresh-credential asks all render the form even with a record.
-    const formOnly = door !== "login" || Boolean(intent?.handoff);
-    if (
-      live &&
-      !formOnly &&
+      intent?.door ??
+      (request.prompt.includes("create") ? "register" : "login");
+    // A form-only entry — registration, reset — and the EARS-68
+    // fresh-credential asks all render the form even with a record.
+    const recordMayAnswer =
+      live !== null &&
+      door === "login" &&
       !freshCredentialAsked({
         prompt: request.prompt,
         maxAgeSeconds: request.maxAgeSeconds,
         lastCredentialAt: live.record.lastCredentialAt,
         now,
-      })
-    ) {
+      }) &&
+      // EARS-44 (amended), design lead decisions (2)/(3): a hand-off intent
+      // uses the live record only when its LIVE reference names the record's
+      // own account — a read-only peek (the `/own` logic against the record's
+      // subject: nothing redeemed, no code sent). A refused or foreign
+      // reference never rides the record, whosever it is: the form renders
+      // and an accepted code replaces the record.
+      (!intent?.handoff ||
+        (await this.auth.isOwnLoginHandoff(
+          intent.handoff,
+          live.record.session.sub,
+        )));
+    if (live && recordMayAnswer) {
       // EARS-64: a live record answers at once, without a form.
       const url = await this.hostIdp.finaliseWithSession(
         request.id,
@@ -248,7 +264,10 @@ export class SignInHostService {
     const settings = this.enabled();
     if (input.origin !== settings.hostOrigin)
       throw new ForbiddenException(FORM_REFUSED);
-    if (input.secFetchSite !== undefined && input.secFetchSite !== "same-origin")
+    if (
+      input.secFetchSite !== undefined &&
+      input.secFetchSite !== "same-origin"
+    )
       throw new ForbiddenException(FORM_REFUSED);
     if (!input.formCookieId) throw new ForbiddenException(FORM_REFUSED);
     const state = await this.state.getForm(input.formCookieId);
@@ -260,6 +279,17 @@ export class SignInHostService {
       throw new ForbiddenException(FORM_REFUSED);
     }
     return { state, formCookieId: input.formCookieId };
+  }
+
+  /**
+   * EARS-24 (amended) — a registration-door post is honoured only on the route
+   * of the storefront the form state recorded (chosen by the auth request's
+   * `client_id`, never by the browser), so each storefront's own field set,
+   * consents and consent versions are the ones stamped.
+   */
+  assertStorefront(form: CheckedForm, storefront: SignInHostStorefront): void {
+    if (form.state.storefront !== storefront)
+      throw new ForbiddenException(FORM_REFUSED);
   }
 
   /** The hand-off reference the form's spent intent carried (EARS-44 on the host), if any. */
@@ -285,6 +315,13 @@ export class SignInHostService {
   ): (session: IdpSession) => Promise<StepOutcome> {
     const settings = this.enabled();
     return async (checked) => {
+      // The ONE place the Zitadel session's lifetime is set: right after the
+      // credential check, before the session reaches the record. Nothing later
+      // on this session sets it again — a live record finalises authorizes
+      // with `finaliseWithSession`, which carries no lifetime, and moves only
+      // `lastFinalisedAt` (the idle clock), never `expiresAt` — so neither the
+      // Zitadel session nor the record outlives 30 days from this step
+      // (ADR-0015 §4; proven by the sign-in-host e2e «second use» case).
       const session = await this.hostIdp.setSessionLifetime(
         checked,
         SIGN_IN_HOST_SESSION_LIFETIME_SECONDS,
@@ -348,6 +385,14 @@ export class SignInHostService {
     if (recordVerdict(record, now, fingerprint) !== "usable") {
       // EARS-64: foreign fingerprint or expired — deleted, its Zitadel session
       // terminated, the browser treated as signed out.
+      await this.drop(cookieId, record.session, setCookies);
+      return null;
+    }
+    // EARS-12 / EARS-41: every session of the subject was revoked after this
+    // record's credential step — a row that survived the revocation's delete
+    // (a concurrent write) is signed out all the same.
+    const revokedAt = await this.state.subjectRevokedAt(record.session.sub);
+    if (revokedAt && record.lastCredentialAt.getTime() < revokedAt.getTime()) {
       await this.drop(cookieId, record.session, setCookies);
       return null;
     }

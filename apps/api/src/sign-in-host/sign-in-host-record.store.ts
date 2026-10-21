@@ -97,13 +97,38 @@ export class SignInHostRecordStore {
   }
 
   /**
+   * Every record of `subject`, deleted; returns their sessions to terminate
+   * (003 EARS-12 / EARS-41 — every session of the subject ends).
+   */
+  async deleteBySubject(subject: string): Promise<IdpSession[]> {
+    const rows = await this.db
+      .delete(signInHostRecords) // retained-data-ok: ephemeral sign-in-host session state (EARS-64), ended with every session of its subject on reset / first verification
+      .where(eq(signInHostRecords.subject, subject))
+      .returning();
+    const sessions: IdpSession[] = [];
+    for (const row of rows) {
+      const id = openAtRest(row.zitadelSessionId, this.key, row.cookieIdHash);
+      const token = openAtRest(row.sessionToken, this.key, row.cookieIdHash);
+      if (id !== null && token !== null)
+        sessions.push({
+          zitadelSessionId: id,
+          sessionToken: token,
+          sub: row.subject,
+        });
+    }
+    return sessions;
+  }
+
+  /**
    * The retention purge: every row past its 30-day end or 7-day idle,
    * decrypted so its Zitadel session can be terminated, then deleted.
    * Returns the sessions to terminate (an envelope that no longer opens has
    * nothing to terminate and is deleted all the same).
    */
   async purgeExpired(now: Date, limit = 500): Promise<IdpSession[]> {
-    const idleBefore = new Date(now.getTime() - SIGN_IN_HOST_IDLE_SECONDS * 1000);
+    const idleBefore = new Date(
+      now.getTime() - SIGN_IN_HOST_IDLE_SECONDS * 1000,
+    );
     const rows = await this.db
       .select()
       .from(signInHostRecords)
@@ -119,7 +144,11 @@ export class SignInHostRecordStore {
       const id = openAtRest(row.zitadelSessionId, this.key, row.cookieIdHash);
       const token = openAtRest(row.sessionToken, this.key, row.cookieIdHash);
       if (id !== null && token !== null) {
-        sessions.push({ zitadelSessionId: id, sessionToken: token, sub: row.subject });
+        sessions.push({
+          zitadelSessionId: id,
+          sessionToken: token,
+          sub: row.subject,
+        });
       }
       await this.db
         .delete(signInHostRecords) // retained-data-ok: retention purge of expired / idle ephemeral session state (EARS-64)

@@ -14,9 +14,11 @@ import {
 } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 import type {
+  DoctorRegisterResponse,
   LoginHandoffResponse,
   OtpRequestResponse,
   PasswordResetResponse,
+  RegisterResponse,
   SignInHostEntryResponse,
   SignInHostStepResponse,
 } from "@ds/schemas";
@@ -38,11 +40,14 @@ import {
 } from "../auth/session/session.cookie.js";
 import { TimingEqualized } from "../auth/timing/index.js";
 import { readAuthVerifyTimingFloorMs } from "../auth/verify-timing.js";
+import { DoctorRegisterService } from "../storefront/doctor-register.service.js";
 import {
   FORM_COOKIE_NAME,
   RECORD_COOKIE_NAME,
 } from "./sign-in-host.cookies.js";
 import {
+  SignInHostDoctorRegisterRequestDto,
+  SignInHostDoctorVerifyRequestDto,
   SignInHostEntryQueryDto,
   SignInHostOtpRequestDto,
   SignInHostOtpVerifyDto,
@@ -50,6 +55,7 @@ import {
   SignInHostPasswordResetCompleteRequestDto,
   SignInHostPasswordResetRequestDto,
   SignInHostHandoffRequestDto,
+  SignInHostRegisterRequestDto,
   SignInHostVerifyRequestDto,
 } from "./sign-in-host.dto.js";
 import {
@@ -103,6 +109,7 @@ export class SignInHostController {
     private readonly auth: AuthService,
     private readonly loginChallenge: LoginChallengePolicy,
     private readonly rateLimit: RateLimitService,
+    private readonly doctorRegister: DoctorRegisterService,
   ) {}
 
   @Get("entry")
@@ -266,7 +273,101 @@ export class SignInHostController {
     return { status: "redirect", url: result.url };
   }
 
-  /** 003 EARS-3/41 — the registration code step on the host; `POST /v1/auth/verify`'s guards. */
+  /**
+   * EARS-24 (amended) — the Academy registration form on the host:
+   * `POST /v1/auth/register`'s command and guards (sending door, timing
+   * floor, captcha), the same enumeration-safe `pending_verification`. Mints
+   * nothing; the code step below is the credential step. Only on a form the
+   * Academy client opened.
+   */
+  @Post("register")
+  @Public()
+  @RateLimited({ door: "sending" })
+  @TimingEqualized()
+  @BotProtected("register")
+  @HttpCode(200)
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "high-stakes",
+    tests: ["EARS-24", "EARS-69", "EARS-70"],
+  })
+  async register(
+    @Body() dto: SignInHostRegisterRequestDto,
+    @Headers() headers: Record<string, string | undefined>,
+  ): Promise<RegisterResponse> {
+    const form = await this.checkForm(readHeaders(headers), dto);
+    this.host.assertStorefront(form, "academy");
+    const { authRequest: _a, csrf: _c, ...request } = dto;
+    return this.auth.register(request);
+  }
+
+  /**
+   * EARS-24 (amended) — the doctor registration form on the host:
+   * `POST /v1/storefront/doctor/register`'s command (the 021 access
+   * conditions, server-stamped consent versions) and guards. Only on a form
+   * the doctor client opened.
+   */
+  @Post("storefront/doctor/register")
+  @Public()
+  @RateLimited({ door: "sending" })
+  @TimingEqualized()
+  @BotProtected("register")
+  @HttpCode(200)
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "high-stakes",
+    tests: ["EARS-24", "EARS-69", "EARS-70"],
+  })
+  async registerDoctor(
+    @Body() dto: SignInHostDoctorRegisterRequestDto,
+    @Headers() headers: Record<string, string | undefined>,
+  ): Promise<DoctorRegisterResponse> {
+    const form = await this.checkForm(readHeaders(headers), dto);
+    this.host.assertStorefront(form, "doctor");
+    const { authRequest: _a, csrf: _c, ...request } = dto;
+    return this.doctorRegister.register(request);
+  }
+
+  /**
+   * EARS-24 / 41 on the host — the doctor form's code step:
+   * `POST /v1/storefront/doctor/verify`'s command and guards; the accepted
+   * code is the EARS-5 credential step. Only on a form the doctor client opened.
+   */
+  @Post("storefront/doctor/verify")
+  @Public()
+  @RateLimited()
+  @TimingEqualized()
+  @HttpCode(200)
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "high-stakes",
+    tests: ["EARS-5", "EARS-24", "EARS-64", "EARS-69", "EARS-70"],
+  })
+  async verifyDoctor(
+    @Body() dto: SignInHostDoctorVerifyRequestDto,
+    @Headers() headers: Record<string, string | undefined>,
+    @Ip() ip: string,
+    @ConsumedIpWindow() consumedIpWindow: number | undefined,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<SignInHostStepResponse> {
+    const h = readHeaders(headers);
+    const form = await this.checkForm(h, dto);
+    this.host.assertStorefront(form, "doctor");
+    const { authRequest: _a, csrf: _c, ...request } = dto;
+    const result = await this.doctorRegister.verifyStep(
+      request,
+      this.host.acceptInto(form, hostRequest(h, ip), RECORD_COOKIE_NAME),
+    );
+    this.rateLimit.reset({ ip, identifier: dto.email });
+    this.rateLimit.refundIpUnit(ip, consumedIpWindow);
+    setCookies(reply, result.setCookies);
+    return { status: "redirect", url: result.url };
+  }
+
+  /** 003 EARS-3/41 — the Academy registration code step on the host; `POST /v1/auth/verify`'s guards. */
   @Post("verify")
   @Public()
   @RateLimited()
@@ -287,6 +388,7 @@ export class SignInHostController {
   ): Promise<SignInHostStepResponse> {
     const h = readHeaders(headers);
     const form = await this.checkForm(h, dto);
+    this.host.assertStorefront(form, "academy");
     const result = await this.auth.verifyStep(
       {
         email: dto.email,

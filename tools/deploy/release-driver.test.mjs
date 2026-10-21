@@ -832,9 +832,10 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       assert.equal(previousOf(), PREVIOUS);
     });
 
-    it("rejects a bad previous SHA as usage", () => {
+    it("rejects a bad previous SHA as usage (a full 40-hex SHA or none, as release-runner's --previous-sha)", () => {
       for (const args of [
         ["record-previous", "prod", SHA, "xyz"],
+        ["record-previous", "prod", SHA, PREVIOUS.slice(0, 12)],
         ["record-previous", "prod", SHA],
         ["record-previous", "prod", "abc", PREVIOUS],
       ]) {

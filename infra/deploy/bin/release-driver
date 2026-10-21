@@ -68,8 +68,6 @@ MANIFEST_MAX_BYTES=65536
 ENV_RE='^(prod|stage-main|stage-pr-[1-9][0-9]*)$'
 SHA_RE='^[0-9a-f]{40}$'
 USER_RE='^[a-z_][a-z0-9_-]*$'
-# The previous SHA prod.mjs reads from the running ds-api image tag (7-40 hex).
-PREVIOUS_RE='^[0-9a-f]{7,40}$'
 # The recorded image set of tools/deploy/lib/registry.mjs (RECORDED_IMAGE_NAMES, the
 # release namespace of its digest reference, RELEASE_MANIFEST_REFS) — pinned equal by
 # the same test. slot.mjs validates the manifest again before it pulls anything.
@@ -136,7 +134,7 @@ unit_state() {
 previous_sha() {
   local value
   value=$(sudo cat "$MANIFEST_DIR/$1.previous" 2>/dev/null | tr -d '[:space:]' || true)
-  if [[ $value =~ $PREVIOUS_RE ]]; then printf '"%s"' "$value"; else printf 'null'; fi
+  if [[ $value =~ $SHA_RE ]]; then printf '"%s"' "$value"; else printf 'null'; fi
 }
 
 cmd_unit_state() {
@@ -152,7 +150,8 @@ cmd_record_previous() {
   [[ $# -eq 3 ]] || usage "usage: release-driver record-previous <env> <sha> <previous-sha|none>"
   check_args "$1" "$2"
   local sha=$2 previous=$3
-  [[ $previous == none || $previous =~ $PREVIOUS_RE ]] || usage "bad previous sha (want 7-40 hex or none)"
+  # A full SHA, as release-runner.mjs --previous-sha takes it from `status`.
+  [[ $previous == none || $previous =~ $SHA_RE ]] || usage "bad previous sha (want a full 40-hex sha or none)"
   # A re-run of <sha> after its swap reads <sha> as the running image: the basis
   # recorded first is the one the release notes range from.
   [[ $(previous_sha "$sha") == null ]] || return 0

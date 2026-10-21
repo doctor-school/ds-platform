@@ -196,8 +196,14 @@ public half on ds-data-prod restricted to ds-api-prod's VPC address
 sudo -u deploy ssh-keygen -t ed25519 -N '' -C ds-api-prod-hop -f /tmp/hop
 sudo install -m 0600 -o deploy -g deploy /tmp/hop /etc/ds-platform/data-prod-ssh-key
 cat /tmp/hop.pub; sudo rm -f /tmp/hop /tmp/hop.pub
-# pin data-prod's host key for deploy (the driver uses StrictHostKeyChecking=yes)
-sudo -u deploy sh -c 'ssh-keyscan -t ed25519 192.168.0.10 >> ~/.ssh/known_hosts'
+# pin data-prod's host key for deploy (the driver uses StrictHostKeyChecking=yes);
+# never trust on first use: the scanned fingerprint must equal the one read on data-prod
+ssh-keyscan -t ed25519 192.168.0.10 > /tmp/data-prod.hostkey
+ssh-keygen -lf /tmp/data-prod.hostkey   # compare with data-prod's own, below
+# on ds-data-prod (operator's ssh session):
+ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+# back on ds-api-prod, only when both fingerprints are equal:
+sudo -u deploy sh -c 'cat >> ~/.ssh/known_hosts' < /tmp/data-prod.hostkey; rm -f /tmp/data-prod.hostkey
 # on ds-data-prod: one line in ~deploy/.ssh/authorized_keys
 restrict,from="192.168.0.20" ssh-ed25519 AAAA… ds-api-prod-hop
 ```

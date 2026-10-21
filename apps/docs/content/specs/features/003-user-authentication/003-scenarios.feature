@@ -1248,6 +1248,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Retain the preceding three-surface keyboard outline and PasswordField unit
     # invariants; this case owns only the side-effect and hard-reload trigger.
 
+  @EARS-3 @EARS-8 @EARS-16 @EARS-41 @failure @verification-code-reuse
+  Scenario: Academy refuses a consumed registration code and preserves its verified owner
+    Given a uniquely registered Academy account accepts its actually delivered registration code once
+    When a cookie-free Academy guest submits that exact consumed registration code without requesting another challenge
+    Then the guest receives only the generic verification refusal without private access
+    And the original verified Academy owner retains its identity and secure session after reload
+    And the original registration password still opens that same verified Academy account
+    # Browser projection of 003 EARS-41 already-used-code refusal; native generic
+    # refusal/timing coverage and cold-verification password invalidation remain.
+
   @EARS-39 @EARS-41 @happy @cold-email-confirmation
   Scenario: A cold verification step still signs in by the code
     Given a uniquely registered Academy account awaits its fresh unconsumed confirmation code with the account return target

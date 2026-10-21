@@ -8,9 +8,16 @@ import {
 } from "@/lib/host-headers";
 import {
   SIGN_IN_HOST_ENTRY_HEADER,
+  SIGN_IN_HOST_UNAVAILABLE_HEADER,
   writeSignInHostHandOver,
+  type SignInHostUnavailable,
 } from "@ds/auth-flow/server";
-import { DOOR_ROUTES, doorFor, readEntry } from "@/lib/sign-in-entry";
+import {
+  DOOR_ROUTES,
+  doorFor,
+  EntryReadError,
+  readEntry,
+} from "@/lib/sign-in-entry";
 
 /**
  * The sign-in host's request gate (Next 16 proxy) — 003 EARS-60 / 66 / 67 /
@@ -22,6 +29,10 @@ import { DOOR_ROUTES, doorFor, readEntry } from "@/lib/sign-in-entry";
  *   `redirect` is a 303 to the API's URL; a `render` reaches the page as a
  *   request header (the page cannot set cookies — the API's form-state cookie
  *   rides THIS response).
+ * - An entry the API refuses or cannot answer keeps a truthful status — its
+ *   429 stays 429 (Retry-After forwarded), anything else is 503 — and the
+ *   `/login` mount renders the forms' own banner for it (no form, no
+ *   guessed redirect, never an empty page).
  * - Every other path is EARS-67's direct visit: the API's answer for a
  *   request naming no auth request (the doctor storefront `/login`), never a
  *   URL of this app's own.
@@ -53,13 +64,22 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   try {
     entry = await readEntry(request.headers, authRequest);
   } catch (error) {
-    // Fail closed: no form and no guessed destination. Logged, so a 503 is
-    // never a silent one (the API status or the transport failure).
+    // Fail closed: no form and no guessed destination. Logged, so the
+    // failure is never a silent one (the API status or the transport failure).
     console.error(
       "[sign-in-host] entry read failed:",
       error instanceof Error ? error.message : error,
     );
-    return harden(new NextResponse(null, { status: 503 }), csp);
+    const refused = error instanceof EntryReadError ? error : null;
+    return harden(
+      unavailable(
+        request,
+        csp,
+        refused?.status === 429 ? "rate-limited" : "unavailable",
+        refused?.retryAfter ?? null,
+      ),
+      csp,
+    );
   }
 
   if (entry.answer.action === "redirect" || !pathDoor) {
@@ -85,9 +105,33 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       render: entry.answer,
     }),
   );
+  forwarded.delete(SIGN_IN_HOST_UNAVAILABLE_HEADER);
   forwarded.set("content-security-policy", csp);
   const res = NextResponse.next({ request: { headers: forwarded } });
   return harden(withCookies(res, entry.setCookies), csp);
+}
+
+/**
+ * The unread entry's answer: a rewrite to the `/login` mount (every path,
+ * a direct visit included, has the one page that renders the banner) at the
+ * truthful status, the reason riding as a request header.
+ */
+function unavailable(
+  request: NextRequest,
+  csp: string,
+  reason: SignInHostUnavailable,
+  retryAfter: string | null,
+): NextResponse {
+  const forwarded = new Headers(request.headers);
+  forwarded.delete(SIGN_IN_HOST_ENTRY_HEADER);
+  forwarded.set(SIGN_IN_HOST_UNAVAILABLE_HEADER, reason);
+  forwarded.set("content-security-policy", csp);
+  const res = NextResponse.rewrite(new URL("/login", request.url), {
+    status: reason === "rate-limited" ? 429 : 503,
+    request: { headers: forwarded },
+  });
+  if (retryAfter !== null) res.headers.set("Retry-After", retryAfter);
+  return res;
 }
 
 function withCookies(res: NextResponse, cookies: string[]): NextResponse {

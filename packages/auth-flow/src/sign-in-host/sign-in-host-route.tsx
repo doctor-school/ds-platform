@@ -1,12 +1,17 @@
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
+import { FormError } from "@ds/design-system/form";
+
+import { DEFAULT_AUTH_FLOW_COPY } from "../copy";
 import { LoginRoute } from "../login/login-route";
 import { RegisterRoute } from "../register/register-route";
 import { ResetRoute } from "../reset/reset-route";
 import {
   SIGN_IN_HOST_ENTRY_HEADER,
+  SIGN_IN_HOST_UNAVAILABLE_HEADER,
   readSignInHostHandOver,
+  readSignInHostUnavailable,
   signInHostConfig,
   signInHostSearchParams,
   type SignInHostPageDoor,
@@ -33,6 +38,11 @@ const DOOR_ROUTES: Record<SignInHostPageDoor, typeof LoginRoute> = {
  * host transport (`signInHostConfig`), its params built from the entry intent
  * alone (`signInHostSearchParams`, EARS-71). No hand-over ⇒ no form.
  *
+ * An entry the proxy could not read (the API's 429, or no answer) arrives as
+ * `SIGN_IN_HOST_UNAVAILABLE_HEADER` instead: no storefront is known, so no
+ * door and no brand — only the forms' own operation-level banner with the
+ * forms' own words (`errors.tooManyAttempts` / `errors.unavailable`).
+ *
  * `storefronts` is the host's own host-config value (the two storefront
  * configs); the package core never picks a storefront config itself.
  */
@@ -43,8 +53,24 @@ export async function SignInHostRoute({
   storefronts: SignInHostStorefronts;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const request = await headers();
+  const unavailable = readSignInHostUnavailable(
+    request.get(SIGN_IN_HOST_UNAVAILABLE_HEADER),
+  );
+  if (unavailable) {
+    const { errors } = DEFAULT_AUTH_FLOW_COPY;
+    return (
+      <div className="mx-auto w-full max-w-md px-4 py-16">
+        <FormError variant="banner">
+          {unavailable === "rate-limited"
+            ? errors.tooManyAttempts
+            : errors.unavailable}
+        </FormError>
+      </div>
+    );
+  }
   const handOver = readSignInHostHandOver(
-    (await headers()).get(SIGN_IN_HOST_ENTRY_HEADER),
+    request.get(SIGN_IN_HOST_ENTRY_HEADER),
   );
   if (!handOver) notFound();
   const storefront = storefronts[handOver.render.storefront];

@@ -36,6 +36,20 @@ const FORWARDED = [
   "sec-fetch-site",
 ] as const;
 
+/** The API refused or could not answer the entry read. */
+export class EntryReadError extends Error {
+  constructor(
+    message: string,
+    /** The API's status; `null` when no answer arrived (transport failure). */
+    readonly status: number | null,
+    /** The API's `Retry-After`, forwarded as sent. */
+    readonly retryAfter: string | null,
+  ) {
+    super(message);
+    this.name = "EntryReadError";
+  }
+}
+
 export type EntryRead = {
   answer: SignInHostEntryResponse;
   setCookies: string[];
@@ -44,7 +58,8 @@ export type EntryRead = {
 /**
  * Ask the API what this navigation is. `authRequest` absent ⇒ the API's
  * EARS-67 answer for a request naming none. Throws when the API does not
- * answer with its contract — the caller fails closed (no guessed redirect).
+ * answer with its contract — the caller fails closed (no guessed redirect);
+ * a non-2xx is an `EntryReadError` carrying the API's status and Retry-After.
  */
 export async function readEntry(
   browser: Headers,
@@ -64,7 +79,13 @@ export async function readEntry(
     `${serverApiBase()}/v1/sign-in-host/entry${query}`,
     { headers, cache: "no-store", redirect: "manual" },
   );
-  if (!res.ok) throw new Error(`sign-in entry answered ${res.status}`);
+  if (!res.ok) {
+    throw new EntryReadError(
+      `sign-in entry answered ${res.status}`,
+      res.status,
+      res.headers.get("retry-after"),
+    );
+  }
   const answer = SignInHostEntryResponseSchema.parse(await res.json());
   return { answer, setCookies: res.headers.getSetCookie() };
 }

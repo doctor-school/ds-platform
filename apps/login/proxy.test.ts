@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   SIGN_IN_HOST_ENTRY_HEADER as ENTRY_HEADER,
+  SIGN_IN_HOST_UNAVAILABLE_HEADER as UNAVAILABLE_HEADER,
   readSignInHostHandOver as readEntryHeader,
 } from "@ds/auth-flow/server";
 import { proxy } from "./proxy";
@@ -186,6 +187,14 @@ describe("003 EARS-66 / 67: stale requests and direct visits go where the API sa
     const res = await proxy(request("/login?authRequest=V2_1"));
     expect(res.status).toBe(503);
     expect(res.headers.get("location")).toBeNull();
+    // Not an empty page: the door mount renders the unavailable banner.
+    expect(res.headers.get("x-middleware-rewrite")).toBe(
+      "http://localhost:3005/login",
+    );
+    expect(res.headers.get(`x-middleware-request-${UNAVAILABLE_HEADER}`)).toBe(
+      "unavailable",
+    );
+    expect(res.headers.get(`x-middleware-request-${ENTRY_HEADER}`)).toBeNull();
     expectHardened(res);
     // Never a silent 503: the cause is logged.
     expect(logged).toHaveBeenCalledWith(
@@ -193,6 +202,64 @@ describe("003 EARS-66 / 67: stale requests and direct visits go where the API sa
       "down",
     );
     logged.mockRestore();
+  });
+});
+
+describe("the API refuses the entry read: a truthful status and the forms' words", () => {
+  it.each(["/login?authRequest=V2_1", "/"])(
+    "a 429 on %s is a 429 rendering the rate-limit banner, Retry-After forwarded",
+    async (path) => {
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ message: "Too Many Requests" }), {
+          status: 429,
+          headers: { "content-type": "application/json", "retry-after": "42" },
+        }),
+      );
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+      const res = await proxy(request(path));
+      expect(res.status).toBe(429);
+      expect(res.headers.get("retry-after")).toBe("42");
+      expect(res.headers.get("location")).toBeNull();
+      expect(res.headers.get("x-middleware-rewrite")).toBe(
+        "http://localhost:3005/login",
+      );
+      expect(
+        res.headers.get(`x-middleware-request-${UNAVAILABLE_HEADER}`),
+      ).toBe("rate-limited");
+      expect(
+        res.headers.get("x-middleware-request-content-security-policy"),
+      ).toBe(res.headers.get("content-security-policy"));
+      expectHardened(res);
+      logged.mockRestore();
+    },
+  );
+
+  it("a 500 is a 503 rendering the unavailable banner, with no Retry-After it never sent", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 500 }));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await proxy(request("/login?authRequest=V2_1"));
+    expect(res.status).toBe(503);
+    expect(res.headers.get("retry-after")).toBeNull();
+    expect(res.headers.get(`x-middleware-request-${UNAVAILABLE_HEADER}`)).toBe(
+      "unavailable",
+    );
+    expect(logged).toHaveBeenCalledWith(
+      "[sign-in-host] entry read failed:",
+      "sign-in entry answered 500",
+    );
+    expectHardened(res);
+    logged.mockRestore();
+  });
+
+  it("a browser-sent unavailable header never reaches a rendered door", async () => {
+    fetchMock.mockResolvedValue(answer(RENDER_DOCTOR));
+    const res = await proxy(
+      request("/login?authRequest=V2_1", {
+        ...NAVIGATE,
+        [UNAVAILABLE_HEADER]: "rate-limited",
+      }),
+    );
+    expect(res.headers.get(`x-middleware-request-${UNAVAILABLE_HEADER}`)).toBeNull();
   });
 });
 

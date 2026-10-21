@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -23,12 +24,14 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
 }));
 
+import { DEFAULT_AUTH_FLOW_COPY } from "../copy";
 import { ACADEMY_AUTH_FLOW, DOCTOR_AUTH_FLOW } from "../hosts";
 import { LoginRoute } from "../login/login-route";
 import { RegisterRoute } from "../register/register-route";
 import { ResetRoute } from "../reset/reset-route";
 import {
   SIGN_IN_HOST_ENTRY_HEADER,
+  SIGN_IN_HOST_UNAVAILABLE_HEADER,
   signInHostConfig,
   writeSignInHostHandOver,
   type SignInHostHandOver,
@@ -138,5 +141,34 @@ describe("003 EARS-71: the door's params come from the entry intent, never the b
     handOver({ door: "login", render: RENDER });
     const el = await mount({ returnTo: "/events/x", handoff: "abc" });
     expect(await el.props.searchParams).toEqual({});
+  });
+});
+
+describe("the entry could not be read: the host says so in the forms' own words", () => {
+  function unavailable(value: string) {
+    requestHeaders.value = new Headers({
+      [SIGN_IN_HOST_UNAVAILABLE_HEADER]: value,
+    });
+  }
+
+  it("the API's rate limit renders the forms' too-many-attempts banner, no form", async () => {
+    unavailable("rate-limited");
+    const html = renderToStaticMarkup(await mount());
+    expect(html).toContain(DEFAULT_AUTH_FLOW_COPY.errors.tooManyAttempts);
+    expect(html).toContain('role="alert"');
+    expect(html).not.toContain("<form");
+    expect(notFound).not.toHaveBeenCalled();
+  });
+
+  it("any other failure renders the forms' temporarily-unavailable banner", async () => {
+    unavailable("unavailable");
+    const html = renderToStaticMarkup(await mount());
+    expect(html).toContain(DEFAULT_AUTH_FLOW_COPY.errors.unavailable);
+    expect(html).not.toContain(DEFAULT_AUTH_FLOW_COPY.errors.tooManyAttempts);
+  });
+
+  it("an unknown value is no state at all (not found)", async () => {
+    unavailable("bogus");
+    await expect(mount()).rejects.toThrow("NEXT_NOT_FOUND");
   });
 });

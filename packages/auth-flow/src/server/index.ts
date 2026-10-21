@@ -63,7 +63,9 @@ export {
 export {
   SIGN_IN_HOST_AUTH_REQUEST_PARAM,
   SIGN_IN_HOST_ENTRY_HEADER,
+  SIGN_IN_HOST_UNAVAILABLE_HEADER,
   readSignInHostHandOver,
+  readSignInHostUnavailable,
   signInHostConfig,
   signInHostSearchParams,
   writeSignInHostHandOver,
@@ -71,4 +73,5 @@ export {
   type SignInHostPageDoor,
   type SignInHostRender,
   type SignInHostStorefronts,
+  type SignInHostUnavailable,
 } from "./sign-in-host";

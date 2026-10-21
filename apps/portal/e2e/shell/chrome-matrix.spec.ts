@@ -288,7 +288,7 @@ test.describe("008 EARS-12 academy chrome is absent inside the webinar room (e2e
     // (`packages/room/src/ui/room-header-bar.tsx`), a bare `<header>` inside the
     // room composition carrying the truthful exit link back to the event page.
     // It exposes no test id, so it is addressed the way a doctor perceives it.
-    // RU copy = `apps/portal/messages/ru.json` → `room.exit`.
+    // RU copy = `ROOM_COPY_RU.exit` (`packages/room/src/copy/room-copy-ru.ts`).
     const roomChrome = page.locator("main header");
     await expect(roomChrome).toHaveCount(1);
     await expect(

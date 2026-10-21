@@ -42,6 +42,7 @@ const localRules = {
  *   @ds/room, @ds/events-storefront     base only; NOT each other
  *   @ds/auth-flow                       base + room + events-storefront
  *   @ds/account                         all of the above + congress-submissions
+ *   @ds/room-page                       base + room + events-storefront + auth-flow + storefront-shell
  *
  * Every edge is listed before the code that uses it lands, so a wave cannot
  * invent a new edge silently. A package absent from this table (db, api-client, utils, hooks, glossary,
@@ -76,6 +77,20 @@ export const PACKAGE_GRAPH = {
     "events-storefront",
     "auth-flow",
     "congress-submissions",
+  ],
+  // The one live-room route mount (#2073, wave-4 gate D9): the server page
+  // reads the session shape and the event context from `events-storefront`,
+  // the api base from `auth-flow`, and seats the shell's `HeaderUserCluster` —
+  // edges `@ds/room` itself may never take (it stays `next`-free and imports
+  // only the base). So the mount sits above `auth-flow`; nothing imports
+  // `room-page`.
+  "room-page": [
+    "schemas",
+    "design-system",
+    "room",
+    "events-storefront",
+    "auth-flow",
+    "storefront-shell",
   ],
 };
 

@@ -213,7 +213,7 @@ export default [
     //     via inline style / setProperty in app code (token values change only
     //     in the @ds/design-system source).
     // #1722 D11 / #2005 / #2072 — `packages/room/src`, `packages/events-storefront/src`
-    // and `packages/event-page/src` carry UI that used to live under
+    // and `packages/event-page/src` (and, since #2073, `packages/room-page/src`) carry UI that used to live under
     // `apps/portal/app`; the tokens-only
     // contract follows the code, so the shared units are scoped here alongside
     // the apps that mount them.
@@ -222,6 +222,7 @@ export default [
       "packages/events-storefront/src/**/*.{ts,tsx}",
       "packages/event-page/src/**/*.{ts,tsx}",
       "packages/room/src/**/*.{ts,tsx}",
+      "packages/room-page/src/**/*.{ts,tsx}",
       "packages/congress-submissions/src/**/*.{ts,tsx}",
     ],
     languageOptions: {
@@ -308,6 +309,7 @@ export default [
       "packages/events-storefront/src/**/*.{ts,tsx}",
       "packages/event-page/src/**/*.{ts,tsx}",
       "packages/room/src/**/*.{ts,tsx}",
+      "packages/room-page/src/**/*.{ts,tsx}",
       "packages/congress-submissions/src/**/*.{ts,tsx}",
     ],
     //

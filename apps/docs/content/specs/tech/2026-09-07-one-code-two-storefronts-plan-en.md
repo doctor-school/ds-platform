@@ -129,6 +129,8 @@ Order rationale: wave 1 carries the most escalations and is prod-critical; wave 
    ↑              ↑
       @ds/auth-flow                     (wave 1; may import room + events-storefront)
             ↑
+      @ds/room-page (wave 4)            (the live-room route mount; may import auth-flow + storefront-shell)
+            ↑ (none — nothing imports room-page)
       @ds/congress-submissions          (046; may import auth-flow)
             ↑
       @ds/account (wave 4)              (may import all of the above)

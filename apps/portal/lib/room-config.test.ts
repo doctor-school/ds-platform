@@ -9,9 +9,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildRoomReturnHref } from "@ds/room/room-return";
+import { buildRoomRouteTable } from "@ds/room/route-table";
 import { describe, expect, it } from "vitest";
 
-import { PORTAL_ROOM_ROUTES } from "../app/webinars/[slug]/room/room-routes";
+import { ACADEMY_ROOM_PAGE } from "./events-storefront.host-config";
 import { ACADEMY_ROOM_ROUTES } from "./room-config";
 
 /**
@@ -46,7 +47,7 @@ describe("006 EARS-6 academy room host values (ACADEMY_ROOM_ROUTES)", () => {
   it("EARS-6: the room route table sends an unauthenticated visitor back to that same room url", () => {
     // The canonical auth target is built here, never re-spelled: if the template
     // and the router ever part ways, the assertion above fails first.
-    expect(PORTAL_ROOM_ROUTES(SLUG).entry.auth).toBe(
+    expect(buildRoomRouteTable(SLUG, ACADEMY_ROOM_PAGE.routes).entry.auth).toBe(
       `/login?returnTo=${encodeURIComponent(buildRoomReturnHref(SLUG, ACADEMY_ROOM_ROUTES))}`,
     );
   });

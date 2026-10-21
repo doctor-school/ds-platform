@@ -1,6 +1,7 @@
 import { adaptPublicEventListing } from "@ds/events-storefront/adapters";
 import type { EventsStorefrontHostConfig } from "@ds/events-storefront/host-config";
 import type { EventPageHostConfig } from "@ds/event-page/host-config";
+import type { RoomPageHostConfig } from "@ds/room-page/host-config";
 
 /**
  * What the Academy states about itself so the shared events feed can serve it
@@ -57,3 +58,25 @@ export const ACADEMY_EVENT_PAGE = {
     breadcrumb: "Эфиры",
   },
 } satisfies EventPageHostConfig;
+
+/**
+ * What the Academy states about itself so the ONE live-room route
+ * (`@ds/room-page`) can serve it at `/webinars/:slug/room` (#2073, wave-4 gate
+ * D9, rows 22 / 24). DATA only: the room and event-page path templates, the
+ * brand home (target and label — «На страницу эфиров» → the эфиры list), the
+ * login route and the same public event read the event page makes. The room
+ * template is the value `lib/room-config.ts` states for the room-return codec
+ * (pinned equal by the test). Every rule lives in `@ds/room-page` / `@ds/room`.
+ */
+export const ACADEMY_ROOM_PAGE = {
+  routes: {
+    room: "/webinars/:slug/room",
+    eventPage: "/webinars/:slug",
+    brandHome: ACADEMY_EVENTS_STOREFRONT.routes.listing,
+    login: ACADEMY_EVENTS_STOREFRONT.routes.login,
+  },
+  copy: {
+    brandHome: "На страницу эфиров",
+  },
+  eventRead: ACADEMY_EVENT_PAGE.contentSet,
+} satisfies RoomPageHostConfig;

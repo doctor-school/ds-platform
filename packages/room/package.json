@@ -10,6 +10,8 @@
     "./server": "./src/server/index.ts",
     "./embed": "./src/model/room-player.ts",
     "./room-return": "./src/model/room-return.ts",
+    "./route-table": "./src/model/room-route-table.ts",
+    "./copy": "./src/copy/room-copy-ru.ts",
     "./display-name": "./src/client/display-name.ts"
   },
   "scripts": {

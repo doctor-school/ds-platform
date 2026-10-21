@@ -23,6 +23,7 @@
     "@ds/events-storefront": "workspace:*",
     "@ds/legal-content": "workspace:*",
     "@ds/room": "workspace:*",
+    "@ds/room-page": "workspace:*",
     "@ds/schemas": "workspace:*",
     "@ds/storefront-shell": "workspace:*",
     "@hookform/resolvers": "^5.9.1",

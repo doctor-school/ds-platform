@@ -140,79 +140,16 @@ apps/
 
 Полный security profile cookie (TTL, rotation, CSRF, fingerprint binding) — **ADR-0001 §6** (single source of truth). Этот документ — implementation reference только для Next.js-specific деталей (см. §3.2.1).
 
-#### 3.2.1. Cross-app SSO via OIDC silent re-auth — frontend implementation (DSO-63 #2)
+#### 3.2.1. Вход между витринами — реализация на фронтенде (ADR-0015 §4)
 
-Cross-app login continuity между doctor, portal, admin, docs, cms — через OIDC silent re-auth (`prompt=none`) у IdP, не через shared cookie на `.doctor.school`. Shared cookie отвергнут per ADR-0001 §6 — same-origin XSS или subdomain takeover скомпрометировали бы admin-сессию, а CSRF / fingerprint mitigations обходятся same-origin XSS. См. ADR-0001 §6 для полного обоснования.
+Непрерывность входа между двумя витринами (`apps/doctor` на `doctor.school`, `apps/portal` на `academy.doctor.school`) — Zitadel как сервер авторизации плюс собственный хост входа `login.doctor.school` (`apps/login`), а не shared cookie на зону `.doctor.school` (отвергнут per ADR-0001 §6 — same-origin XSS или subdomain takeover скомпрометировали бы каждый хост, а CSRF / fingerprint mitigations обходятся same-origin XSS). Поток, один выход и двенадцать обязательных требований безопасности — ADR-0015 §4; этот подраздел называет только то, что несёт каждое приложение фронтенда:
 
-**Frontend pattern для каждого Next.js app:**
-
-```ts
-// apps/{app}/middleware.ts
-import { NextResponse } from "next/server";
-
-export async function middleware(req: NextRequest) {
-  const session = req.cookies.get(APP_SESSION_COOKIE); // portal: "__Host-ds_session"; other apps: "__Host-ds_<app>_session"
-  if (session) return NextResponse.next();
-
-  // No local session → silent re-auth attempt via IdP
-  const url = new URL("https://auth.doctor.school/oauth/authorize");
-  url.searchParams.set("client_id", APP_OAUTH_CLIENT_ID);
-  url.searchParams.set("prompt", "none");
-  url.searchParams.set("redirect_uri", `https://${APP_HOSTNAME}/auth/callback`);
-  url.searchParams.set("state", generateState(req));
-  return NextResponse.redirect(url);
-}
-```
-
-**Auth callback handler:**
-
-```ts
-// apps/{app}/app/auth/callback/route.ts
-export async function GET(req: Request) {
-  const code = new URL(req.url).searchParams.get("code");
-  if (!code) {
-    // No code = IdP returned login_required → fall through to login UI
-    return NextResponse.redirect(
-      `https://auth.doctor.school/login?return_to=${ENCODED_RETURN}`,
-    );
-  }
-  const tokens = await exchangeCodeForTokens(code);
-  // Set host-only cookie with session reference
-  const response = NextResponse.redirect(returnUrl);
-  response.cookies.set("__Host-ds_" + APP_NAME + "_session", tokens.sid, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax", // 'strict' для admin/cms
-    path: "/",
-    maxAge: WEB_SESSION_TTL_SECONDS,
-  });
-  return response;
-}
-```
-
-**Visible UX:** для уже залогиненного пользователя — instantaneous redirect (≤300ms), без явного login screen. Для незалогиненного — нормальный login flow на `auth.doctor.school/login`.
-
-**Logout:**
-
-```ts
-// apps/{app}/app/auth/logout/route.ts
-export async function POST() {
-  // App-level logout
-  const response = NextResponse.redirect("/");
-  response.cookies.delete("__Host-ds_" + APP_NAME + "_session");
-  return response;
-}
-
-// apps/{app}/app/auth/logout-global/route.ts — для "logout from all"
-export async function POST() {
-  // Local cookie delete + redirect к IdP global logout endpoint
-  const response = NextResponse.redirect(
-    "https://auth.doctor.school/oidc/logout",
-  );
-  response.cookies.delete("__Host-ds_" + APP_NAME + "_session");
-  return response;
-}
-```
+- **Хост входа (`apps/login`)** — монтирует те же маршруты `@ds/auth-flow` `Login` / `Register` / `Reset` / `Verify`, что и витрины, на `login.doctor.school`, интерфейсе входа, который называют оба OIDC-клиента витрин (`login_version.login_v2.base_uri`), и отрисовывает их с host-config витрины-источника (`ACADEMY_AUTH_FLOW` / `DOCTOR_AUTH_FLOW`), выбранным по `client_id` запроса авторизации из одной фиксированной карты; неизвестный клиент завершается `access_denied` и формы не видит. Поэтому поля регистрации, согласия, конечные точки регистрации / подтверждения и брендовая панель — собственные у витрины; посадка после входа остаётся за callback витрины. Заход без пригодного запроса авторизации перенаправляется на `/login` витрины врача (настройка окружения, в production сегодня `new.doctor.school`). Его сервер читает запрос авторизации, завершает его одной общей сессией браузера или сессией, которую только что создал шаг с учётными данными, и держит эту сессию за host-only `__Host-ds_login` с привязкой к отпечатку, `lifetime` Zitadel в 30 дней и тайм-аутом простоя в 7 дней. Он соблюдает `prompt=login` и `max_age`. Его вход `/login` и страницы учётных данных принимают только верхнеуровневые переходы; отправки его форм — `POST` того же origin; каждый ответ отдаёт `frame-ancestors 'none'`, `Cross-Origin-Opener-Policy: same-origin` и строгую CSP на nonce, несёт в каждой форме CSRF-токен, привязанный к своей заранее выставленной cookie, и не отдаёт заголовков CORS.
+- **Начало входа (каждая витрина)** — сервер витрины создаёт серверную транзакцию (`state`, `nonce`, свой PKCE verifier, проверенный относительный путь возврата того же origin), держит её идентификатор в host-only `__Host-ds_oidc_tx` и перенаправляет верхнеуровневым переходом на конечную точку авторизации Zitadel с единственным фиксированным `redirect_uri` витрины. Входы самой витрины в вход, регистрацию и сброс ведут сюда (регистрация — с `prompt=create`); витрина не отрисовывает форм аутентификации и не отправляет учётные данные сама.
+- **Тихая проверка (middleware / proxy витрины)** — до любой отрисовки верхнеуровневый `GET` документа без живой сессии, без маркера `__Host-ds_guest` и без транзакции в полёте перенаправляется в ту же авторизацию с `prompt=none` — серверный паттерн передачи своей учётной записи (PR #2952). Callback выпускает сессию или на `login_required` ставит `__Host-ds_guest` (10 минут, удаляется любым callback, выпустившим сессию, вход витрины его не учитывает) и отвечает `303` на страницу, которая отрисовывается гостевой. Не-`GET`, запросы предзагрузки / RSC, `/v1/*`, статические ресурсы, `/.well-known/*`, маршруты аутентификации, маршрут здоровья, поисковые роботы из списка и запросы без метаданных запроса никогда не перенаправляются; клиент, не хранящий cookie, попадает на одноразовый `ds_guest=1`, а не в петлю. Каждый исход тихого callback также ставит одноразовую защиту `__Host-ds_check`, поэтому выпущенная сессия, не разрешившаяся на следующем запросе, отрисовывается гостевой, а не начинает новую проверку; у тихого пути своя корзина лимита частоты под размер NAT, и сработавший лимит заканчивается гостевой отрисовкой, никогда не ошибкой. Ответы перенаправления и callback — `no-store`; гостевая отрисовка публичной страницы сохраняет SSG / ISR-кеширование.
+- **Маршрут callback** — серверный маршрут только для `GET`, который никогда не отрисовывает документ; находит транзакцию по `state`, сверяет её с `__Host-ds_oidc_tx`, погашает код до ответа через внутреннюю конечную точку погашения API (учётные данные `private_key_jwt` клиента витрины есть только у API; ни публичный хост API, ни BFF того же origin эту конечную точку не маршрутизируют), даёт `Set-Cookie` от API положить свежую `__Host-ds_session` на свой хост и отвечает `303` на путь возврата. Каждый ответ, включая отказы и отклонённый `POST` (`form_post`), — это `303`, чей `Location` заканчивается явным пустым фрагментом (`#`), поэтому код в `response_mode=fragment` отбрасывается, — код никогда не попадает на отрисованную страницу.
+- **Выход** — один вызов API, завершающий общую сессию Zitadel браузера и отзывающий каждую связанную с ней сессию витрин; удаление cookie само по себе никогда не является выходом.
+- **Общий код** — формы и шаги начала / callback / тихой проверки / выхода живут один раз в `@ds/auth-flow`; их подключают обе витрины и хост входа, и никто их не копирует. `apps/admin` и `apps/cms` их не подключают: у них свой вход.
 
 **CSRF protection:** double-submit pattern (cookie + header) на всех state-changing endpoints. Реализуется через NestJS middleware на API stороне (см. identity-auth-rbac-design §7.5).
 
@@ -874,7 +811,7 @@ Custom ESLint rule `no-vercel-only-api` блокирует следующие im
 
 - JWT auth-flow через Zitadel (закрыто по ADR-0001 §8, DSP-209).
 - **Host-only `__Host-` cookie per app** (doctor, portal, admin, docs, cms) — каждое приложение имеет свой scope. Полный security profile — ADR-0001 §6.
-- **Cross-app SSO continuity** — через OIDC silent re-auth (`prompt=none`), не через shared cookie. Implementation details — §3.2.1.
+- **Непрерывность между витринами** — через Zitadel и собственный хост входа `login.doctor.school` (ADR-0015 §4), не через shared cookie. Implementation details — §3.2.1.
 - Two-tier validation: JWT fast-path для ≥99% запросов, IdP `/introspect` для high-stakes (payments, AU withdrawal, role-change, admin mutations, PD export).
 - Hybrid RBAC: IdP coarse roles в JWT, backend fine-grained через Cerbos.
 

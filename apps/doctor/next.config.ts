@@ -17,9 +17,9 @@ const configDir = path.dirname(fileURLToPath(import.meta.url));
  * server-side to the api upstream, so `Set-Cookie` lands on doctor.school where
  * `__Host-` accepts it. No CORS, no cross-origin cookie, no token in JS.
  *
- * Continuity between the two hosts is OIDC silent re-auth against the single
- * Zitadel identity (ADR-0015 §4) — never a shared cookie; the host is not an
- * authz boundary (the api re-checks every request).
+ * Continuity between the two hosts is the cross-host sign-in of ADR-0015 §4 —
+ * never a shared cookie; the host is not an authz boundary (the api re-checks
+ * every request).
  */
 const API_PROXY_TARGET = (
   process.env.API_PROXY_TARGET ?? "http://localhost:3000"

@@ -87,8 +87,8 @@ longer exists»: the эфир page stays the destination (021 EARS-10). `router.
 One Zitadel identity, but the BFF session cookie is `__Host-ds_session` — the
 `__Host-` prefix carries **no `Domain`**, so the cookie is locked to the exact
 origin that set it. `doctor.school` and `academy.doctor.school` therefore hold
-**separate** session cookies of the same name; continuity between them is OIDC
-silent re-auth, never a shared cookie. The host is not an authorization boundary
+**separate** session cookies of the same name; continuity between them is the
+first-party cross-host sign-in (ADR-0015 §4), never a shared cookie. The host is not an authorization boundary
 either way: the api re-checks roles on every request. This is why the session read is
 shared as `@ds/auth-flow/server` (#2027) rather than copied per host: the
 hosts differ in which COOKIE they hold, never in how it is read.

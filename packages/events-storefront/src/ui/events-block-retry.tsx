@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { z } from "zod";
-import { MONTH_PARAM } from "@ds/schemas";
+import { MONTH_PARAM, forwardedSessionFrom } from "@ds/schemas";
 
 import type { EventsStorefrontHostConfig } from "../host-config";
 import type { EventsFeedHorizon, FeedFacetOptions } from "../model/feed";
@@ -10,7 +10,6 @@ import {
   fetchMonthEntries,
   fetchEventKindTitles,
   fetchSpecialtyChoices,
-  forwardedSessionFrom,
   readRequestFrom,
 } from "../server";
 import { FeedBlock, MyEventsBlock, readMyEvents } from "./feed-sections";

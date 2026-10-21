@@ -65,3 +65,11 @@ describe("§6.3: the doctor chrome and the navigation model are one list", () =>
     expect(DOCTOR_SHELL.search?.action).toBe(doctorNav.events.href);
   });
 });
+
+describe("017 EARS-12 / LD-4: the one crossing to the sibling storefront", () => {
+  it("points the footer cross-link at the Academy origin", () => {
+    expect(DOCTOR_SHELL.footer.cross.href).toBe(
+      "https://academy.doctor.school/",
+    );
+  });
+});

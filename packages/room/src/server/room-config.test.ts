@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { fetchRoomConfig } from "./room-config";
-import type { RoomSession } from "./session";
+import type { ForwardedSession } from "@ds/schemas";
 
 /**
  * 006 EARS-1 (consumed) / EARS-2 — the parameterised server-side grant read.
@@ -14,7 +14,7 @@ import type { RoomSession } from "./session";
  * without a network.
  */
 
-const session: RoomSession = {
+const session: ForwardedSession = {
   cookie: "__Host-ds_session=abc",
   userAgent: "Mozilla/5.0 (probe)",
   acceptLanguage: "ru-RU,ru;q=0.9",

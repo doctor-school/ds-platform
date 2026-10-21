@@ -40,14 +40,14 @@ exempt from that gate.
 
 ## Exports
 
-| Subpath          | Contract                                                                                                                                                                                                                                    |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.`              | client barrel — the room parts, hooks and types                                                                                                                                                                                             |
-| `./server`       | JSX-free server reads and entry resolution; `RoomSession` + `roomForwardedHeaders` — the structural mirror of `@ds/events-storefront/server`'s hop builder (session surface + `x-forwarded-for` relay, #2054; one mirror by DEBT.md record) |
-| `./embed`        | the pure `resolveEmbed` provider→embed-URL resolver (also feeds the 014 recording player)                                                                                                                                                   |
-| `./display-name` | `setDisplayName`, `DisplayNameError`, `initialsFromDisplayName` — no room UI, so a non-room route importing it never pulls the chat transport into its module graph                                                                         |
-| `./copy`         | `ROOM_COPY_RU` (the default RU room copy; a host overrides only `brandHome`), `ROOM_FORMATTERS_RU` (the four parameterised values, Academy ICU output), `roomCopyRu` — pure data and functions (#2073, wave-4 gate row 24)                  |
-| `./route-table`  | `buildRoomRouteTable` — the refusal targets and in-room links built from a host's route values (#2073, wave-4 gate row 22)                                                                                                                  |
+| Subpath          | Contract                                                                                                                                                                                                                   |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.`              | client barrel — the room parts, hooks and types                                                                                                                                                                            |
+| `./server`       | JSX-free server reads and entry resolution; the reads take the one `ForwardedSession` and send `forwardedHeaders` from `@ds/schemas` (session surface + `x-forwarded-for` relay, #2054)                                    |
+| `./embed`        | the pure `resolveEmbed` provider→embed-URL resolver (also feeds the 014 recording player)                                                                                                                                  |
+| `./display-name` | `setDisplayName`, `DisplayNameError`, `initialsFromDisplayName` — no room UI, so a non-room route importing it never pulls the chat transport into its module graph                                                        |
+| `./copy`         | `ROOM_COPY_RU` (the default RU room copy; a host overrides only `brandHome`), `ROOM_FORMATTERS_RU` (the four parameterised values, Academy ICU output), `roomCopyRu` — pure data and functions (#2073, wave-4 gate row 24) |
+| `./route-table`  | `buildRoomRouteTable` — the refusal targets and in-room links built from a host's route values (#2073, wave-4 gate row 22)                                                                                                 |
 
 The route that mounts the room — the server page and the `"use client"` wrapper
 that need `next` and the sibling packages this one may not import — is

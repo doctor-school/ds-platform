@@ -1,6 +1,9 @@
-import type { SessionClaims } from "@ds/schemas";
-import { forwardedHeaders, forwardedSessionFrom } from "@ds/events-storefront/server";
-import type { ForwardedSession } from "@ds/events-storefront/server";
+import {
+  type ForwardedSession,
+  type SessionClaims,
+  forwardedHeaders,
+  forwardedSessionFrom,
+} from "@ds/schemas";
 
 /**
  * The ONE server-side session read of the shared auth flow (wave-1 gate rows
@@ -8,12 +11,11 @@ import type { ForwardedSession } from "@ds/events-storefront/server";
  *
  * Four facts used to live in three places - the Academy app-shell read, the
  * doctor host `lib/session.ts` and its `lib/shell-auth.ts` - and this subpath is
- * the ONE address the whole platform now reads them through:
+ * the ONE address the platform's auth consumers read them through:
  *
  *   - rows 22-23 (the cookie name, the name-boundary test and the
- *     fingerprint-bound header surface) are DECLARED once in
- *     `@ds/events-storefront/server` and re-exported below - see that block for
- *     why the declaration stays there;
+ *     fingerprint-bound header surface) are DECLARED once in `@ds/schemas`
+ *     (#2073 wave-4 gate D5) and re-exported below for the hosts' auth code;
  *   - row 24: ONE guest short-circuit. No session cookie on the request means
  *     guest, with NO upstream read at all.
  *   - row 25: ONE degrade-to-guest rule. A 401 is a guest; so is a failed read.
@@ -29,16 +31,9 @@ import type { ForwardedSession } from "@ds/events-storefront/server";
  */
 
 /**
- * Rows 22-23 live in `@ds/events-storefront/server` and are RE-EXPORTED here.
- *
- * The declaration itself stays where the dependency graph allows it to stay: the
- * tech spec `2026-09-07-one-code-two-storefronts-plan-en.md` §4 lets
- * `@ds/auth-flow` depend on `@ds/events-storefront` and NOT the other way round,
- * so moving the cookie name and the fingerprint surface up into this package
- * would have inverted an approved edge (the `package-import-boundary` guard
- * fails on it). Re-exporting satisfies the same requirement the move was after —
- * ONE declaration on the platform, read through the auth-flow address by every
- * auth consumer — without touching the graph.
+ * Rows 22-23 are declared in `@ds/schemas` - the one workspace node below every
+ * consumer (`@ds/events-storefront`, `@ds/room`, this package) - and
+ * RE-EXPORTED here so the hosts' auth code keeps one auth-flow address.
  *
  *   - row 22: ONE session-cookie name. `__Host-` prefixed, which by
  *     specification carries NO `Domain` attribute and is therefore locked to the
@@ -65,7 +60,7 @@ export {
   forwardedSessionFrom,
   hasSessionCookie,
   type ForwardedSession,
-} from "@ds/events-storefront/server";
+} from "@ds/schemas";
 
 /**
  * The same-origin BFF upstream every SERVER-side read addresses (each host Next

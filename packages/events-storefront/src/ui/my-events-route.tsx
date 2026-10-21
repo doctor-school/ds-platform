@@ -1,12 +1,15 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { type MyEventsTab, withReturnTarget } from "@ds/schemas";
+import {
+  type MyEventsTab,
+  forwardedSessionFrom,
+  withReturnTarget,
+} from "@ds/schemas";
 import { Container } from "@ds/design-system/container";
 
 import { MY_EVENTS_COPY as COPY } from "../copy/my-events-copy";
 import type { MyEventsHostConfig } from "../host-config";
 import { fetchMyEvents } from "../server/my-events";
-import { forwardedSessionFrom } from "../server/registration-state";
 import { MyEventsList } from "./my-events-list";
 
 /** `?tab=recordings` selects «Записи»; anything else is the default «Предстоящие». */

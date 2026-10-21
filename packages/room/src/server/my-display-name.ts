@@ -1,8 +1,11 @@
-import type { MyDisplayName } from "@ds/schemas";
+import {
+  type ForwardedSession,
+  type MyDisplayName,
+  forwardedHeaders,
+} from "@ds/schemas";
 
 import type { RoomServerReadOptions } from "./room-config";
 import { normalizeApiBase } from "./room-config";
-import { roomForwardedHeaders, type RoomSession } from "./session";
 
 /**
  * 006 EARS-14 / EARS-16 — the authenticated server-side read of the calling
@@ -16,7 +19,7 @@ import { roomForwardedHeaders, type RoomSession } from "./session";
  * AND its fingerprint headers (ADR-0001 §6): the BFF session is fingerprint-bound,
  * so a server-to-server read on the doctor's behalf must present the same
  * `user-agent`, `accept-language` AND client address the browser bound at login
- * (`roomForwardedHeaders`), or the api re-derives a different fingerprint and
+ * (`forwardedHeaders`), or the api re-derives a different fingerprint and
  * 401s a valid session (#2054).
  *
  * Per-caller ⇒ `cache: "no-store"`, never shared. The caller already holds a
@@ -28,12 +31,12 @@ import { roomForwardedHeaders, type RoomSession } from "./session";
  */
 
 export async function fetchMyDisplayName(
-  session: RoomSession,
+  session: ForwardedSession,
   { apiBase, fetchImpl }: RoomServerReadOptions,
 ): Promise<string | null> {
   const doFetch = fetchImpl ?? globalThis.fetch;
   const res = await doFetch(`${normalizeApiBase(apiBase)}/v1/me/display-name`, {
-    headers: roomForwardedHeaders(session),
+    headers: forwardedHeaders(session),
     cache: "no-store",
   });
 

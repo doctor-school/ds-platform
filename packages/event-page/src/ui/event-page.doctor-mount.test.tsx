@@ -26,7 +26,7 @@ const {
   }),
 }));
 
-// Only the READS are stubbed: `forwardedSessionFrom` is the real shared builder
+// Only the READS are stubbed: `forwardedSessionFrom` (`@ds/schemas`) is the real shared builder
 // the page derives the forwarded surface with, so a mock that replaced the whole
 // module would hide a broken build of that surface (#2054).
 vi.mock("@ds/events-storefront/server", async (importOriginal) => ({

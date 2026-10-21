@@ -535,6 +535,21 @@ or exported by hand — `tools/staging/README.md` → «Driving captcha-gated au
 slot»). Absent ⇒ `CaptchaTestTokenMissingError`, never a silent skip. No walk in this
 suite drives a captcha-gated step yet; the first one calls the helper.
 
+## Live-stand env gate: `@ds/e2e/live-stand-env` (#2073)
+
+`lib/live-stand-env.ts` is the ONE env gate of the hosts' live-stand browser
+tiers (the 006 room specs and their siblings). Bare CI skips inert; an env
+that is partly exported fails loudly in `beforeAll`, naming every missing
+variable; `--list` stays green in every state. Each host binds it once with its
+storefront variable in `apps/{portal,doctor}/e2e/support/live-stand-env.ts`:
+
+```ts
+export const { requireLiveStandEnv, requireShortHeartbeat } = liveStandGate({
+  urlVar: "E2E_DOCTOR_URL",
+  playwrightTimeout: "the Playwright timeout",
+});
+```
+
 ## Admin-side writers: `@ds/e2e/admin-events` (#2751)
 
 `admin/` holds what an e2e flow needs to produce admin-side state through the real

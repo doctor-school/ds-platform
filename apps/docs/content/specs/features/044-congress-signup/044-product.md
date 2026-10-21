@@ -3,7 +3,7 @@ title: "Feature 044 — Congress sign-up (PRD)"
 description: "Product requirements for the congress sign-up vertical slice: the public intake form on orthobio.ru (repo doctor-school/orthobio-site), the platform API that turns a submission into a registration AND a passwordless Doctor.School account, a restricted admin roster bound to one event that works as the registration desk at the congress, and a confirmation email. Source of the 044 EARS triplet (ADR-0014)."
 slug: two-site-ia-044-congress-signup-product
 epic: ../../product/two-site-ia/brief.md
-status: Draft
+status: Shipped
 surface: user-facing
 lang: en
 ---

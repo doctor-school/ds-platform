@@ -2,7 +2,7 @@
 title: "044 — Congress sign-up"
 description: "Requirements for the congress sign-up vertical slice: a public unauthenticated intake endpoint reached same-origin from the congress site, a passwordless account created through the shared 003 engine, typed answers and consent stored on the event registration, a confirmation email whose outcome is recorded, and a restricted event-registrar role bound to one event with a roster and a registration desk in apps/admin — attendance marks per congress day, manual registration of walk-ins and a participant card (the desk extends the live roster by the 2026-09-25 amendment, #2377)."
 slug: 044-congress-signup
-status: In dev
+status: Shipped
 issues:
   [
     2294,

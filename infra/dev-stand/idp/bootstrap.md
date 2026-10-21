@@ -140,10 +140,14 @@ Then flip `IDP_BOOTSTRAP=` back off (so normal boots don't re-trigger init).
 web/OIDC application (`authorization_code` + `refresh_token`, BASIC auth, dev-mode
 http redirect URIs), the project-role assertion so
 `urn:zitadel:iam:org:project:roles` is emitted in the token, and seeds the
-`doctor_guest` and `platform_admin` project roles (#662). It also **ensures the
-Login V2 instance feature** (a no-op if
-the FIRSTINSTANCE default already set it — converges instances created before that
-default), **grants `IAM_LOGIN_CLIENT`** to the `ds-bootstrap` machine user —
+`doctor_guest` and `platform_admin` project roles (#662). With the six storefront
+URIs set (below) it **registers the two storefront OIDC clients** (003 EARS-60,
+step 3.bis); with none set it skips them, and a partial set is refused. It
+**selects Login V2 per app** — the headless client and Zitadel's Management
+Console get the id host's login UI as their own `base_uri` — and only then sets
+the **Login V2 instance feature** to `required: false` with the same `baseUri`
+(ADR-0015 §4: with the flag on, Zitadel overrides every client's own `base_uri`).
+It **grants `IAM_LOGIN_CLIENT`** to the `ds-bootstrap` machine user —
 without it the EARS-8 session-link call returns `403 No matching permissions found`
 (`IAM_OWNER` alone is not sufficient) — **configures + activates an SMTP
 provider aimed at Mailpit** (`mailpit:1025`) so verification/reset codes (EARS-3)
@@ -166,9 +170,17 @@ but those IdP-rendered bodies are out of next-intl's reach). Re-running converge
 — it never duplicates.
 
 ```bash
-# Runs on a box with bash + curl + jq (the TrueNAS box has all three):
+# Runs on a box with bash + curl + jq (the TrueNAS box has all three).
+# The six storefront URIs are the dev-stand values of .env.example:
 ssh truenas 'cd ~/ds-platform-dev-stand/idp && \
-  IDP_BASE_URL=http://truenas.local:9080 ./provision.sh --pat-file /tmp/idp-pat.txt'
+  IDP_BASE_URL=http://truenas.local:9080 \
+  IDP_SIGN_IN_BASE_URI=http://localhost:3005 \
+  IDP_BACK_CHANNEL_LOGOUT_URI=http://localhost:3000/v1/auth/back-channel-logout \
+  IDP_ACADEMY_REDIRECT_URI=http://localhost:3001/auth/callback \
+  IDP_ACADEMY_POST_LOGOUT_URI=http://localhost:3001/ \
+  IDP_DOCTOR_REDIRECT_URI=http://localhost:3004/auth/callback \
+  IDP_DOCTOR_POST_LOGOUT_URI=http://localhost:3004/ \
+  ./provision.sh --pat-file /tmp/idp-pat.txt'
 ```
 
 It prints `IDP_PROJECT_ID`, `IDP_CLIENT_ID`, and — **only on first creation** —

@@ -151,12 +151,29 @@ describe.skipIf(!ISSUER || !TOKEN || !PROJECT_ID)(
     );
 
     it("003 EARS-60: an unknown client_id is refused — no login, no code (req. 7)", async () => {
-      const { location } = await authorize(
+      const { status, location } = await authorize(
         `unknown-${randomBytes(6).toString("hex")}`,
         clients.academy.redirectUris![0]!,
       );
+      // Zitadel answers it itself (Errors.App.NotFound), never by redirecting.
+      expect(status).toBe(400);
       expect(location).not.toContain("authRequest=");
       expect(location).not.toContain("code=");
+    });
+
+    it("003 EARS-60: the headless app (the admin sign-in's client) still starts its login on the id host's Login V2 UI", async () => {
+      // Login V2 is selected per app (ADR-0015 §4): with the instance flag off, the
+      // headless app's own loginVersion keeps its authorize hop on a V2 auth request
+      // that POST /v2/oidc/auth_requests/{id} resolves (EARS-8).
+      const headless = (await appByName(HEADLESS_APP_NAME)).oidcConfig!;
+      const base = headless.loginVersion?.loginV2?.baseUri?.replace(/\/$/, "");
+      expect(base).toMatch(/\/ui\/v2\/login$/);
+      const { status, location } = await authorize(
+        headless.clientId,
+        headless.redirectUris![0]!,
+      );
+      expect(status).toBe(302);
+      expect(location.startsWith(`${base}/login?authRequest=`)).toBe(true);
     });
 
     it("003 EARS-60: the headless app (the admin sign-in's client) does not name the sign-in host (req. 7)", async () => {

@@ -356,6 +356,9 @@ sudo bash -c 'set -a; . /etc/ds-platform/stage.env; set +a; \
     -e IDP_SMTP_REAL_USER -e IDP_SMTP_REAL_PASSWORD \
     -e IDP_SMTP_REAL_SENDER_ADDRESS -e IDP_SMTP_REAL_SENDER_NAME \
     -e IDP_SMS_SINK_ENDPOINT -e IDP_SMS_AERO_ENDPOINT \
+    -e IDP_SIGN_IN_BASE_URI -e IDP_BACK_CHANNEL_LOGOUT_URI \
+    -e IDP_ACADEMY_APP_NAME -e IDP_ACADEMY_REDIRECT_URI -e IDP_ACADEMY_POST_LOGOUT_URI \
+    -e IDP_DOCTOR_APP_NAME -e IDP_DOCTOR_REDIRECT_URI -e IDP_DOCTOR_POST_LOGOUT_URI \
     -v /srv/ds-platform/infra/dev-stand/idp:/idp:ro \
     -v /etc/ds-platform/idp-bootstrap-pat.txt:/pat.txt:ro \
     -w /idp alpine:3.20 \
@@ -383,6 +386,16 @@ out is not a no-op, it silently converges the script's DEV default onto the shar
 stage instance (`IDP_PROJECT_NAME`/`IDP_APP_NAME` fall back to `ds-platform-dev`, and
 both objects are looked up BY NAME — an omission creates a second project and a second
 OIDC app rather than converging the stage pair).
+
+The six storefront URIs (`IDP_SIGN_IN_BASE_URI`, `IDP_BACK_CHANNEL_LOGOUT_URI`,
+`IDP_{ACADEMY,DOCTOR}_{REDIRECT,POST_LOGOUT}_URI`) are deliberately absent from
+`stage.env`: `provision.sh` has no default for them and skips its storefront-client
+step when none is set, because on stage the per-slot storefront clients belong to
+`tools/staging/idp.mjs` (`ds-storefront-{academy,doctor}-<slot>`, created on
+`up`/`sync`, removed on `down` — the `-main` pair is the live `main` slot's). They stay
+in the `-e` list so the list keeps matching the grep. The same run moves Login V2 to
+per app (ADR-0015 §4): it pins the headless app and the Management Console to
+`IDP_LOGIN_BASE_URI` and only then turns the instance flag `loginV2.required` off.
 
 Because both forms therefore read the same values, they converge the same project, the
 same app, the same providers — and, as observed on the box on 2026-09-10, the same

@@ -29,8 +29,12 @@ const headlessApp = slice(
   "3. ensure OIDC web application",
   "3.bis. ensure the two",
 );
+const consoleLogin = slice(
+  "3.ter. pin the Zitadel Management Console",
+  "\nensure_console_login_v2\n",
+);
 const instanceLogin = slice(
-  "4. ensure Login V2 instance feature",
+  "4. ensure the Login V2 instance feature",
   "5. grant IAM_LOGIN_CLIENT",
 );
 
@@ -54,6 +58,15 @@ const PROD = {
   IDP_ACADEMY_POST_LOGOUT_URI: "https://academy.doctor.school/",
   IDP_DOCTOR_REDIRECT_URI: "https://new.doctor.school/auth/callback",
   IDP_DOCTOR_POST_LOGOUT_URI: "https://new.doctor.school/",
+};
+const DEV = {
+  IDP_SIGN_IN_BASE_URI: "http://localhost:3005",
+  IDP_BACK_CHANNEL_LOGOUT_URI:
+    "http://localhost:3000/v1/auth/back-channel-logout",
+  IDP_ACADEMY_REDIRECT_URI: "http://localhost:3001/auth/callback",
+  IDP_ACADEMY_POST_LOGOUT_URI: "http://localhost:3001/",
+  IDP_DOCTOR_REDIRECT_URI: "http://localhost:3004/auth/callback",
+  IDP_DOCTOR_POST_LOGOUT_URI: "http://localhost:3004/",
 };
 type Payload = {
   name: string;
@@ -119,20 +132,37 @@ describe("003 EARS-60: storefront OIDC clients (provision.sh step 3.bis)", () =>
     }
   });
 
-  it("003 EARS-60: the dev-stand defaults name the local storefronts and enable dev mode only for http", () => {
-    const [academy, doctor] = payloads({});
+  it("003 EARS-60: plain-http (dev-stand) URIs enable dev mode, https ones never do", () => {
+    const [academy, doctor] = payloads(DEV);
     expect(academy.redirectUris).toEqual([
       "http://localhost:3001/auth/callback",
     ]);
-    expect(doctor.redirectUris).toEqual([
-      "http://localhost:3004/auth/callback",
-    ]);
     expect(academy.loginVersion.loginV2.baseUri).toBe("http://localhost:3005");
-    expect(academy.backChannelLogoutUri).toBe(
-      "http://localhost:3000/v1/auth/back-channel-logout",
-    );
     expect(academy.devMode).toBe(true);
     expect(doctor.devMode).toBe(true);
+  });
+
+  it("003 EARS-60: with no storefront URI configured (stage, admin-e2e) step 3.bis is skipped — no localhost default", () => {
+    const result = run(
+      {},
+      `${inputs}
+echo "mode=$STOREFRONT_CLIENTS"`,
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe("mode=skip");
+    expect(inputs).not.toMatch(/:-https?:/);
+  });
+
+  it("003 EARS-60: a partially configured storefront URI set is refused before provisioning", () => {
+    const { IDP_DOCTOR_POST_LOGOUT_URI: _omitted, ...partial } = PROD;
+    const result = run(
+      partial,
+      `${inputs}
+echo reached`,
+    );
+    expect(result.status).toBe(4);
+    expect(result.stdout).not.toContain("reached");
+    expect(result.stderr).toContain("IDP_DOCTOR_POST_LOGOUT_URI");
   });
 
   it.each([
@@ -227,17 +257,97 @@ ensure_storefront_client "$ACADEMY_APP_NAME" "$ACADEMY_REDIRECT_URI" "$ACADEMY_P
     expect(result.stdout.trim()).toBe("");
   });
 
-  it("003 EARS-60: the headless/admin client and the instance login setting never name the sign-in host (req. 7)", () => {
+  it("003 EARS-60: the headless/admin client carries its own Login V2 base_uri on the id host, never the sign-in host (req. 7)", () => {
     // The API's headless-exchange app (which the admin sign-in also rides) keeps
-    // inheriting the instance Login V2 setting; only the storefront clients carry
-    // the sign-in host as their own base_uri.
-    for (const fragment of [headlessApp, instanceLogin]) {
-      expect(fragment).not.toContain("SIGN_IN_BASE_URI");
-      expect(fragment).not.toContain("loginVersion");
-      expect(fragment).not.toContain("login.doctor.school");
-    }
-    expect(headlessApp).toContain(
-      'authMethodType:"OIDC_AUTH_METHOD_TYPE_BASIC"',
+    // filing V2 auth requests through its OWN loginVersion now that the instance
+    // flag is off (ADR-0015 §4).
+    const result = run(
+      { ...PROD, BASE_URL: "https://id.doctor.school" },
+      `${inputs}
+PROJECT_ID=proj-1 APP_NAME=ds-platform REDIRECT_URIS=https://api.doctor.school/v1/auth/callback POST_LOGOUT_URIS=https://academy.doctor.school/
+api() {
+  case "$1 $2" in
+    "POST /management/v1/projects/proj-1/apps/_search") echo '{"result":[]}' ;;
+    "POST /management/v1/projects/proj-1/apps/oidc") printf 'BODY %s\\n' "$3" >&2; echo '{"appId":"a","clientId":"c"}' ;;
+    *) return 91 ;;
+  esac
+}
+${headlessApp}`,
     );
+    expect(result.status).toBe(0);
+    const body = JSON.parse(
+      /^BODY (.*)$/m.exec(result.stderr)?.[1] ?? "null",
+    ) as Payload & { authMethodType: string };
+    expect(body.loginVersion).toEqual({
+      loginV2: { baseUri: "https://id.doctor.school/ui/v2/login" },
+    });
+    expect(body.authMethodType).toBe("OIDC_AUTH_METHOD_TYPE_BASIC");
+    expect(headlessApp).not.toContain("SIGN_IN_BASE_URI");
+  });
+
+  it("003 EARS-60: the Console keeps Login V2 through a read-modify-write that changes only its loginVersion", () => {
+    const current = {
+      redirectUris: [],
+      responseTypes: ["OIDC_RESPONSE_TYPE_CODE"],
+      appType: "OIDC_APP_TYPE_USER_AGENT",
+      authMethodType: "OIDC_AUTH_METHOD_TYPE_NONE",
+      devMode: true,
+      clientId: "console-client",
+      noneCompliant: false,
+    };
+    const result = run(
+      { LOGIN_BASE_URI: "https://id.doctor.school/ui/v2/login" },
+      `api() {
+  case "$1 $2" in
+    "POST /management/v1/projects/_search") echo '{"result":[{"id":"zp","name":"ZITADEL"}]}' ;;
+    "POST /management/v1/projects/zp/apps/_search") echo '{"result":[{"id":"ca","name":"Management Console"}]}' ;;
+    "GET /management/v1/projects/zp/apps/ca") echo '{"app":{"oidcConfig":${JSON.stringify(current)}}}' ;;
+    *) return 91 ;;
+  esac
+}
+api_idempotent() { printf 'WRITE %s %s %s\\n' "$1" "$2" "$3" >&2; }
+${consoleLogin}
+ensure_console_login_v2`,
+    );
+    expect(result.status).toBe(0);
+    const [, path, body] = /^WRITE PUT (\S+) (.*)$/m.exec(result.stderr) ?? [];
+    expect(path).toBe("/management/v1/projects/zp/apps/ca/oidc_config");
+    expect(JSON.parse(body ?? "null")).toEqual({
+      redirectUris: [],
+      responseTypes: ["OIDC_RESPONSE_TYPE_CODE"],
+      appType: "OIDC_APP_TYPE_USER_AGENT",
+      authMethodType: "OIDC_AUTH_METHOD_TYPE_NONE",
+      devMode: true,
+      loginVersion: {
+        loginV2: { baseUri: "https://id.doctor.school/ui/v2/login" },
+      },
+    });
+    // Several jq hops through a bash child: slow on Windows runners.
+  }, 15000);
+
+  it("003 EARS-60: the instance flag goes to required:false only after every client got its own login version", () => {
+    const result = run(
+      { LOGIN_BASE_URI: "https://id.doctor.school/ui/v2/login" },
+      `api_idempotent() { printf 'BODY %s\\n' "$3" >&2; }
+${instanceLogin}`,
+    );
+    expect(result.status).toBe(0);
+    expect(
+      JSON.parse(/^BODY (.*)$/m.exec(result.stderr)?.[1] ?? "null"),
+    ).toEqual({
+      loginV2: {
+        required: false,
+        baseUri: "https://id.doctor.school/ui/v2/login",
+      },
+    });
+    const order = [
+      "# ── 3. ensure OIDC web application",
+      "# ── 3.bis. ensure the two storefront",
+      "\nensure_console_login_v2\n",
+      "# ── 4. ensure the Login V2 instance feature",
+    ].map((marker) => script.indexOf(marker));
+    expect(order.every((at) => at > 0)).toBe(true);
+    expect([...order].sort((x, y) => x - y)).toEqual(order);
+    expect(instanceLogin).not.toContain("SIGN_IN_BASE_URI");
   });
 });

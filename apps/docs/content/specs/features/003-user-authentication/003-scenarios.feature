@@ -1696,3 +1696,12 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the id is unknown, already spent, expired or was created for the doctor storefront client
     Then the sign-in host renders the plain sign-in form with no error
     And no user is looked up from the login hint
+
+  @EARS-71 @happy @entry-intent-event-target
+  Scenario: A guest signing in from an event page sees that event's card on the sign-in form
+    Given a guest on the page of a published эфир on the Academy
+    When the guest follows the sign-in link to "/login?returnTo=/webinars/<slug>"
+    Then the sign-in host shows the Academy sign-in form with the login variant of that эфир's return-context card
+    And the authorize request carries only the entry-intent id, with no slug and no return path
+    When the guest signs in
+    Then the guest lands signed in on "/webinars/<slug>"

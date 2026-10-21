@@ -34,22 +34,21 @@ function loadStub(token: string): {
   window: { smartCaptcha?: StubSurface; readyCalls: number };
   flush: () => Promise<void>;
 } {
-  const timers: Array<() => void> = [];
   const window = {
     readyCalls: 0,
     __onSmartCaptchaReady() {
       window.readyCalls += 1;
     },
   } as { smartCaptcha?: StubSurface; readyCalls: number };
+  // Page timers never fire here, as under `page.clock.pauseAt` (#3102): the
+  // token must arrive without them.
   runInNewContext(captchaStubScript(token, "__onSmartCaptchaReady"), {
     window,
-    setTimeout: (fn: () => void) => timers.push(fn),
+    setTimeout: () => 0,
   });
   return {
     window,
-    flush: async () => {
-      while (timers.length) timers.shift()?.();
-    },
+    flush: () => new Promise((resolve) => setImmediate(resolve)),
   };
 }
 
@@ -62,7 +61,7 @@ describe("captchaStubScript", () => {
     expect(window.readyCalls).toBe(1);
   });
 
-  it("resolves execute with the test token through the `success` subscription", async () => {
+  it("resolves execute with the test token through the `success` subscription while page timers are frozen", async () => {
     const { window, flush } = loadStub(TOKEN);
     const captcha = window.smartCaptcha!;
     const id = captcha.render({}, { sitekey: "ysc1_x", invisible: true });

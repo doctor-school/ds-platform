@@ -63,7 +63,8 @@ export function isSmartCaptchaScriptUrl(url: URL): boolean {
  * (render / subscribe / execute / getResponse / reset / destroy / setTheme) and
  * then calls the loader's `onload` callback, exactly as the real script does.
  * `execute` resolves asynchronously through the `success` subscription, like
- * the real invisible check.
+ * the real invisible check — on a microtask, not a page timer, so a scenario
+ * that pauses the page clock (`page.clock.pauseAt`) still gets its token.
  */
 export function captchaStubScript(token: string, onload: string): string {
   return `(function () {
@@ -89,13 +90,13 @@ export function captchaStubScript(token: string, onload: string): string {
       };
     },
     execute: function (id) {
-      setTimeout(function () {
+      Promise.resolve().then(function () {
         var w = widget(id);
         if (!w) return;
         w.response = TOKEN;
         (w.listeners.success || []).slice().forEach(function (cb) { cb(TOKEN); });
         if (typeof w.params.callback === "function") w.params.callback(TOKEN);
-      }, 0);
+      });
     },
     getResponse: function (id) { var w = widget(id); return w ? w.response : ""; },
     reset: function (id) { var w = widget(id); if (w) w.response = ""; },

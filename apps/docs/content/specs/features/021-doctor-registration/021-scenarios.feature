@@ -215,3 +215,12 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     And the эфир no longer exists when the registration code is accepted on the sign-in host
     When the storefront callback answers
     Then the doctor lands on the LD-4 landing, signed in
+
+  @EARS-2 @EARS-3 @happy
+  Scenario: A doctor arriving from an эфир sees its card on the sign-in host's registration form
+    Given a guest on the doctor storefront pressed «Участвовать» on «Артроскопия коленного сустава»
+    When the gate sends the guest to the doctor storefront's registration entry
+    Then the authorize request carries only an opaque entry-intent id and no event data
+    And the sign-in host's registration form shows the card of «Артроскопия коленного сустава» with no back-navigation control
+    When the same entry-intent id is presented again
+    Then the registration form renders without the card and with no error

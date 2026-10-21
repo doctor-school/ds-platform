@@ -45,7 +45,7 @@ export type AuthShellProps = {
 /**
  * `<AuthShell>` (#1666 slice C) — the ONE canonical auth frame both storefronts
  * mount: the `design-source/auth.dc.html` brand panel composed into
- * `<AuthLayout>`. It is the shared-frame counterpart of slices A/B
+ * `<AuthLayout>`. It is the cross-front-reuse counterpart of slices A/B
  * (`LoginCard` / `PasswordRecoveryCard` / `EmailConfirmCard`, #1889 / #1902) —
  * those own the CARD inside the frame, this owns the FRAME around it.
  *

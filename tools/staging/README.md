@@ -382,8 +382,11 @@ stage `main` converge of a SHA contained in `main` installs them from the tree i
 shipped: an operator `up main` / `reset main` after `git fetch origin main` and
 `git merge-base --is-ancestor <sha> origin/main`, and the release driver's `--local` unit,
 whose provenance check already proved it. A PR slot run and a `main` converge at a hotfix
-ref install nothing and print once that they use the box's installed entrypoints; on a
-fresh box, converge `main` first. Prod runs install from the tree they ship.
+ref install nothing: they first check the box has all three (absent ⇒ the run fails
+with «converge `main` first») and print once that they use the box's installed
+entrypoints. So a PR that changes the box entrypoints cannot exercise them on its PR
+slot; their live proof is the post-merge `main` converge. Prod runs install from the
+tree they ship.
 
 **Durable box steps (#2982).** Every long box step of a converge — each image pull
 (`pull-<image>`), `migrate`, `seed`, `up` and `prune` — runs as its own systemd unit

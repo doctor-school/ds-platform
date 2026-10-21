@@ -36,7 +36,8 @@
 # The client sees status lines only (spec §4, public logs).
 #
 # Installed as /usr/local/bin/ds-deploy-entrypoint beside ds-release, by the same
-# install step of every operator run.
+# install step and under the same rule (every prod run; on ds-stage-1 only the stage
+# `main` converge of a SHA contained in `main`, #3125).
 #
 # Exit codes: 0 ok · 1 the command failed · 2 rejected (usage, an unknown
 # observation, bad parameters) · 3 refused (the box cannot serve it: no release

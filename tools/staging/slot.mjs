@@ -58,6 +58,7 @@ import {
 } from "../deploy/lib/registry.mjs";
 
 import {
+  BOX_ENTRYPOINTS,
   LOCAL_EXECUTOR,
   STALL_BUDGET_BUILD_MS,
   STALL_BUDGET_DEFAULT_MS,
@@ -1957,6 +1958,23 @@ async function mainContainsShaVerdict(options, verdict) {
   return answer === true;
 }
 
+/**
+ * #3125: a run that installs no entrypoints relies on the box's own, so it first
+ * proves they are there — a fresh box, or one whose `main` never converged, fails
+ * here with the fix named instead of at the first `ds-release` call.
+ */
+export function boxEntrypointsCheckScript(paths = BOX_ENTRYPOINTS.map(({ dest }) => dest)) {
+  return [
+    "missing=''",
+    ...paths.map((path) => `test -x ${quoteCommand([path])} || missing="$missing ${path}"`),
+    'if [ -n "$missing" ]; then',
+    // Single-quoted message: its backticks must reach stderr, not a command substitution.
+    `  echo "box entrypoints absent:$missing"' — converge \`main\` first (\`ds-slot up main --ref <sha>\`); only it installs them' >&2`,
+    "  exit 1",
+    "fi",
+  ].join("\n");
+}
+
 /** `git` in the operator checkout this tool runs from; `{ status, stderr }`. */
 function runGit(args) {
   const result = spawnSync("git", args, { cwd: SELF_TREE, encoding: "utf8" });
@@ -2841,6 +2859,7 @@ function realEffects(
       if (step.installEntrypoints) {
         await streamed(releaseInstallScript(step.liveDir), { label: "install ds-release" });
       } else {
+        await streamed(boxEntrypointsCheckScript(), { label: "check the box entrypoints" });
         console.log(
           `# box entrypoints: not installed from this tree (only a \`main\` converge of a SHA in ` +
             `main installs them) — this run uses the ones ${STAGE_1} has installed`,

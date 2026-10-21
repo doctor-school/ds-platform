@@ -17,9 +17,11 @@
 #   ds-release forget  <env>
 #
 # <env> is prod, stage-main or stage-pr-<N>. Installed as /usr/local/bin/ds-release
-# at the start of every operator run: from the shipped tree (infra/deploy/bin/ds-release)
-# on a forward run, from the operator checkout's committed file on a `--rollback`,
-# which ships no tree; run through sudo.
+# by every prod run and, on ds-stage-1, only by the stage `main` converge of a SHA
+# contained in `main` (#3125; PR slots and hotfix-ref converges use what the box has):
+# from the shipped tree (infra/deploy/bin/ds-release) on a forward run, from the
+# operator checkout's committed file on a `--rollback`, which ships no tree; run
+# through sudo.
 #
 # Exit codes: 0 ok · 1 the step failed · 2 usage · 3 refused (lock, lease, live unit,
 # corrupt status file).

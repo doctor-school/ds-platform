@@ -34,11 +34,12 @@ permissions:
 
 # One stage `main` slot: a newer merge queues behind the running converge+suite,
 # never cancels it mid-converge (the driver unit would keep running regardless).
-# Only a `push` to `main` run of `Runtime images` enters `stage-main`: GitHub keeps
-# one pending run per group, so a PR-triggered run (whose jobs all skip) queued there
-# replaced and cancelled main's pending run (#3125). Every other trigger gets its own.
+# Only a successful `push` to `main` run of `Runtime images` enters `stage-main`:
+# GitHub keeps one pending run per group, so any run whose jobs all skip (a PR
+# trigger, a failed main build) queued there would replace and cancel main's pending
+# good run (#3125). Every other trigger gets a group of its own.
 concurrency:
-  group: ${{ (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main') && 'stage-main' || format('stage-other-{0}', github.run_id) }}
+  group: ${{ (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main') && 'stage-main' || format('stage-other-{0}', github.run_id) }}
   cancel-in-progress: false
 
 env:

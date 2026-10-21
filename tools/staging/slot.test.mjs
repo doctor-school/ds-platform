@@ -13,13 +13,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { GOLDEN_SUBJECTS_PATH, GOLDEN_SUBJECT_ENV_VARS } from "./idp.mjs";
 import { terminateBackendsStatement } from "./golden-db.mjs";
-import { DS_RELEASE_BIN } from "../deploy/lib/remote.mjs";
+import { BOX_ENTRYPOINTS, DS_RELEASE_BIN } from "../deploy/lib/remote.mjs";
 import {
   BUILD_CACHE_RESERVED_SPACE,
   CADDY_CONTAINER,
@@ -77,6 +77,7 @@ import {
   remoteWriteScript,
   requiredOperatorPassword,
   assertCaptchaCoherent,
+  boxEntrypointsCheckScript,
   renderIdpRedirectUris,
   renderSlotDownEnv,
   renderSlotEnv,
@@ -962,6 +963,33 @@ test("3125: `reset main` installs the entrypoints only for a SHA contained in ma
     );
   assert.equal(ship(true).installEntrypoints, true);
   assert.equal(ship(false).installEntrypoints, false);
+});
+
+/** Runs the entrypoint check against `paths` in a local bash. */
+function runEntrypointsCheck(paths) {
+  return spawnSync("bash", ["-c", boxEntrypointsCheckScript(paths)], { encoding: "utf8" });
+}
+
+test("3125: a run that installs nothing checks the box HAS the entrypoints, and names the fix", () => {
+  const dir = mkdtempSync(join(tmpdir(), "ds-3125-"));
+  try {
+    const present = join(dir, "ds-release").replaceAll("\\", "/");
+    const absent = join(dir, "release-driver").replaceAll("\\", "/");
+    writeFileSync(present, "#!/bin/sh\n", { mode: 0o755 });
+    assert.equal(runEntrypointsCheck([present]).status, 0);
+    const missing = runEntrypointsCheck([present, absent]);
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, /box entrypoints absent/);
+    assert.match(missing.stderr, /release-driver/);
+    assert.match(missing.stderr, /converge `main` first/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("3125: the default entrypoint check covers every installed box entrypoint", () => {
+  const script = boxEntrypointsCheckScript();
+  for (const { dest } of BOX_ENTRYPOINTS) assert.ok(script.includes(dest), dest);
 });
 
 /** A fake `git` answering from a script of `{ status }` per subcommand. */

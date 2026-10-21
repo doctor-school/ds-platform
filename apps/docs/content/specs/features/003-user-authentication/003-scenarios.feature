@@ -938,6 +938,15 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When each email reset owner submits their own same retained code and a new password without requesting another challenge
     Then both new passwords sign in only their original verified doctors before all owned email reset isolation sessions are logged out
 
+  @EARS-11 @EARS-12 @EARS-17 @EARS-35 @happy @reset-email-resend
+  Scenario: Academy resends the email password-reset code and completes the newest delivery for the same owner
+    Given a uniquely registered verified Academy doctor is logged out for an email reset resend
+    When the reset resend owner requests a real email password reset and observes disabled resend
+    And only the reset browser cooldown advances before one real email reset resend restarts it
+    Then the newest delivered reset code changes only that owner's password and both owned sessions log out
+    # Retained Academy baseline only; delivery freshness uses recipient-bound IDs.
+    # Browser time advances, never server/provider clocks or quota counters.
+
   @EARS-29 @EARS-12 @happy @password-reset-mail
   Scenario: Academy receives the code-only password-reset mail and completes the real reset
     Given a uniquely registered verified Academy account is owned for a reset-mail journey with its original password

@@ -209,4 +209,27 @@ test.describe("005 EARS-13 axe-core a11y scan of the portal webinar surfaces", (
     await expect(page.getByTestId("profile-name-input")).toBeVisible();
     for (const theme of THEMES) await scan(page, theme);
   });
+
+  // Wave-4 gate row 19 (#2073) — the /account cabinet at 390 px: the profile card
+  // is visible and the page does not scroll sideways. The doctor storefront's
+  // twin is `apps/doctor/e2e/account-mobile.spec.ts`.
+  test("003 EARS-28: the /account card is visible at 390 px with no horizontal overflow", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/register", { waitUntil: "domcontentloaded" });
+    await submitRegisterAndVerify(page);
+    await waitForAuthenticatedLanding(page);
+    await page.goto("/account", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("profile-email")).toBeVisible();
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+    );
+    expect(
+      overflow,
+      "/account must not overflow at 390 px",
+    ).toBeLessThanOrEqual(1);
+  });
 });

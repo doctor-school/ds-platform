@@ -19,8 +19,9 @@ import type { AccountPhoneActions } from "./account-phone-row";
  *
  * The host-side behaviour (the EARS-9 silent refresh, the EARS-10 redirect
  * target, the route table, the transports) is NOT the block, and is asserted
- * per host: apps/portal/app/account/page.test.tsx for the Academy and
- * apps/doctor/components/account-screen.test.tsx for the doctor storefront.
+ * by the one cabinet both hosts mount: packages/account/src/ui/account-cabinet.test.tsx,
+ * plus each host's mount test (apps/portal/app/account/page.test.tsx and
+ * apps/doctor/app/(storefront)/account/page.test.tsx).
  */
 
 const copy: AccountProfileCardCopy = {
@@ -48,7 +49,8 @@ const copy: AccountProfileCardCopy = {
     change: "Изменить",
     verified: "подтверждён",
     unconfirmedHelper: "Не подтверждён — подтвердите, чтобы входить по SMS",
-    suggestedHelper: "Из заявки на конгресс — подтвердите, чтобы входить по SMS",
+    suggestedHelper:
+      "Из заявки на конгресс — подтвердите, чтобы входить по SMS",
     confirmedNote: "Телефон подтверждён. Теперь можно входить по коду из SMS",
     inputLabel: "Номер телефона",
     placeholder: "+7…",
@@ -257,7 +259,9 @@ describe("AccountProfileCard", () => {
     // no separate small-caps «Конгресс» caption beside it.
     const row = screen.getByRole("link", { name: /Мои заявки на Конгресс/ });
     expect(row).toHaveAttribute("href", "/account/congress");
-    expect(row.textContent?.replace("→", "").trim()).toBe("Мои заявки на Конгресс");
+    expect(row.textContent?.replace("→", "").trim()).toBe(
+      "Мои заявки на Конгресс",
+    );
   });
 
   it("046 EARS-4: without a congressHref (no registration for the congress) the row is absent", () => {
@@ -545,9 +549,7 @@ describe("AccountProfileCard — the confirmable phone row (003 #2449)", () => {
     );
     expect(screen.queryByTestId("profile-phone-verified")).toBeNull();
     await user.click(screen.getByTestId("profile-phone-action"));
-    expect(screen.getByLabelText("Номер телефона")).toHaveValue(
-      "+79990001122",
-    );
+    expect(screen.getByLabelText("Номер телефона")).toHaveValue("+79990001122");
   });
 
   it("003 EARS-47: «Отмена» before any code was requested returns the row to what it showed", async () => {

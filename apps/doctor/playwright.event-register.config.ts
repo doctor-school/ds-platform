@@ -37,6 +37,10 @@ export default defineConfig({
   testMatch: [
     /(^|\/)event-register-one-tap\.spec\.ts$/,
     /(^|\/)my-events\.spec\.ts$/,
+    // #2073 (wave-4 gate row 19): the signed-in `/account` cabinet — its axe
+    // scan and its 390 px check — on the same reused doctor account.
+    /(^|\/)a11y\/account-axe\.e2e\.spec\.ts$/,
+    /(^|\/)account-mobile\.spec\.ts$/,
   ],
   fullyParallel: false,
   workers: 1,

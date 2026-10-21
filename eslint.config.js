@@ -340,7 +340,6 @@ export default [
       "apps/admin/app/mfa/enroll/page.tsx",
       "apps/admin/components/back-to-list.tsx",
       "apps/admin/components/fields.tsx",
-      "apps/doctor/components/account-screen.tsx",
       "apps/doctor/components/specialty-catalog-view.tsx",
       "apps/portal/app/academy-home-view.tsx",
       "apps/portal/app/documents/page.tsx",

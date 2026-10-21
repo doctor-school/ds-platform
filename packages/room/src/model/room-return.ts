@@ -12,8 +12,9 @@ import {
  * shipped 003 auth flow carrying a `returnTo` that points back at the ROOM url, so
  * on login (or signup) success the doctor lands on the room again and the
  * server-side gate RE-RUNS — "re-evaluated on return" (EARS-6). This is a DISTINCT
- * shape from the 005 registration-intent (`/webinars/:slug`, `registration-handoff`
- * / `@ds/auth-flow/client` `return-completion`): the room return carries the trailing `/room` segment
+ * shape from the 005 registration-intent (`/webinars/:slug`, carried by
+ * `withReturnTarget` in `@ds/schemas` / `withReturnContext` in `@ds/auth-flow`
+ * and completed by `@ds/auth-flow/client` `return-completion`): the room return carries the trailing `/room` segment
  * and, on completion, fires NO `RegisterForEvent` — the gate simply re-evaluates
  * (an unauthenticated visitor is never silently joined to the roster; an
  * unregistered doctor is then guided to register by the re-evaluation).

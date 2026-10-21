@@ -216,8 +216,10 @@ URL would mint the session on the wrong host — a defect no rendered screen sho
 
 `apps/portal/lib/auth-flow.host-config.ts` and
 `apps/doctor/lib/auth-flow.host-config.ts` for the transport, copy, consent and
-captcha VALUES; `apps/portal/lib/auth-flow-client.ts` and
-`apps/doctor/lib/auth-flow-client.ts` for the browser transport bound to them;
+captcha VALUES; `apps/portal/lib/auth-flow-client.ts` and, on the doctor
+storefront, the `@ds/account` cabinet (`packages/account/src/ui/account-cabinet.tsx`,
+which binds `createAuthClient` to `DOCTOR_AUTH_FLOW.api`) for the browser
+transport bound to them;
 `apps/portal/lib/auth-flow-routes.ts`
 and `apps/doctor/lib/auth-flow-routes.ts` for the ROUTE values, which are read by
 server code (the auth-screen guards, the Academy middleware, the doctor

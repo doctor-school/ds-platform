@@ -17,6 +17,7 @@
     "test:e2e:congress": "playwright test --config=playwright.congress.config.ts"
   },
   "dependencies": {
+    "@ds/account": "workspace:*",
     "@ds/auth-flow": "workspace:*",
     "@ds/congress-submissions": "workspace:*",
     "@ds/design-system": "workspace:*",

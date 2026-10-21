@@ -75,6 +75,10 @@ export default defineConfig({
     // 014 EARS-9 (#1972): «Мои события» reads the doctor's own registrations
     // over a REAL signed-in session, so it rides the same live config.
     "my-events.spec.ts",
+    // #2073: the signed-in `/account` axe scan and 390 px check ride that same
+    // live config.
+    "a11y/account-axe.e2e.spec.ts",
+    "account-mobile.spec.ts",
     // #2180: the signed-in auth cluster is a SERVER read of the session cookie
     // and the header search must narrow a REAL feed, so both ride the live
     // `playwright.shell.config.ts`. The guest half of the shared chrome stays

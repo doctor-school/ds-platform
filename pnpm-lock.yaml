@@ -391,6 +391,9 @@ importers:
 
   apps/doctor:
     dependencies:
+      '@ds/account':
+        specifier: workspace:*
+        version: link:../../packages/account
       '@ds/auth-flow':
         specifier: workspace:*
         version: link:../../packages/auth-flow

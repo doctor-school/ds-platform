@@ -37,7 +37,7 @@ vi.mock("@ds/auth-flow/server", async (importOriginal) => ({
   resolveServerAuth: (...args: unknown[]) => resolveServerAuth(...args),
 }));
 
-import AccountRoute from "./page";
+import AccountRoute, { metadata } from "./page";
 
 /** The route's single mount element. */
 function mount(): ReactElement<AccountPageProps> {
@@ -61,6 +61,10 @@ describe("#2073: /account is a mount of @ds/account with the Academy host config
     const tree = mount();
     expect(tree.type).toBe(AccountPage);
     expect(tree.props).toEqual({ config: ACADEMY_ACCOUNT });
+  });
+
+  it("gate row 18: the tab title is «Личный кабинет — Doctor.School», the same on both storefronts", () => {
+    expect(metadata.title).toBe("Личный кабинет — Doctor.School");
   });
 
   it("the Academy config carries its auth-flow config, its events-storefront «Мои события» route and no congress section", () => {

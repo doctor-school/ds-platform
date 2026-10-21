@@ -60,8 +60,10 @@ const config: NextConfig = {
   // shared chrome ships .tsx sources whose "use client" boundaries only become
   // real client components once Next transpiles them; left out, its hook-bearing
   // parts are pulled into the SSR graph and the render dies with
-  // «useState is not a function».
+  // «useState is not a function». `@ds/account` (#2073) mounts `/account` — the
+  // same .tsx-with-"use client" shape.
   transpilePackages: [
+    "@ds/account",
     "@ds/auth-flow",
     "@ds/congress-submissions",
     "@ds/design-system",

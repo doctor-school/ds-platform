@@ -2038,11 +2038,13 @@ const COMMANDS_WITHOUT_ARGS = new Set(["status", "gc"]);
 const RETRY_FAILED_FLAG = "--retry-failed";
 const LOCAL_FLAG = "--local";
 const IMAGES_FILE_FLAG = "--images-file";
+/** #3114: `--images-file -` reads the manifest from the inherited stdin (fd 0). */
+const IMAGES_FILE_STDIN = "-";
 
 /**
- * #2985: `--local --images-file <path>` — the converge runs ON the box (the stage
- * release driver), with the recorded digests from that file instead of the operator's
- * `gh`. Only `up main`: PR slots stay operator-driven (release-pipeline spec §3 item 8).
+ * #2985: `--local --images-file <path|->` — the converge runs ON the box (the stage
+ * release driver), with the recorded digests from that file (`-`: stdin) instead of the
+ * operator's `gh`. Only `up main`: PR slots stay operator-driven (release-pipeline spec §3 item 8).
  * Returns the remaining flags and the local options.
  */
 function takeLocal(command, slot, flags) {
@@ -2062,7 +2064,7 @@ function takeLocal(command, slot, flags) {
   }
   if (!local && imagesFile === undefined) return { flags: rest, local: {} };
   if (!local || imagesFile === undefined) {
-    throw new SlotError("`--local` and `--images-file <path>` go together");
+    throw new SlotError("`--local` and `--images-file <path|->` go together");
   }
   if (command !== "up" || slot !== "main") {
     throw new SlotError("`--local` converges only `up main` (PR slots stay operator-driven)");
@@ -2096,7 +2098,7 @@ export function parseArgs(argv) {
   if (!command) {
     throw new SlotError(
       "usage: ds-slot up|sync <slot> --ref <sha> [--retry-failed] | " +
-        "up main --ref <sha> --local --images-file <path> | down <slot> | " +
+        "up main --ref <sha> --local --images-file <path|-> | down <slot> | " +
         "reset main --yes --ref <sha> [--retry-failed] | reset-identities <slot> | status | gc | " +
         "agent-admin-code [--json]",
     );
@@ -2926,19 +2928,24 @@ export function requiredBaseDomain(boxEnv) {
  * came from — a `main`/`hotfix/*` push, never a PR build — is the CALLER's check (the
  * stage-main workflow that triggers the driver); this file carries no run to select.
  */
-export function readImagesFile({ slot, sha, path, readText = (file) => readFileSync(file, "utf8") }) {
+export function readImagesFile({ slot, sha, path, readText = (source) => readFileSync(source, "utf8") }) {
+  // #3114: `-` is the inherited fd 0, read as it is. The driver unit runs as `deploy`
+  // with a root-only manifest as its stdin; opening `/dev/stdin` would re-open that
+  // file through /proc/self/fd/0 and re-check its permissions (EACCES).
+  const fromStdin = path === IMAGES_FILE_STDIN;
+  const label = fromStdin ? "on stdin" : path;
   let manifest;
   try {
-    manifest = JSON.parse(readText(path));
+    manifest = JSON.parse(readText(fromStdin ? 0 : path));
   } catch (error) {
-    throw new SlotError(`the image manifest ${path} is not readable JSON (${error.message})`);
+    throw new SlotError(`the image manifest ${label} is not readable JSON (${error.message})`);
   }
   if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
-    throw new SlotError(`the image manifest ${path} is not a JSON object`);
+    throw new SlotError(`the image manifest ${label} is not a JSON object`);
   }
   const keys = Object.keys(manifest).sort().join(",");
   if (keys !== "images,ref,sha") {
-    throw new SlotError(`the image manifest ${path} carries keys ${keys}, not exactly sha, ref, images`);
+    throw new SlotError(`the image manifest ${label} carries keys ${keys}, not exactly sha, ref, images`);
   }
   return validateImageManifest(manifest, { slot, sha });
 }
@@ -2992,7 +2999,11 @@ async function main() {
       ? readImagesFile({ slot: options.slot, sha: options.sha, path: options.imagesFile })
       : await resolveRecordedImagesViaGh({ slot: options.slot, sha: options.sha });
     images = resolved.images;
-    const source = options.local ? options.imagesFile : resolved.run.url;
+    const source = !options.local
+      ? resolved.run.url
+      : options.imagesFile === IMAGES_FILE_STDIN
+        ? "stdin"
+        : options.imagesFile;
     console.log(`# recorded images for ${shortSha(options.sha)} (${resolved.ref}, ${source})`);
     for (const name of RECORDED_IMAGE_NAMES) console.log(`  ${name}: ${images[name]}`);
   }

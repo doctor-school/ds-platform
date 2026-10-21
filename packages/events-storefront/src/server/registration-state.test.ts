@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  fetchEventRegistrationState,
-  forwardedHeaders,
-  forwardedSessionFrom,
-} from "./registration-state";
+import { fetchEventRegistrationState } from "./registration-state";
 
 /**
  * 005 EARS-4 — the per-user registration read both storefronts compose onto the
@@ -111,45 +107,8 @@ describe("#2232 non-doctor session on the storefront event page", () => {
  * re-derives a different fingerprint and 401s a valid session.
  */
 describe("#2054 forwarded client address on the SSR hop", () => {
-  it("2054.1: forwardedSessionFrom carries the incoming x-forwarded-for verbatim", () => {
-    expect(
-      forwardedSessionFrom(
-        new Headers({
-          cookie: "__Host-ds_session=abc",
-          "user-agent": "Mozilla/5.0 (probe)",
-          "accept-language": "ru-RU",
-          "x-forwarded-for": "203.0.113.7, 172.18.0.4",
-        }),
-      ),
-    ).toEqual({
-      cookie: "__Host-ds_session=abc",
-      userAgent: "Mozilla/5.0 (probe)",
-      acceptLanguage: "ru-RU",
-      forwardedFor: "203.0.113.7, 172.18.0.4",
-    });
-  });
-
-  it("2054.2: a request with no session cookie yields an empty cookie and issues no authed headers", () => {
-    const anonymous = forwardedSessionFrom(
-      new Headers({ cookie: "other=1", "x-forwarded-for": "203.0.113.7" }),
-    );
-    expect(anonymous.cookie).toBe("");
-    // The public reads still fire; they carry no session surface, but they DO
-    // carry the client chain (request.ip also keys the api's rate-limit windows).
-    expect(forwardedHeaders(anonymous)).toEqual({
-      accept: "application/json",
-      "x-forwarded-for": "203.0.113.7",
-    });
-  });
-
-  it("2054.3: forwardedHeaders omits x-forwarded-for entirely when the incoming request carried none", () => {
-    const sent = forwardedHeaders({ ...SESSION, forwardedFor: "" });
-    expect("x-forwarded-for" in sent).toBe(false);
-    // Local dev has no proxy: without the header the api falls back to the socket
-    // peer, which IS the same loopback the browser's login rode through.
-    expect(sent.cookie).toBe(SESSION.cookie);
-  });
-
+  // 2054.1-2054.3 (the builder and header-set contract) moved with the unit to
+  // `@ds/schemas` (`packages/schemas/src/auth/forwarded-session.spec.ts`).
   it("2054.4: the registration read forwards the client chain so the api re-derives the login fingerprint", async () => {
     fetchImpl.mockResolvedValue({
       ok: true,

@@ -1,9 +1,8 @@
-import type { EventPlayback } from "@ds/schemas";
-
 import {
+  type EventPlayback,
   forwardedHeaders,
   type ForwardedSession,
-} from "@ds/events-storefront/server";
+} from "@ds/schemas";
 
 /**
  * 014 EARS-5 — the AUTHENTICATED source read behind the recording player.

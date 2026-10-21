@@ -11,12 +11,6 @@ const reads = vi.hoisted(() => ({
   fetchPublicEventPage: vi.fn(),
   fetchParticipationCta: vi.fn(),
   fetchEventRegistrationState: vi.fn(),
-  forwardedSessionFrom: vi.fn(() => ({
-    cookie: "",
-    userAgent: "UA",
-    acceptLanguage: "ru",
-    forwardedFor: "",
-  })),
 }));
 const playback = vi.hoisted(() => ({ fetchEventPlayback: vi.fn() }));
 const NOT_FOUND = new Error("NEXT_NOT_FOUND");

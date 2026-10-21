@@ -2,7 +2,7 @@
 import { isValidElement, type ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SESSION_COOKIE_NAME } from "@ds/events-storefront/server";
+import { SESSION_COOKIE_NAME } from "@ds/schemas";
 import { ROOM_COPY_RU } from "@ds/room/copy";
 
 import type { RoomPageHostConfig } from "../host-config";

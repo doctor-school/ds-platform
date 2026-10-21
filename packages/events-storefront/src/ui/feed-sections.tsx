@@ -1,5 +1,6 @@
 import { Skeleton } from "@ds/design-system/skeleton";
 import {
+  type ForwardedSession,
   type MyEventItem,
   type RawQueryRecord,
   rawQueryList,
@@ -28,7 +29,6 @@ import {
 } from "../model/facets";
 import { feedTenseOf, liveReadHref, showMoreHref } from "../model/feed-url";
 import {
-  type ForwardedSession,
   type ReadRequest,
   fetchEventsFeed,
   fetchEventsLive,

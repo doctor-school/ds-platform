@@ -2,9 +2,11 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { parseReturnTarget } from "@ds/schemas";
-
-import { forwardedHeaders, forwardedSessionFrom } from "./registration-state";
+import {
+  forwardedHeaders,
+  forwardedSessionFrom,
+  parseReturnTarget,
+} from "@ds/schemas";
 
 /**
  * #1111 (005 EARS-1) — the SERVER-side arm of the logged-in one-tap register CTA,

@@ -1,5 +1,7 @@
 import {
   type EventLiveStrip,
+  type ForwardedSession,
+  forwardedHeaders,
   EventsLiveReadSchema,
   EventsMonthEntriesReadSchema,
   type MonthBroadcastEntry,
@@ -14,7 +16,6 @@ import type { EventsStorefrontHostConfig } from "../host-config";
 import type { KindTitle, SpecialtyChoice } from "../model/facets";
 import type { BlockRead, EventsFeedPage } from "../model/feed";
 import { feedReadQuery, feedTenseOf, monthReadQuery } from "../model/feed-url";
-import { type ForwardedSession, forwardedHeaders } from "./registration-state";
 
 const API_BASE = (
   process.env.API_PROXY_TARGET ?? "http://localhost:3000"

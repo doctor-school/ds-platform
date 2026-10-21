@@ -1,7 +1,10 @@
-import type { PublicEventPage } from "@ds/schemas";
+import {
+  type PublicEventPage,
+  forwardedHeaders,
+  forwardedSessionFrom,
+} from "@ds/schemas";
 
 import { relayOnly } from "./events-feed";
-import { forwardedHeaders, forwardedSessionFrom } from "./registration-state";
 
 /**
  * Server-side reader for the 004 public event-page projection (EARS-1). The

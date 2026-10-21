@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { fetchMyDisplayName } from "./my-display-name";
-import type { RoomSession } from "./session";
+import type { ForwardedSession } from "@ds/schemas";
 
 /**
  * 006 EARS-14 / EARS-16 — the self-only display-name read, parameterised for the
  * same reason as the grant read: the API base is a host fact, not a package one.
  */
 
-const session: RoomSession = {
+const session: ForwardedSession = {
   cookie: "__Host-ds_session=abc",
   userAgent: "Mozilla/5.0 (probe)",
   acceptLanguage: "ru-RU",

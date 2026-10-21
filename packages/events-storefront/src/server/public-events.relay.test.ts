@@ -10,7 +10,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fetchPublicEventPage } from "./public-events";
-import { SESSION_COOKIE_NAME } from "./registration-state";
+import { SESSION_COOKIE_NAME } from "@ds/schemas";
 
 const RELAY_COOKIE = "__Host-ds_specialty";
 const DOCTOR_READ = {

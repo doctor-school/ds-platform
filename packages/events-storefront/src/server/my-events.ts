@@ -1,6 +1,9 @@
-import type { MyEvents, MyEventsTab } from "@ds/schemas";
-
-import { forwardedHeaders, type ForwardedSession } from "./registration-state";
+import {
+  type ForwardedSession,
+  type MyEvents,
+  type MyEventsTab,
+  forwardedHeaders,
+} from "@ds/schemas";
 
 /**
  * 005 EARS-6 / 014 EARS-9 — the `MyEvents` read composed onto the «Мои события»

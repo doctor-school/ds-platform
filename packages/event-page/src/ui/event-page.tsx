@@ -37,10 +37,9 @@ import {
   fetchEventRegistrationState,
   fetchParticipationCta,
   fetchPublicEventPage,
-  forwardedSessionFrom,
 } from "@ds/events-storefront/server";
 import { RegisterOneTap } from "@ds/events-storefront/ui";
-import { withReturnTarget } from "@ds/schemas";
+import { forwardedSessionFrom, withReturnTarget } from "@ds/schemas";
 import { EVENT_PAGE_COPY as COPY } from "../copy/event-page-copy";
 import type { EventPageHostConfig } from "../host-config";
 import { fetchEventPlayback } from "../server/event-playback";

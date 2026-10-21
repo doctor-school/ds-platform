@@ -1,6 +1,8 @@
-import type { ParticipationCta } from "@ds/schemas";
-
-import { forwardedHeaders, type ForwardedSession } from "./registration-state";
+import {
+  type ForwardedSession,
+  type ParticipationCta,
+  forwardedHeaders,
+} from "@ds/schemas";
 
 /**
  * 020 EARS-1 / LD-2 (#1764, slice 3) — the academy host's read of the ONE

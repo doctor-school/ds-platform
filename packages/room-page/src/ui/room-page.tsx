@@ -2,10 +2,8 @@ import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 
 import { serverApiBase } from "@ds/auth-flow/server";
-import {
-  fetchPublicEventPage,
-  forwardedSessionFrom,
-} from "@ds/events-storefront/server";
+import { fetchPublicEventPage } from "@ds/events-storefront/server";
+import { forwardedSessionFrom } from "@ds/schemas";
 import { ROOM_COPY_RU } from "@ds/room/copy";
 import { buildRoomRouteTable } from "@ds/room/route-table";
 import {

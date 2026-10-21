@@ -5,6 +5,7 @@ import { permanentRedirect } from "next/navigation";
 import { Link as DsLink } from "@ds/design-system/link";
 import {
   type RawQueryRecord,
+  forwardedSessionFrom,
   rawQueryList,
   rawQueryScalar,
 } from "@ds/schemas";
@@ -45,7 +46,6 @@ import {
   fetchEventsFeed,
   fetchMonthEntries,
   fetchSpecialtyChoices,
-  forwardedSessionFrom,
   readRequestFrom,
 } from "../server";
 import { CompactMonth } from "./compact-month";

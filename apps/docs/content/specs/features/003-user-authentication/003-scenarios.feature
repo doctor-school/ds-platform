@@ -672,6 +672,13 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # sms-budget.service.spec.ts owns EARS-14 per-phone, IP and ASN thresholds.
     # This journey neither exhausts nor claims to inspect fraud-budget counters.
 
+  @host:academy @EARS-7 @EARS-8 @EARS-16 @EARS-41 @EARS-58 @failure @login-sms-code-isolation
+  Scenario: Academy refuses another doctor's live SMS login code and preserves both rightful codes
+    Given two owned Academy doctors verify email and confirm distinct phones for SMS login isolation
+    When both owned doctors retain distinct actual SMS login codes requested through Academy
+    And doctor B submits doctor A's live SMS login code and receives a generic refusal without a session
+    Then both retained SMS login codes still authenticate their rightful owners and preserve their identities through reload
+
   @EARS-7 @EARS-8 @EARS-41 @EARS-16 @failure @login-sms-code-refusal
   Scenario: Academy refuses a wrong SMS login code and accepts the retained real code for the same owner
     Given an owned Academy SMS-code refusal doctor verifies email and confirms a fresh phone

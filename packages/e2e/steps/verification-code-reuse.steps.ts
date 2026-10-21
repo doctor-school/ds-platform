@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
-import { gatedPasswordLogin } from "../lib/gated-password-login.js";
 import {
   assertNoAddressedMail,
   captureAddressedMailCheckpoint,
@@ -335,11 +334,10 @@ Then(
       guest.page.locator('input[autocomplete="current-password"]'),
       value.password,
     );
-    const loggedIn = await gatedPasswordLogin(guest.page, async () => {
-      const pending = captureResponse(guest.page, "/v1/auth/login");
-      await guest.page.getByTestId("password-login-submit").click();
-      return pending;
-    });
+    // This positive owned-account probe creates no deliberate login failure to close.
+    const pending = captureResponse(guest.page, "/v1/auth/login");
+    await guest.page.getByTestId("password-login-submit").click();
+    const loggedIn = await pending;
     let sameCredentials = false;
     try {
       const submitted = loggedIn.response.request().postDataJSON();
@@ -419,12 +417,10 @@ After("@verification-code-reuse", async ({ page }) => {
   if (cleanupFailed) {
     if (test.info().status === test.info().expectedStatus)
       throw new Error("Owned verification replay session cleanup failed");
-    test
-      .info()
-      .annotations.push({
-        type: "cleanup-failed",
-        description:
-          "Owned verification replay cleanup failed; original failure preserved; lead must inspect scoped cleanup.",
-      });
+    test.info().annotations.push({
+      type: "cleanup-failed",
+      description:
+        "Owned verification replay cleanup failed; original failure preserved; lead must inspect scoped cleanup.",
+    });
   }
 });

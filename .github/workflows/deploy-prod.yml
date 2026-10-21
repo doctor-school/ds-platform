@@ -1,0 +1,277 @@
+name: Deploy prod
+
+# The production release, run from Actions on the owner's word in chat (#3158; spec
+# apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md
+# §3 item 3, §4, §5 «Prod release driver.», §8 step (e)).
+#
+#   gh workflow run deploy-prod.yml --ref main -f sha=<sha> -f owner_quote="<the owner's words>"
+#
+#   preflight — refuses an empty or whitespace-only owner_quote before anything
+#               else, then `tools/deploy/release-runner.mjs preflight`: the SHA is in
+#               `main`, `stage-suite` is success, CI is green, the release gate and
+#               the live-broadcast gate pass, the recorded `images-<sha>.json` exists.
+#   deploy    — Environment `production` (deployment branches `main`, no required
+#               reviewer, `deployment: false`): ships the manifest to ds-api-prod's
+#               forced command `release prod <sha>` (the prod release driver, a
+#               `systemd-run` unit that runs every box step, smoke included, and
+#               survives this job's death) and polls `status prod <sha>`, printing
+#               status lines only (spec §4: the repository's Actions logs are public).
+#               After a terminal status: the release cut (success only) and the ONE
+#               GitHub Deployment record, success or failure, carrying the quote.
+#   digest    — on success, the Mattermost digest through `release-digest.yml`. The
+#               record above is written with GITHUB_TOKEN, whose events start no
+#               workflow, so its `deployment_status` trigger never fires for it.
+#
+# No escape hatch exists here: no skip-ci-check, release-gate exemption, live-
+# broadcast override or hotfix ref. Those stay on the workstation break-glass path
+# (`pnpm deploy:prod`).
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full 40-hex SHA on `main` to release.
+        required: true
+        type: string
+      owner_quote:
+        description: The owner's word in chat that authorises this release, verbatim.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# One release at a time, none cancelled. Its own group: the changesets workflow
+# `release.yml` holds `release`, and a push to `main` must never cancel a release
+# waiting here (#3125). The box `flock` + `ds-release` lease is the last line.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  SHA: ${{ inputs.sha }}
+  # ds-api-prod's public address (`api_prod_public_ip`, infra/deploy/README.md).
+  # The `ds-api-prod` ssh alias exists only in operator ssh configs.
+  PROD_SSH_HOST: 77.233.220.222
+  PROD_SSH_USER: deploy
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      # The release gate's basis fallback reads the production Deployment.
+      deployments: read
+      # The release gate lists `release-blocker` Issues and reads range PRs.
+      issues: read
+      pull-requests: read
+      statuses: read
+    outputs:
+      images-run-id: ${{ steps.preflight.outputs.images-run-id }}
+    steps:
+      - name: Refuse an empty owner quote
+        env:
+          OWNER_QUOTE: ${{ inputs.owner_quote }}
+        run: |
+          if [ -z "${OWNER_QUOTE//[[:space:]]/}" ]; then
+            echo "::error::owner_quote is empty — every production release needs the owner's word in chat"
+            exit 1
+          fi
+          echo "owner quote: present (${#OWNER_QUOTE} chars)"
+
+      - name: Check the SHA
+        run: |
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::not a full sha: $SHA"; exit 1; }
+
+      - uses: actions/checkout@v7
+        with:
+          # The SHA-in-main check, the release gate's range and the release notes
+          # walk git history; a shallow clone fails them.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Runner pre-flight
+        id: preflight
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: node tools/deploy/release-runner.mjs preflight --sha "$SHA"
+
+  deploy:
+    needs: preflight
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      deployment: false
+    # The poll below gives up after 60 min; the job limit only backs it up.
+    timeout-minutes: 75
+    permissions:
+      actions: read
+      checks: read
+      # The release cut (`gh release create`).
+      contents: write
+      deployments: write
+      issues: read
+      pull-requests: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The release cut and the release notes walk tags and history.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Download images-<sha>.json from the recorded run
+        uses: actions/download-artifact@v8
+        with:
+          name: images-${{ inputs.sha }}
+          run-id: ${{ needs.preflight.outputs.images-run-id }}
+          github-token: ${{ github.token }}
+          path: manifest
+
+      - name: Write the ssh key
+        env:
+          PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          PROD_SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          dir="$RUNNER_TEMP/prod-ssh"
+          mkdir -p "$dir"
+          printf '%s\n' "$PROD_SSH_KEY" > "$dir/key"
+          printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" > "$dir/known_hosts"
+          chmod 600 "$dir/key" "$dir/known_hosts"
+
+      - name: Start the release driver
+        id: release
+        run: |
+          set +e
+          line=$(ssh -i "$RUNNER_TEMP/prod-ssh/key" \
+            -o UserKnownHostsFile="$RUNNER_TEMP/prod-ssh/known_hosts" \
+            -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 \
+            "$PROD_SSH_USER@$PROD_SSH_HOST" "release prod $SHA" \
+            < "manifest/images-$SHA.json" 2>&1)
+          rc=$?
+          set -e
+          # The driver prints ONE status line (no secret, no journal, no compose
+          # output); only its first line is ever shown.
+          first=$(printf '%s\n' "$line" | head -n 1)
+          echo "release: rc=$rc $first"
+          # `started` / `attached` / `already-succeeded` — the poll needs to know.
+          echo "outcome=$(printf '%s' "$first" | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+          case "$rc" in
+            0) ;;
+            3) echo "::error::release refused: $first"; exit 1 ;;
+            *) echo "::error::release failed (rc=$rc)"; exit 1 ;;
+          esac
+
+      - name: Poll the driver until it is terminal
+        id: poll
+        env:
+          OUTCOME: ${{ steps.release.outputs.outcome }}
+        run: |
+          # 60 min = 240 polls x 15 s: today's operator release (backup, pull,
+          # migrate, IdP converge, up, smoke) runs well under 30 min; the rest is
+          # margin.
+          deadline=$((SECONDS + 60 * 60))
+          ssh_failures=0
+          # The terminal verdict + the release-notes basis, for the record step.
+          terminal() {
+            echo "terminal=$1" >> "$GITHUB_OUTPUT"
+            prev=$(jq -r '.driver.previousSha // ""' <<<"$json")
+            [[ "$prev" =~ ^[0-9a-f]{40}$ ]] || prev=""
+            echo "previous-sha=$prev" >> "$GITHUB_OUTPUT"
+          }
+          while :; do
+            set +e
+            json=$(ssh -i "$RUNNER_TEMP/prod-ssh/key" \
+              -o UserKnownHostsFile="$RUNNER_TEMP/prod-ssh/known_hosts" \
+              -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 \
+              "$PROD_SSH_USER@$PROD_SSH_HOST" "status prod $SHA" \
+              2>"$RUNNER_TEMP/ssh.err" | head -n 1; exit "${PIPESTATUS[0]}")
+            ssh_rc=$?
+            set -e
+            # rc 255 = ssh itself failed (host key, auth, network): four in a row
+            # (~1 min) fail fast. The driver unit keeps running on the box; a
+            # re-dispatch of the same SHA reattaches to it.
+            if [ "$ssh_rc" -eq 255 ]; then
+              ssh_failures=$((ssh_failures + 1))
+              echo "status: ssh failed ($(head -n 1 "$RUNNER_TEMP/ssh.err"))"
+              if [ "$ssh_failures" -ge 4 ]; then
+                echo "::error::ssh to ds-api-prod failed $ssh_failures times in a row"
+                exit 1
+              fi
+              sleep 15
+              continue
+            fi
+            ssh_failures=0
+            if ! line=$(jq -er '"driver=\(.driver.active // "?") rc=\(.driver.rc // "-") step=\(.release.step // "-") state=\(.release.state // "-")"' <<<"$json" 2>/dev/null); then
+              echo "status: unreadable reply"
+            else
+              echo "status: $line"
+              active=$(jq -r '.driver.active // ""' <<<"$json")
+              rc=$(jq -r '.driver.rc // ""' <<<"$json")
+              state=$(jq -r '.release.state // ""' <<<"$json")
+              # Nothing was started: the record alone decides, on the first reply.
+              if [ "$OUTCOME" = "already-succeeded" ]; then
+                if [ "$state" = "succeeded" ]; then
+                  terminal succeeded; echo "release: already succeeded"; exit 0
+                fi
+                echo "::error::driver said already-succeeded, record says state=${state:--}"
+                exit 1
+              fi
+              case "$active" in
+                inactive|failed|absent)
+                  if [ "$rc" = "0" ] && [ "$state" = "succeeded" ]; then
+                    terminal succeeded; echo "release: succeeded"; exit 0
+                  fi
+                  terminal failed
+                  echo "::error::release failed (driver=$active rc=${rc:--} state=${state:--})"
+                  exit 1 ;;
+              esac
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::the release did not finish within 60 min (the driver unit keeps running on the box)"
+              exit 1
+            fi
+            sleep 15
+          done
+
+      - name: Remove the ssh key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/prod-ssh"
+
+      # Success and failure alike, once the driver reached a terminal status.
+      - name: Release cut and the Deployment record
+        if: always() && steps.poll.outputs.terminal != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          OWNER_QUOTE: ${{ inputs.owner_quote }}
+          TERMINAL: ${{ steps.poll.outputs.terminal }}
+          PREVIOUS_SHA: ${{ steps.poll.outputs.previous-sha }}
+        run: |
+          node tools/deploy/release-runner.mjs record --sha "$SHA" \
+            --state "$TERMINAL" --previous-sha "$PREVIOUS_SHA"
+
+  digest:
+    needs: deploy
+    if: needs.deploy.result == 'success'
+    permissions:
+      contents: read
+      deployments: read
+      pull-requests: read
+    uses: ./.github/workflows/release-digest.yml
+    with:
+      sha: ${{ inputs.sha }}
+    # A called workflow gets only the secrets its caller passes.
+    secrets:
+      MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_WEBHOOK_URL }}

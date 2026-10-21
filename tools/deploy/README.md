@@ -350,7 +350,7 @@ stay on the operator path above.
 - **`previousSha`.** The previous-SHA read also records the running SHA through
   `release-driver record-previous prod <sha> <prev|none>` (the first basis recorded for
   a SHA is kept); `status prod <sha>` reports it as `driver.previousSha`, the
-  release-notes basis of the runner's release cut.
+  release-notes basis of the runner's Deployment record (spec §5).
 
 The unit's whole output stays in its journal (`journalctl -u ds-prod-<sha12>-driver`);
 the runner sees status lines only.

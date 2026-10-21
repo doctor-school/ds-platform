@@ -156,7 +156,7 @@ ds-api-prod (`box-role` `prod`) it releases `prod` in the unit `ds-prod-<sha12>-
 which runs `tools/deploy/prod.mjs --local --images-file -` from the codeload tree of the
 SHA (tech spec §5 «Prod release driver»; `tools/deploy/README.md` → Box-local release).
 Each box refuses the other's env. `status` adds that unit's state as `driver`, with
-`previousSha` — the SHA prod ran before, recorded by the prod unit — for the release cut. Reports uploaded on stage-1 land in
+`previousSha` — the SHA prod ran before, recorded by the prod unit — as the Deployment record's release-notes basis. Reports uploaded on stage-1 land in
 `/var/lib/ds-platform/e2e-reports/<sha>/` (root-only, pruned after 14 days; validated and
 extracted with python3 `tarfile`, plain tar only; a stream over
 512 MiB, an archive unpacking past 2 GiB or holding more than 20000 entries is refused).

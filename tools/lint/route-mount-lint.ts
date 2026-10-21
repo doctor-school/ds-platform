@@ -33,21 +33,34 @@
  *      preceded by `await` of the route props (`params` / `searchParams`).
  *      Anything else — a `fetch`, another `await`, `if` / ternary / `&&`
  *      branching, `try`, a call that is not the mount — is a finding.
+ *      SERVER-ACTION BINDING — a server action cannot live in the package
+ *      bound to a host (the package never imports a host config) nor in the
+ *      host-config module (an action needs a `"use server"` module or an
+ *      inline server function), so a mounted route may import ONE
+ *      same-directory sibling (`./<name>`) that is nothing but that binding,
+ *      and the sibling is parsed too: a `"use server"` directive; imports only
+ *      from the row's package (and subpaths), the host-config module and
+ *      `import type … from "react"`; every other top-level statement an
+ *      exported async function whose body is a single
+ *      `return <packageFn>(<HOST_CONFIG>, …)` — the callee imported from the
+ *      package, the first argument imported from the host-config module, the
+ *      remaining arguments free of calls, `await` and branching. Anything else
+ *      in the sibling is a finding, so host logic cannot hide there.
  *   3. HONEST LIMIT — on a `pull_request` event, a diff touching a route file
  *      whose `until` names an extraction wave is reported with the row quoted.
  *      Those pages still carry inline host logic (the wave has not extracted
  *      them yet) and their body is deliberately NOT read, so the claim stays
- *      honest: growth of a doomed route file is visible, not blocked.
+ *      honest: growth of a doomed route file is an annotation, never a
+ *      blocking finding (tech spec §3 rule 3 «Honest limit»).
  *
  * Out of scope by design: `loading` / `error` / `not-found` / `template` /
  * `default` / `route` files. The first five are presentational shells and
  * `route.ts` is an API stub — none of them is the composition surface a wave
  * extracts, and all of them stay excluded from the allowlist too.
  *
- * Severity: WARN in Phase 0 (ADR-0007 §2.6 — a new guard lands WARN, promotes
- * once stable). The severity lives in the exit code plus the `guards-warn`
- * step's `continue-on-error`; the step is NOT in the `ci` needs-list. #2074
- * promotes it to BLOCK after wave 1.
+ * Severity: BLOCK (ADR-0007 §2.6; tech spec §5) — a plain step of the
+ * `guards-block` batch, which is in the `ci` needs-list. Classes 1 and 2 exit 1;
+ * class 3 alone prints its annotation and exits 0.
  *
  * Outside a `pull_request` event class 3 is skipped with an info line; classes
  * 1 and 2 always run (that is what `pnpm pr:preflight --static` executes).
@@ -56,7 +69,7 @@
  * summary, exit 0.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, dirname, posix, resolve } from "node:path";
 import fg from "fast-glob";
 import ts from "typescript";
 
@@ -200,8 +213,150 @@ function collectMountNames(
   if (b && ts.isNamespaceImport(b)) into.add(b.name.text);
 }
 
+/** True when a module specifier names a host-config module. */
+function isHostConfigSpec(spec: string): boolean {
+  return (
+    spec.startsWith(".") &&
+    HOST_CONFIG_RE.test(basename(spec).replace(/\.(ts|tsx)$/, ""))
+  );
+}
+
+/**
+ * The repo-relative path of a same-directory sibling module (`./<name>`, no
+ * deeper path) next to route file `rel`, or null when `spec` is not one or no
+ * such `.ts` / `.tsx` file exists.
+ */
+function siblingOf(rel: string, spec: string): string | null {
+  const m = /^\.\/([\w.-]+)$/.exec(spec);
+  if (!m) return null;
+  const stem = posix.join(dirname(rel).replace(/\\/g, "/"), m[1]);
+  for (const cand of [stem, `${stem}.ts`, `${stem}.tsx`]) {
+    if (/\.tsx?$/.test(cand) && existsSync(resolve(REPO_ROOT, cand)))
+      return cand;
+  }
+  return null;
+}
+
+/** True when `st` carries the modifier `kind` (`export`, `async`, …). */
+function hasModifier(st: ts.Statement, kind: ts.SyntaxKind): boolean {
+  return (
+    (ts.canHaveModifiers(st) ? ts.getModifiers(st) : undefined)?.some(
+      (m) => m.kind === kind,
+    ) ?? false
+  );
+}
+
+/**
+ * The sibling server-action binding of a mounted route: `"use server"`, imports
+ * from the row's package / the host-config module / `import type` from `react`
+ * only, and exported async functions whose body is a single
+ * `return <packageFn>(<HOST_CONFIG>, …)` — so the binding names its config and
+ * nothing else.
+ */
+function checkBinding(rel: string, pkg: string): string[] {
+  const findings: string[] = [];
+  const src = readFileSync(resolve(REPO_ROOT, rel), "utf8");
+  const sf = ts.createSourceFile(
+    rel,
+    src,
+    ts.ScriptTarget.Latest,
+    true,
+    rel.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const at = (n: ts.Node) =>
+    sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+  const beyond = (n: ts.Node, what: string) =>
+    findings.push(
+      `${rel}:${at(n)}: beyond the server-action binding — ${what}; the sibling of a mounted route only binds \`${pkg}\`'s function to its host config`,
+    );
+  const pkgFns = new Set<string>();
+  const configs = new Set<string>();
+  const stmts = sf.statements;
+  const first = stmts[0];
+  const directive =
+    first !== undefined &&
+    ts.isExpressionStatement(first) &&
+    ts.isStringLiteral(first.expression) &&
+    first.expression.text === "use server";
+  if (!directive) {
+    findings.push(
+      `${rel}:1: a route's sibling module must open with the \`"use server"\` directive — only a server-action binding may sit beside a mounted route`,
+    );
+  }
+  let exportsSeen = 0;
+  for (const st of directive ? stmts.slice(1) : stmts) {
+    if (ts.isImportDeclaration(st)) {
+      const spec = ts.isStringLiteral(st.moduleSpecifier)
+        ? st.moduleSpecifier.text
+        : "";
+      const clause = st.importClause;
+      if (spec === pkg || spec.startsWith(`${pkg}/`)) {
+        if (clause && !clause.isTypeOnly) {
+          if (clause.name) pkgFns.add(clause.name.text);
+          const b = clause.namedBindings;
+          if (b && ts.isNamedImports(b))
+            for (const e of b.elements)
+              if (!e.isTypeOnly) pkgFns.add(e.name.text);
+        }
+      } else if (isHostConfigSpec(spec)) {
+        if (clause && !clause.isTypeOnly) collectMountNames(st, configs);
+      } else if (!(spec === "react" && clause?.isTypeOnly === true)) {
+        findings.push(
+          `${rel}:${at(st)}: foreign import \`${spec}\` — a server-action binding imports only \`${pkg}\` (and its subpaths), the host-config module, and \`import type … from "react"\``,
+        );
+      }
+      continue;
+    }
+    if (
+      !ts.isFunctionDeclaration(st) ||
+      !hasModifier(st, ts.SyntaxKind.ExportKeyword) ||
+      !hasModifier(st, ts.SyntaxKind.AsyncKeyword)
+    ) {
+      beyond(
+        st,
+        "a top-level statement that is neither an import nor an exported async function",
+      );
+      continue;
+    }
+    exportsSeen += 1;
+    const body = st.body?.statements ?? ts.factory.createNodeArray();
+    const ret = body[0];
+    if (body.length !== 1 || !ret || !ts.isReturnStatement(ret)) {
+      beyond(st, "an export whose body is not a single `return`");
+      continue;
+    }
+    let e = ret.expression;
+    while (e && ts.isParenthesizedExpression(e)) e = e.expression;
+    if (!e || !ts.isCallExpression(e) || !ts.isIdentifier(e.expression)) {
+      beyond(ret, "the export does not return a package call");
+      continue;
+    }
+    if (!pkgFns.has(e.expression.text)) {
+      findings.push(
+        `${rel}:${at(e)}: \`${e.expression.text}\` is not imported from \`${pkg}\` — a server-action binding returns a call of the package's own function`,
+      );
+    }
+    const [cfg, ...rest] = e.arguments;
+    if (!cfg || !ts.isIdentifier(cfg) || !configs.has(cfg.text)) {
+      findings.push(
+        `${rel}:${at(e)}: the first argument is not imported from the host-config module — a server-action binding passes its host config first`,
+      );
+    }
+    for (const a of rest) banWalk(a, sf, rel, findings);
+  }
+  if (directive && exportsSeen === 0) {
+    findings.push(
+      `${rel}: no exported async function — a server-action binding exports the bound action`,
+    );
+  }
+  return findings;
+}
+
 /** Class 2 for one `mounted` row: the file is a thin projection or it is not. */
-function checkMount(rel: string, pkg: string): string[] {
+function checkMount(
+  rel: string,
+  pkg: string,
+): { findings: string[]; bindings: number } {
   const findings: string[] = [];
   const src = readFileSync(resolve(REPO_ROOT, rel), "utf8");
   const sf = ts.createSourceFile(
@@ -218,6 +373,7 @@ function checkMount(rel: string, pkg: string): string[] {
       `${rel}:${at(n)}: body beyond mount + config — ${what}; a mounted route file mounts the package and passes its host config, nothing else`,
     );
   const mounts = new Set<string>();
+  const bindings: string[] = [];
   let fn:
     | ts.FunctionDeclaration
     | ts.ArrowFunction
@@ -230,15 +386,19 @@ function checkMount(rel: string, pkg: string): string[] {
         ? st.moduleSpecifier.text
         : "";
       const fromPkg = spec === pkg || spec.startsWith(`${pkg}/`);
-      const isHostConfig =
-        spec.startsWith(".") &&
-        HOST_CONFIG_RE.test(basename(spec).replace(/\.(ts|tsx)$/, ""));
+      const isHostConfig = isHostConfigSpec(spec);
       const isNextType =
         spec === "next" && st.importClause?.isTypeOnly === true;
+      const sibling = fromPkg || isHostConfig ? null : siblingOf(rel, spec);
       if (fromPkg) collectMountNames(st, mounts);
-      else if (!isHostConfig && !isNextType) {
+      else if (sibling && bindings.length === 0) bindings.push(sibling);
+      else if (sibling) {
         findings.push(
-          `${rel}:${at(st)}: foreign import \`${spec}\` — a mounted route file imports only \`${pkg}\` (and its subpaths), its own host-config module, and \`import type … from "next"\``,
+          `${rel}:${at(st)}: a second sibling \`${spec}\` — a mounted route file imports ONE server-action binding at most`,
+        );
+      } else if (!isHostConfig && !isNextType) {
+        findings.push(
+          `${rel}:${at(st)}: foreign import \`${spec}\` — a mounted route file imports only \`${pkg}\` (and its subpaths), its own host-config module, one sibling server-action binding, and \`import type … from "next"\``,
         );
       }
       continue;
@@ -279,11 +439,14 @@ function checkMount(rel: string, pkg: string): string[] {
     );
   }
 
+  for (const b of bindings) findings.push(...checkBinding(b, pkg));
+  const done = () => ({ findings, bindings: bindings.length });
+
   if (!fn) {
     findings.push(
       `${rel}: no default export — a \`mounted\` row promises this route mounts \`${pkg}\`'s page export`,
     );
-    return findings;
+    return done();
   }
 
   const checkMountExpr = (expr: ts.Expression | undefined, node: ts.Node) => {
@@ -306,11 +469,11 @@ function checkMount(rel: string, pkg: string): string[] {
   const body = fn.body;
   if (!body) {
     beyond(fn, "the default export has no body");
-    return findings;
+    return done();
   }
   if (!ts.isBlock(body)) {
     checkMountExpr(body as ts.Expression, fn);
-    return findings;
+    return done();
   }
   const stmts = body.statements;
   let returned = false;
@@ -345,7 +508,7 @@ function checkMount(rel: string, pkg: string): string[] {
   }
   if (!returned)
     beyond(fn, "the default export never returns the package mount");
-  return findings;
+  return done();
 }
 
 function resolvePrNumber(): string {
@@ -428,6 +591,7 @@ async function main(): Promise<void> {
   // Class 1b — the tree check, and class 2 for every `mounted` row.
   const files = scanRouteFiles();
   let mountedCount = 0;
+  let bindingCount = 0;
   for (const rel of files) {
     const row = listed.get(rel);
     if (!row) {
@@ -446,28 +610,33 @@ async function main(): Promise<void> {
       );
       continue;
     }
-    findings.push(...checkMount(rel, pkg));
+    const mount = checkMount(rel, pkg);
+    bindingCount += mount.bindings;
+    findings.push(...mount.findings);
   }
 
-  // Class 3 — the honest limit.
-  findings.push(...(await honestLimit(rows)));
+  // Class 3 — the honest limit: annotated, never blocking.
+  const notes = await honestLimit(rows);
+  if (notes.length > 0) {
+    process.stderr.write(
+      `${TAG} ${notes.length} honest limit (annotation, not blocking) — tech spec §3 rule 3:\n`,
+    );
+    for (const n of notes) process.stderr.write(`::warning::${TAG} ${n}\n`);
+  }
 
   if (findings.length > 0) {
     process.stderr.write(
       `${TAG} ${findings.length} finding(s) — a route file assigned to a package is a thin projection (#2002, tech spec §3 rule 3):\n`,
     );
     for (const f of findings) process.stderr.write(`${TAG}   ${f}\n`);
-    process.stderr.write(
-      `${TAG} WARN v1 (ADR-0007 §2.6): annotated, not merge-blocking. #2074 promotes this guard to BLOCK ` +
-        `after wave 1, alongside the host-allowlist and import-boundary checks it travels with.\n`,
-    );
     process.exit(1);
   }
 
   info(
     `OK — ${files.length} route file(s) under apps/portal/app + apps/doctor/app all carry a registry row, ` +
       `all ${rows.length} row(s) name an exact, existing path with a recorded lifetime, ` +
-      `and all ${mountedCount} \`mounted\` route(s) are mount + config only.`,
+      `and all ${mountedCount} \`mounted\` route(s) are mount + config only, ` +
+      `with ${bindingCount} server-action binding(s) bound to their host config only.`,
   );
   process.exit(0);
 }

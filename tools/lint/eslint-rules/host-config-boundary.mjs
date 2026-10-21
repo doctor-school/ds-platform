@@ -34,7 +34,7 @@
  * and nothing else — a needed adapter is added to `allowedAdapters` (a tracked
  * config edit), never disabled per site.
  *
- * Severity: WARN v1 (ADR-0007 §2.6); #2074 promotes the guard to BLOCK.
+ * Severity: BLOCK via `pnpm lint:import-boundary` (ADR-0007 §2.6; tech spec §5).
  */
 
 import { sep } from "node:path";

@@ -41,7 +41,7 @@ graph TD
 
 The required pre-implementation inventory is the repo-wide registry — [`capability-ownership.md`](../../product/two-site-ia/capability-ownership.md). It carries the canonical location, kind, both consumers and the extraction/debt state of every cross-front capability 019 touches: event domain and listing query, event list / day groups, event card, event page blocks, month calendar, facets, LIVE resolution and room entry, live room UI, past/archive recording projection. This spec keeps no private copy of that table — one registry serves every doctor/academy spec, and the PR that moves a capability updates its row in the same commit.
 
-An implementation Issue names its row through the Issue `Reuse:` field (`canon:` / `extract-from:` / `new:`), and the implementing PR carries the `cross-front reuse:` marker the `cross-front-reuse` guard checks.
+An implementation Issue names its row through the Issue `Reuse:` field (`canon:` / `extract-from:` / `new:`), and the implementing PR's host files answer to the registry through the `host-allowlist` / `route-mount` / `import-boundary` tree guards.
 
 There is one package, `@ds/events-storefront`, mounted by both hosts; the host-config values (`apps/doctor/lib/events-storefront.host-config.ts`, `apps/portal/lib/events-storefront.host-config.ts`) are the only per-host difference, and Academy and Doctor targeting and response envelopes reach the package through them. Direct `apps/doctor` → `apps/portal` imports, copied query logic, a second room, or a second lifecycle resolver fail EARS-15.
 

@@ -57,7 +57,6 @@
     "lint:product-note": "tsx tools/lint/product-note-lint.ts",
     "lint:product-note-boundary": "tsx tools/lint/product-note-boundary-lint.ts",
     "lint:registry-research": "tsx tools/lint/registry-research-lint.ts",
-    "lint:cross-front-reuse": "tsx tools/lint/cross-front-reuse-lint.ts",
     "lint:host-allowlist": "tsx tools/lint/host-allowlist-lint.ts",
     "lint:route-mount": "tsx tools/lint/route-mount-lint.ts",
     "lint:import-boundary": "tsx tools/lint/import-boundary-lint.ts",

@@ -629,13 +629,15 @@ jobs:
   # lychee link check walks the whole tree.
   guards-block:
     runs-on: ubuntu-latest
-    # Union of the member jobs' permission blocks: only `prod-surface` needed one
-    # (`issues: read`, for its deferred-Issue OPEN check). No member reaches
-    # GitHub through the `gh` CLI or a tools/lint/lib/gh.ts consumer, so the
-    # Issue-#10 `pull-requests: read` pattern does not apply here.
+    # Union of the member jobs' permission blocks: `prod-surface` needs
+    # `issues: read` (its deferred-Issue OPEN check); `host-allowlist` and
+    # `route-mount` are tools/lint/lib/gh.ts consumers, so the batch carries the
+    # canonical Issue-#10 `pull-requests: read` and each of those steps carries
+    # `GH_TOKEN`/`PR_NUMBER` — enforced by the `workflow-auth` guard.
     permissions:
       contents: read
       issues: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -744,6 +746,49 @@ jobs:
       - name: host-config-parity
         run: pnpm lint:host-config-parity
 
+      # host-allowlist: every apps/{portal,doctor} .ts/.tsx file that is not a Next.js
+      # route file, a test or e2e/** must carry an EXACT-path row in the checked-in
+      # answer key (capability-ownership.md → «Host-file allowlist»), and every row must
+      # name a live file — the dead-glob self-test (#2002, tech spec
+      # 2026-09-07-one-code-two-storefronts-plan-en.md §3 rule 3). POSTURE: BLOCK, a
+      # plain step (ADR-0007 §2.6; tech spec §5 — BLOCK once wave 1 landed). Its
+      # honest-limit class (a PR touching a `wave N` row) is an annotation that exits
+      # 0, so it never blocks. A tools/lint/lib/gh.ts consumer: GH_TOKEN + PR_NUMBER.
+      - name: host-allowlist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: pnpm lint:host-allowlist
+
+      # route-mount: every apps/{portal,doctor}/app/**/{page,layout}.tsx must carry an
+      # EXACT-path row in the checked-in answer key (capability-ownership.md → «Route-file
+      # registry»), and a route whose row says `mounted` must BE a thin projection —
+      # parsed with the TypeScript compiler API: only the row package, its own
+      # host-config module, one sibling server-action binding (itself parsed: `"use
+      # server"`, `return <packageFn>(<HOST_CONFIG>, …)` only) and `import type … from
+      # "next"` may be imported, and the body is Next segment config plus one default
+      # export returning the package mount. The allowlist above skips route files by
+      # design, so page.tsx is the one place host logic could still grow unobserved
+      # (#2002, tech spec 2026-09-07-one-code-two-storefronts-plan-en.md §3 rule 3
+      # «Route mount», §5 on why the three checks travel together). POSTURE: BLOCK, a
+      # plain step; the honest-limit class is a non-blocking annotation (exit 0).
+      - name: route-mount
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: pnpm lint:route-mount
+
+      # import-boundary: packages/** must not import apps/** (directly, via the host
+      # @/ alias, or a relative climb) and must not import another package against
+      # the §4 dependency graph; a host-config module (host-config.ts /
+      # *.host-config.ts under apps/{portal,doctor}) must import no host logic and
+      # carry no function-valued field outside the closed adapter list. The third of
+      # the three tree checks (#2002, tech spec
+      # 2026-09-07-one-code-two-storefronts-plan-en.md §3 rule 3, graph §4, §5 on why
+      # the three travel together). POSTURE: BLOCK, a plain step.
+      - name: import-boundary
+        run: pnpm lint:import-boundary
+
       # scenario-coverage — every `EARS-N` handler declared by a `user-facing`
       # feature spec must be tagged on a live scenario in its
       # `NNN-scenarios.feature` (tech spec §6.4 + §6.5, Issue #2067); coverage was
@@ -839,8 +884,8 @@ jobs:
   # itself and falls back to SKIP, which is the behavior its posture assumes.
   guards-warn:
     runs-on: ubuntu-latest
-    # Union of the member jobs' permission blocks: `tdd-signal`, `product-note`
-    # and `host-allowlist` are tools/lint/lib/gh.ts consumers, so the batch carries the
+    # Union of the member jobs' permission blocks: `tdd-signal` and `product-note`
+    # are tools/lint/lib/gh.ts consumers, so the batch carries the
     # canonical Issue-#10 pattern (`contents: read` + `pull-requests: read`) and each step
     # carries `GH_TOKEN`/`PR_NUMBER` — enforced by the `workflow-auth` guard below.
     permissions:
@@ -1202,58 +1247,6 @@ jobs:
         continue-on-error: ${{ steps.guard_policy.outputs.retained-data == 'WARN' }}
         run: pnpm lint:retained-data
 
-      # host-allowlist: every apps/{portal,doctor} .ts/.tsx file that is not a Next.js
-      # route file, a test or e2e/** must carry an EXACT-path row in the checked-in
-      # answer key (capability-ownership.md → «Host-file allowlist»), and every row must
-      # name a live file — the dead-glob self-test. Replaces the author-declared
-      # `cross-front-reuse` PR-body marker (a promise) with a tree check against the
-      # answer key (#2002, tech spec 2026-09-07-one-code-two-storefronts-plan-en.md §3
-      # rule 3). WARN v1 (ADR-0007 §2.6; a new guard lands WARN, promote once stable),
-      # and NOT in the `ci` needs-list. #2074 promotes it to BLOCK after wave 1 and
-      # retires `cross-front-reuse` at the same time.
-      - name: WARN · host-allowlist
-        id: warn_host_allowlist
-        continue-on-error: ${{ steps.guard_policy.outputs.host-allowlist == 'WARN' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: pnpm lint:host-allowlist
-
-      # route-mount: every apps/{portal,doctor}/app/**/{page,layout}.tsx must carry an
-      # EXACT-path row in the checked-in answer key (capability-ownership.md → «Route-file
-      # registry»), and a route whose row says `mounted` must BE a thin projection —
-      # parsed with the TypeScript compiler API: only the row package, its own
-      # host-config module and `import type … from "next"` may be imported, and the body
-      # is Next segment config plus one default export returning the package mount. The
-      # allowlist above skips route files by design, so page.tsx is the one place host
-      # logic could still grow unobserved (#2002, tech spec
-      # 2026-09-07-one-code-two-storefronts-plan-en.md §3 rule 3 «Route mount», §5 on why
-      # the three checks travel together). WARN v1 (ADR-0007 §2.6; a new guard lands WARN,
-      # promote once stable), and NOT in the `ci` needs-list. #2074 promotes it to BLOCK
-      # after wave 1.
-      - name: WARN · route-mount
-        id: warn_route_mount
-        continue-on-error: ${{ steps.guard_policy.outputs.route-mount == 'WARN' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: pnpm lint:route-mount
-
-      # import-boundary: packages/** must not import apps/** (directly, via the host
-      # @/ alias, or a relative climb) and must not import another package against
-      # the §4 dependency graph; a host-config module (host-config.ts /
-      # *.host-config.ts under apps/{portal,doctor}) must import no host logic and
-      # carry no function-valued field outside the closed adapter list. The third of
-      # the three tree checks that replace the cross-front-reuse PR-body marker
-      # (#2002, tech spec 2026-09-07-one-code-two-storefronts-plan-en.md §3 rule 3,
-      # graph §4, §5 on why the three travel together). WARN v1 (ADR-0007 §2.6; a new
-      # guard lands WARN, promote once stable), and NOT in the `ci` needs-list. #2074
-      # promotes it to BLOCK after wave 1.
-      - name: WARN · import-boundary
-        id: warn_import_boundary
-        continue-on-error: ${{ steps.guard_policy.outputs.import-boundary == 'WARN' }}
-        run: pnpm lint:import-boundary
-
       # WARN report — the second half of the WARN encoding, and the batch's
       # VISIBILITY surface. It collects every WARN step whose `outcome` is
       # `failure` and writes them to the job summary; it exits 0 by design.
@@ -1305,9 +1298,6 @@ jobs:
             product-note=${{ steps.warn_product_note.outcome }}
             workflow-auth=${{ steps.warn_workflow_auth.outcome }}
             retained-data=${{ steps.warn_retained_data.outcome }}
-            host-allowlist=${{ steps.warn_host_allowlist.outcome }}
-            import-boundary=${{ steps.warn_import_boundary.outcome }}
-            route-mount=${{ steps.warn_route_mount.outcome }}
         run: |
           failed="$(printf '%s\n' "$WARN_OUTCOMES" | grep -E '=failure$' | cut -d= -f1 || true)"
           echo "### WARN guards (ADR-0007 §2.6 posture)" >> "$GITHUB_STEP_SUMMARY"

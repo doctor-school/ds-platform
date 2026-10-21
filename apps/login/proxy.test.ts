@@ -182,10 +182,17 @@ describe("003 EARS-66 / 67: stale requests and direct visits go where the API sa
 
   it("an API that cannot answer is a 503 with no form, never a guessed redirect", async () => {
     fetchMock.mockRejectedValue(new Error("down"));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await proxy(request("/login?authRequest=V2_1"));
     expect(res.status).toBe(503);
     expect(res.headers.get("location")).toBeNull();
     expectHardened(res);
+    // Never a silent 503: the cause is logged.
+    expect(logged).toHaveBeenCalledWith(
+      "[sign-in-host] entry read failed:",
+      "down",
+    );
+    logged.mockRestore();
   });
 });
 

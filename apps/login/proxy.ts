@@ -52,8 +52,13 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   let entry;
   try {
     entry = await readEntry(request.headers, authRequest);
-  } catch {
-    // Fail closed: no form and no guessed destination.
+  } catch (error) {
+    // Fail closed: no form and no guessed destination. Logged, so a 503 is
+    // never a silent one (the API status or the transport failure).
+    console.error(
+      "[sign-in-host] entry read failed:",
+      error instanceof Error ? error.message : error,
+    );
     return harden(new NextResponse(null, { status: 503 }), csp);
   }
 

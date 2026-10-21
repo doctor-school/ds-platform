@@ -400,7 +400,9 @@ per app (ADR-0015 §4): it pins the headless app and the Management Console to
 its loginVersion as desired state (#3169) keeps it on Login V2 — older tooling resets it to
 Login V1 and the api's headless sign-in 500s. So the order on stage is: the #3169 tooling merges to
 `main` → the stage `main` redeploy picks up the new tooling → this provision run (flag off) →
-`pnpm stage:slot sync main`; never the flag-off run before that merge.
+`pnpm stage:slot sync main`; never the flag-off run before that merge. After it, every
+`stage:slot` command runs from a checkout that contains #3169 (rebase a worktree onto
+`main` first): the tooling is the checkout's own, so a stale worktree still writes Login V1.
 
 Because both forms therefore read the same values, they converge the same project, the
 same app, the same providers — and, as observed on the box on 2026-09-10, the same

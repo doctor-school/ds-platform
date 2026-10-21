@@ -136,9 +136,17 @@ async function provisionDoctor(specialty?: string) {
       consent: [{ purpose: "partner-data-sharing", version: "v1" }],
     });
     const code = await confirmationCode(email, sentAt);
-    await expectOk(api, "POST", "/v1/auth/verify", {
+    // 003 EARS-23/41: confirm through the doctor door's code step with the
+    // in-tab registration values — the bare `/v1/auth/verify` replaces the
+    // pre-verification password, so the login below would be 401 (#2678, #3150).
+    await expectOk(api, "POST", "/v1/storefront/doctor/verify", {
       email,
       code,
+      registration: {
+        password,
+        medicalWorkerDeclaration: true,
+        consent: [{ purpose: "partner-data-sharing", version: "v1" }],
+      },
     });
     if (specialty) {
       await expectOk(api, "POST", "/v1/auth/login", {

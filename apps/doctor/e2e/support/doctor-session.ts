@@ -33,9 +33,13 @@ import { expect, type Page } from "@playwright/test";
  * live in the api/Postgres BOTH storefronts share, and only the cookie is
  * per-origin. Against the api port directly:
  *
- *   1. `POST /v1/auth/register` `{ email, password }`
+ *   1. `POST /v1/storefront/doctor/register` `{ email, password,
+ *      medicalWorkerDeclaration, consent }`
  *   2. read the OTP from Mailpit (`MAILPIT_URL`), then
- *      `POST /v1/auth/verify` `{ email, code }`
+ *      `POST /v1/storefront/doctor/verify` `{ email, code, registration }` —
+ *      the bare `/v1/auth/verify` replaces the pre-verification password
+ *      (003 EARS-41), so a later password login is 401 (#2678, #3150;
+ *      `support/congress-stand.ts` is the working recipe)
  *   3. `PUT /v1/me/display-name` — REQUIRED: with no saved name the 006 EARS-14
  *      JIT prompt renders INSTEAD of the room and every in-room assertion fails
  *   4. register the doctor for each seeded room this tier drives

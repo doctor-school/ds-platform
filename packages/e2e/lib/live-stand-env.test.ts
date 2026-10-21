@@ -6,7 +6,11 @@ const pw = vi.hoisted(() => ({
 }));
 vi.mock("@playwright/test", () => ({ test: pw }));
 
-import { liveStandGate } from "./live-stand-env";
+import {
+  CONGRESS_SIGNUP_STAND_VARS,
+  congressSignUpEnvProblem,
+  liveStandGate,
+} from "./live-stand-env";
 
 /**
  * #2073 D6 (gate row 28) — the one live-stand env gate both hosts bind. Bare
@@ -119,5 +123,43 @@ describe("live-stand env gate (#2073 D6)", () => {
       }).requireShortHeartbeat(),
     ).toBe(2);
     expect(pw.skip).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * #3149 — the congress intake refuses every submission with one generic 422
+ * while any `CONGRESS_SIGNUP_*` key the api reads is unset, so a live spec
+ * that drives a real sign-up names the missing keys before it sends one.
+ */
+describe("congressSignUpEnvProblem (#3149)", () => {
+  const complete = Object.fromEntries(
+    CONGRESS_SIGNUP_STAND_VARS.map((name) => [name, "set"]),
+  );
+
+  it("is null when every key the intake reads is set", () => {
+    expect(congressSignUpEnvProblem(complete)).toBeNull();
+  });
+
+  it("names every missing key, blank counted as missing", () => {
+    const problem = congressSignUpEnvProblem({
+      ...complete,
+      CONGRESS_SIGNUP_EVENT_ID: undefined,
+      CONGRESS_SIGNUP_EVENT_DAYS: "  ",
+    });
+    expect(problem).toContain(
+      "CONGRESS_SIGNUP_EVENT_ID, CONGRESS_SIGNUP_EVENT_DAYS",
+    );
+    expect(problem).not.toContain("CONGRESS_SIGNUP_CONSENT_VERSION,");
+    expect(problem).toContain("infra/dev-stand/.env.example");
+  });
+
+  it("covers the five keys the intake refuses without", () => {
+    expect([...CONGRESS_SIGNUP_STAND_VARS]).toEqual([
+      "CONGRESS_SIGNUP_EVENT_ID",
+      "CONGRESS_SIGNUP_CONSENT_VERSION",
+      "CONGRESS_SIGNUP_WINDOW_OPENS_AT",
+      "CONGRESS_SIGNUP_WINDOW_CLOSES_AT",
+      "CONGRESS_SIGNUP_EVENT_DAYS",
+    ]);
   });
 });

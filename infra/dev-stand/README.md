@@ -46,9 +46,12 @@ outside git (`.env.local`, `compose.override.yml`). Setup order:
    ```
 
    An existing `.env.local` needs the keys added to the template since it was
-   copied: `CONGRESS_SIGNUP_CONSENT_VERSION` is required for the
-   congress sign-up and for sending a congress submission (the api boots
-   without it).
+   copied: the `CONGRESS_SIGNUP_*` block (`EVENT_ID`, `CONSENT_VERSION`,
+   `WINDOW_OPENS_AT`, `WINDOW_CLOSES_AT`, `EVENT_DAYS`) is required for the
+   congress sign-up and the admin congress roster (the api boots without it;
+   the sign-up then refuses every submission with a generic 422 and the roster
+   answers 503). See [Congress intake](#congress-intake) for the event the
+   `EVENT_ID` names.
 
 3. **Personal override (optional)** — only if your recipe needs a non-default
    storage topology (bind mounts, cloud disks). Named volumes work without it:
@@ -292,6 +295,28 @@ rewinds every branch database at once — while parallel sessions are live it is
 coordination-gated**: announce on the board / task comments and get an ack
 before rolling back, exactly like any other stand-wide destructive op.
 `dev:reset-db` stays global and stays forbidden to subagents.
+
+### Congress intake
+
+The public congress sign-up (044) registers every submitter for ONE event the
+api learns from `CONGRESS_SIGNUP_EVENT_ID`, never from the request. On this
+stand that key is the fixed id of the congress fixture
+`pnpm --filter @ds/api seed:events` writes (`seed-044-congress`: published,
+two months out, a «Конгресс» for doctors with a venue), so the template value
+names a real event in every database the seed ran on:
+
+- `ds_dev` — run the seed once; it is idempotent and re-running it refreshes
+  the dates in place.
+- a branch database — `dev:db:branch` only migrates, so seed it once after
+  creating it, with the printed `DATABASE_URL` exported for the seed.
+
+The rest of the block (`CONSENT_VERSION`, `WINDOW_OPENS_AT`/`WINDOW_CLOSES_AT`,
+`EVENT_DAYS`) has working stand values in `.env.example`. Any of the five unset
+⇒ the sign-up answers one generic 422 by design (the api log names the reason).
+The live specs that drive a real sign-up
+(`apps/portal/e2e/auth-journeys.e2e.spec.ts`,
+`apps/doctor/e2e/login-handoff-live.spec.ts`) read the same `.env.local` and
+fail by the missing key's name instead.
 
 ---
 

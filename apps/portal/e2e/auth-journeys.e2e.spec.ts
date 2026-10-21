@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { congressSignUpEnvProblem } from "@ds/e2e/live-stand-env";
 import { fetchMessage, fetchOtpCode } from "./support/mailpit";
 import { NOTIFICATION_SUBJECTS } from "./support/notification-subjects";
 import { fetchSmsOtpCode } from "./support/sms-sink";
@@ -308,11 +309,15 @@ test.describe("portal auth journeys (real Zitadel)", () => {
   // Congress sign-up (the only minter of a reference) through this host's /v1
   // proxy, then `/login?method=code&handoff=<ref>` opens straight on the code
   // step with the code already sent, strips the reference, and the mailed code
-  // lands on the carried returnTo. Stand prerequisite: the api runs with the
-  // `CONGRESS_SIGNUP_*` keys and its event id names an existing event.
+  // lands on the carried returnTo. Stand prerequisite (#3149): the api runs with
+  // the `CONGRESS_SIGNUP_*` block of `infra/dev-stand/.env.example`, whose event
+  // id is the congress fixture `seed:events` writes; a missing key fails here by
+  // its name, never as the intake's generic 422.
   test("003 EARS-44: the Congress hand-off opens the code step with the code already sent and lands on /account", async ({
     page,
   }) => {
+    const problem = congressSignUpEnvProblem();
+    if (problem) throw new Error(problem);
     const email = newEmail();
     const book = await page.request.get("/v1/public/specialties");
     expect(book.ok(), `specialties — ${book.status()}`).toBe(true);

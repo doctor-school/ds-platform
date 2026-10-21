@@ -128,12 +128,12 @@ Order rationale: wave 1 carries the most escalations and is prod-critical; wave 
 @ds/room     @ds/events-storefront      (wave 2 grows the latter; neither imports auth-flow)
    ↑              ↑
       @ds/auth-flow                     (wave 1; may import room + events-storefront)
-            ↑
-      @ds/room-page (wave 4)            (the live-room route mount; may import auth-flow + storefront-shell)
-            ↑ (none — nothing imports room-page)
-      @ds/congress-submissions          (046; may import auth-flow)
-            ↑
-      @ds/account (wave 4)              (may import all of the above)
+         ↑                    ↑
+@ds/congress-submissions   @ds/room-page (wave 4)   (room-page: the live-room route mount; may import
+   (046; may import            (a leaf — nothing     auth-flow + storefront-shell)
+    auth-flow)                  imports it)
+         ↑
+      @ds/account (wave 4)              (may import everything above except @ds/room-page)
 ```
 
 Consequences: `room-return.ts` moves into `@ds/room` as the **first PR of wave 1**, not in wave 4; the wave-1 package depends on `@ds/events-storefront` for return targets rather than re-declaring them; a shared package that would need `apps/portal` to compile is a stop, not a temporary `paths` alias.

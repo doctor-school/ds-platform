@@ -150,7 +150,7 @@ One lead step, then five code PRs in this order. P0 (#3078) is done: the host-sw
 - **After P0 (#3078, done by #3081)** — one account canvas with a `host` prop and the doctor-only congress row drawn; the room canvas stays one shared canvas without a `host` prop.
 - **After 4.1** — `/account` on the Academy is a mount of `@ds/account` rendering exactly what it rendered before; `apps/portal/lib` holds none of the four account files; the doctor cabinet is untouched — the pre-existing fork. Must stay green: `apg`, the ported `apt`, `pe2e/a11y/a11y-axe.e2e.spec.ts:192`, `pe2e/auth-journeys.e2e.spec.ts`, `pe2e/my-events.spec.ts`.
 - **After 4.2** — both hosts mount one cabinet; DAS no longer exists. Must stay green: `de2e/my-events.spec.ts`, `de2e/congress-submissions.spec.ts`, `de2e/login*.spec.ts` and the Academy list.
-- **After 4.3** — the Academy room route is a mount over `@ds/room` host values; the doctor room glue is untouched. Must stay green: `pe2e/room*.spec.ts`, `pe2e/a11y/room-axe.e2e.spec.ts`.
+- **After 4.3** — the Academy room route is a mount of `@ds/room-page` with its host values; the doctor room glue is untouched. Must stay green: `pe2e/room*.spec.ts`, `pe2e/a11y/room-axe.e2e.spec.ts`.
 - **After 4.4** — both rooms mount one wrapper; `apps/doctor/lib/room.ts` and the `(room)` layout no longer exist. Must stay green: `de2e/room.spec.ts`, `de2e/a11y/room-axe.e2e.spec.ts` and the Academy room list.
 - **After 4.5** — one forwarded-session declaration; one live-stand gate; `apps/doctor/lib` and `apps/portal/lib` contain only allowlisted files.
 
@@ -160,6 +160,7 @@ Run on `main` after PR 4.5, on both hosts (plan §4, «Wave-exit criteria»):
 
 - `pnpm build` green for `apps/portal` and `apps/doctor`; `pnpm ci:standalone-boot portal` and `pnpm ci:standalone-boot doctor` boot the standalone output.
 - `@ds/account` is in both hosts' `transpilePackages` and both `globals.css` `@source` lists; `outputFileTracingIncludes` names it if it ships runtime files; the package `@source`s no downstream; `PACKAGE_GRAPH` carries the `account → congress-submissions` edge and `local/package-import-boundary` reports nothing.
+- `@ds/room-page` is in both hosts' `transpilePackages` and both `globals.css` `@source` lists (it carries the room header cluster classes); `outputFileTracingIncludes` names it if it ships runtime files; `PACKAGE_GRAPH` carries no edge into it (D9 — nothing imports it).
 - The same-origin auth path is unchanged on both hosts — the `/account` guest bounce and its return, the expired-session bounce, sign-out, the password handoff, the room's guest door and its return into the room — evidence from the dev stand (`API_PROXY_TARGET` is baked at build), not from a local dev server.
 - The axe and 390px specs of the touched routes green on both hosts, both themes: `/account` (row 19) and the room (`pe2e/a11y/room-axe.e2e.spec.ts`, `de2e/a11y/room-axe.e2e.spec.ts`).
 - `pnpm lint:route-mount` shows `apps/{portal,doctor}` `/account` and room route files as mounts; the registry rows «Account profile surface» and «Live room UI» name their packages for both hosts; `grep -rn "mirror-of: " apps/doctor apps/portal` returns nothing; `apps/doctor/lib` and `apps/portal/lib` contain only allowlisted files.

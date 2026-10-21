@@ -3,8 +3,9 @@ import type { RoomCopy, RoomCopyStrings } from "./room-copy";
 /**
  * 006 EARS-10 — the room's default RU copy (wave-4 gate row 24).
  *
- * Both storefronts paint the same 47 room strings; the one host value is the
- * brand-home label, which pairs with the brand-home TARGET of the host's route
+ * The room paints 48 strings (44 room + 4 validation); 47 are the same on both
+ * storefronts, and the one host value is the brand-home label, which pairs
+ * with the brand-home TARGET of the host's route
  * table (row 22) — «На страницу эфиров» → `/webinars` on the Academy,
  * «На главную» → `/` on the doctor storefront. A host therefore overrides only
  * `brandHome` ({@link roomCopyRu}); the default below carries the Academy label,

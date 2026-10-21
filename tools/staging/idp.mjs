@@ -249,9 +249,7 @@ export function unionUris(pinned, rendered) {
 const sameSet = (a, b) => {
   const left = [...new Set(a ?? [])].sort();
   const right = [...new Set(b ?? [])].sort();
-  return (
-    left.length === right.length && left.every((value, i) => value === right[i])
-  );
+  return left.length === right.length && left.every((value, i) => value === right[i]);
 };
 
 /**
@@ -262,19 +260,12 @@ const sameSet = (a, b) => {
  * exactly as `provision.sh` strips it on the update path: it belongs to the app
  * resource, not to its `oidc_config` sub-resource.
  */
-function oidcConfigBody({
-  redirectUris,
-  postLogoutRedirectUris,
-  loginVersion,
-}) {
+function oidcConfigBody({ redirectUris, postLogoutRedirectUris, loginVersion }) {
   return {
     redirectUris,
     postLogoutRedirectUris,
     responseTypes: ["OIDC_RESPONSE_TYPE_CODE"],
-    grantTypes: [
-      "OIDC_GRANT_TYPE_AUTHORIZATION_CODE",
-      "OIDC_GRANT_TYPE_REFRESH_TOKEN",
-    ],
+    grantTypes: ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE", "OIDC_GRANT_TYPE_REFRESH_TOKEN"],
     appType: "OIDC_APP_TYPE_WEB",
     authMethodType: "OIDC_AUTH_METHOD_TYPE_BASIC",
     version: "OIDC_VERSION_1_0",
@@ -300,9 +291,7 @@ function oidcConfigBody({
  */
 export function planRedirectUriConverge({ current, desired }) {
   const redirectUris = [...(desired?.redirectUris ?? [])];
-  const postLogoutRedirectUris = [
-    ...(desired?.postLogoutUris ?? desired?.postLogoutRedirectUris ?? []),
-  ];
+  const postLogoutRedirectUris = [...(desired?.postLogoutUris ?? desired?.postLogoutRedirectUris ?? [])];
   if (
     sameSet(current?.redirectUris, redirectUris) &&
     sameSet(current?.postLogoutRedirectUris, postLogoutRedirectUris)
@@ -311,11 +300,7 @@ export function planRedirectUriConverge({ current, desired }) {
   }
   return {
     action: "put",
-    body: oidcConfigBody({
-      redirectUris,
-      postLogoutRedirectUris,
-      loginVersion: current?.loginVersion,
-    }),
+    body: oidcConfigBody({ redirectUris, postLogoutRedirectUris, loginVersion: current?.loginVersion }),
   };
 }
 
@@ -360,8 +345,7 @@ export function planGoldenIdentities({ accounts, existing }) {
       }
       continue;
     }
-    const mustRebuild =
-      Boolean(live) && live.emailVerified === true && !account.emailVerified;
+    const mustRebuild = Boolean(live) && live.emailVerified === true && !account.emailVerified;
     if (live?.userId && !mustRebuild) {
       subjects[account.subjectEnvVar] = live.userId;
       steps.push({
@@ -442,10 +426,7 @@ export function renderGoldenSubjectsEnv(subjects) {
   ];
   for (const name of GOLDEN_SUBJECT_ENV_VARS) {
     const value = subjects?.[name];
-    if (!value)
-      throw new IdpError(
-        `golden subject ${name} is missing — refusing to write a blank`,
-      );
+    if (!value) throw new IdpError(`golden subject ${name} is missing — refusing to write a blank`);
     lines.push(`${name}=${value}`);
   }
   lines.push("");
@@ -458,8 +439,7 @@ export function parseGoldenSubjectsEnv(text) {
   for (const line of String(text ?? "").split(/\r?\n/)) {
     const match = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim());
     if (!match) continue;
-    if (GOLDEN_SUBJECT_ENV_VARS.includes(match[1]))
-      subjects[match[1]] = match[2];
+    if (GOLDEN_SUBJECT_ENV_VARS.includes(match[1])) subjects[match[1]] = match[2];
   }
   const missing = GOLDEN_SUBJECT_ENV_VARS.filter((name) => !subjects[name]);
   if (missing.length) {
@@ -478,10 +458,7 @@ export function parseGoldenSubjectsEnv(text) {
  * with a message about environment variables nobody set — the refusal has to name
  * `ds-slot reset-identities` at the point the operator can act on it.
  */
-export function readGoldenSubjects({
-  readFile = readFileSync,
-  path = GOLDEN_SUBJECTS_PATH,
-} = {}) {
+export function readGoldenSubjects({ readFile = readFileSync, path = GOLDEN_SUBJECTS_PATH } = {}) {
   let text;
   try {
     text = readFile(path, "utf8");
@@ -507,14 +484,9 @@ export function readGoldenSubjects({
  * and the status — never the token, never a request body (which may hold a password).
  */
 export function createIdpClient({ fetch: fetchImpl, baseUrl, pat }) {
-  if (typeof fetchImpl !== "function")
-    throw new IdpError("createIdpClient needs a `fetch`");
-  if (!baseUrl)
-    throw new IdpError("createIdpClient needs a base URL (IDP_BASE_URL)");
-  if (!pat)
-    throw new IdpError(
-      `createIdpClient needs the bootstrap PAT (${IDP_PAT_FILE})`,
-    );
+  if (typeof fetchImpl !== "function") throw new IdpError("createIdpClient needs a `fetch`");
+  if (!baseUrl) throw new IdpError("createIdpClient needs a base URL (IDP_BASE_URL)");
+  if (!pat) throw new IdpError(`createIdpClient needs the bootstrap PAT (${IDP_PAT_FILE})`);
   const origin = String(baseUrl).replace(/\/$/, "");
   return {
     origin,
@@ -537,9 +509,7 @@ export function createIdpClient({ fetch: fetchImpl, baseUrl, pat }) {
       // `allowStatus` is only for a caller that proves the outcome by its own re-read.
       if (!res.ok && allowStatus.includes(res.status)) return null;
       if (!res.ok) {
-        throw new IdpError(
-          `${method} ${path} answered ${res.status} (IdP at ${origin})`,
-        );
+        throw new IdpError(`${method} ${path} answered ${res.status} (IdP at ${origin})`);
       }
       return await res.json();
     },
@@ -557,20 +527,10 @@ export function createIdpClient({ fetch: fetchImpl, baseUrl, pat }) {
  * could drift.
  */
 async function resolveProjectId(client, projectName) {
-  const projects = await client.request(
-    "POST",
-    "/management/v1/projects/_search",
-    {
-      queries: [
-        {
-          nameQuery: { name: projectName, method: "TEXT_QUERY_METHOD_EQUALS" },
-        },
-      ],
-    },
-  );
-  const projectId = (projects?.result ?? []).find(
-    (item) => item.name === projectName,
-  )?.id;
+  const projects = await client.request("POST", "/management/v1/projects/_search", {
+    queries: [{ nameQuery: { name: projectName, method: "TEXT_QUERY_METHOD_EQUALS" } }],
+  });
+  const projectId = (projects?.result ?? []).find((item) => item.name === projectName)?.id;
   if (!projectId) {
     throw new IdpError(
       `the shared project "${projectName}" does not exist on this IdP — this tool CONVERGES ` +
@@ -585,11 +545,7 @@ async function resolveSharedApp(client, { projectName, appName }) {
   const apps = await client.request(
     "POST",
     `/management/v1/projects/${projectId}/apps/_search`,
-    {
-      queries: [
-        { nameQuery: { name: appName, method: "TEXT_QUERY_METHOD_EQUALS" } },
-      ],
-    },
+    { queries: [{ nameQuery: { name: appName, method: "TEXT_QUERY_METHOD_EQUALS" } }] },
   );
   const appId = (apps?.result ?? []).find((item) => item.name === appName)?.id;
   if (!appId) {
@@ -625,12 +581,9 @@ export function diffRedirectSet({ current, desired }) {
 }
 
 const isConverged = ({ redirect, postLogout }) =>
-  [
-    redirect.missing,
-    redirect.extra,
-    postLogout.missing,
-    postLogout.extra,
-  ].every((list) => list.length === 0);
+  [redirect.missing, redirect.extra, postLogout.missing, postLogout.extra].every(
+    (list) => list.length === 0,
+  );
 
 /** Converge attempts before a read-back mismatch is a hard failure (#2694). */
 export const REDIRECT_CONVERGE_ATTEMPTS = 3;
@@ -664,17 +617,13 @@ export async function convergeRedirectUris({
   backoffMs = REDIRECT_CONVERGE_BACKOFF_MS,
   sleep = realSleep,
 }) {
-  const { projectId, appId } = await resolveSharedApp(client, {
-    projectName,
-    appName,
-  });
+  const { projectId, appId } = await resolveSharedApp(client, { projectName, appName });
   const appPath = `/management/v1/projects/${projectId}/apps/${appId}`;
   let want = await readDesired();
   let lastPut;
   let diff;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const current =
-      (await client.request("GET", appPath))?.app?.oidcConfig ?? {};
+    const current = (await client.request("GET", appPath))?.app?.oidcConfig ?? {};
     const plan = planRedirectUriConverge({ current, desired: want });
     if (plan.action === "put") {
       // A re-converge's probe can see a read-back that lagged the previous PUT, so it
@@ -695,12 +644,9 @@ export async function convergeRedirectUris({
               `${plan.body.postLogoutRedirectUris.length} post-logout URI(s)`,
       );
     } else {
-      log(
-        `  ↳ idp redirect set already holds ${current.redirectUris?.length ?? 0} URI(s)`,
-      );
+      log(`  ↳ idp redirect set already holds ${current.redirectUris?.length ?? 0} URI(s)`);
     }
-    const readBack =
-      (await client.request("GET", appPath))?.app?.oidcConfig ?? {};
+    const readBack = (await client.request("GET", appPath))?.app?.oidcConfig ?? {};
     // Re-read the live set: a slot that came up (or went down) during this write is
     // judged against the set as it is now, and becomes the next attempt's target.
     want = await readDesired();
@@ -728,8 +674,7 @@ export async function convergeRedirectUris({
 /** The two storefronts that each get their own confidential OIDC client. */
 export const STOREFRONTS = Object.freeze(["academy", "doctor"]);
 const STOREFRONT_APP_PREFIX = "ds-storefront-";
-const SLOT_STOREFRONT_APP_RE =
-  /^ds-storefront-(academy|doctor)-([a-z0-9][a-z0-9-]*)$/;
+const SLOT_STOREFRONT_APP_RE = /^ds-storefront-(academy|doctor)-([a-z0-9][a-z0-9-]*)$/;
 
 /** `ds-storefront-<storefront>-<slot>` — the per-slot client's app name. */
 export function storefrontAppName(storefront, slot) {
@@ -740,9 +685,7 @@ const assertExactUri = (uri) => {
   // The same refusal provision.sh applies: one exact absolute https URI, never a
   // wildcard / query / glob / list (ADR-0015 §4 req. 1).
   if (!/^https:\/\/[^/\s]+(\/\S*)?$/.test(uri) || /[*?[,]/.test(uri)) {
-    throw new IdpError(
-      `refusing to register a non-exact storefront URI: ${JSON.stringify(uri)}`,
-    );
+    throw new IdpError(`refusing to register a non-exact storefront URI: ${JSON.stringify(uri)}`);
   }
   return uri;
 };
@@ -763,10 +706,7 @@ export function storefrontClientConfig({ storefront, slot, baseDomain }) {
     redirectUris: [assertExactUri(`${origin}/auth/callback`)],
     postLogoutRedirectUris: [assertExactUri(`${origin}/`)],
     responseTypes: ["OIDC_RESPONSE_TYPE_CODE"],
-    grantTypes: [
-      "OIDC_GRANT_TYPE_AUTHORIZATION_CODE",
-      "OIDC_GRANT_TYPE_REFRESH_TOKEN",
-    ],
+    grantTypes: ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE", "OIDC_GRANT_TYPE_REFRESH_TOKEN"],
     appType: "OIDC_APP_TYPE_WEB",
     authMethodType: "OIDC_AUTH_METHOD_TYPE_PRIVATE_KEY_JWT",
     version: "OIDC_VERSION_1_0",
@@ -778,11 +718,7 @@ export function storefrontClientConfig({ storefront, slot, baseDomain }) {
     backChannelLogoutUri: assertExactUri(
       `https://api-${slot}.${baseDomain}/v1/auth/back-channel-logout`,
     ),
-    loginVersion: {
-      loginV2: {
-        baseUri: assertExactUri(`https://login-${slot}.${baseDomain}`),
-      },
-    },
+    loginVersion: { loginV2: { baseUri: assertExactUri(`https://login-${slot}.${baseDomain}`) } },
   };
 }
 
@@ -790,8 +726,7 @@ const sameStorefrontConfig = (current, want) =>
   sameSet(current?.redirectUris, want.redirectUris) &&
   (current?.redirectUris ?? []).length === want.redirectUris.length &&
   sameSet(current?.postLogoutRedirectUris, want.postLogoutRedirectUris) &&
-  (current?.postLogoutRedirectUris ?? []).length ===
-    want.postLogoutRedirectUris.length &&
+  (current?.postLogoutRedirectUris ?? []).length === want.postLogoutRedirectUris.length &&
   current?.authMethodType === want.authMethodType &&
   Boolean(current?.devMode) === want.devMode &&
   current?.backChannelLogoutUri === want.backChannelLogoutUri &&
@@ -823,17 +758,11 @@ export function planStorefrontClients({ slots, baseDomain, existing }) {
       const body = storefrontClientConfig({ storefront, slot, baseDomain });
       const app = byName.get(name);
       if (!app) create.push({ name, body });
-      else if (!sameStorefrontConfig(app.oidcConfig, body))
-        update.push({ appId: app.id, name, body });
+      else if (!sameStorefrontConfig(app.oidcConfig, body)) update.push({ appId: app.id, name, body });
       else keep += 1;
     }
   }
-  return {
-    create,
-    update,
-    remove: remove.sort((a, b) => a.name.localeCompare(b.name)),
-    keep,
-  };
+  return { create, update, remove: remove.sort((a, b) => a.name.localeCompare(b.name)), keep };
 }
 
 /**
@@ -853,27 +782,13 @@ export async function convergeStorefrontClients({
   const appsPath = `/management/v1/projects/${projectId}/apps`;
   const found = await client.request("POST", `${appsPath}/_search`, {
     queries: [
-      {
-        nameQuery: {
-          name: STOREFRONT_APP_PREFIX,
-          method: "TEXT_QUERY_METHOD_STARTS_WITH",
-        },
-      },
+      { nameQuery: { name: STOREFRONT_APP_PREFIX, method: "TEXT_QUERY_METHOD_STARTS_WITH" } },
     ],
   });
-  const plan = planStorefrontClients({
-    slots,
-    baseDomain,
-    existing: found?.result ?? [],
-  });
+  const plan = planStorefrontClients({ slots, baseDomain, existing: found?.result ?? [] });
   for (const { name, body } of plan.create) {
-    const created = await client.request("POST", `${appsPath}/oidc`, {
-      name,
-      ...body,
-    });
-    log(
-      `  ↳ idp storefront client ${name} created (appId ${created?.appId ?? "?"})`,
-    );
+    const created = await client.request("POST", `${appsPath}/oidc`, { name, ...body });
+    log(`  ↳ idp storefront client ${name} created (appId ${created?.appId ?? "?"})`);
   }
   for (const { appId, name, body } of plan.update) {
     await client.request("PUT", `${appsPath}/${appId}/oidc_config`, body);
@@ -883,8 +798,7 @@ export async function convergeStorefrontClients({
     await client.request("DELETE", `${appsPath}/${appId}`);
     log(`  ↳ idp storefront client ${name} removed (no live slot)`);
   }
-  if (plan.keep)
-    log(`  ↳ idp storefront clients already converged: ${plan.keep}`);
+  if (plan.keep) log(`  ↳ idp storefront clients already converged: ${plan.keep}`);
   return { projectId, ...plan };
 }
 
@@ -925,13 +839,9 @@ async function findUserByUsername(client, username) {
  * grant», otherwise the converge would PUT the wrong authorization's roles.
  */
 async function findUserGrant(client, { userId, projectId }) {
-  const data = await client.request(
-    "POST",
-    "/management/v1/users/grants/_search",
-    {
-      queries: [{ userIdQuery: { userId } }],
-    },
-  );
+  const data = await client.request("POST", "/management/v1/users/grants/_search", {
+    queries: [{ userIdQuery: { userId } }],
+  });
   const hit = (data?.result ?? []).find((item) => item.projectId === projectId);
   if (!hit?.id) return null;
   return { id: hit.id, roleKeys: [...(hit.roleKeys ?? [])] };
@@ -1049,45 +959,26 @@ export async function convergeGoldenIdentities({
       // read is in apps/api/src/auth/idp/zitadel.idp.ts:441-452). `userId` stays as a
       // fallback only so an older Zitadel build cannot silently yield no subject.
       const userId = created?.id ?? created?.userId;
-      if (!userId)
-        throw new IdpError(`creating ${step.username} returned no user id`);
-      existing[step.username] = {
-        userId,
-        emailVerified: account.emailVerified,
-      };
+      if (!userId) throw new IdpError(`creating ${step.username} returned no user id`);
+      existing[step.username] = { userId, emailVerified: account.emailVerified };
       subjects[account.subjectEnvVar] = userId;
       log(`  ↳ created ${step.username} (verified: ${account.emailVerified})`);
     } else if (step.op === "set-password") {
       const userId = step.userId ?? existing[step.username]?.userId;
-      if (!userId)
-        throw new IdpError(
-          `no user id to set the password of ${step.username} on`,
-        );
+      if (!userId) throw new IdpError(`no user id to set the password of ${step.username} on`);
       await client.request("POST", `/v2/users/${userId}/password`, {
-        newPassword: {
-          password: passwords[step.passwordEnvVar],
-          changeRequired: false,
-        },
+        newPassword: { password: passwords[step.passwordEnvVar], changeRequired: false },
       });
-      log(
-        `  ↳ password set for ${step.username} (from ${step.passwordEnvVar})`,
-      );
+      log(`  ↳ password set for ${step.username} (from ${step.passwordEnvVar})`);
     } else if (step.op === "verify-email") {
       // The two-hop flip proven live in #1131: SetEmail with `isVerified` is rejected
       // for an unchanged address, so a fresh code is returned (never delivered) and
       // immediately verified. The code lives in this local only — never logged.
-      const issued = await client.request(
-        "POST",
-        `/v2/users/${step.userId}/email/resend`,
-        {
-          returnCode: {},
-        },
-      );
+      const issued = await client.request("POST", `/v2/users/${step.userId}/email/resend`, {
+        returnCode: {},
+      });
       const code = issued?.verificationCode ?? issued?.emailCode;
-      if (!code)
-        throw new IdpError(
-          `the IdP returned no verification code for ${step.username}`,
-        );
+      if (!code) throw new IdpError(`the IdP returned no verification code for ${step.username}`);
       await client.request("POST", `/v2/users/${step.userId}/email/verify`, {
         verificationCode: code,
       });
@@ -1095,8 +986,7 @@ export async function convergeGoldenIdentities({
       log(`  ↳ email marked verified for ${step.username}`);
     } else if (step.op === "ensure-grant") {
       const userId = step.userId ?? existing[step.username]?.userId;
-      if (!userId)
-        throw new IdpError(`no user id to grant ${step.username} on`);
+      if (!userId) throw new IdpError(`no user id to grant ${step.username} on`);
       const roles = step.roleKeys.join(", ");
       if (step.grantId) {
         // The authorization exists and carries the wrong roles: REPLACE its role
@@ -1134,8 +1024,7 @@ export async function convergeGoldenIdentities({
   for (const account of accounts) {
     if (subjects[account.subjectEnvVar]) continue;
     const userId = existing[account.username]?.userId;
-    if (!userId)
-      throw new IdpError(`no subject resolved for ${account.subjectEnvVar}`);
+    if (!userId) throw new IdpError(`no subject resolved for ${account.subjectEnvVar}`);
     subjects[account.subjectEnvVar] = userId;
   }
   return subjects;
@@ -1179,8 +1068,7 @@ export const AGENT_ADMIN_TOTP_ENV_VAR = "DS_STAGE_AGENT_ADMIN_TOTP_SECRET";
  * `stage.env`: the converge mints the password and the TOTP secret itself, so no
  * owner step stands between an agent and an admin sign-in.
  */
-export const AGENT_ADMIN_SECRETS_PATH =
-  "/etc/ds-platform/stage-agent-admin.env";
+export const AGENT_ADMIN_SECRETS_PATH = "/etc/ds-platform/stage-agent-admin.env";
 
 const AGENT_SECRET_KEYS = Object.freeze([
   STAGE_AGENT_ADMIN.passwordEnvVar,
@@ -1206,8 +1094,7 @@ export function parseAgentAdminSecrets(text) {
   const secrets = {};
   for (const line of String(text ?? "").split(/\r?\n/)) {
     const match = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim());
-    if (match && AGENT_SECRET_KEYS.includes(match[1]) && match[2])
-      secrets[match[1]] = match[2];
+    if (match && AGENT_SECRET_KEYS.includes(match[1]) && match[2]) secrets[match[1]] = match[2];
   }
   return secrets;
 }
@@ -1219,8 +1106,7 @@ function base32Decode(text) {
     .replace(/\s+/g, "")
     .replace(/=+$/, "")
     .toUpperCase();
-  if (!clean || /[^A-Z2-7]/.test(clean))
-    throw new IdpError("the TOTP secret is not base32");
+  if (!clean || /[^A-Z2-7]/.test(clean)) throw new IdpError("the TOTP secret is not base32");
   let bits = 0;
   let value = 0;
   const out = [];
@@ -1288,9 +1174,7 @@ async function readTotpFactorState(client, userId) {
   );
   const otp = (data?.result ?? []).find((factor) => factor.otp !== undefined);
   if (!otp) return "absent";
-  return (otp.otp.state ?? otp.state) === "AUTH_FACTOR_STATE_READY"
-    ? "ready"
-    : "not-ready";
+  return (otp.otp.state ?? otp.state) === "AUTH_FACTOR_STATE_READY" ? "ready" : "not-ready";
 }
 
 /** A password Zitadel's default complexity policy accepts: upper, lower, digit, symbol. */
@@ -1322,20 +1206,14 @@ export async function convergeAgentAdmin({
   goldenSubjects = {},
 }) {
   const account = STAGE_AGENT_ADMIN;
-  if (
-    GOLDEN_IDP_ACCOUNTS.some((golden) => golden.username === account.username)
-  ) {
-    throw new IdpError(
-      `${account.username} is a golden account — refusing to converge its factor`,
-    );
+  if (GOLDEN_IDP_ACCOUNTS.some((golden) => golden.username === account.username)) {
+    throw new IdpError(`${account.username} is a golden account — refusing to converge its factor`);
   }
   let secrets = { ...((await readSecrets()) ?? {}) };
   if (!secrets[account.passwordEnvVar]) {
     secrets = { ...secrets, [account.passwordEnvVar]: randomPassword() };
     await writeSecrets(secrets);
-    log(
-      `  ↳ minted a password for ${account.username} (stored in ${AGENT_ADMIN_SECRETS_PATH})`,
-    );
+    log(`  ↳ minted a password for ${account.username} (stored in ${AGENT_ADMIN_SECRETS_PATH})`);
   }
 
   const subjects = await convergeGoldenIdentities({
@@ -1349,9 +1227,7 @@ export async function convergeAgentAdmin({
   const userId = subjects[account.subjectEnvVar];
   // The fence holds on the id, not only the name: an email search is not unique on
   // Zitadel, so a hit resolving to a golden subject (the owner's factors) stops here.
-  const clash = Object.entries(goldenSubjects ?? {}).find(
-    ([, id]) => id === userId,
-  );
+  const clash = Object.entries(goldenSubjects ?? {}).find(([, id]) => id === userId);
   if (!userId || clash) {
     throw new IdpError(
       `${account.username} resolved to ${clash ? `the golden subject ${clash[0]}` : "no subject"} — refusing to touch a factor`,
@@ -1382,9 +1258,7 @@ export async function convergeAgentAdmin({
         `${account.username} still holds a TOTP factor after its removal — not enrolling on top`,
       );
     }
-    log(
-      `  ↳ removed the TOTP factor of ${account.username} (no stored secret for it)`,
-    );
+    log(`  ↳ removed the TOTP factor of ${account.username} (no stored secret for it)`);
   }
 
   const registration = await client.request(
@@ -1393,29 +1267,16 @@ export async function convergeAgentAdmin({
     {},
   );
   if (!registration?.secret) {
-    throw new IdpError(
-      `the TOTP registration of ${account.username} returned no secret`,
-    );
+    throw new IdpError(`the TOTP registration of ${account.username} returned no secret`);
   }
   secrets = { ...secrets, [AGENT_ADMIN_TOTP_ENV_VAR]: registration.secret };
   await writeSecrets(secrets);
-  await client.request(
-    "POST",
-    `/v2/users/${encodeURIComponent(userId)}/totp/verify`,
-    {
-      code: totpCode(registration.secret, now()),
-    },
-  );
+  await client.request("POST", `/v2/users/${encodeURIComponent(userId)}/totp/verify`, {
+    code: totpCode(registration.secret, now()),
+  });
   if ((await readTotpFactorState(client, userId)) !== "ready") {
-    throw new IdpError(
-      `the TOTP factor of ${account.username} is not READY after its verify`,
-    );
+    throw new IdpError(`the TOTP factor of ${account.username} is not READY after its verify`);
   }
-  log(
-    `  ↳ TOTP enrolled for ${account.username} (secret stored in ${AGENT_ADMIN_SECRETS_PATH})`,
-  );
-  return {
-    subject: userId,
-    totp: action === "replace" ? "replaced" : "enrolled",
-  };
+  log(`  ↳ TOTP enrolled for ${account.username} (secret stored in ${AGENT_ADMIN_SECRETS_PATH})`);
+  return { subject: userId, totp: action === "replace" ? "replaced" : "enrolled" };
 }

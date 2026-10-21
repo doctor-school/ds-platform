@@ -625,6 +625,13 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then Zitadel otp_sms verifies it
     And a BFF session is established
 
+  @host:academy @EARS-7 @EARS-8 @EARS-16 @EARS-41 @failure @login-sms-code-reuse
+  Scenario: Academy refuses a consumed SMS login code without disturbing its confirmed-phone owner
+    Given an owned Academy consumed-code doctor verifies email and confirms a fresh phone through the account UI
+    When that consumed-code doctor logs out and requests one delivered SMS login code as an Academy guest
+    And the consumed-code guest enters the actual six-digit SMS login code and it auto-submits
+    Then an independent Academy guest cannot reuse the consumed SMS login code and its confirmed-phone owner survives reload
+
   @EARS-7 @EARS-8 @happy @login-sms-confirmed
   Scenario: Academy signs in the same owned doctor with the confirmed phone SMS code
     Given an owned Academy doctor verifies email and confirms a fresh phone through the real account UI

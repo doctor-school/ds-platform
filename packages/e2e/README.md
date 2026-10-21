@@ -1819,12 +1819,14 @@ identifier from that same browser must still receive the ordinary neutral answer
 proving the source budget was not exhausted; neither request may send mail over
 the full canonical fifteen-second addressed-mail horizon.
 
-Point the local congress configuration at `seed-005-upcoming` from the existing
-`pnpm --filter @ds/api seed:events` fixture writer on the owned branch database.
-Its venue is event-owned, so that writer seeds and restores the canonical test
-venue on both insert and rerun; an environment venue cannot satisfy intake.
-`apps/api/test/scripts/seed-events.e2e-spec.ts` proves initial venue, rerun repair
-and preservation of another fixture's custom venue. No one-off browser database
+The local congress configuration is the `CONGRESS_SIGNUP_*` block of
+`infra/dev-stand/.env.example`: its `CONGRESS_SIGNUP_EVENT_ID` is the fixed id of
+`seed-044-congress`, which `pnpm --filter @ds/api seed:events` writes on the owned
+branch database (run it once after `pnpm dev:db:branch`). Its venue is
+event-owned, so that writer seeds and restores the canonical test venue on both
+insert and rerun; an environment venue cannot satisfy intake.
+`apps/api/test/scripts/seed-events.e2e-spec.ts` proves the fixed id, initial
+venue, rerun repair and preservation of another fixture's custom venue. No one-off browser database
 patch is part of this prerequisite.
 
 The first guest redemption of the still-live reference must return that same

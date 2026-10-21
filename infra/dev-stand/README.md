@@ -313,10 +313,11 @@ names a real event in every database the seed ran on:
 The rest of the block (`CONSENT_VERSION`, `WINDOW_OPENS_AT`/`WINDOW_CLOSES_AT`,
 `EVENT_DAYS`) has working stand values in `.env.example`. Any of the five unset
 ⇒ the sign-up answers one generic 422 by design (the api log names the reason).
-The live specs that drive a real sign-up
-(`apps/portal/e2e/auth-journeys.e2e.spec.ts`,
-`apps/doctor/e2e/login-handoff-live.spec.ts`) read the same `.env.local` and
-fail by the missing key's name instead.
+Two live specs, `apps/portal/e2e/auth-journeys.e2e.spec.ts` and
+`apps/doctor/e2e/login-handoff-live.spec.ts`, read the same `.env.local` and
+fail by the missing key's name instead. The `packages/e2e` BDD steps that sign
+up through `lib/owned-congress-signup.ts` carry no such check (the stage runner
+does not hold the api's keys), so locally they still see the 422.
 
 ---
 

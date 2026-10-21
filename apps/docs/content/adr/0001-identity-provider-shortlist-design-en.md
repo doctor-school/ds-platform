@@ -398,7 +398,7 @@ Login continuity between the two storefronts (`doctor.school`, `academy.doctor.s
 
 **Outside the mechanism:** `admin.doctor.school` (TOTP-gated session, feature 011), `cms.doctor.school` and the internal docs keep their own sign-in; none of them is a client of the sign-in host, and the sign-in host refuses their auth requests.
 
-The nine binding security requirements (exact-match `redirect_uri` and a relative return path, a code useless outside the browser that ran the authorize, `state` / `nonce` and credential-on-the-sign-in-host against login CSRF, cookie attributes, fresh session per host, complete server-side sign-out, admin isolation, no weaker factor, enumeration-safe limits) are stated once, in ADR-0015 §4.
+The eleven binding security requirements (exact-match `redirect_uri` and a relative return path, a code useless outside the browser that ran the authorize — a forged `response_mode` included, `state` / `nonce` and credential-on-the-sign-in-host against login CSRF, cookie attributes, fresh session per host, complete server-side sign-out, admin isolation, no weaker factor and no foreign login UI, enumeration-safe limits, a fingerprint-bound shared session with a bounded lifetime, `prompt=login` / `max_age` and credential events ending every session) are stated once, in ADR-0015 §4.
 
 ## 8. Identity migration from Directual
 

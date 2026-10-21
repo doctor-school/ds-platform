@@ -443,7 +443,9 @@ export function releaseUnitName(env, sha, step) {
 
 /**
  * Install the box entrypoints (ds-release, ds-deploy-entrypoint, release-driver) from
- * the tree just shipped to the box (every run).
+ * the tree just shipped to the box. Prod installs on every run (it ships only `main` /
+ * `hotfix/*`); on ds-stage-1 only the `main` converge of a SHA contained in `main`
+ * does (#3125, `tools/staging/slot.mjs`).
  */
 export function releaseInstallScript(liveDir = "$HOME/ds-platform") {
   return [

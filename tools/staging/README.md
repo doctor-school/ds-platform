@@ -376,8 +376,16 @@ carry no environment (#2995): stage's captcha site key and contour flag are runt
 env, so the same digest serves every slot and, later, production. The BuildKit cache
 cap in the converge's prune stays: `stg-infra`'s `postgres` is still built on the box.
 
-**Durable box steps (#2982).** The ship also installs `/usr/local/bin/ds-release` from
-the slot's own tree, and every long box step of a converge — each image pull
+**Box entrypoints (#3125).** `/usr/local/bin/ds-release`, `/usr/local/bin/ds-deploy-entrypoint`
+and `/usr/local/lib/ds-platform/release-driver` are box-global, so on ds-stage-1 only the
+stage `main` converge of a SHA contained in `main` installs them from the tree it just
+shipped: an operator `up main` / `reset main` after `git fetch origin main` and
+`git merge-base --is-ancestor <sha> origin/main`, and the release driver's `--local` unit,
+whose provenance check already proved it. A PR slot run and a `main` converge at a hotfix
+ref install nothing and print once that they use the box's installed entrypoints; on a
+fresh box, converge `main` first. Prod runs install from the tree they ship.
+
+**Durable box steps (#2982).** Every long box step of a converge — each image pull
 (`pull-<image>`), `migrate`, `seed`, `up` and `prune` — runs as its own systemd unit
 `ds-stage-main-<sha12>-<step>` / `ds-stage-pr-<N>-<sha12>-<step>` instead of a streamed ssh
 command. The operator starts it, then polls `ds-release status`, one status line per

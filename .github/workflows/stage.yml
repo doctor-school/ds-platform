@@ -34,8 +34,11 @@ permissions:
 
 # One stage `main` slot: a newer merge queues behind the running converge+suite,
 # never cancels it mid-converge (the driver unit would keep running regardless).
+# Only a `push` to `main` run of `Runtime images` enters `stage-main`: GitHub keeps
+# one pending run per group, so a PR-triggered run (whose jobs all skip) queued there
+# replaced and cancelled main's pending run (#3125). Every other trigger gets its own.
 concurrency:
-  group: stage-main
+  group: ${{ (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main') && 'stage-main' || format('stage-other-{0}', github.run_id) }}
   cancel-in-progress: false
 
 env:
@@ -290,11 +293,13 @@ jobs:
           rc=$?
           set -e
           kill "$sampler" 2>/dev/null || true
+          # Numbers only, so the job log carries them too: the step summary is not
+          # readable through the API nor by a logged-out viewer.
           {
             echo "### Memory (E2E_WORKERS=$E2E_WORKERS)"
             echo "- max RSS of the largest process: $(awk -F': ' '/Maximum resident set size/ {printf "%d MiB", $2/1024}' "$RUNNER_TEMP/time.log")"
             echo "- peak runner memory used (free -m, 5 s samples): $(sort -n "$mem" | tail -n 1) MiB of $(free -m | awk '/^Mem:/ {print $2}') MiB"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
           exit "$rc"
 
       # The full report goes to the box, never to Actions (public). Always: a red

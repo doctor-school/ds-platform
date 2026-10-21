@@ -1,0 +1,717 @@
+import { randomUUID } from "node:crypto";
+import {
+  expect,
+  request,
+  type APIRequestContext,
+  type Browser,
+  type BrowserContext,
+  type BrowserContextOptions,
+  type Page,
+} from "@playwright/test";
+import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
+import { captureResponse } from "../lib/captured-response.js";
+import { runGatedLoginAttempt } from "../lib/login-failure-gate.js";
+import {
+  captureAddressedMailCheckpoint,
+  fetchRecoveryMail,
+  mailpitUrlFor,
+  nativeRecoveryMail,
+} from "../lib/mailpit.js";
+import {
+  inputSecret,
+  registerOwnedCredentials,
+} from "../lib/owned-registration.js";
+import { assertSecureSession } from "../lib/secure-session.js";
+import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
+
+const SESSION = "__Host-ds_session";
+interface ResetAccount {
+  email: string;
+  resetRequests: number;
+  password: string;
+  acceptedPassword: string;
+  replacement: string;
+  contexts: BrowserContext[];
+  closures: APIRequestContext[];
+  httpCredentials: BrowserContextOptions["httpCredentials"];
+  ownedContexts: BrowserContext[];
+  owner?: Page;
+  reset?: Page;
+  code?: string;
+  subject?: string;
+  cookie?: string | undefined;
+}
+interface ResetIsolation {
+  accounts: ResetAccount[];
+  expectedRevoked: Set<BrowserContext>;
+  contexts: BrowserContext[];
+  closures: APIRequestContext[];
+}
+const journeys = new WeakMap<Page, ResetIsolation>();
+function journey(page: Page): ResetIsolation {
+  const state = journeys.get(page);
+  if (!state) throw new Error("Owned email reset isolation journey missing");
+  return state;
+}
+async function privatePage(
+  browser: Browser,
+  state: ResetAccount,
+  base: string,
+) {
+  const context = await browser.newContext({
+    locale: "ru-RU",
+    ...(state.httpCredentials
+      ? { httpCredentials: state.httpCredentials }
+      : {}),
+  });
+  state.contexts.push(context);
+  state.ownedContexts.push(context);
+  context.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/v1/auth/password/reset"
+    )
+      state.resetRequests++;
+  });
+  await prepareCaptchaForJourney(
+    context,
+    base,
+    process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
+  );
+  return context.newPage();
+}
+async function sameOwner(page: Page, state: ResetAccount) {
+  const result = await page.evaluate(
+    async ({ email, subject }) => {
+      const profileResponse = await fetch("/v1/me/profile", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const sessionResponse = await fetch("/v1/auth/session", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const profile = await profileResponse.json().catch(() => ({}));
+      const session = await sessionResponse.json().catch(() => ({}));
+      return {
+        subject: session.sub as string | undefined,
+        evidence: {
+          profile: profileResponse.status,
+          session: sessionResponse.status,
+          sameEmail: profile.email === email,
+          verified: profile.emailVerified === true,
+          sameSubject:
+            typeof session.sub === "string" &&
+            !!session.sub &&
+            (subject === undefined || subject === session.sub),
+        },
+      };
+    },
+    { email: state.email, subject: state.subject },
+  );
+  expect(result.evidence, "same verified owned account").toEqual({
+    profile: 200,
+    session: 200,
+    sameEmail: true,
+    verified: true,
+    sameSubject: true,
+  });
+  if (!result.subject)
+    throw new Error("Owned email reset isolation subject missing");
+  state.subject ??= result.subject;
+}
+async function noPrivateAccess(page: Page) {
+  expect(
+    (await page.context().cookies()).some((c) => c.name === SESSION),
+    "refusal minted no browser session",
+  ).toBe(false);
+  expect(
+    await page.evaluate(async () => ({
+      session: (
+        await fetch("/v1/auth/session", {
+          credentials: "include",
+          cache: "no-store",
+        })
+      ).status,
+      profile: (
+        await fetch("/v1/me/profile", {
+          credentials: "include",
+          cache: "no-store",
+        })
+      ).status,
+    })),
+    "guest cannot access private owner data",
+  ).toEqual({ session: 401, profile: 401 });
+}
+async function passwordLogin(
+  page: Page,
+  base: string,
+  state: ResetAccount,
+  password: string,
+) {
+  await page.goto(`${base}/login?returnTo=%2Faccount`, { waitUntil: "load" });
+  await page.waitForLoadState("networkidle");
+  await inputSecret(
+    page.locator('input[autocomplete="username"]'),
+    state.email,
+  );
+  await inputSecret(
+    page.locator('input[autocomplete="current-password"]'),
+    password,
+  );
+  let attemptFailed = false;
+  return runGatedLoginAttempt(
+    {
+      close: async () => {
+        let closingFailed = false;
+        let closing: Awaited<ReturnType<typeof request.newContext>>;
+        try {
+          closing = await request.newContext({
+            baseURL: base,
+            ...(state.httpCredentials
+              ? { httpCredentials: state.httpCredentials }
+              : {}),
+          });
+        } catch {
+          if (!attemptFailed)
+            throw new Error("Owned login closure context could not be created");
+          test.info().annotations.push({
+            type: "cleanup-failed",
+            description:
+              "Owned login closure context failed; original password attempt failure retained.",
+          });
+          return;
+        }
+        try {
+          state.closures.push(closing);
+          const accepted = await closing.post("/v1/auth/login", {
+            data: { identifier: state.email, password: state.acceptedPassword },
+          });
+          expect(
+            accepted.status(),
+            "owned successful sign-in closes the failure window",
+          ).toBe(200);
+        } catch {
+          closingFailed = true;
+        } finally {
+          try {
+            const revoked = await closing.post("/v1/auth/logout");
+            expect(
+              revoked.status(),
+              "exact owned closing session is revoked",
+            ).toBe(200);
+            const session = await closing.get("/v1/auth/session");
+            const profile = await closing.get("/v1/me/profile");
+            expect(
+              { session: session.status(), profile: profile.status() },
+              "closed gate session has no private access",
+            ).toEqual({ session: 401, profile: 401 });
+          } catch {
+            closingFailed = true;
+          } finally {
+            if (!closingFailed) {
+              await closing.dispose().catch(() => {
+                closingFailed = true;
+              });
+              if (!closingFailed)
+                state.closures.splice(state.closures.indexOf(closing), 1);
+            }
+          }
+        }
+        if (closingFailed) {
+          if (!attemptFailed)
+            throw new Error(
+              "Owned successful-login closure or its session cleanup failed",
+            );
+          test.info().annotations.push({
+            type: "cleanup-failed",
+            description:
+              "Owned login closure failed; original password attempt failure retained; lead must inspect scoped cleanup.",
+          });
+        }
+      },
+    },
+    async () => {
+      try {
+        const pending = captureResponse(page, "/v1/auth/login");
+        await page.getByTestId("password-login-submit").click();
+        const result = await pending;
+        let exactCommand = false;
+        try {
+          const command = result.response.request().postDataJSON();
+          exactCommand =
+            command.identifier === state.email && command.password === password;
+        } catch {
+          /* Secret-bearing diagnostics project only to false. */
+        }
+        expect(
+          exactCommand,
+          "exact owned identifier and password submitted",
+        ).toBe(true);
+        return result;
+      } catch (error) {
+        attemptFailed = true;
+        throw error;
+      }
+    },
+  );
+}
+
+async function signInAndIdentify(
+  page: Page,
+  base: string,
+  account: ResetAccount,
+  password: string,
+) {
+  const result = await passwordLogin(page, base, account, password);
+  expect(
+    {
+      status: result.response.status(),
+      tokenFree: result.body === '{"status":"authenticated"}',
+    },
+    "owned password accepted",
+  ).toEqual({ status: 200, tokenFree: true });
+  await page.waitForURL((url) => url.pathname === "/account");
+  await assertSecureSession(page, result.response, base);
+  await sameOwner(page, account);
+}
+
+Given(
+  "two owned verified Academy doctors retain distinct live email password reset codes",
+  async ({ page, browser, httpCredentials, world }) => {
+    expect(world.host.id).toBe("academy");
+    const state: ResetIsolation = {
+      accounts: [],
+      contexts: [],
+      closures: [],
+      expectedRevoked: new Set(),
+    };
+    journeys.set(page, state);
+    for (let index = 0; index < 2; index++) {
+      const password = `Original-${randomUUID()}-aA1!`;
+      const account: ResetAccount = {
+        email: `email-reset-isolation-3162-${index}-${randomUUID().replaceAll("-", "")}@example.test`,
+        resetRequests: 0,
+        password,
+        acceptedPassword: password,
+        replacement: `Replacement-${randomUUID()}-aA1!`,
+        ownedContexts: [],
+        contexts: state.contexts,
+        closures: state.closures,
+        httpCredentials,
+      };
+      expect(
+        account.email.split("@")[0]!.length <= 64,
+        "owned email local part fits the registration contract",
+      ).toBe(true);
+      state.accounts.push(account);
+      const owner = await privatePage(browser, account, world.hostBaseUrl);
+      account.owner = owner;
+      const { code } = await registerOwnedCredentials(
+        owner,
+        world.hostBaseUrl,
+        account,
+        "/account",
+      );
+      const verifying = captureResponse(owner, "/v1/auth/verify");
+      await inputSecret(
+        owner.locator('input[autocomplete="one-time-code"]'),
+        code,
+      );
+      expect((await verifying).response.status(), "registration verified").toBe(
+        200,
+      );
+      await owner.waitForURL((url) => url.pathname === "/account");
+      await sameOwner(owner, account);
+      account.cookie = (await owner.context().cookies()).find(
+        (cookie) => cookie.name === SESSION,
+      )?.value;
+      expect(Boolean(account.cookie), "owned session cookie present").toBe(
+        true,
+      );
+    }
+    expect(
+      state.accounts[0]!.email !== state.accounts[1]!.email,
+      "two different owned email addresses",
+    ).toBe(true);
+    // 003 EARS-12: each identifier owns its own provider reset challenge.
+    for (const account of state.accounts) {
+      const reset = await privatePage(browser, account, world.hostBaseUrl);
+      account.reset = reset;
+      await reset.goto(`${world.hostBaseUrl}/reset?returnTo=%2Faccount`, {
+        waitUntil: "load",
+      });
+      await reset.waitForLoadState("networkidle");
+      await inputSecret(
+        reset.locator('input[autocomplete="username"]'),
+        account.email,
+      );
+      const mailpit =
+        process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl);
+      const before = await captureAddressedMailCheckpoint(
+        nativeRecoveryMail(),
+        mailpit,
+        account.email,
+      );
+      const pending = captureResponse(reset, "/v1/auth/password/reset");
+      await reset.getByTestId("reset-request-submit").click();
+      const requested = await pending;
+      expect({
+        status: requested.response.status(),
+        neutral: requested.body === '{"status":"reset_requested"}',
+      }).toEqual({ status: 200, neutral: true });
+      const mail = await fetchRecoveryMail(
+        nativeRecoveryMail(),
+        mailpit,
+        account.email,
+        before,
+        "reset",
+      );
+      account.code = mail.code;
+      const delivered = await captureAddressedMailCheckpoint(
+        nativeRecoveryMail(),
+        mailpit,
+        account.email,
+      );
+      const previous = new Set(before.messageIds);
+      expect(
+        {
+          one:
+            delivered.messageIds.filter((id) => !previous.has(id)).length === 1,
+          sixDigits: /^\d{6}$/.test(account.code),
+        },
+        "one fresh addressed email reset challenge",
+      ).toEqual({ one: true, sixDigits: true });
+      await noPrivateAccess(reset);
+    }
+    expect(
+      state.accounts[0]!.code !== state.accounts[1]!.code,
+      "delivered codes differ without reroll or resend",
+    ).toBe(true);
+  },
+);
+
+When(
+  "the second doctor's reset form submits the first doctor's retained email code with a different password",
+  async ({ page }) => {
+    const [first, second] = journey(page).accounts;
+    if (!first?.code || !second?.reset)
+      throw new Error("Two retained reset challenges missing");
+    const reset = second.reset;
+    await inputSecret(
+      reset.locator('input[autocomplete="one-time-code"]'),
+      first.code,
+    );
+    await inputSecret(
+      reset.locator('input[autocomplete="new-password"]'),
+      second.replacement,
+    );
+    const pending = captureResponse(reset, "/v1/auth/password/reset/complete");
+    await reset.locator('form button[type="submit"]').click();
+    const refused = await pending;
+    let exactCommand = false;
+    let generic = false;
+    try {
+      const command = refused.response.request().postDataJSON();
+      const body = JSON.parse(refused.body);
+      exactCommand =
+        command.identifier === second.email &&
+        command.code === first.code &&
+        command.newPassword === second.replacement;
+      generic =
+        Object.keys(body).length === 3 &&
+        body.statusCode === 400 &&
+        body.message === "the request could not be completed" &&
+        body.error === "Bad Request";
+    } catch {
+      /* Secret-bearing diagnostics project only to false. */
+    }
+    expect(
+      {
+        status: refused.response.status(),
+        exactCommand,
+        generic,
+        noCookie: (await refused.response.headerValue("set-cookie")) === null,
+      },
+      "another account's live code is refused generically",
+    ).toEqual({
+      status: 400,
+      exactCommand: true,
+      generic: true,
+      noCookie: true,
+    });
+    await expect
+      .poll(() => reset.getByTestId("reset-error").ariaSnapshot())
+      .toBe("- alert: Код не подошёл или пароль отклонён.");
+    await noPrivateAccess(reset);
+  },
+);
+
+Then(
+  "both original email reset owners keep their identities and the second doctor's password is unchanged",
+  async ({ page, browser, world }) => {
+    const state = journey(page);
+    for (const account of state.accounts) {
+      await account.owner!.reload({ waitUntil: "load" });
+      await account.owner!.waitForLoadState("networkidle");
+      await sameOwner(account.owner!, account);
+      expect(
+        (await account.owner!.context().cookies()).find(
+          (cookie) => cookie.name === SESSION,
+        )?.value === account.cookie,
+        "foreign code preserves the original owner's cookie",
+      ).toBe(true);
+    }
+    const second = state.accounts[1]!;
+    const rejected = await privatePage(browser, second, world.hostBaseUrl);
+    const failure = await passwordLogin(
+      rejected,
+      world.hostBaseUrl,
+      second,
+      second.replacement,
+    );
+    expect(
+      {
+        status: failure.response.status(),
+        noCookie: (await failure.response.headerValue("set-cookie")) === null,
+      },
+      "foreign-code proposal was never installed",
+    ).toEqual({ status: 401, noCookie: true });
+    await noPrivateAccess(rejected);
+    const accepted = await privatePage(browser, second, world.hostBaseUrl);
+    await signInAndIdentify(
+      accepted,
+      world.hostBaseUrl,
+      second,
+      second.password,
+    );
+  },
+);
+
+When(
+  "each email reset owner submits their own same retained code and a new password without requesting another challenge",
+  async ({ page, world }) => {
+    const state = journey(page);
+    for (const account of state.accounts) {
+      if (!account.reset || !account.code)
+        throw new Error("Retained owner reset missing");
+      const reset = account.reset;
+      await inputSecret(
+        reset.locator('input[autocomplete="one-time-code"]'),
+        account.code,
+      );
+      await inputSecret(
+        reset.locator('input[autocomplete="new-password"]'),
+        account.replacement,
+      );
+      const priorSessionContexts: BrowserContext[] = [];
+      for (const context of account.ownedContexts) {
+        if (
+          context !== reset.context() &&
+          (await context.cookies()).some((cookie) => cookie.name === SESSION)
+        )
+          priorSessionContexts.push(context);
+      }
+      const pending = captureResponse(
+        reset,
+        "/v1/auth/password/reset/complete",
+      );
+      await reset.locator('form button[type="submit"]').click();
+      const completed = await pending;
+      let exactCommand = false;
+      try {
+        const command = completed.response.request().postDataJSON();
+        exactCommand =
+          command.identifier === account.email &&
+          command.code === account.code &&
+          command.newPassword === account.replacement;
+      } catch {
+        /* Secret-bearing diagnostics project only to false. */
+      }
+      expect(
+        {
+          status: completed.response.status(),
+          exactCommand,
+          tokenFree: completed.body === '{"status":"reset_completed"}',
+        },
+        "same retained code completes only its owner's reset",
+      ).toEqual({ status: 200, exactCommand: true, tokenFree: true });
+      // 003 EARS-12: only contexts predating this successful reset are revoked.
+      for (const context of priorSessionContexts)
+        state.expectedRevoked.add(context);
+      account.acceptedPassword = account.replacement;
+      await reset.waitForURL((url) => url.pathname === "/account");
+      await assertSecureSession(reset, completed.response, world.hostBaseUrl, [
+        account.cookie!,
+      ]);
+      await sameOwner(reset, account);
+      expect(
+        await account.owner!.evaluate(async () => ({
+          session: (
+            await fetch("/v1/auth/session", {
+              credentials: "include",
+              cache: "no-store",
+            })
+          ).status,
+          profile: (
+            await fetch("/v1/me/profile", {
+              credentials: "include",
+              cache: "no-store",
+            })
+          ).status,
+        })),
+        "successful reset revokes the prior owner session",
+      ).toEqual({ session: 401, profile: 401 });
+    }
+  },
+);
+
+Then(
+  "both new passwords sign in only their original verified doctors before all owned email reset isolation sessions are logged out",
+  async ({ page, browser, world }) => {
+    const state = journey(page);
+    for (const account of state.accounts) {
+      const accepted = await privatePage(browser, account, world.hostBaseUrl);
+      await signInAndIdentify(
+        accepted,
+        world.hostBaseUrl,
+        account,
+        account.replacement,
+      );
+      await accepted.reload({ waitUntil: "load" });
+      await accepted.waitForLoadState("networkidle");
+      await sameOwner(accepted, account);
+    }
+    expect(
+      state.accounts.map((account) => account.resetRequests),
+      "exactly two challenges and no resend",
+    ).toEqual([1, 1]);
+  },
+);
+
+After("@email-reset-account-isolation", async ({ page, world }) => {
+  const state = journeys.get(page);
+  if (!state) return;
+  const failures: string[] = [];
+  const origin = new URL(world.hostBaseUrl).origin;
+  try {
+    for (const [index, context] of state.contexts.entries()) {
+      let operation = "cookies";
+      let statuses:
+        { logout: number; session: number; profile: number } | undefined;
+      try {
+        if ((await context.cookies()).some((c) => c.name === SESSION)) {
+          operation = "same-origin-page";
+          const active = context
+            .pages()
+            .find((p) => new URL(p.url()).origin === origin);
+          if (!active)
+            throw new Error(
+              "Owned email reset isolation session has no cleanup page",
+            );
+          operation = "logout-and-private-refusal";
+          statuses = await active.evaluate(async () => {
+            const logout = await fetch("/v1/auth/logout", {
+              method: "POST",
+              credentials: "include",
+            });
+            const session = await fetch("/v1/auth/session", {
+              credentials: "include",
+              cache: "no-store",
+            });
+            const profile = await fetch("/v1/me/profile", {
+              credentials: "include",
+              cache: "no-store",
+            });
+            return {
+              logout: logout.status,
+              session: session.status,
+              profile: profile.status,
+            };
+          });
+          const alreadyRevoked = state.expectedRevoked.has(context);
+          expect(
+            statuses,
+            "active sessions log out; explicitly reset-revoked sessions remain private",
+          ).toEqual({
+            logout: alreadyRevoked ? 401 : 200,
+            session: 401,
+            profile: 401,
+          });
+          if (!alreadyRevoked) {
+            expect(
+              (await context.cookies()).some(
+                (cookie) => cookie.name === SESSION,
+              ),
+              "active logout clears its browser cookie",
+            ).toBe(false);
+          }
+          // A reset-revoked cookie is discarded by closing this owned context.
+        }
+      } catch (error) {
+        failures.push(
+          JSON.stringify({
+            context: index,
+            operation,
+            statuses,
+            failure:
+              error instanceof Error && error.name === "TimeoutError"
+                ? "timeout"
+                : "operation-failed",
+          }),
+        );
+      } finally {
+        await context.close().catch(() => {
+          failures.push(
+            JSON.stringify({
+              context: index,
+              operation: "close-context",
+              failure: "operation-failed",
+            }),
+          );
+        });
+      }
+    }
+    for (const closure of state.closures) {
+      try {
+        const logout = await closure.post(
+          `${world.hostBaseUrl}/v1/auth/logout`,
+        );
+        const session = await closure.get(
+          `${world.hostBaseUrl}/v1/auth/session`,
+        );
+        const profile = await closure.get(`${world.hostBaseUrl}/v1/me/profile`);
+        expect(
+          {
+            logout: logout.status(),
+            session: session.status(),
+            profile: profile.status(),
+          },
+          "owned closing session revoked",
+        ).toEqual({ logout: 200, session: 401, profile: 401 });
+      } catch {
+        failures.push("owned-closing-session-revocation");
+      } finally {
+        await closure
+          .dispose()
+          .catch(() => failures.push("closing-context-disposal"));
+      }
+    }
+  } finally {
+    for (const account of state.accounts) {
+      delete account.code;
+      delete account.cookie;
+    }
+    journeys.delete(page);
+  }
+  if (failures.length > 0) {
+    if (test.info().status === test.info().expectedStatus)
+      throw new Error(
+        `Owned email reset isolation session cleanup failed: ${failures.join("; ")}`,
+      );
+    test.info().annotations.push({
+      type: "cleanup-failed",
+      description: `Owned email reset isolation cleanup failed; original scenario failure retained: ${failures.join("; ")}`,
+    });
+  }
+});

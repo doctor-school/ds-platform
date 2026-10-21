@@ -927,6 +927,17 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the BFF mailer sends the branded code-only reset email with no link or button
     And the user completes the reset by typing the code on the /reset screen
 
+  # Academy projection of existing identifier-bound reset checks (#3162).
+  # App-local test: none -> 003 EARS-11/12/16/35 -> dedicated shared steps;
+  # deleted duplicate: none. Both original addressed challenges are retained.
+  @EARS-11 @EARS-12 @EARS-16 @EARS-35 @failure @email-reset-account-isolation
+  Scenario: Academy rejects another doctor's live email reset code and preserves both rightful reset challenges
+    Given two owned verified Academy doctors retain distinct live email password reset codes
+    When the second doctor's reset form submits the first doctor's retained email code with a different password
+    Then both original email reset owners keep their identities and the second doctor's password is unchanged
+    When each email reset owner submits their own same retained code and a new password without requesting another challenge
+    Then both new passwords sign in only their original verified doctors before all owned email reset isolation sessions are logged out
+
   @EARS-29 @EARS-12 @happy @password-reset-mail
   Scenario: Academy receives the code-only password-reset mail and completes the real reset
     Given a uniquely registered verified Academy account is owned for a reset-mail journey with its original password

@@ -2,6 +2,11 @@ import { createDrizzle, type DrizzleHandle } from "@ds/db";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative } from "node:path";
+import {
+  assertObservedMainOrigin,
+  chooseStageObserve,
+  type StageObserve,
+} from "./stage-observe.js";
 
 export interface OwnedAuthContour {
   academyBaseUrl: string;
@@ -45,7 +50,8 @@ const CONSENT_SELECT =
   "SELECT u.id AS profile_id, u.email = $1 AS email_matches, u.zitadel_sub = $2 AS subject_matches, u.email_verified, u.phone IS NULL AS phone_absent, u.phone_verified, u.display_name IS NULL AS display_name_absent, c.id AS consent_id, c.purpose, c.version, c.captured_at::text AS captured_at, c.origin FROM users u JOIN consent_records c ON c.user_id = u.id WHERE u.email = $1 AND u.zitadel_sub = $2 AND ($3::uuid IS NULL OR u.id = $3::uuid) ORDER BY c.id";
 
 interface StageConsentEffects {
-  capture: (script: string) => Promise<string>;
+  capture?: (script: string) => Promise<string>;
+  observe?: StageObserve;
 }
 
 function stageSlot(base: string): string | undefined {
@@ -101,7 +107,33 @@ async function observeStageAuth(
 ): Promise<unknown[]> {
   const owned = { ...fixture };
   validateFixture(owned, phones === undefined);
+  const operation =
+    phones === undefined
+      ? "owned-stage-consent-read"
+      : "owned-stage-phone-account-count";
   try {
+    // #3119: the CI observe transport runs the box's named observation instead.
+    const observe = chooseStageObserve(effects);
+    if (observe) {
+      await assertObservedMainOrigin(observe, base, slot);
+      recordStageOperation(slot, operation, "started", null);
+      let output: string;
+      try {
+        output =
+          phones === undefined
+            ? await observe("auth-consent", {
+                email: owned.email,
+                subject: owned.subject,
+                profileId: owned.profileId ?? null,
+              })
+            : await observe("phone-account-count", { phones: [...phones] });
+      } catch {
+        recordStageOperation(slot, operation, "failed", null);
+        throw new Error();
+      }
+      recordStageOperation(slot, operation, "completed", null);
+      return envelopeRows(output, "ds_main");
+    }
     // Reuse the same public stage transport as consent-refusal.ts, keeping its caller contract intact.
     const staging = await import(
       new URL("../../../tools/staging/slot.mjs", import.meta.url).href
@@ -113,7 +145,7 @@ async function observeStageAuth(
       recordStageOperation(slot, operation, "started", null);
       let output: string;
       try {
-        if (effects) output = await effects.capture(script);
+        if (effects?.capture) output = await effects.capture(script);
         else {
           const remote = await import(
             new URL("../../../tools/deploy/lib/remote.mjs", import.meta.url)
@@ -130,7 +162,12 @@ async function observeStageAuth(
         throw new Error();
       }
       // sshCapture resolves only when its native child exits 0; injected unit captures have no native exit.
-      recordStageOperation(slot, operation, "completed", effects ? null : 0);
+      recordStageOperation(
+        slot,
+        operation,
+        "completed",
+        effects?.capture ? null : 0,
+      );
       return output;
     };
     const env = staging.parseEnvFile(
@@ -157,9 +194,7 @@ async function observeStageAuth(
         : `SELECT count(*)::text AS count FROM users WHERE phone IN (${phones.map((phone) => `'${phone}'`).join(", ")})`;
     const sql = `BEGIN READ ONLY; SET LOCAL statement_timeout = '5s'; SET LOCAL timezone = 'UTC'; SELECT json_build_object('database', current_database(), 'readOnly', current_setting('transaction_read_only') = 'on', 'rows', CASE WHEN current_database() = '${database}' AND current_setting('transaction_read_only') = 'on' THEN (SELECT coalesce(json_agg(row_to_json(binding)), '[]'::json) FROM (${bound}) binding) ELSE NULL END); ROLLBACK;`;
     const output = await capture(
-      phones === undefined
-        ? "owned-stage-consent-read"
-        : "owned-stage-phone-account-count",
+      operation,
       staging.quoteCommand([
         "sudo",
         "docker",
@@ -179,21 +214,22 @@ async function observeStageAuth(
         sql,
       ]),
     );
-    const result = exactRow(JSON.parse(output), [
-      "database",
-      "readOnly",
-      "rows",
-    ]);
-    if (
-      result.database !== database ||
-      result.readOnly !== true ||
-      !Array.isArray(result.rows)
-    )
-      throw new Error();
-    return result.rows;
+    return envelopeRows(output, database);
   } catch {
     throw new Error(FAILURE);
   }
+}
+
+/** The read-only envelope of a stage read, from the expected slot database only. */
+function envelopeRows(output: string, database: string): unknown[] {
+  const result = exactRow(JSON.parse(output), ["database", "readOnly", "rows"]);
+  if (
+    result.database !== database ||
+    result.readOnly !== true ||
+    !Array.isArray(result.rows)
+  )
+    throw new Error();
+  return result.rows;
 }
 
 function validateTarget(contour: OwnedAuthContour): void {

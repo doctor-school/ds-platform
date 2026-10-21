@@ -85,6 +85,31 @@ describe("stage.yml", () => {
     assert.match(ship.run, /upload-report \$SHA/);
   });
 
+  it("3119: the suite reads the box through the CI key's observe verb, written before it runs", () => {
+    const steps = stage.jobs.suite.steps;
+    const key = steps.findIndex((s) => s.name === "Write the ssh key");
+    const suite = steps.findIndex((s) => s.id === "suite");
+    assert.ok(key >= 0 && key < suite, "the key is written before the suite");
+    const run = steps[suite].run;
+    assert.match(
+      run,
+      /export E2E_STAGE_OBSERVE_SSH="\$STAGE_SSH_USER@\$STAGE_SSH_HOST"/,
+    );
+    assert.match(
+      run,
+      /export E2E_STAGE_OBSERVE_KEY="\$RUNNER_TEMP\/stage-ssh\/key"/,
+    );
+    assert.match(
+      run,
+      /export E2E_STAGE_OBSERVE_KNOWN_HOSTS="\$RUNNER_TEMP\/stage-ssh\/known_hosts"/,
+    );
+    assert.equal(
+      JSON.stringify(steps[suite].env ?? {}).includes("STAGE_SSH_KEY"),
+      false,
+      "the key itself never reaches the suite env",
+    );
+  });
+
   it("ships the report under pipefail and surfaces a failed upload as a warning", () => {
     const ship = stage.jobs.suite.steps.find(
       (s) => s.name === "Ship the report to the box",

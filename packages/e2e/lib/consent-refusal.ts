@@ -1,5 +1,10 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import {
+  assertObservedMainOrigin,
+  chooseStageObserve,
+  type StageObserve,
+} from "./stage-observe.js";
 
 /** 003 EARS-20: this query is restricted to this journey's generated address. */
 export function ownedMirrorQuery(email: string): string {
@@ -24,7 +29,26 @@ export function parseMirrorCount(output: string): number {
   return count;
 }
 
-type MirrorQuery = (slot: string, sql: string, base: string) => Promise<string>;
+type MirrorQuery = (
+  slot: string,
+  sql: string,
+  base: string,
+  email: string,
+) => Promise<string>;
+
+/**
+ * The stage read of the owned count: the box's named `mirror-count` observation
+ * when the CI observe transport is selected (#3119), else the operator's own ssh.
+ */
+export function stageMirrorQuery(
+  observe: StageObserve | null = chooseStageObserve() ?? null,
+): MirrorQuery {
+  if (!observe) return nativeMirrorQuery;
+  return async (slot, _sql, base, email) => {
+    await assertObservedMainOrigin(observe, base, slot);
+    return observe("mirror-count", { email });
+  };
+}
 
 async function nativeMirrorQuery(
   slot: string,
@@ -85,7 +109,7 @@ async function nativeMirrorQuery(
 export async function ownedMirrorCount(
   base: string,
   email: string,
-  query: MirrorQuery = nativeMirrorQuery,
+  query: MirrorQuery = stageMirrorQuery(),
 ): Promise<number> {
   let slot: string;
   try {
@@ -111,7 +135,7 @@ export async function ownedMirrorCount(
   const sql = ownedMirrorQuery(email);
   let output: string;
   try {
-    output = await query(slot, sql, base);
+    output = await query(slot, sql, base, email);
   } catch {
     throw new Error("Owned mirror read failed");
   }

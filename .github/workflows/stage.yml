@@ -246,6 +246,21 @@ jobs:
           # The basic-auth header form of the pair is masked too.
           echo "::add-mask::$(printf '%s:%s' "$E2E_HTTP_USER" "$E2E_HTTP_PASS" | base64 -w0)"
 
+      # Before the suite: its box-observing scenarios read stage `main` through the
+      # CI key's `observe <name>` (#3119); the report upload below reuses the key.
+      - name: Write the ssh key
+        if: always()
+        env:
+          STAGE_SSH_KEY: ${{ secrets.STAGE_SSH_KEY }}
+          STAGE_SSH_KNOWN_HOSTS: ${{ secrets.STAGE_SSH_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          dir="$RUNNER_TEMP/stage-ssh"
+          mkdir -p "$dir"
+          printf '%s\n' "$STAGE_SSH_KEY" > "$dir/key"
+          printf '%s\n' "$STAGE_SSH_KNOWN_HOSTS" > "$dir/known_hosts"
+          chmod 600 "$dir/key" "$dir/known_hosts"
+
       - name: Stage suite
         id: suite
         env:
@@ -258,6 +273,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$REPORT_DIR"
+          # The suite reads the box only through the forced command's `observe`
+          # verb (packages/e2e/lib/stage-observe.ts): two paths and a destination.
+          export E2E_STAGE_OBSERVE_SSH="$STAGE_SSH_USER@$STAGE_SSH_HOST"
+          export E2E_STAGE_OBSERVE_KEY="$RUNNER_TEMP/stage-ssh/key"
+          export E2E_STAGE_OBSERVE_KNOWN_HOSTS="$RUNNER_TEMP/stage-ssh/known_hosts"
           # Peak memory, two views: `/usr/bin/time -v` reports the max RSS of the
           # LARGEST single process of the run; `free -m` sampled every 5 s reports
           # the whole runner's used memory, which is what bounds E2E_WORKERS.
@@ -276,19 +296,6 @@ jobs:
             echo "- peak runner memory used (free -m, 5 s samples): $(sort -n "$mem" | tail -n 1) MiB of $(free -m | awk '/^Mem:/ {print $2}') MiB"
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$rc"
-
-      - name: Write the ssh key
-        if: always()
-        env:
-          STAGE_SSH_KEY: ${{ secrets.STAGE_SSH_KEY }}
-          STAGE_SSH_KNOWN_HOSTS: ${{ secrets.STAGE_SSH_KNOWN_HOSTS }}
-        run: |
-          umask 077
-          dir="$RUNNER_TEMP/stage-ssh"
-          mkdir -p "$dir"
-          printf '%s\n' "$STAGE_SSH_KEY" > "$dir/key"
-          printf '%s\n' "$STAGE_SSH_KNOWN_HOSTS" > "$dir/known_hosts"
-          chmod 600 "$dir/key" "$dir/known_hosts"
 
       # The full report goes to the box, never to Actions (public). Always: a red
       # suite is exactly the run whose evidence is needed.

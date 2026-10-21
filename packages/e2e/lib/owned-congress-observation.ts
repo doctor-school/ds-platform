@@ -3,6 +3,11 @@ import { randomUUID } from "node:crypto";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative } from "node:path";
+import {
+  assertObservedMainOrigin,
+  chooseStageObserve,
+  type StageObserve,
+} from "./stage-observe.js";
 
 export interface CongressObservationContour {
   academyBaseUrl: string;
@@ -35,7 +40,8 @@ export interface CongressSnapshot {
   consents: CongressConsent[];
 }
 interface StageEffects {
-  capture: (script: string) => Promise<string>;
+  capture?: (script: string) => Promise<string>;
+  observe?: StageObserve;
 }
 const FAILURE = "Owned congress observation failed";
 const UUID =
@@ -286,6 +292,25 @@ async function stageRead(
   fixture: CongressFixture,
   effects?: StageEffects,
 ): Promise<unknown[]> {
+  // #3119: the CI observe transport runs the box's named observation instead.
+  const observe = chooseStageObserve(effects);
+  if (observe) {
+    await assertObservedMainOrigin(observe, base, slot);
+    const id = randomUUID();
+    record(id, "owned-congress-stage-read", "started", null);
+    let output: string;
+    try {
+      output = await observe("congress-snapshot", {
+        email: fixture.email,
+        displayName: fixture.displayName,
+      });
+    } catch {
+      record(id, "owned-congress-stage-read", "failed", null);
+      throw new Error();
+    }
+    record(id, "owned-congress-stage-read", "completed", null);
+    return envelopeRows(output, "ds_main");
+  }
   const staging = await import(
     new URL("../../../tools/staging/slot.mjs", import.meta.url).href
   );
@@ -296,7 +321,7 @@ async function stageRead(
     const id = randomUUID();
     record(id, operation, "started", null);
     try {
-      const output = effects
+      const output = effects?.capture
         ? await effects.capture(script)
         : await (
             await import(
@@ -308,7 +333,7 @@ async function stageRead(
             signal: AbortSignal.timeout(15_000),
             stderr: "pipe",
           });
-      record(id, operation, "completed", effects ? null : 0);
+      record(id, operation, "completed", effects?.capture ? null : 0);
       return output;
     } catch {
       record(id, operation, "failed", null);
@@ -354,6 +379,10 @@ async function stageRead(
       sql,
     ]),
   );
+  return envelopeRows(output, database);
+}
+/** The read-only envelope of a stage read, from the expected slot database only. */
+function envelopeRows(output: string, database: string): unknown[] {
   const result = object(JSON.parse(output), ["database", "readOnly", "rows"]);
   if (
     result.database !== database ||

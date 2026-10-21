@@ -377,4 +377,227 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(r.status, 3);
     assert.doesNotMatch(log("sudo"), /tar -xf/);
   });
+
+  // ── 3119: observe <name> ─────────────────────────────────────────────────
+  const OWNED = "a1b2c3d4-e5f6-4a7b-8c9d-0123456789ab";
+  const envelope = (rows, extra = {}) =>
+    JSON.stringify({ database: "ds_main", readOnly: true, rows, ...extra });
+  // docker: record argv and stdin, answer with the fixture reply and exit code.
+  const stubDocker = (reply, code = 0) => {
+    writeFileSync(join(dir, "docker-reply"), reply);
+    writeFileSync(
+      join(stubs, "docker"),
+      [
+        "#!/usr/bin/env bash",
+        'printf "%s\\n" "$@" > "$STUB_DIR/docker-argv.log"',
+        'cat > "$STUB_DIR/docker-stdin.log"',
+        'cat "$STUB_DIR/docker-reply"',
+        'echo "psql: FATAL secret diagnostics" >&2',
+        `exit ${code}`,
+      ].join("\n") + "\n",
+    );
+    chmodSync(join(stubs, "docker"), 0o755);
+  };
+  const json = (value) => Buffer.from(JSON.stringify(value));
+  const writeStageEnv = (extra = "") =>
+    writeFileSync(
+      join(root, "etc/ds-platform/stage.env"),
+      `STAGE_BASE_DOMAIN=stage.example.test\nSTAGE_BASIC_AUTH_PASS=hunter2-secret\n${extra}`,
+    );
+
+  it("3119: the bash allowlist and the box observations are one list", () => {
+    const text = readFileSync(ENTRYPOINT, "utf8");
+    const arm = text.match(/case "\$\{words\[1\]\}" in\n([\s\S]*?)\) ;;/)[1];
+    const allow = arm.split(/[|\\\s]+/).filter(Boolean).sort();
+    const table = text.match(/OBSERVATIONS = \{([\s\S]*?)\n\}/)[1];
+    const names = [...table.matchAll(/^ {4}"([a-z-]+)": \(/gm)].map((m) => m[1]).sort();
+    assert.deepEqual(allow, names);
+    assert.equal(names.length, 7);
+  });
+
+  it("3119: observe refuses (exit 3) on any box but the stage box", () => {
+    setRole("prod");
+    stubDocker(envelope([]));
+    const r = run("observe wrong-verification", {
+      input: json({ email: `wrong-2928-verified-${OWNED}@example.test` }),
+    });
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /observe is served by the stage box only/);
+    assert.ok(!existsSync(join(dir, "docker-argv.log")), "no read");
+  });
+
+  for (const [command, why] of [
+    ["observe", /usage: observe <name>/],
+    ["observe wrong-verification extra", /usage: observe <name>/],
+    ["observe drop-users", /unknown observation/],
+    ["observe sql", /unknown observation/],
+  ]) {
+    it(`3119: observe rejects \`${command}\` (exit 2) before any read`, () => {
+      setRole("stage");
+      stubDocker(envelope([]));
+      const r = run(command, { input: json({}) });
+      assert.equal(r.status, 2);
+      assert.match(r.stderr, why);
+      assert.ok(!existsSync(join(dir, "docker-argv.log")), "no read");
+      assert.match(log("logger"), /auth\.warning rejected/);
+    });
+  }
+
+  for (const [label, input] of [
+    ["SQL in a parameter", json({ email: "x@example.test'; DROP TABLE users; --" })],
+    ["another journey's address", json({ email: `consent-2856-${OWNED}@example.test` })],
+    ["an extra parameter", json({ email: `wrong-2928-verified-${OWNED}@example.test`, sql: "1" })],
+    ["a missing parameter", json({})],
+    ["a non-string parameter", json({ email: ["a"] })],
+    ["not JSON", Buffer.from("SELECT 1")],
+    ["a JSON array", json([`wrong-2928-verified-${OWNED}@example.test`])],
+    ["an oversize body", Buffer.from(`{"email":"${"a".repeat(5000)}"}`)],
+  ]) {
+    it(`3119: observe rejects ${label} (exit 2) before any read`, () => {
+      setRole("stage");
+      stubDocker(envelope([]));
+      const r = run("observe wrong-verification", { input });
+      assert.equal(r.status, 2, r.stderr);
+      assert.ok(!existsSync(join(dir, "docker-argv.log")), "no read");
+      assert.doesNotMatch(r.stderr, /DROP|Traceback/);
+    });
+  }
+
+  it("3119: observe reads the main slot in a read-only transaction through psql variables", () => {
+    setRole("stage");
+    const email = `wrong-2928-unknown-${OWNED}@example.test`;
+    const rows = [{ users: 0, verified: false, consents: 0, user_digest: "a".repeat(32), consent_digest: "b".repeat(32) }];
+    stubDocker(envelope(rows));
+    const r = run("observe wrong-verification", { input: json({ email }) });
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout), { database: "ds_main", readOnly: true, rows });
+    const argv = log("docker-argv").trimEnd().split("\n");
+    assert.deepEqual(argv.slice(0, 7), ["exec", "-i", "-e", "PGCLIENTENCODING=UTF8", "stg-infra-postgres-1", "psql", "-X"]);
+    assert.equal(argv[argv.indexOf("-d") + 1], "ds_main");
+    assert.ok(argv.includes(`email=${email}`), "the address is a psql variable");
+    assert.deepEqual(argv.slice(-2), ["-f", "-"]);
+    const sql = log("docker-stdin");
+    assert.match(sql, /^BEGIN READ ONLY;\nSET LOCAL statement_timeout = '5s';/);
+    assert.match(sql, /:'email'/);
+    assert.ok(!sql.includes(email), "never spliced into the SQL text");
+    assert.match(sql, /ROLLBACK;\n$/);
+    assert.match(log("logger"), /auth\.info accepted: observe wrong-verification/);
+    assert.match(log("sudo"), /python3 -I -X utf8 -c/);
+  });
+
+  it("3119: observe auth-consent passes a null profile as an empty psql variable", () => {
+    setRole("stage");
+    stubDocker(envelope([]));
+    const email = `consent-2856-${OWNED}@example.test`;
+    const r = run("observe auth-consent", { input: json({ email, subject: "123", profileId: null }) });
+    assert.equal(r.status, 0, r.stderr);
+    const argv = log("docker-argv").split("\n");
+    for (const v of [`email=${email}`, "subject=123", "profile_id="]) assert.ok(argv.includes(v), v);
+    assert.match(log("docker-stdin"), /NULLIF\(:'profile_id', ''\)/);
+  });
+
+  it("3119: observe phone-account-count binds the owned phones as one text[] variable", () => {
+    setRole("stage");
+    stubDocker(envelope([{ count: "0" }]));
+    const r = run("observe phone-account-count", { input: json({ phones: ["+199900000001", "+199900000002"] }) });
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(log("docker-argv").split("\n").includes("phones={+199900000001,+199900000002}"));
+    const bad = run("observe phone-account-count", { input: json({ phones: ["+7999", "+199900000002"] }) });
+    assert.equal(bad.status, 2);
+  });
+
+  it("3119: observe congress-snapshot admits only the journey's fixed display name", () => {
+    setRole("stage");
+    stubDocker(envelope([]));
+    const email = `congress-registration-2927-${OWNED}@example.test`;
+    const ok = run("observe congress-snapshot", { input: json({ email, displayName: "Иванова Мария" }) });
+    assert.equal(ok.status, 0, ok.stderr);
+    assert.ok(log("docker-argv").split("\n").includes("display_name=Иванова Мария"));
+    const bad = run("observe congress-snapshot", { input: json({ email, displayName: "x' OR '1'='1" }) });
+    assert.equal(bad.status, 2);
+  });
+
+  it("3119: observe mirror-count prints only the count", () => {
+    setRole("stage");
+    stubDocker(envelope([{ count: 1 }]));
+    const r = run("observe mirror-count", { input: json({ email: `register-2704-${OWNED}@example.test` }) });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, "1\n");
+  });
+
+  for (const [label, reply, code] of [
+    ["psql fails", "", 2],
+    ["another database answered", envelope([], { database: "ds_pr_1" }), 0],
+    ["the transaction was not read-only", envelope([], { readOnly: false }), 0],
+    ["the reply is not the envelope", "1|2|3", 0],
+  ]) {
+    it(`3119: observe fails (exit 1) with a fixed reason when ${label}`, () => {
+      setRole("stage");
+      stubDocker(reply, code);
+      const r = run("observe wrong-verification", {
+        input: json({ email: `wrong-2928-verified-${OWNED}@example.test` }),
+      });
+      assert.equal(r.status, 1);
+      assert.equal(r.stdout, "");
+      assert.ok(existsSync(join(dir, "docker-argv.log")), "the read ran");
+      assert.match(
+        r.stderr,
+        /^ds-deploy-entrypoint: the observation (read failed|did not read the main slot read-only)\n$/,
+      );
+    });
+  }
+
+  it("3119: observe academy-host reads the base domain and nothing else of the stage env", () => {
+    setRole("stage");
+    writeStageEnv();
+    const r = run("observe academy-host", { input: json({}) });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, '{"academy":"academy-main.stage.example.test"}\n');
+    assert.doesNotMatch(r.stdout + r.stderr, /hunter2/);
+  });
+
+  it("3119: observe password-policy refuses an IdP origin other than https://id.<base domain>", () => {
+    setRole("stage");
+    writeStageEnv("IDP_BASE_URL=https://evil.example.test\n");
+    const r = run("observe password-policy", { input: json({}) });
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /IdP origin is not/);
+  });
+
+  it("3119: observe password-policy returns only the policy flags, never the token", async () => {
+    setRole("stage");
+    writeStageEnv("IDP_EXTERNAL_DOMAIN=id.stage.example.test\nIDP_EXTERNAL_SECURE=true\n");
+    writeFileSync(join(root, "etc/ds-platform/idp-bootstrap-pat.txt"), "pat-secret-value\n");
+    const { createServer } = await import("node:http");
+    const { spawn } = await import("node:child_process");
+    let seen;
+    const server = createServer((req, res) => {
+      seen = { url: req.url, auth: req.headers.authorization };
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ policy: { minLength: "8", hasUppercase: false, details: { id: "x" } } }));
+    });
+    await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
+    // spawn, not spawnSync: the in-process IdP must answer while the entrypoint runs.
+    const child = spawn("bash", [ENTRYPOINT], {
+      env: {
+        ...process.env,
+        PATH: `${stubs}${delimiter}${process.env.PATH}`,
+        STUB_DIR: dir,
+        DS_ENTRYPOINT_ROOT: root,
+        DS_ENTRYPOINT_IDP_ORIGIN: `http://127.0.0.1:${server.address().port}`,
+        SSH_ORIGINAL_COMMAND: "observe password-policy",
+      },
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d) => (stdout += d));
+    child.stderr.on("data", (d) => (stderr += d));
+    child.stdin.end("{}");
+    const status = await new Promise((ok) => child.on("close", ok));
+    server.close();
+    assert.equal(status, 0, stderr);
+    assert.deepEqual(seen, { url: "/admin/v1/policies/password/complexity", auth: "Bearer pat-secret-value" });
+    assert.equal(stdout, '{"policy":{"minLength":"8","hasUppercase":false}}\n');
+    assert.doesNotMatch(stdout + stderr, /pat-secret/);
+  });
 });

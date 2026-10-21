@@ -15,6 +15,20 @@
 #                             (stdin = the images-<sha>.json manifest)
 #   upload-report <sha>    -> a tar stream on stdin into
 #                             /var/lib/ds-platform/e2e-reports/<sha>/ (stage box only)
+#   observe <name>         -> one named read-only observation of the stage `main`
+#                             slot (stage box only; Issue #3119), its parameters as
+#                             one JSON object on stdin
+#
+# observe runs only the observations OBSERVE_PY below defines (its OBSERVATIONS
+# table, pinned equal to the case arm by the tests): never SQL or shell from the
+# client. Every parameter is checked against its own pattern box-side and reaches
+# psql as a psql variable quoted by psql (`:'name'`), never spliced into the SQL
+# text. The SQL runs against the `main` slot database only, inside `BEGIN READ
+# ONLY` with a statement timeout, and the result is checked to come from that
+# database in a read-only transaction before it is printed. The output is only
+# what the stage e2e suite parses about its own test-owned rows (a count, a
+# fingerprinted snapshot, the configured academy host, the password policy); the
+# stage env, the IdP token and psql's diagnostics never leave the box.
 #
 # <env> and <sha> are checked with the regexes of ds-release (ENV_RE / SHA_RE below
 # are a copy; tools/deploy/ds-deploy-entrypoint.test.mjs pins them equal). Anything
@@ -24,8 +38,9 @@
 # Installed as /usr/local/bin/ds-deploy-entrypoint beside ds-release, by the same
 # install step of every operator run.
 #
-# Exit codes: 0 ok · 1 the command failed · 2 rejected (usage) · 3 refused (the box
-# cannot serve it: no release driver, not the stage box, an unsafe archive).
+# Exit codes: 0 ok · 1 the command failed · 2 rejected (usage, an unknown
+# observation, bad parameters) · 3 refused (the box cannot serve it: no release
+# driver, not the stage box, an unsafe archive).
 set -euo pipefail
 # The bracket ranges of the checks below must not follow a client-chosen collation
 # (sshd's AcceptEnv passes LC_*).
@@ -45,6 +60,12 @@ BOX_ROLE_FILE=$ROOT/etc/ds-platform/box-role
 REPORTS_PARENT=$ROOT/var/lib/ds-platform
 REPORTS_ROOT=$REPORTS_PARENT/e2e-reports
 REPORT_RETENTION_DAYS=14
+STAGE_ENV_FILE=$ROOT/etc/ds-platform/stage.env
+IDP_PAT_FILE=$ROOT/etc/ds-platform/idp-bootstrap-pat.txt
+MAX_OBSERVE_PARAMS_BYTES=4096
+# Test hook only: where the password-policy observation sends its IdP request,
+# after the configured IdP origin has passed its check. Empty on the box.
+OBSERVE_IDP_ORIGIN=$(override DS_ENTRYPOINT_IDP_ORIGIN '')
 # Upload caps. A Playwright report of our suite, traces included, is tens of MB; the
 # caps sit an order of magnitude above it, and well inside the stage disk, so a
 # CI key can neither fill the disk with one stream nor unpack a tar bomb. The
@@ -152,6 +173,248 @@ except Exception:
     stop(3, "the report could not be extracted")
 PY
 
+# The named read-only observations of `observe` (Issue #3119). argv: name env_file
+# pat_file max_params_bytes idp_origin_override; stdin: the JSON parameters. Exit
+# 0 = the observation on stdout · 2 = an unknown name or bad parameters · 3 = the
+# box cannot serve it · 1 = the read failed. A failure prints one fixed short
+# reason, never a diagnostic: the client's stderr is a public Actions log.
+read -r -d '' OBSERVE_PY <<'PY' || true
+import json, re, subprocess, sys, urllib.request
+
+name, env_file, pat_file, max_params, idp_override = sys.argv[1:6]
+CONTAINER = "stg-infra-postgres-1"
+DATABASE = "ds_main"
+
+def stop(code, reason):
+    sys.stdout.write(reason + "\n")
+    sys.exit(code)
+
+UUID = "[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}"
+def owned(prefix):
+    return re.compile("(?:" + prefix + ")-" + UUID + "@example\\.test")
+SUBJECT = re.compile("[1-9][0-9]{0,39}")
+PHONE = re.compile("\\+1999[0-9]{8}")
+DOMAIN = re.compile("[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+")
+
+# Each check returns the psql variable's value, or None for a bad parameter.
+def text(pattern):
+    return lambda v: v if isinstance(v, str) and pattern.fullmatch(v) else None
+def literal(expected):
+    return lambda v: v if v == expected else None
+def optional_uuid(v):
+    if v is None:
+        return ""
+    return v if isinstance(v, str) and re.fullmatch(UUID, v) else None
+def phone_array(v):
+    if (isinstance(v, list) and 1 <= len(v) <= 2
+            and all(isinstance(p, str) and PHONE.fullmatch(p) for p in v)
+            and len(set(v)) == len(v)):
+        return "{" + ",".join(v) + "}"
+    return None
+
+# name -> (parameter -> (psql variable, check), SELECT, output). A SELECT reads
+# psql variables only (`:'var'`, quoted by psql). `envelope` prints {database,
+# readOnly, rows}; `count` prints rows[0].count. One entry per stage read of
+# packages/e2e/lib/{owned-auth-observation,owned-congress-observation,
+# wrong-verification-observation,consent-refusal,password-policy}.ts.
+OBSERVATIONS = {
+    "academy-host": ({}, None, "host"),
+    "password-policy": ({}, None, "policy"),
+    "mirror-count": (
+        {"email": ("email", text(owned("register-2704")))},
+        "SELECT count(*)::int AS count FROM users WHERE email = :'email'",
+        "count",
+    ),
+    "auth-consent": (
+        {"email": ("email", text(owned("consent-2856"))),
+         "subject": ("subject", text(SUBJECT)),
+         "profileId": ("profile_id", optional_uuid)},
+        "SELECT u.id AS profile_id, u.email = :'email' AS email_matches,"
+        " u.zitadel_sub = :'subject' AS subject_matches, u.email_verified,"
+        " u.phone IS NULL AS phone_absent, u.phone_verified,"
+        " u.display_name IS NULL AS display_name_absent, c.id AS consent_id, c.purpose,"
+        " c.version, c.captured_at::text AS captured_at, c.origin"
+        " FROM users u JOIN consent_records c ON c.user_id = u.id"
+        " WHERE u.email = :'email' AND u.zitadel_sub = :'subject'"
+        " AND (NULLIF(:'profile_id', '') IS NULL OR u.id = NULLIF(:'profile_id', '')::uuid)"
+        " ORDER BY c.id",
+        "envelope",
+    ),
+    "phone-account-count": (
+        {"phones": ("phones", phone_array)},
+        "SELECT count(*)::text AS count FROM users WHERE phone = ANY(:'phones'::text[])",
+        "envelope",
+    ),
+    "congress-snapshot": (
+        {"email": ("email", text(owned("congress-registration-2927"))),
+         "displayName": ("display_name", literal("Иванова Мария"))},
+        """SELECT u.id AS "userId", u.zitadel_sub AS subject,
+  u.email_verified AS "emailVerified", u.display_name = :'display_name' AS "displayNameMatches",
+  md5((to_jsonb(u) - 'email_verified' - 'updated_at')::text) AS "profileFingerprint",
+  (SELECT count(*)::int FROM registrations r WHERE r.user_id = u.id) AS "registrationCount",
+  (SELECT bool_and(r.account_created_by_intake AND r.intake_origin = 'site') FROM registrations r WHERE r.user_id = u.id) AS "createdByIntake",
+  (SELECT md5(string_agg((to_jsonb(r) - 'confirmation_mail_status' - 'confirmation_mail_at')::text, '' ORDER BY r.id)) FROM registrations r WHERE r.user_id = u.id) AS "registrationFingerprint",
+  coalesce((SELECT jsonb_agg(jsonb_build_object('id', c.id, 'purpose', c.purpose,
+    'version', c.version, 'capturedAt', c.captured_at::text, 'origin', c.origin) ORDER BY c.id)
+    FROM consent_records c WHERE c.user_id = u.id), '[]'::jsonb) AS consents
+  FROM users u WHERE u.email = :'email'""",
+        "envelope",
+    ),
+    "wrong-verification": (
+        {"email": ("email", text(owned("wrong-2928-(?:verified|unverified|unknown)")))},
+        """SELECT
+  (SELECT count(*)::int FROM users WHERE email = :'email') AS users,
+  (SELECT coalesce(bool_and(email_verified), false) FROM users WHERE email = :'email') AS verified,
+  (SELECT count(*)::int FROM consent_records c JOIN users u ON u.id = c.user_id WHERE u.email = :'email') AS consents,
+  (SELECT md5(coalesce(jsonb_agg(to_jsonb(u) ORDER BY u.id)::text, '[]')) FROM users u WHERE u.email = :'email') AS user_digest,
+  (SELECT md5(coalesce(jsonb_agg(to_jsonb(c) ORDER BY c.id)::text, '[]')) FROM consent_records c JOIN users u ON u.id = c.user_id WHERE u.email = :'email') AS consent_digest""",
+        "envelope",
+    ),
+}
+
+if name not in OBSERVATIONS:
+    stop(2, "unknown observation")
+schema, select, output = OBSERVATIONS[name]
+
+raw = sys.stdin.buffer.read(int(max_params) + 1)
+if len(raw) > int(max_params):
+    stop(2, "the parameters exceed " + max_params + " bytes")
+try:
+    params = json.loads(raw.decode("utf-8")) if raw.strip() else {}
+except ValueError:
+    stop(2, "the parameters are not one JSON object")
+if not isinstance(params, dict) or set(params) != set(schema):
+    stop(2, "bad parameters for " + name)
+variables = []
+for key, (var, check) in schema.items():
+    value = check(params[key])
+    if value is None:
+        stop(2, "bad parameters for " + name)
+    variables += ["-v", var + "=" + value]
+
+def stage_env():
+    env = {}
+    try:
+        with open(env_file, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except (OSError, ValueError):
+        stop(3, "the stage env is not readable")
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):].strip()
+        key, eq, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if not eq or not re.fullmatch("[A-Za-z_][A-Za-z0-9_]*", key):
+            continue
+        if len(value) >= 2 and value[0] in "\"'" and value[-1] == value[0]:
+            value = value[1:-1]
+        env[key] = value
+    domain = env.get("STAGE_BASE_DOMAIN", "")
+    if not DOMAIN.fullmatch(domain):
+        stop(3, "the stage env names no base domain")
+    return env, domain
+
+def emit(value):
+    sys.stdout.write(json.dumps(value, separators=(",", ":")) + "\n")
+    sys.exit(0)
+
+if output == "host":
+    emit({"academy": "academy-main." + stage_env()[1]})
+
+if output == "policy":
+    env, domain = stage_env()
+    # The resolution of tools/staging/slot.mjs resolveIdpBaseUrl.
+    base = env.get("IDP_BASE_URL", "").strip().rstrip("/")
+    if not base and env.get("IDP_EXTERNAL_DOMAIN", "").strip():
+        secure = env.get("IDP_EXTERNAL_SECURE", "").strip().lower() in ("true", "1")
+        port = env.get("IDP_EXTERNAL_PORT", "").strip()
+        suffix = ":" + port if port and port != ("443" if secure else "80") else ""
+        base = ("https" if secure else "http") + "://" + env["IDP_EXTERNAL_DOMAIN"].strip() + suffix
+    if base != "https://id." + domain:
+        stop(3, "the stage IdP origin is not https://id.<base domain>")
+    try:
+        with open(pat_file, encoding="utf-8") as f:
+            pat = f.read().strip()
+    except (OSError, ValueError):
+        stop(3, "the IdP token is not readable")
+    request = urllib.request.Request(
+        (idp_override or base) + "/admin/v1/policies/password/complexity",
+        headers={"Authorization": "Bearer " + pat, "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            policy = json.loads(response.read(65536).decode("utf-8")).get("policy")
+    except Exception:
+        stop(1, "the IdP read failed")
+    if not isinstance(policy, dict):
+        stop(1, "the IdP read failed")
+    keys = ("minLength", "hasUppercase", "hasLowercase", "hasNumber", "hasSymbol")
+    emit({"policy": {k: policy[k] for k in keys if k in policy}})
+
+sql = (
+    "BEGIN READ ONLY;\n"
+    "SET LOCAL statement_timeout = '5s';\n"
+    "SET LOCAL timezone = 'UTC';\n"
+    "SELECT json_build_object('database', current_database(), 'readOnly',"
+    " current_setting('transaction_read_only') = 'on', 'rows', CASE WHEN current_database() = '"
+    + DATABASE + "' AND current_setting('transaction_read_only') = 'on' THEN"
+    " (SELECT coalesce(json_agg(row_to_json(binding)), '[]'::json) FROM (\n"
+    + select + "\n) binding) ELSE NULL END);\n"
+    "ROLLBACK;\n"
+)
+try:
+    done = subprocess.run(
+        ["docker", "exec", "-i", "-e", "PGCLIENTENCODING=UTF8", CONTAINER, "psql", "-X", "-qAt",
+         "-U", "ds", "-d", DATABASE, "-v", "ON_ERROR_STOP=1", *variables, "-f", "-"],
+        input=sql.encode("utf-8"), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20,
+    )
+except (OSError, subprocess.TimeoutExpired):
+    stop(1, "the observation read failed")
+if done.returncode != 0:
+    stop(1, "the observation read failed")
+try:
+    envelope = json.loads(done.stdout.decode("utf-8"))
+except ValueError:
+    stop(1, "the observation read failed")
+if (not isinstance(envelope, dict) or set(envelope) != {"database", "readOnly", "rows"}
+        or envelope["database"] != DATABASE or envelope["readOnly"] is not True
+        or not isinstance(envelope["rows"], list)):
+    stop(1, "the observation did not read the main slot read-only")
+if output == "count":
+    rows = envelope["rows"]
+    count = rows[0].get("count") if len(rows) == 1 and isinstance(rows[0], dict) else None
+    if type(count) is not int or count < 0:
+        stop(1, "the observation read failed")
+    sys.stdout.write(str(count) + "\n")
+    sys.exit(0)
+emit(envelope)
+PY
+
+# observe: one named observation of the stage `main` slot (Issue #3119). The
+# parameters (one JSON object, at most MAX_OBSERVE_PARAMS_BYTES) reach OBSERVE_PY on
+# stdin; only its stdout or its one fixed reason reaches the client.
+observe() {
+  local name=$1 role out rc
+  role=$(sudo cat "$BOX_ROLE_FILE" 2>/dev/null || true)
+  [[ $role == stage ]] || refuse "observe is served by the stage box only"
+  rc=0
+  out=$(head -c "$((MAX_OBSERVE_PARAMS_BYTES + 1))" |
+    sudo python3 -I -X utf8 -c "$OBSERVE_PY" "$name" "$STAGE_ENV_FILE" "$IDP_PAT_FILE" \
+      "$MAX_OBSERVE_PARAMS_BYTES" "$OBSERVE_IDP_ORIGIN") || rc=$?
+  case $rc in
+    0) printf '%s\n' "$out" ;;
+    2) reject "${out:-bad observation parameters}" ;;
+    3) refuse "${out:-the box cannot serve this observation}" ;;
+    *)
+      printf '%s: %s\n' "$TAG" "${out:-the observation failed}" >&2
+      exit 1
+      ;;
+  esac
+}
+
 upload_report() {
   local sha=$1 role dest size reason rc
   role=$(sudo cat "$BOX_ROLE_FILE" 2>/dev/null || true)
@@ -223,7 +486,17 @@ case "$verb" in
     accepted
     upload_report "${words[1]}"
     ;;
+  observe)
+    [[ ${#words[@]} -eq 2 ]] || reject "usage: observe <name>"
+    case "${words[1]}" in
+      academy-host | password-policy | mirror-count | auth-consent | phone-account-count | \
+        congress-snapshot | wrong-verification) ;;
+      *) reject "unknown observation" ;;
+    esac
+    accepted
+    observe "${words[1]}"
+    ;;
   *)
-    reject "unknown command (allowed: status, release, upload-report)"
+    reject "unknown command (allowed: status, release, upload-report, observe)"
     ;;
 esac

@@ -4,6 +4,11 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative } from "node:path";
 import type { OwnedAuthContour } from "./owned-auth-observation.js";
+import {
+  assertObservedMainOrigin,
+  chooseStageObserve,
+  type StageObserve,
+} from "./stage-observe.js";
 
 const OWNED =
   /^wrong-2928-(verified|unverified|unknown)-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}@example\.test$/;
@@ -16,7 +21,8 @@ export interface WrongVerificationSnapshot {
   consentDigest: string;
 }
 interface ReadEffects {
-  capture(script: string): Promise<string>;
+  capture?(script: string): Promise<string>;
+  observe?: StageObserve;
 }
 
 function log(
@@ -146,7 +152,29 @@ export async function readWrongVerificationSnapshot(
     if (!slot) localTarget(contour);
     log("wrong-verification-state-read", "started", id);
     started = true;
-    if (slot) {
+    // #3119: the CI observe transport runs the box's named observation instead.
+    const observe = slot ? chooseStageObserve(effects) : undefined;
+    if (slot && observe) {
+      await assertObservedMainOrigin(observe, contour.academyBaseUrl, slot);
+      const operationId = randomUUID();
+      log("wrong-verification-stage-read", "started", operationId);
+      let output: string;
+      try {
+        output = await observe("wrong-verification", { email });
+      } catch {
+        log("wrong-verification-stage-read", "completed", operationId, false);
+        throw new Error();
+      }
+      log("wrong-verification-stage-read", "completed", operationId, true);
+      const envelope = JSON.parse(output);
+      if (
+        Object.keys(envelope).length !== 3 ||
+        envelope.database !== "ds_main" ||
+        envelope.readOnly !== true
+      )
+        throw new Error();
+      result = snapshot(envelope.rows);
+    } else if (slot) {
       const staging = await import(
         new URL("../../../tools/staging/slot.mjs", import.meta.url).href
       );
@@ -154,13 +182,13 @@ export async function readWrongVerificationSnapshot(
         const operationId = randomUUID();
         log("wrong-verification-stage-read", "started", operationId);
         try {
-          const remote = effects
+          const remote = effects?.capture
             ? undefined
             : await import(
                 new URL("../../../tools/deploy/lib/remote.mjs", import.meta.url)
                   .href
               );
-          const output = effects
+          const output = effects?.capture
             ? await effects.capture(script)
             : await remote!.sshCapture(staging.STAGE_1, script, {
                 sshOptions: ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"],
@@ -172,7 +200,7 @@ export async function readWrongVerificationSnapshot(
             "completed",
             operationId,
             true,
-            effects ? null : 0,
+            effects?.capture ? null : 0,
           );
           return output;
         } catch {

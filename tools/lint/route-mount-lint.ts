@@ -28,7 +28,9 @@
  *      the route's own host-config module (a relative `host-config` /
  *      `*.host-config` specifier) and `import type … from "next"`; the only
  *      top-level statements allowed are those imports, the Next segment-config
- *      exports, and ONE default export whose body is a single `return` of the
+ *      exports, and ONE default export — parameters plain identifiers or the
+ *      route props destructured one level, never a default value or an
+ *      import's name — whose body is a single `return` of the
  *      package mount with props built from identifiers and literals, optionally
  *      preceded by `await` of the route props (`params` / `searchParams`).
  *      Anything else — a `fetch`, another `await`, `if` / ternary / `&&`
@@ -41,7 +43,9 @@
  *      and the sibling is parsed too: a `"use server"` directive; imports only
  *      from the row's package (and subpaths), the host-config module and
  *      `import type … from "react"`; every other top-level statement an
- *      exported async function whose body is a single
+ *      exported async function whose parameters are plain identifiers (no
+ *      default value, no destructuring, no import's name — either would run or
+ *      shadow host code beside a thin-looking body) and whose body is a single
  *      `return <packageFn>(<HOST_CONFIG>, …)` — the callee imported from the
  *      package, the first argument imported from the host-config module, the
  *      remaining arguments free of calls, `await` and branching. Anything else
@@ -193,10 +197,90 @@ function banWalk(
         n.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)
     ) {
       flag(n, "branching (`&&` / `||` / `??`)");
+    } else if (ts.isIfStatement(n)) {
+      flag(n, "branching (`if`)");
+    } else if (ts.isSwitchStatement(n)) {
+      flag(n, "branching (`switch`)");
+    } else if (ts.isTryStatement(n)) {
+      flag(n, "a `try`");
+    } else if (
+      ts.isForStatement(n) ||
+      ts.isForInStatement(n) ||
+      ts.isForOfStatement(n) ||
+      ts.isWhileStatement(n) ||
+      ts.isDoStatement(n)
+    ) {
+      flag(n, "a loop");
     }
     ts.forEachChild(n, visit);
   };
   visit(node);
+}
+
+/** Every local name bound by an import of `sf`, type-only imports included. */
+function importBindings(sf: ts.SourceFile): Set<string> {
+  const names = new Set<string>();
+  for (const st of sf.statements) {
+    if (!ts.isImportDeclaration(st)) continue;
+    collectMountNames(st, names);
+  }
+  return names;
+}
+
+/**
+ * The parameter list of an exported function the guard reads (a binding export
+ * or a mounted page's default export). A default value runs before the body the
+ * guard checks, and a parameter named like an import shadows it, so either
+ * would let host logic sit beside a body that looks thin. Every parameter is a
+ * plain identifier with no initializer and no import's name; a mounted page may
+ * additionally destructure its route props one level deep (`{ params,
+ * searchParams }`) under the same rule per element.
+ */
+function checkParams(
+  params: ts.NodeArray<ts.ParameterDeclaration>,
+  imports: Set<string>,
+  allowDestructure: boolean,
+  sf: ts.SourceFile,
+  rel: string,
+  findings: string[],
+  why: string,
+): void {
+  const at = (n: ts.Node) =>
+    sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+  const plain = (
+    name: ts.BindingName,
+    init: ts.Expression | undefined,
+    n: ts.Node,
+  ): void => {
+    if (!ts.isIdentifier(name)) {
+      findings.push(
+        `${rel}:${at(n)}: a destructured parameter \`${name.getText(sf).slice(0, 40)}\` — ${why}`,
+      );
+      return;
+    }
+    if (init) {
+      findings.push(
+        `${rel}:${at(n)}: parameter \`${name.text}\` has a default value — ${why}`,
+      );
+    }
+    if (imports.has(name.text)) {
+      findings.push(
+        `${rel}:${at(n)}: parameter \`${name.text}\` shadows an import of the same name — ${why}`,
+      );
+    }
+  };
+  for (const p of params) {
+    if (allowDestructure && ts.isObjectBindingPattern(p.name)) {
+      if (p.initializer) {
+        findings.push(
+          `${rel}:${at(p)}: the destructured route props have a default value — ${why}`,
+        );
+      }
+      for (const el of p.name.elements) plain(el.name, el.initializer, el);
+      continue;
+    }
+    plain(p.name, p.initializer, p);
+  }
 }
 
 /** Names imported from the row's package — the only legal mount targets. */
@@ -271,6 +355,7 @@ function checkBinding(rel: string, pkg: string): string[] {
     );
   const pkgFns = new Set<string>();
   const configs = new Set<string>();
+  const imports = importBindings(sf);
   const stmts = sf.statements;
   const first = stmts[0];
   const directive =
@@ -319,6 +404,15 @@ function checkBinding(rel: string, pkg: string): string[] {
       continue;
     }
     exportsSeen += 1;
+    checkParams(
+      st.parameters,
+      imports,
+      false,
+      sf,
+      rel,
+      findings,
+      "a server-action binding's parameters are plain identifiers passed through to the package function",
+    );
     const body = st.body?.statements ?? ts.factory.createNodeArray();
     const ret = body[0];
     if (body.length !== 1 || !ret || !ts.isReturnStatement(ret)) {
@@ -448,6 +542,15 @@ function checkMount(
     );
     return done();
   }
+  checkParams(
+    fn.parameters,
+    importBindings(sf),
+    true,
+    sf,
+    rel,
+    findings,
+    "a mounted route file receives its route props as plain identifiers",
+  );
 
   const checkMountExpr = (expr: ts.Expression | undefined, node: ts.Node) => {
     let e = expr;

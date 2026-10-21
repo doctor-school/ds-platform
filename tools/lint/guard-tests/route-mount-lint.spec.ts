@@ -112,6 +112,42 @@ describe("route-mount-lint", () => {
     expect(stderr).toContain('`"use server"`');
   });
 
+  it("2074: red — a binding parameter shadowing the package function with a default arrow (fetch, branching, dynamic import) → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-param-shadow"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("parameter `renderEventsBlock`");
+  });
+
+  it("2074: red — a binding parameter with a default value computing a fetch → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-param-default"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("parameter `session` has a default value");
+  });
+
+  it("2074: red — an `if` inside an arrow-function argument of a binding → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-arrow-branch"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("branching (`if`)");
+  });
+
+  it("2074: red — a mounted page whose route-prop parameter has a default value computing a fetch → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-mount-param-default"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
+    expect(stderr).toContain("parameter `searchParams` has a default value");
+  });
+
   it("2002: red — a route file with no registry row → exit 1", () => {
     const { code, stderr } = runGuard(GUARD, dir("red-unregistered"), {
       env: TREE_ONLY,

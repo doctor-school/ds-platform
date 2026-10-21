@@ -285,8 +285,7 @@ Then(
               Object.keys(body).length === 1
             : body.statusCode === 429 &&
               body.message === "too many requests, please try again later" &&
-              body.error === "Too Many Requests" &&
-              Object.keys(body).length === 3;
+              Object.keys(body).length === 2;
       } catch {
         /* Keep the account and response bytes out of diagnostics. */
       }

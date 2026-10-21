@@ -40,6 +40,8 @@
 #   IDP_CLIENT_ID=<oidc client id>
 #   IDP_CLIENT_SECRET=<oidc client secret>   # printed ONCE on creation only
 #   IDP_PROJECT_ID=<project id>
+#   IDP_ACADEMY_CLIENT_ID=<Academy storefront client id>   # step 3.bis, when configured
+#   IDP_DOCTOR_CLIENT_ID=<doctor storefront client id>     # step 3.bis, when configured
 set -euo pipefail
 
 # ── args / env ───────────────────────────────────────────────────────────────
@@ -130,6 +132,88 @@ fi
 # SMS carries no creds env here (the sms-aero-adapter holds the SMS-Aero creds
 # and does the egress), so the SMS_DELIVERY_MODE=real fail-closed gate lives at
 # the step-7 activation: an empty provider id hard-aborts, never sink-falls-back.
+
+# ── storefront clients: inputs (003 EARS-60, ADR-0015 §4 req. 1 + 7) ────────
+# One confidential OIDC client per storefront per environment (step 3.bis). Each
+# registers EXACTLY ONE redirect_uri (the storefront's fixed `/auth/callback`)
+# and ONE post_logout_redirect_uri; Zitadel matches them exactly, so a foreign or
+# look-alike redirect_uri never gets a code (req. 1). There are NO defaults: the
+# step runs only when the URIs are configured explicitly — the dev stand from its
+# env file (`infra/dev-stand/.env.example`: portal :3001, doctor :3004, sign-in
+# host :3005, api :3000), the api-e2e CI job from its env block, prod from
+# tools/deploy/prod.mjs. With none of them set (stage — whose per-slot clients
+# `tools/staging/idp.mjs` owns — and admin-e2e) step 3.bis is skipped, so a
+# localhost dev-mode client never lands on a shared instance; a PARTIAL set is
+# refused. Validated BEFORE any mutation: a wildcard / query / list is refused.
+SIGN_IN_BASE_URI="${IDP_SIGN_IN_BASE_URI:-}"
+BACK_CHANNEL_LOGOUT_URI="${IDP_BACK_CHANNEL_LOGOUT_URI:-}"
+ACADEMY_APP_NAME="${IDP_ACADEMY_APP_NAME:-ds-storefront-academy}"
+ACADEMY_REDIRECT_URI="${IDP_ACADEMY_REDIRECT_URI:-}"
+ACADEMY_POST_LOGOUT_URI="${IDP_ACADEMY_POST_LOGOUT_URI:-}"
+DOCTOR_APP_NAME="${IDP_DOCTOR_APP_NAME:-ds-storefront-doctor}"
+DOCTOR_REDIRECT_URI="${IDP_DOCTOR_REDIRECT_URI:-}"
+DOCTOR_POST_LOGOUT_URI="${IDP_DOCTOR_POST_LOGOUT_URI:-}"
+
+# storefront_uri_ok <name> <uri> — one absolute http(s) URI, no wildcard, query,
+# glob bracket, list separator or whitespace; exit 4 otherwise (fail-closed).
+storefront_uri_ok() {
+  local name="$1" uri="$2"
+  if [[ ! "$uri" =~ ^https?://[^/[:space:]]+(/[^[:space:]]*)?$ \
+        || "$uri" == *'*'* || "$uri" == *'?'* || "$uri" == *'['* || "$uri" == *','* ]]; then
+    echo "ERROR: ${name}='${uri}' is not one exact http(s) URI (no *, ?, [, list); refusing to provision" >&2
+    exit 4
+  fi
+}
+STOREFRONT_URI_VARS=(IDP_SIGN_IN_BASE_URI IDP_BACK_CHANNEL_LOGOUT_URI
+  IDP_ACADEMY_REDIRECT_URI IDP_ACADEMY_POST_LOGOUT_URI
+  IDP_DOCTOR_REDIRECT_URI IDP_DOCTOR_POST_LOGOUT_URI)
+STOREFRONT_SET=()
+STOREFRONT_UNSET=()
+for _v in "${STOREFRONT_URI_VARS[@]}"; do
+  if [[ -n "${!_v:-}" ]]; then STOREFRONT_SET+=("$_v"); else STOREFRONT_UNSET+=("$_v"); fi
+done
+if (( ${#STOREFRONT_SET[@]} == 0 )); then
+  STOREFRONT_CLIENTS=skip
+elif (( ${#STOREFRONT_UNSET[@]} > 0 )); then
+  echo "ERROR: storefront client URIs are partially configured; missing: ${STOREFRONT_UNSET[*]}; refusing to provision" >&2
+  exit 4
+else
+  STOREFRONT_CLIENTS=ensure
+  for _v in "${STOREFRONT_URI_VARS[@]}"; do storefront_uri_ok "$_v" "${!_v}"; done
+fi
+
+# storefront_client_payload <name> <redirect> <post-logout> — the AddOIDCApp body.
+# Confidential web client authenticating with private_key_jwt (ADR-0015 §4; the
+# key itself is created by the API-side wiring, never here), code + refresh,
+# JWT access tokens, its OWN Login V2 base_uri (the sign-in host; the headless
+# app and the Console carry the id host's login UI, steps 3 and 3.ter) and the API's
+# back-channel logout endpoint. devMode only when a URI is plain http (dev).
+storefront_client_payload() {
+  local dev=false
+  [[ "$2" == http://* || "$3" == http://* || "$SIGN_IN_BASE_URI" == http://* \
+     || "$BACK_CHANNEL_LOGOUT_URI" == http://* ]] && dev=true
+  jq -nc \
+    --arg n "$1" --arg r "$2" --arg l "$3" \
+    --arg base "$SIGN_IN_BASE_URI" --arg bcl "$BACK_CHANNEL_LOGOUT_URI" \
+    --argjson dev "$dev" \
+    '{
+       name:$n,
+       redirectUris:[$r],
+       postLogoutRedirectUris:[$l],
+       responseTypes:["OIDC_RESPONSE_TYPE_CODE"],
+       grantTypes:["OIDC_GRANT_TYPE_AUTHORIZATION_CODE","OIDC_GRANT_TYPE_REFRESH_TOKEN"],
+       appType:"OIDC_APP_TYPE_WEB",
+       authMethodType:"OIDC_AUTH_METHOD_TYPE_PRIVATE_KEY_JWT",
+       version:"OIDC_VERSION_1_0",
+       devMode:$dev,
+       accessTokenType:"OIDC_TOKEN_TYPE_JWT",
+       accessTokenRoleAssertion:true,
+       idTokenRoleAssertion:true,
+       idTokenUserinfoAssertion:true,
+       backChannelLogoutUri:$bcl,
+       loginVersion:{loginV2:{baseUri:$base}}
+     }'
+}
 
 # ── http helper ──────────────────────────────────────────────────────────────
 # api <METHOD> <PATH> [json-body]  ->  prints response body, fails on non-2xx
@@ -281,6 +365,19 @@ for role in "${_roles[@]}"; do
 done
 
 # ── 3. ensure OIDC web application ───────────────────────────────────────────
+# Login V2 is selected PER APP (ADR-0015 §4): step 4 keeps the instance flag
+# `loginV2.required` false, because with it true Zitadel overwrites every
+# client's own base_uri with the instance one (v4 `internal/query/oidc_client.go`
+# ActiveOIDCClientByID) and the storefront clients of step 3.bis would land on
+# the wrong host. So this headless app carries its OWN loginVersion — the id
+# host's login UI, the value the instance setting held — which keeps its
+# authorize hop filing a V2 auth request (`internal/api/oidc/auth_request.go`
+# CreateAuthRequest → createAuthRequestLoginClient) that
+# POST /v2/oidc/auth_requests/{id} can resolve (EARS-8). Override via
+# IDP_LOGIN_BASE_URI. The v1 management update replaces an omitted loginVersion
+# with «unspecified» (= Login V1), so every converge must send it.
+LOGIN_BASE_URI="${IDP_LOGIN_BASE_URI:-${BASE_URL}/ui/v2/login}"
+storefront_uri_ok IDP_LOGIN_BASE_URI "$LOGIN_BASE_URI"
 # Build the redirect / post-logout arrays from the CSV inputs.
 REDIRECT_JSON="$(jq -nc --arg s "$REDIRECT_URIS" '$s | split(",") | map(gsub("^\\s+|\\s+$";""))')"
 LOGOUT_JSON="$(jq -nc --arg s "$POST_LOGOUT_URIS" '$s | split(",") | map(gsub("^\\s+|\\s+$";""))')"
@@ -296,6 +393,7 @@ APP_PAYLOAD="$(jq -nc \
   --arg n "$APP_NAME" \
   --argjson redirect "$REDIRECT_JSON" \
   --argjson logout "$LOGOUT_JSON" \
+  --arg login "$LOGIN_BASE_URI" \
   '{
      name:$n,
      redirectUris:$redirect,
@@ -309,7 +407,8 @@ APP_PAYLOAD="$(jq -nc \
      accessTokenType:"OIDC_TOKEN_TYPE_JWT",
      accessTokenRoleAssertion:true,
      idTokenRoleAssertion:true,
-     idTokenUserinfoAssertion:true
+     idTokenUserinfoAssertion:true,
+     loginVersion:{loginV2:{baseUri:$login}}
    }')"
 
 if [[ -n "$EXISTING_APP" && "$EXISTING_APP" != "null" ]]; then
@@ -329,31 +428,107 @@ else
   echo "created OIDC app (appId $(echo "$CREATED" | jq -r '.appId'))" >&2
 fi
 
-# ── 4. ensure Login V2 instance feature + baseUri (operator Console login, #174) ─
-# The headless BFF session->token exchange (EARS-8) links a checked session to a
-# pending OIDC auth request via POST /v2/oidc/auth_requests/{id}. That API only
-# resolves an auth request CREATED UNDER LOGIN V2 — with the feature off the
-# authorize hop files a v1 auth request the v2 API can't see (404 "Auth Request
-# does not exist", proven live #146). compose.core.yml turns it on at instance
-# init (ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED); this converges it on
-# any instance initialised before that default (idempotent).
+# ── 3.bis. ensure the two storefront OIDC clients (003 EARS-60, ADR-0015 §4) ──
+# Added BESIDE the app of step 3, which stays the API's headless-exchange client
+# untouched. Read-before-write: an existing client gets its whole oidc_config
+# converged (exact URIs, base_uri, back-channel), an absent one is created. No
+# client key is created or printed here (private_key_jwt keys are minted by the
+# API-side wiring); only the client ids are emitted on stdout.
+# ensure_storefront_client <name> <redirect> <post-logout>  ->  prints client id
+ensure_storefront_client() {
+  # Every hop is checked explicitly: this runs inside $(...), where errexit
+  # does not propagate, so a failed write must fail the function, never fall
+  # through to printing a client id.
+  local name="$1" payload search app_id detail created
+  payload="$(storefront_client_payload "$1" "$2" "$3")" || return 1
+  search="$(api POST "/management/v1/projects/${PROJECT_ID}/apps/_search" \
+    "$(jq -nc --arg n "$name" '{queries:[{nameQuery:{name:$n,method:"TEXT_QUERY_METHOD_EQUALS"}}]}')")" || return 1
+  app_id="$(jq -r --arg n "$name" '[.result[]? | select(.name==$n) | .id][0] // empty' <<< "$search")"
+  if [[ -n "$app_id" ]]; then
+    api_idempotent PUT "/management/v1/projects/${PROJECT_ID}/apps/${app_id}/oidc_config" \
+      "$(jq -c 'del(.name)' <<< "$payload")" >/dev/null || return 1
+    detail="$(api GET "/management/v1/projects/${PROJECT_ID}/apps/${app_id}")" || return 1
+    echo "storefront client ${name} converged (appId ${app_id})" >&2
+    jq -r '.app.oidcConfig.clientId // empty' <<< "$detail"
+  else
+    created="$(api POST "/management/v1/projects/${PROJECT_ID}/apps/oidc" "$payload")" || return 1
+    echo "storefront client ${name} created (appId $(jq -r '.appId' <<< "$created"))" >&2
+    jq -r '.clientId // empty' <<< "$created"
+  fi
+}
+ACADEMY_CLIENT_ID=""
+DOCTOR_CLIENT_ID=""
+if [[ "$STOREFRONT_CLIENTS" == ensure ]]; then
+  ACADEMY_CLIENT_ID="$(ensure_storefront_client "$ACADEMY_APP_NAME" "$ACADEMY_REDIRECT_URI" "$ACADEMY_POST_LOGOUT_URI")"
+  DOCTOR_CLIENT_ID="$(ensure_storefront_client "$DOCTOR_APP_NAME" "$DOCTOR_REDIRECT_URI" "$DOCTOR_POST_LOGOUT_URI")"
+  [[ -n "$ACADEMY_CLIENT_ID" && -n "$DOCTOR_CLIENT_ID" ]] \
+    || { echo "ERROR: a storefront client id did not read back" >&2; exit 1; }
+else
+  echo "storefront client URIs not configured here; step 3.bis skipped" >&2
+fi
+
+# ── 3.ter. pin the Zitadel Management Console to Login V2 per app ────────────
+# The Console (project «ZITADEL», app «Management Console», created by Zitadel at
+# instance setup with an UNSPECIFIED login version) followed the instance flag;
+# with step 4 turning that flag off it would fall back to Login V1, which the v4
+# core no longer renders (compose.core.yml, idp-login). So it gets the same
+# per-app loginVersion as the headless app BEFORE step 4 runs. Read-modify-write:
+# the v1 management update replaces every scalar it is not sent, so the current
+# config is echoed back whole with only loginVersion changed.
+# console_login_v2_body <oidcConfig json>  ->  UpdateOIDCAppConfig body
+console_login_v2_body() {
+  jq -c --arg u "$LOGIN_BASE_URI" '
+    {redirectUris, responseTypes, grantTypes, appType, authMethodType,
+     postLogoutRedirectUris, devMode, accessTokenType, accessTokenRoleAssertion,
+     idTokenRoleAssertion, idTokenUserinfoAssertion, clockSkew, additionalOrigins,
+     skipNativeAppSuccessPage, backChannelLogoutUri}
+    | with_entries(select(.value != null))
+    + {loginVersion:{loginV2:{baseUri:$u}}}' <<< "$1"
+}
+# ensure_console_login_v2  ->  fails when the Console cannot be found or written
+ensure_console_login_v2() {
+  local search project_id app_id current
+  search="$(api POST /management/v1/projects/_search \
+    '{"queries":[{"nameQuery":{"name":"ZITADEL","method":"TEXT_QUERY_METHOD_EQUALS"}}]}')" || return 1
+  project_id="$(jq -r '[.result[]? | select(.name=="ZITADEL") | .id][0] // empty' <<< "$search")"
+  [[ -n "$project_id" ]] \
+    || { echo "ERROR: project ZITADEL not found; refusing to turn the instance Login V2 flag off" >&2; return 1; }
+  search="$(api POST "/management/v1/projects/${project_id}/apps/_search" \
+    '{"queries":[{"nameQuery":{"name":"Management Console","method":"TEXT_QUERY_METHOD_EQUALS"}}]}')" || return 1
+  app_id="$(jq -r '[.result[]? | select(.name=="Management Console") | .id][0] // empty' <<< "$search")"
+  [[ -n "$app_id" ]] \
+    || { echo "ERROR: app «Management Console» not found; refusing to turn the instance Login V2 flag off" >&2; return 1; }
+  current="$(api GET "/management/v1/projects/${project_id}/apps/${app_id}")" || return 1
+  current="$(jq -c '.app.oidcConfig // {}' <<< "$current")" || return 1
+  if [[ "$(jq -r '.loginVersion.loginV2.baseUri // empty' <<< "$current")" == "$LOGIN_BASE_URI" ]]; then
+    echo "console already on Login V2 (${LOGIN_BASE_URI})" >&2
+    return 0
+  fi
+  api_idempotent PUT "/management/v1/projects/${project_id}/apps/${app_id}/oidc_config" \
+    "$(console_login_v2_body "$current")" >/dev/null || return 1
+  echo "console login version ensured (Login V2, ${LOGIN_BASE_URI})" >&2
+}
+ensure_console_login_v2
+
+# ── 4. ensure the Login V2 instance feature: baseUri set, NOT required (#174) ──
+# Login V2 is selected per app (ADR-0015 §4): every client this script owns, and
+# the Console, carries its own loginVersion (steps 3, 3.bis, 3.ter, which run
+# FIRST in this same run). `required` stays false, because with it true Zitadel
+# overwrites each client's own base_uri with the instance one (v4
+# `internal/query/oidc_client.go` ActiveOIDCClientByID) — the storefront clients
+# would send the browser to the id host instead of the sign-in host. The
+# instance-init default (ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED in
+# compose/CI) only matters until this step converges it.
 #
-# baseUri (#174): the v2 authorize hop redirects the BROWSER to this URL to render
-# the login UI. Setting it makes the admin Console (/ui/console) browsable — its
-# interactive login now lands on the `idp-login` container served under
-# /ui/v2/login at the SAME external origin (fronted by the idp-proxy Caddy). This
-# is a DEV-OPERATOR CONVENIENCE only: the api BFF stays HEADLESS (Variant-B) and
-# never renders this UI — its auth_requests + token endpoints are served by the
-# core binary regardless of baseUri. baseUri derives from the provisioner's
-# BASE_URL (the external origin) + the login app's base path, so it is the same
-# origin the issuer/discovery use — no new input. Override via IDP_LOGIN_BASE_URI.
+# baseUri stays the id host's login UI (`idp-login` under /ui/v2/login, fronted by
+# the idp-proxy Caddy) — the same LOGIN_BASE_URI step 3 pins on the headless app,
+# derived from BASE_URL (override IDP_LOGIN_BASE_URI).
 #
 # Idempotency: a same-value PUT returns Zitadel's code-9 "no changes" precondition,
 # which api_idempotent absorbs (locale-independent), so a re-run / dev:up converges.
-LOGIN_BASE_URI="${IDP_LOGIN_BASE_URI:-${BASE_URL}/ui/v2/login}"
 api_idempotent PUT /v2/features/instance \
-  "$(jq -nc --arg u "$LOGIN_BASE_URI" '{loginV2:{required:true, baseUri:$u}}')" >/dev/null \
-  && echo "loginV2 feature ensured (required, baseUri=${LOGIN_BASE_URI})" >&2
+  "$(jq -nc --arg u "$LOGIN_BASE_URI" '{loginV2:{required:false, baseUri:$u}}')" >/dev/null \
+  && echo "loginV2 feature ensured (per app, not required; baseUri=${LOGIN_BASE_URI})" >&2
 
 # ── 5. grant IAM_LOGIN_CLIENT to the bootstrap machine user ───────────────────
 # Calling /v2/oidc/auth_requests/{id} needs the dedicated IAM_LOGIN_CLIENT role —
@@ -1217,6 +1392,10 @@ api POST /admin/v1/policies/login/second_factors/_search '{}' | jq -r \
 # ── output (machine-parseable; secret only when freshly created) ─────────────
 echo "IDP_PROJECT_ID=${PROJECT_ID}"
 echo "IDP_CLIENT_ID=${CLIENT_ID}"
+if [[ -n "$ACADEMY_CLIENT_ID" ]]; then
+  echo "IDP_ACADEMY_CLIENT_ID=${ACADEMY_CLIENT_ID}"
+  echo "IDP_DOCTOR_CLIENT_ID=${DOCTOR_CLIENT_ID}"
+fi
 if [[ -n "$CLIENT_SECRET" ]]; then
   echo "IDP_CLIENT_SECRET=${CLIENT_SECRET}"
 else

@@ -65,19 +65,26 @@ instance does nothing — you must re-init.
 `compose.core.yml` carries an opt-in FIRSTINSTANCE block, gated on `IDP_BOOTSTRAP`.
 When set, the init step creates an IAM-owner machine user `ds-bootstrap`, a console
 admin `zitadel-admin` with a known password, writes the machine user's PAT to a
-readable file, and enables the **Login V2** feature.
+readable file, and seeds the instance with the **Login V2** feature required.
 
-> **Login V2 is required — do not disable it.** The api BFF uses a headless
-> Variant-B exchange (apps/api auth design §3, EARS-8): it links a server-checked
-> session to a pending OIDC auth request via `POST /v2/oidc/auth_requests/{id}`.
-> That session-link API only resolves an auth request **created under Login V2**;
-> with the feature off the authorize hop files a v1 auth request the v2 API can't
-> see and the link 404s (`Auth Request does not exist`, proven live #146). The v2
-> login _UI_ ships as a separate Next.js `login` container — but the BFF never
-> renders it (no `baseUri` is configured), so the single-binary stand needs no
-> extra service: the `auth_requests` + token endpoints live in the core binary.
-> An earlier revision of this bootstrap forced Login V2 off; that was wrong and is
-> reverted.
+> **Login V2 is selected per app; the instance flag is switched off.** The api BFF
+> uses a headless Variant-B exchange (apps/api auth design §3, EARS-8): it links a
+> server-checked session to a pending OIDC auth request via
+> `POST /v2/oidc/auth_requests/{id}`, which only resolves an auth request **created
+> under Login V2** (a v1 auth request 404s with `Auth Request does not exist`,
+> #146). Each app therefore carries its own `loginVersion`: the headless API app
+> (`provision.sh` step 3), Zitadel's Management Console (step 3.ter), the
+> storefront clients (step 3.bis) and, on stage, the per-slot clients
+> (`tools/staging/idp.mjs`, whose redirect converge also re-writes the headless
+> app's loginVersion as desired state, so the stage flag-off run waits for that
+> tooling on `main` — `infra/deploy/compose/stg-infra/README.md`). After those
+> pins, step 4 switches the instance flag
+> `loginV2.required` **off**: with it on, Zitadel overrides every client's own
+> `base_uri` with the instance one (v4.17.3 `internal/query/oidc_client.go`
+> `ActiveOIDCClientByID`) and the storefronts would sign in on the wrong host.
+> The compose `ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED=true` only seeds
+> a fresh instance; step 4 then turns it off. The `auth_requests` + token
+> endpoints live in the core binary.
 
 In your `.env.local` (synced to the remote `.env` on `dev:up`):
 
@@ -140,10 +147,14 @@ Then flip `IDP_BOOTSTRAP=` back off (so normal boots don't re-trigger init).
 web/OIDC application (`authorization_code` + `refresh_token`, BASIC auth, dev-mode
 http redirect URIs), the project-role assertion so
 `urn:zitadel:iam:org:project:roles` is emitted in the token, and seeds the
-`doctor_guest` and `platform_admin` project roles (#662). It also **ensures the
-Login V2 instance feature** (a no-op if
-the FIRSTINSTANCE default already set it — converges instances created before that
-default), **grants `IAM_LOGIN_CLIENT`** to the `ds-bootstrap` machine user —
+`doctor_guest` and `platform_admin` project roles (#662). With the six storefront
+URIs set (below) it **registers the two storefront OIDC clients** (003 EARS-60,
+step 3.bis); with none set it skips them, and a partial set is refused. It
+**selects Login V2 per app** — the headless client and Zitadel's Management
+Console get the id host's login UI as their own `base_uri` — and only then sets
+the **Login V2 instance feature** to `required: false` with the same `baseUri`
+(ADR-0015 §4: with the flag on, Zitadel overrides every client's own `base_uri`).
+It **grants `IAM_LOGIN_CLIENT`** to the `ds-bootstrap` machine user —
 without it the EARS-8 session-link call returns `403 No matching permissions found`
 (`IAM_OWNER` alone is not sufficient) — **configures + activates an SMTP
 provider aimed at Mailpit** (`mailpit:1025`) so verification/reset codes (EARS-3)
@@ -166,9 +177,17 @@ but those IdP-rendered bodies are out of next-intl's reach). Re-running converge
 — it never duplicates.
 
 ```bash
-# Runs on a box with bash + curl + jq (the TrueNAS box has all three):
+# Runs on a box with bash + curl + jq (the TrueNAS box has all three).
+# The six storefront URIs are the dev-stand values of .env.example:
 ssh truenas 'cd ~/ds-platform-dev-stand/idp && \
-  IDP_BASE_URL=http://truenas.local:9080 ./provision.sh --pat-file /tmp/idp-pat.txt'
+  IDP_BASE_URL=http://truenas.local:9080 \
+  IDP_SIGN_IN_BASE_URI=http://localhost:3005 \
+  IDP_BACK_CHANNEL_LOGOUT_URI=http://localhost:3000/v1/auth/back-channel-logout \
+  IDP_ACADEMY_REDIRECT_URI=http://localhost:3001/auth/callback \
+  IDP_ACADEMY_POST_LOGOUT_URI=http://localhost:3001/ \
+  IDP_DOCTOR_REDIRECT_URI=http://localhost:3004/auth/callback \
+  IDP_DOCTOR_POST_LOGOUT_URI=http://localhost:3004/ \
+  ./provision.sh --pat-file /tmp/idp-pat.txt'
 ```
 
 It prints `IDP_PROJECT_ID`, `IDP_CLIENT_ID`, and — **only on first creation** —
@@ -194,6 +213,26 @@ leaves the instance multi-locale and relies on the default language + per-user
 `--project-name`, `--app-name`.
 Defaults target the api BFF callback (`:3000/auth/callback`) and the portal
 (`:3100/auth/callback`).
+
+**Storefront clients (step 3.bis, 003 EARS-60, ADR-0015 §4).** Beside that
+headless app the script converges two more confidential OIDC clients,
+`ds-storefront-academy` and `ds-storefront-doctor` — `private_key_jwt`, exactly
+one callback and one post-logout URI each, the sign-in host as their own Login V2
+`base_uri`, the API's back-channel logout endpoint — and prints
+`IDP_ACADEMY_CLIENT_ID` / `IDP_DOCTOR_CLIENT_ID` (ids only; no client key is
+created here). Overrides: `IDP_ACADEMY_REDIRECT_URI` (default
+`http://localhost:3001/auth/callback`), `IDP_ACADEMY_POST_LOGOUT_URI`
+(`http://localhost:3001/`), `IDP_DOCTOR_REDIRECT_URI`
+(`http://localhost:3004/auth/callback`), `IDP_DOCTOR_POST_LOGOUT_URI`
+(`http://localhost:3004/`), `IDP_SIGN_IN_BASE_URI` (`http://localhost:3005`),
+`IDP_BACK_CHANNEL_LOGOUT_URI`
+(`http://localhost:3000/v1/auth/back-channel-logout`), `IDP_ACADEMY_APP_NAME`,
+`IDP_DOCTOR_APP_NAME`. Each must be one exact `http(s)` URI — a value carrying
+`*`, `?`, `[` or a comma list aborts the run (exit 4) before anything is written.
+Dev mode is enabled on a storefront client only while one of its URIs is `http://`.
+The production values are passed by `pnpm deploy:prod` (`tools/deploy/prod.mjs`)
+and listed in `infra/deploy/README.md` step 9; stage slots get their own pair from
+`tools/staging/idp.mjs`.
 
 > **SMS on the dev-stand = a local catcher, never a real gateway.** The HTTP SMS
 > provider points at the `sms-sink` service (compose.core.yml) — the SMS analogue
@@ -472,8 +511,10 @@ default sits outside any synced dir, so it survives `dev:up`.
 
 ### `baseUri` is set idempotently by `provision.sh` (no console click-path)
 
-`provision.sh` step 4 sets the Login V2 instance feature with the **`baseUri`**
-(`${IDP_BASE_URL}/ui/v2/login`) on top of `required:true`, read-before-write so a
+`provision.sh` step 4 sets the Login V2 instance feature to the **`baseUri`**
+(`${IDP_BASE_URL}/ui/v2/login`) with `required:false` — Login V2 is selected per
+app, each client carrying its own `loginVersion` pinned by steps 3 / 3.bis / 3.ter
+earlier in the same run (see the Login V2 note above). The PUT is idempotent, so a
 re-run / `dev:up` converges with no duplicates. This is a **runtime API call** on
 the running instance — it does **not** re-init and does **not** drop the `zitadel`
 DB. No `IDP_BOOTSTRAP` / re-init is needed to make the Console browsable.
@@ -485,7 +526,7 @@ ssh truenas 'cd ~/ds-platform-dev-stand/idp && \
 # verify it stuck:
 curl -s -H "Authorization: Bearer <PAT>" \
   http://truenas.local:9080/v2/features/instance | jq '.loginV2'
-#   -> { "required": true, "baseUri": "http://truenas.local:9080/ui/v2/login", ... }
+#   -> { "required": false, "baseUri": "http://truenas.local:9080/ui/v2/login", ... }
 ```
 
 ### Verify the Console (browser) and that the BFF path survives

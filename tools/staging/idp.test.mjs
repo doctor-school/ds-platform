@@ -11,7 +11,11 @@ import {
   IdpError,
   convergeGoldenIdentities,
   convergeRedirectUris,
+  convergeStorefrontClients,
   createIdpClient,
+  planStorefrontClients,
+  storefrontAppName,
+  storefrontClientConfig,
   goldenDeletedSubject,
   parseGoldenSubjectsEnv,
   planGoldenIdentities,
@@ -72,6 +76,10 @@ const APP_ROUTES = {
   },
 };
 
+// The shared headless app's desired Login V2 base_uri: the IdP base URL's own login UI,
+// the same default provision.sh step 3 derives (`${BASE_URL}/ui/v2/login`).
+const LOGIN_V2 = { loginV2: { baseUri: "https://id.stage.example/ui/v2/login" } };
+
 test("the deleted doctor's subject is deterministic, marked and never a Zitadel id", () => {
   const first = goldenDeletedSubject("golden.doctor.deleted@example.test");
   assert.equal(first, goldenDeletedSubject("golden.doctor.deleted@example.test"));
@@ -85,10 +93,12 @@ test("a redirect set that already matches converges to a skip", () => {
     current: {
       redirectUris: ["https://b/auth/callback", "https://a/auth/callback"],
       postLogoutRedirectUris: ["https://b", "https://a"],
+      loginVersion: LOGIN_V2,
     },
     desired: {
       redirectUris: ["https://a/auth/callback", "https://b/auth/callback"],
       postLogoutUris: ["https://a", "https://b"],
+      loginVersion: LOGIN_V2,
     },
   });
   assert.equal(plan.action, "skip");
@@ -100,6 +110,7 @@ test("a differing redirect set converges to a PUT carrying the whole ordered set
     desired: {
       redirectUris: ["https://a/auth/callback", "https://b/auth/callback"],
       postLogoutUris: ["https://a", "https://b"],
+      loginVersion: LOGIN_V2,
     },
   });
   assert.equal(plan.action, "put");
@@ -114,13 +125,67 @@ test("a differing redirect set converges to a PUT carrying the whole ordered set
   assert.equal(plan.body.name, undefined);
 });
 
+test("003 EARS-60: a wiped Login V2 version on a matching redirect set converges to a PUT carrying the desired one", () => {
+  // Login V2 is selected per app (ADR-0015 §4): the v1 management update resets an
+  // omitted loginVersion to «unspecified» (= Login V1), so a converge from older tooling
+  // can wipe it while leaving the redirect set intact. The converge OWNS the value: a
+  // wiped one is restored from the desired state, never echoed back.
+  const plan = planRedirectUriConverge({
+    current: { redirectUris: ["https://a/auth/callback"], postLogoutRedirectUris: [] },
+    desired: { redirectUris: ["https://a/auth/callback"], postLogoutUris: [], loginVersion: LOGIN_V2 },
+  });
+  assert.equal(plan.action, "put");
+  assert.deepEqual(plan.body.loginVersion, LOGIN_V2);
+  assert.deepEqual(plan.body.redirectUris, ["https://a/auth/callback"]);
+});
+
+test("003 EARS-60: a matching redirect set and Login V2 base_uri converge to a skip", () => {
+  const plan = planRedirectUriConverge({
+    current: {
+      redirectUris: ["https://a/auth/callback"],
+      postLogoutRedirectUris: [],
+      loginVersion: LOGIN_V2,
+    },
+    desired: { redirectUris: ["https://a/auth/callback"], postLogoutUris: [], loginVersion: LOGIN_V2 },
+  });
+  assert.equal(plan.action, "skip");
+});
+
+test("003 EARS-60: a different Login V2 base_uri converges to a PUT carrying the desired one", () => {
+  const plan = planRedirectUriConverge({
+    current: {
+      redirectUris: ["https://a/auth/callback"],
+      postLogoutRedirectUris: [],
+      loginVersion: { loginV2: { baseUri: "https://login-pr-9.stage.example" } },
+    },
+    desired: { redirectUris: ["https://a/auth/callback"], postLogoutUris: [], loginVersion: LOGIN_V2 },
+  });
+  assert.equal(plan.action, "put");
+  assert.deepEqual(plan.body.loginVersion, LOGIN_V2);
+});
+
+test("003 EARS-60: a redirect converge without a desired Login V2 version is refused, never a V1 write", () => {
+  assert.throws(
+    () =>
+      planRedirectUriConverge({
+        current: { redirectUris: [], postLogoutRedirectUris: [], loginVersion: LOGIN_V2 },
+        desired: { redirectUris: ["https://a/auth/callback"], postLogoutUris: [] },
+      }),
+    IdpError,
+  );
+});
+
 test("a URI the registry no longer renders is dropped by the converge", () => {
   const plan = planRedirectUriConverge({
     current: {
       redirectUris: ["https://a/auth/callback", "https://gone/auth/callback"],
       postLogoutRedirectUris: ["https://a"],
     },
-    desired: { redirectUris: ["https://a/auth/callback"], postLogoutUris: ["https://a"] },
+    desired: {
+      redirectUris: ["https://a/auth/callback"],
+      postLogoutUris: ["https://a"],
+      loginVersion: LOGIN_V2,
+    },
   });
   assert.equal(plan.action, "put");
   assert.deepEqual(plan.body.redirectUris, ["https://a/auth/callback"]);
@@ -196,6 +261,7 @@ test("an already converged app is read and left alone", async () => {
               oidcConfig: {
                 redirectUris: ["https://a/auth/callback"],
                 postLogoutRedirectUris: ["https://a"],
+                loginVersion: LOGIN_V2,
               },
             },
           },
@@ -219,8 +285,10 @@ test("an already converged app is read and left alone", async () => {
 const APP_PATH = "GET /management/v1/projects/p1/apps/a1";
 const PUT_PATH = "PUT /management/v1/projects/p1/apps/a1/oidc_config";
 const cb = (slot) => `https://api-${slot}.stage.example/auth/callback`;
-const appWith = (slots) => ({
-  body: { app: { oidcConfig: { redirectUris: slots.map(cb), postLogoutRedirectUris: [] } } },
+const appWith = (slots, loginVersion = LOGIN_V2) => ({
+  body: {
+    app: { oidcConfig: { redirectUris: slots.map(cb), postLogoutRedirectUris: [], loginVersion } },
+  },
 });
 const setOf = (slots) => ({ redirectUris: slots.map(cb), postLogoutUris: [] });
 
@@ -353,6 +421,77 @@ test("a re-converge PUT answered 400 «No changes» (read-back lagged) is judged
   });
   assert.equal(calls.filter((call) => call.key === PUT_PATH).length, 2);
   assert.equal(result.attempts, 2);
+});
+
+test("003 EARS-60: the converge restores a wiped Login V2 version derived from the IdP base URL", async () => {
+  const calls = [];
+  const client = createIdpClient({
+    fetch: stubFetch(
+      {
+        ...APP_ROUTES,
+        // probe: a parallel run of older tooling wiped loginVersion → read-back restored
+        [APP_PATH]: [appWith(["main"], null), appWith(["main"])],
+        [PUT_PATH]: { body: {} },
+      },
+      calls,
+    ),
+    baseUrl: "https://id.stage.example/",
+    pat: "pat-value",
+  });
+  const result = await convergeRedirectUris({
+    client,
+    desired: setOf(["main"]),
+    sleep: async () => {},
+  });
+  const puts = calls.filter((call) => call.key === PUT_PATH);
+  assert.equal(puts.length, 1);
+  assert.deepEqual(puts[0].body.loginVersion, LOGIN_V2);
+  assert.equal(result.action, "put");
+});
+
+test("003 EARS-60: the converge honours provision.sh's IDP_LOGIN_BASE_URI override", async () => {
+  const calls = [];
+  const override = { loginV2: { baseUri: "https://login.stage.example/ui/v2/login" } };
+  const client = createIdpClient({
+    fetch: stubFetch(
+      {
+        ...APP_ROUTES,
+        [APP_PATH]: [appWith(["main"]), appWith(["main"], override)],
+        [PUT_PATH]: { body: {} },
+      },
+      calls,
+    ),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  await convergeRedirectUris({
+    client,
+    desired: setOf(["main"]),
+    loginBaseUri: " https://login.stage.example/ui/v2/login ",
+    sleep: async () => {},
+  });
+  const puts = calls.filter((call) => call.key === PUT_PATH);
+  assert.equal(puts.length, 1);
+  assert.deepEqual(puts[0].body.loginVersion, override);
+});
+
+test("003 EARS-60: a read-back that keeps losing the Login V2 version fails loudly", async () => {
+  const client = createIdpClient({
+    fetch: stubFetch({
+      ...APP_ROUTES,
+      [APP_PATH]: appWith(["main"], null),
+      [PUT_PATH]: { body: {} },
+    }),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  await assert.rejects(
+    convergeRedirectUris({ client, desired: setOf(["main"]), sleep: async () => {} }),
+    (err) =>
+      err instanceof IdpError &&
+      err.message.includes("login V2 base_uri") &&
+      err.message.includes(LOGIN_V2.loginV2.baseUri),
+  );
 });
 
 test("a URI held in the wrong list does not pass the read-back", async () => {
@@ -1134,4 +1273,131 @@ test("a missing password is generated and persisted BEFORE the first IdP write",
   assert.equal(h.writes[0].afterCalls, 0);
   const pw = h.calls.find((c) => c.key === "POST /v2/users/id-agent/password");
   assert.equal(pw.body.newPassword.password, "Generated-Pw-1!");
+});
+
+// --- per-slot storefront clients (003 EARS-60, ADR-0015 §4) -------------------
+
+const BASE = "stage.example";
+
+test("003 EARS-60: a slot's storefront client names exactly its own callback, post-logout, sign-in host and back-channel", () => {
+  const config = storefrontClientConfig({ storefront: "academy", slot: "pr-12", baseDomain: BASE });
+  assert.deepEqual(config.redirectUris, ["https://academy-pr-12.stage.example/auth/callback"]);
+  assert.deepEqual(config.postLogoutRedirectUris, ["https://academy-pr-12.stage.example/"]);
+  assert.deepEqual(config.loginVersion, { loginV2: { baseUri: "https://login-pr-12.stage.example" } });
+  assert.equal(config.backChannelLogoutUri, "https://api-pr-12.stage.example/v1/auth/back-channel-logout");
+  assert.equal(config.authMethodType, "OIDC_AUTH_METHOD_TYPE_PRIVATE_KEY_JWT");
+  assert.equal(config.devMode, false);
+  assert.equal("name" in config, false);
+  const doctor = storefrontClientConfig({ storefront: "doctor", slot: "pr-12", baseDomain: BASE });
+  assert.deepEqual(doctor.redirectUris, ["https://doctor-pr-12.stage.example/auth/callback"]);
+});
+
+test("003 EARS-60: a wildcard base domain or an unknown storefront is refused, never registered", () => {
+  assert.throws(
+    () => storefrontClientConfig({ storefront: "academy", slot: "pr-1", baseDomain: "*.example" }),
+    IdpError,
+  );
+  assert.throws(
+    () => storefrontClientConfig({ storefront: "admin", slot: "pr-1", baseDomain: BASE }),
+    IdpError,
+  );
+});
+
+test("003 EARS-60: the plan creates a live slot's absent clients, keeps converged ones, updates drift and removes a gone slot's", () => {
+  const converged = (storefront, slot) => ({
+    id: `id-${storefront}-${slot}`,
+    name: storefrontAppName(storefront, slot),
+    oidcConfig: storefrontClientConfig({ storefront, slot, baseDomain: BASE }),
+  });
+  const drifted = {
+    ...converged("doctor", "main"),
+    oidcConfig: {
+      ...storefrontClientConfig({ storefront: "doctor", slot: "main", baseDomain: BASE }),
+      redirectUris: [
+        "https://doctor-main.stage.example/auth/callback",
+        "https://evil.example/auth/callback",
+      ],
+    },
+  };
+  const plan = planStorefrontClients({
+    slots: ["main", "pr-7"],
+    baseDomain: BASE,
+    existing: [
+      converged("academy", "main"),
+      drifted,
+      converged("academy", "pr-3"),
+      // Never touched: the shared headless app and the dev-default clients.
+      { id: "headless", name: "ds-platform-dev" },
+      { id: "dev-academy", name: "ds-storefront-academy" },
+    ],
+  });
+  assert.deepEqual(
+    plan.create.map((item) => item.name),
+    ["ds-storefront-academy-pr-7", "ds-storefront-doctor-pr-7"],
+  );
+  assert.deepEqual(plan.update.map((item) => item.appId), ["id-doctor-main"]);
+  assert.deepEqual(plan.update[0].body.redirectUris, ["https://doctor-main.stage.example/auth/callback"]);
+  assert.deepEqual(plan.remove, [{ appId: "id-academy-pr-3", name: "ds-storefront-academy-pr-3" }]);
+  assert.equal(plan.keep, 1);
+});
+
+test("003 EARS-60: the converge creates, rewrites and deletes over the IdP and leaves the headless app alone", async () => {
+  const calls = [];
+  const client = createIdpClient({
+    fetch: stubFetch(
+      {
+        "POST /management/v1/projects/_search": {
+          body: { result: [{ id: "p1", name: "ds-platform-dev" }] },
+        },
+        "POST /management/v1/projects/p1/apps/_search": {
+          body: {
+            result: [
+              { id: "a1", name: "ds-platform-dev" },
+              { id: "old", name: "ds-storefront-doctor-pr-3", oidcConfig: {} },
+            ],
+          },
+        },
+        "POST /management/v1/projects/p1/apps/oidc": { body: { appId: "new", clientId: "c" } },
+        "DELETE /management/v1/projects/p1/apps/old": { body: {} },
+      },
+      calls,
+    ),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  const lines = [];
+  const result = await convergeStorefrontClients({
+    client,
+    slots: ["pr-9"],
+    baseDomain: BASE,
+    log: (line) => lines.push(line),
+  });
+  const keys = calls.map((call) => call.key);
+  assert.equal(calls[1].body.queries[0].nameQuery.method, "TEXT_QUERY_METHOD_STARTS_WITH");
+  assert.deepEqual(
+    calls.filter((call) => call.key.endsWith("/apps/oidc")).map((call) => call.body.name),
+    ["ds-storefront-academy-pr-9", "ds-storefront-doctor-pr-9"],
+  );
+  assert.ok(keys.includes("DELETE /management/v1/projects/p1/apps/old"));
+  assert.ok(!keys.some((key) => key.includes("/apps/a1")));
+  assert.equal(result.create.length, 2);
+  assert.ok(!lines.join(" ").includes("pat-value"));
+});
+
+test("003 EARS-60: a failed storefront client write aborts the converge", async () => {
+  const client = createIdpClient({
+    fetch: stubFetch({
+      "POST /management/v1/projects/_search": {
+        body: { result: [{ id: "p1", name: "ds-platform-dev" }] },
+      },
+      "POST /management/v1/projects/p1/apps/_search": { body: { result: [] } },
+      "POST /management/v1/projects/p1/apps/oidc": { status: 500, body: {} },
+    }),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  await assert.rejects(
+    convergeStorefrontClients({ client, slots: ["pr-9"], baseDomain: BASE }),
+    IdpError,
+  );
 });

@@ -95,6 +95,7 @@ import {
   convergeAgentAdmin,
   convergeGoldenIdentities,
   convergeRedirectUris,
+  convergeStorefrontClients,
   createIdpClient,
   parseAgentAdminSecrets,
   parsePinnedUris,
@@ -1324,12 +1325,21 @@ export function resolveDesiredRedirectSet(step, env = process.env) {
  * the whole-set write would otherwise drop it (#2694). Forcing the step's own slot keeps
  * a `down` from re-adding the slot it just removed if the read still lists it.
  */
-export function desiredRedirectSetAt(step, liveSlotNames, env = process.env) {
+/**
+ * The slot names an idp step converges to: the live slots, with the step's own slot
+ * added (`up`/`sync`) or dropped (`down`). Shared by the redirect set and the
+ * per-slot storefront clients so both follow one membership rule.
+ */
+export function slotNamesAt(step, liveSlotNames) {
   const names = new Set(liveSlotNames ?? []);
   if (step.slot && step.membership === "include") names.add(step.slot);
   if (step.slot && step.membership === "exclude") names.delete(step.slot);
+  return [...names];
+}
+
+export function desiredRedirectSetAt(step, liveSlotNames, env = process.env) {
   return resolveDesiredRedirectSet(
-    { desired: renderIdpRedirectUris([...names], step.baseDomain) },
+    { desired: renderIdpRedirectUris(slotNamesAt(step, liveSlotNames), step.baseDomain) },
     env,
   );
 }
@@ -2948,6 +2958,19 @@ function realEffects(
           // never the start-time snapshot `main()` took (#2694).
           readDesired: async () =>
             desiredRedirectSetAt(step, Object.keys(await readLiveSlots()), boxEnv),
+          // The shared app's Login V2 base_uri is desired state too: the IdP origin's
+          // login UI unless stage.env carries provision.sh's own override.
+          loginBaseUri: boxEnv.IDP_LOGIN_BASE_URI,
+          log,
+        });
+        // One Academy + one doctor storefront client per live slot (003 EARS-60):
+        // created on up/sync, removed on down and by the whole-registry sweep. The
+        // shared headless app above is converged exactly as before.
+        await convergeStorefrontClients({
+          client,
+          projectName,
+          slots: slotNamesAt(step, Object.keys(await readLiveSlots())),
+          baseDomain: step.baseDomain,
           log,
         });
         return undefined;

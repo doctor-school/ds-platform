@@ -1141,6 +1141,18 @@ const IDP_BOOTSTRAP_PAT_FILE = "/etc/ds-platform/idp-bootstrap-pat.txt";
 const IDP_REDIRECT_URIS = "https://api.doctor.school/auth/callback";
 const IDP_POST_LOGOUT_URIS =
   "https://academy.doctor.school,https://new.doctor.school";
+// The two storefront OIDC clients (provision.sh step 3.bis, 003 EARS-60, ADR-0015 §4):
+// one exact callback + post-logout URI each, the sign-in host as their Login V2
+// base_uri, the API's back-channel logout endpoint. The doctor storefront is
+// `new.doctor.school` until the relaunch moves it (ADR-0015 §7 — a re-registration).
+const IDP_STOREFRONT_CLIENT_ENV = [
+  "IDP_SIGN_IN_BASE_URI=https://login.doctor.school",
+  "IDP_BACK_CHANNEL_LOGOUT_URI=https://api.doctor.school/v1/auth/back-channel-logout",
+  "IDP_ACADEMY_REDIRECT_URI=https://academy.doctor.school/auth/callback",
+  "IDP_ACADEMY_POST_LOGOUT_URI=https://academy.doctor.school/",
+  "IDP_DOCTOR_REDIRECT_URI=https://new.doctor.school/auth/callback",
+  "IDP_DOCTOR_POST_LOGOUT_URI=https://new.doctor.school/",
+].join(" ");
 // The mirrored SSOT constant, read at the DEPLOYED SHA (never a literal `8`):
 // the deploy must verify the instance against the number the shipped code
 // enforces, which on a `--ref` hotfix is not necessarily the local checkout's.
@@ -1184,7 +1196,7 @@ async function provisionIdp(sha, label = sha.slice(0, 12)) {
     await sshScript(
       API_PROD,
       `cd ${IDP_PROVISION_DIR}
-sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; IDP_BASE_URL=${IDP_BASE_URL} IDP_REDIRECT_URIS=${IDP_REDIRECT_URIS} IDP_POST_LOGOUT_URIS=${IDP_POST_LOGOUT_URIS} EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real ./provision.sh --pat-file ${IDP_BOOTSTRAP_PAT_FILE}'
+sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; IDP_BASE_URL=${IDP_BASE_URL} IDP_REDIRECT_URIS=${IDP_REDIRECT_URIS} IDP_POST_LOGOUT_URIS=${IDP_POST_LOGOUT_URIS} ${IDP_STOREFRONT_CLIENT_ENV} EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real ./provision.sh --pat-file ${IDP_BOOTSTRAP_PAT_FILE}'
 `,
       { label: "idp provision", stallBudgetMs: STALL_BUDGET_BUILD_MS },
     );

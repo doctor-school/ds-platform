@@ -517,6 +517,15 @@ jobs:
           # namespace, so both are addressed on localhost here.
           IDP_SMTP_HOST: localhost:1025
           IDP_SMS_SINK_ENDPOINT: http://localhost:8090/
+          # The storefront OIDC clients (003 EARS-60, provision.sh step 3.bis) exist
+          # only where their URIs are configured explicitly; this job's live suite
+          # (storefront-oidc-clients.e2e-spec.ts) needs them. Dev-stand ports.
+          IDP_SIGN_IN_BASE_URI: http://localhost:3005
+          IDP_BACK_CHANNEL_LOGOUT_URI: http://localhost:3000/v1/auth/back-channel-logout
+          IDP_ACADEMY_REDIRECT_URI: http://localhost:3001/auth/callback
+          IDP_ACADEMY_POST_LOGOUT_URI: http://localhost:3001/
+          IDP_DOCTOR_REDIRECT_URI: http://localhost:3004/auth/callback
+          IDP_DOCTOR_POST_LOGOUT_URI: http://localhost:3004/
         run: |
           set -euo pipefail
           bash infra/dev-stand/idp/provision.sh --pat-file ./idp-pat.txt \
@@ -1559,7 +1568,12 @@ jobs:
         run: mkdir -p "$RUNNER_TEMP/idp-pat" && chmod 0777 "$RUNNER_TEMP/idp-pat"
       - name: Start the IdP (Zitadel)
         run: |
+          # ZITADEL_HTTPCLIENT_DENYLIST — the same SSRF-guard override as api-e2e
+          # (see the note there), the dev stand and stage/prod: the default list
+          # denies `localhost`, which refuses every runner-local URI the
+          # provisioner registers (e.g. a back-channel logout URI).
           docker run -d --name ds-idp --network host \
+            -e ZITADEL_HTTPCLIENT_DENYLIST=169.254.0.0/16,fe80::/10,fc00::/7 \
             -v "$RUNNER_TEMP/idp-pat":/pat \
             -e ZITADEL_MASTERKEY=MasterkeyNeedsToHave32Characters \
             -e ZITADEL_EXTERNALSECURE=false \

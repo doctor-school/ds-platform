@@ -260,7 +260,7 @@ const sameSet = (a, b) => {
  * exactly as `provision.sh` strips it on the update path: it belongs to the app
  * resource, not to its `oidc_config` sub-resource.
  */
-function oidcConfigBody({ redirectUris, postLogoutRedirectUris }) {
+function oidcConfigBody({ redirectUris, postLogoutRedirectUris, loginVersion }) {
   return {
     redirectUris,
     postLogoutRedirectUris,
@@ -274,12 +274,37 @@ function oidcConfigBody({ redirectUris, postLogoutRedirectUris }) {
     accessTokenRoleAssertion: true,
     idTokenRoleAssertion: true,
     idTokenUserinfoAssertion: true,
+    // Login V2 is selected per app (ADR-0015 §4) and this converge OWNS the value as
+    // desired state (`sharedAppLoginVersion`), the same one provision.sh step 3 writes:
+    // the v1 management update resets an omitted loginVersion to «unspecified»
+    // (= Login V1), so every write carries it and a wiped one is restored.
+    loginVersion,
   };
 }
 
 /**
- * ensure-present for the WHOLE redirect set: `{ action: "skip" }` when the app
- * already carries exactly it, `{ action: "put", body }` otherwise.
+ * The shared headless app's desired Login V2 version: the IdP's own login UI,
+ * `<IdP base URL>/ui/v2/login` — the value provision.sh step 3 derives
+ * (`${IDP_LOGIN_BASE_URI:-${BASE_URL}/ui/v2/login}`), honouring the same
+ * `IDP_LOGIN_BASE_URI` override. `idpBaseUrl` is the origin the slot tooling already
+ * talks to (`resolveIdpBaseUrl` → `createIdpClient().origin`).
+ */
+export function sharedAppLoginVersion({ idpBaseUrl, loginBaseUri } = {}) {
+  const override = String(loginBaseUri ?? "").trim();
+  const origin = String(idpBaseUrl ?? "").trim().replace(/\/+$/, "");
+  if (!override && !origin) {
+    throw new IdpError("the shared app's Login V2 base_uri needs the IdP base URL");
+  }
+  return { loginV2: { baseUri: assertExactUri(override || `${origin}/ui/v2/login`) } };
+}
+
+const loginBaseUriOf = (config) => config?.loginVersion?.loginV2?.baseUri;
+
+/**
+ * ensure-present for the WHOLE redirect set AND the app's Login V2 version:
+ * `{ action: "skip" }` when the app already carries exactly both, `{ action: "put",
+ * body }` otherwise. A matching redirect set whose loginVersion was wiped (a write
+ * from tooling that omitted it) or points elsewhere is a PUT, never a skip.
  *
  * The compare is order-insensitive (Zitadel does not promise to echo the order it was
  * given) while the write sends the ordered set, so a converge is stable: a second run
@@ -288,13 +313,22 @@ function oidcConfigBody({ redirectUris, postLogoutRedirectUris }) {
 export function planRedirectUriConverge({ current, desired }) {
   const redirectUris = [...(desired?.redirectUris ?? [])];
   const postLogoutRedirectUris = [...(desired?.postLogoutUris ?? desired?.postLogoutRedirectUris ?? [])];
+  const loginVersion = desired?.loginVersion;
+  if (!loginBaseUriOf(desired)) {
+    // A write without it would reset the app to Login V1 (see `oidcConfigBody`).
+    throw new IdpError("the redirect converge needs the shared app's desired Login V2 version");
+  }
   if (
     sameSet(current?.redirectUris, redirectUris) &&
-    sameSet(current?.postLogoutRedirectUris, postLogoutRedirectUris)
+    sameSet(current?.postLogoutRedirectUris, postLogoutRedirectUris) &&
+    loginBaseUriOf(current) === loginBaseUriOf(desired)
   ) {
     return { action: "skip" };
   }
-  return { action: "put", body: oidcConfigBody({ redirectUris, postLogoutRedirectUris }) };
+  return {
+    action: "put",
+    body: oidcConfigBody({ redirectUris, postLogoutRedirectUris, loginVersion }),
+  };
 }
 
 /**
@@ -552,8 +586,9 @@ async function resolveSharedApp(client, { projectName, appName }) {
 
 /**
  * What the app's read-back lacks (`missing`) or carries beyond (`extra`) the desired
- * set, per list — a URI held in the wrong list is not converged. Every list empty ⇒
- * converged.
+ * set, per list — a URI held in the wrong list is not converged — plus a Login V2
+ * base_uri that differs from the desired one (`loginBaseUri: { want, have }`, else
+ * `null`). Every list empty and no Login V2 difference ⇒ converged.
  */
 export function diffRedirectSet({ current, desired }) {
   const diff = (have, want) => {
@@ -570,10 +605,15 @@ export function diffRedirectSet({ current, desired }) {
       current?.postLogoutRedirectUris,
       desired?.postLogoutUris ?? desired?.postLogoutRedirectUris,
     ),
+    loginBaseUri:
+      loginBaseUriOf(current) === loginBaseUriOf(desired)
+        ? null
+        : { want: loginBaseUriOf(desired), have: loginBaseUriOf(current) },
   };
 }
 
-const isConverged = ({ redirect, postLogout }) =>
+const isConverged = ({ redirect, postLogout, loginBaseUri }) =>
+  !loginBaseUri &&
   [redirect.missing, redirect.extra, postLogout.missing, postLogout.extra].every(
     (list) => list.length === 0,
   );
@@ -595,6 +635,11 @@ const realSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * one, re-reads and re-converges, bounded by `attempts` with a growing backoff; still
  * wrong ⇒ `IdpError` naming every missing/extra URI. Never a silent success.
  *
+ * The app's Login V2 version is part of the same desired state (`sharedAppLoginVersion`,
+ * from the client's IdP origin or `loginBaseUri` = provision.sh's `IDP_LOGIN_BASE_URI`):
+ * a parallel write that omitted it (= Login V1, and the api's headless sign-in then 404s
+ * on its auth request) is restored by the next converge and checked on the read-back.
+ *
  * Probe (`GET .../apps/{id}`) → PUT only on a difference → read-back; any failure of
  * a hop aborts. A slot whose callback is not registered fails login with `invalid
  * redirect_uri`, which is strictly worse than a refused `slot up`.
@@ -609,10 +654,13 @@ export async function convergeRedirectUris({
   attempts = REDIRECT_CONVERGE_ATTEMPTS,
   backoffMs = REDIRECT_CONVERGE_BACKOFF_MS,
   sleep = realSleep,
+  loginBaseUri,
 }) {
+  const loginVersion = sharedAppLoginVersion({ idpBaseUrl: client.origin, loginBaseUri });
+  const readWant = async () => ({ ...(await readDesired()), loginVersion });
   const { projectId, appId } = await resolveSharedApp(client, { projectName, appName });
   const appPath = `/management/v1/projects/${projectId}/apps/${appId}`;
-  let want = await readDesired();
+  let want = await readWant();
   let lastPut;
   let diff;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -642,7 +690,7 @@ export async function convergeRedirectUris({
     const readBack = (await client.request("GET", appPath))?.app?.oidcConfig ?? {};
     // Re-read the live set: a slot that came up (or went down) during this write is
     // judged against the set as it is now, and becomes the next attempt's target.
-    want = await readDesired();
+    want = await readWant();
     diff = diffRedirectSet({ current: readBack, desired: want });
     if (isConverged(diff)) {
       return lastPut
@@ -662,8 +710,146 @@ export async function convergeRedirectUris({
   );
 }
 
-function describeDiff({ redirect, postLogout }) {
+// --- storefront OIDC clients per slot (003 EARS-60, ADR-0015 §4) -------------
+
+/** The two storefronts that each get their own confidential OIDC client. */
+export const STOREFRONTS = Object.freeze(["academy", "doctor"]);
+const STOREFRONT_APP_PREFIX = "ds-storefront-";
+const SLOT_STOREFRONT_APP_RE = /^ds-storefront-(academy|doctor)-([a-z0-9][a-z0-9-]*)$/;
+
+/** `ds-storefront-<storefront>-<slot>` — the per-slot client's app name. */
+export function storefrontAppName(storefront, slot) {
+  return `${STOREFRONT_APP_PREFIX}${storefront}-${slot}`;
+}
+
+const assertExactUri = (uri) => {
+  // The same refusal provision.sh applies: one exact absolute https URI, never a
+  // wildcard / query / glob / list (ADR-0015 §4 req. 1).
+  if (!/^https:\/\/[^/\s]+(\/\S*)?$/.test(uri) || /[*?[,]/.test(uri)) {
+    throw new IdpError(`refusing to register a non-exact storefront URI: ${JSON.stringify(uri)}`);
+  }
+  return uri;
+};
+
+/**
+ * The oidc_config of one slot's storefront client, minus `name` — the stage shape of
+ * the payload `provision.sh` step 3.bis builds: exactly one callback and one
+ * post-logout URI on the slot's own storefront host, `private_key_jwt`, the slot's
+ * sign-in host `login-<slot>` as this app's OWN Login V2 base_uri, and the slot API's
+ * back-channel logout endpoint. Every URI is https, so dev mode stays off.
+ */
+export function storefrontClientConfig({ storefront, slot, baseDomain }) {
+  if (!STOREFRONTS.includes(storefront)) {
+    throw new IdpError(`unknown storefront ${JSON.stringify(storefront)}`);
+  }
+  const origin = `https://${storefront}-${slot}.${baseDomain}`;
+  return {
+    redirectUris: [assertExactUri(`${origin}/auth/callback`)],
+    postLogoutRedirectUris: [assertExactUri(`${origin}/`)],
+    responseTypes: ["OIDC_RESPONSE_TYPE_CODE"],
+    grantTypes: ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE", "OIDC_GRANT_TYPE_REFRESH_TOKEN"],
+    appType: "OIDC_APP_TYPE_WEB",
+    authMethodType: "OIDC_AUTH_METHOD_TYPE_PRIVATE_KEY_JWT",
+    version: "OIDC_VERSION_1_0",
+    devMode: false,
+    accessTokenType: "OIDC_TOKEN_TYPE_JWT",
+    accessTokenRoleAssertion: true,
+    idTokenRoleAssertion: true,
+    idTokenUserinfoAssertion: true,
+    backChannelLogoutUri: assertExactUri(
+      `https://api-${slot}.${baseDomain}/v1/auth/back-channel-logout`,
+    ),
+    loginVersion: { loginV2: { baseUri: assertExactUri(`https://login-${slot}.${baseDomain}`) } },
+  };
+}
+
+const sameStorefrontConfig = (current, want) =>
+  sameSet(current?.redirectUris, want.redirectUris) &&
+  (current?.redirectUris ?? []).length === want.redirectUris.length &&
+  sameSet(current?.postLogoutRedirectUris, want.postLogoutRedirectUris) &&
+  (current?.postLogoutRedirectUris ?? []).length === want.postLogoutRedirectUris.length &&
+  current?.authMethodType === want.authMethodType &&
+  Boolean(current?.devMode) === want.devMode &&
+  current?.backChannelLogoutUri === want.backChannelLogoutUri &&
+  current?.loginVersion?.loginV2?.baseUri === want.loginVersion.loginV2.baseUri;
+
+/**
+ * What the per-slot storefront clients need: a `create` for each live slot's absent
+ * client, an `update` for one whose config drifted, a `remove` for a slot client no
+ * live slot owns (a `down`, or a slot that vanished — the whole-registry sweep). Apps
+ * outside the `ds-storefront-<storefront>-<slot>` shape — the shared headless app, the
+ * dev-default `ds-storefront-<storefront>` clients — are never touched.
+ */
+export function planStorefrontClients({ slots, baseDomain, existing }) {
+  const live = new Set(slots ?? []);
+  const byName = new Map();
+  const remove = [];
+  for (const app of existing ?? []) {
+    const match = SLOT_STOREFRONT_APP_RE.exec(app?.name ?? "");
+    if (!match) continue;
+    if (live.has(match[2])) byName.set(app.name, app);
+    else remove.push({ appId: app.id, name: app.name });
+  }
+  const create = [];
+  const update = [];
+  let keep = 0;
+  for (const slot of [...live].sort()) {
+    for (const storefront of STOREFRONTS) {
+      const name = storefrontAppName(storefront, slot);
+      const body = storefrontClientConfig({ storefront, slot, baseDomain });
+      const app = byName.get(name);
+      if (!app) create.push({ name, body });
+      else if (!sameStorefrontConfig(app.oidcConfig, body)) update.push({ appId: app.id, name, body });
+      else keep += 1;
+    }
+  }
+  return { create, update, remove: remove.sort((a, b) => a.name.localeCompare(b.name)), keep };
+}
+
+/**
+ * Converge the per-slot storefront clients to the live slot set (created on
+ * `up`/`sync`, removed on `down` and by the sweep). Read-before-write; any failed hop
+ * aborts as an `IdpError`. Only names and app ids are logged — no client key exists
+ * here (private_key_jwt keys are minted by the API-side wiring).
+ */
+export async function convergeStorefrontClients({
+  client,
+  slots,
+  baseDomain,
+  projectName = DEFAULT_PROJECT_NAME,
+  log = () => {},
+}) {
+  const projectId = await resolveProjectId(client, projectName);
+  const appsPath = `/management/v1/projects/${projectId}/apps`;
+  const found = await client.request("POST", `${appsPath}/_search`, {
+    queries: [
+      { nameQuery: { name: STOREFRONT_APP_PREFIX, method: "TEXT_QUERY_METHOD_STARTS_WITH" } },
+    ],
+  });
+  const plan = planStorefrontClients({ slots, baseDomain, existing: found?.result ?? [] });
+  for (const { name, body } of plan.create) {
+    const created = await client.request("POST", `${appsPath}/oidc`, { name, ...body });
+    log(`  ↳ idp storefront client ${name} created (appId ${created?.appId ?? "?"})`);
+  }
+  for (const { appId, name, body } of plan.update) {
+    await client.request("PUT", `${appsPath}/${appId}/oidc_config`, body);
+    log(`  ↳ idp storefront client ${name} converged`);
+  }
+  for (const { appId, name } of plan.remove) {
+    await client.request("DELETE", `${appsPath}/${appId}`);
+    log(`  ↳ idp storefront client ${name} removed (no live slot)`);
+  }
+  if (plan.keep) log(`  ↳ idp storefront clients already converged: ${plan.keep}`);
+  return { projectId, ...plan };
+}
+
+function describeDiff({ redirect, postLogout, loginBaseUri }) {
   const parts = [];
+  if (loginBaseUri) {
+    parts.push(
+      `login V2 base_uri: want ${loginBaseUri.want}, have ${loginBaseUri.have ?? "none (= Login V1)"}`,
+    );
+  }
   for (const [name, list] of [
     ["redirect missing", redirect.missing],
     ["redirect extra", redirect.extra],

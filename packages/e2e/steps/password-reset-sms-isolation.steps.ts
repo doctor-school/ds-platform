@@ -40,6 +40,8 @@ interface ResetAccount {
   contexts: BrowserContext[];
   closures: APIRequestContext[];
   httpCredentials: BrowserContextOptions["httpCredentials"];
+  ownedContexts: BrowserContext[];
+  expectedRevoked: Set<BrowserContext>;
   owner?: Page;
   reset?: Page;
   code?: string;
@@ -48,6 +50,7 @@ interface ResetAccount {
 }
 interface ResetIsolation {
   accounts: ResetAccount[];
+  expectedRevoked: Set<BrowserContext>;
   contexts: BrowserContext[];
   closures: APIRequestContext[];
 }
@@ -69,6 +72,7 @@ async function privatePage(
       : {}),
   });
   state.contexts.push(context);
+  state.ownedContexts.push(context);
   context.on("request", (request) => {
     if (
       request.method() === "POST" &&
@@ -289,7 +293,12 @@ Given(
     expect(world.host.id).toBe("academy");
     const sink = smsSinkUrl();
     if (!sink) throw new Error("SMS sink required for account isolation proof");
-    const state: ResetIsolation = { accounts: [], contexts: [], closures: [] };
+    const state: ResetIsolation = {
+      accounts: [],
+      contexts: [],
+      closures: [],
+      expectedRevoked: new Set(),
+    };
     journeys.set(page, state);
     for (let index = 0; index < 2; index++) {
       const password = `Original-${randomUUID()}-aA1!`;
@@ -301,6 +310,8 @@ Given(
         password,
         acceptedPassword: password,
         replacement: `Replacement-${randomUUID()}-aA1!`,
+        ownedContexts: [],
+        expectedRevoked: state.expectedRevoked,
         contexts: state.contexts,
         closures: state.closures,
         httpCredentials,
@@ -525,6 +536,10 @@ When(
         },
         "same retained code completes only its owner's reset",
       ).toEqual({ status: 200, exactCommand: true, tokenFree: true });
+      // 003 EARS-12: only contexts predating this successful reset are revoked.
+      for (const context of account.ownedContexts) {
+        if (context !== reset.context()) state.expectedRevoked.add(context);
+      }
       account.acceptedPassword = account.replacement;
       await reset.waitForURL((url) => url.pathname === "/account");
       await assertSecureSession(reset, completed.response, world.hostBaseUrl, [
@@ -615,14 +630,24 @@ After("@sms-reset-account-isolation", async ({ page, world }) => {
               profile: profile.status,
             };
           });
+          const alreadyRevoked = state.expectedRevoked.has(context);
           expect(
             statuses,
-            "exact owned SMS reset isolation session revoked",
+            "active sessions log out; explicitly reset-revoked sessions remain private",
           ).toEqual({
-            logout: 200,
+            logout: alreadyRevoked ? 401 : 200,
             session: 401,
             profile: 401,
           });
+          if (!alreadyRevoked) {
+            expect(
+              (await context.cookies()).some(
+                (cookie) => cookie.name === SESSION,
+              ),
+              "active logout clears its browser cookie",
+            ).toBe(false);
+          }
+          // A reset-revoked cookie is discarded by closing this owned context.
         }
       } catch (error) {
         failures.push(

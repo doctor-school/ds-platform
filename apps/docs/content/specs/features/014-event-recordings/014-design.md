@@ -293,7 +293,7 @@ sequenceDiagram
 
 ## 6. Return-to-origin (`wave: core`, platform-wide rule)
 
-The owner's rule is broader than 014: _any_ login-gated content returns the user to the page they were consuming. This design implements it once, as a portal-auth mechanism, and 014 is its first consumer.
+The owner's rule is broader than 014: _any_ login-gated content returns the user to the page they were consuming. This design implements it once, as a portal-auth mechanism, and 014 is its first consumer. **[Cross-reference 2026-10-21 ([#3006](https://github.com/doctor-school/ds-platform/issues/3006)) — `/login` and `/register` are now storefront entries that redirect to the sign-in host; the validated `returnTo` is stored as the return path of the storefront's server-side sign-in transaction instead of the short-lived cookie below, and the storefront callback consumes it once with a `303` (003 EARS-61, EARS-62; [003 production amendment 2026-10-21](../003-user-authentication/003-design.md)).]**
 
 ```mermaid
 flowchart LR

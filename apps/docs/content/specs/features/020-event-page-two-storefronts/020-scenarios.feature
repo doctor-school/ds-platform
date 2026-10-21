@@ -82,6 +82,9 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
       | an anonymous visitor | this host's /login carrying a returnTo to the room URL |
       | a signed-in doctor   | the participation path on the event page (?from=room)  |
 
+  # Amendment 2026-10-21 (#3006): the host's /login is an entry that renders no form and
+  # redirects to the sign-in host; returnTo becomes the return path stored in the
+  # server-side sign-in transaction, and the storefront callback lands on it (003 EARS-43/62).
   @EARS-7
   Scenario: A guest bounced from the doctor room signs in and lands back in the room
     Given feature 006 reports an open room for the event
@@ -121,6 +124,9 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
     And a component-tree scan finds no second page composition, read model or CTA resolver in either application
     And no import from apps/portal exists in apps/doctor and none from apps/doctor in apps/portal
 
+  # Amendment 2026-10-21 (#3006): «already signed in» is the Academy's server-side silent
+  # check against the shared sign-in-host session, with no guest render first (EARS-22);
+  # the return after registration is the transaction's stored return path (003 EARS-61/62).
   @EARS-18 @happy
   Scenario: A doctor signed in on the doctor storefront opens the Academy page already signed in
     Given a doctor signed in on doctor.school
@@ -335,3 +341,47 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
     When a guest or a signed-in doctor opens the event page
     Then the event-page read carries no sign-up proof
     And the sticky card renders no registrant count, no zero and no empty slot
+
+  # --- Amendment 2026-10-21 (#3006): signed in on both storefronts through the sign-in host, one sign-out on both ---
+
+  @EARS-22 @EARS-18 @happy
+  Scenario Outline: A doctor signed in on one storefront opens the event on the other signed in, with no guest flash
+    Given a doctor signed in on "<signed-in host>" in this browser
+    When the doctor's browser requests the same event page on "<other host>" as a document
+    Then the first response from "<other host>" is a redirect into its silent check, before any page renders
+    And the event page on "<other host>" renders signed in with no form and no second sign-in
+    And no guest render of the event page reached the browser before the signed-in one
+
+    Examples:
+      | signed-in host        | other host            |
+      | doctor.school         | academy.doctor.school |
+      | academy.doctor.school | doctor.school         |
+
+  @EARS-22 @failure
+  Scenario: With no shared session the other storefront's event page is the guest page, with no form
+    Given a browser with no session on either storefront
+    When the browser requests an event page on academy.doctor.school as a document
+    Then the event page renders as a guest with the participation path
+    And no sign-in form is shown and no second redirect follows
+
+  @EARS-18 @happy
+  Scenario: A registration started on the Academy event page returns to that page from the sign-in host
+    Given a guest on the Academy event page of an upcoming hybrid event with the «онлайн» tab selected
+    When the guest activates «Участвовать»
+    Then the Academy renders no form and the browser reaches the sign-in host's registration form
+    When the guest completes the registration and its code step there
+    Then the browser lands on the same Academy event page with the «онлайн» tab, signed in
+    And the doctor storefront's event page for the same event also renders signed in on its next document request
+
+  @EARS-23 @happy
+  Scenario Outline: Sign-out on one storefront signs the doctor out of the other
+    Given a doctor signed in on both storefronts in this browser
+    And the event page is open on "<other host>"
+    When the doctor signs out on "<sign-out host>"
+    Then the next request of the event page on "<other host>" renders it as a guest
+    And no live session remains on either storefront
+
+    Examples:
+      | sign-out host         | other host            |
+      | doctor.school         | academy.doctor.school |
+      | academy.doctor.school | doctor.school         |

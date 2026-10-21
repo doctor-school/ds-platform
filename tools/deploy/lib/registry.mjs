@@ -103,6 +103,18 @@ export function assertImageRefs(images, { pr } = {}) {
 export const HOTFIX_MANIFEST_REF_RE = /^hotfix\/[0-9]+-[a-z0-9-]+$/;
 export const RELEASE_MANIFEST_REFS = Object.freeze(["main", HOTFIX_MANIFEST_REF_RE]);
 
+/**
+ * The manifest policy of a production release: the workstation path
+ * (`tools/deploy/prod.mjs`) and the release workflow's runner pre-flight
+ * (`tools/deploy/release-runner.mjs`, #3158) resolve the same recorded digests.
+ */
+export const PROD_MANIFEST_POLICY = Object.freeze({
+  acceptRefs: RELEASE_MANIFEST_REFS,
+  consumer: "a production release",
+  mainOnly: true,
+  purpose: "release",
+});
+
 const describeRef = (want) => (want instanceof RegExp ? `\`${want.source}\`` : `\`${want}\``);
 
 /**

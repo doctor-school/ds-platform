@@ -717,3 +717,39 @@ pipe's exit code (`tee`'s 0) and masks a non-zero deploy failure. Redirect with
 `> log 2>&1` and check `$?` if a transcript is needed. A watchdog `STALLED` exit
 is non-zero like any other failure — but it means "channel went quiet", not
 "remote work failed": run `pnpm deploy:probe` before deciding re-run vs rollback.
+
+## Release from Actions (`deploy-prod.yml`, #3158)
+
+The normal production release runs in Actions, never from a workstation (spec
+`apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md`
+§3 item 3, §5 «Prod release driver.»). On the owner's word in chat the agent
+dispatches it with that word verbatim:
+
+```bash
+gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_quote="<the owner's words>"
+```
+
+| Job         | What it does                                                                                                                                                                                                                                                                               |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `preflight` | refuses an empty / whitespace-only `owner_quote` first; then `node tools/deploy/release-runner.mjs preflight --sha <sha>`: SHA in `main` · `stage-suite` status success · CI green · release gate · live-broadcast gate · recorded `images-<sha>.json` exists                              |
+| `deploy`    | Environment `production` (`deployment: false`): `ssh deploy@<api-prod> "release prod <sha>" < images-<sha>.json`, polls `status prod <sha>` (status lines only), then `release-runner.mjs record`: release cut on success + the ONE Deployment record (success or failure, with the quote) |
+| `digest`    | on success only: calls `release-digest.yml` (`workflow_call`) with `MATTERMOST_WEBHOOK_URL` passed                                                                                                                                                                                         |
+
+- **Same gates as the workstation path, no escape hatch.** The checks are the
+  modules `pnpm deploy:prod` uses (`ci-gate.mjs`, `release-gate.mjs`,
+  `live-broadcast-check.mjs`, `lib/registry.mjs`); `stage-suite` (set by
+  `stage.yml`) replaces the operator's stage `main` check. `--skip-ci-check`,
+  `--release-gate-exempt`, `--allow-live-broadcast`, `--ref` and `--rollback`
+  exist only on `pnpm deploy:prod` (break-glass). The CI check drops the
+  check-runs of `deploy-prod.yml` itself by workflow path (an earlier failed
+  attempt on the same SHA is not CI).
+- **One release at a time.** `concurrency: deploy-prod`, never cancelled — its own
+  group, not the changesets workflow's `release`. A re-dispatch of the same SHA
+  reattaches to the running driver unit (`attached`) or reports
+  `already-succeeded`.
+- **Record.** `deployment-record.mjs` `recordDeployment` writes the Deployment
+  with `GITHUB_TOKEN`; its notes are based on the driver's `previousSha`. Events of
+  `GITHUB_TOKEN` start no workflow, which is why the digest is called explicitly.
+- **Secrets.** `PROD_SSH_KEY` + `PROD_SSH_KNOWN_HOSTS` live in Environment
+  `production` (deployment branches `main`, no required reviewer) and reach only
+  the `deploy` job.

@@ -8,6 +8,9 @@ import {
   repoWorkflowSuiteFilter,
   filterCheckRunsToRepoWorkflows,
   classifyDeployCheckRuns,
+  ciVerdictProblem,
+  DEPLOY_PROD_WORKFLOW_PATH,
+  fetchDeployCiBoard,
 } from "./ci-gate.mjs";
 
 // Suite ids mirror the live board of main a0ddf421 (#2077 recon facts 2/3).
@@ -187,4 +190,113 @@ test("EARS-6.1: `neutral` and `skipped` stay green conclusions", () => {
     run("core", SUITE_CI, { conclusion: "skipped" }),
   ];
   assert.equal(classifyDeployCheckRuns(rows, WORKFLOW_RUNS).state, "green");
+});
+
+// -- #3158: the deploy workflow's own runs are not CI ------------------------
+
+const SUITE_DEPLOY = 92749399999;
+const DEPLOY_RUN = {
+  id: 34239099999,
+  name: "Deploy prod",
+  path: ".github/workflows/deploy-prod.yml",
+  event: "workflow_dispatch",
+  conclusion: null,
+  check_suite_id: SUITE_DEPLOY,
+};
+
+test("3158: check-runs of the deploy workflow's own path are dropped, selected by path", () => {
+  const rows = [
+    ...REPO_ROWS,
+    // The running release's own job (in progress) and an earlier failed attempt
+    // on the same SHA: neither is a statement about the code.
+    run("preflight", SUITE_DEPLOY, { status: "in_progress", conclusion: null }),
+    run("deploy", SUITE_DEPLOY, { conclusion: "failure" }),
+  ];
+  const v = classifyDeployCheckRuns(rows, [...WORKFLOW_RUNS, DEPLOY_RUN], {
+    ignoreWorkflowPaths: [DEPLOY_PROD_WORKFLOW_PATH],
+  });
+  assert.equal(v.state, "green");
+  assert.deepEqual(v.dropped, [
+    "preflight (.github/workflows/deploy-prod.yml)",
+    "deploy (.github/workflows/deploy-prod.yml)",
+  ]);
+  assert.equal(DEPLOY_PROD_WORKFLOW_PATH, ".github/workflows/deploy-prod.yml");
+});
+
+test("3158: a check named like the deploy job but in a CI suite still counts (names never decide)", () => {
+  const rows = [
+    ...REPO_ROWS,
+    run("deploy", SUITE_CI, { conclusion: "failure" }),
+  ];
+  const v = classifyDeployCheckRuns(rows, [...WORKFLOW_RUNS, DEPLOY_RUN], {
+    ignoreWorkflowPaths: [DEPLOY_PROD_WORKFLOW_PATH],
+  });
+  assert.equal(v.state, "red");
+  assert.deepEqual(v.red, ["deploy=failure"]);
+});
+
+test("3158: without the option the deploy workflow's runs still block (default unchanged)", () => {
+  const rows = [
+    ...REPO_ROWS,
+    run("deploy", SUITE_DEPLOY, { conclusion: "failure" }),
+  ];
+  assert.equal(
+    classifyDeployCheckRuns(rows, [...WORKFLOW_RUNS, DEPLOY_RUN]).state,
+    "red",
+  );
+});
+
+test("3158: fetchDeployCiBoard reads both boards through the injected gh and parses the lines", () => {
+  const calls = [];
+  const exec = (cmd, args) => {
+    calls.push([cmd, ...args].join(" "));
+    if (args[2].includes("/check-runs"))
+      return `${JSON.stringify({ name: "ci", status: "completed", conclusion: "success", check_suite_id: 1 })}
+`;
+    return `${JSON.stringify({ name: "CI", path: ".github/workflows/ci.yml", check_suite_id: 1 })}
+`;
+  };
+  const board = fetchDeployCiBoard({
+    sha: "a".repeat(40),
+    repo: "o/r",
+    run: exec,
+  });
+  assert.equal(board.checkRuns.length, 1);
+  assert.equal(board.workflowRuns[0].path, ".github/workflows/ci.yml");
+  assert.match(
+    calls[0],
+    /^gh api --paginate repos\/o\/r\/commits\/a{40}\/check-runs/,
+  );
+  assert.match(
+    calls[1],
+    /^gh api --paginate repos\/o\/r\/actions\/runs\?head_sha=a{40}/,
+  );
+});
+
+test("3158: fetchDeployCiBoard fails closed when the provenance query fails", () => {
+  const exec = (cmd, args) => {
+    if (args[2].includes("/check-runs")) return "";
+    throw new Error("HTTP 502");
+  };
+  assert.throws(
+    () => fetchDeployCiBoard({ sha: "a".repeat(40), repo: "o/r", run: exec }),
+    /workflow runs .*provenance unknown.*HTTP 502/,
+  );
+});
+
+test("3158: ciVerdictProblem names the refusal per state, null when green", () => {
+  const sha = "b".repeat(40);
+  assert.equal(ciVerdictProblem({ state: "green", count: 3 }, sha), null);
+  assert.match(
+    ciVerdictProblem({ state: "empty" }, sha),
+    /no repo-owned CI check-runs/,
+  );
+  assert.match(
+    ciVerdictProblem({ state: "pending", pending: ["ci"] }, sha),
+    /CI still running for bbbbbbbbbbbb: ci/,
+  );
+  assert.match(
+    ciVerdictProblem({ state: "red", red: ["ci=failure"] }, sha),
+    /CI is RED for bbbbbbbbbbbb: ci=failure/,
+  );
 });

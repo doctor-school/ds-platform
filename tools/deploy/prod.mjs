@@ -58,10 +58,14 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { envFooter } from "../ci/post-product-note.mjs";
 import { cutDeployRelease } from "../release/cut-release.mjs";
-import { classifyDeployCheckRuns } from "./ci-gate.mjs";
-import { createDeploymentRecord } from "./deployment-record.mjs";
+import {
+  DEPLOY_PROD_WORKFLOW_PATH,
+  ciVerdictProblem,
+  classifyDeployCheckRuns,
+  fetchDeployCiBoard,
+} from "./ci-gate.mjs";
+import { recordDeployment as recordDeploymentRecord } from "./deployment-record.mjs";
 import {
   REF_FLAG,
   hotfixPreflightVerdict,
@@ -85,7 +89,6 @@ import {
   probeHealthSha,
   probeReleaseGate,
 } from "./release-gate.mjs";
-import { composeDigest } from "./release-notes.mjs";
 import {
   checkStageMainPrerequisites,
   runStageMainCheck,
@@ -116,8 +119,8 @@ import {
 } from "./service-set.mjs";
 import {
   IMAGE_REGISTRY,
+  PROD_MANIFEST_POLICY,
   RECORDED_IMAGE_NAMES,
-  RELEASE_MANIFEST_REFS,
   assertImageDigests,
   imageDigestScript,
   pullRecordedImagesScript,
@@ -181,12 +184,7 @@ const DATA_COMPOSE = `${REMOTE_TREE}/infra/deploy/compose/data-prod`;
 // ./lib/registry.mjs (the stage slots use the same ones). The manifest proves the
 // images only; the hotfix pre-flight (./hotfix-ref.mjs) still proves the
 // cherry-pick ancestry on its own.
-export const PROD_MANIFEST_POLICY = Object.freeze({
-  acceptRefs: RELEASE_MANIFEST_REFS,
-  consumer: "a production release",
-  mainOnly: true,
-  purpose: "release",
-});
+export { PROD_MANIFEST_POLICY };
 
 /** Validates a recorded manifest for a production release of `sha` (pure). */
 export function validateProdImageManifest(manifest, sha) {
@@ -850,59 +848,23 @@ function assertGreenCi(sha) {
     "-q",
     ".nameWithOwner",
   ]);
-  let checkRuns;
+  let board;
   try {
-    const raw = localCap("gh", [
-      "api",
-      "--paginate",
-      `repos/${repo}/commits/${sha}/check-runs`,
-      "-q",
-      ".check_runs[] | {name,status,conclusion,started_at,completed_at,check_suite_id:.check_suite.id}",
-    ]);
-    checkRuns = raw
-      .split(/\r?\n/)
-      .filter(Boolean)
-      .map((l) => JSON.parse(l));
+    board = fetchDeployCiBoard({ sha, repo, run: localCap });
   } catch (e) {
-    die(`could not query CI check-runs via gh: ${e.message}`);
+    die(e.message);
   }
-  let workflowRuns;
-  try {
-    const raw = localCap("gh", [
-      "api",
-      "--paginate",
-      `repos/${repo}/actions/runs?head_sha=${sha}&per_page=100`,
-      "-q",
-      ".workflow_runs[] | {name,path,check_suite_id}",
-    ]);
-    workflowRuns = raw
-      .split(/\r?\n/)
-      .filter(Boolean)
-      .map((l) => JSON.parse(l));
-  } catch (e) {
-    // Fail-closed: without provenance we cannot tell repo CI from an injected
-    // workflow, and judging the unfiltered board would re-introduce #2077.
-    die(
-      `could not query workflow runs via gh (provenance unknown): ${e.message}`,
-    );
-  }
-
-  const verdict = classifyDeployCheckRuns(checkRuns, workflowRuns);
+  // #3158: the release workflow's own runs on this SHA are not CI either.
+  const verdict = classifyDeployCheckRuns(board.checkRuns, board.workflowRuns, {
+    ignoreWorkflowPaths: [DEPLOY_PROD_WORKFLOW_PATH],
+  });
   if (verdict.dropped.length)
     ok(
-      `ignored ${verdict.dropped.length} non-repo workflow check(s): ` +
+      `ignored ${verdict.dropped.length} non-CI workflow check(s): ` +
         verdict.dropped.join(", "),
     );
-  if (verdict.state === "empty")
-    die(
-      `no repo-owned CI check-runs reported for ${sha.slice(0, 12)} yet — wait for CI to run.`,
-    );
-  if (verdict.state === "pending")
-    die(
-      `CI still running for ${sha.slice(0, 12)}: ${verdict.pending.join(", ")}`,
-    );
-  if (verdict.state === "red")
-    die(`CI is RED for ${sha.slice(0, 12)}: ${verdict.red.join(", ")}`);
+  const problem = ciVerdictProblem(verdict, sha);
+  if (problem) die(problem);
   ok(`CI green — ${verdict.count} check(s) passed for ${sha.slice(0, 12)}`);
 }
 
@@ -1546,73 +1508,17 @@ function cutReleaseAtDeployedSha(sha, { hotfix = false } = {}) {
 }
 
 // Record a successful deploy as a GitHub Deployment(production, sha) + success
-// status, persisting the release-notes digest into the Deployment payload (#942,
-// spec §D3). NON-FATAL by contract: the deploy has already succeeded here, so any
-// gh/compose failure only WARNS — the deploy exit code stays 0. This record uses
-// the ONE composeDigest seam (#847) to persist the notes; the Mattermost chat POST
-// is now fired from CI (`release-digest.yml`) off this Deployment's `success`
-// status — `deploy:prod` no longer posts the digest itself (#968).
-async function recordDeployment(prevSha, sha) {
-  try {
-    // Release tag shipped, if any (null until the first Release exists — expected).
-    let releaseTag = null;
-    try {
-      const raw = localCap("gh", [
-        "release",
-        "list",
-        "--limit",
-        "1",
-        "--json",
-        "tagName",
-      ]);
-      const arr = JSON.parse(raw || "[]");
-      releaseTag =
-        Array.isArray(arr) && arr[0] && arr[0].tagName ? arr[0].tagName : null;
-    } catch (e) {
-      console.log(
-        `  ⚠ could not resolve the latest release tag (recording untagged): ${e.message}`,
-      );
-    }
-
-    // Release-notes digest text — the SAME seam the Mattermost post uses (#847).
-    // Only computable with a real range; a first deploy / same-SHA redeploy has
-    // no range and records empty notes (spec: notesText may be null/"").
-    let notesText = "";
-    if (prevSha && prevSha !== sha) {
-      try {
-        const digest = await composeDigest({
-          prevSha,
-          newSha: sha,
-          footer: envFooter("prod"),
-          cwd: process.cwd(),
-        });
-        if (digest) notesText = digest.text;
-      } catch (e) {
-        console.log(
-          `  ⚠ could not compose release notes for the Deployment record (deploy already succeeded): ${e.message}`,
-        );
-      }
-    }
-
-    const res = createDeploymentRecord({
-      sha,
-      releaseTag,
-      notesText,
-      healthUrl: PROD_HEALTH_URL,
-      cwd: process.cwd(),
-    });
-    if (res.ok) {
-      ok(`GitHub Deployment recorded (#${res.deploymentId})`);
-    } else {
-      console.log(
-        `  ⚠ could not record the GitHub Deployment (deploy already succeeded): ${res.error}`,
-      );
-    }
-  } catch (e) {
-    console.log(
-      `  ⚠ deployment-record step failed (deploy already succeeded): ${e.message}`,
-    );
-  }
+// status (#942, spec §D3); the seam lives in ./deployment-record.mjs, shared with
+// the release workflow's runner (#3158). NON-FATAL by contract.
+function recordDeployment(prevSha, sha) {
+  return recordDeploymentRecord({
+    prevSha,
+    sha,
+    state: "success",
+    healthUrl: PROD_HEALTH_URL,
+    cwd: process.cwd(),
+    log: (line) => console.log(line),
+  });
 }
 
 // `services` is the TARGET-derived set (#1896): a hotfix based on a SHA that

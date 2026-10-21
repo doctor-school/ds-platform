@@ -14,12 +14,28 @@ name: Release digest → Mattermost
 # TAG (#975) and delegates the render+POST to tools/deploy/release-notes.mjs — the
 # ONE digest seam (#847).
 #
+# `workflow_call` (#3158): the release workflow `deploy-prod.yml` calls it after a
+# successful release with the released `sha` and the webhook secret passed — a
+# called workflow gets only the secrets its caller passes, and the Deployment
+# record that workflow writes with GITHUB_TOKEN starts no `deployment_status` run.
+# `deployment_status` stays for the workstation path (`pnpm deploy:prod`) until
+# spec 2026-10-16-release-pipeline-off-workstation §8 step (f).
+#
 # `workflow_dispatch` re-fires the digest by hand (e.g. to backfill a release whose
 # automatic post was missed). With no `sha` input it targets the current prod
 # deployed SHA (the newest `production` Deployment), else HEAD.
 
 on:
   deployment_status:
+  workflow_call:
+    inputs:
+      sha:
+        description: The released SHA to build the release digest for.
+        required: true
+        type: string
+    secrets:
+      MATTERMOST_WEBHOOK_URL:
+        required: false
   workflow_dispatch:
     inputs:
       sha:
@@ -41,8 +57,10 @@ jobs:
   digest:
     # Only a successful PRODUCTION deploy posts a digest — a pending/failure status
     # or a non-prod environment is a no-op (post-release-digest.mjs re-checks in JS).
-    # A manual workflow_dispatch always runs (it synthesises success/production).
+    # A manual workflow_dispatch and a workflow_call (which carries the caller's
+    # event and a required `sha`) always run (they synthesise success/production).
     if: >-
+      inputs.sha != '' ||
       github.event_name == 'workflow_dispatch' ||
       ( github.event.deployment_status.state == 'success' &&
         github.event.deployment.environment == 'production' )
@@ -57,11 +75,12 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-      # workflow_dispatch has no Deployment event: resolve the target SHA (input →
-      # current prod Deployment → HEAD) into $GITHUB_ENV, never interpolated into a
-      # run: shell body — the same injection-safe posture the post step uses.
-      - name: Resolve target SHA (workflow_dispatch)
-        if: github.event_name == 'workflow_dispatch'
+      # workflow_dispatch / workflow_call have no Deployment event: resolve the
+      # target SHA (input → current prod Deployment → HEAD) into $GITHUB_ENV, never
+      # interpolated into a run: shell body — the same injection-safe posture the
+      # post step uses.
+      - name: Resolve target SHA (workflow_dispatch / workflow_call)
+        if: github.event_name != 'deployment_status'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

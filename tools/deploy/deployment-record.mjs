@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// tools/deploy/deployment-record.mjs — record a successful `deploy:prod` as a
-// GitHub Deployment(production, sha) + a `success` deployment_status (Issue #942,
-// W2/L2 of #927).
+// tools/deploy/deployment-record.mjs — record a prod release as a GitHub
+// Deployment(production, sha) + a deployment_status (Issue #942, W2/L2 of #927):
+// `success` from `deploy:prod`; `success` or `failure` with the owner's quote from
+// the release workflow (#3158).
 //
 // Spec: apps/docs/content/specs/tech/2026-07-15-release-cycle-context-freshness-design-en.md
 //       §2 (D3 — the deploy record lives in GitHub, not the repo), §3 (L2 unit
@@ -27,9 +28,13 @@ import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { envFooter } from "../ci/post-product-note.mjs";
+import { composeDigest } from "./release-notes.mjs";
+
 const SHORT = 12;
 // GitHub caps a Deployment/deployment_status `description` at 140 chars.
 const GH_DESCRIPTION_MAX = 140;
+const DEPLOYMENT_STATES = new Set(["success", "failure"]);
 
 /** Strip 4-byte Unicode (astral-plane code points > U+FFFF — emoji, etc.) from a
  *  string. GitHub's `deployment_status.description` / `deployment.description`
@@ -75,6 +80,10 @@ function firstNonEmptyLine(text) {
  * @param {string|null} args.notesText   aggregated release-notes digest, or null/"".
  * @param {string}      args.healthUrl   prod health URL (the status `log_url`).
  * @param {string}      args.nowIso      caller-injected ISO deploy timestamp.
+ * @param {"success"|"failure"} [args.state] the release outcome (#3158: the
+ *   release workflow records a failed release too).
+ * @param {string|null} [args.ownerQuote] the owner's word that authorised the
+ *   release (#3158), in the description and the payload.
  */
 export function buildDeploymentPayload({
   sha,
@@ -82,11 +91,21 @@ export function buildDeploymentPayload({
   notesText,
   healthUrl,
   nowIso,
+  state = "success",
+  ownerQuote = null,
 }) {
+  if (!DEPLOYMENT_STATES.has(state)) {
+    throw new Error(`deployment record state must be success|failure, got: ${state}`);
+  }
   const shortSha = typeof sha === "string" ? sha.slice(0, SHORT) : "";
   const tagLabel = releaseTag ?? "(untagged)";
   const notes = notesText ?? "";
-  const statusSummary = firstNonEmptyLine(notes) || `release ${tagLabel}`;
+  const failed = state === "failure";
+  const statusSummary = failed
+    ? `release failed @ ${shortSha}`
+    : firstNonEmptyLine(notes) || `release ${tagLabel}`;
+  const quote = ownerQuote ? String(ownerQuote) : null;
+  const intent = `${failed ? "failed " : ""}release ${tagLabel} @ ${shortSha}`;
 
   return {
     deployment: {
@@ -95,17 +114,19 @@ export function buildDeploymentPayload({
       auto_merge: false,
       required_contexts: [],
       description: truncate(
-        stripAstral(`release ${tagLabel} @ ${shortSha}`),
+        stripAstral(quote ? `${intent} — «${quote}»` : intent),
         GH_DESCRIPTION_MAX,
       ),
       payload: {
         releaseTag: releaseTag ?? null,
         notes,
         deployedAt: nowIso,
+        state,
+        ownerQuote: quote,
       },
     },
     status: {
-      state: "success",
+      state,
       log_url: healthUrl,
       environment: "production",
       description: truncate(stripAstral(statusSummary), GH_DESCRIPTION_MAX),
@@ -140,7 +161,7 @@ function ghApiPost(path, body, cwd) {
 }
 
 /**
- * Create the GitHub Deployment + success status for a shipped SHA. NON-FATAL: it
+ * Create the GitHub Deployment + its status for a released SHA. NON-FATAL: it
  * catches everything and returns a result struct rather than throwing — the deploy
  * has already succeeded by the time this runs (spec §5).
  *
@@ -151,6 +172,8 @@ export function createDeploymentRecord({
   releaseTag,
   notesText,
   healthUrl,
+  state = "success",
+  ownerQuote = null,
   cwd = process.cwd(),
 }) {
   try {
@@ -161,6 +184,8 @@ export function createDeploymentRecord({
       notesText,
       healthUrl,
       nowIso,
+      state,
+      ownerQuote,
     });
 
     const created = ghApiPost(
@@ -196,6 +221,98 @@ export function createDeploymentRecord({
   }
 }
 
+/** The newest GitHub Release tag, or null (none yet / gh failed — logged). */
+function latestReleaseTagViaGh(cwd, log) {
+  const r = spawnSync(
+    "gh",
+    ["release", "list", "--limit", "1", "--json", "tagName"],
+    { encoding: "utf8", cwd },
+  );
+  if (r.status !== 0) {
+    log(
+      `  ⚠ could not resolve the latest release tag (recording untagged): ${(r.stderr || "").trim()}`,
+    );
+    return null;
+  }
+  const arr = JSON.parse(r.stdout || "[]");
+  return Array.isArray(arr) && arr[0] && arr[0].tagName ? arr[0].tagName : null;
+}
+
+/**
+ * Record a release as a GitHub Deployment(production, sha) + status, persisting
+ * the release-notes digest over `prevSha..sha` into the payload — the ONE
+ * composeDigest seam (#847). Shared by `deploy:prod` (success only) and the
+ * release workflow's runner (#3158: success and failure, with the owner quote).
+ * A failed release attributes no release tag: none was cut for it.
+ *
+ * NON-FATAL by contract: every failure only logs, the result says what happened.
+ *
+ * @returns {Promise<{ ok: boolean, deploymentId?: number, error?: string }>}
+ */
+export async function recordDeployment({
+  prevSha,
+  sha,
+  state = "success",
+  ownerQuote = null,
+  healthUrl,
+  cwd = process.cwd(),
+  log = (line) => console.log(line),
+  deps = {},
+}) {
+  const latestReleaseTag =
+    deps.latestReleaseTag ?? (() => latestReleaseTagViaGh(cwd, log));
+  const compose = deps.composeDigest ?? composeDigest;
+  const create = deps.createDeploymentRecord ?? createDeploymentRecord;
+  try {
+    let releaseTag = null;
+    if (state === "success") {
+      try {
+        releaseTag = latestReleaseTag();
+      } catch (e) {
+        log(
+          `  ⚠ could not resolve the latest release tag (recording untagged): ${e.message}`,
+        );
+      }
+    }
+
+    // Only computable with a real range; a first deploy / same-SHA redeploy has
+    // no range and records empty notes (spec: notesText may be null/"").
+    let notesText = "";
+    if (prevSha && prevSha !== sha) {
+      try {
+        const digest = await compose({
+          prevSha,
+          newSha: sha,
+          footer: envFooter("prod"),
+          cwd,
+        });
+        if (digest) notesText = digest.text;
+      } catch (e) {
+        log(
+          `  ⚠ could not compose release notes for the Deployment record: ${e.message}`,
+        );
+      }
+    }
+
+    const res = create({
+      sha,
+      releaseTag,
+      notesText,
+      healthUrl,
+      state,
+      ownerQuote,
+      cwd,
+    });
+    if (res.ok) log(`  ✓ GitHub Deployment recorded (#${res.deploymentId}, ${state})`);
+    else log(`  ⚠ could not record the GitHub Deployment: ${res.error}`);
+    return res;
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    log(`  ⚠ deployment-record step failed: ${error}`);
+    return { ok: false, error };
+  }
+}
+
 // Run only as the entry point — keep the pure seam importable without any gh I/O,
 // the same guard release-notes.mjs uses. Invoked directly (no args wired yet), it
 // is a no-op that documents the seam; `prod.mjs` imports and calls the seams.
@@ -203,7 +320,8 @@ const invokedPath = process.argv[1] ? realpathSync(process.argv[1]) : "";
 if (invokedPath && invokedPath === fileURLToPath(import.meta.url)) {
   process.stdout.write(
     "[deployment-record] this module exposes buildDeploymentPayload / " +
-      "createDeploymentRecord as importable seams; it is wired into deploy:prod " +
-      "(tools/deploy/prod.mjs), not run standalone.\n",
+      "createDeploymentRecord / recordDeployment as importable seams; it is " +
+      "wired into deploy:prod (tools/deploy/prod.mjs) and the release workflow's " +
+      "runner (tools/deploy/release-runner.mjs), not run standalone.\n",
   );
 }

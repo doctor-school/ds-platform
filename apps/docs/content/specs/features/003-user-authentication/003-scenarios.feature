@@ -62,6 +62,15 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then Academy shows the generic phone-code refusal and the same owner stays unconfirmed with no addressed mail for 15 seconds
     And the retained real SMS code confirms that phone on the same Academy account
 
+  # Live cross-account phone-code projection (#3163); broader native EARS-48/52
+  # write/audit and delivery-horizon exclusions remain in phone.e2e-spec.ts.
+  # Mail evidence here is an immediate post-refusal snapshot, not a window claim.
+  @EARS-16 @EARS-47 @EARS-48 @EARS-52 @failure @phone-code-isolation
+  Scenario: Academy binds each live phone confirmation code to its signed-in doctor
+    Given two owned signed-in Academy doctors retain their distinct actual pending phone confirmation codes
+    When the second doctor submits the first doctor's live phone code and observes generic refusal with unchanged profiles and mailbox snapshot
+    Then both retained rightful phone codes confirm only their owners and both profiles survive reload before logout
+
   # Consumed-code Academy projection (#3025); retain the broader case above.
   # Native consumed refusal: apps/api/test/me/phone.e2e-spec.ts:127;
   # native write/audit/notice exclusions remain there. No expiry claim here.

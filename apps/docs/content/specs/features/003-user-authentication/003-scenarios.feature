@@ -786,6 +786,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And a subsequent attempt for that identifier is not throttled
     But the per-IP and per-ASN windows are not forgiven
 
+  @EARS-13 @EARS-5 @EARS-8 @EARS-16 @happy @login-counter-reset @default-auth-limits
+  Scenario: Academy successful password login clears the same identifier's real rate window
+    Given a unique verified Academy account starts the real login-counter journey as a guest
+    When two real Academy password refusals are followed by the owner's successful password login
+    Then after logout ten same-identifier reset requests are admitted and the eleventh is throttled within the original window
+    # Default-limit local contour only; stage raises the per-account ceiling.
+    # Native per-IP/per-ASN no-forgiveness: apps/api/test/auth/abuse-limits.e2e-spec.ts EARS-13.
+
   @EARS-15 @failure
   Scenario: Account soft-locks after repeated failures
     Given a doctor_guest user

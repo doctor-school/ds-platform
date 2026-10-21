@@ -62,7 +62,13 @@ export {
 } from "./landing";
 export {
   SIGN_IN_HOST_AUTH_REQUEST_PARAM,
+  SIGN_IN_HOST_ENTRY_HEADER,
+  readSignInHostHandOver,
   signInHostConfig,
   signInHostSearchParams,
+  writeSignInHostHandOver,
+  type SignInHostHandOver,
+  type SignInHostPageDoor,
   type SignInHostRender,
+  type SignInHostStorefronts,
 } from "./sign-in-host";

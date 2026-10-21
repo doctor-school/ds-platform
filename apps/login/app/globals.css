@@ -1,0 +1,13 @@
+/*
+ * Sign-in host global stylesheet. Pulls in the shared design-system tokens
+ * (Tailwind + the `:root` / `.dark` theme variables); this app owns no tokens
+ * of its own (ADR-0004 §6.3).
+ */
+@import "@ds/design-system/globals.css";
+
+/*
+ * Tailwind v4 scans only what it can see: `@ds/auth-flow` is a source-linked
+ * package, so the doors it renders lose every utility class in the Docker
+ * build unless declared here (`globals-tailwind-source.test.ts`).
+ */
+@source "../../../packages/auth-flow/src";

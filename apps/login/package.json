@@ -10,7 +10,8 @@
     "start": "next start --keepAliveTimeout 125000",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e:ci": "playwright test --config=playwright.ci.config.ts"
   },
   "dependencies": {
     "@ds/auth-flow": "workspace:*",
@@ -21,6 +22,9 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@ds/e2e": "workspace:*",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.5.0",
     "@types/react": "^19.2.18",

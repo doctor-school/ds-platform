@@ -1,0 +1,142 @@
+import type { ReactElement } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+/**
+ * 003 EARS-60 / 71 (#3170) — the sign-in host's ONE page mount, read as an
+ * element: which storefront's door it mounts, with which config and params,
+ * is decided only by the proxy's hand-over of the API entry answer. The door
+ * bodies are the storefronts' own routes, pinned by their own tests.
+ *
+ * Mocked seams: the request headers and Next's `notFound` throw.
+ */
+const { requestHeaders, notFound } = vi.hoisted(() => ({
+  requestHeaders: { value: new Headers() },
+  notFound: vi.fn(() => {
+    throw new Error("NEXT_NOT_FOUND");
+  }),
+}));
+
+vi.mock("next/headers", () => ({ headers: async () => requestHeaders.value }));
+vi.mock("next/navigation", () => ({
+  notFound,
+  redirect: vi.fn(),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
+}));
+
+import { ACADEMY_AUTH_FLOW, DOCTOR_AUTH_FLOW } from "../hosts";
+import { LoginRoute } from "../login/login-route";
+import { RegisterRoute } from "../register/register-route";
+import { ResetRoute } from "../reset/reset-route";
+import {
+  SIGN_IN_HOST_ENTRY_HEADER,
+  signInHostConfig,
+  writeSignInHostHandOver,
+  type SignInHostHandOver,
+  type SignInHostRender,
+} from "../server/sign-in-host";
+import { VerifyRoute } from "../verify/verify-route";
+import { SignInHostRoute } from "./sign-in-host-route";
+
+const STOREFRONTS = { academy: ACADEMY_AUTH_FLOW, doctor: DOCTOR_AUTH_FLOW };
+
+const RENDER: SignInHostRender = {
+  action: "render",
+  storefront: "doctor",
+  door: "login",
+  authRequest: "V2_1",
+  csrf: "csrf-1",
+};
+
+type Params = Record<string, string | string[] | undefined>;
+type DoorElement = ReactElement<{
+  config: unknown;
+  searchParams: Promise<Params>;
+}>;
+
+function handOver(value: SignInHostHandOver | string | null) {
+  const headers = new Headers();
+  if (value !== null) {
+    headers.set(
+      SIGN_IN_HOST_ENTRY_HEADER,
+      typeof value === "string" ? value : writeSignInHostHandOver(value),
+    );
+  }
+  requestHeaders.value = headers;
+}
+
+async function mount(browser: Params = {}) {
+  return (await SignInHostRoute({
+    storefronts: STOREFRONTS,
+    searchParams: Promise.resolve(browser),
+  })) as DoorElement;
+}
+
+beforeEach(() => {
+  notFound.mockClear();
+});
+
+describe("003 EARS-60: the mounted storefront comes only from the entry hand-over", () => {
+  it("003 EARS-60: a doctor render mounts the doctor storefront's login door on the host transport", async () => {
+    handOver({ door: "login", render: RENDER });
+    const el = await mount();
+    expect(el.type).toBe(LoginRoute);
+    expect(el.props.config).toEqual(signInHostConfig(DOCTOR_AUTH_FLOW, RENDER));
+  });
+
+  it("003 EARS-60: an Academy render mounts the Academy's config", async () => {
+    const render = { ...RENDER, storefront: "academy" } as const;
+    handOver({ door: "login", render });
+    const el = await mount();
+    expect(el.props.config).toEqual(
+      signInHostConfig(ACADEMY_AUTH_FLOW, render),
+    );
+  });
+
+  it("003 EARS-60: the hand-over's door picks the route — register, reset, verify", async () => {
+    for (const [door, route] of [
+      ["register", RegisterRoute],
+      ["reset", ResetRoute],
+      ["verify", VerifyRoute],
+    ] as const) {
+      handOver({ door, render: RENDER });
+      expect((await mount()).type).toBe(route);
+    }
+  });
+
+  it("003 EARS-60: no hand-over, a forged one or a non-render answer ⇒ no form (not found)", async () => {
+    const forged = Buffer.from(
+      JSON.stringify({
+        door: "login",
+        render: { action: "redirect", url: "https://x.test" },
+      }),
+    ).toString("base64url");
+    for (const value of [null, "not-base64-json", forged]) {
+      handOver(value);
+      await expect(mount()).rejects.toThrow("NEXT_NOT_FOUND");
+    }
+    expect(notFound).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("003 EARS-71: the door's params come from the entry intent, never the browser URL", () => {
+  it("003 EARS-71: an intent with an event target hands the door the event as return context", async () => {
+    handOver({
+      door: "login",
+      render: {
+        ...RENDER,
+        intent: { method: "code", eventTarget: "cardio-2026", handoff: false },
+      },
+    });
+    const el = await mount({ returnTo: "/evil", method: "password" });
+    expect(await el.props.searchParams).toEqual({
+      method: "code",
+      returnTo: "/events/cardio-2026",
+    });
+  });
+
+  it("003 EARS-71: no intent ⇒ the plain form, whatever the browser URL carried", async () => {
+    handOver({ door: "login", render: RENDER });
+    const el = await mount({ returnTo: "/events/x", handoff: "abc" });
+    expect(await el.props.searchParams).toEqual({});
+  });
+});

@@ -63,7 +63,7 @@ Thin host projections are intentional: Academy and Doctor have different targeti
 
 ## Host-file allowlist
 
-This table is the checked-in answer key for every `apps/portal` / `apps/doctor` / `apps/login` (the sign-in host, ADR-0015 §4) `.ts`/`.tsx` file the allowlist guard scans: everything except Next.js route files (`page`, `layout`, `loading`, `error`, `not-found`, `template`, `default`, `route`, `middleware`, `proxy`), tests (`*.test.*`, `*.spec.*`, `__tests__/`), `e2e/`, ambient `*.d.ts` and each app's own root-level config. **A new file anywhere in that scope needs a row here in the same PR** — the allowlist guard ([#2002](https://github.com/doctor-school/ds-platform/issues/2002), tech spec §3 rule 3) reads this table as the tree check and fails a file it cannot find (WARN until wave 1 lands, BLOCK after). Rows are exact repo-relative paths, never globs, and a row naming a file that no longer exists fails too — the dead-glob self-test keeps the answer key honest. `until` names the extraction wave that deletes the row; `permanent` means the file is genuinely host-only — brand, config, or a surface the other host does not have; `DEBT.md²` means no extraction wave owns the file and a named open `DEBT.md` line is its lifetime owner — the row leaves that state only when the line's `promote-when` fires and the Issue it becomes deletes the file (or re-labels the row with that Issue's wave). Rows are grouped by directory and sorted by path; 71 files today. Route files are excluded from this table on purpose — they answer to «Route-file registry» below, which records the package each `page.tsx` / `layout.tsx` mounts or will mount.
+This table is the checked-in answer key for every `apps/portal` / `apps/doctor` / `apps/login` (the sign-in host, ADR-0015 §4) `.ts`/`.tsx` file the allowlist guard scans: everything except Next.js route files (`page`, `layout`, `loading`, `error`, `not-found`, `template`, `default`, `route`, `middleware`, `proxy`), tests (`*.test.*`, `*.spec.*`, `__tests__/`), `e2e/`, ambient `*.d.ts` and each app's own root-level config. **A new file anywhere in that scope needs a row here in the same PR** — the allowlist guard ([#2002](https://github.com/doctor-school/ds-platform/issues/2002), tech spec §3 rule 3) reads this table as the tree check and fails a file it cannot find (WARN until wave 1 lands, BLOCK after). Rows are exact repo-relative paths, never globs, and a row naming a file that no longer exists fails too — the dead-glob self-test keeps the answer key honest. `until` names the extraction wave that deletes the row; `permanent` means the file is genuinely host-only — brand, config, or a surface the other host does not have; `DEBT.md²` means no extraction wave owns the file and a named open `DEBT.md` line is its lifetime owner — the row leaves that state only when the line's `promote-when` fires and the Issue it becomes deletes the file (or re-labels the row with that Issue's wave). Rows are grouped by directory and sorted by path; 72 files today. Route files are excluded from this table on purpose — they answer to «Route-file registry» below, which records the package each `page.tsx` / `layout.tsx` mounts or will mount.
 
 ### `apps/doctor/app`
 
@@ -109,10 +109,11 @@ This table is the checked-in answer key for every `apps/portal` / `apps/doctor` 
 
 ### `apps/login/lib`
 
-| path                              | reason                                                                                                                                      | until     |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| `apps/login/lib/host-headers.ts`  | host-only surface — the sign-in host's response headers (nonce CSP, COOP, frame-ancestors; 003 EARS-70, #3170); no storefront has one       | permanent |
-| `apps/login/lib/sign-in-entry.ts` | host-only surface — the server-side `GET /v1/sign-in-host/entry` read and its projection onto a storefront host config (003 EARS-60, #3170) | permanent |
+| path                                         | reason                                                                                                                                                                                             | until     |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| `apps/login/lib/host-headers.ts`             | host-only surface — the sign-in host's response headers (nonce CSP, COOP, frame-ancestors; 003 EARS-70, #3170); no storefront has one                                                              | permanent |
+| `apps/login/lib/sign-in-entry.ts`            | host-only surface — the server-side `GET /v1/sign-in-host/entry` read and the door a navigation opens (003 EARS-60, #3170)                                                                         | permanent |
+| `apps/login/lib/sign-in-host.host-config.ts` | host brand/config — the sign-in host's `@ds/auth-flow` host-config VALUE (#3170): the two storefront configs (`@ds/auth-flow/hosts`) keyed by the entry answer's `storefront`; no value of its own | permanent |
 
 ### `apps/portal/app`
 
@@ -200,13 +201,13 @@ Out of scope, as in the allowlist: `loading` / `error` / `not-found` / `template
 
 ### `apps/login/app`
 
-| path                               | package                                                                                                                                       | until     |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| `apps/login/app/layout.tsx`        | — brand frame of the sign-in host (root html/body, fonts, theme boot; ADR-0015 §4)                                                            | permanent |
-| `apps/login/app/login/page.tsx`    | — host-only surface (the sign-in host renders the `@ds/auth-flow` door of the storefront the server entry decision names, 003 EARS-60, #3170) | permanent |
-| `apps/login/app/register/page.tsx` | — host-only surface (the sign-in host renders the `@ds/auth-flow` door of the storefront the server entry decision names, 003 EARS-60, #3170) | permanent |
-| `apps/login/app/reset/page.tsx`    | — host-only surface (the sign-in host renders the `@ds/auth-flow` door of the storefront the server entry decision names, 003 EARS-60, #3170) | permanent |
-| `apps/login/app/verify/page.tsx`   | — host-only surface (the sign-in host renders the `@ds/auth-flow` door of the storefront the server entry decision names, 003 EARS-60, #3170) | permanent |
+| path                               | package                                                                          | until     |
+| ---------------------------------- | -------------------------------------------------------------------------------- | --------- |
+| `apps/login/app/layout.tsx`        | — brand frame of the sign-in host (root html/body, fonts, `<main>`; ADR-0015 §4) | permanent |
+| `apps/login/app/login/page.tsx`    | `@ds/auth-flow`                                                                  | mounted   |
+| `apps/login/app/register/page.tsx` | `@ds/auth-flow`                                                                  | mounted   |
+| `apps/login/app/reset/page.tsx`    | `@ds/auth-flow`                                                                  | mounted   |
+| `apps/login/app/verify/page.tsx`   | `@ds/auth-flow`                                                                  | mounted   |
 
 ### `apps/portal/app`
 

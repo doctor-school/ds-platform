@@ -1,4 +1,9 @@
-import type { SignInHostDoor, SignInHostEntryResponse } from "@ds/schemas";
+import {
+  SignInHostEntryResponseSchema,
+  type SignInHostDoor,
+  type SignInHostEntryResponse,
+  type SignInHostStorefront,
+} from "@ds/schemas";
 
 import type {
   AuthFlowApiConfig,
@@ -100,4 +105,54 @@ export function signInHostSearchParams(
     if (email) params.email = email;
   }
   return params;
+}
+
+/** A door page of the sign-in host: the entry's three doors plus the code step. */
+export type SignInHostPageDoor = SignInHostDoor | "verify";
+
+const PAGE_DOORS: readonly SignInHostPageDoor[] = [
+  "login",
+  "register",
+  "reset",
+  "verify",
+];
+
+/** Each storefront's own host config, as the sign-in host mounts them. */
+export type SignInHostStorefronts = Readonly<
+  Record<SignInHostStorefront, AuthFlowHostConfig>
+>;
+
+/**
+ * The request header the sign-in host's proxy hands the entry answer to the
+ * page in (#3170). The proxy overwrites it on every door navigation, so a
+ * browser-sent value never reaches a page; the page re-validates it anyway.
+ */
+export const SIGN_IN_HOST_ENTRY_HEADER = "x-ds-sign-in-entry";
+
+/** What the page renders: the door and the entry's render answer. */
+export type SignInHostHandOver = {
+  door: SignInHostPageDoor;
+  render: SignInHostRender;
+};
+
+export function writeSignInHostHandOver(handOver: SignInHostHandOver): string {
+  return Buffer.from(JSON.stringify(handOver), "utf8").toString("base64url");
+}
+
+/** The proxy's hand-over, re-validated against the contract; `null` if absent or malformed. */
+export function readSignInHostHandOver(
+  value: string | null | undefined,
+): SignInHostHandOver | null {
+  if (!value) return null;
+  try {
+    const raw = JSON.parse(
+      Buffer.from(value, "base64url").toString("utf8"),
+    ) as { door?: unknown; render?: unknown };
+    const render = SignInHostEntryResponseSchema.parse(raw.render);
+    if (render.action !== "render") return null;
+    const door = PAGE_DOORS.find((d) => d === raw.door);
+    return door ? { door, render } : null;
+  } catch {
+    return null;
+  }
 }

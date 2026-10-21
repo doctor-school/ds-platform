@@ -28,7 +28,7 @@ const ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], {
 }).trim();
 
 /** The Next apps that sit behind a proxy (Caddy in prod) and proxy `/v1/*` to the api. */
-const PROXIED_APPS = ["admin", "portal", "doctor"];
+const PROXIED_APPS = ["admin", "portal", "doctor", "login"];
 
 /** Caddy's reverse_proxy default upstream idle keep-alive (2 min). */
 const CADDY_UPSTREAM_IDLE_MS = 120_000;

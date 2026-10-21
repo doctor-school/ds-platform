@@ -2,7 +2,11 @@ import {
   SignInHostEntryResponseSchema,
   type SignInHostEntryResponse,
 } from "@ds/schemas";
-import { serverApiBase, type SignInHostRender } from "@ds/auth-flow/server";
+import {
+  serverApiBase,
+  type SignInHostPageDoor,
+  type SignInHostRender,
+} from "@ds/auth-flow/server";
 
 /**
  * 003 EARS-60 / 66 / 67 / 71 — the sign-in host's one read of the API's entry
@@ -14,25 +18,13 @@ import { serverApiBase, type SignInHostRender } from "@ds/auth-flow/server";
  * visit's doctor `/login`), is the API's answer.
  */
 
-/** The doors a page route of this host mounts. */
-export type HostDoor = "login" | "register" | "reset" | "verify";
-
 /** The page route → door table (every other path is EARS-67's direct visit). */
-export const DOOR_ROUTES: Readonly<Record<string, HostDoor>> = {
+export const DOOR_ROUTES: Readonly<Record<string, SignInHostPageDoor>> = {
   "/login": "login",
   "/register": "register",
   "/reset": "reset",
   "/verify": "verify",
 };
-
-/**
- * The request header the proxy hands a `render` answer to the page in. The
- * proxy always overwrites it, so a browser-sent value never reaches a page.
- */
-export const ENTRY_HEADER = "x-ds-sign-in-entry";
-
-/** What the page renders: the door and the entry's render answer. */
-export type EntryHandOver = { door: HostDoor; render: SignInHostRender };
 
 /** The browser facts the API's entry reads (the storefront BFF rewrite's set). */
 const FORWARDED = [
@@ -84,32 +76,10 @@ export async function readEntry(
  * named. A same-origin hop between doors is the person's own choice.
  */
 export function doorFor(
-  pathDoor: HostDoor,
+  pathDoor: SignInHostPageDoor,
   render: SignInHostRender,
   secFetchSite: string | null,
-): HostDoor {
+): SignInHostPageDoor {
   if (pathDoor !== "login" || secFetchSite === "same-origin") return pathDoor;
   return render.door;
-}
-
-export function writeEntryHeader(handOver: EntryHandOver): string {
-  return Buffer.from(JSON.stringify(handOver), "utf8").toString("base64url");
-}
-
-/** The proxy's hand-over, re-validated against the contract; `null` if absent or malformed. */
-export function readEntryHeader(
-  value: string | null | undefined,
-): EntryHandOver | null {
-  if (!value) return null;
-  try {
-    const raw = JSON.parse(
-      Buffer.from(value, "base64url").toString("utf8"),
-    ) as { door?: unknown; render?: unknown };
-    const render = SignInHostEntryResponseSchema.parse(raw.render);
-    if (render.action !== "render") return null;
-    const door = Object.values(DOOR_ROUTES).find((d) => d === raw.door);
-    return door ? { door, render } : null;
-  } catch {
-    return null;
-  }
 }

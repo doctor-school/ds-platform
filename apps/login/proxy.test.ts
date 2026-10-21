@@ -1,7 +1,10 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ENTRY_HEADER, readEntryHeader } from "./lib/sign-in-entry";
+import {
+  SIGN_IN_HOST_ENTRY_HEADER as ENTRY_HEADER,
+  readSignInHostHandOver as readEntryHeader,
+} from "@ds/auth-flow/server";
 import { proxy } from "./proxy";
 
 /**
@@ -101,7 +104,10 @@ describe("003 EARS-60: the form is chosen only by the API's entry answer", () =>
 
   it("003 EARS-60: the admin or an unknown client gets the API's redirect and no form", async () => {
     fetchMock.mockResolvedValue(
-      answer({ action: "redirect", url: `${ZITADEL_CALLBACK}&error=access_denied` }),
+      answer({
+        action: "redirect",
+        url: `${ZITADEL_CALLBACK}&error=access_denied`,
+      }),
     );
     const res = await proxy(request("/login?authRequest=V2_admin"));
     expect(res.status).toBe(303);
@@ -185,7 +191,10 @@ describe("003 EARS-66 / 67: stale requests and direct visits go where the API sa
 
 describe("003 EARS-70: page routes answer top-level navigations only", () => {
   it.each([
-    ["a fetch (mode cors)", { "sec-fetch-mode": "cors", "sec-fetch-dest": "empty" }],
+    [
+      "a fetch (mode cors)",
+      { "sec-fetch-mode": "cors", "sec-fetch-dest": "empty" },
+    ],
     ["a frame", { "sec-fetch-mode": "navigate", "sec-fetch-dest": "iframe" }],
     ["no fetch metadata", {}],
   ])(
@@ -209,7 +218,9 @@ describe("003 EARS-70: page routes answer top-level navigations only", () => {
     const a = await proxy(request("/login?authRequest=V2_1"));
     const b = await proxy(request("/login?authRequest=V2_1"));
     const nonceOf = (r: Response) =>
-      /'nonce-([^']+)'/.exec(r.headers.get("content-security-policy") ?? "")?.[1];
+      /'nonce-([^']+)'/.exec(
+        r.headers.get("content-security-policy") ?? "",
+      )?.[1];
     expect(nonceOf(a)).toBeTruthy();
     expect(nonceOf(a)).not.toBe(nonceOf(b));
     // Next reads the nonce from the REQUEST's CSP header to stamp its scripts.
@@ -220,10 +231,56 @@ describe("003 EARS-70: page routes answer top-level navigations only", () => {
 
   it("003 EARS-70: the icon is served to a non-navigation with the same hardening", async () => {
     const res = await proxy(
-      request("/icon.svg", { "sec-fetch-mode": "no-cors", "sec-fetch-dest": "image" }),
+      request("/icon.svg", {
+        "sec-fetch-mode": "no-cors",
+        "sec-fetch-dest": "image",
+      }),
     );
     expect(res.headers.get("x-middleware-next")).toBe("1");
     expect(fetchMock).not.toHaveBeenCalled();
     expectHardened(res);
+  });
+});
+
+/**
+ * ADR-0015 §4 req. 4 — the host's cookies are the API's, set through this
+ * origin: the gate passes each `Set-Cookie` through byte for byte, so the
+ * host-only attributes the API serializes (`apps/api/src/sign-in-host/
+ * sign-in-host.cookies.ts`) are what the browser stores.
+ */
+describe("ADR-0015 §4 req. 4: the API's host-only cookies pass through unchanged", () => {
+  const FORM =
+    "__Host-ds_login_form=f1; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400";
+  const RECORD_CLEARED =
+    "__Host-ds_login=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0";
+
+  function cookiesOf(res: Response): string[] {
+    return res.headers.getSetCookie();
+  }
+
+  function expectHostOnly(cookie: string) {
+    const attrs = cookie.split("; ").slice(1);
+    expect(cookie.startsWith("__Host-")).toBe(true);
+    expect(attrs).toEqual(
+      expect.arrayContaining(["Path=/", "HttpOnly", "Secure", "SameSite=Lax"]),
+    );
+    expect(attrs.some((a) => /^domain=/i.test(a))).toBe(false);
+  }
+
+  it("003 EARS-70: a render answer's form-state cookie reaches the browser as the API serialized it", async () => {
+    fetchMock.mockResolvedValueOnce(answer(RENDER_DOCTOR, [FORM]));
+    const res = await proxy(request("/login?authRequest=V2_1"));
+    expect(cookiesOf(res)).toEqual([FORM]);
+    expectHostOnly(cookiesOf(res)[0]);
+  });
+
+  it("003 EARS-66: a redirect answer's cookies ride the 303 unchanged", async () => {
+    fetchMock.mockResolvedValueOnce(
+      answer({ action: "redirect", url: DOCTOR_LOGIN }, [RECORD_CLEARED, FORM]),
+    );
+    const res = await proxy(request("/login?authRequest=V2_stale"));
+    expect(res.status).toBe(303);
+    expect(cookiesOf(res)).toEqual([RECORD_CLEARED, FORM]);
+    for (const cookie of cookiesOf(res)) expectHostOnly(cookie);
   });
 });

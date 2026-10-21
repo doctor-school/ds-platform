@@ -7,12 +7,10 @@ import {
   newNonce,
 } from "@/lib/host-headers";
 import {
-  DOOR_ROUTES,
-  ENTRY_HEADER,
-  doorFor,
-  readEntry,
-  writeEntryHeader,
-} from "@/lib/sign-in-entry";
+  SIGN_IN_HOST_ENTRY_HEADER,
+  writeSignInHostHandOver,
+} from "@ds/auth-flow/server";
+import { DOOR_ROUTES, doorFor, readEntry } from "@/lib/sign-in-entry";
 
 /**
  * The sign-in host's request gate (Next 16 proxy) — 003 EARS-60 / 66 / 67 /
@@ -72,8 +70,8 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
   const forwarded = new Headers(request.headers);
   forwarded.set(
-    ENTRY_HEADER,
-    writeEntryHeader({
+    SIGN_IN_HOST_ENTRY_HEADER,
+    writeSignInHostHandOver({
       door: doorFor(
         pathDoor,
         entry.answer,

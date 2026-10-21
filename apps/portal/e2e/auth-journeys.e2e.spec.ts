@@ -6,13 +6,6 @@ import {
   provisionLoggedInDoctor,
   waitForAuthenticatedLanding,
 } from "./support/doctor-session";
-import {
-  createUserWithPhone,
-  deleteUser,
-  grantDoctorGuest,
-  requestPhoneVerification,
-  verifyPhone,
-} from "./support/zitadel-admin";
 
 /**
  * Portal auth browser-E2E (#131 DoD) — the REAL-Zitadel tier (NOT FakeIdpClient).
@@ -49,11 +42,13 @@ const newEmail = (): string =>
   `e2e-131-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
 
 /**
- * A unique E.164-ish phone for the SMS-OTP journey. The dev-stand SMS provider is
- * the local sink (no real delivery), so any well-formed number Zitadel accepts
- * works; uniqueness avoids collisions across reruns (Zitadel uniques the phone).
+ * A unique Russian mobile for the SMS-OTP journey — the shape the account's
+ * phone-confirmation form takes (003 EARS-47). The dev-stand SMS provider is the
+ * local sink (no real delivery); uniqueness avoids collisions across reruns
+ * (Zitadel uniques the phone).
  */
-const newPhone = (): string => `+1555${String(Date.now()).slice(-7)}`;
+const newPhone = (): string =>
+  `+7999${String(Date.now()).slice(-4)}${String(Math.floor(Math.random() * 1000)).padStart(3, "0")}`;
 
 /**
  * Assert the EARS-8 no-token invariant from the live browser: the auth identity
@@ -143,15 +138,18 @@ test.describe("portal auth journeys (real Zitadel)", () => {
   });
 
   // #675 — an ALREADY-authenticated session must not be able to re-walk the auth
-  // flow. After minting a real logged-in doctor (lands on the accepted post-auth
-  // landing — `/webinars` by default since 013 EARS-15), visiting each
-  // of the four portal auth surfaces redirects straight back to /account with NO
-  // auth form rendered. Selectors stay locale-agnostic (`data-testid`), never RU
-  // text. The <AuthShell> guard (client `GET /v1/auth/session`) is the mechanism.
-  test("authenticated session is redirected off every auth surface to /account (no form)", async ({
+  // flow. After minting a real logged-in doctor, visiting each guarded portal
+  // auth surface redirects straight to the host's post-auth landing — the
+  // Academy `landing.afterLogin` (`/webinars` since 013 EARS-15, #2324) — with
+  // NO auth form rendered. The value is restated, not imported: the host config
+  // (`lib/auth-flow.host-config.ts`) pulls in `messages/ru.json`, which the
+  // Playwright ESM loader refuses without an import attribute.
+  // Selectors stay locale-agnostic (`data-testid`), never RU text. The route's
+  // server-side signed-in guard (`guardAuthRoute`) is the mechanism.
+  test("authenticated session is redirected off every auth surface to the post-auth landing (no form)", async ({
     page,
   }) => {
-    // Mint a real logged-in doctor via the shipped 003 flow (ends on /account).
+    // Mint a real logged-in doctor via the shipped 003 flow.
     await provisionLoggedInDoctor(page);
     await waitForAuthenticatedLanding(page);
 
@@ -166,16 +164,17 @@ test.describe("portal auth journeys (real Zitadel)", () => {
       { route: "/verify", submitTestId: "verify-submit" },
     ];
 
+    const landing = "/webinars";
     for (const { route, submitTestId } of surfaces) {
       await page.goto(route);
-      // The guard redirects the authenticated visitor straight to /account…
-      await page.waitForURL(/\/account/);
+      // The guard redirects the authenticated visitor straight to the landing…
+      await page.waitForURL((url) => new URL(url).pathname === landing);
       // …and never rendered the auth form on the way (no flash of the submit).
       await expect(page.getByTestId(submitTestId)).toHaveCount(0);
     }
 
     // EARS-28: the /reset flow stays REACHABLE for the authenticated doctor —
-    // the request form renders instead of bouncing back to /account.
+    // the request form renders instead of bouncing off to the landing.
     await page.goto("/reset");
     await expect(page.getByTestId("reset-request-submit")).toBeVisible();
   });
@@ -387,68 +386,78 @@ test.describe("portal auth journeys (real Zitadel)", () => {
   test("003 EARS-7/42: sms-OTP — provisioned phone → request code → a 6-digit code signs in → session", async ({
     page,
   }) => {
-    const email = newEmail();
     const phone = newPhone();
-    const password = livePassword();
-    let userId = "";
 
-    try {
-      // ── Fixture: provision an account with a VERIFIED phone ──────────────
-      // The portal register form collects only email+password (no phone field —
-      // a separate product slice), so the SMS-OTP precondition (a verified phone)
-      // is set up out-of-band via the Zitadel service API, exactly as the api-tier
-      // e2e provisions its fixtures. This is setup, not the path under test; the
-      // path under test is the live BROWSER round-trip on /login below.
-      userId = await createUserWithPhone({ email, password, phone });
-      const verifyAt = new Date().toISOString();
-      await requestPhoneVerification(userId);
-      const verifyCode = await fetchSmsOtpCode(
-        phone,
-        verifyAt,
-        "user.human.phone.code.added",
-      );
-      expect(verifyCode, "phone-verify SMS should reach the sink").toBeTruthy();
-      await verifyPhone(userId, verifyCode!);
-      // Replicate the register-time #157 grant: the `doctor_guest` project role is
-      // what the OIDC token's roles claim carries, and `/auth/session` is gated on
-      // it — without the grant the SMS-OTP session would 403 on the /account read.
-      await grantDoctorGuest(userId);
+    // ── Fixture: an account whose phone the PLATFORM counts confirmed ──────
+    // Since #2813 the api, not the IdP alone, decides whether a phone is
+    // confirmed, so the precondition is set up the way a doctor does it: the
+    // shipped 003 register → verify flow, then the /account phone confirmation
+    // (003 EARS-47/48 — `POST /v1/me/phone` sends a code, `POST
+    // /v1/me/phone/confirm` accepts it). This is setup, not the path under
+    // test; the path under test is the live BROWSER round-trip on /login below.
+    await provisionLoggedInDoctor(page);
+    await page.goto("/account");
+    await page.getByTestId("profile-phone-action").click();
+    await page
+      .getByTestId("profile-phone-input")
+      .pressSequentially(phone.slice(1));
+    const verifyAt = new Date().toISOString();
+    const requested = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/v1/me/phone" &&
+        response.request().method() === "POST",
+    );
+    await page.getByTestId("profile-phone-send").click();
+    expect((await requested).status(), "phone code requested").toBe(200);
+    const verifyCode = await fetchSmsOtpCode(
+      phone,
+      verifyAt,
+      "user.human.phone.code.added",
+    );
+    expect(verifyCode, "phone-confirm SMS should reach the sink").toBeTruthy();
+    const confirmed = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/v1/me/phone/confirm" &&
+        response.request().method() === "POST",
+    );
+    await page.getByTestId("profile-phone-code").fill(verifyCode!);
+    expect((await confirmed).status(), "phone confirmed").toBe(200);
+    await expect(page.getByTestId("profile-phone-verified")).toBeVisible();
+    // Leave the registration session behind: the SMS code alone must sign in.
+    await page.context().clearCookies();
 
-      // ── Request an SMS OTP (EARS-7 step 1) ───────────────────────────────
-      await page.goto("/login");
-      // #179: select the "One-time code" method tab first (defaults to Password).
-      await page.getByTestId("login-method-otp").click();
-      await page.getByTestId("otp-channel-sms").click();
-      await page.getByTestId("otp-identifier").fill(phone);
-      const otpSentAt = new Date().toISOString();
-      await page.getByTestId("otp-send").click();
+    // ── Request an SMS OTP (EARS-7 step 1) ───────────────────────────────
+    await page.goto("/login");
+    // #179: select the "One-time code" method tab first (defaults to Password).
+    await page.getByTestId("login-method-otp").click();
+    await page.getByTestId("otp-channel-sms").click();
+    await page.getByTestId("otp-identifier").fill(phone);
+    const otpSentAt = new Date().toISOString();
+    await page.getByTestId("otp-send").click();
 
-      // ── Read the login OTP from the sink + submit (EARS-7 step 2 / EARS-8) ─
-      // Select by the `session.otp.sms.challenged` event, NOT timestamp alone:
-      // the registration phone-verify SMS lands close enough that the time cutoff
-      // cannot separate it (the SMS twin of the email `Verify OTP` subject fix).
-      const otpCode = await fetchSmsOtpCode(
-        phone,
-        otpSentAt,
-        "session.otp.sms.challenged",
-      );
-      expect(otpCode, "login OTP should reach the sink").toBeTruthy();
-      // #175: auto-submit on completion (no `otp-verify` click) — same as the
-      // email-OTP journey above; the SMS code is the same six digits
-      // (003 EARS-7 amended, #2636).
-      expect(otpCode).toMatch(/^\d{6}$/);
-      await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
+    // ── Read the login OTP from the sink + submit (EARS-7 step 2 / EARS-8) ─
+    // Select by the `session.otp.sms.challenged` event, NOT timestamp alone:
+    // the registration phone-verify SMS lands close enough that the time cutoff
+    // cannot separate it (the SMS twin of the email `Verify OTP` subject fix).
+    const otpCode = await fetchSmsOtpCode(
+      phone,
+      otpSentAt,
+      "session.otp.sms.challenged",
+    );
+    expect(otpCode, "login OTP should reach the sink").toBeTruthy();
+    // #175: auto-submit on completion (no `otp-verify` click) — same as the
+    // email-OTP journey above; the SMS code is the same six digits
+    // (003 EARS-7 amended, #2636).
+    expect(otpCode).toMatch(/^\d{6}$/);
+    await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
 
-      // ── Session visible + EARS-8 no-token invariant ──────────────────────
-      await waitForAuthenticatedLanding(page);
-      // The default post-auth landing is `/webinars` (013 EARS-15); the profile
-      // card assertions below live on /account, so step onto it deliberately.
-      await page.goto("/account");
-      await expect(page.getByTestId("profile-email")).not.toBeEmpty();
-      await assertNoTokenInClient(page);
-    } finally {
-      if (userId) await deleteUser(userId);
-    }
+    // ── Session visible + EARS-8 no-token invariant ──────────────────────
+    await waitForAuthenticatedLanding(page);
+    // The default post-auth landing is `/webinars` (013 EARS-15); the profile
+    // card assertions below live on /account, so step onto it deliberately.
+    await page.goto("/account");
+    await expect(page.getByTestId("profile-email")).not.toBeEmpty();
+    await assertNoTokenInClient(page);
   });
 
   // #200 defect 1 on the `/reset` COMPLETE step — relocated here from the ungated

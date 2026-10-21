@@ -61,7 +61,8 @@ const config: NextConfig = {
   // real client components once Next transpiles them; left out, its hook-bearing
   // parts are pulled into the SSR graph and the render dies with
   // «useState is not a function». `@ds/account` (#2073) mounts `/account` — the
-  // same .tsx-with-"use client" shape.
+  // same .tsx-with-"use client" shape, and `@ds/room-page` (#2073) mounts
+  // `/events/:slug/room` and ships its client wrapper as .tsx.
   transpilePackages: [
     "@ds/account",
     "@ds/auth-flow",
@@ -70,6 +71,7 @@ const config: NextConfig = {
     "@ds/event-page",
     "@ds/events-storefront",
     "@ds/room",
+    "@ds/room-page",
     "@ds/storefront-shell",
   ],
   // Storefront → api proxy. Client-IP note (#1655): this rewrite forwards the
@@ -85,7 +87,9 @@ const config: NextConfig = {
   // the appending on; nothing is needed, since the socket peer here is the
   // container network the api already trusts.
   async rewrites() {
-    return [{ source: "/v1/:path*", destination: `${API_PROXY_TARGET}/v1/:path*` }];
+    return [
+      { source: "/v1/:path*", destination: `${API_PROXY_TARGET}/v1/:path*` },
+    ];
   },
   // 003 EARS-44 leak control: `/login` may carry a Congress hand-off reference
   // in its query until the page strips it, so no request leaving it may send

@@ -8,11 +8,11 @@ import { requireLiveStandEnv } from "../support/live-stand-env";
  * 006 EARS-11 · 020 (#1912, #1722 slice 4) — axe-core WCAG 2 A/AA scan of the REAL
  * DOCTOR room route `doctor.school/events/[slug]/room`.
  *
- * The academy twin is `apps/portal/e2e/a11y/room-axe.e2e.spec.ts`, and the reason
- * this host needs its OWN scan is that the composition it renders is not the same
- * DOM: the shared `@ds/room` unit is handed THIS host's chrome cluster (the
- * storefront theme toggle + a NON-interactive initials chip, `room-user-cluster.tsx`)
- * and THIS host's copy, and the route sits outside the storefront shell. The CI
+ * The academy twin is `apps/portal/e2e/a11y/room-axe.e2e.spec.ts`. Both hosts mount
+ * the one `@ds/room-page` wrapper (#2073), but this host still needs its OWN scan:
+ * the route is served by THIS host's build, with its own host values (the
+ * «На главную» brand-home label and target) and its own `(room)` route group
+ * outside the storefront shell. The CI
  * `playwright-axe` BLOCK gate scans the DS primitives via the showcase; this scan
  * covers the composed gated room a doctor actually reaches on doctor.school.
  *

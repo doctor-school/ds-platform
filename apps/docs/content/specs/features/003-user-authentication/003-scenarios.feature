@@ -768,6 +768,9 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Given a uniquely owned verified Academy account has two independently password-authenticated browser sessions
     When the first Academy session logs out and its retained cookie is replayed from that same browser
     Then only that first session is revoked while the second unchanged Academy session and private account survive reload
+    # Amendment 2026-10-21 (#3006, EARS-10): still holds under one sign-out - each
+    # independently authenticated browser holds its own shared sign-in-host session,
+    # so the sign-out ends only the first browser's sessions.
     # Native session-service tests retain server-side revocation/audit contracts.
     # Retain the broader account-control logout scenario above.
 
@@ -1398,6 +1401,9 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # -> identifier-switch.steps.ts. Retain unit/channel-request coverage;
     # no exactly matching app-local browser test exists to remove.
 
+  # Amendment 2026-10-21 (#3006, EARS-43/44 amended): the storefront /login is an
+  # entry that redirects; the code step of the hand-off scenarios below renders on
+  # the sign-in host, and the reference rides only the server-held entry intent.
   @EARS-44 @happy @valid-handoff
   Scenario: A valid hand-off reference opens the code step with the code already sent
     Given a uniquely owned Academy congress sign-up was accepted and returned a real hand-off reference
@@ -1528,3 +1534,165 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Mapping: password-reset-sms-refusal.steps.ts (#3101). Retain the broader
     # SMS-reset scenario and native password-reset e2e: this projection adds
     # wrong-code refusal, owner preservation and retained SMS recovery.
+
+  # Production amendment 2026-10-21 (#3006): the sign-in host login.doctor.school
+  # and one sign-out on both storefronts (ADR-0015 §4). The forms are the
+  # originating storefront's own @ds/auth-flow forms rendered on the sign-in host;
+  # no new user-visible text. Cross-storefront journeys run from the Academy here;
+  # the doctor direction is 020 EARS-18 (@host:both).
+
+  @EARS-61 @EARS-62 @EARS-5 @EARS-8 @happy @sign-in-host
+  Scenario: A sign-in from the Academy entry runs on the sign-in host and ends signed in on the stored page
+    Given a signed-out browser on the Academy with no shared sign-in-host session
+    When the guest follows the Academy sign-in entry from "/webinars/some-event"
+    Then the Academy renders no form and redirects to the authorize endpoint with a new interactive transaction
+    And the sign-in host shows the Academy's own sign-in form
+    When the guest signs in there with a verified password account
+    Then the Academy callback mints a fresh session and answers 303 to "/webinars/some-event#"
+    And the authorization code never appears in a rendered document
+
+  @EARS-60 @failure @sign-in-host-client-map
+  Scenario: The sign-in host refuses an admin or unknown client and renders no form
+    Given an auth request created for the admin client and one for an unknown client
+    When each auth request reaches the sign-in host
+    Then each is finalised with the OIDC error access_denied
+    And no sign-in form is rendered for either
+    And a storefront auth request renders that storefront's own registration fields, consents and brand panel
+
+  @EARS-63 @EARS-64 @happy @silent-check
+  Scenario: A doctor signed in on the doctor storefront is signed in on the Academy with no form and no guest flash
+    Given a doctor signed in on the doctor storefront in this browser
+    When the doctor's browser requests an Academy event page as a document
+    Then the first Academy response is a redirect into a silent transaction with prompt=none
+    And the sign-in host finalises it with the shared session and shows no form
+    And the Academy callback mints a session and the event page renders signed in
+    And no guest render of the page reaches the browser before the signed-in one
+
+  @EARS-63 @happy @silent-check-guest
+  Scenario: With no shared session the silent check ends on the guest page and is not repeated
+    Given a browser with no session on either storefront
+    When the browser requests an Academy page as a document
+    Then the silent check ends in login_required and the page renders as a guest
+    And the signed __Host-ds_guest marker and the one-shot __Host-ds_check guard are set
+    When the browser requests another Academy page as a document
+    Then no silent check starts and the page renders as a guest
+
+  @EARS-63 @failure @silent-check-exempt
+  Scenario: Exempt requests, crawlers and a tripped silent limit never redirect
+    Given a browser with no Academy session
+    When the Academy receives a crawler request, a request without fetch metadata, a prefetch, a POST, a "/v1" call, a static asset, a ".well-known" file and the health route
+    Then none of them is answered with a redirect
+    When the silent-check bucket for the client address is exhausted and a document request arrives
+    Then the Academy answers HTTP 200 with the guest render and no redirect
+
+  @EARS-63 @EARS-62 @failure @silent-check-abandoned-form
+  Scenario: An abandoned sign-in form does not hold back the silent check
+    Given a guest started the Academy sign-in entry and left the sign-in host form unfinished
+    And the same person then signed in on the doctor storefront in another tab
+    When the guest requests an Academy page as a document
+    Then the silent check starts and replaces the abandoned interactive transaction
+    And the Academy page renders signed in
+
+  @EARS-62 @failure @callback-stale-transaction
+  Scenario: A sign-in finished after the 60-minute transaction ends signed in by the landing rules
+    Given a guest started the Academy sign-in entry from "/webinars/some-event" more than 60 minutes ago
+    When the guest finishes the sign-in on the sign-in host now
+    Then the Academy callback mints nothing from the expired transaction
+    And a fresh silent transaction signs the guest in through the shared session
+    And the guest is signed in on the Academy landing rather than on "/webinars/some-event"
+
+  @EARS-62 @EARS-70 @failure @callback-hardening
+  Scenario: A form_post or foreign-state callback yields no session
+    Given an attacker prepared an authorize request with their own transaction
+    When the victim's browser completes it and the attacker presents the code
+    Then the code was already redeemed and discarded by the callback and the attacker holds no session
+    And a callback sent as POST is refused with a 303 whose location ends in "#"
+
+  @EARS-10 @EARS-65 @happy @one-sign-out
+  Scenario: Signing out on one storefront signs out on both
+    Given a doctor signed in on the Academy and on the doctor storefront in one browser
+    When the doctor signs out on the Academy
+    Then the Academy session, the shared sign-in-host session and the doctor storefront session are all revoked server-side
+    And the doctor storefront's next document request renders signed out
+    And its silent check ends in login_required
+
+  @EARS-65 @EARS-12 @happy @credential-event-revocation
+  Scenario: A password reset ends every session of the person on both storefronts
+    Given a doctor signed in on both storefronts in one browser and on the Academy in a second browser
+    When the doctor completes a password reset on the sign-in host in a third browser
+    Then every earlier storefront session of the doctor is revoked
+    And the third browser ends signed in on the storefront that started the reset
+
+  @EARS-65 @failure @back-channel-logout
+  Scenario: Only a valid back-channel logout token revokes sessions
+    Given a doctor signed in on both storefronts
+    When the API receives an unsigned logout token and one for a foreign audience
+    Then no session is revoked
+    When the API receives a valid logout token for the doctor's Zitadel session
+    Then every storefront session linked to that sid is revoked
+
+  @EARS-64 @EARS-68 @failure @shared-session-strength
+  Scenario: The shared session is not reused from another fingerprint or when a fresh credential is asked
+    Given a live sign-in-host session created in one browser
+    When its __Host-ds_login cookie is presented from a different client fingerprint with prompt=none
+    Then the auth request ends in login_required and the record is deleted
+    When an auth request with prompt=login arrives in the original browser
+    Then the sign-in form is shown even though the shared session is live
+
+  @EARS-66 @EARS-67 @failure @sign-in-host-stale
+  Scenario: A stale auth request returns to its storefront and a direct visit goes to the doctor storefront
+    Given an Academy auth request this browser opened that Zitadel no longer returns
+    When the browser reloads the sign-in host page of that auth request
+    Then it is redirected to the Academy "/login" entry
+    When a browser with no auth request visits the sign-in host directly
+    Then it is redirected to the configured doctor storefront "/login" entry
+
+  @EARS-69 @failure @no-weaker-factor
+  Scenario: A code finalised by any other login UI yields no storefront session
+    Given a storefront auth request finalised through Zitadel's hosted login
+    When the storefront callback redeems its code
+    Then the redeem refuses it because the sid names no live sign-in-host record
+    And no storefront session exists
+
+  @EARS-70 @happy @sign-in-host-cookies
+  Scenario: Every session and check cookie is host-only and never shared across hosts
+    Given a completed sign-in through the sign-in host and a completed silent check
+    Then __Host-ds_login, __Host-ds_oidc_tx, __Host-ds_session, __Host-ds_guest and __Host-ds_check are host-only, HttpOnly, Secure and SameSite=Lax
+    And none of them carries Domain=.doctor.school
+    And a cross-site post of an attacker's credentials to the sign-in host creates no session
+
+  @EARS-24 @EARS-41 @happy @register-on-sign-in-host
+  Scenario: A registration on the sign-in host ends signed in on both storefronts
+    Given a guest on the Academy with no account
+    When the guest follows the Academy registration entry
+    Then the sign-in host shows the Academy registration form with the Academy consents
+    When the guest registers and enters the six-digit code from the mail
+    Then the guest is signed in on the Academy at the stored return path
+    And a later document navigation on the doctor storefront is signed in through the silent check
+
+  @EARS-43 @EARS-44 @happy @entry-intent
+  Scenario: The code method and the congress hand-off survive the redirect to the sign-in host
+    Given a congress sign-up was accepted and returned a hand-off reference
+    When the visitor follows "/login?method=code&handoff=<ref>&returnTo=/account" on the Academy
+    Then the reference is absent from the authorize request and from every later address
+    And the sign-in host shows the code step with the code already sent to the address as typed
+    When the visitor reloads the sign-in host page
+    Then no second code is sent and the code method is shown without a hand-off
+
+  @EARS-44 @happy @handoff-live-record
+  Scenario: A hand-off met by a live sign-in-host record sends no code and keeps the page in the link
+    Given the browser holds a live sign-in-host record of the doctor named by a hand-off reference
+    And the browser has no storefront session on the Academy
+    When the visitor follows "/login?method=code&handoff=<ref>&returnTo=/account" on the Academy
+    Then the sign-in host finalises with that record, sends no code and shows no form
+    And the visitor lands signed in on "/account" with no more authentication than the record already had
+    When a visitor whose browser holds a live sign-in-host record follows a refused hand-off reference with "returnTo=/account"
+    Then the sign-in host finalises with that record and shows no form
+    And the visitor lands signed in on "/account" rather than on the landing
+
+  @EARS-71 @failure @entry-intent-id
+  Scenario: An unknown, spent or foreign entry-intent id opens the plain sign-in form
+    Given an auth request for the Academy client whose login hint is an entry-intent id
+    When the id is unknown, already spent, expired or was created for the doctor storefront client
+    Then the sign-in host renders the plain sign-in form with no error
+    And no user is looked up from the login hint

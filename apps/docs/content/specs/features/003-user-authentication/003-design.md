@@ -1,6 +1,6 @@
 ---
 title: "003 — User authentication (Design)"
-description: "Design: BFF over Zitadel Session/User v2 API; native-vs-custom boundary; registration + consent + mirror cascade; password / email-OTP / SMS-OTP login; __Host- cookie + server-side refresh rotation; password reset; security baseline; seams (MFA, legacy, mobile, social, step-up); own-mailer returnCode code delivery with Postbox → mail.ru → Resend transport chain; decision-debt for ADR-0001."
+description: "Design: BFF over Zitadel Session/User v2 API; native-vs-custom boundary; registration + consent + mirror cascade; password / email-OTP / SMS-OTP login; __Host- cookie + server-side refresh rotation; password reset; security baseline; seams (MFA, legacy, mobile, social, step-up); own-mailer returnCode code delivery with Postbox → mail.ru → Resend transport chain; decision-debt for ADR-0001; the forms on the first-party sign-in host login.doctor.school, the storefront callback, the shared browser session, the silent check and one sign-out (ADR-0015 §4)."
 slug: 003-user-authentication
 status: In dev
 tracker: https://github.com/doctor-school/ds-platform/milestone/3
@@ -263,6 +263,102 @@ One Prometheus counter (`auth_sms_unconfirmed_phone_requests_total{flow="signin"
 1. That the SMS-type `PasswordReset` webhook body carries the overridden text with the code and `contextInfo.recipientPhoneNumber` for a confirmed phone (source-verified, not yet run live).
 2. The shipped `VERIFY_PHONE_CODE` default (expiry and shape), before the converge fixes the shape.
 3. Count production `users.phone` rows (verified and unverified) before implementation: EARS-58 changes how a phone resolves for any existing phone holder, and today's phone-keyed reset emails the account email (`zitadel.idp.ts:1228-1230`). Record whether a backfill or cleanup is needed, or that the count is about zero.
+
+## Production amendment — the sign-in host and one sign-out on both storefronts (2026-10-21, #3006)
+
+The storefront forms, the BFF credential checks and the storefront session cookie run in production; this amendment moves where the forms render and where the storefront session is minted, and adds the shared browser session, the silent check and one sign-out. Requirements: EARS-5/8/10/12/24/39/43/44 amended and EARS-60…71. The mechanism and the binding security list are ADR-0015 §4 and ADR-0001 §6; this section restates only what the implementation of feature 003 needs and decides nothing they do not. It overrides: §3 (the sequence: the credential no longer posts to the BFF on the storefront origin, and the cookie is set at the callback), the session paragraphs of §4 (post-verify and post-reset auto-login now end in the sign-in host's finalisation), §6 (one more convergence point, the callback), §8 (see below), §8.3 and §13.1–§13.2 (the screens are the same, on the sign-in host), the congress hand-off diagram (`/login` on the storefront is an entry; the redemption runs on the sign-in host), the sign-out of §12 and §15.6 (a cold step on the sign-in host). The baseline is retained below.
+
+**§8 restated.** Zitadel's hosted Login V2 application is still not used for the storefronts. What changes is that each storefront is now an OIDC client of Zitadel whose login UI (`login_version.login_v2.base_uri`) is our own thin application `apps/login` on `login.doctor.school`, mounting the same `@ds/auth-flow` routes; the forms stay ours, and the redirect hop that §8 refused for credentials is the price of one shared browser session (ADR-0015 §4 records the evidence and the rejected alternatives).
+
+### Sign-in through the sign-in host
+
+```mermaid
+sequenceDiagram
+    participant Br as Browser
+    participant SF as Storefront server (entry, callback)
+    participant API as apps/api
+    participant Z as Zitadel (id.doctor.school)
+    participant L as Sign-in host (login.doctor.school)
+    Br->>SF: GET /login?returnTo=/x (or /register, /reset)
+    SF->>API: create transaction {state, nonce, verifier, returnPath, intent, interactive}
+    SF-->>Br: Set-Cookie __Host-ds_oidc_tx; 303 authorize?state&nonce&S256&response_mode=query[&prompt=create][&login_hint=<intent id>]
+    Br->>Z: GET /oauth/v2/authorize
+    Z-->>Br: 302 login.doctor.school/login?authRequest=<id>
+    Br->>L: GET /login?authRequest=<id>
+    L->>API: read auth request (client_id → host-config map; unknown/admin → access_denied)
+    alt live __Host-ds_login record, fingerprint ok, no prompt=login / short max_age, no other-account intent
+        L->>Z: POST /v2/oidc/auth_requests/{id} {sessionId, sessionToken}
+    else
+        L-->>Br: originating storefront's form (captcha, limits as today)
+        Br->>L: POST credential (same-origin, CSRF, Origin)
+        L->>API: same credential endpoint → Zitadel session (lifetime 30 d)
+        L->>L: replace record, rotate __Host-ds_login
+        L->>Z: POST /v2/oidc/auth_requests/{id} {sessionId, sessionToken}
+    end
+    Z-->>Br: 302 storefront callback?code&state
+    Br->>SF: GET /auth/callback?code&state
+    SF->>API: internal redeem {state, code} (verifier server-held)
+    API->>Z: token endpoint (private_key_jwt), check nonce, sid = live record?
+    API-->>SF: new storefront session (fresh sid, linked to Zitadel session id)
+    SF-->>Br: Set-Cookie __Host-ds_session; 303 /x#
+```
+
+**Entry intent (the carrier for `method`, `handoff` and the reset door).** A Zitadel v2 auth request exposes only `authorization.proto` fields 1–10 (id, creation date, `client_id`, scope, `redirect_uri`, `prompt`, ui locales, `login_hint`, `max_age`, hint user id); it carries no `state` and no custom parameter, so the storefront has no other channel to tell the sign-in host which door and method the person chose. The registration door uses `prompt=create` (ADR-0015 §4 step 1). Every other entry that asks for more than the plain sign-in form — `/login?method=code`, `/login?method=code&handoff=<ref>`, `/reset` — records through the API an **entry intent** `{door: login|reset, method?, handoff?, client_id}` under a fresh opaque id (32 random bytes, base64url — at least 128 random bits), bound to the interactive transaction it was created for and to its `client_id`, stored server-side with exactly that transaction's lifetime and deleted with it, the hand-off reference encrypted at rest, and passes only that id in the authorize request's `login_hint`. The sign-in host's server resolves it once through the API, only for an auth request whose `client_id` equals the intent's, deletes it on that read, and applies it to the host-config the `client_id` already selected; an unknown, foreign-client or spent id is ignored and the plain sign-in form renders. The id carries no data and grants nothing beyond opening a door or redeeming the hand-off it was made for, which the link holder could already do. The plain `/login` sends no intent. Requirement: EARS-71.
+
+**Lead decisions (2026-10-21).** (1) The carrier is the server-held intent with its opaque id in `login_hint`. Verified in the Zitadel v4.17.3 source: on the v2 path `internal/api/oidc/auth_request.go` `createAuthRequestLoginClient` copies `req.LoginHint` verbatim into `command.AuthRequest.LoginHint` (and only when non-empty), `internal/command/auth_request.go` `AddAuthRequest` stores it unchanged, and `internal/api/grpc/oidc/v2/oidc.go` `authRequestToPb` returns it as field 8; `HintUserID` is set only from the `userID` that `zitadel/oidc` v3.47.5 `pkg/op/auth_request.go` `ValidateAuthRequest` → `ValidateAuthReqIDTokenHint` derives from an `id_token_hint`, never from `login_hint`. No user lookup, validation or rejection of the value happens on that path (the login-name resolution of `login_hint` exists only in the v1 converter, `auth_request_converter.go`, which storefront clients on Login V2 never reach). (2) A refused hand-off reference while the browser holds a live sign-in-host record finalises with that record, and the person returns signed in to the page in the link (the transaction's return path) — the sign-in host never picks a landing (EARS-44). (3) The own-account hand-off check against a live sign-in-host record (no storefront session) finalises with that record without a code; it is a read-only peek of the reference's account against the record's subject and never authenticates more than the existing session already did (ADR-0015 §4 req. 8).
+
+**Hand-off on the sign-in host.** The storefront's server mount keeps the read-only own-account check (#2951) for a browser that holds a storefront session; otherwise the entry records the intent and redirects (the redirect replaces the address, so the reference leaves the history with the entry URL; the entry answers `Referrer-Policy: no-referrer`). The sign-in host redeems the intent's reference once, through the existing redemption (`POST /v1/auth/login/otp/handoff`, the API reading the reference from the intent instead of the request body), and renders the EARS-42 step with the returned address. With a live record, the API first peeks whether the reference's account is the record's subject (the `/own` logic against the record's session instead of a storefront session): yes → finalise with the record, no code; no → the record is not offered, and the accepted code replaces it.
+
+### Session model and linkage
+
+```mermaid
+erDiagram
+    SIGN_IN_HOST_RECORD ||--|| ZITADEL_SESSION : holds
+    ZITADEL_SESSION ||--o{ STOREFRONT_SESSION : "linked by zitadel_session_id"
+    SIGN_IN_HOST_RECORD {
+        string cookie_id "__Host-ds_login, rotated per credential step"
+        string zitadel_session_id
+        string session_token "encrypted at rest"
+        string fingerprint "UA + IP/24 + accept-language"
+        datetime last_credential_at
+        datetime last_finalised_at "7-day idle"
+    }
+    STOREFRONT_SESSION {
+        string sid "fresh per callback"
+        string zitadel_session_id
+        string refresh_token "server-side, rotating"
+        datetime expires_at "<= Zitadel session expiry"
+    }
+```
+
+`ActiveSession` (requirements Read models) gains the linked `zitadel_session_id`; every revocation path — sign-out, back-channel logout, credential events, refresh reuse, fingerprint mismatch of the record — revokes by that id, synchronously in the API's own session store. The release that moves the storefronts revokes the unlinked sessions once (EARS-65).
+
+### Silent check on the other storefront
+
+```mermaid
+flowchart TD
+    R[Document GET on storefront] --> E{Exempt? non-GET, no fetch metadata, prefetch/RSC, /v1, static, .well-known, auth routes, health, crawler}
+    E -- yes --> G0[Render as today]
+    E -- no --> S{Live storefront session?}
+    S -- yes --> P[Render signed in]
+    S -- no --> M{Valid marker, guard, live silent tx or ds_guest=1?}
+    M -- yes --> GG[Render guest; first request with guard deletes it]
+    M -- no --> RL{Silent bucket ok?}
+    RL -- no --> GH[Guest page HTTP 200]
+    RL -- yes --> T[Silent tx replaces any interactive tx; 303 authorize prompt=none]
+    T --> CB{Callback}
+    CB -- code, sid live --> MS[Mint session, delete marker, set guard, 303 path#]
+    CB -- login_required / error / limited --> MK[Set marker + guard, 303 path#]
+    CB -- no tx cookie --> NC[Burn tx, 303 path?ds_guest=1#]
+```
+
+### Sign-out
+
+Sign-out on either storefront: `POST` to its own sign-out route → the API terminates the linked Zitadel session (`DELETE /v2/sessions/{id}`), deletes the sign-in-host record holding it and revokes every storefront session linked to it (both storefronts, one store) → the storefront clears `__Host-ds_session`, sets the marker and lands where it lands today. The browser's `__Host-ds_login` cookie may stay; it no longer names a record. Back-channel logout (`back_channel_logout_uri` on the API) covers terminations that start elsewhere; a reset, a password change or a lock terminate every Zitadel session of the person (EARS-65).
+
+### Open items for the implementation slice
+
+1. The doctor storefront's sign-in-host map entry and `new.doctor.school` redirect URIs per environment, including stage slots (`tools/staging`).
 
 ## 1. Architecture overview
 

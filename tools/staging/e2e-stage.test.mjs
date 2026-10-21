@@ -9,9 +9,11 @@ import {
   exitCodeFor,
   parseE2eArgs,
   preflightVerdict,
+  publicAxeLeg,
   renderVerdictBlock,
   runE2eStage,
   slotE2eEnv,
+  SUMMARY_REPORTER_PATH,
   summarizeReport,
 } from "./e2e-stage.mjs";
 
@@ -651,5 +653,128 @@ describe("release check (--expect-sha)", () => {
       "test:e2e",
     ]);
     assert.equal(calls[0].env.E2E_GREP, undefined);
+  });
+});
+
+// --- public-log mode (#2985) --------------------------------------------------
+
+describe("E2E_PUBLIC_LOG=1 — the run's console is a public Actions log", () => {
+  const PUBLIC_ENV = {
+    E2E_PUBLIC_LOG: "1",
+    CI: "1",
+    STAGE_BASE_DOMAIN: "stage.doctor.school",
+    E2E_HTTP_USER: "stage",
+    E2E_HTTP_PASS: "s3cret-basic",
+    DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED: "golden-verified-pw",
+    E2E_CAPTCHA_TEST_TOKEN: "captcha-token-xyz",
+  };
+  const SECRETS = [
+    "s3cret-basic",
+    "golden-verified-pw",
+    "captcha-token-xyz",
+    "body-secret-123",
+  ];
+  const assertNoLeak = (lines) => {
+    const out = lines.join("\n");
+    for (const secret of SECRETS) {
+      assert.equal(out.includes(secret), false, `the log carries ${secret}`);
+    }
+    assert.equal(
+      /https?:\/\/[^/\s]*@/.test(out),
+      false,
+      "a credential-bearing URL",
+    );
+    assert.equal(out.includes("czNjcmV0"), false, "a base64 basic-auth header");
+  };
+
+  it("hands the suite the flag and both axe legs the summary reporter", async () => {
+    const { calls, lines, effects } = harness({ issueState: () => "CLOSED" });
+    const code = await runE2eStage(["main", "--expect-sha", SHA], {
+      env: PUBLIC_ENV,
+      effects,
+    });
+    assert.equal(code, 0);
+    assert.equal(calls[0].env.E2E_PUBLIC_LOG, "1");
+    assert.equal(calls.length, 3);
+    const reportDir = calls[0].env.E2E_REPORT_DIR.split(path.sep).join("/");
+    for (const [axe, host] of [
+      [calls[1], "academy"],
+      [calls[2], "doctor"],
+    ]) {
+      assert.deepEqual(axe.argv.slice(-2), [
+        `--reporter=${SUMMARY_REPORTER_PATH},json,html`,
+        `--output=${reportDir}/axe-${host}/artifacts`,
+      ]);
+      assert.equal(
+        axe.env.PLAYWRIGHT_JSON_OUTPUT_FILE,
+        `${reportDir}/axe-${host}/results.json`,
+      );
+      assert.equal(
+        axe.env.PLAYWRIGHT_HTML_OUTPUT_DIR,
+        `${reportDir}/axe-${host}/html`,
+      );
+      assert.equal(axe.env.PLAYWRIGHT_HTML_OPEN, "never");
+      assertShellInert(axe.argv);
+    }
+    assert.match(
+      SUMMARY_REPORTER_PATH,
+      /\/packages\/e2e\/reporters\/summary\.ts$/,
+    );
+    assertShellInert(calls[1].argv);
+    assertNoLeak(lines);
+  });
+
+  it("a refused pre-flight prints the status, never the response body", async () => {
+    const { lines, effects } = harness({
+      fetchHealth: async () => ({
+        status: 500,
+        body: '{"error":"body-secret-123","auth":"s3cret-basic"}',
+      }),
+    });
+    const code = await runE2eStage(["main", "--expect-sha", SHA], {
+      env: PUBLIC_ENV,
+      effects,
+    });
+    assert.equal(code, 2);
+    assert.match(lines.join("\n"), /HTTP 500/);
+    assertNoLeak(lines);
+  });
+
+  it("a health body naming another sha prints only the short shas", async () => {
+    const { lines, effects } = harness({
+      fetchHealth: async () => ({
+        status: 200,
+        body: JSON.stringify({
+          version: "d".repeat(40),
+          note: "body-secret-123",
+        }),
+      }),
+    });
+    const code = await runE2eStage(["main", "--expect-sha", SHA], {
+      env: PUBLIC_ENV,
+      effects,
+    });
+    assert.equal(code, 2);
+    assertNoLeak(lines);
+  });
+
+  it("without the flag the axe legs keep their own reporter", async () => {
+    assert.deepEqual(publicAxeLeg({}, "/r", "doctor"), { args: [], env: {} });
+    assert.deepEqual(publicAxeLeg({ E2E_PUBLIC_LOG: "0" }, "/r", "doctor"), {
+      args: [],
+      env: {},
+    });
+    const { calls, effects } = harness({ issueState: () => "CLOSED" });
+    await runE2eStage(["main"], {
+      env: { STAGE_BASIC_AUTH_PASS: "s3cret" },
+      effects,
+    });
+    assert.equal(calls[0].env.E2E_PUBLIC_LOG, undefined);
+    for (const axe of calls.slice(1)) {
+      assert.equal(
+        axe.argv.some((t) => t.startsWith("--reporter")),
+        false,
+      );
+    }
   });
 });

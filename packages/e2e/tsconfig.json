@@ -9,6 +9,7 @@
     "steps/**/*.ts",
     "derived/**/*.ts",
     "lib/**/*.ts",
+    "reporters/**/*.ts",
     "admin/**/*.ts"
   ],
   "exclude": ["node_modules", "dist", ".features-gen"]

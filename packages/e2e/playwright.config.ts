@@ -1,11 +1,10 @@
-import path from "node:path";
-
 import { GOLDEN_WORKER_POOL_SIZE } from "@ds/db/seed/golden";
 import { defineConfig, devices } from "@playwright/test";
 import { defineBddConfig } from "playwright-bdd";
 
 import { HOSTS } from "./hosts.js";
 import { tagExpressionFor } from "./lib/host-tags.js";
+import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
 
 /**
  * The C6 REGRESSION SUITE — staging/regression-contour tech spec §6 (Issue #2067).
@@ -74,9 +73,6 @@ import { tagExpressionFor } from "./lib/host-tags.js";
  * would have to be re-added on every new request the journey makes.
  */
 const reportDir = process.env.E2E_REPORT_DIR;
-const jsonReport = reportDir
-  ? path.join(reportDir, "results.json")
-  : "test-results/results.json";
 const grep = process.env.E2E_GREP
   ? new RegExp(process.env.E2E_GREP)
   : undefined;
@@ -142,18 +138,13 @@ export default defineConfig({
   retries: 0,
   timeout: 120_000,
   expect: { timeout: 20_000 },
-  reporter: [
-    ["list"],
-    ["json", { outputFile: jsonReport }],
-    ...(reportDir
-      ? [
-          [
-            "html",
-            { outputFolder: path.join(reportDir, "html"), open: "never" },
-          ],
-        ]
-      : []),
-  ] as NonNullable<Parameters<typeof defineConfig>[0]["reporter"]>,
+  // `E2E_PUBLIC_LOG=1` (the stage workflow, #2985): the console gets the
+  // summary-only reporter and the full evidence lands only in `E2E_REPORT_DIR`
+  // (`lib/reporters.ts`).
+  reporter: reportersFor({
+    publicLog: publicLogEnabled(process.env),
+    reportDir,
+  }) as NonNullable<Parameters<typeof defineConfig>[0]["reporter"]>,
   outputDir: "test-results/artifacts",
   use: {
     locale: "ru-RU",

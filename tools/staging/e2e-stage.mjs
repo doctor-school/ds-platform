@@ -176,6 +176,49 @@ export function releaseCheckEnvRefusal(env) {
 }
 
 /**
+ * Public-log mode (`E2E_PUBLIC_LOG=1`, set only by `.github/workflows/stage.yml`,
+ * #2985): the run's console is a PUBLIC Actions log. The suite config then swaps
+ * its console reporter for `packages/e2e/reporters/summary.ts`
+ * (`packages/e2e/lib/reporters.ts`), and the two axe legs — whose configs print
+ * with `list`, error text included — get the same reporter on their command line,
+ * with their json/html report written into the report dir (`publicAxeLeg`).
+ * This command's own lines never carry a response body or a credential in either
+ * mode: the pre-flight reports a status or a fixed reason, never the body.
+ */
+export const SUMMARY_REPORTER_PATH = path
+  .join(REPO_ROOT, "packages", "e2e", "reporters", "summary.ts")
+  .split(path.sep)
+  .join("/");
+
+export function publicLogEnabled(env) {
+  return env?.E2E_PUBLIC_LOG === "1";
+}
+
+const toPosix = (p) => p.split(path.sep).join("/");
+
+/**
+ * One axe leg's public-mode wiring: the summary reporter on the console, PLUS
+ * Playwright's `json` + `html` reporters and the test artifacts (traces) under
+ * `<reportDir>/axe-<host>/`, so the report shipped to the box is complete for a
+ * red axe leg too. Outside public mode the leg keeps its own config reporter.
+ */
+export function publicAxeLeg(env, reportDir, host) {
+  if (!publicLogEnabled(env)) return { args: [], env: {} };
+  const dir = toPosix(path.join(reportDir, `axe-${host}`));
+  return {
+    args: [
+      `--reporter=${SUMMARY_REPORTER_PATH},json,html`,
+      `--output=${dir}/artifacts`,
+    ],
+    env: {
+      PLAYWRIGHT_JSON_OUTPUT_FILE: `${dir}/results.json`,
+      PLAYWRIGHT_HTML_OUTPUT_DIR: `${dir}/html`,
+      PLAYWRIGHT_HTML_OPEN: "never",
+    },
+  };
+}
+
+/**
  * The env the suites read (§6.6): one base URL per storefront plus the stand's
  * basic-auth pair, which `packages/e2e/playwright.config.ts` turns into Playwright
  * `httpCredentials`. The portal serves under `academy-<slot>`, never `portal-`.
@@ -513,6 +556,8 @@ export async function runE2eStage(
     E2E_REPORT_DIR: path.resolve(REPO_ROOT, reportDir),
   };
   if (options.grep) suiteEnv.E2E_GREP = options.grep;
+  if (publicLogEnabled(env)) suiteEnv.E2E_PUBLIC_LOG = "1";
+  const axeLeg = (host) => publicAxeLeg(env, suiteEnv.E2E_REPORT_DIR, host);
 
   const legs = [];
   const suiteArgv = ["pnpm", "--filter", "@ds/e2e", "test:e2e"];
@@ -534,15 +579,18 @@ export async function runE2eStage(
     options.project === undefined || options.project === host;
   if (axe.run) {
     if (axeHost("academy")) {
+      const leg = axeLeg("academy");
       legs.push({
         name: "axe/academy",
         ok:
-          effects.run(["pnpm", "--filter", "@ds/portal", "test:axe"], {
-            env: suiteEnv,
-          }).status === 0,
+          effects.run(
+            ["pnpm", "--filter", "@ds/portal", "test:axe", ...leg.args],
+            { env: { ...suiteEnv, ...leg.env } },
+          ).status === 0,
       });
     }
     if (axeHost("doctor")) {
+      const leg = axeLeg("doctor");
       legs.push({
         name: "axe/doctor",
         ok:
@@ -556,8 +604,9 @@ export async function runE2eStage(
               "test",
               "--config=playwright.room.config.ts",
               "a11y/room-axe",
+              ...leg.args,
             ],
-            { env: suiteEnv },
+            { env: { ...suiteEnv, ...leg.env } },
           ).status === 0,
       });
     }

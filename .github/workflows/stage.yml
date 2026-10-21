@@ -1,0 +1,375 @@
+name: Stage main
+
+# The stage `main` converge + the full stage suite, in Actions (#2985; spec
+# apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md
+# §3 items 2 and 5, §4, §5, §8 step (d)).
+#
+# Trigger: every SUCCESSFUL `runtime-images.yml` run of a push to `main` — the same
+# run-selection policy `selectImagesRun` (tools/deploy/lib/registry.mjs) applies on
+# the operator side, so the stage converges exactly the digests that run recorded.
+#
+#   converge — ships `images-<sha>.json` to the box's forced command
+#              `release stage-main <sha>` (infra/deploy/bin/ds-deploy-entrypoint ->
+#              the release driver, a `systemd-run` unit that survives this job's
+#              death, spec §5) and polls `status stage-main <sha>` until the driver
+#              unit is terminal.
+#   suite    — runs `node tools/staging/e2e-stage.mjs main --expect-sha <sha>` from
+#              the runner, never reading the box (STAGE_BASE_DOMAIN + E2E_HTTP_* are
+#              exported), with `E2E_PUBLIC_LOG=1`: the console is the summary-only
+#              reporter (packages/e2e/reporters/summary.ts); the full HTML/JSON report
+#              is shipped to the box (`upload-report <sha>` ->
+#              /var/lib/ds-platform/e2e-reports/<sha>/), NEVER to Actions artifacts —
+#              this repository's Actions logs and artifacts are public (spec §4).
+#
+# Commit status `stage-suite` on the SHA: pending when the converge starts, then
+# success / failure with counts only. It is the check the release gate requires.
+
+on:
+  workflow_run:
+    workflows: ["Runtime images"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+# One stage `main` slot: a newer merge queues behind the running converge+suite,
+# never cancels it mid-converge (the driver unit would keep running regardless).
+concurrency:
+  group: stage-main
+  cancel-in-progress: false
+
+env:
+  SHA: ${{ github.event.workflow_run.head_sha }}
+  # The stage box's public address (infra/deploy/compose/stg-infra/README.md → Edge).
+  # The `ds-stage-1` ssh alias exists only in operator ssh configs.
+  STAGE_SSH_HOST: 200.169.178.154
+  STAGE_SSH_USER: deploy
+  STATUS_CONTEXT: stage-suite
+
+jobs:
+  converge:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    environment: stage
+    # The poll below gives up after 45 min; the job limit only backs it up.
+    timeout-minutes: 55
+    permissions:
+      actions: read
+      contents: read
+      # Unused by the steps (`gh api …/statuses` only); kept because the
+      # `workflow-auth` guard requires it on every job that runs `gh`.
+      pull-requests: read
+      statuses: write
+    steps:
+      - name: Check the SHA
+        run: |
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::not a full sha: $SHA"; exit 1; }
+
+      - name: Commit status — pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" --silent \
+            -f state=pending -f context="$STATUS_CONTEXT" \
+            -f description="stage main converging" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+      - name: Download images-<sha>.json from the triggering run
+        uses: actions/download-artifact@v8
+        with:
+          name: images-${{ github.event.workflow_run.head_sha }}
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: manifest
+
+      - name: Write the ssh key
+        env:
+          STAGE_SSH_KEY: ${{ secrets.STAGE_SSH_KEY }}
+          STAGE_SSH_KNOWN_HOSTS: ${{ secrets.STAGE_SSH_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          dir="$RUNNER_TEMP/stage-ssh"
+          mkdir -p "$dir"
+          printf '%s\n' "$STAGE_SSH_KEY" > "$dir/key"
+          printf '%s\n' "$STAGE_SSH_KNOWN_HOSTS" > "$dir/known_hosts"
+          chmod 600 "$dir/key" "$dir/known_hosts"
+
+      - name: Start the release driver
+        id: release
+        run: |
+          set +e
+          line=$(ssh -i "$RUNNER_TEMP/stage-ssh/key" \
+            -o UserKnownHostsFile="$RUNNER_TEMP/stage-ssh/known_hosts" \
+            -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 \
+            "$STAGE_SSH_USER@$STAGE_SSH_HOST" "release stage-main $SHA" \
+            < "manifest/images-$SHA.json" 2>&1)
+          rc=$?
+          set -e
+          # The driver prints ONE status line (no secret, no journal, no compose
+          # output); only its first line is ever shown.
+          first=$(printf '%s\n' "$line" | head -n 1)
+          echo "release: rc=$rc $first"
+          # `started` / `attached` / `already-succeeded` — the poll needs to know.
+          echo "outcome=$(printf '%s' "$first" | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+          case "$rc" in
+            0) ;;
+            3) echo "::error::release refused: $first"; exit 1 ;;
+            *) echo "::error::release failed (rc=$rc)"; exit 1 ;;
+          esac
+
+      - name: Poll the driver until it is terminal
+        env:
+          OUTCOME: ${{ steps.release.outputs.outcome }}
+        run: |
+          # 45 min = 180 polls x 15 s: today's operator converge of the `main` slot
+          # (pull, migrate, golden reset, health) runs well under 20 min; the rest
+          # is margin.
+          deadline=$((SECONDS + 45 * 60))
+          ssh_failures=0
+          while :; do
+            set +e
+            json=$(ssh -i "$RUNNER_TEMP/stage-ssh/key" \
+              -o UserKnownHostsFile="$RUNNER_TEMP/stage-ssh/known_hosts" \
+              -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 \
+              "$STAGE_SSH_USER@$STAGE_SSH_HOST" "status stage-main $SHA" \
+              2>"$RUNNER_TEMP/ssh.err" | head -n 1; exit "${PIPESTATUS[0]}")
+            ssh_rc=$?
+            set -e
+            # rc 255 = ssh itself failed (host key, auth, network): four in a row
+            # (~1 min) fail fast instead of 45 min of unreadable replies.
+            if [ "$ssh_rc" -eq 255 ]; then
+              ssh_failures=$((ssh_failures + 1))
+              echo "status: ssh failed ($(head -n 1 "$RUNNER_TEMP/ssh.err"))"
+              if [ "$ssh_failures" -ge 4 ]; then
+                echo "::error::ssh to the stage box failed $ssh_failures times in a row"
+                exit 1
+              fi
+              sleep 15
+              continue
+            fi
+            ssh_failures=0
+            if ! line=$(jq -er '"driver=\(.driver.active // "?") rc=\(.driver.rc // "-") step=\(.release.step // "-") state=\(.release.state // "-")"' <<<"$json" 2>/dev/null); then
+              echo "status: unreadable reply"
+            else
+              echo "status: $line"
+              active=$(jq -r '.driver.active // ""' <<<"$json")
+              rc=$(jq -r '.driver.rc // ""' <<<"$json")
+              state=$(jq -r '.release.state // ""' <<<"$json")
+              # Nothing was started: the record alone decides, on the first reply.
+              if [ "$OUTCOME" = "already-succeeded" ]; then
+                [ "$state" = "succeeded" ] && { echo "converge: already succeeded"; exit 0; }
+                echo "::error::driver said already-succeeded, record says state=${state:--}"
+                exit 1
+              fi
+              case "$active" in
+                inactive|failed|absent)
+                  if [ "$rc" = "0" ] && [ "$state" = "succeeded" ]; then
+                    echo "converge: succeeded"; exit 0
+                  fi
+                  echo "::error::converge failed (driver=$active rc=${rc:--} state=${state:--})"
+                  exit 1 ;;
+              esac
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::converge did not finish within 45 min"
+              exit 1
+            fi
+            sleep 15
+          done
+
+      - name: Commit status — converge failed
+        if: failure() || cancelled()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" --silent \
+            -f state=failure -f context="$STATUS_CONTEXT" \
+            -f description="stage main converge failed — suite not run" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+      - name: Remove the ssh key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/stage-ssh"
+
+  suite:
+    needs: converge
+    runs-on: ubuntu-latest
+    environment: stage
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      # `e2e-stage.mjs` reads the axe-gate Issue's state (`gh issue view`).
+      issues: read
+      pull-requests: read
+      statuses: write
+    env:
+      CI: "1"
+      E2E_PUBLIC_LOG: "1"
+      STAGE_BASE_DOMAIN: stage.doctor.school
+      # Not a secret: the basic-auth USER (`STAGE_BASIC_AUTH_USER` in
+      # infra/deploy/stage.env.example); only its password is.
+      E2E_HTTP_USER: stage
+      # The workers the stage suite runs on. 4 = the config default; re-set it from
+      # the peak memory the «Memory» step summary records on the first live runs.
+      E2E_WORKERS: "4"
+    steps:
+      - name: Name the report dir
+        run: echo "REPORT_DIR=$RUNNER_TEMP/e2e-report" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ds/e2e exec playwright install --with-deps chromium
+
+      - name: Mask the suite secrets
+        env:
+          E2E_HTTP_PASS: ${{ secrets.STAGE_BASIC_AUTH_PASS }}
+          E2E_CAPTCHA_TEST_TOKEN: ${{ secrets.E2E_CAPTCHA_TEST_TOKEN }}
+          DS_GOLDEN_PASSWORD_ADMIN: ${{ secrets.DS_GOLDEN_PASSWORD_ADMIN }}
+          DS_GOLDEN_PASSWORD_DOCTOR_MFA: ${{ secrets.DS_GOLDEN_PASSWORD_DOCTOR_MFA }}
+          DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED: ${{ secrets.DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED }}
+          DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED: ${{ secrets.DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED }}
+        run: |
+          for v in E2E_HTTP_PASS E2E_CAPTCHA_TEST_TOKEN DS_GOLDEN_PASSWORD_ADMIN \
+            DS_GOLDEN_PASSWORD_DOCTOR_MFA DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED \
+            DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED; do
+            value="${!v}"
+            [ -n "$value" ] && echo "::add-mask::$value"
+          done
+          # The basic-auth header form of the pair is masked too.
+          echo "::add-mask::$(printf '%s:%s' "$E2E_HTTP_USER" "$E2E_HTTP_PASS" | base64 -w0)"
+
+      - name: Stage suite
+        id: suite
+        env:
+          E2E_HTTP_PASS: ${{ secrets.STAGE_BASIC_AUTH_PASS }}
+          E2E_CAPTCHA_TEST_TOKEN: ${{ secrets.E2E_CAPTCHA_TEST_TOKEN }}
+          DS_GOLDEN_PASSWORD_ADMIN: ${{ secrets.DS_GOLDEN_PASSWORD_ADMIN }}
+          DS_GOLDEN_PASSWORD_DOCTOR_MFA: ${{ secrets.DS_GOLDEN_PASSWORD_DOCTOR_MFA }}
+          DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED: ${{ secrets.DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED }}
+          DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED: ${{ secrets.DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$REPORT_DIR"
+          # Peak memory, two views: `/usr/bin/time -v` reports the max RSS of the
+          # LARGEST single process of the run; `free -m` sampled every 5 s reports
+          # the whole runner's used memory, which is what bounds E2E_WORKERS.
+          mem="$RUNNER_TEMP/mem.log"
+          ( while :; do free -m | awk '/^Mem:/ {print $3}' >> "$mem"; sleep 5; done ) &
+          sampler=$!
+          set +e
+          /usr/bin/time -v -o "$RUNNER_TEMP/time.log" \
+            node tools/staging/e2e-stage.mjs main --expect-sha "$SHA" --report-dir "$REPORT_DIR"
+          rc=$?
+          set -e
+          kill "$sampler" 2>/dev/null || true
+          {
+            echo "### Memory (E2E_WORKERS=$E2E_WORKERS)"
+            echo "- max RSS of the largest process: $(awk -F': ' '/Maximum resident set size/ {printf "%d MiB", $2/1024}' "$RUNNER_TEMP/time.log")"
+            echo "- peak runner memory used (free -m, 5 s samples): $(sort -n "$mem" | tail -n 1) MiB of $(free -m | awk '/^Mem:/ {print $2}') MiB"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+
+      - name: Write the ssh key
+        if: always()
+        env:
+          STAGE_SSH_KEY: ${{ secrets.STAGE_SSH_KEY }}
+          STAGE_SSH_KNOWN_HOSTS: ${{ secrets.STAGE_SSH_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          dir="$RUNNER_TEMP/stage-ssh"
+          mkdir -p "$dir"
+          printf '%s\n' "$STAGE_SSH_KEY" > "$dir/key"
+          printf '%s\n' "$STAGE_SSH_KNOWN_HOSTS" > "$dir/known_hosts"
+          chmod 600 "$dir/key" "$dir/known_hosts"
+
+      # The full report goes to the box, never to Actions (public). Always: a red
+      # suite is exactly the run whose evidence is needed.
+      - name: Ship the report to the box
+        if: always()
+        run: |
+          if [ ! -d "$REPORT_DIR" ] || [ -z "$(ls -A "$REPORT_DIR")" ]; then
+            echo "::warning::no report to ship — the suite wrote nothing"
+            echo "- **no report shipped**: the suite wrote nothing into the report dir" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # pipefail: a failed tar or ssh (cap exceeded, key or host refusal) must
+          # not pass for a shipped report. The upload never decides the suite
+          # verdict, so a failure is a warning + a step-summary line, not a red step.
+          set -o pipefail
+          set +e
+          tar -C "$REPORT_DIR" -cf - . | ssh -i "$RUNNER_TEMP/stage-ssh/key" \
+            -o UserKnownHostsFile="$RUNNER_TEMP/stage-ssh/known_hosts" \
+            -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 \
+            "$STAGE_SSH_USER@$STAGE_SSH_HOST" "upload-report $SHA" \
+            > "$RUNNER_TEMP/upload.out" 2>&1
+          rc=$?
+          set -e
+          first=$(head -n 1 "$RUNNER_TEMP/upload.out")
+          if [ "$rc" -eq 0 ]; then
+            echo "report: /var/lib/ds-platform/e2e-reports/$SHA/ on the stage box"
+            echo "- report shipped to the stage box: /var/lib/ds-platform/e2e-reports/$SHA/" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::report upload failed (rc=$rc): $first"
+            echo "- **report upload FAILED** (rc=$rc): $first — the box holds no report of this run" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Commit status — the suite verdict
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTCOME: ${{ steps.suite.outcome }}
+        run: |
+          counts=$(node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            import { summarizeReport } from "./tools/staging/e2e-stage.mjs";
+            let report = {};
+            try { report = JSON.parse(readFileSync(process.argv[1], "utf8")); } catch {}
+            const s = summarizeReport(report);
+            const sum = (k) => s.projects.reduce((n, p) => n + p[k], 0);
+            console.log(`${sum("passed")} passed, ${sum("failed")} failed, ${sum("skipped")} skipped`);
+          ' "$REPORT_DIR/results.json")
+          state=failure
+          [ "$OUTCOME" = "success" ] && state=success
+          echo "stage-suite: $state — $counts"
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" --silent \
+            -f state="$state" -f context="$STATUS_CONTEXT" \
+            -f description="$counts" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+      - name: Remove the ssh key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/stage-ssh"
+
+  # The one path the two jobs cannot close themselves: the run is cancelled after
+  # `converge` succeeded but before `suite` got a runner, so no `always()` step of
+  # `suite` runs and `stage-suite` would stay pending.
+  close-status:
+    needs: [converge, suite]
+    if: >-
+      always() && needs.converge.result == 'success' &&
+      needs.suite.result != 'success' && needs.suite.result != 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      # Unused by the step (`gh api …/statuses` only); the `workflow-auth` guard
+      # requires it (with `contents: read`) on every job that runs `gh`.
+      contents: read
+      pull-requests: read
+      statuses: write
+    steps:
+      - name: Commit status — the suite never reached a verdict
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUITE_RESULT: ${{ needs.suite.result }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" --silent \
+            -f state=failure -f context="$STATUS_CONTEXT" \
+            -f description="stage suite $SUITE_RESULT before a verdict" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

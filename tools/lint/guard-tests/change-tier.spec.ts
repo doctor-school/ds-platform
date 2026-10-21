@@ -15,6 +15,7 @@ import {
   API_COPY_ALLOWLIST,
   classifyChangeTier,
   isEnvironmentSensitivePath,
+  E2E_PATH_LOADED_MODULES,
   E2E_RUN_SELECTION_MODULES,
   isNonRuntimePath,
   isTestPath,
@@ -706,8 +707,31 @@ describe("#2819: CI runner scripts under e2e/ are not test paths", () => {
       }
     }
     const underE2e = [...reached].filter((p) => /(?:^|\/)e2e\//.test(p));
-    expect(underE2e.sort()).toEqual([...E2E_RUN_SELECTION_MODULES].sort());
+    expect(underE2e.sort()).toEqual(
+      E2E_RUN_SELECTION_MODULES.filter(
+        (p) => !E2E_PATH_LOADED_MODULES.includes(p),
+      ).sort(),
+    );
     for (const path of underE2e) expect(isTestPath(path), path).toBe(false);
+  });
+
+  it("EARS-1: a path-loaded e2e module is run selection, and the reporter selection names it", () => {
+    const root = resolve(__dirname, "../../..");
+    const selection = readFileSync(
+      join(root, "packages/e2e/lib/reporters.ts"),
+      "utf8",
+    );
+    expect(E2E_PATH_LOADED_MODULES).toEqual([
+      "packages/e2e/reporters/summary.ts",
+    ]);
+    for (const path of E2E_PATH_LOADED_MODULES) {
+      expect(existsSync(join(root, path)), path).toBe(true);
+      expect(E2E_RUN_SELECTION_MODULES).toContain(path);
+      expect(isTestPath(path), path).toBe(false);
+      expect(selection).toContain(
+        `"../${posix.relative("packages/e2e", path)}"`,
+      );
+    }
   });
 
   it("EARS-1: e2e support, steps, lib and evidence helpers stay test-only", () => {

@@ -38,3 +38,9 @@
  * And `@ds/account` (#2073), the one account cabinet `/account` mounts.
  */
 @source "../../../packages/account/src";
+
+/*
+ * And `@ds/room-page` (#2073), the one live-room route `/webinars/:slug/room`
+ * mounts — its client wrapper carries the header cluster's layout classes.
+ */
+@source "../../../packages/room-page/src";

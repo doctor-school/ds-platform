@@ -10,23 +10,23 @@
  * Two shapes, one contract:
  *
  * - {@link RoomCopyStrings} — plain strings only. This is what a SERVER component
- *   may pass across the RSC boundary (D14), so the Academy page builds it with
- *   `getTranslations` and hands it to its `"use client"` wrapper untouched.
+ *   may pass across the RSC boundary (D14), so a host's server page passes the
+ *   package default `ROOM_COPY_RU` (`./room-copy-ru`), with only its `brandHome`
+ *   label overridden, to its `"use client"` wrapper untouched.
  * - {@link RoomCopy} — `RoomCopyStrings` plus the four ICU-parameterised values,
  *   which are FUNCTIONS because their arguments are live client state (a presence
  *   push, an unread tally, the elapsed live minutes, the doctor's own name). They
  *   cannot be pre-rendered server-side, and a function cannot cross the RSC
- *   boundary — so the host's client wrapper builds them.
+ *   boundary — so the host's client wrapper adds them (`ROOM_FORMATTERS_RU`).
  *
  * Deliberately ABSENT (D22): `room.accessGuidance.*`. Those two keys are read by
  * the EVENT page (`?from=room`, EARS-10 guidance), never by the room composition;
  * pulling them in would force a host to author copy for a screen it does not
  * render.
  *
- * `errors.*` (D18) does not come from the `room` namespace at all. The Academy
- * resolves display-name validation through its `errors.validation` catalogue, so
- * the room's prompt takes those four strings explicitly rather than pretending
- * every value is `t("<same key>")` from one namespace.
+ * `errors.*` (D18) is not room copy at all: it is the shared display-name
+ * validation wording, so the room's prompt takes those four strings explicitly
+ * (`ROOM_COPY_RU.errors`) rather than treating them as room sentences.
  */
 
 /** Display-name prompt copy (006 EARS-14) — the JIT «Имя и фамилия» step. */
@@ -201,7 +201,8 @@ export function readRoomCopyKey(
   return key
     .split(".")
     .reduce<unknown>(
-      (node, segment) => (node as Record<string, unknown> | undefined)?.[segment],
+      (node, segment) =>
+        (node as Record<string, unknown> | undefined)?.[segment],
       copy,
     );
 }

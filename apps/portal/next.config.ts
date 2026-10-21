@@ -62,7 +62,8 @@ const config: NextConfig = {
   // pulled into the SSR graph and the render dies with
   // «useState is not a function». `@ds/account` (#2073) mounts `/account`, and
   // its cabinet reads the `@ds/congress-submissions/client` section read on a
-  // host that configures one — both ship .tsx/.ts sources.
+  // host that configures one — both ship .tsx/.ts sources. `@ds/room-page`
+  // (#2073) mounts `/webinars/:slug/room` and ships its client wrapper as .tsx.
   transpilePackages: [
     "@ds/account",
     "@ds/auth-flow",
@@ -71,6 +72,7 @@ const config: NextConfig = {
     "@ds/event-page",
     "@ds/events-storefront",
     "@ds/room",
+    "@ds/room-page",
     "@ds/storefront-shell",
   ],
   // Reverse-proxy the live `/v1/*` BFF under the portal origin so the `__Host-`

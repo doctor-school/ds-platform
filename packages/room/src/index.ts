@@ -55,6 +55,21 @@ export {
   ROOM_COPY_KEYS,
   readRoomCopyKey,
 } from "./copy/room-copy";
+// The default RU copy and its formatters (wave-4 gate row 24); also on the
+// pure `@ds/room/copy` subpath for a server module.
+export {
+  ROOM_COPY_RU,
+  ROOM_FORMATTERS_RU,
+  roomCopyRu,
+  type RoomCopyHostValues,
+} from "./copy/room-copy-ru";
+// The route-table builder over host values (row 22); also on the pure
+// `@ds/room/route-table` subpath for a server module.
+export {
+  buildRoomRouteTable,
+  type RoomRouteTable,
+  type RoomRouteTableHost,
+} from "./model/room-route-table";
 export type {
   RoomContext,
   RoomCopy,

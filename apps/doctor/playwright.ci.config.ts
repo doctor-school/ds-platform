@@ -99,6 +99,10 @@ export default defineConfig({
     // Congress sign-up and the code arrives through Mailpit, so the live
     // journey rides `playwright.congress.config.ts`.
     "login-handoff-live.spec.ts",
+    // #3151: the /account expired-session bounce and password hand-off need a
+    // REAL session store and a mailed reset code, so the spec rides the live
+    // `playwright.register-live.config.ts`.
+    "account-auth-paths-live.spec.ts",
   ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

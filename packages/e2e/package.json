@@ -12,6 +12,7 @@
     "./captcha-stub": "./lib/captcha-stub.ts",
     "./live-stand-env": "./lib/live-stand-env.ts",
     "./stand-http-credentials": "./lib/stand-http-credentials.ts",
+    "./account-auth-paths": "./lib/account-auth-paths.ts",
     "./admin-events": "./admin/index.ts"
   },
   "scripts": {

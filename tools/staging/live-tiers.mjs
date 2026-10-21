@@ -133,6 +133,27 @@ export const LIVE_TIERS = Object.freeze([
           "E2E_LANDING_EVENT_SLUG",
         ],
       },
+      {
+        // #3151: the shared `@ds/e2e/account-auth-paths` body. Its reset request
+        // is captcha-gated, so a slot needs the bot-protection test token.
+        file: "e2e/account-auth-paths-live.spec.ts",
+        requires: [URL_DOCTOR, "MAILPIT_URL", "E2E_CAPTCHA_TEST_TOKEN"],
+      },
+    ],
+  },
+  {
+    name: "live/academy/account-live",
+    host: "academy",
+    app: "apps/portal",
+    pkg: "@ds/portal",
+    config: "playwright.account-live.config.ts",
+    rootDir: "e2e",
+    gated: [
+      {
+        // #3151: the same shared body the doctor register-live tier runs.
+        file: "e2e/account-auth-paths-live.spec.ts",
+        requires: [URL_ACADEMY, "MAILPIT_URL", "E2E_CAPTCHA_TEST_TOKEN"],
+      },
     ],
   },
   {

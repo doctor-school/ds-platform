@@ -63,7 +63,7 @@ Thin host projections are intentional: Academy and Doctor have different targeti
 
 ## Host-file allowlist
 
-This table is the checked-in answer key for every `apps/portal` / `apps/doctor` `.ts`/`.tsx` file the allowlist guard scans: everything except Next.js route files (`page`, `layout`, `loading`, `error`, `not-found`, `template`, `default`, `route`, `middleware`, `proxy`), tests (`*.test.*`, `*.spec.*`, `__tests__/`), `e2e/`, ambient `*.d.ts` and each app's own root-level config. **A new file anywhere in that scope needs a row here in the same PR** — the allowlist guard ([#2002](https://github.com/doctor-school/ds-platform/issues/2002), tech spec §3 rule 3) reads this table as the tree check and fails a file it cannot find (WARN until wave 1 lands, BLOCK after). Rows are exact repo-relative paths, never globs, and a row naming a file that no longer exists fails too — the dead-glob self-test keeps the answer key honest. `until` names the extraction wave that deletes the row; `permanent` means the file is genuinely host-only — brand, config, or a surface the other host does not have; `DEBT.md²` means no extraction wave owns the file and a named open `DEBT.md` line is its lifetime owner — the row leaves that state only when the line's `promote-when` fires and the Issue it becomes deletes the file (or re-labels the row with that Issue's wave). Rows are grouped by directory and sorted by path; 69 files today. Route files are excluded from this table on purpose — they answer to «Route-file registry» below, which records the package each `page.tsx` / `layout.tsx` mounts or will mount.
+This table is the checked-in answer key for every `apps/portal` / `apps/doctor` / `apps/login` (the sign-in host, ADR-0015 §4) `.ts`/`.tsx` file the allowlist guard scans: everything except Next.js route files (`page`, `layout`, `loading`, `error`, `not-found`, `template`, `default`, `route`, `middleware`, `proxy`), tests (`*.test.*`, `*.spec.*`, `__tests__/`), `e2e/`, ambient `*.d.ts` and each app's own root-level config. **A new file anywhere in that scope needs a row here in the same PR** — the allowlist guard ([#2002](https://github.com/doctor-school/ds-platform/issues/2002), tech spec §3 rule 3) reads this table as the tree check and fails a file it cannot find (WARN until wave 1 lands, BLOCK after). Rows are exact repo-relative paths, never globs, and a row naming a file that no longer exists fails too — the dead-glob self-test keeps the answer key honest. `until` names the extraction wave that deletes the row; `permanent` means the file is genuinely host-only — brand, config, or a surface the other host does not have; `DEBT.md²` means no extraction wave owns the file and a named open `DEBT.md` line is its lifetime owner — the row leaves that state only when the line's `promote-when` fires and the Issue it becomes deletes the file (or re-labels the row with that Issue's wave). Rows are grouped by directory and sorted by path; 71 files today. Route files are excluded from this table on purpose — they answer to «Route-file registry» below, which records the package each `page.tsx` / `layout.tsx` mounts or will mount.
 
 ### `apps/doctor/app`
 
@@ -106,6 +106,13 @@ This table is the checked-in answer key for every `apps/portal` / `apps/doctor` 
 
 | path | reason | until |
 | ---- | ------ | ----- |
+
+### `apps/login/lib`
+
+| path                              | reason                                                                                                                                      | until     |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| `apps/login/lib/host-headers.ts`  | host-only surface — the sign-in host's response headers (nonce CSP, COOP, frame-ancestors; 003 EARS-70, #3170); no storefront has one       | permanent |
+| `apps/login/lib/sign-in-entry.ts` | host-only surface — the server-side `GET /v1/sign-in-host/entry` read and its projection onto a storefront host config (003 EARS-60, #3170) | permanent |
 
 ### `apps/portal/app`
 
@@ -160,7 +167,7 @@ This table is the checked-in answer key for every `apps/portal` / `apps/doctor` 
 
 ## Route-file registry
 
-This table is the checked-in answer key for every Next.js composition route file of the two storefronts — every `apps/portal/app/**/{page,layout}.tsx` and `apps/doctor/app/**/{page,layout}.tsx`. It is the second of the three tree checks of [#2002](https://github.com/doctor-school/ds-platform/issues/2002) (tech spec §3 rule 3, «Route mount»): the host-file allowlist above deliberately skips route files, so `page.tsx` is the one place a storefront could still grow host logic unobserved. **A new route file needs a row here in the same PR** — `pnpm lint:route-mount` reads this table and fails a route it cannot find (WARN until wave 1 lands, BLOCK after, per #2074). Rows are exact repo-relative paths, never globs, sorted by path, and a row naming a file that no longer exists fails too.
+This table is the checked-in answer key for every Next.js composition route file of the two storefronts and of the sign-in host — every `apps/portal/app/**/{page,layout}.tsx`, `apps/doctor/app/**/{page,layout}.tsx` and `apps/login/app/**/{page,layout}.tsx`. It is the second of the three tree checks of [#2002](https://github.com/doctor-school/ds-platform/issues/2002) (tech spec §3 rule 3, «Route mount»): the host-file allowlist above deliberately skips route files, so `page.tsx` is the one place a storefront could still grow host logic unobserved. **A new route file needs a row here in the same PR** — `pnpm lint:route-mount` reads this table and fails a route it cannot find (WARN until wave 1 lands, BLOCK after, per #2074). Rows are exact repo-relative paths, never globs, sorted by path, and a row naming a file that no longer exists fails too.
 
 `package` is the `@ds/<name>` the route mounts or will mount; a `permanent` row carries `—` plus the reason it is host-only. `until` is one of three recorded states:
 
@@ -190,6 +197,16 @@ Out of scope, as in the allowlist: `loading` / `error` / `not-found` / `template
 | `apps/doctor/app/(storefront)/layout.tsx`                | — brand frame per host (`@ds/storefront-shell` + `doctorShellConfig` + host session projection)                                                 | permanent |
 | `apps/doctor/app/(storefront)/page.tsx`                  | — host-only surface (doctor home: hero + specialty catalog; the nearest-events block, #1485, will mount from `@ds/events-storefront` inside it) | permanent |
 | `apps/doctor/app/layout.tsx`                             | — brand frame per host (root html/body, fonts, theme boot)                                                                                      | permanent |
+
+### `apps/login/app`
+
+| path                               | package                                                                                                                                       | until     |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| `apps/login/app/layout.tsx`        | — brand frame of the sign-in host (root html/body, fonts, theme boot; ADR-0015 §4)                                                            | permanent |
+| `apps/login/app/login/page.tsx`    | — host-only surface (the sign-in host renders the `@ds/auth-flow` door of the storefront the server entry decision names, 003 EARS-60, #3170) | permanent |
+| `apps/login/app/register/page.tsx` | — host-only surface (the sign-in host renders the `@ds/auth-flow` door of the storefront the server entry decision names, 003 EARS-60, #3170) | permanent |
+| `apps/login/app/reset/page.tsx`    | — host-only surface (the sign-in host renders the `@ds/auth-flow` door of the storefront the server entry decision names, 003 EARS-60, #3170) | permanent |
+| `apps/login/app/verify/page.tsx`   | — host-only surface (the sign-in host renders the `@ds/auth-flow` door of the storefront the server entry decision names, 003 EARS-60, #3170) | permanent |
 
 ### `apps/portal/app`
 

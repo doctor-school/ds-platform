@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // DS Platform — per-session dev-server port prober (#428, extended to the
-// two-storefront triple in #1440).
+// two-storefront triple in #1440 and the sign-in host in #3170).
 //
-// Why: api/portal/doctor default to 3000/3001/3004, which is the SINGLE-session
+// Why: api/portal/doctor/login default to 3000/3001/3004/3005, which is the SINGLE-session
 // default — with parallel sessions on one box, a second session booting the same
 // ports tears down (or trips over) the first session's live-verify / Stage-B URL.
 // The standing convention (#425, `.claude/rules/dev-stand.md`) is: parallel →
@@ -11,7 +11,7 @@
 //
 // Usage:
 //   pnpm dev:ports            # prints the first free set as env lines + URLs
-//   pnpm dev:ports --json     # {"api":3100,"portal":3101,"doctor":3104}
+//   pnpm dev:ports --json     # {"api":3100,"portal":3101,"doctor":3104,"login":3105}
 //
 // The probe BINDS each candidate port (net.createServer().listen) and releases
 // it immediately — real availability, no netstat parsing, cross-platform. A
@@ -27,20 +27,23 @@ import { resolve } from "node:path";
 // ── pure seams (unit-tested in tools/lint/guard-tests) ──────────────────────
 
 /**
- * Offsets from a set's base port. The two storefronts of ADR-0015 both need a
- * dev server, so a session now claims THREE ports, not two.
+ * Offsets from a set's base port. The two storefronts of ADR-0015 and the
+ * sign-in host (`apps/login`, ADR-0015 §4) each need a dev server, so a session
+ * claims FOUR ports.
  *
  * `doctor` is +4, not the contiguous +2: `@ds/showcase` and `@ds/academy-demo`
  * hold fixed dev ports 3002 and 3003, so a contiguous triple would collide with
  * them in the single-session default set. +4 keeps the default set (3000, 3001,
- * 3004) collision-free while every later set stays visually one block.
+ * 3004) collision-free while every later set stays visually one block. `login`
+ * takes the next free offset, +5 (default 3005 — the dev sign-in host origin the
+ * IdP provisioning registers as IDP_SIGN_IN_BASE_URI).
  */
-export const PORT_OFFSETS = { api: 0, portal: 1, doctor: 4 };
+export const PORT_OFFSETS = { api: 0, portal: 1, doctor: 4, login: 5 };
 
 /**
- * The candidate (api, portal, doctor) sets, single-session default first,
- * stepping by 100 so each session's set is visually distinct:
- * (3000,3001,3004) … (3900,3901,3904).
+ * The candidate (api, portal, doctor, login) sets, single-session default
+ * first, stepping by 100 so each session's set is visually distinct:
+ * (3000,3001,3004,3005) … (3900,3901,3904,3905).
  */
 export function portSetSequence() {
   const sets = [];
@@ -49,6 +52,7 @@ export function portSetSequence() {
       base + PORT_OFFSETS.api,
       base + PORT_OFFSETS.portal,
       base + PORT_OFFSETS.doctor,
+      base + PORT_OFFSETS.login,
     ]);
   }
   return sets;
@@ -75,17 +79,19 @@ export async function firstFreePortSet(sets, probe) {
 /**
  * Session-log labels + the REAL wiring: every app consumes `PORT` (api via
  * apps/api/src/main.ts, the Next apps via next dev/start), so the boot lines
- * below are what actually binds the set — API_PORT/PORTAL_PORT/DOCTOR_PORT are
- * handoff labels only.
+ * below are what actually binds the set — API_PORT/PORTAL_PORT/DOCTOR_PORT/
+ * LOGIN_PORT are handoff labels only.
  */
-export function formatPortSet([api, portal, doctor]) {
+export function formatPortSet([api, portal, doctor, login]) {
   return [
     `API_PORT=${api}`,
     `PORTAL_PORT=${portal}`,
     `DOCTOR_PORT=${doctor}`,
+    `LOGIN_PORT=${login}`,
     `# boot api:    PORT=${api} pnpm --filter @ds/api start   → http://localhost:${api}`,
     `# boot portal: PORT=${portal} pnpm --filter @ds/portal start → http://localhost:${portal}`,
     `# boot doctor: PORT=${doctor} pnpm --filter @ds/doctor start → http://localhost:${doctor}`,
+    `# boot login:  PORT=${login} pnpm --filter @ds/login start  → http://localhost:${login}`,
   ];
 }
 
@@ -108,13 +114,20 @@ async function main() {
   const set = await firstFreePortSet(portSetSequence(), probePortFree);
   if (!set) {
     console.error(
-      "dev:ports: no free (api, portal, doctor) set in 3000-3904 — the box is " +
+      "dev:ports: no free (api, portal, doctor, login) set in 3000-3905 — the box is " +
         "saturated; finish or hand back a session before booting another.",
     );
     process.exit(1);
   }
   if (json) {
-    console.log(JSON.stringify({ api: set[0], portal: set[1], doctor: set[2] }));
+    console.log(
+      JSON.stringify({
+        api: set[0],
+        portal: set[1],
+        doctor: set[2],
+        login: set[3],
+      }),
+    );
   } else {
     for (const line of formatPortSet(set)) console.log(line);
   }

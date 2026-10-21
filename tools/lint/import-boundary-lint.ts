@@ -18,8 +18,10 @@
  *      cross-package import the §4 graph does not allow.
  *   2. `local/host-config-boundary` over the host-config file convention
  *      (a `host-config.ts` / `host-config.tsx` file, or a `*.host-config.*`
- *      sibling, anywhere under `apps/portal` or `apps/doctor`) —
- *      no import of `apps/<host>/{lib,components}`, and no function-valued field
+ *      sibling, anywhere under `apps/portal` or `apps/doctor`, plus the
+ *      package-kept `packages/auth-flow/src/hosts/*.host-config.ts`, #3170) —
+ *      no import of `apps/<host>/{lib,components}` (from a package: of any
+ *      app), and no function-valued field
  *      in an exported object literal outside the closed adapter list (empty until
  *      #2027 lands `HostConfig`).
  *

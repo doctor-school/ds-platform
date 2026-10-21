@@ -6,7 +6,7 @@
  * §3 rule 3, «Route mount» bullet + «Honest limit» bullet; §5).
  *
  * Why this exists: the host-file allowlist (`host-allowlist-lint.ts`) scans
- * everything under `apps/{portal,doctor}` EXCEPT Next.js route files, so the
+ * everything under `apps/{portal,doctor,login}` EXCEPT Next.js route files, so the
  * one place a storefront can still grow host logic unobserved is `page.tsx`
  * itself — fetch-and-branch written straight into the route, and the allowlist
  * stays green. §5 is explicit that the allowlist alone is necessary, not
@@ -16,7 +16,7 @@
  * else.
  *
  * What it checks (three classes, each its own finding):
- *   1. TREE — every `apps/{portal,doctor}/app/**\/{page,layout}.tsx` needs an
+ *   1. TREE — every `apps/{portal,doctor,login}/app/**\/{page,layout}.tsx` needs an
  *      exact-path row in the checked-in answer key
  *      (`capability-ownership.md` → «Route-file registry»); every row must name
  *      a live file (stale rows rot the key), no row may be a glob (one `**` row
@@ -117,6 +117,9 @@ const SCAN_GLOBS = [
   "apps/portal/app/**/layout.tsx",
   "apps/doctor/app/**/page.tsx",
   "apps/doctor/app/**/layout.tsx",
+  // #3170 — the sign-in host (ADR-0015 §4) mounts both storefronts' doors.
+  "apps/login/app/**/page.tsx",
+  "apps/login/app/**/layout.tsx",
 ];
 const SCAN_IGNORE = [
   "**/node_modules/**",
@@ -1039,7 +1042,7 @@ async function main(): Promise<void> {
   }
 
   info(
-    `OK — ${files.length} route file(s) under apps/portal/app + apps/doctor/app all carry a registry row, ` +
+    `OK — ${files.length} route file(s) under apps/portal/app + apps/doctor/app + apps/login/app all carry a registry row, ` +
       `all ${rows.length} row(s) name an exact, existing path with a recorded lifetime, ` +
       `and all ${mountedCount} \`mounted\` route(s) are mount + config only, ` +
       `with ${bindingCount} server-action binding(s) bound to their host config only.`,

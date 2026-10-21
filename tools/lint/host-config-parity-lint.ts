@@ -85,6 +85,7 @@ type FieldKind =
 interface HostSource {
   /** Storefront label as the spec tables head their columns. */
   label: "Витрина" | "Академия";
+  /** The storefront app whose `tsconfig.json` the loader child runs under. */
   app: "apps/doctor" | "apps/portal";
   module: string;
   export: string;
@@ -115,13 +116,15 @@ const PAIRS: ConfigPair[] = [
     doctor: {
       label: "Витрина",
       app: "apps/doctor",
-      module: "apps/doctor/lib/auth-flow.host-config.ts",
+      // #3170: the auth-flow host values live in the package (`@ds/auth-flow/hosts`)
+      // because the sign-in host mounts them too; each app re-exports them.
+      module: "packages/auth-flow/src/hosts/doctor.host-config.ts",
       export: "DOCTOR_AUTH_FLOW",
     },
     academy: {
       label: "Академия",
       app: "apps/portal",
-      module: "apps/portal/lib/auth-flow.host-config.ts",
+      module: "packages/auth-flow/src/hosts/academy.host-config.ts",
       export: "ACADEMY_AUTH_FLOW",
     },
     manifest: {

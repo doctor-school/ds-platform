@@ -30,6 +30,7 @@ on:
       - "apps/portal/**"
       - "apps/admin/**"
       - "apps/doctor/**"
+      - "apps/login/**"
       - "packages/**"
       - "infra/dev-stand/**"
       - ".github/workflows/runtime-images.yml"
@@ -131,6 +132,14 @@ jobs:
               target: "",
               build-args: "API_PROXY_TARGET=http://api:3000",
             }
+          # The sign-in host (ADR-0015 §4, #3170). Built, pushed and booted like
+          # every app image; NOT yet a key of the digest manifest below — see there.
+          - {
+              image: login,
+              dockerfile: apps/login/Dockerfile,
+              target: "",
+              build-args: "API_PROXY_TARGET=http://api:3000",
+            }
     env:
       PUSH: ${{ needs.plan.outputs.push }}
       # The registry host is spelled out: `env` is not available in jobs.<id>.env, so
@@ -206,7 +215,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [api, portal, admin, doctor]
+        app: [api, portal, admin, doctor, login]
     env:
       PUSH: ${{ needs.plan.outputs.push }}
     steps:
@@ -373,6 +382,11 @@ jobs:
         run: docker rm -f ds-runtime-app ds-runtime-db ds-runtime-s3 || true
 
   # The digest manifest, written only for pushed images that passed readiness.
+  # `login` (#3170) is verified above but is not a manifest key yet: every
+  # consumer refuses a record with a key outside `RECORDED_IMAGE_NAMES`
+  # (tools/deploy/lib/registry.mjs `assertImageRefs`) and pulls every key it
+  # lists, so the key lands together with the stage/prod deploy wiring of the
+  # sign-in host (#3171), never ahead of it.
   images:
     needs: [plan, build, verify]
     if: needs.plan.outputs.push == 'true'

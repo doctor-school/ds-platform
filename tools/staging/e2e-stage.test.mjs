@@ -850,6 +850,26 @@ describe("liveLegVerdict", () => {
     assert.equal(crashed.ok, false);
   });
 
+  it("names a runner that died before any test ran instead of printing zero counts", () => {
+    for (const report of [{}, undefined, counts()]) {
+      const v = liveLegVerdict({ name: "l", plan: PLAN, status: 1, report });
+      assert.equal(v.state, "fail");
+      assert.equal(v.ok, false);
+      assert.match(v.detail, /^runner exited 1 before any test ran/);
+      assert.doesNotMatch(v.detail, /ran 0 passed/);
+    }
+    // A runner that exited non-zero AFTER a test ran keeps its counts.
+    assert.match(
+      liveLegVerdict({
+        name: "l",
+        plan: PLAN,
+        status: 1,
+        report: counts("unexpected"),
+      }).detail,
+      /^ran 0 passed \/ 1 failed \/ 0 skipped/,
+    );
+  });
+
   it("passes a leg with a passed test and no failure, and lists what it did not run", () => {
     const v = liveLegVerdict({
       name: "l",
@@ -1004,6 +1024,25 @@ describe("runE2eStage — the live legs", () => {
     assert.equal(code, 1);
     assert.match(lines.join("\n"), /live\/doctor\/register-live\s+FAIL — ran/);
   });
+
+  it("prints FAIL — runner exited <code> when a leg's runner dies before any test", async () => {
+    const { lines, effects } = harness({
+      run: (argv) => ({
+        status:
+          argv.join(" ") === "pnpm --filter @ds/portal exec bddgen" ? 1 : 0,
+      }),
+      readReport: (file) => (isLiveReport(file) ? undefined : LIVE_GREEN),
+    });
+    const code = await runE2eStage(["pr-3168", "--project", "academy"], {
+      env: ENV,
+      effects,
+    });
+    assert.equal(code, 1);
+    assert.match(
+      lines.join("\n"),
+      /live\/academy\/default\s+FAIL — runner exited 1 before any test ran/,
+    );
+  });
 });
 
 // --- the release check (#2701): `--expect-sha` is the full suite on a known SHA ---
@@ -1021,7 +1060,6 @@ describe("release check (--expect-sha)", () => {
       ["--project", "doctor"],
       ["--grep", "вход"],
       ["--no-axe"],
-      ["--no-live"],
     ]) {
       assert.throws(
         () => parseE2eArgs(["main", "--expect-sha", SHA, ...extra]),
@@ -1077,6 +1115,21 @@ describe("release check (--expect-sha)", () => {
       "test:e2e",
     ]);
     assert.equal(calls[0].env.E2E_GREP, undefined);
+  });
+
+  it("leaves the live legs out and says so in the verdict — until #3191", async () => {
+    for (const extra of [[], ["--no-live"]]) {
+      const { calls, lines, effects } = harness();
+      const code = await runE2eStage(["main", "--expect-sha", SHA, ...extra], {
+        env: RELEASE_ENV,
+        effects,
+      });
+      assert.equal(code, 0);
+      assert.equal(calls.filter(isLive).length, 0);
+      const out = lines.join("\n");
+      assert.match(out, /live:\s+not run in the release check — until #3191/);
+      assert.match(out, /verdict:\s+PASS$/m);
+    }
   });
 });
 
@@ -1146,9 +1199,17 @@ describe("E2E_PUBLIC_LOG=1 — the run's console is a public Actions log", () =>
       /\/packages\/e2e\/reporters\/summary\.ts$/,
     );
     for (const call of calls) assertShellInert(call.argv);
-    for (const live of calls.filter(isLive)) {
+    assertNoLeak(lines);
+  });
+
+  it("a slot run's live legs print through the summary reporter", async () => {
+    const { calls, lines, effects } = harness({ issueState: () => "CLOSED" });
+    await runE2eStage(["pr-3168"], { env: PUBLIC_ENV, effects });
+    const live = calls.filter(isLive);
+    assert.ok(live.length > 0);
+    for (const leg of live) {
       assert.ok(
-        live.argv.includes(`--reporter=${SUMMARY_REPORTER_PATH},json,html`),
+        leg.argv.includes(`--reporter=${SUMMARY_REPORTER_PATH},json,html`),
         "a live leg prints through the summary reporter in public mode",
       );
     }

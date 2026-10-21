@@ -144,8 +144,11 @@ export function parseE2eArgs(argv) {
 
 /**
  * `--expect-sha` is the RELEASE CHECK `pnpm deploy:prod` runs before shipping (#2701):
- * the `main` slot, the whole suite, every leg. A narrowed run proves only its slice,
- * so the release check refuses any narrowing flag instead of passing on part of it.
+ * the `main` slot, the whole suite, every axe leg. A narrowed run proves only its
+ * slice, so the release check refuses any narrowing flag instead of passing on part
+ * of it. The live-tier legs are the one exception, and not a flag: the release check
+ * never runs them (see `RELEASE_CHECK_LIVE_NOTE`), so `--no-live` changes nothing
+ * there and is not refused.
  */
 function assertReleaseCheckShape(options) {
   if (options.slot !== "main") {
@@ -157,7 +160,6 @@ function assertReleaseCheckShape(options) {
     options.project !== undefined && "--project",
     options.grep !== undefined && "--grep",
     options.axe === false && "--no-axe",
-    options.live === false && "--no-live",
   ].filter(Boolean);
   if (narrowing.length > 0) {
     throw new SlotError(
@@ -325,6 +327,14 @@ export function planLiveLeg(tier, available) {
 }
 
 /**
+ * The release check (`--expect-sha`) does not run the live-tier legs: on a slot they
+ * still fail on spec-side reds and lack operator env, which #3191 resolves before
+ * bringing them into the release check. The omission is printed, never silent.
+ */
+export const RELEASE_CHECK_LIVE_NOTE =
+  "not run in the release check — until #3191";
+
+/**
  * A live leg's verdict. `ok` is what the exit code folds: a leg that RAN with a
  * failure (or exited non-zero) is fatal; a leg that ran nothing — never launched
  * for missing env, or every test skipped — is SKIPPED: printed loudly, never
@@ -352,12 +362,18 @@ export function liveLegVerdict({ name, plan, status, report }) {
     : "";
   const state =
     status !== 0 || failed > 0 ? "fail" : passed === 0 ? "skipped" : "pass";
+  // A runner that died before any test (a failed `prepare`, a config that throws at
+  // load) leaves no report: «ran 0 / 0 / 0» would read as an empty run, so the
+  // verdict names the exit instead.
+  const diedBeforeTests = status !== 0 && passed + failed + skipped === 0;
   return {
     name,
     ok: state !== "fail",
     state,
     launched: true,
-    detail: `ran ${passed} passed / ${failed} failed / ${skipped} skipped${notRun}`,
+    detail: diedBeforeTests
+      ? `runner exited ${status} before any test ran${notRun}`
+      : `ran ${passed} passed / ${failed} failed / ${skipped} skipped${notRun}`,
   };
 }
 
@@ -482,6 +498,7 @@ export function renderVerdictBlock({
   summary,
   legs,
   live = [],
+  liveNote,
   axeNote,
   reportDir,
   preflightReason,
@@ -508,6 +525,7 @@ export function renderVerdictBlock({
     const text = leg.launched ? `${label} — ${leg.detail}` : leg.detail;
     return `${leg.name.padEnd(nameWidth)}${text}`;
   });
+  if (liveNote) lines.push(row("live", liveNote));
   if (liveLines.length > 0) {
     lines.push(row("live", liveLines[0]));
     for (const extra of liveLines.slice(1)) lines.push(indent(extra));
@@ -759,8 +777,10 @@ export async function runE2eStage(
   // The storefront LIVE-TIER configs (#3168): one leg each, selected by host like
   // the axe legs. Each leg gets the suite env plus the stand's IdP and Mailpit;
   // what the operator exported on top (an operator key) counts as available.
+  // The release check leaves them out and says so in the verdict (#3191).
+  const releaseCheck = options.expectSha !== undefined;
   const live = [];
-  if (options.live) {
+  if (options.live && !releaseCheck) {
     for (const tier of LIVE_TIERS.filter((t) => axeHost(t.host))) {
       const reporting = liveLegReporting(
         env,
@@ -827,6 +847,7 @@ export async function runE2eStage(
       summary,
       legs,
       live,
+      liveNote: releaseCheck ? RELEASE_CHECK_LIVE_NOTE : undefined,
       axeNote: axe.note,
       reportDir,
     }),

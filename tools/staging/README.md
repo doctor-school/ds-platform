@@ -228,10 +228,13 @@ regressions. Raise the slot with `pnpm stage:slot up <slot> --ref <sha>` first.
 
 `pnpm e2e:stage main --expect-sha <40-char sha>` is the release check (tech spec C7,
 #2701). It is the full run and nothing less: it refuses any slot but `main`, any
-`--project` / `--grep` / `--no-axe` / `--no-live`, an `E2E_GREP` in the env (the config would compile
+`--project` / `--grep` / `--no-axe`, an `E2E_GREP` in the env (the config would compile
 it into a filter) and a missing `CI` (without it Playwright's `forbidOnly` is off). It
 then asserts the slot's `/v1/health` serves exactly that SHA before a scenario runs, and
-exits **2** on any of these refusals. You do not normally run it by hand: `pnpm
+exits **2** on any of these refusals. It does **not** run the storefront live-tier legs
+(below) and prints `live: not run in the release check — until #3191` instead, so the
+omission is visible in the release record; #3191 brings them into the release check once
+their spec-side reds and missing slot env are resolved. You do not normally run it by hand: `pnpm
 deploy:prod` runs it as its last pre-flight step, from a clean detached checkout of the
 target SHA, right after `stage:slot up main --ref <sha>` converged the slot
 (`tools/deploy/README.md` → «Stage `main` check»). Nothing is written to GitHub.
@@ -345,7 +348,8 @@ Each leg gets the suite env plus `IDP_ISSUER=https://id.<base domain>` and
 `MAILPIT_URL=https://mailpit.<base domain>` (hostnames, never `127.0.0.1`: Playwright
 sends no `__Host-` cookie there); the doctor configs answer the basic-auth challenge
 through `@ds/e2e/stand-http-credentials`. `--project academy|doctor` selects legs like
-the axe legs (`walks` selects none); `--no-live` drops them (refused by `--expect-sha`).
+the axe legs (`walks` selects none); `--no-live` drops them. The release check
+(`--expect-sha`) never runs them and says so in its verdict — until #3191.
 
 A slot cannot supply operator keys (`IDP_SERVICE_TOKEN`, `IDP_PROJECT_ID`, a branch
 `DATABASE_URL`), a reused doctor account (`E2E_DOCTOR_EMAIL`/`_PASSWORD`) or seeded
@@ -358,6 +362,8 @@ one `live:` line per config:
 
 - `PASS — ran N passed / 0 failed / M skipped` — at least one test passed;
 - `FAIL — ran …` — a test failed or the run exited non-zero: **fatal** (exit `1`);
+- `FAIL — runner exited <code> before any test ran` — the runner (or the leg's `prepare`,
+  e.g. `bddgen`) died before its report held a single test: **fatal**;
 - `SKIPPED — ran 0 passed / 0 failed / M skipped` — every test skipped, never green;
 - `skipped — missing env <names>` — the config was not launched.
 

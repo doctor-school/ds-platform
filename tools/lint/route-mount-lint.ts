@@ -33,7 +33,9 @@
  *      shorthand elements only (no renamed or computed key, no rest, no
  *      default, no import's name) — whose body is a single `return` of the
  *      package mount with props built from identifiers and literals, optionally
- *      preceded by `await` of the route props (`params` / `searchParams`).
+ *      preceded by `await` of the route props (`params` / `searchParams`) into
+ *      one plain name or shorthand plain names (no default, computed or renamed
+ *      key, rest, or import's name — the page-parameter allowlist).
  *      Anything else — a `fetch`, another `await`, `if` / ternary / `&&`
  *      branching, `try`, a call that is not the mount — is a finding.
  *      SERVER-ACTION BINDING — a server action cannot live in the package
@@ -43,13 +45,14 @@
  *      same-directory sibling (`./<name>`) that is nothing but that binding,
  *      and the sibling is parsed too: a `"use server"` directive; imports only
  *      from the row's package (and subpaths), the host-config module and
- *      `import type … from "react"`; every other top-level statement an
- *      exported async function whose parameters are plain identifiers (no
- *      default value, no destructuring, no import's name — either would run or
+ *      `import type … from "react"`; every other top-level statement a NAMED
+ *      exported async function — exactly the names the route imports from it,
+ *      no default or extra export — whose parameters are plain identifiers (no
+ *      `this`, default value, destructuring or import's name — either would run or
  *      shadow host code beside a thin-looking body) and whose body is a single
  *      `return <packageFn>(<HOST_CONFIG>, …)` — the callee imported from the
  *      package, the first argument imported from the host-config module, every
- *      further argument a bare identifier naming an import, the export itself
+ *      further argument a bare identifier naming a value import, the export itself
  *      or one of its parameters (an allowlist: no arrow, member read, literal
  *      or expression). Anything else
  *      in the sibling is a finding, so host logic cannot hide there.
@@ -256,6 +259,12 @@ function plainParam(
     );
     return null;
   }
+  if (name.text === "this") {
+    findings.push(
+      `${rel}:${line}: a \`this\` parameter — ${why}`,
+    );
+    return null;
+  }
   let ok = true;
   if (init) {
     ok = false;
@@ -372,6 +381,58 @@ function pageParams(
   }
 }
 
+/**
+ * The left side of `const <name> = await params|searchParams` in a page body,
+ * held to the same allowlist as the page's parameters: one plain identifier, or
+ * an object pattern of shorthand plain identifiers — no default, computed or
+ * renamed key, rest, nested pattern, or import's name. A default or computed key
+ * runs before the mount; a rename can shadow the mount import.
+ */
+function awaitedNames(
+  name: ts.BindingName,
+  d: ts.VariableDeclaration,
+  imports: Set<string>,
+  sf: ts.SourceFile,
+  rel: string,
+  findings: string[],
+): void {
+  const why =
+    "a mounted route file may only await its route props into plain names before the mount";
+  if (!ts.isObjectBindingPattern(name)) {
+    plainParam(name, undefined, false, d, imports, sf, rel, findings, why);
+    return;
+  }
+  for (const el of name.elements) {
+    if (el.propertyName || el.dotDotDotToken || !ts.isIdentifier(el.name)) {
+      const line = sf.getLineAndCharacterOfPosition(el.getStart(sf)).line + 1;
+      findings.push(
+        `${rel}:${line}: awaited route-prop element \`${el.getText(sf).replace(/\s+/g, " ").slice(0, 60)}\` is not a shorthand name — ${why}`,
+      );
+      continue;
+    }
+    plainParam(el.name, el.initializer, false, el, imports, sf, rel, findings, why);
+  }
+}
+
+/**
+ * Local names bound by VALUE imports of `sf` — a type-only import or specifier
+ * names no runtime value, so it is never a legal call argument.
+ */
+function valueImportBindings(sf: ts.SourceFile): Set<string> {
+  const names = new Set<string>();
+  for (const st of sf.statements) {
+    if (!ts.isImportDeclaration(st)) continue;
+    const clause = st.importClause;
+    if (!clause || clause.isTypeOnly) continue;
+    if (clause.name) names.add(clause.name.text);
+    const b = clause.namedBindings;
+    if (b && ts.isNamespaceImport(b)) names.add(b.name.text);
+    if (b && ts.isNamedImports(b))
+      for (const e of b.elements) if (!e.isTypeOnly) names.add(e.name.text);
+  }
+  return names;
+}
+
 /** Names imported from the row's package — the only legal mount targets. */
 function collectMountNames(
   decl: ts.ImportDeclaration,
@@ -426,7 +487,11 @@ function hasModifier(st: ts.Statement, kind: ts.SyntaxKind): boolean {
  * `return <packageFn>(<HOST_CONFIG>, …)` — so the binding names its config and
  * nothing else.
  */
-function checkBinding(rel: string, pkg: string): string[] {
+function checkBinding(
+  rel: string,
+  pkg: string,
+  needed: Set<string>,
+): string[] {
   const findings: string[] = [];
   const src = readFileSync(resolve(REPO_ROOT, rel), "utf8");
   const sf = ts.createSourceFile(
@@ -445,6 +510,8 @@ function checkBinding(rel: string, pkg: string): string[] {
   const pkgFns = new Set<string>();
   const configs = new Set<string>();
   const imports = importBindings(sf);
+  const valueImports = valueImportBindings(sf);
+  const exported = new Set<string>();
   const stmts = sf.statements;
   const first = stmts[0];
   const directive =
@@ -493,6 +560,17 @@ function checkBinding(rel: string, pkg: string): string[] {
       continue;
     }
     exportsSeen += 1;
+    // Exactly the actions the route imports, each a named export: a default or
+    // extra export is surface the route never mounts.
+    if (hasModifier(st, ts.SyntaxKind.DefaultKeyword) || !st.name) {
+      beyond(st, "a default export — a binding's actions are named exports");
+    } else if (!needed.has(st.name.text)) {
+      findings.push(
+        `${rel}:${at(st)}: \`${st.name.text}\` is not imported by the route file — a server-action binding exports exactly the actions its route imports`,
+      );
+    } else {
+      exported.add(st.name.text);
+    }
     const own = bindingParams(st.parameters, imports, sf, rel, findings);
     if (st.name) own.add(st.name.text);
     const body = st.body?.statements ?? ts.factory.createNodeArray();
@@ -522,7 +600,7 @@ function checkBinding(rel: string, pkg: string): string[] {
     // naming an import, the export itself or one of its own parameters, so no
     // arrow, member read or expression can carry host logic into the call.
     for (const a of rest) {
-      if (ts.isIdentifier(a) && (imports.has(a.text) || own.has(a.text)))
+      if (ts.isIdentifier(a) && (valueImports.has(a.text) || own.has(a.text)))
         continue;
       findings.push(
         `${rel}:${at(a)}: argument \`${a.getText(sf).replace(/\s+/g, " ").slice(0, 40)}\` is not a bare import, the export itself or one of its parameters — a server-action binding passes its inputs through unchanged`,
@@ -533,6 +611,14 @@ function checkBinding(rel: string, pkg: string): string[] {
     findings.push(
       `${rel}: no exported async function — a server-action binding exports the bound action`,
     );
+  }
+  if (directive) {
+    for (const n of needed) {
+      if (exported.has(n)) continue;
+      findings.push(
+        `${rel}: the route imports \`${n}\`, which is not a named exported async function here — a server-action binding exports exactly the actions its route imports`,
+      );
+    }
   }
   return findings;
 }
@@ -559,6 +645,8 @@ function checkMount(
     );
   const mounts = new Set<string>();
   const bindings: string[] = [];
+  /** Export names the route imports from its binding (`propertyName` when renamed). */
+  const bindingNames = new Set<string>();
   let fn:
     | ts.FunctionDeclaration
     | ts.ArrowFunction
@@ -576,8 +664,19 @@ function checkMount(
         spec === "next" && st.importClause?.isTypeOnly === true;
       const sibling = fromPkg || isHostConfig ? null : siblingOf(rel, spec);
       if (fromPkg) collectMountNames(st, mounts);
-      else if (sibling && bindings.length === 0) bindings.push(sibling);
-      else if (sibling) {
+      else if (sibling && bindings.length === 0) {
+        bindings.push(sibling);
+        const clause = st.importClause;
+        const b = clause?.namedBindings;
+        if (!clause || clause.isTypeOnly || clause.name || !b || !ts.isNamedImports(b)) {
+          findings.push(
+            `${rel}:${at(st)}: the binding \`${spec}\` is not imported by name — a mounted route file imports its server actions as \`import { action } from "./<binding>"\``,
+          );
+        } else {
+          for (const e of b.elements)
+            if (!e.isTypeOnly) bindingNames.add((e.propertyName ?? e.name).text);
+        }
+      } else if (sibling) {
         findings.push(
           `${rel}:${at(st)}: a second sibling \`${spec}\` — a mounted route file imports ONE server-action binding at most`,
         );
@@ -624,7 +723,8 @@ function checkMount(
     );
   }
 
-  for (const b of bindings) findings.push(...checkBinding(b, pkg));
+  for (const b of bindings)
+    findings.push(...checkBinding(b, pkg, bindingNames));
   const done = () => ({ findings, bindings: bindings.length });
 
   if (!fn) {
@@ -633,7 +733,8 @@ function checkMount(
     );
     return done();
   }
-  pageParams(fn.parameters, importBindings(sf), sf, rel, findings);
+  const pageImports = importBindings(sf);
+  pageParams(fn.parameters, pageImports, sf, rel, findings);
 
   const checkMountExpr = (expr: ts.Expression | undefined, node: ts.Node) => {
     let e = expr;
@@ -681,6 +782,7 @@ function checkMount(
           isRouteProp(init.expression)
         ) {
           banWalk(init.expression, sf, rel, findings);
+          awaitedNames(d.name, d, pageImports, sf, rel, findings);
           continue;
         }
         beyond(

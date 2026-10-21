@@ -186,6 +186,73 @@ describe("route-mount-lint", () => {
     expect(stderr).toContain("route-prop element `...searchParams`");
   });
 
+  it("2074: red — the page body destructures the awaited route props with a default computing a fetch → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-mount-body-destructure-default"),
+      { env: TREE_ONLY },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
+    expect(stderr).toContain("parameter `q` has a default value");
+  });
+
+  it("2074: red — the page body destructures the awaited route props under a computed key → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-mount-body-computed-key"),
+      { env: TREE_ONLY },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
+    expect(stderr).toContain("awaited route-prop element");
+  });
+
+  it("2074: red — the page body renames an awaited route prop onto the mount import's name → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-mount-body-shadow"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
+    expect(stderr).toContain("awaited route-prop element `q: EventsListingPage`");
+  });
+
+  it("2074: red — a binding exporting an action the page does not import → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-second-export"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("`unusedSecondAction` is not imported by the route file");
+  });
+
+  it("2074: red — a binding whose action is a default export → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-default-export"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("a default export");
+  });
+
+  it("2074: red — a binding export declaring a `this` parameter → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-this-param"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("a `this` parameter");
+  });
+
+  it("2074: red — a binding passing a type-only import as an argument → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-type-arg"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("argument `EventsBlockRetryInput`");
+  });
+
   it("2002: red — a route file with no registry row → exit 1", () => {
     const { code, stderr } = runGuard(GUARD, dir("red-unregistered"), {
       env: TREE_ONLY,

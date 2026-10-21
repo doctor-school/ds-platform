@@ -1551,6 +1551,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the Academy callback mints a fresh session and answers 303 to "/webinars/some-event#"
     And the authorization code never appears in a rendered document
 
+  @EARS-61 @EARS-62 @failure @return-path-hardening
+  Scenario: A hostile return path or redirect URI never leaves the storefront
+    Given a signed-out browser on the Academy
+    When the guest opens the Academy sign-in entry with a returnTo of "//evil.example", "https://evil.example" or "/\evil.example"
+    Then the stored return path is "/" and the sign-in ends on "/#"
+    When the guest opens it with a returnTo path longer than 2048 characters
+    Then the return path is cut to its path, or to "/" when the path alone is longer
+    When an authorize request names a look-alike redirect_uri for the Academy client
+    Then no authorization code is issued to it
+
   @EARS-60 @failure @sign-in-host-client-map
   Scenario: The sign-in host refuses an admin or unknown client and renders no form
     Given an auth request created for the admin client and one for an unknown client
@@ -1639,6 +1649,17 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When an auth request with prompt=login arrives in the original browser
     Then the sign-in form is shown even though the shared session is live
 
+  @EARS-39 @EARS-41 @EARS-66 @failure @sign-in-host-cold-code-step
+  Scenario: A cold registration code step on the sign-in host signs in while the auth request lives and returns to the storefront when it is stale
+    Given a guest registered from the Academy entry and reached the code step on the sign-in host
+    When the guest reloads the code step while the auth request is live and enters the code
+    Then the guest is signed in by the code and the auth request is finalised
+    And the Academy callback lands the guest on the stored return path
+    Given another guest whose code step page outlived its auth request
+    When that guest reloads the code step
+    Then the sign-in host treats it as a stale request and redirects to the Academy "/login" entry
+    And the Academy entry starts a new interactive transaction with no error shown
+
   @EARS-66 @EARS-67 @failure @sign-in-host-stale
   Scenario: A stale auth request returns to its storefront and a direct visit goes to the doctor storefront
     Given an Academy auth request this browser opened that Zitadel no longer returns
@@ -1686,9 +1707,19 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the visitor follows "/login?method=code&handoff=<ref>&returnTo=/account" on the Academy
     Then the sign-in host finalises with that record, sends no code and shows no form
     And the visitor lands signed in on "/account" with no more authentication than the record already had
-    When a visitor whose browser holds a live sign-in-host record follows a refused hand-off reference with "returnTo=/account"
-    Then the sign-in host finalises with that record and shows no form
-    And the visitor lands signed in on "/account" rather than on the landing
+
+  @EARS-44 @EARS-64 @failure @handoff-refused-live-record
+  Scenario: An expired hand-off in a browser holding a colleague's session opens the code form, never the colleague's cabinet
+    Given the browser holds a live sign-in-host record of a colleague's account
+    And the browser has no storefront session on the Academy
+    And a hand-off reference of the participant's account that expired after 24 hours
+    When the participant follows "/login?method=code&handoff=<ref>&returnTo=/account" on the Academy
+    Then the sign-in host does not finalise with the colleague's record
+    And it shows the code method in the EARS-43 entry state and sends no code
+    And the colleague's "/account" is not shown
+    When the participant requests and enters a code sent to their own address
+    Then the colleague's record and every storefront session linked to it are ended
+    And the participant lands signed in on "/account" in their own account
 
   @EARS-71 @failure @entry-intent-id
   Scenario: An unknown, spent or foreign entry-intent id opens the plain sign-in form

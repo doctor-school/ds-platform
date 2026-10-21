@@ -1434,3 +1434,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the email login guest submits a different valid six-digit code and receives the generic refusal
     And the refused email login guest enters the retained actual code without requesting another
     Then the recovered email login session persists for the same verified doctor through reload
+
+  @EARS-12 @EARS-16 @EARS-35 @EARS-53 @EARS-58 @failure @sms-reset-code-refusal
+  Scenario: Academy refuses a wrong SMS reset code and accepts the retained real code without losing the owner
+    Given an owned Academy SMS-reset refusal account verifies email and confirms a fresh phone while staying signed in
+    When an independent Academy guest retains the real addressed SMS reset code and submits different valid digits with a new password
+    Then the SMS reset refusal preserves the original owner's session identity and password without replacing the retained challenge
+    When the SMS reset guest submits that same retained delivered code with the distinct new password
+    Then SMS reset completion revokes the prior owner session and the new password signs in the original doctor before owned logout
+    # Mapping: password-reset-sms-refusal.steps.ts (#3101). Retain the broader
+    # SMS-reset scenario and native password-reset e2e: this projection adds
+    # wrong-code refusal, owner preservation and retained SMS recovery.

@@ -1738,3 +1738,26 @@ is used, and the selection runs unchanged with stage configuration.
 Native `apps/api/test/auth/login-otp.e2e-spec.ts` retains IdP and timing proof;
 the existing verified-request, incomplete-code and consumed-replay scenarios
 remain complementary. No runtime or render surface changes, Stage-B or slot.
+
+### Wrong SMS reset code and retained-code recovery (003 EARS-12/16/35/53/58)
+
+`Academy refuses a wrong SMS reset code and accepts the retained real code without losing the owner`
+(`steps/password-reset-sms-refusal.steps.ts`, #3101, `@sms-reset-code-refusal`)
+creates a unique verified password account and confirms a fresh phone through
+real profile/SMS UI. An independent guest requests a real phone reset and retains
+the addressed sink delivery after a store message-ID checkpoint. Different valid
+six-digit input receives the generic 400 with no guest session; the original
+owner's subject, verified profile, session cookie and actual old-password login
+survive. Without another reset request, the same delivered SMS code completes
+the reset, revokes the original session and permits the new password to sign in
+the same subject through the actual form and account reload.
+
+Password submissions use the shared gate with a successful owned login closure,
+whose session is revoked. All owned browser/request contexts remain reachable
+for exact-session cleanup even on failure; cleanup preserves the original
+failure. Trace-off auth fixtures and boolean projections keep codes, passwords
+and session cookies out of assertion diagnostics. No real expiry wait, quota
+threshold, provider/counter mutation or product/helper/config change is involved.
+The selection runs unchanged under stage basic authentication. Native reset e2e
+and the existing SMS happy path remain complementary. No render surface or
+owner Stage-B slot is introduced.

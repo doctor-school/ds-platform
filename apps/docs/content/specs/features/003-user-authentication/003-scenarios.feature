@@ -1458,6 +1458,12 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the refused email login guest enters the retained actual code without requesting another
     Then the recovered email login session persists for the same verified doctor through reload
 
+  @host:academy @EARS-12 @EARS-16 @EARS-53 @failure @reset-sms-code-reuse
+  Scenario: A consumed SMS reset code cannot replace the recovered owner password
+    Given a uniquely owned phone-confirmed Academy account consumes its delivered SMS password reset code once
+    When a guest Academy browser replays that consumed SMS reset code with a different private password
+    Then the accepted SMS reset password still opens the same phone-confirmed Academy account while the replay password cannot sign in
+
   @EARS-12 @EARS-16 @EARS-35 @EARS-53 @EARS-58 @failure @sms-reset-code-refusal
   Scenario: Academy refuses a wrong SMS reset code and accepts the retained real code without losing the owner
     Given an owned Academy SMS-reset refusal account verifies email and confirms a fresh phone while staying signed in

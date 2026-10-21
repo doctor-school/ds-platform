@@ -11,3 +11,4 @@
  * build unless declared here (`globals-tailwind-source.test.ts`).
  */
 @source "../../../packages/auth-flow/src";
+@source "../../../packages/storefront-shell/src";

@@ -27,8 +27,15 @@ export const THEME_STORAGE_KEY = "ds-theme";
 
 export type Theme = "light" | "dark";
 
-/** The media query whose `matches` is the system half of the resolution. */
-export const SYSTEM_DARK_QUERY = "(prefers-color-scheme: dark)";
+/**
+ * The media query of the system half of the resolution, and the pre-paint
+ * script built on it, live in the shared storefront store (the sign-in host's
+ * Academy variant mounts the same script, #3170).
+ */
+export {
+  SYSTEM_DARK_QUERY,
+  THEME_INIT_SCRIPT,
+} from "@ds/storefront-shell/theme";
 
 /**
  * The one resolution rule: a stored EXPLICIT choice (`"light"`/`"dark"`) wins;
@@ -68,22 +75,3 @@ export function persistTheme(theme: Theme): void {
   }
   applyTheme(theme);
 }
-
-/**
- * The FOUC-guard inline script (EARS-12 — "applies the resolved theme before
- * first paint"). Self-contained ES5-safe source: same resolution as
- * {@link resolveTheme}, `try`-wrapped so blocked storage degrades to the system
- * scheme, and it TOGGLES (never only adds) so a stale `.dark` on a restored DOM
- * is corrected too. Parity with `resolveTheme` is pinned by `theme.test.ts`.
- */
-export const THEME_INIT_SCRIPT = `(function () {
-  var stored = null;
-  try {
-    stored = window.localStorage.getItem("${THEME_STORAGE_KEY}");
-  } catch (e) {}
-  var dark =
-    stored === "dark" ||
-    (stored !== "light" &&
-      window.matchMedia("${SYSTEM_DARK_QUERY}").matches);
-  document.documentElement.classList.toggle("dark", dark);
-})();`;

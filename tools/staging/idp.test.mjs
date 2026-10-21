@@ -11,7 +11,11 @@ import {
   IdpError,
   convergeGoldenIdentities,
   convergeRedirectUris,
+  convergeStorefrontClients,
   createIdpClient,
+  planStorefrontClients,
+  storefrontAppName,
+  storefrontClientConfig,
   goldenDeletedSubject,
   parseGoldenSubjectsEnv,
   planGoldenIdentities,
@@ -1134,4 +1138,131 @@ test("a missing password is generated and persisted BEFORE the first IdP write",
   assert.equal(h.writes[0].afterCalls, 0);
   const pw = h.calls.find((c) => c.key === "POST /v2/users/id-agent/password");
   assert.equal(pw.body.newPassword.password, "Generated-Pw-1!");
+});
+
+// --- per-slot storefront clients (003 EARS-60, ADR-0015 §4) -------------------
+
+const BASE = "stage.example";
+
+test("003 EARS-60: a slot's storefront client names exactly its own callback, post-logout, sign-in host and back-channel", () => {
+  const config = storefrontClientConfig({ storefront: "academy", slot: "pr-12", baseDomain: BASE });
+  assert.deepEqual(config.redirectUris, ["https://academy-pr-12.stage.example/auth/callback"]);
+  assert.deepEqual(config.postLogoutRedirectUris, ["https://academy-pr-12.stage.example/"]);
+  assert.deepEqual(config.loginVersion, { loginV2: { baseUri: "https://login-pr-12.stage.example" } });
+  assert.equal(config.backChannelLogoutUri, "https://api-pr-12.stage.example/v1/auth/back-channel-logout");
+  assert.equal(config.authMethodType, "OIDC_AUTH_METHOD_TYPE_PRIVATE_KEY_JWT");
+  assert.equal(config.devMode, false);
+  assert.equal("name" in config, false);
+  const doctor = storefrontClientConfig({ storefront: "doctor", slot: "pr-12", baseDomain: BASE });
+  assert.deepEqual(doctor.redirectUris, ["https://doctor-pr-12.stage.example/auth/callback"]);
+});
+
+test("003 EARS-60: a wildcard base domain or an unknown storefront is refused, never registered", () => {
+  assert.throws(
+    () => storefrontClientConfig({ storefront: "academy", slot: "pr-1", baseDomain: "*.example" }),
+    IdpError,
+  );
+  assert.throws(
+    () => storefrontClientConfig({ storefront: "admin", slot: "pr-1", baseDomain: BASE }),
+    IdpError,
+  );
+});
+
+test("003 EARS-60: the plan creates a live slot's absent clients, keeps converged ones, updates drift and removes a gone slot's", () => {
+  const converged = (storefront, slot) => ({
+    id: `id-${storefront}-${slot}`,
+    name: storefrontAppName(storefront, slot),
+    oidcConfig: storefrontClientConfig({ storefront, slot, baseDomain: BASE }),
+  });
+  const drifted = {
+    ...converged("doctor", "main"),
+    oidcConfig: {
+      ...storefrontClientConfig({ storefront: "doctor", slot: "main", baseDomain: BASE }),
+      redirectUris: [
+        "https://doctor-main.stage.example/auth/callback",
+        "https://evil.example/auth/callback",
+      ],
+    },
+  };
+  const plan = planStorefrontClients({
+    slots: ["main", "pr-7"],
+    baseDomain: BASE,
+    existing: [
+      converged("academy", "main"),
+      drifted,
+      converged("academy", "pr-3"),
+      // Never touched: the shared headless app and the dev-default clients.
+      { id: "headless", name: "ds-platform-dev" },
+      { id: "dev-academy", name: "ds-storefront-academy" },
+    ],
+  });
+  assert.deepEqual(
+    plan.create.map((item) => item.name),
+    ["ds-storefront-academy-pr-7", "ds-storefront-doctor-pr-7"],
+  );
+  assert.deepEqual(plan.update.map((item) => item.appId), ["id-doctor-main"]);
+  assert.deepEqual(plan.update[0].body.redirectUris, ["https://doctor-main.stage.example/auth/callback"]);
+  assert.deepEqual(plan.remove, [{ appId: "id-academy-pr-3", name: "ds-storefront-academy-pr-3" }]);
+  assert.equal(plan.keep, 1);
+});
+
+test("003 EARS-60: the converge creates, rewrites and deletes over the IdP and leaves the headless app alone", async () => {
+  const calls = [];
+  const client = createIdpClient({
+    fetch: stubFetch(
+      {
+        "POST /management/v1/projects/_search": {
+          body: { result: [{ id: "p1", name: "ds-platform-dev" }] },
+        },
+        "POST /management/v1/projects/p1/apps/_search": {
+          body: {
+            result: [
+              { id: "a1", name: "ds-platform-dev" },
+              { id: "old", name: "ds-storefront-doctor-pr-3", oidcConfig: {} },
+            ],
+          },
+        },
+        "POST /management/v1/projects/p1/apps/oidc": { body: { appId: "new", clientId: "c" } },
+        "DELETE /management/v1/projects/p1/apps/old": { body: {} },
+      },
+      calls,
+    ),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  const lines = [];
+  const result = await convergeStorefrontClients({
+    client,
+    slots: ["pr-9"],
+    baseDomain: BASE,
+    log: (line) => lines.push(line),
+  });
+  const keys = calls.map((call) => call.key);
+  assert.equal(calls[1].body.queries[0].nameQuery.method, "TEXT_QUERY_METHOD_STARTS_WITH");
+  assert.deepEqual(
+    calls.filter((call) => call.key.endsWith("/apps/oidc")).map((call) => call.body.name),
+    ["ds-storefront-academy-pr-9", "ds-storefront-doctor-pr-9"],
+  );
+  assert.ok(keys.includes("DELETE /management/v1/projects/p1/apps/old"));
+  assert.ok(!keys.some((key) => key.includes("/apps/a1")));
+  assert.equal(result.create.length, 2);
+  assert.ok(!lines.join(" ").includes("pat-value"));
+});
+
+test("003 EARS-60: a failed storefront client write aborts the converge", async () => {
+  const client = createIdpClient({
+    fetch: stubFetch({
+      "POST /management/v1/projects/_search": {
+        body: { result: [{ id: "p1", name: "ds-platform-dev" }] },
+      },
+      "POST /management/v1/projects/p1/apps/_search": { body: { result: [] } },
+      "POST /management/v1/projects/p1/apps/oidc": { status: 500, body: {} },
+    }),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  await assert.rejects(
+    convergeStorefrontClients({ client, slots: ["pr-9"], baseDomain: BASE }),
+    IdpError,
+  );
 });

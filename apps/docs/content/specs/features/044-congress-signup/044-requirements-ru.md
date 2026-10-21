@@ -43,6 +43,13 @@ issues:
     2382,
     2383,
     2384,
+    3169,
+    3170,
+    3171,
+    3172,
+    3173,
+    3174,
+    3175,
   ]
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/19

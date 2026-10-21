@@ -662,6 +662,139 @@ export async function convergeRedirectUris({
   );
 }
 
+// --- storefront OIDC clients per slot (003 EARS-60, ADR-0015 §4) -------------
+
+/** The two storefronts that each get their own confidential OIDC client. */
+export const STOREFRONTS = Object.freeze(["academy", "doctor"]);
+const STOREFRONT_APP_PREFIX = "ds-storefront-";
+const SLOT_STOREFRONT_APP_RE = /^ds-storefront-(academy|doctor)-([a-z0-9][a-z0-9-]*)$/;
+
+/** `ds-storefront-<storefront>-<slot>` — the per-slot client's app name. */
+export function storefrontAppName(storefront, slot) {
+  return `${STOREFRONT_APP_PREFIX}${storefront}-${slot}`;
+}
+
+const assertExactUri = (uri) => {
+  // The same refusal provision.sh applies: one exact absolute https URI, never a
+  // wildcard / query / glob / list (ADR-0015 §4 req. 1).
+  if (!/^https:\/\/[^/\s]+(\/\S*)?$/.test(uri) || /[*?[,]/.test(uri)) {
+    throw new IdpError(`refusing to register a non-exact storefront URI: ${JSON.stringify(uri)}`);
+  }
+  return uri;
+};
+
+/**
+ * The oidc_config of one slot's storefront client, minus `name` — the stage shape of
+ * the payload `provision.sh` step 3.bis builds: exactly one callback and one
+ * post-logout URI on the slot's own storefront host, `private_key_jwt`, the slot's
+ * sign-in host `login-<slot>` as this app's OWN Login V2 base_uri, and the slot API's
+ * back-channel logout endpoint. Every URI is https, so dev mode stays off.
+ */
+export function storefrontClientConfig({ storefront, slot, baseDomain }) {
+  if (!STOREFRONTS.includes(storefront)) {
+    throw new IdpError(`unknown storefront ${JSON.stringify(storefront)}`);
+  }
+  const origin = `https://${storefront}-${slot}.${baseDomain}`;
+  return {
+    redirectUris: [assertExactUri(`${origin}/auth/callback`)],
+    postLogoutRedirectUris: [assertExactUri(`${origin}/`)],
+    responseTypes: ["OIDC_RESPONSE_TYPE_CODE"],
+    grantTypes: ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE", "OIDC_GRANT_TYPE_REFRESH_TOKEN"],
+    appType: "OIDC_APP_TYPE_WEB",
+    authMethodType: "OIDC_AUTH_METHOD_TYPE_PRIVATE_KEY_JWT",
+    version: "OIDC_VERSION_1_0",
+    devMode: false,
+    accessTokenType: "OIDC_TOKEN_TYPE_JWT",
+    accessTokenRoleAssertion: true,
+    idTokenRoleAssertion: true,
+    idTokenUserinfoAssertion: true,
+    backChannelLogoutUri: assertExactUri(
+      `https://api-${slot}.${baseDomain}/v1/auth/back-channel-logout`,
+    ),
+    loginVersion: { loginV2: { baseUri: assertExactUri(`https://login-${slot}.${baseDomain}`) } },
+  };
+}
+
+const sameStorefrontConfig = (current, want) =>
+  sameSet(current?.redirectUris, want.redirectUris) &&
+  (current?.redirectUris ?? []).length === want.redirectUris.length &&
+  sameSet(current?.postLogoutRedirectUris, want.postLogoutRedirectUris) &&
+  (current?.postLogoutRedirectUris ?? []).length === want.postLogoutRedirectUris.length &&
+  current?.authMethodType === want.authMethodType &&
+  Boolean(current?.devMode) === want.devMode &&
+  current?.backChannelLogoutUri === want.backChannelLogoutUri &&
+  current?.loginVersion?.loginV2?.baseUri === want.loginVersion.loginV2.baseUri;
+
+/**
+ * What the per-slot storefront clients need: a `create` for each live slot's absent
+ * client, an `update` for one whose config drifted, a `remove` for a slot client no
+ * live slot owns (a `down`, or a slot that vanished — the whole-registry sweep). Apps
+ * outside the `ds-storefront-<storefront>-<slot>` shape — the shared headless app, the
+ * dev-default `ds-storefront-<storefront>` clients — are never touched.
+ */
+export function planStorefrontClients({ slots, baseDomain, existing }) {
+  const live = new Set(slots ?? []);
+  const byName = new Map();
+  const remove = [];
+  for (const app of existing ?? []) {
+    const match = SLOT_STOREFRONT_APP_RE.exec(app?.name ?? "");
+    if (!match) continue;
+    if (live.has(match[2])) byName.set(app.name, app);
+    else remove.push({ appId: app.id, name: app.name });
+  }
+  const create = [];
+  const update = [];
+  let keep = 0;
+  for (const slot of [...live].sort()) {
+    for (const storefront of STOREFRONTS) {
+      const name = storefrontAppName(storefront, slot);
+      const body = storefrontClientConfig({ storefront, slot, baseDomain });
+      const app = byName.get(name);
+      if (!app) create.push({ name, body });
+      else if (!sameStorefrontConfig(app.oidcConfig, body)) update.push({ appId: app.id, name, body });
+      else keep += 1;
+    }
+  }
+  return { create, update, remove: remove.sort((a, b) => a.name.localeCompare(b.name)), keep };
+}
+
+/**
+ * Converge the per-slot storefront clients to the live slot set (created on
+ * `up`/`sync`, removed on `down` and by the sweep). Read-before-write; any failed hop
+ * aborts as an `IdpError`. Only names and app ids are logged — no client key exists
+ * here (private_key_jwt keys are minted by the API-side wiring).
+ */
+export async function convergeStorefrontClients({
+  client,
+  slots,
+  baseDomain,
+  projectName = DEFAULT_PROJECT_NAME,
+  log = () => {},
+}) {
+  const projectId = await resolveProjectId(client, projectName);
+  const appsPath = `/management/v1/projects/${projectId}/apps`;
+  const found = await client.request("POST", `${appsPath}/_search`, {
+    queries: [
+      { nameQuery: { name: STOREFRONT_APP_PREFIX, method: "TEXT_QUERY_METHOD_STARTS_WITH" } },
+    ],
+  });
+  const plan = planStorefrontClients({ slots, baseDomain, existing: found?.result ?? [] });
+  for (const { name, body } of plan.create) {
+    const created = await client.request("POST", `${appsPath}/oidc`, { name, ...body });
+    log(`  ↳ idp storefront client ${name} created (appId ${created?.appId ?? "?"})`);
+  }
+  for (const { appId, name, body } of plan.update) {
+    await client.request("PUT", `${appsPath}/${appId}/oidc_config`, body);
+    log(`  ↳ idp storefront client ${name} converged`);
+  }
+  for (const { appId, name } of plan.remove) {
+    await client.request("DELETE", `${appsPath}/${appId}`);
+    log(`  ↳ idp storefront client ${name} removed (no live slot)`);
+  }
+  if (plan.keep) log(`  ↳ idp storefront clients already converged: ${plan.keep}`);
+  return { projectId, ...plan };
+}
+
 function describeDiff({ redirect, postLogout }) {
   const parts = [];
   for (const [name, list] of [

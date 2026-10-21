@@ -40,6 +40,8 @@
 #   IDP_CLIENT_ID=<oidc client id>
 #   IDP_CLIENT_SECRET=<oidc client secret>   # printed ONCE on creation only
 #   IDP_PROJECT_ID=<project id>
+#   IDP_ACADEMY_CLIENT_ID=<Academy storefront client id>   # step 3.bis
+#   IDP_DOCTOR_CLIENT_ID=<doctor storefront client id>     # step 3.bis
 set -euo pipefail
 
 # ── args / env ───────────────────────────────────────────────────────────────
@@ -130,6 +132,73 @@ fi
 # SMS carries no creds env here (the sms-aero-adapter holds the SMS-Aero creds
 # and does the egress), so the SMS_DELIVERY_MODE=real fail-closed gate lives at
 # the step-7 activation: an empty provider id hard-aborts, never sink-falls-back.
+
+# ── storefront clients: inputs (003 EARS-60, ADR-0015 §4 req. 1 + 7) ────────
+# One confidential OIDC client per storefront per environment (step 3.bis). Each
+# registers EXACTLY ONE redirect_uri (the storefront's fixed `/auth/callback`)
+# and ONE post_logout_redirect_uri; Zitadel matches them exactly, so a foreign or
+# look-alike redirect_uri never gets a code (req. 1). Defaults are the dev-stand
+# ports (portal :3001, doctor :3004, sign-in host :3005, api :3000); stage and
+# prod pass their own (tools/staging/idp.mjs, tools/deploy/prod.mjs). Validated
+# BEFORE any mutation: a wildcard / query / list is refused, never registered.
+SIGN_IN_BASE_URI="${IDP_SIGN_IN_BASE_URI:-http://localhost:3005}"
+BACK_CHANNEL_LOGOUT_URI="${IDP_BACK_CHANNEL_LOGOUT_URI:-http://localhost:3000/v1/auth/back-channel-logout}"
+ACADEMY_APP_NAME="${IDP_ACADEMY_APP_NAME:-ds-storefront-academy}"
+ACADEMY_REDIRECT_URI="${IDP_ACADEMY_REDIRECT_URI:-http://localhost:3001/auth/callback}"
+ACADEMY_POST_LOGOUT_URI="${IDP_ACADEMY_POST_LOGOUT_URI:-http://localhost:3001/}"
+DOCTOR_APP_NAME="${IDP_DOCTOR_APP_NAME:-ds-storefront-doctor}"
+DOCTOR_REDIRECT_URI="${IDP_DOCTOR_REDIRECT_URI:-http://localhost:3004/auth/callback}"
+DOCTOR_POST_LOGOUT_URI="${IDP_DOCTOR_POST_LOGOUT_URI:-http://localhost:3004/}"
+
+# storefront_uri_ok <name> <uri> — one absolute http(s) URI, no wildcard, query,
+# glob bracket, list separator or whitespace; exit 4 otherwise (fail-closed).
+storefront_uri_ok() {
+  local name="$1" uri="$2"
+  if [[ ! "$uri" =~ ^https?://[^/[:space:]]+(/[^[:space:]]*)?$ \
+        || "$uri" == *'*'* || "$uri" == *'?'* || "$uri" == *'['* || "$uri" == *','* ]]; then
+    echo "ERROR: ${name}='${uri}' is not one exact http(s) URI (no *, ?, [, list); refusing to provision" >&2
+    exit 4
+  fi
+}
+storefront_uri_ok IDP_SIGN_IN_BASE_URI "$SIGN_IN_BASE_URI"
+storefront_uri_ok IDP_BACK_CHANNEL_LOGOUT_URI "$BACK_CHANNEL_LOGOUT_URI"
+storefront_uri_ok IDP_ACADEMY_REDIRECT_URI "$ACADEMY_REDIRECT_URI"
+storefront_uri_ok IDP_ACADEMY_POST_LOGOUT_URI "$ACADEMY_POST_LOGOUT_URI"
+storefront_uri_ok IDP_DOCTOR_REDIRECT_URI "$DOCTOR_REDIRECT_URI"
+storefront_uri_ok IDP_DOCTOR_POST_LOGOUT_URI "$DOCTOR_POST_LOGOUT_URI"
+
+# storefront_client_payload <name> <redirect> <post-logout> — the AddOIDCApp body.
+# Confidential web client authenticating with private_key_jwt (ADR-0015 §4; the
+# key itself is created by the API-side wiring, never here), code + refresh,
+# JWT access tokens, its OWN Login V2 base_uri (the sign-in host — the headless
+# app and the admin keep inheriting the instance setting of step 4) and the API's
+# back-channel logout endpoint. devMode only when a URI is plain http (dev).
+storefront_client_payload() {
+  local dev=false
+  [[ "$2" == http://* || "$3" == http://* || "$SIGN_IN_BASE_URI" == http://* \
+     || "$BACK_CHANNEL_LOGOUT_URI" == http://* ]] && dev=true
+  jq -nc \
+    --arg n "$1" --arg r "$2" --arg l "$3" \
+    --arg base "$SIGN_IN_BASE_URI" --arg bcl "$BACK_CHANNEL_LOGOUT_URI" \
+    --argjson dev "$dev" \
+    '{
+       name:$n,
+       redirectUris:[$r],
+       postLogoutRedirectUris:[$l],
+       responseTypes:["OIDC_RESPONSE_TYPE_CODE"],
+       grantTypes:["OIDC_GRANT_TYPE_AUTHORIZATION_CODE","OIDC_GRANT_TYPE_REFRESH_TOKEN"],
+       appType:"OIDC_APP_TYPE_WEB",
+       authMethodType:"OIDC_AUTH_METHOD_TYPE_PRIVATE_KEY_JWT",
+       version:"OIDC_VERSION_1_0",
+       devMode:$dev,
+       accessTokenType:"OIDC_TOKEN_TYPE_JWT",
+       accessTokenRoleAssertion:true,
+       idTokenRoleAssertion:true,
+       idTokenUserinfoAssertion:true,
+       backChannelLogoutUri:$bcl,
+       loginVersion:{loginV2:{baseUri:$base}}
+     }'
+}
 
 # ── http helper ──────────────────────────────────────────────────────────────
 # api <METHOD> <PATH> [json-body]  ->  prints response body, fails on non-2xx
@@ -328,6 +397,39 @@ else
   CLIENT_SECRET="$(echo "$CREATED" | jq -r '.clientSecret // ""')"
   echo "created OIDC app (appId $(echo "$CREATED" | jq -r '.appId'))" >&2
 fi
+
+# ── 3.bis. ensure the two storefront OIDC clients (003 EARS-60, ADR-0015 §4) ──
+# Added BESIDE the app of step 3, which stays the API's headless-exchange client
+# untouched. Read-before-write: an existing client gets its whole oidc_config
+# converged (exact URIs, base_uri, back-channel), an absent one is created. No
+# client key is created or printed here (private_key_jwt keys are minted by the
+# API-side wiring); only the client ids are emitted on stdout.
+# ensure_storefront_client <name> <redirect> <post-logout>  ->  prints client id
+ensure_storefront_client() {
+  # Every hop is checked explicitly: this runs inside $(...), where errexit
+  # does not propagate, so a failed write must fail the function, never fall
+  # through to printing a client id.
+  local name="$1" payload search app_id detail created
+  payload="$(storefront_client_payload "$1" "$2" "$3")" || return 1
+  search="$(api POST "/management/v1/projects/${PROJECT_ID}/apps/_search" \
+    "$(jq -nc --arg n "$name" '{queries:[{nameQuery:{name:$n,method:"TEXT_QUERY_METHOD_EQUALS"}}]}')")" || return 1
+  app_id="$(jq -r --arg n "$name" '[.result[]? | select(.name==$n) | .id][0] // empty' <<< "$search")"
+  if [[ -n "$app_id" ]]; then
+    api_idempotent PUT "/management/v1/projects/${PROJECT_ID}/apps/${app_id}/oidc_config" \
+      "$(jq -c 'del(.name)' <<< "$payload")" >/dev/null || return 1
+    detail="$(api GET "/management/v1/projects/${PROJECT_ID}/apps/${app_id}")" || return 1
+    echo "storefront client ${name} converged (appId ${app_id})" >&2
+    jq -r '.app.oidcConfig.clientId // empty' <<< "$detail"
+  else
+    created="$(api POST "/management/v1/projects/${PROJECT_ID}/apps/oidc" "$payload")" || return 1
+    echo "storefront client ${name} created (appId $(jq -r '.appId' <<< "$created"))" >&2
+    jq -r '.clientId // empty' <<< "$created"
+  fi
+}
+ACADEMY_CLIENT_ID="$(ensure_storefront_client "$ACADEMY_APP_NAME" "$ACADEMY_REDIRECT_URI" "$ACADEMY_POST_LOGOUT_URI")"
+DOCTOR_CLIENT_ID="$(ensure_storefront_client "$DOCTOR_APP_NAME" "$DOCTOR_REDIRECT_URI" "$DOCTOR_POST_LOGOUT_URI")"
+[[ -n "$ACADEMY_CLIENT_ID" && -n "$DOCTOR_CLIENT_ID" ]] \
+  || { echo "ERROR: a storefront client id did not read back" >&2; exit 1; }
 
 # ── 4. ensure Login V2 instance feature + baseUri (operator Console login, #174) ─
 # The headless BFF session->token exchange (EARS-8) links a checked session to a
@@ -1217,6 +1319,8 @@ api POST /admin/v1/policies/login/second_factors/_search '{}' | jq -r \
 # ── output (machine-parseable; secret only when freshly created) ─────────────
 echo "IDP_PROJECT_ID=${PROJECT_ID}"
 echo "IDP_CLIENT_ID=${CLIENT_ID}"
+echo "IDP_ACADEMY_CLIENT_ID=${ACADEMY_CLIENT_ID}"
+echo "IDP_DOCTOR_CLIENT_ID=${DOCTOR_CLIENT_ID}"
 if [[ -n "$CLIENT_SECRET" ]]; then
   echo "IDP_CLIENT_SECRET=${CLIENT_SECRET}"
 else

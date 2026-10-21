@@ -667,10 +667,20 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
        IDP_BASE_URL=https://id.doctor.school \
        IDP_REDIRECT_URIS=https://api.doctor.school/auth/callback \
        IDP_POST_LOGOUT_URIS=https://academy.doctor.school,https://new.doctor.school \
+       IDP_SIGN_IN_BASE_URI=https://login.doctor.school \
+       IDP_BACK_CHANNEL_LOGOUT_URI=https://api.doctor.school/v1/auth/back-channel-logout \
+       IDP_ACADEMY_REDIRECT_URI=https://academy.doctor.school/auth/callback \
+       IDP_ACADEMY_POST_LOGOUT_URI=https://academy.doctor.school/ \
+       IDP_DOCTOR_REDIRECT_URI=https://new.doctor.school/auth/callback \
+       IDP_DOCTOR_POST_LOGOUT_URI=https://new.doctor.school/ \
        EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real \
        ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt'
      # copy the emitted IDP_CLIENT_ID / IDP_CLIENT_SECRET / IDP_PROJECT_ID into api.env,
      # then: docker compose up -d api   (restart to pick up the OIDC creds)
+     # Step 3.bis also converges the two storefront clients (003 EARS-60, ADR-0015 §4:
+     # private_key_jwt, one exact callback + post-logout URI each, base_uri = the
+     # sign-in host) and prints IDP_ACADEMY_CLIENT_ID / IDP_DOCTOR_CLIENT_ID — ids
+     # only, no key. They stay unused until the storefront sign-in wiring ships (#3006).
      ```
 
    - **`pnpm deploy:prod` runs this provision step for you (#1997).** The converge

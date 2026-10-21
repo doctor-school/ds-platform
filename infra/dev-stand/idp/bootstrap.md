@@ -195,6 +195,26 @@ leaves the instance multi-locale and relies on the default language + per-user
 Defaults target the api BFF callback (`:3000/auth/callback`) and the portal
 (`:3100/auth/callback`).
 
+**Storefront clients (step 3.bis, 003 EARS-60, ADR-0015 §4).** Beside that
+headless app the script converges two more confidential OIDC clients,
+`ds-storefront-academy` and `ds-storefront-doctor` — `private_key_jwt`, exactly
+one callback and one post-logout URI each, the sign-in host as their own Login V2
+`base_uri`, the API's back-channel logout endpoint — and prints
+`IDP_ACADEMY_CLIENT_ID` / `IDP_DOCTOR_CLIENT_ID` (ids only; no client key is
+created here). Overrides: `IDP_ACADEMY_REDIRECT_URI` (default
+`http://localhost:3001/auth/callback`), `IDP_ACADEMY_POST_LOGOUT_URI`
+(`http://localhost:3001/`), `IDP_DOCTOR_REDIRECT_URI`
+(`http://localhost:3004/auth/callback`), `IDP_DOCTOR_POST_LOGOUT_URI`
+(`http://localhost:3004/`), `IDP_SIGN_IN_BASE_URI` (`http://localhost:3005`),
+`IDP_BACK_CHANNEL_LOGOUT_URI`
+(`http://localhost:3000/v1/auth/back-channel-logout`), `IDP_ACADEMY_APP_NAME`,
+`IDP_DOCTOR_APP_NAME`. Each must be one exact `http(s)` URI — a value carrying
+`*`, `?`, `[` or a comma list aborts the run (exit 4) before anything is written.
+Dev mode is enabled on a storefront client only while one of its URIs is `http://`.
+The production values are passed by `pnpm deploy:prod` (`tools/deploy/prod.mjs`)
+and listed in `infra/deploy/README.md` step 9; stage slots get their own pair from
+`tools/staging/idp.mjs`.
+
 > **SMS on the dev-stand = a local catcher, never a real gateway.** The HTTP SMS
 > provider points at the `sms-sink` service (compose.core.yml) — the SMS analogue
 > of Mailpit. Zitadel POSTs every outbound SMS there as JSON; the sink stores it

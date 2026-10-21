@@ -1424,6 +1424,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the response is the generic throttled response of EARS-13 with no address and no mail
     And the page shows the EARS-43 state with the EARS-13 generic throttled message
 
+  # Narrow default-limit Academy projection (#3037); broader native case retained.
+  # Native expiry/redemption/per-IP coverage: apps/api/test/auth/login-handoff.e2e-spec.ts.
+  @EARS-44 @EARS-13 @EARS-16 @failure @default-auth-limits @handoff-throttled
+  Scenario: Academy refuses a live handoff with the ordinary generic account throttle
+    Given a fresh owned Academy congress reference remains unused while nine legitimate ordinary email-code requests exhaust its account window
+    When a guest opens that still-live reference through the Academy code door with the account return target
+    Then the throttled handoff leaves empty email-code entry with generic refusal and no new mail, private access or reference in history
+
   @EARS-5 @EARS-8 @EARS-58 @happy @login-phone-password
   Scenario: Academy signs in the same owned doctor with the confirmed phone and password
     Given an owned Academy password account verifies email and confirms its fresh phone

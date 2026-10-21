@@ -67,4 +67,34 @@ describe("scripts/seed-events (#1851)", () => {
     // not "stops writing".
     expect(after.updatedAt).not.toBeNull();
   }, 60_000);
+
+  it("044 EARS-13: the configured congress fixture seeds and restores its event-owned venue without changing another fixture's venue", async () => {
+    const readEvent = async (slug: string) => {
+      const [row] = await db
+        .select({ id: events.id, venue: events.venue })
+        .from(events)
+        .where(eq(events.slug, slug));
+      expect(row).toBeDefined();
+      return row!;
+    };
+    const congress = await readEvent("seed-005-upcoming");
+    expect(congress.venue).toBe("Москва, тестовая площадка (эталон)");
+    const other = await readEvent("seed-005-upcoming-2");
+    await db
+      .update(events)
+      .set({ venue: null })
+      .where(eq(events.id, congress.id));
+    await db
+      .update(events)
+      .set({ venue: "Другая тестовая площадка" })
+      .where(eq(events.id, other.id));
+
+    await seedEvents();
+
+    expect(await readEvent("seed-005-upcoming")).toEqual(congress);
+    expect(await readEvent("seed-005-upcoming-2")).toEqual({
+      id: other.id,
+      venue: "Другая тестовая площадка",
+    });
+  }, 60_000);
 });

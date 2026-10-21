@@ -602,7 +602,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Retain zitadel.idp.spec.ts EARS-6 consumed-challenge native proof and
     # the broader wrong-code/timing and verified-account request journeys.
 
-  @host:academy @EARS-6 @EARS-16 @EARS-41 @EARS-48 @failure @login-email-code-isolation
+  @host:academy @EARS-6 @EARS-8 @EARS-16 @EARS-41 @failure @login-email-code-isolation
   Scenario: Academy isolates two live email login codes by their rightful accounts
     Given two owned Academy doctors verify fresh registrations for email login isolation
     When both owned doctors retain distinct actual email login codes requested through Academy

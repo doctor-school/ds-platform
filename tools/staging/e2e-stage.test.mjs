@@ -959,8 +959,10 @@ describe("runE2eStage — the live legs", () => {
       (w) => w.file.split(path.sep).join("/") === file,
     );
     assert.ok(written, "the list the flag names was written");
+    // The slot exports no E2E_CAPTCHA_TEST_TOKEN, so the #3151 spec is not-run too.
     assert.deepEqual(written.content.trim().split("\n"), [
       "signed-in-landing-live.spec.ts",
+      "account-auth-paths-live.spec.ts",
     ]);
   });
 

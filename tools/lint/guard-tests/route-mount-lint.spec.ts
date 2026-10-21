@@ -136,7 +136,7 @@ describe("route-mount-lint", () => {
     });
     expect(code).toBe(1);
     expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
-    expect(stderr).toContain("branching (`if`)");
+    expect(stderr).toContain("argument `() =>");
   });
 
   it("2074: red — a mounted page whose route-prop parameter has a default value computing a fetch → exit 1", () => {
@@ -146,6 +146,44 @@ describe("route-mount-lint", () => {
     expect(code).toBe(1);
     expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
     expect(stderr).toContain("parameter `searchParams` has a default value");
+  });
+
+  it("2074: red — a binding argument that is an arrow mutating its input → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-arrow-mutate"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("argument `() =>");
+  });
+
+  it("2074: red — a binding argument that reads a member (`input.slug`) → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-member-arg"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("argument `input.slug`");
+  });
+
+  it("2074: red — a mounted page destructuring its route props under a computed key → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-mount-param-computed-key"),
+      { env: TREE_ONLY },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
+    expect(stderr).toContain("route-prop element");
+  });
+
+  it("2074: red — a mounted page collecting its route props with a rest element → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-mount-param-rest"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
+    expect(stderr).toContain("route-prop element `...searchParams`");
   });
 
   it("2002: red — a route file with no registry row → exit 1", () => {

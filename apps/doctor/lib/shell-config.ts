@@ -1,5 +1,4 @@
 import type { StorefrontShellConfig } from "@ds/storefront-shell";
-import { academyHref } from "@/lib/academy";
 import { doctorNav, doctorTopNav } from "@/lib/navigation-model";
 
 /**
@@ -24,6 +23,14 @@ import { doctorNav, doctorTopNav } from "@/lib/navigation-model";
  * their own chrome — never render this layout at all. Omitting it also keeps the
  * package's route-visibility client boundary out of the tree entirely.
  */
+
+/**
+ * The Academy origin — the ONE cross-host crossing the doctor storefront is
+ * allowed to make (017 EARS-12 / LD-4), a host value of this config like every
+ * other. The footer cross-link below is its only consumer.
+ */
+const ACADEMY_ORIGIN = "https://academy.doctor.school";
+
 export const DOCTOR_SHELL: StorefrontShellConfig = {
   host: "doctor",
 
@@ -77,7 +84,7 @@ export const DOCTOR_SHELL: StorefrontShellConfig = {
     cross: {
       title: "Экспертам и партнёрам",
       label: "Academy.Doctor.School ↗",
-      href: academyHref("/"),
+      href: `${ACADEMY_ORIGIN}/`,
       note: "Закулисье платформы: проекты, эксперты, партнёры.",
     },
     /** Education is free FOR THE DOCTOR, and the interface never names who

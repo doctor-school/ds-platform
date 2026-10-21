@@ -1266,6 +1266,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Retain the preceding three-surface keyboard outline and PasswordField unit
     # invariants; this case owns only the side-effect and hard-reload trigger.
 
+  @host:academy @EARS-3 @EARS-16 @EARS-39 @EARS-41 @failure @verification-code-isolation
+  Scenario: Academy binds live registration codes to their own unverified accounts
+    Given two owned Academy registrants retain distinct actually delivered live confirmation codes
+    When the second registrant submits the first registrant's live confirmation code
+    Then Academy refuses the foreign code without granting its tab private access and an independent owned password session observes the second account still unverified before logout
+    When each registrant submits its own retained confirmation code
+    Then both rightful owners reach their own verified Academy profiles with secure sessions surviving reload
+    And the second account's original password still authenticates the same verified owner
+    # Existing account-bound EARS-3/16/41 projection; no new auth behavior.
+
   @EARS-3 @EARS-8 @EARS-16 @EARS-41 @failure @verification-code-reuse
   Scenario: Academy refuses a consumed registration code and preserves its verified owner
     Given a uniquely registered Academy account accepts its actually delivered registration code once

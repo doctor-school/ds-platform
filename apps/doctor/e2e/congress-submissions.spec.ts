@@ -124,8 +124,9 @@ test("046 EARS-4: a guest is sent to the login door, signs in by the emailed cod
   const sentAt = Date.now();
   await page.getByTestId("otp-send").click();
   const code = await mailedCode(doctor.email, "login", sentAt);
-  await expect(page.getByTestId("otp-sent-to")).toBeVisible();
   await expect(page.getByTestId("otp-verify")).toBeVisible();
+  // The code step names the address the code went to (bold, unmasked).
+  await expect(page.getByText(doctor.email, { exact: true })).toBeVisible();
   // A complete code submits itself (the door's auto-submit), no click needed.
   await page.getByRole("textbox").first().fill(code);
 

@@ -19,6 +19,10 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  * `E2E_LANDING_EVENT_SLUG` to the env set and needs the doctor server bound to
  * IPv4 (`next start -H 127.0.0.1`, see the spec's docblock).
  *
+ * `e2e/account-auth-paths-live.spec.ts` (#3151) binds the shared `/account`
+ * auth-path body (`@ds/e2e/account-auth-paths`): the expired-session bounce and
+ * the password hand-off, both carrying `returnTo=/account`.
+ *
  * Run against a provisioned stand, the endpoints taken from
  * `~/.ds-platform/.env.local` (dev-stand) or the slot (`tools/staging/README.md`):
  *   E2E_DOCTOR_URL=… IDP_ISSUER=… MAILPIT_URL=… \
@@ -26,7 +30,8 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  */
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: /(^|[/\\])(register-existing|signed-in-landing-live)\.spec\.ts$/,
+  testMatch:
+    /(^|[/\\])(register-existing|signed-in-landing-live|account-auth-paths-live)\.spec\.ts$/,
   // One registrant's mailbox and one per-IP rate budget: do not race them.
   fullyParallel: false,
   workers: 1,

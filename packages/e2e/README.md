@@ -1761,3 +1761,32 @@ threshold, provider/counter mutation or product/helper/config change is involved
 The selection runs unchanged under stage basic authentication. Native reset e2e
 and the existing SMS happy path remain complementary. No render surface or
 owner Stage-B slot is introduced.
+
+### Default-limit Academy browser contour (003 EARS-13)
+
+The `@default-auth-limits` scenarios are local default-limit browser coverage,
+separate from stage's deliberately raised per-account ceiling. Ordinary C6 runs
+exclude that tag on both storefronts. Set `E2E_AUTH_LIMIT_TIER=default` and a
+loopback `E2E_PORTAL_URL`, then run `pnpm --filter @ds/e2e test:e2e --project=academy`
+to generate only those tagged Academy cases. `E2E_GREP` can select one by title.
+Unknown tier values, missing URLs, remote targets and embedded URL credentials
+fail configuration before a browser starts. Use a lead-owned compiled local API
+with its native defaults and no `RATE_LIMIT_*` overrides; the selector does not
+claim to inspect the API's environment. These cases are excluded from normal
+stage/release C6 execution and are not automatic stage/CI browser coverage.
+
+`Academy successful password login clears the same identifier's real rate window`
+(`steps/login-counter-reset.steps.ts`, #3036, `@login-counter-reset`) verifies a
+unique owned account through actual UI and addressed mail. Under the canonical
+cross-worker password gate, two real generic wrong-password refusals precede
+an actual successful password login for that same subject with a fresh secure
+session. After exact owned logout, ten same-identifier reset requests must be
+admitted and the eleventh must receive the real generic 429, all inside the
+original window. Reset admission avoids the provider's password soft-lock;
+no reset is completed and no intervening success can clear the tested window.
+Without forgiveness the earlier attempts consume the remaining admissions;
+a raised ceiling also fails the eleventh-request boundary. No real TTL wait,
+clock/limit override, counter/provider mutation or fabricated IP is used.
+Traces remain off and cleanup revokes only owned sessions and closes contexts.
+Native per-IP/per-ASN no-forgiveness remains in the API abuse-limit suite.
+No product behavior, render surface or owner Stage-B slot changes.

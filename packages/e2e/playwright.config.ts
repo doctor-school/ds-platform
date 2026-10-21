@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 import { defineBddConfig } from "playwright-bdd";
 
 import { HOSTS } from "./hosts.js";
-import { tagExpressionFor } from "./lib/host-tags.js";
+import { authLimitTagsFor } from "./lib/default-auth-limits.js";
 import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
 
 /**
@@ -126,8 +126,14 @@ const testDirFor = (hostId: keyof typeof HOSTS, tags: string) =>
     missingSteps: "skip-scenario",
   });
 
-const academyTestDir = testDirFor("academy", tagExpressionFor("academy"));
-const doctorTestDir = testDirFor("doctor", tagExpressionFor("doctor"));
+const academyTestDir = testDirFor(
+  "academy",
+  authLimitTagsFor("academy", process.env),
+);
+const doctorTestDir = testDirFor(
+  "doctor",
+  authLimitTagsFor("doctor", process.env),
+);
 
 export default defineConfig({
   // Parallel: one golden worker-pool account per worker (see `workers` above).

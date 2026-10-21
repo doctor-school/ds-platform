@@ -1790,3 +1790,35 @@ clock/limit override, counter/provider mutation or fabricated IP is used.
 Traces remain off and cleanup revokes only owned sessions and closes contexts.
 Native per-IP/per-ASN no-forgiveness remains in the API abuse-limit suite.
 No product behavior, render surface or owner Stage-B slot changes.
+
+### Throttled live congress handoff (003 EARS-44/13/16)
+
+`Academy refuses a live handoff with the ordinary generic account throttle`
+(`steps/handoff-throttled.steps.ts`, #3037, `@handoff-throttled`) uses the same
+explicit local `@default-auth-limits` contour above. A real configured congress
+intake mints a unique owned account and still-unused reference. The intake spends
+one ordinary account unit; nine legitimate ordinary email-code requests each
+require a fresh addressed delivery after their own Mailpit message-ID checkpoint.
+The next ordinary request must receive the exact generic 429. A fresh unknown
+identifier from that same browser must still receive the ordinary neutral answer,
+proving the source budget was not exhausted; neither request may send mail over
+the full canonical fifteen-second addressed-mail horizon.
+
+The first guest redemption of the still-live reference must return that same
+byte-identical generic 429, without an address, session or new addressed mail
+over another full delivery horizon. The ordinary email-code method remains
+selected with an empty identifier, a password option and the generic throttle
+message. Private profile/session access stays denied, and the reference disappears
+from both the address bar and Chromium navigation history while `/account`
+survives as the return target. Trace-off fixtures and safe boolean assertions
+protect codes and references; cleanup revokes any unexpected owned session and
+closes its context.
+
+No reference redemption is spent during ordinary request exhaustion. No real
+TTL/window wait, clock/threshold override, counter read/write, provider mutation
+or fabricated IP is used. The broader declaration and native
+`apps/api/test/auth/login-handoff.e2e-spec.ts` retain expiry, redemption limits,
+per-IP throttling and statistical timing coverage. Ordinary stage/release runs
+exclude this default-limit case; the real compiled local browser proof is recorded
+separately and makes no automatic stage/CI browser-coverage claim. This test-only
+projection changes no product behavior or render surface and needs no Stage-B slot.

@@ -116,10 +116,14 @@ Given(
         page: await context.newPage(),
         code: "",
         posts: [],
-        email: `verification-isolation-3137-${role}-${randomUUID()}@example.test`,
+        email: `verification-isolation-3137-${role}-${randomUUID().replaceAll("-", "")}@example.test`,
         password: `Isolation-${randomUUID()}-aA1!`,
       };
       value.owners.push(owner);
+      expect(
+        owner.email.split("@")[0]!.length <= 64,
+        "owned email local part fits the provider limit",
+      ).toBe(true);
       owner.page.on("request", (request) => {
         const path = new URL(request.url()).pathname;
         if (request.method() === "POST" && path.startsWith("/v1/auth/"))

@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
 
 // This explicit config never silently falls back to the CI upstream double.
 // See events-mobile.spec.ts ENV SET and run both real lifecycle phases.
@@ -30,6 +31,11 @@ export default defineConfig({
   reporter: [["list"]],
   timeout: 60_000,
   expect: { timeout: 10_000 },
-  use: { baseURL: process.env.E2E_DOCTOR_URL, trace: "retain-on-failure" },
+  use: {
+    baseURL: process.env.E2E_DOCTOR_URL,
+    // A staging slot's basic-auth pair (#3168); undefined on a local stand.
+    httpCredentials: standHttpCredentials(),
+    trace: "retain-on-failure",
+  },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
 });

@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
 
 /**
  * Doctor-storefront LIVE-STAND registration tier (#2027 wave 1, rows 73 + 77).
@@ -39,6 +40,8 @@ export default defineConfig({
     // (`~/.ds-platform/.env.local`). Unset, the spec is inert; half-set, it fails
     // loudly (`e2e/support/live-stand-env.ts`) — it never guesses a host.
     baseURL: process.env.E2E_DOCTOR_URL,
+    // A staging slot's basic-auth pair (#3168); undefined on a local stand.
+    httpCredentials: standHttpCredentials(),
     trace: "retain-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

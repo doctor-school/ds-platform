@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 
@@ -7,15 +7,23 @@ import {
   assertShellInert,
   axeDecision,
   exitCodeFor,
+  liveLegVerdict,
   parseE2eArgs,
+  planLiveLeg,
   preflightVerdict,
   publicAxeLeg,
   renderVerdictBlock,
   runE2eStage,
   slotE2eEnv,
+  slotLiveEnv,
   SUMMARY_REPORTER_PATH,
   summarizeReport,
 } from "./e2e-stage.mjs";
+import {
+  AXE_LEG_CONFIGS,
+  HERMETIC_CONFIGS,
+  LIVE_TIERS,
+} from "./live-tiers.mjs";
 
 /**
  * `pnpm e2e:stage <slot>` — the C4 / §8-step-7 regression run over a CONVERGED slot.
@@ -34,7 +42,12 @@ describe("parseE2eArgs", () => {
       axe: true,
       reportDir: undefined,
       expectSha: undefined,
+      live: true,
     });
+  });
+
+  it("reads --no-live, which keeps every live-tier leg out of a focused run", () => {
+    assert.equal(parseE2eArgs(["main", "--no-live"]).live, false);
   });
 
   it("reads --project, --grep, --no-axe and --report-dir", () => {
@@ -56,6 +69,7 @@ describe("parseE2eArgs", () => {
         axe: false,
         reportDir: "out",
         expectSha: undefined,
+        live: true,
       },
     );
   });
@@ -294,9 +308,23 @@ const BOX_ENV = {
 };
 const SHA = "c".repeat(40);
 
+/** A live leg whose one test passed — the default, so a test about the suite is not
+ * also a test about every live leg. */
+const LIVE_GREEN = {
+  suites: [
+    { specs: [{ tests: [{ projectName: "chromium", status: "expected" }] }] },
+  ],
+};
+const isLiveReport = (file) => /live-/.test(path.basename(path.dirname(file)));
+const isAxe = (call) =>
+  call.argv.includes("test:axe") || call.argv.includes("a11y/room-axe");
+const isLive = (call) =>
+  call.argv.some((t) => t.startsWith("--config=")) && !isAxe(call);
+
 function harness(overrides = {}) {
   const calls = [];
   const lines = [];
+  const writes = [];
   const effects = {
     readBoxEnv: async () => BOX_ENV,
     fetchHealth: async () => ({
@@ -307,13 +335,14 @@ function harness(overrides = {}) {
       calls.push({ argv, env: options.env });
       return { status: 0 };
     },
-    readReport: () => REPORT,
+    readReport: (file) => (isLiveReport(file) ? LIVE_GREEN : REPORT),
+    writeFile: (file, content) => writes.push({ file, content }),
     issueState: () => "OPEN",
     log: (line) => lines.push(line),
     now: () => new Date("2026-09-14T10:11:12Z"),
     ...overrides,
   };
-  return { calls, lines, effects };
+  return { calls, lines, writes, effects };
 }
 
 describe("assertShellInert", () => {
@@ -513,7 +542,8 @@ describe("runE2eStage", () => {
       env: { STAGE_BASIC_AUTH_PASS: "s3cret" },
       effects,
     });
-    assert.equal(calls.length, 1);
+    assert.equal(calls.filter(isAxe).length, 0);
+    assert.equal(calls[0].argv[2], "@ds/e2e");
     assert.ok(lines.some((l) => l.includes("axe leg skipped: #1692 open")));
   });
 
@@ -523,11 +553,12 @@ describe("runE2eStage", () => {
       env: { STAGE_BASIC_AUTH_PASS: "s3cret" },
       effects,
     });
-    assert.equal(calls.length, 3);
-    assert.ok(calls[1].argv.join(" ").includes("@ds/portal"));
-    assert.ok(calls[2].argv.join(" ").includes("room-axe"));
+    const axe = calls.filter(isAxe);
+    assert.equal(axe.length, 2);
+    assert.ok(axe[0].argv.join(" ").includes("@ds/portal"));
+    assert.ok(axe[1].argv.join(" ").includes("room-axe"));
     assert.equal(
-      calls[1].env.E2E_PORTAL_URL,
+      axe[0].env.E2E_PORTAL_URL,
       "https://academy-main.stage.doctor.school",
     );
   });
@@ -538,8 +569,9 @@ describe("runE2eStage", () => {
       env: { STAGE_BASIC_AUTH_PASS: "s3cret" },
       effects,
     });
-    assert.equal(calls.length, 2);
-    assert.ok(calls[1].argv.join(" ").includes("room-axe"));
+    const axe = calls.filter(isAxe);
+    assert.equal(axe.length, 1);
+    assert.ok(axe[0].argv.join(" ").includes("room-axe"));
   });
 
   it("runs no host axe leg when the derived walks are the selected project", async () => {
@@ -548,7 +580,7 @@ describe("runE2eStage", () => {
       env: { STAGE_BASIC_AUTH_PASS: "s3cret" },
       effects,
     });
-    assert.equal(calls.length, 1);
+    assert.equal(calls.length, 1, "walks selects no host: no axe, no live leg");
     assert.deepEqual(calls[0].argv.slice(4), ["--project", "walks"]);
   });
 
@@ -580,6 +612,436 @@ describe("runE2eStage", () => {
     });
     assert.equal(code, 0);
     assert.ok(lines.some((l) => l.includes("verdict:     PASS")));
+  });
+});
+
+// --- the live-tier legs (#3168) ------------------------------------------------
+
+const REPO = new URL("../../", import.meta.url);
+const repoFile = (rel) => readFileSync(new URL(rel, REPO), "utf8");
+const storefrontConfigs = () =>
+  ["apps/portal", "apps/doctor"].flatMap((app) =>
+    readdirSync(new URL(`${app}/`, REPO))
+      .filter((f) => /^playwright.*\.config\.ts$/.test(f))
+      .map((f) => `${app}/${f}`),
+  );
+const walk = (rel) =>
+  readdirSync(new URL(`${rel}/`, REPO), { withFileTypes: true }).flatMap((d) =>
+    d.isDirectory()
+      ? d.name === "node_modules"
+        ? []
+        : walk(`${rel}/${d.name}`)
+      : [`${rel}/${d.name}`],
+  );
+
+/**
+ * The names each `requireLiveStandEnv(…)` call passes — an inline array literal or
+ * a same-file `const NAME = [ … ]`. Anything else maps to `undefined`, so the
+ * inventory test refuses it instead of reading an empty requirement.
+ */
+function requiredNames(source) {
+  const calls = [
+    ...source.matchAll(/requireLiveStandEnv\(\s*([\s\S]*?)\)\s*;/g),
+  ];
+  return calls.map(([, arg]) => {
+    let literal = arg.trim();
+    if (/^[A-Z_][A-Z0-9_]*$/.test(literal)) {
+      const decl = source.match(
+        new RegExp(`const ${literal}\\s*=\\s*(\\[[\\s\\S]*?\\])`),
+      );
+      if (!decl) return undefined;
+      literal = decl[1];
+    }
+    if (!literal.startsWith("[")) return undefined;
+    return [...literal.matchAll(/"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]);
+  });
+}
+
+describe("live-tier inventory (#3168) — every storefront config is classified", () => {
+  it("lists every apps/{portal,doctor}/playwright*.config.ts exactly once", () => {
+    const live = LIVE_TIERS.map((t) => `${t.app}/${t.config}`);
+    const classified = [
+      ...live,
+      ...Object.keys(AXE_LEG_CONFIGS),
+      ...HERMETIC_CONFIGS,
+    ];
+    assert.equal(
+      new Set(classified).size,
+      classified.length,
+      "a config is listed twice",
+    );
+    assert.deepEqual([...classified].sort(), storefrontConfigs().sort());
+  });
+
+  it("classifies by the rule: a live config owns no webServer, a hermetic one does", () => {
+    for (const config of [
+      ...LIVE_TIERS.map((t) => `${t.app}/${t.config}`),
+      ...Object.keys(AXE_LEG_CONFIGS),
+    ]) {
+      assert.equal(/\bwebServer\s*:/.test(repoFile(config)), false, config);
+    }
+    for (const config of HERMETIC_CONFIGS) {
+      assert.equal(/\bwebServer\s*:/.test(repoFile(config)), true, config);
+    }
+  });
+
+  it("declares every requireLiveStandEnv spec with at least the names it passes", () => {
+    const declared = new Map();
+    for (const tier of LIVE_TIERS) {
+      for (const g of tier.gated)
+        declared.set(`${tier.app}/${g.file}`, g.requires);
+      for (const f of tier.exclude ?? [])
+        declared.set(`${tier.app}/${f}`, null);
+    }
+    const specs = ["apps/portal/e2e", "apps/doctor/e2e"]
+      .flatMap(walk)
+      .filter((f) => /\.ts$/.test(f) && !f.includes("/support/"));
+    let seen = 0;
+    for (const spec of specs) {
+      const source = repoFile(spec);
+      if (!/requireLiveStandEnv\(/.test(source)) continue;
+      seen += 1;
+      // The portal a11y dir is the `axe/academy` leg's (playwright.axe.config.ts).
+      if (spec.startsWith("apps/portal/e2e/a11y/")) continue;
+      assert.ok(
+        declared.has(spec),
+        `${spec} gates its env but no live leg declares it`,
+      );
+      const requires = declared.get(spec);
+      if (requires === null) continue;
+      for (const names of requiredNames(source)) {
+        assert.ok(
+          names,
+          `${spec}: requireLiveStandEnv argument is not a readable literal`,
+        );
+        for (const name of names) {
+          assert.ok(
+            requires.includes(name),
+            `${spec} requires ${name}; live-tiers.mjs omits it`,
+          );
+        }
+      }
+    }
+    assert.ok(seen > 0, "the scan found no gated spec — the walk is broken");
+  });
+
+  it("names the configRequires a config throws on, word for word", () => {
+    for (const tier of LIVE_TIERS.filter((t) => t.configRequires)) {
+      const source = repoFile(`${tier.app}/${tier.config}`);
+      for (const name of tier.configRequires) {
+        assert.ok(
+          source.includes(`"${name}"`),
+          `${tier.config} does not require ${name}`,
+        );
+      }
+    }
+  });
+
+  it("covers the #3150 miss: register-live is a doctor leg", () => {
+    assert.ok(
+      LIVE_TIERS.some(
+        (t) =>
+          t.host === "doctor" &&
+          t.config === "playwright.register-live.config.ts",
+      ),
+    );
+  });
+});
+
+describe("slotLiveEnv", () => {
+  it("maps the shared IdP and Mailpit hosts of the stand — hostnames, never 127.0.0.1", () => {
+    assert.deepEqual(slotLiveEnv({ baseDomain: "stage.doctor.school" }), {
+      IDP_ISSUER: "https://id.stage.doctor.school",
+      MAILPIT_URL: "https://mailpit.stage.doctor.school",
+    });
+  });
+});
+
+describe("planLiveLeg", () => {
+  const TIER = {
+    name: "live/doctor/x",
+    host: "doctor",
+    app: "apps/doctor",
+    pkg: "@ds/doctor",
+    config: "playwright.x.config.ts",
+    rootDir: "e2e",
+    exclude: ["e2e/a11y/twin.e2e.spec.ts"],
+    gated: [
+      { file: "e2e/ok.spec.ts", requires: ["E2E_DOCTOR_URL"] },
+      {
+        file: "e2e/sub/needs.spec.ts",
+        requires: ["E2E_DOCTOR_URL", "B_KEY", "A_KEY"],
+      },
+    ],
+  };
+
+  it("keeps a spec whose env the slot cannot give out of the run, naming what is missing", () => {
+    const plan = planLiveLeg(TIER, {
+      E2E_DOCTOR_URL: "https://d",
+      B_KEY: " ",
+    });
+    assert.equal(plan.run, true);
+    assert.deepEqual(plan.notRun, [
+      { file: "e2e/sub/needs.spec.ts", missing: ["B_KEY", "A_KEY"] },
+    ]);
+    // Lines resolve against the config's rootDir (its top-level testDir).
+    assert.deepEqual(plan.invertList, [
+      "a11y/twin.e2e.spec.ts",
+      "sub/needs.spec.ts",
+    ]);
+  });
+
+  it("does not launch a config that throws at load without its env", () => {
+    const plan = planLiveLeg(
+      { ...TIER, configRequires: ["E2E_DOCTOR_URL", "E2E_EVENTS_LOADED_PATH"] },
+      { E2E_DOCTOR_URL: "https://d" },
+    );
+    assert.equal(plan.run, false);
+    assert.equal(plan.reason, "missing env E2E_EVENTS_LOADED_PATH");
+  });
+});
+
+describe("liveLegVerdict", () => {
+  const counts = (...statuses) => ({
+    suites: [
+      {
+        specs: [
+          {
+            tests: statuses.map((status) => ({
+              projectName: "chromium",
+              status,
+            })),
+          },
+        ],
+      },
+    ],
+  });
+  const PLAN = { run: true, notRun: [], invertList: [] };
+
+  it("reads a leg whose every test skipped as SKIPPED, never green", () => {
+    const v = liveLegVerdict({
+      name: "l",
+      plan: PLAN,
+      status: 0,
+      report: counts("skipped", "skipped"),
+    });
+    assert.equal(v.state, "skipped");
+    assert.equal(v.ok, true);
+    assert.match(v.detail, /0 passed \/ 0 failed \/ 2 skipped/);
+  });
+
+  it("fails a leg that ran with a failure, or whose run exited non-zero", () => {
+    assert.equal(
+      liveLegVerdict({
+        name: "l",
+        plan: PLAN,
+        status: 1,
+        report: counts("expected", "unexpected"),
+      }).state,
+      "fail",
+    );
+    const crashed = liveLegVerdict({
+      name: "l",
+      plan: PLAN,
+      status: 1,
+      report: {},
+    });
+    assert.equal(crashed.state, "fail");
+    assert.equal(crashed.ok, false);
+  });
+
+  it("names a runner that died before any test ran instead of printing zero counts", () => {
+    for (const report of [{}, undefined, counts()]) {
+      const v = liveLegVerdict({ name: "l", plan: PLAN, status: 1, report });
+      assert.equal(v.state, "fail");
+      assert.equal(v.ok, false);
+      assert.match(v.detail, /^runner exited 1 before any test ran/);
+      assert.doesNotMatch(v.detail, /ran 0 passed/);
+    }
+    // A runner that exited non-zero AFTER a test ran keeps its counts.
+    assert.match(
+      liveLegVerdict({
+        name: "l",
+        plan: PLAN,
+        status: 1,
+        report: counts("unexpected"),
+      }).detail,
+      /^ran 0 passed \/ 1 failed \/ 0 skipped/,
+    );
+  });
+
+  it("passes a leg with a passed test and no failure, and lists what it did not run", () => {
+    const v = liveLegVerdict({
+      name: "l",
+      plan: { ...PLAN, notRun: [{ file: "e2e/x.spec.ts", missing: ["K"] }] },
+      status: 0,
+      report: counts("expected", "skipped"),
+    });
+    assert.equal(v.state, "pass");
+    assert.match(v.detail, /ran 1 passed \/ 0 failed \/ 1 skipped/);
+    assert.match(v.detail, /not run: e2e\/x\.spec\.ts \(missing K\)/);
+  });
+
+  it("reads a config that was never launched as SKIPPED with its reason", () => {
+    const v = liveLegVerdict({
+      name: "l",
+      plan: { run: false, reason: "missing env K", notRun: [] },
+    });
+    assert.equal(v.state, "skipped");
+    assert.equal(v.detail, "skipped — missing env K");
+  });
+});
+
+describe("runE2eStage — the live legs", () => {
+  const ENV = { STAGE_BASIC_AUTH_PASS: "s3cret" };
+
+  it("runs one leg per live config with the slot's URLs, IdP and Mailpit", async () => {
+    const { calls, effects } = harness();
+    await runE2eStage(["pr-3168"], { env: ENV, effects });
+    const live = calls.filter(isLive);
+    const configs = live.map((c) =>
+      c.argv.find((t) => t.startsWith("--config=")),
+    );
+    assert.ok(configs.includes("--config=playwright.register-live.config.ts"));
+    assert.ok(configs.includes("--config=playwright.config.ts"));
+    const registerLive =
+      live[configs.indexOf("--config=playwright.register-live.config.ts")];
+    assert.deepEqual(registerLive.argv.slice(0, 6), [
+      "pnpm",
+      "--filter",
+      "@ds/doctor",
+      "exec",
+      "playwright",
+      "test",
+    ]);
+    assert.equal(
+      registerLive.env.E2E_DOCTOR_URL,
+      "https://doctor-pr-3168.stage.doctor.school",
+    );
+    assert.equal(registerLive.env.IDP_ISSUER, "https://id.stage.doctor.school");
+    assert.equal(
+      registerLive.env.MAILPIT_URL,
+      "https://mailpit.stage.doctor.school",
+    );
+    assert.equal(registerLive.env.E2E_HTTP_PASS, "s3cret");
+    assert.ok(registerLive.argv.includes("--pass-with-no-tests"));
+    for (const call of calls) assertShellInert(call.argv);
+    // The suite is not handed the live-tier extras.
+    assert.equal(calls[0].env.IDP_ISSUER, undefined);
+  });
+
+  it("generates the BDD specs before the Academy live leg", async () => {
+    const { calls, effects } = harness();
+    await runE2eStage(["pr-3168", "--project", "academy"], {
+      env: ENV,
+      effects,
+    });
+    const i = calls.findIndex(
+      (c) => c.argv.join(" ") === "pnpm --filter @ds/portal exec bddgen",
+    );
+    assert.ok(i > 0);
+    assert.ok(calls[i + 1].argv.includes("--config=playwright.config.ts"));
+  });
+
+  it("writes the not-run specs to a --test-list-invert file instead of letting them fail on env", async () => {
+    const { calls, writes, effects } = harness();
+    await runE2eStage(["pr-3168", "--project", "doctor"], {
+      env: ENV,
+      effects,
+    });
+    const call = calls.find((c) =>
+      c.argv.includes("--config=playwright.register-live.config.ts"),
+    );
+    const flag = call.argv.find((t) => t.startsWith("--test-list-invert="));
+    assert.ok(flag);
+    const file = flag.slice("--test-list-invert=".length);
+    const written = writes.find(
+      (w) => w.file.split(path.sep).join("/") === file,
+    );
+    assert.ok(written, "the list the flag names was written");
+    assert.deepEqual(written.content.trim().split("\n"), [
+      "signed-in-landing-live.spec.ts",
+    ]);
+  });
+
+  it("honours --project like the axe legs, and --no-live drops every live leg", async () => {
+    const doctor = harness();
+    await runE2eStage(["main", "--project", "doctor"], {
+      env: ENV,
+      effects: doctor.effects,
+    });
+    assert.ok(doctor.calls.filter(isLive).length > 0);
+    assert.equal(
+      doctor.calls.some((c) => c.argv.includes("@ds/portal")),
+      false,
+    );
+
+    const none = harness();
+    await runE2eStage(["main", "--no-live"], {
+      env: ENV,
+      effects: none.effects,
+    });
+    assert.equal(none.calls.filter(isLive).length, 0);
+  });
+
+  it("prints each live config as ran (counts) or skipped — reason, and a skipped leg is not fatal", async () => {
+    const allSkipped = {
+      suites: [
+        {
+          specs: [{ tests: [{ projectName: "chromium", status: "skipped" }] }],
+        },
+      ],
+    };
+    const { calls, lines, effects } = harness({
+      readReport: (file) => (isLiveReport(file) ? allSkipped : LIVE_GREEN),
+    });
+    const code = await runE2eStage(["main"], { env: ENV, effects });
+    const out = lines.join("\n");
+    assert.equal(code, 0, "skipped live legs are loud but not fatal");
+    assert.match(
+      out,
+      /live\/doctor\/events-live\s+skipped — missing env E2E_EVENTS_LOADED_PATH/,
+    );
+    assert.match(
+      out,
+      /live\/doctor\/register-live\s+SKIPPED — ran 0 passed \/ 0 failed \/ 1 skipped/,
+    );
+    assert.match(out, /verdict:\s+PASS — \d+ live legs? skipped/);
+    // events-live is never launched: its config throws at load without its env.
+    assert.equal(
+      calls.some((c) =>
+        c.argv.includes("--config=playwright.events-live.config.ts"),
+      ),
+      false,
+    );
+  });
+
+  it("fails the run when a live leg ran with failures", async () => {
+    const { lines, effects } = harness({
+      readReport: (file) => (isLiveReport(file) ? REPORT : LIVE_GREEN),
+    });
+    const code = await runE2eStage(["main"], { env: ENV, effects });
+    assert.equal(code, 1);
+    assert.match(lines.join("\n"), /live\/doctor\/register-live\s+FAIL — ran/);
+  });
+
+  it("prints FAIL — runner exited <code> when a leg's runner dies before any test", async () => {
+    const { lines, effects } = harness({
+      run: (argv) => ({
+        status:
+          argv.join(" ") === "pnpm --filter @ds/portal exec bddgen" ? 1 : 0,
+      }),
+      readReport: (file) => (isLiveReport(file) ? undefined : LIVE_GREEN),
+    });
+    const code = await runE2eStage(["pr-3168", "--project", "academy"], {
+      env: ENV,
+      effects,
+    });
+    assert.equal(code, 1);
+    assert.match(
+      lines.join("\n"),
+      /live\/academy\/default\s+FAIL — runner exited 1 before any test ran/,
+    );
   });
 });
 
@@ -654,6 +1116,21 @@ describe("release check (--expect-sha)", () => {
     ]);
     assert.equal(calls[0].env.E2E_GREP, undefined);
   });
+
+  it("leaves the live legs out and says so in the verdict — until #3191", async () => {
+    for (const extra of [[], ["--no-live"]]) {
+      const { calls, lines, effects } = harness();
+      const code = await runE2eStage(["main", "--expect-sha", SHA, ...extra], {
+        env: RELEASE_ENV,
+        effects,
+      });
+      assert.equal(code, 0);
+      assert.equal(calls.filter(isLive).length, 0);
+      const out = lines.join("\n");
+      assert.match(out, /live:\s+not run in the release check — until #3191/);
+      assert.match(out, /verdict:\s+PASS$/m);
+    }
+  });
 });
 
 // --- public-log mode (#2985) --------------------------------------------------
@@ -695,11 +1172,12 @@ describe("E2E_PUBLIC_LOG=1 — the run's console is a public Actions log", () =>
     });
     assert.equal(code, 0);
     assert.equal(calls[0].env.E2E_PUBLIC_LOG, "1");
-    assert.equal(calls.length, 3);
+    const axeCalls = calls.filter(isAxe);
+    assert.equal(axeCalls.length, 2);
     const reportDir = calls[0].env.E2E_REPORT_DIR.split(path.sep).join("/");
     for (const [axe, host] of [
-      [calls[1], "academy"],
-      [calls[2], "doctor"],
+      [axeCalls[0], "academy"],
+      [axeCalls[1], "doctor"],
     ]) {
       assert.deepEqual(axe.argv.slice(-2), [
         `--reporter=${SUMMARY_REPORTER_PATH},json,html`,
@@ -720,7 +1198,21 @@ describe("E2E_PUBLIC_LOG=1 — the run's console is a public Actions log", () =>
       SUMMARY_REPORTER_PATH,
       /\/packages\/e2e\/reporters\/summary\.ts$/,
     );
-    assertShellInert(calls[1].argv);
+    for (const call of calls) assertShellInert(call.argv);
+    assertNoLeak(lines);
+  });
+
+  it("a slot run's live legs print through the summary reporter", async () => {
+    const { calls, lines, effects } = harness({ issueState: () => "CLOSED" });
+    await runE2eStage(["pr-3168"], { env: PUBLIC_ENV, effects });
+    const live = calls.filter(isLive);
+    assert.ok(live.length > 0);
+    for (const leg of live) {
+      assert.ok(
+        leg.argv.includes(`--reporter=${SUMMARY_REPORTER_PATH},json,html`),
+        "a live leg prints through the summary reporter in public mode",
+      );
+    }
     assertNoLeak(lines);
   });
 
@@ -770,7 +1262,7 @@ describe("E2E_PUBLIC_LOG=1 — the run's console is a public Actions log", () =>
       effects,
     });
     assert.equal(calls[0].env.E2E_PUBLIC_LOG, undefined);
-    for (const axe of calls.slice(1)) {
+    for (const axe of calls.filter(isAxe)) {
       assert.equal(
         axe.argv.some((t) => t.startsWith("--reporter")),
         false,

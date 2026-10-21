@@ -23,6 +23,19 @@
 //                                          Stage-B hold — #1662 — and the
 //                                          stage `main` check — #2701; reason
 //                                          is mandatory and loudly printed)
+//     node tools/deploy/prod.mjs --local --images-file <path|->
+//                                          the prod release driver's run ON
+//                                          ds-api-prod (#3157, below)
+//
+// Box-local run (`--local`, #3157; tech spec 2026-10-16 release pipeline §5 «Prod
+// release driver»): `infra/deploy/bin/release-driver` runs this file from the
+// codeload tree of the released SHA inside the unit `ds-prod-<sha12>-driver`, with
+// the recorded `images-<sha>.json` on stdin. It runs every box step of the plan
+// below (`DEPLOY_PLAN`), in the same order, minus the steps that need the operator's
+// git and gh (`OPERATOR_ONLY_STEPS`: the pre-flight, the release cut and the
+// Deployment record — the release workflow runs them). api-prod is the box itself
+// (`LOCAL_EXECUTOR`); data-prod is the VPC hop `deploy@<data-prod VPC IP>` with
+// `/etc/ds-platform/data-prod-ssh-key`.
 //
 // Hotfix path (`--ref <sha>`, #1881 / spec §10.11): prod is behind main and a
 // single already-merged fix must ship WITHOUT everything else on main. The extra
@@ -101,6 +114,7 @@ import {
   postgresProbeScript,
   postgresStateScript,
   readPostgresTarget,
+  readPostgresTargetFromTree,
 } from "./postgres-guard.mjs";
 import {
   assertRollbackAllowed,
@@ -119,6 +133,7 @@ import {
 } from "./service-set.mjs";
 import {
   IMAGE_REGISTRY,
+  IMAGES_FILE_STDIN,
   PROD_MANIFEST_POLICY,
   RECORDED_IMAGE_NAMES,
   assertImageDigests,
@@ -126,21 +141,26 @@ import {
   pullRecordedImagesScript,
   pullTokenProbeScript,
   pullTokenVerdict,
+  readImageManifestFile,
   resolveRecordedImagesViaGh,
   validateImageManifest,
 } from "./lib/registry.mjs";
 import {
+  DATA_PROD_HOP_KEY,
+  LOCAL_EXECUTOR,
   PROD_HEALTH_URL,
+  RELEASE_DRIVER_BIN,
   STALL_BUDGET_BUILD_MS,
   BOX_ENTRYPOINTS,
+  boxSpawnArgs,
+  hopDestination,
   releaseCheckScript,
   releaseFinishScript,
   releaseInstallFromSourceScript,
   releaseInstallScript,
   releaseSupersedeScript,
   runDurableStep,
-  shipTree,
-  sshBaseArgs,
+  shipTree as shipCommittedTree,
   sshCapture,
   sshScript,
 } from "./lib/remote.mjs";
@@ -161,8 +181,9 @@ export {
 
 // --- config (env-overridable; SSH aliases live in ~/.ssh/config) ----------
 
-const API_PROD = process.env.DS_API_PROD_SSH || "ds-api-prod";
-const DATA_PROD = process.env.DS_DATA_PROD_SSH || "ds-data-prod";
+// `let`: a `--local` run (#3157) re-points both before its first step (`useLocalHosts`).
+let API_PROD = process.env.DS_API_PROD_SSH || "ds-api-prod";
+let DATA_PROD = process.env.DS_DATA_PROD_SSH || "ds-data-prod";
 // #3054: the entrypoint a run that ships no tree (`--rollback`) installs on the
 // boxes, read from the operator checkout's HEAD commit (with ds-deploy-entrypoint,
 // #2984: BOX_ENTRYPOINTS).
@@ -171,6 +192,10 @@ const REPO_ROOT = join(import.meta.dirname, "..", "..");
 const REMOTE_TREE = "~/ds-platform";
 const VPC_IP = process.env.DS_DATA_PROD_VPC_IP || "192.168.0.10";
 const IMAGE_RETENTION = 3;
+// #3157: the tree a `--local` run reads its target files from and ships — the codeload
+// tree of the released SHA the release driver extracted (null on the operator path,
+// which reads and ships the committed SHA through git).
+let LOCAL_TREE = null;
 const API_COMPOSE = `${REMOTE_TREE}/infra/deploy/compose/api-prod`;
 const DATA_COMPOSE = `${REMOTE_TREE}/infra/deploy/compose/data-prod`;
 
@@ -189,6 +214,195 @@ export { PROD_MANIFEST_POLICY };
 /** Validates a recorded manifest for a production release of `sha` (pure). */
 export function validateProdImageManifest(manifest, sha) {
   return validateImageManifest(manifest, { ...PROD_MANIFEST_POLICY, sha });
+}
+
+// --- #3157: the plan, and its box-local run (the prod release driver) -------
+
+/**
+ * Every phase of `deploy()`, in its order. `deploy()` walks exactly this list
+ * (`planWalker` refuses a phase out of order), so the list IS the release's order.
+ * The smoke runs before `finish`: a red smoke ends the release `failed`.
+ */
+export const DEPLOY_PLAN = Object.freeze([
+  "preflight",
+  "test-token",
+  "service-set",
+  "postgres-verify",
+  "previous-sha",
+  "ship",
+  "install",
+  "data-prod-env",
+  "data-prod-up",
+  "backup",
+  "pull",
+  "boot-verify",
+  "idp",
+  "migrate",
+  "runtime-configs",
+  "verify-running-sha",
+  "prune",
+  "smoke",
+  "finish",
+  "release-cut",
+  "deployment-record",
+]);
+
+/**
+ * The phases that need the operator's checkout and `gh`. A `--local` run skips them:
+ * the release workflow runs the pre-flight before it calls the box, and the release
+ * cut and the Deployment record after a terminal status (spec §3 item 3).
+ */
+export const OPERATOR_ONLY_STEPS = Object.freeze(["preflight", "release-cut", "deployment-record"]);
+
+/** The phases a run executes, in order. */
+export function deployPlan({ local = false } = {}) {
+  return DEPLOY_PLAN.filter((id) => !local || !OPERATOR_ONLY_STEPS.includes(id));
+}
+
+/**
+ * The cursor `deploy()` walks the plan with. `phase(id)` enters a phase every run
+ * executes; `operatorPhase(id)` an operator-only one, answering whether this run
+ * executes it. Either refuses a phase out of `DEPLOY_PLAN` order or a skipped phase
+ * this run executes; `done()` refuses a run that left one out.
+ */
+export function planWalker({ local = false } = {}) {
+  const plan = deployPlan({ local });
+  let at = 0;
+  const advance = (id) => {
+    const index = DEPLOY_PLAN.indexOf(id, at);
+    if (index < 0) throw new Error(`deploy phase ${id} is out of plan order`);
+    const missed = DEPLOY_PLAN.slice(at, index).find((skipped) => plan.includes(skipped));
+    if (missed) throw new Error(`deploy phase ${missed} was left out before ${id}`);
+    at = index + 1;
+    return plan.includes(id);
+  };
+  return {
+    phase(id) {
+      if (OPERATOR_ONLY_STEPS.includes(id)) throw new Error(`${id} is an operator-only phase`);
+      advance(id);
+    },
+    operatorPhase(id) {
+      if (!OPERATOR_ONLY_STEPS.includes(id)) throw new Error(`${id} runs on every path`);
+      return advance(id);
+    },
+    done() {
+      const missed = DEPLOY_PLAN.slice(at).find((id) => plan.includes(id));
+      if (missed) throw new Error(`deploy phase ${missed} was left out`);
+    },
+  };
+}
+
+/**
+ * The boxes of a `--local` run on ds-api-prod: api-prod is the box itself, data-prod
+ * the VPC hop as `deploy` with the dedicated hop key (spec §4, §5).
+ */
+export function localProdHosts({ dataProdAddress = VPC_IP } = {}) {
+  return {
+    api: LOCAL_EXECUTOR,
+    data: hopDestination({
+      user: "deploy",
+      address: dataProdAddress,
+      identityFile: DATA_PROD_HOP_KEY,
+    }),
+  };
+}
+
+function useLocalHosts() {
+  const hosts = localProdHosts();
+  API_PROD = hosts.api;
+  DATA_PROD = hosts.data;
+  LOCAL_TREE = REPO_ROOT;
+}
+
+const LOCAL_FLAG = "--local";
+const IMAGES_FILE_FLAG = "--images-file";
+
+/**
+ * `--local --images-file <path|->` (`-`: the inherited stdin). Nothing else goes with
+ * them: a hotfix `--ref`, `--rollback` and every escape hatch stay on the operator
+ * path (spec §5 «Prod release driver»). Returns `{ local: null }`,
+ * `{ local: { imagesFile } }` or `{ error }`.
+ */
+export function parseLocalFlags(args) {
+  const local = args.includes(LOCAL_FLAG);
+  const at = args.indexOf(IMAGES_FILE_FLAG);
+  if (!local && at < 0) return { local: null };
+  if (!local || at < 0) return { error: "`--local` and `--images-file <path|->` go together" };
+  const imagesFile = args[at + 1];
+  if (!imagesFile || imagesFile.startsWith("--")) {
+    return { error: "`--images-file` requires a path (`-`: stdin)" };
+  }
+  const rest = args.filter((arg, index) => arg !== LOCAL_FLAG && index !== at && index !== at + 1);
+  if (rest.length > 0) {
+    return {
+      error:
+        `\`--local\` takes no other flag (${rest.join(" ")}): a hotfix, a rollback and` +
+        " every escape hatch stay on the operator path",
+    };
+  }
+  return { local: { imagesFile } };
+}
+
+/** A file of the target commit: `git show` on the operator path, the extracted tree on the box. */
+function targetFile(sha, path) {
+  if (LOCAL_TREE) return readFileSync(join(LOCAL_TREE, ...path.split("/")), "utf8").trim();
+  return localCap("git", ["show", `${sha}:${path}`]);
+}
+
+/** The ship: the committed SHA (`git archive`), or on the box the tree it runs from. */
+function shipTree(sha, host) {
+  return shipCommittedTree(sha, host, LOCAL_TREE ? { sourceDir: LOCAL_TREE } : undefined);
+}
+
+/**
+ * Records the previous prod SHA for `status prod <sha>` (`driver.previousSha`, the
+ * release-notes basis the runner reads without box access) through the installed
+ * release driver.
+ */
+export function recordPreviousShaScript(sha, prevSha) {
+  return `${RELEASE_DRIVER_BIN} record-previous prod ${sha} ${prevSha ?? "none"}\n`;
+}
+
+// A release moves production forward: a SHA that does not descend from the live one
+// is a downgrade — a rollback, which goes through `--rollback` and its migration floor
+// (`assertRollbackAllowed`), never through a release. The release driver refuses it
+// before it starts the unit; the unit refuses it again, so a direct `--local` run
+// cannot skip the check (spec §5 «Prod release driver»).
+const GITHUB_COMPARE_API = "https://api.github.com/repos/doctor-school/ds-platform/compare";
+
+/** GitHub's unauthenticated `compare <base>...<head>` status, or null when it cannot answer. */
+export async function compareStatus(base, head, { fetchImpl = fetch } = {}) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 30_000);
+  try {
+    const response = await fetchImpl(`${GITHUB_COMPARE_API}/${base}...${head}`, {
+      headers: { Accept: "application/vnd.github+json" },
+      signal: ac.signal,
+    });
+    if (!response.ok) return null;
+    const body = await response.json();
+    return body && !Array.isArray(body) && typeof body.status === "string" ? body.status : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Pure: may a release of `sha` replace the live prod SHA `live`? (compare `ahead`/`identical`) */
+export function descendsFromLiveVerdict({ live, sha, status }) {
+  if (!live) {
+    return {
+      ok: false,
+      reason:
+        "the live prod SHA is unknown (no running ds-api-prod-api-1) — release it from the workstation path",
+    };
+  }
+  if (status === "ahead" || status === "identical") return { ok: true };
+  return {
+    ok: false,
+    reason: `${sha} does not descend from the live prod SHA ${live.slice(0, 12)} — a downgrade is a rollback (pnpm deploy:prod --rollback)`,
+  };
 }
 
 /**
@@ -562,12 +776,37 @@ async function resolveProdImages(sha) {
     );
   }
   ok(`recorded \`${resolved.ref}\` images for ${sha.slice(0, 12)} (run ${resolved.run.url})`, t);
+  await assertPullToken();
+  return resolved.images;
+}
+
+async function assertPullToken() {
   const token = pullTokenVerdict(await sshCapture(API_PROD, pullTokenProbeScript()), {
     host: API_PROD,
   });
   if (!token.ok) die(token.reason);
   ok(`registry pull token provisioned on ${API_PROD}`);
-  return resolved.images;
+}
+
+// #3157: a `--local` run's target — the SHA and digests of the `images-<sha>.json` the
+// release driver validated and checked against GitHub and the registry before it
+// started this unit (it downloaded the tree of exactly that SHA). Validated again
+// with the release policy before anything touches a box.
+async function readLocalRelease(imagesFile) {
+  step("Release manifest from the release driver (box-local run)");
+  let sha;
+  let images;
+  try {
+    const manifest = readImageManifestFile(imagesFile);
+    sha = manifest.sha;
+    ({ images } = validateProdImageManifest(manifest, sha));
+  } catch (e) {
+    const source = imagesFile === IMAGES_FILE_STDIN ? "on stdin" : imagesFile;
+    die(`the release manifest ${source}: ${e.message}`);
+  }
+  ok(`recorded images for ${sha.slice(0, 12)}`);
+  await assertPullToken();
+  return { sha, images };
 }
 
 // #2981: pull (or reuse) the recorded digests on api-prod as `ds-<image>:<sha>`,
@@ -636,8 +875,7 @@ function closeOpenReleaseAsFailed() {
   openReleaseSha = null;
   for (const host of [API_PROD, DATA_PROD]) {
     const r = spawnSync(
-      "ssh",
-      [...sshBaseArgs(host, ["-o", "ConnectTimeout=15", "-o", "BatchMode=yes"]), script],
+      ...boxSpawnArgs(host, script, ["-o", "ConnectTimeout=15", "-o", "BatchMode=yes"]),
       { stdio: ["ignore", "inherit", "pipe"], encoding: "utf8", timeout: 60_000 },
     );
     if (r.status !== 0) {
@@ -925,7 +1163,7 @@ async function provisionIdp(sha, label = sha.slice(0, 12)) {
   let expectedMin;
   try {
     expectedMin = parsePasswordMinLength(
-      localCap("git", ["show", `${sha}:${SCHEMAS_AUTH_SCHEMA_PATH}`]),
+      targetFile(sha, SCHEMAS_AUTH_SCHEMA_PATH),
     );
   } catch (e) {
     die(
@@ -994,15 +1232,9 @@ sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; IDP_BASE_URL=${IDP_BAS
   let codeExpectation;
   try {
     codeExpectation = resolveEmailedCodeExpectation({
-      provisionText: localCap("git", [
-        "show",
-        `${sha}:${IDP_PROVISION_SCRIPT_PATH}`,
-      ]),
-      verifyCodeSchemaText: localCap("git", [
-        "show",
-        `${sha}:${SCHEMAS_REGISTER_FIELDS_PATH}`,
-      ]),
-      codeEmailsText: localCap("git", ["show", `${sha}:${CODE_EMAILS_PATH}`]),
+      provisionText: targetFile(sha, IDP_PROVISION_SCRIPT_PATH),
+      verifyCodeSchemaText: targetFile(sha, SCHEMAS_REGISTER_FIELDS_PATH),
+      codeEmailsText: targetFile(sha, CODE_EMAILS_PATH),
     });
   } catch (e) {
     die(
@@ -1066,7 +1298,7 @@ sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; IDP_BASE_URL=${IDP_BAS
 function resolveTargetServiceSet(sha, label = sha.slice(0, 12)) {
   let composeText;
   try {
-    composeText = localCap("git", ["show", `${sha}:${API_PROD_COMPOSE_PATH}`]);
+    composeText = targetFile(sha, API_PROD_COMPOSE_PATH);
   } catch (e) {
     die(
       `cannot read ${API_PROD_COMPOSE_PATH} at ${label} — the deploy cannot know` +
@@ -1275,11 +1507,17 @@ export async function preparePostgresDeployment(
   };
 }
 
-async function deploy(hotfixRef = null) {
-  const { sha, images } = await preflight(hotfixRef);
+// `local` (#3157): `{ imagesFile }` of a box-local run, null on the operator path.
+async function deploy(hotfixRef = null, local = null) {
+  const walk = planWalker({ local: Boolean(local) });
+  const { sha, images } = walk.operatorPhase("preflight")
+    ? await preflight(hotfixRef)
+    : await readLocalRelease(local.imagesFile);
+  walk.phase("test-token");
   await assertProdApiEnvHasNoTestToken();
   // #1896: everything per-service below (pull banner, pre-swap boot probe,
   // truthful-success verify, smoke scope) is derived from THIS set.
+  walk.phase("service-set");
   const services = resolveTargetServiceSet(
     sha,
     hotfixRef ? `hotfix ${sha.slice(0, 12)}` : "origin/main",
@@ -1289,10 +1527,16 @@ async function deploy(hotfixRef = null) {
     certIndex < 0
       ? undefined
       : JSON.parse(readFileSync(process.argv[certIndex + 1], "utf8"));
+  walk.phase("postgres-verify");
   step(
     "PostgreSQL: verify cluster, backup path, mounts and immutable target artifacts",
   );
-  const postgres = await preparePostgresDeployment(sha, { certificate });
+  const postgres = await preparePostgresDeployment(sha, {
+    certificate,
+    ...(LOCAL_TREE
+      ? { readTarget: (target) => readPostgresTargetFromTree(target, LOCAL_TREE) }
+      : {}),
+  });
   // What the banners call the thing being shipped: `origin/main` for the normal
   // train, an explicit «hotfix @ <sha>» for `--ref` (#1881) — a deploy log that
   // says "origin/main" while shipping a cherry-pick branch is a lie the next
@@ -1306,6 +1550,7 @@ async function deploy(hotfixRef = null) {
   // `ds-api:<sha>` (no separate persistence file). This is the anchor the
   // release-notes digest ranges from (Issue #868). Non-fatal: any ssh error →
   // prevSha=null (the digest then skips green — it never breaks the deploy).
+  walk.phase("previous-sha");
   let prevSha;
   try {
     const img = await sshCapture(
@@ -1323,11 +1568,31 @@ async function deploy(hotfixRef = null) {
       `  ⚠ could not read the previous prod SHA (${e.message}) — release-notes range disabled for this deploy.`,
     );
   }
+  // #3157: the box-local run refuses a downgrade, then records the release-notes
+  // basis — the runner cuts the release from `status prod <sha>`, without box access.
+  if (local) {
+    const descent = descendsFromLiveVerdict({
+      live: prevSha,
+      sha,
+      status: prevSha ? await compareStatus(prevSha, sha) : null,
+    });
+    if (!descent.ok) die(descent.reason);
+    try {
+      await sshScript(API_PROD, recordPreviousShaScript(sha, prevSha), {
+        label: "record the previous SHA",
+      });
+    } catch (e) {
+      console.log(
+        `  ⚠ could not record the previous prod SHA for status (${e.message}) — the release notes of this release have no basis.`,
+      );
+    }
+  }
 
   const shipLabel =
     hotfixRef && prevSha
       ? `${targetLabel} (base ${prevSha.slice(0, 12)})`
       : targetLabel;
+  walk.phase("ship");
   step(`Ship ${shipLabel} → both boxes`);
   let t = Date.now();
   await postgres.run(async ({ live }) => {
@@ -1344,6 +1609,7 @@ async function deploy(hotfixRef = null) {
   ok(`archive → ${DATA_PROD}`, t);
   // #2982: the durable entrypoint comes from the tree just shipped, every run (with
   // the CI keys' forced command ds-deploy-entrypoint, #2984).
+  walk.phase("install");
   for (const host of [API_PROD, DATA_PROD]) {
     await sshScript(host, releaseInstallScript(), { label: "install ds-release" });
   }
@@ -1356,6 +1622,7 @@ async function deploy(hotfixRef = null) {
   // replaces — so they are rewritten on every run, outside the durable unit: a
   // re-run whose `up` returns its recorded verdict still leaves them in place for
   // the compose calls after it (#2982).
+  walk.phase("data-prod-env");
   await postgres.run(({ live }) =>
     sshScript(
       DATA_PROD,
@@ -1366,6 +1633,7 @@ printf '%s\\n' '${postgresImageOverride(live)}' > .postgres-artifacts.json
       { label: "data-prod compose env" },
     ),
   );
+  walk.phase("data-prod-up");
   await postgres.run(() =>
     boxStep(
       DATA_PROD,
@@ -1391,6 +1659,7 @@ sudo docker compose up -d --no-deps redis
   // correct pre-migrate anchor at the pre-pilot's near-zero write volume —
   // combined with synchronous WAL archiving it yields PITR to just-before-migrate
   // so an app-only rollback never needs a DB rollback.
+  walk.phase("backup");
   await boxStep(
     DATA_PROD,
     sha,
@@ -1426,6 +1695,7 @@ sudo docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info
     `api-prod: pull recorded ${formatServiceImages(services, "/")} + ds-api-migrate :${sha.slice(0, 12)}…`,
   );
   t = Date.now();
+  walk.phase("pull");
   await sshScript(
     API_PROD,
     `cd ${API_COMPOSE}
@@ -1439,42 +1709,55 @@ ${deployShaEnvScript(sha)}
   step("#1410: PRE-SWAP boot verify (old containers still serving)");
   // No `t = Date.now()` here: verifyImagesBoot() prints its own `ok(...)` line
   // and takes no elapsed argument, so timing it would be a dead assignment.
+  walk.phase("boot-verify");
   await verifyImagesBoot(sha, services);
 
   step("#2149: PRE-SWAP IdP converge + SMTP and policy read-back");
   t = Date.now();
+  walk.phase("idp");
   await provisionIdp(sha);
   ok("prod IdP converged and read back before app swap", t);
 
   step("api-prod: migrate → up -d");
   t = Date.now();
+  walk.phase("migrate");
   await boxStep(API_PROD, sha, "migrate", migrateAndUpScript(), "api-prod deploy");
   ok("migrate + up -d", t);
 
   step("api-prod: apply bind-mounted Caddy + Centrifugo configs (#1175)");
   t = Date.now();
+  walk.phase("runtime-configs");
   await applyRuntimeConfigs();
   ok("Caddy + Centrifugo run with the shipped configs", t);
 
+  walk.phase("verify-running-sha");
   step("Verify the RUNNING containers carry the deployed SHA");
   await verifyRunningSha(sha, services);
 
   step(`DSO-127: image retention (keep last ${IMAGE_RETENTION} SHA tags/repo)`);
   t = Date.now();
+  walk.phase("prune");
   await boxStep(API_PROD, sha, "prune", retentionScript(), "retention");
   ok("old images pruned", t);
 
+  walk.phase("smoke");
   step("DSO-128: prod smoke (--expect-sha)");
   await runSmoke(sha, services);
 
+  walk.phase("finish");
   step("#2982: close the release on both boxes (frees the env lease)");
   await finishReleaseSucceeded(sha);
 
-  step("Cut the release at the deployed SHA (#996/§10.5 — Option A)");
-  cutReleaseAtDeployedSha(sha, { hotfix: Boolean(hotfixRef) });
+  if (walk.operatorPhase("release-cut")) {
+    step("Cut the release at the deployed SHA (#996/§10.5 — Option A)");
+    cutReleaseAtDeployedSha(sha, { hotfix: Boolean(hotfixRef) });
+  }
 
-  step("Record the deploy as a GitHub Deployment (#927/#942)");
-  await recordDeployment(prevSha, sha);
+  if (walk.operatorPhase("deployment-record")) {
+    step("Record the deploy as a GitHub Deployment (#927/#942)");
+    await recordDeployment(prevSha, sha);
+  }
+  walk.done();
 
   console.log(
     `\n✓ DEPLOY OK — ${shipLabel} live on prod` +
@@ -1789,6 +2072,15 @@ sudo docker compose up -d
 // --- entry ----------------------------------------------------------------
 
 async function main() {
+  // #3157: the prod release driver's box-local run takes no operator flag at all.
+  const localUsage = parseLocalFlags(process.argv.slice(2));
+  if (localUsage.error) die(localUsage.error);
+  if (localUsage.local) {
+    useLocalHosts();
+    await deploy(null, localUsage.local);
+    return;
+  }
+
   // Validate CLI usage FIRST — a mistyped/bare `--release-gate-exempt` must
   // fail fast, not after the clean-tree, fetch, green-CI and эфир probes have
   // already run (the same contract `--rollback` validates its argument under).

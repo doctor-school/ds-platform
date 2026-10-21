@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { parse } from "yaml";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 
 export const DATA_PATH = "infra/deploy/compose/data-prod/";
 export const SOURCE_LABEL = "org.doctor-school.postgres-source";
@@ -27,7 +27,14 @@ export function postgresSourceHash(files) {
 }
 
 export function postgresContract(files) {
-  const c = parse(files["compose.yml"]);
+  // compose.yml is JSON (valid YAML, so Compose reads it): the box-local release runs
+  // from a bare tree with no node_modules, so the parser is node's own (#3157).
+  let c;
+  try {
+    c = JSON.parse(files["compose.yml"]);
+  } catch {
+    fail("compose contract is not JSON");
+  }
   requireFact(
     c?.name && c.services?.postgres && c.services?.pgbackrest,
     "missing compose contract",
@@ -247,9 +254,50 @@ export function readPostgresTarget(sha, cwd = process.cwd()) {
     return r.stdout;
   };
   sha = git(["rev-parse", "--verify", `${sha}^{commit}`]).trim();
-  const paths = git(["ls-tree", "-r", "--name-only", sha, "--", DATA_PATH])
-    .trim()
-    .split(/\r?\n/)
+  return postgresTargetFrom(sha, {
+    list: () =>
+      git(["ls-tree", "-r", "--name-only", sha, "--", DATA_PATH])
+        .trim()
+        .split(/\r?\n/),
+    read: (path) => git(["show", `${sha}:${path}`]),
+  });
+}
+
+/**
+ * #3157: the same target, read from the extracted tree of exactly `sha` — the codeload
+ * tree a box-local run (`prod.mjs --local`, the prod release driver) runs from, which
+ * carries no git. codeload honours `export-ignore` as `git archive` does, so the
+ * inventory is the committed one.
+ */
+export function readPostgresTargetFromTree(sha, treeDir) {
+  const root = join(treeDir, DATA_PATH);
+  const guarded = (read) => {
+    try {
+      return read();
+    } catch {
+      return fail("cannot read the target source tree");
+    }
+  };
+  return postgresTargetFrom(sha, {
+    list: () =>
+      guarded(() =>
+        readdirSync(root, { recursive: true, withFileTypes: true })
+          .filter((entry) => entry.isFile())
+          .map(
+            (entry) =>
+              DATA_PATH +
+              relative(root, join(entry.parentPath, entry.name))
+                .split(sep)
+                .join("/"),
+          )
+          .sort(),
+      ),
+    read: (path) => guarded(() => readFileSync(join(treeDir, path), "utf8")),
+  });
+}
+
+function postgresTargetFrom(sha, { list, read }) {
+  const paths = list()
     .map((p) => p.slice(DATA_PATH.length))
     .filter(
       (p) =>
@@ -262,7 +310,7 @@ export function readPostgresTarget(sha, cwd = process.cwd()) {
     "invalid target source inventory",
   );
   const files = Object.fromEntries(
-    paths.map((p) => [p, git(["show", `${sha}:${DATA_PATH}${p}`])]),
+    paths.map((p) => [p, read(`${DATA_PATH}${p}`)]),
   );
   return {
     sha,

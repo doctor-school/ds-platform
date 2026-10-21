@@ -192,7 +192,7 @@ test("2981: the manifest is resolved in pre-flight, before the ship step touches
   const preflightAt = PROD_SOURCE.indexOf("const images = await resolveProdImages(target);");
   const stageCheckAt = PROD_SOURCE.indexOf("  assertStageMainCheck(target);");
   assert.ok(preflightAt > 0 && preflightAt < stageCheckAt, "resolved inside pre-flight, before the stage check");
-  const deployAt = PROD_SOURCE.indexOf("const { sha, images } = await preflight(hotfixRef);");
+  const deployAt = PROD_SOURCE.indexOf("? await preflight(hotfixRef)");
   const shipAt = PROD_SOURCE.indexOf("await shipTree(sha, API_PROD);");
   assert.ok(deployAt > 0 && deployAt < shipAt);
 });

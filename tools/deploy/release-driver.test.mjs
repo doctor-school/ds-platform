@@ -207,8 +207,11 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       join(stubs, "curl"),
       [
         'echo "$*" >> "$STUB_DIR/curl.log"',
-        "[[ -f $STUB_DIR/compare.json ]] || exit 22",
-        'cat "$STUB_DIR/compare.json"',
+        // #3157: compare main...<sha> answers from compare.json, any other base (the
+        // live prod SHA) from compare-live.json.
+        "case ${!#} in */compare/main...*) f=$STUB_DIR/compare.json ;; *) f=$STUB_DIR/compare-live.json ;; esac",
+        "[[ -f $f ]] || exit 22",
+        'cat "$f"',
       ].join("\n"),
     );
     // docker: login reads the token on stdin; `manifest inspect --verbose <ref>`
@@ -222,6 +225,8 @@ describe("2985: release-driver", { skip: SKIP }, () => {
         '  login) cat > "$STUB_DIR/docker.login-stdin"; [[ -f $STUB_DIR/login-fails ]] && exit 1',
         '    echo "{}" > "$DOCKER_CONFIG/config.json"; exit 0 ;;',
         "  logout) exit 0 ;;",
+        // #3157: the running api container's image, from $STUB_DIR/live-image.
+        '  inspect) [[ -f $STUB_DIR/live-image ]] || exit 1; cat "$STUB_DIR/live-image" ;;',
         "  manifest) ref=${!#}; f=$STUB_DIR/registry/${ref//[\\/:]/_}.json",
         '    [[ -f $f ]] || { echo "no such manifest" >&2; exit 1; }; cat "$f" ;;',
         "esac",
@@ -263,9 +268,9 @@ describe("2985: release-driver", { skip: SKIP }, () => {
     );
   const setRole = (role) =>
     writeFileSync(join(root, "etc/ds-platform/box-role"), `${role}\n`);
-  const setUnit = (props) =>
+  const setUnit = (props, unit = UNIT) =>
     writeFileSync(
-      join(units, `${UNIT}.props`),
+      join(units, `${unit}.props`),
       Object.entries(props)
         .map(([k, v]) => `${k}=${v}\n`)
         .join(""),
@@ -603,15 +608,260 @@ describe("2985: release-driver", { skip: SKIP }, () => {
     notStarted();
   });
 
-  it("refuses on a prod box until the prod driver lands", () => {
-    setRole("prod");
-    const r = run(["prod", SHA]);
-    assert.equal(r.status, 3);
-    assert.equal(
-      r.stderr,
-      "ds-release-driver: refused: prod release driver lands with #2986\n",
-    );
-    notStarted();
+  describe("3157: the prod release driver", () => {
+    const PROD_UNIT = `ds-prod-${SHA.slice(0, 12)}-driver`;
+    const exited = (status) => ({
+      LoadState: "loaded",
+      ActiveState: "active",
+      SubState: "exited",
+      ExecMainCode: 1,
+      ExecMainStatus: status,
+    });
+    const LIVE = "d".repeat(40);
+    const setLive = (status, image = `ds-api:${LIVE}`) => {
+      writeFileSync(join(dir, "live-image"), `${image}\n`);
+      writeFileSync(join(dir, "compare-live.json"), JSON.stringify({ status }));
+    };
+    const DOWNGRADE = `ds-release-driver: refused: ${SHA} does not descend from the live prod SHA ${LIVE.slice(0, 12)} — a downgrade is a rollback (pnpm deploy:prod --rollback)\n`;
+    beforeEach(() => {
+      setRole("prod");
+      setLive("ahead");
+    });
+
+    it("asks GitHub whether the SHA descends from the live prod SHA it reads from the running api", () => {
+      const r = run(["prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.match(
+        log("docker.log"),
+        /^inspect ds-api-prod-api-1 --format \{\{\.Config\.Image\}\}$/m,
+      );
+      assert.match(
+        log("curl.log"),
+        new RegExp(`/compare/${LIVE}\\.\\.\\.${SHA}`),
+      );
+    });
+
+    it("starts a re-run of the live SHA itself (identical)", () => {
+      setLive("identical");
+      const r = run(["prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, `ds-release-driver: started ${PROD_UNIT}\n`);
+    });
+
+    it("refuses a downgrade: a SHA that does not descend from the live prod SHA", () => {
+      for (const status of ["behind", "diverged"]) {
+        setLive(status);
+        const r = run(["prod", SHA]);
+        assert.equal(r.status, 3, status);
+        assert.equal(r.stderr, DOWNGRADE, status);
+      }
+      rmSync(join(dir, "compare-live.json")); // GitHub cannot answer: closed
+      const r = run(["prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.equal(r.stderr, DOWNGRADE);
+      notStarted();
+    });
+
+    it("refuses when the live prod SHA is unknown (no running api)", () => {
+      for (const image of [null, "ds-api:local", "absent"]) {
+        if (image === null) rmSync(join(dir, "live-image"));
+        else setLive("ahead", image);
+        const r = run(["prod", SHA]);
+        assert.equal(r.status, 3, String(image));
+        assert.equal(
+          r.stderr,
+          "ds-release-driver: refused: the live prod SHA is unknown (no running ds-api-prod-api-1) — release it from the workstation path\n",
+        );
+      }
+      notStarted();
+    });
+
+    it("never asks the live SHA on the stage box", () => {
+      setRole("stage");
+      const r = run(["stage-main", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.doesNotMatch(log("docker.log"), /^inspect ds-api-prod-api-1\b/m);
+    });
+
+    it("starts the release unit for prod on a prod-role box, after the lease", () => {
+      const r = run(["prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, `ds-release-driver: started ${PROD_UNIT}\n`);
+      assert.equal(r.stderr, "");
+      const argv = log("systemd-run.args").trim().split("\n");
+      for (const want of [
+        `--unit=${PROD_UNIT}`,
+        "--remain-after-exit",
+        "KillMode=mixed",
+      ]) {
+        assert.ok(
+          argv.includes(want),
+          `systemd-run gets ${want}: ${argv.join(" ")}`,
+        );
+      }
+      assert.deepEqual(argv.slice(-4), [
+        "/usr/local/lib/ds-platform/release-driver",
+        "_run",
+        "prod",
+        SHA,
+      ]);
+      assert.match(
+        log("ds-release.log"),
+        new RegExp(`^lease prod ${SHA}$`, "m"),
+      );
+      assert.match(log("curl.log"), new RegExp(`/compare/main\\.\\.\\.${SHA}`));
+    });
+
+    it("refuses stage-main and PR slots on the prod box", () => {
+      for (const env of ["stage-main", "stage-pr-7"]) {
+        const r = run([env, SHA]);
+        assert.equal(r.status, 3, env);
+        assert.equal(
+          r.stderr,
+          `ds-release-driver: refused: the prod box serves prod, not ${env}\n`,
+        );
+      }
+      notStarted();
+    });
+
+    it("refuses a SHA that is not on main", () => {
+      for (const status of ["ahead", "diverged"]) {
+        setCompare(status);
+        const r = run(["prod", SHA]);
+        assert.equal(r.status, 3, status);
+        assert.match(
+          r.stderr,
+          new RegExp(`is not on main \\(compare status: ${status}\\)`),
+        );
+      }
+      notStarted();
+    });
+
+    it("refuses a manifest digest the registry does not serve for the SHA", () => {
+      serve("api", digestOf("f"));
+      const r = run(["prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.match(
+        r.stderr,
+        /refused: the manifest digest of api is not the one the registry serves/,
+      );
+      notStarted();
+    });
+
+    it("attaches to a running release unit of the SHA, before GitHub or the registry", () => {
+      setUnit(
+        {
+          LoadState: "loaded",
+          ActiveState: "active",
+          SubState: "running",
+          ExecMainCode: 0,
+          ExecMainStatus: 0,
+        },
+        PROD_UNIT,
+      );
+      rmSync(join(dir, "compare.json"));
+      const r = run(["prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, `ds-release-driver: attached ${PROD_UNIT}\n`);
+      assert.equal(log("curl.log"), "");
+      notStarted();
+    });
+
+    it("answers already-succeeded for an rc-0 unit whose release closed succeeded", () => {
+      setUnit(exited(0), PROD_UNIT);
+      setRecord("succeeded");
+      const r = run(["prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, "ds-release-driver: already-succeeded\n");
+      notStarted();
+    });
+
+    it("starts a failed release of the SHA again", () => {
+      setUnit(exited(1), PROD_UNIT);
+      setRecord("failed");
+      const r = run(["prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, `ds-release-driver: started ${PROD_UNIT}\n`);
+      assert.match(
+        log("systemctl.log"),
+        new RegExp(`reset-failed ${PROD_UNIT}\\.service`),
+      );
+    });
+
+    it("refuses while another SHA holds the prod lease", () => {
+      writeFileSync(join(dir, "lease"), OTHER);
+      const r = run(["prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.match(r.stderr, /refused: env prod is leased by release/);
+      notStarted();
+    });
+  });
+
+  describe("3157: record-previous and previousSha", () => {
+    const PREVIOUS = "c".repeat(40);
+    const saved = () =>
+      join(root, "var/lib/ds-platform/release-driver", `${SHA}.previous`);
+    const previousOf = () => {
+      const r = run(["unit-state", "prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      return JSON.parse(r.stdout).previousSha;
+    };
+
+    it("reports no previous SHA until one is recorded", () => {
+      assert.equal(previousOf(), null);
+    });
+
+    it("records the previous SHA root-only and reports it as previousSha", () => {
+      const r = run(["record-previous", "prod", SHA, PREVIOUS]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(readFileSync(saved(), "utf8"), `${PREVIOUS}\n`);
+      assert.equal(statSync(saved()).mode & 0o777, 0o600);
+      assert.equal(previousOf(), PREVIOUS);
+    });
+
+    it("keeps the first recorded basis: a re-run after the swap reads the SHA itself", () => {
+      run(["record-previous", "prod", SHA, PREVIOUS]);
+      assert.equal(run(["record-previous", "prod", SHA, SHA]).status, 0);
+      assert.equal(previousOf(), PREVIOUS);
+    });
+
+    it("records nothing for none, and a later real basis still lands", () => {
+      assert.equal(run(["record-previous", "prod", SHA, "none"]).status, 0);
+      assert.equal(existsSync(saved()), false);
+      run(["record-previous", "prod", SHA, PREVIOUS]);
+      assert.equal(previousOf(), PREVIOUS);
+    });
+
+    it("rejects a bad previous SHA as usage (a full 40-hex SHA or none, as release-runner's --previous-sha)", () => {
+      for (const args of [
+        ["record-previous", "prod", SHA, "xyz"],
+        ["record-previous", "prod", SHA, PREVIOUS.slice(0, 12)],
+        ["record-previous", "prod", SHA],
+        ["record-previous", "prod", "abc", PREVIOUS],
+      ]) {
+        assert.equal(run(args).status, 2, args.join(" "));
+      }
+      assert.equal(existsSync(saved()), false);
+    });
+
+    it("drops another SHA's recorded basis when a release starts", () => {
+      setRole("prod");
+      writeFileSync(join(dir, "live-image"), `ds-api:${PREVIOUS}\n`);
+      writeFileSync(
+        join(dir, "compare-live.json"),
+        JSON.stringify({ status: "ahead" }),
+      );
+      const dirOf = join(root, "var/lib/ds-platform/release-driver");
+      mkdirSync(dirOf, { recursive: true });
+      writeFileSync(join(dirOf, `${OTHER}.previous`), `${PREVIOUS}\n`);
+      run(["record-previous", "prod", SHA, PREVIOUS]);
+      const r = run(["prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.deepEqual(readdirSync(dirOf).sort(), [
+        `${SHA}.json`,
+        `${SHA}.previous`,
+      ]);
+    });
   });
 
   it("refuses on a box without a role", () => {
@@ -798,7 +1048,12 @@ describe("2985: release-driver", { skip: SKIP }, () => {
     ]) {
       it(`reports ${what} as ${active}`, () => {
         if (props) setUnit(props);
-        assert.deepEqual(state(), { unit: UNIT, active, rc });
+        assert.deepEqual(state(), {
+          unit: UNIT,
+          active,
+          rc,
+          previousSha: null,
+        });
       });
     }
   });
@@ -809,6 +1064,9 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       const src = join(dir, "src", `ds-platform-${SHA}`, "tools/staging");
       mkdirSync(src, { recursive: true });
       writeFileSync(join(src, "slot.mjs"), "// the tree\n");
+      const deploy = join(dir, "src", `ds-platform-${SHA}`, "tools/deploy");
+      mkdirSync(deploy, { recursive: true });
+      writeFileSync(join(deploy, "prod.mjs"), "// the prod tree\n");
       assert.equal(
         spawnSync("tar", [
           "czf",
@@ -873,8 +1131,32 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       assert.deepEqual(readdirSync(home), []);
     });
 
-    it("converges stage-main only", () => {
+    it("runs stage-main and prod only", () => {
       assert.equal(run(["_run", "stage-pr-7", SHA]).status, 2);
+    });
+
+    it("3157: releases prod from exactly the SHA's tree: prod.mjs --local, manifest on stdin", () => {
+      const r = run(["_run", "prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.match(
+        log("curl.args"),
+        new RegExp(
+          `https://codeload\\.github\\.com/doctor-school/ds-platform/tar\\.gz/${SHA}`,
+        ),
+      );
+      const argv = log("node.args").trim().split("\n");
+      assert.match(argv[0], /\/tree\/tools\/deploy\/prod\.mjs$/);
+      assert.deepEqual(argv.slice(1), ["--local", "--images-file", "-"]);
+      assert.equal(log("node.saw-tree"), "// the prod tree\n");
+      assert.equal(log("node.stdin"), manifest());
+      assert.deepEqual(readdirSync(home), [], "the work directory is removed");
+    });
+
+    it("3157: a red prod release is the unit's exit status", () => {
+      assert.equal(
+        run(["_run", "prod", SHA], { env: { NODE_RC: "1" } }).status,
+        1,
+      );
     });
   });
 });

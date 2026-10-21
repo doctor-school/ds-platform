@@ -44,9 +44,11 @@ import {
   RegistryError,
   assertImageDigests as registryAssertImageDigests,
   assertImageRefs as registryAssertImageRefs,
+  IMAGES_FILE_STDIN,
   imageDigestScript as registryImageDigestScript,
   localImageTag,
   pullAndTagArgv,
+  readImageManifestFile,
   RELEASE_MANIFEST_REFS,
   registryLogoutArgv,
   repoDigestsMatch,
@@ -2112,8 +2114,6 @@ const COMMANDS_WITHOUT_ARGS = new Set(["status", "gc"]);
 const RETRY_FAILED_FLAG = "--retry-failed";
 const LOCAL_FLAG = "--local";
 const IMAGES_FILE_FLAG = "--images-file";
-/** #3114: `--images-file -` reads the manifest from the inherited stdin (fd 0). */
-const IMAGES_FILE_STDIN = "-";
 
 /**
  * #2985: `--local --images-file <path|->` — the converge runs ON the box (the stage
@@ -3012,24 +3012,7 @@ export function requiredBaseDomain(boxEnv) {
  * stage-main workflow that triggers the driver); this file carries no run to select.
  */
 export function readImagesFile({ slot, sha, path, readText = (source) => readFileSync(source, "utf8") }) {
-  // #3114: `-` is the inherited fd 0, read as it is. The driver unit runs as `deploy`
-  // with a root-only manifest as its stdin; opening `/dev/stdin` would re-open that
-  // file through /proc/self/fd/0 and re-check its permissions (EACCES).
-  const fromStdin = path === IMAGES_FILE_STDIN;
-  const label = fromStdin ? "on stdin" : path;
-  let manifest;
-  try {
-    manifest = JSON.parse(readText(fromStdin ? 0 : path));
-  } catch (error) {
-    throw new SlotError(`the image manifest ${label} is not readable JSON (${error.message})`);
-  }
-  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
-    throw new SlotError(`the image manifest ${label} is not a JSON object`);
-  }
-  const keys = Object.keys(manifest).sort().join(",");
-  if (keys !== "images,ref,sha") {
-    throw new SlotError(`the image manifest ${label} carries keys ${keys}, not exactly sha, ref, images`);
-  }
+  const manifest = asSlotError(() => readImageManifestFile(path, { readText }));
   return validateImageManifest(manifest, { slot, sha });
 }
 

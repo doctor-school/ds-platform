@@ -187,7 +187,8 @@ test.describe("006 EARS-6 denied-access routing on the doctor host (this host's 
     const roomPath = `/events/${SLUG_YOUTUBE}/room`;
     const expectedLogin = `/login?returnTo=${encodeURIComponent(roomPath)}`;
 
-    // The server page redirects BEFORE any upstream read (D16a) — a server
+    // The shared room read refuses a cookie-less request without any upstream
+    // call (`@ds/room/server` `fetchRoomConfig`), so the server page answers with a server
     // redirect to this host's own login carrying a same-origin return to the room
     // (rule S1 · 020 EARS-7 / §6.1), never an academy login.
     const bounce = await page.request.get(`${DOCTOR_BASE}${roomPath}`, {

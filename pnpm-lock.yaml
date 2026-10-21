@@ -415,6 +415,9 @@ importers:
       '@ds/room':
         specifier: workspace:*
         version: link:../../packages/room
+      '@ds/room-page':
+        specifier: workspace:*
+        version: link:../../packages/room-page
       '@ds/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas

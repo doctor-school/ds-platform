@@ -602,6 +602,13 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Retain zitadel.idp.spec.ts EARS-6 consumed-challenge native proof and
     # the broader wrong-code/timing and verified-account request journeys.
 
+  @host:academy @EARS-6 @EARS-8 @EARS-16 @EARS-41 @failure @login-email-code-isolation
+  Scenario: Academy isolates two live email login codes by their rightful accounts
+    Given two owned Academy doctors verify fresh registrations for email login isolation
+    When both owned doctors retain distinct actual email login codes requested through Academy
+    And doctor B submits doctor A's live email login code and receives a generic refusal without a session
+    Then both retained email login codes still authenticate their rightful owners and preserve their identities through reload
+
   @EARS-34 @EARS-16 @failure @login-email-nonexistent
   Scenario: A login-email-code request for a nonexistent identifier is a silent no-op
     Given a unique unknown Academy address and owned unverified and verified login-code observations

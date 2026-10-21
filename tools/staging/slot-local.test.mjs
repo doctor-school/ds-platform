@@ -58,7 +58,7 @@ test("2985: `--local --images-file` parses for `up main` only, and only as a pai
 });
 
 /** Every effect call of one `up main`, with the whole step it was handed. */
-async function plannedCalls(options) {
+async function plannedCalls(options, shaInMain = () => true) {
   const calls = [];
   const record = (kind) => async (...args) => {
     // The audit line's wall-clock stamp is the one value two runs cannot share.
@@ -84,6 +84,7 @@ async function plannedCalls(options) {
     baseDomain: BASE,
     effects,
     databaseExists: () => true,
+    shaInMain,
   });
   return { calls, line };
 }
@@ -97,6 +98,18 @@ test("2985: the local converge plans exactly the operator's steps, in order", as
   assert.ok(operator.calls.some(([kind]) => kind === "ship"));
   assert.deepEqual(local.calls, operator.calls);
   assert.equal(local.line, operator.line);
+});
+
+test("3125: the local converge installs the entrypoints without re-checking main over the network", async () => {
+  // The release driver's provenance check (`compare main...<sha>`) already proved it.
+  const local = await plannedCalls(
+    parseArgs(["up", "main", "--ref", SHA, "--local", "--images-file", "-"]),
+    () => {
+      throw new Error("a local converge must not re-check main's ancestry");
+    },
+  );
+  const ship = local.calls.find(([kind]) => kind === "ship");
+  assert.equal(ship[1][0].installEntrypoints, true);
 });
 
 const manifest = (over = {}) => JSON.stringify({ sha: SHA, ref: "main", images: { ...IMAGES }, ...over });

@@ -144,11 +144,13 @@ the image's `PermitRootLogin yes` in `/etc/ssh/sshd_config` commented out, root'
 `/etc/ds-platform/box-role` = `prod` / `stage` / `data`. ds-api-prod's port 22 stays on
 `admin_ssh_cidr` until step (e); ds-data-prod stays VPC-only and holds no CI key.
 
-`ds-deploy-entrypoint` is installed beside `ds-release` by every operator run (forward
-deploy and slot runs from the shipped tree, `--rollback` from the operator checkout).
+`ds-deploy-entrypoint` is installed beside `ds-release` by every prod run (forward
+deploy from the shipped tree, `--rollback` from the operator checkout) and, on stage-1,
+only by the stage `main` converge of a SHA contained in `main` (#3125; PR slots and
+hotfix-ref converges use what the box has — `tools/staging/README.md` → Box entrypoints).
 Its `release` verb execs the box-side release driver
-`/usr/local/lib/ds-platform/release-driver` (installed by every operator run beside
-`ds-release`): on stage-1 it converges `stage-main` from the stdin `images-<sha>.json` in the
+`/usr/local/lib/ds-platform/release-driver` (installed beside `ds-release` under the same
+rule): on stage-1 it converges `stage-main` from the stdin `images-<sha>.json` in the
 unit `ds-stage-main-<sha12>-driver` (tech spec §5 «Stage `main` release driver»); on prod it
 refuses until #2986 lands. `status` adds that unit's state as `driver`. Reports uploaded on stage-1 land in
 `/var/lib/ds-platform/e2e-reports/<sha>/` (root-only, pruned after 14 days; validated and

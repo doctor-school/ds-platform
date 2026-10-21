@@ -32,6 +32,7 @@
 // Both IdP converges — the whole redirect-URI set on every `up`/`down`, and the golden
 // identities — live in `idp.mjs` and arrive here as ONE injected `idp` effect.
 
+import { spawnSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -57,6 +58,7 @@ import {
 } from "../deploy/lib/registry.mjs";
 
 import {
+  BOX_ENTRYPOINTS,
   LOCAL_EXECUTOR,
   STALL_BUDGET_BUILD_MS,
   STALL_BUDGET_DEFAULT_MS,
@@ -1504,6 +1506,7 @@ export function planSlotUp({
   databaseExists,
   subjects,
   actor,
+  shaInMain = false,
   now = new Date(),
 }) {
   assertSlotName(slot);
@@ -1529,6 +1532,9 @@ export function planSlotUp({
       // file and the audit log all live outside it.
       preserved: [],
       tmpPrefix: `ds-slot-${slot}`,
+      // #3125: the box-global entrypoints follow the last writer, so only a verified
+      // `main` tree may write them. A PR slot or a hotfix-ref `main` uses the box's own.
+      installEntrypoints: slot === "main" && shaInMain === true,
     },
     {
       kind: "write",
@@ -1725,6 +1731,7 @@ export function planSlotReset({
   baseDomain,
   actor,
   subjects,
+  shaInMain = false,
   now = new Date(),
 }) {
   assertBaseDomain(baseDomain);
@@ -1747,6 +1754,7 @@ export function planSlotReset({
     databaseExists: true,
     subjects,
     actor,
+    shaInMain,
     now,
   });
   const steps = [
@@ -1935,6 +1943,69 @@ async function runConverge(plan, effects) {
   }
 }
 
+/**
+ * #3125: whether this converge may install the box-global entrypoints — `true` only
+ * for slot `main` on a SHA contained in `origin/main`. A PR slot never asks. The
+ * `--local` run (the stage release driver) is already proven: the driver extracted
+ * the tree only after its GitHub `compare main...<sha>` answered behind|identical, so
+ * it is not re-checked over the network. The operator asks `verdict` (a thunk or a
+ * boolean; absent = no proof = no install).
+ */
+async function mainContainsShaVerdict(options, verdict) {
+  if (options.slot !== "main") return false;
+  if (options.local === true) return true;
+  const answer = typeof verdict === "function" ? await verdict(options.sha) : verdict;
+  return answer === true;
+}
+
+/**
+ * #3125: a run that installs no entrypoints relies on the box's own, so it first
+ * proves they are there — a fresh box, or one whose `main` never converged, fails
+ * here with the fix named instead of at the first `ds-release` call.
+ */
+export function boxEntrypointsCheckScript(paths = BOX_ENTRYPOINTS.map(({ dest }) => dest)) {
+  return [
+    "missing=''",
+    ...paths.map((path) => `test -x ${quoteCommand([path])} || missing="$missing ${path}"`),
+    'if [ -n "$missing" ]; then',
+    // Single-quoted message: its backticks must reach stderr, not a command substitution.
+    `  echo "box entrypoints absent:$missing"' — converge \`main\` first (\`ds-slot up main --ref <sha>\`); only it installs them' >&2`,
+    "  exit 1",
+    "fi",
+  ].join("\n");
+}
+
+/** `git` in the operator checkout this tool runs from; `{ status, stderr }`. */
+function runGit(args) {
+  const result = spawnSync("git", args, { cwd: SELF_TREE, encoding: "utf8" });
+  if (result.error) return { status: -1, stderr: result.error.message };
+  return { status: result.status, stderr: result.stderr ?? "" };
+}
+
+/**
+ * #3125: is `sha` contained in `origin/main`? Fetches `main` first, so the answer is
+ * about the remote branch, not a stale local ref. A SHA the freshly fetched checkout
+ * does not hold cannot be in main (a PR or hotfix head); anything git cannot answer
+ * is a refusal, never a guess.
+ */
+export function shaInOriginMain(sha, { git = runGit } = {}) {
+  shortSha(sha);
+  const fetched = git(["fetch", "--quiet", "origin", "main"]);
+  if (fetched.status !== 0) {
+    throw new SlotError(
+      `cannot verify ${shortSha(sha)} against origin/main: \`git fetch origin main\` failed: ${fetched.stderr.trim()}`,
+    );
+  }
+  if (git(["cat-file", "-e", `${sha}^{commit}`]).status !== 0) return false;
+  const ancestor = git(["merge-base", "--is-ancestor", sha, "origin/main"]);
+  if (ancestor.status === 0) return true;
+  if (ancestor.status === 1) return false;
+  throw new SlotError(
+    `cannot verify ${shortSha(sha)} against origin/main: \`git merge-base --is-ancestor\` ` +
+      `exited ${ancestor.status}: ${ancestor.stderr.trim()}`,
+  );
+}
+
 export async function runSlotCommand({
   options,
   images,
@@ -1942,6 +2013,7 @@ export async function runSlotCommand({
   baseDomain,
   effects,
   databaseExists: mainDatabaseExists,
+  shaInMain: mainContainsSha,
 }) {
   if (options.command === "down") {
     // A teardown needs NO golden identities: it must stay possible on a box where the
@@ -1994,6 +2066,7 @@ export async function runSlotCommand({
       baseDomain,
       actor: options.actor,
       subjects,
+      shaInMain: await mainContainsShaVerdict(options, mainContainsSha),
     });
     await runConverge(plan, effects);
     return (
@@ -2019,6 +2092,7 @@ export async function runSlotCommand({
     databaseExists,
     subjects,
     actor: options.actor,
+    shaInMain: await mainContainsShaVerdict(options, mainContainsSha),
   });
   await runConverge(plan, effects);
   return (
@@ -2771,7 +2845,8 @@ function realEffects(
     // Built per step, so every command that emits no `idp` step still runs on a box
     // where the bootstrap PAT file is not readable.
     // --- the five remote-only routines ---------------------------------------
-    // The ship also installs the durable entrypoint from the tree it just shipped.
+    // #3125: the ship installs the box entrypoints from the tree it just shipped only
+    // when the plan says so (a `main` converge of a SHA contained in main).
     ship: async (step) => {
       await shipTree(step.sha, STAGE_1, {
         liveDir: step.liveDir,
@@ -2781,7 +2856,15 @@ function realEffects(
         // codeload tarball of the SHA the driver extracted) is the one installed.
         ...(STAGE_1 === LOCAL_EXECUTOR ? { sourceDir: SELF_TREE } : {}),
       });
-      await streamed(releaseInstallScript(step.liveDir), { label: "install ds-release" });
+      if (step.installEntrypoints) {
+        await streamed(releaseInstallScript(step.liveDir), { label: "install ds-release" });
+      } else {
+        await streamed(boxEntrypointsCheckScript(), { label: "check the box entrypoints" });
+        console.log(
+          `# box entrypoints: not installed from this tree (only a \`main\` converge of a SHA in ` +
+            `main installs them) — this run uses the ones ${STAGE_1} has installed`,
+        );
+      }
     },
     verifyImages: async (step) => {
       const { services, bootProbe } = await readSlotServices(step.slot);
@@ -3072,6 +3155,8 @@ async function main() {
       effects,
       // A THUNK: `runSlotCommand` calls it only in the `up`/`sync` branch for `main`.
       databaseExists: () => boxDatabaseExists(slotDatabaseName("main")),
+      // A THUNK too: asked only for slot `main` off the box (#3125).
+      shaInMain: (sha) => shaInOriginMain(sha),
     }),
   );
 }

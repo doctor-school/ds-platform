@@ -54,17 +54,23 @@ describe("stage.yml", () => {
     }
   });
 
-  it("runs only on a successful push run of runtime-images on main, never cancelled", () => {
+  it("runs only on a successful push run of runtime-images on main; only that run joins the never-cancelled stage-main group", () => {
     assert.deepEqual(stage.on.workflow_run.workflows, ["Runtime images"]);
     assert.equal(parse(read("runtime-images.yml")).name, "Runtime images");
     const gate = stage.jobs.converge.if;
     assert.match(gate, /workflow_run\.conclusion == 'success'/);
     assert.match(gate, /workflow_run\.event == 'push'/);
     assert.match(gate, /workflow_run\.head_branch == 'main'/);
-    assert.deepEqual(stage.concurrency, {
-      group: "stage-main",
-      "cancel-in-progress": false,
-    });
+    // Only a successful push-to-main run joins `stage-main`; every other
+    // (skipped) run gets its own per-run group so it can never cancel main's
+    // pending run.
+    assert.equal(stage.concurrency["cancel-in-progress"], false);
+    const group = stage.concurrency.group;
+    assert.match(group, /workflow_run\.conclusion == 'success'/);
+    assert.match(group, /workflow_run\.event == 'push'/);
+    assert.match(group, /workflow_run\.head_branch == 'main'/);
+    assert.ok(group.includes("&& 'stage-main' ||"), group);
+    assert.ok(group.includes("format('stage-other-{0}', github.run_id)"), group);
     assert.deepEqual(stage.permissions, { contents: "read" });
     assert.deepEqual(stage.jobs.suite.needs, "converge");
   });

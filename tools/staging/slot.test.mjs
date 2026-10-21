@@ -13,13 +13,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { GOLDEN_SUBJECTS_PATH, GOLDEN_SUBJECT_ENV_VARS } from "./idp.mjs";
 import { terminateBackendsStatement } from "./golden-db.mjs";
-import { DS_RELEASE_BIN } from "../deploy/lib/remote.mjs";
+import { BOX_ENTRYPOINTS, DS_RELEASE_BIN } from "../deploy/lib/remote.mjs";
 import {
   BUILD_CACHE_RESERVED_SPACE,
   CADDY_CONTAINER,
@@ -77,6 +77,7 @@ import {
   remoteWriteScript,
   requiredOperatorPassword,
   assertCaptchaCoherent,
+  boxEntrypointsCheckScript,
   renderIdpRedirectUris,
   renderSlotDownEnv,
   renderSlotEnv,
@@ -87,6 +88,7 @@ import {
   runSlotCommand,
   runSlotPlan,
   seedCommandPlan,
+  shaInOriginMain,
   shortSha,
   s3Hostname,
   slotBucketCreateCommand,
@@ -928,6 +930,101 @@ test("up ships the slot's own tree at the requested SHA, into the slot's own dir
   assert.deepEqual(ship.preserved, []);
 });
 
+// #3125: the box-global entrypoints (ds-release, ds-deploy-entrypoint, release-driver)
+// are installed only by a `main` converge of a SHA contained in `origin/main`.
+test("3125: a PR slot's ship never installs the box entrypoints", () => {
+  assert.equal(stepOf(upPlan(), "ship the tree").installEntrypoints, false);
+  assert.equal(stepOf(upPlan({ shaInMain: true }), "ship the tree").installEntrypoints, false);
+});
+
+test("3125: a `main` ship installs the entrypoints only for a SHA contained in main", () => {
+  const main = (overrides) =>
+    stepOf(upPlan({ slot: "main", liveSlots: live({ main: [] }), databaseExists: true, ...overrides }), "ship the tree");
+  assert.equal(main({ shaInMain: true }).installEntrypoints, true);
+  // A hotfix ref, or any `--ref` main does not contain: the box keeps what it has.
+  assert.equal(main({ shaInMain: false }).installEntrypoints, false);
+  // Unknown is not proof.
+  assert.equal(main({}).installEntrypoints, false);
+});
+
+test("3125: `reset main` installs the entrypoints only for a SHA contained in main", () => {
+  const ship = (shaInMain) =>
+    stepOf(
+      planSlotReset({
+        sha: SHA,
+        images: IMAGES,
+        liveSlots: live({ main: [] }),
+        baseDomain: BASE,
+        actor: "tech-lead",
+        subjects: SUBJECTS,
+        shaInMain,
+      }),
+      "ship the tree",
+    );
+  assert.equal(ship(true).installEntrypoints, true);
+  assert.equal(ship(false).installEntrypoints, false);
+});
+
+/** Runs the entrypoint check against `paths` in a local bash. */
+function runEntrypointsCheck(paths) {
+  return spawnSync("bash", ["-c", boxEntrypointsCheckScript(paths)], { encoding: "utf8" });
+}
+
+test("3125: a run that installs nothing checks the box HAS the entrypoints, and names the fix", () => {
+  const dir = mkdtempSync(join(tmpdir(), "ds-3125-"));
+  try {
+    const present = join(dir, "ds-release").replaceAll("\\", "/");
+    const absent = join(dir, "release-driver").replaceAll("\\", "/");
+    writeFileSync(present, "#!/bin/sh\n", { mode: 0o755 });
+    assert.equal(runEntrypointsCheck([present]).status, 0);
+    const missing = runEntrypointsCheck([present, absent]);
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, /box entrypoints absent/);
+    assert.match(missing.stderr, /release-driver/);
+    assert.match(missing.stderr, /converge `main` first/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("3125: the default entrypoint check covers every installed box entrypoint", () => {
+  const script = boxEntrypointsCheckScript();
+  for (const { dest } of BOX_ENTRYPOINTS) assert.ok(script.includes(dest), dest);
+});
+
+/** A fake `git` answering from a script of `{ status }` per subcommand. */
+function fakeGit(answers) {
+  const calls = [];
+  const git = (args) => {
+    calls.push(args.join(" "));
+    const answer = answers[args[0]];
+    return { status: answer ?? 0, stderr: answer ? `${args[0]} failed` : "" };
+  };
+  return { calls, git };
+}
+
+test("3125: shaInOriginMain fetches main, then asks merge-base --is-ancestor", () => {
+  const yes = fakeGit({});
+  assert.equal(shaInOriginMain(SHA, { git: yes.git }), true);
+  assert.deepEqual(yes.calls, [
+    "fetch --quiet origin main",
+    `cat-file -e ${SHA}^{commit}`,
+    `merge-base --is-ancestor ${SHA} origin/main`,
+  ]);
+  assert.equal(shaInOriginMain(SHA, { git: fakeGit({ "merge-base": 1 }).git }), false);
+});
+
+test("3125: a SHA the freshly fetched checkout does not know is not in main", () => {
+  const { calls, git } = fakeGit({ "cat-file": 128 });
+  assert.equal(shaInOriginMain(SHA, { git }), false);
+  assert.ok(!calls.some((call) => call.startsWith("merge-base")));
+});
+
+test("3125: shaInOriginMain refuses on a failed fetch or a broken merge-base, never guesses", () => {
+  assert.throws(() => shaInOriginMain(SHA, { git: fakeGit({ fetch: 128 }).git }), SlotError);
+  assert.throws(() => shaInOriginMain(SHA, { git: fakeGit({ "merge-base": 128 }).git }), SlotError);
+});
+
 test("up verifies the images it pulled and the containers it started, against the SAME sha", () => {
   const plan = upPlan();
   assert.equal(stepOf(plan, "verify recorded digests and boot").sha, SHA);
@@ -1411,6 +1508,62 @@ test("`up` converges the golden identities FIRST — its subjects are the plan's
   assert.ok(env, "the slot env was written");
   assert.match(env[1], new RegExp(`${GOLDEN_SUBJECT_ENV_VARS[0]}=${SUBJECTS[GOLDEN_SUBJECT_ENV_VARS[0]]}`));
   assert.match(line, /slot pr-7 converged/);
+});
+
+/** The ship step one `runSlotCommand` handed its `ship` effect. */
+async function shippedStep(options, shaInMain) {
+  let shipped;
+  const effects = {
+    sql: async () => {},
+    sh: async () => {},
+    write: async () => {},
+    append: async () => {},
+    probe: async () => ({ ok: true, stdout: `{"a":{"Name":"${CADDY_CONTAINER}"}}` }),
+    idp: async (step) => (step.op === "golden-identities" ? SUBJECTS : undefined),
+    ship: async (step) => {
+      shipped = step;
+    },
+    verifyImages: async () => {},
+    verifyRunning: async () => {},
+    health: async () => {},
+    prune: async () => {},
+  };
+  await runSlotCommand({
+    options: { actor: "tech-lead", ...options },
+    images: IMAGES,
+    liveSlots: live({ main: [] }),
+    baseDomain: BASE,
+    effects,
+    databaseExists: true,
+    shaInMain,
+  });
+  return shipped;
+}
+
+test("3125: a PR slot run never asks main's ancestry and installs no entrypoints", async () => {
+  const never = () => {
+    throw new Error("a PR slot must not ask whether its SHA is in main");
+  };
+  const ship = await shippedStep({ command: "up", slot: "pr-7", sha: SHA }, never);
+  assert.equal(ship.installEntrypoints, false);
+  assert.equal((await shippedStep({ command: "sync", slot: "pr-7", sha: SHA }, never)).installEntrypoints, false);
+});
+
+test("3125: an operator `up main` installs the entrypoints only when the SHA is in origin/main", async () => {
+  const asked = [];
+  const verdict = (answer) => (sha) => {
+    asked.push(sha);
+    return answer;
+  };
+  assert.equal((await shippedStep({ command: "up", slot: "main", sha: SHA }, verdict(true))).installEntrypoints, true);
+  assert.equal((await shippedStep({ command: "up", slot: "main", sha: SHA }, verdict(false))).installEntrypoints, false);
+  assert.equal(
+    (await shippedStep({ command: "reset", slot: "main", sha: SHA, yes: true }, verdict(false))).installEntrypoints,
+    false,
+  );
+  assert.deepEqual(asked, [SHA, SHA, SHA]);
+  // No verdict at all is no proof.
+  assert.equal((await shippedStep({ command: "up", slot: "main", sha: SHA })).installEntrypoints, false);
 });
 
 test("`reset-identities` converges the agent admin too (#2531)", async () => {

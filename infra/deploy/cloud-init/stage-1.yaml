@@ -125,15 +125,16 @@ runcmd:
   - install -d -m 0700 -o root -g root /etc/ds-platform
   # #2982: state dir of the durable release entrypoint /usr/local/bin/ds-release
   # (status files /var/lib/ds-platform/release/<env>/<sha>.json).
-  # The box carries no tree of its own, so every operator run (`pnpm deploy:prod`,
-  # `pnpm stage:slot`) installs it from infra/deploy/bin/ds-release before any box
-  # step: right after the ship, or from the operator checkout on `--rollback`.
+  # The box carries no tree of its own, so only the stage `main` converge of a SHA
+  # contained in `main` (`pnpm stage:slot up main`, or the release driver's unit)
+  # installs it from infra/deploy/bin/ds-release of the tree it ships, right after the
+  # ship; PR slots and hotfix-ref converges use what the box has (#3125).
   # It relies on systemd-run, flock, runuser and python3 from the base image.
   - install -d -m 0755 -o root -g root /var/lib/ds-platform/release
   # #2984: ssh hardening, the end state of infra/deploy/bin/harden-ssh.sh. Root
   # login is off (the drop-in above) and root holds no key; the CI keys of deploy
-  # (forced command /usr/local/bin/ds-deploy-entrypoint, installed by every operator
-  # run beside ds-release) are added by the lead with harden-ssh.sh, never baked here.
+  # (forced command /usr/local/bin/ds-deploy-entrypoint, installed beside ds-release
+  # by the stage `main` converge) are added by the lead with harden-ssh.sh, never baked here.
   - [
       "sed",
       "-E",

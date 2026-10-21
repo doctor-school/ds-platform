@@ -246,19 +246,17 @@ services:
       ZITADEL_TLS_ENABLED: "false"
       ZITADEL_EXTERNALDOMAIN: ${IDP_EXTERNAL_DOMAIN:-localhost}
       ZITADEL_EXTERNALPORT: ${IDP_PORT:-9080}
-      # Login V2 — REQUIRED for the headless BFF session->token exchange (EARS-8).
-      # The api's Variant-B flow (apps/api auth design §3) does NOT render any login
-      # UI; it links a server-checked session to a pending OIDC auth request via
-      # POST /v2/oidc/auth_requests/{id}. That session-link API only resolves an
-      # auth request CREATED UNDER LOGIN V2 — with the feature off, the authorize
-      # hop files a v1 auth request the v2 API can't see and the link 404s
-      # ("Auth Request does not exist", proven live #146). Enabling the feature is
-      # enough: the v2 login UI ships as a SEPARATE Next.js `login` container, but
-      # the BFF never hits it (no baseUri set), and the auth_requests + token
-      # endpoints are served by THIS core binary. The org-owner machine user also
-      # needs the IAM_LOGIN_CLIENT role to call the link API — granted by
-      # idp/provision.sh, not here. Read at init, stored on the instance. Default
-      # true; do NOT disable it (that was the reverted #144 workaround).
+      # Login V2 instance flag — seeds a FRESH instance only. Login V2 is selected
+      # PER APP: the headless API app, the Management Console and the storefront
+      # clients each carry their own loginVersion (idp/provision.sh steps 3 /
+      # 3.ter / 3.bis), which keeps the headless BFF's authorize hop filing a V2
+      # auth request that POST /v2/oidc/auth_requests/{id} resolves (EARS-8,
+      # #146). provision.sh step 4 then switches loginV2.required OFF: with it on,
+      # Zitadel overrides every client's own base_uri with the instance one
+      # (v4.17.3 internal/query/oidc_client.go ActiveOIDCClientByID) and the
+      # storefronts would sign in on the wrong host. The bootstrap machine user's
+      # IAM_LOGIN_CLIENT role (needed for the link API) is also granted by
+      # provision.sh, not here.
       ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: ${IDP_LOGIN_V2_REQUIRED:-true}
       # SSRF guard, relaxed for the stand's own network. Zitadel's default
       # `HTTPClient.DenyList` denies `localhost` plus every loopback/private/

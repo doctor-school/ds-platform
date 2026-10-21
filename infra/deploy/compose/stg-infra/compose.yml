@@ -256,9 +256,12 @@ services:
       ZITADEL_TLS_ENABLED: "false"
       ZITADEL_EXTERNALDOMAIN: ${IDP_EXTERNAL_DOMAIN:-id.stage.doctor.school}
       ZITADEL_EXTERNALPORT: ${IDP_EXTERNAL_PORT:-443}
-      # Login V2 — REQUIRED for the headless BFF session→token exchange the api uses
-      # (Variant-B). With it off, the authorize hop files a v1 auth request the v2
-      # link API cannot see and the link 404s (proven live, #146). Never disable.
+      # Seeds a FRESH instance only. Login V2 is selected per app — the headless
+      # API app, the Console and the per-slot storefront clients (tools/staging/
+      # idp.mjs) each carry their own loginVersion — and provision.sh step 4
+      # switches loginV2.required off after the pins: with it on, Zitadel
+      # overrides every client's own base_uri (v4.17.3 ActiveOIDCClientByID) and
+      # the storefronts would sign in on the wrong host.
       ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "true"
       # SSRF guard relaxed for this compose network only — Zitadel's default deny
       # list refuses every private CIDR AFTER DNS resolution, which would block the

@@ -65,19 +65,23 @@ instance does nothing — you must re-init.
 `compose.core.yml` carries an opt-in FIRSTINSTANCE block, gated on `IDP_BOOTSTRAP`.
 When set, the init step creates an IAM-owner machine user `ds-bootstrap`, a console
 admin `zitadel-admin` with a known password, writes the machine user's PAT to a
-readable file, and enables the **Login V2** feature.
+readable file, and seeds the instance with the **Login V2** feature required.
 
-> **Login V2 is required — do not disable it.** The api BFF uses a headless
-> Variant-B exchange (apps/api auth design §3, EARS-8): it links a server-checked
-> session to a pending OIDC auth request via `POST /v2/oidc/auth_requests/{id}`.
-> That session-link API only resolves an auth request **created under Login V2**;
-> with the feature off the authorize hop files a v1 auth request the v2 API can't
-> see and the link 404s (`Auth Request does not exist`, proven live #146). The v2
-> login _UI_ ships as a separate Next.js `login` container — but the BFF never
-> renders it (no `baseUri` is configured), so the single-binary stand needs no
-> extra service: the `auth_requests` + token endpoints live in the core binary.
-> An earlier revision of this bootstrap forced Login V2 off; that was wrong and is
-> reverted.
+> **Login V2 is selected per app; the instance flag is switched off.** The api BFF
+> uses a headless Variant-B exchange (apps/api auth design §3, EARS-8): it links a
+> server-checked session to a pending OIDC auth request via
+> `POST /v2/oidc/auth_requests/{id}`, which only resolves an auth request **created
+> under Login V2** (a v1 auth request 404s with `Auth Request does not exist`,
+> #146). Each app therefore carries its own `loginVersion`: the headless API app
+> (`provision.sh` step 3), Zitadel's Management Console (step 3.ter), the
+> storefront clients (step 3.bis) and, on stage, the per-slot clients
+> (`tools/staging/idp.mjs`). After those pins, step 4 switches the instance flag
+> `loginV2.required` **off**: with it on, Zitadel overrides every client's own
+> `base_uri` with the instance one (v4.17.3 `internal/query/oidc_client.go`
+> `ActiveOIDCClientByID`) and the storefronts would sign in on the wrong host.
+> The compose `ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED=true` only seeds
+> a fresh instance; step 4 then turns it off. The `auth_requests` + token
+> endpoints live in the core binary.
 
 In your `.env.local` (synced to the remote `.env` on `dev:up`):
 
@@ -504,8 +508,10 @@ default sits outside any synced dir, so it survives `dev:up`.
 
 ### `baseUri` is set idempotently by `provision.sh` (no console click-path)
 
-`provision.sh` step 4 sets the Login V2 instance feature with the **`baseUri`**
-(`${IDP_BASE_URL}/ui/v2/login`) on top of `required:true`, read-before-write so a
+`provision.sh` step 4 sets the Login V2 instance feature to the **`baseUri`**
+(`${IDP_BASE_URL}/ui/v2/login`) with `required:false` — Login V2 is selected per
+app, each client carrying its own `loginVersion` pinned by steps 3 / 3.bis / 3.ter
+earlier in the same run (see the Login V2 note above). The PUT is idempotent, so a
 re-run / `dev:up` converges with no duplicates. This is a **runtime API call** on
 the running instance — it does **not** re-init and does **not** drop the `zitadel`
 DB. No `IDP_BOOTSTRAP` / re-init is needed to make the Console browsable.
@@ -517,7 +523,7 @@ ssh truenas 'cd ~/ds-platform-dev-stand/idp && \
 # verify it stuck:
 curl -s -H "Authorization: Bearer <PAT>" \
   http://truenas.local:9080/v2/features/instance | jq '.loginV2'
-#   -> { "required": true, "baseUri": "http://truenas.local:9080/ui/v2/login", ... }
+#   -> { "required": false, "baseUri": "http://truenas.local:9080/ui/v2/login", ... }
 ```
 
 ### Verify the Console (browser) and that the BFF path survives

@@ -190,7 +190,7 @@ test("2981: the deploy pulls (never builds), migrates without --build and drops 
 
 test("2981: the manifest is resolved in pre-flight, before the ship step touches a box", () => {
   const preflightAt = PROD_SOURCE.indexOf("const images = await resolveProdImages(target);");
-  const stageCheckAt = PROD_SOURCE.indexOf("  assertStageMainCheck(target);");
+  const stageCheckAt = PROD_SOURCE.indexOf("  await assertStageGate(target, Boolean(hotfixRef));");
   assert.ok(preflightAt > 0 && preflightAt < stageCheckAt, "resolved inside pre-flight, before the stage check");
   const deployAt = PROD_SOURCE.indexOf("? await preflight(hotfixRef)");
   const shipAt = PROD_SOURCE.indexOf("await shipTree(sha, API_PROD);");

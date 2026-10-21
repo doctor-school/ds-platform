@@ -21,7 +21,7 @@ bootstrap) is a one-time human setup, out of the steady-state loop.
 | `rollback-floor.mjs`       | —                      | Rollback compatibility-floor guard (012 EARS-24, #1607): refuses a `--rollback` target that predates migration 0036 once prod has applied it (see below).                                                                                                            |
 | `idp-policy.mjs`           | —                      | Pure seams for the pipeline-owned IdP provision converge (#1997): the password-complexity read-back verdict and the `@ds/schemas` `PASSWORD_MIN_LENGTH` extraction consumed by `prod.mjs` (see step 5b).                                                             |
 | `release-gate.mjs`         | —                      | Release-blocker + open-batched-Stage-B pre-flight hold (#1662): probe + pure verdict consumed by `prod.mjs` (see below).                                                                                                                                             |
-| `stage-main-check.mjs`     | —                      | Stage `main` check (#2701): the last pre-flight step — converge the stage `main` slot to the target and run the full stage suite from a clean checkout of it (see below).                                                                                            |
+| `stage-main-check.mjs`     | —                      | Stage `main` check (#2701): the last pre-flight step of a `--ref` hotfix — converge the stage `main` slot to the target and run the full stage suite from a clean checkout of it (see below). A `main` target reads the `stage-suite` status instead.                |
 | `registry-retention.mjs`   | —                      | Container-registry retention (#3110), run only by `registry-retention.yml`: keeps the last 3 releases, the latest production deployment, the newest 3 `main` images, the open hotfix and PR heads, deletes the rest (`infra/deploy/README.md` → Container registry). |
 
 ## `pnpm deploy:prod`
@@ -32,13 +32,13 @@ pnpm deploy:prod --ref <sha>        # HOTFIX: ship exactly <sha>, not all of mai
 pnpm deploy:prod --rollback <sha>   # app-only rollback to a prior SHA-tagged image
 pnpm deploy:prod --skip-ci-check    # escape hatch (loud warning)
 pnpm deploy:prod --allow-live-broadcast  # эфир-hold escape hatch (owner-approved urgent ship only)
-pnpm deploy:prod --release-gate-exempt "<reason>"  # release-gate + stage-main-check escape hatch (reason mandatory, printed)
+pnpm deploy:prod --release-gate-exempt "<reason>"  # release-gate + stage-gate escape hatch (reason mandatory, printed)
 ```
 
 Pipeline, fail-closed, stops at the first red step and prints a rollback pointer:
 
-1. **Pre-flight (DSO-126)** — **stage `main` check prerequisites** first (#2806 —
-   below) · clean working tree · `HEAD == origin/main` · **green
+1. **Pre-flight (DSO-126)** — **stage `main` check prerequisites** first, `--ref`
+   only (#2806 — below) · clean working tree · `HEAD == origin/main` · **green
    CI** for that SHA (latest check-run per name via
    `gh api …/commits/<sha>/check-runs`, restricted to suites of repo-owned
    `.github/workflows/*` runs — GitHub-injected `dynamic/*` workflows such as
@@ -46,8 +46,14 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    provenance still blocks — see `ci-gate.mjs`, #2077) · **no live broadcast**
    (`live-broadcast-check.mjs`, fail-closed — #1000, spec §10.4 item 7; the
    `--rollback` path skips this hold) · **release gate** (`release-gate.mjs`,
-   #1662 — below) · **recorded images** (#2981 — below) · **stage `main`
-   check** (`stage-main-check.mjs`, #2701 — below). Refuses otherwise. Fixes
+   #1662 — below) · **recorded images** (#2981 — below) · **stage gate**
+   (#3198, release-pipeline spec §3 item 3): a `main` target's `stage-suite`
+   commit status, posted by `stage.yml` in Actions, must be `success` — missing,
+   pending or red refuses; read through `readStageSuiteProblem`
+   (`release-runner.mjs`, the release workflow's own check), so the PC needs no
+   stage credentials. A `--ref` target is no `main` push, so Actions never runs
+   the suite for it: it keeps the **stage `main` check** (`stage-main-check.mjs`,
+   #2701 — below). Refuses otherwise. Fixes
    the deployed commit to `origin/main`'s SHA — or, under `--ref <sha>`, to
    that commit (below).
    **Recorded images (#2981).** Before anything touches a box, the operator's
@@ -586,8 +592,10 @@ marker parser, evaluator and formatters over fabricated probes — no subprocess
 
 Environment-level risk — the production build, the real IdP, real-shaped data —
 is covered once per release on the shared stage `main` slot (staging tech spec
-C7, release-cycle spec §10.4 item 9). The deploy runs that check **itself**, as
-the last pre-flight step, instead of trusting a record someone wrote:
+C7, release-cycle spec §10.4 item 9). For a target from `main`, Actions covers it
+(`stage.yml`, the `stage-suite` status the pre-flight reads — above). A `--ref`
+hotfix target is no `main` push, so the deploy runs the check **itself**, as the
+last pre-flight step:
 
 1. `git worktree add --detach <tmp>/tree <target>` under the OS temp dir — a
    clean checkout of exactly the target SHA, so the scenarios executed are the
@@ -606,7 +614,7 @@ the last pre-flight step, instead of trusting a record someone wrote:
 Any failure refuses the deploy, fail-closed; nothing is written to GitHub — the
 stand is operated by hand (#2202) and the deploy log is the record.
 
-**Prerequisites on the operator's machine** (#2806) — probed as the FIRST
+**Prerequisites on the operator's machine** (#2806), `--ref` only — probed as the FIRST
 pre-flight step, before the clean-tree check and long before the checkout, so a
 missing one refuses the deploy in seconds and names itself:
 
@@ -617,10 +625,12 @@ missing one refuses the deploy in seconds and names itself:
   bounded at 15 s wall-clock.
 
 Both are reported together when both are missing. The only bypass — of the
-check and its prerequisites alike — is the owner-approved
-`--release-gate-exempt "<reason>"`, printed as the audit record. Unit cover:
-`tools/deploy/stage-main-check.test.mjs` (every spawn and the ssh probe
-injected) and the release-check cases in `tools/staging/e2e-stage.test.mjs`.
+check and its prerequisites alike, and of the `stage-suite` read — is the
+owner-approved `--release-gate-exempt "<reason>"`, printed as the audit record.
+Unit cover: `tools/deploy/stage-main-check.test.mjs` (every spawn and the ssh
+probe injected), the release-check cases in `tools/staging/e2e-stage.test.mjs`,
+and `tools/deploy/prod-stage-gate.test.mjs` (which target takes which check, the
+status read injected).
 
 ## `pnpm deploy:smoke`
 
@@ -786,7 +796,8 @@ gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_
 - **Same gates as the workstation path, no escape hatch.** The checks are the
   modules `pnpm deploy:prod` uses (`ci-gate.mjs`, `release-gate.mjs`,
   `live-broadcast-check.mjs`, `lib/registry.mjs`); `stage-suite` (set by
-  `stage.yml`) replaces the operator's stage `main` check. `--skip-ci-check`,
+  `stage.yml`) replaces the operator's stage `main` check, as it does on the
+  workstation path for a `main` target. `--skip-ci-check`,
   `--release-gate-exempt`, `--allow-live-broadcast`, `--ref` and `--rollback`
   exist only on `pnpm deploy:prod` (break-glass). The CI check drops the
   check-runs of `deploy-prod.yml` itself by workflow path (an earlier failed

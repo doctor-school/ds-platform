@@ -224,7 +224,7 @@ worktree needs no hand-built `packages/db/dist` or `packages/legal-content/dist`
 does not answer — a suite pointed at a half-raised slot reports topology as product
 regressions. Raise the slot with `pnpm stage:slot up <slot> --ref <sha>` first.
 
-### The release check: `--expect-sha`, run by `pnpm deploy:prod`
+### The release check: `--expect-sha`
 
 `pnpm e2e:stage main --expect-sha <40-char sha>` is the release check (tech spec C7,
 #2701). It is the full run and nothing less: it refuses any slot but `main`, any
@@ -234,10 +234,13 @@ then asserts the slot's `/v1/health` serves exactly that SHA before a scenario r
 exits **2** on any of these refusals. It does **not** run the storefront live-tier legs
 (below) and prints `live: not run in the release check — until #3191` instead, so the
 omission is visible in the release record; #3191 brings them into the release check once
-their spec-side reds and missing slot env are resolved. You do not normally run it by hand: `pnpm
-deploy:prod` runs it as its last pre-flight step, from a clean detached checkout of the
-target SHA, right after `stage:slot up main --ref <sha>` converged the slot
-(`tools/deploy/README.md` → «Stage `main` check»). Nothing is written to GitHub.
+their spec-side reds and missing slot env are resolved. You do not normally run it by hand. For a
+target from `main` the `stage.yml` suite job runs it in Actions and posts the
+`stage-suite` status the release pre-flight reads (below). For a `--ref` hotfix target,
+which is no `main` push, `pnpm deploy:prod` runs it on the PC as its last pre-flight step,
+from a clean detached checkout of the target SHA, right after `stage:slot up main --ref
+<sha>` converged the slot (`tools/deploy/README.md` → «Stage `main` check»); that run
+writes nothing to GitHub.
 
 ### The same check in Actions: `.github/workflows/stage.yml` (#2985)
 

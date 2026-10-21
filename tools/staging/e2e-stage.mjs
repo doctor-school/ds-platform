@@ -5,10 +5,10 @@
  * Staging/previews/regression-contour tech spec, C4 and §8 step 7: the C6 suite and
  * the a11y suites are driven from the OPERATOR's machine against the slot's PUBLIC
  * hostnames — the same edge a reviewer uses, basic auth included. A preview verdict is
- * pasted into the PR body by hand; `--expect-sha` is the release check `pnpm deploy:prod`
- * runs itself (C7, tools/deploy/stage-main-check.mjs). There is deliberately no CI
- * check-run and no GitHub status: staging is operated by hand like production (#2202),
- * and a check-run would need the LLM-free runner to hold the stand's credentials.
+ * pasted into the PR body by hand. `--expect-sha` is the release check: for a `main`
+ * push the Actions `stage.yml` suite job runs it and posts the `stage-suite` commit
+ * status the release pre-flight reads (#2985, #3198); `pnpm deploy:prod` runs it itself
+ * only for a `--ref` hotfix target (C7, tools/deploy/stage-main-check.mjs).
  *
  * ── What this command is NOT ─────────────────────────────────────────────────
  * It never raises, syncs or tears down a slot. «A converged slot» is its

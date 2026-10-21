@@ -4,6 +4,7 @@ import {
   request as playwrightRequest,
   type Page,
 } from "@playwright/test";
+import { congressSignUpEnvProblem } from "@ds/e2e/live-stand-env";
 import { requireLiveStandEnv } from "./support/live-stand-env";
 import { mailedCode } from "./support/congress-stand";
 
@@ -16,10 +17,12 @@ import { mailedCode } from "./support/congress-stand";
  * signs in and lands on the carried `returnTo`. A dead reference falls back to
  * the EARS-43 state with nothing sent.
  *
- * Stand prerequisite (operator-owned, like every live tier): the api runs with
- * the `CONGRESS_SIGNUP_*` keys configured and its `CONGRESS_SIGNUP_EVENT_ID`
- * names an event that exists in its database — the sign-up is the ONLY minter
- * of a reference, so there is no shorter honest setup. Rides
+ * Stand prerequisite (the dev-stand contract, #3149): the api runs with the
+ * `CONGRESS_SIGNUP_*` block of `infra/dev-stand/.env.example`, whose
+ * `CONGRESS_SIGNUP_EVENT_ID` is the congress fixture `seed:events` writes into
+ * the database the api reads — the sign-up is the ONLY minter of a reference,
+ * so there is no shorter honest setup. A missing key fails the sign-up by its
+ * name, never as the intake's generic 422. Rides
  * `playwright.congress.config.ts`; inert on a bare CI runner.
  */
 requireLiveStandEnv(["E2E_DOCTOR_URL", "MAILPIT_URL", "IDP_ISSUER"]);
@@ -28,6 +31,8 @@ const DOCTOR_URL = (process.env.E2E_DOCTOR_URL ?? "").replace(/\/$/, "");
 
 /** A fresh Congress sign-up; answers the hand-off reference it returned. */
 async function signUpForCongress(email: string): Promise<string> {
+  const problem = congressSignUpEnvProblem();
+  if (problem) throw new Error(problem);
   const api = await playwrightRequest.newContext({ baseURL: DOCTOR_URL });
   try {
     const book = await api.get("/v1/public/specialties");

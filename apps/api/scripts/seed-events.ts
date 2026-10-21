@@ -50,7 +50,9 @@
  *
  * Prints a JSON object (its stdout contract): `events` maps every seeded slug to
  * its state, and `room` maps each room-E2E env var to the slug it should carry, so
- * a caller / E2E env wiring can pick the slug for each state + room scenario.
+ * a caller / E2E env wiring can pick the slug for each state + room scenario;
+ * `congress` maps `CONGRESS_SIGNUP_EVENT_ID` to the fixed id of the congress
+ * fixture (044, #3149) the stand contract already carries.
  * Exits non-zero on failure.
  */
 import { pathToFileURL } from "node:url";
@@ -85,7 +87,39 @@ const EDITED_RECORDING_KIND: RecordingKind = "edited";
  */
 const RAW_RECORDING_KIND: RecordingKind = "raw";
 
+/**
+ * 044 EARS-5 (#3149) — the congress fixture the dev stand's public congress
+ * intake registers for. Its id is FIXED, unlike every other fixture here: the
+ * api learns the congress event from `CONGRESS_SIGNUP_EVENT_ID`, and the stand
+ * contract (`infra/dev-stand/.env.example`) carries this exact value, so every
+ * stand database this seed ran on — `ds_dev` or a `pnpm dev:db:branch` database —
+ * answers the same key without a per-database lookup.
+ */
+export const SEED_CONGRESS_EVENT_ID = "5eed0044-0000-4000-8000-000000000044";
+export const SEED_CONGRESS_EVENT_SLUG = "seed-044-congress";
+
+/** 012 EARS-26 / EARS-29 (#2509) — the event's kind and its audience. */
+interface SeedClassification {
+  readonly kindId: string;
+  readonly audience: "doctors" | "experts";
+  readonly participationFormat: "online" | "offline" | "hybrid";
+}
+
+/**
+ * The portal (Academy) stand fixtures: the all-formats «Встреча клуба» kind,
+ * audience `experts` (the Academy reads).
+ */
+const ACADEMY_FIXTURE: SeedClassification = {
+  kindId: SEED_EVENT_KINDS.vstrechaKluba.id,
+  audience: "experts",
+  participationFormat: "online",
+};
+
 interface SeedSpec {
+  /** A fixed primary key; omitted ⇒ the column default mints one. */
+  readonly id?: string;
+  /** Omitted ⇒ {@link ACADEMY_FIXTURE}. */
+  readonly classification?: SeedClassification;
   readonly slug: string;
   readonly state: "published" | "live" | "ended" | "hidden" | "in_archive";
   /**
@@ -140,9 +174,30 @@ interface SeedSpec {
 function specs(now: number): SeedSpec[] {
   return [
     {
-      slug: "seed-005-upcoming",
-      // 044 EARS-13 (#3037): the real congress notice reads the event's venue.
+      // 044 EARS-5 (#3149): the congress the stand's public intake registers
+      // for — registrable (published, two months out), a «Конгресс» for
+      // doctors held in person, and with a venue, because the intake refuses
+      // an event without one before any side effect (044 EARS-13, #2517).
+      id: SEED_CONGRESS_EVENT_ID,
+      classification: {
+        kindId: SEED_EVENT_KINDS.kongress.id,
+        audience: "doctors",
+        participationFormat: "offline",
+      },
+      slug: SEED_CONGRESS_EVENT_SLUG,
       venue: "Москва, тестовая площадка (эталон)",
+      state: "published",
+      title: "Конгресс ортобиологии (стенд)",
+      school: "Конгресс",
+      startsAt: new Date(now + 60 * DAY),
+      durationMin: 480,
+      description:
+        "Ежегодный конгресс: пленарные доклады, секции и постерная сессия. Регистрация открыта.",
+      specialties: ["Травматология и ортопедия"],
+      partnerRef: "sponsor:congress",
+    },
+    {
+      slug: "seed-005-upcoming",
       state: "published",
       title: "Управление артериальной гипертензией в 2026",
       school: "Школа кардиологии",
@@ -426,12 +481,17 @@ export async function seedEvents(): Promise<void> {
       // is skipped by Drizzle in both clauses, so non-live states leave the
       // column untouched (null).
       const liveAt = spec.state === "live" ? spec.startsAt : undefined;
+      // 012 EARS-26 / EARS-29 (#2509): the kind, its audience and a format the
+      // kind allows.
+      const { kindId, audience, participationFormat } =
+        spec.classification ?? ACADEMY_FIXTURE;
 
       // Upsert the event by its stable slug so re-runs refresh the instant + state
       // in place (no duplicate rows, no table truncation — branch-safe).
       const [row] = await db
         .insert(events)
         .values({
+          id: spec.id,
           slug: spec.slug,
           title: spec.title,
           school: spec.school,
@@ -443,10 +503,9 @@ export async function seedEvents(): Promise<void> {
           venue: spec.venue,
           state: spec.state,
           origin: spec.origin ?? "platform",
-          // 012 EARS-26 / EARS-29 (#2509): the portal (Academy) stand fixtures — the
-          // all-formats «Встреча клуба» kind, audience `experts` (the Academy reads).
-          kindId: SEED_EVENT_KINDS.vstrechaKluba.id,
-          audience: "experts",
+          kindId,
+          audience,
+          participationFormat,
           liveAt,
           updatedAt: new Date(),
         })
@@ -463,6 +522,9 @@ export async function seedEvents(): Promise<void> {
             venue: spec.venue,
             state: spec.state,
             origin: spec.origin ?? "platform",
+            kindId,
+            audience,
+            participationFormat,
             liveAt,
             updatedAt: new Date(),
           },
@@ -599,6 +661,10 @@ export async function seedEvents(): Promise<void> {
     // 014 EARS-8 (#1345): the archive E2E env vars → the slug each carries.
     archive: {
       E2E_BOTH_CUTS_WEBINAR_SLUG: "seed-014-ended-both-cuts",
+    },
+    // 044 EARS-5 (#3149): the api env key → the congress fixture it names.
+    congress: {
+      CONGRESS_SIGNUP_EVENT_ID: SEED_CONGRESS_EVENT_ID,
     },
   };
   process.stdout.write(`${JSON.stringify(contract, null, 2)}\n`);

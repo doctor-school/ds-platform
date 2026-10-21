@@ -13,8 +13,11 @@ import { defineConfig, devices } from "@playwright/test";
  * runner and fail loudly on a half-exported env (`e2e/support/live-stand-env.ts`);
  * the backend-free `playwright.ci.config.ts` ignores them.
  *
- * Run (production build of the doctor host bound to 127.0.0.1, api on :3000):
- *   E2E_DOCTOR_URL=http://127.0.0.1:3004 IDP_ISSUER=… MAILPIT_URL=… \
+ * Run (production build of the doctor host, api on :3000, both booted from
+ * `~/.ds-platform/.env.local` with the branch database exported; the runner
+ * loads the same file — `login-handoff-live.spec.ts` reads its
+ * `CONGRESS_SIGNUP_*` keys, `infra/dev-stand/README.md` → Congress intake):
+ *   E2E_DOCTOR_URL=http://localhost:3004 \
  *   DATABASE_URL=<branch database> pnpm --filter @ds/doctor test:e2e:congress
  */
 export default defineConfig({

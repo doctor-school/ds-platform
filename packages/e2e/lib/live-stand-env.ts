@@ -73,6 +73,45 @@ export interface LiveStandGate {
 
 const isSet = (name: string): boolean => !!process.env[name]?.trim();
 
+/**
+ * 044 (#3149) — the api keys the public congress intake refuses every
+ * submission without (`apps/api/src/congress/congress-signup.config.ts`):
+ * unset, the sign-up answers the one generic 422 and only the api log says
+ * why. `CONGRESS_SIGNUP_TIMING_FLOOR_MS` is absent on purpose — unset, it
+ * falls back to its default and refuses nothing.
+ */
+export const CONGRESS_SIGNUP_STAND_VARS = [
+  "CONGRESS_SIGNUP_EVENT_ID",
+  "CONGRESS_SIGNUP_CONSENT_VERSION",
+  "CONGRESS_SIGNUP_WINDOW_OPENS_AT",
+  "CONGRESS_SIGNUP_WINDOW_CLOSES_AT",
+  "CONGRESS_SIGNUP_EVENT_DAYS",
+] as const;
+
+/**
+ * #3149 — why a live spec that drives a REAL congress sign-up cannot expect
+ * «accepted» from this stand, or `null` when it can as far as the env shows.
+ *
+ * The runner reads the same `~/.ds-platform/.env.local` the api is booted
+ * from (the stand recipe), so a key missing here is missing there, and the
+ * spec names it instead of failing on an opaque 422.
+ */
+export function congressSignUpEnvProblem(
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  const missing = CONGRESS_SIGNUP_STAND_VARS.filter(
+    (name) => !env[name]?.trim(),
+  );
+  if (missing.length === 0) return null;
+  return (
+    `the congress sign-up needs the api booted with ${missing.join(", ")} — ` +
+    "unset, the intake refuses every submission with a generic 422. Copy the " +
+    "block from infra/dev-stand/.env.example into ~/.ds-platform/.env.local, " +
+    "seed the congress event (`pnpm --filter @ds/api seed:events`) and boot " +
+    "the api and this runner from that file."
+  );
+}
+
 /** Register a `beforeAll` that fails the whole file with a named-variable error. */
 function failLoudly(message: string): void {
   test.beforeAll(() => {

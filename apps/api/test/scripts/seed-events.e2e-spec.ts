@@ -1,7 +1,14 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createDrizzle, eventRecordings, events } from "@ds/db";
+import { SEED_EVENT_KINDS } from "@ds/db/seed/golden";
 import { and, eq, isNull } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { seedEvents } from "../../scripts/seed-events.js";
+import {
+  SEED_CONGRESS_EVENT_ID,
+  SEED_CONGRESS_EVENT_SLUG,
+  seedEvents,
+} from "../../scripts/seed-events.js";
 
 // #1851 — `seed:events` is idempotent, and that is a property of the SCRIPT, not
 // of a lucky first run: the fixture's published recording sits on a row whose
@@ -68,6 +75,43 @@ describe("scripts/seed-events (#1851)", () => {
     expect(after.updatedAt).not.toBeNull();
   }, 60_000);
 
+  // #3149 — the dev stand's `CONGRESS_SIGNUP_EVENT_ID` (infra/dev-stand/.env.example)
+  // names the congress fixture by a FIXED id, so every stand database the seed
+  // ran on answers the same key: the intake's EARS-5 «configured event exists
+  // and is registrable» holds without a per-database id lookup.
+  it("044 EARS-5: the congress fixture is a registrable «Конгресс» for doctors under the fixed id the stand contract names", async () => {
+    const [row] = await db
+      .select({
+        id: events.id,
+        state: events.state,
+        kindId: events.kindId,
+        audience: events.audience,
+        participationFormat: events.participationFormat,
+        startsAt: events.startsAt,
+        venue: events.venue,
+      })
+      .from(events)
+      .where(eq(events.slug, SEED_CONGRESS_EVENT_SLUG));
+    expect(row).toBeDefined();
+    expect(row!.id).toBe(SEED_CONGRESS_EVENT_ID);
+    expect(row!.state).toBe("published");
+    expect(row!.kindId).toBe(SEED_EVENT_KINDS.kongress.id);
+    expect(row!.audience).toBe("doctors");
+    expect(row!.participationFormat).toBe("offline");
+    expect(row!.startsAt.getTime()).toBeGreaterThan(Date.now());
+    expect(row!.venue).not.toBeNull();
+
+    const contract = readFileSync(
+      fileURLToPath(
+        new URL("../../../../infra/dev-stand/.env.example", import.meta.url),
+      ),
+      "utf8",
+    );
+    expect(contract).toMatch(
+      new RegExp(`^CONGRESS_SIGNUP_EVENT_ID=${SEED_CONGRESS_EVENT_ID}$`, "m"),
+    );
+  }, 60_000);
+
   it("044 EARS-13: the configured congress fixture seeds and restores its event-owned venue without changing another fixture's venue", async () => {
     const readEvent = async (slug: string) => {
       const [row] = await db
@@ -77,9 +121,9 @@ describe("scripts/seed-events (#1851)", () => {
       expect(row).toBeDefined();
       return row!;
     };
-    const congress = await readEvent("seed-005-upcoming");
+    const congress = await readEvent(SEED_CONGRESS_EVENT_SLUG);
     expect(congress.venue).toBe("Москва, тестовая площадка (эталон)");
-    const other = await readEvent("seed-005-upcoming-2");
+    const other = await readEvent("seed-005-upcoming");
     await db
       .update(events)
       .set({ venue: null })
@@ -91,8 +135,8 @@ describe("scripts/seed-events (#1851)", () => {
 
     await seedEvents();
 
-    expect(await readEvent("seed-005-upcoming")).toEqual(congress);
-    expect(await readEvent("seed-005-upcoming-2")).toEqual({
+    expect(await readEvent(SEED_CONGRESS_EVENT_SLUG)).toEqual(congress);
+    expect(await readEvent("seed-005-upcoming")).toEqual({
       id: other.id,
       venue: "Другая тестовая площадка",
     });

@@ -1765,3 +1765,13 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the resend owner requests an initial real Academy SMS login code with its resend button disabled
     When only that browser's thirty-second login cooldown advances before the actual SMS resend click
     Then the newest actual SMS delivery authenticates the same Academy owner through reload and exact logout
+
+  # Retained Academy baseline projection (#3182), not shared-sign-in-host acceptance.
+  # App-local test: none -> 003 EARS-12/17/53/58 -> reset-sms-resend.steps.ts;
+  # deleted duplicate: none. Native API delivery/rate-limit coverage stays retained.
+  @EARS-12 @EARS-17 @EARS-53 @EARS-58 @happy @reset-sms-resend
+  Scenario: Academy resends the actual SMS reset code and accepts its newest delivery for the same owner
+    Given an owned verified Academy doctor with a confirmed phone is prepared for an SMS reset resend
+    When the SMS reset resend guest requests an actual reset code and observes disabled resend
+    And only that browser's thirty-second reset cooldown advances before the actual SMS resend click
+    Then the newest actual reset SMS changes only that owner's password and preserves identity through sign-in reload and logout

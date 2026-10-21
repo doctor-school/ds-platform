@@ -127,6 +127,23 @@ export function stageSuiteProblem(combined) {
   return `\`${STAGE_SUITE_CONTEXT}\` is ${status.state}${why}`;
 }
 
+/**
+ * The `stageSuiteProblem` of `sha`'s combined status, read through `read(sha)`
+ * (the `commits/<sha>/status` payload). The release workflow and the workstation
+ * release (`tools/deploy/prod.mjs`) share this read, so both refuse on one rule.
+ */
+export async function readStageSuiteProblem({ sha, read }) {
+  return stageSuiteProblem(await read(sha));
+}
+
+/** `read` for `readStageSuiteProblem`: the combined status via `gh api`. */
+export function combinedStatusViaGh({ repo, run }) {
+  return (sha) =>
+    JSON.parse(
+      run("gh", ["api", `repos/${repo}/commits/${sha}/status?per_page=100`]),
+    );
+}
+
 function capture(cmd, args, cwd) {
   const r = spawnSync(cmd, args, {
     cwd,
@@ -164,14 +181,13 @@ export function preflightChecks({ sha, repo, cwd = process.cwd() }) {
       return { line: `${short} is contained in main` };
     },
     "stage-suite": async () => {
-      const combined = JSON.parse(
-        capture(
-          "gh",
-          ["api", `repos/${repo}/commits/${sha}/status?per_page=100`],
-          cwd,
-        ),
-      );
-      const problem = stageSuiteProblem(combined);
+      const problem = await readStageSuiteProblem({
+        sha,
+        read: combinedStatusViaGh({
+          repo,
+          run: (cmd, args) => capture(cmd, args, cwd),
+        }),
+      });
       if (problem) throw new Error(problem);
       return { line: `\`${STAGE_SUITE_CONTEXT}\` is success for ${short}` };
     },

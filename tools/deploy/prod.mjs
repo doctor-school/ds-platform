@@ -103,6 +103,11 @@ import {
   probeReleaseGate,
 } from "./release-gate.mjs";
 import {
+  STAGE_SUITE_CONTEXT,
+  combinedStatusViaGh,
+  readStageSuiteProblem,
+} from "./release-runner.mjs";
+import {
   checkStageMainPrerequisites,
   runStageMainCheck,
 } from "./stage-main-check.mjs";
@@ -667,13 +672,14 @@ async function preflight(hotfixRef = null) {
   step(
     hotfixRef
       ? `Pre-flight (HOTFIX ${REF_FLAG}): stage check prerequisites · clean tree · target on origin · descendant of prod · cherry-picks of main · green CI · no live broadcast · release gate · recorded images · stage main check`
-      : "Pre-flight: stage check prerequisites · clean tree · HEAD==origin/main · green CI · no live broadcast · release gate · recorded images · stage main check",
+      : `Pre-flight: clean tree · HEAD==origin/main · green CI · no live broadcast · release gate · recorded images · \`${STAGE_SUITE_CONTEXT}\` status`,
   );
 
-  // 0. stage `main` check prerequisites (#2806): the check is the last step, but
-  //    what it needs from this machine is probed first, so a missing one refuses
-  //    in seconds instead of after the checkout, install and converge.
-  await assertStageMainPrerequisites();
+  // 0. stage `main` check prerequisites (#2806), `--ref` only: the PC check is the
+  //    last step, but what it needs from this machine is probed first, so a
+  //    missing one refuses in seconds instead of after the checkout, install and
+  //    converge. A `main` target reads the Actions status instead (#3198).
+  await assertStageMainPrerequisites(Boolean(hotfixRef));
 
   // 1. clean working tree
   const dirty = localCap("git", ["status", "--porcelain"]);
@@ -751,10 +757,13 @@ async function preflight(hotfixRef = null) {
   //     There is no build fallback: api-prod has no way to build any more.
   const images = await resolveProdImages(target);
 
-  // 6. stage `main` check (#2701, spec §10.4 item 8): converge the stage `main`
-  //    slot to the target and run the full stage suite from a clean checkout of
-  //    it. Last, because it is the slowest step; same owner-go bypass as step 5.
-  assertStageMainCheck(target);
+  // 6. stage gate (release-pipeline spec §3 item 3, #3198). A `main` target: the
+  //    `stage-suite` commit status `stage.yml` posted on it in Actions — the PC
+  //    run crashed its pages on PC RAM and its lease refused the next converge.
+  //    A `--ref` hotfix target: Actions runs the stage suite only on `main`
+  //    pushes, so the PC stage `main` check (#2701) still converges the slot and
+  //    runs the suite. Same owner-go bypass as step 5.
+  await assertStageGate(target, Boolean(hotfixRef));
 
   return { sha: target, images };
 }
@@ -990,9 +999,50 @@ async function assertReleaseGate(sha) {
   ok(formatReleaseGateClear(probe.basisSha));
 }
 
+/**
+ * The PC stage `main` check prerequisites, probed only for a `--ref` target —
+ * a `main` target reads the `stage-suite` status and needs nothing from this
+ * machine (no `STAGE_BASIC_AUTH_PASS`, no stage ssh).
+ */
+export async function stageGatePrerequisites({ hotfix, checkPrerequisites }) {
+  if (!hotfix) return { ok: true, needed: false };
+  const result = await checkPrerequisites();
+  return result.ok
+    ? { ok: true, needed: true }
+    : { ok: false, needed: true, reason: result.reason };
+}
+
+/**
+ * The pre-flight stage gate for `sha`: `readStageSuite(sha)` (the
+ * `stageSuiteProblem`, or `null`) for a `main` target, `runPcCheck(sha)` for a
+ * `--ref` target. Returns `{ ok, line }` or `{ ok: false, reason }`.
+ */
+export async function stageGate({ sha, hotfix, readStageSuite, runPcCheck }) {
+  const short = sha.slice(0, 12);
+  if (hotfix) {
+    const result = runPcCheck(sha);
+    return result.ok
+      ? {
+          ok: true,
+          line: `stage \`main\` slot serves ${short} and the full stage suite PASSED`,
+        }
+      : { ok: false, reason: `stage \`main\` check: ${result.reason}` };
+  }
+  let problem;
+  try {
+    problem = await readStageSuite(sha);
+  } catch (e) {
+    problem = `cannot read the \`${STAGE_SUITE_CONTEXT}\` status: ${e.message}`;
+  }
+  return problem
+    ? { ok: false, reason: problem }
+    : { ok: true, line: `\`${STAGE_SUITE_CONTEXT}\` is success for ${short}` };
+}
+
 // Same owner-go bypass as the check itself: an exempted check needs no prerequisites
 // (its own skip line, printed at step 6, is the audit record).
-async function assertStageMainPrerequisites() {
+async function assertStageMainPrerequisites(hotfix) {
+  if (!hotfix) return;
   const exempt = parseReleaseGateExempt(process.argv);
   if (exempt.error) die(exempt.error);
   if (exempt.exempt) {
@@ -1002,10 +1052,15 @@ async function assertStageMainPrerequisites() {
     return;
   }
   const t = Date.now();
-  const result = await checkStageMainPrerequisites();
+  const result = await stageGatePrerequisites({
+    hotfix,
+    checkPrerequisites: checkStageMainPrerequisites,
+  });
   if (!result.ok) {
     die(
-      `stage \`main\` check prerequisites missing — refusing before any checkout:\n  ${result.reason}\n` +
+      `stage \`main\` check prerequisites missing — refusing before any checkout:
+  ${result.reason}
+` +
         `  Skipping the stage check needs the owner's go + ${RELEASE_GATE_EXEMPT_FLAG} "<reason>".`,
     );
   }
@@ -1015,31 +1070,41 @@ async function assertStageMainPrerequisites() {
   );
 }
 
-// The stage `main` check (tools/deploy/stage-main-check.mjs, unit-tested there);
-// this is the deploy-side wiring: print the exemption loudly, else refuse on red.
-function assertStageMainCheck(sha) {
+// The deploy-side wiring of `stageGate`: print the exemption loudly, else refuse on red.
+async function assertStageGate(sha, hotfix) {
   const exempt = parseReleaseGateExempt(process.argv);
   if (exempt.error) die(exempt.error);
+  const what = hotfix
+    ? "stage `main` check"
+    : `\`${STAGE_SUITE_CONTEXT}\` status check`;
   if (exempt.exempt) {
     console.log(
-      `  ⚠ ${RELEASE_GATE_EXEMPT_FLAG}: SKIPPING the stage \`main\` check` +
+      `  ⚠ ${RELEASE_GATE_EXEMPT_FLAG}: SKIPPING the ${what}` +
         ` — ${exempt.reason} (this line is the audit record).`,
     );
     return;
   }
   const t = Date.now();
-  const result = runStageMainCheck({ sha, repoRoot: process.cwd() });
+  const result = await stageGate({
+    sha,
+    hotfix,
+    readStageSuite: (target) =>
+      readStageSuiteProblem({
+        sha: target,
+        read: combinedStatusViaGh({ repo: ghRepoName(), run: localCap }),
+      }),
+    runPcCheck: (target) =>
+      runStageMainCheck({ sha: target, repoRoot: process.cwd() }),
+  });
   if (!result.ok) {
     die(
-      `stage \`main\` check: ${result.reason}.\n` +
-        `  Fix the cause and re-run \`pnpm deploy:prod\`; skipping it needs the owner's go` +
+      `${result.reason}.
+` +
+        `  Fix the cause and re-run \`pnpm deploy:prod\`; skipping the ${what} needs the owner's go` +
         ` + ${RELEASE_GATE_EXEMPT_FLAG} "<reason>".`,
     );
   }
-  ok(
-    `stage \`main\` slot serves ${sha.slice(0, 12)} and the full stage suite PASSED`,
-    t,
-  );
+  ok(result.line, t);
 }
 
 // Read-only probe of the public upcoming-broadcasts listing (exit 0 = CLEAR,
@@ -1077,8 +1142,8 @@ function assertNoLiveBroadcast() {
 // back to the unfiltered board. `tools/gh/merge-gate.mjs` is deliberately NOT
 // changed — dynamic workflows only fire on the default branch, so this gate
 // judges the same board the merge gate saw, minus those dynamic suites.
-function assertGreenCi(sha) {
-  const repo = localCap("gh", [
+function ghRepoName() {
+  return localCap("gh", [
     "repo",
     "view",
     "--json",
@@ -1086,6 +1151,10 @@ function assertGreenCi(sha) {
     "-q",
     ".nameWithOwner",
   ]);
+}
+
+function assertGreenCi(sha) {
+  const repo = ghRepoName();
   let board;
   try {
     board = fetchDeployCiBoard({ sha, repo, run: localCap });

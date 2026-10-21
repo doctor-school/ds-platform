@@ -7,13 +7,14 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from "@nestjs/common";
 import type {
   SignInHostDoor,
   SignInHostEntryResponse,
   SignInHostStorefront,
 } from "@ds/schemas";
-import { AuthService } from "../auth/auth.service.js";
+import { AuthService, type SessionAcceptor } from "../auth/auth.service.js";
 import {
   IDP_CLIENT,
   type IdpClient,
@@ -56,6 +57,12 @@ const AUTH_REQUEST_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
 /** One refusal for every form-post check (CSRF, Origin, Sec-Fetch-Site, binding). */
 const FORM_REFUSED = "form refused";
+
+/**
+ * A credential step overtaken by a revocation of its subject (EARS-12/41):
+ * the storefront's one generic login refusal (EARS-16), no record kept.
+ */
+const STEP_REVOKED = "invalid credentials";
 
 /** The request facts the sign-in host decides on — all taken from the browser's own request. */
 export interface HostRequest {
@@ -312,9 +319,14 @@ export class SignInHostService {
     form: CheckedForm,
     req: HostRequest,
     recordCookieName: string,
-  ): (session: IdpSession) => Promise<StepOutcome> {
+  ): SessionAcceptor<StepOutcome> {
     const settings = this.enabled();
-    return async (checked) => {
+    // EARS-12 / EARS-41 — the credential instant is taken HERE, when the
+    // controller builds the acceptor, i.e. BEFORE the credential check starts:
+    // a check of the old password that races a revocation (a reset completing
+    // elsewhere) is then stamped earlier than that revocation, never after it.
+    const checkStartedAt = this.clock();
+    return async (checked, step) => {
       // The ONE place the Zitadel session's lifetime is set: right after the
       // credential check, before the session reaches the record. Nothing later
       // on this session sets it again — a live record finalises authorizes
@@ -344,14 +356,33 @@ export class SignInHostService {
         await this.records.delete(priorId);
       }
       const now = this.clock();
+      // A step that itself revoked the subject (reset, first verification) is
+      // that revocation's one survivor: its record is stamped at the instant
+      // its own fence was written, so only a LATER revocation ends it.
+      const ownRevocation = step?.subjectRevokedAt;
+      const credentialAt = ownRevocation ?? checkStartedAt;
       const cookieId = newOpaqueId();
-      const expiresAt = recordExpiresAt(now);
+      const expiresAt = recordExpiresAt(credentialAt);
       await this.records.insert(cookieId, {
         session,
         fingerprint: req.fingerprint,
-        lastCredentialAt: now,
+        lastCredentialAt: credentialAt,
         expiresAt,
       });
+      // The revocation's delete may have run before this insert: read its
+      // fence again now that the row exists. A revocation at/after the
+      // credential instant (strictly after one's own) ends this step.
+      const revokedAt = await this.state.subjectRevokedAt(session.sub);
+      if (
+        revokedAt &&
+        (ownRevocation
+          ? revokedAt.getTime() > credentialAt.getTime()
+          : revokedAt.getTime() >= credentialAt.getTime())
+      ) {
+        await this.records.delete(cookieId);
+        await this.idp.terminateSession(session);
+        throw new UnauthorizedException(STEP_REVOKED);
+      }
       setCookies.push(
         recordCookie(cookieId, recordCookieMaxAgeSeconds(expiresAt, now)),
       );

@@ -167,9 +167,10 @@ export class SessionService {
    * and refresh-reuse already are). Idempotent — a subject with no live sessions
    * still records the event (the reset did complete).
    */
-  async revokeAllForSub(sub: string): Promise<void> {
-    await this.revokeSubject(sub);
+  async revokeAllForSub(sub: string): Promise<Date | null> {
+    const fencedAt = await this.revokeSubject(sub);
     await this.audit.record({ type: "PasswordResetCompleted", sub });
+    return fencedAt;
   }
 
   /**
@@ -177,8 +178,8 @@ export class SessionService {
    * session the account held before it, as on reset (EARS-12). The terminal
    * row of that command is `auth.account.verified`, written by the caller.
    */
-  async revokeAllBeforeVerification(sub: string): Promise<void> {
-    await this.revokeSubject(sub);
+  async revokeAllBeforeVerification(sub: string): Promise<Date | null> {
+    return this.revokeSubject(sub);
   }
 
   /**
@@ -187,8 +188,8 @@ export class SessionService {
    * {@link SubjectRevocationHub} (the sign-in host's records, 003 EARS-64), so
    * no path can revoke one and leave the other live.
    */
-  private async revokeSubject(sub: string): Promise<void> {
+  private async revokeSubject(sub: string): Promise<Date | null> {
     await this.store.deleteBySub(sub);
-    await this.revocations.revoke(sub);
+    return this.revocations.revoke(sub);
   }
 }

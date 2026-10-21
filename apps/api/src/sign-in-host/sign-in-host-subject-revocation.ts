@@ -50,10 +50,11 @@ export class SignInHostSubjectRevocation
     if (this.settings) this.hub.register(this);
   }
 
-  async revokeSubject(sub: string): Promise<void> {
+  async revokeSubject(sub: string): Promise<Date> {
+    const at = this.clock();
     await this.state.markSubjectRevoked(
       sub,
-      this.clock(),
+      at,
       SIGN_IN_HOST_SESSION_LIFETIME_SECONDS,
     );
     for (const session of await this.records.deleteBySubject(sub)) {
@@ -67,5 +68,6 @@ export class SignInHostSubjectRevocation
         );
       }
     }
+    return at;
   }
 }

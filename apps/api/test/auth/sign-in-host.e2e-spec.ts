@@ -658,6 +658,35 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
       expect(await recordRows(address)).toHaveLength(0);
     });
 
+    it("EARS-12: a revocation landing between the credential check's start and the record insert leaves no record and refuses the step", async () => {
+      const address = await account("race");
+      const jar = new Jar();
+      const form = await render(jar, ACADEMY);
+      const original = idp.passwordLogin.bind(idp);
+      // The old password is checked while a reset completes elsewhere: the
+      // revocation lands after the check started and before the insert.
+      const race = vi
+        .spyOn(idp, "passwordLogin")
+        .mockImplementationOnce(async (identifier, password) => {
+          const result = await original(identifier, password);
+          await storefrontResetComplete(address);
+          return result;
+        });
+      const terminate = vi.spyOn(idp, "terminateSession");
+      const res = await post(jar, "login", {
+        identifier: address,
+        password: PASSWORD,
+        authRequest: form.authRequest,
+        csrf: form.csrf,
+      });
+      race.mockRestore();
+      expect(res.statusCode).toBe(401);
+      expect(await recordRows(address)).toHaveLength(0);
+      expect(jar.values.has(RECORD_COOKIE_NAME)).toBe(false);
+      expect(terminate).toHaveBeenCalled();
+      terminate.mockRestore();
+    });
+
     it("EARS-12: a record whose credential step precedes the subject's revocation is refused even if it survived the delete", async () => {
       const address = await account("fence");
       const jar = new Jar();

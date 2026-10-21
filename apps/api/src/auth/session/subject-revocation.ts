@@ -6,7 +6,8 @@ import { Injectable } from "@nestjs/common";
  * end with them whenever every session of that subject is revoked.
  */
 export interface SubjectRevocationListener {
-  revokeSubject(sub: string): Promise<void>;
+  /** Ends the subject's sessions; answers the revocation instant it fenced, if any. */
+  revokeSubject(sub: string): Promise<Date | void>;
 }
 
 /**
@@ -29,7 +30,17 @@ export class SubjectRevocationHub {
     this.listeners.push(listener);
   }
 
-  async revoke(sub: string): Promise<void> {
-    for (const listener of this.listeners) await listener.revokeSubject(sub);
+  /**
+   * Answers the latest revocation instant a holder fenced (`null` when none
+   * fences), so the step that asked for the revocation can stamp its own fresh
+   * session as made at that instant and survive only its own fence.
+   */
+  async revoke(sub: string): Promise<Date | null> {
+    let fencedAt: Date | null = null;
+    for (const listener of this.listeners) {
+      const at = await listener.revokeSubject(sub);
+      if (at && (!fencedAt || at.getTime() > fencedAt.getTime())) fencedAt = at;
+    }
+    return fencedAt;
   }
 }

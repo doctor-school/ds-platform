@@ -92,7 +92,20 @@ export const GENERIC_FAILURE = "the request could not be completed";
  * BFF mints its session from it, the sign-in host keeps it in its shared
  * record (003 EARS-5 amended). The check itself is the same code either way.
  */
-export type SessionAcceptor<T> = (session: IdpSession) => Promise<T>;
+export type SessionAcceptor<T> = (
+  session: IdpSession,
+  step?: CredentialStepFacts,
+) => Promise<T>;
+
+/**
+ * What a credential step tells its acceptor beyond the session: when the step
+ * itself revoked every session of the subject (EARS-12 reset, EARS-41 first
+ * verification), the instant that revocation was fenced at — the fresh session
+ * is the revocation's one survivor, and only a LATER revocation ends it.
+ */
+export type CredentialStepFacts = {
+  readonly subjectRevokedAt?: Date;
+};
 
 export const GENERIC_THROTTLED = "too many requests, please try again later";
 
@@ -517,6 +530,7 @@ export class AuthService {
       registration ? { password: registration.password } : undefined,
     );
     if (!result) return null;
+    let revokedAt: Date | null = null;
     if (result.verifiedNow) {
       await this.mirror.markEmailVerified(result.sub);
       await this.audit.record({
@@ -526,10 +540,13 @@ export class AuthService {
       });
       // Every session from before the first verification ends here, also when
       // the adapter issues no new one (fail-closed, EARS-41).
-      await this.sessions.revokeAllBeforeVerification(result.sub);
+      revokedAt = await this.sessions.revokeAllBeforeVerification(result.sub);
     }
     if (!result.session) return null;
-    const established = await accept(result.session);
+    const established = await accept(
+      result.session,
+      revokedAt ? { subjectRevokedAt: revokedAt } : undefined,
+    );
     if (registration?.consent.length) {
       await this.recordMissingConsent(result.sub, registration.consent);
     }
@@ -738,7 +755,7 @@ export class AuthService {
     // Global force-logout of every PRIOR session (+ the PasswordResetCompleted
     // audit) BEFORE minting the new one, so the credential change leaves no stale
     // session behind and the fresh session is the only survivor.
-    await this.sessions.revokeAllForSub(session.sub);
+    const revokedAt = await this.sessions.revokeAllForSub(session.sub);
     // 003 EARS-35: verify only after the reset code succeeds, but before the
     // OIDC exchange; an unverified account cannot complete that exchange. An
     // SMS reset code is issued only to an account whose email is already
@@ -755,7 +772,10 @@ export class AuthService {
       });
     }
     // Mint the fresh session on the identical login convergence point (EARS-8).
-    const established = await accept(session);
+    const established = await accept(
+      session,
+      revokedAt ? { subjectRevokedAt: revokedAt } : undefined,
+    );
     // Mirror login's session-created audit row (EARS-18): the reset just minted an
     // authenticated session, so it records the same `LoginSucceeded` (method
     // `password`) login does — in addition to the PasswordResetCompleted above.

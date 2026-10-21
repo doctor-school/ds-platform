@@ -61,7 +61,12 @@ of an unverified account) goes through the auth layer's one
 `SubjectRevocationHub`: this module fences the revocation instant (a record whose
 credential step precedes it is refused on every use), deletes the subject's rows
 and terminates their Zitadel sessions — before the step that asked for it mints
-its own record.
+its own record. A record is stamped with the instant its credential check
+STARTED (the acceptor is built before the check runs), and after the insert
+the fence is read again: a revocation at or after that instant deletes the
+row, terminates its Zitadel session and refuses the step, so a sign-in with
+the old password that races a reset never survives it. A step that itself
+revoked the subject is stamped at its own fence and ends only on a later one.
 
 ## Retention
 

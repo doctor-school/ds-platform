@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# release-driver — the box-side release driver (Issue #2985; tech spec
-# apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md §3
-# item 2, §5 «Entrypoint», §8 step (d)).
+# release-driver — the box-side release driver (Issues #2985 stage, #3157 prod; tech
+# spec apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md
+# §3 items 2-3, §5 «Entrypoint», «Stage `main` release driver», «Prod release driver»,
+# §8 steps (d)-(e)).
 #
 # The entrypoint's `release <env> <sha>` execs this file with the client's stdin. On
-# the stage box it converges the `main` slot to <sha> without an operator machine:
+# the stage box it converges the `main` slot to <sha>, on ds-api-prod it releases <sha>
+# to production — without an operator machine:
 #
 #   release-driver <env> <sha>        < images-<sha>.json
 #       Validates the env against /etc/ds-platform/box-role and the manifest on
@@ -17,19 +19,26 @@
 #         ds-release-driver: started <unit> | attached <unit> | already-succeeded
 #       exit 0. A refusal is one line on stderr and exit 3; usage exit 2.
 #   release-driver unit-state <env> <sha>
-#       One JSON object {"unit", "active", "rc"} — the entrypoint's `status` adds it
-#       to the ds-release status line as `driver`.
+#       One JSON object {"unit", "active", "rc", "previousSha"} — the entrypoint's
+#       `status` adds it to the ds-release status line as `driver`.
+#   release-driver record-previous <env> <sha> <previous-sha|none>
+#       (called by the unit) Saves the SHA production ran before <sha> — the
+#       release-notes basis `unit-state` reports as `previousSha`. The first SHA
+#       recorded for <sha> is kept: a re-run after the swap reads <sha> itself.
 #   release-driver _run <env> <sha>   (the unit's own process, as the deploy user)
 #       Downloads the codeload tarball of exactly <sha>, extracts it and runs
-#         node <tree>/tools/staging/slot.mjs up main --ref <sha> --local --images-file -
-#       — the operator's converge, step for step, through the box-local executor.
+#         stage-main: node <tree>/tools/staging/slot.mjs up main --ref <sha> --local --images-file -
+#         prod:       node <tree>/tools/deploy/prod.mjs --local --images-file -
+#       — the operator's converge / release, step for step, through the box-local
+#       executor (prod: data-prod over the VPC hop, /etc/ds-platform/data-prod-ssh-key).
 #       `-` reads the inherited fd 0: the manifest is root-only and the unit runs as
 #       deploy, so re-opening it as /dev/stdin (via /proc/self/fd/0) is EACCES.
 #
 # The unit survives the client (systemd-run, KillMode=mixed, --remain-after-exit
 # keeps its exit status for `unit-state`); its whole log stays in its journal and
 # nothing of it reaches the client, whose stderr is a public Actions log (spec §4).
-# PR slots stay operator-driven (spec §3 item 8); the prod driver lands with #2986.
+# PR slots stay operator-driven (spec §3 item 8); a prod hotfix (`--ref`) and a
+# rollback stay on the operator path (`pnpm deploy:prod`).
 #
 # Installed as /usr/local/lib/ds-platform/release-driver beside ds-release and the
 # entrypoint, by the same install step (tools/deploy/lib/remote.mjs BOX_ENTRYPOINTS).
@@ -59,6 +68,8 @@ MANIFEST_MAX_BYTES=65536
 ENV_RE='^(prod|stage-main|stage-pr-[1-9][0-9]*)$'
 SHA_RE='^[0-9a-f]{40}$'
 USER_RE='^[a-z_][a-z0-9_-]*$'
+# The previous SHA prod.mjs reads from the running ds-api image tag (7-40 hex).
+PREVIOUS_RE='^[0-9a-f]{7,40}$'
 # The recorded image set of tools/deploy/lib/registry.mjs (RECORDED_IMAGE_NAMES, the
 # release namespace of its digest reference, RELEASE_MANIFEST_REFS) — pinned equal by
 # the same test. slot.mjs validates the manifest again before it pulls anything.
@@ -121,12 +132,34 @@ unit_state() {
   printf '%s %s\n' "$state" "$rc"
 }
 
+# The recorded previous SHA of <sha>'s release as a JSON value: "<sha>" or null.
+previous_sha() {
+  local value
+  value=$(sudo cat "$MANIFEST_DIR/$1.previous" 2>/dev/null | tr -d '[:space:]' || true)
+  if [[ $value =~ $PREVIOUS_RE ]]; then printf '"%s"' "$value"; else printf 'null'; fi
+}
+
 cmd_unit_state() {
   check_args "$@"
   local unit state rc
   unit=$(unit_name "$1" "$2")
   read -r state rc < <(unit_state "$unit")
-  printf '{"unit":"%s","active":"%s","rc":%s}\n' "$unit" "$state" "$rc"
+  printf '{"unit":"%s","active":"%s","rc":%s,"previousSha":%s}\n' \
+    "$unit" "$state" "$rc" "$(previous_sha "$2")"
+}
+
+cmd_record_previous() {
+  [[ $# -eq 3 ]] || usage "usage: release-driver record-previous <env> <sha> <previous-sha|none>"
+  check_args "$1" "$2"
+  local sha=$2 previous=$3
+  [[ $previous == none || $previous =~ $PREVIOUS_RE ]] || usage "bad previous sha (want 7-40 hex or none)"
+  # A re-run of <sha> after its swap reads <sha> as the running image: the basis
+  # recorded first is the one the release notes range from.
+  [[ $(previous_sha "$sha") == null ]] || return 0
+  [[ $previous == none ]] && return 0
+  sudo install -d -m 0700 -o root -g root "$MANIFEST_DIR"
+  printf '%s\n' "$previous" | sudo tee "$MANIFEST_DIR/$sha.previous" >/dev/null
+  sudo chmod 0600 "$MANIFEST_DIR/$sha.previous"
 }
 
 # The manifest on stdin, checked before anything is started. Prints the reason of a
@@ -245,7 +278,10 @@ check_role() {
       [[ $env == stage-pr-* ]] && refuse "refused: PR slots stay operator-driven (ds-slot up $env)"
       refuse "refused: the stage box serves stage-main, not $env"
       ;;
-    prod) refuse "refused: prod release driver lands with #2986" ;;
+    prod)
+      [[ $env == prod ]] && return 0
+      refuse "refused: the prod box serves prod, not $env"
+      ;;
     *) refuse "refused: this box has no known role" ;;
   esac
 }
@@ -310,8 +346,10 @@ cmd_release() {
   [[ $user =~ $USER_RE ]] || usage "unusable caller user"
   sudo install -d -m 0700 -o root -g root "$MANIFEST_DIR"
   # Only this SHA's manifest is kept: systemd opened every other unit's stdin when it
-  # started, and a restart of another SHA saves that SHA's manifest again.
-  sudo find "$MANIFEST_DIR" -maxdepth 1 -type f -name '*.json' ! -name "$sha.json" -delete
+  # started, and a restart of another SHA saves that SHA's manifest again. Another
+  # SHA's recorded previous SHA goes with it: only a leased release asks for its own.
+  sudo find "$MANIFEST_DIR" -maxdepth 1 -type f \
+    \( -name '*.json' ! -name "$sha.json" -o -name '*.previous' ! -name "$sha.previous" \) -delete
   sudo install -m 0600 -o root -g root "$manifest" "$MANIFEST_DIR/$sha.json"
   # systemd opens the root-only manifest as the unit's stdin before it drops to the
   # deploy user; the journal takes the unit's output.
@@ -325,11 +363,17 @@ cmd_release() {
   say "started $unit"
 }
 
-# The unit's process: the operator converge, run on the box from the SHA's own tree.
+# The unit's process: the operator converge / release, run on the box from the SHA's
+# own tree.
 cmd_run() {
   check_args "$@"
   local env=$1 sha=$2
-  [[ $env == stage-main ]] || usage "the driver converges stage-main only"
+  local -a command
+  case $env in
+    stage-main) command=(tools/staging/slot.mjs up main --ref "$sha" --local --images-file -) ;;
+    prod) command=(tools/deploy/prod.mjs --local --images-file -) ;;
+    *) usage "the driver runs stage-main and prod only" ;;
+  esac
   command -v curl >/dev/null || fail "curl is not installed"
   [[ -x $NODE ]] || fail "node is not installed at $NODE (infra/deploy/bin/install-node.sh)"
   work=$(mktemp -d "${HOME:-/tmp}/ds-release-driver.XXXXXX") # global, for the EXIT trap
@@ -339,7 +383,7 @@ cmd_run() {
   curl -fsSL --proto '=https' --retry 3 --max-time 600 -o "$work/tree.tar.gz" "$CODELOAD/$sha"
   tar xzf "$work/tree.tar.gz" --strip-components=1 -C "$work/tree"
   set +e
-  "$NODE" "$work/tree/tools/staging/slot.mjs" up main --ref "$sha" --local --images-file -
+  "$NODE" "$work/tree/${command[0]}" "${command[@]:1}"
   local rc=$?
   set -e
   exit "$rc"
@@ -348,6 +392,7 @@ cmd_run() {
 main() {
   case ${1:-} in
     unit-state) shift; cmd_unit_state "$@" ;;
+    record-previous) shift; cmd_record_previous "$@" ;;
     _run) shift; cmd_run "$@" ;;
     *) cmd_release "$@" ;;
   esac

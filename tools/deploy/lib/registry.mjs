@@ -149,6 +149,37 @@ export function validateImageManifest(manifest, { sha, acceptRefs, consumer }) {
   return { ref, images: { ...images } };
 }
 
+/** `--images-file -`: the manifest is the inherited stdin (fd 0), #3114. */
+export const IMAGES_FILE_STDIN = "-";
+
+/**
+ * The `images-<sha>.json` a box-local run (a release driver unit, #2985/#3157) reads from
+ * `path` (`-`: the inherited fd 0) — parsed, a JSON object of exactly `sha`, `ref` and
+ * `images`. The caller validates it for its own consumer (`validateImageManifest`).
+ *
+ * `-` is fd 0 read as it is: the driver unit runs as `deploy` with a root-only manifest
+ * as its stdin, and opening `/dev/stdin` would re-open that file through
+ * /proc/self/fd/0 and re-check its permissions (EACCES).
+ */
+export function readImageManifestFile(path, { readText = (source) => readFileSync(source, "utf8") } = {}) {
+  const fromStdin = path === IMAGES_FILE_STDIN;
+  const label = fromStdin ? "on stdin" : path;
+  let manifest;
+  try {
+    manifest = JSON.parse(readText(fromStdin ? 0 : path));
+  } catch (error) {
+    throw new RegistryError(`the image manifest ${label} is not readable JSON (${error.message})`);
+  }
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+    throw new RegistryError(`the image manifest ${label} is not a JSON object`);
+  }
+  const keys = Object.keys(manifest).sort().join(",");
+  if (keys !== "images,ref,sha") {
+    throw new RegistryError(`the image manifest ${label} carries keys ${keys}, not exactly sha, ref, images`);
+  }
+  return manifest;
+}
+
 /**
  * The `runtime-images.yml` run whose artifact is read — or a refusal.
  *

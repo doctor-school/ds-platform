@@ -313,6 +313,43 @@ then survives as a compose orphan while the shipped older Caddyfile stops routin
 it, and the derived smoke no longer probes it. The deploy goes green with a public
 vhost dark. Ship a service removal on `origin/main`, never as a hotfix.
 
+## Box-local release (`--local`, the prod release driver, #3157)
+
+Tech spec `apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md`
+§5 «Prod release driver». The release workflow does not run `pnpm deploy:prod`: it sends
+`release prod <sha>` with the recorded `images-<sha>.json` on stdin to ds-api-prod, whose
+release driver (`infra/deploy/bin/release-driver`, see `infra/deploy/README.md` → SSH
+access model) checks the manifest and both provenances, takes the `ds-release` lease and
+starts the unit `ds-prod-<sha12>-driver`. The unit downloads the codeload tree of exactly
+that SHA and runs
+
+```bash
+node <tree>/tools/deploy/prod.mjs --local --images-file -   # `-`: the unit's stdin
+```
+
+`--local` takes no other flag: a hotfix (`--ref`), `--rollback` and every escape hatch
+stay on the operator path above.
+
+- **The same plan.** `deploy()` walks `DEPLOY_PLAN` (`prod.mjs`) with a cursor that
+  refuses any other order; `--local` runs every phase of it minus `OPERATOR_ONLY_STEPS`
+  — the pre-flight (checkout, `gh`, CI, gates, the stage check), the release cut and the
+  Deployment record, which the release workflow runs before and after the box. The smoke
+  stays inside the run before `finish`: a red smoke ends the release `failed`.
+- **Transport.** api-prod is the box itself (`LOCAL_EXECUTOR`, `lib/remote.mjs`);
+  data-prod is `deploy@<data-prod VPC IP>` (`DS_DATA_PROD_VPC_IP`, default `192.168.0.10`)
+  with `-i /etc/ds-platform/data-prod-ssh-key`, `IdentitiesOnly`, `BatchMode` and
+  `StrictHostKeyChecking=yes` (`hopDestination`) — the hop the operator's ProxyJump takes.
+- **The target from the tree.** The service set, the IdP expectations and the PostgreSQL
+  target are read from the extracted tree instead of `git show` (codeload honours
+  `export-ignore` as `git archive` does), and the ship tars that tree to both boxes.
+- **`previousSha`.** The previous-SHA read also records the running SHA through
+  `release-driver record-previous prod <sha> <prev|none>` (the first basis recorded for
+  a SHA is kept); `status prod <sha>` reports it as `driver.previousSha`, the
+  release-notes basis of the runner's release cut.
+
+The unit's whole output stays in its journal (`journalctl -u ds-prod-<sha12>-driver`);
+the runner sees status lines only.
+
 ## Docker Hub login on the boxes (#2240)
 
 Since #2981 step 5 builds nothing on `api-prod`: our own images come from the

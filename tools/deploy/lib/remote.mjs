@@ -40,9 +40,39 @@ export function sshBaseArgs(host, extraOptions = []) {
     "ServerAliveInterval=15",
     "-o",
     "ServerAliveCountMax=4",
+    ...(HOP_OPTIONS.get(host) ?? []),
     ...extraOptions,
     host,
   ];
+}
+
+// #3157: the VPC hop of the prod release driver. A run ON ds-api-prod (`prod.mjs
+// --local`) reaches ds-data-prod as `deploy@<data-prod VPC IP>` with the dedicated key
+// `/etc/ds-platform/data-prod-ssh-key` — the hop the operator's `ds-data-prod` alias
+// takes through its ProxyJump, so data-prod keeps no public ssh and no CI key (tech
+// spec 2026-10-16 release pipeline §4, §5 «Prod release driver»). The destination
+// carries its own identity flags on every channel `sshBaseArgs` opens to it.
+export const DATA_PROD_HOP_KEY = "/etc/ds-platform/data-prod-ssh-key";
+const HOP_OPTIONS = new Map();
+
+/**
+ * The ssh destination `<user>@<address>` reached with `identityFile` only: no agent,
+ * no other key, no password prompt, and a host key that must already be known (fail
+ * closed — the box's `known_hosts` entry is provisioned with the key).
+ */
+export function hopDestination({ user, address, identityFile }) {
+  const destination = `${user}@${address}`;
+  HOP_OPTIONS.set(destination, [
+    "-i",
+    identityFile,
+    "-o",
+    "IdentitiesOnly=yes",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "StrictHostKeyChecking=yes",
+  ]);
+  return destination;
 }
 
 // Per-step no-output budgets for the sshScript inactivity watchdog (#905).
@@ -356,7 +386,9 @@ trap - EXIT HUP INT TERM`;
  * `sourceDir` — so the archive is a `tar` of that directory (one top-level
  * directory, stripped by the same `--strip-components=1`) and the same
  * `shipTreeCommand` installs it. codeload and `git archive` both honour
- * `export-ignore`, so both carry the same files.
+ * `export-ignore`, so both carry the same files. #3157: a box-local run ships that
+ * same `sourceDir` over its VPC hop too (`prod.mjs --local` → ds-data-prod), so the
+ * tar is chosen by `sourceDir`, not by the destination.
  */
 export async function shipTree(
   sha,
@@ -364,11 +396,12 @@ export async function shipTree(
   { liveDir, preserved, tmpPrefix = "ds-deploy", sourceDir } = {},
 ) {
   const tmp = join(tmpdir(), `${tmpPrefix}-${sha.slice(0, 12)}.tar.gz`);
-  const local = host === LOCAL_EXECUTOR;
-  if (local && !sourceDir) throw new Error("a local ship needs the tree directory it ships");
+  if (host === LOCAL_EXECUTOR && !sourceDir) {
+    throw new Error("a local ship needs the tree directory it ships");
+  }
   await new Promise((resolve, reject) => {
     const out = createWriteStream(tmp);
-    const [command, argv] = local
+    const [command, argv] = sourceDir
       ? ["tar", ["czf", "-", "-C", dirname(sourceDir), basename(sourceDir)]]
       : ["git", ["archive", "--format=tar.gz", "--prefix=ds-platform/", sha]];
     const archiver = spawn(command, argv);

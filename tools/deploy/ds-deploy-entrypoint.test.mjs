@@ -151,7 +151,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     // #2985: no driver installed ⇒ no driver unit.
     assert.equal(
       r.stdout,
-      `{"release":null,"unitAlive":null,"driver":{"unit":"ds-stage-pr-42-${SHA.slice(0, 12)}-driver","active":"absent","rc":null}}\n`,
+      `{"release":null,"unitAlive":null,"driver":{"unit":"ds-stage-pr-42-${SHA.slice(0, 12)}-driver","active":"absent","rc":null,"previousSha":null}}\n`,
     );
     assert.match(log("sudo"), new RegExp(`/usr/local/bin/ds-release status stage-pr-42 ${SHA}`));
     assert.match(log("logger"), new RegExp(`-p auth.info accepted: status stage-pr-42 ${SHA}`));
@@ -190,6 +190,21 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       driver: { unit: `ds-stage-main-${SHA.slice(0, 12)}-driver`, active: "failed", rc: 3 },
     });
     assert.equal(r.stdout.split("\n").length, 2, "one line");
+  });
+
+  it("3157: status prod carries the driver's previousSha, the release-notes basis", () => {
+    const previous = "c".repeat(40);
+    installDriver(
+      `[[ $1 == unit-state ]] && printf '{"unit":"ds-%s-%s-driver","active":"inactive","rc":0,"previousSha":"${previous}"}\\n' "$2" "\${3:0:12}"`,
+    );
+    const r = run(`status prod ${SHA}`);
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout).driver, {
+      unit: `ds-prod-${SHA.slice(0, 12)}-driver`,
+      active: "inactive",
+      rc: 0,
+      previousSha: previous,
+    });
   });
 
   it("2985: status refuses a driver that answers no unit state", () => {

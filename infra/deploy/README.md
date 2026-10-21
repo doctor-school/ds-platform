@@ -151,8 +151,12 @@ hotfix-ref converges use what the box has — `tools/staging/README.md` → Box 
 Its `release` verb execs the box-side release driver
 `/usr/local/lib/ds-platform/release-driver` (installed beside `ds-release` under the same
 rule): on stage-1 it converges `stage-main` from the stdin `images-<sha>.json` in the
-unit `ds-stage-main-<sha12>-driver` (tech spec §5 «Stage `main` release driver»); on prod it
-refuses until #2986 lands. `status` adds that unit's state as `driver`. Reports uploaded on stage-1 land in
+unit `ds-stage-main-<sha12>-driver` (tech spec §5 «Stage `main` release driver»); on
+ds-api-prod (`box-role` `prod`) it releases `prod` in the unit `ds-prod-<sha12>-driver`,
+which runs `tools/deploy/prod.mjs --local --images-file -` from the codeload tree of the
+SHA (tech spec §5 «Prod release driver»; `tools/deploy/README.md` → Box-local release).
+Each box refuses the other's env. `status` adds that unit's state as `driver`, with
+`previousSha` — the SHA prod ran before, recorded by the prod unit — for the release cut. Reports uploaded on stage-1 land in
 `/var/lib/ds-platform/e2e-reports/<sha>/` (root-only, pruned after 14 days; validated and
 extracted with python3 `tarfile`, plain tar only; a stream over
 512 MiB, an archive unpacking past 2 GiB or holding more than 20000 entries is refused).
@@ -181,8 +185,32 @@ reload when the check fails, then proves the effective values with `sshd -T`. Th
 operator line of `deploy`'s `authorized_keys` stays byte-identical; a CI key is matched by
 its key body, so re-running with the same key changes nothing.
 
-**Node on stage-1 (post-boot, once):** the release driver runs `tools/staging/slot.mjs` on
-the box, so stage-1 carries one pinned Node runtime. `infra/deploy/bin/install-node.sh`
+**Data-prod hop key (ds-api-prod → ds-data-prod, once, #3157):** the prod release
+driver's unit runs on ds-api-prod and reaches ds-data-prod over the VPC as `deploy` with a
+dedicated key. Generate it on ds-api-prod, owned by `deploy`, mode 0600, and authorize its
+public half on ds-data-prod restricted to ds-api-prod's VPC address
+(`var.api_prod_private_ip`, default `192.168.0.20`), so the key works from nowhere else:
+
+```bash
+# on ds-api-prod
+sudo -u deploy ssh-keygen -t ed25519 -N '' -C ds-api-prod-hop -f /tmp/hop
+sudo install -m 0600 -o deploy -g deploy /tmp/hop /etc/ds-platform/data-prod-ssh-key
+cat /tmp/hop.pub; sudo rm -f /tmp/hop /tmp/hop.pub
+# pin data-prod's host key for deploy (the driver uses StrictHostKeyChecking=yes)
+sudo -u deploy sh -c 'ssh-keyscan -t ed25519 192.168.0.10 >> ~/.ssh/known_hosts'
+# on ds-data-prod: one line in ~deploy/.ssh/authorized_keys
+restrict,from="192.168.0.20" ssh-ed25519 AAAA… ds-api-prod-hop
+```
+
+`restrict` turns off pty and every forwarding; the key carries no forced command, so it
+reaches `deploy`'s sudo — the accepted risk of tech spec §4 (ds-api-prod already holds the
+database owner credentials), narrowed to a data-prod forced command in step (f). Prove it
+from ds-api-prod: `sudo -u deploy ssh -i /etc/ds-platform/data-prod-ssh-key -o
+IdentitiesOnly=yes -o BatchMode=yes deploy@192.168.0.10 true`.
+
+**Node on stage-1 and ds-api-prod (post-boot, once):** the release driver runs
+`tools/staging/slot.mjs` on stage-1 and `tools/deploy/prod.mjs` on ds-api-prod, so each
+carries one pinned Node runtime. `infra/deploy/bin/install-node.sh`
 downloads the official `linux-x64.tar.xz` of the pinned Node 24 LTS release, refuses it
 unless it matches the pinned sha256, installs it under `/usr/local/lib/nodejs/<version>`
 and links `/usr/local/bin/node`; a second run prints `nothing to change`. It is a

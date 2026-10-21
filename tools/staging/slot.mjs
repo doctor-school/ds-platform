@@ -2950,11 +2950,23 @@ export function readImagesFile({ slot, sha, path, readText = (source) => readFil
   return validateImageManifest(manifest, { slot, sha });
 }
 
+/**
+ * #3117: the plaintext from the box's basic-auth file — two lines, `user=stage` and
+ * `password=<plaintext>` — taken exactly as the operator's `sed -n "s/^password=//p"`
+ * takes it. The user is box configuration (`requiredBasicAuthUser`), so only the
+ * `password=` line is read. The refusal names the file and the key, never its content.
+ */
+export function parseBasicAuthPass(text, source) {
+  const line = text.split(/\r?\n/).find((entry) => entry.startsWith("password="));
+  const pass = line?.slice("password=".length).trim();
+  if (!pass) throw new SlotError(`${source} carries no non-empty password= line`);
+  return pass;
+}
+
 /** #2985: the stand's basic-auth plaintext, read on the box by a `--local` converge. */
 async function readBoxBasicAuthPass() {
-  const pass = (await sshCapture(STAGE_1, `sudo cat ${STAGE_BASIC_AUTH_FILE}`)).trim();
-  if (!pass) throw new SlotError(`${STAGE_BASIC_AUTH_FILE} is empty on ${STAGE_1}`);
-  return pass;
+  const text = await sshCapture(STAGE_1, `sudo cat ${STAGE_BASIC_AUTH_FILE}`);
+  return parseBasicAuthPass(text, `${STAGE_BASIC_AUTH_FILE} on ${STAGE_1}`);
 }
 
 /** `resolveRecordedImages` through the operator's own `gh`, in a throwaway temp dir. */

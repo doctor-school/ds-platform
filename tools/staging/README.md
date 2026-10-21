@@ -390,7 +390,9 @@ instead of `ssh` (same stdin, quoting and watchdog — `LOCAL_EXECUTOR` in
 tree, the digests come from the `images-<sha>.json` file (`-` reads it from the inherited stdin,
 fd 0, without opening a path — the driver's manifest is root-only; validated strictly; which
 `runtime-images.yml` run it came from is the caller's check) instead of `gh`, and the
-health check reads the basic-auth plaintext from `/etc/ds-platform/stage-basic-auth.txt`.
+health check takes the basic-auth plaintext from the `password=` line of
+`/etc/ds-platform/stage-basic-auth.txt` (as the operator's `sed` does; the user stays
+`STAGE_BASIC_AUTH_USER` from `stage.env`), refusing by name when that line is absent or empty.
 The plan and its steps are the operator's, which `slot-local.test.mjs` pins. Only `up main`
 takes `--local`: PR slots stay operator-driven. Spec: release-pipeline spec §5.
 

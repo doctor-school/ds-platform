@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 
 import { IMAGE_REGISTRY } from "../deploy/lib/registry.mjs";
 import { GOLDEN_SUBJECT_ENV_VARS } from "./idp.mjs";
-import { SELF_TREE, SlotError, parseArgs, readImagesFile, runSlotCommand } from "./slot.mjs";
+import { SELF_TREE, SlotError, parseArgs, parseBasicAuthPass, readImagesFile, runSlotCommand } from "./slot.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SHA = "0123456789abcdef0123456789abcdef01234567";
@@ -184,5 +184,26 @@ test("2985: slot.mjs runs from a bare tree without node_modules", () => {
     assert.doesNotMatch(run.stderr, /Cannot find (module|package)/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// #3117: the box file is two lines, `user=stage` / `password=<plaintext>` — the
+// operator path takes the `password=` line with sed; a `--local` converge must too.
+test("3117: the basic-auth file yields only its password= value", () => {
+  for (const text of [
+    "user=stage\npassword=s3cret=with-equals\n",
+    "user=stage\r\npassword=s3cret=with-equals\r\n",
+    "password=s3cret=with-equals\nuser=stage",
+  ]) {
+    assert.equal(parseBasicAuthPass(text, "/etc/x.txt"), "s3cret=with-equals");
+  }
+});
+
+test("3117: a basic-auth file without a non-empty password= line is refused by name", () => {
+  for (const text of ["", "user=stage\n", "user=stage\npassword=\n", "user=stage\npassword=   \n"]) {
+    assert.throws(
+      () => parseBasicAuthPass(text, "/etc/x.txt"),
+      (error) => error instanceof SlotError && /\/etc\/x\.txt/.test(error.message) && /password=/.test(error.message),
+    );
   }
 });

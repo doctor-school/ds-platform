@@ -248,8 +248,20 @@ Every successful `runtime-images.yml` run of a push to `main` triggers
 2. **`suite`** (environment `stage`) checks out the SHA and runs
    `node tools/staging/e2e-stage.mjs main --expect-sha <sha>` with `STAGE_BASE_DOMAIN`,
    `E2E_HTTP_USER` and the stage secrets (basic-auth password, captcha test token, the
-   four golden passwords) exported — the no-SSH mode above, so the suite never reads the
-   box — plus `CI=1` and **`E2E_PUBLIC_LOG=1`**. In that mode the console reporter is
+   four golden passwords) exported — the no-SSH mode above, so `e2e-stage.mjs` itself
+   never reads the box — plus `CI=1` and **`E2E_PUBLIC_LOG=1`**. The box-observing
+   scenarios (the owned mirror count, consent, phone, congress and wrong-verification
+   snapshots, the live password policy) read stage `main` only through the CI key's
+   forced command, `observe <name>`: the job writes the key and the pinned host key into
+   `$RUNNER_TEMP/stage-ssh/` before the suite and exports `E2E_STAGE_OBSERVE_SSH`
+   (`deploy@<box>`), `E2E_STAGE_OBSERVE_KEY` and `E2E_STAGE_OBSERVE_KNOWN_HOSTS` (two
+   paths, never the key), and `packages/e2e/lib/stage-observe.ts` then sends each read as
+   one named, read-only observation with its parameters as JSON on stdin. The box runs
+   only the observations defined in `infra/deploy/bin/ds-deploy-entrypoint`, validates
+   every parameter, reads the `main` database in a `BEGIN READ ONLY` transaction and
+   answers only what the lib parses (release-pipeline spec §5, «Stage suite box reads»).
+   Without those three variables the same libs read the box with the operator's own
+   ssh. In public-log mode the console reporter is
    `packages/e2e/reporters/summary.ts` (one line per test: status, project, title path,
    duration, retry — no error text, no test output, no URL), the two axe legs get the
    same reporter, and the HTML + JSON report is written only into the report dir. The

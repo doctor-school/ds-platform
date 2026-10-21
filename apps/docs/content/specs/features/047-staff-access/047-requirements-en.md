@@ -2,7 +2,7 @@
 title: "047 — Staff access: the platform administrator grants and revokes staff roles in the admin"
 description: "Requirements for the «Доступы» admin section: a platform-administrator-only list of staff members with their role and event, a grant form (email, full name, role, event) that adds the role to an existing account or creates the staff account with a one-time temporary password, a revoke action that closes access at once including open admin sessions, a current authenticator code in the same session when the second factor is older than 30 minutes, retry of a grant or revocation that failed part-way, and the auth.role.granted / auth.role.revoked and auth.step_up.* audit."
 slug: 047-staff-access
-status: Draft
+status: Shipped
 issues: [2378, 2901, 2902]
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/issues/2378

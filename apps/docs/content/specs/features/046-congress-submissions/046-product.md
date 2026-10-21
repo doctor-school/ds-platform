@@ -3,7 +3,7 @@ title: "Feature 046 — Congress submissions: oral talks, posters and abstracts 
 description: "Product requirements for congress submissions in a «Мои заявки на Конгресс» section of the Doctor.School account: a registered participant sends oral talks, posters and abstracts, many and at any time while intake is open; drafts save themselves; statuses and committee comments show in the section and arrive by email; the program committee reviews in the admin; dates and limits are admin settings. Source of the 046 EARS triplet (ADR-0014)."
 slug: two-site-ia-046-congress-submissions-product
 epic: ../../product/two-site-ia/brief.md
-status: Draft
+status: Shipped
 surface: user-facing
 lang: en
 ---

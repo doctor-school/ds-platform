@@ -3,7 +3,7 @@ title: "Фича 044 — Регистрация на конгресс (PRD)"
 description: "Продуктовые требования к вертикальному срезу регистрации на конгресс: публичная форма-заявка на orthobio.ru (репозиторий doctor-school/orthobio-site), API платформы, превращающий заявку в регистрацию И в аккаунт Doctor.School без пароля, ограниченная админ-роль, привязанная к одному мероприятию, с реестром участников, который работает как стол регистрации на конгрессе, и письмо-подтверждение. Источник EARS-триплета 044 (ADR-0014)."
 slug: two-site-ia-044-congress-signup-product-ru
 epic: ../../product/two-site-ia/brief-ru.md
-status: Draft
+status: Shipped
 surface: user-facing
 lang: ru
 ---

@@ -13,9 +13,10 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  * Runs on the live tier `playwright.account-live.config.ts` (no webServer, no
  * bddgen): ENV `E2E_PORTAL_URL`, `MAILPIT_URL`; Academy bound to IPv4.
  */
+requireLiveStandEnv(["E2E_PORTAL_URL", "MAILPIT_URL"]);
+
 defineAccountAuthPathTests({
   host: HOSTS.academy,
-  gate: { requireLiveStandEnv },
   registerPath: "/v1/auth/register",
   verifyPath: "/v1/auth/verify",
   registration: { consent: [{ purpose: "tos", version: "2026-01" }] },

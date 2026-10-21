@@ -959,10 +959,43 @@ describe("runE2eStage — the live legs", () => {
       (w) => w.file.split(path.sep).join("/") === file,
     );
     assert.ok(written, "the list the flag names was written");
-    // The slot exports no E2E_CAPTCHA_TEST_TOKEN, so the #3151 spec is not-run too.
+    // BOX_ENV carries no BOT_PROTECTION_TEST_TOKEN, so `captchaTestTokenEnv`
+    // supplies no E2E_CAPTCHA_TEST_TOKEN and the #3151 spec is not-run too.
     assert.deepEqual(written.content.trim().split("\n"), [
       "signed-in-landing-live.spec.ts",
       "account-auth-paths-live.spec.ts",
+    ]);
+  });
+
+  it("runs the #3151 account-auth-paths spec as a live leg when the box carries the captcha test token", async () => {
+    const { calls, writes, effects } = harness({
+      readBoxEnv: async () => ({
+        ...BOX_ENV,
+        BOT_PROTECTION_TEST_TOKEN: "box-token",
+      }),
+    });
+    await runE2eStage(["pr-3168"], { env: ENV, effects });
+    const academy = calls.find((c) =>
+      c.argv.includes("--config=playwright.account-live.config.ts"),
+    );
+    assert.ok(academy, "the Academy account-live leg is launched");
+    assert.equal(academy.env.E2E_CAPTCHA_TEST_TOKEN, "box-token");
+    assert.equal(
+      academy.argv.some((t) => t.startsWith("--test-list-invert=")),
+      false,
+      "nothing of the Academy tier is listed as not-run",
+    );
+    const doctor = calls.find((c) =>
+      c.argv.includes("--config=playwright.register-live.config.ts"),
+    );
+    assert.equal(doctor.env.E2E_CAPTCHA_TEST_TOKEN, "box-token");
+    const flag = doctor.argv.find((t) => t.startsWith("--test-list-invert="));
+    const file = flag.slice("--test-list-invert=".length);
+    const written = writes.find(
+      (w) => w.file.split(path.sep).join("/") === file,
+    );
+    assert.deepEqual(written.content.trim().split("\n"), [
+      "signed-in-landing-live.spec.ts",
     ]);
   });
 

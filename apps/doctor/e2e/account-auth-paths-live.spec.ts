@@ -13,9 +13,10 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  * Rides the live tier `playwright.register-live.config.ts`: ENV
  * `E2E_DOCTOR_URL`, `MAILPIT_URL`; doctor server bound to IPv4.
  */
+requireLiveStandEnv(["E2E_DOCTOR_URL", "MAILPIT_URL"]);
+
 defineAccountAuthPathTests({
   host: HOSTS.doctor,
-  gate: { requireLiveStandEnv },
   registerPath: "/v1/storefront/doctor/register",
   verifyPath: "/v1/storefront/doctor/verify",
   registration: {

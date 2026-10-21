@@ -11,7 +11,6 @@ import {
   CAPTCHA_TEST_TOKEN_ENV,
   prepareCaptchaForJourney,
 } from "./captcha-stub.js";
-import type { LiveStandGate } from "./live-stand-env.js";
 import { standHttpCredentials } from "./stand-http-credentials.js";
 import {
   captureAddressedMailCheckpoint,
@@ -53,7 +52,8 @@ import {
  * commands with the Mailpit code (the verify carries the registration values:
  * the bare verify replaces the password, 003 EARS-41).
  *
- * ENV SET: the host URL variable, `MAILPIT_URL`. Bare CI → inert green; a
+ * ENV SET (gated by each host binding with a literal `requireLiveStandEnv`, so
+ * the stage inventory test sees it): the host URL variable, `MAILPIT_URL`. Bare CI → inert green; a
  * half-exported env fails loudly by variable name (`live-stand-env.ts`), whose
  * stand preconditions apply (raised rate-limit ceilings; bot protection in its
  * stand bypass mode). Bind the storefront to IPv4 (`next … -H 127.0.0.1`): the
@@ -69,7 +69,6 @@ const ACCOUNT = "/account";
 /** What a host binds the shared body with. */
 export interface AccountAuthPathsHost {
   readonly host: HostConfig;
-  readonly gate: Pick<LiveStandGate, "requireLiveStandEnv">;
   /** The host's register command (`AuthFlowHostConfig.api.registerPath`). */
   readonly registerPath: string;
   /** The host's verify command (`AuthFlowHostConfig.api.verifyPath`). */
@@ -126,7 +125,6 @@ function returnTarget(page: Page): { pathname: string; returnTo: string | null }
 
 export function defineAccountAuthPathTests(bound: AccountAuthPathsHost): void {
   const { host } = bound;
-  bound.gate.requireLiveStandEnv([host.baseUrlEnv, "MAILPIT_URL"]);
 
   const base = (process.env[host.baseUrlEnv] ?? "").replace(/\/$/, "");
   const mailbox = (process.env.MAILPIT_URL ?? "").replace(/\/$/, "");

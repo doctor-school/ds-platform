@@ -83,12 +83,12 @@ function themeScripts(tree: ReactElement[]) {
     );
 }
 
-describe("003 EARS-70: the sign-in host follows the originating storefront's theme under the nonce CSP", () => {
+describe("the sign-in host follows the originating storefront's theme under the nonce CSP", () => {
   beforeEach(() => {
     requestHeaders.value = new Headers();
   });
 
-  it("003 EARS-70: the Academy variant boots the portal theme (stored choice, else system) with the request nonce and watches the system scheme", async () => {
+  it("the Academy variant boots the portal theme (stored choice, else system) with the request nonce and watches the system scheme", async () => {
     request("academy");
     const tree = await layoutTree();
     const scripts = themeScripts(tree);
@@ -98,7 +98,7 @@ describe("003 EARS-70: the sign-in host follows the originating storefront's the
     expect(tree.some((el) => el.type === ThemeWatcher)).toBe(true);
   });
 
-  it("003 EARS-70: the doctor variant boots the doctor theme (stored choice only, light default) with the request nonce and no system watcher", async () => {
+  it("the doctor variant boots the doctor theme (stored choice only, light default) with the request nonce and no system watcher", async () => {
     request("doctor");
     const tree = await layoutTree();
     const scripts = themeScripts(tree);
@@ -108,7 +108,7 @@ describe("003 EARS-70: the sign-in host follows the originating storefront's the
     expect(tree.some((el) => el.type === ThemeWatcher)).toBe(false);
   });
 
-  it("003 EARS-70: with no storefront known (unread entry) the host boots no theme script", async () => {
+  it("with no storefront known (unread entry) the host boots no theme script", async () => {
     request(null);
     const tree = await layoutTree();
     expect(themeScripts(tree)).toHaveLength(0);

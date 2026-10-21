@@ -23,6 +23,7 @@ import { AppModule } from "../../src/app.module.js";
 import { AuthService } from "../../src/auth/auth.service.js";
 import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
+import { hashIdentifier } from "../../src/auth/session/auth-audit.ledger.js";
 import { ZitadelIdpClient } from "../../src/auth/idp/zitadel.idp.js";
 import {
   LOGIN_HANDOFF_STORE,
@@ -805,6 +806,265 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
       expect(hostThrottled.statusCode).toBe(429);
       expect(storefrontThrottled.statusCode).toBe(429);
       expect(hostThrottled.json()).toEqual(storefrontThrottled.json());
+    });
+  });
+
+  describe("ADR-0015 §4 req. 4: the cookies the API sets", () => {
+    /** The raw `Set-Cookie` line the API sent for `name`. */
+    function setCookieLine(
+      res: { headers: Record<string, unknown> },
+      name: string,
+    ): string {
+      const raw = res.headers["set-cookie"];
+      const lines = Array.isArray(raw) ? raw : raw ? [String(raw)] : [];
+      const line = lines.find((l: string) => l.startsWith(`${name}=`));
+      expect(line, `${name} was not set`).toBeDefined();
+      return line as string;
+    }
+
+    function expectHostOnly(line: string, name: string): number {
+      const [pair, ...attrs] = line.split(";").map((p) => p.trim());
+      expect(name.startsWith("__Host-")).toBe(true);
+      expect(pair!.split("=")[1]).not.toBe("");
+      const lower = attrs.map((a) => a.toLowerCase());
+      expect(lower).toContain("path=/");
+      expect(lower).toContain("secure");
+      expect(lower).toContain("httponly");
+      expect(lower).toContain("samesite=lax");
+      expect(lower.some((a) => a.startsWith("domain"))).toBe(false);
+      const maxAge = lower.find((a) => a.startsWith("max-age="));
+      expect(maxAge).toBeDefined();
+      return Number(maxAge!.slice("max-age=".length));
+    }
+
+    it("EARS-66: the form-state cookie is __Host-, Path=/, Secure, HttpOnly, SameSite=Lax and carries no Domain", async () => {
+      const authRequest = hostIdp.seedAuthRequest({ clientId: ACADEMY });
+      const { res, body } = await entry(new Jar(), authRequest);
+      expect(body.action).toBe("render");
+      const maxAge = expectHostOnly(
+        setCookieLine(res, FORM_COOKIE_NAME),
+        FORM_COOKIE_NAME,
+      );
+      expect(maxAge).toBeGreaterThan(0);
+    });
+
+    it("EARS-64: the record cookie is __Host-, Path=/, Secure, HttpOnly, SameSite=Lax, carries no Domain and never outlives the record", async () => {
+      const address = await account("cookie-attrs");
+      const jar = new Jar();
+      const res = await signIn(jar, address);
+      const maxAge = expectHostOnly(
+        setCookieLine(res, RECORD_COOKIE_NAME),
+        RECORD_COOKIE_NAME,
+      );
+      const [row] = await recordRows(address);
+      const leftSeconds = (row!.expires_at.getTime() - Date.now()) / 1000;
+      expect(maxAge).toBeGreaterThan(0);
+      expect(maxAge).toBeLessThanOrEqual(Math.ceil(leftSeconds) + 1);
+    });
+  });
+
+  // ADR-0002 §4.8: auth audit is explicit emission at the command site. Each
+  // host credential route runs its storefront twin's AuthService step, so it
+  // appends the same terminal rows (audit-emission-coverage.ts).
+  describe("EARS-18: each host route appends its storefront twin's audit rows", () => {
+    const pepper =
+      process.env.AUDIT_IDENTIFIER_PEPPER ??
+      "test-only-insecure-audit-identifier-pepper";
+
+    async function now(): Promise<string> {
+      const { rows } = await pool.query<{ t: string }>(
+        "SELECT clock_timestamp()::text AS t",
+      );
+      return rows[0]!.t;
+    }
+
+    /** Event types appended since `since` for `address` (by subject or masked identifier). */
+    async function ledger(address: string, since: string): Promise<string[]> {
+      const { rows } = await pool.query<{ event_type: string }>(
+        `SELECT event_type FROM audit_ledger
+          WHERE created_at >= $3
+            AND (subject_id = (SELECT zitadel_sub FROM users WHERE email = $1)
+                 OR metadata->>'identifier_hash' = $2)
+          ORDER BY created_at`,
+        [address, hashIdentifier(address, pepper), since],
+      );
+      return rows.map((r) => r.event_type);
+    }
+
+    it("EARS-18: the host password step appends auth.login.success, a wrong password auth.login.failure", async () => {
+      const address = await account("audit-login");
+      const since = await now();
+      await signIn(new Jar(), address);
+      const jar = new Jar();
+      const form = await render(jar, ACADEMY);
+      const wrong = await post(jar, "login", {
+        identifier: address,
+        password: "Zz9!definitely-the-wrong-pw",
+        authRequest: form.authRequest,
+        csrf: form.csrf,
+      });
+      expect(wrong.statusCode).toBe(401);
+      const events = await ledger(address, since);
+      expect(events).toContain("auth.login.success");
+      expect(events).toContain("auth.login.failure");
+    });
+
+    it("EARS-18: the host code request appends auth.otp.sent, the code step auth.login.success, a wrong code auth.login.failure", async () => {
+      const address = await account("audit-otp");
+      const since = await now();
+      const jar = new Jar();
+      const form = await render(jar, ACADEMY);
+      const fields = { authRequest: form.authRequest, csrf: form.csrf };
+      const sent = await post(jar, "login/otp/request", {
+        identifier: address,
+        channel: "email",
+        ...fields,
+      });
+      expect(sent.statusCode).toBe(200);
+      const wrong = await post(jar, "login/otp", {
+        identifier: address,
+        code: "000000",
+        channel: "email",
+        ...fields,
+      });
+      expect(wrong.statusCode).toBe(401);
+      const ok = await post(jar, "login/otp", {
+        identifier: address,
+        code: FAKE_VALID_CODE,
+        channel: "email",
+        ...fields,
+      });
+      expect(ok.statusCode).toBe(200);
+      const events = await ledger(address, since);
+      expect(events).toContain("auth.otp.sent");
+      expect(events).toContain("auth.login.failure");
+      expect(events).toContain("auth.login.success");
+    });
+
+    it("EARS-18: a live hand-off redeemed on the host appends exactly one auth.otp.sent", async () => {
+      const address = await account("audit-handoff");
+      const { rows } = await pool.query<{ id: string }>(
+        "SELECT id FROM users WHERE email = $1",
+        [address],
+      );
+      const ref = await app
+        .get<LoginHandoffStore>(LOGIN_HANDOFF_STORE)
+        .mint(rows[0]!.id, address);
+      const intent = await app
+        .get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE)
+        .putIntent(
+          { door: "login", method: "code", handoff: ref, clientId: DOCTOR },
+          600,
+        );
+      const since = await now();
+      const jar = new Jar();
+      const authRequest = hostIdp.seedAuthRequest({
+        clientId: DOCTOR,
+        loginHint: intent,
+      });
+      const { body } = await entry(jar, authRequest);
+      if (body.action !== "render") throw new Error("not rendered");
+      const res = await post(jar, "login/otp/handoff", {
+        authRequest,
+        csrf: body.csrf,
+      });
+      expect(res.json()).toMatchObject({ status: "otp_sent" });
+      expect(
+        (await ledger(address, since)).filter((e) => e === "auth.otp.sent"),
+      ).toHaveLength(1);
+    });
+
+    it("EARS-18: the host Academy registration appends auth.register, its resend auth.otp.sent, its code step auth.account.verified + auth.login.success", async () => {
+      const since = await now();
+      const jar = new Jar();
+      const form = await render(jar, ACADEMY, { prompt: ["create"] });
+      const fields = { authRequest: form.authRequest, csrf: form.csrf };
+      const address = email("audit-reg-academy");
+      const reg = await post(jar, "register", {
+        email: address,
+        password: PASSWORD,
+        consent: CONSENT,
+        ...fields,
+      });
+      expect(reg.statusCode).toBe(200);
+      const resend = await post(jar, "verify/resend", {
+        identifier: address,
+        ...fields,
+      });
+      expect(resend.statusCode).toBe(200);
+      const verified = await post(jar, "verify", {
+        email: address,
+        code: FAKE_VALID_CODE,
+        ...fields,
+      });
+      expect(verified.statusCode).toBe(200);
+      const events = await ledger(address, since);
+      expect(events).toContain("auth.register");
+      expect(events).toContain("auth.otp.sent");
+      expect(events).toContain("auth.account.verified");
+      expect(events).toContain("auth.login.success");
+    });
+
+    it("EARS-18: the host doctor registration appends auth.register, its code step auth.account.verified + auth.login.success", async () => {
+      const since = await now();
+      const jar = new Jar();
+      const form = await render(jar, DOCTOR, { prompt: ["create"] });
+      const fields = { authRequest: form.authRequest, csrf: form.csrf };
+      const address = email("audit-reg-doctor");
+      const reg = await post(jar, "storefront/doctor/register", {
+        email: address,
+        password: PASSWORD,
+        medicalWorkerDeclaration: true,
+        consent: [
+          {
+            purpose: PARTNER_DATA_SHARING_PURPOSE,
+            version: PARTNER_DATA_SHARING_VERSION,
+          },
+        ],
+        ...fields,
+      });
+      expect(reg.statusCode).toBe(200);
+      const verified = await post(jar, "storefront/doctor/verify", {
+        email: address,
+        code: FAKE_VALID_CODE,
+        ...fields,
+      });
+      expect(verified.statusCode).toBe(200);
+      const events = await ledger(address, since);
+      expect(events).toContain("auth.register");
+      expect(events).toContain("auth.account.verified");
+      expect(events).toContain("auth.login.success");
+    });
+
+    it("EARS-18: the host reset request appends auth.password.reset_requested, a wrong code auth.password.reset_failed, the completion auth.password.changed", async () => {
+      const address = await account("audit-reset");
+      const since = await now();
+      const jar = new Jar();
+      const form = await render(jar, ACADEMY);
+      const fields = { authRequest: form.authRequest, csrf: form.csrf };
+      const requested = await post(jar, "password/reset", {
+        identifier: address,
+        ...fields,
+      });
+      expect(requested.statusCode).toBe(200);
+      const wrong = await post(jar, "password/reset/complete", {
+        identifier: address,
+        code: "000000",
+        newPassword: "Dd4!one-more-long-pw",
+        ...fields,
+      });
+      expect(wrong.statusCode).toBeGreaterThanOrEqual(400);
+      const done = await post(jar, "password/reset/complete", {
+        identifier: address,
+        code: FAKE_VALID_CODE,
+        newPassword: "Dd4!one-more-long-pw",
+        ...fields,
+      });
+      expect(done.statusCode).toBe(200);
+      const events = await ledger(address, since);
+      expect(events).toContain("auth.password.reset_requested");
+      expect(events).toContain("auth.password.reset_failed");
+      expect(events).toContain("auth.password.changed");
     });
   });
 

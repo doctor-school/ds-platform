@@ -259,7 +259,9 @@ describe("the API refuses the entry read: a truthful status and the forms' words
         [UNAVAILABLE_HEADER]: "rate-limited",
       }),
     );
-    expect(res.headers.get(`x-middleware-request-${UNAVAILABLE_HEADER}`)).toBeNull();
+    expect(
+      res.headers.get(`x-middleware-request-${UNAVAILABLE_HEADER}`),
+    ).toBeNull();
   });
 });
 
@@ -314,6 +316,23 @@ describe("003 EARS-70: page routes answer top-level navigations only", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expectHardened(res);
   });
+
+  it("the health probe answers a non-navigation without asking the API, with the same hardening and no cookie", async () => {
+    const res = await proxy(request("/healthz", {}));
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(res.headers.get("set-cookie")).toBeNull();
+    expectHardened(res);
+  });
+
+  it.each(["/", "/healthz/x", "/healthzx"])(
+    "003 EARS-70: %s stays behind the navigate-only gate",
+    async (path) => {
+      const res = await proxy(request(path, {}));
+      expect(res.status).toBe(403);
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 });
 
 /**

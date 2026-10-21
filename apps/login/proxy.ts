@@ -33,6 +33,8 @@ import {
  *   429 stays 429 (Retry-After forwarded), anything else is 503 — and the
  *   `/login` mount renders the forms' own banner for it (no form, no
  *   guessed redirect, never an empty page).
+ * - `/healthz` (the image liveness probe) passes to its route for any
+ *   request: no auth state, no API call, no cookie.
  * - Every other path is EARS-67's direct visit: the API's answer for a
  *   request naming no auth request (the doctor storefront `/login`), never a
  *   URL of this app's own.
@@ -42,12 +44,21 @@ import {
  * `/v1/*` (the API rewrite) and `/_next/*` never reach here; `next.config.ts`
  * hardens those.
  */
+/** The liveness probe the image smoke and the stand healthcheck call. */
+const HEALTH_PATH = "/healthz";
+
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const nonce = newNonce();
   const csp = contentSecurityPolicy(nonce);
   const path = request.nextUrl.pathname;
 
   if (path === "/icon.svg" || path.startsWith("/brand/")) {
+    return harden(NextResponse.next(), csp);
+  }
+
+  // The image liveness probe (`app/healthz/route.ts`): no auth state, no API
+  // call, no cookie. Only this exact path; every page stays navigate-only.
+  if (path === HEALTH_PATH) {
     return harden(NextResponse.next(), csp);
   }
 

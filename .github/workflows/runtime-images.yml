@@ -341,6 +341,10 @@ jobs:
             "ds-runtime:$APP"
           path=/
           if [ "$APP" = api ]; then path=/v1/ready; fi
+          # The sign-in host answers top-level navigations only on every page
+          # (003 EARS-70) and each page asks the API, so it is probed on its
+          # liveness route, which carries no auth state.
+          if [ "$APP" = login ]; then path=/healthz; fi
           node tools/scripts/image-readiness.mjs "http://127.0.0.1:3000$path" >> readiness.txt
           docker exec ds-runtime-app node --version >> readiness.txt
           docker inspect --format '{{.Image}}' ds-runtime-app >> readiness.txt

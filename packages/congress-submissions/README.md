@@ -41,7 +41,9 @@ A host supplies two DATA objects and a route file that renders
 Doctor storefront: `apps/doctor/app/(storefront)/account/congress/page.tsx` with
 `apps/doctor/lib/congress-submissions.host-config.ts`. The account page links the
 section through the shared account card's `congressHref`, passed only for an
-account registered for the congress event (`apps/doctor/components/account-screen.tsx`).
+account registered for the congress event (the `@ds/account` cabinet,
+`packages/account/src/ui/account-cabinet.tsx`, mounted by
+`apps/doctor/app/(storefront)/account/page.tsx` with `DOCTOR_ACCOUNT.congress`).
 
 ## Tests
 

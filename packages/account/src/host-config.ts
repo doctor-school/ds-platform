@@ -10,8 +10,7 @@ import type { AuthFlowHostConfig } from "@ds/auth-flow/host-config";
 export type AccountHostConfig = {
   /**
    * The host's existing `@ds/auth-flow` config. The cabinet builds its bound
-   * client from `api` (`createAuthClient`, as each host's `lib/auth-flow-client.ts`
-   * does), reads the bounce and handoff targets from `routes.login`,
+   * client from `api` (`createAuthClient` over the host's `api` paths), reads the bounce and handoff targets from `routes.login`,
    * `routes.account` and `routes.reset` (gate rows 1, 5, 12), and maps a failed
    * save through the host's resolved auth error copy (row 10).
    */

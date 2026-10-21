@@ -31,6 +31,9 @@ Feature: 044 — Congress sign-up
     And a confirmation email is dispatched naming the event, the created Doctor.School account and code-based sign-in
     And the registration's confirmation-mail outcome is recorded as sent with its timestamp
 
+  # Production amendment 2026-10-21 (#3006): the storefront /login is an entry that redirects
+  # to the sign-in host; method=code rides the server-held entry intent, the code step runs
+  # there with the doctor storefront's forms, and the callback lands on /account/congress.
   @EARS-14
   Scenario: First platform entry by one email code proves the address and signs in
     Given a congress-origin account exists for "new@example.org" with email_verified false
@@ -259,6 +262,9 @@ Feature: 044 — Congress sign-up
     And the two references have the same shape, are random and carry no email or account data
     And the congress site shows «Войти в кабинет» linking to the doctor storefront login with that reference
 
+  # Production amendment 2026-10-21 (#3006): the hand-off entry redirects to the sign-in host;
+  # another account's sign-in-host session is not used and is replaced by the accepted code,
+  # ending its sessions on both storefronts; the participant's own session passes with no form.
   @EARS-39
   Scenario: «Войти в кабинет» on a browser already signed in to another account signs in the registrant
     Given a colleague's account is signed in on the doctor storefront in this browser
@@ -267,3 +273,25 @@ Feature: 044 — Congress sign-up
     Then the sign-in code goes to the participant's address, not the colleague's
     And after the code the browser holds only the participant's session on "/account/congress"
     And the same link opened in a browser already signed in as the participant goes straight to "/account/congress" with no code
+
+  # --- Production amendment 2026-10-21 (#3006): the hand-off survives the redirect to the sign-in host ---
+
+  @EARS-40 @EARS-39
+  Scenario: The hand-off reference is redeemed once on the sign-in host and never travels in a URL
+    Given a new participant's sign-up was accepted and returned a handoff reference
+    When the participant opens the doctor storefront login entry with method code, that reference and returnTo "/account/congress"
+    Then the doctor storefront renders no form and redirects to the sign-in host as the doctor client
+    And no URL after the entry carries the reference
+    And the sign-in host shows the doctor storefront's code step with the participant's address and the code is sent
+    When the sign-in host page is reloaded
+    Then no second code is sent and the code method renders without a hand-off
+    When the participant enters the code
+    Then the participant lands signed in on "/account/congress" on the doctor storefront
+
+  @EARS-39 @failure
+  Scenario: Another account's shared session on a clinic PC is replaced on both storefronts
+    Given a colleague is signed in on both storefronts in this browser
+    And a new participant's sign-up was accepted and returned a handoff reference
+    When the participant opens «Войти в кабинет» and enters the code sent to the participant's address
+    Then the participant is signed in on "/account/congress"
+    And neither storefront holds the colleague's session any longer

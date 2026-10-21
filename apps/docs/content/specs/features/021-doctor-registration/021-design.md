@@ -73,6 +73,8 @@ stateDiagram-v2
 
 Three properties the implementation must preserve: the value that reaches a navigation is always the guard's reconstruction and never the raw client-supplied string; the client never rebuilds the target from a referrer, a `document.referrer` read or a stored breadcrumb **[Amended 2026-09-30 — a parked copy of the guard-validated value, re-validated at use and consumed once, is the shared package fallback, not a breadcrumb. See Amendment — 2026-09-30 at the end of this file.]**; and the degraded branch always renders a plain Russian statement of what happened rather than a silent redirect. 019 LD-7 hands a card action into 021 through this same guard, and 019 EARS-8 / EARS-12 require the guest to land back on the **exact stateful feed URL** — so the declared whitelist must carry that feed shape with its URL state, and the increment's shape is agreed with 019 before either guest path ships.
 
+**[Amended 2026-10-21 ([#3006](https://github.com/doctor-school/ds-platform/issues/3006)) — the reconstructed value no longer rides the sent-state and code-entry URLs: the doctor storefront's registration entry stores it as the return path of its server-side sign-in transaction, and the storefront callback lands there. See Amendment — 2026-10-21 at the end of this file.]**
+
 ## 4. The two-tier consent model (F-021-1 Б, LD-5, EARS-5, EARS-7)
 
 Two tiers on the screen; three purposes in the record.
@@ -177,4 +179,33 @@ All four use the semantic field primitives tracked in #197 and draw copy from th
 
 **The mechanism, narrowed.** Each host's middleware/proxy runs the parking rule on four doors — `/login`, `/register`, `/verify` and `/reset`. A door carrying a guard-clean `returnTo` parks it as before; a guest's door without one starts a new flow and expires `ds_return_to`. The parked copy therefore lives only inside the flow that carried it, and stays only as the in-flow safety net behind the query parameter, which every in-flow hop carries.
 
+**[Amended 2026-10-21 ([#3006](https://github.com/doctor-school/ds-platform/issues/3006)) — the parking rule is retired: the storefront doors render no form, and the return path rides the server-side sign-in transaction. See Amendment — 2026-10-21 at the end of this file.]**
+
 **Consequence.** The 2026-09-30 amendment's «a later sign-in that arrives without the query parameter lands on the parked target» holds only while that sign-in continues the carrying flow; a sign-in through a bare door lands per LD-4. The «Войти» link in 003 EARS-23's «account already exists» letter opens a new flow and does not carry the event intent (EARS-10: the target never travels through the letter).
+
+## Amendment — 2026-10-21: registration runs on the sign-in host; the return path rides the sign-in transaction ([#3006](https://github.com/doctor-school/ds-platform/issues/3006))
+
+> **Status:** feature 021 is live in production, so this is recorded as an amendment rather than an inline rewrite (AGENTS.md §6). §1, §2, §3 and the amendments of 2026-09-17, 2026-09-29, 2026-09-30 and 2026-09-30 (2) are read under it. The requirements-side counterpart is [`021-requirements-en.md`](./021-requirements-en.md) / [`021-requirements-ru.md`](./021-requirements-ru.md) under the same heading (EARS-20 added). The mechanism is the 003 design amendment of the same date ([`003-design.md`](../003-user-authentication/003-design.md) → «Production amendment — the sign-in host and one sign-out on both storefronts») over ADR-0015 §4; nothing below restates or varies it.
+
+**Route topology (§1).** `apps/doctor`'s `/register` is an entry, not a page: the storefront server creates an interactive transaction with `prompt=create` and answers a top-level redirect to the authorize endpoint. `apps/login` mounts the same `@ds/auth-flow` register and verify routes with `DOCTOR_AUTH_FLOW`, selected by the doctor client's `client_id`; there is no second copy of the form and no sign-in-host variant of it (003 EARS-60). §2's seam with 003 is unchanged — the commands and endpoints are the ones the storefront form calls today, now called by the sign-in host's server.
+
+**The return target (§3), replacing the in-app carry and the parking of 2026-09-30.**
+
+```mermaid
+sequenceDiagram
+    participant Br as Browser
+    participant SF as Doctor storefront server
+    participant L as Sign-in host (DOCTOR_AUTH_FLOW)
+    Br->>SF: GET /register?returnTo=/events/<slug>?mode=online
+    SF->>SF: LD-3 guard → reconstruction; transaction {returnPath, prompt=create, interactive 60 min}
+    SF-->>Br: 303 authorize … prompt=create
+    Br->>L: registration form → /verify code (same auth request)
+    L-->>Br: finalise → 302 storefront callback?code&state
+    Br->>SF: GET /auth/callback
+    SF->>SF: redeem, mint session; эфир return path → one public event read (not-found → LD-4)
+    SF-->>Br: 303 /events/<slug>?mode=online#
+```
+
+The value the callback navigates to is still the LD-3 guard's reconstruction, now held in the transaction instead of URLs or `ds_return_to`; the sign-in host never sees it and never chooses a landing. The 2026-09-29 completion check (`completionTargetAction`) moves from the client step to the callback's landing decision, for a registration transaction only; the 2026-09-17 direct navigation (standard S5) is the callback's `303`.
+
+**Open item.** The EARS-2 return-context card on the sign-in host needs a carrier for the target (the transaction stays on the storefront, and 003 EARS-71 sends no intent for the registration entry); it is a 003 decision recorded on #3006 before the registration entry's implementation slice.

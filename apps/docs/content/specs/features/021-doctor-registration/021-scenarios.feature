@@ -19,6 +19,9 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     And feature 003's authentication engine is running
     And an эфир «Артроскопия коленного сустава» exists with a public event page
 
+  # Amendment 2026-10-21 (#3006): /register on doctor.school is an entry that redirects with
+  # prompt=create; the form and its /verify step render on the sign-in host with
+  # DOCTOR_AUTH_FLOW, and the return is the callback's 303 to the stored return path.
   @EARS-1 @EARS-2 @EARS-4 @EARS-5 @EARS-7 @EARS-10 @happy
   Scenario: A doctor registers from a gate and returns to the эфир
     Given a guest doctor pressed «Участвовать» on «Артроскопия коленного сустава»
@@ -193,3 +196,22 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     And the canvas's composition switcher is not built
     And the Stage-A picks F-021-1 Б, F-021-2 Б without a back-navigation control and F-021-3 promise-on-the-form stand as decisions rather than re-opened questions
     And the rendered result is re-confirmed with the product owner on the live stand before merge
+
+  # --- Amendment 2026-10-21 (#3006): registration on the sign-in host; signed in on both storefronts ---
+
+  @EARS-20 @EARS-10 @happy
+  Scenario: A fresh registrant from a doctor-storefront gate ends signed in on both storefronts
+    Given a guest on the doctor storefront in a browser with no session on either storefront
+    When the guest follows the gate of the эфир «Артроскопия коленного сустава» to registration
+    Then the doctor storefront renders no form and the browser reaches the sign-in host's registration form with the promo field and the two-tier consents
+    When the guest registers there and enters the code sent to their address
+    Then the browser lands on the эфир page on the doctor storefront, signed in, with no interstitial
+    When the same browser requests an Academy page as a document
+    Then the Academy page renders signed in with no form and no guest render first
+
+  @EARS-10 @failure
+  Scenario: A registration whose эфир vanished before the code lands per LD-4
+    Given a guest started registration from the gate of an эфир on the doctor storefront
+    And the эфир no longer exists when the registration code is accepted on the sign-in host
+    When the storefront callback answers
+    Then the doctor lands on the LD-4 landing, signed in

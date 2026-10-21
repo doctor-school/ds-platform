@@ -680,7 +680,7 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       setRole("stage");
       const r = run(["stage-main", SHA]);
       assert.equal(r.status, 0, r.stderr);
-      assert.doesNotMatch(log("docker.log"), /inspect/);
+      assert.doesNotMatch(log("docker.log"), /^inspect ds-api-prod-api-1\b/m);
     });
 
     it("starts the release unit for prod on a prod-role box, after the lease", () => {

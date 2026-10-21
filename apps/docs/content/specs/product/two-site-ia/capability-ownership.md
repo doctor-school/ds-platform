@@ -187,7 +187,7 @@ Out of scope, as in the allowlist: `loading` / `error` / `not-found` / `template
 | `apps/doctor/app/(storefront)/documents/page.tsx`        | — host-only surface (legal documents list; the 028 content package is net-new, no wave)                                                         | permanent |
 | `apps/doctor/app/(storefront)/events/[slug]/page.tsx`    | `@ds/event-page`                                                                                                                                | mounted   |
 | `apps/doctor/app/(storefront)/events/page.tsx`           | `@ds/events-storefront`                                                                                                                         | mounted   |
-| `apps/doctor/app/(storefront)/layout.tsx`                | — brand frame per host (`@ds/storefront-shell` + `DOCTOR_SHELL` + host session projection)                                                      | permanent |
+| `apps/doctor/app/(storefront)/layout.tsx`                | — brand frame per host (`@ds/storefront-shell` + `doctorShellConfig` + host session projection)                                                 | permanent |
 | `apps/doctor/app/(storefront)/page.tsx`                  | — host-only surface (doctor home: hero + specialty catalog; the nearest-events block, #1485, will mount from `@ds/events-storefront` inside it) | permanent |
 | `apps/doctor/app/layout.tsx`                             | — brand frame per host (root html/body, fonts, theme boot)                                                                                      | permanent |
 

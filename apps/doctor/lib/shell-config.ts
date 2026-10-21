@@ -22,74 +22,78 @@ import { doctorNav, doctorTopNav } from "@/lib/navigation-model";
  * `app/(storefront)/` route group, so the auth screens and the room — which own
  * their own chrome — never render this layout at all. Omitting it also keeps the
  * package's route-visibility client boundary out of the tree entirely.
+ *
+ * The ONE value that is not the host's is `academyOrigin`, the footer
+ * crossing's target (017 EARS-12 / LD-4): it is the ENVIRONMENT's Academy —
+ * production, a stage slot or the local stand — so the layout resolves it at
+ * request time with `readSiblingOrigin` (`@ds/storefront-shell/sibling-origin`,
+ * #3147) and hands it in.
  */
+export function doctorShellConfig(
+  academyOrigin: string,
+): StorefrontShellConfig {
+  return {
+    host: "doctor",
 
-/**
- * The Academy origin — the ONE cross-host crossing the doctor storefront is
- * allowed to make (017 EARS-12 / LD-4), a host value of this config like every
- * other. The footer cross-link below is its only consumer.
- */
-const ACADEMY_ORIGIN = "https://academy.doctor.school";
+    logo: { alt: doctorNav.home.label, href: doctorNav.home.href },
 
-export const DOCTOR_SHELL: StorefrontShellConfig = {
-  host: "doctor",
+    /** The BBM announcement micro-band — the same brand line on both storefronts
+     *  (owner decision 2026-09-10); a value, not a package constant. */
+    topbar: { text: "BBM: Академия смыслов" },
 
-  logo: { alt: doctorNav.home.label, href: doctorNav.home.href },
-
-  /** The BBM announcement micro-band — the same brand line on both storefronts
-   *  (owner decision 2026-09-10); a value, not a package constant. */
-  topbar: { text: "BBM: Академия смыслов" },
-
-  /**
-   * The header search submits to the events listing — the ONE surface this
-   * storefront has that answers a query today. The dedicated results surface is
-   * #1492; until it ships, the input's target is a real, shipped route rather
-   * than an invented `/search` that would 404 (AGENTS.md §6 — no stub
-   * affordance). The form submits `q` by GET, at the listing the nav already
-   * names — the same model row, so the two cannot point at different routes.
-   */
-  search: {
-    placeholder: "Поиск по эфирам",
-    action: doctorNav.events.href,
-  },
-
-  /**
-   * «Эфиры» alone. The canvas `ds-shell.dc.html` draws four items on the
-   * academy artboard, but the owner decision of 2026-09-10 (Issue #2180, merged
-   * 008 / 017 deltas) is that BOTH storefronts ship the single shipped
-   * destination and the nav grows with features 015 / 016 and the partner
-   * surface. A nav item pointing at an unbuilt route is the placeholder
-   * affordance §6 forbids.
-   */
-  nav: doctorTopNav.map((item) => ({ label: item.label, href: item.href })),
-
-  footer: {
-    navTitle: "Разделы",
-    documentsTitle: "Документы и контакты",
     /**
-     * The storefront legal surface (`#d-docs`, 028 EARS-1 / #1967) — all three
-     * are shipped routes. There is deliberately NO «Пользовательское
-     * соглашение» row: that document has no owner-approved text and no page, and
-     * a footer link into nothing is a placeholder.
+     * The header search submits to the events listing — the ONE surface this
+     * storefront has that answers a query today. The dedicated results surface is
+     * #1492; until it ships, the input's target is a real, shipped route rather
+     * than an invented `/search` that would 404 (AGENTS.md §6 — no stub
+     * affordance). The form submits `q` by GET, at the listing the nav already
+     * names — the same model row, so the two cannot point at different routes.
      */
-    documents: [
-      { label: "Документы и контакты", href: "/documents" },
-      {
-        label: "Политика персональных данных и согласия",
-        href: "/documents/privacy-policy",
-      },
-      { label: "Контакты", href: "/documents#contacts" },
-    ],
-    /** 017 EARS-12 / LD-4 — the ONE crossing to the sibling storefront. */
-    cross: {
-      title: "Экспертам и партнёрам",
-      label: "Academy.Doctor.School ↗",
-      href: `${ACADEMY_ORIGIN}/`,
-      note: "Закулисье платформы: проекты, эксперты, партнёры.",
+    search: {
+      placeholder: "Поиск по эфирам",
+      action: doctorNav.events.href,
     },
-    /** Education is free FOR THE DOCTOR, and the interface never names who
-     *  finances it (owner hard rule) — no sponsor or funding wording here. */
-    note: ["Бесплатное образование для врачей.", "© Doctor.School, 2026"],
-    giant: { text: "Doctor.School", fontSize: "min(15.07cqw,240px)" },
-  },
-};
+
+    /**
+     * «Эфиры» alone. The canvas `ds-shell.dc.html` draws four items on the
+     * academy artboard, but the owner decision of 2026-09-10 (Issue #2180, merged
+     * 008 / 017 deltas) is that BOTH storefronts ship the single shipped
+     * destination and the nav grows with features 015 / 016 and the partner
+     * surface. A nav item pointing at an unbuilt route is the placeholder
+     * affordance §6 forbids.
+     */
+    nav: doctorTopNav.map((item) => ({ label: item.label, href: item.href })),
+
+    footer: {
+      navTitle: "Разделы",
+      documentsTitle: "Документы и контакты",
+      /**
+       * The storefront legal surface (`#d-docs`, 028 EARS-1 / #1967) — all three
+       * are shipped routes. There is deliberately NO «Пользовательское
+       * соглашение» row: that document has no owner-approved text and no page, and
+       * a footer link into nothing is a placeholder.
+       */
+      documents: [
+        { label: "Документы и контакты", href: "/documents" },
+        {
+          label: "Политика персональных данных и согласия",
+          href: "/documents/privacy-policy",
+        },
+        { label: "Контакты", href: "/documents#contacts" },
+      ],
+      /** 017 EARS-12 / LD-4 — the ONE crossing to the sibling storefront. Its
+       *  origin is the environment's Academy (`readSiblingOrigin`, #3147), handed
+       *  in by the layout at request time — a slot's crossing stays on the slot. */
+      cross: {
+        title: "Экспертам и партнёрам",
+        label: "Academy.Doctor.School ↗",
+        href: `${academyOrigin}/`,
+        note: "Закулисье платформы: проекты, эксперты, партнёры.",
+      },
+      /** Education is free FOR THE DOCTOR, and the interface never names who
+       *  finances it (owner hard rule) — no sponsor or funding wording here. */
+      note: ["Бесплатное образование для врачей.", "© Doctor.School, 2026"],
+      giant: { text: "Doctor.School", fontSize: "min(15.07cqw,240px)" },
+    },
+  };
+}

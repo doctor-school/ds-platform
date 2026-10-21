@@ -4,7 +4,9 @@ import type { CSSProperties, ReactNode } from "react";
 import { Inter } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
+import { connection } from "next/server";
 import { StorefrontFooter } from "@ds/storefront-shell";
+import { readSiblingOrigin } from "@ds/storefront-shell/sibling-origin";
 import { RouteMain } from "../components/route-main";
 import { ThemeWatcher } from "../components/theme-watcher";
 import { ROOM_SHELL_PATHS, academyShellConfig } from "../lib/shell-config";
@@ -60,7 +62,16 @@ export default async function RootLayout({
 }) {
   const locale = await getLocale();
   const messages = await getMessages();
-  const shell = academyShellConfig(await getTranslations("shell"));
+  // 017 EARS-12 (#3147): the footer crossing's doctor origin is per-environment
+  // configuration read at REQUEST time — slot images are shared by every slot on
+  // one commit, so the value must not freeze into the build. `connection()` opts
+  // the shell out of static prerender so `process.env` is the running
+  // container's (the admin root layout's precedent, #2619).
+  await connection();
+  const shell = academyShellConfig(
+    await getTranslations("shell"),
+    readSiblingOrigin(process.env, "academy"),
+  );
 
   return (
     <html

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readSiblingOrigin } from "@ds/storefront-shell/sibling-origin";
 
 /**
  * Residual doctor-host legal-surface checks after the shared 028 V-3 journey
@@ -23,12 +24,10 @@ test.describe("028 V-3: documents index and document page", () => {
     await expect(page.getByTestId("documents-academy-caption")).toHaveCount(0);
     // The shell footer link is the ONE Academy crossing REQ-24 allows, so the
     // scope is the page body: `main` must contribute no second exit.
-    await expect(
-      page.locator('main a[href*="academy.doctor.school"]'),
-    ).toHaveCount(0);
-    await expect(
-      page.locator('footer a[href*="academy.doctor.school"]'),
-    ).toHaveCount(1);
+    // The configured Academy origin (#3147), never a pinned production host.
+    const academy = readSiblingOrigin(process.env, "doctor");
+    await expect(page.locator(`main a[href^="${academy}"]`)).toHaveCount(0);
+    await expect(page.locator(`footer a[href^="${academy}"]`)).toHaveCount(1);
     // The «Про согласия» explainer went with it (owner Stage-B, 2026-09-07):
     // nothing on this surface describes or offers to withdraw a consent.
     await expect(page.getByTestId("documents-consents-note")).toHaveCount(0);

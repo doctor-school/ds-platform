@@ -694,6 +694,20 @@ test("#2619: a slot admin links «Публичная ссылка» to the slot'
   );
 });
 
+test("#3147: a slot's storefront footer crossings stay on the slot's own sibling hosts", () => {
+  const text = renderSlotEnv({
+    slot: "pr-7",
+    sha: SHA,
+    baseDomain: BASE,
+    redisDb: 4,
+    goldenSubjects: SUBJECTS,
+  });
+  const lines = text.split("\n");
+  // The doctor storefront reads the Academy origin, the Academy the doctor one.
+  assert.ok(lines.includes(`ACADEMY_PUBLIC_ORIGIN=https://academy-pr-7.${BASE}`));
+  assert.ok(lines.includes(`DOCTOR_PUBLIC_ORIGIN=https://doctor-pr-7.${BASE}`));
+});
+
 test("a teardown renders only what compose needs to ADDRESS the project", () => {
   const text = renderSlotDownEnv({ slot: "pr-7" });
   assert.match(text, /^SLOT=pr-7$/m);

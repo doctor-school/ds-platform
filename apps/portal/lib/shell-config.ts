@@ -39,13 +39,6 @@ export const LOGIN_HREF = portalNav.login.href;
 /** The signed-in cluster's «Мои события» destination (008 EARS-5/11, #2243). */
 export const MY_EVENTS_HREF = portalNav.myEvents.href;
 
-/**
- * 017 EARS-12 — the ONE crossing out of this storefront. It is the doctor
- * storefront's origin, a separate deployable on a separate host (ADR-0015 §2),
- * so the link is absolute and lives in exactly one place.
- */
-export const DOCTOR_ORIGIN = "https://doctor.school";
-
 /** The `shell` catalog keys this config projects. Narrower than the namespace's
  *  full key union on purpose — a `useTranslations("shell")` translator satisfies
  *  it, and nothing here can reach a key the shell catalog does not declare. */
@@ -97,8 +90,18 @@ const HIDDEN_ON_PATHS = [
  * patterns are matched SEGMENT-wise, so the starred room pattern below hides the
  * room of any webinar while `/webinars` and `/webinars/:slug` keep their chrome
  * — a prefix matcher would swallow the listing with it.
+ *
+ * `doctorOrigin` is the footer's ONE crossing out of this storefront (017
+ * EARS-12): the doctor storefront is a separate deployable on a separate host
+ * (ADR-0015 §2), so the link is absolute — and which host that is depends on
+ * the ENVIRONMENT (production, a stage slot, the local stand). The caller
+ * resolves it at request time with `readSiblingOrigin`
+ * (`@ds/storefront-shell/sibling-origin`, #3147) and hands it in.
  */
-export function academyShellConfig(t: ShellTranslator): StorefrontShellConfig {
+export function academyShellConfig(
+  t: ShellTranslator,
+  doctorOrigin: string,
+): StorefrontShellConfig {
   return {
     host: "academy",
 
@@ -134,7 +137,7 @@ export function academyShellConfig(t: ShellTranslator): StorefrontShellConfig {
       cross: {
         title: t("footerCrossTitle"),
         label: t("footerCrossLabel"),
-        href: `${DOCTOR_ORIGIN}/`,
+        href: `${doctorOrigin}/`,
         note: t("footerCrossNote"),
       },
       note: [t("footerNoteBrand"), t("footerNoteCopyright")],

@@ -26,7 +26,9 @@ import catalog from "../messages/ru.json";
  * catalog's own copy is covered by the shell tests of `@ds/storefront-shell`.
  */
 const echoKey = (key: ShellConfigKey) => key;
-const config = academyShellConfig(echoKey);
+/** The production doctor storefront — what `readSiblingOrigin` resolves on prod. */
+const DOCTOR_ORIGIN = "https://doctor.school";
+const config = academyShellConfig(echoKey, DOCTOR_ORIGIN);
 
 /** Every destination the shared chrome links to for this host: the wordmark, the
  *  nav, and both branches of the auth cluster (`lib/shell-auth.ts`). */
@@ -82,6 +84,7 @@ describe("§6.3: the academy chrome and the navigation model are one list", () =
 describe("008 EARS-2/12/13/14: the academy host config", () => {
   const ru = academyShellConfig(
     (key: ShellConfigKey) => (catalog.shell as Record<string, string>)[key]!,
+    DOCTOR_ORIGIN,
   );
 
   it("008 EARS-13: every string is read from the catalog, none hardcoded", () => {
@@ -110,5 +113,16 @@ describe("008 EARS-2/12/13/14: the academy host config", () => {
     const crossings = JSON.stringify(ru).match(/doctor\.school/g) ?? [];
     expect(crossings).toHaveLength(1);
     expect(ru.footer.cross.href).toBe("https://doctor.school/");
+  });
+
+  it("017 EARS-12 (#3147): the crossing targets the ENVIRONMENT's doctor storefront, never a literal production host", () => {
+    const slot = academyShellConfig(
+      echoKey,
+      "https://doctor-pr-7.stage.doctor.school",
+    );
+    expect(slot.footer.cross.href).toBe(
+      "https://doctor-pr-7.stage.doctor.school/",
+    );
+    expect(JSON.stringify(slot)).not.toContain("https://doctor.school");
   });
 });

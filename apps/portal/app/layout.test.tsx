@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * #2228 — the root layout is the sticky-footer frame of the Academy storefront.
@@ -29,17 +29,33 @@ vi.mock("next-intl", () => ({
 vi.mock("../components/theme-watcher", () => ({ ThemeWatcher: () => null }));
 vi.mock("../lib/shell-config", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/shell-config")>()),
-  academyShellConfig: () => ({}),
+  academyShellConfig: (_t: unknown, doctorOrigin: string) => ({ doctorOrigin }),
 }));
 const nav = vi.hoisted(() => ({ pathname: "/webinars" }));
 vi.mock("next/navigation", () => ({ usePathname: () => nav.pathname }));
 vi.mock("../lib/theme", () => ({ THEME_INIT_SCRIPT: "" }));
 vi.mock("@ds/storefront-shell", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@ds/storefront-shell")>()),
-  StorefrontFooter: () => <footer data-testid="storefront-footer" />,
+  StorefrontFooter: ({ config }: { config: { doctorOrigin: string } }) => (
+    <footer
+      data-testid="storefront-footer"
+      data-doctor-origin={config.doctorOrigin}
+    />
+  ),
 }));
+vi.mock("next/server", () => ({ connection: async () => undefined }));
 
 import RootLayout from "./layout";
+
+beforeEach(() => {
+  vi.stubEnv(
+    "DOCTOR_PUBLIC_ORIGIN",
+    "https://doctor-pr-7.stage.doctor.school/",
+  );
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 async function renderLayout(): Promise<Document> {
   const tree = await RootLayout({
@@ -119,5 +135,21 @@ describe("#2664: the root layout owns the page's one main landmark", () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
       "the page footer comes after the main",
     ).toBeTruthy();
+  });
+});
+
+describe("017 EARS-12 (#3147): the footer crossing leaves for the ENVIRONMENT's doctor storefront", () => {
+  it("EARS-12: the root layout hands the host config the doctor origin read from the running container's env", async () => {
+    const doc = await renderLayout();
+    expect(
+      doc
+        .querySelector('[data-testid="storefront-footer"]')
+        ?.getAttribute("data-doctor-origin"),
+    ).toBe("https://doctor-pr-7.stage.doctor.school");
+  });
+
+  it("EARS-12: an environment without DOCTOR_PUBLIC_ORIGIN refuses by name instead of linking to production", async () => {
+    vi.stubEnv("DOCTOR_PUBLIC_ORIGIN", "");
+    await expect(renderLayout()).rejects.toThrow(/DOCTOR_PUBLIC_ORIGIN/);
   });
 });

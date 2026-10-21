@@ -82,17 +82,18 @@ never touches it.
 
 ## Runtime contract (discovered from the built 003 code)
 
-| Service          | Port          | Key env (from `env_file`)                                                                        |
-| ---------------- | ------------- | ------------------------------------------------------------------------------------------------ |
-| api (NestJS)     | 3000 (`PORT`) | `DATABASE_URL` `REDIS_URL` `IDP_*` `AUDIT_IDENTIFIER_PEPPER` `*_DELIVERY_MODE` `IDP_SMTP_REAL_*` |
-| portal (Next.js) | 3001          | `API_PROXY_TARGET=http://api:3000` (build-time); runtime `SMARTCAPTCHA_SITE_KEY` — wave-1 ON     |
-| admin (Next.js)  | 3002          | `API_PROXY_TARGET=http://api:3000` (build-time, same routes-manifest bake as the portal)         |
-| centrifugo       | 8000          | `CENTRIFUGO_HTTP_API_KEY` `CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY` (native names, from api.env) |
-| zitadel core     | 8080 (h2c)    | `ZITADEL_MASTERKEY` `ZITADEL_DATABASE_POSTGRES_*` `ZITADEL_EXTERNAL*`                            |
-| zitadel-login    | 3000          | `ZITADEL_API_URL` + the ds-bootstrap PAT file mount                                              |
-| sms-aero-adapter | 8091          | `SMSAERO_EMAIL` `SMSAERO_API_KEY` `SMSAERO_SIGN` (from api.env)                                  |
-| postgres         | 5432 (VPC)    | `POSTGRES_PASSWORD` `PGBACKREST_*`                                                               |
-| redis            | 6379 (VPC)    | — (AOF)                                                                                          |
+| Service          | Port          | Key env (from `env_file`)                                                                                                         |
+| ---------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| api (NestJS)     | 3000 (`PORT`) | `DATABASE_URL` `REDIS_URL` `IDP_*` `AUDIT_IDENTIFIER_PEPPER` `*_DELIVERY_MODE` `IDP_SMTP_REAL_*`                                  |
+| portal (Next.js) | 3001          | `API_PROXY_TARGET=http://api:3000` (build-time); runtime `SMARTCAPTCHA_SITE_KEY` — wave-1 ON, `DOCTOR_PUBLIC_ORIGIN` (#3147)      |
+| admin (Next.js)  | 3002          | `API_PROXY_TARGET=http://api:3000` (build-time, same routes-manifest bake as the portal); runtime `ACADEMY_PUBLIC_ORIGIN` (#2619) |
+| doctor (Next.js) | 3004          | `API_PROXY_TARGET=http://api:3000` (build-time); runtime `ACADEMY_PUBLIC_ORIGIN` (#3147)                                          |
+| centrifugo       | 8000          | `CENTRIFUGO_HTTP_API_KEY` `CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY` (native names, from api.env)                                  |
+| zitadel core     | 8080 (h2c)    | `ZITADEL_MASTERKEY` `ZITADEL_DATABASE_POSTGRES_*` `ZITADEL_EXTERNAL*`                                                             |
+| zitadel-login    | 3000          | `ZITADEL_API_URL` + the ds-bootstrap PAT file mount                                                                               |
+| sms-aero-adapter | 8091          | `SMSAERO_EMAIL` `SMSAERO_API_KEY` `SMSAERO_SIGN` (from api.env)                                                                   |
+| postgres         | 5432 (VPC)    | `POSTGRES_PASSWORD` `PGBACKREST_*`                                                                                                |
+| redis            | 6379 (VPC)    | — (AOF)                                                                                                                           |
 
 Health: `/v1/health` (api), `/v1/ready` (api — Postgres + pgvector + the cached object-storage probe; the deploy/rollback smoke gate, a 503 names the failing check).
 

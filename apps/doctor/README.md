@@ -41,7 +41,7 @@ apps/doctor/
     auth-flow-routes.ts # this host's auth ROUTE VALUES + the server-resolved
                      #   guest/doctor branch → the shell's `auth` DATA prop
                      #   (the session read itself is `@ds/auth-flow/server`, #2027)
-    shell-config.ts  # DOCTOR_SHELL — the host-config VALUES the shared shell renders
+    shell-config.ts  # doctorShellConfig — the host-config VALUES the shared shell renders
     theme.ts         # the inline pre-paint FOUC guard (the toggle itself is in the package)
     auth-client.ts   # client-side same-origin session probe
   e2e/
@@ -107,6 +107,13 @@ pnpm ci:standalone-boot doctor        # boots the artifact the image runs
 Parallel sessions must probe ports with `pnpm dev:ports` (prints an
 `api`/`portal`/`doctor` triple) instead of binding 3000/3001/3004 blindly — see
 `.claude/rules/dev-stand.md` → Parallel sessions.
+
+`ACADEMY_PUBLIC_ORIGIN` (#3147, REQUIRED) is the Academy origin the footer
+crossing links to (017 EARS-12 / LD-4), read at REQUEST time by the storefront
+layout through `readSiblingOrigin` (`@ds/storefront-shell/sibling-origin`); the
+app refuses to render without it (local: `apps/doctor/.env.example`; stage slot:
+rendered by `tools/staging/slot.mjs`; production: `/etc/ds-platform/api.env`). The
+Playwright tiers that assert the crossing read the same variable.
 
 `API_PROXY_TARGET` (default `http://localhost:3000`) points the `/v1/*` rewrite at
 the api. It is frozen into the build, so it must be present at **build** time, not

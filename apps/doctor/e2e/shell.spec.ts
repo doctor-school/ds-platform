@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { readSiblingOrigin } from "@ds/storefront-shell/sibling-origin";
 
 /**
  * 017 EARS-1 / EARS-12 · 008 EARS-3 / EARS-11 / EARS-14 — the doctor
@@ -21,7 +22,7 @@ import { test, expect } from "@playwright/test";
  * `components/storefront-auth-cluster.test.tsx`. Together they cover the
  * EARS-1 invariant: never both clusters, never neither.
  *
- * Host values under test live in `lib/shell-config.ts` (`DOCTOR_SHELL`); the
+ * Host values under test live in `lib/shell-config.ts` (`doctorShellConfig`); the
  * composition they drive lives once, in the package.
  */
 
@@ -281,10 +282,9 @@ test.describe("017 EARS-11: the mobile nav disclosure", () => {
     await expect(mobileNav).toBeVisible();
     // The SAME configured targets as the desktop nav — one config value.
     await expect(mobileNav.getByRole("link")).toHaveCount(1);
-    await expect(mobileNav.getByRole("link", { name: "Эфиры" })).toHaveAttribute(
-      "href",
-      "/events",
-    );
+    await expect(
+      mobileNav.getByRole("link", { name: "Эфиры" }),
+    ).toHaveAttribute("href", "/events");
 
     // It closes again — a native `<details>`, trapping nothing.
     await menu.locator("summary").click();
@@ -397,23 +397,20 @@ test.describe("017 EARS-12: exactly one Academy crossing", () => {
   test("017 EARS-12.1: exactly one Academy link exists and it lives in the footer", async ({
     page,
   }) => {
+    // The crossing targets the Academy origin the app is CONFIGURED with
+    // (#3147), read through the app's own reader — never a pinned production
+    // host. A runner that leaves the variable out fails on the reader's error.
+    const origin = readSiblingOrigin(process.env, "doctor");
     await page.goto("/");
 
-    const academy = page.locator('a[href^="https://academy.doctor.school"]');
+    const academy = page.locator(`a[href^="${origin}"]`);
     await expect(academy).toHaveCount(1);
-    await expect(academy).toHaveAttribute(
-      "href",
-      "https://academy.doctor.school/",
-    );
+    await expect(academy).toHaveAttribute("href", `${origin}/`);
     await expect(
-      page
-        .getByTestId("storefront-footer")
-        .locator('a[href^="https://academy.doctor.school"]'),
+      page.getByTestId("storefront-footer").locator(`a[href^="${origin}"]`),
     ).toHaveCount(1);
     await expect(
-      page
-        .getByTestId("storefront-header")
-        .locator('a[href*="academy.doctor.school"]'),
+      page.getByTestId("storefront-header").locator(`a[href^="${origin}"]`),
     ).toHaveCount(0);
     // The crossing sits in its own footer column with its explanatory note.
     await expect(page.getByTestId("footer-cross")).toContainText(

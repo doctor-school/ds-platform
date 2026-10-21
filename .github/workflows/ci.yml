@@ -1414,6 +1414,10 @@ jobs:
       - run: pnpm exec turbo run build --filter=@ds/portal
       - run: pnpm --filter @ds/portal exec playwright install --with-deps chromium
       - run: pnpm --filter @ds/portal test:e2e:ci
+        env:
+          # #3147 — the portal's required request-time doctor-storefront origin
+          # (its footer crossing, 017 EARS-12); the doctor tier's port.
+          DOCTOR_PUBLIC_ORIGIN: http://localhost:3004
 
   # ─── playwright-axe-doctor: the doctor.school storefront (#1440) ──────
   # The sibling of `playwright-axe-portal`, for the SECOND storefront ADR-0015
@@ -1454,6 +1458,10 @@ jobs:
           API_PROXY_TARGET: http://127.0.0.1:3214
       - run: pnpm --filter @ds/doctor exec playwright install --with-deps chromium
       - run: pnpm --filter @ds/doctor test:e2e:ci
+        env:
+          # #3147 — the doctor storefront's required request-time Academy origin
+          # (its footer crossing, 017 EARS-12); the specs read the same value.
+          ACADEMY_PUBLIC_ORIGIN: http://localhost:3001
 
   # ─── admin-e2e: the admin flows tier + admin axe sweep (#1647) ────────
   # The #1638 audit finding D3: `apps/admin` had ZERO CI runtime coverage. Its
@@ -1791,8 +1799,11 @@ jobs:
       - run: pnpm exec turbo run build --filter=@ds/portal --filter=@ds/admin --filter=@ds/doctor
       - run: pnpm ci:standalone-boot portal admin doctor
         env:
-          # #2619 — the admin's required request-time Academy origin.
+          # #2619 — the admin's required request-time Academy origin; #3147 —
+          # the doctor storefront's too (its footer crossing).
           ACADEMY_PUBLIC_ORIGIN: http://localhost:3001
+          # #3147 — the portal's required request-time doctor-storefront origin.
+          DOCTOR_PUBLIC_ORIGIN: http://localhost:3004
 
   # ─── AI-specific guards from ADR-0007 §2.6 ───────────────────────────
   # The PR-body-parsing guard family (spec-link BLOCK, registry-research,

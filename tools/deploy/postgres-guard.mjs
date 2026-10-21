@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { parse } from "yaml";
 
 export const DATA_PATH = "infra/deploy/compose/data-prod/";
 export const SOURCE_LABEL = "org.doctor-school.postgres-source";
@@ -28,7 +27,14 @@ export function postgresSourceHash(files) {
 }
 
 export function postgresContract(files) {
-  const c = parse(files["compose.yml"]);
+  // compose.yml is JSON (valid YAML, so Compose reads it): the box-local release runs
+  // from a bare tree with no node_modules, so the parser is node's own (#3157).
+  let c;
+  try {
+    c = JSON.parse(files["compose.yml"]);
+  } catch {
+    fail("compose contract is not JSON");
+  }
   requireFact(
     c?.name && c.services?.postgres && c.services?.pgbackrest,
     "missing compose contract",

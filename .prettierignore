@@ -22,3 +22,6 @@ design-source/
 # 044 EARS-35 — a byte-for-byte copy of the orthobio-site generated ОКТМО
 # directory (see apps/admin/lib/settlements.ts); never reformatted here.
 apps/admin/lib/settlements.json
+# #3157 — JSON content in a .yml path (Compose reads JSON as YAML); the bare-tree prod
+# release parses it with JSON.parse, so Prettier must not rewrite it as YAML.
+infra/deploy/compose/data-prod/compose.yml

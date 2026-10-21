@@ -12,8 +12,10 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import {
   DEPLOY_PLAN,
@@ -357,4 +359,40 @@ test("3157: the --local run checks the descent right after its previous-SHA read
     phase.slice(guard),
     /if \(!descent\.ok\) die\(descent\.reason\);/,
   );
+});
+
+// The release driver runs `prod.mjs --local` (and `slot.mjs --local` for stage-main)
+// from a bare codeload tree of the target commit: no `pnpm install`, so no
+// node_modules (infra/deploy/bin/release-driver `cmd_run`). Every module in their
+// static import closure must therefore resolve from node: built-ins and the tree.
+test("3157: the box-local entries load from a bare tree of the commit, without node_modules", () => {
+  const repo = join(import.meta.dirname, "../..");
+  const tree = mkdtempSync(join(tmpdir(), "ds-bare-tree-"));
+  try {
+    const archive = spawnSync("git", ["archive", "--format=tar", "HEAD"], {
+      cwd: repo,
+      maxBuffer: 1 << 30,
+    });
+    assert.equal(archive.status, 0, String(archive.stderr));
+    const untar = spawnSync("tar", ["-x", "-C", tree], {
+      input: archive.stdout,
+    });
+    assert.equal(untar.status, 0, String(untar.stderr));
+    for (const entry of ["tools/deploy/prod.mjs", "tools/staging/slot.mjs"]) {
+      const url = pathToFileURL(join(tree, entry)).href;
+      const run = spawnSync(
+        process.execPath,
+        ["--input-type=module", "-e", `await import(${JSON.stringify(url)});`],
+        { cwd: tree, encoding: "utf8" },
+      );
+      assert.equal(
+        run.status,
+        0,
+        `${entry} does not load from a bare tree:
+${run.stderr}`,
+      );
+    }
+  } finally {
+    rmSync(tree, { recursive: true, force: true });
+  }
 });

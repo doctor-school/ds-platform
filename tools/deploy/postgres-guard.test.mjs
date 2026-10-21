@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parse, stringify } from "yaml";
 import { readFileSync } from "node:fs";
 import {
   postgresContract,
@@ -78,8 +77,8 @@ test("EARS-9: target backup socket and stanza cannot silently diverge", () => {
     postgresContract({
       ...files,
       "compose.yml": files["compose.yml"].replace(
-        "pgsocket:/var/run/postgresql # shared",
-        "redisdata:/var/run/postgresql # shared",
+        '"pgsocket:/var/run/postgresql"',
+        '"redisdata:/var/run/postgresql"',
       ),
     }),
   );
@@ -339,7 +338,7 @@ for (const role of ["postgres", "pgbackrest"]) {
     "inherited mounts",
   ]) {
     test(`EARS-11: ${role} ${kind} topology refuses before activation`, () => {
-      const compose = parse(files["compose.yml"]);
+      const compose = JSON.parse(files["compose.yml"]);
       const service = compose.services[role];
       if (kind === "alternate config")
         service.volumes = service.volumes.map((v) =>
@@ -360,7 +359,11 @@ for (const role of ["postgres", "pgbackrest"]) {
         service.tmpfs = ["/var/lib/postgresql/data/base"];
       if (kind === "inherited mounts") service.volumes_from = ["other"];
       assert.throws(
-        () => postgresContract({ ...files, "compose.yml": stringify(compose) }),
+        () =>
+          postgresContract({
+            ...files,
+            "compose.yml": JSON.stringify(compose),
+          }),
         /mount/,
       );
     });
@@ -422,3 +425,10 @@ for (const role of ["source", "sidecar"]) {
     });
   }
 }
+
+test("3157: a compose contract that is not JSON refuses — the bare-tree release has no YAML parser", () => {
+  assert.throws(
+    () => postgresContract({ ...files, "compose.yml": "name: ds-data-prod\n" }),
+    /compose contract is not JSON/,
+  );
+});

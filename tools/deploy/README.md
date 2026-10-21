@@ -422,6 +422,12 @@ checks image PGDATA and matching UIDs, and exports the exact built images:
 node tools/deploy/postgres-artifact-prepare.mjs --host <approved-build-host> --ref <commit> --output <certificate.json> --export <images.tar> --audit-log <commands.jsonl>
 ```
 
+The data compose is JSON in a `.yml` path (#3157): Compose reads JSON as YAML, and
+the guard parses it with `JSON.parse`, so the box-local release from a bare tree
+needs no npm parser. The rewrite to JSON kept every value but changed the bytes, so
+the source hash: the first release carrying it needs this one-time certification,
+on the operator path (`prod.mjs --local` takes no `--postgres-artifacts`).
+
 This is a separate, audited build operation, not permission to mutate production.
 The exported images must already be available on the deployment host through the
 authorized artifact delivery operation; a missing image is a refusal, never an

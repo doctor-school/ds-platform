@@ -346,7 +346,7 @@ sequenceDiagram
 
 - **Fingerprint binding** (ADR-0001 §6): session metadata stores `hash(UA + IP/24 + accept-language)`; mismatch invalidates the session.
 - **Refresh rotation** (EARS-9): each refresh is single-use; rotation issues a new refresh and revokes the old. A replay of a consumed refresh invalidates the whole chain (RFC 6819) and revokes the session.
-- **No cross-subdomain cookie**: each app holds its own `__Host-` cookie; continuity between the two storefronts is the first-party shared sign-in point on `api.doctor.school` (ADR-0015 §4), not a shared cookie (ADR-0001 §6).
+- **No cross-subdomain cookie**: each app holds its own `__Host-` cookie; continuity between the two storefronts is Zitadel plus the first-party sign-in host `login.doctor.school` (ADR-0015 §4), not a shared cookie (ADR-0001 §6).
 
 ## 4. Registration cascade (EARS-1/2, 19, 20, 3, 26)
 

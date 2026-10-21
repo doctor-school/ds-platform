@@ -268,7 +268,7 @@ Offset допустим только для admin-таблиц с явной п�
 ### 4.5. Authentication
 
 - `Authorization: Bearer <jwt>` header.
-- Web: JWT в `HttpOnly + Secure + SameSite=Lax + __Host-` cookie per app (ADR-0001 §6 + §7 — host-only per app, без shared cross-subdomain cookies; вход между витринами через собственную общую точку входа, ADR-0015 §4).
+- Web: JWT в `HttpOnly + Secure + SameSite=Lax + __Host-` cookie per app (ADR-0001 §6 + §7 — host-only per app, без shared cross-subdomain cookies; вход между витринами через Zitadel и собственный хост входа, ADR-0015 §4).
 - Mobile: JWT в Keychain/Keystore, передаётся в header вручную.
 - Two-tier validation (ADR-0001 §6): JWT fast-path для ≥99% запросов; `/introspect` для high-stakes (payments, AU withdrawal, role-change, admin mutations, PII export).
 

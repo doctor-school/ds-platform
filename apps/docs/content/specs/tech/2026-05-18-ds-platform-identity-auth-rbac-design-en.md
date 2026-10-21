@@ -77,7 +77,7 @@ This spec does not own the identity or RBAC model; it records where each part li
 The base session and token parameters are owned by **ADR-0001 §6 / design §7.1** and are not restated here. The two facts this spec _depends on_:
 
 - **Access token:** JWT, RS256/ES256, **15-min** TTL; claims `sub`, `roles[]`, `mfa`, `sid`, `iat`, `exp`, `jti` (ADR-0001 design §7.1).
-- **Base session:** opaque rotating refresh token, **30d web / 14d mobile**, server-side in Redis; web carries a `__Host-`-prefixed per-app `HttpOnly + Secure + SameSite=Lax` cookie (ADR-0001 §6). Continuity between the two storefronts is the first-party shared sign-in point on `api.doctor.school` with one sign-out on both, **not** a shared cookie (ADR-0015 §4; ADR-0001 design §7.5).
+- **Base session:** opaque rotating refresh token, **30d web / 14d mobile**, server-side in Redis; web carries a `__Host-`-prefixed per-app `HttpOnly + Secure + SameSite=Lax` cookie (ADR-0001 §6). Continuity between the two storefronts is Zitadel plus the first-party sign-in host `login.doctor.school` with one sign-out on both, **not** a shared cookie (ADR-0015 §4; ADR-0001 design §7.5).
 
 The elevated MFA-fresh state (§7.1) is layered **on top of** this base session as an additional claim — it never replaces or extends it.
 

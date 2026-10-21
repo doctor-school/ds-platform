@@ -141,13 +141,14 @@ The full session security profile (TTL, rotation, CSRF, fingerprint binding) —
 
 #### 3.2.1. Cross-storefront sign-in — frontend implementation (ADR-0015 §4)
 
-Login continuity between the two storefronts (`apps/doctor` on `doctor.school`, `apps/portal` on `academy.doctor.school`) is the first-party shared sign-in point on `api.doctor.school`, not a shared cookie spanning the `.doctor.school` zone (rejected per ADR-0001 §6 — same-origin XSS or subdomain takeover would compromise every host, and CSRF / fingerprint mitigations are bypassed by same-origin XSS) and not an IdP `prompt=none` redirect (our first-party sign-in leaves no browser session at the IdP — ADR-0015 → Rejected alternatives). The flow, the one sign-out and the nine binding security requirements are ADR-0015 §4; this subsection names only what each storefront application carries:
+Login continuity between the two storefronts (`apps/doctor` on `doctor.school`, `apps/portal` on `academy.doctor.school`) is Zitadel as the authorization server plus the first-party sign-in host `login.doctor.school` (`apps/login`), not a shared cookie spanning the `.doctor.school` zone (rejected per ADR-0001 §6 — same-origin XSS or subdomain takeover would compromise every host, and CSRF / fingerprint mitigations are bypassed by same-origin XSS). The flow, the one sign-out and the nine binding security requirements are ADR-0015 §4; this subsection names only what each front-end application carries:
 
-- **After a sign-in** — the storefront sends the browser once, top-level, through the shared point with the single-use establish ticket the API returned, so the marker cookie lands on `api.doctor.school`, and returns to the exact page the sign-in started on.
-- **On a signed-out render** — one credentialed status request to the shared point; only a positive answer starts the authorize round trip. Public pages stay statically generated / ISR and are never redirected server-side.
-- **The callback route** — checks `state` against the host-only transaction cookie, redeems the code server-to-server with the PKCE verifier through the same-origin BFF, and lets the API's `Set-Cookie` land the fresh `__Host-ds_session` on its own host.
-- **Sign-out** — one API call that revokes the browser's shared sign-in record and every storefront session minted from it; a cookie delete alone is never the sign-out.
-- **Shared code** — this flow lives once in `@ds/auth-flow` and is mounted by both storefronts; neither copies it. `apps/admin` and `apps/cms` do not mount it: they keep their own sign-in.
+- **The sign-in host (`apps/login`)** — renders the `@ds/auth-flow` sign-in forms on `login.doctor.school`, the login UI both storefront OIDC clients name (`login_version.login_v2.base_uri`). Its server reads the auth request, finalises it with the browser's one shared session or with the session a credential step just created, and holds that session behind the host-only `__Host-ds_login`. It accepts only top-level navigations, sends `frame-ancestors 'none'`, `Cross-Origin-Opener-Policy: same-origin` and a strict nonce-based CSP, carries a CSRF token bound to its own pre-existing cookie on every form, and exposes one credentialed-CORS endpoint: the yes / no status.
+- **Starting a sign-in (each storefront)** — the storefront server creates a server-side transaction (`state`, `nonce`, its own PKCE verifier, a validated same-origin relative return path), keeps its id in the host-only `__Host-ds_oidc_tx` and redirects top-level to Zitadel's authorize endpoint with the storefront's one fixed `redirect_uri`. The storefront's own sign-in links lead here; it no longer posts credentials itself.
+- **On a signed-out render** — one credentialed status request to the sign-in host; only «yes» starts the same authorize with `prompt=none`, and after one `login_required` no further silent attempt in that browser session. Public pages stay statically generated / ISR and are never redirected server-side.
+- **The callback route** — finds the transaction by `state`, checks it against `__Host-ds_oidc_tx`, redeems the code before answering through the API's internal redeem endpoint (the API alone holds the storefront client's `private_key_jwt` credential; neither the public API host nor the same-origin BFF routes that endpoint), lets the API's `Set-Cookie` land the fresh `__Host-ds_session` on its own host and answers `303` to the return path — the code never reaches a rendered page.
+- **Sign-out** — one API call that terminates the browser's shared Zitadel session and revokes every storefront session linked to it; a cookie delete alone is never the sign-out.
+- **Shared code** — the forms, the start / callback / status / sign-out steps live once in `@ds/auth-flow`; both storefronts and the sign-in host mount them and none copies them. `apps/admin` and `apps/cms` do not mount them: they keep their own sign-in.
 
 **CSRF protection:** double-submit pattern (cookie + header) on all state-changing endpoints. Implemented via NestJS middleware on the API side (see identity-auth-rbac-design §7.5).
 
@@ -809,7 +810,7 @@ Documentation:
 
 - JWT auth flow via Zitadel (closed per ADR-0001 §8, DSP-209).
 - **Host-only `__Host-` cookie per app** (doctor, portal, admin, docs, cms) — each app has its own scope. Full security profile — ADR-0001 §6.
-- **Cross-storefront continuity** — via the first-party shared sign-in point on `api.doctor.school` (ADR-0015 §4), not via a shared cookie. Implementation details — §3.2.1.
+- **Cross-storefront continuity** — via Zitadel and the first-party sign-in host `login.doctor.school` (ADR-0015 §4), not via a shared cookie. Implementation details — §3.2.1.
 - Two-tier validation: JWT fast-path for ≥99% of requests, IdP `/introspect` for high-stakes (payments, AU withdrawal, role change, admin mutations, PD export).
 - Hybrid RBAC: IdP coarse roles in JWT, backend fine-grained via Cerbos.
 

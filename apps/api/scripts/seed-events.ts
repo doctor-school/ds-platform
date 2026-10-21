@@ -100,6 +100,7 @@ interface SeedSpec {
   readonly description: string;
   readonly specialties: string[];
   readonly partnerRef: string;
+  readonly venue?: NonNullable<(typeof events.$inferInsert)["venue"]>;
   /**
    * 006 (#584): the event's stream config the room's EARS-2 player is
    * instantiated from. Omitted → no `stream_config` row is written (and any
@@ -140,6 +141,8 @@ function specs(now: number): SeedSpec[] {
   return [
     {
       slug: "seed-005-upcoming",
+      // 044 EARS-13 (#3037): the real congress notice reads the event's venue.
+      venue: "Москва, тестовая площадка (эталон)",
       state: "published",
       title: "Управление артериальной гипертензией в 2026",
       school: "Школа кардиологии",
@@ -437,6 +440,7 @@ export async function seedEvents(): Promise<void> {
           description: spec.description,
           specialties: spec.specialties,
           partnerRef: spec.partnerRef,
+          venue: spec.venue,
           state: spec.state,
           origin: spec.origin ?? "platform",
           // 012 EARS-26 / EARS-29 (#2509): the portal (Academy) stand fixtures — the
@@ -456,6 +460,7 @@ export async function seedEvents(): Promise<void> {
             description: spec.description,
             specialties: spec.specialties,
             partnerRef: spec.partnerRef,
+            venue: spec.venue,
             state: spec.state,
             origin: spec.origin ?? "platform",
             liveAt,

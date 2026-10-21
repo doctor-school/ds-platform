@@ -1804,6 +1804,14 @@ identifier from that same browser must still receive the ordinary neutral answer
 proving the source budget was not exhausted; neither request may send mail over
 the full canonical fifteen-second addressed-mail horizon.
 
+Point the local congress configuration at `seed-005-upcoming` from the existing
+`pnpm --filter @ds/api seed:events` fixture writer on the owned branch database.
+Its venue is event-owned, so that writer seeds and restores the canonical test
+venue on both insert and rerun; an environment venue cannot satisfy intake.
+`apps/api/test/scripts/seed-events.e2e-spec.ts` proves initial venue, rerun repair
+and preservation of another fixture's custom venue. No one-off browser database
+patch is part of this prerequisite.
+
 The first guest redemption of the still-live reference must return that same
 byte-identical generic 429, without an address, session or new addressed mail
 over another full delivery horizon. The ordinary email-code method remains

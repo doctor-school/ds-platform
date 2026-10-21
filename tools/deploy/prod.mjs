@@ -49,8 +49,9 @@
 //   pre-flight  clean tree · HEAD==origin/main · green CI for the SHA (gh)
 //               · no live broadcast (tools/deploy/live-broadcast-check.mjs)
 //               · release gate (tools/deploy/release-gate.mjs)
-//               · stage `main` check: converge the slot to the target, run
-//                 the full stage suite (tools/deploy/stage-main-check.mjs)
+//               · stage gate: a `main` target's `stage-suite` status (Actions);
+//                 a `--ref` target converges the slot and runs the full stage
+//                 suite (tools/deploy/stage-main-check.mjs)
 //   ship        git archive <sha> → api-prod + data-prod over ssh (compose + configs)
 //   data-prod   verify cluster/artifacts → up immutable images (no build/pull)
 //   checkpoint  pgbackrest pre-migrate incr backup  (DSO-129 — BEFORE migrate)

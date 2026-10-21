@@ -7,6 +7,7 @@ import {
   PasswordResetRequestSchema,
   RegisterRequestSchema,
   VerifyRequestSchema,
+  VerifyResendRequestSchema,
 } from "./auth.schema.js";
 import {
   DoctorRegisterRequestSchema,
@@ -106,6 +107,16 @@ export const SignInHostVerifyRequestSchema =
   VerifyRequestSchema.extend(FormPostFields);
 export type SignInHostVerifyRequest = z.infer<
   typeof SignInHostVerifyRequestSchema
+>;
+
+/**
+ * EARS-25 on the sign-in host — re-issue the registration code from the code
+ * step: the storefront's resend body plus the form-post fields.
+ */
+export const SignInHostVerifyResendRequestSchema =
+  VerifyResendRequestSchema.extend(FormPostFields);
+export type SignInHostVerifyResendRequest = z.infer<
+  typeof SignInHostVerifyResendRequestSchema
 >;
 
 /**

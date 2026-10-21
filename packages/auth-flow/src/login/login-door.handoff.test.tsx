@@ -350,3 +350,48 @@ describe("003 EARS-44 (#2659): a hand-off link opened while signed in", () => {
     expect(screen.queryByTestId("login-screen")).toBeNull();
   });
 });
+
+/**
+ * 003 EARS-71 / EARS-44 on the sign-in host (#3170) — the reference rides the
+ * spent entry intent server-side: the host config's `formPost.handoff` says
+ * one is held, the door redeems it once without naming it, and an entry with
+ * no intent (or one without a hand-off) redeems nothing — the plain form.
+ */
+describe("003 EARS-71: the sign-in host redeems the intent's hand-off without the reference", () => {
+  const onHost = (
+    config: typeof DOCTOR_FIXTURE | typeof ACADEMY_FIXTURE,
+    handoff: boolean,
+  ) => ({
+    ...config,
+    api: {
+      ...config.api,
+      formPost: { authRequest: "ar-1", csrf: "csrf-1", handoff },
+    },
+  });
+
+  it.each(HOSTS)(
+    "003 EARS-71: on %s a held hand-off is redeemed once with no reference in the body",
+    async (_host, config) => {
+      window.history.replaceState(null, "", "/login?authRequest=ar-1");
+      redeemLoginHandoff.mockResolvedValue({
+        status: "otp_sent",
+        identifier: EMAIL,
+      });
+
+      renderDoor(onHost(config, true), null);
+
+      await screen.findByTestId("otp-verify");
+      expect(redeemLoginHandoff).toHaveBeenCalledTimes(1);
+      expect(redeemLoginHandoff).toHaveBeenCalledWith(undefined);
+    },
+  );
+
+  it("003 EARS-71: no held hand-off (missing or spent intent) ⇒ nothing redeemed, the plain form", async () => {
+    window.history.replaceState(null, "", "/login?authRequest=ar-1");
+    renderDoor(onHost(DOCTOR_FIXTURE, false), null);
+
+    await screen.findByTestId("login-screen");
+    expect(redeemLoginHandoff).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("otp-verify")).toBeNull();
+  });
+});

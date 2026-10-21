@@ -21,6 +21,7 @@ import type {
   RegisterResponse,
   SignInHostEntryResponse,
   SignInHostStepResponse,
+  VerifyResendResponse,
 } from "@ds/schemas";
 import { Authz, Public } from "../authz/index.js";
 import { BotProtected } from "../bot-protection/index.js";
@@ -57,6 +58,7 @@ import {
   SignInHostHandoffRequestDto,
   SignInHostRegisterRequestDto,
   SignInHostVerifyRequestDto,
+  SignInHostVerifyResendRequestDto,
 } from "./sign-in-host.dto.js";
 import {
   SignInHostService,
@@ -401,6 +403,32 @@ export class SignInHostController {
     this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     setCookies(reply, result.setCookies);
     return { status: "redirect", url: result.url };
+  }
+
+  /**
+   * EARS-25 on the host — re-issue the registration code from the code step:
+   * `POST /v1/auth/verify/resend`'s command and guards (sending door, timing
+   * floor, captcha), the same enumeration-safe `resend_requested` (EARS-16).
+   * Mints nothing; bound to the form like every host post.
+   */
+  @Post("verify/resend")
+  @Public()
+  @RateLimited({ door: "sending" })
+  @TimingEqualized()
+  @BotProtected("verify-resend")
+  @HttpCode(200)
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "high-stakes",
+    tests: ["EARS-25", "EARS-16", "EARS-70"],
+  })
+  async resendVerification(
+    @Body() dto: SignInHostVerifyResendRequestDto,
+    @Headers() headers: Record<string, string | undefined>,
+  ): Promise<VerifyResendResponse> {
+    await this.checkForm(readHeaders(headers), dto);
+    return this.auth.resendEmailVerification(dto.identifier);
   }
 
   /** EARS-11 on the host — sends a reset code, mints nothing; `POST /v1/auth/password/reset`'s guards. */

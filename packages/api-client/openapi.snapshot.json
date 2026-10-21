@@ -5063,6 +5063,27 @@
         "required": ["email", "code", "authRequest", "csrf"],
         "type": "object"
       },
+      "SignInHostVerifyResendRequestDto": {
+        "properties": {
+          "authRequest": {
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "type": "string"
+          },
+          "captchaToken": {
+            "type": "string"
+          },
+          "csrf": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "identifier": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["identifier", "authRequest", "csrf"],
+        "type": "object"
+      },
       "StaffAccessGrantRequestDto": {
         "additionalProperties": false,
         "properties": {
@@ -9914,6 +9935,28 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SignInHostVerifyRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["SignInHost"]
+      }
+    },
+    "/v1/sign-in-host/verify/resend": {
+      "post": {
+        "operationId": "SignInHostController_resendVerification",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignInHostVerifyResendRequestDto"
               }
             }
           },

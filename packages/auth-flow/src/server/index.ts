@@ -60,3 +60,9 @@ export {
   type SpecialtyActor,
   type SpecialtyAwareLanding,
 } from "./landing";
+export {
+  SIGN_IN_HOST_AUTH_REQUEST_PARAM,
+  signInHostConfig,
+  signInHostSearchParams,
+  type SignInHostRender,
+} from "./sign-in-host";

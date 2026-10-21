@@ -295,7 +295,7 @@ export function RegisterDoor({
     // survives it (021 EARS-10).
     router.push(
       withReturnTarget(
-        `${config.routes.verify}?email=${encodeURIComponent(email)}`,
+        `${config.routes.verify}${config.routes.verify.includes("?") ? "&" : "?"}email=${encodeURIComponent(email)}`,
         returnTo,
       ),
     );

@@ -20,6 +20,7 @@ import {
   type SignInHostEntryResponse,
 } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
+import { AuthService } from "../../src/auth/auth.service.js";
 import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { ZitadelIdpClient } from "../../src/auth/idp/zitadel.idp.js";
@@ -458,6 +459,39 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
       expect(res.headers["access-control-allow-origin"]).toBeUndefined();
     }
     expect(await recordRows(address)).toHaveLength(0);
+  });
+
+  it("EARS-25: the registration code is re-sent on the host through the storefront's resend, bound to the form", async () => {
+    const jar = new Jar();
+    const form = await render(jar, DOCTOR, { prompt: ["create"] });
+    const address = email("resend");
+    await registerOnStorefront(address);
+    const resend = vi.spyOn(app.get(AuthService), "resendEmailVerification");
+    const ok = await post(jar, "verify/resend", {
+      identifier: address,
+      authRequest: form.authRequest,
+      csrf: form.csrf,
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toEqual({ status: "resend_requested" });
+    // The same acknowledgement for an unknown address (EARS-16).
+    const unknown = await post(jar, "verify/resend", {
+      identifier: `nobody-${Date.now()}@ds.test`,
+      authRequest: form.authRequest,
+      csrf: form.csrf,
+    });
+    expect(unknown.json()).toEqual(ok.json());
+    expect(resend).toHaveBeenCalledWith(address);
+    // Without the form binding it is the one 403 and nothing is sent.
+    resend.mockClear();
+    const refused = await post(jar, "verify/resend", {
+      identifier: address,
+      authRequest: form.authRequest,
+      csrf: "wrong",
+    });
+    expect(refused.statusCode).toBe(403);
+    expect(resend).not.toHaveBeenCalled();
+    resend.mockRestore();
   });
 
   it("EARS-24: each storefront's registration runs on the host through its own register command; a mismatched door is refused", async () => {

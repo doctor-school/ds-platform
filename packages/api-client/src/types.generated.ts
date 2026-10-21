@@ -2436,6 +2436,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sign-in-host/verify/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["SignInHostController_resendVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/storefront/doctor/events": {
         parameters: {
             query?: never;
@@ -3631,6 +3647,12 @@ export interface components {
                 }[];
                 password: string;
             };
+        };
+        SignInHostVerifyResendRequestDto: {
+            authRequest: string;
+            captchaToken?: string;
+            csrf: string;
+            identifier: string;
         };
         StaffAccessGrantRequestDto: {
             email: string;
@@ -7410,6 +7432,27 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SignInHostVerifyRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SignInHostController_resendVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignInHostVerifyResendRequestDto"];
             };
         };
         responses: {

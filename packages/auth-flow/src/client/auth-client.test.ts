@@ -96,7 +96,9 @@ describe("017 #1933: the sign-in transport", () => {
   });
 
   it("017 #1933.9: a non-JSON failure body still yields an AuthError, never a parse crash", async () => {
-    fetchMock.mockResolvedValue(new Response("<html>502</html>", { status: 502 }));
+    fetchMock.mockResolvedValue(
+      new Response("<html>502</html>", { status: 502 }),
+    );
 
     const error = await doctor
       .login({ identifier: "doctor@clinic.ru", password: "x" })
@@ -203,9 +205,10 @@ describe("021 EARS-19: the bot-protection token on the protected commands", () =
     );
 
     const [url, init] = callArgs();
-    expect(url, "the storefront registration route, relative to this origin").toBe(
-      "/v1/storefront/doctor/register",
-    );
+    expect(
+      url,
+      "the storefront registration route, relative to this origin",
+    ).toBe("/v1/storefront/doctor/register");
     expect(init.method).toBe("POST");
     expect(init.credentials).toBe("include");
     expect(headers(init)["x-smartcaptcha-token"]).toBe("token-from-the-widget");
@@ -240,7 +243,9 @@ describe("021 EARS-19: the bot-protection token on the protected commands", () =
       { identifier: "doctor@example.com", password: "Sup3r$ecretPw!9" },
       "academy-token",
     );
-    expect(headers(callArgs(1)[1])["x-smartcaptcha-token"]).toBe("academy-token");
+    expect(headers(callArgs(1)[1])["x-smartcaptcha-token"]).toBe(
+      "academy-token",
+    );
   });
 
   it("EARS-19.3: every code resend carries the token too — the resend route is @BotProtected on the api", async () => {
@@ -269,30 +274,41 @@ describe("003 EARS-41: the one confirmation command", () => {
   it.each([
     ["Академия", academy, "/v1/auth/verify"],
     ["Витрина", doctor, "/v1/storefront/doctor/verify"],
-  ])("003 EARS-41: %s posts the emailed code to its host verify route", async (_host, client, path) => {
-    fetchMock.mockImplementation(() => Promise.resolve(json({ status: "verified" })));
+  ])(
+    "003 EARS-41: %s posts the emailed code to its host verify route",
+    async (_host, client, path) => {
+      fetchMock.mockImplementation(() =>
+        Promise.resolve(json({ status: "verified" })),
+      );
 
-    await client.verify({ email: "doctor@clinic.ru", code: "482913" });
+      await client.verify({ email: "doctor@clinic.ru", code: "482913" });
 
-    const [url, init] = callArgs();
-    expect(url, "the host's own verify command, from config").toBe(path);
-    expect(JSON.parse(String(init.body))).toEqual({
-      email: "doctor@clinic.ru",
-      code: "482913",
-    });
-    expect("x-smartcaptcha-token" in headers(init)).toBe(false);
-    expect(init.credentials).toBe("include");
-  });
+      const [url, init] = callArgs();
+      expect(url, "the host's own verify command, from config").toBe(path);
+      expect(JSON.parse(String(init.body))).toEqual({
+        email: "doctor@clinic.ru",
+        code: "482913",
+      });
+      expect("x-smartcaptcha-token" in headers(init)).toBe(false);
+      expect(init.credentials).toBe("include");
+    },
+  );
 
   it("003 EARS-41: the held registration values travel WITH the code, unchanged", async () => {
-    fetchMock.mockImplementation(() => Promise.resolve(json({ status: "verified" })));
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(json({ status: "verified" })),
+    );
     const registration = {
       password: "Secret-pass-1",
       medicalWorkerDeclaration: true as const,
       consent: [{ purpose: "partner_data_sharing", version: "v1" }],
     };
 
-    await doctor.verify({ email: "doctor@clinic.ru", code: "482913", registration });
+    await doctor.verify({
+      email: "doctor@clinic.ru",
+      code: "482913",
+      registration,
+    });
 
     const [url, init] = callArgs();
     expect(url).toBe("/v1/storefront/doctor/verify");
@@ -307,7 +323,10 @@ describe("003 EARS-41: the one confirmation command", () => {
 describe("021 EARS-19: the doctor-storefront registration command", () => {
   it("EARS-19.4: a refused token surfaces as the machine-readable code the shared predicates read", async () => {
     fetchMock.mockResolvedValue(
-      json({ message: "captcha refused", code: "bot_protection_rejected" }, 403),
+      json(
+        { message: "captcha refused", code: "bot_protection_rejected" },
+        403,
+      ),
     );
 
     const error = await doctor
@@ -372,5 +391,76 @@ describe("003 #2449: the /account phone confirmation transport", () => {
       .catch((e: unknown) => e);
     expect(failure).toBeInstanceOf(AuthError);
     expect((failure as AuthError).status).toBe(400);
+  });
+});
+
+/**
+ * 003 EARS-70 / ADR-0015 §4 req. 3 on the sign-in host (#3170) — the SAME
+ * transport, with the host's form-post binding: every POST names the auth
+ * request and carries the CSRF token, and a `redirect` success is followed as a
+ * top-level navigation instead of resolving to the calling screen.
+ */
+describe("003 EARS-70: the sign-in host transport", () => {
+  const host = createAuthClient({
+    basePath: "/v1/sign-in-host",
+    registerPath: "/v1/sign-in-host/storefront/doctor/register",
+    verifyPath: "/v1/sign-in-host/storefront/doctor/verify",
+    formPost: { authRequest: "ar-1", csrf: "csrf-1" },
+  });
+
+  it("003 EARS-70: every POST carries authRequest + csrf beside the contract body", async () => {
+    fetchMock.mockResolvedValueOnce(json({ status: "otp_sent" }));
+    await host.requestOtp({ identifier: "doc@clinic.ru", channel: "email" });
+
+    const [url, init] = callArgs();
+    expect(url).toBe("/v1/sign-in-host/login/otp/request");
+    expect(init.credentials).toBe("include");
+    expect(JSON.parse(String(init.body))).toEqual({
+      identifier: "doc@clinic.ru",
+      channel: "email",
+      authRequest: "ar-1",
+      csrf: "csrf-1",
+    });
+  });
+
+  it("003 EARS-5: a redirect success navigates top-level and never settles", async () => {
+    const assign = vi.fn();
+    vi.stubGlobal("window", { location: { assign } });
+    fetchMock.mockResolvedValueOnce(
+      json({ status: "redirect", url: "https://id.example/callback?x=1" }),
+    );
+
+    let settled = false;
+    void host
+      .login({ identifier: "doc@clinic.ru", password: "x" })
+      .then(() => (settled = true));
+    await vi.waitFor(() =>
+      expect(assign).toHaveBeenCalledWith("https://id.example/callback?x=1"),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    expect(settled).toBe(false);
+  });
+
+  it("003 EARS-44: the hand-off redemption names no reference on the host", async () => {
+    fetchMock.mockResolvedValueOnce(json({ status: "handoff_refused" }));
+    await host.redeemLoginHandoff();
+    expect(JSON.parse(String(callArgs()[1].body))).toEqual({
+      authRequest: "ar-1",
+      csrf: "csrf-1",
+    });
+  });
+
+  it("003 EARS-25: the registration-code resend rides the host route", async () => {
+    fetchMock.mockResolvedValueOnce(json({ status: "sent" }));
+    await host.resendVerification({ identifier: "doc@clinic.ru" });
+    expect(callArgs()[0]).toBe("/v1/sign-in-host/verify/resend");
+  });
+
+  it("a storefront transport never adds the form-post fields", async () => {
+    await doctor.login({ identifier: "doc@clinic.ru", password: "x" });
+    expect(JSON.parse(String(callArgs()[1].body))).toEqual({
+      identifier: "doc@clinic.ru",
+      password: "x",
+    });
   });
 });

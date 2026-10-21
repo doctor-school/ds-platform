@@ -11,6 +11,7 @@ import {
   SignInHostPasswordResetRequestSchema,
   SignInHostRegisterRequestSchema,
   SignInHostVerifyRequestSchema,
+  SignInHostVerifyResendRequestSchema,
 } from "@ds/schemas";
 
 // nestjs-zod DTOs at the I/O boundary (ADR-0002 §3); the schemas are the SSOT
@@ -47,4 +48,7 @@ export class SignInHostDoctorRegisterRequestDto extends createZodDto(
 ) {}
 export class SignInHostDoctorVerifyRequestDto extends createZodDto(
   SignInHostDoctorVerifyRequestSchema,
+) {}
+export class SignInHostVerifyResendRequestDto extends createZodDto(
+  SignInHostVerifyResendRequestSchema,
 ) {}

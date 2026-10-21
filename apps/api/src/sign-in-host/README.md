@@ -36,6 +36,7 @@ Contract (SSOT): `packages/schemas/src/auth/sign-in-host.schema.ts`.
 | `POST login/otp/handoff`              | redeems the reference the spent intent carried            | `POST /v1/auth/login/otp/handoff`         |
 | `POST register`                       | Academy registration (Academy form only)                  | `POST /v1/auth/register`                  |
 | `POST verify`                         | Academy code step → record + finalise (Academy form only) | `POST /v1/auth/verify`                    |
+| `POST verify/resend`                  | re-issues the registration code (either form)             | `POST /v1/auth/verify/resend`             |
 | `POST storefront/doctor/register`     | doctor registration (doctor form only)                    | `POST /v1/storefront/doctor/register`     |
 | `POST storefront/doctor/verify`       | doctor code step → record + finalise (doctor form only)   | `POST /v1/storefront/doctor/verify`       |
 | `POST password/reset[/complete]`      | reset request / completion → record + finalise            | `POST /v1/auth/password/reset[/complete]` |

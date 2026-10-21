@@ -163,8 +163,25 @@ describe("ACADEMY_AUTH_FLOW — the form-column wordmark on the dark page", () =
     const { darkSrc } = ACADEMY_AUTH_FLOW.brand.wordmark;
     expect(darkSrc).toBe("/brand/logo-white.svg");
     expect(
-      existsSync(fileURLToPath(new URL(`../public${darkSrc}`, import.meta.url))),
+      existsSync(
+        fileURLToPath(new URL(`../public${darkSrc}`, import.meta.url)),
+      ),
       "the dark variant is a real asset in public/brand",
     ).toBe(true);
+  });
+});
+
+/**
+ * #3170 — the config moved into `@ds/auth-flow/hosts` (the sign-in host mounts
+ * it too), so the two catalogue sentences it used to read from `messages/ru.json`
+ * are literals there; this pins them equal to the catalogue.
+ */
+describe("ACADEMY_AUTH_FLOW reads the Academy catalogue's words", () => {
+  it("states the catalogue's logo alt and consent sentence", async () => {
+    const ru = (await import("../messages/ru.json")).default;
+    expect(ACADEMY_AUTH_FLOW.brand.wordmark.alt).toBe(ru.brand.logoAlt);
+    expect(ACADEMY_AUTH_FLOW.consents.tiers[0]?.items[0]?.statement).toBe(
+      ru.register.consent,
+    );
   });
 });

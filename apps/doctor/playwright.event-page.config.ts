@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
 
 /**
  * 020 EARS-1 (#1764, slice 3) — the doctor event-page LIVE tier.
@@ -28,6 +29,8 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   use: {
     baseURL: process.env.E2E_DOCTOR_URL ?? "http://localhost:3004",
+    // A staging slot's basic-auth pair (#3168); undefined on a local stand.
+    httpCredentials: standHttpCredentials(),
     trace: "retain-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

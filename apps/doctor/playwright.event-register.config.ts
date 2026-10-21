@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
 
 /**
  * 005 EARS-1/2/3/4 (#2005) — the DOCTOR host LIVE-STAND tier for one-tap эфир
@@ -51,6 +52,8 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   use: {
     baseURL: process.env.E2E_DOCTOR_URL ?? "http://localhost:3004",
+    // A staging slot's basic-auth pair (#3168); undefined on a local stand.
+    httpCredentials: standHttpCredentials(),
     trace: "retain-on-failure",
     locale: "ru-RU",
   },

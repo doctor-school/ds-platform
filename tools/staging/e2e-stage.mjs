@@ -29,7 +29,7 @@
  * the axe gate, the verdict block, the exit codes — on a machine with no box.
  */
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -42,6 +42,7 @@ import {
   assertSlotName,
   basicAuthHeader,
   healthVerdict,
+  idpHostname,
   readBoxEnvFile,
   requiredBaseDomain,
   requiredBasicAuthUser,
@@ -50,6 +51,7 @@ import {
   slotHostnames,
 } from "./slot.mjs";
 import { GOLDEN_PASSWORD_ENV_VARS } from "./idp.mjs";
+import { LIVE_TIERS } from "./live-tiers.mjs";
 
 /** The repo root — every leg runs from there, like the scripts in `package.json`. */
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -80,7 +82,7 @@ export function parseE2eArgs(argv) {
   if (slot === undefined || slot.startsWith("-")) {
     throw new SlotError(
       "usage: pnpm e2e:stage <slot> [--project academy|doctor|walks] [--grep <re>] " +
-        "[--no-axe] [--report-dir <path>] [--expect-sha <sha>] — the slot must be named",
+        "[--no-axe] [--no-live] [--report-dir <path>] [--expect-sha <sha>] — the slot must be named",
     );
   }
   assertSlotName(slot);
@@ -91,6 +93,7 @@ export function parseE2eArgs(argv) {
     axe: true,
     reportDir: undefined,
     expectSha: undefined,
+    live: true,
   };
   const takeValue = (flag) => {
     const value = rest.shift();
@@ -114,6 +117,9 @@ export function parseE2eArgs(argv) {
         break;
       case "--no-axe":
         options.axe = false;
+        break;
+      case "--no-live":
+        options.live = false;
         break;
       case "--report-dir":
         options.reportDir = takeValue(flag);
@@ -151,6 +157,7 @@ function assertReleaseCheckShape(options) {
     options.project !== undefined && "--project",
     options.grep !== undefined && "--grep",
     options.axe === false && "--no-axe",
+    options.live === false && "--no-live",
   ].filter(Boolean);
   if (narrowing.length > 0) {
     throw new SlotError(
@@ -267,6 +274,119 @@ export function captchaTestTokenEnv(operatorEnv, boxEnv) {
   return value ? { E2E_CAPTCHA_TEST_TOKEN: value } : {};
 }
 
+/**
+ * What the live-tier legs (#3168, `live-tiers.mjs`) need from the stand beyond the
+ * suite env: the shared IdP origin (one for every slot, `idpHostname`) and the shared
+ * Mailpit (one per stand, behind the same basic-auth pair — README «Mailpit»).
+ * Hostnames only: Playwright does not send `__Host-` cookies to `127.0.0.1`.
+ * Operator keys (`IDP_SERVICE_TOKEN`, a branch `DATABASE_URL`, seeded slugs, a
+ * reused doctor account) are NOT derivable from a slot; a spec that needs one is
+ * reported «not run — missing <names>» unless the operator exports it.
+ */
+export function slotLiveEnv({ baseDomain }) {
+  return {
+    IDP_ISSUER: `https://${idpHostname(baseDomain)}`,
+    MAILPIT_URL: `https://mailpit.${baseDomain}`,
+  };
+}
+
+const isSet = (env, name) => Boolean(env?.[name]?.trim());
+
+/**
+ * One live config's run plan against the env the leg will have. A config that
+ * throws at load without its env is not launched (`run: false`); otherwise every
+ * gated spec missing a variable — and every spec another leg owns (`exclude`) — is
+ * kept out through Playwright's `--test-list-invert`, whose lines resolve against
+ * the config's `rootDir`. Kept out, not run-and-skipped: `requireLiveStandEnv`
+ * reads a slot run (storefront URL set) as an INTENDED tier and would fail loudly.
+ */
+export function planLiveLeg(tier, available) {
+  const missingOf = (names) => names.filter((name) => !isSet(available, name));
+  const configMissing = missingOf(tier.configRequires ?? []);
+  if (configMissing.length > 0) {
+    return {
+      run: false,
+      reason: `missing env ${configMissing.join(", ")}`,
+      notRun: [],
+      invertList: [],
+    };
+  }
+  const notRun = tier.gated
+    .map((g) => ({ file: g.file, missing: missingOf(g.requires) }))
+    .filter((g) => g.missing.length > 0);
+  const toLine = (file) => path.posix.relative(tier.rootDir, file);
+  return {
+    run: true,
+    notRun,
+    invertList: [...(tier.exclude ?? []), ...notRun.map((n) => n.file)].map(
+      toLine,
+    ),
+  };
+}
+
+/**
+ * A live leg's verdict. `ok` is what the exit code folds: a leg that RAN with a
+ * failure (or exited non-zero) is fatal; a leg that ran nothing — never launched
+ * for missing env, or every test skipped — is SKIPPED: printed loudly, never
+ * called green, and not fatal, because the slot cannot supply operator keys.
+ */
+export function liveLegVerdict({ name, plan, status, report }) {
+  if (!plan.run) {
+    return {
+      name,
+      ok: true,
+      state: "skipped",
+      launched: false,
+      detail: `skipped — ${plan.reason}`,
+    };
+  }
+  const summary = summarizeReport(report);
+  const sum = (key) => summary.projects.reduce((n, p) => n + p[key], 0);
+  const passed = sum("passed");
+  const failed = sum("failed");
+  const skipped = sum("skipped");
+  const notRun = plan.notRun.length
+    ? ` · not run: ${plan.notRun
+        .map((n) => `${n.file} (missing ${n.missing.join(", ")})`)
+        .join("; ")}`
+    : "";
+  const state =
+    status !== 0 || failed > 0 ? "fail" : passed === 0 ? "skipped" : "pass";
+  return {
+    name,
+    ok: state !== "fail",
+    state,
+    launched: true,
+    detail: `ran ${passed} passed / ${failed} failed / ${skipped} skipped${notRun}`,
+  };
+}
+
+/**
+ * A live leg's reporters: always Playwright's `json` (the counts come from it) into
+ * `<reportDir>/<leg>/`, plus `list` on the console — or, in public-log mode, the
+ * summary reporter and `html`, exactly as `publicAxeLeg` wires the axe legs.
+ */
+export function liveLegReporting(env, reportDir, name) {
+  const dir = toPosix(path.join(reportDir, name.split("/").join("-")));
+  const publicLog = publicLogEnabled(env);
+  return {
+    dir,
+    args: [
+      `--reporter=${publicLog ? `${SUMMARY_REPORTER_PATH},json,html` : "list,json"}`,
+      `--output=${dir}/artifacts`,
+    ],
+    env: {
+      PLAYWRIGHT_JSON_OUTPUT_FILE: `${dir}/results.json`,
+      ...(publicLog
+        ? {
+            PLAYWRIGHT_HTML_OUTPUT_DIR: `${dir}/html`,
+            PLAYWRIGHT_HTML_OPEN: "never",
+          }
+        : {}),
+    },
+  };
+}
+
 export function slotHealthUrl(slot, baseDomain) {
   return `https://${slotHostnames(slot, baseDomain).api}/v1/health`;
 }
@@ -361,6 +481,7 @@ export function renderVerdictBlock({
   sha,
   summary,
   legs,
+  live = [],
   axeNote,
   reportDir,
   preflightReason,
@@ -379,6 +500,18 @@ export function renderVerdictBlock({
   lines.push(row("suite", counts[0] ?? "no scenario ran"));
   for (const extra of counts.slice(1)) lines.push(indent(extra));
   lines.push(row("axe", axeNote));
+  // One line per live-tier config: «ran (counts)» or «skipped — reason». The
+  // name column is padded so the block stays readable when pasted.
+  const nameWidth = Math.max(0, ...live.map((leg) => leg.name.length)) + 2;
+  const liveLines = live.map((leg) => {
+    const label = { pass: "PASS", fail: "FAIL", skipped: "SKIPPED" }[leg.state];
+    const text = leg.launched ? `${label} — ${leg.detail}` : leg.detail;
+    return `${leg.name.padEnd(nameWidth)}${text}`;
+  });
+  if (liveLines.length > 0) {
+    lines.push(row("live", liveLines[0]));
+    for (const extra of liveLines.slice(1)) lines.push(indent(extra));
+  }
   lines.push(
     row(
       "legs",
@@ -386,10 +519,17 @@ export function renderVerdictBlock({
     ),
   );
   lines.push(row("report", reportDir));
+  const all = [...legs, ...live];
+  const skippedLive = live.filter((leg) => leg.state === "skipped").length;
+  const green = legs.length > 0 && all.every((leg) => leg.ok);
   lines.push(
     row(
       "verdict",
-      legs.length > 0 && legs.every((leg) => leg.ok) ? "PASS" : "FAIL",
+      green && skippedLive > 0
+        ? `PASS — ${skippedLive} live leg${skippedLive === 1 ? "" : "s"} skipped`
+        : green
+          ? "PASS"
+          : "FAIL",
     ),
   );
   return ["```text", ...lines, "```", ""].join("\n");
@@ -452,6 +592,10 @@ export const realEffects = {
       shell: true,
       env: { ...process.env, ...env },
     }),
+  writeFile: (file, content) => {
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, content, "utf8");
+  },
   readReport: (file) => {
     try {
       return JSON.parse(readFileSync(file, "utf8"));
@@ -612,6 +756,66 @@ export async function runE2eStage(
     }
   }
 
+  // The storefront LIVE-TIER configs (#3168): one leg each, selected by host like
+  // the axe legs. Each leg gets the suite env plus the stand's IdP and Mailpit;
+  // what the operator exported on top (an operator key) counts as available.
+  const live = [];
+  if (options.live) {
+    for (const tier of LIVE_TIERS.filter((t) => axeHost(t.host))) {
+      const reporting = liveLegReporting(
+        env,
+        suiteEnv.E2E_REPORT_DIR,
+        tier.name,
+      );
+      const legEnv = {
+        ...suiteEnv,
+        ...slotLiveEnv({ baseDomain }),
+        ...reporting.env,
+      };
+      const plan = planLiveLeg(tier, { ...env, ...legEnv });
+      if (!plan.run) {
+        live.push(liveLegVerdict({ name: tier.name, plan }));
+        continue;
+      }
+      const pnpm = ["pnpm", "--filter", tier.pkg];
+      let status = 0;
+      if (tier.prepare) {
+        status = effects.run([...pnpm, ...tier.prepare], {
+          env: legEnv,
+        }).status;
+      }
+      if (status === 0) {
+        const invert = [];
+        if (plan.invertList.length > 0) {
+          const listFile = `${reporting.dir}/not-run.txt`;
+          effects.writeFile(listFile, `${plan.invertList.join("\n")}\n`);
+          invert.push(`--test-list-invert=${listFile}`);
+        }
+        status = effects.run(
+          [
+            ...pnpm,
+            "exec",
+            "playwright",
+            "test",
+            `--config=${tier.config}`,
+            "--pass-with-no-tests",
+            ...invert,
+            ...reporting.args,
+          ],
+          { env: legEnv },
+        ).status;
+      }
+      live.push(
+        liveLegVerdict({
+          name: tier.name,
+          plan,
+          status,
+          report: effects.readReport(path.join(reporting.dir, "results.json")),
+        }),
+      );
+    }
+  }
+
   const summary = summarizeReport(
     effects.readReport(path.join(suiteEnv.E2E_REPORT_DIR, "results.json")),
   );
@@ -622,11 +826,12 @@ export async function runE2eStage(
       sha: preflight.sha,
       summary,
       legs,
+      live,
       axeNote: axe.note,
       reportDir,
     }),
   );
-  return exitCodeFor({ preflightOk: true, legs });
+  return exitCodeFor({ preflightOk: true, legs: [...legs, ...live] });
 }
 
 const invokedDirectly =

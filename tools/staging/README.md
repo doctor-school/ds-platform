@@ -7,12 +7,13 @@ image (#2981). The one run on the box itself is the stage `main` converge of the
 driver, which runs this same `slot.mjs` with `--local` (below); there is no timer, and the
 box's only Node runtime is the pinned one `infra/deploy/bin/install-node.sh` installs.
 
-| script          | what it owns                                                                                                     | Issue        |
-| --------------- | ---------------------------------------------------------------------------------------------------------------- | ------------ |
-| `golden-db.mjs` | builds and rebuilds `ds_golden`, the template every slot database is cloned from                                 | #2063        |
-| `slot.mjs`      | the lifecycle of one slot: `up`, `sync`, `down`, `reset`, `reset-identities`, `status`, `gc`, `agent-admin-code` | #2064, #2531 |
-| `idp.mjs`       | the two shared-Zitadel converges (whole redirect-URI set; golden identities + agent admin TOTP)                  | #2064, #2531 |
-| `e2e-stage.mjs` | the regression run over a CONVERGED slot: the C6 suite (+ the a11y suites) from your machine                     | #2067        |
+| script           | what it owns                                                                                                            | Issue        |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------ |
+| `golden-db.mjs`  | builds and rebuilds `ds_golden`, the template every slot database is cloned from                                        | #2063        |
+| `slot.mjs`       | the lifecycle of one slot: `up`, `sync`, `down`, `reset`, `reset-identities`, `status`, `gc`, `agent-admin-code`        | #2064, #2531 |
+| `idp.mjs`        | the two shared-Zitadel converges (whole redirect-URI set; golden identities + agent admin TOTP)                         | #2064, #2531 |
+| `e2e-stage.mjs`  | the regression run over a CONVERGED slot: the C6 suite (+ the a11y suites) from your machine                            | #2067        |
+| `live-tiers.mjs` | the registry of storefront live-tier Playwright configs `e2e-stage.mjs` runs as legs, and the env each gated spec needs | #3168        |
 
 Both entry points ship as package scripts, so nothing is invoked by path:
 
@@ -212,6 +213,7 @@ pnpm e2e:stage pr-123                     # both storefronts
 pnpm e2e:stage main --project academy --grep "витрина"
 pnpm e2e:stage main --project walks       # only the derived walks (§6.3), no axe leg
 pnpm e2e:stage pr-123 --no-axe            # skip the a11y leg explicitly
+pnpm e2e:stage pr-123 --no-live           # skip the storefront live-tier legs (#3168)
 ```
 
 The runner builds `@ds/e2e`'s workspace dependencies before BDD generation, so a clean
@@ -226,7 +228,7 @@ regressions. Raise the slot with `pnpm stage:slot up <slot> --ref <sha>` first.
 
 `pnpm e2e:stage main --expect-sha <40-char sha>` is the release check (tech spec C7,
 #2701). It is the full run and nothing less: it refuses any slot but `main`, any
-`--project` / `--grep` / `--no-axe`, an `E2E_GREP` in the env (the config would compile
+`--project` / `--grep` / `--no-axe` / `--no-live`, an `E2E_GREP` in the env (the config would compile
 it into a filter) and a missing `CI` (without it Playwright's `forbidOnly` is off). It
 then asserts the slot's `/v1/health` serves exactly that SHA before a scenario runs, and
 exits **2** on any of these refusals. You do not normally run it by hand: `pnpm
@@ -318,11 +320,57 @@ while it is open the command prints
 `axe leg skipped: #1692 open` and runs the suite alone, because a known-red axe leg would
 train the operator to ignore the leg.
 
+### The live-tier legs (#3168)
+
+The storefronts own Playwright configs that boot **no** `webServer` and drive a real
+api + IdP + Mailpit at `E2E_PORTAL_URL` / `E2E_DOCTOR_URL`. On a bare CI runner their
+specs can only skip, so a slot is the only place they run. `tools/staging/live-tiers.mjs`
+is their registry, and `e2e-stage.test.mjs` holds it against the tree: every
+`apps/{portal,doctor}/playwright*.config.ts` is either a **live** leg (no `webServer`),
+an **axe** leg, or **hermetic** (owns a `webServer`, CI's), and a config in none of
+them — or a live one that grew a `webServer` — fails `pnpm test:tools`.
+
+| Leg                          | Config (`apps/<app>/…`)                                                             |
+| ---------------------------- | ----------------------------------------------------------------------------------- |
+| `live/academy/default`       | `portal/playwright.config.ts` (`e2e` + `bdd`)                                       |
+| `live/doctor/register-live`  | `doctor/playwright.register-live.config.ts`                                         |
+| `live/doctor/congress`       | `doctor/playwright.congress.config.ts`                                              |
+| `live/doctor/event-page`     | `doctor/playwright.event-page.config.ts`                                            |
+| `live/doctor/event-register` | `doctor/playwright.event-register.config.ts`                                        |
+| `live/doctor/events-live`    | `doctor/playwright.events-live.config.ts`                                           |
+| `live/doctor/room`           | `doctor/playwright.room.config.ts` (`room.spec.ts`; the axe twin is `axe/doctor`'s) |
+| `live/doctor/shell`          | `doctor/playwright.shell.config.ts`                                                 |
+
+Each leg gets the suite env plus `IDP_ISSUER=https://id.<base domain>` and
+`MAILPIT_URL=https://mailpit.<base domain>` (hostnames, never `127.0.0.1`: Playwright
+sends no `__Host-` cookie there); the doctor configs answer the basic-auth challenge
+through `@ds/e2e/stand-http-credentials`. `--project academy|doctor` selects legs like
+the axe legs (`walks` selects none); `--no-live` drops them (refused by `--expect-sha`).
+
+A slot cannot supply operator keys (`IDP_SERVICE_TOKEN`, `IDP_PROJECT_ID`, a branch
+`DATABASE_URL`), a reused doctor account (`E2E_DOCTOR_EMAIL`/`_PASSWORD`) or seeded
+slugs. A spec gated on such a variable through `requireLiveStandEnv` would read a slot
+run as an _intended_ tier and fail loudly, so the registry declares what each gated spec
+requires and the leg keeps it out (`--test-list-invert`), printing it as `not run:
+<spec> (missing <names>)`; a config that throws at load without its env is not launched
+at all. Export the variable on this machine and the spec runs. The verdict block prints
+one `live:` line per config:
+
+- `PASS — ran N passed / 0 failed / M skipped` — at least one test passed;
+- `FAIL — ran …` — a test failed or the run exited non-zero: **fatal** (exit `1`);
+- `SKIPPED — ran 0 passed / 0 failed / M skipped` — every test skipped, never green;
+- `skipped — missing env <names>` — the config was not launched.
+
+A skipped leg is loud but **not fatal** (the slot cannot hold operator keys); the verdict
+reads `PASS — <n> live legs skipped`. Each leg writes `results.json` (and in public-log
+mode the summary reporter, HTML and traces) under `live-<host>-<config>/` in the report dir.
+
 Reports land under `packages/e2e/playwright-report/<slot>-<timestamp>/` (HTML +
 `results.json`, gitignored, local only) so a second run cannot overwrite the evidence.
 Stdout ends with a fenced **verdict block** — slot, the SHA `/v1/health` reports, the
-per-project passed/failed/skipped counts, the axe verdict and the report path. That block
-is the artefact you paste. Exit `0` every leg green, `1` a failing leg, `2` pre-flight.
+per-project passed/failed/skipped counts, the axe verdict, one line per live-tier config
+and the report path. That block is the artefact you paste. Exit `0` no leg failed (skipped
+live legs included), `1` a failing leg, `2` pre-flight.
 
 Until the §8 backfill (#2068) rewords the spec feature files in the shared step
 vocabulary, every scenario reports as **skipped** — `missingSteps: "skip-scenario"`, the

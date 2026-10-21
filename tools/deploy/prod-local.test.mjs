@@ -155,7 +155,7 @@ test("3157: on the box, api-prod is the local executor and data-prod the VPC hop
   const hosts = localProdHosts();
   assert.equal(hosts.api, LOCAL_EXECUTOR);
   assert.equal(hosts.data, "deploy@192.168.0.10");
-  assert.equal(DATA_PROD_HOP_KEY, "/etc/ds-platform/data-prod-ssh-key");
+  assert.equal(DATA_PROD_HOP_KEY, "/home/deploy/.ssh/data-prod-hop");
   const args = sshBaseArgs(hosts.data, ["-o", "ConnectTimeout=15"]);
   assert.deepEqual(args, [
     "-o",

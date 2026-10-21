@@ -9,9 +9,11 @@ import {
   PREFLIGHT_ORDER,
   parseRunnerArgs,
   preflightChecks,
+  reportRecord,
   runPreflight,
   runRecord,
   stageSuiteProblem,
+  successRecordExistsViaGh,
 } from "./release-runner.mjs";
 
 const SHA = "a".repeat(40);
@@ -40,6 +42,13 @@ describe("parseRunnerArgs", () => {
     );
   });
 
+  it("reads record --state unknown (the runner lost contact with the driver)", () => {
+    assert.equal(
+      parseRunnerArgs(["record", "--sha", SHA, "--state", "unknown"]).state,
+      "unknown",
+    );
+  });
+
   it("an empty --previous-sha means no basis (the box reported none)", () => {
     assert.equal(
       parseRunnerArgs([
@@ -63,7 +72,7 @@ describe("parseRunnerArgs", () => {
     assert.match(parseRunnerArgs(["deploy", "--sha", SHA]).error, /command/);
     assert.match(
       parseRunnerArgs(["record", "--sha", SHA, "--state", "success"]).error,
-      /succeeded\|failed/,
+      /succeeded\|failed\|unknown/,
     );
     assert.match(
       parseRunnerArgs([
@@ -207,6 +216,10 @@ describe("runRecord", () => {
         calls.push(["record", args]);
         return { ok: true, deploymentId: 9 };
       },
+      successRecorded: async (sha) => {
+        calls.push(["lookup", sha]);
+        return false;
+      },
       log: () => {},
     };
   };
@@ -221,13 +234,15 @@ describe("runRecord", () => {
       ...deps,
     });
     assert.equal(res.ok, true);
+    assert.equal(res.recorded, "new");
     assert.deepEqual(
       deps.calls.map(([k]) => k),
-      ["cut", "record"],
+      ["lookup", "cut", "record"],
     );
-    assert.equal(deps.calls[0][1].targetSha, SHA);
+    assert.equal(deps.calls[0][1], SHA);
+    assert.equal(deps.calls[1][1].targetSha, SHA);
     assert.deepEqual(
-      { ...deps.calls[1][1], log: undefined, healthUrl: undefined },
+      { ...deps.calls[2][1], log: undefined, healthUrl: undefined },
       {
         prevSha: PREV,
         sha: SHA,
@@ -256,6 +271,65 @@ describe("runRecord", () => {
     assert.equal(deps.calls[0][1].ownerQuote, "катим");
   });
 
+  it("unknown (lost contact): no cut, no lookup, an `error` record with the quote", async () => {
+    const deps = make();
+    const res = await runRecord({
+      sha: SHA,
+      state: "unknown",
+      previousSha: PREV,
+      ownerQuote: "катим",
+      ...deps,
+    });
+    assert.equal(res.recorded, "new");
+    assert.deepEqual(
+      deps.calls.map(([k]) => k),
+      ["record"],
+    );
+    assert.equal(deps.calls[0][1].state, "error");
+    assert.equal(deps.calls[0][1].ownerQuote, "катим");
+    assert.equal(deps.calls[0][1].prevSha, PREV);
+  });
+
+  it("succeeded with a success record already on the SHA: no cut, no second record", async () => {
+    const deps = make();
+    const lines = [];
+    deps.log = (l) => lines.push(l);
+    deps.successRecorded = async (sha) => {
+      deps.calls.push(["lookup", sha]);
+      return true;
+    };
+    const res = await runRecord({
+      sha: SHA,
+      state: "succeeded",
+      previousSha: PREV,
+      ownerQuote: "катим",
+      ...deps,
+    });
+    assert.deepEqual(res, { ok: true, recorded: "existing" });
+    assert.deepEqual(
+      deps.calls.map(([k]) => k),
+      ["lookup"],
+    );
+    assert.ok(lines.some((l) => l.startsWith("↷ already recorded")));
+  });
+
+  it("succeeded after a lost-contact `error` record: records success and cuts (the re-dispatch recovery)", async () => {
+    const deps = make();
+    const res = await runRecord({
+      sha: SHA,
+      state: "succeeded",
+      previousSha: PREV,
+      ownerQuote: "катим",
+      ...deps,
+    });
+    assert.equal(res.recorded, "new");
+    assert.deepEqual(
+      deps.calls.map(([k]) => k),
+      ["lookup", "cut", "record"],
+    );
+    assert.equal(deps.calls[2][1].state, "success");
+  });
+
   it("refuses a blank quote before writing anything", async () => {
     const deps = make();
     await assert.rejects(
@@ -281,6 +355,83 @@ describe("runRecord", () => {
       ownerQuote: "q",
       ...deps,
     });
-    assert.deepEqual(res, { ok: false, error: "HTTP 422" });
+    assert.deepEqual(res, { ok: false, error: "HTTP 422", recorded: "new" });
+  });
+});
+
+describe("reportRecord", () => {
+  it("a written record → exit 0 and recorded=new for the workflow", () => {
+    assert.deepEqual(reportRecord({ ok: true, recorded: "new" }), {
+      exitCode: 0,
+      output: "recorded=new\n",
+      message: null,
+    });
+  });
+
+  it("an already-recorded success → exit 0 and recorded=existing", () => {
+    assert.deepEqual(reportRecord({ ok: true, recorded: "existing" }), {
+      exitCode: 0,
+      output: "recorded=existing\n",
+      message: null,
+    });
+  });
+
+  it("a record that could not be written fails the job with an ::error::", () => {
+    const r = reportRecord({ ok: false, error: "HTTP 422", recorded: "new" });
+    assert.equal(r.exitCode, 1);
+    assert.equal(r.output, null);
+    assert.match(
+      r.message,
+      /^::error::the Deployment record was not written: HTTP 422/,
+    );
+  });
+});
+
+describe("successRecordExistsViaGh", () => {
+  const fake = (deployments, statuses) => {
+    const calls = [];
+    return {
+      calls,
+      gh: (args) => {
+        calls.push(args);
+        const p = args[1];
+        if (p.startsWith("repos/{owner}/{repo}/deployments?")) {
+          return JSON.stringify(deployments);
+        }
+        const id = Number(p.split("/")[4]);
+        return JSON.stringify(statuses[id] ?? []);
+      },
+    };
+  };
+
+  it("asks for this SHA's production Deployments only", async () => {
+    const f = fake([], {});
+    assert.equal(await successRecordExistsViaGh({ sha: SHA, gh: f.gh }), false);
+    assert.equal(f.calls[0][0], "api");
+    assert.match(f.calls[0][1], new RegExp(`sha=${SHA}`));
+    assert.match(f.calls[0][1], /environment=production/);
+  });
+
+  it("true when a Deployment of the SHA carries a success status", async () => {
+    const f = fake([{ id: 1 }, { id: 2 }], {
+      1: [{ state: "error" }],
+      2: [{ state: "success" }, { state: "in_progress" }],
+    });
+    assert.equal(await successRecordExistsViaGh({ sha: SHA, gh: f.gh }), true);
+  });
+
+  it("false when only an `error` (lost contact) or a failure record exists", async () => {
+    const f = fake([{ id: 1 }, { id: 2 }], {
+      1: [{ state: "error" }],
+      2: [{ state: "failure" }],
+    });
+    assert.equal(await successRecordExistsViaGh({ sha: SHA, gh: f.gh }), false);
+  });
+
+  it("a success a later release made inactive still counts as recorded", async () => {
+    const f = fake([{ id: 1 }], {
+      1: [{ state: "inactive" }, { state: "success" }],
+    });
+    assert.equal(await successRecordExistsViaGh({ sha: SHA, gh: f.gh }), true);
   });
 });

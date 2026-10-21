@@ -179,6 +179,33 @@ describe("deploy-prod.yml", () => {
     assert.match(poll, /\.driver\.previousSha/);
   });
 
+  it("lost contact and the 60-min time-out record `unknown` before failing the job", () => {
+    const poll = wf.jobs.deploy.steps.find((s) => s.id === "poll").run;
+    // Each `exit 1` that leaves the loop without a driver verdict sets one first,
+    // so the record step (`terminal != ''`) still writes the Deployment record.
+    for (const [why, marker] of [
+      ["ssh lost", /failed \$ssh_failures times in a row/],
+      ["time-out", /did not finish within 60 min/],
+    ]) {
+      const at = poll.search(marker);
+      assert.ok(at > 0, why);
+      const exit = poll.indexOf("exit 1", at);
+      const unknown = poll.indexOf("terminal unknown", at);
+      assert.ok(unknown > at && unknown < exit, why);
+    }
+  });
+
+  it("the digest runs only for a newly written success record", () => {
+    const record = wf.jobs.deploy.steps.find((s) =>
+      /release-runner\.mjs record/.test(s.run ?? ""),
+    );
+    assert.equal(record.id, "record");
+    assert.equal(
+      wf.jobs.deploy.outputs.recorded,
+      "${{ steps.record.outputs.recorded }}",
+    );
+  });
+
   it("exposes no escape hatch", () => {
     for (const hatch of [
       "skip-ci-check",
@@ -195,7 +222,10 @@ describe("deploy-prod.yml", () => {
   it("calls release-digest.yml on success with the webhook secret passed", () => {
     const job = wf.jobs.digest;
     assert.equal(job.uses, "./.github/workflows/release-digest.yml");
-    assert.equal(job.if, "needs.deploy.result == 'success'");
+    assert.equal(
+      job.if,
+      "needs.deploy.result == 'success' && needs.deploy.outputs.recorded == 'new'",
+    );
     assert.deepEqual(job.with, { sha: "${{ inputs.sha }}" });
     assert.deepEqual(job.secrets, {
       MATTERMOST_WEBHOOK_URL: "${{ secrets.MATTERMOST_WEBHOOK_URL }}",

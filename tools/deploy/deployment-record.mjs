@@ -34,7 +34,7 @@ import { composeDigest } from "./release-notes.mjs";
 const SHORT = 12;
 // GitHub caps a Deployment/deployment_status `description` at 140 chars.
 const GH_DESCRIPTION_MAX = 140;
-const DEPLOYMENT_STATES = new Set(["success", "failure"]);
+const DEPLOYMENT_STATES = new Set(["success", "failure", "error"]);
 
 /** Strip 4-byte Unicode (astral-plane code points > U+FFFF — emoji, etc.) from a
  *  string. GitHub's `deployment_status.description` / `deployment.description`
@@ -80,8 +80,9 @@ function firstNonEmptyLine(text) {
  * @param {string|null} args.notesText   aggregated release-notes digest, or null/"".
  * @param {string}      args.healthUrl   prod health URL (the status `log_url`).
  * @param {string}      args.nowIso      caller-injected ISO deploy timestamp.
- * @param {"success"|"failure"} [args.state] the release outcome (#3158: the
- *   release workflow records a failed release too).
+ * @param {"success"|"failure"|"error"} [args.state] the release outcome (#3158: the
+ *   release workflow records a failed release too; #3179: `error` when the runner
+ *   lost contact with the driver and the verdict is unknown).
  * @param {string|null} [args.ownerQuote] the owner's word that authorised the
  *   release (#3158), in the description and the payload.
  */
@@ -95,17 +96,25 @@ export function buildDeploymentPayload({
   ownerQuote = null,
 }) {
   if (!DEPLOYMENT_STATES.has(state)) {
-    throw new Error(`deployment record state must be success|failure, got: ${state}`);
+    throw new Error(
+      `deployment record state must be success|failure|error, got: ${state}`,
+    );
   }
   const shortSha = typeof sha === "string" ? sha.slice(0, SHORT) : "";
   const tagLabel = releaseTag ?? "(untagged)";
   const notes = notesText ?? "";
   const failed = state === "failure";
+  // `error` is GitHub's «could not determine» state, distinct from `failure`: the
+  // runner lost contact with the driver (#3179), which keeps running on the box.
+  const unknown = state === "error";
   const statusSummary = failed
     ? `release failed @ ${shortSha}`
-    : firstNonEmptyLine(notes) || `release ${tagLabel}`;
+    : unknown
+      ? `verdict unknown @ ${shortSha}: lost contact; re-dispatch the SHA to record it`
+      : firstNonEmptyLine(notes) || `release ${tagLabel}`;
   const quote = ownerQuote ? String(ownerQuote) : null;
-  const intent = `${failed ? "failed " : ""}release ${tagLabel} @ ${shortSha}`;
+  const prefix = failed ? "failed " : unknown ? "unknown " : "";
+  const intent = `${prefix}release ${tagLabel} @ ${shortSha}`;
 
   return {
     deployment: {
@@ -150,7 +159,10 @@ function ghApiPost(path, body, cwd) {
     // hiding the field). Bounded to keep the non-fatal warning one line.
     const stderr1 = (r.stderr || "").trim().split(/\r?\n/)[0] ?? "";
     const stdoutBody = (r.stdout || "").trim().replace(/\s+/g, " ");
-    const detail = [stderr1, stdoutBody].filter(Boolean).join(" | ").slice(0, 300);
+    const detail = [stderr1, stdoutBody]
+      .filter(Boolean)
+      .join(" | ")
+      .slice(0, 300);
     return { ok: false, error: `gh api ${path} exited ${r.status}: ${detail}` };
   }
   try {
@@ -303,7 +315,8 @@ export async function recordDeployment({
       ownerQuote,
       cwd,
     });
-    if (res.ok) log(`  ✓ GitHub Deployment recorded (#${res.deploymentId}, ${state})`);
+    if (res.ok)
+      log(`  ✓ GitHub Deployment recorded (#${res.deploymentId}, ${state})`);
     else log(`  ⚠ could not record the GitHub Deployment: ${res.error}`);
     return res;
   } catch (e) {

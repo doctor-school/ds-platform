@@ -35,7 +35,7 @@
 // git and gh (`OPERATOR_ONLY_STEPS`: the pre-flight, the release cut and the
 // Deployment record — the release workflow runs them). api-prod is the box itself
 // (`LOCAL_EXECUTOR`); data-prod is the VPC hop `deploy@<data-prod VPC IP>` with
-// `/etc/ds-platform/data-prod-ssh-key`.
+// `/home/deploy/.ssh/data-prod-hop`.
 //
 // Hotfix path (`--ref <sha>`, #1881 / spec §10.11): prod is behind main and a
 // single already-merged fix must ship WITHOUT everything else on main. The extra

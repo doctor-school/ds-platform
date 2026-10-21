@@ -337,7 +337,7 @@ stay on the operator path above.
   stays inside the run before `finish`: a red smoke ends the release `failed`.
 - **Transport.** api-prod is the box itself (`LOCAL_EXECUTOR`, `lib/remote.mjs`);
   data-prod is `deploy@<data-prod VPC IP>` (`DS_DATA_PROD_VPC_IP`, default `192.168.0.10`)
-  with `-i /etc/ds-platform/data-prod-ssh-key`, `IdentitiesOnly`, `BatchMode` and
+  with `-i /home/deploy/.ssh/data-prod-hop`, `IdentitiesOnly`, `BatchMode` and
   `StrictHostKeyChecking=yes` (`hopDestination`) — the hop the operator's ProxyJump takes.
 - **No downgrade.** The driver (before it starts the unit) and the run itself (right
   after its previous-SHA read) refuse a SHA that does not descend from the live prod SHA,
@@ -350,7 +350,7 @@ stay on the operator path above.
 - **`previousSha`.** The previous-SHA read also records the running SHA through
   `release-driver record-previous prod <sha> <prev|none>` (the first basis recorded for
   a SHA is kept); `status prod <sha>` reports it as `driver.previousSha`, the
-  release-notes basis of the runner's Deployment record (spec §5).
+  basis of the Deployment-record notes the runner writes (spec §5).
 
 The unit's whole output stays in its journal (`journalctl -u ds-prod-<sha12>-driver`);
 the runner sees status lines only.
@@ -781,7 +781,7 @@ gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `preflight` | refuses an empty / whitespace-only `owner_quote` first; then `node tools/deploy/release-runner.mjs preflight --sha <sha>`: SHA in `main` · `stage-suite` status success · CI green · release gate · live-broadcast gate · recorded `images-<sha>.json` exists                              |
 | `deploy`    | Environment `production` (`deployment: false`): `ssh deploy@<api-prod> "release prod <sha>" < images-<sha>.json`, polls `status prod <sha>` (status lines only), then `release-runner.mjs record`: release cut on success + the ONE Deployment record (success or failure, with the quote) |
-| `digest`    | on success only: calls `release-digest.yml` (`workflow_call`) with `MATTERMOST_WEBHOOK_URL` passed                                                                                                                                                                                         |
+| `digest`    | on a newly recorded success only (`recorded=new`): calls `release-digest.yml` (`workflow_call`) with `MATTERMOST_WEBHOOK_URL` passed                                                                                                                                                       |
 
 - **Same gates as the workstation path, no escape hatch.** The checks are the
   modules `pnpm deploy:prod` uses (`ci-gate.mjs`, `release-gate.mjs`,
@@ -796,8 +796,21 @@ gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_
   reattaches to the running driver unit (`attached`) or reports
   `already-succeeded`.
 - **Record.** `deployment-record.mjs` `recordDeployment` writes the Deployment
-  with `GITHUB_TOKEN`; its notes are based on the driver's `previousSha`. Events of
-  `GITHUB_TOKEN` start no workflow, which is why the digest is called explicitly.
+  with `GITHUB_TOKEN`; the driver's `previousSha` is the basis of the
+  Deployment-record notes. Events of `GITHUB_TOKEN` start no workflow, which is
+  why the digest is called explicitly. A record that could not be written fails
+  the job (`::error::`).
+- **Lost contact.** When ssh to ds-api-prod fails four times in a row or the
+  release does not finish within 60 min, the poll sets the verdict `unknown`
+  before failing the job, and the record step writes the Deployment status
+  `error` (GitHub's «could not determine», distinct from `failure`): the driver
+  unit keeps running on the box. A re-dispatch of the same SHA records the
+  verdict — it reattaches (`attached`) or answers `already-succeeded`. Before a
+  success is recorded the runner reads the SHA's production Deployments: when one
+  already carries a `success` status it prints `↷ already recorded` and writes
+  nothing twice — no cut, no second record, no digest (`recorded=existing`); when
+  only the `error` record exists it records the success, cuts and posts the
+  digest as usual.
 - **Secrets.** `PROD_SSH_KEY` + `PROD_SSH_KNOWN_HOSTS` live in Environment
   `production` (deployment branches `main`, no required reviewer) and reach only
   the `deploy` job.

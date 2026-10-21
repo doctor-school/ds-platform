@@ -94,12 +94,16 @@ resource "twc_firewall_rule" "api_https" {
   cidr        = "0.0.0.0/0"
 }
 
+# Port 22 opens to the internet (release-pipeline spec §4, §8 step (e), #3179):
+# GitHub-hosted runners have no fixed address range. The box takes keys only, root
+# login is off, and a CI key reaches nothing but the forced command
+# /usr/local/bin/ds-deploy-entrypoint (infra/deploy/README.md → ssh access model).
 resource "twc_firewall_rule" "api_ssh" {
   firewall_id = twc_firewall.api_prod.id
   direction   = "ingress"
   protocol    = "tcp"
   port        = 22
-  cidr        = var.admin_ssh_cidr
+  cidr        = "0.0.0.0/0"
 }
 
 # data-prod firewall: NO public web. Postgres/Redis reachable only inside the VPC.

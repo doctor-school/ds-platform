@@ -144,7 +144,7 @@ resource "twc_firewall_rule" "stage_1_https" {
 # GitHub-hosted runners have no fixed address range. The box takes keys only, root
 # login is off, and a CI key reaches nothing but the forced command
 # /usr/local/bin/ds-deploy-entrypoint (infra/deploy/README.md → ssh access model).
-# api_ssh (network.tf) stays on var.admin_ssh_cidr until step (e).
+# api_ssh (network.tf) opens the same way for the prod release workflow.
 resource "twc_firewall_rule" "stage_1_ssh" {
   firewall_id = twc_firewall.stage_1.id
   direction   = "ingress"

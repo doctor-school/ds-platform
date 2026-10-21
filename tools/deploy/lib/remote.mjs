@@ -48,11 +48,13 @@ export function sshBaseArgs(host, extraOptions = []) {
 
 // #3157: the VPC hop of the prod release driver. A run ON ds-api-prod (`prod.mjs
 // --local`) reaches ds-data-prod as `deploy@<data-prod VPC IP>` with the dedicated key
-// `/etc/ds-platform/data-prod-ssh-key` — the hop the operator's `ds-data-prod` alias
+// `/home/deploy/.ssh/data-prod-hop` — the hop the operator's `ds-data-prod` alias
 // takes through its ProxyJump, so data-prod keeps no public ssh and no CI key (tech
-// spec 2026-10-16 release pipeline §4, §5 «Prod release driver»). The destination
+// spec 2026-10-16 release pipeline §4, §5 «Prod release driver»). The key is
+// deploy-owned 0600 beside deploy's `known_hosts` (which pins data-prod): the driver
+// unit runs as `deploy`, and `/etc/ds-platform` is root-only 0700. The destination
 // carries its own identity flags on every channel `sshBaseArgs` opens to it.
-export const DATA_PROD_HOP_KEY = "/etc/ds-platform/data-prod-ssh-key";
+export const DATA_PROD_HOP_KEY = "/home/deploy/.ssh/data-prod-hop";
 const HOP_OPTIONS = new Map();
 
 /**

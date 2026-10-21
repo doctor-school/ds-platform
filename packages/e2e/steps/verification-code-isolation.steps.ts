@@ -37,9 +37,9 @@ function state(key: Page): Isolation {
   return value;
 }
 
-async function identity(owner: Registrant, page = owner.page) {
+async function identity(owner: Registrant, page = owner.page, verified = true) {
   const result = await page.evaluate(
-    async ({ email, subject, phoneState }) => {
+    async ({ email, subject, phoneState, verified }) => {
       const profileResponse = await fetch("/v1/me/profile", {
         credentials: "include",
         cache: "no-store",
@@ -61,7 +61,7 @@ async function identity(owner: Registrant, page = owner.page) {
           profile: profileResponse.status,
           session: sessionResponse.status,
           sameEmail: profile.email === email,
-          verified: profile.emailVerified === true,
+          verifiedMatches: profile.emailVerified === verified,
           subjectPresent:
             typeof session.sub === "string" && session.sub.length > 0,
           sameSubject: subject === undefined || session.sub === subject,
@@ -74,16 +74,17 @@ async function identity(owner: Registrant, page = owner.page) {
       email: owner.email,
       subject: owner.subject,
       phoneState: owner.phoneState,
+      verified,
     },
   );
   expect(
     result.evidence,
-    "verified rightful owner and unchanged absent phone",
+    "rightful owner, expected verification state and unchanged absent phone",
   ).toEqual({
     profile: 200,
     session: 200,
     sameEmail: true,
-    verified: true,
+    verifiedMatches: true,
     subjectPresent: true,
     sameSubject: true,
     samePhone: true,
@@ -97,7 +98,9 @@ async function identity(owner: Registrant, page = owner.page) {
       .evaluate((element, email) => element.textContent === email, owner.email),
     "owned email rendered",
   ).toBe(true);
-  await expect(page.getByTestId("profile-email-verified")).toBeVisible();
+  if (verified)
+    await expect(page.getByTestId("profile-email-verified")).toBeVisible();
+  else await expect(page.getByTestId("profile-email-verified")).toHaveCount(0);
 }
 
 Given(
@@ -202,7 +205,7 @@ When(
 );
 
 Then(
-  "Academy refuses the foreign code generically and the second account remains unverified without private access",
+  "Academy refuses the foreign code without granting its tab private access and an independent owned password session observes the second account still unverified before logout",
   async ({ page, browser, baseURL, httpCredentials, world }) => {
     const value = state(page);
     const second = value.owners[1]!;
@@ -232,17 +235,44 @@ Then(
       baseURL ?? world.hostBaseUrl,
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
-    await passwordLogin(guest.page, second, world.hostBaseUrl, 401);
+    const response = await passwordLogin(guest.page, second, world.hostBaseUrl);
+    await guest.page.waitForURL(
+      (url) =>
+        url.origin === new URL(world.hostBaseUrl).origin &&
+        url.pathname === "/account",
+    );
+    await guest.page.waitForLoadState("networkidle");
+    await assertSecureSession(guest.page, response, world.hostBaseUrl);
+    await identity(second, guest.page, false);
+    const revoked = await guest.page.evaluate(async () => {
+      const logout = await fetch("/v1/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+      const session = await fetch("/v1/auth/session", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const profile = await fetch("/v1/me/profile", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      return {
+        logout: logout.status,
+        session: session.status,
+        profile: profile.status,
+      };
+    });
+    expect(
+      revoked,
+      "owned password observation session revoked before code completion",
+    ).toEqual({ logout: 200, session: 401, profile: 401 });
     await assertNoPrivateRegistrationAccess(guest.page, "", second);
+    await assertNoPrivateRegistrationAccess(second.page, "", second);
   },
 );
 
-async function passwordLogin(
-  page: Page,
-  owner: Registrant,
-  base: string,
-  expectedStatus: number,
-) {
+async function passwordLogin(page: Page, owner: Registrant, base: string) {
   await page.goto(`${base}/login?returnTo=%2Faccount`, { waitUntil: "load" });
   await page.waitForLoadState("networkidle");
   await inputSecret(
@@ -268,27 +298,7 @@ async function passwordLogin(
   expect(
     { status: result.response.status(), exactCredentials },
     "original owned password submitted",
-  ).toEqual({ status: expectedStatus, exactCredentials: true });
-  if (expectedStatus === 401) {
-    let generic = false;
-    try {
-      const body = JSON.parse(result.body);
-      generic =
-        Object.keys(body).length === 3 &&
-        body.statusCode === 401 &&
-        body.message === "the request could not be completed" &&
-        body.error === "Unauthorized";
-    } catch {
-      /* Discard private response parser diagnostics. */
-    }
-    expect(generic, "unverified owner password refused generically").toBe(true);
-    expect(
-      ((await result.response.headerValue("set-cookie")) ?? "").includes(
-        `${SESSION}=`,
-      ),
-      "unverified password grants no session",
-    ).toBe(false);
-  }
+  ).toEqual({ status: 200, exactCredentials: true });
   return result.response;
 }
 
@@ -368,17 +378,12 @@ Then(
 );
 
 Then(
-  "the second account's original password now authenticates its previously refused guest",
+  "the second account's original password still authenticates the same verified owner",
   async ({ page, world }) => {
     const value = state(page);
     const second = value.owners[1]!;
     const guest = value.guest!;
-    const response = await passwordLogin(
-      guest.page,
-      second,
-      world.hostBaseUrl,
-      200,
-    );
+    const response = await passwordLogin(guest.page, second, world.hostBaseUrl);
     await guest.page.waitForURL(
       (url) =>
         url.origin === new URL(world.hostBaseUrl).origin &&

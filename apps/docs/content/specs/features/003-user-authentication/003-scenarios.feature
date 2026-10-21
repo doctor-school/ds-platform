@@ -1270,10 +1270,10 @@ Feature: Net-new web authentication producing a doctor_guest identity
   Scenario: Academy binds live registration codes to their own unverified accounts
     Given two owned Academy registrants retain distinct actually delivered live confirmation codes
     When the second registrant submits the first registrant's live confirmation code
-    Then Academy refuses the foreign code generically and the second account remains unverified without private access
+    Then Academy refuses the foreign code without granting its tab private access and an independent owned password session observes the second account still unverified before logout
     When each registrant submits its own retained confirmation code
     Then both rightful owners reach their own verified Academy profiles with secure sessions surviving reload
-    And the second account's original password now authenticates its previously refused guest
+    And the second account's original password still authenticates the same verified owner
     # Existing account-bound EARS-3/16/41 projection; no new auth behavior.
 
   @EARS-3 @EARS-8 @EARS-16 @EARS-41 @failure @verification-code-reuse

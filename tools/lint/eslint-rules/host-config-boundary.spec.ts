@@ -97,4 +97,46 @@ describe("host-config-boundary", () => {
       ],
     });
   });
+
+  it("2074: flags an exported function — host logic a route file could pass on as a config import", () => {
+    ruleTester.run("host-config-boundary", rule, {
+      valid: [
+        { filename: FILE, code: `export const cfg = { title: "A" } satisfies HostConfig;` },
+        { filename: FILE, code: `export type Fn = () => void;\nexport const cfg = { title: "A" };` },
+        { filename: FILE, code: `const label = "A";\nexport { label };` },
+      ],
+      invalid: [
+        {
+          filename: FILE,
+          code: `export async function hostHelper() { return fetch("/x"); }`,
+          errors: [{ messageId: "exportedFunction" }],
+        },
+        {
+          filename: FILE,
+          code: `export const hostHelper = () => fetch("/x");`,
+          errors: [{ messageId: "exportedFunction" }],
+        },
+        {
+          filename: FILE,
+          code: `export const hostHelper = (async function () { return 1; }) as Fn;`,
+          errors: [{ messageId: "exportedFunction" }],
+        },
+        {
+          filename: FILE,
+          code: `export default function () { return 1; }`,
+          errors: [{ messageId: "exportedFunction" }],
+        },
+        {
+          filename: FILE,
+          code: `function hostHelper() { return 1; }\nexport { hostHelper };`,
+          errors: [{ messageId: "exportedFunction" }],
+        },
+        {
+          filename: FILE,
+          code: `const hostHelper = () => 1;\nexport { hostHelper as helper };`,
+          errors: [{ messageId: "exportedFunction" }],
+        },
+      ],
+    });
+  });
 });

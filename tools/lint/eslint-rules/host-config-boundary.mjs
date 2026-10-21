@@ -18,7 +18,7 @@
  * `host-config.{ts,tsx}` or `*.host-config.{ts,tsx}`. Slice C fixes the
  * convention; the `HostConfig` TYPE and the first real config are #2027.
  *
- * Two classes:
+ * Three classes:
  *   (c) `hostLogicImport` — an import of `@/lib/*`, `@/components/*`, or a
  *       relative path resolving into `apps/<host>/{lib,components}`. A config is
  *       data plus package imports; reaching into host logic makes it a module.
@@ -29,6 +29,11 @@
  *       `allowedAdapters` option. That option is the CLOSED adapter list and is
  *       deliberately EMPTY (`[]`) in the repo config: #2027 fills it when
  *       `HostConfig` lands and names the adapters the type actually permits.
+ *   (e) `exportedFunction` — an exported function or class: `export function`,
+ *       `export const f = () => …` (wrappers stripped), `export default
+ *       function`, or `export { local }` naming a local function/class. A
+ *       route file may pass any host-config export to the package
+ *       (`route-mount-lint.ts`), so the module exports data only.
  *
  * ESCAPE HATCH: `// eslint-disable-next-line local/host-config-boundary -- <reason>`
  * and nothing else — a needed adapter is added to `allowedAdapters` (a tracked
@@ -103,6 +108,22 @@ const FUNCTION_TYPES = new Set([
   "FunctionExpression",
 ]);
 
+/** Declarations that export behaviour rather than data. */
+const CALLABLE_DECLARATIONS = new Set([
+  "FunctionDeclaration",
+  "TSDeclareFunction",
+  "ClassDeclaration",
+]);
+
+/** True when an exported value (wrappers stripped) is a function or class. */
+function isCallableValue(node) {
+  const value = unwrap(node);
+  return (
+    value != null &&
+    (FUNCTION_TYPES.has(value.type) || value.type === "ClassExpression")
+  );
+}
+
 /** @type {import('eslint').Rule.RuleModule} */
 const rule = {
   meta: {
@@ -127,6 +148,8 @@ const rule = {
     messages: {
       hostLogicImport:
         'A host-config module must not import host logic: "{{spec}}" resolves into `apps/<host>/{lib,components}`. A config is data plus package imports — move the behaviour into the shared package, or the call site into the route file (tech spec §3 rule 3).',
+      exportedFunction:
+        "`{{name}}` exports a function or class from a host-config module. A host-config module exports config objects only: a route file passes any of its exports on to the package, so an exported function carries host behaviour past the route-mount check — the «callback smuggled through host config» bypass (tech spec §5). Move the behaviour into the shared package.",
       callbackOutsideAdapterList:
         '`{{key}}` is a function-valued host-config field outside the closed adapter list ({{allowed}}). Host behaviour re-entering through config is the «callback smuggled through host config» bypass the allowlist cannot see (tech spec §5): move it into the shared package, or add `{{key}}` to the rule\'s `allowedAdapters` once `HostConfig` (#2027) admits it as an adapter.',
     },
@@ -195,6 +218,33 @@ const rule = {
       }
     }
 
+    function reportExportedFunction(node, name) {
+      context.report({
+        node,
+        messageId: "exportedFunction",
+        data: { name: name ?? "default" },
+      });
+    }
+
+    /** True when the module-scope binding `name` is a function or class. */
+    function localIsCallable(node, name) {
+      const sourceCode = context.sourceCode ?? context.getSourceCode();
+      let scope = sourceCode.getScope(node);
+      let variable;
+      while (scope && !variable) {
+        variable = scope.set.get(name);
+        scope = scope.upper;
+      }
+      return (variable?.defs ?? []).some(
+        (def) =>
+          def.type === "FunctionName" ||
+          def.type === "ClassName" ||
+          (def.type === "Variable" &&
+            def.node.init != null &&
+            isCallableValue(def.node.init)),
+      );
+    }
+
     return {
       ImportDeclaration: checkSource,
       ExportNamedDeclaration(node) {
@@ -202,9 +252,31 @@ const rule = {
           checkSource(node);
           return;
         }
-        if (node.declaration?.type !== "VariableDeclaration") return;
-        for (const declarator of node.declaration.declarations) {
-          if (declarator.init) visitExported(declarator.init);
+        const decl = node.declaration;
+        if (decl && CALLABLE_DECLARATIONS.has(decl.type)) {
+          reportExportedFunction(decl.id ?? decl, decl.id?.name);
+          return;
+        }
+        if (decl?.type === "VariableDeclaration") {
+          for (const declarator of decl.declarations) {
+            if (!declarator.init) continue;
+            if (isCallableValue(declarator.init)) {
+              reportExportedFunction(declarator.id, declarator.id.name);
+              continue;
+            }
+            visitExported(declarator.init);
+          }
+          return;
+        }
+        // `export { local }` / `export { local as name }` re-export a local
+        // binding: resolve it to its declaration.
+        if (node.exportKind === "type") return;
+        for (const specifier of node.specifiers ?? []) {
+          if (specifier.exportKind === "type") continue;
+          if (specifier.local.type !== "Identifier") continue;
+          if (localIsCallable(node, specifier.local.name)) {
+            reportExportedFunction(specifier.local, specifier.local.name);
+          }
         }
       },
       ExportAllDeclaration: checkSource,
@@ -219,7 +291,16 @@ const rule = {
         }
       },
       ExportDefaultDeclaration(node) {
-        visitExported(node.declaration);
+        const decl = node.declaration;
+        if (
+          CALLABLE_DECLARATIONS.has(decl.type) ||
+          isCallableValue(decl) ||
+          (decl.type === "Identifier" && localIsCallable(node, decl.name))
+        ) {
+          reportExportedFunction(decl, "default");
+          return;
+        }
+        visitExported(decl);
       },
     };
   },

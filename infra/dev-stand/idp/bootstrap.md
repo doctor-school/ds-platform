@@ -75,7 +75,10 @@ readable file, and seeds the instance with the **Login V2** feature required.
 > #146). Each app therefore carries its own `loginVersion`: the headless API app
 > (`provision.sh` step 3), Zitadel's Management Console (step 3.ter), the
 > storefront clients (step 3.bis) and, on stage, the per-slot clients
-> (`tools/staging/idp.mjs`). After those pins, step 4 switches the instance flag
+> (`tools/staging/idp.mjs`, whose redirect converge also re-writes the headless
+> app's loginVersion as desired state, so the stage flag-off run waits for that
+> tooling on `main` — `infra/deploy/compose/stg-infra/README.md`). After those
+> pins, step 4 switches the instance flag
 > `loginV2.required` **off**: with it on, Zitadel overrides every client's own
 > `base_uri` with the instance one (v4.17.3 `internal/query/oidc_client.go`
 > `ActiveOIDCClientByID`) and the storefronts would sign in on the wrong host.

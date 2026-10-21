@@ -2958,6 +2958,9 @@ function realEffects(
           // never the start-time snapshot `main()` took (#2694).
           readDesired: async () =>
             desiredRedirectSetAt(step, Object.keys(await readLiveSlots()), boxEnv),
+          // The shared app's Login V2 base_uri is desired state too: the IdP origin's
+          // login UI unless stage.env carries provision.sh's own override.
+          loginBaseUri: boxEnv.IDP_LOGIN_BASE_URI,
           log,
         });
         // One Academy + one doctor storefront client per live slot (003 EARS-60):

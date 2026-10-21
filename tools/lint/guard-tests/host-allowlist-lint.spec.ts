@@ -92,7 +92,7 @@ describe("host-allowlist-lint", () => {
     expect(stderr).toContain("glob row");
   });
 
-  it("2002: honest limit — a PR touching a row whose `until` names a wave → exit 1 with the row quoted", () => {
+  it("2074: honest limit — a PR touching a row whose `until` names a wave is annotated with the row quoted, never blocked → exit 0", () => {
     const { code, stderr } = runGuard(GUARD, dir("warn-until-wave-touch"), {
       env: {
         GITHUB_EVENT_NAME: "pull_request",
@@ -100,7 +100,8 @@ describe("host-allowlist-lint", () => {
         LINT_GH_FIXTURE_DIR: gh("warn-until-wave-touch"),
       },
     });
-    expect(code).toBe(1);
+    expect(code).toBe(0);
+    expect(stderr).toContain("honest limit (annotation, not blocking)");
     expect(stderr).toContain("apps/doctor/lib/a.ts");
     expect(stderr).toContain("wave 1");
   });

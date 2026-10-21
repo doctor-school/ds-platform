@@ -65,7 +65,7 @@ It also includes a **UI-quality-fix round** (spacing / state / hover / reflow de
 
 ## Output
 
-- An explicit **reuse/adoption decision** in the first reply + PR body: `cross-front reuse: <canonical capability> from <owner>` plus `adopted <block> from <registry>`, or `bespoke — sibling-front inventory + toolbox search returned no fit because …`. The registry citation remains machine-checked by `registry-research`.
+- An explicit **reuse/adoption decision** in the first reply + PR body: `adopted <block> from <registry>` naming the canonical capability and its owner, or `bespoke — sibling-front inventory + toolbox search returned no fit because …`. The registry citation is machine-checked by `registry-research`; where storefront code lives is checked by the `host-allowlist` / `route-mount` / `import-boundary` tree guards against `capability-ownership.md`.
 - Adopted/bespoke code lives in `@ds/design-system`, token-only, live-verified; a freshly-researched class also lands a constitution section.
 
 ## Failure modes

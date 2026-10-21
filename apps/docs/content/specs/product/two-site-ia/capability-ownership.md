@@ -1,6 +1,6 @@
 ---
 title: "Cross-front capability ownership registry"
-description: "The single checked-in answer to «who owns this behaviour» across Academy (apps/portal) and Doctor (apps/doctor): canonical location, kind, both consumers, and the extraction/debt state of every cross-front capability. Enforced at the Issue gate (`Reuse:`) and at the PR gate (`cross-front-reuse`)."
+description: "The single checked-in answer to «who owns this behaviour» across Academy (apps/portal) and Doctor (apps/doctor): canonical location, kind, both consumers, and the extraction/debt state of every cross-front capability. Enforced at the Issue gate (`Reuse:`) and in CI by the host-allowlist / route-mount / import-boundary tree guards."
 slug: two-site-ia-capability-ownership
 epic: ./README-ru.md
 milestone: https://github.com/doctor-school/ds-platform/milestone/13
@@ -18,7 +18,7 @@ The registry exists because the rule kept being restated and kept being missed: 
 **How it is used.**
 
 - **Before opening an Issue** on a `track:doctor` / `track:academy` deliverable: find the capability's row here (or grep `apps/portal`, `apps/doctor`, `packages/` and ADD the row), then fill the Issue's `Reuse:` field with one of `canon: <path>` / `extract-from: <path> (#N)` / `new: <reason>`. `pnpm issue:create` fails closed without it.
-- **Before opening a PR** that touches `apps/portal/{app,components,lib}/**` or `apps/doctor/{app,components,lib}/**`: put a `cross-front reuse:` line in the PR body naming the canonical path you consumed, or stating `new` / `bespoke` with a rationale. The `cross-front-reuse` guard (`tools/lint/cross-front-reuse-lint.ts`, WARN posture per ADR-0007 §2.6) checks it.
+- **Before opening a PR** that adds or moves a file under `apps/portal/**` or `apps/doctor/**`: give it its row in [Host-file allowlist](#host-file-allowlist) or [Route-file registry](#route-file-registry) in the same PR. The BLOCK tree guards check the tree against this file: `pnpm lint:host-allowlist` (every host file has an exact-path row), `pnpm lint:route-mount` (every route file has a row, and a `mounted` route is mount + config, plus at most one sibling server-action binding) and `pnpm lint:import-boundary` (packages never import apps; host configs carry no host logic).
 - **Row maintenance is not a separate chore.** The PR that moves a capability — extracts it, adds the second consumer, or lands the shared unit — **updates its row in the same commit**. A row that disagrees with the tree is a review finding, not a follow-up.
 
 `Kind` is one of **shared package** (`packages/**` — design-system block/primitive, schema, codec), **shared API** (`apps/api/**` service/repository + a `packages/schemas` contract), or **host-only** (a file listed in the [Host-file allowlist](#host-file-allowlist) below, with the reason recorded there). There is no «app-local» kind: a helper under `apps/<host>/{lib,components}` whose sibling exists on the other host is a violation, not a licence (ADR-0013 §A1). Every row also carries **Target package / wave** — the package the behaviour lands in and the wave that moves it (tech spec [`2026-09-07-one-code-two-storefronts-plan-en.md`](../../tech/2026-09-07-one-code-two-storefronts-plan-en.md) §4).
@@ -165,7 +165,7 @@ This table is the checked-in answer key for every Next.js composition route file
 `package` is the `@ds/<name>` the route mounts or will mount; a `permanent` row carries `—` plus the reason it is host-only. `until` is one of three recorded states:
 
 - **`wave N (#Issue)`** — the page still carries inline host logic until that wave extracts it into the package. Its body is **not** read by the guard; a PR diff touching it is a WARN with the row quoted (the honest limit), so growth of a doomed route file stays visible.
-- **`mounted`** — the page is a thin projection **now**, and the guard enforces mount-only: the only imports allowed are the package (and its subpaths), the route's own host-config module and `import type … from "next"`; the only body allowed is Next segment config plus one default export returning the package mount with its config, optionally preceded by `await` of the route props.
+- **`mounted`** — the page is a thin projection **now**, and the guard enforces mount-only: the only imports allowed are the package (and its subpaths), the route's own host-config module and `import type … from "next"`; the only body allowed is Next segment config (`dynamic = "<literal>"`, `metadata` of string literals and package-import reads) plus one default export returning the package mount with its config, optionally preceded by `await` of the route props; the mount's attributes are string literals or bare identifiers naming the host config, the binding, a route prop or an awaited name.
 - **`permanent`** — a genuinely host-only route (brand frame, host-only surface) that no wave replaces.
 
 Out of scope, as in the allowlist: `loading` / `error` / `not-found` / `template` / `default` / `route` files — presentational shells and API stubs, not the composition surface a wave extracts.

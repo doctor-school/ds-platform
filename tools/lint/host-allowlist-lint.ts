@@ -5,13 +5,12 @@
  * `apps/docs/content/specs/tech/2026-09-07-one-code-two-storefronts-plan-en.md`
  * §3 rule 3, first bullet + «Honest limit» bullet; §5).
  *
- * Why this exists: `cross-front-reuse` asks the PR AUTHOR to declare, in the PR
- * body, which canonical unit a storefront file consumed. A body field is a
- * promise, not a fact — it is written once, by the same person who wrote the
- * duplicate, and it says nothing about the file that quietly appears in a
- * directory nobody listed. Twelve reuse escalations in seven days were all of
- * that shape. This guard replaces the promise with a tree check against a
- * checked-in answer key: the file either has a row in
+ * Why this exists: a PR-body declaration of which canonical unit a storefront
+ * file consumed is a promise, not a fact — it is written once, by the same
+ * person who wrote the duplicate, and it says nothing about the file that
+ * quietly appears in a directory nobody listed. Twelve reuse escalations in
+ * seven days were all of that shape. This guard is a tree check against a
+ * checked-in answer key instead: the file either has a row in
  * `apps/docs/content/specs/product/two-site-ia/capability-ownership.md` →
  * «Host-file allowlist», or it does not exist as far as the rule is concerned.
  * There is NO path list in this source — the registry is the single answer key,
@@ -33,18 +32,16 @@
  *      the tree check vacuously green. Next.js route groups and dynamic
  *      segments are legitimate path characters, not globs.
  *   3. HONEST LIMIT — on a `pull_request` event, a diff touching a file whose
- *      row `until` names an extraction wave is reported with the row quoted, so
- *      growth of a file the wave is about to delete is visible. `permanent`
+ *      row `until` names an extraction wave is annotated with the row quoted
+ *      (never a blocking finding), so growth of a file the wave is about to
+ *      delete is visible. `permanent`
  *      rows are host-only by decision and never flag. Beyond that, allowlisted
  *      files remain reviewer territory: the claim is «no NEW host file without
  *      a registry event», not «no duplication».
  *
- * Severity: WARN in Phase 0 (ADR-0007 §2.6 — a new guard lands WARN, promotes
- * once stable). The severity lives in the exit code plus the `guards-warn`
- * step's `continue-on-error`; the step is NOT in the `ci` needs-list. #2074
- * promotes it to BLOCK after wave 1 lands and retires `cross-front-reuse` at
- * the same time — that PR-body marker exists only because this tree check did
- * not, so the two must never both be load-bearing.
+ * Severity: BLOCK (ADR-0007 §2.6; tech spec §5) — a plain step of the
+ * `guards-block` batch, which is in the `ci` needs-list. Classes 1 and 2 exit 1;
+ * class 3 alone prints its annotation and exits 0.
  *
  * Outside a `pull_request` event class 3 is skipped with an info line; classes
  * 1 and 2 always run (that is what `pnpm pr:preflight --static` executes).
@@ -220,18 +217,20 @@ async function main(): Promise<void> {
     }
   }
 
-  // Class 3 — the honest limit.
-  findings.push(...(await honestLimit(rows)));
+  // Class 3 — the honest limit: annotated, never blocking.
+  const notes = await honestLimit(rows);
+  if (notes.length > 0) {
+    process.stderr.write(
+      `${TAG} ${notes.length} honest limit (annotation, not blocking) — tech spec §3 rule 3:\n`,
+    );
+    for (const n of notes) process.stderr.write(`::warning::${TAG} ${n}\n`);
+  }
 
   if (findings.length > 0) {
     process.stderr.write(
       `${TAG} ${findings.length} finding(s) — host files answer to the registry (#2002, tech spec §3 rule 3):\n`,
     );
     for (const f of findings) process.stderr.write(`${TAG}   ${f}\n`);
-    process.stderr.write(
-      `${TAG} WARN v1 (ADR-0007 §2.6): annotated, not merge-blocking. #2074 promotes this guard to BLOCK ` +
-        `after wave 1 and retires the cross-front-reuse PR-body marker it replaces.\n`,
-    );
     process.exit(1);
   }
 

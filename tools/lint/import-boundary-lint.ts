@@ -8,11 +8,9 @@
  *
  * Why a guard and not just `eslint .`: the root lint run registers these rules at
  * `warn`, which exits 0 — useful in an editor, useless as a gate. This entry is
- * the PROMOTABLE pass/fail surface: it runs the dedicated config
+ * the pass/fail surface: it runs the dedicated config
  * (`eslint.import-boundary.config.mjs`, both rules at `error`) programmatically
- * and turns any finding into exit 1, so the CI step's `continue-on-error` is the
- * ONLY thing making it non-blocking — flip that (#2074) and the guard is BLOCK
- * with no rule change.
+ * and turns any finding into exit 1.
  *
  * What it checks (rules own the detail; both carry their rationale in-file):
  *   1. `local/package-import-boundary` over `packages/**` — no reach into
@@ -25,8 +23,8 @@
  *      in an exported object literal outside the closed adapter list (empty until
  *      #2027 lands `HostConfig`).
  *
- * Severity: WARN in Phase 0 (ADR-0007 §2.6 — a new guard lands WARN, promotes
- * once stable). The step is NOT in the `ci` needs-list.
+ * Severity: BLOCK (ADR-0007 §2.6; tech spec §5) — a plain step of the
+ * `guards-block` batch, which is in the `ci` needs-list.
  *
  * Run: `pnpm lint:import-boundary`. Findings: stderr, exit 1. Clean: stdout
  * summary, exit 0.
@@ -91,9 +89,6 @@ async function main(): Promise<void> {
       `${TAG} ${findings.length} finding(s) — the package graph and host-config purity are the import boundary (#2002, tech spec §3 rule 3 / §4):\n`,
     );
     for (const f of findings) process.stderr.write(`${TAG}   ${f}\n`);
-    process.stderr.write(
-      `${TAG} WARN v1 (ADR-0007 §2.6): annotated, not merge-blocking. #2074 promotes this guard to BLOCK after wave 1.\n`,
-    );
     process.exit(1);
   }
 

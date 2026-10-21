@@ -30,7 +30,7 @@
  * shared package that would need `apps/portal` to compile is a stop, not a
  * temporary `paths` alias»), never an allowlist entry.
  *
- * Severity: WARN v1 (ADR-0007 §2.6); #2074 promotes the guard to BLOCK.
+ * Severity: BLOCK via `pnpm lint:import-boundary` (ADR-0007 §2.6; tech spec §5).
  */
 
 import { sep } from "node:path";

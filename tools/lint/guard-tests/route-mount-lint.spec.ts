@@ -60,6 +60,238 @@ describe("route-mount-lint", () => {
     expect(stderr).toContain("@/lib/session");
   });
 
+  it('2074: green — a `mounted` page with one sibling server-action binding (`"use server"`, package + host-config imports, `return <packageFn>(<HOST_CONFIG>, …)`) → exit 0', () => {
+    const { code, stdout } = runGuard(GUARD, dir("green-binding"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(0);
+    expect(stdout).toContain("1 server-action binding");
+  });
+
+  it("2074: red — a statement beyond the single `return` in a binding export → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-binding-extra-statement"),
+      { env: TREE_ONLY },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("beyond the server-action binding");
+  });
+
+  it("2074: red — a binding importing host logic (`@/lib/session`) → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-binding-foreign-import"),
+      {
+        env: TREE_ONLY,
+      },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("foreign import `@/lib/session`");
+  });
+
+  it("2074: red — a binding whose export returns a call of anything but a package function → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-binding-non-package-call"),
+      { env: TREE_ONLY },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain(
+      "`renderLocally` is not imported from `@ds/events-storefront`",
+    );
+  });
+
+  it('2074: red — a sibling without the `"use server"` directive is not a binding → exit 1', () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-no-directive"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain('`"use server"`');
+  });
+
+  it("2074: red — a binding parameter shadowing the package function with a default arrow (fetch, branching, dynamic import) → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-param-shadow"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("parameter `renderEventsBlock`");
+  });
+
+  it("2074: red — a binding parameter with a default value computing a fetch → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-param-default"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("parameter `session` has a default value");
+  });
+
+  it("2074: red — an `if` inside an arrow-function argument of a binding → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-arrow-branch"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("argument `() =>");
+  });
+
+  it("2074: red — a mounted page whose route-prop parameter has a default value computing a fetch → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-mount-param-default"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
+    expect(stderr).toContain("parameter `searchParams` has a default value");
+  });
+
+  it("2074: red — a binding argument that is an arrow mutating its input → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-arrow-mutate"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("argument `() =>");
+  });
+
+  it("2074: red — a binding argument that reads a member (`input.slug`) → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-member-arg"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("argument `input.slug`");
+  });
+
+  it("2074: red — a mounted page destructuring its route props under a computed key → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-mount-param-computed-key"),
+      { env: TREE_ONLY },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
+    expect(stderr).toContain("route-prop element");
+  });
+
+  it("2074: red — a mounted page collecting its route props with a rest element → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-mount-param-rest"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
+    expect(stderr).toContain("route-prop element `...searchParams`");
+  });
+
+  it("2074: red — the page body destructures the awaited route props with a default computing a fetch → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-mount-body-destructure-default"),
+      { env: TREE_ONLY },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
+    expect(stderr).toContain("parameter `q` has a default value");
+  });
+
+  it("2074: red — the page body destructures the awaited route props under a computed key → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-mount-body-computed-key"),
+      { env: TREE_ONLY },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
+    expect(stderr).toContain("awaited route-prop element");
+  });
+
+  it("2074: red — the page body renames an awaited route prop onto the mount import's name → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-mount-body-shadow"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
+    expect(stderr).toContain(
+      "awaited route-prop element `q: EventsListingPage`",
+    );
+  });
+
+  it("2074: red — a binding exporting an action the page does not import → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-second-export"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain(
+      "`unusedSecondAction` is not imported by the route file",
+    );
+  });
+
+  it("2074: red — a binding whose action is a default export → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-binding-default-export"),
+      {
+        env: TREE_ONLY,
+      },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("a default export");
+  });
+
+  it("2074: red — a binding export declaring a `this` parameter → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-this-param"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("a `this` parameter");
+  });
+
+  it("2074: red — a binding passing a type-only import as an argument → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-binding-type-arg"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
+    expect(stderr).toContain("argument `EventsBlockRetryInput`");
+  });
+
+  it.each([
+    ["red-mount-prop-tagged-template", "attribute `session`"],
+    ["red-mount-prop-env", "attribute `hostFlag`"],
+    ["red-mount-prop-inline-override", "attribute `config`"],
+    ["red-mount-prop-arrow", "attribute `retry`"],
+    ["red-mount-nested-jsx", "attribute `slot`"],
+    ["red-mount-spread-attribute", "a spread attribute"],
+    ["red-mount-children", "the mount has children"],
+  ])(
+    "2074: red — a mount prop outside the allowlist (%s) → exit 1",
+    (name, needle) => {
+      const { code, stderr } = runGuard(GUARD, dir(name), { env: TREE_ONLY });
+      expect(code).toBe(1);
+      expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
+      expect(stderr).toContain(needle);
+    },
+  );
+
+  it.each([
+    ["red-segment-tagged-template", "segment config `revalidate`"],
+    ["red-segment-getter-metadata", "`metadata` member `get title"],
+  ])(
+    "2074: red — a segment-config export outside the allowlist (%s) → exit 1",
+    (name, needle) => {
+      const { code, stderr } = runGuard(GUARD, dir(name), { env: TREE_ONLY });
+      expect(code).toBe(1);
+      expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
+      expect(stderr).toContain(needle);
+    },
+  );
+
   it("2002: red — a route file with no registry row → exit 1", () => {
     const { code, stderr } = runGuard(GUARD, dir("red-unregistered"), {
       env: TREE_ONLY,
@@ -86,7 +318,7 @@ describe("route-mount-lint", () => {
     expect(stderr).toContain("glob row");
   });
 
-  it("2002: honest limit — a PR touching a `wave N` route file → exit 1 with the row quoted", () => {
+  it("2074: honest limit — a PR touching a `wave N` route file is annotated with the row quoted, never blocked → exit 0", () => {
     const { code, stderr } = runGuard(GUARD, dir("warn-until-wave-touch"), {
       env: {
         GITHUB_EVENT_NAME: "pull_request",
@@ -94,7 +326,8 @@ describe("route-mount-lint", () => {
         LINT_GH_FIXTURE_DIR: gh("warn-until-wave-touch"),
       },
     });
-    expect(code).toBe(1);
+    expect(code).toBe(0);
+    expect(stderr).toContain("honest limit (annotation, not blocking)");
     expect(stderr).toContain("apps/doctor/app/(auth)/login/page.tsx");
     expect(stderr).toContain("wave 1 (#2027)");
   });

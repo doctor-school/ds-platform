@@ -111,6 +111,9 @@ jobs:
       deployment: false
     # The poll below gives up after 60 min; the job limit only backs it up.
     timeout-minutes: 75
+    outputs:
+      # `new` = this run wrote the Deployment record; `existing` = already recorded.
+      recorded: ${{ steps.record.outputs.recorded }}
     permissions:
       actions: read
       checks: read
@@ -183,10 +186,14 @@ jobs:
           # margin.
           deadline=$((SECONDS + 60 * 60))
           ssh_failures=0
+          # The last readable status reply: lost contact still records its basis.
+          last_json='{}'
           # The terminal verdict + the release-notes basis, for the record step.
+          # `unknown` = the runner lost contact (ssh down, or the time-out): the
+          # record step writes the `error` Deployment record before the job fails.
           terminal() {
             echo "terminal=$1" >> "$GITHUB_OUTPUT"
-            prev=$(jq -r '.driver.previousSha // ""' <<<"$json")
+            prev=$(jq -r '.driver.previousSha // ""' <<<"$last_json")
             [[ "$prev" =~ ^[0-9a-f]{40}$ ]] || prev=""
             echo "previous-sha=$prev" >> "$GITHUB_OUTPUT"
           }
@@ -207,6 +214,7 @@ jobs:
               echo "status: ssh failed ($(head -n 1 "$RUNNER_TEMP/ssh.err"))"
               if [ "$ssh_failures" -ge 4 ]; then
                 echo "::error::ssh to ds-api-prod failed $ssh_failures times in a row"
+                terminal unknown
                 exit 1
               fi
               sleep 15
@@ -217,6 +225,7 @@ jobs:
               echo "status: unreadable reply"
             else
               echo "status: $line"
+              last_json=$json
               active=$(jq -r '.driver.active // ""' <<<"$json")
               rc=$(jq -r '.driver.rc // ""' <<<"$json")
               state=$(jq -r '.release.state // ""' <<<"$json")
@@ -240,6 +249,7 @@ jobs:
             fi
             if [ "$SECONDS" -ge "$deadline" ]; then
               echo "::error::the release did not finish within 60 min (the driver unit keeps running on the box)"
+              terminal unknown
               exit 1
             fi
             sleep 15
@@ -249,8 +259,10 @@ jobs:
         if: always()
         run: rm -rf "$RUNNER_TEMP/prod-ssh"
 
-      # Success and failure alike, once the driver reached a terminal status.
+      # Success, failure and lost contact alike, once the poll set a verdict. A
+      # success already recorded for the SHA writes nothing (`recorded=existing`).
       - name: Release cut and the Deployment record
+        id: record
         if: always() && steps.poll.outputs.terminal != ''
         env:
           GH_TOKEN: ${{ github.token }}
@@ -264,7 +276,9 @@ jobs:
 
   digest:
     needs: deploy
-    if: needs.deploy.result == 'success'
+    # Only a newly written success record: a re-dispatch whose success is already
+    # recorded posts no second digest.
+    if: needs.deploy.result == 'success' && needs.deploy.outputs.recorded == 'new'
     permissions:
       contents: read
       deployments: read

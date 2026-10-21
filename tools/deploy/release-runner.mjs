@@ -9,10 +9,13 @@
 //       success, CI is green, the release gate and the live-broadcast gate pass, and
 //       the recorded `images-<sha>.json` exists. Prints one status line per check;
 //       the first refusal exits 1. Writes `images-run-id=<id>` to $GITHUB_OUTPUT.
-//   record --sha <sha> --state succeeded|failed [--previous-sha <sha>]
+//   record --sha <sha> --state succeeded|failed|unknown [--previous-sha <sha>]
 //       After a terminal status of the prod release driver: on success the release
 //       cut, then (success and failure alike) the ONE GitHub Deployment record with
-//       the owner quote ($OWNER_QUOTE — env only, never an argument).
+//       the owner quote ($OWNER_QUOTE — env only, never an argument). `unknown` (the
+//       runner lost contact) records `error`; a success already recorded for the SHA
+//       writes nothing. Writes `recorded=existing|new` to $GITHUB_OUTPUT; a record
+//       that could not be written exits 1.
 //
 // Every check is the workstation path's own module (ci-gate, release-gate,
 // live-broadcast-check, lib/registry, deployment-record, cut-release); this file
@@ -59,6 +62,9 @@ const FULL_SHA = /^[0-9a-f]{40}$/;
 const RECORD_STATES = Object.freeze({
   succeeded: "success",
   failed: "failure",
+  // The runner lost contact with the driver (ssh down, or the 60-min time-out):
+  // GitHub's «could not determine» state; a re-dispatch of the SHA records the verdict.
+  unknown: "error",
 });
 
 /** Parse the CLI. Unknown flags are refused, so no escape hatch can be passed. */
@@ -92,7 +98,7 @@ export function parseRunnerArgs(argv) {
   const state = values["--state"];
   if (!Object.hasOwn(RECORD_STATES, state ?? "")) {
     return {
-      error: `--state must be succeeded|failed, got: ${state ?? "(none)"}`,
+      error: `--state must be succeeded|failed|unknown, got: ${state ?? "(none)"}`,
     };
   }
   const previous = values["--previous-sha"] || null;
@@ -258,9 +264,44 @@ export async function runPreflight({ checks, log = (l) => console.log(l) }) {
 }
 
 /**
+ * Whether a production Deployment of `sha` already carries a `success` status
+ * (#3179): a re-dispatch answered `already-succeeded` after an earlier dispatch
+ * recorded it. A success a later release made `inactive` still counts. A Deployment
+ * that only holds `error` (the earlier dispatch lost contact) or `failure` does not:
+ * the re-dispatch records the verdict (spec §9 «Runner dies mid-step»).
+ *
+ * @param {{sha: string, gh?: (args: string[]) => string}} args `gh` returns stdout.
+ */
+export async function successRecordExistsViaGh({
+  sha,
+  gh = (args) => capture("gh", args),
+}) {
+  const deployments = JSON.parse(
+    gh([
+      "api",
+      `repos/{owner}/{repo}/deployments?sha=${sha}&environment=production&per_page=100`,
+    ]) || "[]",
+  );
+  for (const d of deployments) {
+    const statuses = JSON.parse(
+      gh([
+        "api",
+        `repos/{owner}/{repo}/deployments/${d.id}/statuses?per_page=100`,
+      ]) || "[]",
+    );
+    if (statuses.some((s) => s?.state === "success")) return true;
+  }
+  return false;
+}
+
+/**
  * After a terminal driver status: the release cut on success (its own base
  * selection), then the ONE Deployment record for success and failure alike, with
- * the owner quote; `previousSha` (the driver's `previousSha`) is the notes basis.
+ * the owner quote; `previousSha` (the driver's `previousSha`) is the basis of the
+ * Deployment-record notes. `unknown` records `error` with no cut. A success whose
+ * record already exists writes nothing (`recorded: "existing"`).
+ *
+ * @returns {Promise<{ok: boolean, recorded: "existing"|"new", error?: string, deploymentId?: number}>}
  */
 export async function runRecord({
   sha,
@@ -269,6 +310,7 @@ export async function runRecord({
   ownerQuote,
   cut = (args) => cutDeployRelease(args),
   record = (args) => recordDeployment(args),
+  successRecorded = (s) => successRecordExistsViaGh({ sha: s }),
   log = (l) => console.log(l),
 }) {
   if (!String(ownerQuote ?? "").trim()) {
@@ -277,6 +319,12 @@ export async function runRecord({
     );
   }
   const deploymentState = RECORD_STATES[state];
+  if (state === "succeeded" && (await successRecorded(sha))) {
+    log(
+      `↷ already recorded: a success Deployment exists for ${sha.slice(0, 12)} — no cut, no second record`,
+    );
+    return { ok: true, recorded: "existing" };
+  }
   if (state === "succeeded") {
     try {
       const res = cut({ targetSha: sha });
@@ -291,7 +339,7 @@ export async function runRecord({
       );
     }
   }
-  return record({
+  const res = await record({
     prevSha: previousSha,
     sha,
     state: deploymentState,
@@ -299,6 +347,22 @@ export async function runRecord({
     healthUrl: PROD_HEALTH_URL,
     log,
   });
+  return { ...res, recorded: "new" };
+}
+
+/**
+ * The CLI verdict of a `runRecord` result: a record that could not be written
+ * fails the job (#3179) — the release's one record is its audit trail.
+ */
+export function reportRecord(res) {
+  if (!res.ok) {
+    return {
+      exitCode: 1,
+      output: null,
+      message: `::error::the Deployment record was not written: ${res.error}`,
+    };
+  }
+  return { exitCode: 0, output: `recorded=${res.recorded}\n`, message: null };
 }
 
 function repoName() {
@@ -346,10 +410,12 @@ async function main() {
     previousSha: args.previousSha,
     ownerQuote: process.env.OWNER_QUOTE,
   });
-  if (!res.ok)
-    console.log(
-      `::warning::the Deployment record was not written: ${res.error}`,
-    );
+  const verdict = reportRecord(res);
+  if (verdict.message) console.error(verdict.message);
+  if (verdict.output && process.env.GITHUB_OUTPUT) {
+    appendFileSync(process.env.GITHUB_OUTPUT, verdict.output);
+  }
+  if (verdict.exitCode !== 0) process.exit(verdict.exitCode);
 }
 
 const invokedPath = process.argv[1] ? realpathSync(process.argv[1]) : "";

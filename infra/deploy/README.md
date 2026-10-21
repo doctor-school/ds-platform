@@ -114,16 +114,12 @@ Note: redis runs AOF with **no `maxmemory` / eviction policy set yet** — fine 
   with the token sourced: `set -a; . ../.env; set +a` (`TWC_TOKEN` lives in
   `infra/deploy/.env`, gitignored). Never ask the owner for Timeweb keys — they
   are already on the workstation.
-- **SSH to api-prod is gated by `admin_ssh_cidr`** (gitignored
-  `terraform.tfvars`): the api-prod firewall allows port 22 only from that /32
-  (stage-1 takes 22 from anywhere since #2984, see [SSH access model](#ssh-access-model-2984)).
-  An SSH **timeout** with a green `https://api.doctor.school/v1/health` almost
-  always means the workstation's egress IP changed (verify: `curl
-https://api.ipify.org`), NOT a downed box — update `admin_ssh_cidr` in
-  tfvars, then `terraform plan` (expect exactly one in-place
-  `twc_firewall_rule.api_ssh` update) and `apply`. **Recurring** (the egress IP
-  is dynamic): `184.22.76.93` → `27.130.223.208` (2026-07-12, #729 wave-1 apply)
-  → `27.130.220.41` (2026-07-18, `release-2026.07.18-1` deploy). Runbook
+- **SSH to api-prod takes port 22 from anywhere** (#3179, like stage-1 since #2984;
+  see [SSH access model](#ssh-access-model-2984)): the release workflow's
+  GitHub-hosted runners have no fixed range, so the workstation's dynamic egress IP
+  no longer needs a `/32` in the firewall. An SSH **timeout** with a green
+  `https://api.doctor.school/v1/health` is not a downed box: `terraform plan` shows
+  whether `twc_firewall_rule.api_ssh` drifted from `0.0.0.0/0`. Runbook
   failure-mode: `run-prod-deploy` SKILL → Failure modes.
 
 ## SSH access model (#2984)
@@ -141,8 +137,9 @@ Settings: `/etc/ssh/sshd_config.d/10-ds-hardening.conf` (`PermitRootLogin no`,
 `PasswordAuthentication no`, `KbdInteractiveAuthentication no`, `MaxStartups 10:30:60`),
 the image's `PermitRootLogin yes` in `/etc/ssh/sshd_config` commented out, root's
 `authorized_keys` empty, fail2ban (`sshd` jail) and unattended-upgrades on,
-`/etc/ds-platform/box-role` = `prod` / `stage` / `data`. ds-api-prod's port 22 stays on
-`admin_ssh_cidr` until step (e); ds-data-prod stays VPC-only and holds no CI key.
+`/etc/ds-platform/box-role` = `prod` / `stage` / `data`. ds-api-prod's port 22 is open to
+the internet like stage-1's (GitHub-hosted runners have no fixed range; keys only, the CI
+key reaches only its forced command); ds-data-prod stays VPC-only and holds no CI key.
 
 `ds-deploy-entrypoint` is installed beside `ds-release` by every prod run (forward
 deploy from the shipped tree, `--rollback` from the operator checkout) and, on stage-1,
@@ -187,15 +184,16 @@ its key body, so re-running with the same key changes nothing.
 
 **Data-prod hop key (ds-api-prod → ds-data-prod, once, #3157):** the prod release
 driver's unit runs on ds-api-prod and reaches ds-data-prod over the VPC as `deploy` with a
-dedicated key. Generate it on ds-api-prod, owned by `deploy`, mode 0600, and authorize its
+dedicated key. Generate it on ds-api-prod straight into `/home/deploy/.ssh/data-prod-hop`,
+owned by `deploy`, mode 0600, beside `deploy`'s `known_hosts` (the unit runs as `deploy`,
+and `/etc/ds-platform` is root-only 0700, so a key there is unreadable to it); authorize its
 public half on ds-data-prod restricted to ds-api-prod's VPC address
 (`var.api_prod_private_ip`, default `192.168.0.20`), so the key works from nowhere else:
 
 ```bash
 # on ds-api-prod
-sudo -u deploy ssh-keygen -t ed25519 -N '' -C ds-api-prod-hop -f /tmp/hop
-sudo install -m 0600 -o deploy -g deploy /tmp/hop /etc/ds-platform/data-prod-ssh-key
-cat /tmp/hop.pub; sudo rm -f /tmp/hop /tmp/hop.pub
+sudo -u deploy ssh-keygen -t ed25519 -N '' -C ds-api-prod-hop -f /home/deploy/.ssh/data-prod-hop
+cat /home/deploy/.ssh/data-prod-hop.pub
 # pin data-prod's host key for deploy (the driver uses StrictHostKeyChecking=yes);
 # never trust on first use: the scanned fingerprint must equal the one read on data-prod
 ssh-keyscan -t ed25519 192.168.0.10 > /tmp/data-prod.hostkey
@@ -211,7 +209,7 @@ restrict,from="192.168.0.20" ssh-ed25519 AAAA… ds-api-prod-hop
 `restrict` turns off pty and every forwarding; the key carries no forced command, so it
 reaches `deploy`'s sudo — the accepted risk of tech spec §4 (ds-api-prod already holds the
 database owner credentials), narrowed to a data-prod forced command in step (f). Prove it
-from ds-api-prod: `sudo -u deploy ssh -i /etc/ds-platform/data-prod-ssh-key -o
+from ds-api-prod: `sudo -u deploy ssh -i /home/deploy/.ssh/data-prod-hop -o
 IdentitiesOnly=yes -o BatchMode=yes deploy@192.168.0.10 true`.
 
 **Node on stage-1 and ds-api-prod (post-boot, once):** the release driver runs

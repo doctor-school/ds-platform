@@ -57,7 +57,7 @@ variable "prod_breakglass_ssh_pubkey_path" {
 }
 
 variable "admin_ssh_cidr" {
-  description = "CIDR allowed to reach SSH (22) on api-prod (stage-1 takes 22 from anywhere since #2984, behind key-only auth and forced-command CI keys). Set to the operator's admin IP/CIDR — NOT 0.0.0.0/0."
+  description = "Operator admin IP/CIDR. No firewall rule reads it: api-prod (#3179) and stage-1 (#2984) take 22 from anywhere, behind key-only auth and forced-command CI keys."
   type        = string
   # no default — force an explicit, non-open value.
 }

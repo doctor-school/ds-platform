@@ -30,7 +30,7 @@
 #         stage-main: node <tree>/tools/staging/slot.mjs up main --ref <sha> --local --images-file -
 #         prod:       node <tree>/tools/deploy/prod.mjs --local --images-file -
 #       — the operator's converge / release, step for step, through the box-local
-#       executor (prod: data-prod over the VPC hop, /etc/ds-platform/data-prod-ssh-key).
+#       executor (prod: data-prod over the VPC hop, /home/deploy/.ssh/data-prod-hop).
 #       `-` reads the inherited fd 0: the manifest is root-only and the unit runs as
 #       deploy, so re-opening it as /dev/stdin (via /proc/self/fd/0) is EACCES.
 #

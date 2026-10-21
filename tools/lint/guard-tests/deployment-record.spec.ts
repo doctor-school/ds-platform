@@ -235,6 +235,30 @@ describe("deployment-record — state + owner quote (#3158)", () => {
     expect(deployment.payload.state).toBe("failure");
   });
 
+  it("state error → the lost-contact record: verdict unknown, re-dispatch records it", () => {
+    const { deployment, status } = buildDeploymentPayload({
+      sha: SHA,
+      releaseTag: null,
+      notesText: "",
+      healthUrl: HEALTH,
+      nowIso: NOW,
+      state: "error",
+      ownerQuote: QUOTE,
+    });
+    expect(status.state).toBe("error");
+    expect(status.description).toBe(
+      `verdict unknown @ ${SHA.slice(0, 12)}: lost contact; re-dispatch the SHA to record it`,
+    );
+    expect(status.description.length).toBeLessThanOrEqual(140);
+    expect(
+      deployment.description.startsWith(
+        `unknown release (untagged) @ ${SHA.slice(0, 12)}`,
+      ),
+    ).toBe(true);
+    expect(deployment.payload.state).toBe("error");
+    expect(deployment.payload.ownerQuote).toBe(QUOTE);
+  });
+
   it("an unknown state is refused", () => {
     expect(() =>
       buildDeploymentPayload({

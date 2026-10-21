@@ -33,7 +33,7 @@ export type RefreshOutcome =
  * the cookie and its backing record expire together. The 15 min access-JWT
  * lifetime is token-internal (refreshed under the same session by F4/EARS-9).
  */
-const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
+export const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 /**
  * Owns BFF session establishment and lookup (design §3, EARS-8). The single

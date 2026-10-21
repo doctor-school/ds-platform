@@ -42,6 +42,7 @@ import {
   IdpUnavailableError,
   isPhoneIdentifier,
   type IdpClient,
+  type IdpSession,
 } from "./idp/idp.types.js";
 import { AUTH_WEBHOOK_SECRET } from "./auth.tokens.js";
 import { webhookSecretMatches } from "./webhook-secret.js";
@@ -86,6 +87,13 @@ export const GENERIC_FAILURE = "the request could not be completed";
 // / per-IP / per-ASN ceiling or the global daily breaker). It names no threshold
 // and no account — a refusal is not an existence oracle and not an attacker's
 // budget read-out (design §10: breaker-open returns a generic "try later").
+/**
+ * Where a credential step hands its checked Zitadel session: the storefront
+ * BFF mints its session from it, the sign-in host keeps it in its shared
+ * record (003 EARS-5 amended). The check itself is the same code either way.
+ */
+export type SessionAcceptor<T> = (session: IdpSession) => Promise<T>;
+
 export const GENERIC_THROTTLED = "too many requests, please try again later";
 
 // #147: one generic, non-enumerating message for a residual IdP password-policy
@@ -221,11 +229,29 @@ export class AuthService {
    * (EARS-16). The `fingerprint` is computed by the controller from the request
    * (the only request-coupled input) and bound into the session here.
    */
-  async loginWithPassword(
+  loginWithPassword(
     identifier: string,
     password: string,
     fingerprint: string,
   ): Promise<{ cookie: string; claims: SessionClaims } | null> {
+    return this.passwordStep(identifier, password, (session) =>
+      this.sessions.establish(session, fingerprint),
+    );
+  }
+
+  /**
+   * The EARS-5 password check with every guarantee of {@link loginWithPassword}
+   * (native lockout observation, the EARS-18 ledger rows, the one `null` for
+   * every failure), handing the checked session to `accept` instead of minting
+   * the storefront session itself. The storefront login accepts it into a BFF
+   * session; the sign-in host (003 EARS-5 amended, EARS-69) into its shared
+   * record — one credential path, no second weaker one.
+   */
+  async passwordStep<T>(
+    identifier: string,
+    password: string,
+    accept: SessionAcceptor<T>,
+  ): Promise<T | null> {
     const result = await this.idp.passwordLogin(identifier, password);
 
     // EARS-15: observe the native lockout verdict. The terminal failure event is
@@ -254,10 +280,7 @@ export class AuthService {
       return null;
     }
 
-    const established = await this.sessions.establish(
-      result.session,
-      fingerprint,
-    );
+    const established = await accept(result.session);
     await this.audit.record({
       type: "LoginSucceeded",
       sub: result.session.sub,
@@ -412,10 +435,23 @@ export class AuthService {
    * with the same generic 401 (EARS-16). The `fingerprint` is computed by the
    * controller from the request and bound into the session here.
    */
-  async loginWithOtp(
+  loginWithOtp(
     req: OtpVerify,
     fingerprint: string,
   ): Promise<{ cookie: string; claims: SessionClaims } | null> {
+    return this.otpStep(req, (session) =>
+      this.sessions.establish(session, fingerprint),
+    );
+  }
+
+  /**
+   * The EARS-6/7 code check of {@link loginWithOtp}, handing the checked
+   * session to `accept` (see {@link passwordStep}).
+   */
+  async otpStep<T>(
+    req: OtpVerify,
+    accept: SessionAcceptor<T>,
+  ): Promise<T | null> {
     if (req.channel === "email") {
       // 003 EARS-41: the login code step and the registration step share one
       // submission; the account state decides the Zitadel check.
@@ -423,7 +459,7 @@ export class AuthService {
         req.identifier,
         req.code,
         undefined,
-        fingerprint,
+        accept,
       );
       if (!accepted) {
         await this.audit.record({
@@ -449,7 +485,7 @@ export class AuthService {
       });
       return null;
     }
-    const established = await this.sessions.establish(session, fingerprint);
+    const established = await accept(session);
     await this.audit.record({
       type: "LoginSucceeded",
       sub: session.sub,
@@ -467,12 +503,12 @@ export class AuthService {
    * registration consent recorded only after the code is accepted (EARS-23).
    * `null` for every failure (EARS-16); the caller writes its failure row.
    */
-  private async acceptEmailCode(
+  private async acceptEmailCode<T>(
     identifier: string,
     code: string,
     registration: VerifyRegistration | undefined,
-    fingerprint: string,
-  ): Promise<{ cookie: string; claims: SessionClaims } | null> {
+    accept: SessionAcceptor<T>,
+  ): Promise<T | null> {
     const issued = issuedCode(code);
     if (issued === null) return null;
     const result = await this.idp.submitEmailCode(
@@ -493,10 +529,7 @@ export class AuthService {
       await this.sessions.revokeAllBeforeVerification(result.sub);
     }
     if (!result.session) return null;
-    const established = await this.sessions.establish(
-      result.session,
-      fingerprint,
-    );
+    const established = await accept(result.session);
     if (registration?.consent.length) {
       await this.recordMissingConsent(result.sub, registration.consent);
     }
@@ -654,6 +687,27 @@ export class AuthService {
     newPassword: string,
     fingerprint: string,
   ): Promise<{ cookie: string; body: PasswordResetCompleteResponse }> {
+    const established = await this.resetCompleteStep(
+      identifier,
+      code,
+      newPassword,
+      (session) => this.sessions.establish(session, fingerprint),
+    );
+    return { cookie: established.cookie, body: { status: "reset_completed" } };
+  }
+
+  /**
+   * The EARS-12 reset completion of {@link completePasswordReset} — prior
+   * sessions revoked, email flipped verified, the same ledger rows and the same
+   * generic 400 — handing the checked session to `accept` (see
+   * {@link passwordStep}).
+   */
+  async resetCompleteStep<T>(
+    identifier: string,
+    code: string,
+    newPassword: string,
+    accept: SessionAcceptor<T>,
+  ): Promise<T> {
     const resetCode = issuedCode(code);
     const session =
       resetCode === null
@@ -701,7 +755,7 @@ export class AuthService {
       });
     }
     // Mint the fresh session on the identical login convergence point (EARS-8).
-    const established = await this.sessions.establish(session, fingerprint);
+    const established = await accept(session);
     // Mirror login's session-created audit row (EARS-18): the reset just minted an
     // authenticated session, so it records the same `LoginSucceeded` (method
     // `password`) login does — in addition to the PasswordResetCompleted above.
@@ -710,7 +764,7 @@ export class AuthService {
       sub: session.sub,
       method: "password",
     });
-    return { cookie: established.cookie, body: { status: "reset_completed" } };
+    return established;
   }
 
   /**
@@ -1173,11 +1227,26 @@ export class AuthService {
     req: VerifyRequest,
     fingerprint: string,
   ): Promise<{ cookie: string; body: VerifyResponse }> {
+    const accepted = await this.verifyStep(req, (session) =>
+      this.sessions.establish(session, fingerprint),
+    );
+    return { cookie: accepted.cookie, body: { status: "verified" } };
+  }
+
+  /**
+   * The 003 EARS-3/41 registration code step of {@link verify}, handing the
+   * checked session to `accept` (see {@link passwordStep}); a rejected code is
+   * the same generic 400 with its `VerifyFailed` row.
+   */
+  async verifyStep<T>(
+    req: VerifyRequest,
+    accept: SessionAcceptor<T>,
+  ): Promise<T> {
     const accepted = await this.acceptEmailCode(
       req.email,
       req.code,
       req.registration,
-      fingerprint,
+      accept,
     );
     if (!accepted) {
       // #1112: the rejected code is observable on our side; the code itself
@@ -1189,7 +1258,7 @@ export class AuthService {
       });
       throw new BadRequestException(GENERIC_FAILURE);
     }
-    return { cookie: accepted.cookie, body: { status: "verified" } };
+    return accepted;
   }
 
   /**

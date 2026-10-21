@@ -60,6 +60,11 @@ export const AUDIT_CAPTURE_ALLOWLIST: readonly {
       "append-only telemetry stream, itself an event log — auditing would duplicate the stream 1:1 with no WHO/WHAT gain (010-design §5)",
   },
   {
+    table: "sign_in_host_records",
+    rationale:
+      "ephemeral sign-in-host session state (003 EARS-64), no domain truth: every row is an encrypted Zitadel session handle that lives at most 30 days and is replaced, deleted on mismatch/sign-out or purged when expired — auditing it would copy bearer envelopes into the 3-year ledger; the credential step itself is already in auth_audit (LoginSucceeded)",
+  },
+  {
     table: "specialties_minzdrav",
     rationale:
       "seeded reference book with NO actor write path — the only writer is the provenance-stamped boot seed (017-design §2), so every row change has the same WHO (the deploy) and the same WHY (the committed nomenclature order, already in git); no storefront or admin surface can mutate it, and 017 EARS-3 tests that absence. The ledger's question «which principal changed this and when» has no domain answer here (010-design §5)",

@@ -33,6 +33,7 @@ export default defineConfig({
     "../../packages/db/src/schema/registration-attendance.ts",
     "../../packages/db/src/schema/congress-submission-settings.ts",
     "../../packages/db/src/schema/congress-submissions.ts",
+    "../../packages/db/src/schema/sign-in-host-records.ts",
   ],
   out: "../../apps/api/drizzle",
   dialect: "postgresql",

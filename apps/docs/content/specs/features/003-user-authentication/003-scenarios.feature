@@ -1747,3 +1747,12 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the authorize request carries only the entry-intent id, with no slug and no return path
     When the guest signs in
     Then the guest lands signed in on "/webinars/<slug>"
+
+  # Academy retained-baseline projection (#3180), not shared-sign-in-host acceptance.
+  # Existing native login and SMS-budget contracts remain retained; no expiry proof.
+  @EARS-7 @EARS-8 @EARS-17 @EARS-41 @EARS-42 @happy @login-sms-resend
+  Scenario: Academy resends the SMS login code and accepts the newest delivery for the same owner
+    Given a uniquely registered and verified Academy doctor_guest account is logged out for an SMS-code resend
+    When the resend owner requests an initial real Academy SMS login code with its resend button disabled
+    When only that browser's thirty-second login cooldown advances before the actual SMS resend click
+    Then the newest actual SMS delivery authenticates the same Academy owner through reload and exact logout

@@ -17,7 +17,7 @@ prior_decisions:
   - "ADR-0001 design §7.3 — Auth audit-event taxonomy (`<class>.<event>`), the canonical wire ids the 011 events register under."
   - "ADR-0001 design §8.5 — MFA bootstrap for legacy admin (magic-link elevated session, `mfa_pending_enrollment`, audit events for enrollment and lockout). 011 **reuses the «cannot continue without enrolling» invariant and the canonical event ids (`auth.mfa.enrolled` / `auth.lockout.triggered`)** but **not** the magic-link vehicle — see Prior decisions → PD-1."
   - "ADR-0004 design §3.2 — Cookie / SSO topology, staged admin session model: wave 1 rides the shared 003 `__Host-ds_session`; the **named pre-pilot hardening trigger (#718)** is the dedicated `__Host-ds_admin_session`, host-only, `SameSite=Strict`, plus mandatory 2FA. 011 is that trigger."
-  - "ADR-0004 design §3.2.1 — Per-app cookie + OIDC silent re-auth topology; `sameSite: 'strict'` is named for admin/cms; CSRF double-submit on state-changing endpoints."
+  - "ADR-0004 design §3.2 — Per-app cookie topology, cross-storefront sign-in kept to the two storefronts (ADR-0015 §4); `sameSite: 'strict'` is named for admin/cms; CSRF double-submit on state-changing endpoints."
   - "ADR-0002 §3 — Backend core: nestjs-zod, URI versioning `/v1/...`, Vitest + supertest; DTO SSOT in `packages/schemas/`."
   - "ADR-0003 §6 — `audit_ledger` is the append-only sink for the admin-session and MFA lifecycle events."
   - "ADR-0006 §4 — Feature-spec triplet structure + flat EARS numbering."
@@ -79,7 +79,7 @@ Two questions the initiative did not settle and the owner fork did not cover. Ea
 - **Graduating EARS-13 onto the general step-up mechanism — a tracked deferral.** The vertical landed in #1304 (`AdminAuthorityGuard`, the server-verified 30-minute elevation window, the `401 STEP_UP_REQUIRED` + `stepUpUrl` contract) and the route is a recorded exemption in its coverage registry; when it is re-decided, the factor-removal route moves onto it: the route-local code check is replaced by `stepUp: true` metadata plus guard enforcement. This is a **named follow-up Issue** for `open-ears-issues` step 3a against this Scope line — not a code comment and not an assumption that someone will notice.
 - **Other apps' cookies.** `__Host-ds_cms_session`, `__Host-ds_promo_session`, `__Host-ds_docs_session` (ADR-0004 design §3.2) are untouched. So is the portal's `__Host-ds_session`.
 - **The `legacy_admin` Directual-cutover flow (ADR-0001 design §8.5).** The magic-link elevated-session bootstrap solves a population 011 does not have (PD-1). It stays available, unimplemented, for the cutover slice that needs it.
-- **Cross-app SSO / OIDC silent re-auth for admin.** ADR-0004 design §3.2.1's `prompt=none` continuity is deliberately **not** extended to the admin origin — a `SameSite=Strict`, MFA-gated tier that silently re-materialises from another app's session would undo the separation this spec exists to create.
+- **Cross-storefront sign-in for admin.** The storefront continuity of ADR-0015 §4 (ADR-0004 design §3.2.1) is deliberately **not** extended to the admin origin — a `SameSite=Strict`, MFA-gated tier that silently re-materialises from another app's session would undo the separation this spec exists to create.
 - **Passkeys / WebAuthn as an alternative factor.** ADR-0001 §4 fixes TOTP for `platform_admin` in v1.
 - **Per-admin session management UI** (list/revoke my sessions). Force-logout exists server-side (EARS-10); a surface for it is not in this slice.
 - **Cerbos policy migration.** Admin authorization stays the role fast-path check it is today; moving admin authz into Cerbos is unrelated to session hardening.
@@ -109,7 +109,7 @@ Two questions the initiative did not settle and the owner fork did not cover. Ea
 - **ADR-0001 design §7.3** — The `<class>.<event>` auth audit taxonomy. The 011 events register under it with canonical wire ids (EARS-9).
 - **ADR-0001 design §8.5** — Reused for event names + the no-continue-without-enrollment invariant; **not** reused as the bootstrap vehicle (PD-1).
 - **ADR-0004 design §3.2** — The staged admin session model. Wave 1 (007, through the 2026-07-17 webinar) rides `__Host-ds_session`; **this spec is the named pre-pilot hardening trigger** the ADR links to #718. On merge, the admin row of the §3.2 topology list stops describing a staged compromise and describes the shipped target model.
-- **ADR-0004 design §3.2.1** — Per-app cookie pattern with `sameSite: 'strict'` for admin/cms and CSRF double-submit on state-changing endpoints. 011 implements the admin row of that pattern; it deliberately does **not** adopt §3.2.1's `prompt=none` silent re-auth for admin (Scope → Out).
+- **ADR-0004 design §3.2** — Per-app cookie pattern with `sameSite: 'strict'` for admin/cms and CSRF double-submit on state-changing endpoints. 011 implements the admin row of that pattern; it deliberately does **not** adopt the §3.2.1 cross-storefront sign-in (ADR-0015 §4) for admin (Scope → Out).
 - **ADR-0002 §3** — nestjs-zod, URI versioning, Vitest + supertest, `packages/schemas/` DTO SSOT.
 - **ADR-0003 §6** — `audit_ledger` as the append-only sink.
 - **ADR-0006 §4** — Triplet structure + flat EARS numbering.

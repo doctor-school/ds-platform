@@ -24,7 +24,7 @@ lang: en
 4. **Auth methods v1:** email+password, email+magic-link, phone+SMS-OTP, biometric unlock (mobile, local), MFA TOTP — mandatory for `expert / clinic_admin / investor / platform_admin`; MFA SMS as an acceptable trade-off for `moderator / support` in v1 (planned downgrade, see §5).
 5. **OAuth — phased rollout.** v1: no social. v2: VK ID + Yandex ID + Telegram Login. v3: Apple Sign-In if iOS App Store. Max / Google — on demand. **Account linking requires a verified email on both sides** (protection against pre-auth account takeover).
 6. **Tokens:** OAuth 2.0 BCP (RFC 9700). Access JWT 15min + opaque refresh 30d (web) / 14d (mobile), rotating single-use. PKCE for public clients. Sender-constrained refresh for mobile (DPoP / device-id binding). Server-side session store (Redis). Force-logout via DELETE session. IdP introspection — only for high-stakes endpoints (admin/payments/AU withdrawal/role-change), not on the hot path.
-7. **Security baseline (§5.5):** rate limiting per-user/IP/ASN, enumeration protection (idempotent responses on login/reset), SMS toll-fraud protection (global budget circuit-breaker + IP/ASN limits), RF-accessible CAPTCHA (Yandex SmartCaptcha), account-lockout policy, refresh token theft detection. **Cookie default — `__Host-` prefix per app**; cross-app SSO continuity via OIDC silent re-auth (ADR-0001 §6).
+7. **Security baseline (§5.5):** rate limiting per-user/IP/ASN, enumeration protection (idempotent responses on login/reset), SMS toll-fraud protection (global budget circuit-breaker + IP/ASN limits), RF-accessible CAPTCHA (Yandex SmartCaptcha), account-lockout policy, refresh token theft detection. **Cookie default — `__Host-` prefix per app**; continuity between the two storefronts via the first-party shared sign-in point on `api.doctor.school`, with one sign-out on both (ADR-0015 §4; §7.5).
 8. **IdP selection** — closed in §9 (Zitadel; ADR-0001 §8, DSP-209).
 9. **Directual migration:** Phase 0 discovery (hash format + actual count + consent re-acquisition plan) → bulk import (hash-compatible → as-is; otherwise magic-link reset) → **90-day** soft-migration window (not 30) with a realistic target reactivation rate of 50–70% (not 95%) → sunset Directual auth.
 10. **Deferred gaps** (§10.3) — an explicit registry of what is not closed in DSO-25 and must go in the backlog: consent management, right-to-erasure, Federal Law 187-FZ/FSTEC-17, anomaly detection, HIBP credential check, OWASP ASVS pen-test gates.
@@ -252,7 +252,7 @@ Minimum set of protections for production launch. Implementation — partly IdP,
 | CAPTCHA after N attempts           | API gateway       | **Yandex SmartCaptcha** (RF-accessible) — hCaptcha/reCAPTCHA deprecated in RF. Trigger: 3+ failed logins / IP over 5 min                                                                                                                                                                                                                                                                                |
 | Compromised credentials check      | IdP / backend     | **Deferred to v2:** HIBP Pwned Passwords k-anonymity API on registration + password change                                                                                                                                                                                                                                                                                                              |
 | CSRF protection                    | Backend           | CSRF tokens on mutating endpoints; SameSite=Lax cookie + `__Host-` prefix per app (no shared cross-subdomain cookies)                                                                                                                                                                                                                                                                                   |
-| Cookie security                    | Backend           | `Secure; HttpOnly; SameSite=Lax; __Host-` prefix per app; **no tokens in localStorage**. Cross-app continuity via OIDC silent re-auth (ADR-0001 §6). Full session security profile — ADR-0001 §6 (single source of truth).                                                                                                                                                                              |
+| Cookie security                    | Backend           | `Secure; HttpOnly; SameSite=Lax; __Host-` prefix per app; **no tokens in localStorage**. Cross-storefront continuity via the first-party shared sign-in point (ADR-0015 §4; §7.5). Full session security profile — ADR-0001 §6 (single source of truth).                                                                                                                                                |
 | Session fixation protection        | IdP               | Regenerate session-id on login and on MFA elevation                                                                                                                                                                                                                                                                                                                                                     |
 | PD in logs                         | Backend           | Email/phone masked in logs (`a***@example.com`, `+7***1234`); full values only in encrypted audit log with RF-resident KMS                                                                                                                                                                                                                                                                              |
 
@@ -317,7 +317,7 @@ OAuth 2.0 BCP (RFC 9700) reference implementation.
 | Refresh TTL (mobile)               | **14d** (reduced from 90d per reviewer note — sender-constrained refresh without proof-of-possession at 90d gives too long a compromise window)                                                                                                                                                                                                        |
 | Refresh sender-constraint (mobile) | Device-id binding: at refresh issuance, `device_fingerprint` is stored (combination of installation_id, platform, model); at exchange, match is verified. Mismatch → reject + alert. **DPoP (RFC 9449)** considered for v2 as stricter protection.                                                                                                     |
 | Mobile storage                     | iOS Keychain / Android Keystore                                                                                                                                                                                                                                                                                                                        |
-| Web storage                        | HttpOnly + Secure + SameSite=Lax cookie with `__Host-` prefix. **Not localStorage.** **Every app (portal, admin, promo, docs, cms) holds its own host-only cookie**; cross-app continuity via OIDC silent re-auth (see §7.5). Full security profile — ADR-0001 §6 (single source of truth).                                                            |
+| Web storage                        | HttpOnly + Secure + SameSite=Lax cookie with `__Host-` prefix. **Not localStorage.** **Every app (doctor, portal, admin, docs, cms) holds its own host-only cookie**; continuity between the two storefronts via the first-party shared sign-in point (see §7.5). Full security profile — ADR-0001 §6 (single source of truth).                        |
 | Session store                      | Redis, server-side, bound to refresh token                                                                                                                                                                                                                                                                                                             |
 | Force-logout                       | DELETE session record → invalidates refresh; access expires within 15 min. For admin accounts critical endpoints call introspection (see §7.2).                                                                                                                                                                                                        |
 | List active sessions               | IdP admin API                                                                                                                                                                                                                                                                                                                                          |
@@ -379,35 +379,25 @@ Storage — append-only Postgres table or event-store (if IdP = Zitadel — nati
 
 Where the session store lives — inside the IdP or shared backend Redis. Default — inside the IdP. The decision depends on the headless API ergonomics of both candidates (determined during Phase 0 implementation). This is **not a design blocker** — the force-logout guarantee is the same in both cases (15-min window for access + introspection for high-stakes).
 
-### 7.5. Cross-app SSO via OIDC silent re-auth (DSO-63 #2)
+### 7.5. Cross-storefront sign-in and one sign-out (ADR-0015 §4)
 
-Cross-app login continuity between portal, admin, promo, docs, cms is **not a shared cookie on `.doctor.school`** (a shared cookie spanning trust-zone boundaries was rejected per ADR-0001 §6 — same-origin XSS or subdomain takeover would compromise the admin session), but **OIDC silent re-auth at the IdP**.
+Login continuity between the two storefronts (`doctor.school`, `academy.doctor.school`) is **not a shared cookie on `.doctor.school`** (a shared cookie spanning trust-zone boundaries is rejected per ADR-0001 §6 — same-origin XSS or subdomain takeover would compromise every host, admin included) and **not the IdP's own browser session**: our sign-in is first-party forms with a server-side session exchange, the browser never visits `id.doctor.school`, and Zitadel's `prompt=none` is answered only from the login UI's own cookie — so a `prompt=none` from a storefront never finds a session (evidence: ADR-0015 → Rejected alternatives). It is a **first-party shared sign-in point on `api.doctor.school`**.
 
-**Flow for a user already logged into portal, opening admin:**
+**Flow for a doctor signed in on one storefront, opening the other:**
 
-1. Browser → `admin.doctor.school`.
-2. Admin Next.js middleware checks the local host-only cookie `__Host-ds_admin_session`. Missing / expired.
-3. Middleware issues `302 → auth.doctor.school/oauth/authorize?client_id=admin&prompt=none&redirect_uri=https://admin.doctor.school/auth/callback&state=...`.
-4. IdP checks its own host-only session (cookie on `auth.doctor.school`). Session active.
-5. IdP returns an `authorization_code` → redirect back to `admin.doctor.school/auth/callback?code=...`.
-6. Admin server exchanges the code for an app-specific token and sets its own `__Host-ds_admin_session` cookie.
-7. The user sees the admin UI. **Visible delay ≤300ms**, no explicit login screen.
-
-**If there is no IdP session** (user not logged in anywhere): IdP returns `error=login_required` → admin Next.js redirects to the standard login flow (auth.doctor.school/login).
-
-**IdP requirements:**
-
-- `prompt=none` supported (silent re-auth).
-- Multiple `redirect_uri` allowed per OAuth client, **or** multiple OAuth clients (one per subdomain). Multiple clients cleaner for blast-radius isolation.
-- IdP session cookie — host-only (no `Domain=`), `SameSite=Lax` or `Strict`.
-
-Zitadel supports these natively (`prompt=none` silent re-auth, multiple redirect_uri/clients, host-only session cookie).
+1. Sign-in on storefront 1 (first-party forms, unchanged) also creates the browser's shared sign-in record in the API, linked to the checked Zitadel session; a single-use establish ticket sends the browser once through `api.doctor.school`, which sets the host-only marker `__Host-ds_sso` and returns to the exact storefront-1 URL.
+2. A signed-out page on storefront 2 asks the shared point (one credentialed status request, exact-origin CORS allowlist) whether the browser holds a live record; only a «yes» continues.
+3. Storefront 2 sends the browser to the shared point's authorize endpoint with `state`, a PKCE `S256` challenge and its exact registered callback; the shared point checks the marker, the record and the fingerprint, and returns a single-use ≈60 s code — or `error=login_required`.
+4. The storefront-2 callback verifies `state` and redeems the code server-to-server with the verifier; the API finalises a new OIDC auth request with the checked Zitadel session for a fresh token set and mints a **new** storefront-2 session under a new `sid`.
 
 **Logout:**
 
-- App-level logout: DELETE cookie on one subdomain → user is logged out only on that app, others continue via silent re-auth.
-- Global logout: IdP endpoint `/oidc/logout` invalidates the IdP session → silent re-auth on other apps returns `login_required` → they log out locally.
-- "Logout from all devices" — IdP admin API revoke all sessions for user.
+- Sign-out on either storefront revokes the shared record, every storefront session minted from it and the Zitadel session behind it, server-side — the next request on the other storefront is signed out (one sign-out).
+- "Logout from all devices" — revoke every session record of the user, plus the IdP admin API revoke of all Zitadel sessions for the user.
+
+**Outside the mechanism:** `admin.doctor.school` (TOTP-gated session, feature 011), `cms.doctor.school` and the internal docs keep their own sign-in; none of them is a client of the shared sign-in point.
+
+The nine binding security requirements (exact-match return allowlist, single-use PKCE-bound code, `state` / `nonce`, cookie attributes, fresh session per host, complete server-side sign-out, admin isolation, no weaker factor, enumeration-safe limits) are stated once, in ADR-0015 §4.
 
 ---
 

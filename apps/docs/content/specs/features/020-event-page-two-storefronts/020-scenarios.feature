@@ -125,7 +125,7 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
   Scenario: A doctor signed in on the doctor storefront opens the Academy page already signed in
     Given a doctor signed in on doctor.school
     When the doctor opens the same event on academy.doctor.school
-    Then the doctor is already signed in through the one-account silent re-auth
+    Then the doctor is already signed in through the one-account cross-host sign-in
     And the doctor is never asked for a second sign-in
     When the doctor starts a registration from academy.doctor.school
     Then the return after registration lands on the academy.doctor.school page it started on

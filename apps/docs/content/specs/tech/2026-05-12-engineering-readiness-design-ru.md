@@ -415,7 +415,7 @@ Reg list внешних processor'ов с DPA-status, fallback chain, и кат�
 10. **Отдельные API-токены** агент/пользователь/CI с least privilege; запрет write агента в prod-DB и main-branch.
 11. **TLS + security headers** настроены (HSTS, CSP profile-per-zone per ADR-0001 A1.2).
 12. **Email deliverability** (SPF/DKIM/DMARC) настроен для doctor.school.
-13. **Host-only `__Host-` cookie per app + OIDC silent re-auth** (ADR-0001 §6) — нет shared cross-subdomain cookies.
+13. **Host-only `__Host-` cookie per app + собственная точка входа между витринами** (ADR-0001 §6, ADR-0015 §4) — нет shared cross-subdomain cookies.
 
 ### Operational
 

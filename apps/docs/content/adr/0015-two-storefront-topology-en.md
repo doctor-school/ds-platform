@@ -52,7 +52,7 @@ Evidence from the code as it stands (not an aspiration):
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | API      | `apps/api` is a single NestJS application (ADR-0002 §2/§4); the REST contract is generated once into `@ds/api-client` from the Zod SSOT in `packages/schemas`. There is no host-aware or tenant-aware routing anywhere in the application.                                                         | A second storefront is a new **client** of the same contract, not a fork.                                 |
 | Database | One Postgres 17 instance with one Drizzle schema in `packages/db/src/schema/*.ts` (users, events, registrations, taxonomy, event-recordings, consent-records, audit-ledger, lifecycle, presence-beats, idempotency-keys, media-cleanup-jobs). No storefront or tenant discriminator column exists. | One person row, one registration row, one ledger — OWD-1, OWD-9 and OWD-10 are satisfied by construction. |
-| Identity | One Zitadel instance at `id.doctor.school` (ADR-0001 §6); sessions are host-only cookies issued per front-end host, cross-host continuity via OIDC silent re-auth.                                                                                                                                 | One account spanning both hosts without a shared `.doctor.school` cookie.                                 |
+| Identity | One Zitadel instance at `id.doctor.school` (ADR-0001 §6); sessions are host-only cookies issued per front-end host, cross-host continuity via the first-party shared sign-in point on `api.doctor.school` (§4).                                                                                    | One account spanning both hosts without a shared `.doctor.school` cookie.                                 |
 | Delivery | ADR-0012 §1 — one `api-prod` plane and one `data-prod` plane.                                                                                                                                                                                                                                      | The second storefront adds a front-end container and a Caddy virtual host, nothing else.                  |
 
 The alternatives (a backend, a database or an IdP per storefront) are rejected below, each against the one-way door it breaks.
@@ -84,7 +84,24 @@ The doctor storefront and the Academy backstage are **separate Next.js applicati
 ### 4. Session and access across the two hosts
 
 - **One account (OWD-1).** Zitadel is the single identity provider; a person authenticates once and is the same subject on both hosts.
-- **Per-host session cookies.** The session cookie on the doctor host and the one on the academy host are separate by construction (`__Host-` cookies cannot be scoped to a parent domain). Continuity between hosts is an OIDC silent re-auth (`prompt=none`) at the IdP — ADR-0001 §6, unchanged.
+- **Per-host session cookies.** The session cookie on the doctor host and the one on the academy host are separate by construction (`__Host-` cookies cannot be scoped to a parent domain). Each storefront serves the API under its own origin (a same-origin BFF proxy), so each session is a server-side record in the API's session store behind that host's `__Host-ds_session` cookie.
+- **Cross-host sign-in through a first-party shared sign-in point on `api.doctor.school`.** Continuity between the two storefronts is an OAuth 2.0 authorization-code exchange with PKCE between each storefront and the API, anchored on a **shared sign-in record** the API keeps per browser. The flow:
+  1. _Sign-in on storefront 1_ (first-party forms, unchanged — password, e-mail code, SMS code, captcha, rate limits all stay where they are). Besides the storefront session, the API creates the browser's shared sign-in record, linked to the checked Zitadel session and to the new storefront session, and returns a single-use establish ticket (≈60 s). Storefront 1 sends the browser top-level through `api.doctor.school`, which redeems the ticket, sets the host-only marker cookie `__Host-ds_sso` on `api.doctor.school` and returns the browser to the exact storefront-1 URL it started on.
+  2. _A signed-out page on storefront 2_ asks the shared point whether this browser holds a live shared sign-in (one credentialed request to a single status endpoint; CORS exact-origin allowlist of the two storefronts; the answer is a bare yes / no). Only a «yes» starts the round trip; public pages stay statically cacheable, and a cookieless client — a crawler — never redirects.
+  3. _Authorize._ Storefront 2 creates a fresh `state`, a PKCE `code_verifier` and its `S256` challenge, keeps them in a short-lived host-only transaction cookie, and sends the browser top-level to the shared point's authorize endpoint with its exact registered callback. The shared point reads `__Host-ds_sso`, checks the record is live and its fingerprint matches the browser, and redirects to the callback with a single-use code (≈60 s) bound to that client, callback and challenge — or with `error=login_required` when there is no live record.
+  4. _Redeem._ The storefront-2 callback checks `state` against its transaction cookie, then redeems the code **server-to-server** with the verifier. The API obtains a fresh Zitadel token set by finalising a new OIDC auth request with the Zitadel session the original sign-in checked (`POST /v2/oidc/auth_requests/{id}` — the same finalisation the sign-in already uses), mints a **new** storefront-2 session under a new `sid`, adds it to the record, and storefront 2 sets its own `__Host-ds_session`. The person sees the signed-in page; no form is shown.
+- **One sign-out on both storefronts.** Signing out on either storefront revokes, server-side, the shared sign-in record, every storefront session minted from it and the Zitadel session behind it (its token chains included). The other storefront's next request resolves its cookie to no live session and renders signed out; the leftover `__Host-ds_sso` is inert because its record is gone. All storefront sessions are records in the one API session store, so this revocation is the back-channel: no storefront holds session state the API cannot revoke, which is the property OIDC Back-Channel Logout exists to provide between independent relying parties. Refresh-token reuse detected on any member session revokes the whole record the same way (ADR-0001 §6).
+- **Admin is outside the mechanism.** `admin.doctor.school` keeps its own TOTP-gated session (feature 011); it is not a client of the shared sign-in point, an admin sign-in never creates a shared sign-in record, and a shared record never creates an admin session.
+- **Binding security requirements** (OAuth 2.0 Security BCP — RFC 9700; OIDC Core 1.0; OIDC Back-Channel Logout 1.0). Every implementation PR carries a named test for each:
+  1. _Open redirect / code exfiltration_ — the return URLs and callbacks are matched **exactly** against a fixed allowlist (the two storefront callbacks per environment); no wildcard, prefix or look-alike matching (RFC 9700 §2.1, §4.1, §4.11). A foreign or look-alike URL is refused and no code is issued.
+  2. _Code theft and replay_ — the cross-host code is single-use, short-lived (≈60 s), bound to the request (PKCE `S256` + `state`) and redeemed only server-to-server (RFC 9700 §2.1.1, §4.5); the establish ticket is single-use, ≈60 s, bound to the storefront session that just signed in and redeemable only at the shared point. Both travel only in redirects answered with `Referrer-Policy: no-referrer` and no rendered page (RFC 9700 §4.2, §4.3). A replayed, expired or verifier-less code is refused.
+  3. _Login CSRF_ — `state` (and `nonce` where an ID token is involved, OIDC Core §3.1.2.1) is bound to the initiating storefront transaction; a response to a request the storefront did not make is refused (RFC 9700 §4.7).
+  4. _Cookie theft_ — the marker is host-only on its issuing host, `HttpOnly`, `Secure`, `SameSite=Lax`, never `Domain=.doctor.school`; storefront cookies stay `__Host-`. A test asserts the attributes.
+  5. _Session fixation_ — each storefront mints a fresh session on every cross-host sign-in and never adopts a presented session id.
+  6. _Complete sign-out_ — sign-out revokes the shared record and every storefront session of that browser server-side, not only a cookie delete: sign out on host 1 with host 2 open, and host 2's next request is signed out.
+  7. _Admin isolation_ — a storefront sign-in does not authenticate `admin.doctor.school`, and the reverse.
+  8. _No weaker factor_ — the cross-host path never authenticates more than the original sign-in did: it adds no credential path and moves no password, code or captcha check; it only re-uses the Zitadel session that sign-in already checked. Reviewed explicitly.
+  9. _Enumeration-safe and rate-limited_ — the status, authorize, establish and redeem endpoints keep the existing anti-enumeration behaviour and per-IP / per-user limits; none of them takes an identifier.
 - **The host is not the authorization boundary.** Roles and organisation memberships are attributes of the person (OWD-1, OWD-8); the API authorizes every request against those attributes regardless of which storefront issued it. The academy host additionally refuses to render a backstage surface for a subject with no backstage attribute — defence in depth on top of the API decision, never a substitute for it.
 - **The doctor sees exactly one trace of the Academy** — the single entry point recorded in the input package (REQ-24); no backstage navigation is reachable from the doctor storefront.
 
@@ -130,6 +147,18 @@ It reintroduces «one person, two logins», which OWD-1 closes as a one-way door
 
 It buys no session sharing (host-only cookies are per host regardless — ADR-0001 §6), couples the deploy cadence of two audiences, and turns the OWD-6 backstage boundary into a runtime routing condition instead of a build-time separation.
 
+### Cross-host continuity held by the IdP (`prompt=none` against a Zitadel browser session)
+
+The IdP-native shape — Zitadel holds the shared browser session at `id.doctor.school` and a storefront without a session sends the browser through an OIDC `prompt=none` authorize — would need the least first-party security code, and it would be the choice if it fitted our sign-in. It does not, on the Zitadel we run (`ghcr.io/zitadel/zitadel` and `zitadel-login` `v4.17.3`, `infra/deploy/compose/api-prod/compose.yml`):
+
+- **Zitadel delegates the browser session to the login UI.** With a custom login UI, Zitadel redirects the authorize request to that UI, the UI authenticates by creating and updating a Session API v2 session, and finalises with `POST /v2/oidc/auth_requests/{id}` ([zitadel.com/docs/guides/integrate/login-ui/oidc-standard](https://zitadel.com/docs/guides/integrate/login-ui/oidc-standard)). Zitadel's own Login V2 answers `prompt=none` only from its **own** `sessions` cookie on the login host (`apps/login/src/lib/server/flow-initiation.ts` at tag `v4.17.3`, the `Prompt.NONE` branch; the cookie is written in `apps/login/src/lib/cookies.ts`), and with no session there it returns an HTTP 400 «No active session found», not an OIDC `login_required` redirect back to the storefront.
+- **Our sign-in never puts a session into the browser at the IdP.** The API authenticates on our first-party forms, starts the authorize request **server-to-server** with `prompt=none` and links the checked session to it (`apps/api/src/auth/idp/zitadel.idp.ts`, `exchangeSessionForTokens`); the browser never visits `id.doctor.school`, so no IdP-side browser cookie exists and every `prompt=none` from a storefront finds none.
+- **Making it work means giving up our forms or rebuilding the chosen mechanism inside the IdP.** Either the sign-in moves onto Zitadel's hosted login on `id.doctor.school` — which drops the headless first-party forms of ADR-0001 §2 and the captcha, SMS toll-fraud budget, anti-enumeration and per-IP / per-user limits our API applies there — or a forked login app gains an endpoint that adopts an API-created session into its browser cookie: the same first-party security code as the chosen mechanism, placed in a vendored application pinned in lockstep with the IdP core, plus an extra top-level hop through `id.doctor.school` on every move between storefronts.
+
+### A shared session cookie on `.doctor.school`
+
+Rejected by ADR-0001 §6: a cookie spanning trust zones turns one XSS or one subdomain takeover anywhere under `doctor.school` into a session theft on every host, the admin host included.
+
 ### Growing `apps/promo` into the doctor storefront
 
 Rejected as a framing, adopted as a migration. `apps/promo` is scoped as an SSG marketing surface with no session, no authenticated data fetching and no product design surface for learning; the doctor storefront is a full authenticated product. The new application `apps/doctor` is created for that scope and **absorbs the promo routes** (§2), rather than stretching the promo application to carry sessions, a points ledger and document flows.
@@ -164,26 +193,29 @@ Rejected as a framing, adopted as a migration. `apps/promo` is scoped as an SSG 
 
 - One more Next.js application to build, deploy and keep visually consistent; `apps/promo` must be migrated and retired rather than left standing (tracked at stage 3).
 - Two storefronts mean two design surfaces to keep in parity with `design-source/`; a shared design system reduces but does not remove the cost.
-- Cross-host continuity depends on OIDC silent re-auth: a browser that blocks third-party frames makes the move from `doctor.school` to `academy.doctor.school` a visible re-login. Accepted — the audiences that cross hosts are experts and partners, not doctors.
+- Cross-host continuity is first-party security code: the API owns the shared sign-in record, its marker cookie and four endpoints (status, establish, authorize, redeem), each held to the nine requirements of §4 and a dedicated security review per implementation PR.
+- Every storefront sign-in adds one top-level hop through `api.doctor.school` to set the marker, and the first signed-out page on the other storefront adds one status request and, when it answers «yes», one visible top-level round trip before the signed-in render. Sessions that predate the shared sign-in record carry over only after the next sign-in.
 - Video, points and document capabilities are named as additions, not built: each is a tracked deliverable with its own cost, and none of them is a stack change.
 
 ### Architectural qualities (metrics, not declarations)
 
-| Quality              | Metric                                                            | Target                      |
-| -------------------- | ----------------------------------------------------------------- | --------------------------- |
-| Account unity        | Identity providers / person records per human across both hosts   | 1 / 1                       |
-| Data unity           | Databases holding person, project or points rows                  | 1                           |
-| API unity            | Backend applications serving the storefronts                      | 1 (`apps/api`)              |
-| Storefront isolation | Backstage routes reachable from the doctor host                   | 0                           |
-| Delivery delta       | Infrastructure components added by the second storefront          | 1 container + 1 Caddy vhost |
-| Points consistency   | Attention-points balances per person across web and mobile        | 1                           |
-| Cross-host re-auth   | Person-visible logins to move between hosts (silent re-auth path) | 0                           |
+| Quality              | Metric                                                                              | Target                      |
+| -------------------- | ----------------------------------------------------------------------------------- | --------------------------- |
+| Account unity        | Identity providers / person records per human across both hosts                     | 1 / 1                       |
+| Data unity           | Databases holding person, project or points rows                                    | 1                           |
+| API unity            | Backend applications serving the storefronts                                        | 1 (`apps/api`)              |
+| Storefront isolation | Backstage routes reachable from the doctor host                                     | 0                           |
+| Delivery delta       | Infrastructure components added by the second storefront                            | 1 container + 1 Caddy vhost |
+| Points consistency   | Attention-points balances per person across web and mobile                          | 1                           |
+| Cross-host sign-in   | Sign-in forms shown to a signed-in person moving between the storefronts            | 0                           |
+| One sign-out         | Storefront sessions of a browser still live after it signs out on either storefront | 0                           |
 
 ---
 
 ## Cross-references
 
-- **ADR-0001 §6** — IdP and session model; source of the per-host cookie and OIDC silent re-auth rule reused in §4.
+- **ADR-0001 §6** — IdP and session model; source of the per-host `__Host-` cookie and fingerprint-binding rules §4 builds the cross-host sign-in and the one sign-out on.
+- **Feature 011** (`apps/docs/content/specs/features/011-admin-session-2fa/`) — the admin TOTP session §4 keeps outside the cross-host mechanism.
 - **ADR-0002 §2/§4** — one NestJS application, REST + OpenAPI contract, `@ds/api-client` codegen; the evidence base of §1.
 - **ADR-0002 §8** — media storage and delivery; the anchor for the video addition in §6.
 - **ADR-0003** — Postgres 17 + Drizzle + pgvector; one schema, the evidence base of §1.
@@ -207,6 +239,9 @@ grep -rn "promo/.*doctor\.school" apps/docs/content/
 
 # The academy host must be the portal host in every ADR that names it
 grep -rn "academy\.doctor\.school" apps/docs/content/adr/
+
+# The IdP-side silent re-auth is not the cross-host mechanism anywhere in the corpus
+grep -rniE "silent re-?auth" apps/docs/content/ packages/ apps/doctor apps/portal | grep -v "0015-two-storefront-topology"   # expect no output
 
 # EN + RU section parity of this ADR
 grep -c "^### " apps/docs/content/adr/0015-two-storefront-topology-en.md apps/docs/content/adr/0015-two-storefront-topology-ru.md

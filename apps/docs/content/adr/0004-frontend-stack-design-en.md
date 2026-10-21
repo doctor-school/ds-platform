@@ -139,79 +139,15 @@ apps/
 
 The full session security profile (TTL, rotation, CSRF, fingerprint binding) — **ADR-0001 §6** (single source of truth). This document is the implementation reference for Next.js-specific details only (see §3.2.1).
 
-#### 3.2.1. Cross-app SSO via OIDC silent re-auth — frontend implementation (DSO-63 #2)
+#### 3.2.1. Cross-storefront sign-in — frontend implementation (ADR-0015 §4)
 
-Cross-app login continuity between doctor, portal, admin, docs, cms is achieved via OIDC silent re-auth (`prompt=none`) at the IdP, not via a shared cookie spanning the `.doctor.school` zone. A shared cookie was rejected per ADR-0001 §6 — same-origin XSS or subdomain takeover would compromise the admin session, and CSRF / fingerprint mitigations are bypassed by same-origin XSS. See ADR-0001 §6 for the full rationale.
+Login continuity between the two storefronts (`apps/doctor` on `doctor.school`, `apps/portal` on `academy.doctor.school`) is the first-party shared sign-in point on `api.doctor.school`, not a shared cookie spanning the `.doctor.school` zone (rejected per ADR-0001 §6 — same-origin XSS or subdomain takeover would compromise every host, and CSRF / fingerprint mitigations are bypassed by same-origin XSS) and not an IdP `prompt=none` redirect (our first-party sign-in leaves no browser session at the IdP — ADR-0015 → Rejected alternatives). The flow, the one sign-out and the nine binding security requirements are ADR-0015 §4; this subsection names only what each storefront application carries:
 
-**Frontend pattern per Next.js app:**
-
-```ts
-// apps/{app}/middleware.ts
-import { NextResponse } from "next/server";
-
-export async function middleware(req: NextRequest) {
-  const session = req.cookies.get(APP_SESSION_COOKIE); // portal: "__Host-ds_session"; other apps: "__Host-ds_<app>_session"
-  if (session) return NextResponse.next();
-
-  // No local session → silent re-auth attempt via IdP
-  const url = new URL("https://auth.doctor.school/oauth/authorize");
-  url.searchParams.set("client_id", APP_OAUTH_CLIENT_ID);
-  url.searchParams.set("prompt", "none");
-  url.searchParams.set("redirect_uri", `https://${APP_HOSTNAME}/auth/callback`);
-  url.searchParams.set("state", generateState(req));
-  return NextResponse.redirect(url);
-}
-```
-
-**Auth callback handler:**
-
-```ts
-// apps/{app}/app/auth/callback/route.ts
-export async function GET(req: Request) {
-  const code = new URL(req.url).searchParams.get("code");
-  if (!code) {
-    // No code = IdP returned login_required → fall through to login UI
-    return NextResponse.redirect(
-      `https://auth.doctor.school/login?return_to=${ENCODED_RETURN}`,
-    );
-  }
-  const tokens = await exchangeCodeForTokens(code);
-  // Set host-only cookie with session reference
-  const response = NextResponse.redirect(returnUrl);
-  response.cookies.set("__Host-ds_" + APP_NAME + "_session", tokens.sid, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax", // 'strict' for admin/cms
-    path: "/",
-    maxAge: WEB_SESSION_TTL_SECONDS,
-  });
-  return response;
-}
-```
-
-**Visible UX:** for an already logged-in user — instantaneous redirect (≤300ms), no explicit login screen. For an unauthenticated user — normal login flow at `auth.doctor.school/login`.
-
-**Logout:**
-
-```ts
-// apps/{app}/app/auth/logout/route.ts
-export async function POST() {
-  // App-level logout
-  const response = NextResponse.redirect("/");
-  response.cookies.delete("__Host-ds_" + APP_NAME + "_session");
-  return response;
-}
-
-// apps/{app}/app/auth/logout-global/route.ts — for "logout from all"
-export async function POST() {
-  // Local cookie delete + redirect to IdP global logout endpoint
-  const response = NextResponse.redirect(
-    "https://auth.doctor.school/oidc/logout",
-  );
-  response.cookies.delete("__Host-ds_" + APP_NAME + "_session");
-  return response;
-}
-```
+- **After a sign-in** — the storefront sends the browser once, top-level, through the shared point with the single-use establish ticket the API returned, so the marker cookie lands on `api.doctor.school`, and returns to the exact page the sign-in started on.
+- **On a signed-out render** — one credentialed status request to the shared point; only a positive answer starts the authorize round trip. Public pages stay statically generated / ISR and are never redirected server-side.
+- **The callback route** — checks `state` against the host-only transaction cookie, redeems the code server-to-server with the PKCE verifier through the same-origin BFF, and lets the API's `Set-Cookie` land the fresh `__Host-ds_session` on its own host.
+- **Sign-out** — one API call that revokes the browser's shared sign-in record and every storefront session minted from it; a cookie delete alone is never the sign-out.
+- **Shared code** — this flow lives once in `@ds/auth-flow` and is mounted by both storefronts; neither copies it. `apps/admin` and `apps/cms` do not mount it: they keep their own sign-in.
 
 **CSRF protection:** double-submit pattern (cookie + header) on all state-changing endpoints. Implemented via NestJS middleware on the API side (see identity-auth-rbac-design §7.5).
 
@@ -873,7 +809,7 @@ Documentation:
 
 - JWT auth flow via Zitadel (closed per ADR-0001 §8, DSP-209).
 - **Host-only `__Host-` cookie per app** (doctor, portal, admin, docs, cms) — each app has its own scope. Full security profile — ADR-0001 §6.
-- **Cross-app SSO continuity** — via OIDC silent re-auth (`prompt=none`), not via shared cookie. Implementation details — §3.2.1.
+- **Cross-storefront continuity** — via the first-party shared sign-in point on `api.doctor.school` (ADR-0015 §4), not via a shared cookie. Implementation details — §3.2.1.
 - Two-tier validation: JWT fast-path for ≥99% of requests, IdP `/introspect` for high-stakes (payments, AU withdrawal, role change, admin mutations, PD export).
 - Hybrid RBAC: IdP coarse roles in JWT, backend fine-grained via Cerbos.
 

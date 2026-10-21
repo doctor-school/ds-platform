@@ -415,7 +415,7 @@ Without these items **we do not onboard the first real doctor to prod**:
 10. **Separate API tokens** agent/user/CI with least privilege; no agent write to prod-DB or main-branch.
 11. **TLS + security headers** configured (HSTS, CSP profile-per-zone per ADR-0001 A1.2).
 12. **Email deliverability** (SPF/DKIM/DMARC) configured for doctor.school.
-13. **Host-only `__Host-` cookie per app + OIDC silent re-auth** (ADR-0001 §6) — no shared cross-subdomain cookies.
+13. **Host-only `__Host-` cookie per app + the first-party cross-storefront sign-in point** (ADR-0001 §6, ADR-0015 §4) — no shared cross-subdomain cookies.
 
 ### Operational
 

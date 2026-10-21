@@ -140,79 +140,15 @@ apps/
 
 Полный security profile cookie (TTL, rotation, CSRF, fingerprint binding) — **ADR-0001 §6** (single source of truth). Этот документ — implementation reference только для Next.js-specific деталей (см. §3.2.1).
 
-#### 3.2.1. Cross-app SSO via OIDC silent re-auth — frontend implementation (DSO-63 #2)
+#### 3.2.1. Вход между витринами — реализация на фронтенде (ADR-0015 §4)
 
-Cross-app login continuity между doctor, portal, admin, docs, cms — через OIDC silent re-auth (`prompt=none`) у IdP, не через shared cookie на `.doctor.school`. Shared cookie отвергнут per ADR-0001 §6 — same-origin XSS или subdomain takeover скомпрометировали бы admin-сессию, а CSRF / fingerprint mitigations обходятся same-origin XSS. См. ADR-0001 §6 для полного обоснования.
+Непрерывность входа между двумя витринами (`apps/doctor` на `doctor.school`, `apps/portal` на `academy.doctor.school`) — собственная общая точка входа на `api.doctor.school`, а не shared cookie на зону `.doctor.school` (отвергнут per ADR-0001 §6 — same-origin XSS или subdomain takeover скомпрометировали бы каждый хост, а CSRF / fingerprint mitigations обходятся same-origin XSS) и не перенаправление IdP с `prompt=none` (наш собственный вход не оставляет браузерной сессии у IdP — ADR-0015 → Отклонённые альтернативы). Поток, один выход и девять обязательных требований безопасности — ADR-0015 §4; этот подраздел называет только то, что несёт каждое приложение витрины:
 
-**Frontend pattern для каждого Next.js app:**
-
-```ts
-// apps/{app}/middleware.ts
-import { NextResponse } from "next/server";
-
-export async function middleware(req: NextRequest) {
-  const session = req.cookies.get(APP_SESSION_COOKIE); // portal: "__Host-ds_session"; other apps: "__Host-ds_<app>_session"
-  if (session) return NextResponse.next();
-
-  // No local session → silent re-auth attempt via IdP
-  const url = new URL("https://auth.doctor.school/oauth/authorize");
-  url.searchParams.set("client_id", APP_OAUTH_CLIENT_ID);
-  url.searchParams.set("prompt", "none");
-  url.searchParams.set("redirect_uri", `https://${APP_HOSTNAME}/auth/callback`);
-  url.searchParams.set("state", generateState(req));
-  return NextResponse.redirect(url);
-}
-```
-
-**Auth callback handler:**
-
-```ts
-// apps/{app}/app/auth/callback/route.ts
-export async function GET(req: Request) {
-  const code = new URL(req.url).searchParams.get("code");
-  if (!code) {
-    // No code = IdP returned login_required → fall through to login UI
-    return NextResponse.redirect(
-      `https://auth.doctor.school/login?return_to=${ENCODED_RETURN}`,
-    );
-  }
-  const tokens = await exchangeCodeForTokens(code);
-  // Set host-only cookie with session reference
-  const response = NextResponse.redirect(returnUrl);
-  response.cookies.set("__Host-ds_" + APP_NAME + "_session", tokens.sid, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax", // 'strict' для admin/cms
-    path: "/",
-    maxAge: WEB_SESSION_TTL_SECONDS,
-  });
-  return response;
-}
-```
-
-**Visible UX:** для уже залогиненного пользователя — instantaneous redirect (≤300ms), без явного login screen. Для незалогиненного — нормальный login flow на `auth.doctor.school/login`.
-
-**Logout:**
-
-```ts
-// apps/{app}/app/auth/logout/route.ts
-export async function POST() {
-  // App-level logout
-  const response = NextResponse.redirect("/");
-  response.cookies.delete("__Host-ds_" + APP_NAME + "_session");
-  return response;
-}
-
-// apps/{app}/app/auth/logout-global/route.ts — для "logout from all"
-export async function POST() {
-  // Local cookie delete + redirect к IdP global logout endpoint
-  const response = NextResponse.redirect(
-    "https://auth.doctor.school/oidc/logout",
-  );
-  response.cookies.delete("__Host-ds_" + APP_NAME + "_session");
-  return response;
-}
-```
+- **После входа** — витрина один раз проводит браузер верхнеуровневым переходом через общую точку с одноразовым билетом установки, который вернул API, чтобы cookie-маркер лёг на `api.doctor.school`, и возвращает на ту самую страницу, с которой начался вход.
+- **При отрисовке без входа** — один запрос статуса с учётными данными к общей точке; только положительный ответ запускает круг авторизации. Публичные страницы остаются SSG / ISR и никогда не перенаправляются на сервере.
+- **Маршрут callback** — сверяет `state` с host-only cookie транзакции, погашает код сервер-сервер вместе с PKCE verifier через BFF того же origin и даёт `Set-Cookie` от API положить свежую `__Host-ds_session` на свой хост.
+- **Выход** — один вызов API, отзывающий общую запись входа браузера и каждую выпущенную из неё сессию витрины; удаление cookie само по себе никогда не является выходом.
+- **Общий код** — этот поток живёт один раз в `@ds/auth-flow` и подключается обеими витринами; ни одна его не копирует. `apps/admin` и `apps/cms` его не подключают: у них свой вход.
 
 **CSRF protection:** double-submit pattern (cookie + header) на всех state-changing endpoints. Реализуется через NestJS middleware на API stороне (см. identity-auth-rbac-design §7.5).
 
@@ -874,7 +810,7 @@ Custom ESLint rule `no-vercel-only-api` блокирует следующие im
 
 - JWT auth-flow через Zitadel (закрыто по ADR-0001 §8, DSP-209).
 - **Host-only `__Host-` cookie per app** (doctor, portal, admin, docs, cms) — каждое приложение имеет свой scope. Полный security profile — ADR-0001 §6.
-- **Cross-app SSO continuity** — через OIDC silent re-auth (`prompt=none`), не через shared cookie. Implementation details — §3.2.1.
+- **Непрерывность между витринами** — через собственную общую точку входа на `api.doctor.school` (ADR-0015 §4), не через shared cookie. Implementation details — §3.2.1.
 - Two-tier validation: JWT fast-path для ≥99% запросов, IdP `/introspect` для high-stakes (payments, AU withdrawal, role-change, admin mutations, PD export).
 - Hybrid RBAC: IdP coarse roles в JWT, backend fine-grained через Cerbos.
 

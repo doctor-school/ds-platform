@@ -39,8 +39,8 @@ import {
  *     specification carries NO `Domain` attribute and is therefore locked to the
  *     exact origin that set it. `doctor.school` and `academy.doctor.school` are
  *     different origins and hold SEPARATE session cookies of the SAME name
- *     (ADR-0015 S4); continuity between the storefronts is OIDC silent re-auth
- *     against the one Zitadel identity, never a shared cookie.
+ *     (ADR-0015 S4); continuity between the storefronts is the cross-host
+ *     sign-in of ADR-0015 S4, never a shared cookie.
  *   - row 23: ONE bound-surface header set (`ForwardedSession`,
  *     `forwardedSessionFrom`, `forwardedHeaders`). The BFF session is
  *     fingerprint-bound (ADR-0001 S6 / 003 design S3:

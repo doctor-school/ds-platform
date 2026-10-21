@@ -25,7 +25,7 @@ lang: ru
 4. **Auth-методы v1:** email+password, email+magic-link, phone+SMS-OTP, biometric unlock (mobile, локальный), MFA TOTP — обязательно для `expert / clinic_admin / investor / platform_admin`; MFA SMS как acceptable trade-off для `moderator / support` на v1 (downgrade плановый, см. §5).
 5. **OAuth — phased rollout.** v1: без social. v2: VK ID + Yandex ID + Telegram Login. v3: Apple Sign-In если iOS App Store. Max / Google — по требованию. **Account linking требует verified-email с обеих сторон** (защита от pre-auth account takeover).
 6. **Tokens:** OAuth 2.0 BCP (RFC 9700). Access JWT 15min + opaque refresh 30d (web) / 14d (mobile), rotating single-use. PKCE для public clients. Sender-constrained refresh для mobile (DPoP / device-id binding). Server-side session store (Redis). Force-logout через DELETE session. IdP introspection — только для high-stakes endpoints (admin/payments/AU withdrawal/role-change), не на горячем пути.
-7. **Security baseline (§5.5):** rate limiting per-user/IP/ASN, enumeration protection (idempotent responses на login/reset), SMS toll-fraud защита (global budget circuit-breaker + IP/ASN limits), RF-доступная CAPTCHA (Yandex SmartCaptcha), account-lockout policy, refresh token theft detection. **Cookie default — `__Host-` prefix per app**; cross-app SSO continuity через OIDC silent re-auth (ADR-0001 §6).
+7. **Security baseline (§5.5):** rate limiting per-user/IP/ASN, enumeration protection (idempotent responses на login/reset), SMS toll-fraud защита (global budget circuit-breaker + IP/ASN limits), RF-доступная CAPTCHA (Yandex SmartCaptcha), account-lockout policy, refresh token theft detection. **Cookie default — `__Host-` prefix per app**; непрерывность между двумя витринами через собственную общую точку входа на `api.doctor.school`, с одним выходом на обеих (ADR-0015 §4; §7.5).
 8. **Выбор IdP** — закрыт в §9 (Zitadel; ADR-0001 §8, DSP-209).
 9. **Миграция Directual:** Phase 0 discovery (hash format + реальный count + consent re-acquisition план) → bulk import (hash-compatible → as-is; иначе magic-link reset) → **90-дневное** soft-migration окно (не 30) с реалистичным целевым reactivation rate 50–70% (не 95%) → sunset Directual auth.
 10. **Deferred gaps** (§10.3) — явный реестр того, что не закрывается в DSO-25 и должно быть в backlog: consent management, right-to-erasure, ФЗ-187/ФСТЭК-17, anomaly detection, HIBP credential check, OWASP ASVS pen-test gates.
@@ -253,7 +253,7 @@ WebAuthn / Passkeys — **out of scope v1**, добавляется в v2 как
 | CAPTCHA после N попыток            | API gateway       | **Yandex SmartCaptcha** (RF-доступная) — hCaptcha/reCAPTCHA в РФ deprecated. Триггер: 3+ failed login / IP за 5 мин                                                                                                                                                                                                                                                               |
 | Compromised credentials check      | IdP / backend     | **Deferred to v2:** HIBP Pwned Passwords k-anonymity API на регистрации + смене пароля                                                                                                                                                                                                                                                                                            |
 | CSRF protection                    | Backend           | CSRF-tokens на mutating endpoints; SameSite=Lax cookie + `__Host-` prefix per app (нет shared cross-subdomain cookies)                                                                                                                                                                                                                                                            |
-| Cookie security                    | Backend           | `Secure; HttpOnly; SameSite=Lax; __Host-` prefix per app; **никаких токенов в localStorage**. Cross-app continuity — OIDC silent re-auth (ADR-0001 §6). Полный session security profile — ADR-0001 §6 (single source of truth).                                                                                                                                                   |
+| Cookie security                    | Backend           | `Secure; HttpOnly; SameSite=Lax; __Host-` prefix per app; **никаких токенов в localStorage**. Непрерывность между витринами — собственная общая точка входа (ADR-0015 §4; §7.5). Полный session security profile — ADR-0001 §6 (single source of truth).                                                                                                                          |
 | Session fixation protection        | IdP               | Regenerate session-id при login и при MFA-elevation                                                                                                                                                                                                                                                                                                                               |
 | PII в логах                        | Backend           | Email/phone маскируются в логах (`a***@example.com`, `+7***1234`); полные значения только в шифрованном audit log с RF-resident KMS                                                                                                                                                                                                                                               |
 
@@ -318,7 +318,7 @@ OAuth 2.0 BCP (RFC 9700) reference implementation.
 | Refresh TTL (mobile)               | **14d** (снижено с 90d по reviewer-замечанию — sender-constrained refresh без proof-of-possession при 90d даёт слишком долгое окно компрометации)                                                                                                                                                                                          |
 | Refresh sender-constraint (mobile) | Device-id binding: при выпуске refresh запоминается `device_fingerprint` (combination of installation_id, platform, model); при обмене проверяется match. Несовпадение → reject + alert. **DPoP (RFC 9449)** рассматривается для v2 как более строгая защита.                                                                              |
 | Mobile storage                     | iOS Keychain / Android Keystore                                                                                                                                                                                                                                                                                                            |
-| Web storage                        | HttpOnly + Secure + SameSite=Lax cookie с `__Host-` prefix. **Не localStorage.** **Каждое приложение (portal, admin, promo, docs, cms) держит свою host-only cookie**; cross-app continuity — через OIDC silent re-auth (см. §7.5). Полный security profile — ADR-0001 §6 (single source of truth).                                        |
+| Web storage                        | HttpOnly + Secure + SameSite=Lax cookie с `__Host-` prefix. **Не localStorage.** **Каждое приложение (doctor, portal, admin, docs, cms) держит свою host-only cookie**; непрерывность между двумя витринами — через собственную общую точку входа (см. §7.5). Полный security profile — ADR-0001 §6 (single source of truth).              |
 | Session store                      | Redis, server-side, привязан к refresh-token                                                                                                                                                                                                                                                                                               |
 | Force-logout                       | DELETE session record → invalidates refresh; access умирает в течение 15 мин. Для admin-аккаунтов критические endpoints дёргают introspection (см. §7.2).                                                                                                                                                                                  |
 | List active sessions               | IdP admin API                                                                                                                                                                                                                                                                                                                              |
@@ -380,35 +380,25 @@ Storage — append-only Postgres table или event-store (если IdP = Zitade
 
 Где живёт session store — внутри IdP или общий backend Redis. Default — внутри IdP. Решение зависит от headless API ergonomics обоих кандидатов (определяется в Phase 0 implementation). Это **не блокер дизайна** — force-logout гарантия одинакова в обоих вариантах (15-мин window для access + introspection для high-stakes).
 
-### 7.5. Cross-app SSO via OIDC silent re-auth (DSO-63 #2)
+### 7.5. Вход между витринами и один выход (ADR-0015 §4)
 
-Cross-app login continuity между portal, admin, promo, docs, cms — **не shared cookie на `.doctor.school`** (shared cookie через trust-zone boundary отвергнут per ADR-0001 §6 — same-origin XSS или subdomain takeover скомпрометировали бы admin-сессию), а **OIDC silent re-auth у IdP**.
+Непрерывность входа между двумя витринами (`doctor.school`, `academy.doctor.school`) — **не shared cookie на `.doctor.school`** (shared cookie через trust-zone boundary отвергнут per ADR-0001 §6 — same-origin XSS или subdomain takeover скомпрометировали бы каждый хост, включая admin) и **не собственная браузерная сессия IdP**: наш вход — собственные формы с серверным обменом сессии, браузер никогда не заходит на `id.doctor.school`, а `prompt=none` в Zitadel отвечает только по собственной cookie интерфейса входа — поэтому `prompt=none` с витрины никогда не находит сессию (доказательство: ADR-0015 → Отклонённые альтернативы). Это **собственная общая точка входа на `api.doctor.school`**.
 
-**Flow для пользователя, уже залогиненного на portal, открывающего admin:**
+**Flow для врача, вошедшего на одной витрине и открывающего другую:**
 
-1. Browser → `admin.doctor.school`.
-2. Admin Next.js middleware проверяет local host-only cookie `__Host-ds_admin_session`. Отсутствует / просрочена.
-3. Middleware делает `302 → auth.doctor.school/oauth/authorize?client_id=admin&prompt=none&redirect_uri=https://admin.doctor.school/auth/callback&state=...`.
-4. IdP проверяет свою host-only сессию (cookie на `auth.doctor.school`). Сессия активна.
-5. IdP выдаёт `authorization_code` → редирект обратно на `admin.doctor.school/auth/callback?code=...`.
-6. Admin server обменивает code на app-specific token, ставит свою `__Host-ds_admin_session` cookie.
-7. Пользователь видит admin UI. **Visible delay ≤300ms**, без явного login screen.
-
-**Если IdP-сессии нет** (пользователь не залогинен где-либо вообще): IdP возвращает `error=login_required` → admin Next.js redirects к стандартному login flow (auth.doctor.school/login).
-
-**Требования к IdP:**
-
-- `prompt=none` поддерживается (silent re-auth).
-- Multiple `redirect_uri` allowed per OAuth client, **или** multiple OAuth clients (по одному на subdomain). Multiple clients чище для blast-radius isolation.
-- Cookie IdP-сессии — host-only (без `Domain=`), `SameSite=Lax` или `Strict`.
-
-Zitadel поддерживает это нативно (`prompt=none` silent re-auth, multiple redirect_uri/clients, host-only session cookie).
+1. Вход на витрине 1 (собственные формы без изменений) заодно создаёт в API общую запись входа браузера, связанную с проверенной сессией Zitadel; одноразовый билет установки один раз проводит браузер через `api.doctor.school`, который ставит host-only маркер `__Host-ds_sso` и возвращает браузер ровно на URL витрины 1.
+2. Страница витрины 2 без входа спрашивает общую точку (один запрос статуса с учётными данными, CORS по точному списку origin), есть ли у браузера живая запись; дальше идёт только «да».
+3. Витрина 2 отправляет браузер на конечную точку авторизации общей точки с `state`, PKCE-вызовом `S256` и своим точно зарегистрированным callback; общая точка проверяет маркер, запись и отпечаток и возвращает одноразовый код на ≈60 с — или `error=login_required`.
+4. Callback витрины 2 сверяет `state` и погашает код сервер-сервер вместе с verifier; API завершает новый OIDC-запрос авторизации проверенной сессией Zitadel ради свежего набора токенов и выпускает **новую** сессию витрины 2 под новым `sid`.
 
 **Logout:**
 
-- App-level logout: DELETE cookie на одном subdomain → пользователь логаут только на этом app, остальные продолжают работать через silent re-auth.
-- Global logout: IdP endpoint `/oidc/logout` инвалидирует IdP-сессию → silent re-auth на других apps возвращает `login_required` → они логаутят локально.
-- "Logout from all devices" — IdP admin API revoke all sessions for user.
+- Выход на любой витрине отзывает на сервере общую запись, каждую выпущенную из неё сессию витрины и стоящую за ней сессию Zitadel — следующий запрос на другой витрине уже без входа (один выход).
+- "Logout from all devices" — отзыв всех записей сессий пользователя плюс IdP admin API revoke всех сессий Zitadel пользователя.
+
+**Вне механизма:** `admin.doctor.school` (сессия под TOTP, фича 011), `cms.doctor.school` и внутренняя документация сохраняют свой вход; ни одно из них не клиент общей точки входа.
+
+Девять обязательных требований безопасности (точный список возврата, одноразовый код с привязкой PKCE, `state` / `nonce`, атрибуты cookie, свежая сессия на каждом хосте, полный серверный выход, изоляция админки, не слабее исходного фактора, лимиты без перечисления) зафиксированы один раз — в ADR-0015 §4.
 
 ---
 

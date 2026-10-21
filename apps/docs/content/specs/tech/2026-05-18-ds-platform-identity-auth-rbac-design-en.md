@@ -77,7 +77,7 @@ This spec does not own the identity or RBAC model; it records where each part li
 The base session and token parameters are owned by **ADR-0001 §6 / design §7.1** and are not restated here. The two facts this spec _depends on_:
 
 - **Access token:** JWT, RS256/ES256, **15-min** TTL; claims `sub`, `roles[]`, `mfa`, `sid`, `iat`, `exp`, `jti` (ADR-0001 design §7.1).
-- **Base session:** opaque rotating refresh token, **30d web / 14d mobile**, server-side in Redis; web carries a `__Host-`-prefixed per-app `HttpOnly + Secure + SameSite=Lax` cookie (ADR-0001 §6). Cross-app continuity is OIDC silent re-auth (`prompt=none`), **not** a shared cookie (ADR-0001 design §7.5).
+- **Base session:** opaque rotating refresh token, **30d web / 14d mobile**, server-side in Redis; web carries a `__Host-`-prefixed per-app `HttpOnly + Secure + SameSite=Lax` cookie (ADR-0001 §6). Continuity between the two storefronts is the first-party shared sign-in point on `api.doctor.school` with one sign-out on both, **not** a shared cookie (ADR-0015 §4; ADR-0001 design §7.5).
 
 The elevated MFA-fresh state (§7.1) is layered **on top of** this base session as an additional claim — it never replaces or extends it.
 
@@ -178,22 +178,22 @@ Resolves ADR-0001 §10's "full list of auth audit events — identity-auth-rbac-
 
 **Two-level model.** Every auditable auth event has an **audit class** (a dotted namespace, the unit registered per ADR-0009 §2.4) and an **event** within it. The **canonical wire identifier is `<class>.<event>`**, where `<event>` is the outcome segment. This aligns with the form ADR-0001 §10 already publishes (`auth.step_up.{requested,succeeded,failed}`) and extends it across the whole list. ADR-0001 design §7.3's flat names (`login_success`, `mfa_used`, …) map 1:1 onto these ids (`auth.login.success`, `auth.mfa.used`) — the same events, normalized spelling.
 
-| Class               | Events (wire id `<class>.<event>`)            | Key fields                                                               |
-| ------------------- | --------------------------------------------- | ------------------------------------------------------------------------ |
-| `auth.login`        | `success`, `failure`                          | user_id / identifier_hash, method, reason, ip, user_agent, geo, ts       |
-| `auth.account`      | `verified`                                    | user_id, channel (email/sms), ts                                         |
-| `auth.mfa`          | `enrolled`, `used`, `failure`, `reset`        | user_id, method (totp/sms), reason, by_admin, ts                         |
-| `auth.password`     | `changed`, `reset_requested`                  | user_id (or null), identifier_hash, by_self/by_admin, ip, ts             |
-| `auth.magic_link`   | `sent`, `used`                                | user_id, channel, ts                                                     |
+| Class               | Events (wire id `<class>.<event>`)            | Key fields                                                                                                                                                                     |
+| ------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `auth.login`        | `success`, `failure`                          | user_id / identifier_hash, method, reason, ip, user_agent, geo, ts                                                                                                             |
+| `auth.account`      | `verified`                                    | user_id, channel (email/sms), ts                                                                                                                                               |
+| `auth.mfa`          | `enrolled`, `used`, `failure`, `reset`        | user_id, method (totp/sms), reason, by_admin, ts                                                                                                                               |
+| `auth.password`     | `changed`, `reset_requested`                  | user_id (or null), identifier_hash, by_self/by_admin, ip, ts                                                                                                                   |
+| `auth.magic_link`   | `sent`, `used`                                | user_id, channel, ts                                                                                                                                                           |
 | `auth.session`      | `created`, `terminated`, `rejected`           | user_id, sid, device_id, reason (logout/force/expiry/theft_detected; rejected: wrong_cookie/pending_ref/fingerprint_mismatch/expired/role_without_mfa/csrf_mismatch), tier, ts |
-| `auth.token`        | `rotated`, `theft_detected`                   | user_id, sid, ts                                                         |
-| `auth.account_link` | `linked_auto`, `attempt_rejected`, `unlinked` | user_id, provider, reason, by_self/by_admin, ts                          |
-| `auth.role`         | `granted`, `revoked`                          | user_id, role, by_admin, ts                                              |
-| `auth.lockout`      | `triggered`, `released`                       | user_id, reason, by_admin/auto, ts                                       |
-| `auth.step_up`      | `requested`, `succeeded`, `failed`            | user_id, endpoint, acr_before, acr_after, mfa_method, ip, ua, ts         |
-| `auth.sms`          | `budget_breaker_open`                         | scope (global), count, provider, ts                                      |
-| `auth.sync`         | `drift_detected`                              | user_id, diff, ts                                                        |
-| `auth.erasure`      | `executed`                                    | user_id, scope, ts                                                       |
+| `auth.token`        | `rotated`, `theft_detected`                   | user_id, sid, ts                                                                                                                                                               |
+| `auth.account_link` | `linked_auto`, `attempt_rejected`, `unlinked` | user_id, provider, reason, by_self/by_admin, ts                                                                                                                                |
+| `auth.role`         | `granted`, `revoked`                          | user_id, role, by_admin, ts                                                                                                                                                    |
+| `auth.lockout`      | `triggered`, `released`                       | user_id, reason, by_admin/auto, ts                                                                                                                                             |
+| `auth.step_up`      | `requested`, `succeeded`, `failed`            | user_id, endpoint, acr_before, acr_after, mfa_method, ip, ua, ts                                                                                                               |
+| `auth.sms`          | `budget_breaker_open`                         | scope (global), count, provider, ts                                                                                                                                            |
+| `auth.sync`         | `drift_detected`                              | user_id, diff, ts                                                                                                                                                              |
+| `auth.erasure`      | `executed`                                    | user_id, scope, ts                                                                                                                                                             |
 
 - **Storage:** the `auth_audit` table (§8) is the auth-domain **projection of the append-only `audit_ledger`** (ADR-0003 §6); PD columns store masked values, full values only in the encrypted ledger (003-design §5). Append-only — `INSERT` only, `UPDATE`/`DELETE` blocked at the DB level (ADR-0003 §2.7 ledger pattern). Read access: `platform_admin` + DPO only; deletion is impossible even for them.
 - **Retention:** ≥3 years (ADR-0001 design §7.3 / PRD §31); the platform retention matrix sets the audit ledger at **5 years** with crypto-shred at term (ADR-0009 §2.6, OQ-D3 CLOSED). (ADR-0003's OQ-D3 spells this table `audit_log`; ADR-0009 §2.6 spells the same table `audit_ledger` — one table, two corpus spellings.)

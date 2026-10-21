@@ -267,7 +267,7 @@ All mutating endpoints accept an `Idempotency-Key: <uuid>` header. Backend store
 ### 4.5. Authentication
 
 - `Authorization: Bearer <jwt>` header.
-- Web: JWT in `HttpOnly + Secure + SameSite=Lax + __Host-` cookie per app (ADR-0001 §6 + §7 — host-only per app, no shared cross-subdomain cookies; cross-app SSO via OIDC silent re-auth).
+- Web: JWT in `HttpOnly + Secure + SameSite=Lax + __Host-` cookie per app (ADR-0001 §6 + §7 — host-only per app, no shared cross-subdomain cookies; cross-storefront sign-in via the first-party shared sign-in point, ADR-0015 §4).
 - Mobile: JWT in Keychain/Keystore, passed in header manually.
 - Two-tier validation (ADR-0001 §6): JWT fast-path for ≥99% of requests; `/introspect` for high-stakes (payments, AU withdrawal, role-change, admin mutations, PD export).
 

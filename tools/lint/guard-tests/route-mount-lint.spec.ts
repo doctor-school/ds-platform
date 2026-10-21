@@ -214,7 +214,9 @@ describe("route-mount-lint", () => {
     });
     expect(code).toBe(1);
     expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
-    expect(stderr).toContain("awaited route-prop element `q: EventsListingPage`");
+    expect(stderr).toContain(
+      "awaited route-prop element `q: EventsListingPage`",
+    );
   });
 
   it("2074: red — a binding exporting an action the page does not import → exit 1", () => {
@@ -223,13 +225,19 @@ describe("route-mount-lint", () => {
     });
     expect(code).toBe(1);
     expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
-    expect(stderr).toContain("`unusedSecondAction` is not imported by the route file");
+    expect(stderr).toContain(
+      "`unusedSecondAction` is not imported by the route file",
+    );
   });
 
   it("2074: red — a binding whose action is a default export → exit 1", () => {
-    const { code, stderr } = runGuard(GUARD, dir("red-binding-default-export"), {
-      env: TREE_ONLY,
-    });
+    const { code, stderr } = runGuard(
+      GUARD,
+      dir("red-binding-default-export"),
+      {
+        env: TREE_ONLY,
+      },
+    );
     expect(code).toBe(1);
     expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
     expect(stderr).toContain("a default export");
@@ -252,6 +260,37 @@ describe("route-mount-lint", () => {
     expect(stderr).toContain("apps/portal/app/webinars/retry-block-action.ts");
     expect(stderr).toContain("argument `EventsBlockRetryInput`");
   });
+
+  it.each([
+    ["red-mount-prop-tagged-template", "attribute `session`"],
+    ["red-mount-prop-env", "attribute `hostFlag`"],
+    ["red-mount-prop-inline-override", "attribute `config`"],
+    ["red-mount-prop-arrow", "attribute `retry`"],
+    ["red-mount-nested-jsx", "attribute `slot`"],
+    ["red-mount-spread-attribute", "a spread attribute"],
+    ["red-mount-children", "the mount has children"],
+  ])(
+    "2074: red — a mount prop outside the allowlist (%s) → exit 1",
+    (name, needle) => {
+      const { code, stderr } = runGuard(GUARD, dir(name), { env: TREE_ONLY });
+      expect(code).toBe(1);
+      expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
+      expect(stderr).toContain(needle);
+    },
+  );
+
+  it.each([
+    ["red-segment-tagged-template", "segment config `revalidate`"],
+    ["red-segment-getter-metadata", "`metadata` member `get title"],
+  ])(
+    "2074: red — a segment-config export outside the allowlist (%s) → exit 1",
+    (name, needle) => {
+      const { code, stderr } = runGuard(GUARD, dir(name), { env: TREE_ONLY });
+      expect(code).toBe(1);
+      expect(stderr).toContain("apps/portal/app/webinars/page.tsx");
+      expect(stderr).toContain(needle);
+    },
+  );
 
   it("2002: red — a route file with no registry row → exit 1", () => {
     const { code, stderr } = runGuard(GUARD, dir("red-unregistered"), {

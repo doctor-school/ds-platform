@@ -26,18 +26,28 @@
  *      compiler API (structure, never a regex over source text): the only
  *      imports allowed are the row's package (`@ds/<name>` and its subpaths),
  *      the route's own host-config module (a relative `host-config` /
- *      `*.host-config` specifier) and `import type … from "next"`; the only
- *      top-level statements allowed are those imports, the Next segment-config
- *      exports, and ONE default export — its parameters an allowlist of exact
- *      shapes: none, one plain identifier, or `{ params, searchParams }` with
- *      shorthand elements only (no renamed or computed key, no rest, no
- *      default, no import's name) — whose body is a single `return` of the
- *      package mount with props built from identifiers and literals, optionally
- *      preceded by `await` of the route props (`params` / `searchParams`) into
- *      one plain name or shorthand plain names (no default, computed or renamed
- *      key, rest, or import's name — the page-parameter allowlist).
- *      Anything else — a `fetch`, another `await`, `if` / ternary / `&&`
- *      branching, `try`, a call that is not the mount — is a finding.
+ *      `*.host-config` specifier) and `import type … from "next"`. Every other
+ *      part of the file is held to an ALLOWLIST of the shapes the `mounted`
+ *      routes use — no part is judged by a list of banned constructs. The only
+ *      other top-level statements are:
+ *        - segment config, one `export const` each: `dynamic = "<string
+ *          literal>"`, or `metadata = { … }` whose every member is
+ *          `<name>: "<string literal>"` or `<name>: <PKG>.<name>` (`<PKG>` a
+ *          value import from the row's package) — no other export name, no
+ *          getter, method, spread, computed key, call, template or operator;
+ *        - ONE default export — its parameters none, one plain identifier, or
+ *          `{ params, searchParams }` with shorthand elements only (no renamed
+ *          or computed key, no rest, no default, no import's name) — whose body
+ *          is a single `return` of the mount, optionally preceded by `await` of
+ *          a page parameter (or a plain property read off it) into one plain
+ *          name or shorthand plain names (the same parameter allowlist).
+ *      The mount is one element named by a bare package import, with no
+ *      children; its attributes are `name="<string literal>"` or
+ *      `name={<bare identifier>}` only, the identifier a host-config value
+ *      import, a binding import, a page parameter or a name awaited from one.
+ *      Anything else — a `fetch`, a tagged template, a member read, an object
+ *      or arrow prop, a spread, a nested element, branching, another
+ *      statement — is a finding.
  *      SERVER-ACTION BINDING — a server action cannot live in the package
  *      bound to a host (the package never imports a host config) nor in the
  *      host-config module (an action needs a `"use server"` module or an
@@ -124,20 +134,6 @@ const UNTIL_STATES = ["`wave N (#Issue)`", "`mounted`", "`permanent`"];
 const PACKAGE_RE = /`(@ds\/[a-z0-9-]+)`/;
 /** A host-config module, by the file convention the import-boundary guard uses. */
 const HOST_CONFIG_RE = /^([\w.-]+\.)?host-config$/;
-/** Next.js segment config — declarative route metadata, not host logic. */
-const SEGMENT_CONFIG = new Set([
-  "dynamic",
-  "dynamicParams",
-  "revalidate",
-  "fetchCache",
-  "runtime",
-  "preferredRegion",
-  "maxDuration",
-  "metadata",
-  "viewport",
-]);
-/** The only values a mounted route body may `await`: its own route props. */
-const ROUTE_PROPS = new Set(["params", "searchParams", "props"]);
 /** The only elements a mounted page may destructure from its route props. */
 const ROUTE_PROPS_ELEMENTS = new Set(["params", "searchParams"]);
 
@@ -166,63 +162,96 @@ function classifyUntil(until: string): string | null {
   return UNTIL_WAVE_RE.test(until) ? "wave" : null;
 }
 
-/** True for `params`, `searchParams`, `props` and any property read off them. */
-function isRouteProp(expr: ts.Expression): boolean {
-  if (ts.isIdentifier(expr)) return ROUTE_PROPS.has(expr.text);
-  if (ts.isPropertyAccessExpression(expr)) return isRouteProp(expr.expression);
+/**
+ * True for a page parameter (`props`, `params`, `searchParams` — whichever the
+ * default export declares) or a plain property read off one: the only values a
+ * mounted route body may `await`.
+ */
+function isRouteProp(expr: ts.Expression, pageNames: Set<string>): boolean {
+  if (ts.isIdentifier(expr)) return pageNames.has(expr.text);
+  if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.name))
+    return isRouteProp(expr.expression, pageNames);
   return false;
 }
 
+/** Strips any parentheses around `e`. */
+function unparen(e: ts.Expression): ts.Expression {
+  let x = e;
+  while (ts.isParenthesizedExpression(x)) x = x.expression;
+  return x;
+}
+
 /**
- * Recursively reject the node kinds a thin projection cannot contain: any call
- * (the mount is JSX, not a call), any `await`, and any branching. Applied to
- * the segment-config initialisers, the pre-mount `await`s and the mount JSX, so
- * host logic cannot hide inside an allowed statement shape.
+ * A top-level segment-config export of a mounted route, by allowlist — exactly
+ * the shapes the `mounted` routes use, nothing more: one `export const`
+ * declaration, either `dynamic = "<string literal>"` or `metadata = { … }` whose
+ * every member is `<name>: "<string literal>"` or `<name>: <PKG>.<name>` (`<PKG>`
+ * a value import from the row's package). A getter, method, spread, computed
+ * key, call, tagged template, operator or any other export name would run code
+ * at module load or carry a host value the host config does not hold.
  */
-function banWalk(
-  node: ts.Node,
+function checkSegmentConfig(
+  st: ts.VariableStatement,
+  pkgImports: Set<string>,
   sf: ts.SourceFile,
   rel: string,
   findings: string[],
 ): void {
   const at = (n: ts.Node) =>
     sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+  const show = (n: ts.Node) => n.getText(sf).replace(/\s+/g, " ").slice(0, 40);
   const flag = (n: ts.Node, what: string) =>
     findings.push(
-      `${rel}:${at(n)}: body beyond mount + config — ${what}; a mounted route file mounts the package and passes its host config, nothing else`,
+      `${rel}:${at(n)}: body beyond mount + config — ${what}; a mounted route file's segment config is \`export const dynamic = "<literal>"\` or \`export const metadata = { <name>: "<literal>" | <package import>.<name> }\`, nothing else`,
     );
-  const visit = (n: ts.Node): void => {
-    if (ts.isCallExpression(n) || ts.isNewExpression(n)) {
-      flag(n, `a call (\`${n.expression.getText(sf).slice(0, 40)}\`)`);
-    } else if (ts.isAwaitExpression(n)) {
-      flag(n, "an `await` outside the route props");
-    } else if (ts.isConditionalExpression(n)) {
-      flag(n, "a ternary");
-    } else if (
-      ts.isBinaryExpression(n) &&
-      (n.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
-        n.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
-        n.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)
-    ) {
-      flag(n, "branching (`&&` / `||` / `??`)");
-    } else if (ts.isIfStatement(n)) {
-      flag(n, "branching (`if`)");
-    } else if (ts.isSwitchStatement(n)) {
-      flag(n, "branching (`switch`)");
-    } else if (ts.isTryStatement(n)) {
-      flag(n, "a `try`");
-    } else if (
-      ts.isForStatement(n) ||
-      ts.isForInStatement(n) ||
-      ts.isForOfStatement(n) ||
-      ts.isWhileStatement(n) ||
-      ts.isDoStatement(n)
-    ) {
-      flag(n, "a loop");
-    }
-    ts.forEachChild(n, visit);
-  };
-  visit(node);
+  const decls = st.declarationList.declarations;
+  if (
+    (st.declarationList.flags & ts.NodeFlags.Const) === 0 ||
+    decls.length !== 1
+  ) {
+    flag(st, "segment config that is not one `export const` declaration");
+    return;
+  }
+  const d = decls[0];
+  const name = ts.isIdentifier(d.name) ? d.name.text : d.name.getText(sf);
+  const init = d.initializer ? unparen(d.initializer) : undefined;
+  if (name === "dynamic") {
+    if (!init || !ts.isStringLiteral(init))
+      flag(
+        d,
+        `segment config \`dynamic\` is \`${init ? show(init) : ""}\`, not a string literal`,
+      );
+    return;
+  }
+  if (name !== "metadata") {
+    flag(
+      d,
+      `segment config \`${name}\` is outside the allowlist (\`dynamic\`, \`metadata\`)`,
+    );
+    return;
+  }
+  if (!init || !ts.isObjectLiteralExpression(init)) {
+    flag(
+      d,
+      `\`metadata\` is \`${init ? show(init) : ""}\`, not an object literal`,
+    );
+    return;
+  }
+  for (const p of init.properties) {
+    const ok =
+      ts.isPropertyAssignment(p) &&
+      ts.isIdentifier(p.name) &&
+      (ts.isStringLiteral(p.initializer) ||
+        (ts.isPropertyAccessExpression(p.initializer) &&
+          ts.isIdentifier(p.initializer.name) &&
+          ts.isIdentifier(p.initializer.expression) &&
+          pkgImports.has(p.initializer.expression.text)));
+    if (!ok)
+      flag(
+        p,
+        `\`metadata\` member \`${show(p)}\` is not \`<name>: "<literal>"\` or \`<name>: <package import>.<name>\``,
+      );
+  }
 }
 
 /** Every local name bound by an import of `sf`, type-only imports included. */
@@ -260,9 +289,7 @@ function plainParam(
     return null;
   }
   if (name.text === "this") {
-    findings.push(
-      `${rel}:${line}: a \`this\` parameter — ${why}`,
-    );
+    findings.push(`${rel}:${line}: a \`this\` parameter — ${why}`);
     return null;
   }
   let ok = true;
@@ -317,6 +344,8 @@ function bindingParams(
  * identifier; or one object pattern whose every element is the shorthand
  * `params` / `searchParams` — no renamed or computed key, no rest, no default.
  * Anything else could compute host logic before the body the guard reads.
+ * Returns the allowed parameter names — the route props the body may await
+ * and the mount may pass.
  */
 function pageParams(
   params: ts.NodeArray<ts.ParameterDeclaration>,
@@ -324,20 +353,21 @@ function pageParams(
   sf: ts.SourceFile,
   rel: string,
   findings: string[],
-): void {
+): Set<string> {
   const why =
     "a mounted route file receives its route props as `props` or `{ params, searchParams }`, nothing else";
   const at = (n: ts.Node) =>
     sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+  const names = new Set<string>();
   if (params.length > 1) {
     findings.push(
       `${rel}:${at(params[1])}: a second parameter on the default export — ${why}`,
     );
   }
   const p = params[0];
-  if (!p) return;
+  if (!p) return names;
   if (!ts.isObjectBindingPattern(p.name)) {
-    plainParam(
+    const n = plainParam(
       p.name,
       p.initializer,
       p.dotDotDotToken !== undefined,
@@ -348,7 +378,8 @@ function pageParams(
       findings,
       why,
     );
-    return;
+    if (n) names.add(n);
+    return names;
   }
   if (p.initializer || p.dotDotDotToken) {
     findings.push(
@@ -367,7 +398,7 @@ function pageParams(
       );
       continue;
     }
-    plainParam(
+    const n = plainParam(
       el.name,
       el.initializer,
       false,
@@ -378,7 +409,9 @@ function pageParams(
       findings,
       why,
     );
+    if (n) names.add(n);
   }
+  return names;
 }
 
 /**
@@ -386,7 +419,8 @@ function pageParams(
  * held to the same allowlist as the page's parameters: one plain identifier, or
  * an object pattern of shorthand plain identifiers — no default, computed or
  * renamed key, rest, nested pattern, or import's name. A default or computed key
- * runs before the mount; a rename can shadow the mount import.
+ * runs before the mount; a rename can shadow the mount import. Adds every
+ * allowed name to `into` — the mount may pass them.
  */
 function awaitedNames(
   name: ts.BindingName,
@@ -395,11 +429,23 @@ function awaitedNames(
   sf: ts.SourceFile,
   rel: string,
   findings: string[],
+  into: Set<string>,
 ): void {
   const why =
     "a mounted route file may only await its route props into plain names before the mount";
   if (!ts.isObjectBindingPattern(name)) {
-    plainParam(name, undefined, false, d, imports, sf, rel, findings, why);
+    const n = plainParam(
+      name,
+      undefined,
+      false,
+      d,
+      imports,
+      sf,
+      rel,
+      findings,
+      why,
+    );
+    if (n) into.add(n);
     return;
   }
   for (const el of name.elements) {
@@ -410,7 +456,18 @@ function awaitedNames(
       );
       continue;
     }
-    plainParam(el.name, el.initializer, false, el, imports, sf, rel, findings, why);
+    const n = plainParam(
+      el.name,
+      el.initializer,
+      false,
+      el,
+      imports,
+      sf,
+      rel,
+      findings,
+      why,
+    );
+    if (n) into.add(n);
   }
 }
 
@@ -487,11 +544,7 @@ function hasModifier(st: ts.Statement, kind: ts.SyntaxKind): boolean {
  * `return <packageFn>(<HOST_CONFIG>, …)` — so the binding names its config and
  * nothing else.
  */
-function checkBinding(
-  rel: string,
-  pkg: string,
-  needed: Set<string>,
-): string[] {
+function checkBinding(rel: string, pkg: string, needed: Set<string>): string[] {
   const findings: string[] = [];
   const src = readFileSync(resolve(REPO_ROOT, rel), "utf8");
   const sf = ts.createSourceFile(
@@ -647,6 +700,20 @@ function checkMount(
   const bindings: string[] = [];
   /** Export names the route imports from its binding (`propertyName` when renamed). */
   const bindingNames = new Set<string>();
+  /** Local VALUE names bound by the package, host-config and binding imports. */
+  const pkgValues = new Set<string>();
+  const hostConfigValues = new Set<string>();
+  const bindingLocals = new Set<string>();
+  const segmentConfig: ts.VariableStatement[] = [];
+  const valueNamesOf = (st: ts.ImportDeclaration, into: Set<string>) => {
+    const clause = st.importClause;
+    if (!clause || clause.isTypeOnly) return;
+    if (clause.name) into.add(clause.name.text);
+    const b = clause.namedBindings;
+    if (b && ts.isNamespaceImport(b)) into.add(b.name.text);
+    if (b && ts.isNamedImports(b))
+      for (const e of b.elements) if (!e.isTypeOnly) into.add(e.name.text);
+  };
   let fn:
     | ts.FunctionDeclaration
     | ts.ArrowFunction
@@ -663,24 +730,36 @@ function checkMount(
       const isNextType =
         spec === "next" && st.importClause?.isTypeOnly === true;
       const sibling = fromPkg || isHostConfig ? null : siblingOf(rel, spec);
-      if (fromPkg) collectMountNames(st, mounts);
-      else if (sibling && bindings.length === 0) {
+      if (fromPkg) {
+        collectMountNames(st, mounts);
+        valueNamesOf(st, pkgValues);
+      } else if (isHostConfig) {
+        valueNamesOf(st, hostConfigValues);
+      } else if (sibling && bindings.length === 0) {
         bindings.push(sibling);
+        valueNamesOf(st, bindingLocals);
         const clause = st.importClause;
         const b = clause?.namedBindings;
-        if (!clause || clause.isTypeOnly || clause.name || !b || !ts.isNamedImports(b)) {
+        if (
+          !clause ||
+          clause.isTypeOnly ||
+          clause.name ||
+          !b ||
+          !ts.isNamedImports(b)
+        ) {
           findings.push(
             `${rel}:${at(st)}: the binding \`${spec}\` is not imported by name — a mounted route file imports its server actions as \`import { action } from "./<binding>"\``,
           );
         } else {
           for (const e of b.elements)
-            if (!e.isTypeOnly) bindingNames.add((e.propertyName ?? e.name).text);
+            if (!e.isTypeOnly)
+              bindingNames.add((e.propertyName ?? e.name).text);
         }
       } else if (sibling) {
         findings.push(
           `${rel}:${at(st)}: a second sibling \`${spec}\` — a mounted route file imports ONE server-action binding at most`,
         );
-      } else if (!isHostConfig && !isNextType) {
+      } else if (!isNextType) {
         findings.push(
           `${rel}:${at(st)}: foreign import \`${spec}\` — a mounted route file imports only \`${pkg}\` (and its subpaths), its own host-config module, one sibling server-action binding, and \`import type … from "next"\``,
         );
@@ -688,16 +767,8 @@ function checkMount(
       continue;
     }
     if (ts.isVariableStatement(st)) {
-      const exported = st.modifiers?.some(
-        (m) => m.kind === ts.SyntaxKind.ExportKeyword,
-      );
-      const names = st.declarationList.declarations.map((d) =>
-        ts.isIdentifier(d.name) ? d.name.text : "",
-      );
-      if (exported && names.every((n) => SEGMENT_CONFIG.has(n))) {
-        for (const d of st.declarationList.declarations) {
-          if (d.initializer) banWalk(d.initializer, sf, rel, findings);
-        }
+      if (hasModifier(st, ts.SyntaxKind.ExportKeyword)) {
+        segmentConfig.push(st);
         continue;
       }
       beyond(st, "a top-level binding that is not Next segment config");
@@ -723,6 +794,8 @@ function checkMount(
     );
   }
 
+  for (const st of segmentConfig)
+    checkSegmentConfig(st, pkgValues, sf, rel, findings);
   for (const b of bindings)
     findings.push(...checkBinding(b, pkg, bindingNames));
   const done = () => ({ findings, bindings: bindings.length });
@@ -734,23 +807,69 @@ function checkMount(
     return done();
   }
   const pageImports = importBindings(sf);
-  pageParams(fn.parameters, pageImports, sf, rel, findings);
+  const pageNames = pageParams(fn.parameters, pageImports, sf, rel, findings);
+  const awaited = new Set<string>();
 
+  // The mount, by allowlist — the shape every `mounted` route has: one element
+  // with no children, `name="<literal>"` or `name={<bare identifier>}`
+  // attributes only, each identifier a host-config value import, a binding
+  // import, a page parameter or a name awaited from one. A member read, call,
+  // template, object, arrow, spread, cast or nested element is a finding: each
+  // would compute host logic or a host divergence the host config does not hold.
   const checkMountExpr = (expr: ts.Expression | undefined, node: ts.Node) => {
-    let e = expr;
-    while (e && ts.isParenthesizedExpression(e)) e = e.expression;
+    const e = expr ? unparen(expr) : undefined;
     if (!e || (!ts.isJsxElement(e) && !ts.isJsxSelfClosingElement(e))) {
       beyond(node, "the default export does not return a single package mount");
       return;
     }
-    const tag = ts.isJsxElement(e) ? e.openingElement.tagName : e.tagName;
-    const name = tag.getText(sf).split(".")[0];
-    if (!mounts.has(name)) {
+    const open = ts.isJsxElement(e) ? e.openingElement : e;
+    const tag = open.tagName;
+    if (!ts.isIdentifier(tag) || !mounts.has(tag.text) || open.typeArguments) {
       findings.push(
-        `${rel}:${at(e)}: the mount \`<${tag.getText(sf)}>\` is not imported from \`${pkg}\` — a mounted route file renders the package's page export`,
+        `${rel}:${at(e)}: the mount \`<${tag.getText(sf)}>\` is not a bare name imported from \`${pkg}\` — a mounted route file renders the package's page export`,
       );
     }
-    banWalk(e, sf, rel, findings);
+    if (
+      ts.isJsxElement(e) &&
+      e.children.some(
+        (c) => !ts.isJsxText(c) || !c.containsOnlyTriviaWhiteSpaces,
+      )
+    ) {
+      beyond(e, "the mount has children");
+    }
+    const values = new Set([
+      ...hostConfigValues,
+      ...bindingLocals,
+      ...pageNames,
+      ...awaited,
+    ]);
+    for (const a of open.attributes.properties) {
+      if (ts.isJsxSpreadAttribute(a)) {
+        beyond(a, `a spread attribute \`${a.getText(sf).slice(0, 40)}\``);
+        continue;
+      }
+      const attr = a.name.getText(sf);
+      const init = a.initializer;
+      if (init && ts.isStringLiteral(init)) continue;
+      const v =
+        init &&
+        ts.isJsxExpression(init) &&
+        !init.dotDotDotToken &&
+        init.expression
+          ? unparen(init.expression)
+          : undefined;
+      if (
+        ts.isIdentifier(a.name) &&
+        v &&
+        ts.isIdentifier(v) &&
+        values.has(v.text)
+      )
+        continue;
+      beyond(
+        a,
+        `attribute \`${attr}\` is \`${(init ? init.getText(sf) : "true").replace(/\s+/g, " ").slice(0, 40)}\`, not a string literal or a bare host-config import, binding import, route prop or awaited name`,
+      );
+    }
   };
 
   const body = fn.body;
@@ -779,10 +898,9 @@ function checkMount(
         if (
           init &&
           ts.isAwaitExpression(init) &&
-          isRouteProp(init.expression)
+          isRouteProp(unparen(init.expression), pageNames)
         ) {
-          banWalk(init.expression, sf, rel, findings);
-          awaitedNames(d.name, d, pageImports, sf, rel, findings);
+          awaitedNames(d.name, d, pageImports, sf, rel, findings, awaited);
           continue;
         }
         beyond(

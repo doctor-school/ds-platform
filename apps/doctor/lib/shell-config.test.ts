@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { doctorNav, doctorNavigationModel } from "@/lib/navigation-model";
 import { doctorShellAuthState } from "@/lib/auth-flow-routes";
-import { DOCTOR_SHELL } from "@/lib/shell-config";
+import { doctorShellConfig } from "@/lib/shell-config";
+
+/** The production Academy — the value `readSiblingOrigin` resolves on prod. */
+const DOCTOR_SHELL = doctorShellConfig("https://academy.doctor.school");
 
 /**
  * The §6.3 invariant of the staging/regression-contour tech spec (Issue #2067),
@@ -71,5 +74,13 @@ describe("017 EARS-12 / LD-4: the one crossing to the sibling storefront", () =>
     expect(DOCTOR_SHELL.footer.cross.href).toBe(
       "https://academy.doctor.school/",
     );
+  });
+
+  it("points it at the ENVIRONMENT's Academy, never a literal production host (#3147)", () => {
+    const slot = doctorShellConfig("https://academy-pr-7.stage.doctor.school");
+    expect(slot.footer.cross.href).toBe(
+      "https://academy-pr-7.stage.doctor.school/",
+    );
+    expect(JSON.stringify(slot)).not.toContain("https://academy.doctor.school");
   });
 });

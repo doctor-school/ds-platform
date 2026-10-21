@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * #2228 — the storefront route-group layout is the sticky-footer frame of the
@@ -17,13 +17,30 @@ vi.mock("@ds/auth-flow/server", () => ({
 vi.mock("@/lib/auth-flow-routes", () => ({
   doctorShellAuthState: () => ({ kind: "guest" }),
 }));
-vi.mock("@/lib/shell-config", () => ({ DOCTOR_SHELL: {} }));
+vi.mock("@/lib/shell-config", () => ({
+  doctorShellConfig: (academyOrigin: string) => ({ academyOrigin }),
+}));
 vi.mock("@ds/storefront-shell", () => ({
   StorefrontHeader: () => <header data-testid="storefront-header" />,
-  StorefrontFooter: () => <footer data-testid="storefront-footer" />,
+  StorefrontFooter: ({ config }: { config: { academyOrigin: string } }) => (
+    <footer
+      data-testid="storefront-footer"
+      data-academy-origin={config.academyOrigin}
+    />
+  ),
 }));
 
 import StorefrontLayout from "./layout";
+
+beforeEach(() => {
+  vi.stubEnv(
+    "ACADEMY_PUBLIC_ORIGIN",
+    "https://academy-pr-7.stage.doctor.school/",
+  );
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 async function renderLayout(): Promise<Document> {
   const tree = await StorefrontLayout({
@@ -50,5 +67,21 @@ describe("017 EARS-1 (#2228): the storefront frame pins the footer to the viewpo
     expect(
       Array.from(frame!.children).map((el) => el.tagName.toLowerCase()),
     ).toEqual(["header", "main", "footer"]);
+  });
+});
+
+describe("017 EARS-12 / LD-4 (#3147): the footer crossing leaves for the ENVIRONMENT's Academy", () => {
+  it("EARS-12: the layout hands the host config the Academy origin read from the running container's env", async () => {
+    const doc = await renderLayout();
+    expect(
+      doc
+        .querySelector('[data-testid="storefront-footer"]')
+        ?.getAttribute("data-academy-origin"),
+    ).toBe("https://academy-pr-7.stage.doctor.school");
+  });
+
+  it("EARS-12: an environment without ACADEMY_PUBLIC_ORIGIN refuses by name instead of linking to production", async () => {
+    vi.stubEnv("ACADEMY_PUBLIC_ORIGIN", "");
+    await expect(renderLayout()).rejects.toThrow(/ACADEMY_PUBLIC_ORIGIN/);
   });
 });

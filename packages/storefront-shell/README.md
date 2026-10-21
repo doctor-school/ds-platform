@@ -150,7 +150,7 @@ value sets is what proves the host neutrality the package exists for.
 
 | Host                    | Header mount                                                                      | Footer mount                 | Config values                                               | `auth` state mapping                                                   |
 | ----------------------- | --------------------------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Doctor showcase         | `apps/doctor/app/(storefront)/layout.tsx`                                         | same layout                  | `apps/doctor/lib/shell-config.ts` (`DOCTOR_SHELL`)          | `apps/doctor/lib/auth-flow-routes.ts` (`doctorShellAuthState`, server) |
+| Doctor showcase         | `apps/doctor/app/(storefront)/layout.tsx`                                         | same layout                  | `apps/doctor/lib/shell-config.ts` (`doctorShellConfig`)     | `apps/doctor/lib/auth-flow-routes.ts` (`doctorShellAuthState`, server) |
 | Academy (`apps/portal`) | `apps/portal/app/@chrome/*` via `apps/portal/components/academy-shell-header.tsx` | `apps/portal/app/layout.tsx` | `apps/portal/lib/shell-config.ts` (`academyShellConfig(t)`) | `apps/portal/lib/shell-auth.ts` (`resolveAcademyShellAuth`, server)    |
 
 Route visibility differs by mechanism, not by code: the Doctor showcase scopes

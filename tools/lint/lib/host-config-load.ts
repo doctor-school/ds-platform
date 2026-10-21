@@ -9,8 +9,10 @@
  *
  * argv[2] is a JSON array of `{ module, export, catalog? }` (module paths are
  * absolute). An export that is a function is a host config built from the
- * host's message catalog (the Academy shell): it is called with a translator
- * over `catalog.file`'s `catalog.namespace`, the catalog the app itself reads.
+ * host's message catalog (the Academy shell) and/or the environment's sibling
+ * storefront origin (both shells, #3147): it is called with a translator over
+ * `catalog.file`'s `catalog.namespace`, the catalog the app itself reads, then
+ * with `siblingOrigin`, the production value the guard compares.
  *
  * `undefined` is kept as `{ "$undefined": true }` so a key the host SETS to an
  * undefined value (an unset `process.env` site key) is still a key the guard
@@ -23,6 +25,7 @@ interface LoadRequest {
   module: string;
   export: string;
   catalog?: { file: string; namespace: string };
+  siblingOrigin?: string;
 }
 
 function encode(value: unknown): unknown {
@@ -51,23 +54,28 @@ async function main(): Promise<void> {
     }
     let value = mod[req.export];
     if (typeof value === "function") {
-      if (!req.catalog) {
+      if (!req.catalog && req.siblingOrigin === undefined) {
         throw new Error(
-          `${req.module}:${req.export} is a function but no message catalog is named for it`,
+          `${req.module}:${req.export} is a function but neither a message catalog nor a sibling origin is named for it`,
         );
       }
-      const catalog = JSON.parse(
-        readFileSync(req.catalog.file, "utf8"),
-      ) as Record<string, Record<string, string>>;
-      const ns = catalog[req.catalog.namespace] ?? {};
-      value = (value as (t: (key: string) => string) => unknown)((key) => {
-        if (!(key in ns)) {
-          throw new Error(
-            `catalog ${req.catalog?.file} has no ${req.catalog?.namespace}.${key}`,
-          );
-        }
-        return ns[key]!;
-      });
+      const args: unknown[] = [];
+      if (req.catalog) {
+        const catalog = JSON.parse(
+          readFileSync(req.catalog.file, "utf8"),
+        ) as Record<string, Record<string, string>>;
+        const ns = catalog[req.catalog.namespace] ?? {};
+        args.push((key: string) => {
+          if (!(key in ns)) {
+            throw new Error(
+              `catalog ${req.catalog?.file} has no ${req.catalog?.namespace}.${key}`,
+            );
+          }
+          return ns[key]!;
+        });
+      }
+      if (req.siblingOrigin !== undefined) args.push(req.siblingOrigin);
+      value = (value as (...a: unknown[]) => unknown)(...args);
     }
     out.push(encode(value));
   }

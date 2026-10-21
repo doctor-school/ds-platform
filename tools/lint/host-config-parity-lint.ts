@@ -89,6 +89,9 @@ interface HostSource {
   module: string;
   export: string;
   catalog?: { file: string; namespace: string };
+  /** A builder that takes the environment's sibling-storefront origin (#3147)
+   *  is called with the PRODUCTION value, after the translator when it has one. */
+  siblingOrigin?: string;
 }
 
 interface ProductDifference {
@@ -149,7 +152,8 @@ const PAIRS: ConfigPair[] = [
       label: "Витрина",
       app: "apps/doctor",
       module: "apps/doctor/lib/shell-config.ts",
-      export: "DOCTOR_SHELL",
+      export: "doctorShellConfig",
+      siblingOrigin: "https://academy.doctor.school",
     },
     academy: {
       label: "Академия",
@@ -157,6 +161,7 @@ const PAIRS: ConfigPair[] = [
       module: "apps/portal/lib/shell-config.ts",
       export: "academyShellConfig",
       catalog: { file: "apps/portal/messages/ru.json", namespace: "shell" },
+      siblingOrigin: "https://doctor.school",
     },
     manifest: {
       module: "packages/storefront-shell/src/config.ts",
@@ -208,6 +213,7 @@ function loadHosts(sources: HostSource[]): unknown[] {
     catalog: s.catalog
       ? { file: resolve(ROOT, s.catalog.file), namespace: s.catalog.namespace }
       : undefined,
+    siblingOrigin: s.siblingOrigin,
   }));
   const result = spawnSync(
     process.execPath,

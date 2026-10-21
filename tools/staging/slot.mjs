@@ -1198,6 +1198,10 @@ export function renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects }
     // REQUEST time: the image is shared by every slot on one commit, so a
     // build-time value would carry one slot's host into another.
     `ACADEMY_PUBLIC_ORIGIN=https://${hosts.academy}`,
+    // #3147 — the storefronts' footer crossing (017 EARS-12 / LD-4) stays on the
+    // slot: the doctor storefront reads ACADEMY_PUBLIC_ORIGIN above, the Academy
+    // reads this one — both at REQUEST time, for the same shared-image reason.
+    `DOCTOR_PUBLIC_ORIGIN=https://${hosts.doctor}`,
     // Sink partitioning is by sender local part, not by a Mailpit per slot
     // (spec §3 «Sink partitioning across slots»).
     `MAILER_SMTP_FROM=no-reply+${slot}@${baseDomain}`,

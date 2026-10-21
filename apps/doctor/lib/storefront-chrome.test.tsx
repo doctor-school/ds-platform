@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { StorefrontHeader } from "@ds/storefront-shell";
 import type { ServerAuth } from "@ds/auth-flow/server";
 import { doctorShellAuthState } from "@/lib/auth-flow-routes";
-import { DOCTOR_SHELL } from "@/lib/shell-config";
+import { doctorShellConfig } from "@/lib/shell-config";
+
+const DOCTOR_SHELL = doctorShellConfig("https://academy.doctor.school");
 
 /**
  * 017 EARS-1 / EARS-12 — the doctor host's half of the shared chrome: the
@@ -62,7 +64,8 @@ describe("017 EARS-1: exactly one action cluster", () => {
     // this host drawing two chips while the academy drew one with a third label.
     const html = headerHtml("guest");
     const cluster = html.slice(html.indexOf('data-cluster="guest"'));
-    const links = cluster.slice(0, cluster.indexOf("</div>")).match(/<a\b/g) ?? [];
+    const links =
+      cluster.slice(0, cluster.indexOf("</div>")).match(/<a\b/g) ?? [];
     expect(links).toHaveLength(1);
     expect(html).toContain('href="/login"');
     expect(html).not.toContain('href="/register"');
@@ -120,7 +123,9 @@ describe("017 EARS-1 / EARS-12: the doctor host config", () => {
     const serialized = JSON.stringify(DOCTOR_SHELL);
     const crossings = serialized.match(/academy\.doctor\.school/g) ?? [];
     expect(crossings).toHaveLength(1);
-    expect(DOCTOR_SHELL.footer.cross.href).toBe("https://academy.doctor.school/");
+    expect(DOCTOR_SHELL.footer.cross.href).toBe(
+      "https://academy.doctor.school/",
+    );
   });
 
   it("008 EARS-12: the doctor host declares NO hidden paths — the route group scopes the chrome", () => {

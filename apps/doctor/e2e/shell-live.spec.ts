@@ -10,7 +10,7 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  *   `__Host-ds_session` cookie (ADR-0015 §4), so no browser-side route mock can
  *   reach it — the backend-free tier (`shell.spec.ts`) can only ever see the
  *   guest branch.
- * - the header SEARCH actually narrowing the feed. `DOCTOR_SHELL.search.action`
+ * - the header SEARCH actually narrowing the feed. `doctorShellConfig(…).search.action`
  *   is `/events`, and the storefront feed reads `q` for real
  *   (`apps/api/src/storefront/doctor-events.repository.ts` — `ilike` over the
  *   event title and school), so «submits to its target» is only half the

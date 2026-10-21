@@ -2,7 +2,8 @@ import { headers } from "next/headers";
 import type { ReactNode } from "react";
 import { StorefrontFooter, StorefrontHeader } from "@ds/storefront-shell";
 import { resolveServerAuth } from "@ds/auth-flow/server";
-import { DOCTOR_SHELL } from "@/lib/shell-config";
+import { readSiblingOrigin } from "@ds/storefront-shell/sibling-origin";
+import { doctorShellConfig } from "@/lib/shell-config";
 import { doctorShellAuthState } from "@/lib/auth-flow-routes";
 
 /**
@@ -16,7 +17,7 @@ import { doctorShellAuthState } from "@/lib/auth-flow-routes";
  *
  * The chrome itself is `@ds/storefront-shell`, owned ONCE for both storefronts
  * (#2180, epic #2020 / ADR-0013 A1). This host supplies only VALUES
- * ({@link DOCTOR_SHELL}) and the resolved sign-in STATE — there is no
+ * ({@link doctorShellConfig}) and the resolved sign-in STATE — there is no
  * doctor-local header, footer or auth-cluster component any more, which is what
  * stops the two storefronts drifting apart every time either side ships.
  *
@@ -36,15 +37,16 @@ export default async function StorefrontLayout({
   children: ReactNode;
 }) {
   const auth = await resolveServerAuth(await headers());
+  const config = doctorShellConfig(readSiblingOrigin(process.env, "doctor"));
 
   return (
     <div
       data-testid="storefront-shell"
       className="flex min-h-screen flex-col bg-background text-foreground"
     >
-      <StorefrontHeader config={DOCTOR_SHELL} auth={doctorShellAuthState(auth)} />
+      <StorefrontHeader config={config} auth={doctorShellAuthState(auth)} />
       <main className="flex-1">{children}</main>
-      <StorefrontFooter config={DOCTOR_SHELL} />
+      <StorefrontFooter config={config} />
     </div>
   );
 }

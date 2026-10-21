@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import { StorefrontHeader } from "@ds/storefront-shell";
+import { readSiblingOrigin } from "@ds/storefront-shell/sibling-origin";
 
 import { portalNav } from "@/lib/navigation-model";
 import { resolveAcademyShellAuth } from "@/lib/shell-auth";
@@ -35,5 +36,9 @@ export async function AcademyShellHeader() {
     myEvents: t(portalNav.myEvents.label),
   });
 
-  return <StorefrontHeader config={academyShellConfig(t)} auth={auth} />;
+  const config = academyShellConfig(
+    t,
+    readSiblingOrigin(process.env, "academy"),
+  );
+  return <StorefrontHeader config={config} auth={auth} />;
 }

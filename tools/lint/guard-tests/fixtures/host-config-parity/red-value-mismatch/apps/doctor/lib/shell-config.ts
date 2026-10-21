@@ -1,5 +1,5 @@
 // Fixture: the doctor storefront's shell host values.
-export const DOCTOR_SHELL = {
+export const doctorShellConfig = {
   host: "doctor",
   logo: { alt: "Doctor.School", href: "/" },
   topbar: { text: "BBM" },

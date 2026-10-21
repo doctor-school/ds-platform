@@ -18,6 +18,7 @@ import { FakeMailer } from "../../src/mailer/mailer.fake.js";
 import { MAILER } from "../../src/mailer/mailer.types.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import { phoneSequence } from "../support/phone-sequence.js";
 import {
   DEFAULT_SMS_BUDGET_THRESHOLDS,
   SMS_BUDGET_THRESHOLDS,
@@ -421,11 +422,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return email;
     }
 
-    function uniquePhone(): string {
-      return `+7999${String(Date.now()).slice(-4)}${String(
-        Math.floor(Math.random() * 1000),
-      ).padStart(3, "0")}`;
-    }
+    // EARS-53/16 draws its three numbers in one millisecond; they must differ,
+    // or the `unknown` request reaches the confirmed account (#3152).
+    const uniquePhone = phoneSequence("+7999");
 
     async function account(
       tag: string,

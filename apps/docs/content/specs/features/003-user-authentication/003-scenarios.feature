@@ -1424,3 +1424,13 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Mapping: login-phone-password.steps.ts (#3086). Retain native password,
     # identifier-resolution and phone-confirmation coverage; this projection
     # adds the real confirmed-phone password form and same-account browser proof.
+
+  # Narrow wrong-email-code recovery projection (#3100); broader declarations retained.
+  # Native provider/timing proof: apps/api/test/auth/login-otp.e2e-spec.ts EARS-6/16.
+  @EARS-6 @EARS-8 @EARS-16 @EARS-34 @EARS-41 @failure @login-email-code-refusal
+  Scenario: Academy refuses a wrong email login code and accepts the retained real code for the same owner
+    Given an owned Academy email-code refusal doctor verifies a fresh registration
+    When that owned refusal doctor logs out and retains the newly delivered email login code
+    And the email login guest submits a different valid six-digit code and receives the generic refusal
+    And the refused email login guest enters the retained actual code without requesting another
+    Then the recovered email login session persists for the same verified doctor through reload

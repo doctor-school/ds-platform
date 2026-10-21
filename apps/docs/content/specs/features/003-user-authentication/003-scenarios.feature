@@ -174,6 +174,17 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the password is set, all earlier sessions are revoked and the visitor is signed in
     And the account's email verification state is unchanged
 
+  # Academy projection of existing identifier-bound reset checks (#3139).
+  # App-local test: none -> 003 EARS-12/16/41/53 -> dedicated shared steps;
+  # deleted duplicate: none. Actual delivered codes remain live for both owners.
+  @EARS-12 @EARS-16 @EARS-41 @EARS-53 @failure @sms-reset-account-isolation
+  Scenario: Academy rejects another doctor's live SMS reset code and preserves both rightful reset challenges
+    Given two owned Academy doctors retain distinct live SMS password reset codes for their confirmed phones
+    When the second doctor's reset form submits the first doctor's retained SMS code with a different password
+    Then both original SMS reset owners keep their identities and the second doctor's password is unchanged
+    When each SMS reset owner submits their own same retained code and a new password without requesting another challenge
+    Then both new passwords sign in only their original phone-confirmed doctors before all owned SMS isolation sessions are logged out
+
   @EARS-53 @EARS-16 @EARS-56 @failure @sms-reset
   Scenario: Reset by an unconfirmed or unknown phone is indistinguishable and sends nothing
     Given a phone that is unknown, a phone only typed in a congress form, and a phone awaiting confirmation on the IdP

@@ -1790,6 +1790,17 @@ with its native defaults and no `RATE_LIMIT_*` overrides; the selector does not
 claim to inspect the API's environment. These cases are excluded from normal
 stage/release C6 execution and are not automatic stage/CI browser coverage.
 
+`Password login challenges only after the backend threshold` (S065, #3242,
+`@captcha-threshold`) uses this contour with exactly one Playwright worker
+(`E2E_WORKERS=1`) and `BOT_PROTECTION_ENABLED=true`. Run it on a dedicated
+lead-owned compiled runtime with the real native threshold, working CAPTCHA
+configuration and the supported nonproduction test token. Concurrent successful
+logins reset the shared per-IP threshold, so the ordinary parallel stage/release
+suite excludes this case. Its steps reject a missing default tier, multiple
+workers or disabled bot protection before creating the owned account. Record
+the committed-source browser run separately; the tag grants no automatic
+stage/CI browser acceptance.
+
 `Academy successful password login clears the same identifier's real rate window`
 (`steps/login-counter-reset.steps.ts`, #3036, `@login-counter-reset`) verifies a
 unique owned account through actual UI and addressed mail. Under the canonical

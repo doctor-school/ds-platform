@@ -18,7 +18,7 @@ import {
   registerOwnedCredentials,
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
-import { After, Given, Then, When } from "./support/auth-fixtures.js";
+import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 
 interface CaptchaObservation {
   executes: number;
@@ -82,6 +82,12 @@ async function logout(page: Page) {
 Given(
   "a visitor has entered an identifier and password",
   async ({ page, browser, httpCredentials, world }) => {
+    if (process.env.E2E_AUTH_LIMIT_TIER !== "default")
+      throw new Error("S065 requires E2E_AUTH_LIMIT_TIER=default");
+    if (test.info().config.workers !== 1)
+      throw new Error("S065 requires exactly one Playwright worker");
+    if (process.env.BOT_PROTECTION_ENABLED !== "true")
+      throw new Error("S065 requires BOT_PROTECTION_ENABLED=true");
     expect(world.host.id).toBe("academy");
     const token = captchaTestTokenFromEnv();
     const context = await browser.newContext({

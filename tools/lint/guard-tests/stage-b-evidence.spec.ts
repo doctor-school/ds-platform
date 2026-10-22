@@ -2,6 +2,7 @@
 import {
   instructionQuoteSource,
   validateStageB,
+  validateStageCheck,
 } from "../lib/stage-b-evidence";
 const sha = "a".repeat(40);
 const base = `Stage-B: GO\nStage-B-head: ${sha}\nStage-B-recorded-at: 2026-09-06T00:00:00Z\nStage-B-owner-quote: Approved this live room\nStage-B-source: owner-relay:session-123#message-4\nStage-B-live-url: http://localhost:3000/room`;
@@ -445,5 +446,87 @@ describe("#2699: an owner quote copied from an instruction file is refused", () 
     expect(instructionQuoteSource("Окей, реализуй", docs)).toBeNull();
     expect(instructionQuoteSource("Го", docs)).toBeNull();
     expect(instructionQuoteSource("", docs)).toBeNull();
+  });
+});
+describe("#3205: the agent's recorded slot check of an environment-sensitive change with no render surface", () => {
+  const recorded = "b".repeat(40);
+  const check = (head = sha) =>
+    `Stage-B: N/A — no render surface
+Stage-check: PASS — slot pr-3178, signed in on both storefronts
+Stage-B-head: ${head}
+Stage-B-recorded-at: 2026-10-21T15:51:00Z`;
+  const rework = () => ({
+    accepted: false,
+    reason: "git range-diff shows 1/2 commit(s) differing",
+  });
+  it("refuses a PR with no Stage-check record", () => {
+    const verdict = validateStageCheck(
+      [{ body: "Stage-B: N/A — no render surface" }],
+      sha,
+      3178,
+    );
+    expect(verdict.ok).toBe(false);
+    expect(verdict.reason).toContain("Stage-check");
+  });
+  it("accepts a PASS pinned to the current head", () => {
+    const verdict = validateStageCheck([{ body: check() }], sha, 3178);
+    expect(verdict.ok).toBe(true);
+    expect(verdict.reason).toContain("slot pr-3178");
+  });
+  it("refuses an older head when a runtime file changed since, naming it", () => {
+    const verdict = validateStageCheck(
+      [{ body: check(recorded) }],
+      sha,
+      3178,
+      rework,
+      {
+        headDelta: () => ({
+          ok: true,
+          files: ["tools/staging/idp.mjs", ".changeset/x.md"],
+        }),
+      },
+    );
+    expect(verdict.ok).toBe(false);
+    expect(verdict.reason).toContain("tools/staging/idp.mjs");
+  });
+  it("carries an older head over a non-runtime-only delta and names the files", () => {
+    const verdict = validateStageCheck(
+      [{ body: check(recorded) }],
+      sha,
+      3178,
+      rework,
+      {
+        headDelta: () => ({
+          ok: true,
+          files: [".changeset/x.md", "tools/staging/idp.test.mjs"],
+        }),
+      },
+    );
+    expect(verdict.ok).toBe(true);
+    expect(verdict.reason).toContain("carried");
+    expect(verdict.reason).toContain(".changeset/x.md");
+  });
+  it("refuses a later FAIL, another PR's slot, a missing driven text and a bad recorded-at", () => {
+    const fail = `Stage-check: FAIL — slot pr-3178, sign-in 500
+Stage-B-head: ${sha}
+Stage-B-recorded-at: 2026-10-21T16:00:00Z`;
+    expect(
+      validateStageCheck([{ body: check() }, { body: fail }], sha, 3178).ok,
+    ).toBe(false);
+    expect(validateStageCheck([{ body: check() }], sha, 3179).ok).toBe(false);
+    expect(
+      validateStageCheck(
+        [{ body: check().replace(", signed in on both storefronts", "") }],
+        sha,
+        3178,
+      ).ok,
+    ).toBe(false);
+    expect(
+      validateStageCheck(
+        [{ body: check().replace("2026-10-21T15:51:00Z", "yesterday") }],
+        sha,
+        3178,
+      ).ok,
+    ).toBe(false);
   });
 });

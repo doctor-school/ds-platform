@@ -1,0 +1,7 @@
+{
+  "number": 3205,
+  "body": "## Summary\nOne OIDC client per storefront.\n\nStage-B: N/A — no render surface\n",
+  "labels": [],
+  "files": [{ "path": "tools/staging/idp.mjs" }],
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

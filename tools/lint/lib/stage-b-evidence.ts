@@ -109,6 +109,141 @@ export function instructionQuoteSource(
   return null;
 }
 
+/**
+ * The head pin every Stage-B / Stage-check record carries: the recorded head
+ * must equal the current head, or be carried to it — #2373: a pure rebase
+ * (the Mode (a) carry-over, #1865); #2699: a delta of only non-runtime files
+ * (tests, changesets, evidence captures, docs). A runtime delta needs a fresh
+ * record.
+ */
+function carryHead(
+  recordedHead: string,
+  head: string,
+  stale: string,
+  headEquivalent?: HeadEquivalence,
+  headDelta?: HeadDelta,
+): { ok: true; carried: string } | { ok: false; reason: string } {
+  if (/^[a-f0-9]{40}$/.test(head) && recordedHead === head)
+    return { ok: true, carried: "" };
+  if (
+    (!headEquivalent && !headDelta) ||
+    !/^[a-f0-9]{40}$/.test(head) ||
+    !/^[a-f0-9]{40}$/.test(recordedHead)
+  )
+    return { ok: false, reason: stale };
+  const probe = headEquivalent?.(recordedHead, head);
+  const from = `${recordedHead.slice(0, 12)} to ${head.slice(0, 12)}`;
+  if (probe?.accepted) {
+    const rows =
+      probe.total === undefined ? "" : `, ${probe.equal}/${probe.total} =`;
+    return {
+      ok: true,
+      carried: ` — carried from ${from} (patch-id-identical: git range-diff origin/main${rows})`,
+    };
+  }
+  const why = probe ? [probe.reason] : [];
+  if (!headDelta) return { ok: false, reason: `${stale} (${why.join("; ")})` };
+  const delta = headDelta(recordedHead, head);
+  if (!delta.ok)
+    return {
+      ok: false,
+      reason: `${stale} (${[...why, delta.reason].join("; ")})`,
+    };
+  const runtime = delta.files.filter((path) => !isNonRuntimePath(path));
+  if (runtime.length)
+    return {
+      ok: false,
+      reason: `${stale} (runtime file(s) changed since the recorded head: ${runtime.join(", ")})`,
+    };
+  return {
+    ok: true,
+    carried: ` — carried from ${from} over a non-runtime delta (net of main): ${delta.files.join(", ") || "no file"}`,
+  };
+}
+
+const checkMarker = /^[ \t]*Stage-check:[ \t]*(.*?)[ \t]*$/gim;
+
+/**
+ * #3205: an environment-sensitive runtime change with no render surface has no
+ * owner Stage-B, but cannot merge without the agent's own live check on the PR
+ * slot (`change-tiers.md` → Stage-B and stands, item 2):
+ * `Stage-check: PASS — slot pr-<N>, <what was driven>` with the record's own
+ * `Stage-B-head` + `Stage-B-recorded-at`. The latest record wins; the head pin
+ * carries exactly as a GO does. No owner quote: the agent is the verifier.
+ */
+export function validateStageCheck(
+  records: StageBRecord[],
+  head: string,
+  prNumber: number,
+  headEquivalent?: HeadEquivalence,
+  options: Pick<StageBOptions, "headDelta"> = {},
+): { ok: boolean; reason: string } {
+  const checks = records
+    .flatMap((record, order) =>
+      [...record.body.matchAll(checkMarker)].map((match, index) => {
+        const recorded = Date.parse(stageBField(record.body, "recorded-at"));
+        const pass = /^PASS\b/i.test(match[1]);
+        const native = [record.updatedAt, record.createdAt]
+          .map((date) => Date.parse(date ?? ""))
+          .filter(Number.isFinite);
+        // A PASS ages from its recorded-at; a FAIL honours its later edit.
+        const times = pass ? [recorded] : [recorded, ...native];
+        const known = times.filter(Number.isFinite);
+        return {
+          record,
+          value: match[1],
+          pass,
+          order,
+          index,
+          time: known.length ? Math.max(...known) : NaN,
+        };
+      }),
+    )
+    .sort((a, b) => a.time - b.time || a.order - b.order || a.index - b.index);
+  const required = `the agent's recorded slot check \`Stage-check: PASS — slot pr-${prNumber}, <what was driven>\` with \`Stage-B-head\` + \`Stage-B-recorded-at\``;
+  if (!checks.length)
+    return { ok: false, reason: `No Stage-check record: requires ${required}` };
+  if (checks.some((c) => !Number.isFinite(c.time)))
+    return {
+      ok: false,
+      reason: "Undated Stage-check record; reconcile the record",
+    };
+  const latest = checks.at(-1)!;
+  const field = (name: string) => stageBField(latest.record.body, name);
+  const pass = latest.value.match(
+    /^PASS\s*[-\u2013\u2014]\s*slot\s+(pr-\d+)\s*,\s*(.+)$/i,
+  );
+  if (
+    !pass ||
+    pass[1].toLowerCase() !== `pr-${prNumber}` ||
+    !meaningful(pass[2])
+  )
+    return {
+      ok: false,
+      reason: `Latest Stage-check is not a PASS on slot pr-${prNumber} naming what was driven (${latest.value}): requires ${required}`,
+    };
+  const pin = carryHead(
+    field("head"),
+    head,
+    "Stage-check head is missing or stale; re-run the slot check on the current head",
+    headEquivalent,
+    options.headDelta,
+  );
+  if (!pin.ok) return pin;
+  if (
+    !utc(field("recorded-at")) ||
+    Date.parse(field("recorded-at")) > Date.now() + 60_000
+  )
+    return {
+      ok: false,
+      reason: "Stage-check recorded-at must be a past ISO UTC timestamp",
+    };
+  return {
+    ok: true,
+    reason: `Current Stage-check record: ${latest.value}${pin.carried}`,
+  };
+}
+
 export function validateStageB(
   records: StageBRecord[],
   head: string,
@@ -144,48 +279,18 @@ export function validateStageB(
         "Latest decision is not a Stage-B GO/batched/lead-certified approval (pending/refused/revoked)",
     };
   const recordedHead = field("head");
-  let carried = "";
   // #2584: a ship-tier GO approves the wording with no live stand, but it
   // stays head-pinned so a later push cannot inherit a GO given on other text.
   const shipGo = go && tier === "ship";
-  if (!/^[a-f0-9]{40}$/.test(head) || recordedHead !== head) {
-    const stale =
-      "Stage-B head is missing or stale; record current applicability or obtain a fresh verdict";
-    // #2373: a pure rebase keeps a valid record, exactly as the Mode (a)
-    // carry-over does (#1865). #2699: so does a delta made only of non-runtime
-    // files (tests, changesets, evidence captures, docs). A slot-report lead
-    // certification stays pinned by its own `report-sha` check below.
-    if (
-      (!headEquivalent && !options.headDelta) ||
-      !/^[a-f0-9]{40}$/.test(head) ||
-      !/^[a-f0-9]{40}$/.test(recordedHead)
-    )
-      return { ok: false, reason: stale };
-    const probe = headEquivalent?.(recordedHead, head);
-    const from = `${recordedHead.slice(0, 12)} to ${head.slice(0, 12)}`;
-    if (probe?.accepted) {
-      const rows =
-        probe.total === undefined ? "" : `, ${probe.equal}/${probe.total} =`;
-      carried = ` — carried from ${from} (patch-id-identical: git range-diff origin/main${rows})`;
-    } else {
-      const why = probe ? [probe.reason] : [];
-      if (!options.headDelta)
-        return { ok: false, reason: `${stale} (${why.join("; ")})` };
-      const delta = options.headDelta(recordedHead, head);
-      if (!delta.ok)
-        return {
-          ok: false,
-          reason: `${stale} (${[...why, delta.reason].join("; ")})`,
-        };
-      const runtime = delta.files.filter((path) => !isNonRuntimePath(path));
-      if (runtime.length)
-        return {
-          ok: false,
-          reason: `${stale} (runtime file(s) changed since the recorded head: ${runtime.join(", ")})`,
-        };
-      carried = ` — carried from ${from} over a non-runtime delta (net of main): ${delta.files.join(", ") || "no file"}`;
-    }
-  }
+  const pin = carryHead(
+    recordedHead,
+    head,
+    "Stage-B head is missing or stale; record current applicability or obtain a fresh verdict",
+    headEquivalent,
+    options.headDelta,
+  );
+  if (!pin.ok) return pin;
+  const carried = pin.carried;
   if (
     !utc(field("recorded-at")) ||
     Date.parse(field("recorded-at")) > Date.now() + 60_000

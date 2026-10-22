@@ -270,4 +270,36 @@ describe("stage-b-lint", () => {
       expect(stderr).toContain("not an owner decision");
     });
   });
+
+  describe("#3205: environment-sensitive change with no render surface", () => {
+    it("red: env-sensitive runtime file, no UI file, no Stage-check record → exit 1", () => {
+      const { code, stderr } = runGuard(
+        GUARD,
+        caseDir("stage-b", "red-env-sensitive-no-check"),
+        { env: prEnv("3205", "red-env-sensitive-no-check") },
+      );
+      expect(code).toBe(1);
+      expect(stderr).toContain("tools/staging/idp.mjs");
+      expect(stderr).toContain("Stage-check");
+    });
+
+    it("green: env-sensitive runtime file + a body Stage-check PASS pinned to the head → exit 0", () => {
+      const { code, stdout } = runGuard(
+        GUARD,
+        caseDir("stage-b", "green-env-sensitive-check"),
+        { env: prEnv("3206", "green-env-sensitive-check") },
+      );
+      expect(code).toBe(0);
+      expect(stdout).toContain("slot pr-3206");
+    });
+
+    it("green: the Stage-check PASS may live in a PR comment → exit 0", () => {
+      const { code } = runGuard(
+        GUARD,
+        caseDir("stage-b", "green-env-sensitive-check-comment"),
+        { env: prEnv("3207", "green-env-sensitive-check-comment") },
+      );
+      expect(code).toBe(0);
+    });
+  });
 });

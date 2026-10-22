@@ -855,9 +855,12 @@ jobs:
       #   markdown-links (offline)   the WHOLE tree with `--offline`: every internal
       #                              file link and `#anchor` (`--include-fragments`);
       #                              no request leaves the runner. Every event.
-      #   markdown-links (changed)   the PR's added/modified/renamed `*.md` files
-      #                              (`git diff --diff-filter=ACMR` against the merge
-      #                              base with the PR base branch, fixtures dropped)
+      #   markdown-links (changed)   the PR's added/modified/renamed files of every
+      #                              extension the tree scan reads (lychee's default
+      #                              set: Markdown variants, `*.html`/`*.htm`, `*.txt`;
+      #                              `git diff --diff-filter=ACMR` against the merge
+      #                              base with the PR base branch, fixtures dropped;
+      #                              a diff error reds the step, never an empty set)
       #                              get the full ONLINE check, so an external link
       #                              the author just wrote is still verified. An
       #                              empty set has nothing to check and the step
@@ -907,9 +910,11 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          files=$(git diff --name-only --diff-filter=ACMR "origin/${BASE_REF}...HEAD" -- '*.md' \
-            | grep -v '^tools/lint/guard-tests/fixtures/' | tr '\n' ' ' || true)
-          echo "changed *.md: ${files:-<none>}"
+          files=$(git diff --name-only --diff-filter=ACMR "origin/${BASE_REF}...HEAD" -- \
+              '*.md' '*.mkd' '*.mdx' '*.mdown' '*.mdwn' '*.mkdn' '*.mkdown' '*.markdown' \
+              '*.html' '*.htm' '*.txt' \
+            | sed '/^tools\/lint\/guard-tests\/fixtures\//d' | tr '\n' ' ')
+          echo "changed link-check inputs: ${files:-<none>}"
           echo "files=${files}" >> "$GITHUB_OUTPUT"
 
       - name: markdown-links (changed)

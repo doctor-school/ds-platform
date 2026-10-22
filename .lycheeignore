@@ -1,4 +1,5 @@
-# Lychee URL exclusions for the markdown-links CI job.
+# Lychee URL exclusions for the markdown-links PR check (ci.yml guards-block)
+# and the nightly link-sweep (.github/workflows/link-sweep.yml).
 # Each entry is a Rust regex matched against the full URL. Add a one-line
 # comment above the entry explaining why it is excluded. See Issue #10.
 

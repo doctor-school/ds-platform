@@ -1331,78 +1331,178 @@ describe("E2E_PUBLIC_LOG=1 — the run's console is a public Actions log", () =>
 
 // --- #3191: the live legs' env is derived from the slot, never left «missing» ---
 
-describe("slotLiveStandEnv (#3191)", () => {
+describe("slotLiveStandEnv (#3191) — one derivation, Actions and ssh alike", () => {
+  const golden = { DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED: "golden-verified" };
   const box = {
-    DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED: "box-verified",
+    DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED: "golden-verified",
     IDP_SERVICE_TOKEN: "box-token",
     IDP_PROJECT_ID: "box-project",
     CONGRESS_SIGNUP_EVENT_ID: "evt",
-    CONGRESS_SIGNUP_CONSENT_VERSION: "v1",
-    CONGRESS_SIGNUP_WINDOW_OPENS_AT: "2026-01-01",
-    CONGRESS_SIGNUP_WINDOW_CLOSES_AT: "2027-01-01",
-    CONGRESS_SIGNUP_EVENT_DAYS: "2027-03-01",
     POSTGRES_PASSWORD: "must-not-leak",
+  };
+  // What `.github/workflows/stage.yml` job `suite` exports — and nothing else.
+  const ACTIONS_ENV = {
+    CI: "1",
+    E2E_PUBLIC_LOG: "1",
+    E2E_WORKERS: "4",
+    STAGE_BASE_DOMAIN: "stage.doctor.school",
+    E2E_HTTP_USER: "stage",
+    E2E_HTTP_PASS: "s3cret",
+    E2E_CAPTCHA_TEST_TOKEN: "captcha-token",
+    DS_GOLDEN_PASSWORD_ADMIN: "golden-admin",
+    DS_GOLDEN_PASSWORD_DOCTOR_MFA: "golden-mfa",
+    DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED: "golden-unverified",
+    DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED: "golden-verified",
   };
 
   it("signs the live specs in as the golden verified doctor and its first pool copy", () => {
-    const env = slotLiveStandEnv({}, box);
+    const env = slotLiveStandEnv({}, golden, "doctor");
     assert.equal(env.E2E_DOCTOR_EMAIL, "golden.doctor.verified@example.test");
-    assert.equal(env.E2E_DOCTOR_PASSWORD, "box-verified");
+    assert.equal(env.E2E_DOCTOR_PASSWORD, "golden-verified");
     assert.equal(
       env.E2E_DOCTOR2_EMAIL,
       "golden.doctor.verified.w1@example.test",
     );
-    assert.equal(env.E2E_DOCTOR2_PASSWORD, "box-verified");
+    assert.equal(env.E2E_DOCTOR2_PASSWORD, "golden-verified");
   });
 
   it("names no golden account when its password is unknown — the spec stays not-run", () => {
-    const env = slotLiveStandEnv({}, {});
+    const env = slotLiveStandEnv({}, {}, "doctor");
     assert.equal(env.E2E_DOCTOR_EMAIL, undefined);
     assert.equal(env.E2E_DOCTOR2_EMAIL, undefined);
   });
 
-  it("hands over the stand keys the slot api boots with, and nothing else of the box", () => {
-    const env = slotLiveStandEnv({}, box);
+  it("derives no stand key of the box — only golden accounts and slugs", () => {
+    const env = slotLiveStandEnv({}, box, "doctor");
     for (const name of [
       "IDP_SERVICE_TOKEN",
       "IDP_PROJECT_ID",
       "CONGRESS_SIGNUP_EVENT_ID",
-      "CONGRESS_SIGNUP_CONSENT_VERSION",
-      "CONGRESS_SIGNUP_WINDOW_OPENS_AT",
-      "CONGRESS_SIGNUP_WINDOW_CLOSES_AT",
-      "CONGRESS_SIGNUP_EVENT_DAYS",
+      "POSTGRES_PASSWORD",
     ])
-      assert.equal(env[name], box[name], name);
-    assert.equal(Object.values(env).includes("must-not-leak"), false);
+      assert.equal(env[name], undefined, name);
   });
 
-  it("lets an operator export win over the box and the golden default", () => {
+  it("lets an operator export win over the golden default", () => {
     const env = slotLiveStandEnv(
-      { IDP_SERVICE_TOKEN: "op-token", E2E_DOCTOR_EMAIL: "op@example.test" },
-      box,
+      { E2E_DOCTOR_EMAIL: "op@example.test", E2E_DOCTOR_PASSWORD: "op-pw" },
+      golden,
+      "doctor",
     );
-    assert.equal(env.IDP_SERVICE_TOKEN, "op-token");
     assert.equal(env.E2E_DOCTOR_EMAIL, "op@example.test");
+    assert.equal(env.E2E_DOCTOR_PASSWORD, "op-pw");
   });
 
-  it("is what a live leg runs with", async () => {
-    const { calls, effects } = harness({
-      readBoxEnv: async () => ({ ...BOX_ENV, ...box }),
+  it("hands a live leg the same env in Actions (no ssh) and over ssh", async () => {
+    const legEnvs = async (env, readBoxEnv) => {
+      let boxRead = false;
+      const { calls, effects } = harness({
+        issueState: () => "CLOSED",
+        readBoxEnv: async () => {
+          boxRead = true;
+          return readBoxEnv();
+        },
+      });
+      await runE2eStage(["main", "--expect-sha", SHA], { env, effects });
+      return { boxRead, legs: calls.filter(isLive) };
+    };
+    const actions = await legEnvs(ACTIONS_ENV, async () => {
+      throw new Error("Actions has no ssh");
     });
-    await runE2eStage(["pr-3191", "--project", "doctor"], {
-      env: { STAGE_BASIC_AUTH_PASS: "s3cret" },
+    assert.equal(
+      actions.boxRead,
+      false,
+      "the release check in Actions reads no box env",
+    );
+    const ssh = await legEnvs(
+      {
+        CI: "1",
+        E2E_PUBLIC_LOG: "1",
+        E2E_WORKERS: "4",
+        STAGE_BASIC_AUTH_PASS: "s3cret",
+      },
+      async () => ({
+        ...BOX_ENV,
+        ...box,
+        DS_GOLDEN_PASSWORD_ADMIN: "golden-admin",
+        DS_GOLDEN_PASSWORD_DOCTOR_MFA: "golden-mfa",
+        DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED: "golden-unverified",
+        BOT_PROTECTION_TEST_TOKEN: "captcha-token",
+      }),
+    );
+    assert.equal(ssh.boxRead, true);
+    assert.ok(actions.legs.length > 0);
+    assert.equal(ssh.legs.length, actions.legs.length);
+    const liveKeys = (e) =>
+      Object.keys(e)
+        .filter((k) =>
+          /^(E2E_|IDP_|MAILPIT_|CONGRESS_|DATABASE_|DS_GOLDEN_)/.test(k),
+        )
+        .filter(
+          (k) =>
+            !["E2E_REPORT_DIR", "E2E_HTTP_USER", "E2E_HTTP_PASS"].includes(k),
+        )
+        .sort();
+    actions.legs.forEach((leg, i) => {
+      const other = ssh.legs[i];
+      assert.deepEqual(
+        liveKeys(other.env),
+        liveKeys(leg.env),
+        leg.argv.join(" "),
+      );
+      for (const k of liveKeys(leg.env))
+        assert.equal(other.env[k], leg.env[k], k);
+      assert.equal(
+        other.env.IDP_SERVICE_TOKEN,
+        undefined,
+        "ssh hands no box key over",
+      );
+    });
+  });
+});
+
+describe("E2E_PUBLIC_LOG=1 — every live leg of the release check (#3191)", () => {
+  it("prints through the summary reporter and writes its json/html into the run's report dir", async () => {
+    const { calls, effects } = harness({ issueState: () => "CLOSED" });
+    await runE2eStage(["main", "--expect-sha", SHA], {
+      env: {
+        CI: "1",
+        E2E_PUBLIC_LOG: "1",
+        STAGE_BASE_DOMAIN: "stage.doctor.school",
+        E2E_HTTP_USER: "stage",
+        E2E_HTTP_PASS: "s3cret",
+      },
       effects,
     });
-    const shell = calls.find((c) =>
-      c.argv.includes("--config=playwright.shell.config.ts"),
-    );
-    assert.equal(
-      shell.env.E2E_DOCTOR_EMAIL,
-      "golden.doctor.verified@example.test",
-    );
-    assert.equal(shell.env.IDP_SERVICE_TOKEN, "box-token");
-    // The suite leg is not handed the live-tier extras.
-    assert.equal(calls[0].env.IDP_SERVICE_TOKEN, undefined);
+    const live = calls.filter(isLive);
+    assert.ok(live.length > 0);
+    const reportDir = calls[0].env.E2E_REPORT_DIR.split(path.sep).join("/");
+    for (const leg of live) {
+      const label = leg.argv.join(" ");
+      assert.ok(
+        leg.argv.includes(`--reporter=${SUMMARY_REPORTER_PATH},json,html`),
+        `${label}: the summary reporter, never list`,
+      );
+      assert.equal(
+        leg.argv.some((t) => /--reporter=.*\blist\b/.test(t)),
+        false,
+        label,
+      );
+      const out = leg.argv.find((t) => t.startsWith("--output="));
+      assert.ok(
+        out.slice("--output=".length).startsWith(`${reportDir}/live-`),
+        label,
+      );
+      for (const name of [
+        "PLAYWRIGHT_JSON_OUTPUT_FILE",
+        "PLAYWRIGHT_HTML_OUTPUT_DIR",
+      ])
+        assert.ok(
+          leg.env[name].startsWith(`${reportDir}/live-`),
+          `${label} ${name}`,
+        );
+      assert.equal(leg.env.PLAYWRIGHT_HTML_OPEN, "never");
+    }
   });
 });
 

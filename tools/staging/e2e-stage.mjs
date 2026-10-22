@@ -280,9 +280,9 @@ export function captchaTestTokenEnv(operatorEnv, boxEnv) {
  * suite env: the shared IdP origin (one for every slot, `idpHostname`) and the shared
  * Mailpit (one per stand, behind the same basic-auth pair — README «Mailpit»).
  * Hostnames only: Playwright does not send `__Host-` cookies to `127.0.0.1`.
- * Operator keys (`IDP_SERVICE_TOKEN`, a branch `DATABASE_URL`, seeded slugs, a
- * reused doctor account) are NOT derivable from a slot; a spec that needs one is
- * reported «not run — missing <names>» unless the operator exports it.
+ * The golden accounts and slugs come from `slotLiveStandEnv`; a key neither the
+ * slot's hostnames nor the golden dataset nor the Actions env carries is not
+ * derived, and its spec is reported «not run» (`live-tiers.mjs` `slotReason`).
  */
 export function slotLiveEnv({ baseDomain }) {
   return {
@@ -291,22 +291,6 @@ export function slotLiveEnv({ baseDomain }) {
   };
 }
 
-/**
- * Stand keys the slot's own api boots with (`/etc/ds-platform/stage.env`) that a
- * live spec needs too (#3191): the IdP service token + project the signed-in
- * landing spec reconciles the account's grant with, and the `CONGRESS_SIGNUP_*`
- * block the congress sign-up specs check before expecting «accepted».
- */
-export const LIVE_STAND_BOX_KEYS = Object.freeze([
-  "IDP_SERVICE_TOKEN",
-  "IDP_PROJECT_ID",
-  "CONGRESS_SIGNUP_EVENT_ID",
-  "CONGRESS_SIGNUP_CONSENT_VERSION",
-  "CONGRESS_SIGNUP_WINDOW_OPENS_AT",
-  "CONGRESS_SIGNUP_WINDOW_CLOSES_AT",
-  "CONGRESS_SIGNUP_EVENT_DAYS",
-]);
-
 /** The golden accounts a live spec signs in as: `E2E_DOCTOR_*` and `E2E_DOCTOR2_*`. */
 const LIVE_DOCTOR_ACCOUNTS = Object.freeze([
   { prefix: "E2E_DOCTOR", key: "doctorVerified" },
@@ -314,32 +298,32 @@ const LIVE_DOCTOR_ACCOUNTS = Object.freeze([
 ]);
 
 /**
- * The live legs' env DERIVED from the slot (#3191), so a live spec runs instead of
- * reading «not run — missing». An operator export wins, then the box's stage env,
- * then the golden dataset every slot is cloned from:
+ * The live legs' env DERIVED for a slot (#3191), so a live spec runs instead of
+ * reading «not run — missing». ONE derivation for both modes: its inputs are the
+ * operator's env and the golden passwords under their `DS_GOLDEN_PASSWORD_*`
+ * names (`goldenPasswordEnv` — the environment-`stage` secrets in Actions, the
+ * box's stage env over ssh), never anything else of the box. So the release check
+ * in Actions (no ssh, README «The same check in Actions») and an operator run with
+ * ssh hand a live spec the same env. An operator export wins over the defaults:
  * - `E2E_DOCTOR_*` / `E2E_DOCTOR2_*` — the golden verified doctor and its first
- *   worker-pool copy (`idp.mjs` GOLDEN_IDP_ACCOUNTS), with the password the box
- *   provisioned them with; no password known ⇒ no account named.
- * - `LIVE_STAND_BOX_KEYS` — the stand keys the slot api itself boots with.
+ *   worker-pool copy (`idp.mjs` GOLDEN_IDP_ACCOUNTS); no password ⇒ no account.
  * - `GOLDEN_LIVE_ENV[host]` — the golden event slugs and `/events` paths a
  *   spec of that storefront reads (`live-tiers.mjs`).
- * Nothing else of the box is handed over.
+ * A stand key Actions does not carry (an IdP management token, the congress
+ * sign-up block, a database URL) is not derived: its spec is declared with a
+ * `slotReason` in `live-tiers.mjs` and reported «not run».
  */
-export function slotLiveStandEnv(operatorEnv, boxEnv, host) {
-  const pick = (name) => operatorEnv?.[name] || boxEnv?.[name] || undefined;
+export function slotLiveStandEnv(operatorEnv, goldenPasswords, host) {
   const env = {};
   for (const [name, value] of Object.entries(GOLDEN_LIVE_ENV[host] ?? {})) {
     env[name] = operatorEnv?.[name] || value;
-  }
-  for (const name of LIVE_STAND_BOX_KEYS) {
-    const value = pick(name);
-    if (value) env[name] = value;
   }
   for (const { prefix, key } of LIVE_DOCTOR_ACCOUNTS) {
     const account = GOLDEN_IDP_ACCOUNTS.find((a) => a.key === key);
     const email = operatorEnv?.[`${prefix}_EMAIL`] || account.username;
     const password =
-      operatorEnv?.[`${prefix}_PASSWORD`] || pick(account.passwordEnvVar);
+      operatorEnv?.[`${prefix}_PASSWORD`] ||
+      goldenPasswords?.[account.passwordEnvVar];
     if (!password) continue;
     env[`${prefix}_EMAIL`] = email;
     env[`${prefix}_PASSWORD`] = password;
@@ -829,9 +813,9 @@ export async function runE2eStage(
 
   // The storefront LIVE-TIER configs (#3168): one leg each, selected by host like
   // the axe legs. Each leg gets the suite env plus the stand's IdP and Mailpit;
-  // what the operator exported on top (an operator key) counts as available, and
-  // the rest is derived from the slot (`slotLiveStandEnv`). The release check runs
-  // them like every other leg (#3191).
+  // the golden accounts and slugs come from `slotLiveStandEnv` — the same env in
+  // Actions (no ssh) and over ssh. The release check runs them like every other
+  // leg (#3191).
   const live = [];
   if (options.live) {
     for (const tier of LIVE_TIERS.filter((t) => axeHost(t.host))) {
@@ -843,7 +827,7 @@ export async function runE2eStage(
       const legEnv = {
         ...suiteEnv,
         ...slotLiveEnv({ baseDomain }),
-        ...slotLiveStandEnv(env, boxEnv, tier.host),
+        ...slotLiveStandEnv(env, suiteEnv, tier.host),
         E2E_API_URL: env.E2E_API_URL || new URL(healthUrl).origin,
         ...reporting.env,
       };

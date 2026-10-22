@@ -138,6 +138,8 @@ export const LIVE_TIERS = Object.freeze([
       },
       {
         file: "e2e/signed-in-landing-live.spec.ts",
+        slotReason:
+          "the spec narrows an account's project grant through the IdP management API, whose service token the release check in Actions does not carry (an IdP management token is kept out of a public repo's Actions env)",
         requires: [
           URL_DOCTOR,
           ...IDP_MAIL,
@@ -191,8 +193,10 @@ export const LIVE_TIERS = Object.freeze([
       },
       {
         // Its congress sign-up checks the api's `CONGRESS_SIGNUP_*` block first
-        // (`congressSignUpEnvProblem`); a slot run derives it from the box.
+        // (`congressSignUpEnvProblem`).
         file: "e2e/login-handoff-live.spec.ts",
+        slotReason:
+          "its congress sign-up needs the api's CONGRESS_SIGNUP_* block, which lives only in the box's stage env — the release check in Actions reads no box env, and congress intake is closed",
         requires: [URL_DOCTOR, ...IDP_MAIL, ...CONGRESS_SIGNUP],
       },
     ],

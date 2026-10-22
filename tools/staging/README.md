@@ -353,17 +353,31 @@ through `@ds/e2e/stand-http-credentials`. `--project academy|doctor` selects leg
 the axe legs (`walks` selects none); `--no-live` drops them. The release check
 (`--expect-sha`) runs them all (#3191).
 
-**Derived from the slot (#3191).** The rest of a leg's env is `slotLiveStandEnv`
-(`e2e-stage.mjs`); an operator export wins over each value:
+**Derived for the slot (#3191).** The release check runs in Actions (`stage.yml` job
+`suite`, «The same check in Actions» above), which never reads the box: its env is the
+base domain, the basic-auth pair, the captcha test token and the four golden passwords,
+nothing else. The rest of a leg's env is therefore derived from those and from repo data
+only — `slotLiveStandEnv` (`e2e-stage.mjs`), one derivation for both modes (over ssh the
+golden passwords come from the box's `stage.env` under the same `DS_GOLDEN_PASSWORD_*`
+names, and no other box key is handed over); an operator export wins over each value:
 
 - `E2E_DOCTOR_EMAIL`/`_PASSWORD` and `E2E_DOCTOR2_*` — the golden verified doctor and
-  its first worker-pool copy (`idp.mjs` GOLDEN_IDP_ACCOUNTS), with the password the box
-  provisioned (`DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED`);
-- `IDP_SERVICE_TOKEN`, `IDP_PROJECT_ID` and the `CONGRESS_SIGNUP_*` block — read from
-  the box's `stage.env`, the same values the slot api boots with;
+  its first worker-pool copy (`idp.mjs` GOLDEN_IDP_ACCOUNTS), with
+  `DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED`;
 - the golden event slugs and `/events` paths per storefront (`GOLDEN_LIVE_ENV` in
   `live-tiers.mjs`, held against `packages/db/src/seed/golden/ids.ts`), and
   `E2E_API_URL` = the slot's api origin.
+
+An IdP management token (`IDP_SERVICE_TOKEN`/`IDP_PROJECT_ID`), the api's
+`CONGRESS_SIGNUP_*` block and a `DATABASE_URL` are **not** derived and not added to the
+Actions env (a management token in a public repo's Actions env widens the blast radius;
+congress intake is closed): the specs that need them carry a `slotReason`.
+
+**Workers.** `live/academy/default` honours `E2E_WORKERS` (the suite job sets 4): its
+spec files run in parallel, each journey registering its own address and reading Mailpit
+by that recipient; the files signed in as the one golden doctor pair form the
+`golden-account` project, held to one worker (`apps/portal/playwright.config.ts`). The
+doctor live configs stay on one worker.
 
 Raw Node `fetch`es (Mailpit reads) carry the basic-auth pair through
 `standBasicAuthHeaders`, and raw api calls on a captcha-gated route carry the test token
@@ -377,9 +391,9 @@ as `not run: <spec> (by design: <reason>)`: the provider-variant room specs (the
 dataset seeds only rutube streams), the heartbeat-cadence specs (a slot api runs the
 production 60 s cadence), the congress-submission specs (they write fixture rows straight
 into a database a slot keeps inside the box's docker network) and the one-tap
-registration (005 registration is append-only, so a run consumes its эфиры). In Actions
-(`stage.yml`, which never reads the box) the box-derived keys are absent, so those specs
-print `missing`. A config that throws at load without its env is not launched at all.
+registration (005 registration is append-only, so a run consumes its эфиры), the
+signed-in landing spec (an IdP management token) and the congress login hand-off (the
+`CONGRESS_SIGNUP_*` block). A config that throws at load without its env is not launched at all.
 Export the variable on this machine and the spec runs. The verdict block prints
 one `live:` line per config:
 
@@ -390,7 +404,7 @@ one `live:` line per config:
 - `SKIPPED — ran 0 passed / 0 failed / M skipped` — every test skipped, never green;
 - `skipped — missing env <names>` — the config was not launched.
 
-A skipped leg is loud but **not fatal** (the slot cannot hold operator keys); the verdict
+A skipped leg is loud but **not fatal** (a key the release check does not carry); the verdict
 reads `PASS — <n> live legs skipped`. Each leg writes `results.json` (and in public-log
 mode the summary reporter, HTML and traces) under `live-<host>-<config>/` in the report dir.
 

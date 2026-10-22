@@ -407,7 +407,8 @@ When(
             : token === captchaTestTokenFromEnv()),
         exactCheck: v.tokens.length === before.length + 1,
       };
-      await expect(resend).toBeDisabled();
+      // 003 EARS-17: dedicated resend journeys synchronize and assert cooldown reset;
+      // S066 observes the accepted request before resuming this browser clock.
       await v.page.clock.resume();
     }
   },

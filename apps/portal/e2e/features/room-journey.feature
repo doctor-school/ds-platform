@@ -6,9 +6,10 @@
 # presence invariant EARS-8) are asserted in the apps/api Vitest e2e; HERE we drive
 # exactly what a doctor sees and does in the running portal on the live dev stand —
 # the required user-facing deliverable (requirements Verification, the `all` row):
-# admission → player-from-the-enum → real-time chat → visibility-gated heartbeat →
-# denied-access routing → room-close degradation → the browser-observable authz +
-# frame-only + МСК-no-drift cross-cuts. The whole run rides a deliberately non-Moscow
+# admission → real-time chat → denied-access routing → room-close degradation →
+# the browser-observable authz + frame-only + МСК-no-drift cross-cuts (the
+# provider-enum player and the heartbeat cadence live in
+# room-provider-journey.feature and room-heartbeat-journey.feature). The whole run rides a deliberately non-Moscow
 # browser timezone (playwright.config `bdd` project, America/New_York) + ru-RU
 # locale, so the МСК labels prove no viewer-local drift globally (EARS-10), not just
 # in one tagged step.
@@ -18,8 +19,7 @@
 # auto-login flow (support/doctor-session), then completing the REAL 005 registration
 # by carrying a `returnTo` to the event page. So the suite runs on `LIVE_STAND` + the
 # seeded stream config alone (no operator-seeded credentials). Seeded fixture rooms
-# (006↔007 fixture seam): `seed-005-live` (rutube, the happy/chat/heartbeat room),
-# `seed-006-room-youtube` / `-rutube` / `-unavailable` (the provider-enum variants),
+# (006↔007 fixture seam): `seed-005-live` (rutube, the happy/chat room),
 # `seed-005-upcoming` (the not-live branch), `seed-005-ended` (the closed room). Every
 # slug is env-overridable; the whole feature `test.skip`s (its Background gate no-ops)
 # when the dev-stand env is absent, so a stray CI invocation is inert. The live run +

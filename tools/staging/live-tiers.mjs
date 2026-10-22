@@ -97,13 +97,12 @@ const CONGRESS_SIGNUP = [
  *
  * The Academy default leg after the #3229 triage: one product deviation (008
  * EARS-14 — no storefront footer on `/`, `apps/portal/lib/shell-config.ts`
- * deferring to epic #2020), and three specs whose precondition the golden
- * dataset does not hold: a day with 4+ Academy эфиры (month-fidelity «+N ещё»),
- * fewer than 10 upcoming эфиры and the local seed's named past эфиры
- * (webinars-feed-view gate rows 31–32).
+ * deferring to epic #2020), and the month-fidelity «+N ещё» pill cap, which
+ * waits for the golden dense Academy day to reach the slot (the next `main`
+ * converge seeds it).
  */
 const ACADEMY_DEFAULT_RED_3229 =
-  "red on slot — #3229: 008 EARS-14 footer absent on / (product, epic #2020); month-fidelity «+N ещё» pill cap waits for a slot golden re-seed carrying the dense Academy day";
+  "red on slot — #3229: 008 EARS-14 footer absent on / (product, epic #2020); month-fidelity «+N ещё» pill cap until the golden dense Academy day reaches the slot (next main converge seeds it)";
 
 export const LIVE_TIERS = Object.freeze([
   {

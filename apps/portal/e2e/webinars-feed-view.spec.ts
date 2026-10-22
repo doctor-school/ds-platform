@@ -127,6 +127,9 @@ test.describe("the Academy feed view (wave-2 entry gate §2.4)", () => {
       first.counts.past,
       "the stand carries a past season",
     ).toBeGreaterThan(10);
+    // 019 «Amendment — 2026-10-12»: the first screen holds at least the 10
+    // most recent past эфиры.
+    expect(first.data.length).toBeGreaterThanOrEqual(10);
 
     await page.goto("/webinars?tense=past", { waitUntil: "load" });
     await page.waitForLoadState("networkidle");

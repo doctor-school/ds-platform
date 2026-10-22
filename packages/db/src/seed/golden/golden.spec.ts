@@ -893,8 +893,8 @@ describe("#2213 golden dataset at volume", () => {
       const { pinned, built } = atPin(pin);
       const day = denseAcademyDay(pinned);
       expect(day.slice(0, 7), pin).toBe(mskDayKey(pinned).slice(0, 7));
-      // The cap applies to today and the future only (a past day lists every
-      // event), so the four must be scheduled — published and still ahead.
+      // 004 scope item 10: the four sit in the pin's own month, scheduled —
+      // published and still ahead of the run instant.
       const academy = built.events.filter(
         (e) =>
           e.audience === "experts" &&

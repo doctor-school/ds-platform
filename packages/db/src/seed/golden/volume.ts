@@ -209,10 +209,11 @@ const LIVE_OFFSETS_MIN = [-20, -45] as const;
  *
  * The grid carries two or three эфиры a weekday split between both audiences,
  * so no Academy (experts) day reaches the four a month cell needs before it
- * caps its pills and appends «+N ещё» (004 scope item 10). The cap applies to
- * today and the future only — a past day lists every event — so the marathon
- * is scheduled ahead of the run instant and inside «этот месяц»: tomorrow at
- * these МСК hours, or, on a month's last day, later today.
+ * caps its pills and appends «+N ещё» (004 scope item 10). The marathon is
+ * scheduled ahead of the run instant and inside «этот месяц»: tomorrow at these
+ * МСК hours, or, on a month's last day, later today. The dense day therefore
+ * lives in the month of the last seed run only; once the month rolls over it is
+ * absent until the next `seed:golden` upsert (the slot `main` converge).
  */
 const DENSE_ACADEMY_DAY_MINUTES = [10 * 60, 12 * 60, 14 * 60, 16 * 60] as const;
 

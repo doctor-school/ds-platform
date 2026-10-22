@@ -189,7 +189,9 @@ its own schedule state, the badge and the countdown, and the row that keeps «э
 (`audience = experts`) эфиры tomorrow at `10:00` · `12:00` · `14:00` · `16:00`
 МСК — or later today when today is the month's last day — so the Academy month
 view holds a day with more events than its three-pill cap and renders «+N ещё»
-at any pin (a past day lists every event, so the marathon is always ahead).
+at any pin. The day lives in the month of the last seed run only: after the
+month rolls over it is absent until the next `seed:golden` upsert (the slot
+`main` converge re-seeds on every push to `main`).
 
 **State is a function of position, never of a quota.** A cell ahead of the pin is
 `published` (with one `draft` and one `hidden` per future month, always on the

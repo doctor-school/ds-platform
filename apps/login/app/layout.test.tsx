@@ -30,8 +30,12 @@ const { default: RootLayout } = await import("./layout");
 
 const NONCE = "bm9uY2UtMzE3MA==";
 
-function request(storefront: SignInHostRender["storefront"] | null): void {
+function request(
+  storefront: SignInHostRender["storefront"] | null,
+  cookie?: string,
+): void {
   const headers = new Headers();
+  if (cookie) headers.set("cookie", cookie);
   headers.set("content-security-policy", contentSecurityPolicy(NONCE, false));
   if (storefront) {
     headers.set(
@@ -122,5 +126,47 @@ describe("the sign-in host follows the originating storefront's theme under the 
       .find((part) => part.startsWith("script-src"));
     expect(scriptSrc).toBe(`script-src 'nonce-${NONCE}' 'strict-dynamic'`);
     expect(scriptSrc).not.toContain("'unsafe-inline'");
+  });
+});
+
+describe("#3171: a visitor's explicit storefront theme reaches the sign-in host", () => {
+  const htmlClass = (tree: ReactElement[]) =>
+    (tree.find((el) => el.type === "html")?.props as { className?: string })
+      .className ?? "";
+
+  for (const storefront of ["academy", "doctor"] as const) {
+    it(`a stored dark choice renders the ${storefront} variant dark server-side, with no theme script or watcher to undo it`, async () => {
+      request(storefront, "__Host-ds_sign_in=x; ds-theme=dark");
+      const tree = await layoutTree();
+      expect(htmlClass(tree).split(" ")).toContain("dark");
+      expect(themeScripts(tree)).toHaveLength(0);
+      expect(tree.some((el) => el.type === ThemeWatcher)).toBe(false);
+    });
+
+    it(`a stored light choice renders the ${storefront} variant light and keeps the system out`, async () => {
+      request(storefront, "ds-theme=light");
+      const tree = await layoutTree();
+      expect(htmlClass(tree).split(" ")).not.toContain("dark");
+      expect(themeScripts(tree)).toHaveLength(0);
+    });
+  }
+
+  it("without the cookie (or with a corrupt one) each variant keeps its own default", async () => {
+    request("academy", "ds-theme=purple");
+    const academy = await layoutTree();
+    expect(htmlClass(academy).split(" ")).not.toContain("dark");
+    expect(themeScripts(academy)[0]?.dangerouslySetInnerHTML?.__html).toBe(
+      THEME_INIT_SCRIPT,
+    );
+    request("doctor");
+    const doctor = await layoutTree();
+    expect(themeScripts(doctor)[0]?.dangerouslySetInnerHTML?.__html).toBe(
+      THEME_FOUC_GUARD,
+    );
+  });
+
+  it("the unread-entry banner also honours a stored dark choice", async () => {
+    request(null, "ds-theme=dark");
+    expect(htmlClass(await layoutTree()).split(" ")).toContain("dark");
   });
 });

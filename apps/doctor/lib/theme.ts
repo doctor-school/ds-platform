@@ -37,15 +37,12 @@ export function readStoredTheme(): Theme | null {
   }
 }
 
-/** Record an explicit choice and apply it in the same turn. */
-export function persistTheme(theme: Theme): void {
-  try {
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
-  } catch {
-    // Storage unavailable — the choice still applies for this document.
-  }
-  applyTheme(theme);
-}
+/**
+ * Record an explicit choice and apply it in the same turn — the shared store's
+ * writer, which also mirrors it into the `ds-theme` preference cookie the
+ * sign-in host reads (#3171).
+ */
+export { persistTheme } from "@ds/storefront-shell/theme";
 
 /**
  * The inline script the root layout runs BEFORE first paint, so a remembered

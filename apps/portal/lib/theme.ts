@@ -65,13 +65,9 @@ export function applyTheme(theme: Theme): void {
   document.documentElement.classList.toggle("dark", theme === "dark");
 }
 
-/** Persist an EXPLICIT user choice (it now wins over the system scheme) and apply it. */
-export function persistTheme(theme: Theme): void {
-  try {
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-  } catch {
-    // Blocked storage must not break the visible flip — the class still applies;
-    // the choice simply won't survive the session (truthful degradation).
-  }
-  applyTheme(theme);
-}
+/**
+ * Persist an EXPLICIT user choice (it now wins over the system scheme) and apply
+ * it — the shared store's writer, which also mirrors the choice into the
+ * `ds-theme` preference cookie the sign-in host reads (#3171).
+ */
+export { persistTheme } from "@ds/storefront-shell/theme";

@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { Button } from "@ds/design-system/button";
 import { cn } from "@ds/design-system/lib/utils";
 
-import { persistTheme } from "./theme";
+import { persistTheme, syncThemeCookie } from "./theme";
 
 /**
  * 008 EARS-3 · 017 EARS-1 — the storefront theme control (canvas
@@ -67,6 +67,13 @@ export function ThemeToggle({
     readIsDark,
     serverIsDark,
   );
+
+  // Every storefront page mounts this toggle in its header: the place a choice
+  // made before the preference cookie existed, or one since cleared, is brought
+  // in line for the sign-in host (#3171).
+  useEffect(() => {
+    syncThemeCookie();
+  }, []);
 
   const onClick = useCallback(() => {
     // An activation is an EXPLICIT visitor choice — persist it and apply it; the

@@ -330,6 +330,16 @@ describe("stage-b-lint", () => {
       expect(stdout).toContain("slot pr-3212");
     });
 
+    it("red: a later FAIL whose text carries an <https://…> link beats the earlier PASS → exit 1", () => {
+      const { code, stderr } = runGuard(
+        GUARD,
+        caseDir("stage-b", "red-check-later-fail-link"),
+        { env: prEnv("3213", "red-check-later-fail-link") },
+      );
+      expect(code).toBe(1);
+      expect(stderr).toContain("FAIL");
+    });
+
     it("green: the Stage-check PASS may live in a PR comment → exit 0", () => {
       const { code } = runGuard(
         GUARD,

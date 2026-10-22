@@ -161,6 +161,7 @@ function carryHead(
   };
 }
 
+const STAGE_CHECK_TEMPLATE = /^PASS\s*[-–—]\s*slot\s+pr-<[^>]*>/i;
 const checkMarker = /^[ \t]*Stage-check:[ \t]*(.*?)[ \t]*$/gim;
 
 /**
@@ -181,9 +182,10 @@ export function validateStageCheck(
   const checks = records
     .flatMap((record, order) =>
       [...record.body.matchAll(checkMarker)]
-        // A line quoting the record template (`pr-<N>, <what was driven>`) is
-        // not a record: it neither counts nor poisons the set as undated.
-        .filter((match) => !/<[^>]*>/.test(match[1]))
+        // A line quoting the record template (slot `pr-<N>`) is not a record:
+        // it neither counts nor poisons the set as undated. Every other line
+        // counts, a FAIL with `<…>` text included.
+        .filter((match) => !STAGE_CHECK_TEMPLATE.test(match[1]))
         .map((match, index) => {
           const recorded = Date.parse(stageBField(record.body, "recorded-at"));
           const pass = /^PASS\b/i.test(match[1]);

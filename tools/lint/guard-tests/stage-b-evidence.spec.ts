@@ -529,4 +529,22 @@ Stage-B-recorded-at: 2026-10-21T16:00:00Z`;
       ).ok,
     ).toBe(false);
   });
+  it("a later FAIL carrying an <https://…> link still invalidates an earlier PASS", () => {
+    const fail = `Stage-check: FAIL — slot pr-3178, sign-in 500 <https://github.com/acme/repo/pull/3178#issuecomment-1>
+Stage-B-head: ${sha}
+Stage-B-recorded-at: 2026-10-21T16:00:00Z`;
+    const verdict = validateStageCheck(
+      [{ body: check() }, { body: fail }],
+      sha,
+      3178,
+    );
+    expect(verdict.ok).toBe(false);
+    expect(verdict.reason).toContain("FAIL");
+  });
+  it("only the literal template line is ignored", () => {
+    const quote = "Stage-check: PASS — slot pr-<N>, <what was driven>";
+    expect(
+      validateStageCheck([{ body: check() }, { body: quote }], sha, 3178).ok,
+    ).toBe(true);
+  });
 });

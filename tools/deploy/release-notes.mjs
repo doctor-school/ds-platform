@@ -312,10 +312,26 @@ async function main() {
     return;
   }
 
-  const res = await fetch(process.env.MATTERMOST_WEBHOOK_URL, {
+  const status = await postToMattermost({
+    webhook: process.env.MATTERMOST_WEBHOOK_URL,
+    text: payload.text,
+  });
+  log(
+    `delivered the aggregated release note to Mattermost (${status}; ${digest.productCount} product PR(s)).`,
+  );
+}
+
+/**
+ * POST `{text}` to the Mattermost incoming webhook; throws on a non-2xx answer.
+ * The release digest and the release workflow's rollback notice (#2987) share it.
+ *
+ * @returns {Promise<number>} the HTTP status.
+ */
+export async function postToMattermost({ webhook, text, fetchImpl = fetch }) {
+  const res = await fetchImpl(webhook, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ text }),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
@@ -323,9 +339,7 @@ async function main() {
       `Mattermost webhook POST failed: ${res.status} ${res.statusText} ${detail.slice(0, 200)}`,
     );
   }
-  log(
-    `delivered the aggregated release note to Mattermost (${res.status}; ${digest.productCount} product PR(s)).`,
-  );
+  return res.status;
 }
 
 // Run only as the entry point — keep the pure seams importable without POSTing.

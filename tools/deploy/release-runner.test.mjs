@@ -5,13 +5,21 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { buildDeploymentPayload } from "./deployment-record.mjs";
 import {
   PREFLIGHT_ORDER,
+  ROLLBACK_PREFLIGHT_ORDER,
+  buildRollbackNotice,
+  liveProdShaViaGh,
   parseRunnerArgs,
   preflightChecks,
   reportRecord,
+  rollbackPreflightChecks,
+  rollbackVerdict,
   runPreflight,
   runRecord,
+  runRollbackNotice,
+  runRollbackRecord,
   stageSuiteProblem,
   successRecordExistsViaGh,
 } from "./release-runner.mjs";
@@ -433,5 +441,433 @@ describe("successRecordExistsViaGh", () => {
       1: [{ state: "inactive" }, { state: "success" }],
     });
     assert.equal(await successRecordExistsViaGh({ sha: SHA, gh: f.gh }), true);
+  });
+});
+
+// --- #2987: rollback mode (spec §3 item 3 «Rollback mode», §5 «Prod rollback») ---
+
+describe("parseRunnerArgs — rollback commands", () => {
+  it("reads rollback-preflight, rollback-record, rollback-notice and rollback-verdict", () => {
+    assert.deepEqual(parseRunnerArgs(["rollback-preflight", "--sha", SHA]), {
+      command: "rollback-preflight",
+      sha: SHA,
+    });
+    assert.deepEqual(
+      parseRunnerArgs([
+        "rollback-record",
+        "--sha",
+        SHA,
+        "--state",
+        "failed",
+        "--from-sha",
+        PREV,
+      ]),
+      { command: "rollback-record", sha: SHA, state: "failed", fromSha: PREV },
+    );
+    assert.deepEqual(
+      parseRunnerArgs(["rollback-notice", "--sha", SHA, "--state", "unknown"]),
+      { command: "rollback-notice", sha: SHA, state: "unknown" },
+    );
+    assert.deepEqual(parseRunnerArgs(["rollback-verdict", "--sha", SHA]), {
+      command: "rollback-verdict",
+      sha: SHA,
+    });
+  });
+
+  it("an empty --from-sha means none; a bad one is refused", () => {
+    const base = ["rollback-record", "--sha", SHA, "--state", "succeeded"];
+    assert.equal(parseRunnerArgs([...base, "--from-sha", ""]).fromSha, null);
+    assert.match(
+      parseRunnerArgs([...base, "--from-sha", "zz"]).error,
+      /from-sha/,
+    );
+  });
+
+  it("has no escape hatch in rollback mode either", () => {
+    for (const flag of ["--skip-ci-check", "--previous-sha", "--ref"]) {
+      assert.match(
+        parseRunnerArgs(["rollback-preflight", "--sha", SHA, flag, "x"]).error,
+        /unknown argument/,
+        flag,
+      );
+    }
+  });
+});
+
+describe("rollbackPreflightChecks", () => {
+  const LIVE = "d".repeat(40);
+  const OTHER = "c".repeat(40);
+  const rel = (tag, target, extra = {}) => ({
+    tag_name: tag,
+    target_commitish: target,
+    draft: false,
+    ...extra,
+  });
+  const world = (over = {}) => {
+    const w = {
+      reason: "smoke red after release-2026.10.21-1",
+      releases: [
+        rel("release-2026.10.21-1", LIVE),
+        rel("release-2026.10.20-2", SHA),
+        rel("release-2026.10.20-1", OTHER),
+      ],
+      deployments: [{ id: 2, sha: LIVE }],
+      statuses: { 2: [{ state: "success" }] },
+      compare: "behind",
+      images: async () => ({
+        ref: "main",
+        run: { url: "https://example.test/run/7", databaseId: 7 },
+      }),
+      calls: [],
+      ...over,
+    };
+    w.gh = (args) => {
+      w.calls.push(args);
+      const p = args[1];
+      if (p.includes("/releases")) return JSON.stringify(w.releases);
+      if (p.includes("/compare/")) return JSON.stringify({ status: w.compare });
+      if (p.includes("/statuses")) {
+        return JSON.stringify(w.statuses[Number(p.split("/")[4])] ?? []);
+      }
+      if (p.includes("/deployments")) return JSON.stringify(w.deployments);
+      throw new Error(`unexpected gh ${p}`);
+    };
+    return w;
+  };
+  const preflight = (w) =>
+    runPreflight({
+      checks: rollbackPreflightChecks({
+        sha: SHA,
+        repo: "o/r",
+        reason: w.reason,
+        gh: w.gh,
+        resolveImages: w.images,
+      }),
+      log: () => {},
+    });
+
+  it("checks the reason, a recent release, behind live and the manifest — no stage-suite, gate or broadcast", () => {
+    assert.deepEqual(ROLLBACK_PREFLIGHT_ORDER, [
+      "reason",
+      "recent-release",
+      "behind-live",
+      "recorded-images",
+    ]);
+    const names = rollbackPreflightChecks({ sha: SHA, repo: "o/r" }).map(
+      (c) => c.name,
+    );
+    assert.deepEqual(names, [...ROLLBACK_PREFLIGHT_ORDER]);
+    for (const banned of [
+      "stage-suite",
+      "release-gate",
+      "live-broadcast",
+      "ci",
+    ])
+      assert.equal(names.includes(banned), false, banned);
+  });
+
+  it("passes a recent release behind the live SHA with its manifest", async () => {
+    const w = world();
+    assert.deepEqual(await preflight(w), { ok: true, imagesRunId: 7 });
+    assert.ok(
+      w.calls.some((a) => a[1] === `repos/o/r/compare/${LIVE}...${SHA}`),
+      "compares <live>...<sha>",
+    );
+  });
+
+  it("refuses an empty or whitespace-only reason before anything is asked", async () => {
+    for (const reason of ["", "   \n\t", undefined]) {
+      const w = world({ reason });
+      const res = await preflight(w);
+      assert.equal(res.ok, false);
+      assert.equal(res.failed, "reason");
+      assert.equal(w.calls.length, 0);
+    }
+  });
+
+  it("refuses a SHA that is not the target of one of the latest 3 release-* Releases", async () => {
+    const w = world({
+      releases: [
+        rel("release-2026.10.21-1", LIVE),
+        rel("release-2026.10.20-2", OTHER),
+        rel("release-2026.10.20-1", OTHER),
+        rel("release-2026.10.19-1", SHA),
+      ],
+    });
+    const res = await preflight(w);
+    assert.equal(res.failed, "recent-release");
+    assert.match(res.reason, /latest 3 release-\* Releases/);
+  });
+
+  it("orders Releases by date and sequence, skips drafts and non-release tags", async () => {
+    const w = world({
+      releases: [
+        rel("release-2026.10.19-1", SHA),
+        rel("release-2026.10.21-1", LIVE),
+        rel("release-2026.10.20-10", OTHER),
+        rel("release-2026.10.20-9", OTHER),
+        rel("release-2026.10.22-1", OTHER, { draft: true }),
+        rel("v1.2.3", OTHER),
+      ],
+    });
+    assert.equal((await preflight(w)).failed, "recent-release");
+    w.releases.splice(3, 1); // without -9 the SHA's release is the third
+    assert.equal((await preflight(w)).ok, true);
+  });
+
+  for (const status of ["ahead", "identical", "diverged"]) {
+    it(`refuses a target whose compare with the live SHA is ${status}`, async () => {
+      const res = await preflight(world({ compare: status }));
+      assert.equal(res.failed, "behind-live");
+      assert.match(res.reason, new RegExp(status));
+    });
+  }
+
+  it("the live SHA is the latest production Deployment with a success status", async () => {
+    const w = world({
+      deployments: [
+        { id: 3, sha: OTHER },
+        { id: 2, sha: LIVE },
+      ],
+      statuses: {
+        3: [{ state: "failure" }],
+        2: [{ state: "inactive" }, { state: "success" }],
+      },
+    });
+    assert.equal(await liveProdShaViaGh({ repo: "o/r", gh: w.gh }), LIVE);
+  });
+
+  it("refuses when no successful production Deployment names the live SHA", async () => {
+    const res = await preflight(world({ deployments: [] }));
+    assert.equal(res.failed, "behind-live");
+    assert.match(res.reason, /live prod SHA is unknown/);
+  });
+
+  it("refuses when no images-<sha>.json is recorded", async () => {
+    const res = await preflight(
+      world({
+        images: async () => {
+          throw new Error("no runtime-images run recorded images for this SHA");
+        },
+      }),
+    );
+    assert.equal(res.failed, "recorded-images");
+  });
+});
+
+describe("rollbackVerdict", () => {
+  const LIVE = "d".repeat(40);
+  const reply = (active, rc, state, extra = {}) =>
+    JSON.stringify({
+      rollback:
+        state === null
+          ? null
+          : { kind: "rollback", sha: SHA, state, from: LIVE, ...extra },
+      driver: { unit: "u", active, rc, previousSha: null },
+    });
+
+  it("running while the unit runs", () => {
+    for (const active of ["active", "activating"]) {
+      const v = rollbackVerdict(reply(active, null, "running"), SHA);
+      assert.equal(v.terminal, null, active);
+      assert.equal(v.line, `driver=${active} rc=- state=running`);
+    }
+  });
+
+  it("succeeded only for an rc-0 finished unit whose record says succeeded", () => {
+    const v = rollbackVerdict(reply("inactive", 0, "succeeded"), SHA);
+    assert.equal(v.terminal, "succeeded");
+    assert.equal(v.from, LIVE);
+  });
+
+  it("a dead or failed unit whose record still says running is a failure", () => {
+    for (const [active, rc] of [
+      ["failed", 137],
+      ["inactive", 0],
+      ["absent", null],
+    ]) {
+      assert.equal(
+        rollbackVerdict(reply(active, rc, "running"), SHA).terminal,
+        "failed",
+        active,
+      );
+    }
+  });
+
+  it("a red unit or record is a failure; no record and no unit is a failure", () => {
+    assert.equal(
+      rollbackVerdict(reply("failed", 1, "failed"), SHA).terminal,
+      "failed",
+    );
+    assert.equal(
+      rollbackVerdict(reply("inactive", 0, "failed"), SHA).terminal,
+      "failed",
+    );
+    assert.equal(
+      rollbackVerdict(reply("absent", null, null), SHA).terminal,
+      "failed",
+    );
+  });
+
+  it("an unreadable reply or another SHA's record is not a verdict", () => {
+    assert.equal(rollbackVerdict("{nope", SHA).terminal, null);
+    assert.equal(rollbackVerdict("{nope", SHA).line, "unreadable reply");
+    const other = rollbackVerdict(
+      reply("inactive", 0, "succeeded", { sha: PREV }),
+      SHA,
+    );
+    assert.equal(other.terminal, null);
+    assert.equal(other.line, "unreadable reply");
+  });
+});
+
+describe("runRollbackRecord", () => {
+  const make = () => {
+    const calls = [];
+    return {
+      calls,
+      create: (args) => {
+        calls.push(args);
+        return { ok: true, deploymentId: 11 };
+      },
+      log: () => {},
+    };
+  };
+
+  for (const [state, deploymentState] of [
+    ["succeeded", "success"],
+    ["failed", "failure"],
+    ["unknown", "error"],
+  ]) {
+    it(`${state}: ONE ${deploymentState} record, no release cut, the reason attached`, async () => {
+      const deps = make();
+      const res = await runRollbackRecord({
+        sha: SHA,
+        state,
+        fromSha: PREV,
+        reason: "login down",
+        ...deps,
+      });
+      assert.deepEqual(res, { ok: true, deploymentId: 11, recorded: "new" });
+      assert.equal(deps.calls.length, 1);
+      const [args] = deps.calls;
+      assert.equal(args.state, deploymentState);
+      assert.equal(args.releaseTag, null);
+      assert.equal(args.notesText, "");
+      assert.deepEqual(args.rollback, { reason: "login down", from: PREV });
+    });
+  }
+
+  it("refuses a blank reason before writing anything", async () => {
+    const deps = make();
+    await assert.rejects(
+      runRollbackRecord({
+        sha: SHA,
+        state: "succeeded",
+        reason: "  ",
+        ...deps,
+      }),
+      /reason is empty/,
+    );
+    assert.equal(deps.calls.length, 0);
+  });
+});
+
+describe("buildDeploymentPayload — rollback", () => {
+  const base = {
+    sha: SHA,
+    releaseTag: null,
+    notesText: "",
+    healthUrl: "https://api.example/v1/health",
+    nowIso: "2026-10-22T00:00:00.000Z",
+  };
+
+  it("describes the record `rollback to <sha12> — <reason>` and keeps the reason in the payload", () => {
+    const { deployment, status } = buildDeploymentPayload({
+      ...base,
+      state: "success",
+      rollback: { reason: "логин не работает 🔥", from: PREV },
+    });
+    assert.equal(
+      deployment.description,
+      `rollback to ${SHA.slice(0, 12)} — логин не работает `,
+    );
+    assert.equal(deployment.payload.kind, "rollback");
+    assert.equal(deployment.payload.reason, "логин не работает 🔥");
+    assert.equal(deployment.payload.from, PREV);
+    assert.equal(deployment.payload.ownerQuote, null);
+    assert.equal(status.state, "success");
+    assert.equal(status.description, `rollback to ${SHA.slice(0, 12)}`);
+  });
+
+  it("a failed or lost-contact rollback says so in its status", () => {
+    const failed = buildDeploymentPayload({
+      ...base,
+      state: "failure",
+      rollback: { reason: "x" },
+    });
+    assert.equal(
+      failed.deployment.description,
+      `rollback to ${SHA.slice(0, 12)} — x`,
+    );
+    assert.match(failed.status.description, /^rollback failed @ /);
+    const unknown = buildDeploymentPayload({
+      ...base,
+      state: "error",
+      rollback: { reason: "x" },
+    });
+    assert.match(unknown.status.description, /^rollback verdict unknown @ /);
+  });
+
+  it("stays within GitHub's 140-char description cap", () => {
+    const { deployment } = buildDeploymentPayload({
+      ...base,
+      state: "success",
+      rollback: { reason: "r".repeat(400) },
+    });
+    assert.equal(deployment.description.length, 140);
+  });
+});
+
+describe("rollback notice", () => {
+  it("is «откат прода на <sha12>: <reason>» with the outcome", () => {
+    const text = buildRollbackNotice({
+      sha: SHA,
+      state: "succeeded",
+      reason: "smoke red",
+    });
+    assert.equal(
+      text.split("\n")[0],
+      `откат прода на ${SHA.slice(0, 12)}: smoke red`,
+    );
+    assert.notEqual(
+      buildRollbackNotice({ sha: SHA, state: "failed", reason: "x" }),
+      buildRollbackNotice({ sha: SHA, state: "succeeded", reason: "x" }),
+    );
+  });
+
+  it("posts it through the digest's Mattermost helper; no webhook skips green", async () => {
+    const posted = [];
+    const post = async (args) => posted.push(args);
+    await runRollbackNotice({
+      sha: SHA,
+      state: "failed",
+      reason: "x",
+      webhook: "https://mm.example/hooks/1",
+      post,
+      log: () => {},
+    });
+    assert.equal(posted.length, 1);
+    assert.equal(posted[0].webhook, "https://mm.example/hooks/1");
+    assert.match(posted[0].text, /^откат прода на /);
+    await runRollbackNotice({
+      sha: SHA,
+      state: "failed",
+      reason: "x",
+      webhook: "",
+      post,
+      log: () => {},
+    });
+    assert.equal(posted.length, 1);
   });
 });

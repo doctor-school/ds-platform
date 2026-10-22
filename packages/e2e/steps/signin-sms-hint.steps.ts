@@ -18,6 +18,11 @@ import {
   smsSinkUrl,
   type SmsCheckpoint,
 } from "../lib/sms-sink.js";
+import {
+  expectEnteredThrough,
+  lastStorefrontEntry,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { Given, Then, When, test } from "./support/auth-fixtures.js";
 
 const SMS_HINT =
@@ -46,8 +51,11 @@ async function assertUnconfirmedPhone(page: Page, state: SmsVisitor) {
     expectedDatabaseHost: process.env.E2E_AUTH_DATABASE_HOST ?? "",
     expectedDatabasePort: Number(process.env.E2E_AUTH_DATABASE_PORT),
   };
+  // #3172: the code door is the sign-in host's; the Academy contour is the
+  // storefront whose entry opened it.
   expect(
-    contour.academyBaseUrl.replace(/\/$/, "") === new URL(page.url()).origin,
+    contour.academyBaseUrl.replace(/\/$/, "") ===
+      lastStorefrontEntry(page)?.origin,
     "the phone observer belongs to the actual Academy contour",
   ).toBe(true);
   // No account mirror at all carries the owned phone, so none has it confirmed.
@@ -102,8 +110,14 @@ Given(
       world.hostBaseUrl,
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
+    watchStorefrontEntries(page, world.hostBaseUrl);
     await page.goto(target.toString(), { waitUntil: "load" });
     await page.waitForLoadState("networkidle");
+    expectEnteredThrough(page, world.hostBaseUrl, {
+      pathname: "/login",
+      method: "code",
+      returnTo: "/account",
+    });
     await expect(page.getByTestId("login-method-otp")).toHaveAttribute(
       "aria-selected",
       "true",

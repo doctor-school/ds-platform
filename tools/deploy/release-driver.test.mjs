@@ -111,7 +111,9 @@ const SAMPLES = {
   good: manifest(),
   // #3171: a rollback target recorded before the sign-in host image.
   "pre-login": manifest({
-    images: Object.fromEntries(Object.entries(IMAGES).filter(([name]) => name !== "login")),
+    images: Object.fromEntries(
+      Object.entries(IMAGES).filter(([name]) => name !== "login"),
+    ),
   }),
   hotfix: manifest({ ref: "hotfix/12-fix-x" }),
   "wrong sha": manifest({ sha: OTHER }),
@@ -126,9 +128,6 @@ const SAMPLES = {
       ...IMAGES,
       api: `${IMAGE_REGISTRY}/api@sha256:${"a".repeat(63)}`,
     },
-  }),
-  "unknown image": manifest({
-    images: { ...IMAGES, worker: `${IMAGE_REGISTRY}/worker@${digestOf("f")}` },
   }),
   "missing image": manifest({ images: { api: IMAGES.api } }),
   "another image's digest": manifest({
@@ -609,6 +608,102 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       "ds-release-driver: refused: cannot read the registry with the box's pull credential\n",
     );
     notStarted();
+  });
+
+  // #3254: a manifest of a newer tree may carry an image this installed driver does not
+  // know yet (the driver itself is installed from the tree it ships). The extra image
+  // keeps the whole provenance check; slot.mjs / prod.mjs of the shipped tree judge
+  // the image set itself.
+  describe("3254: an image the driver does not know", () => {
+    const WORKER = `${IMAGE_REGISTRY}/worker@${digestOf("f")}`;
+    const withWorker = (images = {}) =>
+      manifest({ images: { ...IMAGES, worker: WORKER, ...images } });
+
+    it("starts for a manifest with an extra, well-formed, registry-served image", () => {
+      serve("worker", digestOf("f"));
+      const r = run(["stage-main", SHA], { input: withWorker() });
+      assert.equal(r.status, 0, r.stderr);
+      assert.deepEqual(
+        log("docker.log")
+          .trim()
+          .split("\n")
+          .filter((c) => c.startsWith("manifest")),
+        [...RECORDED_IMAGE_NAMES, "worker"].map(
+          (name) =>
+            `manifest inspect --verbose ${IMAGE_REGISTRY}/${name}:${SHA}`,
+        ),
+        "every manifest image, the extra one too, is checked against the registry",
+      );
+      assert.match(log("systemd-run.args"), /--unit=/);
+    });
+
+    for (const name of ["Worker", "-worker", "work_er"]) {
+      it(`refuses an extra image named ${name}`, () => {
+        const r = run(["stage-main", SHA], {
+          input: manifest({
+            images: {
+              ...IMAGES,
+              [name]: `${IMAGE_REGISTRY}/${name}@${digestOf("f")}`,
+            },
+          }),
+        });
+        assert.equal(r.status, 3, r.stdout);
+        assert.equal(
+          r.stderr,
+          "ds-release-driver: refused: bad manifest: the manifest image names are not all image names\n",
+        );
+        notStarted();
+        assert.equal(log("docker.log"), "", "nothing is asked of the registry");
+      });
+    }
+
+    it("refuses an extra image whose digest reference names another image", () => {
+      const r = run(["stage-main", SHA], {
+        input: withWorker({ worker: IMAGES.api }),
+      });
+      assert.equal(r.status, 3, r.stdout);
+      assert.equal(
+        r.stderr,
+        "ds-release-driver: refused: bad manifest: the manifest image worker is not a sha256 digest reference of worker\n",
+      );
+      notStarted();
+    });
+
+    it("refuses an extra image whose digest the registry does not serve for the SHA", () => {
+      serve("worker", digestOf("9"));
+      const r = run(["stage-main", SHA], { input: withWorker() });
+      assert.equal(r.status, 3, r.stdout);
+      assert.equal(
+        r.stderr,
+        "ds-release-driver: refused: the manifest digest of worker is not the one the registry serves for this commit\n",
+      );
+      notStarted();
+    });
+
+    it("refuses an extra image the registry has no tag of the SHA for", () => {
+      const r = run(["stage-main", SHA], { input: withWorker() });
+      assert.equal(r.status, 3, r.stdout);
+      assert.equal(
+        r.stderr,
+        "ds-release-driver: refused: the registry serves no single-manifest worker tag of this commit\n",
+      );
+      notStarted();
+    });
+
+    it("still refuses a manifest without a required image", () => {
+      serve("worker", digestOf("f"));
+      const images = { ...IMAGES, worker: WORKER };
+      delete images.api;
+      const r = run(["stage-main", SHA], {
+        input: manifest({ images }),
+      });
+      assert.equal(r.status, 3, r.stdout);
+      assert.equal(
+        r.stderr,
+        "ds-release-driver: refused: bad manifest: the manifest images lack api\n",
+      );
+      notStarted();
+    });
   });
 
   it("refuses a PR slot and any env the stage box does not serve", () => {

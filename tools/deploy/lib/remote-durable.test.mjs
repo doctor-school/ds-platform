@@ -48,9 +48,9 @@ test("2982/2984/2985: every box entrypoint is installed from the shipped tree, i
     releaseInstallScript(),
     [
       "sudo install -d -m 0755 -o root -g root /usr/local/lib/ds-platform",
-      `sudo install -m 0755 "/home/deploy/ds-platform/infra/deploy/bin/ds-release" ${DS_RELEASE_BIN}`,
-      `sudo install -m 0755 "/home/deploy/ds-platform/infra/deploy/bin/ds-deploy-entrypoint" ${DS_DEPLOY_ENTRYPOINT_BIN}`,
-      `sudo install -m 0755 "/home/deploy/ds-platform/infra/deploy/bin/release-driver" ${RELEASE_DRIVER_BIN}`,
+      `sudo install -m 0755 "/home/deploy/ds-platform/infra/deploy/bin/ds-release" ${DS_RELEASE_BIN}`,  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
+      `sudo install -m 0755 "/home/deploy/ds-platform/infra/deploy/bin/ds-deploy-entrypoint" ${DS_DEPLOY_ENTRYPOINT_BIN}`,  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
+      `sudo install -m 0755 "/home/deploy/ds-platform/infra/deploy/bin/release-driver" ${RELEASE_DRIVER_BIN}`,  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
     ].join("\n"),
   );
   assert.equal(RELEASE_DRIVER_BIN, "/usr/local/lib/ds-platform/release-driver");
@@ -506,7 +506,7 @@ test("2987: a forward install records its tree — a kept copy and its SHA — f
     `sudo install -d -m 0755 -o root -g root ${INSTALLED_TREES_DIR}`,
     `if ! sudo test -d "${V}"; then`,
     `  sudo rm -rf -- "${V}.new"`,
-    `  sudo cp -R -- "/home/deploy/ds-platform/." "${V}.new"`,
+    `  sudo cp -R -- "/home/deploy/ds-platform/." "${V}.new"`,  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
     ...treeSymlinkCheckLines(`${V}.new`).map((l) => `  ${l}`),
     `  sudo chown -R root:root -- "${V}.new"`,
     `  sudo chmod -R go-w -- "${V}.new"`,

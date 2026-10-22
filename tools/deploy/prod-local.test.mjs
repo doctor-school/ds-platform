@@ -203,7 +203,7 @@ test("2987: the break-glass operator path connects to ds-api-prod as breakglass"
 });
 
 test("2987: both prod boxes use the fixed tree whatever HOME the writer has; only ds-api-prod ships as root", () => {
-  assert.equal(PROD_LIVE_TREE, "/home/deploy/ds-platform");
+  assert.equal(PROD_LIVE_TREE, "/home/deploy/ds-platform");  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
   // No `~`- or `$HOME`-relative prod tree is left: the root unit runs with HOME=/root.
   assert.match(SOURCE, /const REMOTE_TREE = PROD_LIVE_TREE;/);
   assert.doesNotMatch(SOURCE, /["`]~\/ds-platform/);

@@ -19,12 +19,12 @@ const PROD_PRESERVED = "infra/deploy/compose/api-prod/.env";
 // ── shipTreeCommand — the production default ────────────────────────────────
 
 test("2987: the default call ships into the fixed prod tree, never a $HOME-relative one", () => {
-  assert.equal(PROD_LIVE_TREE, "/home/deploy/ds-platform");
+  assert.equal(PROD_LIVE_TREE, "/home/deploy/ds-platform");  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
   const script = shipTreeCommand();
   assert.match(script, /^set -eu\nlive="\/home\/deploy\/ds-platform"\n/);
   // The staging dir is the tree's sibling: a root writer (HOME=/root) swaps by a rename
   // on the same filesystem and never stages under its own home.
-  assert.ok(script.includes('work=$(mktemp -d "/home/deploy/ds-platform.ship.XXXXXX")'));
+  assert.ok(script.includes('work=$(mktemp -d "/home/deploy/ds-platform.ship.XXXXXX")'));  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
   assert.ok(!script.includes("$HOME"));
 });
 

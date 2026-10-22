@@ -1829,3 +1829,11 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Given a verified Academy owner has a saved name before a separate guest write attempt
     When the separate cookie-free Academy guest submits a valid display-name PUT
     Then the guest write exposes no private access and the owner's fresh profile and reloaded account retain the saved name
+
+  # Retained Academy baseline (#3256), not shared-sign-in-host acceptance.
+  # Existing staff account amendment #2456; no statistics or grant-policy change.
+  @EARS-27 @EARS-28 @EARS-16 @EARS-10 @happy @staff-own-profile
+  Scenario: Academy staff own-profile access preserves registrar confinement
+    Given two uniquely owned verified Academy users are prepared for staff-profile role checks
+    When the platform-admin-only Academy owner opens and edits their own profile then signs out
+    Then Academy refuses the registrar-only profile but admits the same owner after a doctor-guest grant and fresh sign-in

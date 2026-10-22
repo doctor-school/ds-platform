@@ -36,6 +36,7 @@ interface Threshold {
   password: string;
   wrong: string;
   posts: number;
+  idleRenders: number;
   release?: () => void;
   gate?: Promise<void>;
 }
@@ -95,6 +96,7 @@ Given(
       password: `Original-${randomUUID()}-aA1!`,
       wrong: `Wrong-${randomUUID()}-aA1!`,
       posts: 0,
+      idleRenders: 0,
     };
     journeys.set(page, state);
     await installCaptchaStub(context);
@@ -200,6 +202,10 @@ Given(
       waitUntil: "load",
     });
     await owned.waitForLoadState("networkidle");
+    await expect
+      .poll(async () => (await observations(owned)).renders)
+      .toBeGreaterThan(0);
+    state.idleRenders = (await observations(owned)).renders;
     await inputSecret(identifier(owned), state.email);
     await inputSecret(password(owned), state.wrong);
   },
@@ -233,9 +239,9 @@ Then(
     const state = journey(page);
     expect(state.posts).toBe(3);
     expect(await observations(state.page)).toEqual({
-      renders: 0,
+      renders: state.idleRenders,
       executes: 0,
-      invisible: false,
+      invisible: true,
     });
   },
 );
@@ -260,7 +266,7 @@ Then("the portal executes a fresh invisible challenge", async ({ page }) => {
   const state = journey(page);
   await expect
     .poll(() => observations(state.page))
-    .toEqual({ renders: 1, executes: 1, invisible: true });
+    .toEqual({ renders: state.idleRenders + 1, executes: 1, invisible: true });
   expect(state.posts, "solve is still pending").toBe(4);
 });
 

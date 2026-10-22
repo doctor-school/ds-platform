@@ -185,9 +185,17 @@ cmd_record_previous() {
 
 # The manifest on stdin, checked before anything is started. Prints the reason of a
 # refusal on stdout, nothing when it is a manifest of <sha>'s release images.
+# The image set must hold every required name; an image beyond IMAGE_NAMES is
+# accepted (#3254): a newer tree adds images, and this driver is installed from the
+# tree a release ships — refusing them would dead-end every release past the addition.
+# Every image, known or not, keeps the same check: a strict name, a sha256 digest
+# reference of its own name in the release namespace, and (check_registry_digests)
+# the digest the registry serves for <name>:<sha>. The image set itself is judged by
+# the shipped tree's slot.mjs / prod.mjs, which pull exactly what they know.
 read -r -d '' VALIDATE_PY <<'PY' || true
 import json, re, sys
 path, sha, names, later, ref_re, image_re = sys.argv[1:7]
+NAME_RE = r"[a-z0-9][a-z0-9-]*"
 names = names.split()
 later = later.split()
 
@@ -207,9 +215,13 @@ if doc["sha"] != sha:
 if not isinstance(doc["ref"], str) or not re.fullmatch(ref_re, doc["ref"]):
     stop("the manifest ref is not main or hotfix/<N>-<slug>")
 images = doc["images"]
-required = [name for name in names if name not in later]
-if not isinstance(images, dict) or not set(required) <= set(images) <= set(names):
-    stop("the manifest images are not exactly " + ", ".join(names))
+if not isinstance(images, dict):
+    stop("the manifest images are not an object")
+if not all(re.fullmatch(NAME_RE, name) for name in images):
+    stop("the manifest image names are not all image names")
+missing = [name for name in names if name not in later and name not in images]
+if missing:
+    stop("the manifest images lack " + ", ".join(missing))
 for name in sorted(images):
     m = re.fullmatch(image_re, images[name]) if isinstance(images[name], str) else None
     if not m or m.group(1) != name:
@@ -269,6 +281,15 @@ check_descends_from_live() {
   esac
 }
 
+# The manifest's image names, the known ones in IMAGE_NAMES order and then any newer
+# ones (#3254), one line, each already a VALIDATE_PY-checked name.
+read -r -d '' NAMES_PY <<'PY' || true
+import json, sys
+path, names = sys.argv[1], sys.argv[2].split()
+images = json.load(open(path, encoding="utf-8"))["images"]
+print(" ".join([n for n in names if n in images] + sorted(set(images) - set(names))))
+PY
+
 # Manifest provenance. Every recorded digest must be the one the registry serves for
 # <registry>/<image>:<sha> in the release namespace (no `pr/`): only the build
 # Environment holds the push token for it, so a manifest cannot name another image.
@@ -314,9 +335,10 @@ for name in sorted(images):
 PY
 
 check_registry_digests() {
-  local sha=$1 manifest=$2 served reason
-  # shellcheck disable=SC2086 # IMAGE_NAMES is a word list
-  if ! served=$(sudo sh -c "$REGISTRY_SH" sh "$IMAGE_REGISTRY" "$REGISTRY_PULL_TOKEN" "$sha" $IMAGE_NAMES 2>/dev/null); then
+  local sha=$1 manifest=$2 names served reason
+  names=$(python3 -I -c "$NAMES_PY" "$manifest" "$IMAGE_NAMES")
+  # shellcheck disable=SC2086 # names is a word list of checked image names
+  if ! served=$(sudo sh -c "$REGISTRY_SH" sh "$IMAGE_REGISTRY" "$REGISTRY_PULL_TOKEN" "$sha" $names 2>/dev/null); then
     refuse "refused: cannot read the registry with the box's pull credential"
   fi
   reason=$(python3 -I -c "$DIGESTS_PY" "$manifest" "$served")

@@ -153,7 +153,13 @@ unit `ds-stage-main-<sha12>-driver` (tech spec §5 «Stage `main` release driver
 ds-api-prod (`box-role` `prod`) it releases `prod` in the unit `ds-prod-<sha12>-driver`,
 which runs `tools/deploy/prod.mjs --local --images-file -` from the codeload tree of the
 SHA (tech spec §5 «Prod release driver»; `tools/deploy/README.md` → Box-local release).
-Each box refuses the other's env. `status` adds that unit's state as `driver`, with
+Each box refuses the other's env. The driver requires every recorded image in the
+manifest and also accepts an image it does not know yet: it is installed from the tree a
+release ships, so an image a newer tree adds would otherwise refuse every release past
+the addition. Every image, known or not, must carry a strict image name and a `sha256`
+digest reference of its own name, equal to the digest the registry serves for
+`<image>:<sha>` in the release namespace; the shipped tree's `slot.mjs` / `prod.mjs`
+judge the image set before they pull. `status` adds that unit's state as `driver`, with
 `previousSha` — the SHA prod ran before, recorded by the prod unit — as the Deployment record's release-notes basis. Reports uploaded on stage-1 land in
 `/var/lib/ds-platform/e2e-reports/<sha>/` (root-only, pruned after 14 days; validated and
 extracted with python3 `tarfile`, plain tar only; a stream over

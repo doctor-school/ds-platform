@@ -856,8 +856,10 @@ jobs:
       #                              file link and `#anchor` (`--include-fragments`);
       #                              no request leaves the runner. Every event.
       #   markdown-links (changed)   the PR's added/modified/renamed files of every
-      #                              extension the tree scan reads (lychee's default
-      #                              set: Markdown variants, `*.html`/`*.htm`, `*.txt`;
+      #                              extension the tree scan reads (lychee 0.24.2's
+      #                              default set, `FileType::default_extensions`:
+      #                              md/mkd/mdx/mdown/mdwn/mkdn/mkdown/markdown,
+      #                              html/htm, css, txt, xml;
       #                              `git diff --diff-filter=ACMR` against the merge
       #                              base with the PR base branch, fixtures dropped;
       #                              a diff error reds the step, never an empty set)
@@ -910,9 +912,12 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
+          # The default `bash -e` has no pipefail: without it a failed `git diff`
+          # inside the pipeline would yield an empty set and a green step.
+          set -euo pipefail
           files=$(git diff --name-only --diff-filter=ACMR "origin/${BASE_REF}...HEAD" -- \
               '*.md' '*.mkd' '*.mdx' '*.mdown' '*.mdwn' '*.mkdn' '*.mkdown' '*.markdown' \
-              '*.html' '*.htm' '*.txt' \
+              '*.html' '*.htm' '*.css' '*.txt' '*.xml' \
             | sed '/^tools\/lint\/guard-tests\/fixtures\//d' | tr '\n' ' ')
           echo "changed link-check inputs: ${files:-<none>}"
           echo "files=${files}" >> "$GITHUB_OUTPUT"

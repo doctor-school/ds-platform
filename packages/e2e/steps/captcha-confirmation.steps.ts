@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { expect, type BrowserContext, type Page } from "@playwright/test";
+import {
+  expect,
+  type BrowserContext,
+  type Page,
+  type Response,
+} from "@playwright/test";
 import {
   captchaStubScript,
   captchaTestTokenFromEnv,
@@ -25,6 +30,8 @@ import { assertSecureSession } from "../lib/secure-session.js";
 import {
   captureSmsCheckpoint,
   freshConfirmablePhone,
+  phoneConfirmationCode,
+  PHONE_CODE_EVENT,
   resetSmsCode,
   RESET_CODE_EVENT,
   smsSinkUrl,
@@ -154,6 +161,84 @@ async function logout(v: Visitor) {
   expect(
     (await v.context.cookies()).some((c) => c.name === "__Host-ds_session"),
   ).toBe(false);
+}
+async function controlledCountdown(v: Visitor) {
+  await v.page.clock.install();
+  const pause = await v.page.evaluate(() => Date.now() + 60_000);
+  await v.page.clock.pauseAt(new Date(pause));
+}
+async function ownedPhonePrerequisite(v: Visitor, sink: string) {
+  const before = await captureSmsCheckpoint(sink, v.phone);
+  let observed: Response | undefined;
+  const observe = (response: Response) => {
+    if (
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/v1/me/phone/confirm"
+    )
+      observed = response;
+  };
+  v.page.on("response", observe);
+  let helperFailed = false;
+  try {
+    await confirmOwnedPhone(v.page, { phone: v.phone, sink });
+  } catch {
+    helperFailed = true;
+  } finally {
+    v.page.off("response", observe);
+  }
+  let submittedMatchesDelivered = false;
+  let genericBadRequest = false;
+  if (observed) {
+    try {
+      const delivered = await waitForSmsCode(
+        sink,
+        v.phone,
+        before,
+        phoneConfirmationCode,
+        PHONE_CODE_EVENT,
+      );
+      submittedMatchesDelivered =
+        observed.request().postDataJSON().code === delivered;
+      const body = await observed.json();
+      genericBadRequest =
+        body.statusCode === 400 &&
+        body.error === "Bad Request" &&
+        body.message === "the request could not be completed";
+    } catch {
+      /* Do not retain code-bearing parser diagnostics. */
+    }
+  }
+  const status = observed?.status() ?? 0;
+  const evidence = {
+    purpose: v.purpose,
+    kind: v.kind,
+    path: "/v1/me/phone/confirm",
+    status,
+    submittedMatchesDelivered,
+    genericBadRequest,
+    errorCategory:
+      status === 200
+        ? "none"
+        : status === 400
+          ? "bad_request"
+          : status === 429
+            ? "throttled"
+            : status === 503
+              ? "unavailable"
+              : "unknown",
+  };
+  if (helperFailed || status !== 200 || !submittedMatchesDelivered) {
+    test.info().annotations.push({
+      type: "S066-phone-prerequisite",
+      description: JSON.stringify(evidence),
+    });
+  }
+  if (helperFailed)
+    throw new Error(`S066 phone prerequisite: ${JSON.stringify(evidence)}`);
+  expect(
+    { status, submittedMatchesDelivered },
+    diagnostic(v, evidence.path, "phone prerequisite"),
+  ).toEqual({ status: 200, submittedMatchesDelivered: true });
 }
 async function requestCode(v: Visitor, base: string, loginPath: string) {
   const mailpit = process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(base);
@@ -293,11 +378,6 @@ Given(
         };
         state.push(v);
         await instrument(v);
-        if (purpose === "resend") {
-          await v.page.clock.install();
-          const pause = await v.page.evaluate(() => Date.now() + 60_000);
-          await v.page.clock.pauseAt(new Date(pause));
-        }
         const registered = await registerOwnedCredentials(
           v.page,
           world.hostBaseUrl,
@@ -339,10 +419,18 @@ Given(
             const sink = smsSinkUrl();
             if (!sink)
               throw new Error("S066 SMS variant requires real SMS sink");
-            await confirmOwnedPhone(v.page, { phone: v.phone, sink });
+            await ownedPhonePrerequisite(v, sink);
           }
           await logout(v);
+          if (purpose === "resend") await controlledCountdown(v);
           await requestCode(v, world.hostBaseUrl, world.host.loginPath);
+        } else if (purpose === "resend") {
+          // Install only for the owning code-screen countdown, after registration.
+          await controlledCountdown(v);
+          await open(
+            v.page,
+            `${world.hostBaseUrl}/verify?email=${encodeURIComponent(v.email)}&returnTo=%2Faccount`,
+          );
         }
         v.confirmationChecks = v.tokens.length;
       }

@@ -918,6 +918,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # trimming, Enter/Escape, header and accessibility coverage; an optimistic
     # render alone does not prove persistence after a real document reload.
 
+  # Retained Academy baseline projection (#3220), not shared-sign-in-host acceptance.
+  # Native account-cabinet.test.tsx and display-name.e2e-spec.ts remain retained.
+  @host:academy @EARS-16 @EARS-27 @EARS-28 @happy @display-name-cancel
+  Scenario: Academy Escape cancels an unsaved profile name without a write
+    Given a uniquely registered verified Academy account has an original display name saved through its account form
+    When that Academy owner enters a different inline display-name draft and presses Escape
+    Then Escape restores the saved name without a display-name PUT and fresh profile and document reload preserve the original identity
+
   @EARS-29 @happy @verification-mail
   Scenario: The verification code email is composed and sent by the BFF mailer, code-only
     Given a fresh owned Academy registration is completed in its requesting tab without consuming a code

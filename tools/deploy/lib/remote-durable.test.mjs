@@ -484,3 +484,57 @@ test("2982: the rollback builders — a read-only live-unit check and supersede 
   assert.match(up, /sudo \/usr\/local\/bin\/ds-release supersede prod "\$f"$/);
   assert.throws(() => releaseCheckScript("production"));
 });
+
+test("2987: a forward install records its tree — a kept copy and its SHA — for the box-side rollback", async () => {
+  const { INSTALLED_TREE_FILE, INSTALLED_TREE_DIR } =
+    await import("./remote.mjs");
+  assert.equal(
+    INSTALLED_TREE_FILE,
+    "/usr/local/lib/ds-platform/installed-tree",
+  );
+  const lines = releaseInstallScript("$HOME/ds-platform", { sha: SHA }).split(
+    "\n",
+  );
+  // The binaries first, exactly as before; then the tree they came from.
+  assert.equal(lines.slice(0, 4).join("\n"), releaseInstallScript());
+  assert.deepEqual(lines.slice(4), [
+    `sudo rm -rf -- "${INSTALLED_TREE_DIR}.new"`,
+    `sudo cp -a -- "$HOME/ds-platform/." "${INSTALLED_TREE_DIR}.new"`,
+    `sudo rm -rf -- "${INSTALLED_TREE_DIR}"`,
+    `sudo mv -- "${INSTALLED_TREE_DIR}.new" "${INSTALLED_TREE_DIR}"`,
+    `printf '%s %s\\n' ${SHA} "${INSTALLED_TREE_DIR}" | sudo tee "${INSTALLED_TREE_FILE}.new" >/dev/null`,
+    `sudo mv -- "${INSTALLED_TREE_FILE}.new" "${INSTALLED_TREE_FILE}"`,
+  ]);
+  assert.throws(
+    () => releaseInstallScript("$HOME/ds-platform", { sha: "abc" }),
+    /sha/,
+  );
+});
+
+test("2987: the rollback's check and supersede exclude exactly its own unit", async () => {
+  const { releaseCheckScript, releaseSupersedeScript, rollbackUnitName } =
+    await import("./remote.mjs");
+  const own = rollbackUnitName(SHA);
+  assert.equal(own, "ds-prod-0123456789ab-rollback");
+  assert.equal(
+    releaseCheckScript("prod", { exceptUnit: own }),
+    `sudo ${DS_RELEASE_BIN} check --except ${own} prod`,
+  );
+  assert.equal(
+    releaseSupersedeScript("prod", undefined, { exceptUnit: own }),
+    `sudo ${DS_RELEASE_BIN} supersede --except ${own} prod`,
+  );
+  assert.ok(
+    releaseSupersedeScript("prod", "true\n", { exceptUnit: own }).endsWith(
+      `supersede --except ${own} prod "$f"`,
+    ),
+  );
+  assert.throws(
+    () =>
+      releaseCheckScript("prod", {
+        exceptUnit: "ds-prod-0123456789ab-migrate",
+      }),
+    /rollback unit/,
+  );
+  assert.throws(() => rollbackUnitName("abc"), /sha/);
+});

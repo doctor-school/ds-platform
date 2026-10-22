@@ -13,6 +13,11 @@
 #                             the release driver's unit state added as `driver`
 #   release <env> <sha>    -> /usr/local/lib/ds-platform/release-driver <env> <sha>
 #                             (stdin = the images-<sha>.json manifest)
+#   rollback prod <sha>    -> release-driver rollback prod <sha> (prod box only;
+#                             stdin = the target's images-<sha>.json; #2987)
+#   rollback-status prod <sha>
+#                          -> release-driver rollback-status prod <sha>: the rollback
+#                             record and the -rollback unit state (prod box only)
 #   upload-report <sha>    -> a tar stream on stdin into
 #                             /var/lib/ds-platform/e2e-reports/<sha>/ (stage box only)
 #   observe <name>         -> one named read-only observation of the stage `main`
@@ -483,6 +488,21 @@ case "$verb" in
       refuse "release driver not installed (lands with #2985 stage / #2986 prod)"
     exec "$RELEASE_DRIVER" "${words[1]}" "${words[2]}"
     ;;
+  rollback | rollback-status)
+    [[ ${#words[@]} -eq 3 && ${words[1]} == prod ]] || reject "usage: $verb prod <sha>"
+    check_sha "${words[2]}"
+    accepted
+    role=$(sudo cat "$BOX_ROLE_FILE" 2>/dev/null || true)
+    [[ $role == prod ]] || refuse "$verb is served by the prod box only"
+    if [[ ! -x $RELEASE_DRIVER ]]; then
+      [[ $verb == rollback ]] && refuse "release driver not installed: no box-side rollback on this box"
+      # No driver, no rollback unit: nothing was ever rolled back from here.
+      printf '{"rollback":null,"driver":{"unit":"ds-prod-%s-rollback","active":"absent","rc":null,"previousSha":null}}\n' \
+        "${words[2]:0:12}"
+      exit 0
+    fi
+    exec "$RELEASE_DRIVER" "$verb" prod "${words[2]}"
+    ;;
   upload-report)
     [[ ${#words[@]} -eq 2 ]] || reject "usage: upload-report <sha>"
     check_sha "${words[1]}"
@@ -500,6 +520,6 @@ case "$verb" in
     observe "${words[1]}"
     ;;
   *)
-    reject "unknown command (allowed: status, release, upload-report, observe)"
+    reject "unknown command (allowed: status, release, rollback, rollback-status, upload-report, observe)"
     ;;
 esac

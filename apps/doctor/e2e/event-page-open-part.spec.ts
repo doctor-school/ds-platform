@@ -317,6 +317,12 @@ test.describe("020 EARS-8/9/19 — wave-3 PR 3.3 on the doctor host", () => {
     await page.goto(`${BASE!}/events/${HYBRID_SLUG}`, {
       waitUntil: "domcontentloaded",
     });
+    // The tabs are server-rendered Radix triggers: a click that lands before
+    // the client chunks hydrate them does nothing (a deployed build over a
+    // long network path loses that race every time). Same wait as
+    // `signInGoldenDoctor` (@ds/e2e/sign-in).
+    await page.waitForLoadState("load");
+    await page.waitForLoadState("networkidle");
     const tabs = page.getByTestId("event-format-tabs");
     // Seats remain → the policy offers registration → «очно» by default.
     await expect(tabs).toHaveAttribute("data-mode", "offline");
@@ -327,7 +333,9 @@ test.describe("020 EARS-8/9/19 — wave-3 PR 3.3 on the doctor host", () => {
     await expect(tabs).toHaveAttribute("data-mode", "online");
     await shoot(page, "doctor-hybrid-tab-online-desktop-light");
 
-    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.reload({ waitUntil: "load" });
+    // The keyboard step below needs the hydrated tablist too.
+    await page.waitForLoadState("networkidle");
     await expect(page.getByTestId("event-format-tabs")).toHaveAttribute(
       "data-mode",
       "online",

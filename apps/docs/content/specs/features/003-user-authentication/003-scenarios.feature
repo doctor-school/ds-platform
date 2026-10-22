@@ -1775,3 +1775,11 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the SMS reset resend guest requests an actual reset code and observes disabled resend
     And only that browser's thirty-second reset cooldown advances before the actual SMS resend click
     Then the newest actual reset SMS changes only that owner's password and preserves identity through sign-in reload and logout
+
+  # Retained Academy baseline projection (#3202), not shared-sign-in-host acceptance.
+  # Native profile.e2e-spec.ts generic refusal and no-write coverage stay retained.
+  @EARS-27 @EARS-16 @failure @guest-profile-parity
+  Scenario: Academy guest profile reads match generic sibling refusals without identity disclosure
+    Given a cookie-free Academy browser opens the ordinary login page for guest profile reads
+    When that Academy guest reads its profile and display-name through the actual browser origin
+    Then both guest reads retain the same generic refusal and account navigation exposes no private profile or session

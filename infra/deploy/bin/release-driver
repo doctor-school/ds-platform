@@ -381,6 +381,17 @@ cmd_release() {
     return 0
   fi
 
+  # #2987: a rollback of this very SHA is not a release step the lease sees (its unit
+  # has this SHA's prefix); a release waits for it like for any other running unit.
+  # Refused before the lease, the reset and the manifest save: a refusal after the
+  # lease would hold prod for a release that never started.
+  if [[ $env == prod ]]; then
+    local rb_state rb_rc
+    read -r rb_state rb_rc < <(unit_state "$(rollback_unit_name "$sha")")
+    [[ $rb_state != active && $rb_state != activating ]] ||
+      refuse "refused: $(rollback_unit_name "$sha") is still running; wait for it to end"
+  fi
+
   # Another SHA's open release or running unit holds the env (ds-release's lease).
   if ! out=$(sudo "$DS_RELEASE" lease "$env" "$sha" 2>&1); then
     refuse "refused: ${out##*refused: }"
@@ -399,14 +410,6 @@ cmd_release() {
     # starts afresh).
     sudo systemctl stop "$unit.service" >/dev/null 2>&1 || true
     sudo systemctl reset-failed "$unit.service" >/dev/null 2>&1 || true
-  fi
-
-  # #2987: a rollback of this very SHA is not a release step the lease sees (its unit
-  # has this SHA's prefix); a release waits for it like for any other running unit.
-  if [[ $env == prod ]]; then
-    read -r state rc < <(unit_state "$(rollback_unit_name "$sha")")
-    [[ $state != active && $state != activating ]] ||
-      refuse "refused: $(rollback_unit_name "$sha") is still running; wait for it to end"
   fi
 
   user=$(id -un)

@@ -1068,6 +1068,16 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       assert.equal(r.status, 3);
       assert.match(r.stderr, new RegExp(`${RB_UNIT} is still running`));
       notStarted();
+      // Refused before anything of the release happens: no lease is taken (it would
+      // hold prod for a release that never started), no finished unit is reset, no
+      // manifest is saved.
+      assert.doesNotMatch(log("ds-release.log"), /^(lease|status)\b/m);
+      assert.equal(log("systemctl.log"), "");
+      assert.ok(
+        !existsSync(
+          join(root, "var/lib/ds-platform/release-driver", `${SHA}.json`),
+        ),
+      );
     });
 
     it("a later release of the rolled-off SHA re-runs: its superseded record never answers already-succeeded", () => {

@@ -85,6 +85,10 @@ function firstNonEmptyLine(text) {
  *   lost contact with the driver and the verdict is unknown).
  * @param {string|null} [args.ownerQuote] the owner's word that authorised the
  *   release (#3158), in the description and the payload.
+ * @param {{reason: string, from?: string|null}|null} [args.rollback] a rollback
+ *   record (#2987, spec 2026-10-16-release-pipeline-off-workstation §3 item 3
+ *   «Rollback mode»): described `rollback to <sha12> — <reason>`, its payload
+ *   carries the reason and the rolled-off SHA instead of release notes.
  */
 export function buildDeploymentPayload({
   sha,
@@ -94,6 +98,7 @@ export function buildDeploymentPayload({
   nowIso,
   state = "success",
   ownerQuote = null,
+  rollback = null,
 }) {
   if (!DEPLOYMENT_STATES.has(state)) {
     throw new Error(
@@ -101,6 +106,7 @@ export function buildDeploymentPayload({
     );
   }
   const shortSha = typeof sha === "string" ? sha.slice(0, SHORT) : "";
+  if (rollback) return buildRollbackPayload({ sha, shortSha, healthUrl, nowIso, state, rollback });
   const tagLabel = releaseTag ?? "(untagged)";
   const notes = notesText ?? "";
   const failed = state === "failure";
@@ -132,6 +138,44 @@ export function buildDeploymentPayload({
         deployedAt: nowIso,
         state,
         ownerQuote: quote,
+      },
+    },
+    status: {
+      state,
+      log_url: healthUrl,
+      environment: "production",
+      description: truncate(stripAstral(statusSummary), GH_DESCRIPTION_MAX),
+    },
+  };
+}
+
+function buildRollbackPayload({ sha, shortSha, healthUrl, nowIso, state, rollback }) {
+  const reason = String(rollback.reason ?? "");
+  const statusSummary =
+    state === "failure"
+      ? `rollback failed @ ${shortSha}`
+      : state === "error"
+        ? `rollback verdict unknown @ ${shortSha}: lost contact with the driver`
+        : `rollback to ${shortSha}`;
+  return {
+    deployment: {
+      ref: sha,
+      environment: "production",
+      auto_merge: false,
+      required_contexts: [],
+      description: truncate(
+        stripAstral(`rollback to ${shortSha} — ${reason}`),
+        GH_DESCRIPTION_MAX,
+      ),
+      payload: {
+        kind: "rollback",
+        releaseTag: null,
+        notes: "",
+        deployedAt: nowIso,
+        state,
+        ownerQuote: null,
+        reason,
+        from: rollback.from ?? null,
       },
     },
     status: {
@@ -186,6 +230,7 @@ export function createDeploymentRecord({
   healthUrl,
   state = "success",
   ownerQuote = null,
+  rollback = null,
   cwd = process.cwd(),
 }) {
   try {
@@ -198,6 +243,7 @@ export function createDeploymentRecord({
       nowIso,
       state,
       ownerQuote,
+      rollback,
     });
 
     const created = ghApiPost(

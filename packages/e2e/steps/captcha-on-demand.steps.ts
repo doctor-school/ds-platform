@@ -101,9 +101,23 @@ async function protectedSend(
   );
   // Both callbacks run in one browser turn, before the first network action settles.
   await emitProvider(page, index, "success", true);
+  const response = await accepted;
+  let errorCode = "none";
+  if (!response.ok()) {
+    const body: unknown = await response.json().catch(() => null);
+    if (
+      body &&
+      typeof body === "object" &&
+      "code" in body &&
+      typeof body.code === "string" &&
+      /^[A-Z][A-Z0-9_]{1,79}$/.test(body.code)
+    ) {
+      errorCode = body.code;
+    }
+  }
   expect(
-    (await accepted).ok(),
-    "real backend accepted the protected send",
+    response.ok(),
+    `real protected send ${label}: path=${pathname}, status=${response.status()}, code=${errorCode}`,
   ).toBe(true);
   await page.waitForLoadState("networkidle");
   expect(

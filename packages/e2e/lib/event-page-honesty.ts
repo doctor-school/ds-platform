@@ -45,7 +45,16 @@ export async function eventPageHonestyFindings(page: Page): Promise<string[]> {
         }
       }
       for (const section of region.querySelectorAll("section")) {
-        const heading = section.firstElementChild?.textContent?.trim() ?? "";
+        // The box's LABEL is a first child carrying text only (the shared
+        // section rule is a micro-label + hairline, both spans). A first child
+        // holding block content — a speaker card after the first, which drops
+        // the repeated «Ведёт» rule (#2996) — is the box's body, not its label,
+        // so the section is not a labelled box at all.
+        const label = section.firstElementChild;
+        if (!label || label.querySelector("div, p, img, a, ul, ol, dl")) {
+          continue;
+        }
+        const heading = label.textContent?.trim() ?? "";
         const body = section.textContent?.trim() ?? "";
         if (body.length <= heading.length) {
           findings.push(`${id}: an empty labelled box «${heading}»`);

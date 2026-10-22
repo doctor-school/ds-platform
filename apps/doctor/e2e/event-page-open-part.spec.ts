@@ -133,7 +133,15 @@ test.describe("020 EARS-2 — the registration-free decision set", () => {
     await page.goto(`${BASE}/events/${SLUG}`, {
       waitUntil: "domcontentloaded",
     });
-    const guest = await page.getByTestId("event-page-open-part").innerHTML();
+    // A speaker photo is a presigned object-storage URL minted per request:
+    // its signing instant and signature differ between ANY two reads, guest or
+    // not (#2996 — the stand's speakers carry photos). Those request nonces are
+    // blanked; every other byte, the object key included, must still match.
+    const unsigned = (html: string) =>
+      html.replace(/(X-Amz-(?:Date|Signature))=[^&"]*/gu, "$1=");
+    const guest = unsigned(
+      await page.getByTestId("event-page-open-part").innerHTML(),
+    );
 
     // The open part is the host's projection of a `@Public()` read: `links` are
     // resolved from the HOST's route table, never from the viewer. A session
@@ -153,9 +161,9 @@ test.describe("020 EARS-2 — the registration-free decision set", () => {
     await page.goto(`${BASE}/events/${SLUG}`, {
       waitUntil: "domcontentloaded",
     });
-    const withSession = await page
-      .getByTestId("event-page-open-part")
-      .innerHTML();
+    const withSession = unsigned(
+      await page.getByTestId("event-page-open-part").innerHTML(),
+    );
 
     expect(withSession).toBe(guest);
   });

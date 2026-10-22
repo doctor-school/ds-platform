@@ -1,0 +1,247 @@
+import {
+  doorPath,
+  formPostFields,
+  fulfillHostRedirect,
+  hostRoute,
+  isIdpCallback,
+} from "./support/sign-in-door";
+import {
+  test,
+  expect,
+  devices,
+  type Page,
+  type Request,
+} from "@playwright/test";
+
+/** 021 on the sign-in host (#3172): the doctor storefront's `/register` entry hands over here. */
+const DOOR = doorPath("doctor", "register");
+
+/**
+ * 021 EARS-11 (#1547) — the RENDERED half of the per-field validation contract.
+ *
+ * The contract itself is pinned one tier down
+ * (`packages/schemas/src/storefront/register-fields.spec.ts` for the FieldSpec
+ * table, `packages/auth-flow/src/fields/fields.test.ts` for its react-hook-form
+ * projection). What only a browser can prove is what the DOCTOR meets: which
+ * message appears in which slot, that the password hint and its error share ONE
+ * slot (003 EARS-37, owner decision Б — hint OR error, never both), that a
+ * pasted promo code is trimmed rather than rejected, and — the reason LD-9
+ * exists — that the confirmation code accepts what a phone keyboard actually
+ * produces.
+ *
+ * Backend-free tier (`playwright.ci.config.ts`): the `/v1/*` commands are
+ * intercepted at the network boundary, which is what makes the verified REQUEST
+ * assertable — the code that leaves the browser, not the glyphs on screen.
+ */
+const REGISTER_ROUTE = hostRoute("/v1/storefront/doctor/register");
+// 003 EARS-41/23 (#2556) — the doctor storefront's own code submit; its answer
+// sets the session itself, so no sign-in replay follows it.
+const CONFIRM_ROUTE = hostRoute("/v1/storefront/doctor/verify");
+
+const EMAIL = "doctor@clinic.ru";
+const PASSWORD = "correct horse battery";
+
+const PASSWORD_HINT = "Не менее 8 символов.";
+// #2027: the canvas states the password rule in ONE sentence, so the hint and
+// the error that enforces it read alike — what changes is the slot's state, not
+// its words (`design-source/auth.dc.html:171,424`).
+const PASSWORD_TOO_SHORT = PASSWORD_HINT;
+const EMAIL_MALFORMED = "Введите корректный адрес электронной почты.";
+const PROMO_TOO_LONG =
+  "Промокод длиннее 64 символов — проверьте, что скопировали только код.";
+
+/**
+ * The message slot a control is described by.
+ *
+ * `FormControl` points `aria-describedby` at the FormMessage in both states —
+ * the description id while the field is clean, the message id once it errors —
+ * so the LAST token always resolves the one slot this field owns. Reading the
+ * slot through the accessibility wiring, rather than by text, is what lets the
+ * hint-OR-error assertion be about the SLOT and not about the page.
+ */
+async function messageSlot(page: Page, testId: string) {
+  const describedBy =
+    (await page.getByTestId(testId).getAttribute("aria-describedby")) ?? "";
+  const id = describedBy.trim().split(/\s+/).at(-1);
+  expect(id, `${testId} is wired to a message slot`).toBeTruthy();
+  return page.locator(`#${id}`);
+}
+
+/** Tick a consent through its label — the checkbox primitive's own hit area. */
+async function tick(page: Page, testId: string) {
+  await page.getByTestId(testId).locator("xpath=ancestor::label[1]").click();
+  await expect(page.getByTestId(testId)).toBeChecked();
+}
+
+function body(request: Request): Record<string, unknown> {
+  return JSON.parse(request.postData() ?? "{}") as Record<string, unknown>;
+}
+
+test.describe("021 EARS-11: per-field validation on the registration door", () => {
+  test("021 EARS-11.1: a malformed address is stated in the email field, and a valid one clears it", async ({
+    page,
+  }) => {
+    await page.goto(DOOR);
+
+    const email = page.getByTestId("register-email");
+    await email.fill("doctor-at-clinic");
+    await email.blur();
+
+    // `toContainText`, not `toHaveText`: an erroring FormMessage prefixes the
+    // primitive's own «⚠» affordance, which is the design system's to own — the
+    // assertion is about the SENTENCE this feature supplies.
+    await expect(await messageSlot(page, "register-email")).toContainText(
+      EMAIL_MALFORMED,
+    );
+    // The error belongs to the field that carries it — `errorSlot: "field"`.
+    await expect(email).toHaveAttribute("aria-invalid", "true");
+
+    await email.fill(EMAIL);
+    await email.blur();
+    // Cleared means GONE: a field with no error and no hint renders no message
+    // element at all, so the statement is absent rather than blank.
+    await expect(page.getByText(EMAIL_MALFORMED)).toHaveCount(0);
+    await expect(email).not.toHaveAttribute("aria-invalid", "true");
+  });
+
+  test("003 EARS-37 / 021 EARS-11.2: the password error REPLACES the hint in the single shared slot, and the hint returns", async ({
+    page,
+  }) => {
+    await page.goto(DOOR);
+
+    // Pre-submit: the slot carries the hint, which is the whole pre-submit
+    // affordance — the rule is stated before it is enforced.
+    await expect(await messageSlot(page, "register-password")).toHaveText(
+      PASSWORD_HINT,
+    );
+
+    const password = page.getByTestId("register-password");
+    await password.fill("short12");
+    await password.blur();
+
+    // 003 EARS-37, owner decision Б — ONE slot: the error replaces the hint,
+    // never stacks under it, and it restates the same rule so nothing is lost.
+    const slot = await messageSlot(page, "register-password");
+    await expect(slot).toContainText(PASSWORD_TOO_SHORT);
+    // ONE element on the door carries the sentence — the slot itself. Counted
+    // by containment rather than by exact text: an erroring `FormMessage`
+    // prefixes the design system's own «⚠» affordance (see EARS-11.1 above), so
+    // an exact-text count would measure the glyph, not the doubling this pins.
+    await expect(
+      page.getByTestId("registration-form").getByText(PASSWORD_HINT),
+      "the hint is replaced, not doubled",
+    ).toHaveCount(1);
+    await expect(password).toHaveAttribute("aria-invalid", "true");
+
+    await password.fill("longenough");
+    await password.blur();
+    await expect(await messageSlot(page, "register-password")).toHaveText(
+      PASSWORD_HINT,
+    );
+    await expect(password).not.toHaveAttribute("aria-invalid", "true");
+  });
+
+  test("021 EARS-11.3: an over-long promo code is stated, a pasted one is trimmed, and the bound itself is accepted", async ({
+    page,
+  }) => {
+    await page.goto(DOOR);
+
+    const promo = page.getByTestId("register-promo");
+    await promo.fill("D".repeat(65));
+    await promo.blur();
+    await expect(await messageSlot(page, "register-promo")).toContainText(
+      PROMO_TOO_LONG,
+    );
+
+    // Trim, not rejection: the paste case design §7 asks for. Trimming happens
+    // on BLUR so an interior space stays typable.
+    await promo.fill("  DS-2026  ");
+    await promo.blur();
+    await expect(promo).toHaveValue("DS-2026");
+    await expect(page.getByText(PROMO_TOO_LONG)).toHaveCount(0);
+    await expect(promo).not.toHaveAttribute("aria-invalid", "true");
+
+    // The bound is inclusive — 64 is a valid promo code, not a long one.
+    await promo.fill("D".repeat(64));
+    await promo.blur();
+    await expect(page.getByText(PROMO_TOO_LONG)).toHaveCount(0);
+    await expect(promo).not.toHaveAttribute("aria-invalid", "true");
+  });
+});
+
+/**
+ * iPhone 13 emulation MINUS `defaultBrowserType`: a describe-level `use()` may
+ * not switch browser engines (it would force a new worker), and the engine is
+ * not what this test is about — the phone-shaped viewport, the mobile UA and
+ * touch are, because they are what selects the on-screen keyboard `inputMode`
+ * addresses.
+ */
+const { viewport, userAgent, deviceScaleFactor, isMobile, hasTouch } =
+  devices["iPhone 13"];
+
+test.describe("021 EARS-11: the confirmation code on a phone", () => {
+  test.use({ viewport, userAgent, deviceScaleFactor, isMobile, hasTouch });
+
+  test("021 EARS-11.4: the six-digit code takes the digit keypad, refuses letters, renders untransformed and verifies", async ({
+    page,
+  }) => {
+    await page.route(REGISTER_ROUTE, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ status: "pending_verification" }),
+      }),
+    );
+    // #3172 — on the sign-in host the accepted code is the finished
+    // credential step: the host answers its redirect to the IdP callback.
+    await page.route(CONFIRM_ROUTE, fulfillHostRedirect);
+
+    await page.goto(DOOR);
+    await page.getByTestId("register-email").fill(EMAIL);
+    await page.getByTestId("register-password").fill(PASSWORD);
+    await tick(page, "register-medworker");
+    await tick(page, "register-partner-data");
+    await page.getByTestId("register-submit").click();
+
+    await expect(page.getByTestId("verify-submit")).toBeVisible();
+
+    // #2636 — the emitted code is six digits: the device this test emulates
+    // pops the digit keypad.
+    const code = page.locator('input[autocomplete="one-time-code"]');
+    await expect(code).toHaveAttribute("inputmode", "numeric");
+
+    // LD-9 — no CSS uppercase transform anywhere in the slot row: the value is
+    // normalised, the glyphs are never restyled, so what the doctor sees is
+    // what they typed.
+    const slots = page.locator("div.aspect-square");
+    await expect(slots).toHaveCount(6);
+    const transforms = await slots.evaluateAll((nodes) =>
+      nodes.map((node) => getComputedStyle(node).textTransform),
+    );
+    expect(transforms).toEqual(Array.from({ length: 6 }, () => "none"));
+
+    // The proof the field is typed for the REAL code: letters never land in a
+    // cell, and the six digits go to the engine exactly as typed.
+    await code.fill("abc");
+    await expect(code).toHaveValue("");
+    const [request] = await Promise.all([
+      page.waitForRequest(CONFIRM_ROUTE),
+      code.fill("482913"),
+    ]);
+    // 003 EARS-39 (host amendment): the code step is a full page load on
+    // the sign-in host, so no in-tab registration value rides with the code
+    // — the host's form state holds the warm proof (API-tier tested).
+    expect(body(request)).toEqual({
+      ...formPostFields("doctor", "register"),
+      email: EMAIL,
+      code: "482913",
+    });
+    expect(body(request)).not.toHaveProperty("registration");
+
+    // 021 EARS-10 (amended 2026-09-17) — the accepted code navigates; the
+    // confirmation surface leaving the DOM is what says the command succeeded.
+    await expect(page.getByTestId("verify-submit")).toHaveCount(0);
+    // #3172 — the host followed its success answer to the IdP callback.
+    await page.waitForURL(isIdpCallback);
+  });
+});

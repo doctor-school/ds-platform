@@ -1,3 +1,7 @@
+import {
+  isAuthCommandPath,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import {
@@ -216,8 +220,7 @@ When(
       const sends: Send[] = [];
       owned.on("request", (request) => {
         const pathname = new URL(request.url()).pathname;
-        if (request.method() !== "POST" || !pathname.startsWith("/v1/auth/"))
-          return;
+        if (request.method() !== "POST" || !isAuthCommandPath(pathname)) return;
         sends.push({
           pathname,
           token: request.headers()["x-smartcaptcha-token"] ?? "",
@@ -242,7 +245,7 @@ When(
           owned.locator('input[autocomplete="new-password"]'),
           password,
         );
-        path = "/v1/auth/register";
+        path = signInHostApiPath("/v1/auth/register");
         submit = "register-submit";
         resend = "verify-resend";
         matches = (body) => body.email === email && body.password === password;
@@ -250,7 +253,7 @@ When(
         if (variant === "sms-login")
           await owned.getByTestId("otp-channel-sms").click();
         await inputSecret(owned.getByTestId("otp-identifier"), identifier);
-        path = "/v1/auth/login/otp/request";
+        path = signInHostApiPath("/v1/auth/login/otp/request");
         submit = "otp-send";
         resend = "otp-resend";
         matches = (body) =>
@@ -261,7 +264,7 @@ When(
           owned.locator('input[autocomplete="username"]'),
           identifier,
         );
-        path = "/v1/auth/password/reset";
+        path = signInHostApiPath("/v1/auth/password/reset");
         submit = "reset-request-submit";
         resend = "reset-resend";
         matches = (body) => body.identifier === identifier;
@@ -292,7 +295,9 @@ When(
         state,
         sends,
         `${variant}:resend`,
-        variant === "register" ? "/v1/auth/verify/resend" : path,
+        variant === "register"
+          ? signInHostApiPath("/v1/auth/verify/resend")
+          : path,
         () => owned.getByTestId(resend).click(),
         variant === "register" ? (body) => body.identifier === email : matches,
         true,

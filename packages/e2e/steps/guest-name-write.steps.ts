@@ -1,3 +1,4 @@
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -164,7 +165,10 @@ Given(
       state.base,
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
-    const registering = captureResponse(state.owner, "/v1/auth/register");
+    const registering = captureResponse(
+      state.owner,
+      signInHostApiPath("/v1/auth/register"),
+    );
     const { code } = await registerOwnedCredentials(
       state.owner,
       state.base,
@@ -188,7 +192,10 @@ Given(
       (await registration.response.headerValue("set-cookie")) ?? "",
       state,
     );
-    const verifying = captureResponse(state.owner, "/v1/auth/verify");
+    const verifying = captureResponse(
+      state.owner,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       state.owner.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -201,6 +208,7 @@ Given(
         verified.body,
         state,
         code,
+        world.hostBaseUrl,
       ),
     ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
     await state.owner.waitForURL(
@@ -232,9 +240,11 @@ Given(
       (await guestContext.cookies()).length,
       "fresh cookie-free guest",
     ).toBe(0);
-    await state.guest.goto(`${state.base}/login`, { waitUntil: "load" });
+    // #3172: `/login` leaves for the sign-in host; the guest's private writes
+    // are attempted from an ordinary storefront page that offers «Войти».
+    await state.guest.goto(`${state.base}/`, { waitUntil: "load" });
     await expect(
-      state.guest.getByTestId("password-login-submit"),
+      state.guest.getByRole("link", { name: "Войти" }).first(),
     ).toBeVisible();
     await assertGuest(state);
   },
@@ -348,7 +358,7 @@ After("@guest-name-write", async ({ page, $testInfo }) => {
           context.pages().find((candidate) => !candidate.isClosed()) ??
           (await context.newPage());
         if (new URL(active.url()).origin !== new URL(state.base).origin)
-          await active.goto(`${state.base}/login`);
+          await active.goto(`${state.base}/`);
         const result = await active.evaluate(async () => {
           const logout = await fetch("/v1/auth/logout", {
             method: "POST",

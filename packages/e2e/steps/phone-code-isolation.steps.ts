@@ -1,3 +1,4 @@
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -155,7 +156,10 @@ Given(
         { email: owner.email, password: `Owned-${randomUUID()}-aA1!` },
         "/account",
       );
-      const verifying = captureResponse(owner.page, "/v1/auth/verify");
+      const verifying = captureResponse(
+        owner.page,
+        signInHostApiPath("/v1/auth/verify"),
+      );
       await inputSecret(
         owner.page.locator('input[autocomplete="one-time-code"]'),
         code,

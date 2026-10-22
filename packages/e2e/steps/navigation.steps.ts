@@ -1,6 +1,11 @@
 import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
+import { isSignInHostForm } from "../lib/sign-in-host-api.js";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { Then, When } from "./support/fixtures.js";
 
 /**
@@ -31,7 +36,9 @@ async function expectPathname(page: Page, path: string): Promise<void> {
 
 When(
   "the {word} opens {string}",
-  async ({ page }, _actor: string, path: string) => {
+  async ({ page, world }, _actor: string, path: string) => {
+    // A guest bounce to sign-in is checked by the entry it went through.
+    watchStorefrontEntries(page, world.hostBaseUrl);
     await page.goto(path, { waitUntil: "domcontentloaded" });
   },
 );
@@ -70,6 +77,12 @@ Then(
       page.getByRole("heading", { level: 1, name: heading, exact: true }),
       `the h1 of ${world.host.loginPath}`,
     ).toBeVisible();
-    expect(new URL(page.url()).searchParams.get("returnTo")).toBe(returnTo);
+    // #3172 — the sign-in page is the sign-in host's form; `returnTo` rode
+    // the storefront's login entry into the transaction.
+    expect(isSignInHostForm(page.url()), "the sign-in host's form").toBe(true);
+    expectEnteredThrough(page, world.hostBaseUrl, {
+      pathname: world.host.loginPath,
+      returnTo,
+    });
   },
 );

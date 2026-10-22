@@ -1,3 +1,4 @@
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import {
@@ -66,7 +67,10 @@ When(
   "that browser sends a real Academy BFF registration request without any accepted consent version",
   async ({ page }) => {
     const state = refusal(page);
-    const captured = captureResponse(state.page, "/v1/auth/register");
+    const captured = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/register"),
+    );
     // 003 EARS-20: this is a BFF omission probe, not the Academy form's consent projection.
     await state.page.evaluate(
       async ({ email, password, token }) => {

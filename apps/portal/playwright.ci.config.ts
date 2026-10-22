@@ -1,9 +1,4 @@
-import {
-  chmodSync,
-  mkdtempSync,
-  realpathSync,
-  statSync,
-} from "node:fs";
+import { chmodSync, mkdtempSync, realpathSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 
@@ -35,7 +30,11 @@ const BASE = `http://127.0.0.1:${PORT}`;
 // Readiness probe: NOT `/` — the portal home server-renders an api fetch, so
 // with no backend it 500s and Playwright's webServer check (2xx–4xx) would
 // never pass. `/login` is one of the backend-free pages this tier scans.
-const READY_URL = `${BASE}/login`;
+const READY_URL = `${BASE}/documents`;
+// #3172 — the sign-in entries answer a 303 built by the API's internal
+// transaction endpoint; this tier boots the shared double of that endpoint.
+const DOUBLE_PORT = Number(process.env.STOREFRONT_DOUBLE_PORT ?? 3217);
+const DOUBLE_TOKEN = "storefront-double-token";
 const ACADEMY_E2E_SAFE_MARKER = "ACADEMY_PARTNERSHIP_E2E_SAFE";
 
 function normalized(path: string): string {
@@ -65,25 +64,24 @@ const inheritedSafeDirectory =
 const ACADEMY_SUBMISSIONS_DIR =
   (inheritedSafeDirectory
     ? validateInheritedSafeDirectory(inheritedSafeDirectory)
-    : undefined) ??
-  mkdtempSync(join(tmpdir(), "academy-partnership-e2e-"));
+    : undefined) ?? mkdtempSync(join(tmpdir(), "academy-partnership-e2e-"));
 if (!inheritedSafeDirectory) chmodSync(ACADEMY_SUBMISSIONS_DIR, 0o700);
 process.env[ACADEMY_E2E_SAFE_MARKER] = "1";
 process.env.ACADEMY_SUBMISSIONS_DIR = ACADEMY_SUBMISSIONS_DIR;
 
 export default defineConfig({
   testDir: "./e2e",
-  // Only the backend-free axe, Academy, password-reveal and verify-entry specs run in CI; live-Zitadel journeys
+  // Only the backend-free axe, Academy and sign-in-entry specs run in CI (the
+  // forms, their axe scan, password reveal and the bare /verify entry run on the
+  // sign-in host tier, `apps/login/e2e`); live-Zitadel journeys
   // and the dev-stand-gated `e2e/a11y/` suite (`test:axe`) stay out. Anchored regex,
   // not a bare-basename glob: `e2e/a11y/a11y-axe.e2e.spec.ts` (the dev-stand
   // tier) shares the basename and a glob would drag its env-skipped tests in.
   testMatch: [
     /[\\/]e2e[\\/]a11y-axe\.e2e\.spec\.ts$/,
     /[\\/]e2e[\\/]academy-home\.e2e\.spec\.ts$/,
-    /[\\/]e2e[\\/]password-reveal\.e2e\.spec\.ts$/,
-    // 003 EARS-40: a cold /verify with no address redirects client-side and
-    // reads no upstream, so it is hermetic in exactly this tier.
-    /[\\/]e2e[\\/]verify-bare-entry\.e2e\.spec\.ts$/,
+    // 003 EARS-61 (#3172): the entries' 303 against the internal-API double.
+    /[\\/]e2e[\\/]storefront-entry\.e2e\.spec\.ts$/,
     // 028 V-4: the documents surface reads a workspace package from disk and
     // issues no api call, so it is hermetic in exactly this tier.
     /[\\/]e2e[\\/]documents\.spec\.ts$/,
@@ -106,15 +104,29 @@ export default defineConfig({
   // Boot the already-built portal. `next start` serves the `.next` production
   // build, so the CI job must run the portal build first. No backend env is
   // needed; Academy persistence receives only the guarded temp directory below.
-  webServer: {
-    command: `pnpm --filter @ds/portal exec next start -p ${PORT} --keepAliveTimeout 125000`,
-    url: READY_URL,
-    timeout: 120_000,
-    reuseExistingServer: false,
-    env: {
-      ...process.env,
-      [ACADEMY_E2E_SAFE_MARKER]: "1",
-      ACADEMY_SUBMISSIONS_DIR,
+  webServer: [
+    {
+      command: "node ../../packages/e2e/doubles/storefront-internal-api.mjs",
+      url: `http://127.0.0.1:${DOUBLE_PORT}/health`,
+      env: {
+        STOREFRONT_DOUBLE_PORT: String(DOUBLE_PORT),
+        STOREFRONT_DOUBLE_TOKEN: DOUBLE_TOKEN,
+      },
+      timeout: 30_000,
+      reuseExistingServer: false,
     },
-  },
+    {
+      command: `pnpm --filter @ds/portal exec next start -H 127.0.0.1 -p ${PORT} --keepAliveTimeout 125000`,
+      url: READY_URL,
+      timeout: 120_000,
+      reuseExistingServer: false,
+      env: {
+        ...process.env,
+        [ACADEMY_E2E_SAFE_MARKER]: "1",
+        ACADEMY_SUBMISSIONS_DIR,
+        INTERNAL_API_URL: `http://127.0.0.1:${DOUBLE_PORT}`,
+        INTERNAL_API_TOKEN: DOUBLE_TOKEN,
+      },
+    },
+  ],
 });

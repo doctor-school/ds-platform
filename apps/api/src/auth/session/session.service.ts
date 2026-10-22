@@ -16,6 +16,7 @@ import {
   type SessionRecord,
   type SessionStore,
 } from "./session.types.js";
+import { SharedSessionHub } from "./shared-session.js";
 import { SubjectRevocationHub } from "./subject-revocation.js";
 
 /**
@@ -50,7 +51,67 @@ export class SessionService {
     @Inject(AUTH_AUDIT) private readonly audit: AuthAuditLog,
     @Inject(SubjectRevocationHub)
     private readonly revocations: SubjectRevocationHub = new SubjectRevocationHub(),
+    @Inject(SharedSessionHub)
+    private readonly sharedSessions: SharedSessionHub = new SharedSessionHub(),
   ) {}
+
+  /**
+   * 003 EARS-8 (amended) — the ONLY other path that mints a storefront
+   * session: the storefront callback's redeem, after the code's ID token
+   * proved its `sid` is the Zitadel session of a live sign-in-host record.
+   * A fresh `sid` every time (no presented id is ever adopted), linked to that
+   * Zitadel session, the tokens kept server-side, and an expiry no later than
+   * the Zitadel session's (`expiresAtMs`, capped at the web session lifetime).
+   */
+  async mintLinked(input: {
+    zitadelSessionId: string;
+    client: "academy" | "doctor";
+    claims: SessionClaims;
+    accessToken: string;
+    refreshToken: string;
+    fingerprint: string;
+    expiresAtMs: number;
+  }): Promise<{ cookie: string; claims: SessionClaims }> {
+    const now = Date.now();
+    const expiresAtMs = Math.min(
+      input.expiresAtMs,
+      now + SESSION_TTL_SECONDS * 1000,
+    );
+    const record: SessionRecord = {
+      sid: randomUUID(),
+      zitadelSessionId: input.zitadelSessionId,
+      sub: input.claims.sub,
+      roles: input.claims.roles,
+      mfa: input.claims.mfa,
+      accessToken: input.accessToken,
+      refreshToken: input.refreshToken,
+      fingerprint: input.fingerprint,
+      expiresAtMs,
+      oidcClient: input.client,
+    };
+    await this.store.create(record);
+    return {
+      cookie: serializeSessionCookie(record.sid, {
+        maxAgeSeconds: Math.max(0, Math.floor((expiresAtMs - now) / 1000)),
+      }),
+      claims: { sub: record.sub, roles: record.roles, mfa: record.mfa },
+    };
+  }
+
+  /**
+   * 003 EARS-10 / EARS-64 — revoke every storefront session linked to the
+   * Zitadel session `zitadelSessionId`, on both storefronts, each with its
+   * `SessionRevoked`. Synchronous in the API's own store.
+   */
+  async revokeLinked(zitadelSessionId: string): Promise<void> {
+    for (const record of await this.store.deleteLinked(zitadelSessionId)) {
+      await this.audit.record({
+        type: "SessionRevoked",
+        sub: record.sub,
+        sid: record.sid,
+      });
+    }
+  }
 
   /**
    * EARS-8: complete the OIDC exchange for a checked Zitadel session, persist the
@@ -111,7 +172,15 @@ export class SessionService {
     const record = await this.store.get(sid);
     if (!record) return { status: "no_session" };
 
-    const result = await this.idp.refreshTokens(record.refreshToken);
+    // 003 EARS-8 (amended): a callback-minted session rotates through its own
+    // storefront client; the rotation keeps its link and its bounded expiry
+    // (`rotate` never moves `expiresAtMs`). A legacy session keeps the BFF client.
+    const result = record.oidcClient
+      ? await this.sharedSessions.refreshLinked(
+          record.oidcClient,
+          record.refreshToken,
+        )
+      : await this.idp.refreshTokens(record.refreshToken);
     if (result.reuseDetected) {
       await this.store.delete(sid);
       await this.audit.record({
@@ -146,7 +215,13 @@ export class SessionService {
    */
   async logout(sid: string): Promise<{ cookie: string }> {
     const record = await this.store.get(sid);
-    if (record) {
+    if (record?.oidcClient) {
+      // 003 EARS-10 (amended) — one sign-out on both storefronts: the Zitadel
+      // session and the sign-in-host record holding it end first, then every
+      // storefront session linked to it (this one included), all in this call.
+      await this.sharedSessions.end(record.sub, record.zitadelSessionId);
+      await this.revokeLinked(record.zitadelSessionId);
+    } else if (record) {
       await this.store.delete(sid);
       await this.audit.record({
         type: "SessionRevoked",

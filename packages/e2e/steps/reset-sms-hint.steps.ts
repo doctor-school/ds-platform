@@ -1,3 +1,7 @@
+import { hostCommand,
+  isAuthCommandPath,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -64,7 +68,7 @@ Given(
       const path = new URL(request.url()).pathname;
       if (
         !["GET", "HEAD", "OPTIONS"].includes(request.method()) &&
-        path.startsWith("/v1/auth/")
+        isAuthCommandPath(path)
       )
         state.commands.push(path);
     });
@@ -119,13 +123,16 @@ When(
   async ({ page }) => {
     const state = journey(page);
     state.requestedAt = await captureSmsCheckpoint(state.sink, state.phone);
-    const pending = captureResponse(state.visitor, "/v1/auth/password/reset");
+    const pending = captureResponse(
+      state.visitor,
+      signInHostApiPath("/v1/auth/password/reset"),
+    );
     await state.visitor.getByTestId("reset-request-submit").click();
     const captured = await pending;
     let exactCommand = false;
     let neutralBody = false;
     try {
-      const command = captured.response.request().postDataJSON();
+      const command = hostCommand(captured.response.request().postDataJSON());
       exactCommand =
         Object.keys(command).join() === "identifier" &&
         command.identifier === state.phone;
@@ -243,7 +250,9 @@ Then(
       state.visitor.getByTestId("reset-request-submit"),
     ).toBeVisible();
     await state.visitor.waitForLoadState("networkidle");
-    expect(state.commands).toEqual(["/v1/auth/password/reset"]);
+    expect(state.commands).toEqual([
+      signInHostApiPath("/v1/auth/password/reset"),
+    ]);
     expect(new URL(state.visitor.url()).origin).toBe(
       new URL(world.hostBaseUrl).origin,
     );

@@ -1,3 +1,4 @@
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { expect, type Page } from "@playwright/test";
 
 import { Given, Then, When } from "./support/auth-fixtures.js";
@@ -36,7 +37,7 @@ Given("a visitor opens the registration form", async ({ page, world }) => {
   page.on("request", (request) => {
     if (
       request.method() === "POST" &&
-      new URL(request.url()).pathname === "/v1/auth/register"
+      new URL(request.url()).pathname === signInHostApiPath("/v1/auth/register")
     ) {
       requests.count += 1;
     }

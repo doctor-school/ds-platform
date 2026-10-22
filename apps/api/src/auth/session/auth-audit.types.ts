@@ -311,6 +311,17 @@ export type AuthAuditEvent =
       type: "AdminSessionRejected";
       sub: string | null;
       reason: AdminSessionRejectionReason;
+    }
+  // 003 EARS-62 (ADR-0015 §4 req. 3, login CSRF): a storefront callback whose
+  // `state` is not the browser's own transaction. The code was spent with that
+  // transaction's verifier and its tokens discarded; `sub` is the discarded ID
+  // token's subject when the code redeemed (`null` otherwise). Recorded in the
+  // same canonical `auth.session.rejected` id, storefront tier.
+  | {
+      type: "StorefrontCallbackRejected";
+      sub: string | null;
+      client: string;
+      reason: "state_mismatch";
     };
 
 /**
@@ -354,6 +365,7 @@ export const AUTH_AUDIT_EVENT_TYPES = [
   "AdminSessionEstablished",
   "AdminSessionEnded",
   "AdminSessionRejected",
+  "StorefrontCallbackRejected",
 ] as const satisfies readonly AuthAuditEvent["type"][];
 
 export type AuthAuditEventType = (typeof AUTH_AUDIT_EVENT_TYPES)[number];

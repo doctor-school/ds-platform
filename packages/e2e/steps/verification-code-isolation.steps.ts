@@ -1,3 +1,7 @@
+import {
+  isAuthCommandPath,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -129,7 +133,7 @@ Given(
       ).toBe(true);
       owner.page.on("request", (request) => {
         const path = new URL(request.url()).pathname;
-        if (request.method() === "POST" && path.startsWith("/v1/auth/"))
+        if (request.method() === "POST" && isAuthCommandPath(path))
           owner.posts.push(path);
       });
       await prepareCaptchaForJourney(
@@ -147,7 +151,7 @@ Given(
       expect(
         registrationEvidence(
           registered.response.request().postData() ?? "",
-          await registered.response.text(),
+          registered.body,
           owner,
         ),
       ).toEqual({
@@ -176,7 +180,10 @@ When(
   "the second registrant submits the first registrant's live confirmation code",
   async ({ page }) => {
     const [first, second] = state(page).owners as [Registrant, Registrant];
-    const pending = captureResponse(second.page, "/v1/auth/verify");
+    const pending = captureResponse(
+      second.page,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       second.page.locator('input[autocomplete="one-time-code"]'),
       first.code,
@@ -283,7 +290,7 @@ async function passwordLogin(page: Page, owner: Registrant, base: string) {
     page.locator('input[autocomplete="current-password"]'),
     owner.password,
   );
-  const pending = captureResponse(page, "/v1/auth/login");
+  const pending = captureResponse(page, signInHostApiPath("/v1/auth/login"));
   await page.getByTestId("password-login-submit").click();
   const result = await pending;
   let exactCredentials = false;
@@ -306,7 +313,10 @@ When(
   "each registrant submits its own retained confirmation code",
   async ({ page, world }) => {
     for (const owner of state(page).owners) {
-      const pending = captureResponse(owner.page, "/v1/auth/verify");
+      const pending = captureResponse(
+        owner.page,
+        signInHostApiPath("/v1/auth/verify"),
+      );
       await inputSecret(
         owner.page.locator('input[autocomplete="one-time-code"]'),
         owner.code,
@@ -322,6 +332,7 @@ When(
           accepted.body,
           owner,
           owner.code,
+          world.hostBaseUrl,
         ),
       ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
       await owner.page.waitForURL(
@@ -354,11 +365,18 @@ Then(
     expect(
       value.owners[0]!.posts,
       "first owner never replaces its challenge",
-    ).toEqual(["/v1/auth/register", "/v1/auth/verify"]);
+    ).toEqual([
+      signInHostApiPath("/v1/auth/register"),
+      signInHostApiPath("/v1/auth/verify"),
+    ]);
     expect(
       value.owners[1]!.posts,
       "second owner retries only the retained challenge",
-    ).toEqual(["/v1/auth/register", "/v1/auth/verify", "/v1/auth/verify"]);
+    ).toEqual([
+      signInHostApiPath("/v1/auth/register"),
+      signInHostApiPath("/v1/auth/verify"),
+      signInHostApiPath("/v1/auth/verify"),
+    ]);
     expect(
       value.owners[0]!.subject !== value.owners[1]!.subject,
       "two distinct rightful principals",

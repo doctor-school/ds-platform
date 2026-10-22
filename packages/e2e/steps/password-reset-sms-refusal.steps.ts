@@ -1,3 +1,12 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import {
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -216,7 +225,10 @@ async function passwordSignIn(
     },
     async () => {
       try {
-        const pending = captureResponse(page, "/v1/auth/login");
+        const pending = captureResponse(
+          page,
+          signInHostApiPath("/v1/auth/login"),
+        );
         await page.getByTestId("password-login-submit").click();
         const result = await pending;
         let exactCommand = false;
@@ -231,7 +243,7 @@ async function passwordSignIn(
           {
             status: result.response.status(),
             exactCommand,
-            tokenFree: result.body === '{"status":"authenticated"}',
+            tokenFree: storefrontCallbackAcknowledgement(result.body, base),
           },
           "owned password is accepted by actual login",
         ).toEqual({ status: 200, exactCommand: true, tokenFree: true });
@@ -281,7 +293,10 @@ Given(
       state,
       "/account",
     );
-    const pending = captureResponse(owner, "/v1/auth/verify");
+    const pending = captureResponse(
+      owner,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       owner.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -307,12 +322,13 @@ When(
   async ({ page, browser, world }) => {
     const state = journey(page);
     const reset = await privatePage(browser, state, world.hostBaseUrl);
+    watchStorefrontEntries(reset, world.hostBaseUrl);
     state.reset = reset;
     reset.on("request", (request) => {
       const pathname = new URL(request.url()).pathname;
       if (
         request.method() === "POST" &&
-        pathname.startsWith("/v1/auth/password/reset")
+        pathname.startsWith(signInHostApiPath("/v1/auth/password/reset"))
       )
         state.resetPosts.push(pathname);
     });
@@ -325,7 +341,10 @@ When(
       state.phone,
     );
     const checkpoint = await captureSmsCheckpoint(state.sink, state.phone);
-    const pending = captureResponse(reset, "/v1/auth/password/reset");
+    const pending = captureResponse(
+      reset,
+      signInHostApiPath("/v1/auth/password/reset"),
+    );
     await reset.getByTestId("reset-request-submit").click();
     const requested = await pending;
     expect({
@@ -374,7 +393,7 @@ When(
     );
     const completion = captureResponse(
       reset,
-      "/v1/auth/password/reset/complete",
+      signInHostApiPath("/v1/auth/password/reset/complete"),
     );
     await reset.locator('form button[type="submit"]').click();
     const refused = await completion;
@@ -454,13 +473,22 @@ When(
       )
       .toBe(true);
     expect(new URL(reset.url()).pathname).toBe("/reset");
-    expect(new URL(reset.url()).searchParams.get("returnTo")).toBe("/account");
+    // #3172 — the reset form is the sign-in host's; the account return path
+    // rode the storefront's reset entry into the transaction.
+    expect(isSignInHostForm(reset.url())).toBe(true);
+    expectEnteredThrough(reset, world.hostBaseUrl, {
+      pathname: "/reset",
+      returnTo: "/account",
+    });
     await inputSecret(code, state.code);
     await inputSecret(
       reset.locator('input[autocomplete="new-password"]'),
       state.newPassword,
     );
-    const pending = captureResponse(reset, "/v1/auth/password/reset/complete");
+    const pending = captureResponse(
+      reset,
+      signInHostApiPath("/v1/auth/password/reset/complete"),
+    );
     await reset.locator('form button[type="submit"]').click();
     const completed = await pending;
     let exactCommand = false;
@@ -476,7 +504,7 @@ When(
     expect({
       status: completed.response.status(),
       exactCommand,
-      tokenFree: completed.body === '{"status":"reset_completed"}',
+      tokenFree: storefrontCallbackAcknowledgement(completed.body, world.hostBaseUrl),
     }).toEqual({ status: 200, exactCommand: true, tokenFree: true });
     state.resetCompleted = true;
     await reset.waitForURL((url) => url.pathname === "/account");
@@ -520,9 +548,9 @@ Then(
       state.resetPosts,
       "one reset request, one refusal, same delivered-code completion",
     ).toEqual([
-      "/v1/auth/password/reset",
-      "/v1/auth/password/reset/complete",
-      "/v1/auth/password/reset/complete",
+      signInHostApiPath("/v1/auth/password/reset"),
+      signInHostApiPath("/v1/auth/password/reset/complete"),
+      signInHostApiPath("/v1/auth/password/reset/complete"),
     ]);
     await revokeBrowser(fresh);
     await revokeBrowser(state.reset);

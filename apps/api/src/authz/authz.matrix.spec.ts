@@ -108,6 +108,27 @@ describe("validateRow", () => {
     expect(v.some((m) => /role/i.test(m))).toBe(true);
   });
 
+  it("003 EARS-62: an internal row is valid only under /v1/internal, and a route there must be internal", () => {
+    const internal: AuthzMeta = {
+      access: "internal",
+      check: "none",
+      audit: "none",
+      tests: ["EARS-71"],
+    };
+    expect(validateRow("POST /v1/internal/oidc/transaction", internal)).toEqual([]);
+    expect(validateRow("POST /v1/auth/login", internal).length).toBe(1);
+    expect(
+      validateRow("POST /v1/internal/oidc/transaction", publicMeta).length,
+    ).toBe(1);
+    expect(
+      validateRow("POST /v1/internal/oidc/transaction", {
+        ...internal,
+        check: "fast-path",
+        roles: ["doctor_guest"],
+      }).length,
+    ).toBe(2);
+  });
+
   it("§6.2: rejects an out-of-enum auth_check", () => {
     const v = validateRow("GET /v1/x", {
       ...publicMeta,

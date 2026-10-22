@@ -4,6 +4,7 @@ import {
 } from "@ds/schemas";
 
 import { consentStatementOf, resolveAuthFlowCopy } from "../copy";
+import type { StorefrontOidcHost } from "../server/storefront-oidc";
 import type {
   AuthFlowApiConfig,
   AuthFlowCopyOverride,
@@ -164,3 +165,14 @@ export const DOCTOR_AUTH_FLOW = {
     wordingVersion: "2026-09-22",
   },
 } satisfies AuthFlowHostConfig;
+
+/**
+ * 003 EARS-61 / EARS-62 — this storefront as an OIDC client of the sign-in
+ * host: the client key the API's per-environment map resolves to its Zitadel
+ * `client_id` and its one `redirect_uri` (`/auth/callback`,
+ * `STOREFRONT_CALLBACK_PATH`), and the config its landing rules come from.
+ */
+export const DOCTOR_STOREFRONT_OIDC = {
+  client: "doctor",
+  config: DOCTOR_AUTH_FLOW,
+} as const satisfies StorefrontOidcHost;

@@ -1,3 +1,7 @@
+import { hostCommand,
+  isAuthCommandPath,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -138,7 +142,7 @@ Given(
     expect(
       registrationEvidence(
         registered.response.request().postData() ?? "",
-        await registered.response.text(),
+        registered.body,
         value,
       ),
     ).toEqual({
@@ -151,7 +155,10 @@ Given(
       (await registered.response.headerValue("set-cookie")) ?? "",
       value,
     );
-    const pending = captureResponse(owned, "/v1/auth/verify");
+    const pending = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       owned.locator('input[autocomplete="one-time-code"]'),
       value.code,
@@ -167,6 +174,7 @@ Given(
         accepted.body,
         value,
         value.code,
+        world.hostBaseUrl,
       ),
     ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
     await owned.waitForURL(
@@ -199,7 +207,7 @@ When(
     value.guest = { context, page: visitor };
     visitor.on("request", (request) => {
       const path = new URL(request.url()).pathname;
-      if (request.method() === "POST" && path.startsWith("/v1/auth/"))
+      if (request.method() === "POST" && isAuthCommandPath(path))
         value.posts.push(path);
     });
     expect(
@@ -217,7 +225,10 @@ When(
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       value.email,
     );
-    const pending = captureResponse(visitor, "/v1/auth/verify");
+    const pending = captureResponse(
+      visitor,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       visitor.locator('input[autocomplete="one-time-code"]'),
       value.code!,
@@ -226,7 +237,7 @@ When(
     let exactReplay = false;
     let generic = false;
     try {
-      const request = refused.response.request().postDataJSON();
+      const request = hostCommand(refused.response.request().postDataJSON());
       const body = JSON.parse(refused.body);
       exactReplay =
         Object.keys(request).length === 2 &&
@@ -287,7 +298,7 @@ Then(
     expect(
       value.posts,
       "no new registration, resend or login-code challenge",
-    ).toEqual(["/v1/auth/verify"]);
+    ).toEqual([signInHostApiPath("/v1/auth/verify")]);
     await assertNoAddressedMail(
       request,
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
@@ -335,12 +346,15 @@ Then(
       value.password,
     );
     // This positive owned-account probe creates no deliberate login failure to close.
-    const pending = captureResponse(guest.page, "/v1/auth/login");
+    const pending = captureResponse(
+      guest.page,
+      signInHostApiPath("/v1/auth/login"),
+    );
     await guest.page.getByTestId("password-login-submit").click();
     const loggedIn = await pending;
     let sameCredentials = false;
     try {
-      const submitted = loggedIn.response.request().postDataJSON();
+      const submitted = hostCommand(loggedIn.response.request().postDataJSON());
       sameCredentials =
         submitted.identifier === value.email &&
         submitted.password === value.password;
@@ -364,7 +378,10 @@ Then(
       [value.cookie!],
     );
     await assertIdentity(value, guest.page);
-    expect(value.posts).toEqual(["/v1/auth/verify", "/v1/auth/login"]);
+    expect(value.posts).toEqual([
+      signInHostApiPath("/v1/auth/verify"),
+      signInHostApiPath("/v1/auth/login"),
+    ]);
   },
 );
 

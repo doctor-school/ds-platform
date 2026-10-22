@@ -6,6 +6,7 @@ import {
   verificationRefusalEvidence,
   coldVerificationEvidence,
   registrationUrl,
+  storefrontCallbackAcknowledgement,
 } from "./owned-registration.js";
 
 const account = { email: "owned@example.test", password: "synthetic-password" };
@@ -14,17 +15,25 @@ const request = {
   consent: [{ purpose: "tos", version: "2026-01" }],
 };
 const ack = { status: "pending_verification" };
+const base = "https://academy.example.test";
+const form = { authRequest: "V2_synthetic", csrf: "synthetic-csrf" };
+/** 003 EARS-5 (amended): the host answers with the storefront's own callback. */
+const hostRedirect = JSON.stringify({
+  status: "redirect",
+  url: `${base}/auth/callback?code=idp-code&state=tx-state`,
+});
 
 describe("cold verification evidence without secret diagnostics", () => {
   const code = "123456";
-  const submitted = { email: account.email, code };
-  it("EARS-41: accepts the owned code alone with the exact verified acknowledgement", () => {
+  const submitted = { email: account.email, code, ...form };
+  it("EARS-41: accepts the owned code alone with the storefront callback acknowledgement", () => {
     expect(
       coldVerificationEvidence(
         JSON.stringify(submitted),
-        '{"status":"verified"}',
+        hostRedirect,
         account,
         code,
+        base,
       ),
     ).toEqual({
       credentialsMatch: true,
@@ -36,15 +45,17 @@ describe("cold verification evidence without secret diagnostics", () => {
     { ...submitted, registration: { password: account.password } },
     { ...submitted, password: account.password },
     { ...submitted, other: "synthetic-secret" },
+    { email: account.email, code, csrf: form.csrf, other: "x" },
   ])(
     "EARS-41: rejects any additional credential or request field %#",
     (request) => {
       expect(
         coldVerificationEvidence(
           JSON.stringify(request),
-          '{"status":"verified"}',
+          hostRedirect,
           account,
           code,
+          base,
         ).codeOnly,
       ).toBe(false);
     },
@@ -52,15 +63,17 @@ describe("cold verification evidence without secret diagnostics", () => {
   it.each([
     { ...submitted, email: "other@example.test" },
     { ...submitted, code: "654321" },
+    { ...submitted, authRequest: undefined },
   ])(
-    "EARS-41: a different identity or code cannot prove the owned confirmation %#",
+    "EARS-41: a different identity, code or form cannot prove the owned confirmation %#",
     (request) => {
       expect(
         coldVerificationEvidence(
           JSON.stringify(request),
-          '{"status":"verified"}',
+          hostRedirect,
           account,
           code,
+          base,
         ).credentialsMatch,
       ).toBe(false);
     },
@@ -68,8 +81,8 @@ describe("cold verification evidence without secret diagnostics", () => {
   it.each([
     null,
     {},
-    { status: "pending_verification" },
-    { status: "verified", access_token: "synthetic-secret" },
+    { status: "verified" },
+    { status: "redirect", url: `${base}/auth/callback?code=c&state=s`, access_token: "synthetic-secret" },
   ])(
     "EARS-41: refuses an inexact or credential-bearing acknowledgement %#",
     (response) => {
@@ -78,6 +91,7 @@ describe("cold verification evidence without secret diagnostics", () => {
         JSON.stringify(response),
         account,
         code,
+        base,
       );
       expect(evidence.acknowledgementMatches).toBe(false);
       expect(
@@ -92,12 +106,34 @@ describe("cold verification evidence without secret diagnostics", () => {
         "synthetic-secret",
         account,
         code,
+        base,
       ),
     ).toEqual({
       credentialsMatch: false,
       codeOnly: false,
       acknowledgementMatches: false,
     });
+  });
+});
+
+describe("the storefront callback acknowledgement (003 EARS-5 amended)", () => {
+  it("EARS-5: the originating storefront's /auth/callback with the IdP code and state", () => {
+    expect(storefrontCallbackAcknowledgement(hostRedirect, base)).toBe(true);
+  });
+  it.each([
+    // another storefront's callback is another client's transaction
+    { status: "redirect", url: "https://doctor.example.test/auth/callback?code=c&state=s" },
+    { status: "redirect", url: `${base}/account?code=c&state=s` },
+    { status: "redirect", url: `${base}/auth/callback?state=s` },
+    { status: "redirect", url: `${base}/auth/callback?code=c` },
+    { status: "redirect", url: `${base}/auth/callback?code=c&state=s&error=access_denied` },
+    { status: "redirect", url: "not a url" },
+    { status: "verified" },
+    { status: "redirect" },
+  ])("EARS-5: never «some redirect» %#", (response) => {
+    expect(
+      storefrontCallbackAcknowledgement(JSON.stringify(response), base),
+    ).toBe(false);
   });
 });
 
@@ -128,7 +164,7 @@ describe("wrong confirmation code evidence", () => {
   const submitted = JSON.stringify({
     email: account.email,
     code: submittedCode,
-    registration: { password: account.password },
+    ...form,
   });
   const refusal = {
     statusCode: 400,
@@ -217,35 +253,36 @@ describe("wrong confirmation code evidence", () => {
 
 describe("verification evidence without secret diagnostics", () => {
   const code = "123456";
-  const submitted = {
-    email: account.email,
-    code,
-    registration: { password: account.password },
-  };
-  it("EARS-3: accepts the owned code and held password with the exact verified acknowledgement", () => {
+  const submitted = { email: account.email, code, ...form };
+  it("EARS-3: accepts the owned code without a registration value and the storefront callback acknowledgement", () => {
     expect(
       verificationEvidence(
         JSON.stringify(submitted),
-        '{"status":"verified"}',
+        hostRedirect,
         account,
         code,
+        base,
       ),
     ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
   });
   it.each([
     { ...submitted, email: "other@example.test" },
     { ...submitted, code: "654321" },
-    { ...submitted, registration: undefined },
-    { ...submitted, registration: { password: "other" } },
+    // 003 EARS-39 (host): the code command carries no registration value
+    { ...submitted, registration: { password: account.password } },
+    { ...submitted, registration: {} },
+    { ...submitted, held: account.password },
+    { ...submitted, authRequest: "" },
   ])(
-    "EARS-41: rejects a different identity, code or missing held password %#",
+    "EARS-39: rejects a different identity or code, or any registration value %#",
     (request) => {
       expect(
         verificationEvidence(
           JSON.stringify(request),
-          '{"status":"verified"}',
+          hostRedirect,
           account,
           code,
+          base,
         ).credentialsMatch,
       ).toBe(false);
     },
@@ -253,8 +290,13 @@ describe("verification evidence without secret diagnostics", () => {
   it.each([
     null,
     {},
+    { status: "verified" },
     { status: "pending_verification" },
-    { status: "verified", access_token: "synthetic-secret" },
+    {
+      status: "redirect",
+      url: `${base}/auth/callback?code=c&state=s`,
+      access_token: "synthetic-secret",
+    },
   ])(
     "EARS-3: rejects an inexact verification acknowledgement without exposing its fields %#",
     (response) => {
@@ -263,6 +305,7 @@ describe("verification evidence without secret diagnostics", () => {
         JSON.stringify(response),
         account,
         code,
+        base,
       );
       expect(evidence.acknowledgementMatches).toBe(false);
       expect(
@@ -277,6 +320,7 @@ describe("verification evidence without secret diagnostics", () => {
         "synthetic-secret",
         account,
         code,
+        base,
       ),
     ).toEqual({ credentialsMatch: false, acknowledgementMatches: false });
   });

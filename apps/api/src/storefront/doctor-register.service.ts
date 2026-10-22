@@ -110,12 +110,19 @@ export class DoctorRegisterService {
    * is absent, then delegates the accepted registration to 003.
    */
   async register(req: DoctorRegisterRequest): Promise<DoctorRegisterResponse> {
+    return (await this.registerAccount(req)).body;
+  }
+
+  /** {@link register}, also naming the account it created (the host's warm proof, 003 EARS-24/41). */
+  async registerAccount(
+    req: DoctorRegisterRequest,
+  ): Promise<{ body: DoctorRegisterResponse; created: string | null }> {
     const consent = this.requiredStampedConsents(req);
 
     // The 003 engine, unchanged. Its response is the enumeration-safe
     // `pending_verification` (EARS-16) that 021 EARS-13 requires this surface to
     // render identically for a known and an unknown email.
-    return this.auth.register({
+    return this.auth.registerAccount({
       email: req.email,
       password: req.password,
       consent,
@@ -148,8 +155,9 @@ export class DoctorRegisterService {
   async verifyStep<T>(
     req: DoctorVerifyRequest,
     accept: SessionAcceptor<T>,
+    warm?: { keepPasswordOf: string },
   ): Promise<T> {
-    return this.auth.verifyStep(this.toVerifyRequest(req), accept);
+    return this.auth.verifyStep(this.toVerifyRequest(req), accept, warm);
   }
 
   private toVerifyRequest(req: DoctorVerifyRequest) {

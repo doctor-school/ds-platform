@@ -187,8 +187,33 @@ ssh truenas 'cd ~/ds-platform-dev-stand/idp && \
   IDP_ACADEMY_POST_LOGOUT_URI=http://localhost:3001/ \
   IDP_DOCTOR_REDIRECT_URI=http://localhost:3004/auth/callback \
   IDP_DOCTOR_POST_LOGOUT_URI=http://localhost:3004/ \
+  IDP_SECRET_ENV_FILE=$HOME/ds-platform-dev-stand/idp/storefront-secrets.env \
   ./provision.sh --pat-file /tmp/idp-pat.txt'
 ```
+
+`IDP_SECRET_ENV_FILE` (step 3.bis.2) is where the storefront clients'
+`private_key_jwt` keys (`IDP_ACADEMY_CLIENT_KEY`, `IDP_DOCTOR_CLIENT_KEY`) and
+`INTERNAL_API_TOKEN` live: the script keeps each one while it is still valid (the
+key's id still listed on its app; a token of ≥32 bytes), mints it otherwise, writes
+the file `0600`, and prints only key ids — never a value. It is a path on the box
+the script runs on: when that is your own machine, point it straight at
+`~/.ds-platform/.env.local`; on the TrueNAS recipe above keep the file on the box
+(so re-runs keep the keys) and carry its three lines into `.env.local` once, e.g.
+`ssh truenas 'cat ~/ds-platform-dev-stand/idp/storefront-secrets.env' >> ~/.ds-platform/.env.local`
+after removing the blank template lines of the same names.
+
+Which file holds what, per environment (the client keys reach the api only; a
+storefront server gets `INTERNAL_API_TOKEN` alone):
+
+| Environment | Client keys + token (api only)                                                    | Token only (portal, doctor)                               |
+| ----------- | --------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| dev stand   | `~/.ds-platform/.env.local` (one developer machine; every local process reads it) | the same `.env.local`                                     |
+| stage slot  | `/etc/ds-platform/slots/<slot>.sign-in.env` (`tools/staging/slot.mjs`)            | `/etc/ds-platform/slots/<slot>.internal.env`              |
+| prod        | `/etc/ds-platform/api-sign-in.env` (`IDP_SECRET_ENV_FILE`)                        | `/etc/ds-platform/internal.env` (`IDP_INTERNAL_ENV_FILE`) |
+
+`IDP_INTERNAL_ENV_FILE` (optional, needs `IDP_SECRET_ENV_FILE`) makes step 3.bis.2 also
+write that token-only file; the dev stand does not set it, because its local api,
+portal and doctor all run from `.env.local` on the developer's own machine.
 
 It prints `IDP_PROJECT_ID`, `IDP_CLIENT_ID`, and — **only on first creation** —
 `IDP_CLIENT_SECRET`, each already prefixed with its `.env.local` key so the lines

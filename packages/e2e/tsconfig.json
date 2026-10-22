@@ -9,6 +9,7 @@
     "steps/**/*.ts",
     "derived/**/*.ts",
     "lib/**/*.ts",
+    "sign-in-host/**/*.ts",
     "reporters/**/*.ts",
     "admin/**/*.ts"
   ],

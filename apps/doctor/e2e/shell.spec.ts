@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { TOP_LEVEL_NAVIGATION_HEADERS } from "@ds/e2e/storefront-entry";
 import { readSiblingOrigin } from "@ds/storefront-shell/sibling-origin";
 
 /**
@@ -254,12 +255,20 @@ test.describe("017 EARS-2: every configured chrome target is a real route", () =
     // Exactly one link in the guest cluster — the combined label, never a
     // «Войти» + «Регистрация» pair (canvas line 220, 017 US-7).
     await expect(cluster.getByRole("link")).toHaveCount(1);
+    // `/login` is the shipped sign-in entry (#3172): a top-level navigation to
+    // it answers a 303 into the sign-in host's authorize URL (this tier's
+    // internal-API double points that URL back at itself). The form behind it
+    // is proven on the sign-in host tier (`apps/login/e2e/doctor-login.e2e.spec.ts`).
+    const entry = page.waitForRequest(
+      (request) =>
+        request.isNavigationRequest() &&
+        new URL(request.url()).pathname === "/login",
+    );
     await cluster
       .getByRole("link", { name: "Войти / Регистрация", exact: true })
       .click();
-    // `/login` is the shipped sign-in surface, and it carries the way to
-    // `/register`; the combined canvas surface (`auth.dc.html`) is #2080.
-    await expect(page).toHaveURL(/\/login(?:$|[?#])/);
+    expect(new URL((await entry).url()).search).toBe("");
+    await expect(page).toHaveURL(/\/oauth\/v2\/authorize\?.*state=tx-\d+/);
   });
 });
 
@@ -379,16 +388,22 @@ test.describe("017 EARS-1: the chrome is scoped to the storefront route group", 
   test("017 EARS-1.9: the auth surfaces carry their own chrome, not the storefront shell", async ({
     page,
   }) => {
-    // `/login` and `/register` live OUTSIDE `app/(storefront)/`, so the shared
-    // chrome is absent by construction — no `hiddenOnPaths` and therefore no
-    // client route boundary is added to this host for it.
+    // `/login` and `/register` live OUTSIDE `app/(storefront)/`: they are route
+    // handlers that answer a 303 into the sign-in host (#3172), so the shared
+    // chrome is absent by construction — no page of this host renders there.
+    // The doors' own chromeless frame is proven on the sign-in host tier
+    // (`doctor-login.e2e.spec.ts` 017 #1933, `doctor-register-layout.e2e.spec.ts`
+    // 021 EARS-1.4).
     for (const route of ["/login", "/register"]) {
-      await page.goto(route);
-      await expect(
-        page.getByTestId("storefront-header"),
+      const res = await page.request.get(route, {
+        maxRedirects: 0,
+        headers: TOP_LEVEL_NAVIGATION_HEADERS,
+      });
+      expect(res.status(), `${route} is an entry, not a page`).toBe(303);
+      expect(
+        await res.text(),
         `no storefront chrome on ${route}`,
-      ).toHaveCount(0);
-      await expect(page.getByTestId("storefront-footer")).toHaveCount(0);
+      ).not.toContain("storefront-header");
     }
   });
 });

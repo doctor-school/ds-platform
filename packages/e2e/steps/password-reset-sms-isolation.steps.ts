@@ -1,3 +1,5 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -76,7 +78,8 @@ async function privatePage(
   context.on("request", (request) => {
     if (
       request.method() === "POST" &&
-      new URL(request.url()).pathname === "/v1/auth/password/reset"
+      new URL(request.url()).pathname ===
+        signInHostApiPath("/v1/auth/password/reset")
     )
       state.resetRequests++;
   });
@@ -244,7 +247,10 @@ async function passwordLogin(
     },
     async () => {
       try {
-        const pending = captureResponse(page, "/v1/auth/login");
+        const pending = captureResponse(
+          page,
+          signInHostApiPath("/v1/auth/login"),
+        );
         await page.getByTestId("password-login-submit").click();
         const result = await pending;
         let exactCommand = false;
@@ -278,7 +284,7 @@ async function signInAndIdentify(
   expect(
     {
       status: result.response.status(),
-      tokenFree: result.body === '{"status":"authenticated"}',
+      tokenFree: storefrontCallbackAcknowledgement(result.body, base),
     },
     "owned password accepted",
   ).toEqual({ status: 200, tokenFree: true });
@@ -325,7 +331,10 @@ Given(
         account,
         "/account",
       );
-      const verifying = captureResponse(owner, "/v1/auth/verify");
+      const verifying = captureResponse(
+        owner,
+        signInHostApiPath("/v1/auth/verify"),
+      );
       await inputSecret(
         owner.locator('input[autocomplete="one-time-code"]'),
         code,
@@ -360,7 +369,10 @@ Given(
         account.phone,
       );
       const before = await captureSmsCheckpoint(sink, account.phone);
-      const pending = captureResponse(reset, "/v1/auth/password/reset");
+      const pending = captureResponse(
+        reset,
+        signInHostApiPath("/v1/auth/password/reset"),
+      );
       await reset.getByTestId("reset-request-submit").click();
       const requested = await pending;
       expect({
@@ -414,7 +426,10 @@ When(
       reset.locator('input[autocomplete="new-password"]'),
       second.replacement,
     );
-    const pending = captureResponse(reset, "/v1/auth/password/reset/complete");
+    const pending = captureResponse(
+      reset,
+      signInHostApiPath("/v1/auth/password/reset/complete"),
+    );
     await reset.locator('form button[type="submit"]').click();
     const refused = await pending;
     let exactCommand = false;
@@ -514,7 +529,7 @@ When(
       );
       const pending = captureResponse(
         reset,
-        "/v1/auth/password/reset/complete",
+        signInHostApiPath("/v1/auth/password/reset/complete"),
       );
       await reset.locator('form button[type="submit"]').click();
       const completed = await pending;
@@ -532,7 +547,7 @@ When(
         {
           status: completed.response.status(),
           exactCommand,
-          tokenFree: completed.body === '{"status":"reset_completed"}',
+          tokenFree: storefrontCallbackAcknowledgement(completed.body, world.hostBaseUrl),
         },
         "same retained code completes only its owner's reset",
       ).toEqual({ status: 200, exactCommand: true, tokenFree: true });

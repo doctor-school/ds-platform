@@ -1,3 +1,9 @@
+import {
+  AUTH_REQUEST_PARAM,
+  isSignInHostForm,
+  isAuthCommandPath,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -33,6 +39,7 @@ interface ColdVerification extends OwnedCredentials {
   code?: string;
   authPosts: string[];
   visitedLogin: boolean;
+  beforeReload?: string;
   submitted?: AddressedMailCheckpoint;
   verification?: Response;
   evidence?: ReturnType<typeof coldVerificationEvidence>;
@@ -67,7 +74,7 @@ Given(
     verifications.set(page, state);
     owned.on("request", (request) => {
       const pathname = new URL(request.url()).pathname;
-      if (request.method() === "POST" && pathname.startsWith("/v1/auth/"))
+      if (request.method() === "POST" && isAuthCommandPath(pathname))
         state.authPosts.push(pathname);
     });
     owned.on("framenavigated", (frame) => {
@@ -78,7 +85,7 @@ Given(
         state.visitedLogin = true;
     });
     await installCaptchaStub(context);
-    const { response, code } = await registerOwnedCredentials(
+    const { response, body, code } = await registerOwnedCredentials(
       owned,
       world.hostBaseUrl,
       state,
@@ -88,7 +95,7 @@ Given(
     expect(
       registrationEvidence(
         response.request().postData() ?? "",
-        await response.text(),
+        body,
         state,
       ),
     ).toEqual({
@@ -100,7 +107,7 @@ Given(
       /^\d{6}$/.test(code),
       "fresh owned six-digit confirmation code",
     ).toBe(true);
-    expect(state.authPosts).toEqual(["/v1/auth/register"]);
+    expect(state.authPosts).toEqual([signInHostApiPath("/v1/auth/register")]);
     await assertNoPrivateRegistrationAccess(
       owned,
       (await response.headerValue("set-cookie")) ?? "",
@@ -119,6 +126,7 @@ When(
       (await field.inputValue()) === "",
       "confirmation code unconsumed before reload",
     ).toBe(true);
+    state.beforeReload = state.page.url();
     const response = await state.page.reload({ waitUntil: "load" });
     expect(response?.status(), "real verification document reloaded").toBe(200);
     expect(
@@ -134,20 +142,28 @@ Then(
   async ({ page, world }) => {
     const state = verification(page);
     const url = new URL(state.page.url());
-    expect(url.origin).toBe(new URL(world.hostBaseUrl).origin);
+    // #3172 — the step is the sign-in host's: the reload keeps the same auth
+    // request, whose transaction holds the `/account` return target (the
+    // landing after the code is the journey's proof of it).
+    expect(isSignInHostForm(url)).toBe(true);
+    expect(url.origin).not.toBe(new URL(world.hostBaseUrl).origin);
     expect(url.pathname).toBe("/verify");
+    expect(url.searchParams.get(AUTH_REQUEST_PARAM)).toBe(
+      new URL(state.beforeReload ?? "about:blank").searchParams.get(
+        AUTH_REQUEST_PARAM,
+      ),
+    );
     expect(
       url.searchParams.get("email") === state.email,
       "exact owned address survives reload",
     ).toBe(true);
-    expect(url.searchParams.get("returnTo")).toBe("/account");
     const field = state.page.locator('input[autocomplete="one-time-code"]');
     await expect(field).toBeVisible();
     expect(
       (await field.inputValue()) === "",
       "reloaded code remains unentered",
     ).toBe(true);
-    expect(state.authPosts).toEqual(["/v1/auth/register"]);
+    expect(state.authPosts).toEqual([signInHostApiPath("/v1/auth/register")]);
     await assertNoPrivateRegistrationAccess(state.page, "", state);
   },
 );
@@ -156,17 +172,19 @@ When(
   "the registrant enters that same delivered six-digit code once on the cold step",
   async ({ page, world }) => {
     const state = verification(page);
-    const pending = captureResponse(state.page, "/v1/auth/verify").then(
-      ({ response, body }) => {
-        state.evidence = coldVerificationEvidence(
-          response.request().postData() ?? "",
-          body,
-          state,
-          state.code!,
-        );
-        return response;
-      },
-    );
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/verify"),
+    ).then(({ response, body }) => {
+      state.evidence = coldVerificationEvidence(
+        response.request().postData() ?? "",
+        body,
+        state,
+        state.code!,
+        world.hostBaseUrl,
+      );
+      return response;
+    });
     state.submitted = await captureAddressedMailCheckpoint(
       nativeRecoveryMail(),
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
@@ -262,7 +280,10 @@ Then(
     expect(
       state.authPosts,
       "one registration and one code-only confirmation through authenticated arrival",
-    ).toEqual(["/v1/auth/register", "/v1/auth/verify"]);
+    ).toEqual([
+      signInHostApiPath("/v1/auth/register"),
+      signInHostApiPath("/v1/auth/verify"),
+    ]);
     expect(state.visitedLogin, "confirmation never visits the login door").toBe(
       false,
     );
@@ -302,7 +323,7 @@ When(
     guest.on("request", (request) => {
       if (
         request.method() === "POST" &&
-        new URL(request.url()).pathname === "/v1/auth/login"
+        new URL(request.url()).pathname === signInHostApiPath("/v1/auth/login")
       )
         state.passwordRequests! += 1;
     });
@@ -310,7 +331,8 @@ When(
       const pending = guest.waitForResponse(
         (response) =>
           response.request().method() === "POST" &&
-          new URL(response.url()).pathname === "/v1/auth/login",
+          new URL(response.url()).pathname ===
+            signInHostApiPath("/v1/auth/login"),
       );
       await guest.getByTestId("password-login-submit").click();
       return pending;

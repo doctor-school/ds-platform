@@ -29,6 +29,15 @@ const BASE = `http://127.0.0.1:${PORT}`;
 const API_PORT = Number(process.env.DOCTOR_EVENTS_FAKE_API_PORT ?? 3214);
 const API = `http://127.0.0.1:${API_PORT}`;
 
+// #3172 — the sign-in entries (`/login`, `/register`, `/reset`, `/verify`)
+// answer a 303 built by the API's internal transaction endpoint; the tier
+// boots the shared double of that endpoint
+// (`packages/e2e/doubles/storefront-internal-api.mjs`), whose authorize URL
+// points back at itself so a followed entry lands on a real answer.
+const DOUBLE_PORT = Number(process.env.STOREFRONT_DOUBLE_PORT ?? 3217);
+const DOUBLE = `http://127.0.0.1:${DOUBLE_PORT}`;
+const DOUBLE_TOKEN = "storefront-double-token";
+
 export default defineConfig({
   testDir: "./e2e",
   testMatch:
@@ -48,6 +57,17 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
     {
+      command: "node ../../packages/e2e/doubles/storefront-internal-api.mjs",
+      url: `${DOUBLE}/health`,
+      env: {
+        STOREFRONT_DOUBLE_PORT: String(DOUBLE_PORT),
+        STOREFRONT_DOUBLE_TOKEN: DOUBLE_TOKEN,
+        STOREFRONT_DOUBLE_AUTHORIZE: `${DOUBLE}/oauth/v2/authorize`,
+      },
+      timeout: 30_000,
+      reuseExistingServer: false,
+    },
+    {
       command: "node e2e/support/doctor-events-api.mjs",
       url: `${API}/health`,
       env: { DOCTOR_EVENTS_FAKE_API_PORT: String(API_PORT) },
@@ -55,9 +75,13 @@ export default defineConfig({
       reuseExistingServer: false,
     },
     {
-      command: `pnpm --filter @ds/doctor exec next start -p ${PORT} --keepAliveTimeout 125000`,
+      command: `pnpm --filter @ds/doctor exec next start -H 127.0.0.1 -p ${PORT} --keepAliveTimeout 125000`,
       url: BASE,
-      env: { API_PROXY_TARGET: API },
+      env: {
+        API_PROXY_TARGET: API,
+        INTERNAL_API_URL: DOUBLE,
+        INTERNAL_API_TOKEN: DOUBLE_TOKEN,
+      },
       timeout: 120_000,
       reuseExistingServer: false,
     },

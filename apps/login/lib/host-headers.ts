@@ -1,6 +1,8 @@
 /**
  * 003 EARS-70, ADR-0015 §4 req. 2(a) / 4 — the response hardening every answer
- * of the sign-in host carries, and the navigate-only test of its page routes.
+ * of the sign-in host carries (its navigate-only test of the page routes is
+ * `isTopLevelNavigation` of `@ds/auth-flow/server`, shared with the storefront
+ * entries).
  *
  * The strict nonce CSP is net-new in this repository (no storefront ships one):
  * the proxy mints a fresh nonce per request, puts the policy on the RESPONSE
@@ -50,16 +52,3 @@ export const HARDENING_HEADERS: Readonly<Record<string, string>> = {
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",
 };
-
-/**
- * ADR-0015 §4 req. 2(a) — a top-level navigation: `Sec-Fetch-Mode: navigate`
- * AND `Sec-Fetch-Dest: document`. A request without fetch metadata is not
- * one; a frame, a fetch or a prefetch is not one either (Next's client router
- * falls back to a full navigation when its fetch is refused).
- */
-export function isTopLevelNavigation(headers: Headers): boolean {
-  return (
-    headers.get("sec-fetch-mode") === "navigate" &&
-    headers.get("sec-fetch-dest") === "document"
-  );
-}

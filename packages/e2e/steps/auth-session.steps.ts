@@ -1,3 +1,4 @@
+import { isSignInHostForm, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import {
   expect,
   type APIRequestContext,
@@ -51,13 +52,17 @@ async function submitDeliveredEmailCode(
   );
   const requestResponse = page.waitForResponse(
     (response) =>
-      new URL(response.url()).pathname === "/v1/auth/login/otp/request" &&
+      new URL(response.url()).pathname ===
+        signInHostApiPath("/v1/auth/login/otp/request") &&
       response.request().method() === "POST",
   );
   await page.getByTestId("otp-send").click();
   otpRequestResponses.set(page, await requestResponse);
   const code = await fetchLoginCode(request, mailbox, doctor.email, before);
-  const loginResponse = captureResponse(page, "/v1/auth/login/otp");
+  const loginResponse = captureResponse(
+    page,
+    signInHostApiPath("/v1/auth/login/otp"),
+  );
   // The sixth character auto-submits the shipped OTP form.
   await page.locator('input[autocomplete="one-time-code"]').fill(code);
   const login = await loginResponse;
@@ -167,7 +172,10 @@ When(
   "that doctor signs in through the Academy password form",
   async ({ page, world }) => {
     expect(world.host.id).toBe("academy");
-    const loginResponse = captureResponse(page, "/v1/auth/login");
+    const loginResponse = captureResponse(
+      page,
+      signInHostApiPath("/v1/auth/login"),
+    );
     const doctor = await signInGoldenDoctor(page, world.host, SEED);
     world.signedInAs = doctor.seedName;
     const login = await loginResponse;
@@ -263,7 +271,8 @@ When(
     const refused = await gatedPasswordLogin(page, async () => {
       const loginResponse = page.waitForResponse(
         (response) =>
-          new URL(response.url()).pathname === "/v1/auth/login" &&
+          new URL(response.url()).pathname ===
+            signInHostApiPath("/v1/auth/login") &&
           response.request().method() === "POST",
       );
       await page.getByRole("button", { name: /Войти|Продолжить/i }).click();
@@ -285,6 +294,8 @@ Then(
     await expect(page).toHaveURL(
       new RegExp(`${world.host.loginPath}(?:\\?|$)`),
     );
+    // #3172 — the generic error shows on the sign-in host's form.
+    expect(isSignInHostForm(page.url())).toBe(true);
     await expect(
       page.getByRole("alert").filter({ hasText: GENERIC_PASSWORD_ERROR }),
     ).toBeVisible();

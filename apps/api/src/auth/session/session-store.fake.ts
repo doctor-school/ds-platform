@@ -33,7 +33,11 @@ export class InMemorySessionStore implements SessionStore {
     return Promise.resolve(record);
   }
 
-  rotate(sid: string, accessToken: string, refreshToken: string): Promise<void> {
+  rotate(
+    sid: string,
+    accessToken: string,
+    refreshToken: string,
+  ): Promise<void> {
     const record = this.bySid.get(sid);
     // No-op if the session is gone (expired/revoked) — rotation never resurrects.
     if (record) this.bySid.set(sid, { ...record, accessToken, refreshToken });
@@ -54,6 +58,18 @@ export class InMemorySessionStore implements SessionStore {
       if (record) this.unlink(record);
     }
     return Promise.resolve();
+  }
+
+  deleteLinked(zitadelSessionId: string): Promise<SessionRecord[]> {
+    // Linked sessions are few per Zitadel session; a scan keeps the fake small.
+    const revoked: SessionRecord[] = [];
+    for (const record of [...this.bySid.values()]) {
+      if (record.oidcClient && record.zitadelSessionId === zitadelSessionId) {
+        this.unlink(record);
+        if (record.expiresAtMs > Date.now()) revoked.push(record);
+      }
+    }
+    return Promise.resolve(revoked);
   }
 
   /** Drop a record from both the primary map and the `sub` index, pruning the empty set. */

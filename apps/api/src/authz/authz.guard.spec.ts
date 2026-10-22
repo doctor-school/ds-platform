@@ -35,6 +35,31 @@ describe("AuthzGuard (runtime mirror, fail-closed)", () => {
     expect(guard.canActivate(ctx(meta))).toBe(true);
   });
 
+  it("003 EARS-62: admits an internal row only on a request under /v1/internal (the credential is the middleware's)", () => {
+    const meta: AuthzMeta = {
+      access: "internal",
+      check: "none",
+      audit: "none",
+      tests: ["EARS-71"],
+    };
+    const at = (url: string): ExecutionContext => {
+      const handler = (): void => {};
+      Reflect.defineMetadata(AUTHZ_KEY, meta, handler);
+      return {
+        getHandler: () => handler,
+        getClass: () => class {},
+        switchToHttp: () => ({ getRequest: () => ({ url }) }),
+      } as unknown as ExecutionContext;
+    };
+    expect(guard.canActivate(at("/v1/internal/oidc/transaction"))).toBe(true);
+    expect(() => guard.canActivate(at("/v1/auth/login"))).toThrow(
+      ForbiddenException,
+    );
+    expect(() => guard.canActivate(at("/v1/internalx/a"))).toThrow(
+      ForbiddenException,
+    );
+  });
+
   it("denies an authenticated endpoint when no subject is present", () => {
     const meta: AuthzMeta = {
       access: "authenticated",

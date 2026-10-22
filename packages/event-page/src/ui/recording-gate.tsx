@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Button } from "@ds/design-system/button";
 import { Link as DsLink } from "@ds/design-system/link";
 
@@ -101,16 +100,18 @@ export function RecordingGate({
             {body}
           </p>
           <Button asChild size="lg" className="mt-5">
-            <Link href={signInHref} data-testid="recording-gate-signin">
+            {/* 003 EARS-61 — the entries act only on a top-level document
+                navigation: plain links, never prefetching router links. */}
+            <a data-testid="recording-gate-signin" href={signInHref}>
               {ctaLabel}
-            </Link>
+            </a>
           </Button>
           <p className="mt-4 text-caption font-semibold text-muted-foreground">
             {noAccountLabel}{" "}
             <DsLink asChild className="font-bold">
-              <Link href={signUpHref} data-testid="recording-gate-signup">
+              <a data-testid="recording-gate-signup" href={signUpHref}>
                 {signUpLabel}
-              </Link>
+              </a>
             </DsLink>
           </p>
         </div>

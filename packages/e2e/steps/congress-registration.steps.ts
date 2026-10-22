@@ -1,3 +1,12 @@
+import { hostCommand,
+  isAuthCommandPath,
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import {
@@ -122,13 +131,13 @@ async function passwordProbe(
     state.password,
   );
   const submitted = await gatedPasswordLogin(page, async () => {
-    const pending = captureResponse(page, "/v1/auth/login");
+    const pending = captureResponse(page, signInHostApiPath("/v1/auth/login"));
     await page.getByTestId("password-login-submit").click();
     return pending;
   });
   let intended = false;
   try {
-    const body = submitted.response.request().postDataJSON();
+    const body = hostCommand(submitted.response.request().postDataJSON());
     intended =
       body.identifier === state.email && body.password === state.password;
   } catch {
@@ -302,9 +311,10 @@ When(
     const owned = state.page;
     owned.on("request", (request) => {
       const pathname = new URL(request.url()).pathname;
-      if (request.method() === "POST" && pathname.startsWith("/v1/auth/"))
+      if (request.method() === "POST" && isAuthCommandPath(pathname))
         state.authPosts.push(pathname);
     });
+    watchStorefrontEntries(owned, world.hostBaseUrl);
     await owned.goto(registrationUrl(world.hostBaseUrl, "/account"), {
       waitUntil: "load",
     });
@@ -330,7 +340,10 @@ When(
       mailbox,
       state.email,
     );
-    const pending = captureResponse(owned, "/v1/auth/register");
+    const pending = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/register"),
+    );
     await owned.getByTestId("register-submit").click();
     const submitted = await pending;
     expect(
@@ -348,13 +361,16 @@ When(
       consentMatches: true,
       acknowledgementMatches: true,
     });
+    // #3172 — the code step is the sign-in host's `/verify`; the account
+    // return path rode the storefront's registration entry.
     await owned.waitForURL(
-      (url) =>
-        url.origin === new URL(world.hostBaseUrl).origin &&
-        url.pathname === "/verify",
+      (url) => isSignInHostForm(url) && url.pathname === "/verify",
     );
     await owned.waitForLoadState("networkidle");
-    expect(new URL(owned.url()).searchParams.get("returnTo")).toBe("/account");
+    expectEnteredThrough(owned, world.hostBaseUrl, {
+      pathname: "/register",
+      returnTo: "/account",
+    });
     await assertNoPrivateRegistrationAccess(
       owned,
       (await submitted.response.headerValue("set-cookie")) ?? "",
@@ -398,7 +414,10 @@ Then(
       "exact congress state unchanged before code submission",
     ).toBe(true);
     const wrong = differentVerificationCode(state.code);
-    const pending = captureResponse(state.page, "/v1/auth/verify");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       state.page.locator('input[autocomplete="one-time-code"]'),
       wrong,
@@ -470,10 +489,13 @@ Then(
 
 When(
   "that congress registrant enters its delivered code once in the requesting Academy tab",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const state = registration(page);
     if (!state.code) throw new Error("Owned congress code was not delivered");
-    const pending = captureResponse(state.page, "/v1/auth/verify");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       state.page.locator('input[autocomplete="one-time-code"]'),
       state.code,
@@ -489,6 +511,7 @@ When(
         state.accepted.body,
         state,
         state.code,
+        world.hostBaseUrl,
       ),
     ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
   },
@@ -515,7 +538,11 @@ Then(
     expect(
       state.authPosts,
       "one registration, one refused code and one accepted code without password replay",
-    ).toEqual(["/v1/auth/register", "/v1/auth/verify", "/v1/auth/verify"]);
+    ).toEqual([
+      signInHostApiPath("/v1/auth/register"),
+      signInHostApiPath("/v1/auth/verify"),
+      signInHostApiPath("/v1/auth/verify"),
+    ]);
   },
 );
 

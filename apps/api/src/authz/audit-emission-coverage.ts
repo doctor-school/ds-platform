@@ -343,6 +343,17 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
         spec: "003 EARS-64/66/67/68 (entry reuses the record or renders the form); EARS-18 rows belong to the credential commands",
       },
     },
+    "POST /v1/internal/oidc/redeem": {
+      // 003 EARS-62 — the storefront callback's redeem turns a code our
+      // sign-in host finalised into a storefront session. The credential was
+      // checked (and its auth.login.success appended) by the host step that
+      // wrote the record, so a mint appends no second row; a callback whose
+      // `state` is not the browser's own transaction (login CSRF, ADR-0015 §4
+      // req. 3) appends the security event the spec names.
+      emits: ["StorefrontCallbackRejected"],
+      coveredBy:
+        "storefront-oidc.e2e: EARS-62 (req. 3) a foreign state burns the transaction, discards the tokens and appends auth.session.rejected (state_mismatch, storefront tier)",
+    },
     "POST /v1/sign-in-host/login": {
       emits: ["LoginSucceeded", "LoginFailed", "AccountLocked"],
       coveredBy:

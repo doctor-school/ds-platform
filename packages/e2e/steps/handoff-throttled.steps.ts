@@ -1,3 +1,13 @@
+import { handoffCommandWithoutReference,
+  AUTH_REQUEST_PARAM,
+  isAuthCommandPath,
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { captchaTestTokenFromEnv } from "../lib/captcha-stub.js";
@@ -19,8 +29,8 @@ import {
   test,
 } from "./support/auth-fixtures.js";
 
-const REQUEST = "/v1/auth/login/otp/request";
-const HANDOFF = "/v1/auth/login/otp/handoff";
+const REQUEST = signInHostApiPath("/v1/auth/login/otp/request");
+const HANDOFF = signInHostApiPath("/v1/auth/login/otp/handoff");
 // 003 design §10 / EARS-13: the real, unmodified per-account window.
 const PER_ACCOUNT_REQUESTS = 10;
 const GENERIC_429 =
@@ -170,11 +180,12 @@ When(
   async ({ page, world }) => {
     const state = journey(page);
     const guest = await state.context.newPage();
+    watchStorefrontEntries(guest, world.hostBaseUrl);
     state.guest = guest;
     const posts: string[] = [];
     guest.on("request", (request) => {
       const path = new URL(request.url()).pathname;
-      if (request.method() === "POST" && path.startsWith("/v1/auth/"))
+      if (request.method() === "POST" && isAuthCommandPath(path))
         posts.push(path);
     });
     const mail = nativeRecoveryMail();
@@ -197,8 +208,8 @@ When(
     let exactCommand = false;
     try {
       const body = response.response.request().postDataJSON();
-      exactCommand =
-        Object.keys(body).join() === "ref" && body.ref === state.reference;
+      // 003 EARS-44 (host): the reference rides the form state only.
+      exactCommand = handoffCommandWithoutReference(body, state.reference);
     } catch {
       // Never retain a reference-bearing parser diagnostic.
     }
@@ -276,15 +287,21 @@ Then(
       }),
       "private endpoints remain inaccessible",
     ).toEqual({ profile: 401, session: 401 });
+    // #3172 — the code door is the sign-in host's form, whose URL carries only
+    // the IdP's auth request: the reference never reaches it, and the ordinary
+    // account target rode the storefront entry into the transaction.
     const url = new URL(guest.url());
     expect(
-      url.origin === new URL(world.hostBaseUrl).origin &&
+      isSignInHostForm(url) &&
         url.pathname === "/login" &&
-        url.searchParams.size === 2 &&
-        url.searchParams.get("method") === "code" &&
-        url.searchParams.get("returnTo") === "/account",
-      "reference stripped while the ordinary account target survives",
+        [...url.searchParams.keys()].join() === AUTH_REQUEST_PARAM,
+      "reference stripped from the code door",
     ).toBe(true);
+    expectEnteredThrough(guest, world.hostBaseUrl, {
+      pathname: "/login",
+      method: "code",
+      returnTo: "/account",
+    });
     const cdp = await state.context.newCDPSession(guest);
     try {
       const history = await cdp.send("Page.getNavigationHistory");

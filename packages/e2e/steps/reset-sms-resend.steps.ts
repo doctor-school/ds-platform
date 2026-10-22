@@ -1,4 +1,6 @@
-﻿import { randomUUID } from "node:crypto";
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { randomUUID } from "node:crypto";
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import {
   expect,
   type Browser,
@@ -66,7 +68,8 @@ async function privatePage(browser: Browser, state: ResendReset, base: string) {
   context.on("request", (request) => {
     if (
       request.method() === "POST" &&
-      new URL(request.url()).pathname === "/v1/auth/password/reset"
+      new URL(request.url()).pathname ===
+        signInHostApiPath("/v1/auth/password/reset")
     )
       state.requests++;
   });
@@ -126,7 +129,10 @@ async function sameOwner(page: Page, state: ResendReset) {
   state.subject ??= result.subject;
 }
 async function requestResult(page: Page, state: ResendReset) {
-  const result = await captureResponse(page, "/v1/auth/password/reset");
+  const result = await captureResponse(
+    page,
+    signInHostApiPath("/v1/auth/password/reset"),
+  );
   let matches = false;
   try {
     matches =
@@ -182,7 +188,7 @@ Given(
     journeys.set(page, state);
     const owner = await privatePage(browser, state, world.hostBaseUrl);
     state.owner = owner;
-    const { response, code } = await registerOwnedCredentials(
+    const { response, body, code } = await registerOwnedCredentials(
       owner,
       world.hostBaseUrl,
       state,
@@ -191,7 +197,7 @@ Given(
     expect(
       registrationEvidence(
         response.request().postData() ?? "",
-        await response.text(),
+        body,
         state,
       ),
     ).toEqual({
@@ -199,7 +205,10 @@ Given(
       consentMatches: true,
       acknowledgementMatches: true,
     });
-    const pending = captureResponse(owner, "/v1/auth/verify");
+    const pending = captureResponse(
+      owner,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       owner.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -212,6 +221,7 @@ Given(
         verified.body,
         state,
         code,
+        world.hostBaseUrl,
       ),
     }).toEqual({
       status: 200,
@@ -315,7 +325,10 @@ Then(
       reset.locator('input[autocomplete="new-password"]'),
       state.newPassword,
     );
-    const pending = captureResponse(reset, "/v1/auth/password/reset/complete");
+    const pending = captureResponse(
+      reset,
+      signInHostApiPath("/v1/auth/password/reset/complete"),
+    );
     await reset.locator('form button[type="submit"]').click();
     const completed = await pending;
     let matches = false;
@@ -325,7 +338,7 @@ Then(
         body.identifier === state.phone &&
         body.code === state.code &&
         body.newPassword === state.newPassword &&
-        completed.body === '{"status":"reset_completed"}';
+        storefrontCallbackAcknowledgement(completed.body, world.hostBaseUrl);
     } catch {
       /* Discard secret-bearing diagnostics. */
     }
@@ -375,7 +388,10 @@ Then(
         target.locator('input[autocomplete="current-password"]'),
         password,
       );
-      const result = captureResponse(target, "/v1/auth/login");
+      const result = captureResponse(
+        target,
+        signInHostApiPath("/v1/auth/login"),
+      );
       await target.getByTestId("password-login-submit").click();
       return { target, result: await result };
     };

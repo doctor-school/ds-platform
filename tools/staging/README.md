@@ -100,6 +100,22 @@ navigation: it routes only Yandex's `captcha.js` to a stub that resolves the rea
 widget with the token, so the `x-smartcaptcha-token` header, the api guard and the
 provider all run for real. The owner's Stage-B judges only how the widget looks.
 
+## Storefront redeem secrets per slot (#3172)
+
+The slot's root-only `/etc/ds-platform/slots/<slot>.sign-in.env` also carries the
+storefront clients' `private_key_jwt` keys `IDP_{ACADEMY,DOCTOR}_CLIENT_KEY` (Zitadel
+JSON application keys: kept while the key id is still listed on the slot's app,
+re-minted when revoked or absent) and the slot's `INTERNAL_API_TOKEN` (32 random bytes,
+kept across converges), written by the «converge the slot's sign-in host clients and
+env» step; only key ids and kept/minted verdicts are logged, and a key the IdP cannot
+produce refuses the converge before the file or the api changes. Only the api mounts
+that file. The same converge writes the root-only `/etc/ds-platform/slots/<slot>.internal.env`
+(0600) with `INTERNAL_API_TOKEN` alone — the api's value, sliced from the same rendering —
+and the portal and doctor containers mount only that one, so a storefront server never
+holds a client key or the record key. The two storefronts call the slot api at
+`INTERNAL_API_URL=http://api:3000` (compose network, never a public host). `down`
+touches both files (compose loads every env_file) and a preview's `down` removes both.
+
 ## API mail transport and safe configuration recovery (#2274)
 
 `renderSlotEnv` always emits `MAILER_SMTP_HOST=mailpit`,

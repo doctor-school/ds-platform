@@ -1,3 +1,4 @@
+import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomInt, randomUUID } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -163,13 +164,16 @@ When(
   async ({ page }) => {
     const state = visitor(page);
     state.requestedAt = await captureSmsCheckpoint(state.sink, state.phone);
-    const pending = captureResponse(page, "/v1/auth/login/otp/request");
+    const pending = captureResponse(
+      page,
+      signInHostApiPath("/v1/auth/login/otp/request"),
+    );
     await page.getByTestId("otp-send").click();
     const captured = await pending;
     let requestMatches = false;
     let neutral = false;
     try {
-      const submitted = captured.response.request().postDataJSON();
+      const submitted = hostCommand(captured.response.request().postDataJSON());
       requestMatches =
         Object.keys(submitted).sort().join(",") === "channel,identifier" &&
         submitted.channel === "sms" &&

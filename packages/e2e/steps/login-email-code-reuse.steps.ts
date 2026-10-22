@@ -1,3 +1,5 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -112,7 +114,7 @@ Given(
       baseURL ?? "",
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
-    const { response, code } = await registerOwnedCredentials(
+    const { response, body, code } = await registerOwnedCredentials(
       owned,
       world.hostBaseUrl,
       state,
@@ -121,7 +123,7 @@ Given(
     expect(
       registrationEvidence(
         response.request().postData() ?? "",
-        await response.text(),
+        body,
         state,
       ),
     ).toEqual({
@@ -129,17 +131,19 @@ Given(
       consentMatches: true,
       acknowledgementMatches: true,
     });
-    const verified = captureResponse(owned, "/v1/auth/verify").then(
-      ({ response, body }) => ({
-        response,
-        evidence: verificationEvidence(
-          response.request().postData() ?? "",
-          body,
-          state,
-          code,
-        ),
-      }),
-    );
+    const verified = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/verify"),
+    ).then(({ response, body }) => ({
+      response,
+      evidence: verificationEvidence(
+        response.request().postData() ?? "",
+        body,
+        state,
+        code,
+        world.hostBaseUrl,
+      ),
+    }));
     await inputSecret(
       owned.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -207,11 +211,11 @@ When(
     );
     const requested = captureResponse(
       state.page,
-      "/v1/auth/login/otp/request",
+      signInHostApiPath("/v1/auth/login/otp/request"),
     ).then(({ response, body }) => {
       let matches = false;
       try {
-        const request = response.request().postDataJSON();
+        const request = hostCommand(response.request().postDataJSON());
         matches =
           request.identifier === state.email &&
           request.channel === "email" &&
@@ -283,26 +287,27 @@ Then(
 
 When(
   "the owned verified account submits that delivered sign-in code for consumed-code replay",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const state = login(page);
     if (!state.code) throw new Error("Verified sign-in mail has not been read");
-    const accepted = captureResponse(state.page, "/v1/auth/login/otp").then(
-      ({ response, body }) => {
-        let matches = false;
-        try {
-          const request = response.request().postDataJSON();
-          matches =
-            request.identifier === state.email &&
-            request.channel === "email" &&
-            request.code === state.code &&
-            Object.keys(request).length === 3 &&
-            body === '{"status":"authenticated"}';
-        } catch {
-          // Discard code-bearing parser diagnostics.
-        }
-        return { response, matches };
-      },
-    );
+    const accepted = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/login/otp"),
+    ).then(({ response, body }) => {
+      let matches = false;
+      try {
+        const request = hostCommand(response.request().postDataJSON());
+        matches =
+          request.identifier === state.email &&
+          request.channel === "email" &&
+          request.code === state.code &&
+          Object.keys(request).length === 3 &&
+          storefrontCallbackAcknowledgement(body, world.hostBaseUrl);
+      } catch {
+        // Discard code-bearing parser diagnostics.
+      }
+      return { response, matches };
+    });
     await inputSecret(
       state.page.locator('input[autocomplete="one-time-code"]'),
       state.code,
@@ -371,7 +376,10 @@ Then(
         (await guest.cookies()).some((cookie) => cookie.name === SESSION),
         "replay starts without the owner's session",
       ).toBe(false);
-      const pending = captureResponse(visitor, "/v1/auth/login/otp");
+      const pending = captureResponse(
+        visitor,
+        signInHostApiPath("/v1/auth/login/otp"),
+      );
       const evidence = await visitor.evaluate(
         async ({ identifier, code }) => {
           const response = await fetch("/v1/auth/login/otp", {
@@ -488,12 +496,10 @@ After("@login-email-code-reuse", async ({ page }) => {
   if (cleanupFailed) {
     if (test.info().status === test.info().expectedStatus)
       throw new Error("Owned email-code session cleanup failed");
-    test
-      .info()
-      .annotations.push({
-        type: "cleanup-failed",
-        description:
-          "Owned email-code session cleanup failed; original failure preserved; lead must inspect scoped cleanup.",
-      });
+    test.info().annotations.push({
+      type: "cleanup-failed",
+      description:
+        "Owned email-code session cleanup failed; original failure preserved; lead must inspect scoped cleanup.",
+    });
   }
 });

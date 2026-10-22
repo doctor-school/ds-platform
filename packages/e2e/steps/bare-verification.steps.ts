@@ -1,3 +1,6 @@
+import { AUTH_REQUEST_PARAM, isSignInHostForm } from "../lib/sign-in-host-api.js";
+import { isAuthCommandPath } from "../lib/sign-in-host-api.js";
+import { TOP_LEVEL_NAVIGATION_HEADERS } from "../lib/storefront-entry.js";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
@@ -35,13 +38,22 @@ async function expectReplacement(
   base: string,
   returnTo: string | null,
 ) {
+  // #3172 — the storefront's `/verify` is an entry into the registration door
+  // of the sign-in host: the replacement happens server-side (a `303`), so the
+  // page settles on the host's `/register` carrying only the IdP's auth
+  // request; the return target rides the transaction, never the form URL.
   await expect(page.getByTestId("registration-form")).toBeVisible();
   const url = new URL(page.url());
-  expect(url.origin).toBe(new URL(base).origin);
+  expect(isSignInHostForm(url)).toBe(true);
+  expect(url.origin).not.toBe(new URL(base).origin);
   expect(url.pathname).toBe("/register");
-  expect(url.searchParams.get("returnTo")).toBe(returnTo);
-  expect([...url.searchParams.keys()]).toEqual(returnTo ? ["returnTo"] : []);
-  if (!returnTo) expect(url.search).toBe("");
+  expect([...url.searchParams.keys()]).toEqual([AUTH_REQUEST_PARAM]);
+  const entry = entries.get(page);
+  expect(entry?.origin, "the arrival entered through the storefront").toBe(
+    new URL(base).origin,
+  );
+  expect(entry?.pathname).toBe("/verify");
+  expect(entry?.searchParams.get("returnTo") ?? null).toBe(returnTo);
   await expectNoVerificationRender(page);
   expect(await page.evaluate(() => window.history.length)).toBeLessThanOrEqual(
     2,
@@ -52,8 +64,17 @@ async function expectReplacement(
   await page.goForward();
   await expect(page.getByTestId("registration-form")).toBeVisible();
   expect(new URL(page.url()).pathname).toBe("/register");
-  expect(new URL(page.url()).searchParams.get("returnTo")).toBe(returnTo);
   await expectNoVerificationRender(page);
+}
+
+/** The first request of the arrival's redirect chain (the storefront entry). */
+const entries = new WeakMap<Page, URL>();
+
+async function arrive(page: Page, target: string): Promise<void> {
+  const response = await page.goto(target);
+  let request = response?.request() ?? null;
+  while (request?.redirectedFrom()) request = request.redirectedFrom();
+  if (request) entries.set(page, new URL(request.url()));
 }
 
 Given(
@@ -69,7 +90,7 @@ Given(
     arrivals.set(page, state);
     expect(await context.cookies()).toEqual([]);
     context.on("request", (request) => {
-      if (new URL(request.url()).pathname.startsWith("/v1/auth/")) {
+      if (isAuthCommandPath(new URL(request.url()).pathname)) {
         state.authRequests += 1;
       }
     });
@@ -111,7 +132,7 @@ When(
   /^that visitor opens bare \/verify and the route mounts$/,
   async ({ page, world }) => {
     const state = arrival(page);
-    await state.page.goto(new URL("/verify", world.hostBaseUrl).toString());
+    await arrive(state.page, new URL("/verify", world.hostBaseUrl).toString());
     await state.page.waitForURL((url) => url.pathname === "/register");
     await state.page.waitForLoadState("networkidle");
   },
@@ -128,12 +149,16 @@ Then(
   "the bare verification server HTML and mounted journey render no verification step, generic account description or auth frame",
   async ({ page, world }) => {
     const state = arrival(page);
+    // #3172 — the storefront's `/verify` renders no document at all: it is a
+    // `303` entry with an empty body (the host's step HTML is pinned by the
+    // sign-in host tier, `apps/login/e2e/academy-verify-bare-entry`).
     const response = await state.context.request.get(
       new URL("/verify", world.hostBaseUrl).toString(),
+      { maxRedirects: 0, headers: TOP_LEVEL_NAVIGATION_HEADERS },
     );
-    expect(response.status()).toBe(200);
-    expect(response.headers()["content-type"]).toContain("text/html");
+    expect(response.status()).toBe(303);
     const html = await response.text();
+    expect(html).toBe("");
     expect(html).not.toContain('data-testid="verify-card"');
     expect(html).not.toContain("ваш аккаунт");
     expect(html).not.toContain('data-testid="auth-wordmark"');
@@ -148,7 +173,7 @@ When(
     state.page = await state.context.newPage();
     const target = new URL("/verify", world.hostBaseUrl);
     target.searchParams.set("returnTo", RETURN_TO);
-    await state.page.goto(target.toString());
+    await arrive(state.page, target.toString());
     await state.page.waitForURL((url) => url.pathname === "/register");
     await state.page.waitForLoadState("networkidle");
   },

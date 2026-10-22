@@ -1,3 +1,4 @@
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -98,7 +99,10 @@ Given(
       },
       "/account",
     );
-    const verifying = captureResponse(state.owner, "/v1/auth/verify");
+    const verifying = captureResponse(
+      state.owner,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       state.owner.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -144,7 +148,9 @@ Then(
       ...(httpCredentials ? { httpCredentials } : {}),
     });
     const copied = await state.copiedContext.newPage();
-    await copied.goto(`${world.hostBaseUrl}/login`, { waitUntil: "load" });
+    // #3172: `/login` is an entry that leaves for the sign-in host now; the
+    // copied cookie is replayed from an ordinary public storefront page.
+    await copied.goto(`${world.hostBaseUrl}/`, { waitUntil: "load" });
     await copied.waitForLoadState("networkidle");
     await state.copiedContext.addCookies([state.cookie]);
     const fingerprint = await copied.evaluate(() => ({

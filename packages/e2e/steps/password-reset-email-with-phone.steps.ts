@@ -1,3 +1,4 @@
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -96,7 +97,7 @@ Given(
       { email: state.email, password: `Owned-${randomUUID()}-aA1!` },
       "/account",
     );
-    const verified = post(account, "/v1/auth/verify");
+    const verified = post(account, signInHostApiPath("/v1/auth/verify"));
     await inputSecret(
       account.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -172,7 +173,10 @@ When(
       ),
       sms: await captureSmsCheckpoint(state.sink, state.phone),
     };
-    const pending = post(state.guest, "/v1/auth/password/reset");
+    const pending = post(
+      state.guest,
+      signInHostApiPath("/v1/auth/password/reset"),
+    );
     await state.guest.getByTestId("reset-request-submit").click();
     const response = await pending;
     expect(response.status(), "neutral reset status").toBe(200);

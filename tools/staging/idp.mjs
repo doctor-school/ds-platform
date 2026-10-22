@@ -809,8 +809,8 @@ export function planStorefrontClients({ slots, baseDomain, existing }) {
 /**
  * Converge the per-slot storefront clients to the live slot set (created on
  * `up`/`sync`, removed on `down` and by the sweep). Read-before-write; any failed hop
- * aborts as an `IdpError`. Only names and app ids are logged — no client key exists
- * here (private_key_jwt keys are minted by the API-side wiring).
+ * aborts as an `IdpError`. Only names and app ids are logged; the clients'
+ * private_key_jwt keys are {@link ensureStorefrontClientKeys}'s.
  */
 export async function convergeStorefrontClients({
   client,
@@ -830,14 +830,17 @@ export async function convergeStorefrontClients({
   // The api's sign-in-host client map (003 EARS-60) needs each slot's ids; a client id
   // is public (it travels in every authorize URL), so it may be returned and logged.
   const clientIds = {};
+  const appIds = {};
   for (const app of found?.result ?? []) {
     if (SLOT_STOREFRONT_APP_RE.test(app?.name ?? "") && app?.oidcConfig?.clientId) {
       clientIds[app.name] = app.oidcConfig.clientId;
+      if (app.id) appIds[app.name] = app.id;
     }
   }
   for (const { name, body } of plan.create) {
     const created = await client.request("POST", `${appsPath}/oidc`, { name, ...body });
     if (created?.clientId) clientIds[name] = created.clientId;
+    if (created?.appId) appIds[name] = created.appId;
     log(`  ↳ idp storefront client ${name} created (appId ${created?.appId ?? "?"})`);
   }
   for (const { appId, name, body } of plan.update) {
@@ -849,8 +852,68 @@ export async function convergeStorefrontClients({
     log(`  ↳ idp storefront client ${name} removed (no live slot)`);
   }
   if (plan.keep) log(`  ↳ idp storefront clients already converged: ${plan.keep}`);
-  for (const { name } of plan.remove) delete clientIds[name];
-  return { projectId, ...plan, clientIds };
+  for (const { name } of plan.remove) {
+    delete clientIds[name];
+    delete appIds[name];
+  }
+  return { projectId, ...plan, clientIds, appIds };
+}
+
+/**
+ * The key id of a stored storefront client key — base64 of Zitadel's JSON
+ * application key file `{type:"application",keyId,key,appId,clientId}`, the shape
+ * the api env schema accepts — when it belongs to `appId`; else `null`.
+ */
+export function storefrontClientKeyId(value, appId) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return null;
+  try {
+    const file = JSON.parse(Buffer.from(value, "base64").toString("utf8"));
+    return file?.type === "application" &&
+      file.appId === appId &&
+      typeof file.key === "string" &&
+      typeof file.keyId === "string" &&
+      file.keyId
+      ? file.keyId
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 003 EARS-62 (ADR-0015 §4): the private_key_jwt keys of `slot`'s two storefront
+ * clients. A stored key (`existing[storefront]`) is kept while its keyId is still
+ * listed on its app (ListAppKeys); a missing, foreign or revoked one is replaced by
+ * a fresh JSON key (AddAppKey `{"type":"KEY_TYPE_JSON"}` → `keyDetails`). Returns
+ * `{ keys: { academy, doctor }, minted: [storefront…] }`. The key values are
+ * returned to the caller's secret-file writer only — the log carries key ids and
+ * verdicts, never a value. Any failed hop or unusable answer is an `IdpError`.
+ */
+export async function ensureStorefrontClientKeys({ client, projectId, result, slot, existing = {}, log = () => {} }) {
+  const keys = {};
+  const minted = [];
+  for (const storefront of STOREFRONTS) {
+    const name = storefrontAppName(storefront, slot);
+    const appId = result?.appIds?.[name];
+    if (!appId) {
+      throw new IdpError(`the IdP returned no app id for ${name} — cannot key the slot's storefront client`);
+    }
+    const keysPath = `/management/v1/projects/${projectId}/apps/${appId}/keys`;
+    const listed = await client.request("POST", `${keysPath}/_search`, {});
+    const storedId = storefrontClientKeyId(existing[storefront], appId);
+    if (storedId && (listed?.result ?? []).some((key) => key?.id === storedId)) {
+      keys[storefront] = existing[storefront];
+      log(`  ↳ idp storefront client ${name}: key ${storedId} kept`);
+      continue;
+    }
+    const added = await client.request("POST", keysPath, { type: "KEY_TYPE_JSON" });
+    const keyId = storefrontClientKeyId(added?.keyDetails, appId);
+    if (!keyId) throw new IdpError(`the IdP returned no usable JSON key for ${name}`);
+    keys[storefront] = added.keyDetails;
+    minted.push(storefront);
+    log(`  ↳ idp storefront client ${name}: key ${keyId} minted`);
+  }
+  return { keys, minted };
 }
 
 /**

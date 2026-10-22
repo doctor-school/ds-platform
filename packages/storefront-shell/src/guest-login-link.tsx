@@ -1,6 +1,5 @@
 "use client";
 
-import NextLink from "next/link";
 import { usePathname } from "next/navigation";
 import { formatLandOnlyReturnTarget } from "@ds/schemas";
 import { Button } from "@ds/design-system/button";
@@ -35,6 +34,10 @@ export function guestLoginHref(
 /**
  * The client half of the guest cluster: the chrome is mounted from a layout, so
  * only the client knows the page it is drawn on (`usePathname`).
+ *
+ * 003 EARS-61 — a plain `<a>`, not a Next router link: the entry acts only on a
+ * top-level document navigation, and a router link would prefetch it (one
+ * sign-in transaction per guest page view) and soft-navigate on the click.
  */
 export function GuestLoginLink({
   loginHref,
@@ -46,12 +49,9 @@ export function GuestLoginLink({
   const pathname = usePathname();
   return (
     <Button asChild variant="on-primary" size="chip">
-      <NextLink
-        href={guestLoginHref(loginHref, pathname)}
-        data-testid="shell-login"
-      >
+      <a data-testid="shell-login" href={guestLoginHref(loginHref, pathname)}>
         {label}
-      </NextLink>
+      </a>
     </Button>
   );
 }

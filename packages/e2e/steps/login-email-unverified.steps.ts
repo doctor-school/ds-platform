@@ -1,3 +1,8 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { hostCommand,
+  isAuthCommandPath,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -72,7 +77,7 @@ Given(
     logins.set(page, state);
     owned.on("request", (request) => {
       const pathname = new URL(request.url()).pathname;
-      if (request.method() === "POST" && pathname.startsWith("/v1/auth/"))
+      if (request.method() === "POST" && isAuthCommandPath(pathname))
         state.authPosts.push(pathname);
     });
     await prepareCaptchaForJourney(
@@ -80,7 +85,10 @@ Given(
       baseURL ?? "",
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
-    const registered = captureResponse(owned, "/v1/auth/register");
+    const registered = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/register"),
+    );
     await registerOwnedCredentials(owned, world.hostBaseUrl, state, "/account");
     const registration = await registered;
     expect(
@@ -95,7 +103,7 @@ Given(
       acknowledgementMatches: true,
     });
     expect(state.authPosts, "registration code remains unconsumed").toEqual([
-      "/v1/auth/register",
+      signInHostApiPath("/v1/auth/register"),
     ]);
     await assertNoPrivateRegistrationAccess(
       owned,
@@ -125,7 +133,10 @@ When(
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
     );
-    const requested = captureResponse(state.page, "/v1/auth/login/otp/request");
+    const requested = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/login/otp/request"),
+    );
     await state.page.getByTestId("otp-send").click();
     state.requested = await requested;
   },
@@ -136,7 +147,7 @@ Then(
   async ({ page }) => {
     const state = login(page);
     const requested = state.requested!;
-    const request = parsedObject(requested.response.request().postData() ?? "");
+    const request = hostCommand(parsedObject(requested.response.request().postData() ?? ""));
     expect(
       request.identifier === state.email && request.channel === "email",
       "code request belongs to the owned email",
@@ -226,18 +237,20 @@ Then(
 
 When(
   "that unverified account enters the fresh sign-in mail's six digits once on Academy's code step",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const state = login(page);
-    const accepted = captureResponse(state.page, "/v1/auth/login/otp");
+    const accepted = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/login/otp"),
+    );
     await inputSecret(
       state.page.locator('input[autocomplete="one-time-code"]'),
       state.code!,
     );
     state.accepted = await accepted;
-    const request = parsedObject(
+    const request = hostCommand(parsedObject(
       state.accepted.response.request().postData() ?? "",
-    );
-    const response = parsedObject(state.accepted.body);
+    ));
     expect(
       state.accepted.response.status(),
       "fresh sign-in code accepted",
@@ -248,9 +261,10 @@ When(
         request.identifier === state.email &&
         request.channel === "email" &&
         request.code === state.code,
-      acknowledgementMatches:
-        Object.keys(response).length === 1 &&
-        response.status === "authenticated",
+      acknowledgementMatches: storefrontCallbackAcknowledgement(
+        state.accepted.body,
+        world.hostBaseUrl,
+      ),
     }).toEqual({ requestMatches: true, acknowledgementMatches: true });
   },
 );
@@ -305,9 +319,9 @@ Then(
       state.authPosts,
       "one code request and one automatic acceptance",
     ).toEqual([
-      "/v1/auth/register",
-      "/v1/auth/login/otp/request",
-      "/v1/auth/login/otp",
+      signInHostApiPath("/v1/auth/register"),
+      signInHostApiPath("/v1/auth/login/otp/request"),
+      signInHostApiPath("/v1/auth/login/otp"),
     ]);
   },
 );

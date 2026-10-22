@@ -2,7 +2,7 @@ import { GOLDEN_WORKER_POOL_SIZE } from "@ds/db/seed/golden";
 import { defineConfig, devices } from "@playwright/test";
 import { defineBddConfig } from "playwright-bdd";
 
-import { HOSTS } from "./hosts.js";
+import { HOSTS, SIGN_IN_HOST } from "./hosts.js";
 import { authLimitTagsFor } from "./lib/default-auth-limits.js";
 import { publicLogEnabled, reportersFor } from "./lib/reporters.js";
 
@@ -191,6 +191,19 @@ export default defineConfig({
       testDir: "./derived",
       testMatch: /.*\.walk\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"] },
+    },
+    // ── The sign-in host (ADR-0015 §4, #3171) ────────────────────────────────
+    // Its own shape (no navigation model, no legal documents, no events path),
+    // so it is neither a Gherkin host project nor a walk target: plain specs in
+    // `./sign-in-host`, addressed at `login-<slot>` through E2E_LOGIN_URL.
+    {
+      name: "login",
+      testDir: "./sign-in-host",
+      testMatch: /.*\.spec\.ts$/,
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: process.env[SIGN_IN_HOST.baseUrlEnv],
+      },
     },
   ],
 });

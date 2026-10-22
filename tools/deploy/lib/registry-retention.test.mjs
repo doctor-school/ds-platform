@@ -16,7 +16,7 @@ import {
 
 const sha = (n) => n.toString(16).padStart(40, "0");
 const digest = (n) => `sha256:${n.toString(16).padStart(64, "0")}`;
-const RELEASE_REPOS = ["api", "api-migrate", "portal", "admin", "doctor"];
+const RELEASE_REPOS = ["api", "api-migrate", "portal", "admin", "doctor", "login"];
 
 /** Every image repo carries the same tags; `pr/*` the same PR tags. */
 function registry(mainTags, prTags = []) {
@@ -49,7 +49,7 @@ function baseInput(overrides = {}) {
   };
 }
 
-test("retentionRepos: the five release repos and their pr/ twins", () => {
+test("retentionRepos: the six release repos and their pr/ twins", () => {
   assert.deepEqual(retentionRepos(), [
     ...RELEASE_REPOS,
     ...RELEASE_REPOS.map((n) => `pr/${n}`),

@@ -2,6 +2,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { NextConfig } from "next";
+
+import { bffApiRewrite } from "@ds/schemas/internal-api";
 import createNextIntlPlugin from "next-intl/plugin";
 
 const configDir = path.dirname(fileURLToPath(import.meta.url));
@@ -81,7 +83,8 @@ const config: NextConfig = {
   // portal never needs CORS or an absolute api URL in client code.
   async rewrites() {
     return [
-      { source: "/v1/:path*", destination: `${API_PROXY_TARGET}/v1/:path*` },
+      // ADR-0015 §4 req 2: the shared source refuses the internal API prefix.
+      bffApiRewrite(API_PROXY_TARGET),
     ];
   },
   // 003 EARS-44 leak control: `/login` may carry a Congress hand-off reference

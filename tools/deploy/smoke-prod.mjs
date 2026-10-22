@@ -3,7 +3,7 @@
 // (tools/dev/smoke.mjs) retargeted at the live public prod origins.
 //
 // Unlike the dev smoke — which probes internal LAN service ports read from a
-// personal `.env.local` — this drives the FIVE public prod hostnames end to
+// personal `.env.local` — this drives the public prod hostnames end to
 // end, over real TLS, exactly as a browser / the api's callers reach them:
 //
 //   api    GET https://api.doctor.school/v1/health   → 200 + status:"ok" (+ SHA)
@@ -21,6 +21,8 @@
 //          storefront renders; #1723. TEMPORARY host until the doctor.school
 //          cut-over — override with PROD_DOCTOR_HOST; set it EMPTY or to
 //          `skip` to skip both doctor probes while the A-record is pending)
+//   sign-in host GET https://login.doctor.school/healthz → 200 "ok" (#3171;
+//          PROD_LOGIN_HOST=skip for a target that ships no ds-login image)
 //   chat   GET https://api.doctor.school/connection/websocket → < 500 (Caddy →
 //          centrifugo route alive; a non-upgrade GET draws Centrifugo's 400,
 //          while a down/unrouted centrifugo surfaces Caddy's 502; #729)
@@ -41,7 +43,7 @@
 //          disabled on the default login policy by provision.sh 8.quater) —
 //          non-200 / redirect-away / 200 without a form field all pass; a
 //          200 register FORM fails the smoke.
-//   TLS    api. / academy. / admin. / id. / new.doctor.school → cert valid, not
+//   TLS    api. / academy. / admin. / id. / new. / login.doctor.school → cert valid, not
 //          near expiry
 //
 // The prod hostnames ARE the contract here (Caddy vhosts + Beget A-records +
@@ -81,10 +83,11 @@ const ID_HOST = process.env.PROD_ID_HOST || "id.doctor.school";
 // ACME decides whether prod is considered healthy.
 // Exported for unit tests: the switch is pure string classification, so it is
 // pinned without touching process.env at import time.
-export function isDoctorProbeSkipped(rawValue) {
-  const v = (rawValue ?? "new.doctor.school").trim().toLowerCase();
+export function isProbeSkipped(rawValue, defaultHost) {
+  const v = (rawValue ?? defaultHost).trim().toLowerCase();
   return v === "" || v === "skip";
 }
+export const isDoctorProbeSkipped = (rawValue) => isProbeSkipped(rawValue, "new.doctor.school");
 const DOCTOR_HOST_RAW = (
   process.env.PROD_DOCTOR_HOST ?? "new.doctor.school"
 ).trim();
@@ -96,6 +99,28 @@ const DOCTOR_HOST = DOCTOR_PROBES_SKIPPED
   : DOCTOR_HOST_RAW;
 const DOCTOR_SKIP_REASON =
   "doctor probes skipped — host not routed yet (#1723); unset PROD_DOCTOR_HOST once the Beget A-record is live";
+// The sign-in host (ADR-0015 §4, #3171). Same switch semantics as the doctor
+// host: a deploy TARGET that predates the sign-in host ships no ds-login image
+// and no login vhost (prod.mjs sets PROD_LOGIN_HOST=skip for it, #1896). The
+// code default stays probe-on: its DNS record is a release prerequisite of the
+// release that adds the vhost, never a reason to skip.
+export const isLoginProbeSkipped = (rawValue) => isProbeSkipped(rawValue, "login.doctor.school");
+const LOGIN_HOST_RAW = (process.env.PROD_LOGIN_HOST ?? "login.doctor.school").trim();
+const LOGIN_PROBES_SKIPPED = isLoginProbeSkipped(process.env.PROD_LOGIN_HOST);
+const LOGIN_HOST = LOGIN_PROBES_SKIPPED ? "login.doctor.school" : LOGIN_HOST_RAW;
+const LOGIN_SKIP_REASON =
+  "sign-in host probes skipped — the deploy target ships no ds-login image (#3171)";
+
+/**
+ * The smoke's `image -> env opt-out` contract (#1896): a deploy target whose
+ * compose ships no such image has no such vhost, and prod.mjs sets the named
+ * variable to `skip` for that smoke.
+ */
+export const OPTIONAL_VHOST_PROBES = Object.freeze({
+  "ds-doctor": "PROD_DOCTOR_HOST",
+  "ds-login": "PROD_LOGIN_HOST",
+});
+
 // PUBLIC OIDC client id (api.env IDP_CLIENT_ID — visible in every browser
 // authorize URL, NOT a credential). Opt-in: enables the full cookie-less
 // authorize→login flow probe; unset ⇒ that one probe prints SKIP.
@@ -488,6 +513,19 @@ async function probeDoctor() {
   return `${res.status} (doctor storefront renders)`;
 }
 
+// The sign-in host (#3171): its /healthz answers "ok" from the container
+// (apps/login/app/healthz/route.ts) — 200 + that body proves the container is
+// up AND the login vhost routes to it. Every page route asks the api first
+// (003 EARS-70), so a page would mix the api's health into this probe.
+async function probeSignInHost() {
+  if (LOGIN_PROBES_SKIPPED) throw new SkipProbe(LOGIN_SKIP_REASON);
+  const res = await httpsGet(`https://${LOGIN_HOST}/healthz`);
+  if (res.status !== 200 || res.body.trim() !== "ok") {
+    throw new Error(`/healthz → ${res.status}`);
+  }
+  return "200 (sign-in host routed)";
+}
+
 // The Caddy → centrifugo route (#729): a plain GET (no websocket upgrade) draws
 // Centrifugo's own 400, so any < 500 proves the container is up AND routed;
 // 502 = centrifugo down; 404 = the Caddy handle block is missing.
@@ -506,6 +544,7 @@ const PROBES = [
   ["portal /verify cold", probeVerifyCold],
   ["admin /", probeAdmin],
   ["doctor /", probeDoctor],
+  ["sign-in host /healthz", probeSignInHost],
   ["chat ws route", probeChatRoute],
   ["login cold loginname", probeLoginCold],
   ["login cold flow", probeLoginColdFlow],
@@ -521,6 +560,13 @@ const PROBES = [
       return probeTls(DOCTOR_HOST);
     },
   ],
+  [
+    `TLS ${LOGIN_HOST}`,
+    () => {
+      if (LOGIN_PROBES_SKIPPED) throw new SkipProbe(LOGIN_SKIP_REASON);
+      return probeTls(LOGIN_HOST);
+    },
+  ],
 ];
 
 function withTimeout(promise, ms) {
@@ -534,7 +580,7 @@ function withTimeout(promise, ms) {
 
 async function main() {
   console.log(
-    `prod smoke — api=${API_HOST} portal=${PORTAL_HOST} admin=${ADMIN_HOST} id=${ID_HOST} doctor=${DOCTOR_PROBES_SKIPPED ? "SKIPPED (not routed yet, #1723)" : DOCTOR_HOST}` +
+    `prod smoke — api=${API_HOST} portal=${PORTAL_HOST} admin=${ADMIN_HOST} id=${ID_HOST} doctor=${DOCTOR_PROBES_SKIPPED ? "SKIPPED (not routed yet, #1723)" : DOCTOR_HOST} login=${LOGIN_PROBES_SKIPPED ? "SKIPPED (not in the target, #3171)" : LOGIN_HOST}` +
       (EXPECT_SHA ? ` — expect-sha=${EXPECT_SHA}` : "") +
       ` — ${new Date().toISOString()}`,
   );

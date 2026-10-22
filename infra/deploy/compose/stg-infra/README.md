@@ -493,6 +493,26 @@ converge, so `sync` already is its reset), `--yes` is mandatory, `ds_golden` is 
 touched, and every run appends one audit line to `/var/log/ds-platform/slot.log`
 **before** it drops anything.
 
+**The sign-in host per slot (#3171, ADR-0015 §4).** Every slot serves its sign-in host
+at `login-<slot>.<base>` (the `login` container, port 3005), the Login V2 base URI its
+`ds-storefront-{academy,doctor}-<slot>` clients carry. Before `up -d`, the converge step
+«converge the slot's sign-in host clients and env» converges those two clients, reads
+their client ids and writes the root-only `/etc/ds-platform/slots/<slot>.sign-in.env`
+(0600): `IDP_{ACADEMY,DOCTOR}_CLIENT_ID` plus a per-slot `SIGN_IN_RECORD_KEY`, minted by
+the tool on the first converge (32 random bytes) and kept on every later one; only
+«kept»/«minted» is logged. The non-secret half (`IDP_SIGN_IN_BASE_URI`, the storefront
+`/login` URLs) is in `<slot>.env`. So the api's sign-in-host module is ON in every slot.
+`down` of a preview removes the file; `main` keeps its key. Nothing here is in `stage.env`.
+
+The sign-in host only renders once the stage instance runs Login V2 **per app**: the
+instance flag `loginV2.required` must be `false`, or Zitadel sends every app to the
+shared Login V2 UI and never to `login-<slot>`. That flag is a ONE-OFF instance setting,
+not per-slot state: it is flipped by the `provision.sh` run described in «Zitadel
+converge» (the Login V2 per app paragraph), in that order, once — the slot converge does
+not touch it. Before the first slot routes `login-<slot>`, confirm the stage instance
+answers `loginV2.required: false` (Console → Instance → Features, or `GET
+/v2/features/instance`); if it is still `true`, run that provision step first.
+
 **No registry, no rendered includes.** Nothing on the box records which slots exist:
 `docker ps` and its compose-project labels are the single authority, and `status` reads
 them live. The edge no longer mounts anything generated — see «The edge is static» below —

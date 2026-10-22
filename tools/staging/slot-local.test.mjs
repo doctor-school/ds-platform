@@ -25,6 +25,7 @@ const IMAGES = Object.freeze({
   portal: `${IMAGE_REGISTRY}/portal@${digestOf("c")}`,
   admin: `${IMAGE_REGISTRY}/admin@${digestOf("d")}`,
   doctor: `${IMAGE_REGISTRY}/doctor@${digestOf("e")}`,
+  login: `${IMAGE_REGISTRY}/login@${digestOf("f")}`,
 });
 const SUBJECTS = Object.fromEntries(GOLDEN_SUBJECT_ENV_VARS.map((name, i) => [name, `sub-${i + 1}`]));
 

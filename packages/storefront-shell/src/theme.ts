@@ -43,6 +43,8 @@ export function persistTheme(theme: Theme): void {
   } catch {
     // Storage unavailable — the choice still applies for this document.
   }
+  // The sign-in host reads the choice from the cookie (#3171, below).
+  writeThemeCookie(theme);
   applyTheme(theme);
 }
 
@@ -82,3 +84,82 @@ export const THEME_INIT_SCRIPT = `(function () {
       window.matchMedia("${SYSTEM_DARK_QUERY}").matches);
   document.documentElement.classList.toggle("dark", dark);
 })();`;
+
+// --- the explicit choice as a cross-host preference cookie (#3171) -----------
+// The sign-in host is its own origin (ADR-0015 §4), so `localStorage` there
+// never sees the storefront's choice. The storefront therefore mirrors it into
+// a non-auth preference cookie for its parent domain, which the host reads
+// server-side. A display preference, not an auth cookie: ADR-0015 §4 req 4
+// (host-only cookies) governs auth cookies only.
+
+/** Name of the preference cookie — the same word as the storage key. */
+export const THEME_COOKIE_NAME = THEME_STORAGE_KEY;
+
+/** One year, in seconds. */
+const THEME_COOKIE_MAX_AGE_S = 31_536_000;
+
+/** `localhost`, a single-label name or a literal IP: no shared parent domain. */
+function isLocalHostname(hostname: string): boolean {
+  return (
+    !hostname.includes(".") ||
+    hostname.endsWith(".localhost") ||
+    /^[0-9.]+$/.test(hostname) ||
+    hostname.includes(":")
+  );
+}
+
+/**
+ * The cookie `Domain` a storefront host shares with the sign-in host: its
+ * parent domain (`academy.doctor.school` → `doctor.school`,
+ * `doctor-pr-7.stage.doctor.school` → `stage.doctor.school`); a two-label host
+ * is its own parent; `undefined` (host-only) on localhost or an IP.
+ */
+export function themeCookieDomain(hostname: string): string | undefined {
+  const host = hostname.toLowerCase().replace(/\.$/, "");
+  if (isLocalHostname(host)) return undefined;
+  const labels = host.split(".");
+  return labels.length > 2 ? labels.slice(1).join(".") : host;
+}
+
+/**
+ * The `document.cookie` assignment that records (`theme`) or clears (`null`)
+ * the explicit choice for `hostname`. `Secure` everywhere but a local host.
+ */
+export function themeCookie(theme: Theme | null, hostname: string): string {
+  const domain = themeCookieDomain(hostname);
+  return [
+    `${THEME_COOKIE_NAME}=${theme ?? ""}`,
+    "Path=/",
+    `Max-Age=${theme ? THEME_COOKIE_MAX_AGE_S : 0}`,
+    "SameSite=Lax",
+    ...(domain ? [`Domain=${domain}`, "Secure"] : []),
+  ].join("; ");
+}
+
+/** Mirror the explicit choice (or its absence) into the preference cookie. */
+export function writeThemeCookie(theme: Theme | null): void {
+  try {
+    document.cookie = themeCookie(theme, window.location.hostname);
+  } catch {
+    // A cookie-less document keeps its own theme; only the host carry-over is lost.
+  }
+}
+
+/**
+ * Bring the cookie in line with the stored choice: a choice made before the
+ * cookie existed starts travelling, and a cleared choice stops travelling.
+ */
+export function syncThemeCookie(): void {
+  writeThemeCookie(readStoredTheme());
+}
+
+/** Read the preference cookie out of a request `Cookie` header (server side). */
+export function themeFromCookieHeader(header: string | null): Theme | null {
+  for (const part of (header ?? "").split(";")) {
+    const [name, value] = part.trim().split("=");
+    if (name === THEME_COOKIE_NAME && (value === "dark" || value === "light")) {
+      return value;
+    }
+  }
+  return null;
+}

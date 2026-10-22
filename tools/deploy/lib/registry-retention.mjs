@@ -4,7 +4,7 @@
 // pushes five images (`registry.mjs`), so without retention it fills and every
 // push fails. The owner's policy (2026-10-20, #3110): keep the production build
 // and at most a couple of previous ones for rollback. Concretely, per release repo
-// (`api`, `api-migrate`, `portal`, `admin`, `doctor`): the targets of the latest
+// (`RECORDED_IMAGE_NAMES`): the targets of the latest
 // RELEASES_KEPT `release-*` releases (prod + rollback targets — `pnpm deploy:prod
 // --rollback` re-pulls a pruned SHA's recorded digests) ∪ the newest MAIN_SHAS_KEPT
 // first-parent `main` commits that have an image (the next release candidate and

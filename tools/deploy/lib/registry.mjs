@@ -30,7 +30,16 @@ export const IMAGE_REGISTRY = "ds-platform.registry.twcstorage.ru";
 export const REGISTRY_PULL_TOKEN_FILE = "/etc/ds-platform/registry-pull-token";
 export const IMAGES_WORKFLOW = "runtime-images.yml";
 /** The manifest keys; each is pulled and tagged locally as `ds-<key>:<sha>`. */
-export const RECORDED_IMAGE_NAMES = Object.freeze(["api", "api-migrate", "portal", "admin", "doctor"]);
+export const RECORDED_IMAGE_NAMES = Object.freeze(["api", "api-migrate", "portal", "admin", "doctor", "login"]);
+/**
+ * Keys recorded only from the commit that introduced them on: a manifest of an
+ * earlier commit (a rollback or `--ref` hotfix target) has none, and its compose
+ * runs no such service. Absent ⇒ not pulled; every other key stays required.
+ */
+export const LATER_RECORDED_IMAGE_NAMES = Object.freeze(["login"]);
+/** The recorded keys a validated set carries, in `RECORDED_IMAGE_NAMES` order. */
+export const recordedImageNames = (images) =>
+  RECORDED_IMAGE_NAMES.filter((name) => !(LATER_RECORDED_IMAGE_NAMES.includes(name) && images[name] === undefined));
 /** `docker image inspect --format` that prints one RepoDigest per line. */
 export const REPO_DIGESTS_FORMAT = "{{range .RepoDigests}}{{println .}}{{end}}";
 
@@ -57,10 +66,10 @@ export function shellQuote(text) {
 }
 
 /**
- * The five recorded references, each a digest reference of ITS OWN image. `pr` says
+ * The recorded references, each a digest reference of ITS OWN image. `pr` says
  * which namespace they must all come from: `true` = `pr/`, `false` = the release
  * namespace (no prefix: `main` and `hotfix/*` pushes), `undefined` = either (but one
- * for all five).
+ * for all).
  */
 export function assertImageRefs(images, { pr } = {}) {
   if (!images || typeof images !== "object" || Array.isArray(images)) {
@@ -72,7 +81,7 @@ export function assertImageRefs(images, { pr } = {}) {
   const extra = Object.keys(images).filter((name) => !RECORDED_IMAGE_NAMES.includes(name));
   if (extra.length) throw new RegistryError(`recorded image set has unknown image(s): ${extra.join(", ")}`);
   const namespaces = new Set();
-  for (const name of RECORDED_IMAGE_NAMES) {
+  for (const name of recordedImageNames(images)) {
     const ref = images[name];
     if (typeof ref !== "string") throw new RegistryError(`recorded image set lacks \`${name}\``);
     const match = ref.match(DIGEST_REF_RE);
@@ -322,7 +331,7 @@ export function registryLogoutArgv() {
 }
 
 /**
- * One remote bash script (errexit) that brings the five recorded images onto the box
+ * One remote bash script (errexit) that brings the recorded images onto the box
  * as `ds-<image>:<sha>`: a tag whose RepoDigests already carry the recorded digest is
  * reused (a same-SHA re-run pulls nothing), any other is pulled and re-tagged; the box
  * then logs out of the registry. Prints `pull:<image>=REUSED|PULLED`.
@@ -330,7 +339,7 @@ export function registryLogoutArgv() {
 export function pullRecordedImagesScript({ sha, images }) {
   assertFullSha(sha);
   assertImageRefs(images);
-  const lines = RECORDED_IMAGE_NAMES.map((name) => {
+  const lines = recordedImageNames(images).map((name) => {
     const ref = images[name];
     const tag = localImageTag(name, sha);
     return [
@@ -349,7 +358,7 @@ export function pullRecordedImagesScript({ sha, images }) {
 export function imageDigestScript({ sha, images }) {
   assertFullSha(sha);
   assertImageRefs(images);
-  return RECORDED_IMAGE_NAMES.map((name) => {
+  return recordedImageNames(images).map((name) => {
     const ref = images[name];
     return [
       `d=$(sudo docker image inspect --format '${REPO_DIGESTS_FORMAT}' ${localImageTag(name, sha)} 2>/dev/null) || d=ABSENT`,

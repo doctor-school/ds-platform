@@ -109,6 +109,7 @@ describe("slotE2eEnv", () => {
       {
         E2E_PORTAL_URL: "https://academy-main.stage.doctor.school",
         E2E_DOCTOR_URL: "https://doctor-main.stage.doctor.school",
+        E2E_LOGIN_URL: "https://login-main.stage.doctor.school",
         E2E_HTTP_USER: "stage",
         E2E_HTTP_PASS: "s3cret",
         E2E_SMS_SINK_URL: "https://sms-sink.stage.doctor.school",

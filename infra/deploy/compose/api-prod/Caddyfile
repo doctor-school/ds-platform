@@ -3,7 +3,8 @@
 # ports verified against the built code (DSO-100): api = 3000 (apps/api/src/main.ts
 # PORT default), portal = 3001 (apps/portal/Dockerfile ENV PORT=3001), admin = 3002
 # (apps/admin/Dockerfile ENV PORT=3002), doctor = 3004 (apps/doctor/Dockerfile ENV
-# PORT=3004, #1723), centrifugo = 8000 (dev-stand parity),
+# PORT=3004, #1723), login = 3005 (apps/login/Dockerfile ENV PORT=3005, #3171),
+# centrifugo = 8000 (dev-stand parity),
 # zitadel core = 8080 (h2c), zitadel-login = 3000. Certs persist in the caddy_data
 # volume (compose.yml).
 
@@ -12,9 +13,24 @@
 	email a@preencipium.com
 }
 
+# ADR-0015 §4 req 2: the storefront-server-only API prefix is reached only on the
+# compose network (api:3000), never through a public vhost. Imported by EVERY app
+# vhost, not only api.: each Next host also proxies /v1 to the api (and its BFF
+# refuses the prefix too, @ds/schemas/internal-api). Caddy's `path` matcher is
+# case-insensitive and judges the cleaned, unescaped path, so `/V1/Internal`,
+# `/v1//internal` and percent-encoded spellings land here as well.
+(internal_api_unreachable) {
+	handle /v1/internal /v1/internal/* {
+		respond 404
+	}
+}
+
 # Portal (Next.js standalone) — user-facing auth screens (#1171).
 academy.doctor.school {
-	reverse_proxy portal:3001
+	import internal_api_unreachable
+	handle {
+		reverse_proxy portal:3001
+	}
 }
 
 # Doctor storefront (Next.js standalone) — the public doctor-facing site (#1723).
@@ -28,7 +44,24 @@ academy.doctor.school {
 # (infra/deploy/README.md §"Doctor storefront roll-out"). The doctor app proxies
 # /v1/* to the api internally (same-origin __Host- cookie, apps/doctor/next.config.ts).
 new.doctor.school {
-	reverse_proxy doctor:3004
+	import internal_api_unreachable
+	handle {
+		reverse_proxy doctor:3004
+	}
+}
+
+# The sign-in host (Next.js standalone, ADR-0015 §4, #3171) — the Login V2
+# base_uri of both storefront OIDC clients. Automatic ACME over HTTP-01 like every
+# other vhost, so the Beget A-record `login.doctor.school` → 77.233.220.222 MUST
+# resolve before the release that adds this block (infra/deploy/README.md
+# §"Sign-in host roll-out"). It proxies its /v1/* calls to the api internally.
+# Cookies stay host-only: no vhost here adds or rewrites a Set-Cookie
+# `Domain` (ADR-0015 §4 req 4).
+login.doctor.school {
+	import internal_api_unreachable
+	handle {
+		reverse_proxy login:3005
+	}
 }
 
 # Admin app (Next.js + Refine standalone) — operator event/program management
@@ -36,7 +69,10 @@ new.doctor.school {
 # the admin app proxies /v1/* to the api internally (same-origin __Host- cookie,
 # apps/admin/next.config.ts).
 admin.doctor.school {
-	reverse_proxy admin:3002
+	import internal_api_unreachable
+	handle {
+		reverse_proxy admin:3002
+	}
 }
 
 # NestJS BFF/API. The portal proxies /v1/* to the api internally (same-origin
@@ -51,6 +87,7 @@ admin.doctor.school {
 # Centrifugo server API is key-gated (X-API-Key) — public exposure over TLS is
 # authenticated, and clients hold no publish capability (config namespace).
 api.doctor.school {
+	import internal_api_unreachable
 	# Browser websocket connections (portal room chat).
 	handle /connection/websocket {
 		reverse_proxy centrifugo:8000

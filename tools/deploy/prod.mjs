@@ -173,6 +173,7 @@ import {
   sshCapture,
   sshScript,
 } from "./lib/remote.mjs";
+import { OPTIONAL_VHOST_PROBES } from "./smoke-prod.mjs";
 
 // The ssh/ship primitives live in ./lib/remote.mjs so the staging slot tool
 // drives its box through exactly the same channel (#2194). They are re-exported
@@ -499,7 +500,7 @@ export function deployShaEnvScript(sha) {
 }
 
 /**
- * The on-box pull step: the five recorded digests, reused when a local tag already
+ * The on-box pull step: the recorded digests, reused when a local tag already
  * carries them, logged out after. The token is read on the box from its root-only
  * file — it never appears in this script.
  */
@@ -691,6 +692,47 @@ async function assertProdApiEnvHasNoTestToken() {
   );
   if (!verdict.ok) die(verdict.reason);
   ok(`${API_PROD_ENV_FILE}: no BOT_PROTECTION_TEST_TOKEN`);
+}
+
+// --- #3171: the sign-in host's record key is owner-placed in api.env ---------
+// The api's sign-in-host module stays disabled (404) without SIGN_IN_RECORD_KEY;
+// a release whose target ships the sign-in host refuses before any box change
+// instead of shipping a host whose every form post 404s. Counted, never printed.
+export function apiEnvRecordKeyProbeScript(envFile = API_PROD_ENV_FILE) {
+  return `if sudo test -r '${envFile}'; then
+  echo api-env=readable
+  echo "record-key-lines=$(sudo grep -cE '^[[:space:]]*(export[[:space:]]+)?SIGN_IN_RECORD_KEY=[^[:space:]]' '${envFile}' || true)"
+else
+  echo api-env=unreadable
+fi
+`;
+}
+
+export function apiEnvRecordKeyVerdict(output) {
+  const lines = String(output ?? "").split(/\r?\n/);
+  const count = lines.map((line) => line.match(/^record-key-lines=(\d+)$/)).find(Boolean);
+  if (!lines.includes("api-env=readable") || !count) {
+    return {
+      ok: false,
+      reason: `could not read ${API_PROD_ENV_FILE} on api-prod to prove it carries SIGN_IN_RECORD_KEY`,
+    };
+  }
+  return Number(count[1]) >= 1
+    ? { ok: true }
+    : {
+        ok: false,
+        reason:
+          `${API_PROD_ENV_FILE} on api-prod has no SIGN_IN_RECORD_KEY — the sign-in host's at-rest key ` +
+          "is owner-placed before the release that ships it (infra/deploy/README.md §\"Sign-in host roll-out\")",
+      };
+}
+
+async function assertProdApiEnvHasRecordKey(services) {
+  if (!(services ?? []).some((s) => s.image === "ds-login")) return;
+  step("#3171: api-prod env carries the sign-in host's record key");
+  const verdict = apiEnvRecordKeyVerdict(await sshCapture(API_PROD, apiEnvRecordKeyProbeScript()));
+  if (!verdict.ok) die(verdict.reason);
+  ok(`${API_PROD_ENV_FILE}: SIGN_IN_RECORD_KEY present`);
 }
 
 // --- tiny console ---------------------------------------------------------
@@ -1276,6 +1318,23 @@ const IDP_POST_LOGOUT_URIS =
 // one exact callback + post-logout URI each, the sign-in host as their Login V2
 // base_uri, the API's back-channel logout endpoint. The doctor storefront is
 // `new.doctor.school` until the relaunch moves it (ADR-0015 §7 — a re-registration).
+/**
+ * #3171: merge the storefront client ids provision.sh printed (step 3.bis, one
+ * `IDP_{ACADEMY,DOCTOR}_CLIENT_ID=` line each, into `idsFile`) into the compose
+ * `.env` the api interpolates — the prod sign-in-host client map (003 EARS-60).
+ * Run in the compose dir. A converge that printed no pair refuses, `.env`
+ * untouched: the api would otherwise boot with its sign-in host disabled.
+ * Client ids are public (they ride every authorize URL); nothing secret here.
+ */
+export function storefrontClientIdsEnvScript(idsFile) {
+  return [
+    `academy=$(grep -E '^IDP_ACADEMY_CLIENT_ID=[A-Za-z0-9@._-]+$' "${idsFile}" | tail -n 1)`,
+    `doctor=$(grep -E '^IDP_DOCTOR_CLIENT_ID=[A-Za-z0-9@._-]+$' "${idsFile}" | tail -n 1)`,
+    `if [ -z "$academy" ] || [ -z "$doctor" ]; then echo "provision.sh printed no storefront client id pair" >&2; exit 1; fi`,
+    `{ { [ -f .env ] && grep -vE '^IDP_(ACADEMY|DOCTOR)_CLIENT_ID=' .env; } || true; printf '%s\\n%s\\n' "$academy" "$doctor"; } > .env.next && mv .env.next .env`,
+  ].join("\n");
+}
+
 const IDP_STOREFRONT_CLIENT_ENV = [
   "IDP_SIGN_IN_BASE_URI=https://login.doctor.school",
   "IDP_BACK_CHANNEL_LOGOUT_URI=https://api.doctor.school/v1/auth/back-channel-logout",
@@ -1326,8 +1385,13 @@ async function provisionIdp(sha, label = sha.slice(0, 12)) {
   try {
     await sshScript(
       API_PROD,
-      `cd ${IDP_PROVISION_DIR}
-sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; IDP_BASE_URL=${IDP_BASE_URL} IDP_REDIRECT_URIS=${IDP_REDIRECT_URIS} IDP_POST_LOGOUT_URIS=${IDP_POST_LOGOUT_URIS} ${IDP_STOREFRONT_CLIENT_ENV} EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real ./provision.sh --pat-file ${IDP_BOOTSTRAP_PAT_FILE}'
+      `set -eo pipefail
+cd ${IDP_PROVISION_DIR}
+ids=$(mktemp)
+trap 'rm -f "$ids"' EXIT
+sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; IDP_BASE_URL=${IDP_BASE_URL} IDP_REDIRECT_URIS=${IDP_REDIRECT_URIS} IDP_POST_LOGOUT_URIS=${IDP_POST_LOGOUT_URIS} ${IDP_STOREFRONT_CLIENT_ENV} EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real ./provision.sh --pat-file ${IDP_BOOTSTRAP_PAT_FILE}' | tee "$ids"
+cd ${API_COMPOSE}
+${storefrontClientIdsEnvScript("$ids")}
 `,
       { label: "idp provision", stallBudgetMs: STALL_BUDGET_BUILD_MS },
     );
@@ -1854,6 +1918,7 @@ ${deployShaEnvScript(sha)}
   step("#2149: PRE-SWAP IdP converge + SMTP and policy read-back");
   t = Date.now();
   walk.phase("idp");
+  await assertProdApiEnvHasRecordKey(services);
   await provisionIdp(sha);
   ok("prod IdP converged and read back before app swap", t);
 
@@ -1943,25 +2008,25 @@ function recordDeployment(prevSha, sha) {
   });
 }
 
-// `services` is the TARGET-derived set (#1896): a hotfix based on a SHA that
-// predates the doctor storefront ships no `ds-doctor` image and no doctor vhost,
-// so probing new.doctor.school would red a healthy deploy. Reuse the smoke's own
-// documented opt-out (`PROD_DOCTOR_HOST=skip`, #1723) rather than a second
-// mechanism.
-//
-// The `ds-doctor` string stays LITERAL on purpose: it is not a service list but
-// the one end of the smoke's own `service -> env opt-out` contract, whose other
-// end (`PROD_DOCTOR_HOST`) lives in `smoke-prod.mjs`. Deriving it would mean
-// inventing a naming convention between the two files. When a SECOND optional
-// vhost appears, export that mapping from `smoke-prod.mjs` and read it here —
-// do not grow this into a second hard-coded service list (#1896).
+// `services` is the TARGET-derived set (#1896): a hotfix or rollback target that
+// predates a storefront or the sign-in host ships no such image and no such vhost,
+// so probing its host would red a healthy deploy. The `image -> env opt-out`
+// contract is the smoke's own (`OPTIONAL_VHOST_PROBES`, smoke-prod.mjs).
+export function smokeEnvFor(services, env = process.env) {
+  const shipped = new Set((services ?? []).map((s) => s.image));
+  const out = { ...env };
+  for (const [image, variable] of Object.entries(OPTIONAL_VHOST_PROBES)) {
+    if (!shipped.has(image)) out[variable] = "skip";
+  }
+  return out;
+}
+
 function runSmoke(sha, services) {
-  const shipsDoctor = (services ?? []).some((s) => s.image === "ds-doctor");
-  if (!shipsDoctor) {
-    console.log(
-      `  ℹ the deploy target ships no ds-doctor image — the doctor storefront` +
-        ` probes are skipped for this smoke (#1896).`,
-    );
+  const env = smokeEnvFor(services);
+  for (const [image, variable] of Object.entries(OPTIONAL_VHOST_PROBES)) {
+    if (env[variable] === "skip" && process.env[variable] !== "skip") {
+      console.log(`  ℹ the deploy target ships no ${image} image — its vhost probes are skipped for this smoke (#1896).`);
+    }
   }
   return new Promise((resolve) => {
     const child = spawn(
@@ -1969,9 +2034,7 @@ function runSmoke(sha, services) {
       [join(import.meta.dirname, "smoke-prod.mjs"), "--expect-sha", sha],
       {
         stdio: "inherit",
-        env: shipsDoctor
-          ? process.env
-          : { ...process.env, PROD_DOCTOR_HOST: "skip" },
+        env,
       },
     );
     child.on("close", (code) => {

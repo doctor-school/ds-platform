@@ -102,19 +102,19 @@ volumes:
   caddy_data:
 `;
 
-test("1896: an origin/main deploy derives today's four SHA-tagged services from the CURRENT compose", () => {
+test("1896: an origin/main deploy derives today's five SHA-tagged services from the CURRENT compose", () => {
   const services = deployServiceSet(currentCompose, { source: "origin/main" });
   assert.deepEqual(
     services.map((s) => s.name),
-    ["api", "portal", "admin", "doctor"],
+    ["api", "portal", "admin", "doctor", "login"],
   );
   assert.deepEqual(
     services.map((s) => s.image),
-    ["ds-api", "ds-portal", "ds-admin", "ds-doctor"],
+    ["ds-api", "ds-portal", "ds-admin", "ds-doctor", "ds-login"],
   );
   assert.deepEqual(
     services.map((s) => s.port),
-    [null, 3001, 3002, 3004],
+    [null, 3001, 3002, 3004, 3005],
   );
 });
 
@@ -155,6 +155,7 @@ test("1896: the boot probe drops the api and keeps a pinned port per remaining s
       ["portal", "ds-portal", 3001],
       ["admin", "ds-admin", 3002],
       ["doctor", "ds-doctor", 3004],
+      ["login", "ds-login", 3005],
     ],
   );
 

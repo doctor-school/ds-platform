@@ -8,6 +8,7 @@ import {
   SIGN_IN_HOST_ENTRY_HEADER,
   readSignInHostHandOver,
 } from "@ds/auth-flow/server";
+import { themeFromCookieHeader } from "@ds/storefront-shell/theme";
 import { ThemeWatcher } from "@ds/storefront-shell/theme-watcher";
 
 import { SIGN_IN_HOST_THEMES } from "../lib/sign-in-host.host-config";
@@ -42,6 +43,10 @@ const inter = Inter({
  * stays `'nonce-…' 'strict-dynamic'` with no `'unsafe-inline'`. With no
  * storefront known (an unread entry's banner) nothing boots and the page is
  * light.
+ *
+ * A visitor's EXPLICIT storefront choice outranks both (#3171): the storefronts
+ * mirror it into the `ds-theme` preference cookie for the shared parent domain,
+ * and this layout renders it server-side — no script, no watcher, no flash.
  */
 export default async function RootLayout({
   children,
@@ -52,16 +57,19 @@ export default async function RootLayout({
   const handOver = readSignInHostHandOver(
     request.get(SIGN_IN_HOST_ENTRY_HEADER),
   );
-  const theme = handOver
-    ? SIGN_IN_HOST_THEMES[handOver.render.storefront]
-    : null;
+  // The explicit choice wins over every variant default, as on the storefronts.
+  const chosen = themeFromCookieHeader(request.get("cookie"));
+  const theme =
+    handOver && !chosen
+      ? SIGN_IN_HOST_THEMES[handOver.render.storefront]
+      : null;
   const nonce = /'nonce-([^']+)'/.exec(
     request.get("content-security-policy") ?? "",
   )?.[1];
   return (
     <html
       lang="ru"
-      className={inter.variable}
+      className={chosen === "dark" ? `${inter.variable} dark` : inter.variable}
       style={
         {
           // eslint-disable-next-line local/no-token-redefinition -- bind self-hosted next/font Inter into the token's own family stack; not a value fork

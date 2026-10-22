@@ -12,6 +12,10 @@
     "./health": {
       "types": "./dist/health/index.d.ts",
       "default": "./dist/health/index.js"
+    },
+    "./internal-api": {
+      "types": "./src/internal-api/index.d.ts",
+      "default": "./src/internal-api/index.js"
     }
   },
   "main": "./dist/index.js",

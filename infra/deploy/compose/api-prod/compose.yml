@@ -52,6 +52,9 @@ services:
       # the doctor container is still warming.
       doctor:
         condition: service_started
+      # The sign-in host (#3171) — login.doctor.school, same treatment.
+      login:
+        condition: service_started
       centrifugo:
         condition: service_started
       zitadel:
@@ -75,6 +78,17 @@ services:
       # The deployed commit SHA — surfaced at GET /v1/health (DSO-127) so an
       # operator can confirm the live build over HTTP. Same value as the image tag.
       DEPLOY_SHA: ${DEPLOY_SHA:?}
+      # The sign-in host's non-secret half (003 EARS-60/66/67, ADR-0015 §4): its
+      # own origin (the form-post Origin check) and the storefront /login pages a
+      # stale or direct visit returns to. The client ids are the ones the pre-swap
+      # IdP converge read back (`pnpm deploy:prod` writes them into `.env`); the
+      # SIGN_IN_RECORD_KEY secret is owner-placed in api.env. Any one unset ⇒ the
+      # module is disabled (404).
+      IDP_SIGN_IN_BASE_URI: https://login.doctor.school
+      SIGN_IN_ACADEMY_LOGIN_URL: https://academy.doctor.school/login
+      SIGN_IN_DOCTOR_LOGIN_URL: https://new.doctor.school/login
+      IDP_ACADEMY_CLIENT_ID: ${IDP_ACADEMY_CLIENT_ID:-}
+      IDP_DOCTOR_CLIENT_ID: ${IDP_DOCTOR_CLIENT_ID:-}
     depends_on:
       zitadel:
         condition: service_healthy
@@ -215,6 +229,40 @@ services:
           "node",
           "-e",
           "fetch('http://localhost:3004/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # --- login — Next.js standalone, the sign-in host (login.doctor.school) ---------
+  # ADR-0015 §4: the one sign-in host both storefront OIDC clients carry as their
+  # Login V2 base_uri. Same standalone pattern as doctor; its API calls go through
+  # its own same-origin proxy to the api (API_PROXY_TARGET baked by
+  # runtime-images.yml). /healthz is the probe: every page route asks the API's
+  # entry first (003 EARS-70), so no page can be one.
+  login:
+    image: ds-login:${DEPLOY_SHA:?}
+    restart: unless-stopped
+    env_file: [/etc/ds-platform/api.env]
+    environment:
+      # Pinned like every Next app here (DSO-100): an api PORT in api.env must
+      # never reach it. 3005 matches the Dockerfile ENV + the Caddy upstream.
+      PORT: "3005"
+      # The form's SmartCaptcha CLIENT key (same `.env` source as the
+      # storefronts); `login.doctor.school` must be on the resource's allowed
+      # hosts (infra/deploy/README.md §"Sign-in host roll-out").
+      SMARTCAPTCHA_SITE_KEY: ${SMARTCAPTCHA_SITE_KEY:-}
+    depends_on:
+      api:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3005/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 15s
       timeout: 5s

@@ -133,7 +133,7 @@ jobs:
               build-args: "API_PROXY_TARGET=http://api:3000",
             }
           # The sign-in host (ADR-0015 §4, #3170). Built, pushed and booted like
-          # every app image; NOT yet a key of the digest manifest below — see there.
+          # every app image, and a key of the digest manifest below.
           - {
               image: login,
               dockerfile: apps/login/Dockerfile,
@@ -386,11 +386,7 @@ jobs:
         run: docker rm -f ds-runtime-app ds-runtime-db ds-runtime-s3 || true
 
   # The digest manifest, written only for pushed images that passed readiness.
-  # `login` (#3170) is verified above but is not a manifest key yet: every
-  # consumer refuses a record with a key outside `RECORDED_IMAGE_NAMES`
-  # (tools/deploy/lib/registry.mjs `assertImageRefs`) and pulls every key it
-  # lists, so the key lands together with the stage/prod deploy wiring of the
-  # sign-in host (#3171), never ahead of it.
+  # Its keys are `RECORDED_IMAGE_NAMES` (tools/deploy/lib/registry.mjs).
   images:
     needs: [plan, build, verify]
     if: needs.plan.outputs.push == 'true'
@@ -403,7 +399,7 @@ jobs:
           SHA: ${{ needs.plan.outputs.sha }}
           REF: ${{ needs.plan.outputs.ref }}
         run: |
-          for image in api api-migrate portal admin doctor; do
+          for image in api api-migrate portal admin doctor login; do
             test -s "digests/$image" || { echo "::error::missing digest for $image"; exit 1; }
           done
           jq -n --arg sha "$SHA" --arg ref "$REF" \
@@ -412,7 +408,8 @@ jobs:
             --arg portal "$(cat digests/portal)" \
             --arg admin "$(cat digests/admin)" \
             --arg doctor "$(cat digests/doctor)" \
-            '{sha: $sha, ref: $ref, images: {api: $api, "api-migrate": $migrate, portal: $portal, admin: $admin, doctor: $doctor}}' \
+            --arg login "$(cat digests/login)" \
+            '{sha: $sha, ref: $ref, images: {api: $api, "api-migrate": $migrate, portal: $portal, admin: $admin, doctor: $doctor, login: $login}}' \
             > "images-$SHA.json"
           {
             echo "### images-$SHA.json"

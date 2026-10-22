@@ -827,8 +827,17 @@ export async function convergeStorefrontClients({
     ],
   });
   const plan = planStorefrontClients({ slots, baseDomain, existing: found?.result ?? [] });
+  // The api's sign-in-host client map (003 EARS-60) needs each slot's ids; a client id
+  // is public (it travels in every authorize URL), so it may be returned and logged.
+  const clientIds = {};
+  for (const app of found?.result ?? []) {
+    if (SLOT_STOREFRONT_APP_RE.test(app?.name ?? "") && app?.oidcConfig?.clientId) {
+      clientIds[app.name] = app.oidcConfig.clientId;
+    }
+  }
   for (const { name, body } of plan.create) {
     const created = await client.request("POST", `${appsPath}/oidc`, { name, ...body });
+    if (created?.clientId) clientIds[name] = created.clientId;
     log(`  ↳ idp storefront client ${name} created (appId ${created?.appId ?? "?"})`);
   }
   for (const { appId, name, body } of plan.update) {
@@ -840,7 +849,27 @@ export async function convergeStorefrontClients({
     log(`  ↳ idp storefront client ${name} removed (no live slot)`);
   }
   if (plan.keep) log(`  ↳ idp storefront clients already converged: ${plan.keep}`);
-  return { projectId, ...plan };
+  for (const { name } of plan.remove) delete clientIds[name];
+  return { projectId, ...plan, clientIds };
+}
+
+/**
+ * `{ academy, doctor }` — the client ids of `slot`'s storefront pair out of a
+ * {@link convergeStorefrontClients} result. Missing ⇒ an `IdpError`: a slot api
+ * with half a client map would run with its sign-in host disabled (404).
+ */
+export function slotStorefrontClientIds(result, slot) {
+  const ids = {};
+  for (const storefront of STOREFRONTS) {
+    const id = result?.clientIds?.[storefrontAppName(storefront, slot)];
+    if (!id) {
+      throw new IdpError(
+        `the IdP returned no client id for ${storefrontAppName(storefront, slot)} — cannot wire the slot's sign-in host`,
+      );
+    }
+    ids[storefront] = id;
+  }
+  return ids;
 }
 
 function describeDiff({ redirect, postLogout, loginBaseUri }) {

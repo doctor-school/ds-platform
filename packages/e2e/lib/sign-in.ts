@@ -36,6 +36,19 @@ export function preHydrationSubmitError(
 }
 
 /**
+ * True once React has hydrated `node`: React stamps a `__reactProps$<id>` key on
+ * every DOM node it hydrates, and only then are the node's handlers (the login
+ * form's `onSubmit`) attached. Self-contained so Playwright can serialise it
+ * into `page.waitForFunction`.
+ */
+export function isReactHydrated(node: object | null): boolean {
+  return (
+    node !== null &&
+    Object.keys(node).some((key) => key.startsWith("__reactProps$"))
+  );
+}
+
+/**
  * THE golden sign-in — the single login path of the C6 regression contract
  * (staging/regression-contour tech spec §6.1, Issue #2067).
  *
@@ -61,12 +74,12 @@ export function preHydrationSubmitError(
  * and the login card is server-rendered as a real `<form>`: clicking its submit
  * button before those chunks EXECUTE makes the browser submit the form natively
  * (a GET back to the login route with the credentials in the query string), so
- * `/v1/auth/login` is never called and the doctor is never signed in. Hence
- * `waitUntil: "load"` — every subresource, chunks included, has arrived — plus
- * `networkidle`, which additionally covers the chunks React requests only while
- * hydrating. The doctor host is where this bites: its chunk set is the slower of
- * the two, which is why the academy pass could stay green while the doctor pass
- * hung for the full `waitForURL` timeout.
+ * `/v1/auth/login` is never called and the doctor is never signed in. Hence the
+ * walk waits until React has hydrated the login `<form>` itself
+ * ({@link isReactHydrated}). `networkidle` is not that signal: a login page
+ * carrying the real Yandex SmartCaptcha widget (every slot) keeps the widget
+ * iframe's Metrika beacons in flight, so the wait never settles (#3229: a slot
+ * run sat in it until the 120 s test timeout).
  */
 export async function signInGoldenDoctor(
   page: Page,
@@ -100,7 +113,11 @@ export async function signInWithPassword(
   baseUrl?: string,
 ): Promise<void> {
   await page.goto(`${baseUrl ?? ""}${host.loginPath}`, { waitUntil: "load" });
-  await page.waitForLoadState("networkidle");
+  const form = page.locator("form", {
+    has: page.locator('input[autocomplete="current-password"]'),
+  });
+  await expect(form).toHaveCount(1);
+  await page.waitForFunction(isReactHydrated, await form.elementHandle());
   await page.locator('input[autocomplete="username"]').fill(credentials.email);
   await page
     .locator('input[autocomplete="current-password"]')

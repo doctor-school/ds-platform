@@ -26,7 +26,11 @@ test.describe("008 EARS-3 app-shell theme toggle flips + persists (e2e)", () => 
     context,
   }) => {
     await context.clearCookies();
-    await page.goto("/", { waitUntil: "domcontentloaded" });
+    // The toggle is server-rendered: a click before hydration flips nothing
+    // (#3229 slot run at 4 workers — the click landed ~250 ms before the last
+    // client chunk), so wait for the client chunks.
+    await page.goto("/", { waitUntil: "load" });
+    await page.waitForLoadState("networkidle");
 
     // Since #2180 the shared chrome renders exactly ONE toggle at every width
     // (017 EARS-1 forbids a second copy in the DOM).

@@ -236,7 +236,7 @@ export const LIVE_TIERS = Object.freeze([
       {
         file: "e2e/signed-in-landing-live.spec.ts",
         slotReason:
-          "the spec narrows an account's project grant through the IdP management API, whose service token the release check in Actions does not carry (an IdP management token is kept out of a public repo's Actions env)",
+          "permanently out of the release check: the spec narrows an account's project grant through the IdP management API, whose service token is kept out of a public repo's Actions env, and a box verb holding that token box-side cannot serve it either — the Actions release check reaches the box over https only, with no ssh",
         requires: [
           URL_DOCTOR,
           ...IDP_MAIL,

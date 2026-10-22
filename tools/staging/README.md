@@ -407,7 +407,7 @@ dataset seeds only rutube streams), the heartbeat-cadence specs (a slot api runs
 production 60 s cadence), the congress-submission specs (they write fixture rows straight
 into a database a slot keeps inside the box's docker network) and the one-tap
 registration (005 registration is append-only, so a run consumes its эфиры), the
-signed-in landing spec (an IdP management token) and the congress login hand-off (the
+signed-in landing spec (an IdP management token; permanently out — a box verb holding the token would need the ssh the Actions release check does not have) and the congress login hand-off (the
 `CONGRESS_SIGNUP_*` block). A config that throws at load without its env is not launched at all.
 Export the variable on this machine and the spec runs. The verdict block prints
 one `live:` line per config:

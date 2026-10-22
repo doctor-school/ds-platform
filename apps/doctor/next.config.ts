@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 
 import type { NextConfig } from "next";
 
+import { bffApiRewrite } from "@ds/schemas/internal-api";
+
 const configDir = path.dirname(fileURLToPath(import.meta.url));
 
 /**
@@ -88,7 +90,8 @@ const config: NextConfig = {
   // container network the api already trusts.
   async rewrites() {
     return [
-      { source: "/v1/:path*", destination: `${API_PROXY_TARGET}/v1/:path*` },
+      // ADR-0015 §4 req 2: the shared source refuses the internal API prefix.
+      bffApiRewrite(API_PROXY_TARGET),
     ];
   },
   // 003 EARS-44 leak control: `/login` may carry a Congress hand-off reference

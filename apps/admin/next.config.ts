@@ -2,6 +2,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { NextConfig } from "next";
+
+import { bffApiRewrite } from "@ds/schemas/internal-api";
 import createNextIntlPlugin from "next-intl/plugin";
 
 const configDir = path.dirname(fileURLToPath(import.meta.url));
@@ -43,7 +45,8 @@ const config: NextConfig = {
   // session cookie is set/sent same-origin (see API_PROXY_TARGET above).
   async rewrites() {
     return [
-      { source: "/v1/:path*", destination: `${API_PROXY_TARGET}/v1/:path*` },
+      // ADR-0015 §4 req 2: the shared source refuses the internal API prefix.
+      bffApiRewrite(API_PROXY_TARGET),
     ];
   },
 };

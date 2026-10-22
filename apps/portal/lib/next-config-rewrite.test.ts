@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { BFF_API_REWRITE_SOURCE } from "@ds/schemas/internal-api";
+
 import config from "../next.config";
 
 /**
@@ -31,10 +33,10 @@ describe("006 the portal /v1 rewrite carries the room's relative fetches", () =>
           ...(rewrites.afterFiles ?? []),
           ...(rewrites.fallback ?? []),
         ];
-    const v1 = rules.find((rule) => rule.source === "/v1/:path*");
+    const v1 = rules.find((rule) => rule.source === BFF_API_REWRITE_SOURCE);
     expect(v1).toBeDefined();
     // The capture is the WHOLE versioned surface — chat, heartbeat, room grant and
     // display-name all ride it; a narrower source would silently break one of them.
-    expect(v1!.destination).toMatch(/\/v1\/:path\*$/);
+    expect(v1!.destination).toMatch(/\/v1\/:path$/);
   });
 });

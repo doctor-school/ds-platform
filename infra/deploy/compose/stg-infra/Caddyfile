@@ -247,9 +247,11 @@ http://127.0.0.1:2020 {
 	# would mint a certificate for a slot that can never exist (both asserted by
 	# tools/staging/stage-edge.test.mjs).
 	# The storefront-server-only endpoints (ADR-0015 §4 req 2) are never reachable
-	# through a public api-<slot> host — production parity (api-prod/Caddyfile).
+	# through any public slot host, api-<slot> and every Next host proxying /v1
+	# alike — production parity (api-prod/Caddyfile `internal_api_unreachable`).
+	# Caddy's `path` matcher is case-insensitive over the cleaned, unescaped path.
 	@stage_internal_api {
-		header_regexp internal Host "^api-(main|pr-[1-9][0-9]{0,9})[.]"
+		header_regexp internal Host "^(academy|doctor|admin|api|login)-(main|pr-[1-9][0-9]{0,9})[.]"
 		path /v1/internal /v1/internal/*
 	}
 	handle @stage_internal_api {

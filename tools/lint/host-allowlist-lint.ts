@@ -17,7 +17,7 @@
  * so adding host code and recording the decision are the same edit.
  *
  * What it checks (three classes, each its own finding):
- *   1. TREE — every `apps/{portal,doctor}` `.ts`/`.tsx` file needs an exact-path
+ *   1. TREE — every `apps/{portal,doctor,login}` `.ts`/`.tsx` file needs an exact-path
  *      row. Exempt: Next.js route files by basename (`page`, `layout`,
  *      `loading`, `error`, `not-found`, `template`, `default`, `route`,
  *      `middleware`, `proxy`), tests (`*.test.*`, `*.spec.*`, `__tests__/**`),
@@ -79,12 +79,18 @@ const TAG = "[host-allowlist]";
 /** The heading that opens the allowlist section of the shared answer key. */
 const SECTION_HEADING = "## Host-file allowlist";
 
-/** The two storefront hosts the plan converges; other apps are out of scope. */
+/**
+ * The two storefront hosts the plan converges, plus the sign-in host that
+ * renders both storefronts' `@ds/auth-flow` doors (ADR-0015 §4, #3170); other
+ * apps are out of scope.
+ */
 const SCAN_GLOBS = [
   "apps/portal/**/*.ts",
   "apps/portal/**/*.tsx",
   "apps/doctor/**/*.ts",
   "apps/doctor/**/*.tsx",
+  "apps/login/**/*.ts",
+  "apps/login/**/*.tsx",
 ];
 const SCAN_IGNORE = [
   "**/node_modules/**",
@@ -235,7 +241,7 @@ async function main(): Promise<void> {
   }
 
   info(
-    `OK — ${files.length} host file(s) under apps/portal + apps/doctor all carry an allowlist row, ` +
+    `OK — ${files.length} host file(s) under apps/portal + apps/doctor + apps/login all carry an allowlist row, ` +
       `and all ${rows.length} row(s) name an exact, existing path.`,
   );
   process.exit(0);

@@ -112,6 +112,16 @@ async function safeError(
 }
 
 /**
+ * The sign-in host's success answer (`SignInHostStepResponse`): the URL to
+ * leave for, or `null` for every other answer shape.
+ */
+function hostRedirectOf(answer: unknown): string | null {
+  if (typeof answer !== "object" || answer === null) return null;
+  const { status, url } = answer as { status?: unknown; url?: unknown };
+  return status === "redirect" && typeof url === "string" ? url : null;
+}
+
+/**
  * Build the auth client for ONE host from the paths that host states.
  *
  * A factory rather than a module singleton because the register/confirm commands
@@ -132,6 +142,7 @@ export function createAuthClient(api: AuthFlowApiConfig) {
     body: TReq,
     captchaToken?: string,
   ): Promise<TRes> {
+    const { formPost } = api;
     const res = await fetch(path, {
       method: "POST",
       // Same-origin, but explicit: the session cookie must ride the request.
@@ -143,14 +154,34 @@ export function createAuthClient(api: AuthFlowApiConfig) {
           ? { [BOT_PROTECTION_TOKEN_HEADER]: captchaToken }
           : {}),
       },
-      body: JSON.stringify(body),
+      // #3170 — on the sign-in host every POST names its auth request and
+      // carries the form-state CSRF token (ADR-0015 §4 req. 3).
+      body: JSON.stringify(
+        formPost
+          ? {
+              ...(body as object),
+              authRequest: formPost.authRequest,
+              csrf: formPost.csrf,
+            }
+          : body,
+      ),
     });
     if (!res.ok) {
       const error = await safeError(res);
       throw new AuthError(res.status, error.message, error.code);
     }
     // Some endpoints (logout/refresh) carry only a status; all are JSON.
-    return (await res.json()) as TRes;
+    const answer = (await res.json()) as TRes;
+    const redirect = formPost ? hostRedirectOf(answer) : null;
+    if (redirect) {
+      // 003 EARS-5 (amended) — the host's credential step is done: the API
+      // finalised the auth request, and the browser leaves for the URL it
+      // named as a top-level navigation. The promise never settles, so no
+      // storefront completion of the calling screen runs on this origin.
+      window.location.assign(redirect);
+      return new Promise<TRes>(() => {});
+    }
+    return answer;
   }
 
   /**
@@ -195,10 +226,12 @@ export function createAuthClient(api: AuthFlowApiConfig) {
      * `handoff_refused`. No captcha (passed on the sign-up form); an EARS-13
      * limit throws the generic 429 like any code request.
      */
-    redeemLoginHandoff: (body: LoginHandoffRequest) =>
-      postJson<LoginHandoffRequest, LoginHandoffResponse>(
+    redeemLoginHandoff: (body?: LoginHandoffRequest) =>
+      postJson<Partial<LoginHandoffRequest>, LoginHandoffResponse>(
         auth("login/otp/handoff"),
-        body,
+        // #3170 — on the sign-in host the reference is held server-side (the
+        // spent entry intent); the body never names one there.
+        api.formPost ? {} : (body ?? {}),
       ),
 
     /** 003 EARS-6/7 — exchange the one-time code for a session on this origin. */

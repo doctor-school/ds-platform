@@ -18,7 +18,7 @@
  *
  * What it checks: if the PR diff touches any user-facing UI path
  * (apps/portal/**, apps/promo/**, apps/admin/**, apps/academy-demo/**,
- * apps/doctor/**, packages/design-system/**, and a shared package's
+ * apps/doctor/**, apps/login/**, packages/design-system/**, and a shared package's
  * `src/ui/**`),
  * — the single source of that classification is `lib/ui-surface.ts`
  * `isUiSourcePath`, NOT a list maintained here. #1564 was exactly this prose

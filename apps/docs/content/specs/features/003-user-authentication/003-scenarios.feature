@@ -838,6 +838,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Default-limit local contour only; stage raises the per-account ceiling.
     # Native per-IP/per-ASN no-forgiveness: apps/api/test/auth/abuse-limits.e2e-spec.ts EARS-13.
 
+  @EARS-13 @EARS-12 @EARS-8 @EARS-16 @happy @reset-counter-forgiveness @default-auth-limits
+  Scenario: Academy password reset completion clears the same identifier rate window
+    Given a unique verified Academy reset-forgiveness owner starts as a guest
+    When two real Academy password refusals precede that owner's delivered email reset completion
+    Then after reset logout ten real same-owner requests are admitted and the eleventh is throttled inside the original window
+    # Native default-limit local contour; ordinary stage C6 excludes this tag.
+    # Per-IP/per-ASN coverage stays in abuse-limits.e2e-spec.ts EARS-13.
+
   @EARS-15 @failure
   Scenario: Account soft-locks after repeated failures
     Given a doctor_guest user
@@ -882,6 +890,13 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the response is the same generic 401 as the other /v1/me/* reads
     And no profile data is disclosed
 
+  @EARS-27 @EARS-28 @happy @host:academy @two-owner-profiles
+  Scenario: Two Academy browsers retain only their own profile identities through reload and logout
+    Given two independently registered and email-verified Academy browsers have distinct names saved through their account forms
+    When both Academy browsers reload their actual account documents
+    Then each browser retains only its own verified profile and signing out either owner leaves the other isolated
+    # Native profile.e2e-spec.ts retains database no-write coverage.
+
   @EARS-28 @happy @browser @account-profile-surface
   Scenario: The /account page renders the profile surface instead of raw claims
     Given an authenticated doctor_guest user with a verified email and no attached phone
@@ -902,6 +917,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # NEW real persistence proof: display-name-edit.steps.ts. Retain mocked
     # trimming, Enter/Escape, header and accessibility coverage; an optimistic
     # render alone does not prove persistence after a real document reload.
+
+  # Retained Academy baseline projection (#3220), not shared-sign-in-host acceptance.
+  # Native account-cabinet.test.tsx and display-name.e2e-spec.ts remain retained.
+  @host:academy @EARS-16 @EARS-27 @EARS-28 @happy @display-name-cancel
+  Scenario: Academy Escape cancels an unsaved profile name without a write
+    Given a uniquely registered verified Academy account has an original display name saved through its account form
+    When that Academy owner enters a different inline display-name draft and presses Escape
+    Then Escape restores the saved name without a display-name PUT and fresh profile and document reload preserve the original identity
 
   @EARS-29 @happy @verification-mail
   Scenario: The verification code email is composed and sent by the BFF mailer, code-only
@@ -1775,3 +1798,11 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the SMS reset resend guest requests an actual reset code and observes disabled resend
     And only that browser's thirty-second reset cooldown advances before the actual SMS resend click
     Then the newest actual reset SMS changes only that owner's password and preserves identity through sign-in reload and logout
+
+  # Retained Academy baseline projection (#3202), not shared-sign-in-host acceptance.
+  # Native profile.e2e-spec.ts generic refusal and no-write coverage stay retained.
+  @EARS-27 @EARS-16 @failure @guest-profile-parity
+  Scenario: Academy guest profile reads match generic sibling refusals without identity disclosure
+    Given a cookie-free Academy browser opens the ordinary login page for guest profile reads
+    When that Academy guest reads its profile and display-name through the actual browser origin
+    Then both guest reads retain the same generic refusal and account navigation exposes no private profile or session

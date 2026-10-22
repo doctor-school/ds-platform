@@ -1,9 +1,9 @@
 /** Render-capable path semantics shared by UI evidence guards. */
 const RENDERED_APP_ROOT_RE =
-  /^apps\/(?:academy-demo|admin|cms|docs|doctor|mobile|portal|promo|showcase)\//;
+  /^apps\/(?:academy-demo|admin|cms|docs|doctor|login|mobile|portal|promo|showcase)\//;
 const RENDER_SOURCE_EXT_RE = /\.(?:[jt]sx|css)$/;
 const USER_MESSAGE_RE =
-  /^apps\/(?:academy-demo|admin|cms|docs|doctor|mobile|portal|promo|showcase)\/messages\/[^/]+\.json$/;
+  /^apps\/(?:academy-demo|admin|cms|docs|doctor|login|mobile|portal|promo|showcase)\/messages\/[^/]+\.json$/;
 const DS_RENDER_SOURCE_RE =
   /^packages\/design-system\/src\/.*\.(?:[jt]sx?|css)$/;
 /**
@@ -29,7 +29,7 @@ const PACKAGE_RENDER_SOURCE_RE = /^packages\/[^/]+\/src\/.*\.(?:[jt]sx|css)$/;
  * contract stays extensible without treating arbitrary server/data modules as UI.
  */
 const APP_RENDER_RUNTIME_TS_RE =
-  /^apps\/(?:academy-demo|admin|cms|docs|doctor|mobile|portal|promo|showcase)\/(?:.*\/)?(?:theme|[^/]+-(?:theme|copy|message|view-state|render-state))\.ts$/;
+  /^apps\/(?:academy-demo|admin|cms|docs|doctor|login|mobile|portal|promo|showcase)\/(?:.*\/)?(?:theme|[^/]+-(?:theme|copy|message|view-state|render-state))\.ts$/;
 const DS_TOKEN_SOURCE_RE =
   /^packages\/design-system\/(?:tokens\/(?:primitive|semantic|semantic\.dark|component)\.json|src\/styles\/tokens\.css)$/;
 const NON_RENDER_SOURCE_RE =

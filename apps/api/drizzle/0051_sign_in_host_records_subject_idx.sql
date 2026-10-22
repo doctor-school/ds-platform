@@ -1,0 +1,1 @@
+CREATE INDEX "sign_in_host_records_subject_idx" ON "sign_in_host_records" USING btree ("subject");

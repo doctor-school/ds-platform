@@ -198,6 +198,10 @@ describe("2985: release-driver", { skip: SKIP }, () => {
         '      echo "ds-release: refused: env $2 is leased by release $(cat "$STUB_DIR/lease"), which has not finished" >&2; exit 3',
         '    fi; echo "ds-release: env $2 is free" ;;',
         '  status) if [[ -f $STUB_DIR/status.json ]]; then cat "$STUB_DIR/status.json"; else echo \'{"release":null,"unitAlive":null}\'; fi ;;',
+        // #2987: `check` refuses while $STUB_DIR/live-step names a running unit.
+        "  check) if [[ -f $STUB_DIR/live-step ]]; then",
+        '      echo "ds-release: refused: $(cat "$STUB_DIR/live-step").service is still running (sudo journalctl -fu x); wait for it to end" >&2; exit 3',
+        '    fi; echo "ds-release: no step unit is running" ;;',
         "esac",
       ].join("\n"),
     );
@@ -209,7 +213,8 @@ describe("2985: release-driver", { skip: SKIP }, () => {
         'echo "$*" >> "$STUB_DIR/curl.log"',
         // #3157: compare main...<sha> answers from compare.json, any other base (the
         // live prod SHA) from compare-live.json.
-        "case ${!#} in */compare/main...*) f=$STUB_DIR/compare.json ;; *) f=$STUB_DIR/compare-live.json ;; esac",
+        // #2987: the Releases listing answers from releases.json.
+        "case ${!#} in */compare/main...*) f=$STUB_DIR/compare.json ;; */releases*) f=$STUB_DIR/releases.json ;; *) f=$STUB_DIR/compare-live.json ;; esac",
         "[[ -f $f ]] || exit 22",
         'cat "$f"',
       ].join("\n"),
@@ -794,6 +799,412 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       assert.equal(r.status, 3);
       assert.match(r.stderr, /refused: env prod is leased by release/);
       notStarted();
+    });
+  });
+
+  describe("2987: the box-side prod rollback", () => {
+    const RB_UNIT = `ds-prod-${SHA.slice(0, 12)}-rollback`;
+    const PROD_UNIT = `ds-prod-${SHA.slice(0, 12)}-driver`;
+    const LIVE = "d".repeat(40);
+    const TOOLING = "/usr/local/lib/ds-platform/tree";
+    const exited = (status) => ({
+      LoadState: "loaded",
+      ActiveState: "active",
+      SubState: "exited",
+      ExecMainCode: 1,
+      ExecMainStatus: status,
+    });
+    const running = {
+      LoadState: "loaded",
+      ActiveState: "active",
+      SubState: "running",
+      ExecMainCode: 0,
+      ExecMainStatus: 0,
+    };
+    const setLive = (status) => {
+      writeFileSync(join(dir, "live-image"), `ds-api:${LIVE}\n`);
+      writeFileSync(join(dir, "compare-live.json"), JSON.stringify({ status }));
+    };
+    const release = (tag, target, extra = {}) => ({
+      tag_name: tag,
+      target_commitish: target,
+      draft: false,
+      ...extra,
+    });
+    const setReleases = (list) =>
+      writeFileSync(join(dir, "releases.json"), JSON.stringify(list));
+    const installTree = (sha = LIVE) => {
+      const tree = join(root, TOOLING, "tools/deploy");
+      mkdirSync(tree, { recursive: true });
+      writeFileSync(join(tree, "prod.mjs"), "// the tooling tree\n");
+      writeFileSync(
+        join(root, "usr/local/lib/ds-platform/installed-tree"),
+        `${sha} ${TOOLING}\n`,
+      );
+    };
+    const recordFile = () =>
+      join(root, "var/lib/ds-platform/release-driver/rollback", `${SHA}.json`);
+    const readRecord = () => JSON.parse(readFileSync(recordFile(), "utf8"));
+
+    beforeEach(() => {
+      setRole("prod");
+      setLive("behind");
+      setReleases([
+        release("release-2026.10.20-1", LIVE),
+        release("release-2026.10.19-2", SHA),
+        release("release-2026.10.19-1", OTHER),
+      ]);
+      installTree();
+    });
+
+    it("starts its own unit and record, without a lease, after the live-unit check excluding exactly itself", () => {
+      const r = run(["rollback", "prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, `ds-release-driver: started ${RB_UNIT}\n`);
+      assert.equal(r.stderr, "");
+      const calls = log("ds-release.log");
+      assert.match(calls, new RegExp(`^check --except ${RB_UNIT} prod$`, "m"));
+      assert.doesNotMatch(
+        calls,
+        /^(lease|release|finish|status)\b/m,
+        "never the release record, never a lease",
+      );
+      const saved = join(
+        root,
+        "var/lib/ds-platform/release-driver/rollback",
+        `${SHA}.images.json`,
+      );
+      assert.equal(readFileSync(saved, "utf8"), manifest());
+      assert.equal(statSync(saved).mode & 0o777, 0o600);
+      const argv = log("systemd-run.args").trim().split("\n");
+      for (const want of [
+        `--unit=${RB_UNIT}`,
+        "--remain-after-exit",
+        "KillMode=mixed",
+        `StandardInput=file:${saved}`,
+      ]) {
+        assert.ok(argv.includes(want), `systemd-run gets ${want}`);
+      }
+      assert.deepEqual(argv.slice(-4), [
+        "/usr/local/lib/ds-platform/release-driver",
+        "_rollback",
+        "prod",
+        SHA,
+      ]);
+      const record = readRecord();
+      assert.equal(record.kind, "rollback");
+      assert.equal(record.state, "running");
+      assert.equal(record.unit, RB_UNIT);
+      assert.equal(record.from, LIVE);
+      assert.equal(statSync(recordFile()).mode & 0o777, 0o600);
+      assert.ok(
+        !existsSync(
+          join(root, "var/lib/ds-platform/release-driver", `${SHA}.json`),
+        ),
+        "the release manifest slot of the SHA is untouched",
+      );
+      assert.match(
+        log("curl.log"),
+        new RegExp(`/compare/${LIVE}\\.\\.\\.${SHA}`),
+      );
+      assert.match(log("curl.log"), /\/releases\?per_page=100/);
+    });
+
+    for (const status of ["ahead", "identical", "diverged"]) {
+      it(`refuses a target whose compare with the live SHA is ${status}: a rollback never moves production forward`, () => {
+        setLive(status);
+        const r = run(["rollback", "prod", SHA]);
+        assert.equal(r.status, 3);
+        assert.match(
+          r.stderr,
+          new RegExp(
+            `is not behind the live prod SHA ${LIVE.slice(0, 12)} \\(compare status: ${status}\\)`,
+          ),
+        );
+        notStarted();
+      });
+    }
+
+    it("refuses closed when the live SHA is unknown or GitHub cannot compare", () => {
+      rmSync(join(dir, "compare-live.json"));
+      assert.equal(run(["rollback", "prod", SHA]).status, 3);
+      rmSync(join(dir, "live-image"));
+      const r = run(["rollback", "prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.match(r.stderr, /live prod SHA is unknown/);
+      notStarted();
+    });
+
+    it("refuses a SHA that is not the target of one of the latest 3 release-* Releases", () => {
+      setReleases([
+        release("release-2026.10.21-1", LIVE),
+        release("release-2026.10.20-3", OTHER),
+        release("release-2026.10.20-2", OTHER),
+        release("release-2026.10.18-1", SHA), // the 4th newest
+        release("release-2026.10.22-1", SHA, { draft: true }), // a draft is no release
+        release("v9.9.9", SHA), // not a release-* tag
+      ]);
+      const r = run(["rollback", "prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.match(
+        r.stderr,
+        /is not the target of one of the latest 3 release-\* Releases/,
+      );
+      notStarted();
+    });
+
+    it("orders the Releases by date and sequence, not by listing order", () => {
+      setReleases([
+        release("release-2026.10.18-1", SHA),
+        release("release-2026.10.20-10", OTHER),
+        release("release-2026.10.20-9", OTHER),
+        release("release-2026.10.19-1", LIVE),
+      ]);
+      assert.equal(
+        run(["rollback", "prod", SHA]).status,
+        3,
+        "the 4th newest by key",
+      );
+    });
+
+    it("refuses closed when GitHub cannot list the Releases", () => {
+      rmSync(join(dir, "releases.json"));
+      assert.equal(run(["rollback", "prod", SHA]).status, 3);
+      writeFileSync(join(dir, "releases.json"), "{}");
+      const r = run(["rollback", "prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.match(r.stderr, /cannot read the GitHub Releases/);
+      notStarted();
+    });
+
+    it("refuses a target that is not on main, or whose digests the registry does not serve", () => {
+      setCompare("diverged");
+      assert.equal(run(["rollback", "prod", SHA]).status, 3);
+      setCompare("behind");
+      serve("api", digestOf("9"));
+      const r = run(["rollback", "prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.match(
+        r.stderr,
+        /manifest digest of api is not the one the registry serves/,
+      );
+      notStarted();
+    });
+
+    it("refuses a bad manifest before anything is asked", () => {
+      const r = run(["rollback", "prod", SHA], {
+        input: manifest({ ref: "pr/7" }),
+      });
+      assert.equal(r.status, 3);
+      assert.match(r.stderr, /bad manifest/);
+      assert.equal(log("curl.log"), "");
+      notStarted();
+    });
+
+    it("is refused on the stage box and for any env but prod", () => {
+      setRole("stage");
+      const stage = run(["rollback", "prod", SHA]);
+      assert.equal(stage.status, 3);
+      assert.match(stage.stderr, /served by the prod box only/);
+      setRole("prod");
+      for (const env of ["stage-main", "stage-pr-4"]) {
+        const r = run(["rollback", env, SHA]);
+        assert.equal(r.status, 3, env);
+        assert.match(r.stderr, /a rollback serves prod only/);
+      }
+      notStarted();
+    });
+
+    it("refuses without a recorded tooling tree", () => {
+      rmSync(join(root, "usr/local/lib/ds-platform/installed-tree"));
+      const r = run(["rollback", "prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.match(r.stderr, /no tooling tree is recorded/);
+      notStarted();
+    });
+
+    it("refuses while any release step runs, naming the unit", () => {
+      writeFileSync(
+        join(dir, "live-step"),
+        `ds-prod-${SHA.slice(0, 12)}-migrate`,
+      );
+      const r = run(["rollback", "prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.match(
+        r.stderr,
+        new RegExp(
+          `ds-prod-${SHA.slice(0, 12)}-migrate\\.service is still running`,
+        ),
+      );
+      notStarted();
+      assert.ok(!existsSync(recordFile()), "no record before the unit starts");
+    });
+
+    it("attaches to its running unit before GitHub or the registry", () => {
+      setUnit(running, RB_UNIT);
+      rmSync(join(dir, "compare.json"));
+      const r = run(["rollback", "prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, `ds-release-driver: attached ${RB_UNIT}\n`);
+      assert.equal(log("curl.log"), "");
+      notStarted();
+    });
+
+    it("resets a finished rollback unit of the SHA and starts a fresh attempt", () => {
+      setUnit(exited(1), RB_UNIT);
+      const r = run(["rollback", "prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.match(
+        log("systemctl.log"),
+        new RegExp(`^reset-failed ${RB_UNIT}\\.service$`, "m"),
+      );
+      assert.equal(r.stdout, `ds-release-driver: started ${RB_UNIT}\n`);
+    });
+
+    it("a release of the SHA waits while its rollback runs", () => {
+      setLive("identical");
+      setUnit(running, RB_UNIT);
+      const r = run(["prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.match(r.stderr, new RegExp(`${RB_UNIT} is still running`));
+      notStarted();
+      // Refused before anything of the release happens: no lease is taken (it would
+      // hold prod for a release that never started), no finished unit is reset, no
+      // manifest is saved.
+      assert.doesNotMatch(log("ds-release.log"), /^(lease|status)\b/m);
+      assert.equal(log("systemctl.log"), "");
+      assert.ok(
+        !existsSync(
+          join(root, "var/lib/ds-platform/release-driver", `${SHA}.json`),
+        ),
+      );
+    });
+
+    it("a later release of the rolled-off SHA re-runs: its superseded record never answers already-succeeded", () => {
+      setLive("ahead");
+      setUnit(exited(0), PROD_UNIT);
+      writeFileSync(
+        join(dir, "status.json"),
+        JSON.stringify({
+          release: { sha: SHA, state: "superseded" },
+          unitAlive: null,
+        }),
+      );
+      const r = run(["prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, `ds-release-driver: started ${PROD_UNIT}\n`);
+    });
+
+    describe("rollback-status", () => {
+      it("reports no record and an absent unit before any rollback", () => {
+        const r = run(["rollback-status", "prod", SHA]);
+        assert.equal(r.status, 0, r.stderr);
+        assert.deepEqual(JSON.parse(r.stdout), {
+          rollback: null,
+          driver: {
+            unit: RB_UNIT,
+            active: "absent",
+            rc: null,
+            previousSha: null,
+          },
+        });
+        assert.equal(log("ds-release.log"), "", "never the release record");
+      });
+
+      it("returns the rollback record and the -rollback unit's state", () => {
+        assert.equal(run(["rollback", "prod", SHA]).status, 0);
+        setUnit(exited(0), RB_UNIT);
+        const r = run(["rollback-status", "prod", SHA]);
+        assert.equal(r.status, 0, r.stderr);
+        const doc = JSON.parse(r.stdout);
+        assert.equal(doc.rollback.kind, "rollback");
+        assert.equal(doc.rollback.state, "running");
+        assert.deepEqual(doc.driver, {
+          unit: RB_UNIT,
+          active: "inactive",
+          rc: 0,
+          previousSha: null,
+        });
+        assert.equal(r.stdout.split("\n").length, 2, "one line");
+      });
+
+      it("names a corrupt record", () => {
+        mkdirSync(dirname(recordFile()), { recursive: true });
+        writeFileSync(recordFile(), "{nope");
+        const r = run(["rollback-status", "prod", SHA]);
+        assert.equal(r.status, 1);
+        assert.match(r.stderr, /corrupt rollback record/);
+      });
+
+      it("is refused on the stage box", () => {
+        setRole("stage");
+        assert.equal(run(["rollback-status", "prod", SHA]).status, 3);
+      });
+    });
+
+    describe("_rollback", () => {
+      beforeEach(() => {
+        stub(
+          join(root, "usr/local/bin/node"),
+          [
+            'printf "%s\\n" "$@" > "$STUB_DIR/node.args"',
+            'cat "$1" > "$STUB_DIR/node.saw-tree" 2>/dev/null || true',
+            'cat > "$STUB_DIR/node.stdin"',
+            'exit "${NODE_RC:-0}"',
+          ].join("\n"),
+        );
+      });
+
+      it("runs prod.mjs --local --rollback from the tooling tree, never a codeload of the target", () => {
+        const r = run(["_rollback", "prod", SHA]);
+        assert.equal(r.status, 0, r.stderr);
+        const argv = log("node.args").trim().split("\n");
+        assert.equal(argv[0], join(root, TOOLING, "tools/deploy/prod.mjs"));
+        assert.deepEqual(argv.slice(1), [
+          "--local",
+          "--rollback",
+          SHA,
+          "--images-file",
+          "-",
+        ]);
+        assert.equal(log("node.saw-tree"), "// the tooling tree\n");
+        assert.equal(log("node.stdin"), manifest());
+        assert.equal(
+          log("curl.log"),
+          "",
+          "the driver fetches nothing: prod.mjs fetches the target tree",
+        );
+        assert.equal(readRecord().state, "succeeded");
+      });
+
+      it("a second rollback (after a rollback) still runs from the tooling tree", () => {
+        assert.equal(run(["_rollback", "prod", SHA]).status, 0);
+        assert.equal(run(["_rollback", "prod", OTHER]).status, 0);
+        const argv = log("node.args").trim().split("\n");
+        assert.equal(argv[0], join(root, TOOLING, "tools/deploy/prod.mjs"));
+        assert.deepEqual(argv.slice(1), [
+          "--local",
+          "--rollback",
+          OTHER,
+          "--images-file",
+          "-",
+        ]);
+      });
+
+      it("a red rollback is the unit's exit status and its record's verdict", () => {
+        assert.equal(
+          run(["_rollback", "prod", SHA], { env: { NODE_RC: "1" } }).status,
+          1,
+        );
+        assert.equal(readRecord().state, "failed");
+        assert.equal(readRecord().kind, "rollback");
+      });
+
+      it("fails without a recorded tooling tree", () => {
+        rmSync(join(root, "usr/local/lib/ds-platform/installed-tree"));
+        assert.equal(run(["_rollback", "prod", SHA]).status, 1);
+        assert.equal(log("node.args"), "");
+      });
     });
   });
 

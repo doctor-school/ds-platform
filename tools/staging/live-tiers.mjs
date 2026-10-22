@@ -27,6 +27,12 @@
  * The test asserts every `requireLiveStandEnv` call in the configs' test dirs is
  * declared here with at least the names it passes, so this list cannot rot.
  *
+ * `seededEnv` is what a slot CAN give beyond its URLs: the golden slugs carrying
+ * the event shapes a tier's specs read ({@link GOLDEN_SLUGS}). `e2e:stage` hands
+ * them to that tier's leg only, and an operator-exported value of the same name
+ * wins. A tier whose specs share a variable with unrelated specs gets its own
+ * config, so a seeded slug never switches on a spec nobody pointed at it.
+ *
  * `configRequires` is the same, one level up: a config that THROWS at load without
  * its env (`playwright.events-live.config.ts`) is not launched at all.
  *
@@ -34,6 +40,35 @@
  * `testDir` (Playwright's `rootDir`, the base `--test-list-invert` lines resolve
  * against).
  */
+
+/**
+ * #2996 — the golden events (`seed:golden`, the ONLY seed a slot runs) carrying
+ * each shape the event-page specs assert, handed to a tier as `seededEnv`.
+ * Mirrored from `packages/db/src/seed/golden/` like `idp.mjs` mirrors its
+ * accounts: `apps/api/test/scripts/stage-event-page-slugs.spec.ts` builds the
+ * golden dataset and fails when a slug here stops carrying its shape. Named
+ * fixtures where one has the shape; otherwise a volume event picked because it
+ * keeps that shape at ANY seed instant (a slot seeds at its own `now`, and an
+ * event starting near it flips to ended) — the spec checks several instants.
+ */
+export const GOLDEN_SLUGS = Object.freeze({
+  /** `golden.events.upcoming` — published, online, `experts`, one speaker. */
+  academyUpcoming: "golden-event-upcoming",
+  /** `golden.events.pastWithRecording` — ended, one published montage, one speaker. */
+  academyEndedRecorded: "golden-event-past-recorded",
+  /** Ended, nothing published, `recording_expected_by` set, speakers. */
+  academyPreparingDated: "golden-volume-event-148",
+  /** Published offline `experts` event with seats left. */
+  academyOffline: "golden-volume-event-425",
+  /** Published offline `experts` event with `seats_left = 0`. */
+  academyOfflineSoldOut: "golden-volume-event-485",
+  /** Published hybrid `experts` event with seats left. */
+  academyHybrid: "golden-volume-event-420",
+  /** Published hybrid `experts` event with `seats_left = 0`. */
+  academyHybridSoldOut: "golden-volume-event-540",
+  /** Published online `doctors` event with speakers (the doctor storefront reads only `doctors`). */
+  doctorUpcoming: "golden-volume-event-418",
+});
 
 const URL_DOCTOR = "E2E_DOCTOR_URL";
 const URL_ACADEMY = "E2E_PORTAL_URL";
@@ -210,6 +245,37 @@ export const LIVE_TIERS = Object.freeze([
     rootDir: "e2e",
     // Both specs `test.skip` with a reason when their slug / api URL is absent.
     gated: [],
+    // #2996: a `published` online doctors-audience event with speakers.
+    seededEnv: { E2E_WEBINAR_SLUG: GOLDEN_SLUGS.doctorUpcoming },
+  },
+  {
+    // #2996: the Academy event-page specs (020 EARS-1/8/9/19, 014 EARS-4/7/21),
+    // their own config so the golden slugs below reach exactly these two specs
+    // and not every default-tier spec that also reads `E2E_WEBINAR_SLUG`.
+    name: "live/academy/event-page",
+    host: "academy",
+    app: "apps/portal",
+    pkg: "@ds/portal",
+    config: "playwright.event-page.config.ts",
+    rootDir: "e2e",
+    gated: [],
+    seededEnv: {
+      E2E_WEBINAR_SLUG: GOLDEN_SLUGS.academyUpcoming,
+      E2E_WEBINAR_SLUG_ENDED: GOLDEN_SLUGS.academyEndedRecorded,
+      E2E_ENDED_WEBINAR_SLUG: GOLDEN_SLUGS.academyEndedRecorded,
+      E2E_PREPARING_WEBINAR_SLUG: GOLDEN_SLUGS.academyPreparingDated,
+      E2E_HYBRID_SLUG: GOLDEN_SLUGS.academyHybrid,
+      E2E_HYBRID_SOLDOUT_SLUG: GOLDEN_SLUGS.academyHybridSoldOut,
+      E2E_OFFLINE_SOLDOUT_SLUG: GOLDEN_SLUGS.academyOfflineSoldOut,
+      E2E_SWEEP_SLUGS: [
+        GOLDEN_SLUGS.academyUpcoming,
+        GOLDEN_SLUGS.academyEndedRecorded,
+        GOLDEN_SLUGS.academyOffline,
+        GOLDEN_SLUGS.academyOfflineSoldOut,
+        GOLDEN_SLUGS.academyHybrid,
+        GOLDEN_SLUGS.academyHybridSoldOut,
+      ].join(","),
+    },
   },
   {
     name: "live/doctor/event-register",
@@ -323,24 +389,24 @@ export const HERMETIC_CONFIGS = Object.freeze([
  */
 export const GOLDEN_EVENT_SLUGS = Object.freeze({
   /** Published, upcoming, `experts` audience — the Academy's not-live эфир. */
-  upcoming: "golden-event-upcoming",
+  upcoming: GOLDEN_SLUGS.academyUpcoming,
   /** Live, `doctors` audience — the doctor storefront's only live эфир. */
   live: "golden-event-live",
   /** Live, `experts` audience — the Academy's room. */
   academyLive: "golden-event-live-academy",
   /** Ended, with a published recording. */
-  pastWithRecording: "golden-event-past-recorded",
+  pastWithRecording: GOLDEN_SLUGS.academyEndedRecorded,
 });
 
 /**
- * The live-leg env a slot derives from the golden dataset, per storefront host.
+ * The live-leg env a slot derives from the golden dataset, per storefront host;
+ * a tier's own `seededEnv` (#2996) wins over it for that tier's leg.
  * Only values a spec can READ without consuming them: a spec that would consume
  * a seeded state (one-tap registration) or needs a seed the golden dataset does
  * not hold is declared with `slotReason` in its gated entry instead.
  */
 export const GOLDEN_LIVE_ENV = Object.freeze({
   academy: Object.freeze({
-    E2E_WEBINAR_SLUG: GOLDEN_EVENT_SLUGS.upcoming,
     E2E_WEBINAR_SLUG_NOT_LIVE: GOLDEN_EVENT_SLUGS.upcoming,
     E2E_WEBINAR_SLUG_LIVE: GOLDEN_EVENT_SLUGS.academyLive,
     E2E_ROOM_SLUG_LIVE: GOLDEN_EVENT_SLUGS.academyLive,

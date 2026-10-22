@@ -799,8 +799,9 @@ gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_
   `live-broadcast-check.mjs`, `lib/registry.mjs`); `stage-suite` (set by
   `stage.yml`) replaces the operator's stage `main` check, as it does on the
   workstation path for a `main` target. `--skip-ci-check`,
-  `--release-gate-exempt`, `--allow-live-broadcast`, `--ref` and `--rollback`
-  exist only on `pnpm deploy:prod` (break-glass). The CI check drops the
+  `--release-gate-exempt`, `--allow-live-broadcast` and `--ref` exist only on
+  `pnpm deploy:prod` (break-glass); the rollback runs here in rollback mode
+  (below), and `pnpm deploy:prod --rollback` stays its break-glass twin. The CI check drops the
   check-runs of `deploy-prod.yml` itself by workflow path (an earlier failed
   attempt on the same SHA is not CI).
 - **One release at a time.** `concurrency: deploy-prod`, never cancelled — its own
@@ -826,3 +827,35 @@ gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_
 - **Secrets.** `PROD_SSH_KEY` + `PROD_SSH_KNOWN_HOSTS` live in Environment
   `production` (deployment branches `main`, no required reviewer) and reach only
   the `deploy` job.
+
+### Rollback mode (#2987)
+
+When a release visibly broke production (failed post-deploy smoke, site or login
+down) the agent rolls it off without an owner word (spec §3 item 3 «Rollback
+mode», §9, §10 owner decision 2026-10-22) and reports to the owner at once:
+
+```bash
+gh workflow run deploy-prod.yml --ref main -f mode=rollback -f sha=<target sha> -f reason="<why>"
+```
+
+- **Pre-flight** (`release-runner.mjs rollback-preflight`): the `reason` is not
+  blank (it reaches steps only through `env:`); the SHA is the target of one of
+  the latest 3 `release-*` Releases (by date and sequence; drafts skipped); it is
+  strictly behind the live SHA (the newest production Deployment with a `success`
+  status; compare `<live>...<sha>` = `behind`); its `images-<sha>.json` is
+  recorded. No stage-suite, release-gate or live-broadcast check. The box repeats
+  the ancestry and release checks as the boundary and runs the migration floor.
+- **Deploy.** `ssh deploy@<api-prod> "rollback prod <sha>" < images-<sha>.json`,
+  then polls `rollback-status prod <sha>` (30 min, status lines only). The verdict
+  (`release-runner.mjs rollback-verdict`) reads the `-rollback` unit state as well
+  as the record: a dead, failed or absent unit is succeeded only with rc 0 and a
+  `succeeded` record, so a unit that died with its record still `running` is a
+  failure. Lost contact or the time-out is `unknown` → an `error` record.
+- **After a terminal status.** No release cut, no digest. `rollback-record` writes
+  the ONE Deployment record (`success` / `failure` / `error`) described
+  `rollback to <sha12> — <reason>`, with the reason and the rolled-off SHA in its
+  payload; `rollback-notice` posts «откат прода на <sha12>: <reason>» and the
+  outcome to Mattermost through `release-notes.mjs` `postToMattermost`.
+- **Break-glass stays on the workstation.** `pnpm deploy:prod --rollback`, the
+  hotfix `--ref`, `--skip-ci-check`, `--allow-live-broadcast` and
+  `--release-gate-exempt` are not on this path.

@@ -515,6 +515,77 @@ describe(
       assert.equal(ds(["check", "stage-pr-3"]).code, 0);
     });
 
+    it("2987: check and supersede exclude exactly the rollback's own unit — a stale step unit of its SHA still refuses", () => {
+      const units = join(root, "units");
+      const own = "ds-prod-aaaaaaaaaaaa-rollback";
+      const stale = "ds-prod-aaaaaaaaaaaa-migrate";
+      writeFileSync(join(units, `${own}.pid`), "1\n"); // running: no rc yet
+      try {
+        const plain = ds(["check", "prod"]);
+        assert.equal(
+          plain.code,
+          3,
+          "without --except the rollback unit refuses like any other",
+        );
+        assert.match(
+          plain.err,
+          new RegExp(`${own}\\.service is still running`),
+        );
+        const own1 = ds(["check", "--except", own, "prod"]);
+        assert.equal(own1.code, 0, own1.err);
+        const marker = join(root, "rollback-own");
+        const sup = ds([
+          "supersede",
+          "--except",
+          own,
+          "prod",
+          scriptFile("rb-own", `touch "${marker}"\n`),
+        ]);
+        assert.equal(sup.code, 0, sup.err);
+        assert.ok(existsSync(marker), "the up -d ran under the env lock");
+
+        writeFileSync(join(units, `${stale}.pid`), "1\n");
+        const check = ds(["check", "--except", own, "prod"]);
+        assert.equal(check.code, 3);
+        assert.match(
+          check.err,
+          new RegExp(`${stale}\\.service is still running`),
+        );
+        const marker2 = join(root, "rollback-stale");
+        const refused = ds([
+          "supersede",
+          "--except",
+          own,
+          "prod",
+          scriptFile("rb-stale", `touch "${marker2}"\n`),
+        ]);
+        assert.equal(refused.code, 3);
+        assert.match(
+          refused.err,
+          new RegExp(`${stale}\\.service is still running`),
+        );
+        assert.ok(!existsSync(marker2), "nothing ran");
+
+        for (const bad of [
+          stale,
+          "ds-stage-main-aaaaaaaaaaaa-rollback",
+          "ds-prod-aaaa-rollback",
+          "",
+        ]) {
+          assert.equal(
+            ds(["check", "--except", bad, "prod"]).code,
+            2,
+            `--except ${bad}`,
+          );
+        }
+        assert.equal(ds(["check", "--except"]).code, 2);
+      } finally {
+        rmSync(join(units, `${own}.pid`), { force: true });
+        rmSync(join(units, `${stale}.pid`), { force: true });
+      }
+      assert.equal(ds(["check", "prod"]).code, 0);
+    });
+
     it("names a corrupt status file instead of a traceback", () => {
       const dir = join(root, "state", "stage-pr-9");
       mkdirSync(dir, { recursive: true });

@@ -22,9 +22,9 @@
 // the root `.dockerignore`. So after liveness, every route in ROUTE_PROBES must
 // answer HTTP 200 — not "< 500" — and the verdict names the failing route.
 //
-// Usage:  node tools/ci/standalone-boot-check.mjs [app ...]  (default: portal admin doctor)
+// Usage:  node tools/ci/standalone-boot-check.mjs [app ...]  (default: portal admin doctor login)
 // Requires the app's production build to exist already:
-//         pnpm exec turbo run build --filter=@ds/portal --filter=@ds/admin --filter=@ds/doctor
+//         pnpm exec turbo run build --filter=@ds/portal --filter=@ds/admin --filter=@ds/doctor --filter=@ds/login
 //
 // Env:
 //   STANDALONE_BOOT_DEADLINE_MS  per-app boot deadline (default 90000)
@@ -35,7 +35,7 @@ import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const DEFAULT_APPS = ["portal", "admin", "doctor"];
+const DEFAULT_APPS = ["portal", "admin", "doctor", "login"];
 
 // Per-app routes that depend on a RUNTIME-fs asset (#2012). Declared next to the
 // app list so a new runtime-`fs` route is one line to cover. Each must answer 200
@@ -44,6 +44,9 @@ const ROUTE_PROBES = {
   portal: ["/documents", "/documents/privacy-policy"],
   admin: [],
   doctor: ["/documents", "/documents/privacy-policy"],
+  // The sign-in host reads no runtime-fs asset; `/` liveness (a redirect,
+  // 003 EARS-67) is its whole probe.
+  login: [],
 };
 const DEADLINE_MS = Number(process.env.STANDALONE_BOOT_DEADLINE_MS || 90_000);
 const POLL_MS = 500;

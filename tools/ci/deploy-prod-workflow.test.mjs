@@ -26,14 +26,113 @@ const environmentOf = (job) =>
 const stepRuns = (job) => (job.steps ?? []).map((s) => s.run ?? "").join("\n");
 
 describe("deploy-prod.yml", () => {
-  it("is a workflow_dispatch with the required inputs sha and owner_quote, and nothing else", () => {
+  it("is a workflow_dispatch with sha, mode (release | rollback), owner_quote and reason, and nothing else", () => {
     assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch"]);
     const inputs = wf.on.workflow_dispatch.inputs;
-    assert.deepEqual(Object.keys(inputs).sort(), ["owner_quote", "sha"]);
-    for (const name of ["sha", "owner_quote"]) {
-      assert.equal(inputs[name].required, true, name);
+    assert.deepEqual(Object.keys(inputs).sort(), [
+      "mode",
+      "owner_quote",
+      "reason",
+      "sha",
+    ]);
+    assert.equal(inputs.sha.required, true);
+    assert.equal(inputs.sha.type, "string");
+    assert.equal(inputs.mode.type, "choice");
+    assert.deepEqual(inputs.mode.options, ["release", "rollback"]);
+    assert.equal(inputs.mode.default, "release");
+    // Each mode's own text input is enforced by the first step, per mode.
+    for (const name of ["owner_quote", "reason"]) {
       assert.equal(inputs[name].type, "string", name);
     }
+  });
+
+  it("2987: the first step refuses a blank owner_quote in release mode and a blank reason in rollback mode", () => {
+    const step = wf.jobs.preflight.steps[0];
+    assert.deepEqual(step.env, {
+      MODE: "${{ inputs.mode }}",
+      OWNER_QUOTE: "${{ inputs.owner_quote }}",
+      REASON: "${{ inputs.reason }}",
+    });
+    const release = step.run.indexOf("release)");
+    const rollback = step.run.indexOf("rollback)");
+    assert.ok(release > 0 && rollback > release);
+    assert.match(
+      step.run.slice(release, rollback),
+      /\$\{OWNER_QUOTE\/\/\[\[:space:\]\]\/\}[\s\S]*exit 1/,
+    );
+    assert.match(
+      step.run.slice(rollback),
+      /\$\{REASON\/\/\[\[:space:\]\]\/\}[\s\S]*exit 1/,
+    );
+    // An unknown mode is refused, never read as a release.
+    assert.match(step.run, /\*\)[\s\S]*exit 1/);
+  });
+
+  it("2987: the reason reaches steps only through env:", () => {
+    const reasonUses = raw.match(/inputs\.reason/g) ?? [];
+    const envUses = [...Object.values(wf.jobs)].flatMap((job) =>
+      (job.steps ?? []).filter(
+        (s) => s.env?.REASON === "${{ inputs.reason }}",
+      ),
+    );
+    assert.ok(envUses.length >= 3);
+    assert.equal(reasonUses.length, envUses.length);
+  });
+
+  it("2987: rollback mode runs its own pre-flight, rollback prod / rollback-status prod, its record and notice — never the release path", () => {
+    const pre = wf.jobs.preflight.steps;
+    const byId = (steps, id) => steps.find((s) => s.id === id);
+    assert.equal(byId(pre, "preflight").if, "inputs.mode != 'rollback'");
+    const rbPre = byId(pre, "rollback-preflight");
+    assert.equal(rbPre.if, "inputs.mode == 'rollback'");
+    assert.match(
+      rbPre.run,
+      /release-runner\.mjs rollback-preflight --sha "\$SHA"/,
+    );
+    assert.equal(
+      wf.jobs.preflight.outputs["images-run-id"],
+      "${{ steps.preflight.outputs.images-run-id || steps.rollback-preflight.outputs.images-run-id }}",
+    );
+    const steps = wf.jobs.deploy.steps;
+    for (const id of ["release", "poll"]) {
+      assert.equal(byId(steps, id).if, "inputs.mode != 'rollback'", id);
+    }
+    const start = byId(steps, "rollback");
+    assert.equal(start.if, "inputs.mode == 'rollback'");
+    assert.match(
+      start.run,
+      /"rollback prod \$SHA" \\\n\s+< "manifest\/images-\$SHA\.json"/,
+    );
+    const poll = byId(steps, "rollback-poll");
+    assert.equal(poll.if, "inputs.mode == 'rollback'");
+    assert.match(poll.run, /"rollback-status prod \$SHA"/);
+    assert.match(poll.run, /release-runner\.mjs rollback-verdict --sha "\$SHA"/);
+    // Lost contact and the time-out set `unknown` before leaving the loop.
+    for (const marker of [
+      /failed \$ssh_failures times in a row/,
+      /did not finish within 30 min/,
+    ]) {
+      const at = poll.run.search(marker);
+      assert.ok(at > 0, String(marker));
+      const exit = poll.run.indexOf("exit 1", at);
+      const unknown = poll.run.indexOf("terminal unknown", at);
+      assert.ok(unknown > at && unknown < exit, String(marker));
+    }
+    const record = byId(steps, "rollback-record");
+    assert.equal(
+      record.if,
+      "always() && inputs.mode == 'rollback' && steps.rollback-poll.outputs.terminal != ''",
+    );
+    assert.match(record.run, /rollback-record --sha "\$SHA"/);
+    assert.equal(record.env.OWNER_QUOTE, undefined);
+    const notice = steps.find((s) => /rollback-notice/.test(s.run ?? ""));
+    assert.equal(notice.if, record.if);
+    assert.equal(
+      notice.env.MATTERMOST_WEBHOOK_URL,
+      "${{ secrets.MATTERMOST_WEBHOOK_URL }}",
+    );
+    // No release cut and no digest in rollback mode.
+    assert.match(wf.jobs.digest.if, /^inputs\.mode != 'rollback' && /);
   });
 
   it("refuses an empty or whitespace-only owner_quote before any other step", () => {
@@ -167,7 +266,10 @@ describe("deploy-prod.yml", () => {
     const record = wf.jobs.deploy.steps.find((s) =>
       /release-runner\.mjs record/.test(s.run ?? ""),
     );
-    assert.equal(record.if, "always() && steps.poll.outputs.terminal != ''");
+    assert.equal(
+      record.if,
+      "always() && inputs.mode != 'rollback' && steps.poll.outputs.terminal != ''",
+    );
     assert.equal(record.env.OWNER_QUOTE, "${{ inputs.owner_quote }}");
     assert.match(
       record.run,
@@ -224,7 +326,7 @@ describe("deploy-prod.yml", () => {
     assert.equal(job.uses, "./.github/workflows/release-digest.yml");
     assert.equal(
       job.if,
-      "needs.deploy.result == 'success' && needs.deploy.outputs.recorded == 'new'",
+      "inputs.mode != 'rollback' && needs.deploy.result == 'success' && needs.deploy.outputs.recorded == 'new'",
     );
     assert.deepEqual(job.with, { sha: "${{ inputs.sha }}" });
     assert.deepEqual(job.secrets, {

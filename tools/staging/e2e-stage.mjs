@@ -283,6 +283,7 @@ export function captchaTestTokenEnv(operatorEnv, boxEnv) {
  * The golden accounts and slugs come from `slotLiveStandEnv`; a key neither the
  * slot's hostnames nor the golden dataset nor the Actions env carries is not
  * derived, and its spec is reported «not run» (`live-tiers.mjs` `slotReason`).
+ * A tier's own golden slugs (`seededEnv`, {@link seededLegEnv}) win over the host's.
  */
 export function slotLiveEnv({ baseDomain }) {
   return {
@@ -332,6 +333,20 @@ export function slotLiveStandEnv(operatorEnv, goldenPasswords, host) {
 }
 
 const isSet = (env, name) => Boolean(env?.[name]?.trim());
+
+/**
+ * #2996 — a live tier's golden slugs (`seededEnv`, `live-tiers.mjs`), for that
+ * tier's leg only. An operator-exported value of the same name wins: the leg env
+ * overrides the inherited one, so a seeded slug is dropped wherever the operator
+ * already named their own.
+ */
+export function seededLegEnv(tier, operatorEnv) {
+  return Object.fromEntries(
+    Object.entries(tier.seededEnv ?? {}).filter(
+      ([name]) => !isSet(operatorEnv, name),
+    ),
+  );
+}
 
 /**
  * One live config's run plan against the env the leg will have. A config that
@@ -828,6 +843,8 @@ export async function runE2eStage(
         ...suiteEnv,
         ...slotLiveEnv({ baseDomain }),
         ...slotLiveStandEnv(env, suiteEnv, tier.host),
+        // A tier's own golden slugs (#2996) are more specific than the host's.
+        ...seededLegEnv(tier, env),
         E2E_API_URL: env.E2E_API_URL || new URL(healthUrl).origin,
         ...reporting.env,
       };

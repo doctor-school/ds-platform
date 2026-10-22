@@ -17,6 +17,25 @@
 //       writes nothing. Writes `recorded=existing|new` to $GITHUB_OUTPUT; a record
 //       that could not be written exits 1.
 //
+// Rollback mode (#2987; spec §3 item 3 «Rollback mode», §5 «Prod rollback»):
+//
+//   rollback-preflight --sha <sha>
+//       Before the box is touched: the reason ($REASON — env only) is not blank, the
+//       SHA is the target of one of the latest 3 `release-*` Releases, a strict
+//       ancestor of the live SHA (the latest successful production Deployment's;
+//       compare `<live>...<sha>` = `behind`), and its `images-<sha>.json` is
+//       recorded. No stage-suite, release-gate or live-broadcast check: the target
+//       passed them when it shipped. Writes `images-run-id=<id>` to $GITHUB_OUTPUT.
+//   rollback-verdict --sha <sha>
+//       Reads one `rollback-status prod <sha>` reply on stdin and prints one line:
+//       `<running|succeeded|failed|unreadable> <from-sha|-> <status line>`.
+//   rollback-record --sha <sha> --state succeeded|failed|unknown [--from-sha <sha>]
+//       The ONE Deployment record of the rollback, `rollback to <sha12> — <reason>`;
+//       no release cut. Exits 1 when it could not be written.
+//   rollback-notice --sha <sha> --state succeeded|failed|unknown
+//       The Mattermost notice «откат прода на <sha12>: <reason>» with the outcome,
+//       through the digest's poster ($MATTERMOST_WEBHOOK_URL; unset skips green).
+//
 // Every check is the workstation path's own module (ci-gate, release-gate,
 // live-broadcast-check, lib/registry, deployment-record, cut-release); this file
 // only orders them for a runner, which holds no box access. There is no escape
@@ -33,7 +52,10 @@ import {
   classifyDeployCheckRuns,
   fetchDeployCiBoard,
 } from "./ci-gate.mjs";
-import { recordDeployment } from "./deployment-record.mjs";
+import {
+  createDeploymentRecord,
+  recordDeployment,
+} from "./deployment-record.mjs";
 import {
   PROD_MANIFEST_POLICY,
   resolveRecordedImagesViaGh,
@@ -45,6 +67,7 @@ import {
   formatReleaseGateHold,
   probeReleaseGate,
 } from "./release-gate.mjs";
+import { postToMattermost } from "./release-notes.mjs";
 
 /** The `stage.yml` commit status the release requires (spec §3 item 3). */
 export const STAGE_SUITE_CONTEXT = "stage-suite";
@@ -67,18 +90,25 @@ const RECORD_STATES = Object.freeze({
   unknown: "error",
 });
 
+/** The flags each command admits; anything else is refused. */
+const COMMAND_FLAGS = Object.freeze({
+  preflight: ["--sha"],
+  record: ["--sha", "--state", "--previous-sha"],
+  "rollback-preflight": ["--sha"],
+  "rollback-verdict": ["--sha"],
+  "rollback-record": ["--sha", "--state", "--from-sha"],
+  "rollback-notice": ["--sha", "--state"],
+});
+
 /** Parse the CLI. Unknown flags are refused, so no escape hatch can be passed. */
 export function parseRunnerArgs(argv) {
   const [command, ...rest] = argv;
-  if (command !== "preflight" && command !== "record") {
+  if (!Object.hasOwn(COMMAND_FLAGS, command ?? "")) {
     return {
-      error: `unknown command ${command ?? "(none)"}: preflight | record`,
+      error: `unknown command ${command ?? "(none)"}: ${Object.keys(COMMAND_FLAGS).join(" | ")}`,
     };
   }
-  const allowed =
-    command === "preflight"
-      ? ["--sha"]
-      : ["--sha", "--state", "--previous-sha"];
+  const allowed = COMMAND_FLAGS[command];
   const values = {};
   for (let i = 0; i < rest.length; i += 2) {
     const flag = rest[i];
@@ -93,7 +123,7 @@ export function parseRunnerArgs(argv) {
       error: `--sha must be a full 40-hex commit sha, got: ${sha ?? "(none)"}`,
     };
   }
-  if (command === "preflight") return { command, sha };
+  if (!allowed.includes("--state")) return { command, sha };
 
   const state = values["--state"];
   if (!Object.hasOwn(RECORD_STATES, state ?? "")) {
@@ -101,13 +131,17 @@ export function parseRunnerArgs(argv) {
       error: `--state must be succeeded|failed|unknown, got: ${state ?? "(none)"}`,
     };
   }
-  const previous = values["--previous-sha"] || null;
-  if (previous !== null && !FULL_SHA.test(previous)) {
+  if (command === "rollback-notice") return { command, sha, state };
+  const shaFlag = command === "record" ? "--previous-sha" : "--from-sha";
+  const other = values[shaFlag] || null;
+  if (other !== null && !FULL_SHA.test(other)) {
     return {
-      error: `--previous-sha must be a full 40-hex commit sha, got: ${previous}`,
+      error: `${shaFlag} must be a full 40-hex commit sha, got: ${other}`,
     };
   }
-  return { command, sha, state, previousSha: previous };
+  return command === "record"
+    ? { command, sha, state, previousSha: other }
+    : { command, sha, state, fromSha: other };
 }
 
 /**
@@ -381,6 +415,240 @@ export function reportRecord(res) {
   return { exitCode: 0, output: `recorded=${res.recorded}\n`, message: null };
 }
 
+// --- #2987: rollback mode -------------------------------------------------------
+
+/** The rollback pre-flight, in order (spec §3 item 3 «Rollback mode»). */
+export const ROLLBACK_PREFLIGHT_ORDER = Object.freeze([
+  "reason",
+  "recent-release",
+  "behind-live",
+  "recorded-images",
+]);
+
+/** The registry keeps the images of exactly the latest 3 releases (spec §8 (a)). */
+export const ROLLBACK_RELEASES = 3;
+
+const RELEASE_TAG = /^release-(\d{4})\.(\d{2})\.(\d{2})-([1-9]\d*)$/;
+
+/**
+ * The targets of the latest `keep` `release-YYYY.MM.DD-N` Releases, newest first,
+ * ordered by date and sequence (never by listing order); drafts are not releases.
+ * The box driver's `check_recent_release` applies the same rule as the boundary.
+ */
+export function recentReleaseTargets(releases, keep = ROLLBACK_RELEASES) {
+  const ranked = [];
+  for (const r of Array.isArray(releases) ? releases : []) {
+    if (!r || typeof r !== "object" || r.draft) continue;
+    const m = RELEASE_TAG.exec(String(r.tag_name ?? ""));
+    if (m) {
+      ranked.push({
+        key: m.slice(1).map(Number),
+        target: String(r.target_commitish ?? ""),
+      });
+    }
+  }
+  ranked.sort((a, b) => {
+    for (let i = 0; i < 4; i += 1) {
+      if (a.key[i] !== b.key[i]) return b.key[i] - a.key[i];
+    }
+    return 0;
+  });
+  return ranked.slice(0, keep).map((r) => r.target);
+}
+
+/**
+ * The live prod SHA: the SHA of the newest production Deployment that carries a
+ * `success` status (a later release's `inactive` does not unmake it), or null.
+ */
+export async function liveProdShaViaGh({ repo, gh }) {
+  const deployments = JSON.parse(
+    gh([
+      "api",
+      `repos/${repo}/deployments?environment=production&per_page=30`,
+    ]) || "[]",
+  );
+  for (const d of deployments) {
+    const statuses = JSON.parse(
+      gh(["api", `repos/${repo}/deployments/${d.id}/statuses?per_page=100`]) ||
+        "[]",
+    );
+    if (statuses.some((s) => s?.state === "success")) return d.sha ?? null;
+  }
+  return null;
+}
+
+/** The rollback pre-flight checks, wired to `gh` and the recorded-images reader. */
+export function rollbackPreflightChecks({
+  sha,
+  repo,
+  reason,
+  cwd = process.cwd(),
+  gh = (args) => capture("gh", args, cwd),
+  resolveImages = (args) => resolveRecordedImagesViaGh(args),
+}) {
+  const short = sha.slice(0, 12);
+  const checks = {
+    reason: async () => {
+      if (!String(reason ?? "").trim()) {
+        throw new Error(
+          "reason is empty — a rollback records why production is rolled back",
+        );
+      }
+      return { line: `reason present (${String(reason).length} chars)` };
+    },
+    "recent-release": async () => {
+      const releases = JSON.parse(
+        gh(["api", `repos/${repo}/releases?per_page=100`]) || "[]",
+      );
+      if (!recentReleaseTargets(releases).includes(sha)) {
+        throw new Error(
+          `${short} is not the target of one of the latest ${ROLLBACK_RELEASES} release-* Releases`,
+        );
+      }
+      return {
+        line: `${short} is the target of one of the latest ${ROLLBACK_RELEASES} releases`,
+      };
+    },
+    "behind-live": async () => {
+      const live = await liveProdShaViaGh({ repo, gh });
+      if (!FULL_SHA.test(live ?? "")) {
+        throw new Error(
+          "the live prod SHA is unknown (no successful production Deployment)",
+        );
+      }
+      const status = JSON.parse(
+        gh(["api", `repos/${repo}/compare/${live}...${sha}`]) || "{}",
+      )?.status;
+      if (status !== "behind") {
+        throw new Error(
+          `${short} is not behind the live prod SHA ${live.slice(0, 12)} (compare status: ${status ?? "unknown"}) — a rollback never moves production forward`,
+        );
+      }
+      return {
+        line: `${short} is behind the live prod SHA ${live.slice(0, 12)}`,
+      };
+    },
+    "recorded-images": async () => {
+      const resolved = await resolveImages({ ...PROD_MANIFEST_POLICY, sha });
+      return {
+        line: `recorded \`${resolved.ref}\` images for ${short} (run ${resolved.run.url})`,
+        imagesRunId: resolved.run.databaseId,
+      };
+    },
+  };
+  return ROLLBACK_PREFLIGHT_ORDER.map((name) => ({ name, run: checks[name] }));
+}
+
+const TERMINAL_UNIT = new Set(["inactive", "failed", "absent"]);
+
+/**
+ * The verdict of one `rollback-status prod <sha>` reply. The unit state decides
+ * as well as the record: a finished, dead or absent `-rollback` unit is succeeded
+ * only with rc 0 AND a `succeeded` record — a unit that died before writing its
+ * verdict leaves the record `running`, and that is a failure.
+ *
+ * @returns {{terminal: null|"succeeded"|"failed", line: string, from: string|null}}
+ */
+export function rollbackVerdict(text, sha) {
+  let doc;
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    doc = null;
+  }
+  const driver = doc?.driver;
+  const record = doc?.rollback ?? null;
+  if (
+    !doc ||
+    typeof driver !== "object" ||
+    driver === null ||
+    (record !== null && record.sha !== sha)
+  ) {
+    return { terminal: null, line: "unreadable reply", from: null };
+  }
+  const active = String(driver.active ?? "?");
+  const rc = driver.rc ?? null;
+  const state = record?.state ?? null;
+  const from = FULL_SHA.test(record?.from ?? "") ? record.from : null;
+  const line = `driver=${active} rc=${rc ?? "-"} state=${state ?? "-"}`;
+  if (!TERMINAL_UNIT.has(active)) return { terminal: null, line, from };
+  const terminal = rc === 0 && state === "succeeded" ? "succeeded" : "failed";
+  return { terminal, line, from };
+}
+
+/**
+ * After a terminal rollback status: the ONE Deployment record, no release cut.
+ *
+ * @returns {Promise<{ok: boolean, recorded: "new", error?: string, deploymentId?: number}>}
+ */
+export async function runRollbackRecord({
+  sha,
+  state,
+  fromSha = null,
+  reason,
+  create = (args) => createDeploymentRecord(args),
+  log = (l) => console.log(l),
+}) {
+  if (!String(reason ?? "").trim()) {
+    throw new Error("reason is empty — a rollback record needs its reason");
+  }
+  const deploymentState = RECORD_STATES[state];
+  const res = create({
+    sha,
+    releaseTag: null,
+    notesText: "",
+    healthUrl: PROD_HEALTH_URL,
+    state: deploymentState,
+    rollback: { reason, from: fromSha },
+  });
+  if (res.ok) {
+    log(
+      `✓ GitHub Deployment recorded (#${res.deploymentId}, rollback ${deploymentState})`,
+    );
+  }
+  return { ...res, recorded: "new" };
+}
+
+const NOTICE_OUTCOME = Object.freeze({
+  succeeded: "итог: откат выполнен",
+  failed: "итог: откат не удался",
+  unknown: "итог неизвестен: связь с прод-сервером потеряна",
+});
+
+/** The Mattermost notice of a rollback: the spec's line first, the outcome below. */
+export function buildRollbackNotice({ sha, state, reason }) {
+  return `откат прода на ${sha.slice(0, 12)}: ${String(reason ?? "").trim()}\n${NOTICE_OUTCOME[state]}`;
+}
+
+/** Post the rollback notice; no webhook configured skips green, as the digest does. */
+export async function runRollbackNotice({
+  sha,
+  state,
+  reason,
+  webhook,
+  post = (args) => postToMattermost(args),
+  log = (l) => console.log(l),
+}) {
+  if (!webhook) {
+    log(
+      "MATTERMOST_WEBHOOK_URL is not configured — no rollback notice (green).",
+    );
+    return;
+  }
+  await post({ webhook, text: buildRollbackNotice({ sha, state, reason }) });
+  log("✓ rollback notice posted to Mattermost");
+}
+
+async function readStdin() {
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(chunk);
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+function writeOutput(text) {
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, text);
+}
+
 function repoName() {
   return (
     process.env.GITHUB_REPOSITORY ||
@@ -401,9 +669,46 @@ async function main() {
     console.error(`::error::release-runner: ${args.error}`);
     process.exit(2);
   }
-  if (args.command === "preflight") {
+  if (args.command === "rollback-verdict") {
+    const v = rollbackVerdict(await readStdin(), args.sha);
+    const word =
+      v.terminal ?? (v.line === "unreadable reply" ? "unreadable" : "running");
+    console.log(`${word} ${v.from ?? "-"} ${v.line}`);
+    return;
+  }
+  if (args.command === "rollback-record") {
+    const verdict = reportRecord(
+      await runRollbackRecord({
+        sha: args.sha,
+        state: args.state,
+        fromSha: args.fromSha,
+        reason: process.env.REASON,
+      }),
+    );
+    if (verdict.message) console.error(verdict.message);
+    if (verdict.exitCode !== 0) process.exit(verdict.exitCode);
+    return;
+  }
+  if (args.command === "rollback-notice") {
+    await runRollbackNotice({
+      sha: args.sha,
+      state: args.state,
+      reason: process.env.REASON,
+      webhook: process.env.MATTERMOST_WEBHOOK_URL,
+    });
+    return;
+  }
+  if (args.command === "preflight" || args.command === "rollback-preflight") {
+    const repo = repoName();
     const res = await runPreflight({
-      checks: preflightChecks({ sha: args.sha, repo: repoName() }),
+      checks:
+        args.command === "preflight"
+          ? preflightChecks({ sha: args.sha, repo })
+          : rollbackPreflightChecks({
+              sha: args.sha,
+              repo,
+              reason: process.env.REASON,
+            }),
     });
     if (!res.ok) {
       console.error(
@@ -411,12 +716,7 @@ async function main() {
       );
       process.exit(1);
     }
-    if (process.env.GITHUB_OUTPUT) {
-      appendFileSync(
-        process.env.GITHUB_OUTPUT,
-        `images-run-id=${res.imagesRunId}\n`,
-      );
-    }
+    writeOutput(`images-run-id=${res.imagesRunId}\n`);
     console.log(`pre-flight passed for ${args.sha.slice(0, 12)}`);
     return;
   }

@@ -487,11 +487,15 @@ export function LoginDoor({
     // Right after reading it, whatever happens next: a reload must not redeem
     // again and the reference must not stay in history.
     stripHandoffFromAddressBar();
-    if (!handoffRef || handoffRedeemed.current) return;
+    // #3170 — on the sign-in host the reference rides the spent entry intent
+    // server-side; the transport redeems it without naming it.
+    const redeems =
+      handoffRef !== null || config.api.formPost?.handoff === true;
+    if (!redeems || handoffRedeemed.current) return;
     handoffRedeemed.current = true;
     setHandoffPending(true);
     authClient
-      .redeemLoginHandoff({ ref: handoffRef })
+      .redeemLoginHandoff(handoffRef ? { ref: handoffRef } : undefined)
       .then(async (answer) => {
         if (answer.status === "otp_sent") {
           setSentIdentifier(answer.identifier);

@@ -55,3 +55,30 @@ export function persistTheme(theme: Theme): void {
 export const THEME_FOUC_GUARD = `try{if(localStorage.getItem(${JSON.stringify(
   THEME_STORAGE_KEY,
 )})==="dark"){document.documentElement.classList.add("dark")}}catch(e){}`;
+
+/** The media query whose `matches` is the system half of the Academy resolution. */
+export const SYSTEM_DARK_QUERY = "(prefers-color-scheme: dark)";
+
+/**
+ * The Academy's pre-paint theme script (006 EARS-12 — "applies the resolved
+ * theme before first paint"): a stored EXPLICIT choice wins, otherwise the
+ * system `prefers-color-scheme`. Self-contained ES5-safe source, `try`-wrapped
+ * so blocked storage degrades to the system scheme, and it TOGGLES (never only
+ * adds) so a stale `.dark` on a restored DOM is corrected too. Unlike
+ * {@link THEME_FOUC_GUARD} (the doctor storefront's stored-choice-only guard)
+ * it follows the system; {@link ThemeWatcher} keeps an open page in step.
+ * Hosts: the Academy root layout and the sign-in host's Academy variant
+ * (#3170); its parity with the portal's `resolveTheme` is pinned by the
+ * portal's `lib/theme.test.ts`.
+ */
+export const THEME_INIT_SCRIPT = `(function () {
+  var stored = null;
+  try {
+    stored = window.localStorage.getItem("${THEME_STORAGE_KEY}");
+  } catch (e) {}
+  var dark =
+    stored === "dark" ||
+    (stored !== "light" &&
+      window.matchMedia("${SYSTEM_DARK_QUERY}").matches);
+  document.documentElement.classList.toggle("dark", dark);
+})();`;

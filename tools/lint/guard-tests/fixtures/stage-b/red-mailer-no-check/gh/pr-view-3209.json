@@ -1,0 +1,7 @@
+{
+  "number": 3209,
+  "body": "## Summary\nMailer transport retry.\n\nStage-B: N/A — no render surface\n",
+  "labels": [],
+  "files": [{ "path": "apps/api/src/mailer/transport.ts" }],
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

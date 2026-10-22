@@ -30,6 +30,7 @@ on:
       - "apps/portal/**"
       - "apps/admin/**"
       - "apps/doctor/**"
+      - "apps/login/**"
       - "packages/**"
       - "infra/dev-stand/**"
       - ".github/workflows/runtime-images.yml"
@@ -131,21 +132,29 @@ jobs:
               target: "",
               build-args: "API_PROXY_TARGET=http://api:3000",
             }
+          # The sign-in host (ADR-0015 §4, #3170). Built, pushed and booted like
+          # every app image; NOT yet a key of the digest manifest below — see there.
+          - {
+              image: login,
+              dockerfile: apps/login/Dockerfile,
+              target: "",
+              build-args: "API_PROXY_TARGET=http://api:3000",
+            }
     env:
       PUSH: ${{ needs.plan.outputs.push }}
       # The registry host is spelled out: `env` is not available in jobs.<id>.env, so
       # a change to env.REGISTRY must change this line too.
       TAG: ${{ format('ds-platform.registry.twcstorage.ru/{0}{1}:{2}', needs.plan.outputs.prefix, matrix.image, needs.plan.outputs.sha) }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ needs.plan.outputs.sha }}" }
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       # The push token lives only in this job. After login it runs nothing but
       # buildx and shell steps of this workflow — no PR-head node/pnpm on the
       # runner; the login-action post-step logs out.
       - name: Log in to the registry (push)
         if: needs.plan.outputs.push == 'true'
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ds-platform
@@ -154,7 +163,7 @@ jobs:
       # Build the committed image, not a host bundle with repository dependencies.
       - name: Build production image
         id: build
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -182,7 +191,7 @@ jobs:
           echo "$IMAGE: \`$REGISTRY/$PREFIX$IMAGE@$DIGEST\`" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload digest
         if: needs.plan.outputs.push == 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: digest-${{ matrix.image }}
           path: digests/${{ matrix.image }}
@@ -190,7 +199,7 @@ jobs:
           retention-days: 1
       - name: Upload image tar (no push)
         if: needs.plan.outputs.push != 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: image-${{ matrix.image }}
           path: ${{ runner.temp }}/image.tar
@@ -206,30 +215,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [api, portal, admin, doctor]
+        app: [api, portal, admin, doctor, login]
     env:
       PUSH: ${{ needs.plan.outputs.push }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ needs.plan.outputs.sha }}" }
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc }
       # This job runs PR-head code (image-readiness.mjs, the booted images) after
       # login, so it holds only the pull-only token.
       - name: Log in to the registry (pull only)
         if: needs.plan.outputs.push == 'true'
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ds-platform
           password: ${{ secrets.REGISTRY_PULL_TOKEN }}
       - name: Download digests
         if: needs.plan.outputs.push == 'true'
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with: { pattern: digest-*, path: digests, merge-multiple: true }
       - name: Download image tars
         if: needs.plan.outputs.push != 'true'
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with: { pattern: "image-${{ matrix.app }}*", path: tars }
       # Boot the image that was built — when pushed, pulled back BY DIGEST, so the
       # readiness evidence is about the exact artifact a deploy will pull.
@@ -332,6 +341,10 @@ jobs:
             "ds-runtime:$APP"
           path=/
           if [ "$APP" = api ]; then path=/v1/ready; fi
+          # The sign-in host answers top-level navigations only on every page
+          # (003 EARS-70) and each page asks the API, so it is probed on its
+          # liveness route, which carries no auth state.
+          if [ "$APP" = login ]; then path=/healthz; fi
           node tools/scripts/image-readiness.mjs "http://127.0.0.1:3000$path" >> readiness.txt
           docker exec ds-runtime-app node --version >> readiness.txt
           docker inspect --format '{{.Image}}' ds-runtime-app >> readiness.txt
@@ -356,7 +369,7 @@ jobs:
         env:
           APP: ${{ matrix.app }}
       - name: Upload image readiness evidence
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: runtime-image-${{ matrix.app }}
           path: readiness.txt
@@ -373,12 +386,17 @@ jobs:
         run: docker rm -f ds-runtime-app ds-runtime-db ds-runtime-s3 || true
 
   # The digest manifest, written only for pushed images that passed readiness.
+  # `login` (#3170) is verified above but is not a manifest key yet: every
+  # consumer refuses a record with a key outside `RECORDED_IMAGE_NAMES`
+  # (tools/deploy/lib/registry.mjs `assertImageRefs`) and pulls every key it
+  # lists, so the key lands together with the stage/prod deploy wiring of the
+  # sign-in host (#3171), never ahead of it.
   images:
     needs: [plan, build, verify]
     if: needs.plan.outputs.push == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with: { pattern: digest-*, path: digests, merge-multiple: true }
       - name: Write images-<sha>.json
         env:
@@ -403,7 +421,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           cat "images-$SHA.json"
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: images-${{ needs.plan.outputs.sha }}
           path: images-${{ needs.plan.outputs.sha }}.json

@@ -64,9 +64,10 @@ export const HEAVY_JOBS = {
   },
   "playwright-axe": { packages: ["@ds/showcase"], extraInputs: [] },
   "playwright-axe-doctor": { packages: ["@ds/doctor"], extraInputs: [] },
+  "playwright-axe-login": { packages: ["@ds/login"], extraInputs: [] },
   "playwright-axe-portal": { packages: ["@ds/portal"], extraInputs: [] },
   "standalone-boot": {
-    packages: ["@ds/portal", "@ds/admin", "@ds/doctor"],
+    packages: ["@ds/portal", "@ds/admin", "@ds/doctor", "@ds/login"],
     extraInputs: [],
   },
 };

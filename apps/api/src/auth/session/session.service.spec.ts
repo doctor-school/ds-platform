@@ -3,6 +3,7 @@ import { FakeIdpClient } from "../idp/idp.fake.js";
 import { InMemorySessionStore } from "./session-store.fake.js";
 import { InMemoryAuthAuditLog } from "./auth-audit.fake.js";
 import { SessionService } from "./session.service.js";
+import { SubjectRevocationHub } from "./subject-revocation.js";
 import { parseCookies, SESSION_COOKIE_NAME } from "./session.cookie.js";
 
 // Refresh rotation + logout (EARS-9, EARS-10) at the service altitude — the
@@ -29,7 +30,8 @@ describe("SessionService — refresh rotation + logout", () => {
     const idp = new FakeIdpClient();
     await idp.createUser({ email: "user@ds.test", password: "pw-12345678" });
     const login = await idp.passwordLogin("user@ds.test", "pw-12345678");
-    if (login.outcome !== "authenticated") throw new Error("login setup failed");
+    if (login.outcome !== "authenticated")
+      throw new Error("login setup failed");
     const store = new InMemorySessionStore();
     const audit = new InMemoryAuthAuditLog();
     const svc = new SessionService(idp, store, audit);
@@ -124,6 +126,46 @@ describe("SessionService — refresh rotation + logout", () => {
     // …while another subject's session is untouched (revocation is sub-scoped).
     expect(await store.get(sidOther)).toBeDefined();
     // The user-level PasswordResetCompleted event is recorded exactly once.
-    expect(audit.events).toContainEqual({ type: "PasswordResetCompleted", sub });
+    expect(audit.events).toContainEqual({
+      type: "PasswordResetCompleted",
+      sub,
+    });
+  });
+});
+
+// 003 EARS-12 / EARS-41 — both «every session of this subject ends» paths run
+// through the one revocation hook, so another session holder (the sign-in
+// host's records) can never be skipped by one of them.
+describe("SessionService — subject revocation hook", () => {
+  it("EARS-12: a completed reset and a first verification each revoke every registered holder", async () => {
+    const hub = new SubjectRevocationHub();
+    const revoked: string[] = [];
+    hub.register({
+      revokeSubject: (sub) => {
+        revoked.push(sub);
+        return Promise.resolve();
+      },
+    });
+    const svc = new SessionService(
+      new FakeIdpClient(),
+      new InMemorySessionStore(),
+      new InMemoryAuthAuditLog(),
+      hub,
+    );
+    await svc.revokeAllForSub("sub-reset");
+    await svc.revokeAllBeforeVerification("sub-verify");
+    expect(revoked).toEqual(["sub-reset", "sub-verify"]);
+  });
+
+  it("EARS-12: a holder that fails fails the revocation (no session minted over it)", async () => {
+    const hub = new SubjectRevocationHub();
+    hub.register({ revokeSubject: () => Promise.reject(new Error("down")) });
+    const svc = new SessionService(
+      new FakeIdpClient(),
+      new InMemorySessionStore(),
+      new InMemoryAuthAuditLog(),
+      hub,
+    );
+    await expect(svc.revokeAllForSub("sub")).rejects.toThrow("down");
   });
 });

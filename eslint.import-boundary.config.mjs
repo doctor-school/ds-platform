@@ -110,9 +110,10 @@ export const PACKAGE_FILES = [
 ];
 
 /**
- * Scope 2 — the host-config FILE CONVENTION on the two storefronts. Slice C
- * fixes the convention; #2027 lands the first real config and the `HostConfig`
- * type it satisfies.
+ * Scope 2 — the host-config FILE CONVENTION on the two storefronts, plus the
+ * storefront host configs `@ds/auth-flow` keeps because two apps mount them (a
+ * storefront and the sign-in host, #3170). Slice C fixes the convention; #2027
+ * lands the first real config and the `HostConfig` type it satisfies.
  */
 export const HOST_CONFIG_FILES = [
   "apps/portal/**/host-config.ts",
@@ -123,6 +124,8 @@ export const HOST_CONFIG_FILES = [
   "apps/doctor/**/host-config.tsx",
   "apps/doctor/**/*.host-config.ts",
   "apps/doctor/**/*.host-config.tsx",
+  "packages/auth-flow/src/hosts/*.host-config.ts",
+  "packages/auth-flow/src/hosts/*.host-config.tsx",
 ];
 
 const languageOptions = {

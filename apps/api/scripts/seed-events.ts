@@ -52,13 +52,29 @@
  * its state, and `room` maps each room-E2E env var to the slug it should carry, so
  * a caller / E2E env wiring can pick the slug for each state + room scenario;
  * `congress` maps `CONGRESS_SIGNUP_EVENT_ID` to the fixed id of the congress
- * fixture (044, #3149) the stand contract already carries.
+ * fixture (044, #3149) the stand contract already carries; `eventPage` maps each
+ * event-page e2e env var (020 / 014 EARS-7, #2996) to the slug carrying the
+ * shape that spec asserts ({@link SEED_EVENT_PAGE_SLUGS}).
+ *
+ * #2996 — speakers. An event's speaker list is `event_experts` links to
+ * PUBLISHED experts (012 EARS-24). The seed does not invent expert records: its
+ * speakers are the golden volume expert fixtures (`buildGoldenVolume`, the same
+ * `@ds/db/seed/golden` source `SEED_EVENT_KINDS` comes from), inserted by their
+ * golden id — never overwriting a row `seed:golden` already wrote — and then
+ * linked to the fixtures that declare `speakers`.
  * Exits non-zero on failure.
  */
 import { pathToFileURL } from "node:url";
-import { createDrizzle, eventRecordings, events, streamConfig } from "@ds/db";
-import { SEED_EVENT_KINDS } from "@ds/db/seed/golden";
-import { and, eq, isNull } from "drizzle-orm";
+import {
+  createDrizzle,
+  eventExperts,
+  eventRecordings,
+  events,
+  experts,
+  streamConfig,
+} from "@ds/db";
+import { SEED_EVENT_KINDS, buildGoldenVolume } from "@ds/db/seed/golden";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
@@ -98,6 +114,47 @@ const RAW_RECORDING_KIND: RecordingKind = "raw";
 export const SEED_CONGRESS_EVENT_ID = "5eed0044-0000-4000-8000-000000000044";
 export const SEED_CONGRESS_EVENT_SLUG = "seed-044-congress";
 
+/**
+ * #2996 — the event-page e2e env vars → the seed slug carrying the shape each
+ * spec asserts (`apps/portal/e2e/event-page-020.e2e.spec.ts`,
+ * `apps/portal/e2e/webinar-archive.spec.ts`, `apps/doctor/e2e/event-page*.spec.ts`).
+ * The playwright config headers list the same pairs for a local run.
+ */
+export const SEED_EVENT_PAGE_SLUGS = Object.freeze({
+  /** `published`, online, with speakers — both hosts' event-page specs. */
+  E2E_WEBINAR_SLUG: "seed-005-upcoming",
+  /** `ended`, no participation control (020 EARS-1). */
+  E2E_WEBINAR_SLUG_ENDED: "seed-005-ended",
+  /** `ended` with a single published montage and speakers (014 EARS-4/21). */
+  E2E_ENDED_WEBINAR_SLUG: "seed-014-ended-month-ago",
+  /** `ended`, no published recording, `recording_expected_by` set (014 EARS-7). */
+  E2E_PREPARING_WEBINAR_SLUG: "seed-005-ended-preparing",
+  /** `ended`, no published recording and NO `recording_expected_by` (014 EARS-7). */
+  E2E_PREPARING_UNDATED_WEBINAR_SLUG: "seed-005-ended",
+  /** Hybrid with seats left — the format tabs open on «очно» (020 EARS-8). */
+  E2E_HYBRID_SLUG: "seed-005-hybrid",
+  /** Hybrid with `seats_left = 0` — opens on «онлайн» and says why (020 EARS-9). */
+  E2E_HYBRID_SOLDOUT_SLUG: "seed-005-hybrid-sold-out",
+  /** Pure offline with `seats_left = 0` — «мест нет», no control (020 EARS-9). */
+  E2E_OFFLINE_SOLDOUT_SLUG: "seed-005-offline-sold-out",
+  /** The EARS-19 honesty sweep: format × phase (online / offline / hybrid · upcoming / ended). */
+  E2E_SWEEP_SLUGS: [
+    "seed-005-upcoming",
+    "seed-005-ended",
+    "seed-005-offline",
+    "seed-005-offline-sold-out",
+    "seed-005-hybrid",
+    "seed-005-hybrid-sold-out",
+  ].join(","),
+});
+
+/**
+ * #2996 — how many golden volume experts the seed links as speakers (the first
+ * N published ones of `buildGoldenVolume(...).experts`): a handful, so the
+ * fixtures read as a real programme without the seed owning the catalogue.
+ */
+const SPEAKER_EXPERT_COUNT = 4;
+
 /** 012 EARS-26 / EARS-29 (#2509) — the event's kind and its audience. */
 interface SeedClassification {
   readonly kindId: string;
@@ -135,6 +192,27 @@ interface SeedSpec {
   readonly specialties: string[];
   readonly partnerRef: string;
   readonly venue?: NonNullable<(typeof events.$inferInsert)["venue"]>;
+  /**
+   * 020 LD-5 (#2996): the remaining offline seats — `0` is «мест нет». Omitted ⇒
+   * the column is left untouched (an online fixture has no seat limit).
+   */
+  readonly seatsLeft?: number;
+  /**
+   * 014 EARS-1/7 (#2996): the day the operator promises the recording by, as
+   * days after the seed run (a `date`, rendered «до <day> <month>»). Omitted ⇒
+   * the column is left untouched.
+   */
+  readonly recordingExpectedInDays?: number;
+  /**
+   * #2996: the event's speakers — golden volume experts (index into the first
+   * {@link SPEAKER_EXPERT_COUNT}) in presentation order, each with its
+   * event-specific role. Present ⇒ the event's active `event_experts` links are
+   * reconciled to exactly this list; omitted ⇒ its links are left untouched.
+   */
+  readonly speakers?: readonly {
+    readonly expert: number;
+    readonly role: string;
+  }[];
   /**
    * 006 (#584): the event's stream config the room's EARS-2 player is
    * instantiated from. Omitted → no `stream_config` row is written (and any
@@ -213,6 +291,10 @@ function specs(now: number): SeedSpec[] {
         "Целевые уровни давления, выбор стартовой терапии и работа с резистентной гипертензией: показания, доказательная база и рабочие протоколы. Разбираем реальный клинический случай — от первичного приёма до оценки результата через 6 месяцев. Вопросы спикеру — прямо в чате эфира.",
       specialties: ["Кардиология", "Терапия", "Общая врачебная практика"],
       partnerRef: "Партнёр Фарма",
+      speakers: [
+        { expert: 0, role: "Спикер" },
+        { expert: 1, role: "Модератор" },
+      ],
     },
     {
       // A SECOND registrable event so the logged-in one-tap path (EARS-1) can be
@@ -370,6 +452,99 @@ function specs(now: number): SeedSpec[] {
         "Завершённый эфир — регистрация закрыта. Разбор коморбидных состояний при сахарном диабете 2 типа.",
       specialties: ["Эндокринология"],
       partnerRef: "Партнёр Фарма",
+      // 014 EARS-7: ended, nothing published and NO committed day — the
+      // UNDATED «запись готовится» plaque.
+      speakers: [{ expert: 2, role: "Спикер" }],
+    },
+    {
+      slug: "seed-005-ended-preparing",
+      state: "ended",
+      title: "Разбор: антикоагулянтная терапия при фибрилляции предсердий",
+      school: "Школа кардиологии",
+      startsAt: new Date(now - 3 * DAY),
+      durationMin: 90,
+      description:
+        "Завершённый эфир — регистрация закрыта. Выбор антикоагулянта у пожилых пациентов с фибрилляцией предсердий и хронической болезнью почек: оценка риска кровотечений, коррекция доз, переход между препаратами.",
+      specialties: ["Кардиология"],
+      partnerRef: "Партнёр Фарма",
+      // 014 EARS-7 (#2996): the эфир ended, nothing is published yet, and the
+      // operator has committed to a day — the DATED «запись готовится» plaque.
+      recordingExpectedInDays: 5,
+      speakers: [
+        { expert: 1, role: "Ведущий" },
+        { expert: 3, role: "Спикер" },
+      ],
+    },
+    // ── wave-3 format × seats fixtures (#2996, 020 EARS-8/9/19) ─────────────
+    // The four in-person shapes the event page's format block distinguishes:
+    // offline / hybrid, each with seats left and sold out. Registrable
+    // (`published`, in the future) Academy events of the all-formats kind.
+    {
+      classification: { ...ACADEMY_FIXTURE, participationFormat: "offline" },
+      slug: "seed-005-offline",
+      state: "published",
+      title: "Клинический разбор: хроническая сердечная недостаточность",
+      school: "Школа кардиологии",
+      startsAt: new Date(now + 12 * DAY),
+      durationMin: 180,
+      venue: "Москва, ул. Тверская, 22, конференц-зал «Пушкинский»",
+      seatsLeft: 24,
+      description:
+        "Очная встреча клуба: три клинических случая ХСН со сниженной фракцией выброса — титрация квадротерапии, ведение при гипотонии и почечной дисфункции, показания к устройствам. Работа в малых группах, вопросы ведущему по ходу разбора.",
+      specialties: ["Кардиология", "Терапия"],
+      partnerRef: "Партнёр Фарма",
+      speakers: [{ expert: 0, role: "Ведущий" }],
+    },
+    {
+      classification: { ...ACADEMY_FIXTURE, participationFormat: "offline" },
+      slug: "seed-005-offline-sold-out",
+      state: "published",
+      title: "Мастерская: УЗИ-навигация при внутрисуставных инъекциях",
+      school: "Школа ортобиологии",
+      startsAt: new Date(now + 16 * DAY),
+      durationMin: 240,
+      venue: "Санкт-Петербург, Невский пр., 55, учебный центр, зал 3",
+      seatsLeft: 0,
+      description:
+        "Практическая мастерская на фантомах: доступы к коленному, плечевому и тазобедренному суставам под УЗИ-контролем, типичные ошибки и профилактика осложнений. Группа ограничена числом рабочих мест у аппаратов.",
+      specialties: ["Травматология и ортопедия", "Ревматология"],
+      partnerRef: "Партнёр Фарма",
+      speakers: [{ expert: 3, role: "Ведущий" }],
+    },
+    {
+      classification: { ...ACADEMY_FIXTURE, participationFormat: "hybrid" },
+      slug: "seed-005-hybrid",
+      state: "published",
+      title: "Сахарный диабет 2 типа: интенсификация терапии",
+      school: "Школа эндокринологии",
+      startsAt: new Date(now + 9 * DAY),
+      durationMin: 120,
+      venue: "Москва, Краснопресненская наб., 12, ЦМТ, конгресс-зал",
+      seatsLeft: 40,
+      description:
+        "Встреча клуба в зале и онлайн: когда и как интенсифицировать сахароснижающую терапию, место агонистов ГПП-1 и иНГЛТ-2, старт инсулинотерапии. Разбираем случаи участников — присылайте вопросы заранее или задавайте в чате трансляции.",
+      specialties: ["Эндокринология", "Терапия"],
+      partnerRef: "Партнёр Фарма",
+      speakers: [
+        { expert: 2, role: "Спикер" },
+        { expert: 1, role: "Модератор" },
+      ],
+    },
+    {
+      classification: { ...ACADEMY_FIXTURE, participationFormat: "hybrid" },
+      slug: "seed-005-hybrid-sold-out",
+      state: "published",
+      title: "Неврология: головная боль в практике терапевта",
+      school: "Школа неврологии",
+      startsAt: new Date(now + 11 * DAY),
+      durationMin: 90,
+      venue: "Казань, ул. Баумана, 9, отель «Кремлёвский», зал «Волга»",
+      seatsLeft: 0,
+      description:
+        "Мигрень, головная боль напряжения и «красные флаги» вторичной головной боли: алгоритм приёма, профилактическая терапия и когда направлять к неврологу. Очные места разобраны — участие онлайн открыто.",
+      specialties: ["Неврология", "Терапия"],
+      partnerRef: "Партнёр Фарма",
+      speakers: [{ expert: 3, role: "Спикер" }],
     },
     // ── 014 both-cuts fixture (#1345) ────────────────────────────────────────
     // The ONE эфир that published BOTH cuts: the montage `recordings.projection`
@@ -398,6 +573,7 @@ function specs(now: number): SeedSpec[] {
         embedRef: "0f9e8d7c6b5a493827160f5e4d3c2b1a",
         durationSec: 124 * 60,
       },
+      speakers: [{ expert: 0, role: "Спикер" }],
     },
     // ── wave-2 «Прошедшие» widening fixture (#2028, gate row 32) ─────────────
     // An ended эфир a month back with a published montage whose length the
@@ -418,6 +594,10 @@ function specs(now: number): SeedSpec[] {
         embedRef: "5d1c9e7a3b2f48a6c0e4d8b1f7a9c2e3",
         durationSec: 72 * 60,
       },
+      speakers: [
+        { expert: 3, role: "Спикер" },
+        { expert: 2, role: "Спикер" },
+      ],
     },
     // ── 014 legacy-archive fixture (#1741) ────────────────────────────────────
     // The ONE `legacy` эфир: an archive-only broadcast the platform never
@@ -474,8 +654,38 @@ export async function seedEvents(): Promise<void> {
 
   const { pool, db } = createDrizzle(connectionString);
   const result: Record<string, string> = {};
+  const now = Date.now();
   try {
-    for (const spec of specs(Date.now())) {
+    // #2996: the golden expert fixtures the speakers are. Inserted by their
+    // golden id and otherwise left alone — a stand `seed:golden` already filled
+    // keeps its own rows (and their write-once `first_published_at`).
+    const speakerExperts = buildGoldenVolume(new Date(now))
+      .experts.filter((expert) => expert.status === "published")
+      .slice(0, SPEAKER_EXPERT_COUNT);
+    if (speakerExperts.length < SPEAKER_EXPERT_COUNT) {
+      throw new Error(
+        `golden volume carries ${speakerExperts.length} published experts, the seed links ${SPEAKER_EXPERT_COUNT}`,
+      );
+    }
+    const speakerIds = speakerExperts.map((expert) => expert.id as string);
+    await db.insert(experts).values(speakerExperts).onConflictDoNothing();
+    const published = await db
+      .select({ id: experts.id })
+      .from(experts)
+      .where(
+        and(
+          inArray(experts.id, speakerIds),
+          eq(experts.status, "published"),
+          isNull(experts.deletedAt),
+        ),
+      );
+    if (published.length !== SPEAKER_EXPERT_COUNT) {
+      throw new Error(
+        "a golden speaker expert is missing or unpublished on this stand — a speaker link needs a published expert",
+      );
+    }
+
+    for (const spec of specs(now)) {
       // 007-seam (#717): a `live` event went live when it started — stamp
       // `live_at` so the room-header live-duration element renders. `undefined`
       // is skipped by Drizzle in both clauses, so non-live states leave the
@@ -485,6 +695,15 @@ export async function seedEvents(): Promise<void> {
       // kind allows.
       const { kindId, audience, participationFormat } =
         spec.classification ?? ACADEMY_FIXTURE;
+      // 014 EARS-1 (#2996): a `date` column — the calendar day, never an instant.
+      // `null` (not `undefined`, which Drizzle skips) so a re-run clears a
+      // day the spec no longer sets.
+      const recordingExpectedBy =
+        spec.recordingExpectedInDays === undefined
+          ? null
+          : new Date(now + spec.recordingExpectedInDays * DAY)
+              .toISOString()
+              .slice(0, 10);
 
       // Upsert the event by its stable slug so re-runs refresh the instant + state
       // in place (no duplicate rows, no table truncation — branch-safe).
@@ -501,6 +720,8 @@ export async function seedEvents(): Promise<void> {
           specialties: spec.specialties,
           partnerRef: spec.partnerRef,
           venue: spec.venue,
+          seatsLeft: spec.seatsLeft,
+          recordingExpectedBy,
           state: spec.state,
           origin: spec.origin ?? "platform",
           kindId,
@@ -520,6 +741,8 @@ export async function seedEvents(): Promise<void> {
             specialties: spec.specialties,
             partnerRef: spec.partnerRef,
             venue: spec.venue,
+            seatsLeft: spec.seatsLeft,
+            recordingExpectedBy,
             state: spec.state,
             origin: spec.origin ?? "platform",
             kindId,
@@ -531,10 +754,20 @@ export async function seedEvents(): Promise<void> {
         })
         .returning({ id: events.id });
 
-      // 012 EARS-24 (#1607) — the seed no longer writes speakers. Since the
-      // cutover an event's speaker list is `event_experts` links to published
-      // experts, authored in the admin console; there is no free-text list to
-      // reconcile and the seed deliberately does not fabricate expert records.
+      // 012 EARS-24 (#1607) + #2996 — an event's speaker list is `event_experts`
+      // links to published experts. The seed's speakers are the golden expert
+      // fixtures inserted above; the links are reconciled to `spec.speakers`.
+      if (spec.speakers) {
+        await reconcileSpeakers(
+          db,
+          row.id,
+          spec.speakers.map(({ expert, role }, position) => ({
+            expertId: speakerIds[expert]!,
+            role,
+            position,
+          })),
+        );
+      }
 
       // 006 (#584): upsert the stream config by its `event_id` PK. A spec without
       // `stream` (e.g. the "unavailable" fixture) RETIRES any prior row so the
@@ -666,8 +899,93 @@ export async function seedEvents(): Promise<void> {
     congress: {
       CONGRESS_SIGNUP_EVENT_ID: SEED_CONGRESS_EVENT_ID,
     },
+    // #2996: the event-page e2e env vars → the slug each carries.
+    eventPage: SEED_EVENT_PAGE_SLUGS,
   };
   process.stdout.write(`${JSON.stringify(contract, null, 2)}\n`);
+}
+
+/**
+ * #2996 — every seed slug that declares speakers: the event-page specs on both
+ * hosts read each of them as an event WITH speakers.
+ */
+export const SEED_SPEAKER_SLUGS: readonly string[] = Object.freeze(
+  specs(0)
+    .filter((spec) => spec.speakers !== undefined)
+    .map((spec) => spec.slug),
+);
+
+type SeedDb = ReturnType<typeof createDrizzle>["db"];
+
+interface SpeakerLink {
+  readonly expertId: string;
+  readonly role: string;
+  readonly position: number;
+}
+
+/**
+ * #2996 — converge one event's ACTIVE `event_experts` links to `desired`, on the
+ * product's own retained-row rules (012 §2.1): a link that no longer matches is
+ * RETIRED (never deleted), a retired link for a desired expert is RESTORED in
+ * place (the `(event, expert)` pair spans every retained row), and an unchanged
+ * link is not written at all — so a re-run is a no-op. Retiring first frees every
+ * position a moved link needs before it is re-taken (the active-position index).
+ */
+async function reconcileSpeakers(
+  db: SeedDb,
+  eventId: string,
+  desired: readonly SpeakerLink[],
+): Promise<void> {
+  const existing = await db
+    .select({
+      id: eventExperts.id,
+      expertId: eventExperts.expertId,
+      role: eventExperts.role,
+      position: eventExperts.position,
+      status: eventExperts.status,
+    })
+    .from(eventExperts)
+    .where(eq(eventExperts.eventId, eventId));
+  const wanted = new Map(desired.map((link) => [link.expertId, link]));
+  const matches = (
+    link: (typeof existing)[number],
+    want: SpeakerLink | undefined,
+  ): boolean =>
+    want !== undefined &&
+    link.status === "active" &&
+    link.role === want.role &&
+    link.position === want.position;
+  const bump = () => ({
+    version: sql`${eventExperts.version} + 1`,
+    updatedAt: new Date(),
+  });
+
+  for (const link of existing) {
+    if (link.status === "active" && !matches(link, wanted.get(link.expertId))) {
+      await db
+        .update(eventExperts)
+        .set({ ...bump(), status: "retired", deletedAt: new Date() })
+        .where(eq(eventExperts.id, link.id));
+    }
+  }
+  for (const want of desired) {
+    const link = existing.find((row) => row.expertId === want.expertId);
+    if (link && matches(link, want)) continue;
+    if (link) {
+      await db
+        .update(eventExperts)
+        .set({
+          ...bump(),
+          role: want.role,
+          position: want.position,
+          status: "active",
+          deletedAt: null,
+        })
+        .where(eq(eventExperts.id, link.id));
+    } else {
+      await db.insert(eventExperts).values({ eventId, ...want });
+    }
+  }
 }
 
 const isCliEntry =

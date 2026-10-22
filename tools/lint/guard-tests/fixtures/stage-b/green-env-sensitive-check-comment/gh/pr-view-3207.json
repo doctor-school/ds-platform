@@ -1,0 +1,13 @@
+{
+  "number": 3207,
+  "body": "## Summary\nMailer transport retry.\n\nStage-B: N/A — no render surface\n",
+  "labels": [],
+  "files": [{ "path": "apps/api/src/mailer/transport.ts" }],
+  "comments": [
+    {
+      "body": "Stage-check: PASS — slot pr-3207, a sign-up code email arrived in the slot mailbox\nStage-B-head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nStage-B-recorded-at: 2026-10-21T15:51:00Z",
+      "createdAt": "2026-10-21T15:52:00Z"
+    }
+  ],
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

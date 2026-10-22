@@ -7,7 +7,7 @@ import { caseDir, ghDir, runGuard } from "./run-guard";
  *
  * The guard is the TREE check of the one-code-two-storefronts plan (tech spec
  * `2026-09-07-one-code-two-storefronts-plan-en.md` §3 rule 3, first bullet):
- * every `apps/{portal,doctor}` `.ts`/`.tsx` file that is not a Next.js route
+ * every `apps/{portal,doctor,login}` `.ts`/`.tsx` file that is not a Next.js route
  * file, a test or `e2e/**` needs an exact-path row in the checked-in answer key
  * (`capability-ownership.md` → «Host-file allowlist»). The dead-glob self-test
  * is the other half: a row naming a file that no longer exists, or a row
@@ -47,6 +47,15 @@ describe("host-allowlist-lint", () => {
     });
     expect(code).toBe(1);
     expect(stderr).toContain("apps/doctor/lib/x.ts");
+    expect(stderr).toContain("no allowlist row");
+  });
+
+  it("3170: red — an unlisted `apps/login/lib/*.ts` (the sign-in host is in scope) → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-unlisted-login-lib"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/login/lib/sign-in-entry.ts");
     expect(stderr).toContain("no allowlist row");
   });
 

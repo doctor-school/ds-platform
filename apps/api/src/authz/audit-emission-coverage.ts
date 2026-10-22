@@ -325,6 +325,79 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
       coveredBy:
         "verify.e2e (EARS-25): an existing+unverified resend appends exactly one auth.otp.sent row; no-op paths append none",
     },
+    // 003 EARS-60…71 (ADR-0015 §4) — the sign-in host's credential routes. Each
+    // is the host twin of a storefront route above: it checks the form binding
+    // (req. 3) and then runs the SAME `AuthService` / `DoctorRegisterService`
+    // step, so the terminal rows are appended at that shared command site and
+    // equal the storefront twin's. A host-local event would double-count one
+    // sign-in. The covering `it`s read the rows back from the ledger.
+    "GET /v1/sign-in-host/entry": {
+      // The entry runs no credential step: it renders the form, or finalises
+      // the auth request with the live record a credential step already wrote
+      // (that step appended its own auth.login.success). Its storefront
+      // counterpart is the session read (`GET /v1/auth/session`), which appends
+      // no row either — also when it refuses a fingerprint mismatch (EARS-10).
+      noneBySpec: {
+        reason:
+          "no credential is checked and no account, identifier or credential changes: the entry renders the form or reuses the record the credential step wrote (that step appended the auth.login.success); a fingerprint-mismatched record is treated as signed out exactly as the storefront session read treats its own mismatch, which appends no row",
+        spec: "003 EARS-64/66/67/68 (entry reuses the record or renders the form); EARS-18 rows belong to the credential commands",
+      },
+    },
+    "POST /v1/sign-in-host/login": {
+      emits: ["LoginSucceeded", "LoginFailed", "AccountLocked"],
+      coveredBy:
+        "sign-in-host.e2e: EARS-18 the host password step appends auth.login.success, a wrong password auth.login.failure (AuthService.passwordStep, the POST /v1/auth/login command site)",
+    },
+    "POST /v1/sign-in-host/login/otp/request": {
+      emits: ["OtpSent"],
+      coveredBy:
+        "sign-in-host.e2e: EARS-18 the host code request appends auth.otp.sent (AuthService.requestLoginOtp)",
+    },
+    "POST /v1/sign-in-host/login/otp/handoff": {
+      emits: ["OtpSent"],
+      coveredBy:
+        "sign-in-host.e2e: EARS-18 a live hand-off redeemed on the host appends exactly one auth.otp.sent",
+    },
+    "POST /v1/sign-in-host/login/otp": {
+      emits: ["LoginSucceeded", "LoginFailed"],
+      coveredBy:
+        "sign-in-host.e2e: EARS-18 the code step appends auth.login.success, a wrong code auth.login.failure (AuthService.otpStep)",
+    },
+    "POST /v1/sign-in-host/register": {
+      emits: ["Registered"],
+      coveredBy:
+        "sign-in-host.e2e: EARS-18 the host Academy registration appends auth.register (AuthService.register)",
+    },
+    "POST /v1/sign-in-host/storefront/doctor/register": {
+      emits: ["Registered"],
+      coveredBy:
+        "sign-in-host.e2e: EARS-18 the host doctor registration appends auth.register (DoctorRegisterService → AuthService.register)",
+    },
+    "POST /v1/sign-in-host/storefront/doctor/verify": {
+      emits: ["IdentifierVerified", "LoginSucceeded", "VerifyFailed"],
+      coveredBy:
+        "sign-in-host.e2e: EARS-18 the host doctor code step appends auth.account.verified + auth.login.success (DoctorRegisterService.verifyStep → AuthService.verifyStep)",
+    },
+    "POST /v1/sign-in-host/verify": {
+      emits: ["IdentifierVerified", "LoginSucceeded", "VerifyFailed"],
+      coveredBy:
+        "sign-in-host.e2e: EARS-18 the host Academy code step appends auth.account.verified + auth.login.success (AuthService.verifyStep)",
+    },
+    "POST /v1/sign-in-host/verify/resend": {
+      emits: ["OtpSent"],
+      coveredBy:
+        "sign-in-host.e2e: EARS-18 the host resend appends auth.otp.sent (AuthService.resendEmailVerification)",
+    },
+    "POST /v1/sign-in-host/password/reset": {
+      emits: ["PasswordResetRequested"],
+      coveredBy:
+        "sign-in-host.e2e: EARS-18 the host reset request appends auth.password.reset_requested (AuthService.requestPasswordReset)",
+    },
+    "POST /v1/sign-in-host/password/reset/complete": {
+      emits: ["PasswordResetCompleted", "PasswordResetFailed"],
+      coveredBy:
+        "sign-in-host.e2e: EARS-18 a wrong code appends auth.password.reset_failed, the completion auth.password.changed (AuthService.resetCompleteStep)",
+    },
   };
 
 /**

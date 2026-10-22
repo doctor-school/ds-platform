@@ -101,7 +101,7 @@ const PRIMITIVE_IGNORE = [
 // code, not UI source).
 //
 // Surface scope = the UI apps that consume `@ds/design-system` (portal / doctor /
-// promo / admin / the dev-only Academy review app), matching registry-research.
+// login / promo / admin / the dev-only Academy review app), matching registry-research.
 // `apps/docs`
 // (Fumadocs), `apps/cms` (Payload) and `apps/mobile`
 // (React Native — no DOM `<a>`/`next/link`) are deliberately NOT scanned: they do
@@ -115,6 +115,9 @@ const APP_GLOBS = [
   "apps/doctor/app/**/*.tsx",
   "apps/doctor/components/**/*.tsx",
   "apps/doctor/src/**/*.tsx",
+  "apps/login/app/**/*.tsx",
+  "apps/login/components/**/*.tsx",
+  "apps/login/src/**/*.tsx",
   "apps/promo/app/**/*.tsx",
   "apps/promo/components/**/*.tsx",
   "apps/promo/src/**/*.tsx",

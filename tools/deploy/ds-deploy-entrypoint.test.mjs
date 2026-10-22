@@ -214,7 +214,70 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.match(r.stderr, /reported no unit state/);
   });
 
+  it("2987: rollback prod execs the driver's rollback path on the prod box, the manifest on stdin", () => {
+    setRole("prod");
+    installDriver(
+      'cat > "$STUB_DIR/driver-stdin.log"; echo "driver-called $*"',
+    );
+    const r = run(`rollback prod ${SHA}`, { input: '{"sha":"t"}' });
+    assert.equal(r.status, 0, String(r.stderr));
+    assert.equal(String(r.stdout), `driver-called rollback prod ${SHA}\n`);
+    assert.equal(log("driver-stdin"), '{"sha":"t"}');
+    assert.match(log("logger"), /auth\.info accepted: rollback prod/);
+  });
+
+  it("2987: rollback-status prod returns the driver's rollback record and unit state", () => {
+    setRole("prod");
+    installDriver('echo "driver-called $*"');
+    const r = run(`rollback-status prod ${SHA}`);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, `driver-called rollback-status prod ${SHA}\n`);
+    assert.equal(log("ds-release"), "", "never the release record");
+  });
+
+  it("2987: rollback-status without a driver reports no rollback and an absent unit", () => {
+    setRole("prod");
+    const r = run(`rollback-status prod ${SHA}`);
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout), {
+      rollback: null,
+      driver: {
+        unit: `ds-prod-${SHA.slice(0, 12)}-rollback`,
+        active: "absent",
+        rc: null,
+        previousSha: null,
+      },
+    });
+    assert.equal(
+      run(`rollback prod ${SHA}`).status,
+      3,
+      "no driver: the rollback is refused",
+    );
+  });
+
+  it("2987: the stage box (or a box without a role) refuses rollback and rollback-status", () => {
+    installDriver('echo "driver-called $*"');
+    for (const role of ["stage", null]) {
+      if (role) setRole(role);
+      else rmSync(join(root, "etc/ds-platform/box-role"), { force: true });
+      for (const verb of ["rollback", "rollback-status"]) {
+        const r = run(`${verb} prod ${SHA}`);
+        assert.equal(r.status, 3, `${verb} on ${role}`);
+        assert.match(
+          r.stderr,
+          new RegExp(`${verb} is served by the prod box only`),
+        );
+        assert.equal(r.stdout, "", "the driver never ran");
+      }
+    }
+  });
+
   const rejected = [
+    ["a rollback of another env", `rollback stage-main ${SHA}`],
+    ["a rollback-status of another env", `rollback-status stage-pr-3 ${SHA}`],
+    ["a rollback with an extra argument", `rollback prod ${SHA} now`],
+    ["a rollback without a sha", "rollback prod"],
+    ["a rollback with a short sha", "rollback prod 0123456"],
     ["no command at all", undefined],
     ["an empty command", ""],
     ["an unknown verb", `finish prod ${SHA} succeeded`],

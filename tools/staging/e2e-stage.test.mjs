@@ -22,6 +22,7 @@ import {
 } from "./e2e-stage.mjs";
 import {
   AXE_LEG_CONFIGS,
+  GOLDEN_SLUGS,
   HERMETIC_CONFIGS,
   GOLDEN_EVENT_SLUGS,
   GOLDEN_LIVE_ENV,
@@ -931,6 +932,44 @@ describe("runE2eStage — the live legs", () => {
     for (const call of calls) assertShellInert(call.argv);
     // The suite is not handed the live-tier extras.
     assert.equal(calls[0].env.IDP_ISSUER, undefined);
+  });
+
+  it("hands each event-page leg its golden slugs, lets the operator's own value win, and keeps them off every other leg (#2996)", async () => {
+    const { calls, effects } = harness();
+    await runE2eStage(["pr-2996"], {
+      env: { ...ENV, E2E_HYBRID_SLUG: "operator-hybrid" },
+      effects,
+    });
+    const leg = (pkg) =>
+      calls.find(
+        (c) =>
+          c.argv.includes(pkg) &&
+          c.argv.includes("--config=playwright.event-page.config.ts"),
+      );
+    const academy = leg("@ds/portal");
+    const doctor = leg("@ds/doctor");
+    assert.ok(academy && doctor);
+    assert.equal(academy.env.E2E_WEBINAR_SLUG, GOLDEN_SLUGS.academyUpcoming);
+    assert.equal(
+      academy.env.E2E_PREPARING_WEBINAR_SLUG,
+      GOLDEN_SLUGS.academyPreparingDated,
+    );
+    assert.equal(
+      academy.env.E2E_OFFLINE_SOLDOUT_SLUG,
+      GOLDEN_SLUGS.academyOfflineSoldOut,
+    );
+    // The operator exported their own: the leg does not override it.
+    assert.equal(academy.env.E2E_HYBRID_SLUG, undefined);
+    assert.equal(doctor.env.E2E_WEBINAR_SLUG, GOLDEN_SLUGS.doctorUpcoming);
+    assert.equal(doctor.env.E2E_HYBRID_SLUG, undefined);
+    // The default Academy leg and the suite never see a seeded slug.
+    const academyDefault = calls.find(
+      (c) =>
+        c.argv.includes("@ds/portal") &&
+        c.argv.includes("--config=playwright.config.ts"),
+    );
+    assert.equal(academyDefault.env.E2E_WEBINAR_SLUG, undefined);
+    assert.equal(calls[0].env.E2E_WEBINAR_SLUG, undefined);
   });
 
   it("generates the BDD specs before the Academy live leg", async () => {

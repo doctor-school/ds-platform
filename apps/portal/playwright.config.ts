@@ -32,6 +32,9 @@ import { defineBddConfig } from "playwright-bdd";
  *   E2E_WEBINAR_SLUG=seed-005-upcoming E2E_ONE_TAP_SLUG=seed-005-upcoming-2 \
  *   E2E_WEBINAR_SLUG_ENDED=seed-005-ended E2E_WEBINAR_SLUG_HIDDEN=seed-005-hidden \
  *   pnpm --filter @ds/portal test:e2e --project=bdd
+ * The event-page specs (`event-page-020.e2e.spec.ts`, `webinar-archive.spec.ts`)
+ * run on their own tier, `playwright.event-page.config.ts`, whose header lists
+ * the `seed:events` slug for each of their env vars (#2996).
  * `E2E_PORTAL_URL` must point at a portal whose `/v1/*` rewrite reaches the api
  * (set `API_PROXY_TARGET` when starting that portal). We do NOT start the portal
  * here (no `webServer`): the dev-stand topology is the operator's.
@@ -92,7 +95,6 @@ const GOLDEN_ACCOUNT_SPECS = [
   /[\\/]room-presence-count\.spec\.ts$/,
   /[\\/]room\.spec\.ts$/,
   /[\\/]theme\.e2e\.spec\.ts$/,
-  /[\\/]webinar-archive\.spec\.ts$/,
 ];
 
 /**
@@ -100,12 +102,15 @@ const GOLDEN_ACCOUNT_SPECS = [
  * (`test:axe` → `playwright.axe.config.ts`, under `e2e/a11y/`) and the hermetic
  * CI page-level scan (`test:e2e:ci` → `playwright.ci.config.ts`,
  * `a11y-axe.e2e.spec.ts`, #400). #3151: the shared /account auth-path body
- * rides its own live tier (`playwright.account-live.config.ts`).
+ * rides its own live tier (`playwright.account-live.config.ts`), and the
+ * #2996 event-page specs theirs (`playwright.event-page.config.ts`).
  */
 const OWN_CONFIG_SPECS = [
   /a11y\//,
   /a11y-axe\.e2e\.spec\.ts/,
   /account-auth-paths-live\.spec\.ts/,
+  /event-page-020\.e2e\.spec\.ts/,
+  /webinar-archive\.spec\.ts/,
 ];
 
 export default defineConfig({

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
  */
 export const WARN_GUARDS = new Set([
   "aa-contrast",
+  "action-pin",
   "asset-format",
   "audit-coverage",
   "axe-exclude",

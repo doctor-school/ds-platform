@@ -22,9 +22,26 @@ name: Deploy prod
 #               record above is written with GITHUB_TOKEN, whose events start no
 #               workflow, so its `deployment_status` trigger never fires for it.
 #
-# No escape hatch exists here: no skip-ci-check, release-gate exemption, live-
-# broadcast override or hotfix ref. Those stay on the workstation break-glass path
-# (`pnpm deploy:prod`).
+# Rollback mode (#2987; spec §3 item 3 «Rollback mode», §5 «Prod rollback», §9
+# «A release broke prod»):
+#
+#   gh workflow run deploy-prod.yml --ref main -f mode=rollback -f sha=<target sha> -f reason="<why>"
+#
+#   preflight — refuses an empty or whitespace-only reason (no owner quote: a release
+#               that visibly broke prod is rolled off without an owner word, §10),
+#               then `release-runner.mjs rollback-preflight`: the SHA is the target of
+#               one of the latest 3 `release-*` Releases, strictly behind the live
+#               SHA, with its `images-<sha>.json` recorded. No stage-suite, release
+#               gate or live-broadcast check.
+#   deploy    — the same Environment and key: `rollback prod <sha>` with the manifest
+#               on stdin, polls `rollback-status prod <sha>` (status lines only; the
+#               verdict reads the unit state as well as the record), then no release
+#               cut, the ONE Deployment record `rollback to <sha12> — <reason>` and the
+#               Mattermost notice «откат прода на <sha12>: <reason>». No digest.
+#
+# The rollback runs on this path; the escape hatches do not: no skip-ci-check,
+# release-gate exemption, live-broadcast override or hotfix ref. Those stay
+# break-glass on the workstation path (`pnpm deploy:prod`).
 
 on:
   workflow_dispatch:
@@ -33,9 +50,21 @@ on:
         description: Full 40-hex SHA on `main` to release.
         required: true
         type: string
+      mode:
+        description: "`release` (default) or `rollback` to a recent release behind the live SHA."
+        required: false
+        default: release
+        type: choice
+        options:
+          - release
+          - rollback
       owner_quote:
-        description: The owner's word in chat that authorises this release, verbatim.
-        required: true
+        description: "Release mode: the owner's word in chat that authorises this release, verbatim."
+        required: false
+        type: string
+      reason:
+        description: "Rollback mode: why production is rolled back (required in that mode)."
+        required: false
         type: string
 
 permissions:
@@ -70,38 +99,62 @@ jobs:
       pull-requests: read
       statuses: read
     outputs:
-      images-run-id: ${{ steps.preflight.outputs.images-run-id }}
+      images-run-id: ${{ steps.preflight.outputs.images-run-id || steps.rollback-preflight.outputs.images-run-id }}
     steps:
-      - name: Refuse an empty owner quote
+      - name: Refuse an empty owner quote or rollback reason
         env:
+          MODE: ${{ inputs.mode }}
           OWNER_QUOTE: ${{ inputs.owner_quote }}
+          REASON: ${{ inputs.reason }}
         run: |
-          if [ -z "${OWNER_QUOTE//[[:space:]]/}" ]; then
-            echo "::error::owner_quote is empty — every production release needs the owner's word in chat"
-            exit 1
-          fi
-          echo "owner quote: present (${#OWNER_QUOTE} chars)"
+          case "$MODE" in
+            release)
+              if [ -z "${OWNER_QUOTE//[[:space:]]/}" ]; then
+                echo "::error::owner_quote is empty — every production release needs the owner's word in chat"
+                exit 1
+              fi
+              echo "owner quote: present (${#OWNER_QUOTE} chars)" ;;
+            rollback)
+              if [ -z "${REASON//[[:space:]]/}" ]; then
+                echo "::error::reason is empty — a rollback records why production is rolled back"
+                exit 1
+              fi
+              echo "rollback reason: present (${#REASON} chars)" ;;
+            *)
+              echo "::error::mode must be release or rollback"
+              exit 1 ;;
+          esac
 
       - name: Check the SHA
         run: |
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::not a full sha: $SHA"; exit 1; }
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The SHA-in-main check, the release gate's range and the release notes
           # walk git history; a shallow clone fails them.
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
 
       - name: Runner pre-flight
         id: preflight
+        if: inputs.mode != 'rollback'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: node tools/deploy/release-runner.mjs preflight --sha "$SHA"
+
+      - name: Rollback pre-flight
+        id: rollback-preflight
+        if: inputs.mode == 'rollback'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REASON: ${{ inputs.reason }}
+        run: node tools/deploy/release-runner.mjs rollback-preflight --sha "$SHA"
 
   deploy:
     needs: preflight
@@ -124,17 +177,17 @@ jobs:
       pull-requests: read
       statuses: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The release cut and the release notes walk tags and history.
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
 
       - name: Download images-<sha>.json from the recorded run
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: images-${{ inputs.sha }}
           run-id: ${{ needs.preflight.outputs.images-run-id }}
@@ -155,6 +208,7 @@ jobs:
 
       - name: Start the release driver
         id: release
+        if: inputs.mode != 'rollback'
         run: |
           set +e
           line=$(ssh -i "$RUNNER_TEMP/prod-ssh/key" \
@@ -178,6 +232,7 @@ jobs:
 
       - name: Poll the driver until it is terminal
         id: poll
+        if: inputs.mode != 'rollback'
         env:
           OUTCOME: ${{ steps.release.outputs.outcome }}
         run: |
@@ -255,6 +310,87 @@ jobs:
             sleep 15
           done
 
+      - name: Start the rollback driver
+        id: rollback
+        if: inputs.mode == 'rollback'
+        run: |
+          set +e
+          line=$(ssh -i "$RUNNER_TEMP/prod-ssh/key" \
+            -o UserKnownHostsFile="$RUNNER_TEMP/prod-ssh/known_hosts" \
+            -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 \
+            "$PROD_SSH_USER@$PROD_SSH_HOST" "rollback prod $SHA" \
+            < "manifest/images-$SHA.json" 2>&1)
+          rc=$?
+          set -e
+          # One status line, as the release driver's: `started` / `attached`.
+          first=$(printf '%s\n' "$line" | head -n 1)
+          echo "rollback: rc=$rc $first"
+          case "$rc" in
+            0) ;;
+            3) echo "::error::rollback refused: $first"; exit 1 ;;
+            *) echo "::error::rollback failed (rc=$rc)"; exit 1 ;;
+          esac
+
+      - name: Poll the rollback until it is terminal
+        id: rollback-poll
+        if: inputs.mode == 'rollback'
+        run: |
+          # 30 min = 120 polls x 15 s: an app-only `up -d` of recorded digests, the
+          # running-SHA verify and the smoke; no build, no migrate.
+          deadline=$((SECONDS + 30 * 60))
+          ssh_failures=0
+          from=-
+          # `unknown` = lost contact (ssh down, or the time-out): the record step
+          # writes the `error` Deployment record before the job fails.
+          terminal() {
+            echo "terminal=$1" >> "$GITHUB_OUTPUT"
+            [[ "$from" =~ ^[0-9a-f]{40}$ ]] || from=""
+            echo "from-sha=$from" >> "$GITHUB_OUTPUT"
+          }
+          while :; do
+            set +e
+            json=$(ssh -i "$RUNNER_TEMP/prod-ssh/key" \
+              -o UserKnownHostsFile="$RUNNER_TEMP/prod-ssh/known_hosts" \
+              -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 \
+              "$PROD_SSH_USER@$PROD_SSH_HOST" "rollback-status prod $SHA" \
+              2>"$RUNNER_TEMP/ssh.err" | head -n 1; exit "${PIPESTATUS[0]}")
+            ssh_rc=$?
+            set -e
+            if [ "$ssh_rc" -eq 255 ]; then
+              ssh_failures=$((ssh_failures + 1))
+              echo "status: ssh failed ($(head -n 1 "$RUNNER_TEMP/ssh.err"))"
+              if [ "$ssh_failures" -ge 4 ]; then
+                echo "::error::ssh to ds-api-prod failed $ssh_failures times in a row"
+                terminal unknown
+                exit 1
+              fi
+              sleep 15
+              continue
+            fi
+            ssh_failures=0
+            # The verdict reads the unit state as well as the record: a dead unit
+            # whose record still says `running` is a failure (release-runner.mjs).
+            read -r verdict rb_from line < <(printf '%s' "$json" |
+              node tools/deploy/release-runner.mjs rollback-verdict --sha "$SHA") ||
+              verdict=unreadable
+            echo "status: ${line:-unreadable reply}"
+            [ "${rb_from:--}" = "-" ] || from=$rb_from
+            case "$verdict" in
+              succeeded)
+                terminal succeeded; echo "rollback: succeeded"; exit 0 ;;
+              failed)
+                terminal failed
+                echo "::error::rollback failed ($line)"
+                exit 1 ;;
+            esac
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::the rollback did not finish within 30 min (the rollback unit keeps running on the box)"
+              terminal unknown
+              exit 1
+            fi
+            sleep 15
+          done
+
       - name: Remove the ssh key
         if: always()
         run: rm -rf "$RUNNER_TEMP/prod-ssh"
@@ -263,7 +399,7 @@ jobs:
       # success already recorded for the SHA writes nothing (`recorded=existing`).
       - name: Release cut and the Deployment record
         id: record
-        if: always() && steps.poll.outputs.terminal != ''
+        if: always() && inputs.mode != 'rollback' && steps.poll.outputs.terminal != ''
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -274,11 +410,34 @@ jobs:
           node tools/deploy/release-runner.mjs record --sha "$SHA" \
             --state "$TERMINAL" --previous-sha "$PREVIOUS_SHA"
 
+      # Rollback: no release cut, the ONE Deployment record with the reason.
+      - name: The rollback Deployment record
+        id: rollback-record
+        if: always() && inputs.mode == 'rollback' && steps.rollback-poll.outputs.terminal != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REASON: ${{ inputs.reason }}
+          TERMINAL: ${{ steps.rollback-poll.outputs.terminal }}
+          FROM_SHA: ${{ steps.rollback-poll.outputs.from-sha }}
+        run: |
+          node tools/deploy/release-runner.mjs rollback-record --sha "$SHA" \
+            --state "$TERMINAL" --from-sha "$FROM_SHA"
+
+      # Not a release digest (release-digest.yml owns that): the team's notice.
+      - name: The rollback notice to Mattermost
+        if: always() && inputs.mode == 'rollback' && steps.rollback-poll.outputs.terminal != ''
+        env:
+          MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_WEBHOOK_URL }}
+          REASON: ${{ inputs.reason }}
+          TERMINAL: ${{ steps.rollback-poll.outputs.terminal }}
+        run: node tools/deploy/release-runner.mjs rollback-notice --sha "$SHA" --state "$TERMINAL"
+
   digest:
     needs: deploy
     # Only a newly written success record: a re-dispatch whose success is already
     # recorded posts no second digest.
-    if: needs.deploy.result == 'success' && needs.deploy.outputs.recorded == 'new'
+    if: inputs.mode != 'rollback' && needs.deploy.result == 'success' && needs.deploy.outputs.recorded == 'new'
     permissions:
       contents: read
       deployments: read

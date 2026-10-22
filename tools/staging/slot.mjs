@@ -2871,7 +2871,7 @@ function realEffects(
         ...(STAGE_1 === LOCAL_EXECUTOR ? { sourceDir: SELF_TREE } : {}),
       });
       if (step.installEntrypoints) {
-        await streamed(releaseInstallScript(step.liveDir), { label: "install ds-release" });
+        await streamed(releaseInstallScript(step.liveDir, { sha: step.sha }), { label: "install ds-release" });
       } else {
         await streamed(boxEntrypointsCheckScript(), { label: "check the box entrypoints" });
         console.log(

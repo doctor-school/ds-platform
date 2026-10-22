@@ -149,6 +149,10 @@ const APP_GLOBS = [
   "apps/doctor/app/**/*.tsx",
   "apps/doctor/components/**/*.tsx",
   "apps/doctor/lib/**/*.tsx",
+  // #3170 — the sign-in host renders both storefronts' auth forms to the user.
+  "apps/login/app/**/*.tsx",
+  "apps/login/components/**/*.tsx",
+  "apps/login/lib/**/*.tsx",
   // #1722 D11 — the shared webinar-room unit renders product UI on both
   // storefronts; the primitives contract follows the composition out of
   // `apps/portal/app` into the package.

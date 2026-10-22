@@ -23,8 +23,10 @@ import {
   compareStatus,
   deployPlan,
   descendsFromLiveVerdict,
+  fetchTargetTree,
   localProdHosts,
   parseLocalFlags,
+  rollbackTargetVerdict,
   planWalker,
   recordPreviousShaScript,
 } from "./prod.mjs";
@@ -192,7 +194,7 @@ test("3157: a --local run re-points both boxes before its first step, and every 
   const main = SOURCE.slice(SOURCE.indexOf("async function main("));
   assert.match(
     main,
-    /if \(localUsage\.local\) \{\s*useLocalHosts\(\);\s*await deploy\(null, localUsage\.local\);/,
+    /if \(localUsage\.local\) \{\s*useLocalHosts\(\);\s*if \(localUsage\.local\.rollback\) await rollback\(localUsage\.local\.rollback, localUsage\.local\);\s*else await deploy\(null, localUsage\.local\);/,
   );
   assert.doesNotMatch(
     deployBody,
@@ -223,7 +225,6 @@ test("3157: --local takes only --images-file, and no operator flag", () => {
   );
   for (const extra of [
     ["--ref", SHA],
-    ["--rollback", SHA],
     ["--skip-ci-check"],
     ["--allow-live-broadcast"],
     ["--release-gate-exempt", "x"],
@@ -349,7 +350,11 @@ test("3157: the --local run checks the descent right after its previous-SHA read
   const guard = phase.search(
     /descendsFromLiveVerdict\(\{\s*live: prevSha,\s*sha,/,
   );
-  const read = phase.indexOf("docker inspect ds-api-prod-api-1");
+  const read = phase.indexOf("await readLiveProdSha()");
+  assert.match(
+    SOURCE,
+    /async function readLiveProdSha\(\) \{[^}]*docker inspect ds-api-prod-api-1/,
+  );
   const record = phase.indexOf("recordPreviousShaScript(sha, prevSha)");
   assert.ok(
     read > 0 && read < guard && guard < record,
@@ -396,3 +401,148 @@ ${run.stderr}`,
     rmSync(tree, { recursive: true, force: true });
   }
 });
+
+test("2987: --local admits --rollback <sha> as its one mode flag", () => {
+  assert.deepEqual(
+    parseLocalFlags(["--local", "--rollback", SHA, "--images-file", "-"]),
+    {
+      local: { imagesFile: "-", rollback: SHA },
+    },
+  );
+  assert.match(
+    parseLocalFlags(["--local", "--images-file", "-", "--rollback"]).error,
+    /full 40-hex/,
+  );
+  assert.match(
+    parseLocalFlags([
+      "--local",
+      "--images-file",
+      "-",
+      "--rollback",
+      SHA.slice(0, 12),
+    ]).error,
+    /full 40-hex/,
+  );
+  assert.match(
+    parseLocalFlags([
+      "--local",
+      "--images-file",
+      "-",
+      "--rollback",
+      SHA,
+      "--ref",
+      SHA,
+    ]).error,
+    /takes no other flag/,
+  );
+  assert.match(
+    parseLocalFlags([
+      "--local",
+      "--images-file",
+      "-",
+      "--rollback",
+      SHA,
+      "--rollback",
+      SHA,
+    ]).error,
+    /takes no other flag/,
+  );
+});
+
+test("2987: the box-side rollback moves production only backwards (compare <live>...<sha> = behind)", () => {
+  const live = "d".repeat(40);
+  assert.deepEqual(
+    rollbackTargetVerdict({ live, sha: SHA, status: "behind" }),
+    { ok: true },
+  );
+  for (const status of ["ahead", "identical", "diverged", null]) {
+    const v = rollbackTargetVerdict({ live, sha: SHA, status });
+    assert.equal(v.ok, false, String(status));
+    assert.match(v.reason, /not behind the live prod SHA dddddddddddd/);
+  }
+  assert.match(
+    rollbackTargetVerdict({ live: null, sha: SHA, status: null }).reason,
+    /unknown/,
+  );
+});
+
+test("2987: the target tree is fetched from codeload into a directory of its own; a failed fetch is no tree", async () => {
+  const base = mkdtempSync(join(tmpdir(), "ds-target-tree-"));
+  try {
+    const failed = await fetchTargetTree(SHA, {
+      dir: join(base, "a"),
+      fetchImpl: async () => ({ ok: false, status: 404 }),
+    });
+    assert.equal(failed, null, "an HTTP error");
+    const thrown = await fetchTargetTree(SHA, {
+      dir: join(base, "b"),
+      fetchImpl: async () => {
+        throw new Error("network");
+      },
+    });
+    assert.equal(thrown, null, "a network error");
+    let asked;
+    const notTar = await fetchTargetTree(SHA, {
+      dir: join(base, "c"),
+      fetchImpl: async (url) => {
+        asked = url;
+        return {
+          ok: true,
+          arrayBuffer: async () =>
+            Buffer.from("not a tarball"),
+        };
+      },
+    });
+    assert.equal(notTar, null, "an archive tar cannot read");
+    assert.equal(
+      asked,
+      `https://codeload.github.com/doctor-school/ds-platform/tar.gz/${SHA}`,
+    );
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test(
+  "2987: a fetched tarball is extracted with its top directory stripped",
+  { skip: spawnSync("tar", ["--version"]).status !== 0 && "no tar" },
+  async () => {
+    const base = mkdtempSync(join(tmpdir(), "ds-target-tree-"));
+    try {
+      const src = join(base, "src", `ds-platform-${SHA}`, "apps/api/drizzle");
+      mkdirSync(src, { recursive: true });
+      writeFileSync(join(src, "0036_speaker_cutover.sql"), "-- cutover");
+      const archive = join(base, "t.tar.gz");
+      const tar = spawnSync("tar", [
+        "czf",
+        archive,
+        "-C",
+        join(base, "src"),
+        `ds-platform-${SHA}`,
+      ]);
+      if (tar.status !== 0) return;
+      const bytes = readFileSync(archive);
+      const dir = await fetchTargetTree(SHA, {
+        dir: join(base, "tree"),
+        fetchImpl: async () => ({
+          ok: true,
+          arrayBuffer: async () =>
+            bytes.buffer.slice(
+              bytes.byteOffset,
+              bytes.byteOffset + bytes.length,
+            ),
+        }),
+      });
+      assert.equal(dir, join(base, "tree"));
+      assert.equal(
+        readFileSync(
+          join(dir, "apps/api/drizzle/0036_speaker_cutover.sql"),
+          "utf8",
+        ),
+        "-- cutover",
+      );
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  },
+);

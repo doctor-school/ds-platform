@@ -16,6 +16,9 @@ describe("rendered UI source classification", () => {
     // lives in `@ds/storefront-shell`; what the host still owns are its own
     // page blocks, which is the live doctor component this row pins.
     "apps/doctor/components/storefront-hero.tsx",
+    // #3170 — the sign-in host renders both storefronts' auth forms.
+    "apps/login/app/login/page.tsx",
+    "apps/login/app/globals.css",
     "packages/storefront-shell/src/storefront-header.tsx",
     "apps/mobile/src/screens/home.tsx",
     "apps/portal/app/page.tsx",
@@ -44,6 +47,8 @@ describe("rendered UI source classification", () => {
     "apps/portal/lib/auth-flow.host-config.ts",
     "apps/admin/lib/admin-auth.ts",
     "apps/docs/lib/source.ts",
+    // The sign-in host's header builder is server mechanics, not render source.
+    "apps/login/lib/host-headers.ts",
   ])("red: %s is outside rendered UI roots", (path) => {
     expect(isUiSourcePath(path)).toBe(false);
   });

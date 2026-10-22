@@ -338,6 +338,7 @@ them — or a live one that grew a `webServer` — fails `pnpm test:tools`.
 | Leg                          | Config (`apps/<app>/…`)                                                             |
 | ---------------------------- | ----------------------------------------------------------------------------------- |
 | `live/academy/default`       | `portal/playwright.config.ts` (`e2e` + `bdd`)                                       |
+| `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)      |
 | `live/doctor/register-live`  | `doctor/playwright.register-live.config.ts`                                         |
 | `live/doctor/congress`       | `doctor/playwright.congress.config.ts`                                              |
 | `live/doctor/event-page`     | `doctor/playwright.event-page.config.ts`                                            |
@@ -367,6 +368,13 @@ names, and no other box key is handed over); an operator export wins over each v
 - the golden event slugs and `/events` paths per storefront (`GOLDEN_LIVE_ENV` in
   `live-tiers.mjs`, held against `packages/db/src/seed/golden/ids.ts`), and
   `E2E_API_URL` = the slot's api origin.
+
+Event slugs come from the golden set the slot was seeded with (#2996): a tier's
+`seededEnv` (`live-tiers.mjs` → `GOLDEN_SLUGS`) names the golden event carrying each shape
+its specs assert, only that tier's leg receives them, and a value the operator exported
+wins; it also wins over the host-wide
+`GOLDEN_LIVE_ENV` slug for that leg. `apps/api/test/scripts/stage-event-page-slugs.spec.ts` builds the golden dataset and
+fails when a mirrored slug stops carrying its shape.
 
 An IdP management token (`IDP_SERVICE_TOKEN`/`IDP_PROJECT_ID`), the api's
 `CONGRESS_SIGNUP_*` block and a `DATABASE_URL` are **not** derived and not added to the

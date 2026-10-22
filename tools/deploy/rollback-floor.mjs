@@ -39,6 +39,9 @@
 // call (tools/deploy/rollback-floor.test.mjs). `prod.mjs` supplies the two real
 // readers.
 
+import { existsSync, statSync } from "node:fs";
+import { join } from "node:path";
+
 /** The legacy table dropped by the cutover — the prod-side presence probe. */
 export const LEGACY_SPEAKER_TABLE = "event_speakers";
 
@@ -226,4 +229,27 @@ export function makeGitCutoverMigrationProbe(localCap) {
       return false;
     }
   };
+}
+
+/**
+ * #2987: the target-tree probe of the box-side rollback, which has no git: the
+ * target's codeload tree, fetched into `treeDir`, carries the cutover migration
+ * file or not. A tree that was never fetched (`treeDir` null, or no directory) is
+ * unresolved state (→ TARGET_STATE_UNRESOLVED), never "absent".
+ *
+ * @param {string|null} treeDir
+ */
+export function makeTreeCutoverMigrationProbe(treeDir) {
+  return async () => {
+    if (!treeDir || !isDirectory(treeDir)) return null;
+    return existsSync(join(treeDir, ...CUTOVER_MIGRATION_PATH.split("/")));
+  };
+}
+
+function isDirectory(path) {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
 }

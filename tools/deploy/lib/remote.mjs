@@ -482,11 +482,51 @@ export function releaseUnitName(env, sha, step) {
  * `hotfix/*`); on ds-stage-1 only the `main` converge of a SHA contained in `main`
  * does (#3125, `tools/staging/slot.mjs`).
  */
-export function releaseInstallScript(liveDir = "$HOME/ds-platform") {
+export function releaseInstallScript(liveDir = "$HOME/ds-platform", { sha } = {}) {
+  if (sha !== undefined) assertRelease("prod", sha);
   return [
     ...installDirLines(BOX_ENTRYPOINTS.map(({ dest }) => dest)),
     ...BOX_ENTRYPOINTS.map(({ dest, path }) => `sudo install -m 0755 "${liveDir}/${path}" ${dest}`),
+    ...(sha === undefined ? [] : installedTreeLines(liveDir, sha)),
   ].join("\n");
+}
+
+// #2987: the tooling tree of the box-side rollback (spec §5 «Prod rollback», «Two
+// trees»). A forward install keeps a copy of the tree it installed the entrypoints
+// from — the shipped tree is replaced by the next ship, this copy only by the next
+// install — and records its SHA and path in INSTALLED_TREE_FILE (one line,
+// `<sha> <path>`). The copy is in place before the record names it.
+export const INSTALLED_TREE_DIR = "/usr/local/lib/ds-platform/tree";
+export const INSTALLED_TREE_FILE = "/usr/local/lib/ds-platform/installed-tree";
+
+function installedTreeLines(liveDir, sha) {
+  const tree = INSTALLED_TREE_DIR;
+  return [
+    `sudo rm -rf -- "${tree}.new"`,
+    `sudo cp -a -- "${liveDir}/." "${tree}.new"`,
+    `sudo rm -rf -- "${tree}"`,
+    `sudo mv -- "${tree}.new" "${tree}"`,
+    `printf '%s %s\\n' ${sha} "${tree}" | sudo tee "${INSTALLED_TREE_FILE}.new" >/dev/null`,
+    `sudo mv -- "${INSTALLED_TREE_FILE}.new" "${INSTALLED_TREE_FILE}"`,
+  ];
+}
+
+/** #2987: the box-side rollback's own unit (spec §5 «Own unit and record»). */
+export function rollbackUnitName(sha) {
+  assertRelease("prod", sha);
+  return `ds-prod-${sha.slice(0, 12)}-rollback`;
+}
+
+const ROLLBACK_UNIT_RE = /^ds-prod-[0-9a-f]{12}-rollback$/;
+
+// `--except <unit>`: only the rollback's own unit — a step unit of the same SHA
+// (a stale `migrate`) still refuses.
+function exceptArg(exceptUnit) {
+  if (exceptUnit === undefined) return "";
+  if (!ROLLBACK_UNIT_RE.test(String(exceptUnit))) {
+    throw new Error(`only a rollback unit is excluded from the live-unit check, not ${JSON.stringify(exceptUnit)}`);
+  }
+  return ` --except ${exceptUnit}`;
 }
 
 // A binary outside /usr/local/bin (the release driver, #2985) needs its directory
@@ -553,10 +593,13 @@ function withScriptFile(script, command) {
   ].join("\n");
 }
 
-/** Read-only: refuses (exit 3, naming the unit) while any step unit of `env` runs. */
-export function releaseCheckScript(env) {
+/**
+ * Read-only: refuses (exit 3, naming the unit) while any step unit of `env` runs —
+ * except `exceptUnit`, the box-side rollback's own unit (#2987).
+ */
+export function releaseCheckScript(env, { exceptUnit } = {}) {
   assertRelease(env, "0".repeat(40));
-  return `sudo ${DS_RELEASE_BIN} check ${env}`;
+  return `sudo ${DS_RELEASE_BIN} check${exceptArg(exceptUnit)} ${env}`;
 }
 
 /**
@@ -565,9 +608,9 @@ export function releaseCheckScript(env) {
  * app-only rollback's `up -d` goes through it, so a later release of the SHA rolled
  * off starts a fresh attempt instead of answering from stale verdicts.
  */
-export function releaseSupersedeScript(env, script) {
+export function releaseSupersedeScript(env, script, { exceptUnit } = {}) {
   assertRelease(env, "0".repeat(40));
-  const command = `sudo ${DS_RELEASE_BIN} supersede ${env}`;
+  const command = `sudo ${DS_RELEASE_BIN} supersede${exceptArg(exceptUnit)} ${env}`;
   return script === undefined ? command : withScriptFile(script, `${command} "$f"`);
 }
 

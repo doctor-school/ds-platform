@@ -11,9 +11,9 @@
 #   ds-release release [--retry-failed] <env> <sha> <step> <script-file>
 #   ds-release status  <env> <sha>
 #   ds-release finish  <env> <sha> succeeded|failed
-#   ds-release check   <env>
+#   ds-release check   [--except <rollback-unit>] <env>
 #   ds-release lease   <env> <sha>
-#   ds-release supersede <env> [<script-file>]
+#   ds-release supersede [--except <rollback-unit>] <env> [<script-file>]
 #   ds-release forget  <env>
 #
 # <env> is prod, stage-main or stage-pr-<N>. Installed as /usr/local/bin/ds-release
@@ -94,9 +94,12 @@ reap_env_units() {
 
 # Read-only: refuse while a step unit of the env (except the SHA `$2`'s own) still
 # runs — `active (exited)` is a finished --remain-after-exit unit, not a running one.
+# `$3` (#2987) excludes exactly one unit: the box-side rollback's own, which runs the
+# check from inside itself; a step unit of the same SHA still refuses.
 refuse_live_units() {
-  local unit
+  local unit except=${3:-}
   while read -r unit; do
+    [[ -n $except && $unit == "$except.service" ]] && continue
     unit_alive "$unit" && refuse "$unit is still running (sudo journalctl -fu $unit); wait for it to end"
   done < <(env_units "$1" "$2")
   return 0
@@ -420,10 +423,25 @@ cmd_forget() {
 # check: read-only, lock-free — refuses (exit 3, naming the unit) while any step
 # unit of the env still runs. The rollback runs it before its first state change.
 cmd_check() {
-  [[ $# -eq 1 ]] || usage "usage: ds-release check <env>"
+  local except=
+  if [[ ${1:-} == --except ]]; then
+    [[ $# -ge 3 ]] || usage "usage: ds-release check [--except <rollback-unit>] <env>"
+    except=$2
+    [[ -n $except ]] || usage "--except takes a rollback unit"
+    shift 2
+  fi
+  [[ $# -eq 1 ]] || usage "usage: ds-release check [--except <rollback-unit>] <env>"
   check_env "$1"
-  refuse_live_units "$1" ""
+  check_except "$1" "$except"
+  refuse_live_units "$1" "" "$except"
   say "no ds-$1-* step unit is running"
+}
+
+# --except <unit> (#2987): only a rollback unit of the env — the box-side rollback
+# excludes itself, never a step unit.
+check_except() {
+  [[ -z $2 || $2 =~ ^ds-$1-[0-9a-f]{12}-rollback$ ]] ||
+    usage "--except takes only a rollback unit ds-$1-<sha12>-rollback, not $2"
 }
 
 # supersede: a converge that moves the env off its recorded SHAs outside a release
@@ -432,12 +450,20 @@ cmd_check() {
 # of any of those SHAs starts afresh — then the optional script runs, streamed, as
 # the operator, still holding the lock.
 cmd_supersede() {
-  [[ $# -eq 1 || $# -eq 2 ]] || usage "usage: ds-release supersede <env> [<script-file>]"
+  local except=
+  if [[ ${1:-} == --except ]]; then
+    [[ $# -ge 3 ]] || usage "usage: ds-release supersede [--except <rollback-unit>] <env> [<script-file>]"
+    except=$2
+    [[ -n $except ]] || usage "--except takes a rollback unit"
+    shift 2
+  fi
+  [[ $# -eq 1 || $# -eq 2 ]] || usage "usage: ds-release supersede [--except <rollback-unit>] <env> [<script-file>]"
   check_env "$1"
+  check_except "$1" "$except"
   local env=$1 src=${2:-} dir file out
   [[ -z $src || -r $src ]] || usage "script file not readable: $src"
   take_lock "$env"
-  refuse_live_units "$env" ""
+  refuse_live_units "$env" "" "$except"
   dir=$(env_dir "$env")
   for file in "$dir"/*.json; do
     [[ -e $file && $(basename "$file") =~ $RECORD_RE ]] || continue

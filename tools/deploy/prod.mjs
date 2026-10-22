@@ -68,7 +68,8 @@
 // `drizzle-kit migrate` are all no-ops when already current.
 
 import { spawn, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -126,6 +127,7 @@ import {
   assertRollbackAllowed,
   makeGitCutoverMigrationProbe,
   makeProdCutoverReader,
+  makeTreeCutoverMigrationProbe,
   RollbackFloorError,
 } from "./rollback-floor.mjs";
 import {
@@ -165,6 +167,7 @@ import {
   releaseInstallFromSourceScript,
   releaseInstallScript,
   releaseSupersedeScript,
+  rollbackUnitName,
   runDurableStep,
   shipTree as shipCommittedTree,
   sshCapture,
@@ -323,11 +326,15 @@ function useLocalHosts() {
 const LOCAL_FLAG = "--local";
 const IMAGES_FILE_FLAG = "--images-file";
 
+const ROLLBACK_FLAG = "--rollback";
+
 /**
- * `--local --images-file <path|->` (`-`: the inherited stdin). Nothing else goes with
- * them: a hotfix `--ref`, `--rollback` and every escape hatch stay on the operator
- * path (spec §5 «Prod release driver»). Returns `{ local: null }`,
- * `{ local: { imagesFile } }` or `{ error }`.
+ * `--local [--rollback <sha>] --images-file <path|->` (`-`: the inherited stdin).
+ * `--rollback <sha>` (the full SHA) is the one mode flag `--local` admits: the
+ * box-side rollback's run from the tooling tree (#2987, spec §5 «Prod rollback»).
+ * Nothing else goes with them: a hotfix `--ref` and every escape hatch stay on the
+ * operator path (spec §5 «Prod release driver»). Returns `{ local: null }`,
+ * `{ local: { imagesFile } }`, `{ local: { imagesFile, rollback } }` or `{ error }`.
  */
 export function parseLocalFlags(args) {
   const local = args.includes(LOCAL_FLAG);
@@ -338,15 +345,24 @@ export function parseLocalFlags(args) {
   if (!imagesFile || imagesFile.startsWith("--")) {
     return { error: "`--images-file` requires a path (`-`: stdin)" };
   }
-  const rest = args.filter((arg, index) => arg !== LOCAL_FLAG && index !== at && index !== at + 1);
+  const rb = args.indexOf(ROLLBACK_FLAG);
+  let rollback = null;
+  if (rb >= 0) {
+    rollback = args[rb + 1];
+    if (!/^[0-9a-f]{40}$/.test(String(rollback))) {
+      return { error: "`--local --rollback` takes the full 40-hex SHA of the target" };
+    }
+  }
+  const taken = new Set([at, at + 1, ...(rb >= 0 ? [rb, rb + 1] : [])]);
+  const rest = args.filter((arg, index) => arg !== LOCAL_FLAG && !taken.has(index));
   if (rest.length > 0) {
     return {
       error:
-        `\`--local\` takes no other flag (${rest.join(" ")}): a hotfix, a rollback and` +
+        `\`--local\` takes no other flag (${rest.join(" ")}): a hotfix and` +
         " every escape hatch stay on the operator path",
     };
   }
-  return { local: { imagesFile } };
+  return { local: rollback ? { imagesFile, rollback } : { imagesFile } };
 }
 
 /** A file of the target commit: `git show` on the operator path, the extracted tree on the box. */
@@ -409,6 +425,51 @@ export function descendsFromLiveVerdict({ live, sha, status }) {
     ok: false,
     reason: `${sha} does not descend from the live prod SHA ${live.slice(0, 12)} — a downgrade is a rollback (pnpm deploy:prod --rollback)`,
   };
+}
+
+/**
+ * Pure (#2987): may the box-side rollback put `sha` back in place of the live SHA
+ * `live`? Only a strict ancestor (compare `behind`) — the mirror of
+ * `descendsFromLiveVerdict`; the release driver refuses the same before it starts
+ * the unit, and the unit refuses again so a direct `--local --rollback` cannot skip it.
+ */
+export function rollbackTargetVerdict({ live, sha, status }) {
+  if (!live) {
+    return { ok: false, reason: "the live prod SHA is unknown (no running ds-api-prod-api-1)" };
+  }
+  if (status === "behind") return { ok: true };
+  return {
+    ok: false,
+    reason: `${sha} is not behind the live prod SHA ${live.slice(0, 12)} (compare status: ${status ?? "unknown"}) — a rollback never moves production forward`,
+  };
+}
+
+const CODELOAD_URL = "https://codeload.github.com/doctor-school/ds-platform/tar.gz";
+
+/**
+ * #2987: the target tree of the box-side rollback — the target SHA's codeload tree,
+ * fetched as a release fetches its own, into `dir` (top directory stripped). The
+ * target's files are read only from there; it is never executed. Any failure is no
+ * tree (null): the caller refuses the rollback as unresolved.
+ */
+export async function fetchTargetTree(sha, { dir, fetchImpl = fetch } = {}) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 600_000);
+  try {
+    const response = await fetchImpl(`${CODELOAD_URL}/${sha}`, { signal: ac.signal });
+    if (!response?.ok) return null;
+    const bytes = Buffer.from(await response.arrayBuffer());
+    mkdirSync(dir, { recursive: true });
+    const archive = `${dir}.tar.gz`;
+    writeFileSync(archive, bytes);
+    const tar = spawnSync("tar", ["xzf", archive, "--strip-components=1", "-C", dir], { stdio: "ignore" });
+    rmSync(archive, { force: true });
+    return tar.status === 0 ? dir : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -1635,12 +1696,7 @@ async function deploy(hotfixRef = null, local = null) {
   walk.phase("previous-sha");
   let prevSha;
   try {
-    const img = await sshCapture(
-      API_PROD,
-      `sudo docker inspect ds-api-prod-api-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent`,
-    );
-    const m = img.trim().match(/^ds-api:([0-9a-f]{7,40})$/i);
-    prevSha = m ? m[1] : null;
+    prevSha = await readLiveProdSha();
     console.log(
       `  ↩ previous prod SHA (from running ds-api image): ${prevSha ? prevSha.slice(0, 12) : "none"}`,
     );
@@ -1693,7 +1749,8 @@ async function deploy(hotfixRef = null, local = null) {
   // the CI keys' forced command ds-deploy-entrypoint, #2984).
   walk.phase("install");
   for (const host of [API_PROD, DATA_PROD]) {
-    await sshScript(host, releaseInstallScript(), { label: "install ds-release" });
+    // #2987: the install also keeps this tree as the box-side rollback's tooling tree.
+    await sshScript(host, releaseInstallScript(undefined, { sha }), { label: "install ds-release" });
   }
   ok("ds-release + ds-deploy-entrypoint installed on both boxes");
   openReleaseSha = sha;
@@ -1930,6 +1987,18 @@ function runSmoke(sha, services) {
   });
 }
 
+// The SHA production runs: the running api container's image tag `ds-api:<sha>` (the
+// durable deploy record; no separate persistence file), or null. Throws when the box
+// cannot be read.
+async function readLiveProdSha() {
+  const img = await sshCapture(
+    API_PROD,
+    `sudo docker inspect ds-api-prod-api-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent`,
+  );
+  const m = img.trim().match(/^ds-api:([0-9a-f]{7,40})$/i);
+  return m ? m[1] : null;
+}
+
 // --- rollback (app-only; DSO-127) -----------------------------------------
 
 /**
@@ -1958,18 +2027,50 @@ export function committedReleaseSources(repoRoot = REPO_ROOT, ref = "HEAD") {
   }));
 }
 
-async function rollback(shaArg) {
+// `local` (#2987): `{ imagesFile, rollback }` of the box-side rollback — the release
+// driver's -rollback unit runs it from the tooling tree on ds-api-prod (spec §5 «Prod
+// rollback»); null on the workstation path (break-glass). One implementation: the box
+// run differs only in where the target's files and digests come from, in installing
+// nothing, and in excluding its own unit from the live-unit check.
+async function rollback(shaArg, local = null) {
   if (!/^[0-9a-f]{7,40}$/.test(shaArg)) {
     die(`--rollback needs a git SHA (7–40 hex chars), got: ${shaArg}`);
   }
-  // Images are tagged with the FULL commit SHA — expand a short prefix via
-  // local git so `--rollback 88514b6` matches `ds-api:88514b60c93d…`.
   let sha;
-  try {
-    sha = localCap("git", ["rev-parse", "--verify", `${shaArg}^{commit}`]);
-  } catch {
-    die(`cannot resolve ${shaArg} to a commit in the local repo`);
+  let localRelease = null;
+  if (local) {
+    // The box has no git: the driver passes the full SHA and its recorded manifest.
+    sha = shaArg;
+    localRelease = await readLocalRelease(local.imagesFile);
+    if (localRelease.sha !== sha) die(`--rollback ${sha}: the manifest on stdin records ${localRelease.sha}`);
+    const live = await readLiveProdSha().catch(() => null);
+    const target = rollbackTargetVerdict({
+      live,
+      sha,
+      status: live ? await compareStatus(live, sha) : null,
+    });
+    if (!target.ok) die(`--rollback: ${target.reason}`);
+    // The target tree: fetched into a directory of its own, read, never executed.
+    const base = mkdtempSync(join(tmpdir(), "ds-rollback-target-"));
+    process.on("exit", () => rmSync(base, { recursive: true, force: true }));
+    LOCAL_TREE = await fetchTargetTree(sha, { dir: join(base, "tree") });
+    if (!LOCAL_TREE) {
+      die(
+        `--rollback: cannot fetch the target tree of ${sha.slice(0, 12)} — its service set and` +
+          " migration floor are unresolved; prod was not touched",
+      );
+    }
+  } else {
+    // Images are tagged with the FULL commit SHA — expand a short prefix via
+    // local git so `--rollback 88514b6` matches `ds-api:88514b60c93d…`.
+    try {
+      sha = localCap("git", ["rev-parse", "--verify", `${shaArg}^{commit}`]);
+    } catch {
+      die(`cannot resolve ${shaArg} to a commit in the local repo`);
+    }
   }
+  // #2987: inside its own unit the rollback excludes exactly that unit.
+  const own = local ? { exceptUnit: rollbackUnitName(sha) } : {};
   // #1896: the rollback target's OWN compose says which SHA-tagged images that
   // commit produced — rolling back below a service's introduction must not
   // demand an image that never existed at that SHA.
@@ -2032,7 +2133,10 @@ async function rollback(shaArg) {
         host: DATA_PROD,
         composeDir: DATA_COMPOSE,
       }),
-      targetCarriesMigration: makeGitCutoverMigrationProbe(localCap),
+      // The box has no git: the fetched target tree answers (#2987).
+      targetCarriesMigration: local
+        ? makeTreeCutoverMigrationProbe(LOCAL_TREE)
+        : makeGitCutoverMigrationProbe(localCap),
     });
     ok(`rollback floor: ${verdict.reason}`);
   } catch (err) {
@@ -2052,29 +2156,32 @@ async function rollback(shaArg) {
   // checkout's HEAD — every run, like the forward path (tech spec §5 Entrypoint) —
   // and a box the forward path never reached still gets it before its first call.
   // The install is the one write before the read-only check below.
-  let releaseSources;
-  try {
-    releaseSources = committedReleaseSources();
-  } catch (e) {
-    die(`--rollback: ${e.message}`);
-  }
-  for (const host of [API_PROD, DATA_PROD]) {
+  // #2987: the box-side rollback installs nothing — it runs the installed entrypoints.
+  if (!local) {
+    let releaseSources;
     try {
-      await sshScript(host, releaseInstallFromSourceScript(releaseSources), {
-        label: "install ds-release",
-      });
+      releaseSources = committedReleaseSources();
     } catch (e) {
-      die(`--rollback: cannot install ds-release on ${host} (${e.message}); prod was not rolled back`);
+      die(`--rollback: ${e.message}`);
     }
+    for (const host of [API_PROD, DATA_PROD]) {
+      try {
+        await sshScript(host, releaseInstallFromSourceScript(releaseSources), {
+          label: "install ds-release",
+        });
+      } catch (e) {
+        die(`--rollback: cannot install ds-release on ${host} (${e.message}); prod was not rolled back`);
+      }
+    }
+    ok("ds-release + ds-deploy-entrypoint installed on both boxes from the operator checkout");
   }
-  ok("ds-release + ds-deploy-entrypoint installed on both boxes from the operator checkout");
 
   // #2982: a release step outlives the operator session that started it. A
   // rollback racing a still-running `migrate` (whose `up -d` would put the SHA
   // being rolled off back) is refused, read-only, before the first state change.
   for (const host of [API_PROD, DATA_PROD]) {
     try {
-      await sshCapture(host, releaseCheckScript(RELEASE_ENV), { stderr: "pipe" });
+      await sshCapture(host, releaseCheckScript(RELEASE_ENV, own), { stderr: "pipe" });
     } catch (e) {
       die(`--rollback refused on ${host}: ${e.message}`);
     }
@@ -2096,7 +2203,8 @@ done`,
       `  ℹ target image(s) not on api-prod (pruned by retention):\n${present}\n` +
         `    pulling them from the target's recorded \`main\` digests…`,
     );
-    const images = await resolveProdImages(sha);
+    // The box-side rollback pulls the digests of the manifest the driver checked.
+    const images = local ? localRelease.images : await resolveProdImages(sha);
     await pullRecordedImages(sha, images, { label: "rollback pull" });
     ok("target images pulled by their recorded digests");
   } else {
@@ -2120,7 +2228,7 @@ done`,
   // supersedes their release records under the env lock (refused while a step
   // unit runs): a later deploy of the SHA rolled off then runs every step again
   // instead of answering from verdicts that no longer describe the containers.
-  await sshScript(DATA_PROD, releaseSupersedeScript(RELEASE_ENV), {
+  await sshScript(DATA_PROD, releaseSupersedeScript(RELEASE_ENV, undefined, own), {
     label: "supersede the data-prod release record",
   });
   step("api-prod: up -d previous tag (NO build, NO migrate — app tier only)");
@@ -2134,6 +2242,7 @@ done`,
 ${deployShaEnvScript(sha)}
 sudo docker compose up -d
 `,
+      own,
     ),
     { label: "rollback up" },
   );
@@ -2159,7 +2268,8 @@ async function main() {
   if (localUsage.error) die(localUsage.error);
   if (localUsage.local) {
     useLocalHosts();
-    await deploy(null, localUsage.local);
+    if (localUsage.local.rollback) await rollback(localUsage.local.rollback, localUsage.local);
+    else await deploy(null, localUsage.local);
     return;
   }
 

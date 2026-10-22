@@ -53,7 +53,7 @@ test("2982: data-prod up, the pre-migrate backup, the pull, migrate+up and the p
 });
 
 test("2982: the entrypoint is installed after the ship, the release opened, and closed only after the smoke", () => {
-  const install = deployBody.indexOf("releaseInstallScript()");
+  const install = deployBody.indexOf("releaseInstallScript(undefined, { sha })");
   const opened = deployBody.indexOf("openReleaseSha = sha;");
   const firstStep = deployBody.indexOf("boxStep(");
   const shipped = deployBody.indexOf("shipTree(sha, DATA_PROD)");
@@ -79,20 +79,46 @@ test("2982: the rollback pull stays streamed — never behind the lease of the r
 
 test("2982: the rollback refuses while a box step still runs, then supersedes the release under the env lock", () => {
   const rollback = SOURCE.slice(SOURCE.indexOf("async function rollback("));
-  const check = rollback.indexOf("releaseCheckScript(RELEASE_ENV)");
+  const check = rollback.indexOf("releaseCheckScript(RELEASE_ENV, own)");
   const pull = rollback.indexOf('label: "rollback pull"');
   const up = rollback.search(/releaseSupersedeScript\(\s*RELEASE_ENV,/);
   assert.ok(check > 0, "a read-only live-unit check on both boxes");
   assert.ok(check < pull, "the check runs before the first state change");
   assert.ok(pull < up, "the up -d runs inside `ds-release supersede` (env lock held)");
   assert.match(rollback, /for \(const host of \[API_PROD, DATA_PROD\]\)[\s\S]{0,200}releaseCheckScript/);
-  assert.match(rollback, /releaseSupersedeScript\(RELEASE_ENV\)[\s\S]{0,80}DATA_PROD|DATA_PROD[\s\S]{0,200}releaseSupersedeScript\(RELEASE_ENV\)/);
+  assert.match(rollback, /DATA_PROD, releaseSupersedeScript\(RELEASE_ENV, undefined, own\)/);
+});
+
+test("2987: the box-side rollback is the same rollback(): it installs nothing, reads the fetched target tree and excludes only its own unit", () => {
+  const rollback = SOURCE.slice(SOURCE.indexOf("async function rollback("), SOURCE.indexOf("// --- entry"));
+  assert.match(rollback, /const own = local \? \{ exceptUnit: rollbackUnitName\(sha\) \} : \{\};/);
+  // Every live-unit check and both supersedes carry `own`; nothing else does.
+  assert.equal((rollback.match(/releaseCheckScript\(RELEASE_ENV, own\)/g) || []).length, 1);
+  assert.match(
+    rollback,
+    /releaseSupersedeScript\(\s*RELEASE_ENV,[\s\S]{0,400}?\n\s*own,\n\s*\),\s*\{ label: "rollback up" \}/,
+  );
+  // The install is the workstation path's alone.
+  assert.match(rollback, /if \(!local\) \{\s*let releaseSources;/);
+  // The target's files come from its fetched tree, the floor without git; a failed
+  // fetch refuses before the first box read.
+  const fetchAt = rollback.indexOf("LOCAL_TREE = await fetchTargetTree(sha");
+  assert.ok(fetchAt > 0 && fetchAt < rollback.indexOf("resolveTargetServiceSet(sha"));
+  assert.match(rollback, /if \(!LOCAL_TREE\) \{\s*die\(/);
+  assert.match(
+    rollback,
+    /local\s*\? makeTreeCutoverMigrationProbe\(LOCAL_TREE\)\s*: makeGitCutoverMigrationProbe\(localCap\)/,
+  );
+  // The pull takes the digests of the manifest the driver checked.
+  assert.match(rollback, /const images = local \? localRelease\.images : await resolveProdImages\(sha\);/);
+  // The box-side run refuses a forward move again, before the tree is fetched.
+  assert.ok(rollback.indexOf("rollbackTargetVerdict(") < fetchAt);
 });
 
 test("3054: the rollback installs ds-release on both boxes from the operator checkout before its first check", () => {
   const rollback = SOURCE.slice(SOURCE.indexOf("async function rollback("));
   const install = rollback.indexOf("releaseInstallFromSourceScript(");
-  const check = rollback.indexOf("releaseCheckScript(RELEASE_ENV)");
+  const check = rollback.indexOf("releaseCheckScript(RELEASE_ENV, own)");
   assert.ok(install > 0, "the rollback installs the entrypoint");
   assert.ok(install < check, "the install precedes the first ds-release call");
   const beforeCheck = rollback.slice(0, check);

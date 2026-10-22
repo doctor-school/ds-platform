@@ -162,3 +162,56 @@ test("EARS-24: a missing blob is a clean `false`, an unknown commit still throws
   });
   await assert.rejects(failing(SHA));
 });
+
+test("2987: the box-side probe reads the fetched target tree; a failed fetch is unresolved, not absent", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } =
+    await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { makeTreeCutoverMigrationProbe, CUTOVER_MIGRATION_PATH } =
+    await import("./rollback-floor.mjs");
+  const base = mkdtempSync(join(tmpdir(), "ds-floor-tree-"));
+  try {
+    const sha = "a".repeat(40);
+    const postCutover = {
+      readProdCutoverState: async () => ({ legacyTablePresent: false }),
+    };
+    // No tree: the fetch failed — refused as unresolved.
+    for (const treeDir of [null, join(base, "missing")]) {
+      await assert.rejects(
+        assertRollbackAllowed({
+          sha,
+          ...postCutover,
+          targetCarriesMigration: makeTreeCutoverMigrationProbe(treeDir),
+        }),
+        (err) =>
+          err instanceof RollbackFloorError &&
+          err.code === "TARGET_STATE_UNRESOLVED",
+      );
+    }
+    // A tree without the file: below the floor.
+    const old = join(base, "old");
+    mkdirSync(old);
+    await assert.rejects(
+      assertRollbackAllowed({
+        sha,
+        ...postCutover,
+        targetCarriesMigration: makeTreeCutoverMigrationProbe(old),
+      }),
+      (err) =>
+        err instanceof RollbackFloorError && err.code === "TARGET_BELOW_FLOOR",
+    );
+    // A tree with it: at or above the floor.
+    const fresh = join(base, "fresh");
+    mkdirSync(join(fresh, CUTOVER_MIGRATION_PATH, ".."), { recursive: true });
+    writeFileSync(join(fresh, CUTOVER_MIGRATION_PATH), "-- cutover");
+    const verdict = await assertRollbackAllowed({
+      sha,
+      ...postCutover,
+      targetCarriesMigration: makeTreeCutoverMigrationProbe(fresh),
+    });
+    assert.equal(verdict.reason, "at-or-above-floor");
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});

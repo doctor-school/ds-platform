@@ -33,12 +33,23 @@
 #       executor (prod: data-prod over the VPC hop, /home/deploy/.ssh/data-prod-hop).
 #       `-` reads the inherited fd 0: the manifest is root-only and the unit runs as
 #       deploy, so re-opening it as /dev/stdin (via /proc/self/fd/0) is EACCES.
+#   release-driver rollback prod <sha>        < images-<sha>.json   (#2987)
+#       The box-side app-only rollback (prod box only). Refuses unless the manifest
+#       is <sha>'s, <sha> is on main, strictly behind the live prod SHA and the target
+#       of one of the latest 3 release-* Releases, its digests are the registry's, a
+#       tooling tree is recorded and no release step runs; then starts
+#       ds-prod-<sha12>-rollback (its own record, kind `rollback`) and answers
+#       `started <unit>` / `attached <unit>`.
+#   release-driver rollback-status prod <sha>
+#       {"rollback": <record|null>, "driver": {"unit", "active", "rc", "previousSha"}}.
+#   release-driver _rollback prod <sha>   (the rollback unit's process)
+#       node <tooling tree>/tools/deploy/prod.mjs --local --rollback <sha> --images-file -
 #
 # The unit survives the client (systemd-run, KillMode=mixed, --remain-after-exit
 # keeps its exit status for `unit-state`); its whole log stays in its journal and
 # nothing of it reaches the client, whose stderr is a public Actions log (spec §4).
-# PR slots stay operator-driven (spec §3 item 8); a prod hotfix (`--ref`) and a
-# rollback stay on the operator path (`pnpm deploy:prod`).
+# PR slots stay operator-driven (spec §3 item 8); a prod hotfix (`--ref`) stays on the
+# operator path (`pnpm deploy:prod`), and so does its break-glass `--rollback`.
 #
 # Installed as /usr/local/lib/ds-platform/release-driver beside ds-release and the
 # entrypoint, by the same install step (tools/deploy/lib/remote.mjs BOX_ENTRYPOINTS).
@@ -63,6 +74,14 @@ CODELOAD=$(override DS_DRIVER_CODELOAD https://codeload.github.com/doctor-school
 GITHUB_API=$(override DS_DRIVER_GITHUB_API https://api.github.com/repos/doctor-school/ds-platform)
 REGISTRY_PULL_TOKEN=$ROOT/etc/ds-platform/registry-pull-token
 MANIFEST_MAX_BYTES=65536
+# #2987: the box-side rollback. The tooling tree a forward install recorded (one line
+# `<sha> <path>`, tools/deploy/lib/remote.mjs INSTALLED_TREE_FILE), the rollback's own
+# records and manifests, and how many of the latest `release-*` Releases a rollback
+# may target (registry-retention.mjs RELEASES_KEPT keeps exactly their images).
+INSTALLED_TREE_FILE=$ROOT/usr/local/lib/ds-platform/installed-tree
+ROLLBACK_DIR=$MANIFEST_DIR/rollback
+ROLLBACK_RELEASES=3
+TREE_PATH_RE='^/[A-Za-z0-9._/-]+$'
 
 # A copy of ds-release's (tools/deploy/release-driver.test.mjs pins them equal).
 ENV_RE='^(prod|stage-main|stage-pr-[1-9][0-9]*)$'
@@ -318,6 +337,16 @@ check_role() {
   esac
 }
 
+# The manifest on stdin into <file>, refused (exit 3) unless it is <sha>'s release
+# manifest — the same check for a release and a rollback.
+read_manifest() {
+  local sha=$1 manifest=$2 reason
+  head -c "$((MANIFEST_MAX_BYTES + 1))" >"$manifest"
+  (($(stat -c %s "$manifest") <= MANIFEST_MAX_BYTES)) || refuse "refused: the manifest exceeds $MANIFEST_MAX_BYTES bytes"
+  reason=$(python3 -I -c "$VALIDATE_PY" "$manifest" "$sha" "$IMAGE_NAMES" "$MANIFEST_REF_RE" "$IMAGE_REF_RE")
+  [[ -z $reason ]] || refuse "refused: bad manifest: $reason"
+}
+
 cmd_release() {
   check_args "$@"
   local env=$1 sha=$2 unit manifest reason state rc out user record
@@ -327,10 +356,7 @@ cmd_release() {
   work=$(mktemp -d) # global: the EXIT trap outlives this function
   trap 'rm -rf -- "${work:-}"' EXIT
   manifest=$work/images.json
-  head -c "$((MANIFEST_MAX_BYTES + 1))" >"$manifest"
-  (($(stat -c %s "$manifest") <= MANIFEST_MAX_BYTES)) || refuse "refused: the manifest exceeds $MANIFEST_MAX_BYTES bytes"
-  reason=$(python3 -I -c "$VALIDATE_PY" "$manifest" "$sha" "$IMAGE_NAMES" "$MANIFEST_REF_RE" "$IMAGE_REF_RE")
-  [[ -z $reason ]] || refuse "refused: bad manifest: $reason"
+  read_manifest "$sha" "$manifest"
   # A running converge of this SHA was itself started only after both provenance
   # checks passed: attaching to it needs neither, so a GitHub rate limit or a registry
   # outage never fails a converge that is already running. Re-checked under the lock.
@@ -375,6 +401,14 @@ cmd_release() {
     sudo systemctl reset-failed "$unit.service" >/dev/null 2>&1 || true
   fi
 
+  # #2987: a rollback of this very SHA is not a release step the lease sees (its unit
+  # has this SHA's prefix); a release waits for it like for any other running unit.
+  if [[ $env == prod ]]; then
+    read -r state rc < <(unit_state "$(rollback_unit_name "$sha")")
+    [[ $state != active && $state != activating ]] ||
+      refuse "refused: $(rollback_unit_name "$sha") is still running; wait for it to end"
+  fi
+
   user=$(id -un)
   [[ $user =~ $USER_RE ]] || usage "unusable caller user"
   sudo install -d -m 0700 -o root -g root "$MANIFEST_DIR"
@@ -394,6 +428,229 @@ cmd_release() {
     fail "systemd-run could not start $unit"
   fi
   say "started $unit"
+}
+
+# --- #2987: the box-side prod rollback (spec §5 «Prod rollback») -------------------
+#
+# A separate path of the prod driver: its own unit ds-prod-<sha12>-rollback and its
+# own record ($ROLLBACK_DIR/<sha>.json, kind `rollback`) — never the release record of
+# the SHA, never a `finish`. It takes no lease; ds-release's `check`, with exactly its
+# own unit excluded, refuses it while any release step runs.
+
+rollback_unit_name() { printf 'ds-prod-%s-rollback' "${1:0:12}"; }
+
+check_rollback_role() {
+  [[ $1 == prod ]] || refuse "refused: a rollback serves prod only, not $1"
+  [[ $(box_role) == prod ]] || refuse "refused: the rollback is served by the prod box only"
+}
+
+# The target must be a strict ancestor of the live SHA (compare <live>...<sha> =
+# `behind`), the mirror of check_descends_from_live: a rollback never moves
+# production forward. Sets LIVE.
+check_behind_live() {
+  local sha=$1 status
+  LIVE=$(live_prod_sha)
+  [[ -n $LIVE ]] || refuse "refused: the live prod SHA is unknown (no running ds-api-prod-api-1)"
+  status=$(compare_status "$LIVE" "$sha") || status=
+  [[ $status == behind ]] ||
+    refuse "refused: $sha is not behind the live prod SHA ${LIVE:0:12} (compare status: ${status:-unknown}) — a rollback never moves production forward"
+}
+
+# The SHA is the target of one of the latest ROLLBACK_RELEASES `release-YYYY.MM.DD-N`
+# Releases (ordered by date and sequence, as registry-retention.mjs orders them;
+# drafts are not releases). Prints yes, no or unreadable.
+read -r -d '' RECENT_PY <<'PY' || true
+import json, re, sys
+sha, keep = sys.argv[1], int(sys.argv[2])
+try:
+    doc = json.load(sys.stdin)
+except ValueError:
+    doc = None
+if not isinstance(doc, list):
+    print("unreadable")
+    sys.exit(0)
+tag_re = re.compile(r"^release-(\d{4})\.(\d{2})\.(\d{2})-([1-9]\d*)$")
+releases = []
+for r in doc:
+    if not isinstance(r, dict) or r.get("draft"):
+        continue
+    m = tag_re.match(str(r.get("tag_name", "")))
+    if m:
+        releases.append((tuple(int(g) for g in m.groups()), str(r.get("target_commitish", ""))))
+releases.sort(reverse=True)
+print("yes" if sha in [target for _, target in releases[:keep]] else "no")
+PY
+
+check_recent_release() {
+  local sha=$1 body verdict
+  body=$(curl -fsS --proto '=https' --max-time 30 -H 'Accept: application/vnd.github+json' \
+    "$GITHUB_API/releases?per_page=100" 2>/dev/null) ||
+    refuse "refused: cannot list the GitHub Releases (GitHub unavailable)"
+  verdict=$(printf '%s' "$body" | python3 -I -c "$RECENT_PY" "$sha" "$ROLLBACK_RELEASES")
+  case $verdict in
+    yes) ;;
+    no) refuse "refused: $sha is not the target of one of the latest $ROLLBACK_RELEASES release-* Releases" ;;
+    *) refuse "refused: cannot read the GitHub Releases" ;;
+  esac
+}
+
+# The tooling tree: the box-absolute path the newest forward install recorded, when
+# it holds prod.mjs; nothing otherwise.
+installed_tree() {
+  local line sha path
+  line=$(sudo cat "$INSTALLED_TREE_FILE" 2>/dev/null || true)
+  read -r sha path _ <<<"$line"
+  [[ $sha =~ $SHA_RE && $path =~ $TREE_PATH_RE && $path != *..* ]] || return 0
+  [[ -f $ROOT$path/tools/deploy/prod.mjs ]] || return 0
+  printf '%s' "$ROOT$path"
+}
+
+# The rollback record, written root-only and atomically: `running` (a fresh attempt,
+# with the live SHA it rolls off as `from`) or the unit's verdict.
+read -r -d '' ROLLBACK_RECORD_PY <<'PY' || true
+import json, os, sys, tempfile, time
+path, sha, unit, state, origin = sys.argv[1:6]
+now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+doc = None
+if state != "running":
+    try:
+        with open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+    except (OSError, ValueError):
+        doc = None
+if state == "running" or not isinstance(doc, dict) or doc.get("sha") != sha:
+    doc = {"kind": "rollback", "env": "prod", "sha": sha, "unit": unit,
+           "from": origin or None, "startedAt": now, "endedAt": None}
+doc["state"] = state
+if state != "running":
+    doc["endedAt"] = now
+directory = os.path.dirname(path)
+fd, tmp = tempfile.mkstemp(dir=directory, prefix=".rollback.")
+with os.fdopen(fd, "w", encoding="utf-8") as f:
+    json.dump(doc, f, sort_keys=True)
+    f.write("\n")
+    f.flush()
+    os.fsync(f.fileno())
+os.chmod(tmp, 0o600)
+os.replace(tmp, path)
+dfd = os.open(directory, os.O_RDONLY)
+os.fsync(dfd)
+os.close(dfd)
+PY
+
+write_rollback_record() {
+  local sha=$1 state=$2 origin=${3:-}
+  sudo install -d -m 0700 -o root -g root "$MANIFEST_DIR" "$ROLLBACK_DIR"
+  sudo python3 -I -c "$ROLLBACK_RECORD_PY" "$ROLLBACK_DIR/$sha.json" "$sha" \
+    "$(rollback_unit_name "$sha")" "$state" "$origin"
+}
+
+cmd_rollback() {
+  check_args "$@"
+  local env=$1 sha=$2 unit manifest state rc out user
+  check_rollback_role "$env"
+  unit=$(rollback_unit_name "$sha")
+
+  work=$(mktemp -d) # global: the EXIT trap outlives this function
+  trap 'rm -rf -- "${work:-}"' EXIT
+  manifest=$work/images.json
+  read_manifest "$sha" "$manifest"
+  read -r state rc < <(unit_state "$unit")
+  if [[ $state == active || $state == activating ]]; then
+    say "attached $unit"
+    return 0
+  fi
+  command -v curl >/dev/null || fail "curl is not installed"
+  check_on_main "$sha"
+  check_behind_live "$sha"
+  check_recent_release "$sha"
+  check_registry_digests "$sha" "$manifest"
+  [[ -n $(installed_tree) ]] ||
+    refuse "refused: no tooling tree is recorded in $INSTALLED_TREE_FILE (a forward release installs it) — roll back with pnpm deploy:prod --rollback"
+
+  # The release driver's own lock: a release and a rollback call never interleave.
+  mkdir -p "$LOCK_DIR"
+  exec 8>"$LOCK_DIR/ds-release-driver-$env.lock"
+  flock -n 8 || refuse "refused: another release-driver call for $env is in progress"
+  read -r state rc < <(unit_state "$unit")
+  if [[ $state == active || $state == activating ]]; then
+    say "attached $unit"
+    return 0
+  fi
+  # Refused while any release step runs (this unit is not running yet).
+  if ! out=$(sudo "$DS_RELEASE" check --except "$unit" "$env" 2>&1); then
+    refuse "refused: ${out##*refused: }"
+  fi
+  if [[ $state == inactive || $state == failed ]]; then
+    sudo systemctl stop "$unit.service" >/dev/null 2>&1 || true
+    sudo systemctl reset-failed "$unit.service" >/dev/null 2>&1 || true
+  fi
+
+  user=$(id -un)
+  [[ $user =~ $USER_RE ]] || usage "unusable caller user"
+  sudo install -d -m 0700 -o root -g root "$MANIFEST_DIR" "$ROLLBACK_DIR"
+  sudo find "$ROLLBACK_DIR" -maxdepth 1 -type f -name '*.images.json' ! -name "$sha.images.json" -delete
+  sudo install -m 0600 -o root -g root "$manifest" "$ROLLBACK_DIR/$sha.images.json"
+  write_rollback_record "$sha" running "$LIVE"
+  if ! sudo systemd-run --quiet --unit="$unit" --remain-after-exit -p KillMode=mixed \
+    --uid="$user" -p StandardInput="file:$ROLLBACK_DIR/$sha.images.json" \
+    -p StandardOutput=journal -p StandardError=journal \
+    --description="ds-release-driver rollback ${sha:0:12}" \
+    "$SELF" _rollback "$env" "$sha" >/dev/null 2>&1; then
+    write_rollback_record "$sha" failed
+    fail "systemd-run could not start $unit"
+  fi
+  say "started $unit"
+}
+
+# rollback-status: {"rollback": <record or null>, "driver": {"unit", "active", "rc",
+# "previousSha": null}} — the `driver` object of a release's `status`, for the
+# -rollback unit.
+read -r -d '' ROLLBACK_STATUS_PY <<'PY' || true
+import json, sys
+text, unit, active, rc = sys.argv[1:5]
+record = None
+if text.strip():
+    try:
+        record = json.loads(text)
+    except ValueError:
+        print("corrupt")
+        sys.exit(0)
+driver = {"unit": unit, "active": active, "rc": None if rc == "null" else int(rc), "previousSha": None}
+print(json.dumps({"rollback": record, "driver": driver}, sort_keys=False, separators=(",", ":")))
+PY
+
+cmd_rollback_status() {
+  check_args "$@"
+  local env=$1 sha=$2 unit state rc text line
+  check_rollback_role "$env"
+  unit=$(rollback_unit_name "$sha")
+  read -r state rc < <(unit_state "$unit")
+  text=$(sudo cat "$ROLLBACK_DIR/$sha.json" 2>/dev/null || true)
+  line=$(python3 -I -c "$ROLLBACK_STATUS_PY" "$text" "$unit" "$state" "$rc")
+  [[ $line != corrupt ]] || fail "corrupt rollback record of ${sha:0:12}"
+  printf '%s\n' "$line"
+}
+
+# The rollback unit's process: prod.mjs --local --rollback from the TOOLING tree (the
+# newest forward install's), never from the target's own older tree, which has no
+# rollback path; prod.mjs fetches the target tree itself to read its files.
+cmd_run_rollback() {
+  check_args "$@"
+  local env=$1 sha=$2 tooling rc
+  [[ $env == prod ]] || usage "the rollback runs prod only"
+  [[ -x $NODE ]] || fail "node is not installed at $NODE (infra/deploy/bin/install-node.sh)"
+  tooling=$(installed_tree)
+  if [[ -z $tooling ]]; then
+    write_rollback_record "$sha" failed
+    fail "no tooling tree is recorded in $INSTALLED_TREE_FILE"
+  fi
+  set +e
+  "$NODE" "$tooling/tools/deploy/prod.mjs" --local --rollback "$sha" --images-file -
+  rc=$?
+  set -e
+  if ((rc == 0)); then write_rollback_record "$sha" succeeded; else write_rollback_record "$sha" failed; fi
+  exit "$rc"
 }
 
 # The unit's process: the operator converge / release, run on the box from the SHA's
@@ -426,7 +683,10 @@ main() {
   case ${1:-} in
     unit-state) shift; cmd_unit_state "$@" ;;
     record-previous) shift; cmd_record_previous "$@" ;;
+    rollback) shift; cmd_rollback "$@" ;;
+    rollback-status) shift; cmd_rollback_status "$@" ;;
     _run) shift; cmd_run "$@" ;;
+    _rollback) shift; cmd_run_rollback "$@" ;;
     *) cmd_release "$@" ;;
   esac
 }

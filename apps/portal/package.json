@@ -14,6 +14,7 @@
     "test:e2e": "bddgen && playwright test",
     "test:e2e:ci": "playwright test --config=playwright.ci.config.ts",
     "test:e2e:account-live": "playwright test --config=playwright.account-live.config.ts",
+    "test:e2e:event-page": "playwright test --config=playwright.event-page.config.ts",
     "test:axe": "playwright test --config=playwright.axe.config.ts"
   },
   "dependencies": {

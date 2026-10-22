@@ -16,6 +16,9 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  *   E2E_DOCTOR_URL=http://localhost:3004 E2E_API_URL=http://localhost:3000 \
  *   E2E_WEBINAR_SLUG=seed-005-upcoming \
  *   pnpm --filter @ds/doctor exec playwright test --config=playwright.event-page.config.ts
+ * `seed-005-upcoming` is the `seed:events` fixture with speakers (its stdout
+ * `eventPage` block); a staging slot hands this tier a golden slug instead
+ * (`tools/staging/live-tiers.mjs` → `seededEnv`, #2996).
  */
 export default defineConfig({
   testDir: "./e2e",

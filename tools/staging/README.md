@@ -339,6 +339,7 @@ them — or a live one that grew a `webServer` — fails `pnpm test:tools`.
 | Leg                          | Config (`apps/<app>/…`)                                                             |
 | ---------------------------- | ----------------------------------------------------------------------------------- |
 | `live/academy/default`       | `portal/playwright.config.ts` (`e2e` + `bdd`)                                       |
+| `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)      |
 | `live/doctor/register-live`  | `doctor/playwright.register-live.config.ts`                                         |
 | `live/doctor/congress`       | `doctor/playwright.congress.config.ts`                                              |
 | `live/doctor/event-page`     | `doctor/playwright.event-page.config.ts`                                            |
@@ -354,9 +355,14 @@ through `@ds/e2e/stand-http-credentials`. `--project academy|doctor` selects leg
 the axe legs (`walks` selects none); `--no-live` drops them. The release check
 (`--expect-sha`) never runs them and says so in its verdict — until #3191.
 
+Event slugs come from the golden set the slot was seeded with (#2996): a tier's
+`seededEnv` (`live-tiers.mjs` → `GOLDEN_SLUGS`) names the golden event carrying each shape
+its specs assert, only that tier's leg receives them, and a value the operator exported
+wins. `apps/api/test/scripts/stage-event-page-slugs.spec.ts` builds the golden dataset and
+fails when a mirrored slug stops carrying its shape.
+
 A slot cannot supply operator keys (`IDP_SERVICE_TOKEN`, `IDP_PROJECT_ID`, a branch
-`DATABASE_URL`), a reused doctor account (`E2E_DOCTOR_EMAIL`/`_PASSWORD`) or seeded
-slugs. A spec gated on such a variable through `requireLiveStandEnv` would read a slot
+`DATABASE_URL`) or a reused doctor account (`E2E_DOCTOR_EMAIL`/`_PASSWORD`). A spec gated on such a variable through `requireLiveStandEnv` would read a slot
 run as an _intended_ tier and fail loudly, so the registry declares what each gated spec
 requires and the leg keeps it out (`--test-list-invert`), printing it as `not run:
 <spec> (missing <names>)`; a config that throws at load without its env is not launched

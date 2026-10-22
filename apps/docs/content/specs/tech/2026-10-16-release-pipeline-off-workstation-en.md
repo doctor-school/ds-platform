@@ -32,7 +32,7 @@ Related canon it changes or narrows:
   8. verifies SHA, retention and smoke;
   9. writes `gh release create` and a GitHub Deployment record (`tools/deploy/deployment-record.mjs`), **on success only**.
 - Nothing detaches remote work: there is no `nohup`, `setsid`, `systemd-run` or `tmux`, no lock and no state file. When the client dies mid-step, the code can only report that the remote work «MAY have completed» (`tools/deploy/lib/remote.mjs:78`).
-- Port 22 on ds-api-prod and ds-stage-1 admits only the owner PC's `/32` (`infra/deploy/terraform/network.tf:97-103`, `stage-1.tf:132-138`). None of the seven GitHub Actions workflows (all `ubuntu-latest`) reaches a Timeweb host. `.github/workflows/release-digest.yml` already listens to `deployment_status`.
+- Port 22 on ds-api-prod and ds-stage-1 admitted only the owner PC's `/32` (the Terraform firewall rules `api_ssh` and `stage_1_ssh`). None of the seven GitHub Actions workflows (all `ubuntu-latest`) reaches a Timeweb host. `.github/workflows/release-digest.yml` already listens to `deployment_status`.
 - The PC is the only holder of four credentials: the ssh keys to the three boxes; the GitHub token (in the OS keyring); `TWC_TOKEN` (the full Timeweb account) together with the local `terraform.tfstate`; and `STAGE_BASIC_AUTH_PASS`, exported by hand. Stage and prod runtime secrets already live on the boxes.
 - The agent's `gh` runs under the owner's own GitHub account (`sidorovanthon`). GitHub therefore cannot tell an action the agent takes from one the owner takes. §3 item 3 is built around this fact.
 

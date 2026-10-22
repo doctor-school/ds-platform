@@ -423,7 +423,7 @@ per-deploy. Run them once; from then on `pnpm deploy:prod` is the whole deploy.
    token; project-scoped tokens do not exist). Confirm/create the `ds-platform`
    Timeweb project and set `project_id`. Generate deploy SSH keypairs and set the
    `*_ssh_pubkey_path` + real pubkeys in `cloud-init/*.yaml`; the owner's break-glass
-   public keys at `*_breakglass_ssh_pubkey_path` (#2984). Set `admin_ssh_cidr`.
+   public keys at `*_breakglass_ssh_pubkey_path` (#2984).
 2. **Value-preflight (BEFORE `plan`/`apply`).** Attribute-shape `validate`-green
    does NOT cover value-level availability — enumerate these from the **live
    provider API** (not a repo mapping), else you learn them via failed applies:

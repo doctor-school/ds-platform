@@ -486,8 +486,10 @@ test("2982: the rollback builders — a read-only live-unit check and supersede 
 });
 
 test("2987: a forward install records its tree — a kept copy and its SHA — for the box-side rollback", async () => {
-  const { INSTALLED_TREE_FILE, INSTALLED_TREE_DIR } =
+  const { INSTALLED_TREE_FILE, INSTALLED_TREE_DIR, INSTALLED_TREES_DIR } =
     await import("./remote.mjs");
+  assert.equal(INSTALLED_TREES_DIR, "/usr/local/lib/ds-platform/trees");
+  const V = `${INSTALLED_TREES_DIR}/${SHA}`;
   assert.equal(
     INSTALLED_TREE_FILE,
     "/usr/local/lib/ds-platform/installed-tree",
@@ -495,13 +497,24 @@ test("2987: a forward install records its tree — a kept copy and its SHA — f
   const lines = releaseInstallScript("$HOME/ds-platform", { sha: SHA }).split(
     "\n",
   );
-  // The binaries first, exactly as before; then the tree they came from.
+  // The binaries first, exactly as before; then the tree they came from: a
+  // root-owned, not group/other-writable version directory filled under `.new` and
+  // renamed whole, a `tree` symlink switched by one rename, current + previous kept.
   assert.equal(lines.slice(0, 4).join("\n"), releaseInstallScript());
   assert.deepEqual(lines.slice(4), [
-    `sudo rm -rf -- "${INSTALLED_TREE_DIR}.new"`,
-    `sudo cp -a -- "$HOME/ds-platform/." "${INSTALLED_TREE_DIR}.new"`,
-    `sudo rm -rf -- "${INSTALLED_TREE_DIR}"`,
-    `sudo mv -- "${INSTALLED_TREE_DIR}.new" "${INSTALLED_TREE_DIR}"`,
+    `sudo install -d -m 0755 -o root -g root ${INSTALLED_TREES_DIR}`,
+    `if ! sudo test -d "${V}"; then`,
+    `  sudo rm -rf -- "${V}.new"`,
+    `  sudo cp -R -- "$HOME/ds-platform/." "${V}.new"`,
+    `  sudo chown -R root:root -- "${V}.new"`,
+    `  sudo chmod -R go-w -- "${V}.new"`,
+    `  sudo mv -T -- "${V}.new" "${V}"`,
+    `fi`,
+    `if sudo test -d "${INSTALLED_TREE_DIR}" && ! sudo test -L "${INSTALLED_TREE_DIR}"; then sudo rm -rf -- "${INSTALLED_TREE_DIR}"; fi`,
+    `prev=$(sudo readlink -- "${INSTALLED_TREE_DIR}" || true)`,
+    `sudo ln -sfn -- "${V}" "${INSTALLED_TREE_DIR}.new"`,
+    `sudo mv -T -- "${INSTALLED_TREE_DIR}.new" "${INSTALLED_TREE_DIR}"`,
+    `for d in ${INSTALLED_TREES_DIR}/*; do [ "$d" = "${V}" ] || [ "$d" = "$prev" ] || sudo rm -rf -- "$d"; done`,
     `printf '%s %s\\n' ${SHA} "${INSTALLED_TREE_DIR}" | sudo tee "${INSTALLED_TREE_FILE}.new" >/dev/null`,
     `sudo mv -- "${INSTALLED_TREE_FILE}.new" "${INSTALLED_TREE_FILE}"`,
   ]);

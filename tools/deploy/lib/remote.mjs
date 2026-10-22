@@ -496,16 +496,36 @@ export function releaseInstallScript(liveDir = "$HOME/ds-platform", { sha } = {}
 // from — the shipped tree is replaced by the next ship, this copy only by the next
 // install — and records its SHA and path in INSTALLED_TREE_FILE (one line,
 // `<sha> <path>`). The copy is in place before the record names it.
+//
+// The root entrypoint execs from this copy (spec §4 «sudo on prod»), so it is
+// root-owned and not group/other-writable — never the deploy-owned shipped tree's
+// modes (`cp -a` would keep them). Each SHA gets its own directory under
+// INSTALLED_TREES_DIR, filled under `.new` and renamed whole; INSTALLED_TREE_DIR is
+// a symlink to it, switched by one rename (`mv -T`), so a reader sees the old tree
+// or the new one, never a half-copied one. The current and the previous version are
+// kept: a rollback unit that resolved the previous tree keeps its files.
 export const INSTALLED_TREE_DIR = "/usr/local/lib/ds-platform/tree";
+export const INSTALLED_TREES_DIR = "/usr/local/lib/ds-platform/trees";
 export const INSTALLED_TREE_FILE = "/usr/local/lib/ds-platform/installed-tree";
 
 function installedTreeLines(liveDir, sha) {
   const tree = INSTALLED_TREE_DIR;
+  const version = `${INSTALLED_TREES_DIR}/${sha}`;
   return [
-    `sudo rm -rf -- "${tree}.new"`,
-    `sudo cp -a -- "${liveDir}/." "${tree}.new"`,
-    `sudo rm -rf -- "${tree}"`,
-    `sudo mv -- "${tree}.new" "${tree}"`,
+    `sudo install -d -m 0755 -o root -g root ${INSTALLED_TREES_DIR}`,
+    `if ! sudo test -d "${version}"; then`,
+    `  sudo rm -rf -- "${version}.new"`,
+    `  sudo cp -R -- "${liveDir}/." "${version}.new"`,
+    `  sudo chown -R root:root -- "${version}.new"`,
+    `  sudo chmod -R go-w -- "${version}.new"`,
+    `  sudo mv -T -- "${version}.new" "${version}"`,
+    `fi`,
+    // The pre-symlink layout kept a plain directory here; a rename cannot replace it.
+    `if sudo test -d "${tree}" && ! sudo test -L "${tree}"; then sudo rm -rf -- "${tree}"; fi`,
+    `prev=$(sudo readlink -- "${tree}" || true)`,
+    `sudo ln -sfn -- "${version}" "${tree}.new"`,
+    `sudo mv -T -- "${tree}.new" "${tree}"`,
+    `for d in ${INSTALLED_TREES_DIR}/*; do [ "$d" = "${version}" ] || [ "$d" = "$prev" ] || sudo rm -rf -- "$d"; done`,
     `printf '%s %s\\n' ${sha} "${tree}" | sudo tee "${INSTALLED_TREE_FILE}.new" >/dev/null`,
     `sudo mv -- "${INSTALLED_TREE_FILE}.new" "${INSTALLED_TREE_FILE}"`,
   ];

@@ -316,6 +316,104 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     }
   });
 
+  it("EARS-60: S156 a live storefront record and forged client hints cannot authenticate an admin or unmapped client", async () => {
+    const address = await account("client-binding");
+    const jar = new Jar();
+    await signIn(jar, address);
+    const record = jar.values.get(RECORD_COOKIE_NAME);
+    const before = await recordRows(address);
+    const lifetimes = hostIdp.lifetimes.length;
+    for (const clientId of [
+      process.env.IDP_CLIENT_ID || "admin-client-e2e",
+      "unmapped-client-s156",
+    ]) {
+      const authRequest = hostIdp.seedAuthRequest({ clientId });
+      const result = await app.inject({
+        method: "GET",
+        url: `/v1/sign-in-host/entry?authRequest=${authRequest}&client_id=${ACADEMY}&storefront=academy`,
+        headers: {
+          ...DEVICE,
+          cookie: `${jar.header()}; client_id=${ACADEMY}; storefront=academy`,
+          "x-client-id": ACADEMY,
+          "x-storefront": "academy",
+          "x-ds-sign-in-entry": "forged-render",
+        },
+      });
+      expect(result.statusCode).toBe(200);
+      expect(result.json()).toEqual({
+        action: "redirect",
+        url: expect.stringContaining("error=access_denied"),
+      });
+      expect(hostIdp.finalised.at(-1)).toEqual({
+        id: authRequest,
+        error: "access_denied",
+      });
+      expect(result.cookies).toEqual([]);
+      expect(await recordRows(address)).toEqual(before);
+      expect(jar.values.get(RECORD_COOKIE_NAME)).toBe(record);
+    }
+    expect(hostIdp.lifetimes).toHaveLength(lifetimes);
+  });
+
+  it("EARS-60: S156 the auth request replaces a foreign prior form despite forged URL/header/cookie client selection", async () => {
+    const jar = new Jar();
+    for (const [clientId, storefront, foreignClient, foreign] of [
+      [ACADEMY, "academy", DOCTOR, "doctor"],
+      [DOCTOR, "doctor", ACADEMY, "academy"],
+    ] as const) {
+      await render(jar, foreignClient, { prompt: ["create"] });
+      const oldForm = jar.values.get(FORM_COOKIE_NAME);
+      const authRequest = hostIdp.seedAuthRequest({
+        clientId,
+        prompt: ["create"],
+      });
+      const res = await app.inject({
+        method: "GET",
+        url: `/v1/sign-in-host/entry?authRequest=${authRequest}&client_id=${foreignClient}&storefront=${foreign}&registerPath=/evil&wordingVersion=evil`,
+        headers: {
+          ...DEVICE,
+          cookie: `${jar.header()}; client_id=${foreignClient}; storefront=${foreign}`,
+          "x-client-id": foreignClient,
+          "x-storefront": foreign,
+          "x-ds-sign-in-entry": "forged-render",
+        },
+      });
+      jar.apply(res.cookies);
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({
+        action: "render",
+        storefront,
+        door: "register",
+        authRequest,
+        csrf: expect.any(String),
+      });
+      expect(jar.values.get(FORM_COOKIE_NAME)).not.toBe(oldForm);
+      expect(res.cookies.map((cookie) => cookie.name)).not.toContain(
+        SESSION_COOKIE_NAME,
+      );
+      const wrongRoute =
+        storefront === "academy" ? "storefront/doctor/register" : "register";
+      const refused = await post(jar, wrongRoute, {
+        email: email(`binding-${storefront}`),
+        password: PASSWORD,
+        ...(storefront === "academy"
+          ? {
+              medicalWorkerDeclaration: true,
+              consent: [
+                {
+                  purpose: PARTNER_DATA_SHARING_PURPOSE,
+                  version: PARTNER_DATA_SHARING_VERSION,
+                },
+              ],
+            }
+          : { consent: CONSENT }),
+        authRequest,
+        csrf: res.json().csrf,
+      });
+      expect(refused.statusCode).toBe(403);
+    }
+  });
+
   it("EARS-66: a stale auth request returns to the storefront the form state recorded", async () => {
     const jar = new Jar();
     const { authRequest } = await render(jar, ACADEMY);

@@ -25,6 +25,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { DEFAULT_AUTH_FLOW_COPY } from "../copy";
+import type { AuthFlowHostConfig } from "../host-config";
 import { ACADEMY_AUTH_FLOW, DOCTOR_AUTH_FLOW } from "../hosts";
 import { LoginRoute } from "../login/login-route";
 import { RegisterRoute } from "../register/register-route";
@@ -94,6 +95,57 @@ describe("003 EARS-60: the mounted storefront comes only from the entry hand-ove
       signInHostConfig(ACADEMY_AUTH_FLOW, render),
     );
   });
+
+  it.each(["academy", "doctor"] as const)(
+    "003 EARS-60: S156 %s registration ignores a forged storefront, fields, consents, brand and transport in URL/cookies",
+    async (storefront) => {
+      const foreign = storefront === "academy" ? "doctor" : "academy";
+      const render = { ...RENDER, storefront, door: "register" } as const;
+      handOver({ door: "register", render });
+      requestHeaders.value.set(
+        "cookie",
+        `storefront=${foreign}; client_id=${foreign}; wordingVersion=evil; registerPath=/evil`,
+      );
+      requestHeaders.value.set("x-storefront", foreign);
+      const el = await mount({
+        storefront: foreign,
+        client_id: foreign,
+        promoField: "true",
+        medicalWorkerDeclaration: "false",
+        wordingVersion: "evil",
+        brand: "attacker",
+        registerPath: "/evil",
+        authRequest: "foreign-request",
+        csrf: "foreign-csrf",
+      });
+      const config = el.props.config as AuthFlowHostConfig;
+      const original = STOREFRONTS[storefront];
+      expect(el.type).toBe(RegisterRoute);
+      expect(config.register).toEqual(original.register);
+      expect(config.consents).toEqual(original.consents);
+      expect(config.brand).toEqual(original.brand);
+      expect(config.copy).toEqual(original.copy);
+      expect(config.consents?.wordingVersion).toBe(
+        storefront === "academy" ? "2026-01" : "2026-09-22",
+      );
+      expect(config.api).toEqual({
+        basePath: "/v1/sign-in-host",
+        registerPath:
+          storefront === "academy"
+            ? "/v1/sign-in-host/register"
+            : "/v1/sign-in-host/storefront/doctor/register",
+        verifyPath:
+          storefront === "academy"
+            ? "/v1/sign-in-host/verify"
+            : "/v1/sign-in-host/storefront/doctor/verify",
+        formPost: { authRequest: RENDER.authRequest, csrf: RENDER.csrf },
+      });
+      expect(await el.props.searchParams).toEqual({});
+      for (const door of ["login", "register", "verify", "reset"] as const) {
+        expect(config.routes[door]).toBe(`/${door}?authRequest=V2_1`);
+      }
+    },
+  );
 
   it("003 EARS-60: the hand-over's door picks the route — register, reset, verify", async () => {
     for (const [door, route] of [

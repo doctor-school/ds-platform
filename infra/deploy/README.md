@@ -444,11 +444,11 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    join the VPC via a `local_network {id,ip,mode}` block — DSO-100 2026-07-02).
    Review the plan (region/preset/cost) before `apply`.
 4. **DNS (manual, at Beget — the zone is NOT at Timeweb):** point A-records
-   `api.` / `academy.` / `id.` / `admin.` / `new.doctor.school` at the
+   `api.` / `academy.` / `id.` / `admin.` / `new.` / `login.doctor.school` at the
    `api_prod_public_ip` output (`admin.` is the wave-1 addition — Wave-1 apply
    order step 2; `academy.` is the portal host per #1171; `new.` is the doctor
    storefront's temporary host, #1723 — owner-gated and deliberately LAST, see
-   the roll-out section). Those five are the intended public
+   the roll-out section; `login.` is the sign-in host, #3171). Those six are the intended public
    record set — the pre-#1171 portal host is being retired in #1173 (its Caddy
    vhost is already gone from this tree; its A-record is deleted by hand, see the
    cutover section's retirement marker below).
@@ -819,6 +819,8 @@ deploy.
    Keep domain validation **ON**. On 2026-09-09 the owner's Yandex Cloud
    console screenshot confirmed `academy.doctor.school` and `new.doctor.school`
    in the `ds-platform-prod` allowed-host list, with domain validation enabled;
+   `login.doctor.school` (the sign-in host, #3171) joins that list before its
+   release — see §"Sign-in host roll-out";
    `app.doctor.school` was absent. Evidence and verification follow-up:
    [#2117](https://github.com/doctor-school/ds-platform/issues/2117), following
    the September 8 decision to retain bot protection in
@@ -1001,8 +1003,8 @@ first `apply` (report, don't assume green):
   the socket-based backup connection (local `trust`), and a real full/incr + restore.
 - `apps/doctor/Dockerfile` (#1723) — same standalone pattern, entry expected at
   `apps/doctor/server.js`, serving on 3004; it DOES carry a `public/` COPY.
-- Caddy ACME issuance for all five public hostnames (needs the Beget A-records
-  live first — `new.doctor.school` included, #1723).
+- Caddy ACME issuance for all six public hostnames (needs the Beget A-records
+  live first — `new.doctor.school` included, #1723; `login.doctor.school`, #3171).
 
 ## Rollback
 
@@ -1387,6 +1389,60 @@ Order:
    prod" criterion binds: the compose/Caddy/tooling work above may land at any
    time, but the **DNS flip (step 1) happens only once the release-3 surfaces
    (017/019/020/021) are product-ready**. Gate #1704 sequences that.
+
+## Sign-in host roll-out — `login.doctor.school` (#3171)
+
+`apps/login` is the one sign-in host both storefront OIDC clients carry as their
+Login V2 `base_uri` (ADR-0015 §4; 003 EARS-60..71). The repo half lands with
+#3171: the `login` compose service (image `ds-login:<sha>`, `PORT=3005`,
+`/healthz`-healthcheck, `depends_on: api`, in `caddy.depends_on`), the Caddy vhost
+`login.doctor.school → login:3005`, `ds-login` as a first-class member of
+`pnpm deploy:prod` (build, digest manifest, retention, rollback), the api's
+sign-in-host env (`IDP_SIGN_IN_BASE_URI`, `SIGN_IN_{ACADEMY,DOCTOR}_LOGIN_URL` in
+compose; `IDP_{ACADEMY,DOCTOR}_CLIENT_ID` written into the compose `.env` from the
+pre-swap IdP converge's read-back) and a `/healthz` + TLS probe in `pnpm smoke:prod`.
+
+Like `new.` this is an ADD of a free name, and the same HTTP-01 ordering applies:
+the out-of-band steps below MUST be done **before** the release that carries the
+vhost. They are tracked as that release's prerequisite Issue (`Release-requires:`
+on #3171's PR). Unlike `new.`, the smoke has **no** operator opt-out to bridge a
+missing record: `PROD_LOGIN_HOST=skip` is set by `prod.mjs` only for a deploy
+target that ships no `ds-login` image (an older rollback target, #1896).
+
+1. **[OWNER-GATED] Beget DNS — add the A-record** `login` → `77.233.220.222`
+   (`api_prod_public_ip`). Verify from two resolvers before the release:
+
+   ```bash
+   nslookup login.doctor.school 8.8.8.8   # must return A 77.233.220.222
+   nslookup login.doctor.school 1.1.1.1
+   ```
+
+2. **[OWNER-GATED] SmartCaptcha allowed host.** Add `login.doctor.school` to the
+   `ds-platform-prod` resource's allowed-host list (domain validation stays ON; the
+   site/server keys are unchanged, so no rebuild). The form's captcha is the same
+   `SMARTCAPTCHA_SITE_KEY` the storefronts use.
+
+3. **[OWNER-PLACED] `SIGN_IN_RECORD_KEY` in `/etc/ds-platform/api.env`** (root:root
+   `0600`, template `api.env.example`): `openssl rand -base64 32`, generated on the
+   box, never in git or chat. `pnpm deploy:prod` refuses a target that ships
+   `ds-login` before any box change unless the line is present — it counts the
+   assignment over ssh (`record-key-lines=N`), never reads the value out.
+   Evidence: that count, e.g.
+   `ssh api-prod "sudo grep -c '^SIGN_IN_RECORD_KEY=' /etc/ds-platform/api.env"` → `1`.
+
+4. **Deploy.** `pnpm deploy:prod` — Caddy restarts on the stale bind-mounted
+   `Caddyfile` (#1175), issues the `login.` certificate on first request, and the
+   smoke probes `https://login.doctor.school/healthz` (200 `ok`) + TLS.
+
+5. **Monitoring.** The mon-prod-tw blackbox targets live in the `bbm` repo
+   (`infra/monitoring/`, see «Мониторинг» below), not here: add
+   `login.doctor.school/healthz` (`probe_scope=app_health`) there after step 4.
+
+The edge keeps every app cookie host-only (ADR-0015 §4 req 4): no vhost adds or
+rewrites a `Set-Cookie` `Domain`. The storefronts' `ds-theme` preference cookie is
+set by the storefront itself for the parent domain — a display preference, not an
+auth cookie. The api's storefront-server-only prefix `/v1/internal` answers 404 on
+every public vhost (ADR-0015 §4 req 2).
 
 ## Build-cache GC on `api-prod` (#1419)
 

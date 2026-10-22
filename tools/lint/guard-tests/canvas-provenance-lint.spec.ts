@@ -16,6 +16,11 @@ import {
   checkProvenance,
   vendorCanvases,
 } from "../../design/vendor-canvas.mjs";
+import {
+  TOKENS_REL,
+  generateStatesBlock,
+  stampCanvas,
+} from "../../design/canvas-states.mjs";
 import { REPO_ROOT, runGuard } from "./run-guard";
 import { spawnSync } from "node:child_process";
 
@@ -35,6 +40,8 @@ const sha = (bytes: string | Buffer) =>
 function tree(files: Record<string, string>, manifest?: unknown): string {
   const root = mkdtempSync(join(tmpdir(), "canvas-provenance-"));
   dirs.push(root);
+  mkdirSync(join(root, TOKENS_REL, ".."), { recursive: true });
+  writeFileSync(join(root, TOKENS_REL), TOKENS, "utf8");
   for (const [path, bytes] of Object.entries(files)) {
     mkdirSync(join(root, path, ".."), { recursive: true });
     writeFileSync(join(root, path), bytes, "utf8");
@@ -48,7 +55,10 @@ function tree(files: Record<string, string>, manifest?: unknown): string {
   return root;
 }
 
-const canvas = "<x-dc>auth</x-dc>\n";
+// A non-archive canvas carries the #2221 ds-states block; archive does not.
+const TOKENS = readFileSync(join(REPO_ROOT, TOKENS_REL), "utf8");
+const BLOCK = generateStatesBlock(TOKENS);
+const canvas = stampCanvas("<x-dc>auth</x-dc>\n", BLOCK);
 const archived = "<x-dc>archive</x-dc>\n";
 const entry = (bytes: string) => ({
   sha256: sha(bytes),
@@ -135,26 +145,30 @@ describe("canvas provenance check (#2389)", () => {
 describe("pnpm design:vendor writer (#2389)", () => {
   const now = new Date("2026-09-28T10:00:00.000Z");
 
-  it("NEW → SAME → CHANGED, byte-exact copy, manifest upserted with pulledAt = now UTC", () => {
+  it("NEW → SAME → CHANGED, byte-exact pull + ds-states stamp (#2221), manifest upserted with pulledAt = now UTC", () => {
     const root = tree(goodFiles, goodManifest);
     const pulled = join(root, "pulled");
     mkdirSync(pulled);
     const fresh = "<x-dc>fresh — кириллица\r\n</x-dc>";
     writeFileSync(join(pulled, "fresh.dc.html"), fresh, "utf8");
 
+    const stamped = stampCanvas(fresh, BLOCK);
     expect(
       vendorCanvases(root, [join(pulled, "fresh.dc.html")], {
         remote: "fresh.dc.html",
         now,
       }),
-    ).toEqual([`NEW design-source/fresh.dc.html ${Buffer.byteLength(fresh)}`]);
+    ).toEqual([
+      `NEW design-source/fresh.dc.html ${Buffer.byteLength(stamped)}`,
+    ]);
     const copied = readFileSync(join(root, "design-source/fresh.dc.html"));
-    expect(copied.equals(Buffer.from(fresh, "utf8"))).toBe(true);
+    expect(copied.equals(Buffer.from(stamped, "utf8"))).toBe(true);
     const manifest = JSON.parse(
       readFileSync(join(root, "design-source/manifest.json"), "utf8"),
     );
     expect(manifest.files["fresh.dc.html"]).toEqual({
-      sha256: sha(fresh),
+      sha256: sha(stamped),
+      pulledSha256: sha(fresh),
       pulledAt: "2026-09-28T10:00:00.000Z",
       remotePath: "fresh.dc.html",
     });
@@ -194,9 +208,9 @@ describe("pnpm design:vendor writer (#2389)", () => {
     mkdirSync(pulled);
     const kit = "window.Kit = { label: 'Будущие' };\r\n";
     writeFileSync(join(pulled, "feed-kit.js"), kit, "utf8");
-    expect(vendorCanvases(root, [join(pulled, "feed-kit.js")], { now })).toEqual(
-      [`NEW design-source/feed-kit.js ${Buffer.byteLength(kit)}`],
-    );
+    expect(
+      vendorCanvases(root, [join(pulled, "feed-kit.js")], { now }),
+    ).toEqual([`NEW design-source/feed-kit.js ${Buffer.byteLength(kit)}`]);
     expect(
       readFileSync(join(root, "design-source/feed-kit.js")).equals(
         Buffer.from(kit, "utf8"),
@@ -255,11 +269,20 @@ describe("vendored canvas bytes survive git (#2389 review)", () => {
   it("design-source canvases are -text: git never EOL-normalises the recorded bytes", () => {
     const attr = spawnSync(
       "git",
-      ["check-attr", "text", "--", "design-source/auth.dc.html", "design-source/archive/archive-auth-v1.dc.html", "design-source/events-feed-kit.js"],
+      [
+        "check-attr",
+        "text",
+        "--",
+        "design-source/auth.dc.html",
+        "design-source/archive/archive-auth-v1.dc.html",
+        "design-source/events-feed-kit.js",
+      ],
       { cwd: REPO_ROOT, encoding: "utf8" },
     ).stdout;
     expect(attr).toContain("design-source/auth.dc.html: text: unset");
-    expect(attr).toContain("design-source/archive/archive-auth-v1.dc.html: text: unset");
+    expect(attr).toContain(
+      "design-source/archive/archive-auth-v1.dc.html: text: unset",
+    );
     expect(attr).toContain("design-source/events-feed-kit.js: text: unset");
   });
 });

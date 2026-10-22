@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "canvases": {
+    "academy-apply.dc.html": {
+      "untagged": 12,
+      "offToken": 6
+    },
+    "academy-docs.dc.html": {
+      "untagged": 9,
+      "offToken": 11
+    },
+    "academy-expert.dc.html": {
+      "untagged": 13,
+      "offToken": 11
+    },
+    "academy-experts.dc.html": {
+      "untagged": 3,
+      "offToken": 4
+    },
+    "academy-home.dc.html": {
+      "untagged": 11,
+      "offToken": 12
+    },
+    "academy-index-demo.dc.html": {
+      "untagged": 9,
+      "offToken": 6
+    },
+    "academy-invest.dc.html": {
+      "untagged": 22,
+      "offToken": 17
+    },
+    "academy-investor-cabinet.dc.html": {
+      "untagged": 15,
+      "offToken": 14
+    },
+    "academy-partner.dc.html": {
+      "untagged": 10,
+      "offToken": 3
+    },
+    "academy-partners.dc.html": {
+      "untagged": 13,
+      "offToken": 13
+    },
+    "academy-project.dc.html": {
+      "untagged": 15,
+      "offToken": 14
+    },
+    "academy-projects.dc.html": {
+      "untagged": 2,
+      "offToken": 4
+    },
+    "account-my-events.dc.html": {
+      "untagged": 10,
+      "offToken": 4
+    },
+    "account-profile.dc.html": {
+      "untagged": 36,
+      "offToken": 12
+    },
+    "auth.dc.html": {
+      "untagged": 1,
+      "offToken": 0
+    },
+    "doctor-cabinet.dc.html": {
+      "untagged": 29,
+      "offToken": 18
+    },
+    "doctor-community.dc.html": {
+      "untagged": 9,
+      "offToken": 11
+    },
+    "doctor-congress.dc.html": {
+      "untagged": 29,
+      "offToken": 34
+    },
+    "doctor-docs.dc.html": {
+      "untagged": 8,
+      "offToken": 6
+    },
+    "doctor-feed.dc.html": {
+      "untagged": 11,
+      "offToken": 10
+    },
+    "doctor-home.dc.html": {
+      "untagged": 20,
+      "offToken": 15
+    },
+    "doctor-lesson.dc.html": {
+      "untagged": 23,
+      "offToken": 25
+    },
+    "doctor-lk-congress.dc.html": {
+      "untagged": 30,
+      "offToken": 52
+    },
+    "doctor-school.dc.html": {
+      "untagged": 20,
+      "offToken": 19
+    },
+    "document.dc.html": {
+      "untagged": 8,
+      "offToken": 9
+    },
+    "ds-foundation.dc.html": {
+      "untagged": 12,
+      "offToken": 4
+    },
+    "ds-shell.dc.html": {
+      "untagged": 12,
+      "offToken": 15
+    },
+    "event-page.dc.html": {
+      "untagged": 50,
+      "offToken": 59
+    },
+    "unit-chat-column.dc.html": {
+      "untagged": 5,
+      "offToken": 6
+    },
+    "unit-content-card.dc.html": {
+      "untagged": 4,
+      "offToken": 7
+    },
+    "unit-events-filter.dc.html": {
+      "untagged": 5,
+      "offToken": 1
+    },
+    "unit-expert-card.dc.html": {
+      "untagged": 1,
+      "offToken": 2
+    },
+    "unit-project-card.dc.html": {
+      "untagged": 1,
+      "offToken": 2
+    },
+    "unit-room-frame.dc.html": {
+      "untagged": 7,
+      "offToken": 1
+    }
+  }
+}

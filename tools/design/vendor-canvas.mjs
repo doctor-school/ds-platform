@@ -2,6 +2,7 @@
 // DS Platform — the ONE writer of vendored Claude Design canvases (#2389).
 //
 //   pnpm design:vendor <pulled-file>… [--remote <path>] [--note <text>]
+//   pnpm design:vendor --restamp
 //   pnpm design:vendor --check
 //
 // Vendoring = the lead's DesignSync `get_file` pull (lead-only tool) lands the
@@ -13,10 +14,15 @@
 // `NEW|SAME|CHANGED <file> <bytes>`. A real pull drops any earlier `note`
 // (e.g. the #2389 backfill note) unless `--note` restates one.
 //
+// A non-archive `*.dc.html` is then stamped with the tokens.css control-state
+// block (./canvas-states.mjs, #2221): the manifest's `sha256` is the stamped
+// bytes, `pulledSha256` the pulled ones. `--restamp` re-stamps every
+// non-archive canvas in place (after a tokens.css change) without a pull.
+//
 // `--check` is the body of the `canvas-provenance` BLOCK guard
 // (tools/lint/canvas-provenance-lint.ts): every `design-source/**/*.dc.html`
 // and `*.js` canvas module has an entry whose sha256 equals its bytes, and
-// every entry has its file.
+// every entry has its file; plus the three #2221 state checks.
 // Honest limit: this proves the manifest and the bytes agree and that the
 // vendoring was an explicit recorded act; it cannot prove, without network,
 // that the bytes came from Claude Design. The structural control against a
@@ -25,7 +31,6 @@
 
 import { createHash } from "node:crypto";
 import {
-  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -42,6 +47,15 @@ import {
   sep,
 } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import {
+  TOKENS_REL,
+  checkStates,
+  generateStatesBlock,
+  listStatedCanvases,
+  shrinkBaseline,
+  stampCanvas,
+} from "./canvas-states.mjs";
 
 export const DESIGN_SYNC_PROJECT = "8cc2f39a-d58e-4491-b539-4337881ced4f";
 export const MANIFEST_REL = "design-source/manifest.json";
@@ -157,6 +171,11 @@ export function checkProvenance(root) {
     )
       problems.push(`${label}: pulledAt must be an ISO date`);
     if (
+      entry.pulledSha256 !== undefined &&
+      !/^[0-9a-f]{64}$/.test(entry.pulledSha256)
+    )
+      problems.push(`${label}: pulledSha256 must be 64 hex chars`);
+    if (
       entry.remotePath !== undefined &&
       entry.remotePath !== null &&
       typeof entry.remotePath !== "string"
@@ -169,6 +188,14 @@ export function checkProvenance(root) {
       problems.push(
         `design-source/${rel}: manifest entry without a vendored file`,
       );
+  return { ok: problems.length === 0, problems };
+}
+
+/** Provenance + the #2221 state checks: the whole `--check` / guard verdict. */
+export function checkCanvases(root) {
+  const provenance = checkProvenance(root);
+  const states = checkStates(root);
+  const problems = [...provenance.problems, ...states.problems];
   return { ok: problems.length === 0, problems };
 }
 
@@ -190,6 +217,7 @@ export function vendorCanvases(
     files: {},
   };
   const lines = [];
+  const stated = [];
   for (const pulled of pulledFiles) {
     const source = resolve(pulled);
     if (!CANVAS_RE.test(source))
@@ -200,20 +228,26 @@ export function vendorCanvases(
         ? toPosix(insideBase)
         : basename(source);
     const target = join(base, rel);
-    const bytes = readFileSync(source);
+    const pulledBytes = readFileSync(source);
+    const bytes = isStated(rel)
+      ? Buffer.from(
+          stampCanvas(pulledBytes.toString("utf8"), stateBlock(root)),
+          "utf8",
+        )
+      : pulledBytes;
     const sha = sha256Hex(bytes);
     const previous = existsSync(target)
       ? sha256Hex(readFileSync(target))
       : null;
-    if (resolve(target) !== source) {
-      mkdirSync(dirname(target), { recursive: true });
-      copyFileSync(source, target);
-    }
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, bytes);
     const entry = {
       sha256: sha,
+      ...(isStated(rel) ? { pulledSha256: sha256Hex(pulledBytes) } : {}),
       pulledAt: now.toISOString(),
       remotePath: remote,
     };
+    if (isStated(rel)) stated.push(rel);
     if (note) entry.note = note;
     manifest.files[rel] = entry;
     const status =
@@ -221,15 +255,71 @@ export function vendorCanvases(
     lines.push(`${status} design-source/${rel} ${bytes.length}`);
   }
   writeManifest(root, manifest);
+  if (stated.length) shrinkBaseline(root, stated, readTokens(root));
+  return lines;
+}
+
+/** A non-archive `.dc.html` canvas carries the ds-states block (#2221). */
+function isStated(rel) {
+  return rel.endsWith(".dc.html") && !rel.startsWith("archive/");
+}
+
+function readTokens(root) {
+  return readFileSync(join(root, TOKENS_REL), "utf8");
+}
+
+function stateBlock(root) {
+  return generateStatesBlock(readTokens(root));
+}
+
+/**
+ * `--restamp`: regenerate the ds-states block in every non-archive canvas in
+ * place (after a tokens.css change, or the first stamp). `pulledAt`, `note`
+ * and `remotePath` stay — no pull happened; `pulledSha256` keeps the bytes of
+ * the recorded pull (the pre-stamp sha256 when the entry predates #2221).
+ */
+export function restampCanvases(root) {
+  const manifest = readManifest(root);
+  if (!manifest) throw new Error(`${MANIFEST_REL} missing`);
+  const block = stateBlock(root);
+  const lines = [];
+  const rels = listStatedCanvases(root);
+  for (const rel of rels) {
+    const entry = manifest.files[rel];
+    if (!entry)
+      throw new Error(
+        `design-source/${rel}: no manifest entry — vendor it first`,
+      );
+    const target = join(root, "design-source", rel);
+    const before = readFileSync(target);
+    const bytes = Buffer.from(
+      stampCanvas(before.toString("utf8"), block),
+      "utf8",
+    );
+    const changed = !bytes.equals(before);
+    if (changed) writeFileSync(target, bytes);
+    const { sha256: recorded, pulledSha256, ...rest } = entry;
+    manifest.files[rel] = {
+      sha256: sha256Hex(bytes),
+      pulledSha256: pulledSha256 ?? recorded,
+      ...rest,
+    };
+    lines.push(
+      `${changed ? "CHANGED" : "SAME"} design-source/${rel} ${bytes.length}`,
+    );
+  }
+  writeManifest(root, manifest);
+  shrinkBaseline(root, rels, readTokens(root));
   return lines;
 }
 
 function parseArgs(argv) {
   const files = [];
-  const opts = { check: false, remote: null, note: undefined };
+  const opts = { check: false, restamp: false, remote: null, note: undefined };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--check") opts.check = true;
+    else if (arg === "--restamp") opts.restamp = true;
     else if (arg === "--remote") opts.remote = argv[++i] ?? null;
     else if (arg === "--note") opts.note = argv[++i];
     else if (arg.startsWith("--")) throw new Error(`unknown flag ${arg}`);
@@ -242,7 +332,7 @@ function main() {
   const { files, opts } = parseArgs(process.argv.slice(2));
   const root = repoRoot();
   if (opts.check) {
-    const verdict = checkProvenance(root);
+    const verdict = checkCanvases(root);
     for (const problem of verdict.problems)
       process.stderr.write(`[design:vendor] ${problem}\n`);
     if (!verdict.ok) process.exit(1);
@@ -251,9 +341,13 @@ function main() {
     );
     return;
   }
+  if (opts.restamp) {
+    for (const line of restampCanvases(root)) process.stdout.write(`${line}\n`);
+    return;
+  }
   if (!files.length) {
     process.stderr.write(
-      "usage: pnpm design:vendor <pulled-file>… [--remote <path>] [--note <text>] | --check\n",
+      "usage: pnpm design:vendor <pulled-file>… [--remote <path>] [--note <text>] | --restamp | --check\n",
     );
     process.exit(2);
   }

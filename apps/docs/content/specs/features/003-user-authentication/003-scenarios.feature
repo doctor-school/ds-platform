@@ -1815,3 +1815,11 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Given a cookie-free Academy browser opens the ordinary login page for guest profile reads
     When that Academy guest reads its profile and display-name through the actual browser origin
     Then both guest reads retain the same generic refusal and account navigation exposes no private profile or session
+
+  # Retained Academy baseline projection (#3222), not shared-sign-in-host acceptance.
+  # Native display-name.e2e-spec.ts unauthenticated/no-write coverage stays retained.
+  @EARS-16 @EARS-27 @EARS-28 @failure @guest-name-write
+  Scenario: Academy refuses a guest display-name write and preserves the authenticated owner's name
+    Given a verified Academy owner has a saved name before a separate guest write attempt
+    When the separate cookie-free Academy guest submits a valid display-name PUT
+    Then the guest write exposes no private access and the owner's fresh profile and reloaded account retain the saved name

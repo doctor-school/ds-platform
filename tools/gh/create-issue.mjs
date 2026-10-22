@@ -758,8 +758,8 @@ function main() {
   if (kindError) die(kindError);
   const trackError = trackLabelError(passthrough);
   if (trackError) die(trackError);
-  //   • the cross-front reuse answer (#1821): a storefront-track Issue names
-  //     what it reuses in the body's `Reuse:` field before it is opened.
+  //   • the cross-front reuse answer (#1821): every tracked (non-epic) Issue
+  //     names what it reuses in the body's `Reuse:` field before it is opened.
   const reuseError = reuseFieldError(passthrough, bodyText(passthrough));
   if (reuseError) die(reuseError);
   //   • roadmap taxonomy (#1729, spec §7.1): EARS tasks need a parent, epics

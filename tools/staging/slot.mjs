@@ -49,6 +49,7 @@ import {
   localImageTag,
   pullAndTagArgv,
   readImageManifestFile,
+  recordedImageNames,
   RELEASE_MANIFEST_REFS,
   registryLogoutArgv,
   repoDigestsMatch,
@@ -798,7 +799,7 @@ export function pullCommandPlan(sha, images) {
     kind: "ensure-present",
     label: "pull recorded images",
     stallBudget: "build",
-    items: RECORDED_IMAGE_NAMES.map((name) => {
+    items: recordedImageNames(images).map((name) => {
       const ref = images[name];
       const tag = localImageTag(name, sha);
       return {
@@ -811,11 +812,12 @@ export function pullCommandPlan(sha, images) {
 }
 
 /** One durable unit per image the pull fetches (#2982): `pull-<image>`. */
-function durablePulls(slot, sha, pull) {
+function durablePulls(slot, sha, images, pull) {
+  const names = recordedImageNames(images);
   return {
     ...pull,
     items: pull.items.map((item, index) =>
-      durable(slot, sha, `pull-${RECORDED_IMAGE_NAMES[index]}`, item),
+      durable(slot, sha, `pull-${names[index]}`, item),
     ),
   };
 }
@@ -1565,7 +1567,7 @@ export function planSlotUp({
       }),
       mode: 0o640,
     },
-    durablePulls(slot, sha, pullCommandPlan(sha, images)),
+    durablePulls(slot, sha, images, pullCommandPlan(sha, images)),
     registryLogoutCommand(),
     { kind: "verify-images", label: "verify recorded digests and boot", sha, slot, images },
   ];
@@ -2886,7 +2888,7 @@ function realEffects(
       // service outside it would have nothing to pull and no build to fall back to.
       const unrecorded = services
         .map((service) => service.image)
-        .filter((image) => !RECORDED_IMAGE_NAMES.includes(image.replace(/^ds-/, "")));
+        .filter((image) => !recordedImageNames(step.images).includes(image.replace(/^ds-/, "")));
       if (unrecorded.length) {
         throw new SlotError(
           `the slot compose runs image(s) no recorded manifest carries: ${unrecorded.join(", ")}`,
@@ -3110,7 +3112,7 @@ async function main() {
         ? "stdin"
         : options.imagesFile;
     console.log(`# recorded images for ${shortSha(options.sha)} (${resolved.ref}, ${source})`);
-    for (const name of RECORDED_IMAGE_NAMES) console.log(`  ${name}: ${images[name]}`);
+    for (const name of recordedImageNames(images)) console.log(`  ${name}: ${images[name]}`);
   }
   const boxEnv = await readBoxEnvFile(STAGE_ENV_FILE);
   const liveSlots = await readLiveSlots();

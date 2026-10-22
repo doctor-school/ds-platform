@@ -44,7 +44,7 @@ const digestOf = (hex) => `sha256:${hex.repeat(64)}`;
 const recordedImages = (prefix) =>
   Object.freeze(
     Object.fromEntries(
-      RECORDED_IMAGE_NAMES.map((name, i) => [name, `${IMAGE_REGISTRY}/${prefix}${name}@${digestOf("abcde"[i])}`]),
+      RECORDED_IMAGE_NAMES.map((name, i) => [name, `${IMAGE_REGISTRY}/${prefix}${name}@${digestOf("abcdef"[i])}`]),
     ),
   );
 const IMAGES = recordedImages("");
@@ -157,6 +157,24 @@ test("2981: api-prod pulls each recorded digest and tags it ds-<image>:<sha> —
   assert.throws(() => apiProdPullScript({ sha: "deadbeef", images: IMAGES }), RegistryError);
 });
 
+test("3171: the sign-in host image is recorded, pulled and tagged ds-login:<sha> like every app image", () => {
+  assert.ok(RECORDED_IMAGE_NAMES.includes("login"));
+  const script = apiProdPullScript({ sha: SHA, images: IMAGES });
+  assert.ok(script.includes(`docker tag ${IMAGES.login} ds-login:${SHA}`));
+});
+
+test("3171: a manifest recorded before the sign-in host image (no `login` key) still validates — a rollback or hotfix target predating #3171 pulls the images it has", () => {
+  const preLogin = Object.fromEntries(Object.entries(IMAGES).filter(([name]) => name !== "login"));
+  assert.deepEqual(validateProdImageManifest(manifestFor({ images: { ...preLogin } }), SHA).images, preLogin);
+  const script = apiProdPullScript({ sha: SHA, images: preLogin });
+  assert.doesNotMatch(script, /ds-login/);
+  for (const name of ["api", "api-migrate", "portal", "admin", "doctor"]) {
+    assert.ok(script.includes(`ds-${name}:${SHA}`), `still pulls ${name}`);
+  }
+  // Only the image introduced later may be absent; every earlier one stays required.
+  assert.throws(() => apiProdPullScript({ sha: SHA, images: { ...preLogin, portal: undefined } }), RegistryError);
+});
+
 test("2981: the pull token is read on the box by path; it is never in the rendered script", () => {
   const script = apiProdPullScript({ sha: SHA, images: IMAGES });
   assert.ok(script.includes(`--password-stdin < ${REGISTRY_PULL_TOKEN_FILE}`));
@@ -200,7 +218,7 @@ test("2981: the manifest is resolved in pre-flight, before the ship step touches
 // --- retention ----------------------------------------------------------------
 
 test("2981: retention keeps the last N tags of every pulled repo, ds-api-migrate included", () => {
-  assert.deepEqual(RETAINED_IMAGE_REPOS, ["ds-api", "ds-api-migrate", "ds-portal", "ds-admin", "ds-doctor"]);
+  assert.deepEqual(RETAINED_IMAGE_REPOS, ["ds-api", "ds-api-migrate", "ds-portal", "ds-admin", "ds-doctor", "ds-login"]);
   const script = retentionScript(3);
   for (const repo of RETAINED_IMAGE_REPOS) assert.match(script, new RegExp(`^prune_repo ${repo} 3$`, "m"));
   // The registry digest records a pull leaves behind are reclaimed with their tags.
@@ -218,12 +236,13 @@ test("2981: the api-prod compose declares no build and tags every ds-* image wit
     "ds-api-migrate:${DEPLOY_SHA:?}",
     "ds-api:${DEPLOY_SHA:?}",
     "ds-doctor:${DEPLOY_SHA:?}",
+    "ds-login:${DEPLOY_SHA:?}",
     "ds-portal:${DEPLOY_SHA:?}",
   ]);
   // Every pulled image except the one-shot migrate is swapped and verified.
   assert.deepEqual(
     deployServiceSet(API_PROD_COMPOSE).map((s) => s.image),
-    ["ds-api", "ds-portal", "ds-admin", "ds-doctor"],
+    ["ds-api", "ds-portal", "ds-admin", "ds-doctor", "ds-login"],
   );
 });
 

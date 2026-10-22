@@ -499,7 +499,7 @@ export function deployShaEnvScript(sha) {
 }
 
 /**
- * The on-box pull step: the five recorded digests, reused when a local tag already
+ * The on-box pull step: the recorded digests, reused when a local tag already
  * carries them, logged out after. The token is read on the box from its root-only
  * file — it never appears in this script.
  */

@@ -26,6 +26,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   IMAGE_REGISTRY,
+  LATER_RECORDED_IMAGE_NAMES,
   RECORDED_IMAGE_NAMES,
   REGISTRY_PULL_TOKEN_FILE,
   RELEASE_MANIFEST_REFS,
@@ -76,6 +77,9 @@ test("2985: the driver's image set and manifest refs are the registry's", () => 
   assert.deepEqual(value(DRIVER, "IMAGE_NAMES").split(" "), [
     ...RECORDED_IMAGE_NAMES,
   ]);
+  assert.deepEqual(value(DRIVER, "LATER_IMAGE_NAMES").split(" "), [
+    ...LATER_RECORDED_IMAGE_NAMES,
+  ]);
   assert.equal(value(DRIVER, "IMAGE_REGISTRY"), IMAGE_REGISTRY);
   assert.equal(
     pick(DRIVER, "REGISTRY_PULL_TOKEN"),
@@ -96,7 +100,7 @@ const digestOf = (hex) => `sha256:${hex.repeat(64)}`;
 const IMAGES = Object.fromEntries(
   RECORDED_IMAGE_NAMES.map((name, i) => [
     name,
-    `${IMAGE_REGISTRY}/${name}@${digestOf("abcde"[i])}`,
+    `${IMAGE_REGISTRY}/${name}@${digestOf("abcdef"[i])}`,
   ]),
 );
 const manifest = (over = {}) =>
@@ -105,6 +109,10 @@ const manifest = (over = {}) =>
 // Each sample is judged by the driver AND by slot.mjs's validator; they must agree.
 const SAMPLES = {
   good: manifest(),
+  // #3171: a rollback target recorded before the sign-in host image.
+  "pre-login": manifest({
+    images: Object.fromEntries(Object.entries(IMAGES).filter(([name]) => name !== "login")),
+  }),
   hotfix: manifest({ ref: "hotfix/12-fix-x" }),
   "wrong sha": manifest({ sha: OTHER }),
   "non-sha256 digest": manifest({

@@ -106,6 +106,7 @@ import {
   verifyImagesScript,
   verifyRunningScript,
 } from "./slot.mjs";
+import { RECORDED_IMAGE_NAMES } from "../deploy/lib/registry.mjs";
 
 const BASE = "stage.doctor.school";
 const SHA = "0123456789abcdef0123456789abcdef01234567";
@@ -120,6 +121,7 @@ const recordedImages = (prefix) =>
     portal: `${IMAGE_REGISTRY}/${prefix}portal@${digestOf("c")}`,
     admin: `${IMAGE_REGISTRY}/${prefix}admin@${digestOf("d")}`,
     doctor: `${IMAGE_REGISTRY}/${prefix}doctor@${digestOf("e")}`,
+    login: `${IMAGE_REGISTRY}/${prefix}login@${digestOf("f")}`,
   });
 const IMAGES = recordedImages("");
 const PR_IMAGES = recordedImages("pr/");
@@ -407,7 +409,7 @@ test("images are PULLED by their recorded digest and tagged locally, never built
   const pull = pullCommandPlan(SHA, IMAGES);
   assert.equal(pull.kind, "ensure-present");
   assert.equal(pull.stallBudget, "build");
-  assert.equal(pull.items.length, 5);
+  assert.equal(pull.items.length, RECORDED_IMAGE_NAMES.length);
   const api = pull.items[0];
   // The probe reads the local tag's RepoDigests; only the recorded digest is a match.
   assert.deepEqual(api.probe.slice(0, 4), ["sudo", "docker", "image", "inspect"]);
@@ -1043,7 +1045,7 @@ test("up verifies the images it pulled and the containers it started, against th
   const plan = upPlan();
   assert.equal(stepOf(plan, "verify recorded digests and boot").sha, SHA);
   assert.deepEqual(stepOf(plan, "verify recorded digests and boot").images, IMAGES);
-  assert.deepEqual(stepOf(plan, "pull recorded images").items.length, 5);
+  assert.deepEqual(stepOf(plan, "pull recorded images").items.length, RECORDED_IMAGE_NAMES.length);
   assert.equal(stepOf(plan, "verify the running images").sha, SHA);
   const health = stepOf(plan, "health");
   assert.equal(health.kind, "health");

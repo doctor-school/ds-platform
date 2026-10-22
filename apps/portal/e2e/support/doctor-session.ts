@@ -1,4 +1,5 @@
-import { expect, type Page } from "@playwright/test";
+import { prepareCaptchaForJourney } from "@ds/e2e/captcha-stub";
+import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { fetchOtpCode } from "./mailpit";
 import { NOTIFICATION_SUBJECTS } from "./notification-subjects";
 
@@ -29,6 +30,34 @@ const livePassword = (): string => `Prt-${Date.now()}-aA1!`;
 const newEmail = (): string =>
   `e2e-574-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
 
+/** Contexts whose captcha script is already routed — a route is installed once. */
+const captchaReady = new WeakSet<BrowserContext>();
+
+/**
+ * Make the register form the browser is on submittable the way a person's is
+ * (#3229, found on a slot): registration is captcha-gated, and a slot's real
+ * SmartCaptcha never yields a token headless, so the context gets the
+ * `@ds/e2e/captcha-stub` stand-in (nothing on a local stand booted with bot
+ * protection off). The stub must serve `captcha.js` before the page loads it,
+ * so the form is reloaded after installing it — same URL, so a carried
+ * `returnTo` survives. The `load` + `networkidle` wait is the hydration wait of
+ * `@ds/e2e/sign-in`: a click before the client chunks run submits the form
+ * natively (`POST /register`) and the walk never reaches `/verify`.
+ */
+async function readyRegisterForm(page: Page): Promise<void> {
+  const context = page.context();
+  if (!captchaReady.has(context)) {
+    await prepareCaptchaForJourney(
+      context,
+      page.url(),
+      process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
+    );
+    captchaReady.add(context);
+  }
+  await page.reload({ waitUntil: "load" });
+  await page.waitForLoadState("networkidle");
+}
+
 /**
  * Fill + submit the register form the browser is CURRENTLY on (so any `returnTo`
  * already carried in the URL rides through to `/verify` and the post-auth resume),
@@ -39,6 +68,7 @@ const newEmail = (): string =>
  * keys off stable `autocomplete` attributes + `data-testid`s, never visible text.
  */
 export async function submitRegisterAndVerify(page: Page): Promise<string> {
+  await readyRegisterForm(page);
   const email = newEmail();
   const sentAt = new Date().toISOString();
   await page.locator('input[autocomplete="email"]').fill(email);
@@ -104,6 +134,7 @@ export async function provisionDoctorCreds(
   const password = livePassword();
   const sentAt = new Date().toISOString();
   await page.goto("/register", { waitUntil: "domcontentloaded" });
+  await readyRegisterForm(page);
   await page.locator('input[autocomplete="email"]').fill(email);
   await page.locator('input[autocomplete="new-password"]').fill(password);
   await page.getByTestId("register-submit").click();

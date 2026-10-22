@@ -1,3 +1,5 @@
+import { HOSTS } from "@ds/e2e/hosts";
+import { signInWithPassword } from "@ds/e2e/sign-in";
 import { test, expect, type Page } from "@playwright/test";
 import { requireLiveStandEnv } from "./support/live-stand-env";
 
@@ -87,11 +89,8 @@ async function login(
   email: string,
   password: string,
 ): Promise<void> {
-  await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("textbox", { name: /почта|email/i }).fill(email);
-  await page.getByRole("textbox", { name: /пароль|password/i }).fill(password);
-  await page.getByRole("button", { name: /войти|продолжить/i }).click();
-  await page.waitForURL(/\/account|\/webinars/);
+  // The shared live sign-in walk waits for the login card to hydrate first.
+  await signInWithPassword(page, HOSTS.academy, { email, password }, BASE);
 }
 
 /** Open the live room and return the chat composer input (visible chat pane). */

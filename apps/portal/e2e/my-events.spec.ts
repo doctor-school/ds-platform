@@ -1,3 +1,5 @@
+import { HOSTS } from "@ds/e2e/hosts";
+import { signInWithPassword } from "@ds/e2e/sign-in";
 import { test, expect, type Browser, type Page } from "@playwright/test";
 import {
   ADMIN_ORIGIN,
@@ -267,15 +269,13 @@ test.describe("005 EARS-7 my-events freshness (e2e)", () => {
 
     // Log the doctor in through the real 003 flow — the session cookie is bound to
     // this browser's fingerprint surface, which the SSR «мои события» read forwards.
-    await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-    // Locale-agnostic `autocomplete` selectors (#177): a label regex also matches
-    // the password tab and the «Показать пароль» toggle.
-    await page.locator('input[autocomplete="username"]').fill(DOCTOR_EMAIL!);
-    await page
-      .locator('input[autocomplete="current-password"]')
-      .fill(DOCTOR_PASSWORD!);
-    await page.getByTestId("password-login-submit").click();
-    await page.waitForURL(/\/account|\/webinars/);
+    // The shared live sign-in walk waits for the login card to hydrate first.
+    await signInWithPassword(
+      page,
+      HOSTS.academy,
+      { email: DOCTOR_EMAIL!, password: DOCTOR_PASSWORD! },
+      BASE,
+    );
 
     const cardSelector = `a[href="/webinars/${FRESH_SLUG}"]`;
 

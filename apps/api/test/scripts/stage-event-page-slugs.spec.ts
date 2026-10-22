@@ -115,6 +115,25 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
       inPerson(slugs.academyHybrid!, "hybrid", false);
       inPerson(slugs.academyHybridSoldOut!, "hybrid", true);
 
+      // #3229 — the default Academy tier's 005 journey events.
+      for (const slug of [
+        slugs.academyUpcomingOneTap!,
+        slugs.academyUpcomingMarker!,
+      ]) {
+        const shape = read(slug);
+        expect(shape, slug).toMatchObject({
+          state: "published",
+          audience: "experts",
+          format: "online",
+          future: true,
+        });
+        expect(shape.speakers, slug).toBeGreaterThan(0);
+      }
+      expect(read(slugs.academyHidden!)).toMatchObject({
+        state: "hidden",
+        audience: "experts",
+      });
+
       const doctor = read(slugs.doctorUpcoming!);
       expect(doctor).toMatchObject({
         state: "published",
@@ -130,6 +149,7 @@ describe("tools/staging live-tier golden slugs (#2996)", () => {
     const verified = new Set(Object.values(slugs));
     const tiers = LIVE_TIERS.filter((tier) => tier.seededEnv);
     expect(tiers.map((t) => t.name).sort()).toEqual([
+      "live/academy/default",
       "live/academy/event-page",
       "live/doctor/event-page",
     ]);

@@ -1,4 +1,6 @@
-import { test, expect } from "@playwright/test";
+import { HOSTS } from "@ds/e2e/hosts";
+import { signInWithPassword } from "@ds/e2e/sign-in";
+import { test, expect, type Page } from "@playwright/test";
 
 /**
  * 014 EARS-4 — the publicly readable POST-LIVE event page, driven in a browser
@@ -89,18 +91,18 @@ test.skip(
 );
 
 /**
- * The real 003 login, mirroring `event-page-registered.spec.ts` L70-73. Shared
- * by the EARS-5 and EARS-8 describes: both need a REAL session, because the only
- * thing that makes a source exist is a response the api authorized.
+ * The real 003 login through the shared live sign-in walk (`@ds/e2e/sign-in`),
+ * which waits for the login card to hydrate before submitting. Shared by the
+ * EARS-5 and EARS-8 describes: both need a REAL session, because the only thing
+ * that makes a source exist is a response the api authorized.
  */
-async function signIn(page: import("@playwright/test").Page) {
-  await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("textbox", { name: /почта|email/i }).fill(DOCTOR_EMAIL!);
-  await page
-    .getByRole("textbox", { name: /пароль|password/i })
-    .fill(DOCTOR_PASSWORD!);
-  await page.getByRole("button", { name: /войти|продолжить/i }).click();
-  await page.waitForURL(/\/account|\/webinars/);
+async function signIn(page: Page) {
+  await signInWithPassword(
+    page,
+    HOSTS.academy,
+    { email: DOCTOR_EMAIL!, password: DOCTOR_PASSWORD! },
+    BASE,
+  );
 }
 
 test.describe("014 EARS-4 public post-live event page (e2e)", () => {

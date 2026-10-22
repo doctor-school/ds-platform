@@ -24,10 +24,19 @@ import { Given, Then, When } from "../support/fixtures";
  */
 
 const SEED = {
-  upcoming: process.env.E2E_WEBINAR_SLUG ?? "seed-005-upcoming",
+  upcoming:
+    process.env.E2E_JOURNEY_SLUG_UPCOMING ??
+    process.env.E2E_WEBINAR_SLUG ??
+    "seed-005-upcoming",
   live: process.env.E2E_WEBINAR_SLUG_LIVE ?? "seed-005-live",
-  ended: process.env.E2E_WEBINAR_SLUG_ENDED ?? "seed-005-ended",
-  hidden: process.env.E2E_WEBINAR_SLUG_HIDDEN ?? "seed-005-hidden",
+  ended:
+    process.env.E2E_JOURNEY_SLUG_ENDED ??
+    process.env.E2E_WEBINAR_SLUG_ENDED ??
+    "seed-005-ended",
+  hidden:
+    process.env.E2E_JOURNEY_SLUG_HIDDEN ??
+    process.env.E2E_WEBINAR_SLUG_HIDDEN ??
+    "seed-005-hidden",
 } as const;
 
 const PARTICIPATE = "Участвовать";

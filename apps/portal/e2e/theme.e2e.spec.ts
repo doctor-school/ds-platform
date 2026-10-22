@@ -1,3 +1,5 @@
+import { HOSTS } from "@ds/e2e/hosts";
+import { signInWithPassword } from "@ds/e2e/sign-in";
 import { test, expect, type Page } from "@playwright/test";
 
 /**
@@ -113,13 +115,13 @@ async function expectGlyph(page: Page, glyph: "☾︎" | "☀︎") {
 
 /** Log the doctor in through the real 003 flow (identifier + password). */
 async function login(page: Page): Promise<void> {
-  await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("textbox", { name: /почта|email/i }).fill(DOCTOR_EMAIL!);
-  await page
-    .getByRole("textbox", { name: /пароль|password/i })
-    .fill(DOCTOR_PASSWORD!);
-  await page.getByRole("button", { name: /войти|продолжить/i }).click();
-  await page.waitForURL(/\/account|\/webinars/);
+  // The shared live sign-in walk waits for the login card to hydrate first.
+  await signInWithPassword(
+    page,
+    HOSTS.academy,
+    { email: DOCTOR_EMAIL!, password: DOCTOR_PASSWORD! },
+    BASE,
+  );
 }
 
 // The leading `006 EARS-12 ` prefix is the ears-test-lint feature scope — a

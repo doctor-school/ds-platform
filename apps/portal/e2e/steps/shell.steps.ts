@@ -1,3 +1,5 @@
+import { HOSTS } from "@ds/e2e/hosts";
+import { signInWithPassword } from "@ds/e2e/sign-in";
 import { expect } from "@playwright/test";
 import { Given, Then, When } from "../support/fixtures";
 import {
@@ -45,10 +47,12 @@ Given("a registered doctor who is not yet signed in", async ({ page, context, wo
 });
 
 When("the doctor completes login via the feature-003 auth flow", async ({ page, world }) => {
-  await page.goto("/login", { waitUntil: "domcontentloaded" });
-  await page.getByRole("textbox", { name: /почта|email/i }).fill(world.email!);
-  await page.getByRole("textbox", { name: /пароль|password/i }).fill(world.password!);
-  await page.getByRole("button", { name: /войти|продолжить/i }).click();
+  // The shared live sign-in walk: it waits for the login card to hydrate
+  // before submitting (a pre-hydration click is a native `POST /login`).
+  await signInWithPassword(page, HOSTS.academy, {
+    email: world.email!,
+    password: world.password!,
+  });
 });
 
 Then("the doctor lands on the discovery front-door at {string}", async ({ page }, path: string) => {
@@ -120,7 +124,9 @@ Given("a visitor with no authenticated session", async ({ context }) => {
 });
 
 When("the visitor opens the discovery front-door", async ({ page }) => {
-  await page.goto("/", { waitUntil: "domcontentloaded" });
+  // The listing's route is `/webinars` (008 «Amendment — 2026-08-17»: `/` is
+  // the feature-013 Academy landing).
+  await page.goto("/webinars", { waitUntil: "domcontentloaded" });
 });
 
 Then("the discovery listing of upcoming broadcasts is shown", async ({ page }) => {

@@ -146,8 +146,12 @@ async function loginAs(
   email: string,
   password: string,
 ): Promise<void> {
-  await page.getByRole("textbox", { name: /почта|email/i }).fill(email);
-  await page.getByRole("textbox", { name: /пароль|password/i }).fill(password);
+  // The hydration wait of `@ds/e2e/sign-in`: a click before the login card's
+  // client chunks run submits the form natively and nobody is signed in.
+  await page.waitForLoadState("load");
+  await page.waitForLoadState("networkidle");
+  await page.locator('input[autocomplete="username"]').fill(email);
+  await page.locator('input[autocomplete="current-password"]').fill(password);
   await page.getByRole("button", { name: /войти|продолжить/i }).click();
 }
 

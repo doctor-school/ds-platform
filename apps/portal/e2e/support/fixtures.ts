@@ -59,7 +59,12 @@ export interface JourneyWorld {
 export const test = base.extend<{ world: JourneyWorld }>({
   // eslint-disable-next-line no-empty-pattern -- bddgen requires the `({}, use)` shape (see above)
   world: async ({}, use) => {
-    await use({ slug: process.env.E2E_WEBINAR_SLUG ?? "seed-005-upcoming" });
+    await use({
+      slug:
+        process.env.E2E_JOURNEY_SLUG_UPCOMING ??
+        process.env.E2E_WEBINAR_SLUG ??
+        "seed-005-upcoming",
+    });
   },
 });
 

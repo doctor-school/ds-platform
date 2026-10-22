@@ -75,12 +75,38 @@ export async function signInGoldenDoctor(
   baseUrl?: string,
 ): Promise<GoldenDoctor> {
   const doctor = resolveWorkerGoldenDoctor(seedName);
-  const password = goldenDoctorPassword(doctor);
+  await signInWithPassword(
+    page,
+    host,
+    { email: doctor.email, password: goldenDoctorPassword(doctor) },
+    baseUrl,
+  );
+  return doctor;
+}
 
+/**
+ * The same 003 password sign-in for an account the CALLER names (a live spec's
+ * `E2E_DOCTOR_EMAIL` / `E2E_DOCTOR_PASSWORD`, which a slot derives from the
+ * golden verified doctor). One walk with {@link signInGoldenDoctor}, so the
+ * hydration wait above covers every live spec: #3229 found
+ * `webinar-archive.spec.ts` carrying its own `domcontentloaded` copy that
+ * clicked «Войти» before hydration — a native `POST /login`, no
+ * `/v1/auth/login`, the page left on `/login` until the test timed out.
+ */
+export async function signInWithPassword(
+  page: Page,
+  host: HostConfig,
+  credentials: { readonly email: string; readonly password: string },
+  baseUrl?: string,
+): Promise<void> {
   await page.goto(`${baseUrl ?? ""}${host.loginPath}`, { waitUntil: "load" });
   await page.waitForLoadState("networkidle");
-  await page.locator('input[autocomplete="username"]').fill(doctor.email);
-  await page.locator('input[autocomplete="current-password"]').fill(password);
+  await page
+    .locator('input[autocomplete="username"]')
+    .fill(credentials.email);
+  await page
+    .locator('input[autocomplete="current-password"]')
+    .fill(credentials.password);
   await page.getByRole("button", { name: /войти|продолжить/i }).click();
 
   // The session cookie is set before the post-login redirect, so leaving the
@@ -96,5 +122,4 @@ export async function signInGoldenDoctor(
   const nativeSubmit = preHydrationSubmitError(page.url(), host.loginPath);
   if (nativeSubmit) throw new Error(nativeSubmit);
   expect(new URL(page.url()).pathname).not.toBe(host.loginPath);
-  return doctor;
 }

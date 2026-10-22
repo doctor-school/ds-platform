@@ -974,6 +974,59 @@ describe("runE2eStage — the live legs", () => {
     assert.equal(calls[0].env.E2E_WEBINAR_SLUG, undefined);
   });
 
+  it("hands the default Academy leg its own 005 journey slugs — golden events under journey-only names, never an event-page slug name (#3229)", async () => {
+    const { calls, effects } = harness();
+    await runE2eStage(["pr-3229"], { env: ENV, effects });
+    const leg = calls.find(
+      (c) =>
+        c.argv.includes("@ds/portal") &&
+        c.argv.includes("--config=playwright.config.ts"),
+    );
+    assert.ok(leg);
+    assert.equal(
+      leg.env.E2E_JOURNEY_SLUG_UPCOMING,
+      GOLDEN_SLUGS.academyUpcoming,
+    );
+    assert.equal(
+      leg.env.E2E_JOURNEY_SLUG_ONE_TAP,
+      GOLDEN_SLUGS.academyUpcomingOneTap,
+    );
+    assert.equal(
+      leg.env.E2E_JOURNEY_SLUG_MARKER,
+      GOLDEN_SLUGS.academyUpcomingMarker,
+    );
+    assert.equal(
+      leg.env.E2E_JOURNEY_SLUG_ENDED,
+      GOLDEN_SLUGS.academyEndedRecorded,
+    );
+    assert.equal(leg.env.E2E_JOURNEY_SLUG_HIDDEN, GOLDEN_SLUGS.academyHidden);
+    // Three distinct registrable events: one guest journey, one one-tap, one marker.
+    assert.equal(
+      new Set([
+        leg.env.E2E_JOURNEY_SLUG_UPCOMING,
+        leg.env.E2E_JOURNEY_SLUG_ONE_TAP,
+        leg.env.E2E_JOURNEY_SLUG_MARKER,
+      ]).size,
+      3,
+    );
+    // #2996 holds: no event-page slug name reaches this leg.
+    for (const name of [
+      "E2E_WEBINAR_SLUG",
+      "E2E_WEBINAR_SLUG_ENDED",
+      "E2E_WEBINAR_SLUG_HIDDEN",
+      "E2E_ENDED_WEBINAR_SLUG",
+    ]) {
+      assert.equal(leg.env[name], undefined, name);
+    }
+    // The journey names stay on this leg alone.
+    const eventPage = calls.find(
+      (c) =>
+        c.argv.includes("@ds/portal") &&
+        c.argv.includes("--config=playwright.event-page.config.ts"),
+    );
+    assert.equal(eventPage.env.E2E_JOURNEY_SLUG_UPCOMING, undefined);
+  });
+
   it("generates the BDD specs before the Academy live leg", async () => {
     const { calls, effects } = harness();
     await runE2eStage(["pr-3168", "--project", "academy"], {

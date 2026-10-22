@@ -22,8 +22,14 @@ import { LIVE_STAND, provisionLoggedInDoctor } from "./support/doctor-session";
  * "other cards unchanged" is `E2E_WEBINAR_SLUG` (default `seed-005-upcoming`).
  */
 
-const SLUG = process.env.E2E_MARKER_SLUG ?? "seed-005-upcoming-3";
-const CONTROL_SLUG = process.env.E2E_WEBINAR_SLUG ?? "seed-005-upcoming";
+const SLUG =
+  process.env.E2E_JOURNEY_SLUG_MARKER ??
+  process.env.E2E_MARKER_SLUG ??
+  "seed-005-upcoming-3";
+const CONTROL_SLUG =
+  process.env.E2E_JOURNEY_SLUG_UPCOMING ??
+  process.env.E2E_WEBINAR_SLUG ??
+  "seed-005-upcoming";
 const MARKER = "Вы записаны";
 
 test.describe.configure({ mode: "serial" });

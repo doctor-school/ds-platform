@@ -68,6 +68,12 @@ export const GOLDEN_SLUGS = Object.freeze({
   academyHybridSoldOut: "golden-volume-event-540",
   /** Published online `doctors` event with speakers (the doctor storefront reads only `doctors`). */
   doctorUpcoming: "golden-volume-event-418",
+  /** `golden.events.hidden` — an `experts` event in the `hidden` state. */
+  academyHidden: "golden-event-hidden",
+  /** Published online `experts` event with speakers — the 005 one-tap journey's second event. */
+  academyUpcomingOneTap: "golden-volume-event-412",
+  /** Published online `experts` event with speakers — the 004 EARS-8 marker spec's own event. */
+  academyUpcomingMarker: "golden-volume-event-424",
 });
 
 const URL_DOCTOR = "E2E_DOCTOR_URL";
@@ -103,6 +109,19 @@ export const LIVE_TIERS = Object.freeze([
     rootDir: ".",
     // The `bdd` project's specs are generated; the `test:e2e` script runs this first.
     prepare: ["exec", "bddgen"],
+    // #3229: the 004/005 journeys and the 004 EARS-8 marker spec read their events
+    // under journey-only names (a local stand falls back to its `seed-005-*`
+    // fixtures). Never an event-page slug name (`E2E_WEBINAR_SLUG*`): #2996 keeps
+    // those on the event-page tier, so they cannot switch on this tier's
+    // event-page specs. Each journey registers a FRESH doctor, so a slot's golden
+    // events are never consumed.
+    seededEnv: {
+      E2E_JOURNEY_SLUG_UPCOMING: GOLDEN_SLUGS.academyUpcoming,
+      E2E_JOURNEY_SLUG_ONE_TAP: GOLDEN_SLUGS.academyUpcomingOneTap,
+      E2E_JOURNEY_SLUG_MARKER: GOLDEN_SLUGS.academyUpcomingMarker,
+      E2E_JOURNEY_SLUG_ENDED: GOLDEN_SLUGS.academyEndedRecorded,
+      E2E_JOURNEY_SLUG_HIDDEN: GOLDEN_SLUGS.academyHidden,
+    },
     gated: [
       {
         file: "e2e/room.spec.ts",

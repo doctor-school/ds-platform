@@ -3,27 +3,30 @@ import { LIVE_STAND, provisionLoggedInDoctor } from "../support/doctor-session";
 import { DISCOVERY_HEADING, mainWebinarHrefs } from "../support/shell";
 
 /**
- * 008 EARS-8 — `/` renders the feature-004 discovery listing IDENTICALLY for a
- * guest and a logged-in doctor; the content does not branch on auth state — only
- * the header's account affordance differs («Войти» vs the avatar icon). Driven by
+ * 008 EARS-8 — the discovery listing renders IDENTICALLY for a guest and a
+ * logged-in doctor. Its route is `/webinars` since the 008 «Amendment —
+ * 2026-08-17» (`008-requirements-en.md`: `/` is the Academy landing of feature
+ * 013, the listing is at `/webinars`), which moved the route, not this rule:
+ * the content does not branch on auth state — only the header's account
+ * affordance differs («Войти» vs the avatar icon). Driven by
  * capturing the listing's event-link fingerprint in each render and asserting they
  * match, then confirming the header affordance is the only divergence.
  *
  * LIVE_STAND tier (needs a doctor session). A FRESHLY provisioned doctor has no
  * registrations, so the per-viewer 004 «registered» overlay adds nothing — the
- * doctor's `/` is byte-for-byte the guest listing. `test.skip`s on a bare CI run.
+ * doctor's `/webinars` is byte-for-byte the guest listing. `test.skip`s on a bare CI run.
  */
 
-test.describe("008 EARS-8 / renders identically for guest and doctor (e2e)", () => {
+test.describe("008 EARS-8 /webinars renders identically for guest and doctor (e2e)", () => {
   test.skip(!LIVE_STAND, "requires a live portal + real Zitadel + Mailpit");
 
   test("008 EARS-8: the discovery listing content is identical for guest and doctor — only the header affordance differs", async ({
     page,
     context,
   }) => {
-    // Guest render of `/`.
+    // Guest render of `/webinars`.
     await context.clearCookies();
-    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.goto("/webinars", { waitUntil: "domcontentloaded" });
     await expect(
       page.getByRole("heading", { name: DISCOVERY_HEADING }),
     ).toBeVisible();
@@ -32,9 +35,9 @@ test.describe("008 EARS-8 / renders identically for guest and doctor (e2e)", () 
     await expect(page.getByTestId("shell-login")).toBeVisible();
     await expect(page.getByTestId("shell-avatar")).toHaveCount(0);
 
-    // Doctor render of `/` (fresh 003 doctor, no registrations).
+    // Doctor render of `/webinars` (fresh 003 doctor, no registrations).
     await provisionLoggedInDoctor(page);
-    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.goto("/webinars", { waitUntil: "domcontentloaded" });
     await expect(
       page.getByRole("heading", { name: DISCOVERY_HEADING }),
     ).toBeVisible();

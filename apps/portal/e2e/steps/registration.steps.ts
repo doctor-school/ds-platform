@@ -16,17 +16,30 @@ import {
  *
  * Fixture events are the seeded `seed-005-*` slugs (apps/api/scripts/seed-events.ts,
  * the 005↔007 seam); the slugs are read from env so a stand with differently-named
- * fixtures can override them.
+ * fixtures can override them. A staging slot hands the golden events under the
+ * journey-only `E2E_JOURNEY_SLUG_*` names (`tools/staging/live-tiers.mjs`, #3229).
  */
 
 const SEED = {
-  published: process.env.E2E_WEBINAR_SLUG ?? "seed-005-upcoming",
+  published:
+    process.env.E2E_JOURNEY_SLUG_UPCOMING ??
+    process.env.E2E_WEBINAR_SLUG ??
+    "seed-005-upcoming",
   // A SECOND registrable event so the one-tap path drives an event the doctor is
   // not yet registered for, independently of the guest journey's event.
-  oneTap: process.env.E2E_ONE_TAP_SLUG ?? "seed-005-upcoming-2",
+  oneTap:
+    process.env.E2E_JOURNEY_SLUG_ONE_TAP ??
+    process.env.E2E_ONE_TAP_SLUG ??
+    "seed-005-upcoming-2",
   live: process.env.E2E_WEBINAR_SLUG_LIVE ?? "seed-005-live",
-  ended: process.env.E2E_WEBINAR_SLUG_ENDED ?? "seed-005-ended",
-  hidden: process.env.E2E_WEBINAR_SLUG_HIDDEN ?? "seed-005-hidden",
+  ended:
+    process.env.E2E_JOURNEY_SLUG_ENDED ??
+    process.env.E2E_WEBINAR_SLUG_ENDED ??
+    "seed-005-ended",
+  hidden:
+    process.env.E2E_JOURNEY_SLUG_HIDDEN ??
+    process.env.E2E_WEBINAR_SLUG_HIDDEN ??
+    "seed-005-hidden",
 } as const;
 
 const CONFIRMATION = "Вы записаны";

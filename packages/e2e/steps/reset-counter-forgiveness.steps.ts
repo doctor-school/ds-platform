@@ -199,7 +199,7 @@ Given(
     const control: ResetForgivenessJourney = {
       context: controlContext,
       page: await controlContext.newPage(),
-      email: `reset-forgiveness-control-3204-${randomUUID()}@example.test`,
+      email: `reset-control-3204-${randomUUID()}@example.test`,
       password: `Control-${randomUUID()}-aA1!`,
       newPassword: "",
       failed: false,

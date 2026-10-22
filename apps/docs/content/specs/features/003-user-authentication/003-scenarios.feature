@@ -721,6 +721,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And a successful solve retries the captured original login values exactly once
 
   @EARS-17 @happy
+  @implemented @captcha-confirmation
   Scenario: Proving a code or completing reset is not challenged again
     Given a visitor already requested a verification, login, or reset code through a protected action
     When the visitor submits that verification code or login OTP, or completes password reset

@@ -1,7 +1,8 @@
-﻿import { randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import {
   captchaStubScript,
+  captchaTestTokenFromEnv,
   isSmartCaptchaScriptUrl,
 } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
@@ -83,8 +84,8 @@ async function open(page: Page, target: string) {
   await page.waitForLoadState("networkidle");
 }
 async function instrument(v: Visitor) {
-  // 003 EARS-17: unique frontend tokens with real BOTOFF API responses. This
-  // intentionally proves neither server token verification nor Yandex acceptance.
+  // 003 EARS-17: BOTOFF proves distinct frontend token bytes; BOTON uses the
+  // supported fixed provider test token and proves distinct execution revisions.
   await v.context.exposeBinding("__s066Issued", (_source, token: string) => {
     v.tokens.push(token);
   });
@@ -92,9 +93,13 @@ async function instrument(v: Visitor) {
     const onload =
       new URL(route.request().url()).searchParams.get("onload") ??
       "__onSmartCaptchaReady";
-    const script = captchaStubScript("s066", onload).replace(
+    const bypass = process.env.BOT_PROTECTION_ENABLED === "false";
+    const script = captchaStubScript(
+      bypass ? "s066" : captchaTestTokenFromEnv(),
+      onload,
+    ).replace(
       "w.response = TOKEN;",
-      'TOKEN = "s066-" + crypto.randomUUID(); window.__s066Issued(TOKEN); w.response = TOKEN;',
+      `${bypass ? 'TOKEN = "s066-" + crypto.randomUUID(); ' : ""}window.__s066Issued(TOKEN); w.response = TOKEN;`,
     );
     if (!script.includes("window.__s066Issued(TOKEN)"))
       throw new Error("S066 provider instrumentation did not bind");
@@ -218,10 +223,8 @@ Given(
   async ({ page, browser, httpCredentials, world }) => {
     test.setTimeout(300_000);
     expect(world.host.id).toBe("academy");
-    expect(
-      process.env.BOT_PROTECTION_ENABLED,
-      "S066 unique script tokens require explicit local API BOTOFF; no app API interception",
-    ).toBe("false");
+    if (process.env.BOT_PROTECTION_ENABLED !== "false")
+      captchaTestTokenFromEnv();
     const state: Visitor[] = [];
     journeys.set(page, state);
     for (const kind of [
@@ -369,12 +372,12 @@ When(
   async ({ page, world }) => {
     for (const v of visitors(page)) {
       await logout(v);
-      await requestCode(v, world.hostBaseUrl, world.host.loginPath);
-      const before = [...v.tokens];
-      v.resendChecks = before.length;
       await v.page.clock.install();
       const pause = await v.page.evaluate(() => Date.now() + 60_000);
       await v.page.clock.pauseAt(new Date(pause));
+      await requestCode(v, world.hostBaseUrl, world.host.loginPath);
+      const before = [...v.tokens];
+      v.resendChecks = before.length;
       // 003 EARS-17: only the browser countdown advances, never API/IdP time or counters.
       for (let second = 0; second < 30; second++) {
         await v.page.clock.runFor(1000);
@@ -396,7 +399,12 @@ When(
       ];
       v.resent = {
         status: accepted.response.status(),
-        fresh: !!token && !before.includes(token) && token === v.tokens.at(-1),
+        fresh:
+          !!token &&
+          token === v.tokens.at(-1) &&
+          (process.env.BOT_PROTECTION_ENABLED === "false"
+            ? !before.includes(token)
+            : token === captchaTestTokenFromEnv()),
         exactCheck: v.tokens.length === before.length + 1,
       };
       await expect(resend).toBeDisabled();
@@ -436,11 +444,9 @@ After("@captcha-confirmation", async ({ page }) => {
   if (failed) {
     if (test.info().status === test.info().expectedStatus)
       throw new Error("Owned S066 session cleanup failed");
-    test
-      .info()
-      .annotations.push({
-        type: "cleanup-failed",
-        description: "Owned S066 cleanup failed; original failure retained.",
-      });
+    test.info().annotations.push({
+      type: "cleanup-failed",
+      description: "Owned S066 cleanup failed; original failure retained.",
+    });
   }
 });

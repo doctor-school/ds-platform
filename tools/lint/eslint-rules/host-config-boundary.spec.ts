@@ -27,6 +27,8 @@ const ruleTester = new RuleTester({
 });
 
 const FILE = "apps/doctor/host/host-config.ts";
+/** A storefront host config the package keeps because two apps mount it (#3170). */
+const PACKAGE_FILE = "packages/auth-flow/src/hosts/doctor.host-config.ts";
 
 describe("host-config-boundary", () => {
   it("2002: flags host-logic imports into a host-config module", () => {
@@ -134,6 +136,45 @@ describe("host-config-boundary", () => {
         {
           filename: FILE,
           code: `const hostHelper = () => 1;\nexport { hostHelper as helper };`,
+          errors: [{ messageId: "exportedFunction" }],
+        },
+      ],
+    });
+  });
+
+  it("3170: a package host config imports no app at all — and is still data only", () => {
+    ruleTester.run("host-config-boundary", rule, {
+      valid: [
+        { filename: PACKAGE_FILE, code: `import { MARKETING_COMMUNICATIONS_PURPOSE } from "@ds/schemas";` },
+        { filename: PACKAGE_FILE, code: `import type { AuthFlowHostConfig } from "../host-config";` },
+        { filename: PACKAGE_FILE, code: `import { resolveAuthFlowCopy } from "../copy";` },
+        { filename: PACKAGE_FILE, code: `export const DOCTOR_AUTH_FLOW = { api: { basePath: "/v1/auth" } };` },
+      ],
+      invalid: [
+        {
+          // Any `@/…` alias resolves into an app; from a package it is never lib-only.
+          filename: PACKAGE_FILE,
+          code: `import { routes } from "@/app/routes";`,
+          errors: [{ messageId: "hostLogicImport" }],
+        },
+        {
+          filename: PACKAGE_FILE,
+          code: `import { x } from "../../../../apps/doctor/messages/copy";`,
+          errors: [{ messageId: "hostLogicImport" }],
+        },
+        {
+          filename: PACKAGE_FILE,
+          code: `import { x } from "apps/login/lib/sign-in-entry";`,
+          errors: [{ messageId: "hostLogicImport" }],
+        },
+        {
+          filename: PACKAGE_FILE,
+          code: `export const DOCTOR_AUTH_FLOW = { onSuccess: () => {} };`,
+          errors: [{ messageId: "callbackOutsideAdapterList" }],
+        },
+        {
+          filename: PACKAGE_FILE,
+          code: `export const hostHelper = () => 1;`,
           errors: [{ messageId: "exportedFunction" }],
         },
       ],

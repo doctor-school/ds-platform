@@ -15,13 +15,19 @@
  *
  * SCOPE (wired in `eslint.import-boundary.config.mjs` / `eslint.config.js`): the
  * host-config FILE CONVENTION only — `apps/{portal,doctor}/**` files named
- * `host-config.{ts,tsx}` or `*.host-config.{ts,tsx}`. Slice C fixes the
- * convention; the `HostConfig` TYPE and the first real config are #2027.
+ * `host-config.{ts,tsx}` or `*.host-config.{ts,tsx}`, plus the storefront host
+ * configs kept in a package because more than one app mounts them
+ * (`packages/auth-flow/src/hosts/*.host-config.ts`, #3170: a storefront and the
+ * sign-in host). Slice C fixes the convention; the `HostConfig` TYPE and the
+ * first real config are #2027.
  *
  * Three classes:
- *   (c) `hostLogicImport` — an import of `@/lib/*`, `@/components/*`, or a
- *       relative path resolving into `apps/<host>/{lib,components}`. A config is
- *       data plus package imports; reaching into host logic makes it a module.
+ *   (c) `hostLogicImport` — in an app: an import of `@/lib/*`,
+ *       `@/components/*`, or a relative path resolving into
+ *       `apps/<host>/{lib,components}`. In a package: an import of ANY app —
+ *       `apps/…`, the host `@/…` alias, or a relative path climbing into
+ *       `apps/`. A config is data plus package imports; reaching into host
+ *       logic makes it a module.
  *   (d) `callbackOutsideAdapterList` — inside an EXPORTED object literal
  *       (default export, `export const x = {…}`, `{…} satisfies X`, `{…} as X`,
  *       nested literals included) a property whose value is an arrow function,
@@ -47,7 +53,7 @@ import { sep } from "node:path";
 /** Repo-relative posix path of the linted file (RuleTester passes one already). */
 function repoRelative(filename) {
   const posix = String(filename ?? "").split(sep).join("/");
-  const m = /(?:^|\/)(apps\/.*)$/.exec(posix);
+  const m = /(?:^|\/)((?:apps|packages)\/.*)$/.exec(posix);
   return m ? m[1] : posix;
 }
 
@@ -71,8 +77,17 @@ function resolveRelative(fromDir, spec) {
 /** The two host directories a config must not reach into. */
 const HOST_LOGIC_DIRS = new Set(["lib", "components"]);
 
-/** True when `spec` names host logic (`@/lib|components/…` or a relative hop). */
+/**
+ * True when `spec` names host logic. From an app: `@/lib|components/…` or a
+ * relative hop into `apps/<host>/{lib,components}`. From a package (a host
+ * config several apps mount): any app at all — no app is a dependency of it.
+ */
 function isHostLogic(spec, fileRel) {
+  if (fileRel.startsWith("packages/")) {
+    if (/^@\//.test(spec) || /^apps\//.test(spec)) return true;
+    if (!spec.startsWith(".")) return false;
+    return resolveRelative(dirOf(fileRel), spec).split("/")[0] === "apps";
+  }
   const alias = /^@\/(lib|components)(\/|$)/.exec(spec);
   if (alias) return true;
   if (!spec.startsWith(".")) return false;
@@ -147,7 +162,7 @@ const rule = {
     ],
     messages: {
       hostLogicImport:
-        'A host-config module must not import host logic: "{{spec}}" resolves into `apps/<host>/{lib,components}`. A config is data plus package imports — move the behaviour into the shared package, or the call site into the route file (tech spec §3 rule 3).',
+        'A host-config module must not import host logic: "{{spec}}" resolves into `apps/<host>/{lib,components}` (from a package host config: into any app). A config is data plus package imports — move the behaviour into the shared package, or the call site into the route file (tech spec §3 rule 3).',
       exportedFunction:
         "`{{name}}` exports a function or class from a host-config module. A host-config module exports config objects only: a route file passes any of its exports on to the package, so an exported function carries host behaviour past the route-mount check — the «callback smuggled through host config» bypass (tech spec §5). Move the behaviour into the shared package.",
       callbackOutsideAdapterList:

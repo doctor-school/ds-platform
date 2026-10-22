@@ -445,6 +445,33 @@ export type AuthFlowApiConfig = {
    * doctor host — each takes the host's own `registration` values.
    */
   readonly verifyPath: string;
+  /**
+   * The sign-in host's form-post binding (003 EARS-70, ADR-0015 §4 req. 3) —
+   * present only when the doors are mounted on the sign-in host for one auth
+   * request; absent on both storefronts. See {@link AuthFlowFormPost}.
+   */
+  readonly formPost?: AuthFlowFormPost;
+};
+
+/**
+ * What every POST of a door mounted on the sign-in host carries, and how its
+ * success is answered (#3170). Transport DATA, handed out by the API's entry
+ * answer and projected onto the storefront's own config by the host — no
+ * screen branches on the host.
+ *
+ * - every POST body gains `authRequest` + `csrf` (the token bound to the
+ *   pre-existing form-state cookie for this very auth request);
+ * - a success answering `{status: "redirect", url}` is followed as a
+ *   top-level navigation (the Zitadel callback, or the storefront `/login` of
+ *   a stale request) — nothing after it runs, no session lands on this origin;
+ * - `handoff`: the spent entry intent carried a hand-off reference (EARS-44 /
+ *   71). The reference never reaches the browser: the door redeems it with a
+ *   body that names none, and the API reads it from the form state.
+ */
+export type AuthFlowFormPost = {
+  readonly authRequest: string;
+  readonly csrf: string;
+  readonly handoff?: boolean;
 };
 
 /**
@@ -592,7 +619,7 @@ export type AuthFlowHostConfig = {
    * Every word comes from the package defaults unless stated here; set a key
    * only for a sentence that genuinely differs (today: the Academy's brand panel).
    */
-  readonly copy?: AuthFlowCopyOverride;
+  readonly copy?: AuthFlowCopyOverride | undefined;
   readonly brand: AuthFlowBrand;
   /**
    * The SmartCaptcha site key VALUE the doors run the challenge on — never stated

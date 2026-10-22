@@ -21,7 +21,7 @@ import {
   REQUIRED_DOCTOR_REGISTER_CONSENT_PURPOSES,
 } from "@ds/schemas";
 
-import { AuthService } from "../auth/auth.service.js";
+import { AuthService, type SessionAcceptor } from "../auth/auth.service.js";
 
 /**
  * The version stamped on the declaration when it is granted (ADR-0009 —
@@ -137,20 +137,33 @@ export class DoctorRegisterService {
     req: DoctorVerifyRequest,
     fingerprint: string,
   ): Promise<{ cookie: string; body: VerifyResponse }> {
+    return this.auth.verify(this.toVerifyRequest(req), fingerprint);
+  }
+
+  /**
+   * The same code step, handing the checked session to `accept` instead of a
+   * storefront session — the sign-in host's door (003 EARS-24 amended: the
+   * doctor form's own verification endpoint, its own consent stamping).
+   */
+  async verifyStep<T>(
+    req: DoctorVerifyRequest,
+    accept: SessionAcceptor<T>,
+  ): Promise<T> {
+    return this.auth.verifyStep(this.toVerifyRequest(req), accept);
+  }
+
+  private toVerifyRequest(req: DoctorVerifyRequest) {
     const registration = req.registration
       ? {
           password: req.registration.password,
           consent: this.requiredStampedConsents(req.registration),
         }
       : undefined;
-    return this.auth.verify(
-      {
-        email: req.email,
-        code: req.code,
-        ...(registration ? { registration } : {}),
-      },
-      fingerprint,
-    );
+    return {
+      email: req.email,
+      code: req.code,
+      ...(registration ? { registration } : {}),
+    };
   }
 
   /**

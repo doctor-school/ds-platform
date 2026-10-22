@@ -133,6 +133,7 @@ const CI_E2E_CHECKS = [
   "playwright-academy-demo",
   "playwright-axe-portal",
   "playwright-axe-doctor",
+  "playwright-axe-login",
   "admin-e2e",
 ];
 

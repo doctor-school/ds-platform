@@ -21,7 +21,7 @@ import {
 } from "./affected-areas.mjs";
 
 // A miniature of the real graph: congress-submissions → doctor; schemas → api,
-// portal, doctor (via auth-flow); design-system → every web app.
+// portal, doctor, login (via auth-flow); design-system → every web app.
 const WORKSPACE = workspaceFromManifests(
   ["apps/*", "packages/*", "tools/lint/guard-tests"],
   {
@@ -48,6 +48,14 @@ const WORKSPACE = workspaceFromManifests(
         "@ds/congress-submissions": "workspace:*",
         "@ds/design-system": "workspace:*",
         "@ds/legal-content": "workspace:*",
+      },
+    },
+    "apps/login/package.json": {
+      name: "@ds/login",
+      dependencies: {
+        "@ds/auth-flow": "workspace:*",
+        "@ds/design-system": "workspace:*",
+        "@ds/schemas": "workspace:*",
       },
     },
     "apps/admin/package.json": {
@@ -115,11 +123,12 @@ test("EARS-2: an apps/api change runs api-e2e and every job that boots the api",
 });
 
 test("EARS-3: dependents are transitive and follow every dependency field", () => {
-  // schemas → auth-flow (peer) → portal, doctor; schemas → api.
+  // schemas → auth-flow (peer) → portal, doctor, login; schemas → api.
   assert.deepEqual(running(pr(["packages/schemas/src/index.ts"])), [
     "admin-e2e",
     "api-e2e",
     "playwright-axe-doctor",
+    "playwright-axe-login",
     "playwright-axe-portal",
     "standalone-boot",
   ]);
@@ -308,4 +317,13 @@ test("EARS-13: a HEAVY_JOBS package missing from the workspace throws (the calle
       }),
     /unknown package @ds\/admin/,
   );
+});
+
+test("EARS-14: an apps/login change runs the sign-in host's axe tier and the standalone boot only", () => {
+  // #3170: the sign-in host's axe tier boots the app against an upstream
+  // double, so an apps/api change does not reach it (EARS-2 above).
+  assert.deepEqual(running(pr(["apps/login/app/login/page.tsx"])), [
+    "playwright-axe-login",
+    "standalone-boot",
+  ]);
 });

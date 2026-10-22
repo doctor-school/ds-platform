@@ -371,6 +371,9 @@ export default [
       "apps/portal/**/*.host-config.{ts,tsx}",
       "apps/doctor/**/host-config.{ts,tsx}",
       "apps/doctor/**/*.host-config.{ts,tsx}",
+      // #3170 — storefront host configs the package keeps because two apps
+      // (a storefront and the sign-in host) mount them.
+      "packages/auth-flow/src/hosts/*.host-config.{ts,tsx}",
     ],
     plugins: { local: localRules },
     rules: {

@@ -301,6 +301,15 @@ describe("route-mount-lint", () => {
     expect(stderr).toContain("no route-file registry row");
   });
 
+  it("3170: red — an unregistered `apps/login/app/**/page.tsx` (the sign-in host is in scope) → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-unregistered-login"), {
+      env: TREE_ONLY,
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/login/app/login/page.tsx");
+    expect(stderr).toContain("no route-file registry row");
+  });
+
   it("2002: red — a stale row naming a route file that no longer exists → exit 1", () => {
     const { code, stderr } = runGuard(GUARD, dir("red-stale-row"), {
       env: TREE_ONLY,

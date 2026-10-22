@@ -1,6 +1,15 @@
 import { z } from "zod";
 
 import { SMARTCAPTCHA_VALIDATE_URL } from "../bot-protection/smart-captcha.provider.js";
+import { parseAtRestKey } from "../common/crypto/at-rest.js";
+
+/** An empty or whitespace-only env line is unset; surrounding whitespace is trimmed. */
+function blankIsUnset<T extends z.ZodType>(schema: T) {
+  return z.preprocess(
+    (v) => (typeof v === "string" ? v.trim() || undefined : v),
+    schema,
+  );
+}
 
 export const ApiEnvSchema = z.looseObject({
   DATABASE_URL: z.url(),
@@ -70,6 +79,31 @@ export const ApiEnvSchema = z.looseObject({
   // webhook fails closed when this is unset — an unauthenticated mirror-write
   // surface is never opened by default.
   IDP_WEBHOOK_SECRET: z.string().optional(),
+
+  // 003 EARS-60/64/66/67, ADR-0015 §4 req. 7 — the sign-in-host block. The
+  // client map lives here and only here: the two storefront OIDC clients
+  // `infra/dev-stand/idp/provision.sh` step 3.bis emits (same names), the
+  // storefront `/login` each one returns to (EARS-66; the doctor one is also the
+  // EARS-67 direct-visit target), the sign-in host's own origin (the form-post
+  // `Origin` check, ADR-0015 §4 req. 3 — the same base URI the clients are
+  // registered with), and the at-rest key of the record (EARS-64: AES-256-GCM,
+  // base64 of exactly 32 bytes; never logged). All optional: with any one of
+  // them unset the sign-in-host module is disabled and its routes answer 404,
+  // which is the production state until #3171 sets them. A blank template line
+  // is unset; a malformed key or URL refuses to boot.
+  IDP_ACADEMY_CLIENT_ID: blankIsUnset(z.string().min(1).optional()),
+  IDP_DOCTOR_CLIENT_ID: blankIsUnset(z.string().min(1).optional()),
+  IDP_SIGN_IN_BASE_URI: blankIsUnset(z.url().optional()),
+  SIGN_IN_ACADEMY_LOGIN_URL: blankIsUnset(z.url().optional()),
+  SIGN_IN_DOCTOR_LOGIN_URL: blankIsUnset(z.url().optional()),
+  SIGN_IN_RECORD_KEY: blankIsUnset(
+    z
+      .string()
+      .refine((v) => parseAtRestKey(v) !== null, {
+        message: "SIGN_IN_RECORD_KEY must be base64 of exactly 32 bytes",
+      })
+      .optional(),
+  ),
 
   // Reconciliation sweep period (EARS-19, design §11 "Reconciliation depth",
   // #119). The Zitadel Action webhook is the primary, authoritative sync

@@ -21,7 +21,7 @@
  *      A TODO that cites an Issue (`TODO(#123)` / `TODO: … see #123`) passes.
  *
  * Scope: user-facing app source only (apps/portal|promo|admin/src,
- * apps/academy-demo/app, apps/doctor/{app,lib}, plus packages/design-system/src) — *.ts/*.tsx/*.jsx,
+ * apps/academy-demo/app, apps/doctor/{app,lib}, apps/login/{app,lib}, plus packages/design-system/src) — *.ts/*.tsx/*.jsx,
  * excluding tests. Backend BFF
  * and tooling are out of scope (a TODO in a tool is not user-facing). The gate
  * is intentionally narrow + literal so it is reliable, not a style nanny.
@@ -55,6 +55,9 @@ const GLOBS = [
   // same shape apps/portal uses — there is no src/ layer to point at (#1440).
   "apps/doctor/app/**/*.{ts,tsx,jsx}",
   "apps/doctor/lib/**/*.{ts,tsx,jsx}",
+  // #3170 — the sign-in host (ADR-0015 §4) has the same app-root shape.
+  "apps/login/app/**/*.{ts,tsx,jsx}",
+  "apps/login/lib/**/*.{ts,tsx,jsx}",
   "apps/academy-demo/app/**/*.{ts,tsx,jsx}",
   "packages/design-system/src/**/*.{ts,tsx,jsx}",
   // #1722 D11 — NEW coverage: the shared webinar-room unit is user-facing

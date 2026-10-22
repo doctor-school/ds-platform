@@ -60,3 +60,18 @@ export {
   type SpecialtyActor,
   type SpecialtyAwareLanding,
 } from "./landing";
+export {
+  SIGN_IN_HOST_AUTH_REQUEST_PARAM,
+  SIGN_IN_HOST_ENTRY_HEADER,
+  SIGN_IN_HOST_UNAVAILABLE_HEADER,
+  readSignInHostHandOver,
+  readSignInHostUnavailable,
+  signInHostConfig,
+  signInHostSearchParams,
+  writeSignInHostHandOver,
+  type SignInHostHandOver,
+  type SignInHostPageDoor,
+  type SignInHostRender,
+  type SignInHostStorefronts,
+  type SignInHostUnavailable,
+} from "./sign-in-host";

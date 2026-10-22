@@ -1,0 +1,40 @@
+{
+  "name": "@ds/login",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DS Platform sign-in host — login.doctor.school, the first-party login UI both storefronts' OIDC clients use (Next.js 16 App Router, ADR-0015 §4).",
+  "scripts": {
+    "dev": "next dev -p 3005",
+    "build": "next build",
+    "start": "next start --keepAliveTimeout 125000",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e:ci": "playwright test --config=playwright.ci.config.ts"
+  },
+  "dependencies": {
+    "@ds/auth-flow": "workspace:*",
+    "@ds/design-system": "workspace:*",
+    "@ds/schemas": "workspace:*",
+    "@ds/storefront-shell": "workspace:*",
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@ds/e2e": "workspace:*",
+    "@playwright/test": "^1.63.0",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^26.5.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "jsdom": "^30.0.1",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

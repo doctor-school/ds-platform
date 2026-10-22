@@ -10,17 +10,18 @@ import {
 
 /**
  * Unit cover for `tools/dev/port-pair.mjs` (#428; extended to the ADR-0015
- * (api, portal, doctor) triple in #1440) — the per-session dev-server port
+ * (api, portal, doctor) triple in #1440 and the sign-in host `login` in
+ * #3170) — the per-session dev-server port
  * helper. Pure seams only (set sequence, first-free selection, output shape);
  * the impure bind-probe is exercised once against a real ephemeral listener
  * below, without touching any port another session could be using.
  */
 describe("port-pair portSetSequence()", () => {
-  it("starts at the single-session default 3000/3001/3004 and steps by 100", () => {
+  it("starts at the single-session default 3000/3001/3004/3005 and steps by 100", () => {
     const sets = portSetSequence();
-    expect(sets[0]).toEqual([3000, 3001, 3004]);
-    expect(sets[1]).toEqual([3100, 3101, 3104]);
-    expect(sets.at(-1)).toEqual([3900, 3901, 3904]);
+    expect(sets[0]).toEqual([3000, 3001, 3004, 3005]);
+    expect(sets[1]).toEqual([3100, 3101, 3104, 3105]);
+    expect(sets.at(-1)).toEqual([3900, 3901, 3904, 3905]);
     expect(sets).toHaveLength(10);
   });
 
@@ -36,9 +37,9 @@ describe("port-pair firstFreePortSet()", () => {
   it("returns the first set where ALL ports probe free", async () => {
     const busy = new Set([3000, 3101]);
     const probe = async (port: number) => !busy.has(port);
-    // 3000 busy → set 0 out; 3101 busy → set 1 out; 3200/3201/3204 free.
+    // 3000 busy → set 0 out; 3101 busy → set 1 out; 3200/3201/3204/3205 free.
     await expect(firstFreePortSet(portSetSequence(), probe)).resolves.toEqual([
-      3200, 3201, 3204,
+      3200, 3201, 3204, 3205,
     ]);
   });
 
@@ -46,7 +47,15 @@ describe("port-pair firstFreePortSet()", () => {
     const busy = new Set([3004]);
     const probe = async (port: number) => !busy.has(port);
     await expect(firstFreePortSet(portSetSequence(), probe)).resolves.toEqual([
-      3100, 3101, 3104,
+      3100, 3101, 3104, 3105,
+    ]);
+  });
+
+  it("skips a set whose LOGIN (sign-in host) port alone is taken", async () => {
+    const busy = new Set([3005]);
+    const probe = async (port: number) => !busy.has(port);
+    await expect(firstFreePortSet(portSetSequence(), probe)).resolves.toEqual([
+      3100, 3101, 3104, 3105,
     ]);
   });
 
@@ -79,10 +88,12 @@ describe("port-pair firstFreePortSet()", () => {
 
 describe("port-pair formatPortSet()", () => {
   it("emits ready-to-paste env lines + live URLs", () => {
-    const lines = formatPortSet([3100, 3101, 3104]);
+    const lines = formatPortSet([3100, 3101, 3104, 3105]);
     expect(lines).toContain("API_PORT=3100");
     expect(lines).toContain("PORTAL_PORT=3101");
     expect(lines).toContain("DOCTOR_PORT=3104");
+    expect(lines).toContain("LOGIN_PORT=3105");
+    expect(lines.join("\n")).toContain("http://localhost:3105");
     expect(lines.join("\n")).toContain("http://localhost:3101");
     expect(lines.join("\n")).toContain("http://localhost:3104");
   });

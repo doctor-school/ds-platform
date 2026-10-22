@@ -239,7 +239,7 @@ The stack is driven by `pnpm dev:*` scripts — a cross-platform Node launcher
 | `pnpm dev:rollback <name>`   | Roll the database back to a snapshot — recipe-specific, **dataset-global** (see the parallel-session caveat below). |
 | `pnpm dev:reset-db`          | Drop + recreate the database volume, then start.                                                                    |
 | `pnpm dev:config`            | Validate compose + `${SECRET}` interpolation, without an `up`.                                                      |
-| `pnpm dev:ports`             | Print the first free `(api, portal)` port pair — `3000/3001`, then `3100/3101`, … Never kills a listener (#428).    |
+| `pnpm dev:ports`             | Print the first free `(api, portal, doctor, login)` set — `3000/3001/3004/3005`, then `3100/…`. Never kills (#428). |
 | `pnpm dev:db:branch <N>`     | Create + migrate the per-branch database `ds_dev_<n>`; prints the `DATABASE_URL` to export (#428).                  |
 | `pnpm dev:db:drop <N>`       | Drop the `ds_dev_<n>` branch database. The shared `ds_dev` is structurally undroppable here.                        |
 
@@ -276,10 +276,13 @@ the schema-migrate + seed steps are added once `apps/api` exists (setup-design
 
 **Parallel sessions (#428).** Two sessions on one box isolate at two seams:
 
-1. **Ports** — `3000/3001` is the single-session default; a parallel session
-   runs `pnpm dev:ports` and boots api/portal on the printed free pair — both
-   apps consume `PORT` (the printed boot lines carry the exact commands;
-   `API_PORT`/`PORTAL_PORT` are handoff labels). Never kill a listener you did
+1. **Ports** — `3000/3001/3004/3005` (api, portal, doctor storefront,
+   `apps/login` sign-in host) is the single-session default; a parallel session
+   runs `pnpm dev:ports` and boots the apps on the printed free set — every app
+   consumes `PORT` (the printed boot lines carry the exact commands;
+   `API_PORT`/`PORTAL_PORT`/`DOCTOR_PORT`/`LOGIN_PORT` are handoff labels).
+   The IdP registers the sign-in host at `IDP_SIGN_IN_BASE_URI`
+   (`http://localhost:3005` in `.env.example`). Never kill a listener you did
    not start.
 2. **Database** — each branch worktree gets its own database inside the shared
    Postgres container: `pnpm dev:db:branch <issue-N>` creates `ds_dev_<n>` and

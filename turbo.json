@@ -37,6 +37,12 @@
         "IDP_SCOPES",
         "IDP_WEBHOOK_SECRET",
         "IDP_VERIFY_EMAIL_CODE_TTL_S",
+        "IDP_ACADEMY_CLIENT_ID",
+        "IDP_DOCTOR_CLIENT_ID",
+        "IDP_SIGN_IN_BASE_URI",
+        "SIGN_IN_ACADEMY_LOGIN_URL",
+        "SIGN_IN_DOCTOR_LOGIN_URL",
+        "SIGN_IN_RECORD_KEY",
         "MAILPIT_URL",
         "SMS_SINK_URL"
       ]

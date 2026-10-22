@@ -52,4 +52,11 @@ describe("import-boundary-lint", () => {
     expect(stderr).toContain("must not import host logic");
     expect(stderr).toContain("onSuccess");
   });
+
+  it("3170: red — a package-kept host config (`packages/auth-flow/src/hosts/*.host-config.ts`) exporting a function → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-package-host-config"));
+    expect(code).toBe(1);
+    expect(stderr).toContain("host-config-boundary");
+    expect(stderr).toContain("hostHelper");
+  });
 });

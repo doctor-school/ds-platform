@@ -10,7 +10,7 @@
  * parts:
  *
  *   Part 1 — per-route inventory. Every App-Router page under
- *   `apps/{portal,admin}/app` must have exactly one entry in the committed
+ *   `apps/{portal,admin,doctor,login}/app` must have exactly one entry in the committed
  *   manifest `tools/lint/prod-surface-manifest.yaml`, classified
  *   `product-ready` or `deferred` (+ a tracking `issue: "#N"`). Failures:
  *   `unclassified-route`, `stale-manifest-entry` (entry → missing file),
@@ -56,6 +56,7 @@ const PAGE_GLOBS = [
   "apps/portal/app/**/page.{tsx,ts}",
   "apps/admin/app/**/page.{tsx,ts}",
   "apps/doctor/app/**/page.{tsx,ts}",
+  "apps/login/app/**/page.{tsx,ts}",
 ];
 const MESSAGE_GLOBS = [
   "apps/portal/messages/*.json",

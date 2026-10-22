@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./user-cluster": "./src/user-cluster.tsx",
     "./theme": "./src/theme.ts",
+    "./theme-watcher": "./src/theme-watcher.tsx",
     "./sibling-origin": "./src/sibling-origin.ts"
   },
   "scripts": {

@@ -21,6 +21,7 @@ import { AuditModule } from "./audit/audit.module.js";
 import { TaxonomyModule } from "./taxonomy/taxonomy.module.js";
 import { RecordingsModule } from "./recordings/recordings.module.js";
 import { StorefrontModule } from "./storefront/storefront.module.js";
+import { SignInHostModule } from "./sign-in-host/sign-in-host.module.js";
 import { CongressModule } from "./congress/congress.module.js";
 
 import { StaffAccessModule } from "./staff-access/staff-access.module.js";
@@ -70,6 +71,9 @@ import { StaffAccessModule } from "./staff-access/staff-access.module.js";
     // public read and the membership mechanism (#1479 EARS-3). After
     // DatabaseModule: its boot-time seed upserts the book through that handle.
     StorefrontModule,
+    // 003 EARS-60/64/66/67/68/69/71 — the sign-in host API (/v1/sign-in-host/*);
+    // inert (404) until its configuration block is complete.
+    SignInHostModule,
     // 005 registration write + per-user EventRegistrationState read
     // (doctor_guest-authenticated).
     RegistrationModule,

@@ -16,6 +16,7 @@ import {
   type SessionRecord,
   type SessionStore,
 } from "./session.types.js";
+import { SubjectRevocationHub } from "./subject-revocation.js";
 
 /**
  * Outcome of a refresh attempt (EARS-9). `rotated` carries the (unchanged)
@@ -33,7 +34,7 @@ export type RefreshOutcome =
  * the cookie and its backing record expire together. The 15 min access-JWT
  * lifetime is token-internal (refreshed under the same session by F4/EARS-9).
  */
-const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
+export const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 /**
  * Owns BFF session establishment and lookup (design §3, EARS-8). The single
@@ -47,6 +48,8 @@ export class SessionService {
     @Inject(IDP_CLIENT) private readonly idp: IdpClient,
     @Inject(SESSION_STORE) private readonly store: SessionStore,
     @Inject(AUTH_AUDIT) private readonly audit: AuthAuditLog,
+    @Inject(SubjectRevocationHub)
+    private readonly revocations: SubjectRevocationHub = new SubjectRevocationHub(),
   ) {}
 
   /**
@@ -164,9 +167,10 @@ export class SessionService {
    * and refresh-reuse already are). Idempotent — a subject with no live sessions
    * still records the event (the reset did complete).
    */
-  async revokeAllForSub(sub: string): Promise<void> {
-    await this.store.deleteBySub(sub);
+  async revokeAllForSub(sub: string): Promise<Date | null> {
+    const fencedAt = await this.revokeSubject(sub);
     await this.audit.record({ type: "PasswordResetCompleted", sub });
+    return fencedAt;
   }
 
   /**
@@ -174,7 +178,18 @@ export class SessionService {
    * session the account held before it, as on reset (EARS-12). The terminal
    * row of that command is `auth.account.verified`, written by the caller.
    */
-  async revokeAllBeforeVerification(sub: string): Promise<void> {
+  async revokeAllBeforeVerification(sub: string): Promise<Date | null> {
+    return this.revokeSubject(sub);
+  }
+
+  /**
+   * The one «every session of `sub` ends» step both revocations above share:
+   * the storefront session store, then every other holder registered on the
+   * {@link SubjectRevocationHub} (the sign-in host's records, 003 EARS-64), so
+   * no path can revoke one and leave the other live.
+   */
+  private async revokeSubject(sub: string): Promise<Date | null> {
     await this.store.deleteBySub(sub);
+    return this.revocations.revoke(sub);
   }
 }

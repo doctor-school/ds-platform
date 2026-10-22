@@ -175,7 +175,7 @@ sudo bash harden-ssh.sh --role stage --breakglass-pubkey breakglass-stage-1.pub 
   --ci-pubkey ci-stage.pub --dry-run          # read the plan
 sudo bash harden-ssh.sh --role stage --breakglass-pubkey breakglass-stage-1.pub \
   --ci-pubkey ci-stage.pub
-# prod: --role prod (CI key with step (e)); data-prod: --role data, no --ci-pubkey
+# prod: --role prod, from a breakglass session (below); data-prod: --role data, no --ci-pubkey
 ```
 
 It runs `sshd -t` before `systemctl reload ssh` and restores the sshd files without a
@@ -183,11 +183,25 @@ reload when the check fails, then proves the effective values with `sshd -T`. Th
 operator line of `deploy`'s `authorized_keys` stays byte-identical; a CI key is matched by
 its key body, so re-running with the same key changes nothing.
 
+**sudo on prod (ds-api-prod, `--role prod`; tech spec §4 «sudo on prod», step (f)):**
+`deploy` holds one sudo right, `/etc/sudoers.d/90-ds-deploy` (the entrypoint as root, no
+argument, `SSH_ORIGINAL_COMMAND` kept through sudo's env reset), and the CI keys carry
+`command="sudo -n /usr/local/bin/ds-deploy-entrypoint",…,no-user-rc`. Once `breakglass` is proven in
+place the converge also removes `deploy`'s rules from every other sudoers.d file (cloud-init's
+`90-cloud-init-users`), takes `deploy` out of groups `sudo` and `docker`, and removes every
+`deploy` key line not behind the prod forced command — the operator key (and its interim
+`from=` line) included; it refuses to unless it runs from a `breakglass` session
+(`SUDO_USER=breakglass`). Run it from that session, in this order: (1) prove a
+`breakglass` login on both prod boxes; (2) converge with `--role prod --ci-pubkey <prod CI
+key>` (`--dry-run` first); (3) prove the Actions path with a `status` call and a
+`rollback-status` read. ds-stage-1 (`--role stage`) and ds-data-prod (`--role data`) keep
+`deploy`'s sudo and operator key; data-prod is narrowed with its own driver (step (f), PR 5).
+
 **Data-prod hop key (ds-api-prod → ds-data-prod, once, #3157):** the prod release
 driver's unit runs on ds-api-prod and reaches ds-data-prod over the VPC as `deploy` with a
 dedicated key. Generate it on ds-api-prod straight into `/home/deploy/.ssh/data-prod-hop`,
-owned by `deploy`, mode 0600, beside `deploy`'s `known_hosts` (the unit runs as `deploy`,
-and `/etc/ds-platform` is root-only 0700, so a key there is unreadable to it); authorize its
+owned by `deploy`, mode 0600, beside `deploy`'s `known_hosts` (the driver names both on every hop;
+the unit runs as root on ds-api-prod since step (f)); authorize its
 public half on ds-data-prod restricted to ds-api-prod's VPC address
 (`var.api_prod_private_ip`, default `192.168.0.20`), so the key works from nowhere else:
 
@@ -423,7 +437,7 @@ per-deploy. Run them once; from then on `pnpm deploy:prod` is the whole deploy.
    token; project-scoped tokens do not exist). Confirm/create the `ds-platform`
    Timeweb project and set `project_id`. Generate deploy SSH keypairs and set the
    `*_ssh_pubkey_path` + real pubkeys in `cloud-init/*.yaml`; the owner's break-glass
-   public keys at `*_breakglass_ssh_pubkey_path` (#2984). Set `admin_ssh_cidr`.
+   public keys at `*_breakglass_ssh_pubkey_path` (#2984).
 2. **Value-preflight (BEFORE `plan`/`apply`).** Attribute-shape `validate`-green
    does NOT cover value-level availability — enumerate these from the **live
    provider API** (not a repo mapping), else you learn them via failed applies:

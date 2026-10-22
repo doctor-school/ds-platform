@@ -3,8 +3,8 @@
 // slot tool ships a tree over exactly the channel production ships one.
 // `node --test` (pnpm test:tools).
 //
-// The production call is the DEFAULT call: its rendered remote script must stay
-// byte-identical to the text prod.mjs rendered before the move. The end-to-end
+// The production call is the DEFAULT call: it ships into the fixed prod tree
+// PROD_LIVE_TREE (#2987). The end-to-end
 // proof that the rendered script still behaves lives in
 // tools/lint/guard-tests/deploy-ship-tree.spec.ts, which executes it in a real
 // POSIX shell; these tests pin the text contract itself.
@@ -12,15 +12,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { shipTreeCommand, sshBaseArgs } from "./remote.mjs";
+import { PROD_LIVE_TREE, shipTreeCommand, sshBaseArgs } from "./remote.mjs";
 
 const PROD_PRESERVED = "infra/deploy/compose/api-prod/.env";
 
 // ── shipTreeCommand — the production default ────────────────────────────────
 
-test("2194: the default call still ships into production's live tree", () => {
+test("2987: the default call ships into the fixed prod tree, never a $HOME-relative one", () => {
+  assert.equal(PROD_LIVE_TREE, "/home/deploy/ds-platform");  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
   const script = shipTreeCommand();
-  assert.match(script, /^set -eu\nlive="\$HOME\/ds-platform"\n/);
+  assert.match(script, /^set -eu\nlive="\/home\/deploy\/ds-platform"\n/);
+  // The staging dir is the tree's sibling: a root writer (HOME=/root) swaps by a rename
+  // on the same filesystem and never stages under its own home.
+  assert.ok(script.includes('work=$(mktemp -d "/home/deploy/ds-platform.ship.XXXXXX")'));  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
+  assert.ok(!script.includes("$HOME"));
+});
+
+test("2987: asRoot wraps the whole ship in one sudo shell, quoted intact", () => {
+  const plain = shipTreeCommand();
+  const wrapped = shipTreeCommand({ asRoot: true });
+  assert.ok(wrapped.startsWith("sudo -n bash -c '"));
+  assert.ok(wrapped.endsWith("'"));
+  // Un-quoting the single-quoted word gives back the plain script byte for byte.
+  const unquoted = wrapped.slice("sudo -n bash -c '".length, -1).replaceAll(`'\\''`, "'");
+  assert.equal(unquoted, plain);
 });
 
 test("2194: the default call still carries the api-prod .env forward", () => {
@@ -36,7 +51,7 @@ test("2194: the default call still carries the api-prod .env forward", () => {
   );
 });
 
-test("2194: production ships straight into $HOME — no parent mkdir", () => {
+test("2194: production ships into deploy's existing home — no parent mkdir", () => {
   assert.ok(!shipTreeCommand().includes('mkdir -p "$(dirname "$live")"'));
 });
 

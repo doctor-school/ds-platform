@@ -11,8 +11,7 @@
 //
 // The only generalization is parameterization, never behaviour: `shipTreeCommand`
 // and `shipTree` take the live directory and the preserved-file list as options
-// whose DEFAULTS are production's exact values, so the default call renders the
-// byte-identical remote script it rendered before the move.
+// whose DEFAULTS are production's values (the fixed live tree PROD_LIVE_TREE, #2987).
 
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -51,10 +50,14 @@ export function sshBaseArgs(host, extraOptions = []) {
 // `/home/deploy/.ssh/data-prod-hop` — the hop the operator's `ds-data-prod` alias
 // takes through its ProxyJump, so data-prod keeps no public ssh and no CI key (tech
 // spec 2026-10-16 release pipeline §4, §5 «Prod release driver»). The key is
-// deploy-owned 0600 beside deploy's `known_hosts` (which pins data-prod): the driver
-// unit runs as `deploy`, and `/etc/ds-platform` is root-only 0700. The destination
+// deploy-owned 0600 beside deploy's `known_hosts` (which pins data-prod) and is named
+// with it on every hop, whichever user the driver unit runs as (root on ds-api-prod,
+// #2987). The destination
 // carries its own identity flags on every channel `sshBaseArgs` opens to it.
-export const DATA_PROD_HOP_KEY = "/home/deploy/.ssh/data-prod-hop";
+export const DATA_PROD_HOP_KEY = "/home/deploy/.ssh/data-prod-hop";  // no-hardcoded-path-ok: a fixed path on the prod box (deploy's home), not on this machine
+// #2987: on ds-api-prod the driver unit runs as root (spec §4 «sudo on prod»), whose
+// own known_hosts does not pin data-prod; the hop names deploy's file explicitly.
+export const DATA_PROD_HOP_KNOWN_HOSTS = "/home/deploy/.ssh/known_hosts";  // no-hardcoded-path-ok: a fixed path on the prod box (deploy's home), not on this machine
 const HOP_OPTIONS = new Map();
 
 /**
@@ -62,7 +65,7 @@ const HOP_OPTIONS = new Map();
  * no other key, no password prompt, and a host key that must already be known (fail
  * closed — the box's `known_hosts` entry is provisioned with the key).
  */
-export function hopDestination({ user, address, identityFile }) {
+export function hopDestination({ user, address, identityFile, knownHostsFile }) {
   const destination = `${user}@${address}`;
   HOP_OPTIONS.set(destination, [
     "-i",
@@ -73,6 +76,7 @@ export function hopDestination({ user, address, identityFile }) {
     "BatchMode=yes",
     "-o",
     "StrictHostKeyChecking=yes",
+    ...(knownHostsFile ? ["-o", `UserKnownHostsFile=${knownHostsFile}`] : []),
   ]);
   return destination;
 }
@@ -170,6 +174,18 @@ export function createStallWatchdog({
 const REMOTE_BASH =
   'script=$(cat); exec bash --norc -euo pipefail -c "$script"';
 
+// #2987: the same command run as root — the script still drained first, then handed
+// whole to `sudo -n bash`. The break-glass operator `breakglass` reaches ds-api-prod
+// as itself, and the live tree there (PROD_LIVE_TREE) is root's; every script it
+// sends that box goes through this form (`asRoot` on sshScript / sshCapture).
+const REMOTE_BASH_ROOT =
+  'script=$(cat); exec sudo -n bash --norc -euo pipefail -c "$script"';
+
+/** The command a box's shell is handed for a stdin-fed script: as the user, or as root. */
+export function remoteBash({ asRoot = false } = {}) {
+  return asRoot ? REMOTE_BASH_ROOT : REMOTE_BASH;
+}
+
 // #2985: the box-local executor. A run ON the box (the stage release driver,
 // `infra/deploy/bin/release-driver`) addresses the box as this host: `boxSpawnArgs`
 // then runs the very command an ssh session would hand the box's login shell —
@@ -178,6 +194,12 @@ const REMOTE_BASH =
 // knows the difference: the plan, its steps and its ds-release units are the same.
 // (`local` is not an ssh destination this repository uses; `DS_STAGE_SSH` names one.)
 export const LOCAL_EXECUTOR = "local";
+
+// #2987: production's live tree on both prod boxes — a fixed path, never `~` or
+// `$HOME`: the root release unit (HOME=/root) and the break-glass operator
+// `breakglass` (its own home) address the tree deploy's runs always used, with
+// `compose/api-prod/.env` carried forward inside it.
+export const PROD_LIVE_TREE = "/home/deploy/ds-platform"; // no-hardcoded-path-ok: a fixed path on the prod boxes, not on this machine
 
 /** `[command, argv]` that hand `remoteCommand` to the box's shell — over ssh, or locally. */
 export function boxSpawnArgs(host, remoteCommand, extraOptions = []) {
@@ -195,10 +217,10 @@ export function boxSpawnArgs(host, remoteCommand, extraOptions = []) {
 export function sshScript(
   host,
   script,
-  { label, stallBudgetMs, probeHint } = {},
+  { label, stallBudgetMs, probeHint, asRoot = false } = {},
 ) {
   return new Promise((resolve, reject) => {
-    const child = spawn(...boxSpawnArgs(host, REMOTE_BASH), {
+    const child = spawn(...boxSpawnArgs(host, remoteBash({ asRoot })), {
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stalled = false;
@@ -249,11 +271,12 @@ export function sshScript(
 //                  that only stops waiting leaves a live ssh holding the event
 //                  loop open, which is what hung the SessionStart hook, #2233);
 //   `stderr`     - "inherit" (default) or "pipe", which folds ssh's own
-//                  diagnostics into the rejection instead of the caller's tty.
+//                  diagnostics into the rejection instead of the caller's tty;
+//   `asRoot`     - run the script as root (`remoteBash`, #2987).
 export function sshCapture(host, script, options = {}) {
-  const { sshOptions = [], signal, stderr = "inherit" } = options;
+  const { sshOptions = [], signal, stderr = "inherit", asRoot = false } = options;
   return new Promise((resolve, reject) => {
-    const child = spawn(...boxSpawnArgs(host, REMOTE_BASH, sshOptions), {
+    const child = spawn(...boxSpawnArgs(host, remoteBash({ asRoot }), sshOptions), {
       stdio: ["pipe", "pipe", stderr],
     });
     let out = "";
@@ -302,17 +325,23 @@ export function sshCapture(host, script, options = {}) {
 // Streams are piped in-process (Windows-safe - no shell pipe / redirection).
 //
 // `liveDir` and `preserved` are parameters whose DEFAULTS are production's own
-// values (#2194): the default call renders the byte-identical script it
-// rendered before this module existed, while a staging slot ships into
-// `$HOME/ds-platform.slots/<slot>` and preserves nothing - its compose
-// interpolation comes from `/etc/ds-platform/*.env`, never from a file inside
-// the tree (tech spec 2026-09-08 staging contour, SS3 "Host runtime").
+// values (#2194): production ships into the fixed PROD_LIVE_TREE, while a staging
+// slot ships into `$HOME/ds-platform.slots/<slot>` and preserves nothing - its
+// compose interpolation comes from `/etc/ds-platform/*.env`, never from a file
+// inside the tree (tech spec 2026-09-08 staging contour, SS3 "Host runtime").
 //
 // `preserved` entries are repo-relative paths carried forward from the previous
 // tree; an empty list renders no preserve section at all.
+//
+// `asRoot` (#2987, ds-api-prod) runs the whole script under `sudo -n bash -c`: the
+// tree there is written by the root release unit or by the break-glass operator
+// `breakglass`, neither of which owns deploy's home. The staging directory of an
+// absolute `liveDir` is its sibling, so the swap is a rename on one filesystem
+// whatever `$HOME` the writer has.
 export function shipTreeCommand({
-  liveDir = "$HOME/ds-platform",
+  liveDir = PROD_LIVE_TREE,
   preserved = ["infra/deploy/compose/api-prod/.env"],
+  asRoot = false,
 } = {}) {
   const varName = (i) => (i === 0 ? "preserved_rel" : `preserved_rel_${i}`);
   const preservedDecls = preserved
@@ -335,14 +364,17 @@ export function shipTreeCommand({
     })
     .join("");
   // The live tree of a slot sits one level below $HOME; its parent must exist
-  // before the swap `mv`. Production ships straight into $HOME, so the default
-  // call emits nothing here and keeps the script byte-identical.
-  const ensureParent = liveDir.replace(/^\$HOME\//, "").includes("/")
-    ? 'mkdir -p "$(dirname "$live")"\n'
-    : "";
-  return `set -eu
+  // before the swap `mv`. Production's fixed tree sits in deploy's existing home,
+  // so it emits nothing here.
+  const homeRelative = liveDir.startsWith("$HOME/");
+  const ensureParent =
+    homeRelative && liveDir.slice("$HOME/".length).includes("/")
+      ? 'mkdir -p "$(dirname "$live")"\n'
+      : "";
+  const workParent = homeRelative ? "$HOME" : liveDir.slice(0, liveDir.lastIndexOf("/"));
+  const script = `set -eu
 live="${liveDir}"
-work=$(mktemp -d "$HOME/ds-platform.ship.XXXXXX")
+work=$(mktemp -d "${workParent}/ds-platform.ship.XXXXXX")
 stage="$work/stage"
 previous="$work/previous"
 ${preservedDecls}swapping=0
@@ -374,6 +406,11 @@ mv "$stage" "$live"
 swapping=0
 rm -rf "$work"
 trap - EXIT HUP INT TERM`;
+  return asRoot ? `sudo -n bash -c ${shellQuote(script)}` : script;
+}
+
+function shellQuote(s) {
+  return `'${s.replaceAll("'", `'\\''`)}'`;
 }
 
 /**
@@ -395,7 +432,7 @@ trap - EXIT HUP INT TERM`;
 export async function shipTree(
   sha,
   host,
-  { liveDir, preserved, tmpPrefix = "ds-deploy", sourceDir } = {},
+  { liveDir, preserved, asRoot, tmpPrefix = "ds-deploy", sourceDir } = {},
 ) {
   const tmp = join(tmpdir(), `${tmpPrefix}-${sha.slice(0, 12)}.tar.gz`);
   if (host === LOCAL_EXECUTOR && !sourceDir) {
@@ -415,7 +452,7 @@ export async function shipTree(
   });
   try {
     await new Promise((resolve, reject) => {
-      const child = spawn(...boxSpawnArgs(host, shipTreeCommand({ liveDir, preserved })), {
+      const child = spawn(...boxSpawnArgs(host, shipTreeCommand({ liveDir, preserved, asRoot })), {
         stdio: ["pipe", "inherit", "inherit"],
       });
       child.on("error", reject);
@@ -482,7 +519,7 @@ export function releaseUnitName(env, sha, step) {
  * `hotfix/*`); on ds-stage-1 only the `main` converge of a SHA contained in `main`
  * does (#3125, `tools/staging/slot.mjs`).
  */
-export function releaseInstallScript(liveDir = "$HOME/ds-platform", { sha } = {}) {
+export function releaseInstallScript(liveDir = PROD_LIVE_TREE, { sha } = {}) {
   if (sha !== undefined) assertRelease("prod", sha);
   return [
     ...installDirLines(BOX_ENTRYPOINTS.map(({ dest }) => dest)),
@@ -496,18 +533,58 @@ export function releaseInstallScript(liveDir = "$HOME/ds-platform", { sha } = {}
 // from — the shipped tree is replaced by the next ship, this copy only by the next
 // install — and records its SHA and path in INSTALLED_TREE_FILE (one line,
 // `<sha> <path>`). The copy is in place before the record names it.
+//
+// The root entrypoint execs from this copy (spec §4 «sudo on prod»), so it is
+// root-owned and not group/other-writable — never the deploy-owned shipped tree's
+// modes (`cp -a` would keep them). Each SHA gets its own directory under
+// INSTALLED_TREES_DIR, filled under `.new` and renamed whole; INSTALLED_TREE_DIR is
+// a symlink to it, switched by one rename (`mv -T`), so a reader sees the old tree
+// or the new one, never a half-copied one. The current and the previous version are
+// kept: a rollback unit that resolved the previous tree keeps its files.
 export const INSTALLED_TREE_DIR = "/usr/local/lib/ds-platform/tree";
+export const INSTALLED_TREES_DIR = "/usr/local/lib/ds-platform/trees";
 export const INSTALLED_TREE_FILE = "/usr/local/lib/ds-platform/installed-tree";
 
 function installedTreeLines(liveDir, sha) {
   const tree = INSTALLED_TREE_DIR;
+  const version = `${INSTALLED_TREES_DIR}/${sha}`;
   return [
-    `sudo rm -rf -- "${tree}.new"`,
-    `sudo cp -a -- "${liveDir}/." "${tree}.new"`,
-    `sudo rm -rf -- "${tree}"`,
-    `sudo mv -- "${tree}.new" "${tree}"`,
+    `sudo install -d -m 0755 -o root -g root ${INSTALLED_TREES_DIR}`,
+    `if ! sudo test -d "${version}"; then`,
+    `  sudo rm -rf -- "${version}.new"`,
+    `  sudo cp -R -- "${liveDir}/." "${version}.new"`,
+    ...treeSymlinkCheckLines(`${version}.new`).map((l) => `  ${l}`),
+    `  sudo chown -R root:root -- "${version}.new"`,
+    `  sudo chmod -R go-w -- "${version}.new"`,
+    `  sudo mv -T -- "${version}.new" "${version}"`,
+    `fi`,
+    // The pre-symlink layout kept a plain directory here; a rename cannot replace it.
+    `if sudo test -d "${tree}" && ! sudo test -L "${tree}"; then sudo rm -rf -- "${tree}"; fi`,
+    `prev=$(sudo readlink -- "${tree}" || true)`,
+    `sudo ln -sfn -- "${version}" "${tree}.new"`,
+    `sudo mv -T -- "${tree}.new" "${tree}"`,
+    `for d in ${INSTALLED_TREES_DIR}/*; do [ "$d" = "${version}" ] || [ "$d" = "$prev" ] || sudo rm -rf -- "$d"; done`,
     `printf '%s %s\\n' ${sha} "${tree}" | sudo tee "${INSTALLED_TREE_FILE}.new" >/dev/null`,
     `sudo mv -- "${INSTALLED_TREE_FILE}.new" "${INSTALLED_TREE_FILE}"`,
+  ];
+}
+
+/**
+ * #2987: refuse a copied tree that holds a symlink resolving outside it. `cp -R`
+ * copies a symlink as a symlink, and `chown -R` does not follow it, so a link in the
+ * deploy-owned shipped tree could point root, which execs from the copy, at a
+ * deploy-writable file. Every link is resolved by root (`readlink -f`, which fails
+ * closed on an unresolvable link) against the canonical copy directory; any escape
+ * removes the copy and exits 1 before the copy is chowned or renamed.
+ */
+export function treeSymlinkCheckLines(dir) {
+  return [
+    `escaped=$(sudo find "${dir}" -type l -exec sh -c 'top=$(readlink -f -- "$0") || exit 1; for l; do t=$(readlink -f -- "$l") || t=; case $t in "$top"|"$top"/*) ;; *) printf "%s -> %s\\n" "$l" "\${t:-unresolvable}" ;; esac; done' "${dir}" {} +) || escaped="the symlink check failed"`,
+    `if [ -n "$escaped" ]; then`,
+    `  printf 'install refused: a symlink in the shipped tree resolves outside it:\\n%s\\n' "$escaped" >&2`,
+    `  sudo rm -rf -- "${dir}"`,
+    `  exit 1`,
+    `fi`,
   ];
 }
 

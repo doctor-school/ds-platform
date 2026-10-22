@@ -24,6 +24,7 @@ import {
   releaseStepVerdict,
   releaseUnitName,
   runDurableStep,
+  treeSymlinkCheckLines,
 } from "./remote.mjs";
 
 const SHA = "0123456789abcdef0123456789abcdef01234567";
@@ -47,9 +48,9 @@ test("2982/2984/2985: every box entrypoint is installed from the shipped tree, i
     releaseInstallScript(),
     [
       "sudo install -d -m 0755 -o root -g root /usr/local/lib/ds-platform",
-      `sudo install -m 0755 "$HOME/ds-platform/infra/deploy/bin/ds-release" ${DS_RELEASE_BIN}`,
-      `sudo install -m 0755 "$HOME/ds-platform/infra/deploy/bin/ds-deploy-entrypoint" ${DS_DEPLOY_ENTRYPOINT_BIN}`,
-      `sudo install -m 0755 "$HOME/ds-platform/infra/deploy/bin/release-driver" ${RELEASE_DRIVER_BIN}`,
+      `sudo install -m 0755 "/home/deploy/ds-platform/infra/deploy/bin/ds-release" ${DS_RELEASE_BIN}`,  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
+      `sudo install -m 0755 "/home/deploy/ds-platform/infra/deploy/bin/ds-deploy-entrypoint" ${DS_DEPLOY_ENTRYPOINT_BIN}`,  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
+      `sudo install -m 0755 "/home/deploy/ds-platform/infra/deploy/bin/release-driver" ${RELEASE_DRIVER_BIN}`,  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
     ].join("\n"),
   );
   assert.equal(RELEASE_DRIVER_BIN, "/usr/local/lib/ds-platform/release-driver");
@@ -486,22 +487,36 @@ test("2982: the rollback builders — a read-only live-unit check and supersede 
 });
 
 test("2987: a forward install records its tree — a kept copy and its SHA — for the box-side rollback", async () => {
-  const { INSTALLED_TREE_FILE, INSTALLED_TREE_DIR } =
+  const { INSTALLED_TREE_FILE, INSTALLED_TREE_DIR, INSTALLED_TREES_DIR } =
     await import("./remote.mjs");
+  assert.equal(INSTALLED_TREES_DIR, "/usr/local/lib/ds-platform/trees");
+  const V = `${INSTALLED_TREES_DIR}/${SHA}`;
   assert.equal(
     INSTALLED_TREE_FILE,
     "/usr/local/lib/ds-platform/installed-tree",
   );
-  const lines = releaseInstallScript("$HOME/ds-platform", { sha: SHA }).split(
+  const lines = releaseInstallScript(undefined, { sha: SHA }).split(
     "\n",
   );
-  // The binaries first, exactly as before; then the tree they came from.
+  // The binaries first, exactly as before; then the tree they came from: a
+  // root-owned, not group/other-writable version directory filled under `.new` and
+  // renamed whole, a `tree` symlink switched by one rename, current + previous kept.
   assert.equal(lines.slice(0, 4).join("\n"), releaseInstallScript());
   assert.deepEqual(lines.slice(4), [
-    `sudo rm -rf -- "${INSTALLED_TREE_DIR}.new"`,
-    `sudo cp -a -- "$HOME/ds-platform/." "${INSTALLED_TREE_DIR}.new"`,
-    `sudo rm -rf -- "${INSTALLED_TREE_DIR}"`,
-    `sudo mv -- "${INSTALLED_TREE_DIR}.new" "${INSTALLED_TREE_DIR}"`,
+    `sudo install -d -m 0755 -o root -g root ${INSTALLED_TREES_DIR}`,
+    `if ! sudo test -d "${V}"; then`,
+    `  sudo rm -rf -- "${V}.new"`,
+    `  sudo cp -R -- "/home/deploy/ds-platform/." "${V}.new"`,  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
+    ...treeSymlinkCheckLines(`${V}.new`).map((l) => `  ${l}`),
+    `  sudo chown -R root:root -- "${V}.new"`,
+    `  sudo chmod -R go-w -- "${V}.new"`,
+    `  sudo mv -T -- "${V}.new" "${V}"`,
+    `fi`,
+    `if sudo test -d "${INSTALLED_TREE_DIR}" && ! sudo test -L "${INSTALLED_TREE_DIR}"; then sudo rm -rf -- "${INSTALLED_TREE_DIR}"; fi`,
+    `prev=$(sudo readlink -- "${INSTALLED_TREE_DIR}" || true)`,
+    `sudo ln -sfn -- "${V}" "${INSTALLED_TREE_DIR}.new"`,
+    `sudo mv -T -- "${INSTALLED_TREE_DIR}.new" "${INSTALLED_TREE_DIR}"`,
+    `for d in ${INSTALLED_TREES_DIR}/*; do [ "$d" = "${V}" ] || [ "$d" = "$prev" ] || sudo rm -rf -- "$d"; done`,
     `printf '%s %s\\n' ${SHA} "${INSTALLED_TREE_DIR}" | sudo tee "${INSTALLED_TREE_FILE}.new" >/dev/null`,
     `sudo mv -- "${INSTALLED_TREE_FILE}.new" "${INSTALLED_TREE_FILE}"`,
   ]);
@@ -509,6 +524,51 @@ test("2987: a forward install records its tree — a kept copy and its SHA — f
     () => releaseInstallScript("$HOME/ds-platform", { sha: "abc" }),
     /sha/,
   );
+});
+
+// The check runs for real under bash, `sudo` stubbed to run its argv as the caller.
+const SYMLINK_SKIP =
+  spawnSync("bash", ["-c", "command -v find && readlink -f / && d=$(mktemp -d) && ln -s / \"$d/l\" && test -L \"$d/l\"; rc=$?; rm -rf \"$d\"; exit $rc"], {
+    env: { ...process.env, MSYS: "winsymlinks:nativestrict" },
+    stdio: "ignore",
+  }).status !== 0 && "needs bash, find, readlink -f and real symlinks";
+
+test("2987: a copied tree with a symlink leaving it is refused and removed before chown", { skip: SYMLINK_SKIP }, () => {
+  const run = (setup) => {
+    const dir = mkdtempSync(join(tmpdir(), "ds-tree-links-"));
+    try {
+      const stubs = join(dir, "stubs");
+      const copy = join(dir, "trees", "v.new");
+      spawnSync("bash", ["-c", `mkdir -p "$1" "$2/apps/docs/content/skills" "$2/.agents" && printf x > "$3/outside"`, "_", stubs, copy, dir]);
+      writeFileSync(join(stubs, "sudo"), '#!/usr/bin/env bash\n"$@"\n');
+      chmodSync(join(stubs, "sudo"), 0o755);
+      spawnSync("bash", ["-c", setup], { cwd: copy, env: { ...process.env, MSYS: "winsymlinks:nativestrict" } });
+      const script = [...treeSymlinkCheckLines(copy.replace(/\\/g, "/")), "echo checked"].join("\n");
+      const r = spawnSync("bash", ["-c", script], {
+        env: { ...process.env, PATH: `${stubs}${delimiter}${process.env.PATH}` },
+        encoding: "utf8",
+      });
+      return { status: r.status, out: r.stdout + r.stderr, kept: existsSync(copy) };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  // The repo's own link (.agents/skills -> ../apps/docs/content/skills) stays inside.
+  const inside = run("ln -s ../apps/docs/content/skills .agents/skills");
+  assert.equal(inside.status, 0, inside.out);
+  assert.match(inside.out, /checked/);
+  assert.ok(inside.kept);
+  for (const [what, setup] of [
+    ["a relative escape", "ln -s ../../outside escape"],
+    ["an absolute escape", "ln -s /etc/passwd escape"],
+    ["a dangling escape", "ln -s /nonexistent/dir/file escape"],
+  ]) {
+    const r = run(setup);
+    assert.equal(r.status, 1, `${what}: ${r.out}`);
+    assert.match(r.out, /install refused: a symlink in the shipped tree resolves outside it/, what);
+    assert.doesNotMatch(r.out, /checked/, `${what}: the install stops`);
+    assert.ok(!r.kept, `${what}: the copy is removed`);
+  }
 });
 
 test("2987: the rollback's check and supersede exclude exactly its own unit", async () => {

@@ -109,11 +109,10 @@ resource "twc_server_ip" "stage_1_ipv4" {
 }
 
 # stage-1 firewall: the api-prod public model — web open (Caddy terminates TLS for
-# every slot vhost and challenges with basic auth, step 2), SSH from the operator
-# allowlist only. There is no runner on the box and no inbound CI path today: slots
-# are driven over SSH from the operator machine. The release-pipeline tech spec
-# (apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md)
-# plans SSH from GitHub-hosted runners with forced-command keys instead.
+# every slot vhost and challenges with basic auth, step 2), SSH from anywhere
+# (stage_1_ssh below). There is no runner on the box: GitHub-hosted runners reach it
+# with forced-command CI keys, and PR slots stay driven over SSH by the operator key
+# (apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md §4).
 resource "twc_firewall" "stage_1" {
   name        = "ds-stage-1-fw"
   description = "stage-1: web open (Caddy basic-auth vhosts), SSH admin-only, no inbound CI path. #2061."

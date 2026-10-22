@@ -65,7 +65,7 @@ resource "twc_router" "ds" {
   }
 }
 
-# api-prod firewall: public web (80/443) from anywhere + SSH from the admin CIDR.
+# api-prod firewall: public web (80/443) and SSH (api_ssh below) from anywhere.
 # Binds to the api-prod server via `link` (twc_firewall has no project_id — the
 # firewall inherits the project from the linked server).
 resource "twc_firewall" "api_prod" {

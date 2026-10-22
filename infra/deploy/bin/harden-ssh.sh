@@ -17,9 +17,14 @@
 #     with `visudo -cf`, authorized_keys = the break-glass key);
 #   - /root/.ssh/authorized_keys emptied, only once breakglass is verified in place;
 #   - each CI key in deploy's authorized_keys behind the forced command
-#     /usr/local/bin/ds-deploy-entrypoint (matched by key body; every other line,
-#     the operator key above all, stays byte-identical; a key already on an
-#     unrestricted deploy line is refused);
+#     /usr/local/bin/ds-deploy-entrypoint — `sudo -n /usr/local/bin/ds-deploy-entrypoint`
+#     on prod (matched by key body; on stage and data every other line, the operator
+#     key above all, stays byte-identical; a key already on an unrestricted deploy
+#     line is refused);
+#   - prod only, once breakglass is verified in place: /etc/sudoers.d/90-ds-deploy
+#     (deploy may run the entrypoint as root, nothing else; `visudo -cf`), deploy's
+#     rules in other sudoers.d files removed, deploy out of groups sudo and docker,
+#     and every deploy key line not behind the prod forced command removed;
 #   - /etc/ds-platform/box-role = the role;
 #   - fail2ban and unattended-upgrades enabled and running.
 # `sshd -t` runs BEFORE `systemctl reload ssh`; on failure the sshd files are
@@ -42,8 +47,26 @@ BREAKGLASS_HOME=$ROOT/home/breakglass
 BREAKGLASS_SUDOERS=$ROOT/etc/sudoers.d/91-ds-breakglass
 BOX_ROLE_FILE=$ROOT/etc/ds-platform/box-role
 PASSWD=$ROOT/etc/passwd
+GROUP=$ROOT/etc/group
+SUDOERS_D=$ROOT/etc/sudoers.d
+DEPLOY_SUDOERS=$SUDOERS_D/90-ds-deploy
 
-CI_KEY_OPTIONS='command="/usr/local/bin/ds-deploy-entrypoint",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding'
+# The forced command of a CI key. On prod the entrypoint runs as root through the
+# one sudo right deploy holds there (DEPLOY_SUDOERS_CONTENT below); on stage and data
+# deploy keeps its sudo and the entrypoint elevates per call.
+ENTRYPOINT=/usr/local/bin/ds-deploy-entrypoint
+KEY_RESTRICTIONS=no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding
+# Any CI line, either role's form: what the operator-key refusal below tells apart
+# from an unrestricted line.
+RESTRICTED_RE='^command="(sudo -n )?/usr/local/bin/ds-deploy-entrypoint",'
+PROD_CI_RE='^command="sudo -n /usr/local/bin/ds-deploy-entrypoint",'
+
+# Prod only (spec §4 «sudo on prod»): deploy may run the entrypoint as root with no
+# argument, and sudo keeps SSH_ORIGINAL_COMMAND (the request) through its env reset.
+# infra/deploy/cloud-init/api-prod.yaml writes the same bytes; the tests pin them.
+DEPLOY_SUDOERS_CONTENT='Defaults!/usr/local/bin/ds-deploy-entrypoint env_keep += "SSH_ORIGINAL_COMMAND"
+deploy ALL=(root) NOPASSWD: /usr/local/bin/ds-deploy-entrypoint ""
+'
 PUBKEY_RE='^(ssh-ed25519|sk-ssh-ed25519@openssh\.com|ecdsa-sha2-nistp(256|384|521)|ssh-rsa) [A-Za-z0-9+/]+=* ?[^[:cntrl:]]*$'
 
 # The drop-in. infra/deploy/cloud-init/{api-prod,data-prod,stage-1}.yaml write the
@@ -78,6 +101,12 @@ done
 [[ $role =~ ^(prod|stage|data)$ ]] || usage "--role must be prod, stage or data"
 [[ -n $breakglass_file ]] || usage "--breakglass-pubkey <file> is required"
 [[ -n $ROOT || $dry_run == 1 || $EUID -eq 0 ]] || usage "run as root (sudo)"
+if [[ $role == prod ]]; then
+  # no-user-rc: sshd would run deploy's own ~/.ssh/rc as deploy before the sudo.
+  CI_KEY_OPTIONS="command=\"sudo -n $ENTRYPOINT\",$KEY_RESTRICTIONS,no-user-rc"
+else
+  CI_KEY_OPTIONS="command=\"$ENTRYPOINT\",$KEY_RESTRICTIONS"
+fi
 
 # One public key, no options, from a one-line file.
 read_pubkey() {
@@ -100,7 +129,7 @@ for f in ${ci_files[@]+"${ci_files[@]}"}; do
   # A CI key already on an unrestricted deploy line is the operator key passed by
   # mistake: putting it behind the forced command would lock the operator out.
   if [[ -f $DEPLOY_KEYS ]] && grep -F -- " $(key_body "$k")" "$DEPLOY_KEYS" |
-    grep -qv '^command="/usr/local/bin/ds-deploy-entrypoint",'; then
+    grep -Eqv "$RESTRICTED_RE"; then
     usage "$f is already an unrestricted key of deploy (the operator key?); a CI key must be a new key"
   fi
 done
@@ -128,6 +157,25 @@ converge_file() {
     chmod "$mode" "$path"
   fi
   return 0
+}
+
+# A sudoers.d file: checked with `visudo -cf` before it is in place, then renamed in
+# (sudo skips a name with a dot, so the `.ds-harden.new` file is never read).
+install_sudoers() {
+  local path=$1 content=$2 what=$3 tmp
+  tmp=$(mktemp)
+  printf '%s' "$content" >"$tmp"
+  visudo -cf "$tmp" >/dev/null || { rm -f "$tmp"; fail "visudo rejected $what"; }
+  mkdir -p "$(dirname "$path")"
+  cp "$tmp" "$path.ds-harden.new" && rm -f "$tmp"
+  chmod 0440 "$path.ds-harden.new"
+  mv -f "$path.ds-harden.new" "$path"
+}
+
+breakglass_ready() {
+  grep -q '^breakglass:' "$PASSWD" &&
+    [[ $(cat "$BREAKGLASS_HOME/.ssh/authorized_keys" 2>/dev/null) == "$breakglass_key" ]] &&
+    [[ $(cat "$BREAKGLASS_SUDOERS" 2>/dev/null; printf x) == "${sudoers_line}x" ]]
 }
 
 backup_sshd_file() {
@@ -174,14 +222,7 @@ sudoers_line='breakglass ALL=(ALL) NOPASSWD:ALL
 '
 if ! { [[ -f $BREAKGLASS_SUDOERS ]] && [[ $(cat "$BREAKGLASS_SUDOERS"; printf x) == "${sudoers_line}x" ]]; }; then
   note "write $BREAKGLASS_SUDOERS"
-  if [[ $dry_run == 0 ]]; then
-    tmp=$(mktemp)
-    printf '%s' "$sudoers_line" >"$tmp"
-    visudo -cf "$tmp" >/dev/null || { rm -f "$tmp"; fail "visudo rejected the breakglass sudoers file"; }
-    mkdir -p "$(dirname "$BREAKGLASS_SUDOERS")"
-    cp "$tmp" "$BREAKGLASS_SUDOERS" && rm -f "$tmp"
-    chmod 0440 "$BREAKGLASS_SUDOERS"
-  fi
+  [[ $dry_run == 1 ]] || install_sudoers "$BREAKGLASS_SUDOERS" "$sudoers_line" "the breakglass sudoers file"
 fi
 if converge_file "$BREAKGLASS_HOME/.ssh/authorized_keys" 0600 "$breakglass_key"$'\n' && [[ $dry_run == 0 ]]; then
   chmod 0700 "$BREAKGLASS_HOME/.ssh"
@@ -192,10 +233,7 @@ fi
 if [[ -s $ROOT_KEYS ]]; then
   note "empty $ROOT_KEYS"
   if [[ $dry_run == 0 ]]; then
-    grep -q '^breakglass:' "$PASSWD" &&
-      [[ $(cat "$BREAKGLASS_HOME/.ssh/authorized_keys" 2>/dev/null) == "$breakglass_key" ]] &&
-      [[ $(cat "$BREAKGLASS_SUDOERS" 2>/dev/null; printf x) == "${sudoers_line}x" ]] ||
-      fail "breakglass is not in place; root's keys were left as they are"
+    breakglass_ready || fail "breakglass is not in place; root's keys were left as they are"
     : >"$ROOT_KEYS"
   fi
 fi
@@ -218,6 +256,50 @@ for key in ${ci_keys[@]+"${ci_keys[@]}"}; do
     mv -f "$DEPLOY_KEYS.ds-harden.new" "$DEPLOY_KEYS"
   fi
 done
+
+# --- prod: deploy holds the entrypoint and nothing else (spec §4 «sudo on prod») ----
+# Its one sudo right is written first, then every other right goes: the rules other
+# sudoers.d files give it (cloud-init's 90-cloud-init-users), groups sudo and docker
+# (docker is root-equivalent; the Actions path runs as root and needs neither), and
+# every key line not behind the prod forced command — the operator key above all.
+# The operator path on prod is breakglass, so nothing of deploy's goes before
+# breakglass is proven in place.
+if [[ $role == prod ]]; then
+  if ! { [[ -f $DEPLOY_SUDOERS ]] && [[ $(cat "$DEPLOY_SUDOERS"; printf x) == "${DEPLOY_SUDOERS_CONTENT}x" ]]; }; then
+    note "write $DEPLOY_SUDOERS"
+    [[ $dry_run == 1 ]] || install_sudoers "$DEPLOY_SUDOERS" "$DEPLOY_SUDOERS_CONTENT" "the deploy sudoers file"
+  fi
+  [[ $dry_run == 1 ]] || breakglass_ready ||
+    fail "breakglass is not in place; deploy's sudo rights and keys were left as they are"
+  # The files above are not a working login: only a converge run from a breakglass
+  # session proves one, before the operator's own deploy session loses its key.
+  [[ $dry_run == 1 || ${SUDO_USER-} == breakglass ]] ||
+    fail "run --role prod from a breakglass session (sudo as breakglass); deploy's sudo rights and keys were left as they are"
+  for f in "$SUDOERS_D"/*; do
+    [[ -f $f && $f != "$DEPLOY_SUDOERS" && $f != "$BREAKGLASS_SUDOERS" && ${f##*/} != *.* ]] || continue
+    grep -Eq '^[[:space:]]*deploy[[:space:]]' "$f" || continue
+    note "remove deploy's rule from $f"
+    if [[ $dry_run == 0 ]]; then
+      rest=$(grep -Ev '^[[:space:]]*deploy[[:space:]]' "$f" || true)
+      install_sudoers "$f" "${rest:+$rest$'\n'}" "$f without deploy's rule"
+    fi
+  done
+  for g in sudo docker; do
+    if grep -Eq "^$g:[^:]*:[^:]*:(.*,)?deploy(,.*)?\$" "$GROUP" 2>/dev/null; then
+      note "remove deploy from group $g"
+      [[ $dry_run == 1 ]] || gpasswd ${ROOT:+--root "$ROOT"} -d deploy "$g" >/dev/null
+    fi
+  done
+  if [[ -f $DEPLOY_KEYS ]] && grep -Ev '^[[:space:]]*(#|$)' "$DEPLOY_KEYS" | grep -Eqv "$PROD_CI_RE"; then
+    note "remove every deploy key not behind the prod forced command from $DEPLOY_KEYS"
+    if [[ $dry_run == 0 ]]; then
+      rest=$(grep -E "$PROD_CI_RE" "$DEPLOY_KEYS" || true)
+      cp -p "$DEPLOY_KEYS" "$DEPLOY_KEYS.ds-harden.new"
+      { [[ -z $rest ]] || printf '%s\n' "$rest"; } >"$DEPLOY_KEYS.ds-harden.new"
+      mv -f "$DEPLOY_KEYS.ds-harden.new" "$DEPLOY_KEYS"
+    fi
+  fi
+fi
 
 # --- box role -------------------------------------------------------------------------
 converge_file "$BOX_ROLE_FILE" 0644 "$role"$'\n' || true

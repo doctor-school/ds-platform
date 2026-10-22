@@ -56,12 +56,6 @@ variable "prod_breakglass_ssh_pubkey_path" {
   default     = "~/.ssh/ds-breakglass-prod.pub"
 }
 
-variable "admin_ssh_cidr" {
-  description = "Operator admin IP/CIDR. No firewall rule reads it: api-prod (#3179) and stage-1 (#2984) take 22 from anywhere, behind key-only auth and forced-command CI keys."
-  type        = string
-  # no default — force an explicit, non-open value.
-}
-
 variable "vpc_cidr" {
   description = "Private network CIDR joining api-prod and data-prod. data-prod is reachable only inside it."
   type        = string

@@ -18,6 +18,7 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
+  BREAKGLASS_API_PROD,
   DEPLOY_PLAN,
   OPERATOR_ONLY_STEPS,
   compareStatus,
@@ -28,6 +29,8 @@ import {
   parseLocalFlags,
   rollbackTargetVerdict,
   planWalker,
+  prodScriptOptions,
+  prodShipOptions,
   recordPreviousShaScript,
 } from "./prod.mjs";
 import {
@@ -37,7 +40,9 @@ import {
 import {
   DATA_PROD_HOP_KEY,
   LOCAL_EXECUTOR,
+  PROD_LIVE_TREE,
   RELEASE_DRIVER_BIN,
+  shipTreeCommand,
   sshBaseArgs,
 } from "./lib/remote.mjs";
 
@@ -157,7 +162,7 @@ test("3157: on the box, api-prod is the local executor and data-prod the VPC hop
   const hosts = localProdHosts();
   assert.equal(hosts.api, LOCAL_EXECUTOR);
   assert.equal(hosts.data, "deploy@192.168.0.10");
-  assert.equal(DATA_PROD_HOP_KEY, "/home/deploy/.ssh/data-prod-hop");
+  assert.equal(DATA_PROD_HOP_KEY, "/home/deploy/.ssh/data-prod-hop");  // no-hardcoded-path-ok: a fixed path on the prod box (deploy's home), not on this machine
   const args = sshBaseArgs(hosts.data, ["-o", "ConnectTimeout=15"]);
   assert.deepEqual(args, [
     "-o",
@@ -173,6 +178,8 @@ test("3157: on the box, api-prod is the local executor and data-prod the VPC hop
     "-o",
     "StrictHostKeyChecking=yes",
     "-o",
+    "UserKnownHostsFile=/home/deploy/.ssh/known_hosts",  // no-hardcoded-path-ok: a fixed path on the prod box (deploy's home), not on this machine
+    "-o",
     "ConnectTimeout=15",
     "deploy@192.168.0.10",
   ]);
@@ -184,6 +191,52 @@ test("3157: on the box, api-prod is the local executor and data-prod the VPC hop
     "ServerAliveCountMax=4",
     "ds-data-prod",
   ]);
+});
+
+test("2987: the break-glass operator path connects to ds-api-prod as breakglass", () => {
+  assert.equal(BREAKGLASS_API_PROD, "breakglass@ds-api-prod");
+  assert.match(
+    SOURCE,
+    /let API_PROD = process\.env\.DS_API_PROD_SSH \|\| BREAKGLASS_API_PROD;/,
+  );
+  // data-prod stays the operator's alias through its ProxyJump.
+  assert.match(SOURCE, /let DATA_PROD = process\.env\.DS_DATA_PROD_SSH \|\| "ds-data-prod";/);
+});
+
+test("2987: both prod boxes use the fixed tree whatever HOME the writer has; only ds-api-prod ships as root", () => {
+  assert.equal(PROD_LIVE_TREE, "/home/deploy/ds-platform");  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
+  // No `~`- or `$HOME`-relative prod tree is left: the root unit runs with HOME=/root.
+  assert.match(SOURCE, /const REMOTE_TREE = PROD_LIVE_TREE;/);
+  assert.doesNotMatch(SOURCE, /["`]~\/ds-platform/);
+  assert.doesNotMatch(SOURCE, /\$HOME\/ds-platform/);
+  assert.match(SOURCE, /releaseInstallScript\(PROD_LIVE_TREE, \{ sha \}\)/);
+  const box = prodShipOptions(LOCAL_EXECUTOR, { api: LOCAL_EXECUTOR, localTree: "/srv/tree" });
+  assert.deepEqual(box, { liveDir: PROD_LIVE_TREE, asRoot: true, sourceDir: "/srv/tree" });
+  const glass = prodShipOptions(BREAKGLASS_API_PROD, { api: BREAKGLASS_API_PROD });
+  assert.deepEqual(glass, { liveDir: PROD_LIVE_TREE, asRoot: true });
+  const data = prodShipOptions("ds-data-prod", { api: BREAKGLASS_API_PROD });
+  assert.deepEqual(data, { liveDir: PROD_LIVE_TREE, asRoot: false });
+  // The root-run ship renders the same absolute tree, never `/root/ds-platform`.
+  const rootShip = shipTreeCommand(box);
+  assert.ok(rootShip.startsWith("sudo -n bash -c "));
+  assert.ok(rootShip.includes(`live="${PROD_LIVE_TREE}"`));
+  assert.ok(!rootShip.includes("$HOME"));
+});
+
+test("2987: break-glass runs every ds-api-prod script as root; data-prod, stage and a --local run as they are", () => {
+  assert.deepEqual(prodScriptOptions(BREAKGLASS_API_PROD, { api: BREAKGLASS_API_PROD }), { asRoot: true });
+  assert.deepEqual(prodScriptOptions("ds-data-prod", { api: BREAKGLASS_API_PROD }), { asRoot: false });
+  assert.deepEqual(prodScriptOptions("ds-stage-1", { api: BREAKGLASS_API_PROD }), { asRoot: false });
+  const hosts = localProdHosts();
+  assert.deepEqual(prodScriptOptions(hosts.api, { api: hosts.api }), { asRoot: false }, "the unit is root already");
+  assert.deepEqual(prodScriptOptions(hosts.data, { api: hosts.api }), { asRoot: false });
+  // One transport: the raw primitives are reached only through the two wrappers, and
+  // the durable steps poll through the same wrapper.
+  assert.equal(SOURCE.match(/\bboxScript\(/g).length, 1);
+  assert.equal(SOURCE.match(/\bboxCapture\(/g).length, 1);
+  assert.match(SOURCE, /return boxScript\(host, script, \{ \.\.\.options, \.\.\.prodScriptOptions\(host, \{ api: API_PROD \}\) \}\);/);
+  assert.match(SOURCE, /return boxCapture\(host, script, \{ \.\.\.options, \.\.\.prodScriptOptions\(host, \{ api: API_PROD \}\) \}\);/);
+  assert.match(SOURCE, /retryFailed: RETRY_FAILED,\s*capture: sshCapture,\s*\}\);/);
 });
 
 test("3157: a --local run re-points both boxes before its first step, and every data-prod step goes through DATA_PROD", () => {

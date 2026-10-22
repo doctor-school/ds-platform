@@ -29,7 +29,7 @@ Stack (ADR-0002–0006 in `apps/docs/content/adr/` + `README.md`): NestJS + Zod 
 
 ## 2. Repository conventions
 
-Monorepo pnpm 10 + Turborepo; trunk-based `<prefix>/<N>-<slug>`, Conventional Commits, squash/delete on merge. `.claude/rules/repo-conventions.md` holds the mandatory required fields, changesets, native technical dependency links, board Done and canonical landing. New feature specs land before implementation; corrections to approved behavior/docs may share its code PR (repo-conventions → ADRs & specs). Prod ships only through `pnpm deploy:prod` and its release-readiness/authorization policy.
+Monorepo pnpm 10 + Turborepo; trunk-based `<prefix>/<N>-<slug>`, Conventional Commits, squash/delete on merge. `.claude/rules/repo-conventions.md` holds the mandatory required fields, changesets, native technical dependency links, board Done and canonical landing. New feature specs land before implementation; corrections to approved behavior/docs may share its code PR (repo-conventions → ADRs & specs). Prod ships only through `deploy-prod.yml` on the owner's word and its release-readiness policy (break-glass: `pnpm deploy:prod`).
 
 ---
 

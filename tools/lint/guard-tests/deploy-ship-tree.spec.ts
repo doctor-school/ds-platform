@@ -13,9 +13,21 @@ import { join, resolve } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { PROD_LIVE_TREE } from "../../deploy/lib/remote.mjs";
 import { shipTreeCommand } from "../../deploy/prod.mjs";
 
 const fixtureRoots: string[] = [];
+
+// Production ships into the fixed PROD_LIVE_TREE (#2987), its staging directory a
+// sibling of it. The fixture runs that same script re-rooted from deploy's home into
+// the fixture's `$HOME`, so it never touches the real path.
+const PROD_HOME = PROD_LIVE_TREE.slice(0, PROD_LIVE_TREE.lastIndexOf("/"));
+function prodShipInFixtureHome() {
+  const script = shipTreeCommand();
+  expect(script).toContain(`live="${PROD_LIVE_TREE}"`);
+  expect(script).toContain(`mktemp -d "${PROD_HOME}/ds-platform.ship.XXXXXX"`);
+  return script.replaceAll(PROD_HOME, "$HOME");
+}
 
 function findPosixShell() {
   if (process.platform !== "win32") {
@@ -114,7 +126,7 @@ function mvFailureShim() {
 function runShip({
   home,
   archive,
-  command = shipTreeCommand(),
+  command = prodShipInFixtureHome(),
   env = {},
 }: {
   home: string;
@@ -148,7 +160,7 @@ afterEach(() => {
 
 describe("prod deploy tree shipping (#1182)", () => {
   it("stages a clean tree, carries forward only api-prod compose .env, then swaps", () => {
-    const command = shipTreeCommand();
+    const command = prodShipInFixtureHome();
     const extractAt = command.indexOf(
       'tar xzf - --strip-components=1 -C "$stage"',
     );
@@ -222,7 +234,7 @@ describe("prod deploy tree shipping (#1182)", () => {
 
     const result = runShip({
       ...fixture,
-      command: `${mvFailureShim()}${shipTreeCommand()}`,
+      command: `${mvFailureShim()}${prodShipInFixtureHome()}`,
       env: { FAIL_STAGE_TO_LIVE: "1" },
     });
 
@@ -244,7 +256,7 @@ describe("prod deploy tree shipping (#1182)", () => {
 
     const result = runShip({
       ...fixture,
-      command: `${mvFailureShim()}${shipTreeCommand()}`,
+      command: `${mvFailureShim()}${prodShipInFixtureHome()}`,
       env: {
         FAIL_STAGE_TO_LIVE: "1",
         FAIL_RESTORE_TO_LIVE: "1",
@@ -264,7 +276,7 @@ describe("prod deploy tree shipping (#1182)", () => {
 
   it("maps HUP to a nonzero exit status through the executable trap", () => {
     const fixture = createFixture();
-    const command = shipTreeCommand().replace('mkdir -p "$stage"', () =>
+    const command = prodShipInFixtureHome().replace('mkdir -p "$stage"', () =>
       ['kill -HUP "$$"', 'mkdir -p "$stage"'].join("\n"),
     );
 

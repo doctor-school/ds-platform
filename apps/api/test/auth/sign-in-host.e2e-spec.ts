@@ -6755,6 +6755,148 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     });
   });
 
+  describe("EARS-24/41: the warm registration code step is proven by the host form state", () => {
+    const DOCTOR_CONSENT = [
+      {
+        purpose: PARTNER_DATA_SHARING_PURPOSE,
+        version: PARTNER_DATA_SHARING_VERSION,
+      },
+    ];
+    const doors = {
+      academy: {
+        client: ACADEMY,
+        register: "register",
+        verify: "verify",
+        fields: { consent: CONSENT },
+      },
+      doctor: {
+        client: DOCTOR,
+        register: "storefront/doctor/register",
+        verify: "storefront/doctor/verify",
+        fields: { medicalWorkerDeclaration: true, consent: DOCTOR_CONSENT },
+      },
+    } as const;
+
+    /** The typed password, on a fresh browser and auth request: the status of the host login. */
+    async function typedPasswordStatus(address: string): Promise<number> {
+      const jar = new Jar();
+      const form = await render(jar, ACADEMY);
+      const res = await post(jar, "login", {
+        identifier: address,
+        password: PASSWORD,
+        authRequest: form.authRequest,
+        csrf: form.csrf,
+      });
+      return res.statusCode;
+    }
+
+    async function register(
+      door: (typeof doors)[keyof typeof doors],
+      slug: string,
+    ) {
+      const jar = new Jar();
+      const form = await render(jar, door.client, { prompt: ["create"] });
+      const address = email(slug);
+      const reg = await post(jar, door.register, {
+        email: address,
+        password: PASSWORD,
+        ...door.fields,
+        authRequest: form.authRequest,
+        csrf: form.csrf,
+      });
+      expect(reg.statusCode).toBe(200);
+      return { jar, form, address, formId: jar.values.get(FORM_COOKIE_NAME)! };
+    }
+
+    for (const [name, door] of Object.entries(doors)) {
+      it(`003 EARS-41: the ${name} registration verified in the same host form state keeps the typed password`, async () => {
+        const { jar, form, address } = await register(door, `warm-${name}`);
+        // The full page load to the code step re-renders the form (a fresh
+        // form state and CSRF token) and carries no in-tab password.
+        const { body: step } = await entry(jar, form.authRequest);
+        if (step.action !== "render") throw new Error("not rendered");
+        expect(step.csrf).not.toBe(form.csrf);
+        const verified = await post(jar, door.verify, {
+          email: address,
+          code: FAKE_VALID_CODE,
+          authRequest: form.authRequest,
+          csrf: step.csrf,
+        });
+        expect(verified.statusCode).toBe(200);
+        expect(verified.json()).toMatchObject({ status: "redirect" });
+        expect(await typedPasswordStatus(address)).toBe(200);
+      });
+
+      it(`003 EARS-41: the ${name} registration verified from another browser takes the cold path`, async () => {
+        const { address } = await register(door, `cold-${name}`);
+        const other = new Jar();
+        const form = await render(other, door.client, { prompt: ["create"] });
+        const verified = await post(other, door.verify, {
+          email: address,
+          code: FAKE_VALID_CODE,
+          authRequest: form.authRequest,
+          csrf: form.csrf,
+        });
+        expect(verified.statusCode).toBe(200);
+        expect(await typedPasswordStatus(address)).not.toBe(200);
+      });
+    }
+
+    it("003 EARS-24: the registration marker is single-use and bound to its auth request", async () => {
+      const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+      // Spent by the accepted code.
+      const first = await register(doors.academy, "marker-spent");
+      expect((await state.getForm(first.formId))?.registration).toMatchObject({
+        authRequestId: first.form.authRequest,
+      });
+      const wrong = await post(first.jar, "verify", {
+        email: first.address,
+        code: "000000",
+        authRequest: first.form.authRequest,
+        csrf: first.form.csrf,
+      });
+      expect(wrong.statusCode).toBe(400);
+      // A mistyped code does not spend it.
+      expect((await state.getForm(first.formId))?.registration).toBeDefined();
+      const ok = await post(first.jar, "verify", {
+        email: first.address,
+        code: FAKE_VALID_CODE,
+        authRequest: first.form.authRequest,
+        csrf: first.form.csrf,
+      });
+      expect(ok.statusCode).toBe(200);
+      expect((await state.getForm(first.formId))?.registration).toBeUndefined();
+      // A new auth request in the same browser does not inherit it.
+      const second = await register(doors.academy, "marker-other-request");
+      const next = await render(second.jar, ACADEMY, { prompt: ["create"] });
+      const verified = await post(second.jar, "verify", {
+        email: second.address,
+        code: FAKE_VALID_CODE,
+        authRequest: next.authRequest,
+        csrf: next.csrf,
+      });
+      expect(verified.statusCode).toBe(200);
+      expect(await typedPasswordStatus(second.address)).not.toBe(200);
+    });
+
+    it("003 EARS-41: a re-registration of an existing unverified address records no marker (the earlier password is never kept)", async () => {
+      const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+      const first = await register(doors.academy, "marker-reregister");
+      const again = new Jar();
+      const form = await render(again, ACADEMY, { prompt: ["create"] });
+      const reg = await post(again, "register", {
+        email: first.address,
+        password: "Bb2!another-long-password",
+        consent: CONSENT,
+        authRequest: form.authRequest,
+        csrf: form.csrf,
+      });
+      expect(reg.statusCode).toBe(200);
+      const formId = again.values.get(FORM_COOKIE_NAME)!;
+      expect((await state.getForm(formId))?.registration).toBeUndefined();
+    });
+  });
+
   describe("disabled", () => {
     let disabled: Awaited<ReturnType<typeof compile>>;
     beforeAll(async () => {

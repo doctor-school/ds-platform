@@ -1072,15 +1072,25 @@ export class FakeIdpClient implements IdpClient {
       if (!this.emailOtpChallenges.has(record.sub))
         return Promise.resolve(null);
       this.emailOtpChallenges.delete(record.sub);
-      if (registration && record.password == null) {
+      if (
+        registration &&
+        "password" in registration &&
+        record.password == null
+      ) {
         record.password = registration.password;
       }
       const session = this.checkedSession(record.sub);
       return Promise.resolve({ sub: record.sub, verifiedNow: false, session });
     }
     record.emailVerified = true;
-    if (registration) {
+    if (registration && "password" in registration) {
       record.password = registration.password;
+    } else if (
+      registration !== undefined &&
+      "keepPasswordOf" in registration &&
+      registration.keepPasswordOf === record.sub
+    ) {
+      // 003 EARS-41: the host-proven warm step keeps the typed password.
     } else if (record.password != null) {
       // Invalidated: a value nobody holds, as the real adapter sets.
       record.password = `unrecorded-${randomUUID()}`;

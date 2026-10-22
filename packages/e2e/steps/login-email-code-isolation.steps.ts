@@ -1,3 +1,5 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -142,8 +144,10 @@ Given(
       owned.on("request", (request) => {
         if (request.method() !== "POST") return;
         const path = new URL(request.url()).pathname;
-        if (path === "/v1/auth/login/otp/request") owner.requests += 1;
-        if (path === "/v1/auth/login/otp") owner.submissions += 1;
+        if (path === signInHostApiPath("/v1/auth/login/otp/request"))
+          owner.requests += 1;
+        if (path === signInHostApiPath("/v1/auth/login/otp"))
+          owner.submissions += 1;
       });
       await prepareCaptchaForJourney(
         context,
@@ -156,7 +160,10 @@ Given(
         owner,
         "/account",
       );
-      const pending = captureResponse(owned, "/v1/auth/verify");
+      const pending = captureResponse(
+        owned,
+        signInHostApiPath("/v1/auth/verify"),
+      );
       await inputSecret(
         owned.locator('input[autocomplete="one-time-code"]'),
         code,
@@ -214,13 +221,16 @@ When(
         mailbox,
         owner.email,
       );
-      const pending = captureResponse(owner.page, "/v1/auth/login/otp/request");
+      const pending = captureResponse(
+        owner.page,
+        signInHostApiPath("/v1/auth/login/otp/request"),
+      );
       await owner.page.getByTestId("otp-send").click();
       const sent = await pending;
       let matches = false;
       let neutral = false;
       try {
-        const request = sent.response.request().postDataJSON();
+        const request = hostCommand(sent.response.request().postDataJSON());
         const body = JSON.parse(sent.body);
         matches =
           Object.keys(request).sort().join(",") === "channel,identifier" &&
@@ -264,7 +274,10 @@ When(
     const [a, b] = pair(page);
     if (!a.code || !b.code)
       throw new Error("Actual owner login codes are missing");
-    const pending = captureResponse(b.page, "/v1/auth/login/otp");
+    const pending = captureResponse(
+      b.page,
+      signInHostApiPath("/v1/auth/login/otp"),
+    );
     const field = b.page.locator('input[autocomplete="one-time-code"]');
     await inputSecret(field, a.code);
     const refused = await pending;
@@ -272,7 +285,7 @@ When(
     let matches = false;
     try {
       const body = JSON.parse(refused.body);
-      const request = refused.response.request().postDataJSON();
+      const request = hostCommand(refused.response.request().postDataJSON());
       generic =
         Object.keys(body).length === 3 &&
         body.statusCode === 401 &&
@@ -296,11 +309,9 @@ When(
     await guest(b);
     await expect(field).toHaveValue("");
     await expect(field).toBeFocused();
-    const refusal = b.page
-      .getByRole("alert")
-      .filter({
-        hasText: "Код не подошёл. Проверьте его или запросите новый.",
-      });
+    const refusal = b.page.getByRole("alert").filter({
+      hasText: "Код не подошёл. Проверьте его или запросите новый.",
+    });
     await expect(refusal).toHaveCount(1);
     await expect(refusal).toBeVisible();
   },
@@ -312,7 +323,10 @@ Then(
     const [a, b] = pair(page);
     for (const owner of [a, b]) {
       if (!owner.code) throw new Error("The retained owner code is missing");
-      const pending = captureResponse(owner.page, "/v1/auth/login/otp");
+      const pending = captureResponse(
+        owner.page,
+        signInHostApiPath("/v1/auth/login/otp"),
+      );
       await inputSecret(
         owner.page.locator('input[autocomplete="one-time-code"]'),
         owner.code,
@@ -321,15 +335,14 @@ Then(
       let matches = false;
       let authenticated = false;
       try {
-        const request = signedIn.response.request().postDataJSON();
-        const body = JSON.parse(signedIn.body);
+        const request = hostCommand(signedIn.response.request().postDataJSON());
         matches =
           Object.keys(request).sort().join(",") === "channel,code,identifier" &&
           request.channel === "email" &&
           request.identifier === owner.email &&
           request.code === owner.code;
         authenticated =
-          Object.keys(body).length === 1 && body.status === "authenticated";
+          storefrontCallbackAcknowledgement(signedIn.body, world.hostBaseUrl);
       } catch {
         /* Assertions project only booleans. */
       }
@@ -414,12 +427,10 @@ After("@login-email-code-isolation", async ({ page }) => {
   if (failed) {
     if (test.info().status === test.info().expectedStatus)
       throw new Error("Owned email isolation session cleanup failed");
-    test
-      .info()
-      .annotations.push({
-        type: "cleanup-failed",
-        description:
-          "Owned email isolation cleanup failed; original scenario failure retained.",
-      });
+    test.info().annotations.push({
+      type: "cleanup-failed",
+      description:
+        "Owned email isolation cleanup failed; original scenario failure retained.",
+    });
   }
 });

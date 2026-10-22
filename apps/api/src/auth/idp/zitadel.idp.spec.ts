@@ -3077,6 +3077,39 @@ describe("ZitadelIdpClient.submitEmailCode wire shape (003 EARS-41/23)", () => {
     expect(sent.password.length).toBeGreaterThanOrEqual(40);
   });
 
+  it("003 EARS-41: the sign-in host's warm proof for this very account keeps the pre-verification password", async () => {
+    const { calls, fetchImpl } = scripted({
+      verified: false,
+      methods: ["AUTHENTICATION_METHOD_TYPE_PASSWORD"],
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    const result = await client.submitEmailCode("user@ds.test", "LC7Q2M", {
+      keepPasswordOf: "user-9",
+    });
+    expect(result).toMatchObject({ sub: "user-9", verifiedNow: true });
+    expect(result?.session).not.toBeNull();
+    expect(calls.filter((c) => c.url.endsWith("/password"))).toHaveLength(0);
+  });
+
+  it("003 EARS-41: a warm proof naming another account is the cold step — the pre-verification password is invalidated", async () => {
+    const { calls, fetchImpl } = scripted({
+      verified: false,
+      methods: ["AUTHENTICATION_METHOD_TYPE_PASSWORD"],
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    const result = await client.submitEmailCode("user@ds.test", "LC7Q2M", {
+      keepPasswordOf: "user-other",
+    });
+    expect(result?.session).not.toBeNull();
+    const sets = calls.filter((c) => c.url.endsWith("/password"));
+    expect(sets).toHaveLength(1);
+    expect(
+      JSON.parse(sets[0]!.body ?? "{}").newPassword.password.length,
+    ).toBeGreaterThanOrEqual(40);
+  });
+
   it("003 EARS-41: a transient SetPassword fault after the code flipped the address is retried, and the submitted password still replaces the pre-verification one", async () => {
     const { calls, fetchImpl } = scripted({
       verified: false,

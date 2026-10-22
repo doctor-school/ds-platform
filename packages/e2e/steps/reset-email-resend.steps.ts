@@ -1,3 +1,5 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -130,7 +132,7 @@ Given(
       baseURL ?? "",
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
-    const { response, code } = await registerOwnedCredentials(
+    const { response, body, code } = await registerOwnedCredentials(
       owned,
       world.hostBaseUrl,
       state,
@@ -139,7 +141,7 @@ Given(
     expect(
       registrationEvidence(
         response.request().postData() ?? "",
-        await response.text(),
+        body,
         state,
       ),
     ).toEqual({
@@ -147,17 +149,19 @@ Given(
       consentMatches: true,
       acknowledgementMatches: true,
     });
-    const verified = captureResponse(owned, "/v1/auth/verify").then(
-      ({ response, body }) => ({
-        response,
-        evidence: verificationEvidence(
-          response.request().postData() ?? "",
-          body,
-          state,
-          code,
-        ),
-      }),
-    );
+    const verified = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/verify"),
+    ).then(({ response, body }) => ({
+      response,
+      evidence: verificationEvidence(
+        response.request().postData() ?? "",
+        body,
+        state,
+        code,
+        world.hostBaseUrl,
+      ),
+    }));
     await inputSecret(
       owned.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -218,11 +222,11 @@ function mailbox(state: ResentReset, base: string) {
 async function requestResult(page: Page, state: ResentReset) {
   const { response, body } = await captureResponse(
     page,
-    "/v1/auth/password/reset",
+    signInHostApiPath("/v1/auth/password/reset"),
   );
   let matches = false;
   try {
-    const request = response.request().postDataJSON();
+    const request = hostCommand(response.request().postDataJSON());
     matches =
       request.identifier === state.email &&
       Object.keys(request).length === 1 &&
@@ -296,7 +300,8 @@ When(
     state.page.on("request", (request) => {
       if (
         request.method() === "POST" &&
-        new URL(request.url()).pathname === "/v1/auth/password/reset"
+        new URL(request.url()).pathname ===
+          signInHostApiPath("/v1/auth/password/reset")
       )
         state.requests += 1;
     });
@@ -372,17 +377,17 @@ Then(
     );
     const pending = captureResponse(
       state.page,
-      "/v1/auth/password/reset/complete",
+      signInHostApiPath("/v1/auth/password/reset/complete"),
     ).then(({ response, body }) => {
       let matches = false;
       try {
-        const request = response.request().postDataJSON();
+        const request = hostCommand(response.request().postDataJSON());
         matches =
           request.identifier === state.email &&
           request.code === state.code &&
           request.newPassword === state.newPassword &&
           Object.keys(request).length === 3 &&
-          body === '{"status":"reset_completed"}';
+          storefrontCallbackAcknowledgement(body, world.hostBaseUrl);
       } catch {
         // Discard code-bearing parser diagnostics.
       }
@@ -533,12 +538,15 @@ Then(
         },
         async () => {
           try {
-            const pending = captureResponse(guest, "/v1/auth/login");
+            const pending = captureResponse(
+              guest,
+              signInHostApiPath("/v1/auth/login"),
+            );
             await guest.getByTestId("password-login-submit").click();
             const result = await pending;
             let exactCommand = false;
             try {
-              const command = result.response.request().postDataJSON();
+              const command = hostCommand(result.response.request().postDataJSON());
               exactCommand =
                 command.identifier === state.email &&
                 command.password === password;

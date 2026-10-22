@@ -42,6 +42,11 @@
 #   IDP_PROJECT_ID=<project id>
 #   IDP_ACADEMY_CLIENT_ID=<Academy storefront client id>   # step 3.bis, when configured
 #   IDP_DOCTOR_CLIENT_ID=<doctor storefront client id>     # step 3.bis, when configured
+# The storefront secrets are NEVER printed: with IDP_SECRET_ENV_FILE set, step
+# 3.bis.2 writes IDP_{ACADEMY,DOCTOR}_CLIENT_KEY + INTERNAL_API_TOKEN straight into
+# that env file (kept while still valid, minted otherwise) and logs only key ids;
+# with IDP_INTERNAL_ENV_FILE also set, it writes that file with ONLY the same
+# INTERNAL_API_TOKEN (the storefront servers' slice — no client key ever).
 set -euo pipefail
 
 # ── args / env ───────────────────────────────────────────────────────────────
@@ -181,10 +186,35 @@ else
   STOREFRONT_CLIENTS=ensure
   for _v in "${STOREFRONT_URI_VARS[@]}"; do storefront_uri_ok "$_v" "${!_v}"; done
 fi
+# The env file step 3.bis.2 keeps the storefront secrets in (003 EARS-62): a file
+# only the api reads — prod `/etc/ds-platform/api-sign-in.env` (tools/deploy/prod.mjs),
+# the dev stand's `.env.local` (idp/bootstrap.md). IDP_INTERNAL_ENV_FILE (optional,
+# needs IDP_SECRET_ENV_FILE) is the storefront servers' token-only file — prod
+# `/etc/ds-platform/internal.env`. Unset ⇒ no secret is touched. Set without the
+# storefront clients, or in a directory that does not exist ⇒ refused here, before
+# any mutation.
+SECRET_ENV_FILE="${IDP_SECRET_ENV_FILE:-}"
+INTERNAL_ENV_FILE="${IDP_INTERNAL_ENV_FILE:-}"
+if [[ -n "$INTERNAL_ENV_FILE" && -z "$SECRET_ENV_FILE" ]]; then
+  echo "ERROR: IDP_INTERNAL_ENV_FILE is set but IDP_SECRET_ENV_FILE is not; refusing to provision" >&2
+  exit 4
+fi
+if [[ -n "$SECRET_ENV_FILE" ]]; then
+  if [[ "$STOREFRONT_CLIENTS" != ensure ]]; then
+    echo "ERROR: IDP_SECRET_ENV_FILE is set but the storefront client URIs are not; refusing to provision" >&2
+    exit 4
+  fi
+  for _f in "$SECRET_ENV_FILE" "$INTERNAL_ENV_FILE"; do
+    if [[ -n "$_f" && ! -d "$(dirname -- "$_f")" ]]; then
+      echo "ERROR: storefront secret file '${_f}' is not in an existing directory; refusing to provision" >&2
+      exit 4
+    fi
+  done
+fi
 
 # storefront_client_payload <name> <redirect> <post-logout> — the AddOIDCApp body.
-# Confidential web client authenticating with private_key_jwt (ADR-0015 §4; the
-# key itself is created by the API-side wiring, never here), code + refresh,
+# Confidential web client authenticating with private_key_jwt (ADR-0015 §4; its
+# JSON key is minted by step 3.bis.2 into IDP_SECRET_ENV_FILE), code + refresh,
 # JWT access tokens, its OWN Login V2 base_uri (the sign-in host; the headless
 # app and the Console carry the id host's login UI, steps 3 and 3.ter) and the API's
 # back-channel logout endpoint. devMode only when a URI is plain http (dev).
@@ -431,9 +461,9 @@ fi
 # ── 3.bis. ensure the two storefront OIDC clients (003 EARS-60, ADR-0015 §4) ──
 # Added BESIDE the app of step 3, which stays the API's headless-exchange client
 # untouched. Read-before-write: an existing client gets its whole oidc_config
-# converged (exact URIs, base_uri, back-channel), an absent one is created. No
-# client key is created or printed here (private_key_jwt keys are minted by the
-# API-side wiring); only the client ids are emitted on stdout.
+# converged (exact URIs, base_uri, back-channel), an absent one is created. Only
+# the client ids are emitted on stdout; the clients' private_key_jwt keys are
+# step 3.bis.2's, and never printed.
 # ensure_storefront_client <name> <redirect> <post-logout>  ->  prints client id
 ensure_storefront_client() {
   # Every hop is checked explicitly: this runs inside $(...), where errexit
@@ -465,6 +495,137 @@ if [[ "$STOREFRONT_CLIENTS" == ensure ]]; then
     || { echo "ERROR: a storefront client id did not read back" >&2; exit 1; }
 else
   echo "storefront client URIs not configured here; step 3.bis skipped" >&2
+fi
+
+# ── 3.bis.2. storefront secrets into the api's secret env (003 EARS-62) ──────
+# The api authenticates each storefront client to Zitadel's token endpoint with
+# private_key_jwt (ADR-0015 §4): it needs that client's JSON application key
+# (AddAppKey `{"type":"KEY_TYPE_JSON"}` → `keyDetails`, base64 of
+# `{type:"application",keyId,key,appId,clientId}` — the exact value the api env
+# schema accepts). The storefront Next servers and the api share
+# INTERNAL_API_TOKEN, the bearer of every `/v1/internal/*` route. All three live in
+# IDP_SECRET_ENV_FILE (read by the api alone); IDP_INTERNAL_ENV_FILE gets the token
+# ONLY, the same value, so a storefront server never holds a client key. Values
+# pass from the API response through shell variables into the files, never to
+# stdout/stderr — the log carries key ids and kept/minted verdicts only.
+# Idempotent: a stored key is kept while its keyId is still listed on ITS app (a
+# revoked key or a re-created app ⇒ a fresh key); a stored token of ≥32 bytes is
+# kept. Each file is rewritten (0600, atomic rename) only when its content changed.
+# Any failed hop before the first write refuses with both files untouched; a failed
+# internal write after it leaves a secret file whose token the re-run keeps.
+
+# env_file_value <file> <NAME>  ->  the last NAME= value in file (empty if none)
+env_file_value() {
+  [[ -f "$1" ]] || return 0
+  { grep -E "^[[:space:]]*(export[[:space:]]+)?$2=" "$1" || true; } | tail -n 1 \
+    | sed -E "s/^[[:space:]]*(export[[:space:]]+)?$2=//" | tr -d '\r'
+}
+
+# ensure_storefront_client_key <app-name> <stored-key>  ->  prints the key to keep
+# (captured by the caller into a variable; never echoed)
+ensure_storefront_client_key() {
+  local name="$1" stored="$2" search app_id listed stored_id minted key_id
+  search="$(api POST "/management/v1/projects/${PROJECT_ID}/apps/_search" \
+    "$(jq -nc --arg n "$name" '{queries:[{nameQuery:{name:$n,method:"TEXT_QUERY_METHOD_EQUALS"}}]}')")" || return 1
+  app_id="$(jq -r --arg n "$name" '[.result[]? | select(.name==$n) | .id][0] // empty' <<< "$search")"
+  [[ -n "$app_id" ]] || { echo "ERROR: storefront client ${name} not found for its key" >&2; return 1; }
+  listed="$(api POST "/management/v1/projects/${PROJECT_ID}/apps/${app_id}/keys/_search" '{}')" || return 1
+  if [[ -n "$stored" ]]; then
+    stored_id="$(jq -Rr --arg a "$app_id" \
+      'try (@base64d | fromjson | select(.type=="application" and .appId==$a and (.key|type)=="string") | .keyId) // empty' \
+      <<< "$stored" 2>/dev/null || true)"
+    if [[ -n "$stored_id" ]] \
+       && jq -e --arg k "$stored_id" '[.result[]?.id] | index($k) != null' <<< "$listed" >/dev/null; then
+      echo "storefront client ${name}: key ${stored_id} kept" >&2
+      printf '%s' "$stored"
+      return 0
+    fi
+  fi
+  minted="$(api POST "/management/v1/projects/${PROJECT_ID}/apps/${app_id}/keys" '{"type":"KEY_TYPE_JSON"}' \
+    | jq -r '.keyDetails // empty')" || return 1
+  key_id="$(jq -Rr --arg a "$app_id" \
+    'try (@base64d | fromjson | select(.type=="application" and .appId==$a and (.key|type)=="string") | .keyId) // empty' \
+    <<< "$minted" 2>/dev/null || true)"
+  [[ -n "$key_id" ]] || { echo "ERROR: Zitadel returned no usable JSON key for ${name}" >&2; return 1; }
+  echo "storefront client ${name}: key ${key_id} minted" >&2
+  printf '%s' "$minted"
+}
+
+# internal_api_token <stored>  ->  the stored token when ≥32 bytes, else a fresh one
+internal_api_token() {
+  if (( ${#1} >= 32 )); then
+    echo "INTERNAL_API_TOKEN kept" >&2
+    printf '%s' "$1"
+    return 0
+  fi
+  local fresh
+  fresh="$(head -c 32 /dev/urandom | base64 | tr -d '\n')" || return 1
+  (( ${#fresh} >= 32 )) || return 1
+  echo "INTERNAL_API_TOKEN minted" >&2
+  printf '%s' "$fresh"
+}
+
+# write_secret_env <file> NAME=VALUE...  ->  replaces those names, keeps every other line
+write_secret_env() {
+  local file="$1" names="" pair tmp
+  shift
+  for pair in "$@"; do names+="${names:+|}${pair%%=*}"; done
+  tmp="$(mktemp "${file}.XXXXXX")" || return 1
+  if ! { if [[ -f "$file" ]]; then
+           grep -vE "^[[:space:]]*(export[[:space:]]+)?(${names})=" "$file" || true
+         fi
+         printf '%s\n' "$@"; } > "$tmp" \
+     || ! chmod 600 "$tmp" || ! mv -f "$tmp" "$file"; then
+    rm -f "$tmp"
+    return 1
+  fi
+}
+
+# write_internal_env <file> <token>  ->  the file holds ONLY that token
+write_internal_env() {
+  local file="$1" wanted tmp
+  wanted="# written by provision.sh step 3.bis.2: the storefront servers' INTERNAL_API_TOKEN only
+INTERNAL_API_TOKEN=$2"
+  if [[ -f "$file" && "$(cat -- "$file")" == "$wanted" ]]; then
+    echo "INTERNAL_API_TOKEN in ${file}: unchanged" >&2
+    return 0
+  fi
+  tmp="$(mktemp "${file}.XXXXXX")" || return 1
+  if ! printf '%s\n' "$wanted" > "$tmp" || ! chmod 600 "$tmp" || ! mv -f "$tmp" "$file"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  echo "INTERNAL_API_TOKEN written to ${file} (token only)" >&2
+}
+
+# ensure_storefront_secrets <file> [internal-file]
+ensure_storefront_secrets() {
+  local file="$1" internal="${2:-}" academy doctor token old_academy old_doctor old_token
+  old_academy="$(env_file_value "$file" IDP_ACADEMY_CLIENT_KEY)"
+  old_doctor="$(env_file_value "$file" IDP_DOCTOR_CLIENT_KEY)"
+  old_token="$(env_file_value "$file" INTERNAL_API_TOKEN)"
+  academy="$(ensure_storefront_client_key "$ACADEMY_APP_NAME" "$old_academy")" || return 1
+  doctor="$(ensure_storefront_client_key "$DOCTOR_APP_NAME" "$old_doctor")" || return 1
+  token="$(internal_api_token "$old_token")" || return 1
+  [[ -n "$academy" && -n "$doctor" && -n "$token" ]] || return 1
+  if [[ "$academy" == "$old_academy" && "$doctor" == "$old_doctor" && "$token" == "$old_token" ]]; then
+    echo "storefront secrets in ${file}: unchanged" >&2
+  else
+    write_secret_env "$file" \
+      "IDP_ACADEMY_CLIENT_KEY=${academy}" "IDP_DOCTOR_CLIENT_KEY=${doctor}" "INTERNAL_API_TOKEN=${token}" \
+      || return 1
+    echo "storefront secrets written to ${file} (IDP_ACADEMY_CLIENT_KEY, IDP_DOCTOR_CLIENT_KEY, INTERNAL_API_TOKEN)" >&2
+  fi
+  if [[ -n "$internal" ]]; then
+    write_internal_env "$internal" "$token" || return 1
+  fi
+}
+
+if [[ -n "$SECRET_ENV_FILE" ]]; then
+  ensure_storefront_secrets "$SECRET_ENV_FILE" "${INTERNAL_ENV_FILE:-}" \
+    || { echo "ERROR: the storefront secrets could not be produced; ${SECRET_ENV_FILE} left as it was" >&2; exit 1; }
+elif [[ "$STOREFRONT_CLIENTS" == ensure ]]; then
+  echo "IDP_SECRET_ENV_FILE not set; step 3.bis.2 (storefront client keys, INTERNAL_API_TOKEN) skipped" >&2
 fi
 
 # ── 3.ter. pin the Zitadel Management Console to Login V2 per app ────────────

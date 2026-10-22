@@ -1,3 +1,4 @@
+import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -114,7 +115,7 @@ Given(
         process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
       );
       if (kind !== "unknown") {
-        const { response, code } = await registerOwnedCredentials(
+        const { response, body, code } = await registerOwnedCredentials(
           owned,
           world.hostBaseUrl,
           probe,
@@ -123,7 +124,7 @@ Given(
         expect(
           registrationEvidence(
             response.request().postData() ?? "",
-            await response.text(),
+            body,
             probe,
           ),
         ).toEqual({
@@ -137,7 +138,10 @@ Given(
           probe,
         );
         if (kind === "verified") {
-          const pending = captureResponse(owned, "/v1/auth/verify");
+          const pending = captureResponse(
+            owned,
+            signInHostApiPath("/v1/auth/verify"),
+          );
           await inputSecret(
             owned.locator('input[autocomplete="one-time-code"]'),
             code,
@@ -153,6 +157,7 @@ Given(
               accepted.body,
               probe,
               code,
+              world.hostBaseUrl,
             ),
           ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
           await owned.waitForURL((url) => url.pathname === "/account");
@@ -210,7 +215,10 @@ When(
   async ({ page, $testInfo: testInfo }) => {
     const value = state(page);
     for (const probe of value.probes) {
-      const pending = captureResponse(probe.page, "/v1/auth/verify");
+      const pending = captureResponse(
+        probe.page,
+        signInHostApiPath("/v1/auth/verify"),
+      );
       await inputSecret(
         probe.page.locator('input[autocomplete="one-time-code"]'),
         value.wrongCode!,
@@ -218,9 +226,9 @@ When(
       const captured = await pending;
       let codeOnly = false;
       try {
-        const request: unknown = JSON.parse(
+        const request: unknown = hostCommand(JSON.parse(
           captured.response.request().postData() ?? "",
-        );
+        ));
         codeOnly =
           request !== null &&
           typeof request === "object" &&

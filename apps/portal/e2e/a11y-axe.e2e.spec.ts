@@ -7,7 +7,9 @@ import { test, expect, type Page } from "@playwright/test";
  * resurrecting the #274 tier retired by the #351 showcase retarget).
  *
  * The showcase `playwright-axe` CI gate scans the DS primitives in isolation;
- * THIS spec scans the COMPOSED product pages — /login, /register, /reset — for
+ * THIS spec scans the COMPOSED product pages — the documents and the
+ * education-index demo (the sign-in forms /login, /register, /reset moved to
+ * the sign-in host tier, `apps/login/e2e`, with #3172) — for
  * what only a real page can violate: page-shell landmark structure
  * (`landmark-one-main`, `landmark-no-duplicate-main`, `landmark-main-is-top-level` —
  * best-practice rules, enabled explicitly beside the tag set via
@@ -202,24 +204,6 @@ async function scan(
 }
 
 test.describe("#400 page-level axe a11y scan (backend-free)", () => {
-  test("login page passes WCAG 2 A/AA + one-h1 shell check", async ({
-    page,
-  }) => {
-    await scan(page, "/login");
-  });
-
-  test("register page passes WCAG 2 A/AA + one-h1 shell check", async ({
-    page,
-  }) => {
-    await scan(page, "/register");
-  });
-
-  test("reset page passes WCAG 2 A/AA + one-h1 shell check", async ({
-    page,
-  }) => {
-    await scan(page, "/reset");
-  });
-
   // 028 EARS-2/3/4/5 — the Academy documents surfaces. Both are composed
   // long-form reading pages (heading hierarchy, link contrast, landmark
   // structure), which is precisely what a primitive-level scan cannot cover.
@@ -261,93 +245,3 @@ test.describe("#400 page-level axe a11y scan (backend-free)", () => {
     });
   });
 });
-
-/**
- * #2027 PR 1.8 — the password-recovery route joins the gate on this host the
- * day it mounts the shared `@ds/auth-flow/reset` door. Both stages are scanned,
- * because the complete stage (code slots, the new-password field with its reveal
- * toggle, «Начать заново», the resend) is a second composition reachable only
- * by submitting the request stage. Each stage runs at the desktop and the
- * mobile width in both themes: the WCAG 2 A/AA bar in THAT theme, exactly one
- * non-empty `h1`, and no horizontal overflow (the mobile-parity arm). The
- * initiate acknowledgement is identical for every identifier (003 EARS-16), so
- * it is fulfilled at the network edge; the round trip itself is driven live by
- * the stand drives, not on this backend-free tier.
- */
-for (const stage of ["request", "complete"] as const) {
-  for (const [viewport, size] of [
-    ["desktop", { width: 1440, height: 900 }],
-    ["mobile", { width: 390, height: 844 }],
-  ] as const) {
-    for (const theme of ["light", "dark"] as const) {
-      test(`003 EARS-11/12 /reset ${stage} stage passes WCAG 2 A/AA + one-h1, no overflow (${viewport}, ${theme})`, async ({
-        page,
-      }) => {
-        // The anonymous principal, as `scan` fulfills it for every route.
-        await page.route(SESSION_PROBE, (route) =>
-          route.fulfill({
-            status: 401,
-            contentType: "application/json",
-            body: JSON.stringify({ message: "unauthorized" }),
-          }),
-        );
-        await page.addInitScript((value: string) => {
-          window.localStorage.setItem("ds-theme", value);
-        }, theme);
-        await page.setViewportSize(size);
-        await page.route("**/v1/auth/password/reset", (route) =>
-          route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: JSON.stringify({}),
-          }),
-        );
-        await page.goto("/reset");
-        await page.getByTestId("reset-request-submit").waitFor();
-        if (stage === "complete") {
-          await page
-            .locator('input[autocomplete="username"]')
-            .fill("doc@example.com");
-          await page.getByTestId("reset-request-submit").click();
-          await expect(
-            page.locator('input[autocomplete="new-password"]'),
-          ).toBeVisible();
-        }
-        const html = page.locator("html");
-        if (theme === "dark") {
-          await expect(html).toHaveClass(/(^|\s)dark(\s|$)/);
-        } else {
-          await expect(html).not.toHaveClass(/(^|\s)dark(\s|$)/);
-        }
-
-        const h1 = page.locator("h1");
-        await expect(h1, "h1 count on /reset").toHaveCount(1);
-        await expect(h1, "h1 text on /reset").not.toHaveText(/^\s*$/);
-
-        const measured = await page.evaluate(() => ({
-          scrollWidth: document.scrollingElement?.scrollWidth ?? 0,
-          innerWidth: window.innerWidth,
-        }));
-        expect(
-          measured.scrollWidth,
-          `document scrollWidth (${measured.scrollWidth}) exceeds the viewport (${measured.innerWidth})`,
-        ).toBeLessThanOrEqual(measured.innerWidth);
-
-        const results = await new AxeBuilder({ page })
-          .options({ rules: MAIN_LANDMARK_RULES })
-          .withTags(WCAG_TAGS)
-          .analyze();
-        const summary = results.violations.map((v) => ({
-          id: v.id,
-          impact: v.impact,
-          help: v.help,
-          nodes: v.nodes.map((n) => n.target).flat(),
-        }));
-        expect(
-          summary,
-          `axe violations on /reset (${stage}, ${viewport}, ${theme})`,
-        ).toEqual([]);
-      });
-    }
-  }
-}

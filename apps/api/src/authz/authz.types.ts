@@ -47,8 +47,17 @@ export type Role = (typeof ROLES)[number];
  *   verified by the classified handler against the server-side pending-auth
  *   record (its fingerprint and its required next step); the guard's job on these
  *   rows is to NOT wave through a session-based subject.
+ * - `internal`      — 003 EARS-62 / EARS-71 (ADR-0015 §4 req. 2): a route under
+ *   `INTERNAL_API_PREFIX` (`/v1/internal`) that only the storefront servers
+ *   call, with `Authorization: Bearer <INTERNAL_API_TOKEN>`. Not `public` —
+ *   no browser may reach it — and not `authenticated` — the caller is a
+ *   server, not a session subject. The credential is checked by
+ *   `InternalApiMiddleware` before any guard (a 404 without it); the matrix
+ *   binds the class to the prefix both ways, and the guard admits it only on
+ *   a request under the prefix.
  */
-export type AuthzAccess = "public" | "authenticated" | "pending-auth";
+export type AuthzAccess =
+  "public" | "authenticated" | "pending-auth" | "internal";
 
 /**
  * Engine-neutral enforcement strength (spec §3):

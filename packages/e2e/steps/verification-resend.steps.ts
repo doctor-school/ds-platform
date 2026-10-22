@@ -1,3 +1,7 @@
+import { hostCommand,
+  isAuthCommandPath,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -82,7 +86,7 @@ Given(
       state.visitors
         .filter((visitor) => visitor.kind !== "unknown")
         .map(async (visitor) => {
-          const { response, code } = await registerOwnedCredentials(
+          const { response, body, code } = await registerOwnedCredentials(
             visitor.page,
             world.hostBaseUrl,
             visitor,
@@ -91,7 +95,7 @@ Given(
           expect(
             registrationEvidence(
               response.request().postData() ?? "",
-              await response.text(),
+              body,
               visitor,
             ),
           ).toEqual({
@@ -105,7 +109,10 @@ Given(
             visitor,
           );
           if (visitor.kind === "verified") {
-            const pending = captureResponse(visitor.page, "/v1/auth/verify");
+            const pending = captureResponse(
+              visitor.page,
+              signInHostApiPath("/v1/auth/verify"),
+            );
             await inputSecret(
               visitor.page.locator('input[autocomplete="one-time-code"]'),
               code,
@@ -121,6 +128,7 @@ Given(
                 accepted.body,
                 visitor,
                 code,
+                world.hostBaseUrl,
               ),
             ).toEqual({
               credentialsMatch: true,
@@ -174,7 +182,7 @@ Given(
         route.searchParams.set("returnTo", "/account");
         visitor.page.on("request", (request) => {
           const path = new URL(request.url()).pathname;
-          if (request.method() === "POST" && path.startsWith("/v1/auth/"))
+          if (request.method() === "POST" && isAuthCommandPath(path))
             visitor.authPosts.push(path);
         });
         await visitor.page.goto(route.toString(), { waitUntil: "load" });
@@ -213,7 +221,10 @@ When(
           mailpit,
           visitor.email,
         );
-        const pending = captureResponse(visitor.page, "/v1/auth/verify/resend");
+        const pending = captureResponse(
+          visitor.page,
+          signInHostApiPath("/v1/auth/verify/resend"),
+        );
         await resend.click();
         const captured = await pending;
         let neutralBody = false;
@@ -226,7 +237,7 @@ When(
             !Array.isArray(body) &&
             Object.keys(body).length === 1 &&
             body.status === "resend_requested";
-          const submitted = captured.response.request().postDataJSON();
+          const submitted = hostCommand(captured.response.request().postDataJSON());
           identifierOnly =
             submitted !== null &&
             typeof submitted === "object" &&
@@ -281,7 +292,7 @@ Then(
       expect(
         visitor.authPosts,
         "one real resend and no code acceptance or registration replay",
-      ).toEqual(["/v1/auth/verify/resend"]);
+      ).toEqual([signInHostApiPath("/v1/auth/verify/resend")]);
     }
   },
 );
@@ -396,7 +407,9 @@ Then(
           .inputValue()) === "",
         "no reissued code submitted",
       ).toBe(true);
-      expect(visitor.authPosts).toEqual(["/v1/auth/verify/resend"]);
+      expect(visitor.authPosts).toEqual([
+        signInHostApiPath("/v1/auth/verify/resend"),
+      ]);
     }
   },
 );

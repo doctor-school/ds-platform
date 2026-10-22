@@ -1,3 +1,5 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -162,13 +164,16 @@ async function passwordLogin(state: IsolationJourney, owned: OwnedSession) {
     owned.page.locator('input[autocomplete="current-password"]'),
     state.password,
   );
-  const pending = captureResponse(owned.page, "/v1/auth/login");
+  const pending = captureResponse(
+    owned.page,
+    signInHostApiPath("/v1/auth/login"),
+  );
   await owned.page.getByRole("button", { name: /Войти|Продолжить/i }).click();
   const accepted = await pending;
   expect(
     {
       status: accepted.response.status(),
-      acknowledgement: accepted.body === '{"status":"authenticated"}',
+      acknowledgement: storefrontCallbackAcknowledgement(accepted.body, state.base),
     },
     "actual independent password login accepted",
   ).toEqual({ status: 200, acknowledgement: true });
@@ -224,7 +229,10 @@ Given(
       state,
       "/account",
     );
-    const pending = captureResponse(first.page, "/v1/auth/verify");
+    const pending = captureResponse(
+      first.page,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       first.page.locator('input[autocomplete="one-time-code"]'),
       code,

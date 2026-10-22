@@ -368,9 +368,16 @@ export type EmailCodeTrigger = "sign-in" | "re-registration";
  * 003 EARS-41: the registration values a code step submits with the code. Only
  * the password reaches the IdP; consent is the BFF's own record.
  */
-export interface EmailCodeRegistration {
-  password: string;
-}
+/**
+ * 003 EARS-41 — what the warm registration code step carries: the in-tab
+ * password the registration typed (classic `/verify`), or — on the sign-in
+ * host, whose full page loads carry no in-tab value — the account the host's
+ * form state proves this browser created (`keepPasswordOf`): its
+ * pre-verification password is then kept, for exactly that account.
+ */
+export type EmailCodeRegistration =
+  | { password: string }
+  | { keepPasswordOf: string };
 
 /**
  * 003 EARS-41: the outcome of an accepted email code.
@@ -607,8 +614,8 @@ export interface IdpClient {
    * state, which Zitadel check applies — the armed `otp_email` login challenge
    * for a verified address, the email-verification check for an unverified one.
    * On the unverified branch the account's pre-verification password is
-   * replaced by `registration.password`, or invalidated when no registration is
-   * submitted, before any session exists; the session is then armed and
+   * replaced by `registration.password`, kept when `registration.keepPasswordOf`
+   * names this very account, or invalidated otherwise, before any session exists; the session is then armed and
    * completed in one request with the Zitadel-returned code. On the verified
    * branch `registration.password` is set only when the account has none
    * (fail-soft). Resolves `null` for every failure (unknown identifier, wrong /

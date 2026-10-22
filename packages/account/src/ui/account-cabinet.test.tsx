@@ -54,7 +54,11 @@ vi.mock("next/link", () => ({
   }: {
     href: string;
     children: React.ReactNode;
-  }) => <a href={href}>{children}</a>,
+  }) => (
+    <a data-router-link="" href={href}>
+      {children}
+    </a>
+  ),
 }));
 
 // The cabinet builds its client from the host's `api` (gate D1/D2); the bound
@@ -343,6 +347,12 @@ describe("003 EARS-28 /account profile surface", () => {
     await renderReady();
     const link = screen.getByText("Сменить пароль").closest("a");
     expect(link?.getAttribute("href")).toBe("/reset?returnTo=%2Faccount");
+  });
+
+  it("003 EARS-61: «Сменить пароль» is a plain document link to the reset entry, never a prefetching router link", async () => {
+    await renderReady();
+    const link = screen.getByText("Сменить пароль").closest("a");
+    expect(link).not.toHaveAttribute("data-router-link");
   });
 
   it("014 EARS-9: the «Мои события» row links at the configured route", async () => {

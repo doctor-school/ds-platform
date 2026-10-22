@@ -1,3 +1,7 @@
+import { hostCommand,
+  isAuthCommandPath,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { randomInt, randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import {
@@ -74,7 +78,7 @@ function refusalEvidence(
   phone: string,
   state: PhoneOnlyRegistration,
 ): PhoneRefusal["evidence"] {
-  const request = parsedObject(observed.response.request().postData() ?? "");
+  const request = hostCommand(parsedObject(observed.response.request().postData() ?? ""));
   const response = parsedObject(observed.body);
   const errors = response.errors;
   const issue =
@@ -164,7 +168,7 @@ Given(
     registrations.set(page, state);
     owned.on("request", (request) => {
       const pathname = new URL(request.url()).pathname;
-      if (request.method() === "POST" && pathname.startsWith("/v1/auth/"))
+      if (request.method() === "POST" && isAuthCommandPath(pathname))
         state.authPosts.push(pathname);
     });
     await prepareCaptchaForJourney(
@@ -217,7 +221,10 @@ When(
       });
     for (const phone of state.phones) {
       // 003 EARS-2/16: probe the public request contract without modifying the form.
-      const pending = captureResponse(state.page, "/v1/auth/register");
+      const pending = captureResponse(
+        state.page,
+        signInHostApiPath("/v1/auth/register"),
+      );
       await state.page.evaluate(
         async ({ phone, password, token }) => {
           try {
@@ -345,7 +352,10 @@ When(
   "the same visitor submits the real Academy registration form with a unique valid email as a control",
   async ({ page, world }) => {
     const state = registration(page);
-    const pending = captureResponse(state.page, "/v1/auth/register");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/register"),
+    );
     const { response, code } = await registerOwnedCredentials(
       state.page,
       world.hostBaseUrl,
@@ -395,7 +405,11 @@ Then(
     expect(
       state.authPosts,
       "two invalid requests and one valid form submission only",
-    ).toEqual(["/v1/auth/register", "/v1/auth/register", "/v1/auth/register"]);
+    ).toEqual([
+      signInHostApiPath("/v1/auth/register"),
+      signInHostApiPath("/v1/auth/register"),
+      signInHostApiPath("/v1/auth/register"),
+    ]);
     await expect(
       state.page.locator('input[type="tel"], input[autocomplete="tel"]'),
     ).toHaveCount(0);

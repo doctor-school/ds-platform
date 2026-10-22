@@ -10,11 +10,17 @@ import { openAtRest, sealAtRest } from "../common/crypto/at-rest.js";
  * - **form state**, keyed by the form-state cookie: the CSRF token the form
  *   posts back, the storefront the auth request's `client_id` selected (the
  *   EARS-66 return target for a later stale request — never a URL parameter),
- *   the auth request this form answers, and the entry intent spent for it.
+ *   the auth request this form answers, the entry intent spent for it, and the
+ *   registration this browser created for it (the EARS-24/41 warm proof).
  * - **entry intents**, keyed by their opaque id (the authorize `login_hint`):
  *   `{door, method?, handoff?, eventTarget?, client_id}`, readable at most
- *   once. The writer is the storefront entry (#3006 S3/S4); `putIntent` is that
- *   writer's seam and the test-support writer.
+ *   once. The writer is the storefront entry's transaction (EARS-71); it is
+ *   deleted with that transaction.
+ * - **storefront transactions** (003 EARS-61, ADR-0015 §4 step 1), keyed by
+ *   their opaque id (the storefront's `__Host-ds_oidc_tx`): the `state`,
+ *   `nonce` and PKCE verifier the API generated, the return path, the door,
+ *   the kind and the bound intent id — the whole record an at-rest envelope,
+ *   readable at most once (the callback's redeem takes it).
  *
  * Only `SHA-256(id)` ever reaches a key, and the hand-off reference is an
  * at-rest envelope (`common/crypto/at-rest.ts`), so a Redis dump carries no
@@ -31,11 +37,42 @@ export interface EntryIntent {
   readonly clientId: string;
 }
 
+/** 003 EARS-61 — one storefront transaction, held only by the API. */
+export interface StorefrontTransaction {
+  readonly client: SignInHostStorefront;
+  readonly clientId: string;
+  readonly kind: "interactive" | "silent";
+  readonly door: SignInHostDoor;
+  readonly state: string;
+  readonly nonce: string;
+  readonly verifier: string;
+  readonly returnPath?: string | undefined;
+  /** 005 EARS-2 — the эфир slug whose registration the callback completes. */
+  readonly completeRegistration?: string | undefined;
+  /** The bound entry intent's id (EARS-71), deleted with the transaction. */
+  readonly intentId?: string | undefined;
+}
+
+/**
+ * 003 EARS-24/41 — the registration this form's browser just submitted on the
+ * host: the account the registration CREATED, its address and the auth request
+ * it answered. It is the host's proof that the code step runs in the same
+ * browser as the registration (the warm step), standing in for the in-tab
+ * password the host's full page loads cannot carry. Never a password.
+ */
+export interface FormRegistration {
+  readonly sub: string;
+  readonly email: string;
+  readonly authRequestId: string;
+  readonly createdAt: number;
+}
+
 export interface FormState {
   readonly csrfToken: string;
   readonly storefront: SignInHostStorefront;
   readonly authRequestId: string;
   readonly intent?: EntryIntent | undefined;
+  readonly registration?: FormRegistration | undefined;
 }
 
 export interface SignInHostStateStore {
@@ -50,6 +87,13 @@ export interface SignInHostStateStore {
   putIntent(intent: EntryIntent, ttlSeconds: number): Promise<string>;
   /** Read and delete in one step: a second read of the same id is `null`. */
   takeIntent(id: string): Promise<EntryIntent | null>;
+  /** Store a transaction for `ttlSeconds`; returns its fresh opaque id (32 random bytes). */
+  putTransaction(
+    tx: StorefrontTransaction,
+    ttlSeconds: number,
+  ): Promise<string>;
+  /** Read and delete in one step (single use): a second read of the same id is `null`. */
+  takeTransaction(id: string): Promise<StorefrontTransaction | null>;
   /**
    * 003 EARS-12 / EARS-41 defence in depth — the moment every session of
    * `subject` was last revoked, kept for as long as any record can live; a
@@ -72,6 +116,7 @@ export function newOpaqueId(): string {
 const FORM_PREFIX = "sign-in-host:form:";
 const INTENT_PREFIX = "sign-in-host:intent:";
 const REVOKED_PREFIX = "sign-in-host:revoked:";
+const TX_PREFIX = "sign-in-host:tx:";
 
 function parseInstant(raw: string | null): Date | null {
   if (raw === null) return null;
@@ -120,6 +165,26 @@ class StateCodec {
     };
   }
 
+  encodeTransaction(tx: StorefrontTransaction, context: string): string {
+    return sealAtRest(JSON.stringify(tx), this.key, context);
+  }
+
+  decodeTransaction(
+    raw: string,
+    context: string,
+  ): StorefrontTransaction | null {
+    const plain = openAtRest(raw, this.key, context);
+    if (!plain) return null;
+    try {
+      const tx = JSON.parse(plain) as Partial<StorefrontTransaction>;
+      if (!tx.client || !tx.clientId || !tx.state || !tx.nonce || !tx.door)
+        return null;
+      return tx as StorefrontTransaction;
+    } catch {
+      return null;
+    }
+  }
+
   encodeForm(state: FormState, context: string): string {
     return JSON.stringify({
       csrfToken: state.csrfToken,
@@ -128,6 +193,7 @@ class StateCodec {
       ...(state.intent
         ? { intent: this.encodeIntent(state.intent, context) }
         : {}),
+      ...(state.registration ? { registration: state.registration } : {}),
     });
   }
 
@@ -138,17 +204,33 @@ class StateCodec {
         storefront?: SignInHostStorefront;
         authRequestId?: string;
         intent?: Serialised;
+        registration?: Partial<FormRegistration>;
       };
       if (!parsed.csrfToken || !parsed.storefront || !parsed.authRequestId)
         return null;
       const intent = parsed.intent
         ? this.decodeIntent(parsed.intent, context)
         : null;
+      const r = parsed.registration;
+      const registration =
+        r &&
+        typeof r.sub === "string" &&
+        typeof r.email === "string" &&
+        typeof r.authRequestId === "string" &&
+        typeof r.createdAt === "number"
+          ? {
+              sub: r.sub,
+              email: r.email,
+              authRequestId: r.authRequestId,
+              createdAt: r.createdAt,
+            }
+          : undefined;
       return {
         csrfToken: parsed.csrfToken,
         storefront: parsed.storefront,
         authRequestId: parsed.authRequestId,
         ...(intent ? { intent } : {}),
+        ...(registration ? { registration } : {}),
       };
     } catch {
       return null;
@@ -213,6 +295,29 @@ export class RedisSignInHostStateStore implements SignInHostStateStore {
     } catch {
       return null;
     }
+  }
+
+  async putTransaction(
+    tx: StorefrontTransaction,
+    ttlSeconds: number,
+  ): Promise<string> {
+    const id = newOpaqueId();
+    const k = hashed(TX_PREFIX, id);
+    await this.redis.set(
+      k,
+      this.codec.encodeTransaction(tx, k),
+      "EX",
+      ttlSeconds,
+    );
+    return id;
+  }
+
+  async takeTransaction(id: string): Promise<StorefrontTransaction | null> {
+    const k = hashed(TX_PREFIX, id);
+    const raw = await this.redis.eval(TAKE_SCRIPT, 1, k);
+    return typeof raw === "string"
+      ? this.codec.decodeTransaction(raw, k)
+      : null;
   }
 
   async markSubjectRevoked(subject: string, at: Date, ttlSeconds: number) {
@@ -298,6 +403,23 @@ export class InMemorySignInHostStateStore implements SignInHostStateStore {
     } catch {
       return Promise.resolve(null);
     }
+  }
+
+  putTransaction(
+    tx: StorefrontTransaction,
+    ttlSeconds: number,
+  ): Promise<string> {
+    const id = newOpaqueId();
+    const k = hashed(TX_PREFIX, id);
+    this.write(k, this.codec.encodeTransaction(tx, k), ttlSeconds);
+    return Promise.resolve(id);
+  }
+
+  takeTransaction(id: string): Promise<StorefrontTransaction | null> {
+    const k = hashed(TX_PREFIX, id);
+    const raw = this.read(k);
+    this.entries.delete(k);
+    return Promise.resolve(raw ? this.codec.decodeTransaction(raw, k) : null);
   }
 
   markSubjectRevoked(subject: string, at: Date, ttlSeconds: number) {

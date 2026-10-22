@@ -7,7 +7,11 @@ import { ACADEMY_AUTH_FLOW } from "@ds/auth-flow/hosts";
  * Re-exported under this file's old names, so every route file of this host
  * keeps its one import.
  */
-export { ACADEMY_AUTH_FLOW, ACADEMY_AUTH_FLOW_API } from "@ds/auth-flow/hosts";
+export {
+  ACADEMY_AUTH_FLOW,
+  ACADEMY_AUTH_FLOW_API,
+  ACADEMY_STOREFRONT_OIDC,
+} from "@ds/auth-flow/hosts";
 
 /**
  * The Academy's account cabinet config (#2073, wave-4 gate D1) — a second export

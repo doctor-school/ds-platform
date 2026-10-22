@@ -7,7 +7,11 @@ import { DOCTOR_AUTH_FLOW } from "@ds/auth-flow/hosts";
  * another app. Re-exported under this file's old names, so every route file of
  * this host keeps its one import.
  */
-export { DOCTOR_AUTH_FLOW, DOCTOR_AUTH_FLOW_API } from "@ds/auth-flow/hosts";
+export {
+  DOCTOR_AUTH_FLOW,
+  DOCTOR_AUTH_FLOW_API,
+  DOCTOR_STOREFRONT_OIDC,
+} from "@ds/auth-flow/hosts";
 
 /**
  * The doctor storefront's account cabinet config (#2073, wave-4 gate D1) — a

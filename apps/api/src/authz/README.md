@@ -37,6 +37,13 @@ async logout() {}
 Field contract and interdependencies: spec §3 / §3.1 (enforced by `validateRow`).
 A `@Public()` handler **still must** carry `@Authz({ access: "public", … })`.
 
+A storefront-server-only route under `INTERNAL_API_PREFIX` (`/v1/internal`,
+003 EARS-62) is `access: "internal"` with `check: "none"` and no roles — the
+matrix refuses the class anywhere else and any other class under the prefix;
+its controller applies `InternalApiMiddleware` (bearer `INTERNAL_API_TOKEN`,
+404 without it) and `@ApiExcludeController()` (not public API surface: absent
+from the OpenAPI document and the generated client).
+
 ## Regenerating the matrix
 
 The committed `apps/api/docs/endpoint-authz-matrix.md` is generated — do not edit

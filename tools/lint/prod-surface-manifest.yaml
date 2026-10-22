@@ -42,22 +42,6 @@ routes:
     file: apps/portal/app/@footer/[...catchAll]/page.tsx
     status: product-ready
   - app: portal
-    route: /login
-    file: apps/portal/app/login/page.tsx
-    status: product-ready
-  - app: portal
-    route: /register
-    file: apps/portal/app/register/page.tsx
-    status: product-ready
-  - app: portal
-    route: /reset
-    file: apps/portal/app/reset/page.tsx
-    status: product-ready
-  - app: portal
-    route: /verify
-    file: apps/portal/app/verify/page.tsx
-    status: product-ready
-  - app: portal
     route: /account
     file: apps/portal/app/account/page.tsx
     status: product-ready
@@ -157,78 +141,42 @@ routes:
     status: deferred
     issue: "#1430"
 
-  - app: doctor
-    route: /register
-    file: apps/doctor/app/(auth)/register/page.tsx
-    status: deferred
-    issue: "#1430"
-
-  - app: doctor
-    route: /login
-    file: apps/doctor/app/(auth)/login/page.tsx
-    status: deferred
-    issue: "#1430"
-
-  # 003 EARS-24 (#2455) — the registration confirmation step on THIS host: the
-  # same package `/verify` route the Academy mounts. Same cut-over as the doors
-  # beside it — the storefront opens with #1430.
-  - app: doctor
-    route: /verify
-    file: apps/doctor/app/(auth)/verify/page.tsx
-    status: deferred
-    issue: "#1430"
-
-  # 003 EARS-11/12 (#1989) — password recovery on THIS host: the shared
-  # `<PasswordRecoveryCard>` projected by `components/reset-screen.tsx`, ending
-  # the #1933/#1958 interim that sent «Забыли пароль» and «Сменить пароль»
-  # across to the Academy. Same cut-over as the doors beside it — the storefront
-  # opens with #1430.
-  - app: doctor
-    route: /reset
-    file: apps/doctor/app/(auth)/reset/page.tsx
-    status: deferred
-    issue: "#1430"
-
   # 003 EARS-27/28 (#1958) — the 017 signed-in cluster «Личный кабинет» target:
   # the Academy account-profile surface projected onto this host through the
   # shared block, until feature 022 (#1791) replaces it with the doctor cabinet.
-  # Same cut-over as the two doors above — the storefront opens with #1430.
+  # The storefront opens with #1430.
   - app: doctor
     route: /account
     file: apps/doctor/app/(storefront)/account/page.tsx
     status: deferred
     issue: "#1430"
 
-  # 003 EARS-60 (#3170) — the sign-in host `login.doctor.school` (ADR-0015 §4):
+  # 003 EARS-60 / 61 — the sign-in host `login.doctor.school` (ADR-0015 §4):
   # one app that renders the Academy's or the doctor storefront's
   # `@ds/auth-flow` door for a Zitadel auth request, the storefront chosen by the
-  # server entry decision. Same doors as the storefront rows above, no copy of
-  # their own. The host is wired on stage and prod by #3171 (PR #3228); `deferred`
-  # because nothing sends users to it until the S4 storefront entry and callback
-  # (#3172) make it user-reachable.
+  # server entry decision. These are the only form pages of the sign-in doors:
+  # each storefront's `/login`, `/register`, `/reset` and `/verify` is a route
+  # handler that answers `303` into this host (EARS-61), and its
+  # `/auth/callback` is a route handler that renders no document (EARS-62).
   - app: login
     route: /login
     file: apps/login/app/login/page.tsx
-    status: deferred
-    issue: "#3172"
+    status: product-ready
 
   - app: login
     route: /register
     file: apps/login/app/register/page.tsx
-    status: deferred
-    issue: "#3172"
+    status: product-ready
 
   - app: login
     route: /reset
     file: apps/login/app/reset/page.tsx
-    status: deferred
-    issue: "#3172"
+    status: product-ready
 
   - app: login
     route: /verify
     file: apps/login/app/verify/page.tsx
-    status: deferred
-    issue: "#3172"
+    status: product-ready
 
   # 046 EARS-4 (#2433) — «Мои заявки на Конгресс», the route-file mount of the
   # shared `@ds/congress-submissions` section, linked from `/account`. Same

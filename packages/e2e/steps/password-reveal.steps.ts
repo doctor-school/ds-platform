@@ -1,3 +1,7 @@
+import {
+  isAuthCommandPath,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -108,8 +112,8 @@ Given(
     owned.on("request", (request) => {
       if (request.method() !== "POST") return;
       const path = new URL(request.url()).pathname;
-      if (!path.startsWith("/v1/auth/")) return;
-      if (path !== "/v1/auth/password/reset") {
+      if (!isAuthCommandPath(path)) return;
+      if (path !== signInHostApiPath("/v1/auth/password/reset")) {
         state.otherAuthCommands += 1;
         return;
       }
@@ -151,7 +155,8 @@ Given(
       );
       const pending = owned.waitForResponse(
         (response) =>
-          new URL(response.url()).pathname === "/v1/auth/password/reset" &&
+          new URL(response.url()).pathname ===
+            signInHostApiPath("/v1/auth/password/reset") &&
           response.request().method() === "POST",
       );
       await owned.getByTestId("reset-request-submit").click();

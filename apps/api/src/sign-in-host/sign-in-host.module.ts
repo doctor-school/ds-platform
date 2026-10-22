@@ -1,5 +1,10 @@
 import { randomBytes } from "node:crypto";
-import { Logger, Module } from "@nestjs/common";
+import {
+  Logger,
+  Module,
+  type MiddlewareConsumer,
+  type NestModule,
+} from "@nestjs/common";
 import { Redis } from "ioredis";
 import { AuthModule } from "../auth/auth.module.js";
 import { SessionModule } from "../auth/session/session.module.js";
@@ -20,6 +25,19 @@ import { SignInHostRecordPurge } from "./sign-in-host-record.purge.js";
 import { SignInHostRecordStore } from "./sign-in-host-record.store.js";
 import { SignInHostService } from "./sign-in-host.service.js";
 import { SignInHostSubjectRevocation } from "./sign-in-host-subject-revocation.js";
+import {
+  INTERNAL_API_TOKEN,
+  InternalApiMiddleware,
+} from "./internal-api.middleware.js";
+import { StorefrontOidcController } from "./storefront-oidc.controller.js";
+import { FakeStorefrontOidc } from "./storefront-oidc.idp.fake.js";
+import {
+  STOREFRONT_OIDC_IDP,
+  ZitadelStorefrontOidc,
+  type StorefrontOidcIdp,
+} from "./storefront-oidc.idp.js";
+import { parseClientKey, type ClientKey } from "./storefront-oidc.jwt.js";
+import { StorefrontOidcService } from "./storefront-oidc.service.js";
 import {
   InMemorySignInHostStateStore,
   RedisSignInHostStateStore,
@@ -49,8 +67,35 @@ import {
   // StorefrontModule: the doctor storefront's register / verify command the
   // host's doctor registration door runs (003 EARS-24 amended).
   imports: [AuthModule, SessionModule, StorefrontModule],
-  controllers: [SignInHostController],
+  controllers: [SignInHostController, StorefrontOidcController],
   providers: [
+    {
+      // 003 EARS-62 / EARS-71 — the internal credential; unset, every
+      // `/v1/internal/*` route answers 404.
+      provide: INTERNAL_API_TOKEN,
+      useFactory: (): string | null => loadEnv().INTERNAL_API_TOKEN ?? null,
+    },
+    {
+      // 003 EARS-62 — the storefront clients' token endpoint call. The real
+      // adapter whenever a Zitadel issuer is configured (a client without its
+      // key then fails closed, never falls back to a fake); the fake otherwise.
+      provide: STOREFRONT_OIDC_IDP,
+      useFactory: (): StorefrontOidcIdp => {
+        const env = loadEnv();
+        if (!env.IDP_ISSUER) return new FakeStorefrontOidc();
+        const keys = new Map<string, ClientKey>();
+        for (const [clientId, raw] of [
+          [env.IDP_ACADEMY_CLIENT_ID, env.IDP_ACADEMY_CLIENT_KEY],
+          [env.IDP_DOCTOR_CLIENT_ID, env.IDP_DOCTOR_CLIENT_KEY],
+        ] as const) {
+          const key = parseClientKey(raw);
+          if (clientId && key && key.clientId === clientId)
+            keys.set(clientId, key);
+        }
+        return new ZitadelStorefrontOidc({ issuer: env.IDP_ISSUER, keys });
+      },
+    },
+    StorefrontOidcService,
     {
       provide: SIGN_IN_HOST_SETTINGS,
       useFactory: (): SignInHostSettings | null => {
@@ -114,4 +159,10 @@ import {
   ],
   exports: [SIGN_IN_HOST_STATE_STORE],
 })
-export class SignInHostModule {}
+export class SignInHostModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    // ADR-0015 §4 req. 2 — the internal routes exist only for the holder of
+    // the internal credential (before any guard, so nothing reveals them).
+    consumer.apply(InternalApiMiddleware).forRoutes(StorefrontOidcController);
+  }
+}

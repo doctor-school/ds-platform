@@ -1,3 +1,12 @@
+import {
+  isAuthCommandPath,
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -48,14 +57,20 @@ async function observeCodeStep(visitor: CodeScreenVisitor, base: string) {
   await expect(card.getByRole("heading", { level: 1 })).toHaveText(
     "Проверьте почту",
   );
+  // #3172 — the code step is the sign-in host's `/verify`, carrying the typed
+  // address and the same auth request; the account return path rode the
+  // storefront's registration entry into the transaction.
   const url = new URL(owned.url());
-  expect(url.origin).toBe(new URL(base).origin);
+  expect(isSignInHostForm(url)).toBe(true);
   expect(url.pathname).toBe("/verify");
   expect(
     url.searchParams.get("email") === visitor.email,
     "exact typed route address",
   ).toBe(true);
-  expect(url.searchParams.get("returnTo")).toBe("/account");
+  expectEnteredThrough(owned, base, {
+    pathname: "/register",
+    returnTo: "/account",
+  });
   expect(
     (await card.locator("strong").innerText()) === visitor.email,
     "exact unmasked typed destination",
@@ -109,7 +124,7 @@ Given(
       world.hostBaseUrl,
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
-    const { response, code } = await registerOwnedCredentials(
+    const { response, body, code } = await registerOwnedCredentials(
       owned,
       world.hostBaseUrl,
       existing,
@@ -118,7 +133,7 @@ Given(
     expect(
       registrationEvidence(
         response.request().postData() ?? "",
-        await response.text(),
+        body,
         existing,
       ),
       "existing visitor prerequisite uses the real registration command",
@@ -127,7 +142,10 @@ Given(
       consentMatches: true,
       acknowledgementMatches: true,
     });
-    const verification = captureResponse(owned, "/v1/auth/verify");
+    const verification = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       owned.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -142,6 +160,7 @@ Given(
         accepted.body,
         existing,
         code,
+        world.hostBaseUrl,
       ),
     ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
     await owned.waitForURL((url) => url.pathname === "/account");
@@ -200,7 +219,7 @@ Given(
       ).toEqual([]);
       visitor.page.on("request", (request) => {
         const pathname = new URL(request.url()).pathname;
-        if (request.method() === "POST" && pathname.startsWith("/v1/auth/"))
+        if (request.method() === "POST" && isAuthCommandPath(pathname))
           visitor.authPosts.push(pathname);
       });
     }
@@ -212,6 +231,7 @@ When(
   async ({ page, world }) => {
     for (const visitor of codeScreens(page).visitors) {
       const owned = visitor.page;
+      watchStorefrontEntries(owned, world.hostBaseUrl);
       await owned.goto(registrationUrl(world.hostBaseUrl, "/account"), {
         waitUntil: "load",
       });
@@ -235,7 +255,10 @@ When(
         mailbox,
         visitor.email.toLowerCase(),
       );
-      const registration = captureResponse(owned, "/v1/auth/register");
+      const registration = captureResponse(
+        owned,
+        signInHostApiPath("/v1/auth/register"),
+      );
       await owned.getByTestId("register-submit").click();
       const registered = await registration;
       expect(
@@ -301,12 +324,13 @@ Then(
       await back.click();
       await owned.waitForURL((url) => url.pathname === "/register");
       await expect(owned.getByTestId("registration-form")).toBeVisible();
-      expect(new URL(owned.url()).origin).toBe(
-        new URL(world.hostBaseUrl).origin,
-      );
-      expect(new URL(owned.url()).searchParams.get("returnTo")).toBe(
-        "/account",
-      );
+      // #3172 — back on the sign-in host's registration door, in the same
+      // transaction the storefront entry opened with the account return path.
+      expect(isSignInHostForm(owned.url())).toBe(true);
+      expectEnteredThrough(owned, world.hostBaseUrl, {
+        pathname: "/register",
+        returnTo: "/account",
+      });
       await expect
         .poll(
           async () =>
@@ -339,7 +363,7 @@ Then(
       expect(
         visitor.authPosts,
         "Back sends no replay or code acceptance",
-      ).toEqual(["/v1/auth/register"]);
+      ).toEqual([signInHostApiPath("/v1/auth/register")]);
     }
   },
 );

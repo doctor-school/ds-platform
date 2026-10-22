@@ -86,6 +86,15 @@ interface HostHeaders {
 }
 
 /**
+ * 003 EARS-24/41 — the host's warm proof as the code step's argument: the
+ * account this browser's form state recorded as created by its registration.
+ */
+const warmProof = (
+  sub: string | undefined,
+): { keepPasswordOf: string } | undefined =>
+  sub ? { keepPasswordOf: sub } : undefined;
+
+/**
  * 003 EARS-5 (amended) / 60 / 64 / 66 / 67 / 68 / 69 / 70 / 71, ADR-0015 §4 —
  * the sign-in host's API (`/v1/sign-in-host/*`).
  *
@@ -301,7 +310,12 @@ export class SignInHostController {
     const form = await this.checkForm(readHeaders(headers), dto);
     this.host.assertStorefront(form, "academy");
     const { authRequest: _a, csrf: _c, ...request } = dto;
-    return this.auth.register(request);
+    const { body, created } = await this.auth.registerAccount(request);
+    await this.host.recordRegistration(
+      form,
+      created ? { sub: created, email: dto.email } : null,
+    );
+    return body;
   }
 
   /**
@@ -329,7 +343,13 @@ export class SignInHostController {
     const form = await this.checkForm(readHeaders(headers), dto);
     this.host.assertStorefront(form, "doctor");
     const { authRequest: _a, csrf: _c, ...request } = dto;
-    return this.doctorRegister.register(request);
+    const { body, created } =
+      await this.doctorRegister.registerAccount(request);
+    await this.host.recordRegistration(
+      form,
+      created ? { sub: created, email: dto.email } : null,
+    );
+    return body;
   }
 
   /**
@@ -362,7 +382,9 @@ export class SignInHostController {
     const result = await this.doctorRegister.verifyStep(
       request,
       this.host.acceptInto(form, hostRequest(h, ip), RECORD_COOKIE_NAME),
+      warmProof(this.host.warmRegistration(form, dto.email)),
     );
+    await this.host.spendRegistration(form);
     this.rateLimit.reset({ ip, identifier: dto.email });
     this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     setCookies(reply, result.setCookies);
@@ -398,7 +420,9 @@ export class SignInHostController {
         ...(dto.registration ? { registration: dto.registration } : {}),
       },
       this.host.acceptInto(form, hostRequest(h, ip), RECORD_COOKIE_NAME),
+      warmProof(this.host.warmRegistration(form, dto.email)),
     );
+    await this.host.spendRegistration(form);
     this.rateLimit.reset({ ip, identifier: dto.email });
     this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     setCookies(reply, result.setCookies);

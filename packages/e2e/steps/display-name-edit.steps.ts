@@ -1,3 +1,4 @@
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -85,7 +86,7 @@ Given(
       baseURL ?? "",
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
-    const { response, code } = await registerOwnedCredentials(
+    const { response, body, code } = await registerOwnedCredentials(
       owned,
       world.hostBaseUrl,
       state,
@@ -94,7 +95,7 @@ Given(
     expect(
       registrationEvidence(
         response.request().postData() ?? "",
-        await response.text(),
+        body,
         state,
       ),
     ).toEqual({
@@ -107,17 +108,19 @@ Given(
       (await response.headerValue("set-cookie")) ?? "",
       state,
     );
-    const verified = captureResponse(owned, "/v1/auth/verify").then(
-      ({ response, body }) => ({
-        response,
-        evidence: verificationEvidence(
-          response.request().postData() ?? "",
-          body,
-          state,
-          code,
-        ),
-      }),
-    );
+    const verified = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/verify"),
+    ).then(({ response, body }) => ({
+      response,
+      evidence: verificationEvidence(
+        response.request().postData() ?? "",
+        body,
+        state,
+        code,
+        world.hostBaseUrl,
+      ),
+    }));
     await inputSecret(
       owned.locator('input[autocomplete="one-time-code"]'),
       code,

@@ -1,3 +1,14 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { handoffCommandWithoutReference, hostCommand,
+  AUTH_REQUEST_PARAM,
+  isAuthCommandPath,
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import {
   captureResponse,
@@ -45,6 +56,7 @@ Given(
       ...(httpCredentials ? { httpCredentials } : {}),
     });
     const owned = await context.newPage();
+    watchStorefrontEntries(owned, world.hostBaseUrl);
     const state: Handoff = {
       context,
       page: owned,
@@ -54,7 +66,7 @@ Given(
     handoffs.set(page, state);
     owned.on("request", (request) => {
       const pathname = new URL(request.url()).pathname;
-      if (request.method() === "POST" && pathname.startsWith("/v1/auth/"))
+      if (request.method() === "POST" && isAuthCommandPath(pathname))
         state.authPosts.push(pathname);
     });
     const signup = await createOwnedCongressSignup(
@@ -85,7 +97,10 @@ When(
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
     );
-    const pending = captureResponse(state.page, "/v1/auth/login/otp/handoff");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/login/otp/handoff"),
+    );
     const response = await state.page.goto(target.toString(), {
       waitUntil: "load",
     });
@@ -104,9 +119,10 @@ Then(
     try {
       const submitted = state.redeemed.response.request().postDataJSON();
       const answer = JSON.parse(state.redeemed.body);
+      // 003 EARS-44 (host): the body names no reference (the form state
+      // holds it); the answer still names the hand-off account.
       correct =
-        Object.keys(submitted).length === 1 &&
-        submitted.ref === state.reference &&
+        handoffCommandWithoutReference(submitted, state.reference ?? "") &&
         Object.keys(answer).length === 2 &&
         answer.status === "otp_sent" &&
         answer.identifier === state.email;
@@ -157,7 +173,7 @@ Then(
       delivered,
     );
     expect(state.authPosts, "no second code request or resend").toEqual([
-      "/v1/auth/login/otp/handoff",
+      signInHostApiPath("/v1/auth/login/otp/handoff"),
     ]);
   },
 );
@@ -190,7 +206,7 @@ Then(
       "the hand-off redemption carried no captcha token",
     ).not.toContain("x-smartcaptcha-token");
     expect(state.authPosts, "no captcha-gated auth request").toEqual([
-      "/v1/auth/login/otp/handoff",
+      signInHostApiPath("/v1/auth/login/otp/handoff"),
     ]);
     const viewport = state.page.viewportSize();
     if (!viewport) throw new Error("The hand-off page has no viewport");
@@ -234,16 +250,23 @@ Then(
 
 Then(
   "the hand-off reference is absent from the address bar and browser navigation history",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const state = handoff(page);
+    // #3172 — the address bar is the sign-in host's code door, carrying only
+    // the IdP's auth request; the Academy return context rode the storefront
+    // entry into the transaction (the /account landing after the code proves it).
     const url = new URL(state.page.url());
     expect(
-      url.pathname === "/login" &&
-        url.searchParams.size === 2 &&
-        url.searchParams.get("method") === "code" &&
-        url.searchParams.get("returnTo") === "/account",
-      "the address bar retains only the method and Academy return context",
+      isSignInHostForm(url) &&
+        url.pathname === "/login" &&
+        [...url.searchParams.keys()].join() === AUTH_REQUEST_PARAM,
+      "the address bar retains only the auth request",
     ).toBe(true);
+    expectEnteredThrough(state.page, world.hostBaseUrl, {
+      pathname: "/login",
+      method: "code",
+      returnTo: "/account",
+    });
     const history = await state.context.newCDPSession(state.page);
     try {
       const entries = await history.send("Page.getNavigationHistory");
@@ -263,10 +286,13 @@ Then(
 
 When(
   "the visitor enters the delivered hand-off sign-in code once in that Academy tab",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const state = handoff(page);
     if (!state.code) throw new Error("The delivered handoff code is missing");
-    const pending = captureResponse(state.page, "/v1/auth/login/otp");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/login/otp"),
+    );
     await inputSecret(
       state.page.locator('input[autocomplete="one-time-code"]'),
       state.code,
@@ -274,13 +300,13 @@ When(
     state.accepted = await pending;
     let correct = false;
     try {
-      const request = state.accepted.response.request().postDataJSON();
+      const request = hostCommand(state.accepted.response.request().postDataJSON());
       correct =
         Object.keys(request).length === 3 &&
         request.identifier === state.email &&
         request.channel === "email" &&
         request.code === state.code &&
-        state.accepted.body === '{"status":"authenticated"}';
+        storefrontCallbackAcknowledgement(state.accepted.body, world.hostBaseUrl);
     } catch {
       // Do not retain code-bearing parser diagnostics.
     }
@@ -348,7 +374,10 @@ Then(
     expect(
       state.authPosts,
       "one redemption and one code submission without another auth command",
-    ).toEqual(["/v1/auth/login/otp/handoff", "/v1/auth/login/otp"]);
+    ).toEqual([
+      signInHostApiPath("/v1/auth/login/otp/handoff"),
+      signInHostApiPath("/v1/auth/login/otp"),
+    ]);
     await state.page.screenshot({
       path: test.info().outputPath("handoff-account.png"),
     });

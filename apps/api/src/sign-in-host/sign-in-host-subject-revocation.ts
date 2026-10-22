@@ -1,6 +1,10 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { IDP_CLIENT, type IdpClient } from "../auth/idp/idp.types.js";
 import {
+  SharedSessionHub,
+  type SharedSessionListener,
+} from "../auth/session/shared-session.js";
+import {
   SubjectRevocationHub,
   type SubjectRevocationListener,
 } from "../auth/session/subject-revocation.js";
@@ -29,7 +33,7 @@ import {
  */
 @Injectable()
 export class SignInHostSubjectRevocation
-  implements SubjectRevocationListener, OnModuleInit
+  implements SubjectRevocationListener, SharedSessionListener, OnModuleInit
 {
   private readonly logger = new Logger(SignInHostSubjectRevocation.name);
 
@@ -43,11 +47,25 @@ export class SignInHostSubjectRevocation
     private readonly state: SignInHostStateStore,
     @Inject(IDP_CLIENT) private readonly idp: IdpClient,
     @Inject(SIGN_IN_HOST_CLOCK) private readonly clock: SignInHostClock,
+    @Inject(SharedSessionHub) private readonly shared: SharedSessionHub,
   ) {}
 
   onModuleInit(): void {
     // A disabled sign-in host holds no records; nothing to end.
-    if (this.settings) this.hub.register(this);
+    if (!this.settings) return;
+    this.hub.register(this);
+    this.shared.register(this);
+  }
+
+  /**
+   * 003 EARS-10 (amended) — a linked storefront session signed out: the
+   * record holding its Zitadel session is deleted and that session terminated
+   * at Zitadel (`DELETE /v2/sessions/{id}`), so no browser can finalise
+   * silently with it again. A record already gone leaves nothing to end.
+   */
+  async endSharedSession(sub: string, zitadelSessionId: string): Promise<void> {
+    const session = await this.records.deleteBySession(sub, zitadelSessionId);
+    if (session) await this.idp.terminateSession(session);
   }
 
   async revokeSubject(sub: string): Promise<Date> {

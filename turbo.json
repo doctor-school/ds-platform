@@ -43,6 +43,9 @@
         "SIGN_IN_ACADEMY_LOGIN_URL",
         "SIGN_IN_DOCTOR_LOGIN_URL",
         "SIGN_IN_RECORD_KEY",
+        "INTERNAL_API_TOKEN",
+        "IDP_ACADEMY_CLIENT_KEY",
+        "IDP_DOCTOR_CLIENT_KEY",
         "MAILPIT_URL",
         "SMS_SINK_URL"
       ]

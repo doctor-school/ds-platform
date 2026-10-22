@@ -1,6 +1,7 @@
 import { HOSTS } from "@ds/e2e/hosts";
 import { signInWithPassword } from "@ds/e2e/sign-in";
 import { test, expect, type Page } from "@playwright/test";
+import { waitForRoomChatLive } from "./support/room";
 
 /**
  * 006 EARS-12 — the portal-wide theme mechanism + the room-header toggle
@@ -73,9 +74,14 @@ async function armFirstPaintProbe(page: Page): Promise<void> {
   // `app/layout.tsx`). Over a real network (#3229, slot run) Chromium ticks
   // animation frames while the document is still streaming, before the guard has
   // even arrived; such a frame paints no page and is not a wrong-theme flash.
+  // A `hidden` element paints nothing either: Next.js streams its own
+  // `<div hidden>` boundary ahead of the guard (served `/login` body, #3229), and
+  // a frame between that div and the guard is not a flash.
   await page.addInitScript(() => {
     const probe = () => {
-      if (!document.body?.querySelector(":scope > :not(script)")) {
+      if (
+        !document.body?.querySelector(":scope > :not(script):not([hidden])")
+      ) {
         requestAnimationFrame(probe);
         return;
       }
@@ -227,6 +233,8 @@ test.describe("006 EARS-12 room-header theme toggle — canvas icon-button flips
       waitUntil: "domcontentloaded",
     });
     await page.waitForURL(new RegExp(`/webinars/${SLUG_LIVE}/room$`));
+    // The toggle is server-rendered: a click before hydration does nothing.
+    await waitForRoomChatLive(page);
 
     // Fresh room entry on a light-system browser, no stored choice: the portal
     // follows the system → light. The toggle is a `<button>` NOT pressed for
@@ -264,6 +272,7 @@ test.describe("006 EARS-12 room-header theme toggle — canvas icon-button flips
     await page.goto(`${BASE}/webinars/${SLUG_LIVE}/room`, {
       waitUntil: "domcontentloaded",
     });
+    await waitForRoomChatLive(page);
     const toggleAgain = themeButton(page);
     await expect(toggleAgain).toHaveAttribute("aria-pressed", "true");
     await toggleAgain.click();

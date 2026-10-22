@@ -146,17 +146,36 @@ test.describe("the Academy feed view (wave-2 entry gate §2.4)", () => {
   test("gate rows 43, 50: the live block renders the experts-audience live event, between the head and the day feed", async ({
     page,
   }) => {
+    // 019 «Amendment — 2026-10-05» «Live block» (019-requirements-en.md:329): at
+    // most TWO strips, earliest start first, then «Ещё N в эфире →». A stand
+    // with more live эфиры (a slot's golden season, #3229) need not show
+    // SLUG_LIVE, so the expected strips are the live read's own head — the same
+    // guest read the page renders from.
+    const live = (await (
+      await page.request.get("/v1/public/events/live", {
+        headers: { accept: "application/json" },
+      })
+    ).json()) as { slug: string }[];
+    expect(
+      live.map((s) => s.slug),
+      "the experts-audience live event is live",
+    ).toContain(SLUG_LIVE);
+    const first = live[0]!.slug;
+
     await page.goto("/webinars", { waitUntil: "domcontentloaded" });
 
     const block = page.getByTestId("events-live-block");
     await expect(block).toBeVisible();
-    const strip = block.getByTestId("live-event-strip").filter({
-      has: page.locator(`a[href="/webinars/${SLUG_LIVE}"]`),
-    });
-    await expect(strip).toHaveCount(1);
+    await expect(block.getByTestId("live-event-strip")).toHaveCount(
+      Math.min(live.length, 2),
+    );
+    if (live.length > 2) {
+      await expect(block).toContainText(`Ещё ${live.length - 2} в эфире →`);
+    }
+    const strip = block.getByTestId("live-event-strip").first();
     await expect(strip.getByTestId("live-event-strip-title")).toHaveAttribute(
       "href",
-      `/webinars/${SLUG_LIVE}`,
+      `/webinars/${first}`,
     );
     // A guest's action leads to the event page, never into the room.
     await expect(strip.getByTestId("live-event-strip-action")).toHaveText(

@@ -41,24 +41,9 @@ Feature: 006 Webinar room journey — a registered doctor watches live, chats in
     And the live-room player is a configured provider frame only, never a re-hosted surface
     And the event page the room admits through labels every absolute time in МСК with no viewer-local drift
 
-  # --- The player is instantiated from the explicit provider enum (US-1) — EARS-2 ---
-
-  @EARS-2 @failure
-  Scenario Outline: The room player is instantiated from the explicit provider enum, not by URL-sniffing
-    Given a registered doctor on the "<provider>"-provider live room
-    When the doctor enters that provider room
-    Then the "<provider>" embed frame is rendered from the enum value, not the other provider
-
-    Examples:
-      | provider |
-      | youtube  |
-      | rutube   |
-
-  @EARS-2 @edge
-  Scenario: An unconfigured provider yields the truthful stream-unavailable state, no guessed embed
-    Given a registered doctor on the stream-unconfigured live room
-    When the doctor enters that unconfigured room
-    Then the room shows the truthful stream-unavailable state and renders no embed frame
+  # The provider-enum variants (EARS-2) live in room-provider-journey.feature and the
+  # heartbeat cadence (EARS-4) in room-heartbeat-journey.feature: each needs a stand
+  # shape a stage slot does not have, so a slot run keeps those files out (#3229).
 
   # --- Live chat fan-out over Centrifugo (US-2) — EARS-3 ---
 
@@ -67,22 +52,6 @@ Feature: 006 Webinar room journey — a registered doctor watches live, chats in
     Given two registered doctors in the same live room
     When one doctor posts a chat message
     Then the other doctor sees the message appear in real time without reloading the page
-
-  # --- Visibility-gated heartbeat presence capture (US-3) — EARS-4 ---
-
-  @EARS-4 @happy
-  Scenario: The room fires an immediate authenticated heartbeat, then every N seconds with no doctor action
-    Given a registered doctor watching in the live room with the tab visible
-    When the doctor stays in the room across several cadence intervals
-    Then the client posts an entry heartbeat and more timer-driven authenticated heartbeats
-
-  @EARS-4 @edge
-  Scenario: A backgrounded tab pauses the heartbeat and resumes when visible again
-    Given a registered doctor posting heartbeats in the live room
-    When the room tab is backgrounded so document.hidden becomes true
-    Then the client stops posting heartbeats while the tab is hidden
-    When the room tab becomes visible again
-    Then the client posts an immediate authenticated heartbeat before resuming the N-second grid
 
   # --- Denied-access routing, never a soft wall (US-1, US-5) — EARS-6 ---
 

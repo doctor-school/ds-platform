@@ -44,7 +44,7 @@ const captchaReady = new WeakSet<BrowserContext>();
  * `@ds/e2e/sign-in`: a click before the client chunks run submits the form
  * natively (`POST /register`) and the walk never reaches `/verify`.
  */
-async function readyRegisterForm(page: Page): Promise<void> {
+export async function readyRegisterForm(page: Page): Promise<void> {
   const context = page.context();
   if (!captchaReady.has(context)) {
     await prepareCaptchaForJourney(
@@ -112,9 +112,7 @@ export async function provisionLoggedInDoctor(page: Page): Promise<string> {
 export async function waitForAuthenticatedLanding(page: Page): Promise<void> {
   await page.waitForURL((url) => {
     const path = new URL(url).pathname;
-    return (
-      path === "/" || path === "/webinars" || path.startsWith("/account")
-    );
+    return path === "/" || path === "/webinars" || path.startsWith("/account");
   });
 }
 

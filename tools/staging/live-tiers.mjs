@@ -98,13 +98,22 @@ const CONGRESS_SIGNUP = [
  */
 const RED_ON_SLOT_3229 = "red on slot — #3229";
 
+/**
+ * The Academy default leg after the #3229 triage: one product deviation (008
+ * EARS-14 — no storefront footer on `/`, `apps/portal/lib/shell-config.ts`
+ * deferring to epic #2020), specs that pin the local `seed-*` shape the golden
+ * dataset does not hold, and the room-page journeys still red.
+ */
+const ACADEMY_DEFAULT_RED_3229 =
+  "red on slot — #3229: 008 EARS-14 footer absent on / (product, epic #2020); month-fidelity and webinars-feed-view pin the local seed shape; room journeys red";
+
 export const LIVE_TIERS = Object.freeze([
   {
     name: "live/academy/default",
     host: "academy",
     app: "apps/portal",
     pkg: "@ds/portal",
-    releaseCheck: { excluded: RED_ON_SLOT_3229 },
+    releaseCheck: { excluded: ACADEMY_DEFAULT_RED_3229 },
     config: "playwright.config.ts",
     rootDir: ".",
     // The `bdd` project's specs are generated; the `test:e2e` script runs this first.

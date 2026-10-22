@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { readyRegisterForm } from "./support/doctor-session";
 import { requireLiveStandEnv } from "./support/live-stand-env";
 import { fetchOtpCode } from "./support/mailpit";
 import { NOTIFICATION_SUBJECTS } from "./support/notification-subjects";
@@ -125,6 +126,9 @@ async function registerDoctor(
     ? `/register?returnTo=${encodeURIComponent(opts.returnTo)}`
     : "/register";
   await page.goto(`${BASE}${entry}`, { waitUntil: "domcontentloaded" });
+  // #3229: the shared captcha-stub + hydration wait — a click before the form
+  // hydrates submits it natively (`POST /register`) and never reaches /verify.
+  await readyRegisterForm(page);
   await page.locator('input[autocomplete="email"]').fill(email);
   await page.locator('input[autocomplete="new-password"]').fill(password);
   await page.getByTestId("register-submit").click();

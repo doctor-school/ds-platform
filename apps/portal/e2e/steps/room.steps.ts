@@ -1,6 +1,15 @@
 import { expect, type Page, type Request } from "@playwright/test";
-import { After, Given, Then, When, type HeartbeatLog } from "../support/fixtures";
-import { provisionLoggedInDoctor, submitRegisterAndVerify } from "../support/doctor-session";
+import {
+  After,
+  Given,
+  Then,
+  When,
+  type HeartbeatLog,
+} from "../support/fixtures";
+import {
+  provisionLoggedInDoctor,
+  submitRegisterAndVerify,
+} from "../support/doctor-session";
 
 /**
  * 006 room-journey step definitions (#584) — the browser translation of the
@@ -32,7 +41,8 @@ const BASE = process.env.E2E_PORTAL_URL ?? "http://localhost:3001";
 // upcoming/ended seeds drive the not-live + closed-room branches. Every slug is
 // env-overridable so a differently-seeded stand can retarget without a code change.
 const SLUG_LIVE = process.env.E2E_ROOM_SLUG_LIVE ?? "seed-005-live";
-const SLUG_YOUTUBE = process.env.E2E_ROOM_SLUG_YOUTUBE ?? "seed-006-room-youtube";
+const SLUG_YOUTUBE =
+  process.env.E2E_ROOM_SLUG_YOUTUBE ?? "seed-006-room-youtube";
 const SLUG_RUTUBE = process.env.E2E_ROOM_SLUG_RUTUBE ?? "seed-006-room-rutube";
 const SLUG_UNAVAILABLE =
   process.env.E2E_ROOM_SLUG_UNAVAILABLE ?? "seed-006-room-unavailable";
@@ -45,7 +55,6 @@ const SLUG_NOT_LIVE =
 // is observable in a test window — read that same value here.
 const HEARTBEAT_SECONDS = Number(process.env.E2E_ROOM_HEARTBEAT_SECONDS ?? "2");
 
-const CONFIRMATION = "Вы записаны";
 const roomUrl = (slug: string): string => `${BASE}/webinars/${slug}/room`;
 const eventUrl = (slug: string): string => `${BASE}/webinars/${slug}`;
 
@@ -62,7 +71,14 @@ async function registerForRoom(page: Page, slug: string): Promise<void> {
   );
   await submitRegisterAndVerify(page);
   await page.waitForURL(new RegExp(`/webinars/${slug}(?:$|[?#])`));
-  await expect(page.getByText(CONFIRMATION, { exact: false }).first()).toBeVisible();
+  // The REGISTERED state (#1871): «Вы записаны» on an upcoming event, the room-entry
+  // CTA on a LIVE one — so the old «Вы записаны» text never matched a live room
+  // (#3229, slot run). Keyed off the signup card's `data-cta-action` policy
+  // attribute, locale-agnostic (#177).
+  await expect(page.getByTestId("event-signup-card")).toHaveAttribute(
+    "data-cta-action",
+    /^(registered|enter-room)$/,
+  );
 }
 
 /**
@@ -107,8 +123,14 @@ function expectAnsweredBeatsAccepted(beats: HeartbeatLog): void {
   const answered = beats.statuses.filter((status) => status !== 0);
   expect(answered.length, "no heartbeat was answered").toBeGreaterThan(0);
   for (const status of answered) {
-    expect(status, "a heartbeat was refused — the beat was not authenticated").toBeGreaterThanOrEqual(200);
-    expect(status, "a heartbeat was refused — the beat was not authenticated").toBeLessThan(300);
+    expect(
+      status,
+      "a heartbeat was refused — the beat was not authenticated",
+    ).toBeGreaterThanOrEqual(200);
+    expect(
+      status,
+      "a heartbeat was refused — the beat was not authenticated",
+    ).toBeLessThan(300);
   }
 }
 
@@ -119,7 +141,10 @@ function expectAnsweredBeatsAccepted(beats: HeartbeatLog): void {
  */
 async function setHidden(page: Page, hidden: boolean): Promise<void> {
   await page.evaluate((h) => {
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => h });
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => h,
+    });
     Object.defineProperty(document, "visibilityState", {
       configurable: true,
       get: () => (h ? "hidden" : "visible"),
@@ -229,10 +254,13 @@ Then(
 
 // ── Unknown/absent provider → truthful unavailable (EARS-2 edge) ──────────────
 
-Given("a registered doctor on the stream-unconfigured live room", async ({ page, world }) => {
-  world.slug = SLUG_UNAVAILABLE;
-  await registerForRoom(page, world.slug);
-});
+Given(
+  "a registered doctor on the stream-unconfigured live room",
+  async ({ page, world }) => {
+    world.slug = SLUG_UNAVAILABLE;
+    await registerForRoom(page, world.slug);
+  },
+);
 
 When("the doctor enters that unconfigured room", async ({ page, world }) => {
   await page.goto(roomUrl(world.slug), { waitUntil: "domcontentloaded" });
@@ -253,22 +281,29 @@ Then(
 
 // ── Live chat fan-out over Centrifugo (EARS-3) ────────────────────────────────
 
-Given("two registered doctors in the same live room", async ({ page, browser, world }) => {
-  world.slug = SLUG_LIVE;
-  // Doctor A rides the default `bdd`-project context (`page`). Doctor B is a SECOND,
-  // independent 003 session in a fresh context (a distinct doctor in the same room),
-  // stored on the world so the When/Then steps can drive it and the After hook can
-  // close it. Both self-register for the live room, then open its chat.
-  await registerForRoom(page, world.slug);
-  await page.goto(roomUrl(world.slug), { waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("room-chat-messages").first()).toBeVisible();
+Given(
+  "two registered doctors in the same live room",
+  async ({ page, browser, world }) => {
+    world.slug = SLUG_LIVE;
+    // Doctor A rides the default `bdd`-project context (`page`). Doctor B is a SECOND,
+    // independent 003 session in a fresh context (a distinct doctor in the same room),
+    // stored on the world so the When/Then steps can drive it and the After hook can
+    // close it. Both self-register for the live room, then open its chat.
+    await registerForRoom(page, world.slug);
+    await page.goto(roomUrl(world.slug), { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("room-chat-messages").first()).toBeVisible();
 
-  world.ctxB = await browser.newContext();
-  world.pageB = await world.ctxB.newPage();
-  await registerForRoom(world.pageB, world.slug);
-  await world.pageB.goto(roomUrl(world.slug), { waitUntil: "domcontentloaded" });
-  await expect(world.pageB.getByTestId("room-chat-messages").first()).toBeVisible();
-});
+    world.ctxB = await browser.newContext();
+    world.pageB = await world.ctxB.newPage();
+    await registerForRoom(world.pageB, world.slug);
+    await world.pageB.goto(roomUrl(world.slug), {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      world.pageB.getByTestId("room-chat-messages").first(),
+    ).toBeVisible();
+  },
+);
 
 When("one doctor posts a chat message", async ({ page, world }) => {
   // Doctor A posts a unique message through the gated composer (the composer POSTs
@@ -284,9 +319,14 @@ Then(
     // EARS-3: A's message fans out to doctor B over the REAL Centrifugo channel with
     // NO reload of page B — the subscribe-only connection token the grant carried
     // delivers it live.
-    expect(world.pageB, "the second doctor's page should be provisioned").toBeTruthy();
+    expect(
+      world.pageB,
+      "the second doctor's page should be provisioned",
+    ).toBeTruthy();
     await expect(
-      world.pageB!.getByTestId("room-chat-message").filter({ hasText: world.chatMessage }),
+      world
+        .pageB!.getByTestId("room-chat-message")
+        .filter({ hasText: world.chatMessage }),
     ).toBeVisible({ timeout: 15_000 });
   },
 );
@@ -305,11 +345,14 @@ Given(
   },
 );
 
-When("the doctor stays in the room across several cadence intervals", async ({ page }) => {
-  // No doctor action — beats fire purely on the timer. Wait ~3 intervals so a
-  // cadence (immediate mount beat + at least one on the N-second grid) is observable.
-  await page.waitForTimeout(HEARTBEAT_SECONDS * 3200);
-});
+When(
+  "the doctor stays in the room across several cadence intervals",
+  async ({ page }) => {
+    // No doctor action — beats fire purely on the timer. Wait ~3 intervals so a
+    // cadence (immediate mount beat + at least one on the N-second grid) is observable.
+    await page.waitForTimeout(HEARTBEAT_SECONDS * 3200);
+  },
+);
 
 Then(
   "the client posts an entry heartbeat and more timer-driven authenticated heartbeats",
@@ -322,16 +365,19 @@ Then(
   },
 );
 
-Given("a registered doctor posting heartbeats in the live room", async ({ page, world }) => {
-  world.slug = SLUG_LIVE;
-  await registerForRoom(page, world.slug);
-  world.beats = trackHeartbeats(page);
-  await page.goto(roomUrl(world.slug), { waitUntil: "domcontentloaded" });
-  await page.waitForURL(new RegExp(`/webinars/${world.slug}/room$`));
-  // Let the visible loop fire at least one beat before we background it.
-  await page.waitForTimeout(HEARTBEAT_SECONDS * 2200);
-  expect(world.beats.count).toBeGreaterThanOrEqual(1);
-});
+Given(
+  "a registered doctor posting heartbeats in the live room",
+  async ({ page, world }) => {
+    world.slug = SLUG_LIVE;
+    await registerForRoom(page, world.slug);
+    world.beats = trackHeartbeats(page);
+    await page.goto(roomUrl(world.slug), { waitUntil: "domcontentloaded" });
+    await page.waitForURL(new RegExp(`/webinars/${world.slug}/room$`));
+    // Let the visible loop fire at least one beat before we background it.
+    await page.waitForTimeout(HEARTBEAT_SECONDS * 2200);
+    expect(world.beats.count).toBeGreaterThanOrEqual(1);
+  },
+);
 
 When(
   "the room tab is backgrounded so document.hidden becomes true",
@@ -342,12 +388,15 @@ When(
   },
 );
 
-Then("the client stops posting heartbeats while the tab is hidden", async ({ page, world }) => {
-  // EARS-4: while hidden the loop emits NO beats — a backgrounded tab's minutes do
-  // not count toward the sponsor report, so the count does not grow.
-  await page.waitForTimeout(HEARTBEAT_SECONDS * 3000);
-  expect(world.beats!.count).toBe(world.beatsWhileHidden);
-});
+Then(
+  "the client stops posting heartbeats while the tab is hidden",
+  async ({ page, world }) => {
+    // EARS-4: while hidden the loop emits NO beats — a backgrounded tab's minutes do
+    // not count toward the sponsor report, so the count does not grow.
+    await page.waitForTimeout(HEARTBEAT_SECONDS * 3000);
+    expect(world.beats!.count).toBe(world.beatsWhileHidden);
+  },
+);
 
 When("the room tab becomes visible again", async ({ page, world }) => {
   world.visibleAgainAt = Date.now();
@@ -362,7 +411,10 @@ Then(
     await page.waitForTimeout(HEARTBEAT_SECONDS * 2200);
     const beats = world.beats!;
     const resumed = beats.sentAt.slice(world.beatsWhileHidden!);
-    expect(resumed.length, "no beat after the tab became visible").toBeGreaterThanOrEqual(2);
+    expect(
+      resumed.length,
+      "no beat after the tab became visible",
+    ).toBeGreaterThanOrEqual(2);
     const immediateWithinMs = Math.min(1_500, HEARTBEAT_SECONDS * 750);
     expect(resumed[0]! - world.visibleAgainAt!).toBeLessThan(immediateWithinMs);
     expectAnsweredBeatsAccepted(beats);
@@ -371,31 +423,34 @@ Then(
 
 // ── Denied-access routing, never a soft wall (EARS-6) ─────────────────────────
 
-Given("a caller who is {string} for the live room", async ({ page, context, world }, condition: string) => {
-  switch (condition) {
-    case "unauthenticated": {
-      // A genuine guest — no session; the target room is the live room.
-      world.slug = SLUG_LIVE;
-      await context.clearCookies();
-      break;
+Given(
+  "a caller who is {string} for the live room",
+  async ({ page, context, world }, condition: string) => {
+    switch (condition) {
+      case "unauthenticated": {
+        // A genuine guest — no session; the target room is the live room.
+        world.slug = SLUG_LIVE;
+        await context.clearCookies();
+        break;
+      }
+      case "authenticated but unregistered": {
+        // A fresh 003 doctor authenticated but NOT on the live room's roster.
+        world.slug = SLUG_LIVE;
+        await provisionLoggedInDoctor(page);
+        await page.waitForURL(/\/account/);
+        break;
+      }
+      case "on an event that is not live": {
+        // A doctor REGISTERED for a NOT-live (upcoming) event.
+        world.slug = SLUG_NOT_LIVE;
+        await registerForRoom(page, world.slug);
+        break;
+      }
+      default:
+        throw new Error(`unknown access condition token: ${condition}`);
     }
-    case "authenticated but unregistered": {
-      // A fresh 003 doctor authenticated but NOT on the live room's roster.
-      world.slug = SLUG_LIVE;
-      await provisionLoggedInDoctor(page);
-      await page.waitForURL(/\/account/);
-      break;
-    }
-    case "on an event that is not live": {
-      // A doctor REGISTERED for a NOT-live (upcoming) event.
-      world.slug = SLUG_NOT_LIVE;
-      await registerForRoom(page, world.slug);
-      break;
-    }
-    default:
-      throw new Error(`unknown access condition token: ${condition}`);
-  }
-});
+  },
+);
 
 When("the caller reaches the room", async ({ page, world }) => {
   await page.goto(roomUrl(world.slug), { waitUntil: "domcontentloaded" });
@@ -460,43 +515,56 @@ Then(
 
 // ── Cross-cutting authz — the room surface requires a session (EARS-8) ────────
 
-Given("a guest with no session targeting the live room", async ({ context, world }) => {
-  world.slug = SLUG_LIVE;
-  await context.clearCookies();
-});
+Given(
+  "a guest with no session targeting the live room",
+  async ({ context, world }) => {
+    world.slug = SLUG_LIVE;
+    await context.clearCookies();
+  },
+);
 
-Then("the RoomConfig read is refused without a session", async ({ page, world }) => {
-  // EARS-8: the RoomConfig read requires authentication ∧ registration — an
-  // unauthenticated caller is refused (never served another doctor's room data).
-  const res = await page.request.get(
-    `${BASE}/v1/events/${encodeURIComponent(world.slug)}/room`,
-    { headers: { accept: "application/json" } },
-  );
-  expect(res.ok(), "RoomConfig must not be served to an unauthenticated caller").toBe(
-    false,
-  );
-  expect(res.status()).toBeGreaterThanOrEqual(400);
-});
+Then(
+  "the RoomConfig read is refused without a session",
+  async ({ page, world }) => {
+    // EARS-8: the RoomConfig read requires authentication ∧ registration — an
+    // unauthenticated caller is refused (never served another doctor's room data).
+    const res = await page.request.get(
+      `${BASE}/v1/events/${encodeURIComponent(world.slug)}/room`,
+      { headers: { accept: "application/json" } },
+    );
+    expect(
+      res.ok(),
+      "RoomConfig must not be served to an unauthenticated caller",
+    ).toBe(false);
+    expect(res.status()).toBeGreaterThanOrEqual(400);
+  },
+);
 
 Then("the chat post is refused without a session", async ({ page, world }) => {
   const res = await page.request.post(
     `${BASE}/v1/events/${encodeURIComponent(world.slug)}/chat`,
     { headers: { accept: "application/json" }, data: { text: "guest" } },
   );
-  expect(res.ok(), "the chat command must not be satisfied for a guest").toBe(false);
-  expect(res.status()).toBeGreaterThanOrEqual(400);
-});
-
-Then("the heartbeat post is refused without a session", async ({ page, world }) => {
-  const res = await page.request.post(
-    `${BASE}/v1/events/${encodeURIComponent(world.slug)}/heartbeat`,
-    { headers: { accept: "application/json" } },
-  );
-  expect(res.ok(), "the heartbeat command must not be satisfied for a guest").toBe(
+  expect(res.ok(), "the chat command must not be satisfied for a guest").toBe(
     false,
   );
   expect(res.status()).toBeGreaterThanOrEqual(400);
 });
+
+Then(
+  "the heartbeat post is refused without a session",
+  async ({ page, world }) => {
+    const res = await page.request.post(
+      `${BASE}/v1/events/${encodeURIComponent(world.slug)}/heartbeat`,
+      { headers: { accept: "application/json" } },
+    );
+    expect(
+      res.ok(),
+      "the heartbeat command must not be satisfied for a guest",
+    ).toBe(false);
+    expect(res.status()).toBeGreaterThanOrEqual(400);
+  },
+);
 
 // ── Teardown — never leak the second chat context past the scenario ───────────
 

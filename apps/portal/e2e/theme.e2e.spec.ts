@@ -51,7 +51,9 @@ const THEME_KEY = "ds-theme";
 
 /** Is `.dark` currently on `<html>`? */
 function isDark(page: Page): Promise<boolean> {
-  return page.evaluate(() => document.documentElement.classList.contains("dark"));
+  return page.evaluate(() =>
+    document.documentElement.classList.contains("dark"),
+  );
 }
 
 /** The persisted explicit choice, if any. */
@@ -66,27 +68,38 @@ function storedTheme(page: Page): Promise<string | null> {
  * wrong class and this capture would expose the flash.
  */
 async function armFirstPaintProbe(page: Page): Promise<void> {
+  // The first frame that can paint PAGE content — the first one whose `<body>`
+  // holds an element other than a script (the guard is the body's first element,
+  // `app/layout.tsx`). Over a real network (#3229, slot run) Chromium ticks
+  // animation frames while the document is still streaming, before the guard has
+  // even arrived; such a frame paints no page and is not a wrong-theme flash.
   await page.addInitScript(() => {
-    requestAnimationFrame(() => {
+    const probe = () => {
+      if (!document.body?.querySelector(":scope > :not(script)")) {
+        requestAnimationFrame(probe);
+        return;
+      }
       (window as unknown as Record<string, unknown>).__dsFirstFrameDark =
         document.documentElement.classList.contains("dark");
-    });
+    };
+    requestAnimationFrame(probe);
   });
 }
 
 function firstFrameDark(page: Page): Promise<boolean | undefined> {
-  return page.waitForFunction(
-    () =>
-      (window as unknown as Record<string, unknown>).__dsFirstFrameDark !==
-      undefined,
-  ).then(() =>
-    page.evaluate(
+  return page
+    .waitForFunction(
       () =>
-        (window as unknown as Record<string, unknown>).__dsFirstFrameDark as
-          | boolean
-          | undefined,
-    ),
-  );
+        (window as unknown as Record<string, unknown>).__dsFirstFrameDark !==
+        undefined,
+    )
+    .then(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as Record<string, unknown>).__dsFirstFrameDark as
+            boolean | undefined,
+      ),
+    );
 }
 
 /** Persist an explicit choice BEFORE any document of the context loads. */
@@ -197,7 +210,10 @@ test.describe("006 EARS-12 portal-wide theme mechanism — system default, expli
 // The leading `006 EARS-12 ` prefix is the ears-test-lint feature scope.
 test.describe("006 EARS-12 room-header theme toggle — canvas icon-button flips .dark live, persists, survives reload (e2e)", () => {
   test.skip(
-    !process.env.E2E_PORTAL_URL || !DOCTOR_EMAIL || !DOCTOR_PASSWORD || !SLUG_LIVE,
+    !process.env.E2E_PORTAL_URL ||
+      !DOCTOR_EMAIL ||
+      !DOCTOR_PASSWORD ||
+      !SLUG_LIVE,
     "requires a live portal + a doctor registered for the seeded live room",
   );
 

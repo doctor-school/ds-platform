@@ -338,18 +338,18 @@ is their registry, and `e2e-stage.test.mjs` holds it against the tree: every
 an **axe** leg, or **hermetic** (owns a `webServer`, CI's), and a config in none of
 them — or a live one that grew a `webServer` — fails `pnpm test:tools`.
 
-| Leg                          | Config (`apps/<app>/…`)                                                             | Release check           |
-| ---------------------------- | ----------------------------------------------------------------------------------- | ----------------------- |
-| `live/academy/default`       | `portal/playwright.config.ts` (`e2e` + `bdd`)                                       | no — red on slot, #3229 |
-| `live/academy/account-live`  | `portal/playwright.account-live.config.ts`                                          | yes                     |
-| `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)      | yes                     |
-| `live/doctor/register-live`  | `doctor/playwright.register-live.config.ts`                                         | yes                     |
-| `live/doctor/congress`       | `doctor/playwright.congress.config.ts`                                              | yes                     |
-| `live/doctor/event-page`     | `doctor/playwright.event-page.config.ts`                                            | no — red on slot, #3229 |
-| `live/doctor/event-register` | `doctor/playwright.event-register.config.ts`                                        | yes                     |
-| `live/doctor/events-live`    | `doctor/playwright.events-live.config.ts`                                           | yes                     |
-| `live/doctor/room`           | `doctor/playwright.room.config.ts` (`room.spec.ts`; the axe twin is `axe/doctor`'s) | yes                     |
-| `live/doctor/shell`          | `doctor/playwright.shell.config.ts`                                                 | no — red on slot, #3229 |
+| Leg                          | Config (`apps/<app>/…`)                                                             | Release check                                        |
+| ---------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `live/academy/default`       | `portal/playwright.config.ts` (`e2e` + `bdd`)                                       | no — red on slot, #3229 (reason in `live-tiers.mjs`) |
+| `live/academy/account-live`  | `portal/playwright.account-live.config.ts`                                          | yes                                                  |
+| `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)      | yes                                                  |
+| `live/doctor/register-live`  | `doctor/playwright.register-live.config.ts`                                         | yes                                                  |
+| `live/doctor/congress`       | `doctor/playwright.congress.config.ts`                                              | yes                                                  |
+| `live/doctor/event-page`     | `doctor/playwright.event-page.config.ts`                                            | no — red on slot, #3229                              |
+| `live/doctor/event-register` | `doctor/playwright.event-register.config.ts`                                        | yes                                                  |
+| `live/doctor/events-live`    | `doctor/playwright.events-live.config.ts`                                           | yes                                                  |
+| `live/doctor/room`           | `doctor/playwright.room.config.ts` (`room.spec.ts`; the axe twin is `axe/doctor`'s) | yes                                                  |
+| `live/doctor/shell`          | `doctor/playwright.shell.config.ts`                                                 | no — red on slot, #3229                              |
 
 Each leg gets the suite env plus `IDP_ISSUER=https://id.<base domain>` and
 `MAILPIT_URL=https://mailpit.<base domain>` (hostnames, never `127.0.0.1`: Playwright

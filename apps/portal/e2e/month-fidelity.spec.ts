@@ -19,6 +19,17 @@ const DESKTOP = { width: 1280, height: 900 };
 const MOBILE = { width: 390, height: 844 };
 const THEMES = ["light", "dark"] as const;
 
+/**
+ * Wait until the client chunks have run (#3229, slot run): `domcontentloaded` hands
+ * back a server-rendered page whose picker ‹ › and dot-grid day buttons are not yet
+ * wired, so a click lands on dead markup — the same hydration wait as
+ * `@ds/e2e/sign-in`.
+ */
+async function untilHydrated(page: Page): Promise<void> {
+  await page.waitForLoadState("load");
+  await page.waitForLoadState("networkidle");
+}
+
 async function applyTheme(page: Page, theme: (typeof THEMES)[number]) {
   await page.evaluate(
     (dark) => document.documentElement.classList.toggle("dark", dark),
@@ -126,6 +137,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await page.goto("/webinars?view=month", {
         waitUntil: "domcontentloaded",
       });
+      await untilHydrated(page);
       await applyTheme(page, theme);
 
       // The desktop grid pane (display-only calendar — no ARIA grid roles; the
@@ -171,6 +183,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await page.goto("/webinars?view=month", {
         waitUntil: "domcontentloaded",
       });
+      await untilHydrated(page);
       await applyTheme(page, theme);
 
       const grid = page.getByTestId("month-grid-desktop");
@@ -366,6 +379,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await page.goto("/webinars?view=month", {
         waitUntil: "domcontentloaded",
       });
+      await untilHydrated(page);
       await applyTheme(page, theme);
       const grid = page.getByTestId("month-grid-desktop");
       await expect(grid).toBeVisible();
@@ -380,6 +394,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await page.goto(`/webinars?view=month&month=${farYear}-11`, {
         waitUntil: "domcontentloaded",
       });
+      await untilHydrated(page);
       await applyTheme(page, theme);
       const farGrid = page.getByTestId("month-grid-desktop");
       await expect(farGrid).toBeVisible();
@@ -404,6 +419,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await page.goto("/webinars?view=month", {
         waitUntil: "domcontentloaded",
       });
+      await untilHydrated(page);
       await applyTheme(page, theme);
 
       const mobile = page.getByTestId("month-calendar-mobile");
@@ -434,6 +450,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
     }) => {
       await page.setViewportSize(MOBILE);
       await page.goto("/webinars", { waitUntil: "domcontentloaded" });
+      await untilHydrated(page);
       await applyTheme(page, theme);
 
       await expect(page.getByTestId("events-feed-view")).toBeVisible();
@@ -466,6 +483,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
     }) => {
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.goto("/webinars", { waitUntil: "domcontentloaded" });
+      await untilHydrated(page);
       await applyTheme(page, theme);
 
       const head = page.locator('[data-feed-block="head"]');
@@ -503,6 +521,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
 
       // `/` is the Academy home (#1313); the canonical listing is `/webinars`.
       await page.goto("/webinars", { waitUntil: "domcontentloaded" });
+      await untilHydrated(page);
       await applyTheme(page, theme);
       await expect(page.getByTestId("events-feed-view")).toBeVisible();
 
@@ -515,6 +534,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
         .getAttribute("href");
       expect(eventHref).toBeTruthy();
       await page.goto(eventHref!, { waitUntil: "domcontentloaded" });
+      await untilHydrated(page);
       await applyTheme(page, theme);
       const broadcastsNav = page
         .getByTestId("shell-nav-desktop")
@@ -532,6 +552,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await page.goto("/webinars?view=month", {
         waitUntil: "domcontentloaded",
       });
+      await untilHydrated(page);
       await applyTheme(page, theme);
 
       const picker = page.getByTestId("month-toolbar").locator("details");
@@ -562,6 +583,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await page.goto("/webinars?view=month", {
         waitUntil: "domcontentloaded",
       });
+      await untilHydrated(page);
       await applyTheme(page, theme);
 
       const toolbar = page.getByTestId("month-toolbar");
@@ -598,6 +620,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await page.goto("/webinars?view=month", {
         waitUntil: "domcontentloaded",
       });
+      await untilHydrated(page);
       await applyTheme(page, theme);
 
       const picker = page.getByTestId("month-toolbar").locator("details");
@@ -633,6 +656,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
     }) => {
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.goto("/webinars", { waitUntil: "domcontentloaded" });
+      await untilHydrated(page);
       await applyTheme(page, theme);
 
       const head = page.locator('[data-feed-block="head"]');
@@ -659,6 +683,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await page.goto("/webinars?view=month", {
         waitUntil: "domcontentloaded",
       });
+      await untilHydrated(page);
       await applyTheme(page, theme);
       await expect(page.getByTestId("month-grid-desktop")).toBeVisible();
       await expect(page.getByTestId("prev-month-link")).toHaveCount(0);
@@ -673,6 +698,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await page.goto(`/webinars?view=month&month=${nextParam}`, {
         waitUntil: "domcontentloaded",
       });
+      await untilHydrated(page);
       await applyTheme(page, theme);
       const back = page.getByTestId("prev-month-link");
       await expect(back).toBeVisible();

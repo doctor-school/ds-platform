@@ -1,4 +1,4 @@
-import { expect } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { Given, Then, When, test } from "../support/fixtures";
 import {
   LIVE_STAND,
@@ -42,7 +42,19 @@ const SEED = {
     "seed-005-hidden",
 } as const;
 
-const CONFIRMATION = "Вы записаны";
+/**
+ * The REGISTERED state of the event page (#1871): an upcoming event states «Вы
+ * записаны», a LIVE one renders the room-entry CTA «Войти в эфир» instead, so the
+ * old `getByText("Вы записаны")` never matched the live branch (#3229, slot run).
+ * Keyed off the signup card's `data-cta-action` policy attribute — the exact
+ * discriminator the card renders from, locale-agnostic (#177).
+ */
+async function expectRegisteredState(page: Page, slug: string): Promise<void> {
+  await expect(page.getByTestId("event-signup-card")).toHaveAttribute(
+    "data-cta-action",
+    slug === SEED.live ? "enter-room" : "registered",
+  );
+}
 const PARTICIPATE = "Участвовать";
 
 // ── Background ───────────────────────────────────────────────────────────────
@@ -58,13 +70,18 @@ Given("the live dev stand is available", async () => {
 
 // ── Guest through auth → registered → «мои события» → back (EARS-2/4/6/11) ────
 
-Given("a guest on the published event page", async ({ page, context, world }) => {
-  world.slug = SEED.published;
-  // A genuine guest — no session cookie rides the request, so the public 004 page
-  // renders its «Участвовать» register CTA (never a per-user registered state).
-  await context.clearCookies();
-  await page.goto(`/webinars/${world.slug}`, { waitUntil: "domcontentloaded" });
-});
+Given(
+  "a guest on the published event page",
+  async ({ page, context, world }) => {
+    world.slug = SEED.published;
+    // A genuine guest — no session cookie rides the request, so the public 004 page
+    // renders its «Участвовать» register CTA (never a per-user registered state).
+    await context.clearCookies();
+    await page.goto(`/webinars/${world.slug}`, {
+      waitUntil: "domcontentloaded",
+    });
+  },
+);
 
 When("the guest activates «Участвовать»", async ({ page }) => {
   // The public register CTA is a same-origin `/register?returnTo=/webinars/:slug`
@@ -88,9 +105,7 @@ Then(
     // EARS-2: the doctor returns to the ORIGINALLY chosen event, registered — no
     // re-search, no second «Участвовать» tap. The resume navigates to the returnTo.
     await page.waitForURL(new RegExp(`/webinars/${world.slug}(?:$|[?#])`));
-    await expect(
-      page.getByText(CONFIRMATION, { exact: false }).first(),
-    ).toBeVisible();
+    await expectRegisteredState(page, world.slug);
   },
 );
 
@@ -99,9 +114,7 @@ Then("the register CTA is no longer offered", async ({ page }) => {
   await expect(
     page.getByRole("link", { name: PARTICIPATE, exact: true }),
   ).toHaveCount(0);
-  await expect(
-    page.getByTestId("event-register-one-tap"),
-  ).toHaveCount(0);
+  await expect(page.getByTestId("event-register-one-tap")).toHaveCount(0);
 });
 
 When("the doctor opens «мои события»", async ({ page }) => {
@@ -119,26 +132,28 @@ Then(
 );
 
 Then(
-  "every listed time is labeled МСК with no drift to the viewer timezone",
+  "the listed online event time reads in the viewer's zone with its label",
   async ({ page }) => {
-    // EARS-11: under the non-Moscow browser timezone (config `bdd` project,
-    // America/New_York) every «мои события» instant is still presented in
-    // Europe/Moscow, explicitly labeled МСК — no drift to the viewer's local tz.
-    await expect(page.locator("body")).toContainText("МСК");
+    // EARS-11 as amended 2026-10-02 (#2537, 005-requirements-en.md:142 → 004
+    // EARS-12): an ONLINE event on «мои события» reads in the viewer's zone with
+    // an explicit label — under the `bdd` project's America/New_York «GMT-4» /
+    // «GMT-5» — never МСК (that stays for offline events, emails, admin).
+    await expect(page.locator("body")).toContainText(/GMT-[45]/);
   },
 );
 
-When("the doctor opens the listed event from «мои события»", async ({ page, world }) => {
-  await page.locator(`a[href="/webinars/${world.slug}"]`).first().click();
-  await page.waitForURL(new RegExp(`/webinars/${world.slug}(?:$|[?#])`));
-});
+When(
+  "the doctor opens the listed event from «мои события»",
+  async ({ page, world }) => {
+    await page.locator(`a[href="/webinars/${world.slug}"]`).first().click();
+    await page.waitForURL(new RegExp(`/webinars/${world.slug}(?:$|[?#])`));
+  },
+);
 
 Then(
   "the doctor is back on that event page in the registered state",
-  async ({ page }) => {
-    await expect(
-      page.getByText(CONFIRMATION, { exact: false }).first(),
-    ).toBeVisible();
+  async ({ page, world }) => {
+    await expectRegisteredState(page, world.slug);
   },
 );
 
@@ -151,24 +166,30 @@ Given(
     // Provision a fresh 003 doctor (register + verify + auto-login → /account),
     // then open a SECOND registrable event they are not yet registered for.
     await provisionLoggedInDoctor(page);
-    await page.goto(`/webinars/${world.slug}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`/webinars/${world.slug}`, {
+      waitUntil: "domcontentloaded",
+    });
     // A logged-in, not-yet-registered doctor gets the one-tap COMMAND button
     // (not the guest `/register` handoff link).
     await expect(page.getByTestId("event-register-one-tap")).toBeVisible();
   },
 );
 
-When("the doctor activates the one-tap «Участвовать» command", async ({ page }) => {
-  // EARS-1: one action — the button POSTs `RegisterForEvent` and re-reads the
-  // per-user state; no trip through auth, no confirmation round-trip.
-  await page.getByTestId("event-register-one-tap").click();
-});
+When(
+  "the doctor activates the one-tap «Участвовать» command",
+  async ({ page }) => {
+    // EARS-1: one action — the button POSTs `RegisterForEvent` and re-reads the
+    // per-user state; no trip through auth, no confirmation round-trip.
+    await page.getByTestId("event-register-one-tap").click();
+  },
+);
 
-Then("the event page immediately shows the registered state", async ({ page }) => {
-  await expect(
-    page.getByText(CONFIRMATION, { exact: false }).first(),
-  ).toBeVisible();
-});
+Then(
+  "the event page immediately shows the registered state",
+  async ({ page, world }) => {
+    await expectRegisteredState(page, world.slug);
+  },
+);
 
 // ── Register-during-live (EARS-1 + EARS-9, the #673 Stage-B rework) ──────────
 
@@ -180,7 +201,9 @@ Given(
     // the seeded live event, so the one-tap command button must be offered
     // (EARS-9: `live` is a registrable state, same affordance as `published`).
     await provisionLoggedInDoctor(page);
-    await page.goto(`/webinars/${world.slug}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`/webinars/${world.slug}`, {
+      waitUntil: "domcontentloaded",
+    });
     await expect(page.getByTestId("event-register-one-tap")).toBeVisible();
   },
 );
@@ -191,7 +214,9 @@ Then(
     // The rework finding: the live-event «Участвовать» must never navigate to the
     // not-yet-built 006 room (`/webinars/:slug/room` → 404). The one-tap COMMAND
     // registers in place and the SAME page re-renders registered.
-    await expect(page).toHaveURL(new RegExp(`/webinars/${world.slug}(?:$|[?#])`));
+    await expect(page).toHaveURL(
+      new RegExp(`/webinars/${world.slug}(?:$|[?#])`),
+    );
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   },
 );
@@ -217,11 +242,16 @@ Then(
 
 // ── Lifecycle gating (EARS-9) ────────────────────────────────────────────────
 
-Given("the {string} event page", async ({ page, context, world }, state: string) => {
-  world.slug = state === "hidden" ? SEED.hidden : SEED.ended;
-  await context.clearCookies();
-  await page.goto(`/webinars/${world.slug}`, { waitUntil: "domcontentloaded" });
-});
+Given(
+  "the {string} event page",
+  async ({ page, context, world }, state: string) => {
+    world.slug = state === "hidden" ? SEED.hidden : SEED.ended;
+    await context.clearCookies();
+    await page.goto(`/webinars/${world.slug}`, {
+      waitUntil: "domcontentloaded",
+    });
+  },
+);
 
 Then("no register affordance is offered", async ({ page }) => {
   // EARS-9: ended/hidden events render NO participation affordance — neither the
@@ -256,9 +286,10 @@ Then("the MyEvents read is refused without a session", async ({ page }) => {
   const res = await page.request.get("/v1/me/events", {
     headers: { accept: "application/json" },
   });
-  expect(res.ok(), "MyEvents must not be served to an unauthenticated caller").toBe(
-    false,
-  );
+  expect(
+    res.ok(),
+    "MyEvents must not be served to an unauthenticated caller",
+  ).toBe(false);
   expect(res.status()).toBeGreaterThanOrEqual(400);
 });
 

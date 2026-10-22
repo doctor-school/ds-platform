@@ -75,9 +75,10 @@ async function registerAndEnterRoom(
   // The one-tap swaps to the registered confirmation via a server refresh — wait
   // for the register CTA to leave before entering the room.
   await expect(page.getByTestId("event-register-one-tap")).toHaveCount(0);
-  await page.goto(`/webinars/${SLUG_LIVE}/room`, {
-    waitUntil: "domcontentloaded",
-  });
+  await page.goto(`/webinars/${SLUG_LIVE}/room`, { waitUntil: "load" });
+  // The display-name prompt is a client form: a submit before hydration is a
+  // native GET (`/room?displayName=…`, #3229 slot trace) that saves nothing.
+  await page.waitForLoadState("networkidle");
 }
 
 // The leading `006 EARS-14 ` prefix is the ears-test-lint feature scope — a

@@ -40,7 +40,10 @@ test.describe("the Academy feed view (wave-2 entry gate §2.4)", () => {
   test("gate row 28: the head carries «Прошедшие | Будущие», «Будущие» by default, and the tense is URL state", async ({
     page,
   }) => {
-    await page.goto("/webinars", { waitUntil: "domcontentloaded" });
+    await page.goto("/webinars", { waitUntil: "load" });
+    // The tense tabs are client-wired: a click before hydration lands on dead
+    // markup and the URL never gains `?tense=past` (#3229, slot run).
+    await page.waitForLoadState("networkidle");
 
     const tabs = page.getByTestId("events-tense-tabs");
     await expect(tabs.getByRole("tab")).toHaveText(["Прошедшие", "Будущие"]);

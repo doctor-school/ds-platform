@@ -122,7 +122,12 @@ test("EARS-6: the Предстоящие list shows the registered event with it
  * Self-provisioning + live-stand-gated via `LIVE_STAND`; inert on a bare CI run.
  */
 test.describe("014 EARS-9 my-events tabs (e2e)", () => {
-  const HIDDEN_SLUG = process.env.E2E_HIDDEN_SLUG ?? "seed-005-hidden";
+  // #3229: a slot hands the leg its golden live + hidden events (`E2E_WEBINAR_SLUG_LIVE`,
+  // `E2E_JOURNEY_SLUG_HIDDEN`); a local stand falls back to its `seed-005-*` fixtures.
+  const HIDDEN_SLUG =
+    process.env.E2E_HIDDEN_SLUG ??
+    process.env.E2E_JOURNEY_SLUG_HIDDEN ??
+    "seed-005-hidden";
 
   test("014 EARS-9: «Мои события» opens on Предстоящие, offers exactly Предстоящие|Записи, and deep-links the Записи tab", async ({
     page,
@@ -132,17 +137,22 @@ test.describe("014 EARS-9 my-events tabs (e2e)", () => {
     await provisionLoggedInDoctor(page);
 
     // A real registration so the default tab has content to be right ABOUT.
-    const status = await page.evaluate(async (slug) => {
-      const res = await fetch(
-        `/v1/events/${encodeURIComponent(slug)}/registration`,
-        {
-          method: "POST",
-          headers: { accept: "application/json" },
-          credentials: "include",
-        },
-      );
-      return res.status;
-    }, process.env.E2E_LIVE_SLUG ?? "seed-005-live");
+    const status = await page.evaluate(
+      async (slug) => {
+        const res = await fetch(
+          `/v1/events/${encodeURIComponent(slug)}/registration`,
+          {
+            method: "POST",
+            headers: { accept: "application/json" },
+            credentials: "include",
+          },
+        );
+        return res.status;
+      },
+      process.env.E2E_LIVE_SLUG ??
+        process.env.E2E_WEBINAR_SLUG_LIVE ??
+        "seed-005-live",
+    );
     expect(status).toBe(200);
 
     await page.goto(`${BASE}/account/events`, {

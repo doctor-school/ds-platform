@@ -1708,6 +1708,13 @@ describe("golden live env (#3191) — derived from the dataset every slot is clo
       if (tier.releaseCheck)
         assert.match(releaseCheckExclusion(tier), /#3229/, tier.name);
     }
+    // The Academy default leg names what keeps it out, the product deviation first.
+    assert.match(
+      releaseCheckExclusion(
+        LIVE_TIERS.find((t) => t.name === "live/academy/default"),
+      ),
+      /008 EARS-14 footer absent on \/ \(product, epic #2020\)/,
+    );
   });
 
   it("refuses an exclusion without a reason — a leg never leaves the release check silently", () => {

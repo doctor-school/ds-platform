@@ -132,7 +132,9 @@ test.describe("006 EARS-3 live chat over Centrifugo (e2e)", () => {
 
       // Doctor B sees A's message appear in real time — no reload of page B.
       await expect(
-        pageB.getByTestId("room-chat-message").filter({ hasText: messageFromA }),
+        pageB
+          .getByTestId("room-chat-message")
+          .filter({ hasText: messageFromA }),
       ).toBeVisible({ timeout: 15_000 });
 
       // The reverse direction proves the bidirectional fan-out: B posts, A sees it.
@@ -146,7 +148,9 @@ test.describe("006 EARS-3 live chat over Centrifugo (e2e)", () => {
         .first()
         .click();
       await expect(
-        pageA.getByTestId("room-chat-message").filter({ hasText: messageFromB }),
+        pageA
+          .getByTestId("room-chat-message")
+          .filter({ hasText: messageFromB }),
       ).toBeVisible({ timeout: 15_000 });
     } finally {
       await ctxA.close();
@@ -162,7 +166,9 @@ test.describe("006 EARS-3 live chat over Centrifugo (e2e)", () => {
       const page = await ctx.newPage();
       await login(page, DOCTOR_A_EMAIL!, DOCTOR_A_PASSWORD!);
       const composer = await openRoomChat(page);
-      const send = page.getByRole("button", { name: /отправить|send/i }).first();
+      const send = page
+        .getByRole("button", { name: /отправить|send/i })
+        .first();
 
       // Empty and whitespace-only drafts are not sendable (the same rule the server
       // enforces) — the send control stays disabled, never posting garbage.

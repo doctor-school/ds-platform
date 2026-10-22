@@ -101,9 +101,7 @@ export async function signInWithPassword(
 ): Promise<void> {
   await page.goto(`${baseUrl ?? ""}${host.loginPath}`, { waitUntil: "load" });
   await page.waitForLoadState("networkidle");
-  await page
-    .locator('input[autocomplete="username"]')
-    .fill(credentials.email);
+  await page.locator('input[autocomplete="username"]').fill(credentials.email);
   await page
     .locator('input[autocomplete="current-password"]')
     .fill(credentials.password);

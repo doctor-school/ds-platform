@@ -57,7 +57,9 @@ test.describe("004 EARS-8 listing-card registered marker (e2e)", () => {
     await provisionLoggedInDoctor(page);
     await page.goto(`/webinars/${SLUG}`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("event-register-one-tap").click();
-    await expect(page.getByText(MARKER, { exact: false }).first()).toBeVisible();
+    await expect(
+      page.getByText(MARKER, { exact: false }).first(),
+    ).toBeVisible();
 
     // The listing now marks EXACTLY the registered card. The «вы записаны» marker
     // is a sibling of the card's stretched title link, so scope to the card
@@ -67,14 +69,18 @@ test.describe("004 EARS-8 listing-card registered marker (e2e)", () => {
       has: page.locator(`a[href="/webinars/${SLUG}"]`),
     });
     await expect(registeredCard).toBeVisible();
-    await expect(registeredCard.getByText(MARKER, { exact: false })).toBeVisible();
+    await expect(
+      registeredCard.getByText(MARKER, { exact: false }),
+    ).toBeVisible();
 
     // …and every other card is unchanged — no marker outside the registered card.
     const controlCard = page.locator("[data-webinar-card]", {
       has: page.locator(`a[href="/webinars/${CONTROL_SLUG}"]`),
     });
     await expect(controlCard).toBeVisible();
-    await expect(controlCard.getByText(MARKER, { exact: false })).toHaveCount(0);
+    await expect(controlCard.getByText(MARKER, { exact: false })).toHaveCount(
+      0,
+    );
     await expect(page.getByText(MARKER, { exact: false })).toHaveCount(1);
 
     // A guest again (cookies dropped): the public render is marker-free — the

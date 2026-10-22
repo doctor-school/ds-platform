@@ -44,6 +44,15 @@ describe("action-pin", () => {
     expect(stderr).toContain("missing the trailing `# vX");
   });
 
+  it("red: a major-only `# v7` comment is not an exact release tag → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-major-only-comment"));
+    expect(code).toBe(1);
+    expect(stderr).toContain("ci.yml:7");
+    expect(stderr).toContain("missing the trailing `# vX");
+    // an exact semver tag with a pre-release suffix is accepted.
+    expect(stderr).not.toContain("ci.yml:8");
+  });
+
   it("red: a composite action under .github/actions is scanned too → exit 1", () => {
     const { code, stderr } = runGuard(GUARD, dir("red-composite-action"));
     expect(code).toBe(1);

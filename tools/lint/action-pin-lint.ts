@@ -6,14 +6,14 @@
  * Rule: every `uses:` reference in `.github/workflows/*.yml|yaml` and in
  * `.github/actions/**\/action.yml|yaml` that reaches another repository is pinned
  * to a full 40-hex commit SHA and carries the exact release tag as a trailing
- * comment, in the format Dependabot's `github-actions` ecosystem maintains:
+ * comment, in the format Renovate's `github-actions` manager maintains:
  *
  *     uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
  *
  * A tag or branch is a moving pointer: whoever controls the upstream repository
  * can repoint it, and the next run executes the new code with this repository's
  * tokens. A commit SHA cannot be repointed. The comment keeps the pin readable
- * and is the anchor Dependabot rewrites together with the SHA, so a missing
+ * and is the anchor Renovate rewrites together with the SHA, so a missing
  * comment is a finding too. First-party `actions/*` follow the same rule — one
  * rule, no allowlist (OpenSSF Scorecard "Pinned-Dependencies").
  *
@@ -40,7 +40,8 @@ const TAG = "[action-pin]";
 // `uses:` as a mapping key, optionally as the first key of a sequence item.
 const USES_RE = /^\s*(?:-\s+)?uses:\s*(.*)$/;
 const SHA_RE = /^[0-9a-f]{40}$/;
-const VERSION_COMMENT_RE = /^#\s*v\d/;
+// The exact release tag (`v7.0.1`, `v7.1.0-rc.1`), never a floating major (`v7`).
+const VERSION_COMMENT_RE = /^#\s*v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\s|$)/;
 
 const isYaml = (f: string) => f.endsWith(".yml") || f.endsWith(".yaml");
 
@@ -111,7 +112,7 @@ for (const file of files) {
     }
     if (!VERSION_COMMENT_RE.test(comment)) {
       findings.push(
-        `${where}: \`${ref}\` — missing the trailing \`# vX.Y.Z\` release-tag comment`,
+        `${where}: \`${ref}\` — missing the trailing \`# vX.Y.Z\` exact release-tag comment`,
       );
     }
   });

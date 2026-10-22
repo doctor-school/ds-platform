@@ -24,7 +24,7 @@ mode: inline
 
 Respect dependencies and mandatory gates; reuse still-applicable evidence instead of repeating completed steps. Related implementation/doc corrections may share a PR per repo-conventions; independent work need not serialize behind unrelated checks.
 
-1. **`read-relevant-adrs`** (inline) — load ADRs cited in `NNN-requirements.md` "Prior decisions" plus any architecturally adjacent ADRs. Cite them in the first user-facing reply.
+1. **`read-relevant-adrs`** (inline) — load ADRs cited in `NNN-requirements.md` "Prior decisions" plus any architecturally adjacent ADRs. Cite them in the first user-facing reply. One capability — one package: its owner is the row in `apps/docs/content/specs/product/two-site-ia/capability-ownership.md`; a host adds only a route file + host-config fields (ADR-0013 §A1).
 2. **`verify-base-ci-green`** (inline) — `gh run list --branch main --limit 1`. If red, note in PR description that baseline was already red.
    2a. **Stage-A precondition (before implementation).** For any rendered surface, run `build-ui-from-design-system` research/adoption and design-approval gate now. Verify the original owner-approved layout/behavior and source artifacts, or obtain the required choice before UI code. Record the adoption decision; missing design capability is a prerequisite. Stage B follows live verification and must clear before merge.
 3. **RED** — write one failing Vitest test per EARS-N. Naming: `it('EARS-N: when <trigger>, system shall <behavior>')`. Flat numbering per ADR-0006 §4; nest to `N.M` only when one handler carries multiple shall-clauses.

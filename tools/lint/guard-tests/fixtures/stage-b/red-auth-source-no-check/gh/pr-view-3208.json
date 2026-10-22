@@ -1,0 +1,7 @@
+{
+  "number": 3208,
+  "body": "## Summary\nSession refresh window.\n\nStage-B: N/A — no render surface\n",
+  "labels": [],
+  "files": [{ "path": "apps/api/src/auth/session/refresh.service.ts" }],
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

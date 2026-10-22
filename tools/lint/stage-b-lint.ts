@@ -11,6 +11,7 @@ import {
   isEnvironmentSensitivePath,
   isNonRuntimePath,
   normalizeTierFiles,
+  requiresStageCheck,
   resolveTier,
   type ChangeTier,
   type ChangeTierFile,
@@ -266,6 +267,9 @@ async function main(): Promise<void> {
   const environmentSensitive = allFiles
     .flatMap((f) => [f.path, f.previousPath ?? ""])
     .filter((p) => p && isEnvironmentSensitivePath(p));
+  const stageCheckPaths = allFiles
+    .flatMap((f) => [f.path, f.previousPath ?? ""])
+    .filter((p) => p && requiresStageCheck(p));
   const loadRecords = async (): Promise<StageBRecord[]> => {
     const records: StageBRecord[] = [
       { body: pr.body ?? "", updatedAt: pr.updatedAt },
@@ -280,16 +284,16 @@ async function main(): Promise<void> {
     return records;
   };
   if (!renderable.length) {
-    if (!environmentSensitive.length) {
+    if (!stageCheckPaths.length) {
       info(
         `PR #${pr.number} touches no user-facing render surface, rule does not apply`,
       );
       process.exit(0);
     }
-    // #3205: no owner Stage-B without a render surface, but an
-    // environment-sensitive runtime change needs the agent's slot check.
+    // #3205: no owner Stage-B without a render surface, but a runtime change
+    // in the owner-consented classes needs the agent's slot check.
     info(
-      `PR #${pr.number} touches no render surface but environment-sensitive runtime file(s): ${environmentSensitive.join(", ")}`,
+      `PR #${pr.number} touches no render surface but Stage-check runtime file(s): ${stageCheckPaths.join(", ")}`,
     );
     const check = validateStageCheck(
       await loadRecords(),
@@ -300,7 +304,7 @@ async function main(): Promise<void> {
     );
     if (!check.ok)
       fail(
-        `PR #${pr.number} changes environment-sensitive runtime file(s) (${environmentSensitive.join(", ")}): ${check.reason}`,
+        `PR #${pr.number} changes Stage-check runtime file(s) (${stageCheckPaths.join(", ")}): ${check.reason}`,
       );
     info(check.reason);
     process.exit(0);

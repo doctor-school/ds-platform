@@ -293,6 +293,43 @@ describe("stage-b-lint", () => {
       expect(stdout).toContain("slot pr-3206");
     });
 
+    it("red: an auth source file / a mailer file with no Stage-check record → exit 1", () => {
+      for (const [name, pr, path] of [
+        [
+          "red-auth-source-no-check",
+          "3208",
+          "apps/api/src/auth/session/refresh.service.ts",
+        ],
+        ["red-mailer-no-check", "3209", "apps/api/src/mailer/transport.ts"],
+      ]) {
+        const { code, stderr } = runGuard(GUARD, caseDir("stage-b", name), {
+          env: prEnv(pr, name),
+        });
+        expect(code, name).toBe(1);
+        expect(stderr, name).toContain(path);
+      }
+    });
+
+    it("skip: infra docs, an IdP bootstrap doc, terraform and an env template → exit 0 unchanged", () => {
+      const { code, stdout } = runGuard(
+        GUARD,
+        caseDir("stage-b", "skip-infra-docs-templates"),
+        { env: prEnv("3210", "skip-infra-docs-templates") },
+      );
+      expect(code).toBe(0);
+      expect(stdout).toContain("rule does not apply");
+    });
+
+    it("green: a comment quoting the record template neither counts nor poisons the set → exit 0", () => {
+      const { code, stdout } = runGuard(
+        GUARD,
+        caseDir("stage-b", "green-auth-source-check-template-quote"),
+        { env: prEnv("3212", "green-auth-source-check-template-quote") },
+      );
+      expect(code).toBe(0);
+      expect(stdout).toContain("slot pr-3212");
+    });
+
     it("green: the Stage-check PASS may live in a PR comment → exit 0", () => {
       const { code } = runGuard(
         GUARD,

@@ -180,24 +180,28 @@ export function validateStageCheck(
 ): { ok: boolean; reason: string } {
   const checks = records
     .flatMap((record, order) =>
-      [...record.body.matchAll(checkMarker)].map((match, index) => {
-        const recorded = Date.parse(stageBField(record.body, "recorded-at"));
-        const pass = /^PASS\b/i.test(match[1]);
-        const native = [record.updatedAt, record.createdAt]
-          .map((date) => Date.parse(date ?? ""))
-          .filter(Number.isFinite);
-        // A PASS ages from its recorded-at; a FAIL honours its later edit.
-        const times = pass ? [recorded] : [recorded, ...native];
-        const known = times.filter(Number.isFinite);
-        return {
-          record,
-          value: match[1],
-          pass,
-          order,
-          index,
-          time: known.length ? Math.max(...known) : NaN,
-        };
-      }),
+      [...record.body.matchAll(checkMarker)]
+        // A line quoting the record template (`pr-<N>, <what was driven>`) is
+        // not a record: it neither counts nor poisons the set as undated.
+        .filter((match) => !/<[^>]*>/.test(match[1]))
+        .map((match, index) => {
+          const recorded = Date.parse(stageBField(record.body, "recorded-at"));
+          const pass = /^PASS\b/i.test(match[1]);
+          const native = [record.updatedAt, record.createdAt]
+            .map((date) => Date.parse(date ?? ""))
+            .filter(Number.isFinite);
+          // A PASS ages from its recorded-at; a FAIL honours its later edit.
+          const times = pass ? [recorded] : [recorded, ...native];
+          const known = times.filter(Number.isFinite);
+          return {
+            record,
+            value: match[1],
+            pass,
+            order,
+            index,
+            time: known.length ? Math.max(...known) : NaN,
+          };
+        }),
     )
     .sort((a, b) => a.time - b.time || a.order - b.order || a.index - b.index);
   const required = `the agent's recorded slot check \`Stage-check: PASS — slot pr-${prNumber}, <what was driven>\` with \`Stage-B-head\` + \`Stage-B-recorded-at\``;

@@ -1,5 +1,5 @@
-import { expect, type Page } from "@playwright/test";
-import { After, Given, Then, When } from "../support/fixtures";
+import { expect, type Page, type Request } from "@playwright/test";
+import { After, Given, Then, When, type HeartbeatLog } from "../support/fixtures";
 import { provisionLoggedInDoctor, submitRegisterAndVerify } from "../support/doctor-session";
 
 /**
@@ -78,18 +78,38 @@ async function expectNoRoom(page: Page): Promise<void> {
   await expect(page.getByTestId("room-context")).toHaveCount(0);
 }
 
-/** Attach a request listener that counts heartbeat POSTs to the gated endpoint. */
-function trackHeartbeats(page: Page): { count: number } {
-  const beats = { count: 0 };
+/**
+ * Attach listeners that log every heartbeat POST to the gated endpoint — its send
+ * instant and the status the api answered — so a step can assert the cadence AND
+ * that each beat was accepted as authenticated (a guest's beat is refused).
+ */
+function trackHeartbeats(page: Page): HeartbeatLog {
+  const beats: HeartbeatLog = { count: 0, sentAt: [], statuses: [] };
+  const isBeat = (method: string, url: string): boolean =>
+    method === "POST" && /\/v1\/events\/[^/]+\/heartbeat$/.test(url);
+  const index = new Map<Request, number>();
   page.on("request", (req) => {
-    if (
-      req.method() === "POST" &&
-      /\/v1\/events\/[^/]+\/heartbeat$/.test(req.url())
-    ) {
-      beats.count += 1;
-    }
+    if (!isBeat(req.method(), req.url())) return;
+    index.set(req, beats.count);
+    beats.count += 1;
+    beats.sentAt.push(Date.now());
+    beats.statuses.push(0);
+  });
+  page.on("response", (res) => {
+    const at = index.get(res.request());
+    if (at !== undefined) beats.statuses[at] = res.status();
   });
   return beats;
+}
+
+/** Every beat that has been answered so far was accepted (2xx) — an authenticated beat. */
+function expectAnsweredBeatsAccepted(beats: HeartbeatLog): void {
+  const answered = beats.statuses.filter((status) => status !== 0);
+  expect(answered.length, "no heartbeat was answered").toBeGreaterThan(0);
+  for (const status of answered) {
+    expect(status, "a heartbeat was refused — the beat was not authenticated").toBeGreaterThanOrEqual(200);
+    expect(status, "a heartbeat was refused — the beat was not authenticated").toBeLessThan(300);
+  }
 }
 
 /**
@@ -292,11 +312,13 @@ When("the doctor stays in the room across several cadence intervals", async ({ p
 });
 
 Then(
-  "the client posts more than one authenticated heartbeat, driven only by the timer",
+  "the client posts an entry heartbeat and more timer-driven authenticated heartbeats",
   async ({ world }) => {
-    // EARS-4: a visible tab fires more than one beat with no click — the cadence, not
-    // a one-shot ping.
-    expect(world.beats!.count).toBeGreaterThanOrEqual(2);
+    // EARS-4: a visible tab fires the entry beat and more beats with no click — the
+    // cadence, not a one-shot ping — and the api accepts every one as authenticated.
+    const beats = world.beats!;
+    expect(beats.count).toBeGreaterThanOrEqual(2);
+    expectAnsweredBeatsAccepted(beats);
   },
 );
 
@@ -327,16 +349,25 @@ Then("the client stops posting heartbeats while the tab is hidden", async ({ pag
   expect(world.beats!.count).toBe(world.beatsWhileHidden);
 });
 
-When("the room tab becomes visible again", async ({ page }) => {
+When("the room tab becomes visible again", async ({ page, world }) => {
+  world.visibleAgainAt = Date.now();
   await setHidden(page, false);
 });
 
-Then("the client resumes posting authenticated heartbeats", async ({ page, world }) => {
-  // EARS-4: on re-focus the loop resumes (an immediate beat + the N-second grid), so
-  // the count grows past the frozen while-hidden value.
-  await page.waitForTimeout(HEARTBEAT_SECONDS * 2200);
-  expect(world.beats!.count).toBeGreaterThan(world.beatsWhileHidden!);
-});
+Then(
+  "the client posts an immediate authenticated heartbeat before resuming the N-second grid",
+  async ({ page, world }) => {
+    // EARS-4: on re-focus the loop beats AT ONCE — well inside one interval, so it is
+    // not the grid's next tick — and then resumes the N-second grid.
+    await page.waitForTimeout(HEARTBEAT_SECONDS * 2200);
+    const beats = world.beats!;
+    const resumed = beats.sentAt.slice(world.beatsWhileHidden!);
+    expect(resumed.length, "no beat after the tab became visible").toBeGreaterThanOrEqual(2);
+    const immediateWithinMs = Math.min(1_500, HEARTBEAT_SECONDS * 750);
+    expect(resumed[0]! - world.visibleAgainAt!).toBeLessThan(immediateWithinMs);
+    expectAnsweredBeatsAccepted(beats);
+  },
+);
 
 // ── Denied-access routing, never a soft wall (EARS-6) ─────────────────────────
 

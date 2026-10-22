@@ -15,3 +15,18 @@ export function standHttpCredentials(
   const password = env.E2E_HTTP_PASS;
   return username && password ? { username, password } : undefined;
 }
+
+/**
+ * The same pair as a Basic `authorization` header, for a raw Node `fetch` a spec
+ * makes outside Playwright's request stack (a Mailpit read, an IdP call through
+ * the stand's gate) — `httpCredentials` answers only the browser's and the
+ * `request` fixture's challenges (#3191). Empty on a local dev stand.
+ */
+export function standBasicAuthHeaders(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): Record<string, string> {
+  const credentials = standHttpCredentials(env);
+  if (!credentials) return {};
+  const pair = `${credentials.username}:${credentials.password}`;
+  return { authorization: `Basic ${Buffer.from(pair).toString("base64")}` };
+}

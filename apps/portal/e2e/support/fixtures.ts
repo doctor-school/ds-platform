@@ -9,6 +9,17 @@ import type { BrowserContext, Page } from "@playwright/test";
  * journey re-points it per room seed). Kept tiny so the subagent/lead return
  * contract stays clean (heavy payloads never leave the browser context).
  */
+/**
+ * 006 EARS-4 — every heartbeat POST the room tab fired: when it was sent and the
+ * status the api answered (0 until the response lands), so the cadence steps can
+ * assert both the timing and that each beat was ACCEPTED as authenticated.
+ */
+export interface HeartbeatLog {
+  count: number;
+  sentAt: number[];
+  statuses: number[];
+}
+
 export interface JourneyWorld {
   /** The event slug the current scenario is driving (the `published` seed by default). */
   slug: string;
@@ -19,9 +30,11 @@ export interface JourneyWorld {
    * listener increments so the cadence/visibility steps can compare beats fired
    * across the Given/When/Then split (a plain number would not survive rebinding).
    */
-  beats?: { count: number };
+  beats?: HeartbeatLog;
   /** 006 EARS-4 — the beat count captured at the instant the room tab was backgrounded. */
   beatsWhileHidden?: number;
+  /** 006 EARS-4 — when the room tab was made visible again (`Date.now()`). */
+  visibleAgainAt?: number;
   /**
    * 006 EARS-3 chat fan-out — the SECOND doctor's context/page (a distinct 003
    * session in the same live room). Closed by the `After` hook so the fresh

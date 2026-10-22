@@ -5,6 +5,11 @@ import {
   type Page,
 } from "@playwright/test";
 import pg from "pg";
+import { captchaTestTokenHeaders } from "@ds/e2e/captcha-stub";
+import {
+  standBasicAuthHeaders,
+  standHttpCredentials,
+} from "@ds/e2e/stand-http-credentials";
 
 /**
  * 046 (#2433) — the live-stand fixtures the «Мои заявки на Конгресс» tier
@@ -76,6 +81,7 @@ export async function mailedCode(
   for (let attempt = 0; attempt < 40; attempt++) {
     const res = await fetch(
       `${MAILPIT_BASE}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
+      { headers: standBasicAuthHeaders() },
     );
     if (res.ok) {
       const data = (await res.json()) as {
@@ -100,10 +106,14 @@ export async function mailedCode(
 export async function provisionDoctor(tag: string): Promise<CongressDoctor> {
   const email = `e2e-2433-${tag}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@ds.test`;
   const password = `Doc-${Date.now()}-aA1!`;
-  const api = await playwrightRequest.newContext({ baseURL: DOCTOR_URL });
+  const api = await playwrightRequest.newContext({
+    baseURL: DOCTOR_URL,
+    httpCredentials: standHttpCredentials(),
+  });
   try {
     const sentAt = Date.now();
     const reg = await api.post("/v1/storefront/doctor/register", {
+      headers: captchaTestTokenHeaders(),
       data: {
         email,
         password,

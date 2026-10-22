@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { standBasicAuthHeaders } from "@ds/e2e/stand-http-credentials";
 import { requireLiveStandEnv } from "./support/live-stand-env";
 
 /**
@@ -64,6 +65,7 @@ async function fetchMail(
   for (let attempt = 0; attempt < 30; attempt++) {
     const res = await fetch(
       `${MAILPIT_BASE}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
+      { headers: standBasicAuthHeaders() },
     );
     if (res.ok) {
       const data = (await res.json()) as {
@@ -76,7 +78,9 @@ async function fetchMail(
           (m.Subject ?? "").includes(subject),
       );
       if (hit?.ID) {
-        const msg = await fetch(`${MAILPIT_BASE}/api/v1/message/${hit.ID}`);
+        const msg = await fetch(`${MAILPIT_BASE}/api/v1/message/${hit.ID}`, {
+          headers: standBasicAuthHeaders(),
+        });
         if (msg.ok) {
           const body = (await msg.json()) as Partial<MailpitMessage>;
           return {

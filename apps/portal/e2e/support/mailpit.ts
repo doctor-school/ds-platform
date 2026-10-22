@@ -7,6 +7,8 @@
  * `424242` code here — this tier reads the REAL delivered code.
  */
 
+import { standBasicAuthHeaders } from "@ds/e2e/stand-http-credentials";
+
 const MAILPIT_BASE = (
   process.env.MAILPIT_URL ?? "http://truenas.local:8025"
 ).replace(/\/$/, "");
@@ -66,6 +68,7 @@ export async function fetchOtpCode(
   for (let attempt = 0; attempt < 30; attempt++) {
     const res = await fetch(
       `${MAILPIT_BASE}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
+      { headers: standBasicAuthHeaders() },
     );
     if (res.ok) {
       const data = (await res.json()) as {
@@ -81,7 +84,9 @@ export async function fetchOtpCode(
           (!subject || (m.Subject ?? "").includes(subject)),
       );
       if (hit?.ID) {
-        const msgRes = await fetch(`${MAILPIT_BASE}/api/v1/message/${hit.ID}`);
+        const msgRes = await fetch(`${MAILPIT_BASE}/api/v1/message/${hit.ID}`, {
+          headers: standBasicAuthHeaders(),
+        });
         if (msgRes.ok) {
           const code = extractCode(
             (await msgRes.json()) as {
@@ -122,6 +127,7 @@ export async function fetchMessage(
   for (let attempt = 0; attempt < 30; attempt++) {
     const res = await fetch(
       `${MAILPIT_BASE}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
+      { headers: standBasicAuthHeaders() },
     );
     if (res.ok) {
       const data = (await res.json()) as {
@@ -134,7 +140,9 @@ export async function fetchMessage(
           (!subjectIncludes || (m.Subject ?? "").includes(subjectIncludes)),
       );
       if (hit?.ID) {
-        const msgRes = await fetch(`${MAILPIT_BASE}/api/v1/message/${hit.ID}`);
+        const msgRes = await fetch(`${MAILPIT_BASE}/api/v1/message/${hit.ID}`, {
+          headers: standBasicAuthHeaders(),
+        });
         if (msgRes.ok) {
           const msg = (await msgRes.json()) as Partial<MailpitMessage>;
           return {

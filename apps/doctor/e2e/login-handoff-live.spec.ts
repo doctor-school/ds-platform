@@ -5,6 +5,11 @@ import {
   type Page,
 } from "@playwright/test";
 import { congressSignUpEnvProblem } from "@ds/e2e/live-stand-env";
+import { captchaTestTokenHeaders } from "@ds/e2e/captcha-stub";
+import {
+  standBasicAuthHeaders,
+  standHttpCredentials,
+} from "@ds/e2e/stand-http-credentials";
 import { requireLiveStandEnv } from "./support/live-stand-env";
 import { mailedCode } from "./support/congress-stand";
 
@@ -33,7 +38,10 @@ const DOCTOR_URL = (process.env.E2E_DOCTOR_URL ?? "").replace(/\/$/, "");
 async function signUpForCongress(email: string): Promise<string> {
   const problem = congressSignUpEnvProblem();
   if (problem) throw new Error(problem);
-  const api = await playwrightRequest.newContext({ baseURL: DOCTOR_URL });
+  const api = await playwrightRequest.newContext({
+    baseURL: DOCTOR_URL,
+    httpCredentials: standHttpCredentials(),
+  });
   try {
     const book = await api.get("/v1/public/specialties");
     expect(book.ok(), `specialties — ${book.status()}`).toBe(true);
@@ -41,6 +49,7 @@ async function signUpForCongress(email: string): Promise<string> {
       entries: Array<{ id: string }>;
     };
     const res = await api.post("/v1/congress/sign-up", {
+      headers: captchaTestTokenHeaders(),
       data: {
         surname: "Иванова",
         firstName: "Мария",
@@ -124,6 +133,7 @@ async function codeMailCount(email: string): Promise<number> {
   await new Promise((resolve) => setTimeout(resolve, 5_000));
   const res = await fetch(
     `${MAILPIT_BASE}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
+    { headers: standBasicAuthHeaders() },
   );
   const data = (await res.json()) as {
     messages?: Array<{ Subject?: string }>;

@@ -1,4 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
+import {
+  expectAtSignInHostFrom,
+  watchStorefrontEntries,
+} from "@ds/e2e/storefront-entry-watch";
 import { requireLiveStandEnv } from "./support/live-stand-env";
 import {
   REGISTRATION_URL,
@@ -116,8 +120,15 @@ test("046 EARS-4: a guest is sent to the login door, signs in by the emailed cod
   const doctor = await provisionDoctor("guest");
   expect(await context.cookies()).toHaveLength(0);
 
+  // #3172: the door is the sign-in host's form, entered through this
+  // storefront's `/login` carrying the section (the transaction holds it).
+  const storefront = process.env.E2E_DOCTOR_URL ?? "";
+  watchStorefrontEntries(page, storefront);
   await page.goto(SECTION);
-  await expect(page).toHaveURL(/\/login\?returnTo=%2Faccount%2Fcongress$/);
+  await expectAtSignInHostFrom(page, storefront, {
+    pathname: "/login",
+    returnTo: "/account/congress",
+  });
 
   await page.getByTestId("login-method-otp").click();
   await page.getByTestId("otp-identifier").fill(doctor.email);

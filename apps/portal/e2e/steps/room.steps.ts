@@ -11,6 +11,10 @@ import {
   submitRegisterAndVerify,
 } from "../support/doctor-session";
 import { answerDisplayNamePrompt, waitForRoomChatLive } from "../support/room";
+import {
+  expectAtSignInHostFrom,
+  watchStorefrontEntries,
+} from "@ds/e2e/storefront-entry-watch";
 
 /**
  * 006 room-journey step definitions (#584) — the browser translation of the
@@ -464,6 +468,7 @@ Given(
 );
 
 When("the caller reaches the room", async ({ page, world }) => {
+  watchStorefrontEntries(page, BASE);
   await page.goto(roomUrl(world.slug), { waitUntil: "domcontentloaded" });
 });
 
@@ -474,11 +479,12 @@ Then(
     // a hidden player), branching on the refusal reason.
     if (destination === "the 003 auth flow") {
       // 401 → the 003 login flow, carrying a returnTo BACK to this room url so the
-      // gate re-evaluates on return.
-      await page.waitForURL(/\/login\?/);
-      expect(page.url()).toContain(
-        `returnTo=${encodeURIComponent(`/webinars/${world.slug}/room`)}`,
-      );
+      // gate re-evaluates on return — through the storefront's `/login` entry to
+      // the sign-in host's form (#3172; the return path rides the transaction).
+      await expectAtSignInHostFrom(page, BASE, {
+        pathname: "/login",
+        returnTo: `/webinars/${world.slug}/room`,
+      });
     } else if (destination === "the 005 register front door") {
       // 403 → the 004/005 event page carrying `?from=room`, surfacing the access
       // guidance above the register front door.

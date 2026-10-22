@@ -1,5 +1,7 @@
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 
+import { isSignInHostForm } from "./sign-in-host-api.js";
+
 /**
  * #3172 — the return path of a sign-in journey no longer rides the form URL:
  * the storefront entry (`GET <storefront>/{login,register,reset,verify}`)
@@ -85,4 +87,20 @@ export function expectEnteredThrough(
       entry ? new URL(entry.url).searchParams.get("method") : null,
       "the sign-in method the entry carried",
     ).toBe(expected.method);
+}
+
+/**
+ * A guest bounced off a gated storefront address (or sent into a door) ends on
+ * the sign-in host's form, having entered through the storefront `base`'s own
+ * entry with `expected.returnTo` — the replacement for reading `returnTo` off
+ * the form URL. {@link watchStorefrontEntries} must be installed before the
+ * navigation that bounces.
+ */
+export async function expectAtSignInHostFrom(
+  page: Page,
+  base: string,
+  expected: { returnTo: string | null; pathname?: string; method?: string },
+): Promise<void> {
+  await page.waitForURL((url) => isSignInHostForm(url));
+  expectEnteredThrough(page, base, expected);
 }

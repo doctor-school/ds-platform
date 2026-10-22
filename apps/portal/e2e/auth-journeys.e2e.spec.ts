@@ -1,5 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 import { congressSignUpEnvProblem } from "@ds/e2e/live-stand-env";
+import { AUTH_REQUEST_PARAM, isSignInHostForm } from "@ds/e2e/sign-in-host-api";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "@ds/e2e/storefront-entry-watch";
 import { fetchMessage, fetchOtpCode } from "./support/mailpit";
 import { NOTIFICATION_SUBJECTS } from "./support/notification-subjects";
 import { fetchSmsOtpCode } from "./support/sms-sink";
@@ -79,6 +84,19 @@ async function assertNoTokenInClient(page: Page): Promise<void> {
   const session = cookies.find((c) => c.name === SESSION_COOKIE);
   expect(session, "session cookie must be set").toBeTruthy();
   expect(session!.httpOnly, "session cookie must be HttpOnly").toBe(true);
+}
+
+const BASE = process.env.E2E_PORTAL_URL ?? "http://localhost:3001";
+
+/** The sign-in host's `/login` door, its address bar carrying only the auth request. */
+function expectOnlyAuthRequest(page: Page): void {
+  const url = new URL(page.url());
+  expect(
+    isSignInHostForm(url) &&
+      url.pathname === "/login" &&
+      [...url.searchParams.keys()].join() === AUTH_REQUEST_PARAM,
+    "the address bar retains only the auth request",
+  ).toBe(true);
 }
 
 test.describe("portal auth journeys (real Zitadel)", () => {
@@ -348,13 +366,22 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     ).toBe("accepted");
 
     const sentAt = new Date().toISOString();
+    watchStorefrontEntries(page, BASE);
     const response = await page.goto(
       `/login?method=code&handoff=${accepted.handoff}&returnTo=%2Faccount`,
     );
     expect(response?.headers()["referrer-policy"]).toBe("no-referrer");
     await expect(page.getByTestId("otp-verify")).toBeVisible();
     await expect(page.getByText(email)).toBeVisible();
-    await expect(page).toHaveURL(/\/login\?method=code&returnTo=%2Faccount$/);
+    // #3172: the address bar is the sign-in host's code door carrying only the
+    // IdP's auth request — the reference is stripped, the return path rode the
+    // storefront entry into the transaction (the /account landing proves it).
+    expectOnlyAuthRequest(page);
+    expectEnteredThrough(page, BASE, {
+      pathname: "/login",
+      method: "code",
+      returnTo: "/account",
+    });
 
     const code = await fetchOtpCode(email, sentAt);
     expect(code, "the hand-off code should reach Mailpit").toBeTruthy();
@@ -367,11 +394,18 @@ test.describe("portal auth journeys (real Zitadel)", () => {
   test("003 EARS-44: an unknown hand-off reference falls back to «По коду» with an empty field", async ({
     page,
   }) => {
+    watchStorefrontEntries(page, BASE);
     await page.goto(
       "/login?method=code&handoff=Ab-_0123456789abcdefghijklmnopqrstuvwxyzABC",
     );
 
-    await expect(page).toHaveURL(/\/login\?method=code$/);
+    await page.waitForURL((url) => isSignInHostForm(url));
+    expectOnlyAuthRequest(page);
+    expectEnteredThrough(page, BASE, {
+      pathname: "/login",
+      method: "code",
+      returnTo: null,
+    });
     await expect(page.getByTestId("login-method-otp")).toHaveAttribute(
       "aria-selected",
       "true",

@@ -16,6 +16,7 @@
     "./account-auth-paths": "./lib/account-auth-paths.ts",
     "./storefront-entry": "./lib/storefront-entry.ts",
     "./sign-in-host-api": "./lib/sign-in-host-api.ts",
+    "./storefront-entry-watch": "./lib/storefront-entry-watch.ts",
     "./admin-events": "./admin/index.ts",
     "./feed-card": "./lib/feed-card.ts"
   },

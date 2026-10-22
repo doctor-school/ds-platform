@@ -20,7 +20,7 @@ mode: inline
 
 ## Procedure
 
-0. **Stage-A precondition (before implementation).** For a rendered surface run `build-ui-from-design-system` research/adoption and owner design gate before the fix. Verify existing approval and its exact scope; new or changed look/behavior requires the recorded owner decision. Missing required design capability blocks UI implementation. Stage B remains required before merge.
+0. **Stage-A precondition (before implementation).** For a rendered surface run `build-ui-from-design-system` research/adoption and owner design gate before the fix. Verify existing approval and its exact scope; new or changed look/behavior requires the recorded owner decision. Missing required design capability blocks UI implementation. Stage B remains required before merge. One capability — one package: its owner is the row in `apps/docs/content/specs/product/two-site-ia/capability-ownership.md`; a host adds only a route file + host-config fields (ADR-0013 §A1).
 1. **Failing test first** for a behaviour fix — reproduce the bug in a Vitest test (or, for CI/infra hotfixes, in the smallest possible artifact that demonstrates the failure — e.g., a workflow-syntax check). A Ship-tier fix (`.claude/rules/change-tiers.md`) adds no test for copy, exactly one for a value substitution, never one pinning wording; it updates existing tests that quote the old text.
 2. **Fix** — minimum code change that turns the failing test green.
 3. **UI verification gate (if the fix touches any rendered surface).** If the change touches a user-facing UI surface (`apps/portal/**`, `apps/promo/**`, `apps/admin/**`, `packages/design-system/**`) — even a "one-line" tweak like a radius, color, label, or copy string — you MUST, before the review step:

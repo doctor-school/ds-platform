@@ -22,6 +22,13 @@ import { caseDir, ghDir, runGuard } from "./run-guard";
 const canvasFile = "design-source/ds-foundation.dc.html";
 const authCanvas = "design-source/auth.dc.html";
 const freshCanvas = "design-source/fresh.dc.html";
+/** #2221: a stamped canvas whose tokens restamp rides with tokens.css. */
+const stampedCanvas = "design-source/stamped.dc.html";
+const tokensFile = "packages/design-system/src/styles/tokens.css";
+const stamped = (block: string, body = "<p>body</p>") =>
+  `<style>a{}/* ds-states:begin */${block}/* ds-states:end */</style>
+${body}
+`;
 /** The #2338 shape: one shared-package UI file edited next to its own canvas. */
 const authUiFile = "packages/auth-flow/src/ui/brand-panel.tsx";
 /**
@@ -221,7 +228,12 @@ beforeAll(() => {
     "<script>const props = { host: 'academy' };</script>\n",
     "utf8",
   );
-  commit(canvasRepo, "base: vendored canvases", [canvasFile, authCanvas]);
+  writeFileSync(join(canvasRepo, stampedCanvas), stamped("x{}"), "utf8");
+  commit(canvasRepo, "base: vendored canvases", [
+    canvasFile,
+    authCanvas,
+    stampedCanvas,
+  ]);
   git(canvasRepo, ["update-ref", "refs/remotes/origin/main", "HEAD"]);
 
   // A second base branch, so the GITHUB_BASE_REF selection is observable.
@@ -257,6 +269,19 @@ beforeAll(() => {
     freshCanvas,
   ]);
 
+  // #2221 heads: a tokens restamp (block-only delta) and a body edit.
+  const stampedHead = (branch: string, text: string): string => {
+    git(canvasRepo, ["checkout", "-q", "-b", branch, "trunk"]);
+    writeFileSync(join(canvasRepo, stampedCanvas), text, "utf8");
+    commit(canvasRepo, branch, [stampedCanvas]);
+    return git(canvasRepo, ["rev-parse", "HEAD"]);
+  };
+  const restampOid = stampedHead("tokens-restamp", stamped("y{}"));
+  const bodyEditOid = stampedHead(
+    "tokens-body-edit",
+    stamped("y{}", "<p>new copy</p>"),
+  );
+
   // The checkout the guard runs from has no canvas on disk at all.
   git(canvasRepo, ["checkout", "-q", "-b", "stale", "trunk"]);
   git(canvasRepo, ["rm", "-q", "-r", "design-source"]);
@@ -287,6 +312,16 @@ beforeAll(() => {
     2338: pullRequest(2338, authBody, [authCanvas, authUiFile]),
     // red: the co-edit is blocked even when the body cites another source.
     2339: pullRequest(2339, approvedBody, [authCanvas, approvedFile]),
+    // green #2221: tokens.css + its generated block-only canvas restamp.
+    2221: JSON.stringify({
+      ...JSON.parse(pullRequest(2221, canvasBody, [stampedCanvas, tokensFile])),
+      headRefOid: restampOid,
+    }),
+    // red #2221: tokens.css + a canvas edited outside the block.
+    2222: JSON.stringify({
+      ...JSON.parse(pullRequest(2222, canvasBody, [stampedCanvas, tokensFile])),
+      headRefOid: bodyEditOid,
+    }),
     // green: a vendoring PR (canvas + manifest only) is not a UI PR.
     2340: pullRequest(2340, "vendoring pass", [
       authCanvas,
@@ -898,6 +933,19 @@ describe("ui-parity guard integration", () => {
     const { code, stderr } = runCanvasGuard(2339);
     expect(code).toBe(1);
     expect(stderr).toContain("canvas co-edit: design-source/auth.dc.html");
+  });
+
+  it("green fixture: #2221 tokens.css + a block-only canvas restamp is not a co-edit", () => {
+    const { code, stdout, stderr } = runCanvasGuard(2221);
+    expect(stderr).not.toContain("canvas co-edit");
+    expect(code).toBe(0);
+    expect(stdout).toContain("parity body evidence OK");
+  });
+
+  it("red fixture: #2221 tokens.css + a canvas body edit stays a co-edit", () => {
+    const { code, stderr } = runCanvasGuard(2222);
+    expect(code).toBe(1);
+    expect(stderr).toContain(`canvas co-edit: ${stampedCanvas}`);
   });
 
   it("green fixture: #2389 a design-source-only vendoring PR is outside the UI rule", () => {

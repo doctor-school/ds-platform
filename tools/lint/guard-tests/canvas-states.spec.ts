@@ -106,16 +106,8 @@ describe("state block generator (#2221)", () => {
     expect(generateStatesBlock(edited)).toContain("var(--btn-hover,#000001)");
   });
 
-  it("keeps the reference block's untagged-control selectors (auth.dc.html link + ghost hover)", () => {
-    expect(BLOCK).toContain(
-      '[data-link]:hover,button[style*="text-underline-offset:4px"]:hover{text-decoration:underline!important}',
-    );
-    expect(BLOCK).toContain(
-      '[data-link]:active,button[style*="text-underline-offset:4px"]:active{opacity:',
-    );
-    expect(BLOCK).toContain(
-      '[data-ghost]:hover,button[style*="--tint-fg"]:hover{background:var(--tint,',
-    );
+  it("owns only tagged selectors — no untagged-button fallbacks", () => {
+    expect(BLOCK).not.toContain("button[style*=");
   });
 });
 
@@ -123,8 +115,17 @@ describe("stamp (#2221)", () => {
   it("appends the block to the helmet <style>, replacing legacy owned rules; idempotent", () => {
     const legacy = `${helmet('a{color:red}[data-btn="primary"]:hover{background:red}[data-link]:hover,button[style*="x"]:hover{opacity:1}')}<p/>\n</x-dc>\n`;
     const once = stampCanvas(legacy, BLOCK);
-    expect(once).toBe(`${helmet(`a{color:red}${BLOCK}`)}<p/>\n</x-dc>\n`);
+    expect(once).toBe(
+      `${helmet(`a{color:red}button[style*="x"]:hover{opacity:1}${BLOCK}`)}<p/>\n</x-dc>\n`,
+    );
     expect(stampCanvas(once, BLOCK)).toBe(once);
+  });
+
+  it("strips only the owned selectors from a mixed selector list", () => {
+    const mixed = `${helmet(".keep:hover,[data-link]:hover,.also{color:red}[data-ghost]:hover{x:1}")}<p/>\n</x-dc>\n`;
+    expect(stampCanvas(mixed, BLOCK)).toBe(
+      `${helmet(`.keep:hover,.also{color:red}${BLOCK}`)}<p/>\n</x-dc>\n`,
+    );
   });
 
   it("replaces a hand-edited block between the markers", () => {
@@ -317,6 +318,23 @@ describe("pnpm design:vendor stamps at vendoring (#2221)", () => {
     ]);
     expect(checkProvenance(root).ok).toBe(true);
     expect(checkStates(root).ok).toBe(true);
+  });
+
+  it("--restamp refuses a canvas whose bytes differ from the manifest sha256, writing nothing", () => {
+    const raw =
+      "<x-dc>\n<helmet><style>body{margin:0}</style></helmet>\n<p>a</p>\n</x-dc>\n";
+    const root = tree({ "a.dc.html": raw, "b.dc.html": raw });
+    const edited = raw.replace("<p>a</p>", "<p>hand edit</p>");
+    writeFileSync(join(root, "design-source/a.dc.html"), edited, "utf8");
+    const manifestPath = join(root, "design-source/manifest.json");
+    const manifestBefore = readFileSync(manifestPath, "utf8");
+    expect(() => restampCanvases(root)).toThrow(
+      /design-source\/a\.dc\.html.*re-vendor it from Claude Design/,
+    );
+    const read = (rel: string) => readFileSync(join(root, rel), "utf8");
+    expect(read("design-source/a.dc.html")).toBe(edited);
+    expect(read("design-source/b.dc.html")).toBe(raw);
+    expect(read("design-source/manifest.json")).toBe(manifestBefore);
   });
 });
 

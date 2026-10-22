@@ -284,12 +284,24 @@ export function restampCanvases(root) {
   const block = stateBlock(root);
   const lines = [];
   const rels = listStatedCanvases(root);
+  // A restamp only rewrites the generated block of the recorded bytes; a canvas
+  // edited by hand since its pull/stamp would launder that edit into the
+  // manifest as if it came from tokens.css.
+  const drifted = [];
   for (const rel of rels) {
     const entry = manifest.files[rel];
     if (!entry)
       throw new Error(
         `design-source/${rel}: no manifest entry — vendor it first`,
       );
+    if (sha256Hex(readFileSync(join(root, "design-source", rel))) !== entry.sha256)
+      drifted.push(
+        `design-source/${rel}: bytes differ from manifest sha256 — re-vendor it from Claude Design (\`pnpm design:vendor <pulled file>\`)`,
+      );
+  }
+  if (drifted.length) throw new Error(drifted.join("\n"));
+  for (const rel of rels) {
+    const entry = manifest.files[rel];
     const target = join(root, "design-source", rel);
     const before = readFileSync(target);
     const bytes = Buffer.from(

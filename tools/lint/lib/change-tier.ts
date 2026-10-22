@@ -337,9 +337,11 @@ function isUiEvidencePath(path: string): boolean {
 /**
  * #2699: files that change nothing a user runs — tests, changesets, evidence
  * captures, docs content (specs / ADRs / skills / product docs), `.feature`
- * files and vendored Claude Design canvases (`design-source/**`, the parity
- * reference — never built or deployed, #3249). The Stage-B guard routes on the remaining (runtime) files and carries
- * a recorded GO over a delta made only of these.
+ * files and vendored Claude Design canvases (`*.dc.html` / `*.js` anywhere
+ * under `design-source/`, as `isVendoredCanvasPath` matches — the parity
+ * reference, never built or deployed, #3249). The Stage-B guard routes on the
+ * remaining (runtime) files and carries a recorded GO over a delta made only
+ * of these.
  */
 export function isNonRuntimePath(path: string): boolean {
   return (

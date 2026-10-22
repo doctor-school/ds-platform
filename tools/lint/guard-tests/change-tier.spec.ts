@@ -360,7 +360,8 @@ describe("#3205: requiresStageCheck — the owner-consented Stage-check classes"
       "tools/deploy/prod.mjs",
     ])
       expect(requiresStageCheck(path), path).toBe(false);
-  });  it("#3249: a vendored canvas is never built or deployed — non-runtime, no Stage-check, not environment-sensitive", () => {
+  });
+  it("#3249: a vendored canvas is never built or deployed — non-runtime, no Stage-check, not environment-sensitive", () => {
     for (const path of [
       "design-source/auth.dc.html",
       "design-source/archive/auth/login.dc.html",

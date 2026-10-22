@@ -12,6 +12,7 @@ import {
   planLiveLeg,
   preflightVerdict,
   publicAxeLeg,
+  releaseCheckExclusion,
   renderVerdictBlock,
   runE2eStage,
   slotE2eEnv,
@@ -1194,21 +1195,65 @@ describe("release check (--expect-sha)", () => {
     assert.equal(calls[0].env.E2E_GREP, undefined);
   });
 
-  it("runs every live leg too (#3191), and prints each one's verdict", async () => {
+  const liveLegsRun = (calls) =>
+    calls
+      .filter(isLive)
+      .map(
+        (c) => `${c.argv[2]} ${c.argv.find((t) => t.startsWith("--config="))}`,
+      );
+  const legKey = (tier) => `${tier.pkg} --config=${tier.config}`;
+
+  it("runs exactly the live legs not excluded from it (#3191), and prints each one's verdict", async () => {
     const { calls, lines, effects } = harness();
     const code = await runE2eStage(["main", "--expect-sha", SHA], {
       env: RELEASE_ENV,
       effects,
     });
     assert.equal(code, 0);
-    const configs = calls
-      .filter(isLive)
-      .map((c) => c.argv.find((t) => t.startsWith("--config=")));
-    for (const tier of LIVE_TIERS)
-      assert.ok(configs.includes(`--config=${tier.config}`), tier.name);
+    assert.deepEqual(
+      liveLegsRun(calls).sort(),
+      LIVE_TIERS.filter((t) => !t.releaseCheck)
+        .map(legKey)
+        .sort(),
+    );
     const out = lines.join("\n");
-    assert.doesNotMatch(out, /not run in the release check/);
-    assert.match(out, /live:\s+live\//);
+    assert.match(out, /live:\s+live\/doctor\/register-live\s+PASS/);
+  });
+
+  it("prints one line per excluded leg with its reason, and the leg never runs", async () => {
+    const { lines, effects } = harness();
+    await runE2eStage(["main", "--expect-sha", SHA], {
+      env: RELEASE_ENV,
+      effects,
+    });
+    const out = lines.join("\n");
+    const excluded = LIVE_TIERS.filter((t) => t.releaseCheck);
+    assert.ok(excluded.length > 0);
+    for (const tier of excluded) {
+      const line = `live: ${tier.name} not in the release check — ${tier.releaseCheck.excluded}`;
+      assert.equal(
+        lines.filter((l) => l === line).length,
+        1,
+        `${tier.name}: one line «${line}»`,
+      );
+      assert.doesNotMatch(
+        out,
+        new RegExp(
+          `${tier.name.replaceAll("/", "\\/")}\\s+(PASS|FAIL|SKIPPED)`,
+        ),
+      );
+    }
+  });
+
+  it("a plain slot run still runs every live leg, excluded ones included, and prints no exclusion", async () => {
+    const { calls, lines, effects } = harness();
+    const code = await runE2eStage(["main"], {
+      env: { STAGE_BASIC_AUTH_PASS: "s3cret" },
+      effects,
+    });
+    assert.equal(code, 0);
+    assert.deepEqual(liveLegsRun(calls).sort(), LIVE_TIERS.map(legKey).sort());
+    assert.doesNotMatch(lines.join("\n"), /not in the release check/);
   });
 
   it("fails the release check on a red live leg", async () => {
@@ -1595,6 +1640,37 @@ describe("golden live env (#3191) — derived from the dataset every slot is clo
       verdict.detail,
       /congress-submissions\.spec\.ts \(by design: /,
     );
+  });
+
+  it("keeps exactly the three slot-red legs out of the release check, each with a reason citing #3229", () => {
+    const excluded = LIVE_TIERS.filter((t) => t.releaseCheck);
+    assert.deepEqual(excluded.map((t) => t.name).sort(), [
+      "live/academy/default",
+      "live/doctor/event-page",
+      "live/doctor/shell",
+    ]);
+    for (const tier of LIVE_TIERS) {
+      assert.doesNotThrow(() => releaseCheckExclusion(tier), tier.name);
+      if (tier.releaseCheck)
+        assert.match(releaseCheckExclusion(tier), /#3229/, tier.name);
+    }
+  });
+
+  it("refuses an exclusion without a reason — a leg never leaves the release check silently", () => {
+    for (const releaseCheck of [
+      {},
+      { excluded: "" },
+      { excluded: "   " },
+      { excluded: true },
+      { excluded: "reason", extra: 1 },
+    ]) {
+      assert.throws(
+        () => releaseCheckExclusion({ name: "live/x/y", releaseCheck }),
+        /live\/x\/y.*releaseCheck/,
+        JSON.stringify(releaseCheck),
+      );
+    }
+    assert.equal(releaseCheckExclusion({ name: "live/x/y" }), undefined);
   });
 
   it("gives every by-design reason a variable a slot genuinely lacks", () => {

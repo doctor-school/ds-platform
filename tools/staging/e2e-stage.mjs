@@ -144,7 +144,8 @@ export function parseE2eArgs(argv) {
 
 /**
  * `--expect-sha` is the RELEASE CHECK `pnpm deploy:prod` runs before shipping (#2701):
- * the `main` slot, the whole suite, every axe leg and every live-tier leg (#3191).
+ * the `main` slot, the whole suite, every axe leg and every live-tier leg (#3191)
+ * that `live-tiers.mjs` does not exclude from it with a printed reason.
  * A narrowed run proves only its slice, so the release check refuses any narrowing
  * flag — `--no-live` included — instead of passing on part of it.
  */
@@ -382,6 +383,27 @@ export function planLiveLeg(tier, available) {
       toLine,
     ),
   };
+}
+
+/**
+ * A live tier's exclusion from the release check (`releaseCheck.excluded` in
+ * `live-tiers.mjs`), or `undefined` when the release check runs it. An exclusion
+ * must carry its reason — the release record prints it — so an entry without one,
+ * or with any other key, is refused instead of dropping a leg silently.
+ */
+export function releaseCheckExclusion(tier) {
+  if (tier.releaseCheck === undefined) return undefined;
+  const { excluded, ...rest } = tier.releaseCheck ?? {};
+  if (
+    typeof excluded !== "string" ||
+    excluded.trim() === "" ||
+    Object.keys(rest).length > 0
+  ) {
+    throw new SlotError(
+      `${tier.name}: releaseCheck must be exactly { excluded: "<reason>" } with a non-empty reason`,
+    );
+  }
+  return excluded;
 }
 
 /**
@@ -830,10 +852,18 @@ export async function runE2eStage(
   // the axe legs. Each leg gets the suite env plus the stand's IdP and Mailpit;
   // the golden accounts and slugs come from `slotLiveStandEnv` — the same env in
   // Actions (no ssh) and over ssh. The release check runs them like every other
-  // leg (#3191).
+  // leg (#3191), except a tier `live-tiers.mjs` excludes from it with a reason:
+  // that leg is named with its reason, never run, and a plain slot run keeps it.
   const live = [];
   if (options.live) {
     for (const tier of LIVE_TIERS.filter((t) => axeHost(t.host))) {
+      const excluded = releaseCheckExclusion(tier);
+      if (options.expectSha !== undefined && excluded !== undefined) {
+        effects.log(
+          `live: ${tier.name} not in the release check — ${excluded}`,
+        );
+        continue;
+      }
       const reporting = liveLegReporting(
         env,
         suiteEnv.E2E_REPORT_DIR,

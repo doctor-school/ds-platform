@@ -83,12 +83,22 @@ const CONGRESS_SIGNUP = [
   "CONGRESS_SIGNUP_EVENT_DAYS",
 ];
 
+/**
+ * `releaseCheck: { excluded: "<reason>" }` keeps a tier out of the release check
+ * (`e2e-stage.mjs --expect-sha`), which prints «live: <tier> not in the release
+ * check — <reason>» instead of running it; a plain slot run still runs it. The
+ * reason is mandatory (`releaseCheckExclusion` refuses an entry without one).
+ * These three are red on a slot (#3191 proof run); #3229 owns their triage.
+ */
+const RED_ON_SLOT_3229 = "red on slot — #3229";
+
 export const LIVE_TIERS = Object.freeze([
   {
     name: "live/academy/default",
     host: "academy",
     app: "apps/portal",
     pkg: "@ds/portal",
+    releaseCheck: { excluded: RED_ON_SLOT_3229 },
     config: "playwright.config.ts",
     rootDir: ".",
     // The `bdd` project's specs are generated; the `test:e2e` script runs this first.
@@ -241,6 +251,7 @@ export const LIVE_TIERS = Object.freeze([
     host: "doctor",
     app: "apps/doctor",
     pkg: "@ds/doctor",
+    releaseCheck: { excluded: RED_ON_SLOT_3229 },
     config: "playwright.event-page.config.ts",
     rootDir: "e2e",
     // Both specs `test.skip` with a reason when their slug / api URL is absent.
@@ -356,6 +367,7 @@ export const LIVE_TIERS = Object.freeze([
     host: "doctor",
     app: "apps/doctor",
     pkg: "@ds/doctor",
+    releaseCheck: { excluded: RED_ON_SLOT_3229 },
     config: "playwright.shell.config.ts",
     rootDir: "e2e",
     gated: [

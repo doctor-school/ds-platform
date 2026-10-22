@@ -1058,7 +1058,7 @@ async function assertReleaseGate(sha) {
   const verdict = evaluateReleaseGate(probe);
   const hold = formatReleaseGateHold(verdict);
   if (hold) die(hold);
-  ok(formatReleaseGateClear(probe.basisSha));
+  ok(formatReleaseGateClear(probe.basisSha, verdict.notes));
 }
 
 /**

@@ -550,6 +550,25 @@ signal stands:
    matters: an app-only `--rollback` records no Deployment, so a
    Deployment-only basis can be NEWER than what runs and would narrow the range
    past undeployed PRs.
+
+   **Dark-on-prod slices (#3233).** A sliced feature can merge a slice whose
+   surface is reachable on prod only through a later PR #M (an app nothing
+   routes to yet, a refactor into a shared package). Its author records
+   `Stage-B-dark-until: #M` (exactly one PR number) next to the batched
+   marker, in the same accepted-source set and with the same line tolerance;
+   the record IS the author's certification that the slice alone makes no
+   visible prod difference. Such a pair holds only while #M is merged and
+   reachable at the target — inside this release range, or (an authoring
+   error the gate still catches) already deployed. #M open, closed unmerged
+   or merged after the target clears the pair, and the gate output lists it
+   as `not holding: PR #<n> → gate #<g> …: dark until #M — not in this
+release`. A malformed value, two different numbers for one PR, or a #M
+   that cannot be resolved HOLDS. The reaching PR #M carries its own
+   `Stage-B: batched at #<gate>`, so the release that makes the surface
+   visible is still held until acceptance closes the gate. A PR without the
+   marker holds exactly as above. This keeps one unfinished sliced feature
+   from holding every parallel session's release.
+
 3. **Selected release prerequisites** — PR-body `Release-requires: #123, #456`
    lines name Issues that must be CLOSED before that PR ships. The gate checks
    only PRs in `<live deployed>..<selected target>` (including cherry-picked

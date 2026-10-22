@@ -706,9 +706,10 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And provider challenge UI appears only if Yandex requires interaction
     And the first success callback resumes that pending action exactly once with the fresh token
     And duplicate callbacks or a previously used token cannot replay the action
-    # Browser policy projection: observed supported captcha.js adapter; local API BOTOFF.
-    # Real send doors remain untouched. Fresh probe tokens and synthetic provider events
-    # prove frontend orchestration, not Yandex interaction or server token verification.
+    # Browser policy projection: observed supported captcha.js adapter; real send doors.
+    # BOTOFF proves distinct probe-token bytes; BOTON retains the accepted test token
+    # and proves fresh per-send execution/instance. Synthetic provider interaction
+    # proves frontend orchestration, not Yandex challenge UI or token freshness.
 
   @EARS-17 @happy @implemented @captcha-threshold @default-auth-limits
   Scenario: Password login challenges only after the backend threshold

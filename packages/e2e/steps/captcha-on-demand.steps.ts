@@ -41,6 +41,12 @@ async function idle(page: Page, state: Observation) {
   state.idle++;
 }
 
+async function installClock(page: Page) {
+  await page.clock.install();
+  const now = await page.evaluate(() => Date.now());
+  await page.clock.pauseAt(new Date(now + 60_000));
+}
+
 async function protectedSend(
   page: Page,
   state: Observation,
@@ -114,19 +120,16 @@ async function protectedSend(
     await tokenMatchesCall(page, index, sent.token),
     "request carries its fresh callback token",
   ).toBe(true);
-  expect(
-    sends.slice(0, before).every((prior) => prior.token !== sent.token),
-    "resend never reuses an earlier token",
-  ).toBe(true);
+  if (process.env.BOT_PROTECTION_ENABLED === "false") {
+    expect(
+      sends.slice(0, before).every((prior) => prior.token !== sent.token),
+      "BOTOFF browser probe: resend never reuses an earlier token",
+    ).toBe(true);
+  }
   await expect(page.locator("[data-s064-challenge]")).toHaveCount(0);
   // Exercise the saved callback with its already-used token again after settlement.
   await emitProvider(page, index, "success", true);
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-      ),
-  );
+  await page.clock.runFor(50);
   expect(
     sends.length,
     "duplicate and used-token callbacks cannot replay a settled send",
@@ -144,10 +147,6 @@ Given(
   async ({ page, browser, httpCredentials, world }) => {
     test.setTimeout(180_000);
     expect(world.host.id).toBe("academy");
-    expect(
-      process.env.BOT_PROTECTION_ENABLED,
-      "S064 distinct-token browser policy requires the sanctioned local BOTOFF API",
-    ).toBe("false");
     const context = await browser.newContext({
       locale: "ru-RU",
       ...(httpCredentials ? { httpCredentials } : {}),
@@ -164,6 +163,7 @@ Given(
     const owned = await context.newPage();
     state.pages.push(owned);
     await installOnDemandProvider(owned);
+    await installClock(owned);
     await owned.goto(`${world.hostBaseUrl}/register`, {
       waitUntil: "networkidle",
     });
@@ -179,7 +179,6 @@ When(
     const password = `Captcha-${randomUUID()}-aA1!`;
     // Unregistered targets exercise the real enumeration-safe send doors without
     // sending provider SMS or modifying a shared seeded account.
-    const phone = `+7999${String(parseInt(randomUUID().replaceAll("-", "").slice(0, 8), 16) % 10_000_000).padStart(7, "0")}`;
     for (const variant of [
       "register",
       "email-login",
@@ -193,6 +192,7 @@ When(
       if (variant !== "register") {
         state.pages.push(owned);
         await installOnDemandProvider(owned);
+        await installClock(owned);
         await owned.goto(
           `${world.hostBaseUrl}/${variant.endsWith("login") ? "login?method=code" : "reset"}`,
           { waitUntil: "networkidle" },
@@ -213,8 +213,11 @@ When(
           >,
         });
       });
-      await owned.clock.install();
-      const identifier = variant.startsWith("sms") ? phone : email;
+      const identifier = variant.startsWith("sms")
+        ? `+7999${String(parseInt(randomUUID().replaceAll("-", "").slice(0, 8), 16) % 10_000_000).padStart(7, "0")}`
+        : variant === "register"
+          ? email
+          : `captcha-${variant}-3241-${randomUUID()}@example.test`;
       let path: string;
       let submit: string;
       let resend: string;

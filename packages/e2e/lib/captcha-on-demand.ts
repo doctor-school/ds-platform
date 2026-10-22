@@ -7,9 +7,13 @@ import {
 } from "./captcha-stub.js";
 
 /** Private S064 instrumentation of the supported provider adapter, never the API. */
-export function onDemandProviderScript(token: string, onload: string): string {
+export function onDemandProviderScript(
+  token: string,
+  onload: string,
+  distinctTokens = true,
+): string {
   // Delay the loader notification until observation is installed. Tokens below
-  // are browser-policy probes: this journey requires the local API's BOTOFF mode.
+  // are browser-policy probes only with BOTOFF; BOTON retains the accepted test token.
   return `${captchaStubScript(token, "__s064_delayed_loader")}
 (function () {
   var provider = window.smartCaptcha;
@@ -50,7 +54,7 @@ export function onDemandProviderScript(token: string, onload: string): string {
   provider.execute = function (id) {
     var entry = entries[id];
     calls.push({ id: id, invisible: entry.invisible, listeners: entry.listeners,
-      callback: entry.callback, token: ${JSON.stringify(token)} + "-s064-" + calls.length });
+      callback: entry.callback, token: ${distinctTokens ? `${JSON.stringify(token)} + "-s064-" + calls.length` : JSON.stringify(token)} });
   };
   var onload = ${JSON.stringify(onload)};
   if (typeof window[onload] === "function") window[onload]();
@@ -59,6 +63,7 @@ export function onDemandProviderScript(token: string, onload: string): string {
 
 export async function installOnDemandProvider(page: Page): Promise<void> {
   const token = captchaTestTokenFromEnv();
+  const distinctTokens = process.env.BOT_PROTECTION_ENABLED === "false";
   await page.route(isSmartCaptchaScriptUrl, async (route) => {
     const onload =
       new URL(route.request().url()).searchParams.get("onload") ??
@@ -66,7 +71,11 @@ export async function installOnDemandProvider(page: Page): Promise<void> {
     await route.fulfill({
       status: 200,
       contentType: "application/javascript; charset=utf-8",
-      body: onDemandProviderScript(`${token}-${randomUUID()}`, onload),
+      body: onDemandProviderScript(
+        distinctTokens ? `${token}-${randomUUID()}` : token,
+        onload,
+        distinctTokens,
+      ),
     });
   });
 }

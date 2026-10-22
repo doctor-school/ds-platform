@@ -27,7 +27,14 @@ import type { NavigationModel } from "./navigation-model.js";
 /** The two storefronts. `academy` is `apps/portal`; `doctor` is `apps/doctor`. */
 export type HostId = "academy" | "doctor";
 
+/**
+ * A storefront — what the Gherkin projects and the derived walks drive. The
+ * sign-in host is a different shape ({@link SignInHostConfig}): it has no
+ * navigation model, no legal documents and no events path, so it is never a
+ * member of {@link HOSTS}.
+ */
 export interface HostConfig {
+  readonly kind: "storefront";
   readonly id: HostId;
   /** The env var holding this host's base URL on the slot under test (§6.6). */
   readonly baseUrlEnv: "E2E_PORTAL_URL" | "E2E_DOCTOR_URL";
@@ -57,6 +64,7 @@ export interface HostConfig {
 
 export const HOSTS: Readonly<Record<HostId, HostConfig>> = Object.freeze({
   academy: Object.freeze({
+    kind: "storefront",
     id: "academy",
     baseUrlEnv: "E2E_PORTAL_URL",
     navigationModelModule: "apps/portal/lib/navigation-model.ts",
@@ -71,6 +79,7 @@ export const HOSTS: Readonly<Record<HostId, HostConfig>> = Object.freeze({
     }),
   }),
   doctor: Object.freeze({
+    kind: "storefront",
     id: "doctor",
     baseUrlEnv: "E2E_DOCTOR_URL",
     navigationModelModule: "apps/doctor/lib/navigation-model.ts",
@@ -85,6 +94,29 @@ export const HOSTS: Readonly<Record<HostId, HostConfig>> = Object.freeze({
     }),
   }),
 });
+
+/**
+ * The sign-in host (`apps/login`, ADR-0015 §4): the one Login V2 host both
+ * storefront OIDC clients send a visitor to. Its own `login` Playwright project
+ * drives it at `login-<slot>` (E2E_LOGIN_URL, `tools/staging/e2e-stage.mjs`).
+ */
+export interface SignInHostConfig {
+  readonly kind: "sign-in-host";
+  readonly id: "login";
+  readonly baseUrlEnv: "E2E_LOGIN_URL";
+  /** The container probe (`apps/login/app/healthz/route.ts`): no api round trip. */
+  readonly healthPath: "/healthz";
+}
+
+export const SIGN_IN_HOST: SignInHostConfig = Object.freeze({
+  kind: "sign-in-host",
+  id: "login",
+  baseUrlEnv: "E2E_LOGIN_URL",
+  healthPath: "/healthz",
+});
+
+/** Every host an e2e project can address — discriminated on `kind`. */
+export type AnyHostConfig = HostConfig | SignInHostConfig;
 
 /**
  * The fixed, host-independent path both storefront images publish their Next
@@ -130,7 +162,7 @@ export function hostById(id: string): HostConfig {
  * The host's base URL on the slot under test. Unset → a NAMED failure: an e2e run
  * silently defaulting to localhost would report a green pass against nothing.
  */
-export function baseUrlFor(host: HostConfig): string {
+export function baseUrlFor(host: AnyHostConfig): string {
   const url = process.env[host.baseUrlEnv];
   if (!url) {
     throw new HostConfigError(

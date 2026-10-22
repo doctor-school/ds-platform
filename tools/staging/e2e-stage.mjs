@@ -59,13 +59,14 @@ const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 /**
  * The selectable projects of `packages/e2e/playwright.config.ts`: the two storefront
  * Gherkin projects plus `walks`, the derived navigation/route walks (§6.3), which one
- * project drives across BOTH hosts.
+ * project drives across BOTH hosts, and `login`, the sign-in host's own specs
+ * (`packages/e2e/sign-in-host`, ADR-0015 §4).
  *
  * Hand-kept in TWO places: the `projects:` array of that config is the other half,
  * and it carries the mirror comment. Rename a project in one and rename it here.
  */
 export const HOST_PROJECTS = Object.freeze(["academy", "doctor"]);
-export const PROJECTS = Object.freeze([...HOST_PROJECTS, "walks"]);
+export const PROJECTS = Object.freeze([...HOST_PROJECTS, "walks", "login"]);
 
 /**
  * The contrast fix that has to be on `main` before the axe suites can join the slot
@@ -81,7 +82,7 @@ export function parseE2eArgs(argv) {
   const slot = rest.shift();
   if (slot === undefined || slot.startsWith("-")) {
     throw new SlotError(
-      "usage: pnpm e2e:stage <slot> [--project academy|doctor|walks] [--grep <re>] " +
+      "usage: pnpm e2e:stage <slot> [--project academy|doctor|walks|login] [--grep <re>] " +
         "[--no-axe] [--no-live] [--report-dir <path>] [--expect-sha <sha>] — the slot must be named",
     );
   }
@@ -240,6 +241,7 @@ export function slotE2eEnv({ slot, baseDomain, user, password }) {
   return {
     E2E_PORTAL_URL: `https://${hosts.academy}`,
     E2E_DOCTOR_URL: `https://${hosts.doctor}`,
+    E2E_LOGIN_URL: `https://${hosts.login}`,
     E2E_HTTP_USER: user,
     E2E_HTTP_PASS: password,
     E2E_SMS_SINK_URL: `https://sms-sink.${baseDomain}`,

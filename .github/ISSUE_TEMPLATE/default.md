@@ -34,7 +34,7 @@ Reuse: <!-- exactly one of:
      canon: <packages/… or apps/api/… path already owning this capability>
      extract-from: <apps/portal/… or apps/doctor/… path> (#<extraction Issue>)
      new: <why nothing shared fits>
-     MANDATORY on a track:doctor / track:academy Issue (`pnpm issue:create` fails
+     MANDATORY on every Issue (`pnpm issue:create` fails
      closed without it). Answer key: apps/docs/content/specs/product/two-site-ia/capability-ownership.md
      — and grep apps/portal, apps/doctor, packages/ before writing `new:`. -->
 

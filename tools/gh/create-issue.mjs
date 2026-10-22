@@ -229,9 +229,9 @@ export const KIND_LABELS = [
 
 /**
  * The track-label taxonomy (#1583) — the permanent product-axis every new Issue
- * carries exactly one of. `track:academy` = academy.doctor.school surfaces
- * (specs 012–016); `track:doctor` = the doctor showcase site `apps/doctor`
- * (specs 017–021); `track:platform` = shared backend/infra/process/both-sites.
+ * carries exactly one of. `track:academy` = academy.doctor.school surfaces;
+ * `track:doctor` = the doctor showcase site `apps/doctor`; `track:platform` =
+ * shared packages, backend, infra, process, or work serving both sites.
  */
 export const TRACK_LABELS = ["track:academy", "track:doctor", "track:platform"];
 
@@ -357,13 +357,6 @@ export function trackLabelError(args) {
 }
 
 /**
- * The tracks whose Issues write STOREFRONT code and therefore answer the
- * cross-front reuse question before they are opened (#1821). `track:platform`
- * is exempt — shared backend/infra/process work IS the canonical layer.
- */
-export const REUSE_GATED_TRACK_LABELS = ["track:academy", "track:doctor"];
-
-/**
  * The `Reuse:` field of the Issue body (`.github/ISSUE_TEMPLATE/*.md`), in the
  * three sanctioned forms. Tolerant of a leading list marker/blockquote and of
  * bold (`**Reuse:**`), because that is how the templates render it.
@@ -398,8 +391,8 @@ export function bodyText(args) {
 }
 
 /**
- * Validate the cross-front reuse requirement (#1821): a storefront-track Issue
- * (`track:academy` / `track:doctor`) must answer «what already exists for this»
+ * Validate the cross-front reuse requirement (#1821, ADR-0013 §A1): an Issue on
+ * ANY track must answer «what already exists for this»
  * BEFORE it is opened, in the body's `Reuse:` field — `canon: <path>` when a
  * canonical unit is consumed, `extract-from: <path> (#N)` when it must first be
  * extracted, `new: <reason>` when nothing fits. The answer key is the registry
@@ -410,19 +403,22 @@ export function bodyText(args) {
  * the owner reads as «rebuilding what already works». By the time a PR exists
  * the wrong work is already written.
  *
- * `track:platform` is exempt (it authors the canonical layer), and so is an
- * `epic: …` container (it decomposes into children that each carry the field).
+ * `track:platform` answers it too — one capability lives in one package, so
+ * shared work names that package (`canon:`) and infra/process work says why no
+ * shared capability applies (`new: <reason>`). Only an `epic: …` container is
+ * exempt (it decomposes into children that each carry the field).
  * @param {string[]} args  the gh passthrough
  * @param {string} body    the resolved Issue body
  * @returns {string|null}
  */
 export function reuseFieldError(args, body) {
   const found = collectTrackLabels(args);
-  if (!found.some((l) => REUSE_GATED_TRACK_LABELS.includes(l))) return null;
+  // No track label is trackLabelError's refusal; this gate answers only for a tracked Issue.
+  if (!found.some((l) => TRACK_LABELS.includes(l))) return null;
   if (isEpicTitle(titleValue(args))) return null;
   if (REUSE_FIELD_RE.test(body ?? "")) return null;
   return (
-    `a ${REUSE_GATED_TRACK_LABELS.join(" / ")} Issue must answer the cross-front reuse question in ` +
+    `every Issue (${found.join(" / ")}) must answer the cross-front reuse question in ` +
     `its body before it is opened (AGENTS.md §6, #1821). Add ONE line, one of:\n` +
     `    Reuse: canon: packages/design-system/src/blocks/<unit>.tsx\n` +
     `    Reuse: extract-from: apps/portal/components/<unit>.tsx (#<extraction-issue>)\n` +
@@ -730,7 +726,7 @@ function main() {
         `  Required (fail-closed, BEFORE any gh call): exactly ONE source label (#1009) — ${SOURCE_LABELS.join(" | ")};\n` +
         `  exactly ONE kind label (#1137) — ${KIND_LABELS.join(" | ")}; exactly ONE track label (#1583) — ${TRACK_LABELS.join(" | ")};\n` +
         `  and a --milestone (fallback «${FALLBACK_MILESTONE}»).\n` +
-        `  A ${REUSE_GATED_TRACK_LABELS.join(" / ")} Issue (#1821) additionally needs a body \`Reuse:\` line —\n` +
+        "  Every tracked Issue (#1821, ADR-0013 §A1) additionally needs a body `Reuse:` line —\n" +
         "  `canon: <path>` | `extract-from: <path> (#N)` | `new: <reason>`; check the capability-ownership registry first.\n" +
         "  Issue Type is auto-derived from the kind label; assignee defaults to @me (both overridable via --type/--assignee).\n" +
         `  The \`${ROADMAP_LABEL}\` label (#1806, spec §3.4) — the ONE attribute the board's Roadmap view filters on —\n` +
@@ -762,8 +758,8 @@ function main() {
   if (kindError) die(kindError);
   const trackError = trackLabelError(passthrough);
   if (trackError) die(trackError);
-  //   • the cross-front reuse answer (#1821): a storefront-track Issue names
-  //     what it reuses in the body's `Reuse:` field before it is opened.
+  //   • the cross-front reuse answer (#1821): every tracked (non-epic) Issue
+  //     names what it reuses in the body's `Reuse:` field before it is opened.
   const reuseError = reuseFieldError(passthrough, bodyText(passthrough));
   if (reuseError) die(reuseError);
   //   • roadmap taxonomy (#1729, spec §7.1): EARS tasks need a parent, epics

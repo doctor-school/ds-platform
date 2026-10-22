@@ -36,7 +36,6 @@ import {
   buildSubIssueLinkArgs,
   bodyText,
   reuseFieldError,
-  REUSE_GATED_TRACK_LABELS,
 } from "./create-issue.mjs";
 import { EARS_KIND_LABEL, ROADMAP_LABEL } from "./lib/roadmap-taxonomy.mjs";
 
@@ -155,8 +154,8 @@ test("bodyText reads --body, --body=, and -b inline forms", () => {
   assert.equal(bodyText(["--body-file", "no-such-file-1821.md"]), "");
 });
 
-test("reuseFieldError requires a Reuse: line on a storefront-track Issue", () => {
-  for (const track of REUSE_GATED_TRACK_LABELS) {
+test("reuseFieldError requires a Reuse: line on every track, track:platform included", () => {
+  for (const track of TRACK_LABELS) {
     const args = ["--label", track, "--title", "[Витрина][019] events feed"];
     assert.match(reuseFieldError(args, "## Context\n\nno reuse answer here\n"), /Reuse: canon:/);
     // Each sanctioned form satisfies it, bold or plain, list-marked or not.
@@ -176,8 +175,12 @@ test("reuseFieldError requires a Reuse: line on a storefront-track Issue", () =>
   }
 });
 
-test("reuseFieldError exempts track:platform and epic containers", () => {
-  assert.equal(reuseFieldError(["--label", "track:platform", "--title", "x"], "no field"), null);
+test("reuseFieldError refuses a track:platform Issue without Reuse: and exempts epic containers", () => {
+  const platform = ["--label", "track:platform", "--title", "[Platform] shared feed core"];
+  assert.match(reuseFieldError(platform, "no field"), /Reuse: canon:/);
+  assert.equal(reuseFieldError(platform, "Reuse: new: deploy tooling, no shared capability\n"), null);
+  // No track label at all is trackLabelError's refusal, not this gate's.
+  assert.equal(reuseFieldError(["--title", "x"], "no field"), null);
   assert.equal(
     reuseFieldError(["--label", "track:doctor", "--title", "epic: doctor storefront"], "no field"),
     null,

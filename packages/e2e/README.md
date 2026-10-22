@@ -1817,6 +1817,36 @@ Traces remain off and cleanup revokes only owned sessions and closes contexts.
 Native per-IP/per-ASN no-forgiveness remains in the API abuse-limit suite.
 No product behavior, render surface or owner Stage-B slot changes.
 
+### CAPTCHA failure and recovery (003 EARS-17)
+
+`CAPTCHA failure is truthful, terminal, theme-aware, and non-destructive`
+(`steps/captcha-failure.steps.ts`, S067, #3255, `@captcha-failure`) uses the
+explicit local `@default-auth-limits` contour with `E2E_AUTH_LIMIT_TIER=default`,
+`E2E_WORKERS=1`, a loopback `E2E_PORTAL_URL`, `BOT_PROTECTION_ENABLED=true`,
+`E2E_CAPTCHA_TEST_TOKEN` and `E2E_S067_VALIDATION_CONTOUR=local-provider`.
+Select it with `E2E_GREP="CAPTCHA failure is truthful"` and
+`pnpm --filter @ds/e2e test:e2e --project=academy` after the lead records the
+committed runtime and its isolated database binding.
+
+The lead-owned API must bind its supported `SMARTCAPTCHA_VALIDATE_URL` to a
+lead-owned local deterministic validation service. It returns the provider's
+ordinary `status: "failed"` for `s067-rejected-*`, `status: "ok"` for
+`s067-valid-*`, and `status: "ok"` after one second for `s067-slow-valid-*`.
+The latter upstream delay exposes the pre-response feedback state; it changes
+no application response. Never send these synthetic tokens to the real Yandex
+service. The marker fails closed, and ordinary stage/release selection excludes
+the scenario; the marker alone does not attest to the server binding.
+
+Only the supported third-party `captcha.js` is adapted in the browser. Both
+initial themes, live theme changes, expired/network/javascript/dismissed events,
+real BFF rejection, retired callbacks, fresh widgets/tokens and actual accepted
+registration recovery are observed. A later reset solve must clear CAPTCHA
+feedback while retaining an unrelated identifier validation error. Application
+API traffic, the BFF guard, header transport and server provider adapter remain
+real. This proves the local provider-boundary contract, not actual Yandex service,
+new shared-sign-in-host, stage or production acceptance. No TTL wait, provider
+policy/counter mutation, runtime change or owner Stage-B slot is involved.
+
 ### Throttled live congress handoff (003 EARS-44/13/16)
 
 `Academy refuses a live handoff with the ordinary generic account throttle`

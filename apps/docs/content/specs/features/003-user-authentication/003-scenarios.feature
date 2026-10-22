@@ -729,7 +729,8 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the visitor explicitly asks to resend a code
     Then the portal executes a new invisible check and uses a fresh token for that resend
 
-  @EARS-17 @failure
+  @EARS-17 @failure @captcha-failure @default-auth-limits
+  # S067: deterministic provider lifecycle; application requests stay real.
   Scenario: CAPTCHA failure is truthful, terminal, theme-aware, and non-destructive
     Given the invisible widget uses the portal's resolved light or dark theme and follows a live theme change
     When its token expires, Yandex rejects it, its script or network fails, or an incomplete challenge closes

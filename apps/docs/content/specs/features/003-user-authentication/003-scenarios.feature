@@ -838,6 +838,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Default-limit local contour only; stage raises the per-account ceiling.
     # Native per-IP/per-ASN no-forgiveness: apps/api/test/auth/abuse-limits.e2e-spec.ts EARS-13.
 
+  @EARS-13 @EARS-12 @EARS-8 @EARS-16 @happy @reset-counter-forgiveness @default-auth-limits
+  Scenario: Academy password reset completion clears the same identifier rate window
+    Given a unique verified Academy reset-forgiveness owner starts as a guest
+    When two real Academy password refusals precede that owner's delivered email reset completion
+    Then after reset logout ten real same-owner requests are admitted and the eleventh is throttled inside the original window
+    # Native default-limit local contour; ordinary stage C6 excludes this tag.
+    # Per-IP/per-ASN coverage stays in abuse-limits.e2e-spec.ts EARS-13.
+
   @EARS-15 @failure
   Scenario: Account soft-locks after repeated failures
     Given a doctor_guest user

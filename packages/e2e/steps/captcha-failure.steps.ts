@@ -46,10 +46,12 @@ function state(page: Page) {
 }
 
 async function theme(page: Page, value: Theme) {
-  await page.evaluate((value) => {
-    document.documentElement.classList.toggle("dark", value === "dark");
-    localStorage.setItem("theme", value);
-  }, value);
+  await page.emulateMedia({ colorScheme: value });
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.documentElement.classList.contains("dark")),
+    )
+    .toBe(value === "dark");
 }
 async function open(
   context: BrowserContext,
@@ -58,12 +60,14 @@ async function open(
   path = "register",
 ) {
   const page = await context.newPage();
-  await page.addInitScript(
-    (value) => localStorage.setItem("theme", value),
-    initial,
-  );
+  // Academy's real init script and ThemeWatcher own resolution from system media.
+  await page.addInitScript(() => localStorage.removeItem("ds-theme"));
+  await page.emulateMedia({ colorScheme: initial });
   await installFailureProvider(page);
   await page.goto(`${base}/${path}`, { waitUntil: "networkidle" });
+  expect(
+    await page.evaluate(() => localStorage.getItem("ds-theme")),
+  ).toBeNull();
   await expect
     .poll(() =>
       page.evaluate(() => document.documentElement.classList.contains("dark")),

@@ -94,18 +94,15 @@ const CONGRESS_SIGNUP = [
  * (`e2e-stage.mjs --expect-sha`), which prints «live: <tier> not in the release
  * check — <reason>» instead of running it; a plain slot run still runs it. The
  * reason is mandatory (`releaseCheckExclusion` refuses an entry without one).
- * These three are red on a slot (#3191 proof runs); #3229 owns their triage.
- */
-const RED_ON_SLOT_3229 = "red on slot — #3229";
-
-/**
+ *
  * The Academy default leg after the #3229 triage: one product deviation (008
  * EARS-14 — no storefront footer on `/`, `apps/portal/lib/shell-config.ts`
- * deferring to epic #2020), specs that pin the local `seed-*` shape the golden
- * dataset does not hold, and the room-page journeys still red.
+ * deferring to epic #2020), and the month-fidelity «+N ещё» pill cap, which
+ * waits for the golden dense Academy day to reach the slot (the next `main`
+ * converge seeds it).
  */
 const ACADEMY_DEFAULT_RED_3229 =
-  "red on slot — #3229: 008 EARS-14 footer absent on / (product, epic #2020); month-fidelity and webinars-feed-view pin the local seed shape; room journeys red";
+  "red on slot — #3229: 008 EARS-14 footer absent on / (product, epic #2020); month-fidelity «+N ещё» pill cap until the golden dense Academy day reaches the slot (next main converge seeds it)";
 
 export const LIVE_TIERS = Object.freeze([
   {
@@ -142,6 +139,32 @@ export const LIVE_TIERS = Object.freeze([
           "E2E_ROOM_SLUG_YOUTUBE",
           "E2E_ROOM_SLUG_RUTUBE",
           "E2E_ROOM_SLUG_UNAVAILABLE",
+          "E2E_ROOM_SLUG_LIVE",
+          "E2E_ROOM_HEARTBEAT_SECONDS",
+        ],
+      },
+      {
+        // #3229: the 006 provider-enum journeys, split out of room-journey.feature
+        // so the rest of that journey runs on a slot. `bddgen` writes the spec.
+        file: ".features-gen/e2e/features/room-provider-journey.feature.spec.js",
+        slotReason:
+          "the golden dataset seeds only rutube streams — no YouTube, unavailable-provider, VK or CDNvideo room exists on a slot",
+        requires: [
+          URL_ACADEMY,
+          ...IDP_MAIL,
+          "E2E_ROOM_SLUG_YOUTUBE",
+          "E2E_ROOM_SLUG_RUTUBE",
+          "E2E_ROOM_SLUG_UNAVAILABLE",
+        ],
+      },
+      {
+        // #3229: the 006 EARS-4 heartbeat-cadence journeys, split out the same way.
+        file: ".features-gen/e2e/features/room-heartbeat-journey.feature.spec.js",
+        slotReason:
+          "a slot api runs the production heartbeat cadence (60 s); the spec needs ROOM_HEARTBEAT_INTERVAL_SECONDS ≤ 10",
+        requires: [
+          URL_ACADEMY,
+          ...IDP_MAIL,
           "E2E_ROOM_SLUG_LIVE",
           "E2E_ROOM_HEARTBEAT_SECONDS",
         ],
@@ -212,7 +235,7 @@ export const LIVE_TIERS = Object.freeze([
       {
         file: "e2e/signed-in-landing-live.spec.ts",
         slotReason:
-          "the spec narrows an account's project grant through the IdP management API, whose service token the release check in Actions does not carry (an IdP management token is kept out of a public repo's Actions env)",
+          "permanently out of the release check: the spec narrows an account's project grant through the IdP management API, whose service token is kept out of a public repo's Actions env, and a box verb holding that token box-side cannot serve it either — the Actions release check reaches the box over https only, with no ssh",
         requires: [
           URL_DOCTOR,
           ...IDP_MAIL,
@@ -279,7 +302,6 @@ export const LIVE_TIERS = Object.freeze([
     host: "doctor",
     app: "apps/doctor",
     pkg: "@ds/doctor",
-    releaseCheck: { excluded: RED_ON_SLOT_3229 },
     config: "playwright.event-page.config.ts",
     rootDir: "e2e",
     // Both specs `test.skip` with a reason when their slug / api URL is absent.
@@ -395,7 +417,6 @@ export const LIVE_TIERS = Object.freeze([
     host: "doctor",
     app: "apps/doctor",
     pkg: "@ds/doctor",
-    releaseCheck: { excluded: RED_ON_SLOT_3229 },
     config: "playwright.shell.config.ts",
     rootDir: "e2e",
     gated: [

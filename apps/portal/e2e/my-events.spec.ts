@@ -155,9 +155,10 @@ test.describe("014 EARS-9 my-events tabs (e2e)", () => {
     );
     expect(status).toBe(200);
 
-    await page.goto(`${BASE}/account/events`, {
-      waitUntil: "domcontentloaded",
-    });
+    // The tabs switch through client URL state: a click on the server-rendered
+    // tab before hydration does nothing (#3229 slot run — the URL stayed bare).
+    await page.goto(`${BASE}/account/events`, { waitUntil: "load" });
+    await page.waitForLoadState("networkidle");
 
     // EXACTLY two tabs — the canvas's third «Сертификаты» tab is owner-decided out
     // of scope (2026-08-17) and must not render, not even as a disabled stub.

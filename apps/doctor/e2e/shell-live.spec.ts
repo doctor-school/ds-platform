@@ -57,7 +57,10 @@ test.describe("017 EARS-1: the signed-in cluster on a live stand", () => {
     page,
   }) => {
     await loginAsDoctor(page);
-    await page.goto("/", { waitUntil: "domcontentloaded" });
+    // The toggle is server-rendered: a click before hydration flips nothing
+    // (#3229 slot run — `.dark` never landed), so wait for the client chunks.
+    await page.goto("/", { waitUntil: "load" });
+    await page.waitForLoadState("networkidle");
 
     for (const expectDark of [true, false]) {
       await page.getByTestId("theme-toggle").click();
@@ -85,15 +88,19 @@ test.describe("017 EARS-5: the header search narrows the shipped feed", () => {
     await expect(feed).toBeVisible();
     const cards = feed.locator('a[href^="/events/"]');
     const before = await cards.count();
-    expect(before, "the live stand must carry a non-empty feed").toBeGreaterThan(
-      0,
-    );
+    expect(
+      before,
+      "the live stand must carry a non-empty feed",
+    ).toBeGreaterThan(0);
 
     // Take a term the upstream really carries, so the narrowing is observable
     // rather than a guess about seed data.
     const title = (await cards.first().innerText()).trim();
     const term = title.split(/\s+/).find((word) => word.length > 4);
-    expect(term, "the first feed card must carry a word to search for").toBeTruthy();
+    expect(
+      term,
+      "the first feed card must carry a word to search for",
+    ).toBeTruthy();
 
     const search = page.getByTestId("shell-search");
     await search.locator('input[name="q"]').fill(term!);
@@ -113,9 +120,9 @@ test.describe("017 EARS-5: the header search narrows the shipped feed", () => {
     // full feed AND keep every non-matching card.)
     expect(after).toBeGreaterThan(0);
     expect(after).toBeLessThanOrEqual(before);
-    await expect(
-      narrowed.locator('a[href^="/events/"]').first(),
-    ).toContainText(new RegExp(term!, "i"));
+    await expect(narrowed.locator('a[href^="/events/"]').first()).toContainText(
+      new RegExp(term!, "i"),
+    );
 
     // The chrome rides the narrowed view, search input included.
     await expect(page.getByTestId("shell-search")).toHaveCount(1);

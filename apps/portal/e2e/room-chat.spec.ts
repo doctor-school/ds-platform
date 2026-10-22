@@ -2,6 +2,7 @@ import { HOSTS } from "@ds/e2e/hosts";
 import { signInWithPassword } from "@ds/e2e/sign-in";
 import { test, expect, type Page } from "@playwright/test";
 import { requireLiveStandEnv } from "./support/live-stand-env";
+import { waitForRoomChatLive } from "./support/room";
 
 /**
  * 006 EARS-3 — live chat over Centrifugo (gated read + real-time post). Two gated
@@ -98,10 +99,10 @@ async function openRoomChat(page: Page) {
   await page.goto(`${BASE}/webinars/${SLUG_LIVE}/room`, {
     waitUntil: "domcontentloaded",
   });
-  // The chat message log renders once the grant carried a chat credential and the
-  // Centrifugo connection is up (subscribe is server-side, so the pane is present
-  // immediately; the log region is the readiness anchor).
-  await expect(page.getByTestId("room-chat-messages").first()).toBeVisible();
+  // The log region is server-rendered, so it is no readiness anchor: wait for the
+  // subscription + history read (the pane leaves its loading skeleton) before a
+  // composer fill or a live-message expectation (#3229 slot traces).
+  await waitForRoomChatLive(page);
   return page.getByRole("textbox", { name: /написать в чат|chat/i }).first();
 }
 

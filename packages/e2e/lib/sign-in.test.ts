@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { preHydrationSubmitError } from "./sign-in.js";
+import { isReactHydrated, preHydrationSubmitError } from "./sign-in.js";
 
 /**
  * The self-accusation half of the golden sign-in (regression-contour tech spec
@@ -40,5 +40,29 @@ describe("preHydrationSubmitError", () => {
         "/login",
       ),
     ).toBeNull();
+  });
+});
+
+/**
+ * The hydration signal the sign-in walk waits on (#3229). `networkidle` never
+ * settles on a login page that carries the real Yandex SmartCaptcha widget: its
+ * iframe keeps Metrika beacons in flight, so the slot run sat in
+ * `waitForLoadState("networkidle")` until the 120 s test timeout. React stamps a
+ * `__reactProps$<id>` key on every DOM node it hydrates, so the form owning that
+ * key is the exact moment a click can no longer submit natively.
+ */
+describe("isReactHydrated", () => {
+  it("is true once React has attached its props key to the node", () => {
+    expect(isReactHydrated({ __reactProps$abc123: { onSubmit() {} } })).toBe(
+      true,
+    );
+  });
+
+  it("is false for the server-rendered node before hydration", () => {
+    expect(isReactHydrated({ __reactFiberLike: 1, id: "login" })).toBe(false);
+  });
+
+  it("is false when the node is absent", () => {
+    expect(isReactHydrated(null)).toBe(false);
   });
 });

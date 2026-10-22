@@ -10,6 +10,7 @@ import {
   provisionLoggedInDoctor,
   submitRegisterAndVerify,
 } from "../support/doctor-session";
+import { answerDisplayNamePrompt, waitForRoomChatLive } from "../support/room";
 
 /**
  * 006 room-journey step definitions (#584) — the browser translation of the
@@ -162,6 +163,19 @@ function sendButton(page: Page) {
   return page.getByRole("button", { name: /отправить|send/i }).first();
 }
 
+/**
+ * Enter the room as the freshly self-registered doctor `registerForRoom` made:
+ * the gate admits (the room url holds — no redirect to login/event), and since
+ * 006 EARS-14 a doctor with no saved name meets the just-in-time name prompt
+ * before the room composes, so it is answered here — a precondition of every
+ * in-room scenario, never their subject (`room-display-name.spec.ts` pins it).
+ */
+async function enterRoom(page: Page, slug: string): Promise<void> {
+  await page.goto(roomUrl(slug), { waitUntil: "load" });
+  await page.waitForURL(new RegExp(`/webinars/${slug}/room$`));
+  await answerDisplayNamePrompt(page);
+}
+
 // ── Admission & composition (EARS-1/EARS-2/EARS-9/EARS-10) ────────────────────
 
 Given("a registered doctor on the live event", async ({ page, world }) => {
@@ -170,10 +184,9 @@ Given("a registered doctor on the live event", async ({ page, world }) => {
 });
 
 When("the doctor enters the live room", async ({ page, world }) => {
-  await page.goto(roomUrl(world.slug), { waitUntil: "domcontentloaded" });
   // The gate admits (authenticated ∧ registered ∧ live) → the room url holds (no
   // redirect to login/event), the room composition renders.
-  await page.waitForURL(new RegExp(`/webinars/${world.slug}/room$`));
+  await enterRoom(page, world.slug);
 });
 
 Then(
@@ -181,7 +194,10 @@ Then(
   async ({ page }) => {
     // EARS-1 consumed → EARS-2 composition: the event context, the live chat aside,
     // and the embed player (seed-005-live is a rutube-provider room) all compose.
-    await expect(page.getByTestId("room-context").first()).toBeVisible();
+    // The `bdd` project is Desktop Chrome, where `WebinarRoomLayout` mounts the
+    // one-line `room-context-strip`; `room-context` is the mobile «О эфире» tab
+    // mount only (#1123), never in the desktop DOM.
+    await expect(page.getByTestId("room-context-strip")).toBeVisible();
     await expect(page.getByTestId("room-chat").first()).toBeVisible();
     await expect(page.getByTestId("room-player-rutube")).toBeVisible();
   },
@@ -228,8 +244,7 @@ Given(
 );
 
 When("the doctor enters that provider room", async ({ page, world }) => {
-  await page.goto(roomUrl(world.slug), { waitUntil: "domcontentloaded" });
-  await page.waitForURL(new RegExp(`/webinars/${world.slug}/room$`));
+  await enterRoom(page, world.slug);
 });
 
 Then(
@@ -263,8 +278,7 @@ Given(
 );
 
 When("the doctor enters that unconfigured room", async ({ page, world }) => {
-  await page.goto(roomUrl(world.slug), { waitUntil: "domcontentloaded" });
-  await page.waitForURL(new RegExp(`/webinars/${world.slug}/room$`));
+  await enterRoom(page, world.slug);
 });
 
 Then(
@@ -290,18 +304,16 @@ Given(
     // stored on the world so the When/Then steps can drive it and the After hook can
     // close it. Both self-register for the live room, then open its chat.
     await registerForRoom(page, world.slug);
-    await page.goto(roomUrl(world.slug), { waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("room-chat-messages").first()).toBeVisible();
+    await enterRoom(page, world.slug);
+    await waitForRoomChatLive(page);
 
     world.ctxB = await browser.newContext();
     world.pageB = await world.ctxB.newPage();
     await registerForRoom(world.pageB, world.slug);
-    await world.pageB.goto(roomUrl(world.slug), {
-      waitUntil: "domcontentloaded",
-    });
-    await expect(
-      world.pageB.getByTestId("room-chat-messages").first(),
-    ).toBeVisible();
+    await enterRoom(world.pageB, world.slug);
+    // B's subscription must be up before A posts, or the live fan-out has no
+    // reader yet (#3229 slot run).
+    await waitForRoomChatLive(world.pageB);
   },
 );
 
@@ -340,8 +352,7 @@ Given(
     await registerForRoom(page, world.slug);
     // Attach the beat counter BEFORE navigating so no beat is missed, then enter.
     world.beats = trackHeartbeats(page);
-    await page.goto(roomUrl(world.slug), { waitUntil: "domcontentloaded" });
-    await page.waitForURL(new RegExp(`/webinars/${world.slug}/room$`));
+    await enterRoom(page, world.slug);
   },
 );
 
@@ -371,8 +382,7 @@ Given(
     world.slug = SLUG_LIVE;
     await registerForRoom(page, world.slug);
     world.beats = trackHeartbeats(page);
-    await page.goto(roomUrl(world.slug), { waitUntil: "domcontentloaded" });
-    await page.waitForURL(new RegExp(`/webinars/${world.slug}/room$`));
+    await enterRoom(page, world.slug);
     // Let the visible loop fire at least one beat before we background it.
     await page.waitForTimeout(HEARTBEAT_SECONDS * 2200);
     expect(world.beats.count).toBeGreaterThanOrEqual(1);
@@ -436,8 +446,9 @@ Given(
       case "authenticated but unregistered": {
         // A fresh 003 doctor authenticated but NOT on the live room's roster.
         world.slug = SLUG_LIVE;
+        // `provisionLoggedInDoctor` already waits for the authenticated landing
+        // — `/webinars` since 013 EARS-15, so no `/account` pin here.
         await provisionLoggedInDoctor(page);
-        await page.waitForURL(/\/account/);
         break;
       }
       case "on an event that is not live": {
@@ -493,8 +504,9 @@ Given(
     // room of an ENDED event (the post-close state — the live→ended transition is
     // authored by 007; the ended seed stands in for a closed room).
     world.slug = process.env.E2E_ROOM_SLUG_ENDED ?? "seed-005-ended";
+    // The authenticated landing is `/webinars` since 013 EARS-15;
+    // `provisionLoggedInDoctor` waits for it.
     await provisionLoggedInDoctor(page);
-    await page.waitForURL(/\/account/);
     await page.goto(roomUrl(world.slug), { waitUntil: "domcontentloaded" });
   },
 );

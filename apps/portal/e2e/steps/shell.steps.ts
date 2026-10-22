@@ -20,8 +20,8 @@ import {
 
 /**
  * 008 shell-journey step definitions — the browser translation of the connected
- * shell arc (login → discovery front-door `/` → shell nav → profile; guest «Войти»
- * + the same `/`; mobile ≡ collapse). Driven on the live dev stand; the shared
+ * shell arc (login → the discovery listing `/webinars` → shell nav → profile; guest
+ * «Войти» on the same listing; mobile ≡ collapse). Driven on the live dev stand; the shared
  * Background step («the live dev stand is available», registration.steps.ts) gates
  * the whole feature on `LIVE_STAND` and is intentionally reused, not redefined.
  *
@@ -129,7 +129,7 @@ Then(
   },
 );
 
-// ── Guest sees «Войти» and the same `/` (EARS-4/8) ────────────────────────────
+// ── Guest sees «Войти» on the same `/webinars` listing (EARS-4/8) ──────────────
 
 Given("a visitor with no authenticated session", async ({ context }) => {
   await context.clearCookies();

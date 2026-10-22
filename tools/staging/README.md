@@ -345,11 +345,11 @@ them — or a live one that grew a `webServer` — fails `pnpm test:tools`.
 | `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)      | yes                                                  |
 | `live/doctor/register-live`  | `doctor/playwright.register-live.config.ts`                                         | yes                                                  |
 | `live/doctor/congress`       | `doctor/playwright.congress.config.ts`                                              | yes                                                  |
-| `live/doctor/event-page`     | `doctor/playwright.event-page.config.ts`                                            | no — red on slot, #3229                              |
+| `live/doctor/event-page`     | `doctor/playwright.event-page.config.ts`                                            | yes                                                  |
 | `live/doctor/event-register` | `doctor/playwright.event-register.config.ts`                                        | yes                                                  |
 | `live/doctor/events-live`    | `doctor/playwright.events-live.config.ts`                                           | yes                                                  |
 | `live/doctor/room`           | `doctor/playwright.room.config.ts` (`room.spec.ts`; the axe twin is `axe/doctor`'s) | yes                                                  |
-| `live/doctor/shell`          | `doctor/playwright.shell.config.ts`                                                 | no — red on slot, #3229                              |
+| `live/doctor/shell`          | `doctor/playwright.shell.config.ts`                                                 | yes                                                  |
 
 Each leg gets the suite env plus `IDP_ISSUER=https://id.<base domain>` and
 `MAILPIT_URL=https://mailpit.<base domain>` (hostnames, never `127.0.0.1`: Playwright
@@ -359,7 +359,7 @@ the axe legs (`walks` selects none); `--no-live` drops them. The release check
 (`--expect-sha`) runs every leg the table marks «yes» (#3191). A leg marked «no» carries
 `releaseCheck: { excluded: "<reason>" }` in `live-tiers.mjs`: the release check prints
 `live: <leg> not in the release check — <reason>` and does not run it, while a plain slot
-run still does. The three excluded legs are red on a slot; #3229 owns bringing them back.
+run still does. The one excluded leg is red on a slot; #3229 owns bringing it back.
 
 **Derived for the slot (#3191).** The release check runs in Actions (`stage.yml` job
 `suite`, «The same check in Actions» above), which never reads the box: its env is the
@@ -407,7 +407,7 @@ dataset seeds only rutube streams), the heartbeat-cadence specs (a slot api runs
 production 60 s cadence), the congress-submission specs (they write fixture rows straight
 into a database a slot keeps inside the box's docker network) and the one-tap
 registration (005 registration is append-only, so a run consumes its эфиры), the
-signed-in landing spec (an IdP management token) and the congress login hand-off (the
+signed-in landing spec (an IdP management token; permanently out — a box verb holding the token would need the ssh the Actions release check does not have) and the congress login hand-off (the
 `CONGRESS_SIGNUP_*` block). A config that throws at load without its env is not launched at all.
 Export the variable on this machine and the spec runs. The verdict block prints
 one `live:` line per config:

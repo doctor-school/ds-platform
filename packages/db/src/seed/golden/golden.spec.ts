@@ -873,6 +873,48 @@ describe("#2213 golden dataset at volume", () => {
     return byDay;
   };
 
+  /**
+   * The first МСК day from tomorrow back to today that stays inside the pin's
+   * own МСК month: tomorrow, or today when today is the month's last day.
+   */
+  const denseAcademyDay = (pinned: Date): string => {
+    const today = mskDayKey(pinned);
+    const tomorrow = mskDayKey(new Date(pinned.getTime() + 86_400_000));
+    return tomorrow.slice(0, 7) === today.slice(0, 7) ? tomorrow : today;
+  };
+
+  it("#3229: carries one dense Academy day in the pin's own МСК month, so the month view's «+N ещё» overflow (004 scope item 10) is reachable at any pin", () => {
+    // A desktop month cell renders at most three pills and a 4+-event day
+    // appends «+N ещё». The grid carries two or three эфиры a weekday split
+    // between both audiences, so no Academy (experts) day ever reached four
+    // and the overflow was unreachable on a slot (#3229). Production runs
+    // expert marathons — one such day next to the run day is the shape.
+    for (const pin of COVERAGE_PINS) {
+      const { pinned, built } = atPin(pin);
+      const day = denseAcademyDay(pinned);
+      expect(day.slice(0, 7), pin).toBe(mskDayKey(pinned).slice(0, 7));
+      // 004 scope item 10: the four sit in the pin's own month, scheduled —
+      // published and still ahead of the run instant.
+      const academy = built.events.filter(
+        (e) =>
+          e.audience === "experts" &&
+          e.state === "published" &&
+          (e.startsAt as Date).getTime() > pinned.getTime() &&
+          mskDayKey(e.startsAt as Date) === day,
+      );
+      expect(academy.length, `${pin} / ${day}`).toBeGreaterThanOrEqual(4);
+      // A marathon tomorrow runs inside the grid's own МСК hours.
+      if (day !== mskDayKey(pinned)) {
+        for (const event of academy) {
+          const hour = (event.startsAt as Date).getUTCHours() + 3;
+          const label = `${pin} / ${event.slug as string}`;
+          expect(hour, label).toBeGreaterThanOrEqual(10);
+          expect(hour, label).toBeLessThanOrEqual(19);
+        }
+      }
+    }
+  });
+
   it("#2213: carries an эфир on every day of the season, not just most", () => {
     // The owner's Stage-B verdict on PR #2216 in one assertion: doctor.school
     // runs эфиры EVERY day, so a calendar walked day by day must never render
@@ -901,10 +943,11 @@ describe("#2213 golden dataset at volume", () => {
           expect(count, `${pin} / Saturday ${day}`).toBeGreaterThanOrEqual(1);
         } else {
           expect(count, `${pin} / ${day}`).toBeGreaterThanOrEqual(2);
-          // The ceiling holds everywhere but today: the run day also carries
-          // the two live rooms and the «сегодня» эфир, which are appended to
-          // the grid rather than scheduled in it.
-          if (day !== mskDayKey(pinned)) {
+          // The ceiling holds everywhere but today and the dense Academy day:
+          // the run day also carries the two live rooms and the «сегодня»
+          // эфир, the dense day its expert marathon — all appended to the
+          // grid rather than scheduled in it.
+          if (day !== mskDayKey(pinned) && day !== denseAcademyDay(pinned)) {
             expect(
               (gridByDay.get(day) ?? []).length,
               `${pin} / ${day}`,

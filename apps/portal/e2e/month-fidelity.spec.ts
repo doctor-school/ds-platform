@@ -345,9 +345,37 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
 
       // Pill cap (scope item 10, canvas update 2026-07-17): a desktop cell
       // renders at most 3 event pills, live-first; a 4+-events day appends the
-      // «+N ещё» overflow link instead (the seed carries such a day).
-      const moreLink = grid.getByText(/^\+\d+ ещё$/).first();
-      await expect(moreLink).toBeVisible();
+      // «+N ещё» overflow link instead. The 4+-event day is read off the
+      // stand's own month read (the page's guest read), not a seed name: the
+      // golden dataset's dense Academy day (#3229), a local seed's busy day.
+      const ym = mskNowYm();
+      const monthKey = `${ym.year}-${String(ym.month).padStart(2, "0")}`;
+      const entries = (await (
+        await page.request.get(`/v1/public/events?month=${monthKey}`, {
+          headers: { accept: "application/json" },
+        })
+      ).json()) as { startsAt: string }[];
+      const perDay = new Map<string, number>();
+      for (const entry of entries) {
+        const day = new Date(entry.startsAt).toLocaleDateString("en-CA", {
+          timeZone: "Europe/Moscow",
+        });
+        perDay.set(day, (perDay.get(day) ?? 0) + 1);
+      }
+      const dense = [...perDay].find(([, n]) => n >= 4);
+      expect(dense, `${monthKey} carries a day with 4+ events`).toBeDefined();
+      const [denseDay, denseCount] = dense!;
+      const moreLink = grid.locator(`a[href*="day=${denseDay}"]`, {
+        hasText: /^\+\d+ ещё$/,
+      });
+      await expect(moreLink).toHaveText(`+${denseCount - 3} ещё`);
+      expect(
+        await moreLink.evaluate(
+          (a) =>
+            a.parentElement!.querySelectorAll("a[href^='/webinars/']").length,
+        ),
+        `${denseDay} renders three pills before its overflow link`,
+      ).toBe(3);
       const capViolations = await grid.evaluate((root) => {
         const bad: string[] = [];
         const cells = new Set<Element>();

@@ -731,6 +731,28 @@ describe("live-tier inventory (#3168) — every storefront config is classified"
     assert.ok(seen > 0, "the scan found no gated spec — the walk is broken");
   });
 
+  it("gates a generated BDD spec only by the path bddgen writes for a real feature file", () => {
+    // A renamed feature leaves its gated path naming nothing: the scenarios would
+    // run on a slot instead of being reported «not run» (#3229).
+    let seen = 0;
+    for (const tier of LIVE_TIERS) {
+      for (const g of tier.gated.filter((x) =>
+        x.file.startsWith(".features-gen/"),
+      )) {
+        seen += 1;
+        const feature = g.file.match(
+          /^\.features-gen\/(.+\.feature)\.spec\.js$/,
+        );
+        assert.ok(feature, `${tier.name} ${g.file}: not a bddgen output path`);
+        assert.doesNotThrow(
+          () => repoFile(`${tier.app}/${feature[1]}`),
+          `${tier.name} ${g.file}: ${tier.app}/${feature[1]} does not exist`,
+        );
+      }
+    }
+    assert.ok(seen > 0, "no gated BDD spec found — the walk is broken");
+  });
+
   it("names the configRequires a config throws on, word for word", () => {
     for (const tier of LIVE_TIERS.filter((t) => t.configRequires)) {
       const source = repoFile(`${tier.app}/${tier.config}`);
@@ -1696,12 +1718,10 @@ describe("golden live env (#3191) — derived from the dataset every slot is clo
     );
   });
 
-  it("keeps exactly the three slot-red legs out of the release check, each with a reason citing #3229", () => {
+  it("keeps exactly the slot-red Academy default leg out of the release check, with a reason citing #3229", () => {
     const excluded = LIVE_TIERS.filter((t) => t.releaseCheck);
     assert.deepEqual(excluded.map((t) => t.name).sort(), [
       "live/academy/default",
-      "live/doctor/event-page",
-      "live/doctor/shell",
     ]);
     for (const tier of LIVE_TIERS) {
       assert.doesNotThrow(() => releaseCheckExclusion(tier), tier.name);

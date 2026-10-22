@@ -205,6 +205,19 @@ const WEEKDAY_CADENCE = [2, 3, 2, 3, 3, 2, 3] as const;
 const LIVE_OFFSETS_MIN = [-20, -45] as const;
 
 /**
+ * The dense Academy day (#3229): an expert marathon of four эфиров.
+ *
+ * The grid carries two or three эфиры a weekday split between both audiences,
+ * so no Academy (experts) day reaches the four a month cell needs before it
+ * caps its pills and appends «+N ещё» (004 scope item 10). The marathon is
+ * scheduled ahead of the run instant and inside «этот месяц»: tomorrow at these
+ * МСК hours, or, on a month's last day, later today. The dense day therefore
+ * lives in the month of the last seed run only; once the month rolls over it is
+ * absent until the next `seed:golden` upsert (the slot `main` converge).
+ */
+const DENSE_ACADEMY_DAY_MINUTES = [10 * 60, 12 * 60, 14 * 60, 16 * 60] as const;
+
+/**
  * Share of the past season that has been moved to the archive.
  *
  * The recent past is «Прошедшие» with its recording; the older third is what an
@@ -252,6 +265,11 @@ interface VolumeEventPlan {
   startsAt: Date;
   liveAt?: Date;
   recordingExpectedBy?: string;
+  /**
+   * The primary project slot, when the row is placed for its project rather
+   * than by its ordinal (the dense Academy day); `index % projects` otherwise.
+   */
+  primaryProject?: number;
 }
 
 /**
@@ -347,7 +365,10 @@ function gridCells(now: Date): GridCell[] {
           weekdayCounter % WEEKDAY_CADENCE.length
         ] as number;
         weekdayCounter += 1;
-        for (const [slot, minutes] of slotMinutes(count, dayCounter).entries()) {
+        for (const [slot, minutes] of slotMinutes(
+          count,
+          dayCounter,
+        ).entries()) {
           push(minutes, slot);
         }
       } else if (day === 5) {
@@ -384,8 +405,9 @@ function gridCells(now: Date): GridCell[] {
 function planVolumeEvents(now: Date): VolumeEventPlan[] {
   const nowMs = now.getTime();
   const cells = gridCells(now);
-  const pastCount = cells.filter((cell) => cell.startsAt.getTime() <= nowMs)
-    .length;
+  const pastCount = cells.filter(
+    (cell) => cell.startsAt.getTime() <= nowMs,
+  ).length;
   const archiveCount = Math.floor(pastCount * ARCHIVE_SHARE_OF_PAST);
 
   const plans: VolumeEventPlan[] = [];
@@ -477,7 +499,50 @@ function planVolumeEvents(now: Date): VolumeEventPlan[] {
     startsAt: upcomingTodayStart(now),
   });
 
+  const mediaProjects = VOLUME_PROJECTS.flatMap((project, slot) =>
+    project.kind === "media" ? [slot] : [],
+  );
+  for (const [k, startsAt] of denseAcademyDayStarts(now).entries()) {
+    plans.push({
+      index: plans.length,
+      state: "published",
+      recorded: false,
+      startsAt,
+      primaryProject: mediaProjects[k % mediaProjects.length]!,
+    });
+  }
+
   return plans;
+}
+
+/**
+ * The marathon's start instants: tomorrow at {@link DENSE_ACADEMY_DAY_MINUTES}
+ * when tomorrow is still in the run day's МСК month; otherwise spread evenly
+ * between the pin and today's МСК midnight, whole minutes, strictly ahead.
+ */
+function denseAcademyDayStarts(now: Date): Date[] {
+  const nowMs = now.getTime();
+  const mskMidnight = Math.floor((nowMs + MSK_OFFSET_MS) / MS_DAY) * MS_DAY;
+  const tomorrow = mskMidnight + MS_DAY;
+  if (
+    new Date(tomorrow).getUTCMonth() === new Date(mskMidnight).getUTCMonth()
+  ) {
+    return DENSE_ACADEMY_DAY_MINUTES.map(
+      (minutes) => new Date(tomorrow + minutes * MS_MINUTE - MSK_OFFSET_MS),
+    );
+  }
+  const dayEnd = tomorrow - MSK_OFFSET_MS;
+  const step = (dayEnd - nowMs) / (DENSE_ACADEMY_DAY_MINUTES.length + 1);
+  return DENSE_ACADEMY_DAY_MINUTES.map(
+    (_, k) =>
+      new Date(
+        // Whole minutes, but never rounded past midnight into the next month.
+        Math.min(
+          Math.ceil((nowMs + (k + 1) * step) / MS_MINUTE) * MS_MINUTE,
+          dayEnd - 1,
+        ),
+      ),
+  );
 }
 
 /**
@@ -505,22 +570,24 @@ function upcomingTodayStart(now: Date): Date {
  */
 function eventCreatedMs(plan: VolumeEventPlan, nowMs: number): number {
   return (
-    Math.min(plan.startsAt.getTime(), nowMs) -
-    (30 + (plan.index % 45)) * MS_DAY
+    Math.min(plan.startsAt.getTime(), nowMs) - (30 + (plan.index % 45)) * MS_DAY
   );
 }
 
 /** 012 LD-12 — a project's default audience follows what it is. */
-function projectDefaultAudience(kind: NewProject["kind"]): "doctors" | "experts" {
+function projectDefaultAudience(
+  kind: NewProject["kind"],
+): "doctors" | "experts" {
   return kind === "media" ? "experts" : "doctors";
 }
 
 function volumeEventClassification(
   i: number,
+  primarySlot: number,
   format: "online" | "offline" | "hybrid",
 ): Pick<NewEvent, "kindId" | "audience"> {
-  // The primary project slot of `buildEventProjects` (`i % projects`).
-  const primary = VOLUME_PROJECTS[i % VOLUME_PROJECTS.length]!;
+  // The primary project slot of `buildEventProjects` (`primaryProjectOf`).
+  const primary = VOLUME_PROJECTS[primarySlot]!;
   const audience = projectDefaultAudience(primary.kind);
   const kind =
     format === "online"
@@ -571,7 +638,11 @@ function buildEvent(plan: VolumeEventPlan, now: Date): NewEvent {
     // 012 EARS-26 / EARS-29 — the audience of the event's PRIMARY project
     // (schools → doctors, media → experts, so both storefronts carry volume)
     // and a seed kind that allows the format.
-    ...volumeEventClassification(i, participationFormat ?? "online"),
+    ...volumeEventClassification(
+      i,
+      primaryProjectOf(plan),
+      participationFormat ?? "online",
+    ),
     // Only a format with a room to fill has seats to run out of; one offline
     // event in eleven is «мест нет», which is the state the format block's
     // sold-out copy needs.
@@ -665,8 +736,14 @@ function expertSlotsFor(i: number): number[] {
   return [...new Set(slots)];
 }
 
-function projectSlotsFor(i: number): number[] {
-  const slots = [i % VOLUME_PROJECTS.length];
+/** The event's primary project slot — the one its audience follows. */
+function primaryProjectOf(plan: VolumeEventPlan): number {
+  return plan.primaryProject ?? plan.index % VOLUME_PROJECTS.length;
+}
+
+function projectSlotsFor(plan: VolumeEventPlan): number[] {
+  const i = plan.index;
+  const slots = [primaryProjectOf(plan)];
   if (i % 2 === 0) slots.push((i * 2 + 1) % VOLUME_PROJECTS.length);
   return [...new Set(slots)];
 }
@@ -727,7 +804,7 @@ function buildEventProjects(
       GOLDEN_VOLUME_ORDINAL_BASE + plan.index,
     );
     const createdAt = linkCreatedAt(plan, nowMs);
-    for (const slot of projectSlotsFor(plan.index)) {
+    for (const slot of projectSlotsFor(plan)) {
       rows.push({
         id: goldenUuid(GOLDEN_GROUP.eventProjects, ordinal),
         eventId,
@@ -983,7 +1060,10 @@ function buildRegistrations(
  * days later, and an эфир from six months back should not have waited six
  * months for one.
  */
-function buildRecordings(plans: VolumeEventPlan[], now: Date): NewEventRecording[] {
+function buildRecordings(
+  plans: VolumeEventPlan[],
+  now: Date,
+): NewEventRecording[] {
   const rows: NewEventRecording[] = [];
   const nowMs = now.getTime();
   let ordinal = GOLDEN_VOLUME_ORDINAL_BASE;
@@ -1203,7 +1283,10 @@ function buildDirectionSpecialties(at: At): GoldenDirectionSpecialtyLink[] {
   GOLDEN_DIRECTIONS.forEach((spec, i) => {
     // #2836 / #2871: the empty directions' links are appended after every
     // list below.
-    if (spec === GOLDEN_EMPTY_DIRECTION || spec === GOLDEN_EMPTY_SCOPE_DIRECTION)
+    if (
+      spec === GOLDEN_EMPTY_DIRECTION ||
+      spec === GOLDEN_EMPTY_SCOPE_DIRECTION
+    )
       return;
     for (const name of spec.specialties) {
       // The partition links the editor retired when the empty specialties moved.
@@ -1233,10 +1316,7 @@ function buildDirectionSpecialties(at: At): GoldenDirectionSpecialtyLink[] {
 function buildDirectionAdjacency(at: At): NewDirectionAdjacency[] {
   const rows: NewDirectionAdjacency[] = [];
   let ordinal = GOLDEN_VOLUME_ORDINAL_BASE;
-  const push = (
-    edge: (typeof GOLDEN_ADJACENCY)[number],
-    retired: boolean,
-  ) => {
+  const push = (edge: (typeof GOLDEN_ADJACENCY)[number], retired: boolean) => {
     const createdAt = at({ days: -330 + (ordinal % 90) });
     const row: NewDirectionAdjacency = {
       id: goldenUuid(GOLDEN_GROUP.directionAdjacency, ordinal),

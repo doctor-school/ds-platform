@@ -11,8 +11,8 @@
 # viewer-zone rule (EARS-11 as amended 2026-10-02, #2537): the viewer's zone with
 # its label, never МСК.
 #
-# Seeded fixture events (005↔007 fixture seam, parent #564): the journey drives the
-# `seed-005-*` events (apps/api/scripts/seed-events.ts). "Done against the real
+# Events (005↔007 fixture seam, parent #564): a local stand drives the `seed-005-*`
+# events (apps/api/scripts/seed-events.ts), a slot its golden events (`E2E_JOURNEY_SLUG_*`, tools/staging/live-tiers.mjs). "Done against the real
 # dependency" = the journey runs on events authored + transitioned through 007.
 
 Feature: 005 Webinar registration journey — guest through auth to «мои события», one-tap, and lifecycle gating

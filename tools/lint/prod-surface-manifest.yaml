@@ -203,31 +203,32 @@ routes:
   # one app that renders the Academy's or the doctor storefront's
   # `@ds/auth-flow` door for a Zitadel auth request, the storefront chosen by the
   # server entry decision. Same doors as the storefront rows above, no copy of
-  # their own. `deferred` because the host is not reachable yet: no stage slot,
-  # no prod service or vhost serves it until #3171 wires both.
+  # their own. The host is wired on stage and prod by #3171 (PR #3228); `deferred`
+  # because nothing sends users to it until the S4 storefront entry and callback
+  # (#3172) make it user-reachable.
   - app: login
     route: /login
     file: apps/login/app/login/page.tsx
     status: deferred
-    issue: "#3171"
+    issue: "#3172"
 
   - app: login
     route: /register
     file: apps/login/app/register/page.tsx
     status: deferred
-    issue: "#3171"
+    issue: "#3172"
 
   - app: login
     route: /reset
     file: apps/login/app/reset/page.tsx
     status: deferred
-    issue: "#3171"
+    issue: "#3172"
 
   - app: login
     route: /verify
     file: apps/login/app/verify/page.tsx
     status: deferred
-    issue: "#3171"
+    issue: "#3172"
 
   # 046 EARS-4 (#2433) — «Мои заявки на Конгресс», the route-file mount of the
   # shared `@ds/congress-submissions` section, linked from `/account`. Same

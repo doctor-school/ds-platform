@@ -1,0 +1,71 @@
+name: Link sweep
+
+# Nightly ONLINE link check of every external URL in the tree (#2270). The PR gate
+# (`ci.yml` → guards-block → markdown-links) checks the whole tree offline and only
+# the PR's changed `*.md` files online, so a third-party site that times out or
+# bot-blocks the runner never reds a PR; this sweep is where such a link surfaces
+# instead. It never gates a merge.
+#   - schedule: daily; workflow_dispatch: on demand.
+#   - On failure it files ONE tracking Issue (fixed title below) or, while that
+#     Issue is open, comments on it with the run's failing URLs. The Issue is the
+#     queue for fixing the link or recording a `.lycheeignore` entry with its cause.
+#
+# Same lychee pin, input exclusions and blob→raw remap as `ci.yml` markdown-links
+# (rationale there); URL exclusions come from `.lycheeignore`.
+
+on:
+  schedule:
+    - cron: "41 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  # Read-only; the workflow-auth guard's baseline for every job that runs `gh`.
+  pull-requests: read
+
+concurrency:
+  group: link-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: lychee (online, whole tree)
+        id: lychee
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: >-
+            --no-progress --include-fragments
+            --exclude-path tools/lint/guard-tests/fixtures/
+            --remap '^https://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/([^#]+)(#.*)?$ https://raw.githubusercontent.com/$1/$2/$3/$4'
+            .
+          output: lychee/out.md
+          fail: false
+
+      - name: Report into the tracking Issue
+        if: steps.lychee.outputs.exit_code != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "Link sweep: external links failing"
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo "Nightly \`link-sweep\` run ${RUN_URL} (ref \`${GITHUB_REF_NAME}\`, \`${GITHUB_SHA}\`) found failing links."
+            echo "Fix the link, or record a \`.lycheeignore\` entry with its observed cause. This report never blocks a merge."
+            echo
+            head -c 60000 lychee/out.md
+          } > report.md
+          existing=$(gh issue list --state open --search "in:title \"${TITLE}\"" --json number,title \
+            --jq "map(select(.title == \"${TITLE}\")) | .[0].number // empty")
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file report.md
+          else
+            gh issue create --title "$TITLE" --body-file report.md \
+              --label chore --label source:agent --label track:platform \
+              --milestone "Platform ops & hardening"
+          fi

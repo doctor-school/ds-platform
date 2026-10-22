@@ -105,7 +105,8 @@ env:
 #                          pays install + docs-build only
 #   guards-block / guards-warn / pr-body-guards
 #                          UNCONDITIONAL — they are exactly the checks that DO
-#                          apply to a docs diff (markdown-links, spec-link,
+#                          apply to a docs diff (markdown-links — offline over
+#                          the tree, online over the changed `*.md` —, spec-link,
 #                          EARS/glossary/product-note, …)
 #
 # `code` is TRUE unless EVERY changed file is docs-class (`*.md` anywhere,
@@ -847,17 +848,38 @@ jobs:
       - name: primitives-first (tool-encoded WARN/BLOCK — a non-zero exit is the BLOCK class)
         run: pnpm lint:primitives-first
 
-      # markdown-links — lychee link check over the whole tree (needs the full
-      # checkout above). Last in the batch: it is the only network-bound step, so
-      # the deterministic local guards fail fast ahead of it.
+      # markdown-links — lychee link check, BLOCK on exactly what the PR author
+      # controls (#2270). Last in the batch: the changed-files half is the only
+      # network-bound step, so the deterministic local guards fail fast ahead of it.
+      #
+      #   markdown-links (offline)   the WHOLE tree with `--offline`: every internal
+      #                              file link and `#anchor` (`--include-fragments`);
+      #                              no request leaves the runner. Every event.
+      #   markdown-links (changed)   the PR's added/modified/renamed files of every
+      #                              extension the tree scan reads (lychee 0.24.2's
+      #                              default set, `FileType::default_extensions`:
+      #                              md/mkd/mdx/mdown/mdwn/mkdn/mkdown/markdown,
+      #                              html/htm, css, txt, xml;
+      #                              `git diff --diff-filter=ACMR` against the merge
+      #                              base with the PR base branch, fixtures dropped;
+      #                              a diff error reds the step, never an empty set)
+      #                              get the full ONLINE check, so an external link
+      #                              the author just wrote is still verified. An
+      #                              empty set has nothing to check and the step
+      #                              does not run; non-`pull_request` events run
+      #                              the offline half only.
+      #
+      # External links in files the PR does not touch are not this PR's verdict: a
+      # third-party site timing out or bot-blocking the runner would otherwise red
+      # every PR at once (nngroup.com, carbondesignsystem.com, yandex.cloud — #2270).
+      # They are swept nightly by `link-sweep.yml`, which reports into one tracking
+      # Issue and never gates a merge.
       #
       # Exclusions live in `.lycheeignore` (repo root), one rationale comment per
-      # entry. Note in particular the LAST entry there: this repo's OWN
-      # `github.com/doctor-school/ds-platform/…` URLs are excluded, so this BLOCK
-      # gate does not depend on several hundred github.com requests per run
-      # (#1268; current evidence and re-inclusion question: #2860). Links to
-      # anywhere else, including inside the generated CHANGELOG.md files, are
-      # still checked.
+      # entry, and apply to both halves and the sweep. Note in particular the LAST
+      # entry there: this repo's OWN `github.com/doctor-school/ds-platform/…` URLs
+      # are excluded, so no check depends on several hundred github.com requests
+      # per run (#1268; current evidence and re-inclusion question: #2860).
       #
       # `.lycheeignore` holds URL regexes, so it cannot exclude an INPUT file.
       # Input exclusions are `--exclude-path` regexes here instead: the lint-guard
@@ -874,14 +896,41 @@ jobs:
       # is dropped — a raw text file has no anchors to verify. lychee applies the
       # remap BEFORE the `.lycheeignore` match, so excluded URLs need their raw
       # form listed there too (see the self-URL entry).
-      - name: markdown-links
+      - name: markdown-links (offline)
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: >-
+            --no-progress --offline --include-fragments
+            --exclude-path tools/lint/guard-tests/fixtures/
+            --remap '^https://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/([^#]+)(#.*)?$ https://raw.githubusercontent.com/$1/$2/$3/$4'
+            .
+          fail: true
+
+      - name: markdown-links changed-file set
+        id: md-changed
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # The default `bash -e` has no pipefail: without it a failed `git diff`
+          # inside the pipeline would yield an empty set and a green step.
+          set -euo pipefail
+          files=$(git diff --name-only --diff-filter=ACMR "origin/${BASE_REF}...HEAD" -- \
+              '*.md' '*.mkd' '*.mdx' '*.mdown' '*.mdwn' '*.mkdn' '*.mkdown' '*.markdown' \
+              '*.html' '*.htm' '*.css' '*.txt' '*.xml' \
+            | sed '/^tools\/lint\/guard-tests\/fixtures\//d' | tr '\n' ' ')
+          echo "changed link-check inputs: ${files:-<none>}"
+          echo "files=${files}" >> "$GITHUB_OUTPUT"
+
+      - name: markdown-links (changed)
+        if: steps.md-changed.outputs.files != ''
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
           args: >-
             --no-progress --include-fragments
             --exclude-path tools/lint/guard-tests/fixtures/
             --remap '^https://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/([^#]+)(#.*)?$ https://raw.githubusercontent.com/$1/$2/$3/$4'
-            .
+            ${{ steps.md-changed.outputs.files }}
           fail: true
 
   # ─── WARN light guards ────────────────────────────────────────────────

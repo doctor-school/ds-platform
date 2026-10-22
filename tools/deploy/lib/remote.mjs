@@ -174,6 +174,18 @@ export function createStallWatchdog({
 const REMOTE_BASH =
   'script=$(cat); exec bash --norc -euo pipefail -c "$script"';
 
+// #2987: the same command run as root — the script still drained first, then handed
+// whole to `sudo -n bash`. The break-glass operator `breakglass` reaches ds-api-prod
+// as itself, and the live tree there (PROD_LIVE_TREE) is root's; every script it
+// sends that box goes through this form (`asRoot` on sshScript / sshCapture).
+const REMOTE_BASH_ROOT =
+  'script=$(cat); exec sudo -n bash --norc -euo pipefail -c "$script"';
+
+/** The command a box's shell is handed for a stdin-fed script: as the user, or as root. */
+export function remoteBash({ asRoot = false } = {}) {
+  return asRoot ? REMOTE_BASH_ROOT : REMOTE_BASH;
+}
+
 // #2985: the box-local executor. A run ON the box (the stage release driver,
 // `infra/deploy/bin/release-driver`) addresses the box as this host: `boxSpawnArgs`
 // then runs the very command an ssh session would hand the box's login shell —
@@ -205,10 +217,10 @@ export function boxSpawnArgs(host, remoteCommand, extraOptions = []) {
 export function sshScript(
   host,
   script,
-  { label, stallBudgetMs, probeHint } = {},
+  { label, stallBudgetMs, probeHint, asRoot = false } = {},
 ) {
   return new Promise((resolve, reject) => {
-    const child = spawn(...boxSpawnArgs(host, REMOTE_BASH), {
+    const child = spawn(...boxSpawnArgs(host, remoteBash({ asRoot })), {
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stalled = false;
@@ -259,11 +271,12 @@ export function sshScript(
 //                  that only stops waiting leaves a live ssh holding the event
 //                  loop open, which is what hung the SessionStart hook, #2233);
 //   `stderr`     - "inherit" (default) or "pipe", which folds ssh's own
-//                  diagnostics into the rejection instead of the caller's tty.
+//                  diagnostics into the rejection instead of the caller's tty;
+//   `asRoot`     - run the script as root (`remoteBash`, #2987).
 export function sshCapture(host, script, options = {}) {
-  const { sshOptions = [], signal, stderr = "inherit" } = options;
+  const { sshOptions = [], signal, stderr = "inherit", asRoot = false } = options;
   return new Promise((resolve, reject) => {
-    const child = spawn(...boxSpawnArgs(host, REMOTE_BASH, sshOptions), {
+    const child = spawn(...boxSpawnArgs(host, remoteBash({ asRoot }), sshOptions), {
       stdio: ["pipe", "pipe", stderr],
     });
     let out = "";

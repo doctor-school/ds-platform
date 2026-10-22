@@ -186,11 +186,12 @@ its key body, so re-running with the same key changes nothing.
 **sudo on prod (ds-api-prod, `--role prod`; tech spec §4 «sudo on prod», step (f)):**
 `deploy` holds one sudo right, `/etc/sudoers.d/90-ds-deploy` (the entrypoint as root, no
 argument, `SSH_ORIGINAL_COMMAND` kept through sudo's env reset), and the CI keys carry
-`command="sudo -n /usr/local/bin/ds-deploy-entrypoint",…`. Once `breakglass` is proven in
+`command="sudo -n /usr/local/bin/ds-deploy-entrypoint",…,no-user-rc`. Once `breakglass` is proven in
 place the converge also removes `deploy`'s rules from every other sudoers.d file (cloud-init's
 `90-cloud-init-users`), takes `deploy` out of groups `sudo` and `docker`, and removes every
 `deploy` key line not behind the prod forced command — the operator key (and its interim
-`from=` line) included. Run it from a `breakglass` session, in this order: (1) prove a
+`from=` line) included; it refuses to unless it runs from a `breakglass` session
+(`SUDO_USER=breakglass`). Run it from that session, in this order: (1) prove a
 `breakglass` login on both prod boxes; (2) converge with `--role prod --ci-pubkey <prod CI
 key>` (`--dry-run` first); (3) prove the Actions path with a `status` call and a
 `rollback-status` read. ds-stage-1 (`--role stage`) and ds-data-prod (`--role data`) keep

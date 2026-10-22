@@ -172,8 +172,8 @@ import {
   rollbackUnitName,
   runDurableStep,
   shipTree as shipCommittedTree,
-  sshCapture,
-  sshScript,
+  sshCapture as boxCapture,
+  sshScript as boxScript,
 } from "./lib/remote.mjs";
 import { OPTIONAL_VHOST_PROBES } from "./smoke-prod.mjs";
 
@@ -395,6 +395,26 @@ export function prodShipOptions(host, { api, localTree = null }) {
     asRoot: host === api,
     ...(localTree ? { sourceDir: localTree } : {}),
   };
+}
+
+/**
+ * #2987: the script options of a prod box. The break-glass operator `breakglass`
+ * reaches ds-api-prod as itself and the live tree there is root's (spec §4 «sudo on
+ * prod»), so every script it sends that box runs as root. A `--local` run is the
+ * root release unit already (api = LOCAL_EXECUTOR) and runs its scripts as they are;
+ * data-prod is reached as deploy and stays deploy.
+ */
+export function prodScriptOptions(host, { api }) {
+  return { asRoot: host === api && api !== LOCAL_EXECUTOR };
+}
+
+// The one transport of every prod script: each call site goes through these two, so
+// the root decision above is made once, for every step, the durable ones included.
+function sshScript(host, script, options = {}) {
+  return boxScript(host, script, { ...options, ...prodScriptOptions(host, { api: API_PROD }) });
+}
+function sshCapture(host, script, options = {}) {
+  return boxCapture(host, script, { ...options, ...prodScriptOptions(host, { api: API_PROD }) });
 }
 
 /**
@@ -983,6 +1003,7 @@ function boxStep(host, sha, step, script, label) {
     script,
     label,
     retryFailed: RETRY_FAILED,
+    capture: sshCapture,
   });
 }
 

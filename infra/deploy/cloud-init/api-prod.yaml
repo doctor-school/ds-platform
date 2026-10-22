@@ -124,8 +124,9 @@ runcmd:
   - install -d -m 0755 -o root -g root /var/lib/ds-platform/release
   # #2984: ssh hardening, the end state of infra/deploy/bin/harden-ssh.sh. Root
   # login is off (the drop-in above) and root holds no key; the CI keys of deploy
-  # (forced command /usr/local/bin/ds-deploy-entrypoint, installed by every prod
-  # run beside ds-release) are added by the lead with harden-ssh.sh, never baked here.
+  # (forced command `sudo -n /usr/local/bin/ds-deploy-entrypoint`, no-user-rc; the
+  # entrypoint is installed by every prod run beside ds-release) are added by the
+  # lead with harden-ssh.sh, never baked here.
   - [
       "sed",
       "-E",

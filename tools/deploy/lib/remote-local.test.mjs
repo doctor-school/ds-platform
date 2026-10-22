@@ -13,6 +13,7 @@ import test from "node:test";
 import {
   LOCAL_EXECUTOR,
   boxSpawnArgs,
+  remoteBash,
   shipTree,
   shipTreeCommand,
   sshBaseArgs,
@@ -46,6 +47,38 @@ test("2985: sshScript runs locally under -euo pipefail, the semantics of a strea
   await sshScript(LOCAL_EXECUTOR, "true\n", { label: "ok" });
   await assert.rejects(sshScript(LOCAL_EXECUTOR, "false\necho never\n", { label: "step" }), /step on local exited 1/);
   await assert.rejects(sshScript(LOCAL_EXECUTOR, 'echo "$UNSET_VARIABLE_2985"\n', { label: "u" }), /exited 1/);
+});
+
+test("2987: asRoot hands the drained script whole to `sudo -n bash`; the plain form is unchanged", () => {
+  assert.equal(remoteBash(), 'script=$(cat); exec bash --norc -euo pipefail -c "$script"');
+  assert.equal(remoteBash({ asRoot: false }), remoteBash());
+  assert.equal(
+    remoteBash({ asRoot: true }),
+    'script=$(cat); exec sudo -n bash --norc -euo pipefail -c "$script"',
+  );
+});
+
+test("2987: an asRoot script and capture run through sudo with the script intact", { skip: SKIP }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ds-asroot-"));
+  const path = process.env.PATH;
+  try {
+    // A sudo stand-in: records its argv, drops `-n`, runs the rest.
+    writeFileSync(
+      join(dir, "sudo"),
+      `#!/usr/bin/env bash\nprintf '%s\\n' "$1" "$2" >>"${dir}/sudo.log"\n[[ $1 == -n ]] && shift\nexec "$@"\n`,
+      { mode: 0o755 },
+    );
+    process.env.PATH = `${dir}:${path}`;
+    assert.equal(await sshCapture(LOCAL_EXECUTOR, 'x="a b"; echo "$x"', { asRoot: true }), "a b");
+    await sshScript(LOCAL_EXECUTOR, "true\n", { label: "root", asRoot: true });
+    await assert.rejects(sshScript(LOCAL_EXECUTOR, "false\n", { label: "root", asRoot: true }), /root on local exited 1/);
+    assert.equal(readFileSync(join(dir, "sudo.log"), "utf8"), "-n\nbash\n".repeat(3));
+    await sshCapture(LOCAL_EXECUTOR, "true");
+    assert.equal(readFileSync(join(dir, "sudo.log"), "utf8"), "-n\nbash\n".repeat(3), "the plain form never calls sudo");
+  } finally {
+    process.env.PATH = path;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("2985: a local ship installs the given tree as the live tree", { skip: SKIP }, async () => {

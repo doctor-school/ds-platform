@@ -29,6 +29,7 @@ import {
   parseLocalFlags,
   rollbackTargetVerdict,
   planWalker,
+  prodScriptOptions,
   prodShipOptions,
   recordPreviousShaScript,
 } from "./prod.mjs";
@@ -220,6 +221,22 @@ test("2987: both prod boxes use the fixed tree whatever HOME the writer has; onl
   assert.ok(rootShip.startsWith("sudo -n bash -c "));
   assert.ok(rootShip.includes(`live="${PROD_LIVE_TREE}"`));
   assert.ok(!rootShip.includes("$HOME"));
+});
+
+test("2987: break-glass runs every ds-api-prod script as root; data-prod, stage and a --local run as they are", () => {
+  assert.deepEqual(prodScriptOptions(BREAKGLASS_API_PROD, { api: BREAKGLASS_API_PROD }), { asRoot: true });
+  assert.deepEqual(prodScriptOptions("ds-data-prod", { api: BREAKGLASS_API_PROD }), { asRoot: false });
+  assert.deepEqual(prodScriptOptions("ds-stage-1", { api: BREAKGLASS_API_PROD }), { asRoot: false });
+  const hosts = localProdHosts();
+  assert.deepEqual(prodScriptOptions(hosts.api, { api: hosts.api }), { asRoot: false }, "the unit is root already");
+  assert.deepEqual(prodScriptOptions(hosts.data, { api: hosts.api }), { asRoot: false });
+  // One transport: the raw primitives are reached only through the two wrappers, and
+  // the durable steps poll through the same wrapper.
+  assert.equal(SOURCE.match(/\bboxScript\(/g).length, 1);
+  assert.equal(SOURCE.match(/\bboxCapture\(/g).length, 1);
+  assert.match(SOURCE, /return boxScript\(host, script, \{ \.\.\.options, \.\.\.prodScriptOptions\(host, \{ api: API_PROD \}\) \}\);/);
+  assert.match(SOURCE, /return boxCapture\(host, script, \{ \.\.\.options, \.\.\.prodScriptOptions\(host, \{ api: API_PROD \}\) \}\);/);
+  assert.match(SOURCE, /retryFailed: RETRY_FAILED,\s*capture: sshCapture,\s*\}\);/);
 });
 
 test("3157: a --local run re-points both boxes before its first step, and every data-prod step goes through DATA_PROD", () => {

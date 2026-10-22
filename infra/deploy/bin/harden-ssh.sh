@@ -102,7 +102,8 @@ done
 [[ -n $breakglass_file ]] || usage "--breakglass-pubkey <file> is required"
 [[ -n $ROOT || $dry_run == 1 || $EUID -eq 0 ]] || usage "run as root (sudo)"
 if [[ $role == prod ]]; then
-  CI_KEY_OPTIONS="command=\"sudo -n $ENTRYPOINT\",$KEY_RESTRICTIONS"
+  # no-user-rc: sshd would run deploy's own ~/.ssh/rc as deploy before the sudo.
+  CI_KEY_OPTIONS="command=\"sudo -n $ENTRYPOINT\",$KEY_RESTRICTIONS,no-user-rc"
 else
   CI_KEY_OPTIONS="command=\"$ENTRYPOINT\",$KEY_RESTRICTIONS"
 fi
@@ -270,6 +271,10 @@ if [[ $role == prod ]]; then
   fi
   [[ $dry_run == 1 ]] || breakglass_ready ||
     fail "breakglass is not in place; deploy's sudo rights and keys were left as they are"
+  # The files above are not a working login: only a converge run from a breakglass
+  # session proves one, before the operator's own deploy session loses its key.
+  [[ $dry_run == 1 || ${SUDO_USER-} == breakglass ]] ||
+    fail "run --role prod from a breakglass session (sudo as breakglass); deploy's sudo rights and keys were left as they are"
   for f in "$SUDOERS_D"/*; do
     [[ -f $f && $f != "$DEPLOY_SUDOERS" && $f != "$BREAKGLASS_SUDOERS" && ${f##*/} != *.* ]] || continue
     grep -Eq '^[[:space:]]*deploy[[:space:]]' "$f" || continue

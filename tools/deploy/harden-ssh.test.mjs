@@ -148,7 +148,7 @@ const CI_PROD = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICIPRODKEYxxxxxxxxxxxxxxxxx
 const FORCED =
   'command="/usr/local/bin/ds-deploy-entrypoint",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding';
 const FORCED_PROD =
-  'command="sudo -n /usr/local/bin/ds-deploy-entrypoint",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding';
+  'command="sudo -n /usr/local/bin/ds-deploy-entrypoint",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-user-rc';
 const CLOUD_INIT_USERS = "# Created by cloud-init\n\n# User rules for deploy\ndeploy ALL=(ALL) NOPASSWD:ALL\n";
 const GROUPS = "root:x:0:\nsudo:x:27:deploy\ndocker:x:999:deploy\ndeploy:x:1000:\n";
 
@@ -236,7 +236,14 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
 
   const run = (args, env = {}) => {
     const r = spawnSync("bash", [SCRIPT, ...args], {
-      env: { ...process.env, PATH: `${stubs}${delimiter}${process.env.PATH}`, STUB_DIR: dir, HARDEN_ROOT: root, ...env },
+      env: {
+        ...process.env,
+        PATH: `${stubs}${delimiter}${process.env.PATH}`,
+        STUB_DIR: dir,
+        HARDEN_ROOT: root,
+        SUDO_USER: "breakglass",
+        ...env,
+      },
       encoding: "utf8",
     });
     return { status: r.status, out: r.stdout + r.stderr };
@@ -399,6 +406,22 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
     assert.match(again.out, /nothing to change/);
     assert.deepEqual(snapshot(), before);
     assert.doesNotMatch(calls(), /visudo|gpasswd|reload/);
+  });
+
+  it("2987: on prod, nothing of deploy's goes unless the run comes from a breakglass session", () => {
+    for (const sudoUser of ["deploy", ""]) {
+      const r = run(prodArgs(), { SUDO_USER: sudoUser });
+      assert.notEqual(r.status, 0, r.out);
+      assert.match(r.out, /from a breakglass session/);
+      assert.equal(read("home/deploy/.ssh/authorized_keys"), `${OPERATOR}\n${FORCED_PROD} ${CI_PROD}\n`);
+      assert.equal(read("etc/sudoers.d/90-cloud-init-users"), CLOUD_INIT_USERS);
+      assert.equal(read("etc/group"), GROUPS);
+    }
+    const dry = run(prodArgs("--dry-run"), { SUDO_USER: "deploy" });
+    assert.equal(dry.status, 0, dry.out);
+    const ok = run(prodArgs(), { SUDO_USER: "breakglass" });
+    assert.equal(ok.status, 0, ok.out);
+    assert.equal(read("home/deploy/.ssh/authorized_keys"), `${FORCED_PROD} ${CI_PROD}\n`);
   });
 
   it("2987: on prod, a run with no CI key still leaves no unrestricted deploy line", () => {

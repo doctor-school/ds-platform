@@ -20,7 +20,8 @@ import { standHttpCredentials } from "@ds/e2e/stand-http-credentials";
  *   E2E_PORTAL_URL=http://localhost:3001 \
  *   E2E_WEBINAR_SLUG=seed-005-upcoming E2E_WEBINAR_SLUG_ENDED=seed-005-ended \
  *   E2E_ENDED_WEBINAR_SLUG=seed-014-ended-month-ago \
- *   E2E_PREPARING_WEBINAR_SLUG=seed-005-ended \
+ *   E2E_PREPARING_WEBINAR_SLUG=seed-005-ended-preparing \
+ *   E2E_PREPARING_UNDATED_WEBINAR_SLUG=seed-005-ended \
  *   E2E_HYBRID_SLUG=seed-005-hybrid E2E_HYBRID_SOLDOUT_SLUG=seed-005-hybrid-sold-out \
  *   E2E_OFFLINE_SOLDOUT_SLUG=seed-005-offline-sold-out \
  *   E2E_SWEEP_SLUGS=seed-005-upcoming,seed-005-ended,seed-005-offline,seed-005-offline-sold-out,seed-005-hybrid,seed-005-hybrid-sold-out \

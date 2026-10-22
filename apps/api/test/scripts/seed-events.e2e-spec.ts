@@ -225,6 +225,38 @@ describe("scripts/seed-events (#1851)", () => {
     expect((await readSpeakers(slug)).length).toBeGreaterThan(0);
   }, 60_000);
 
+  it("014 EARS-7: the undated preparing fixture is an ended event with NO committed day and no published recording, distinct from the dated one", async () => {
+    const dated = SEED_EVENT_PAGE_SLUGS.E2E_PREPARING_WEBINAR_SLUG;
+    const undated = SEED_EVENT_PAGE_SLUGS.E2E_PREPARING_UNDATED_WEBINAR_SLUG;
+    expect(dated).toBe("seed-005-ended-preparing");
+    expect(undated).toBe("seed-005-ended");
+    expect(SEED_SPEAKER_SLUGS).toContain(dated);
+    // A re-run converges a previously dated row back to undated.
+    await seedEvents();
+    const [row] = await db
+      .select({
+        id: events.id,
+        state: events.state,
+        recordingExpectedBy: events.recordingExpectedBy,
+      })
+      .from(events)
+      .where(eq(events.slug, undated));
+    expect(row).toBeDefined();
+    expect(row!.state).toBe("ended");
+    expect(row!.recordingExpectedBy).toBeNull();
+    const published = await db
+      .select({ id: eventRecordings.id })
+      .from(eventRecordings)
+      .where(
+        and(
+          eq(eventRecordings.eventId, row!.id),
+          eq(eventRecordings.status, "published"),
+          isNull(eventRecordings.deletedAt),
+        ),
+      );
+    expect(published).toEqual([]);
+  }, 60_000);
+
   it("020 EARS-8/9: the wave-3 sweep shapes are registrable Academy events — offline and hybrid, with seats and sold out", async () => {
     const readShape = async (slug: string) => {
       const [row] = await db

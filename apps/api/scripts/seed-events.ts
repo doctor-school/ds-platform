@@ -128,7 +128,9 @@ export const SEED_EVENT_PAGE_SLUGS = Object.freeze({
   /** `ended` with a single published montage and speakers (014 EARS-4/21). */
   E2E_ENDED_WEBINAR_SLUG: "seed-014-ended-month-ago",
   /** `ended`, no published recording, `recording_expected_by` set (014 EARS-7). */
-  E2E_PREPARING_WEBINAR_SLUG: "seed-005-ended",
+  E2E_PREPARING_WEBINAR_SLUG: "seed-005-ended-preparing",
+  /** `ended`, no published recording and NO `recording_expected_by` (014 EARS-7). */
+  E2E_PREPARING_UNDATED_WEBINAR_SLUG: "seed-005-ended",
   /** Hybrid with seats left — the format tabs open on «очно» (020 EARS-8). */
   E2E_HYBRID_SLUG: "seed-005-hybrid",
   /** Hybrid with `seats_left = 0` — opens on «онлайн» and says why (020 EARS-9). */
@@ -450,10 +452,28 @@ function specs(now: number): SeedSpec[] {
         "Завершённый эфир — регистрация закрыта. Разбор коморбидных состояний при сахарном диабете 2 типа.",
       specialties: ["Эндокринология"],
       partnerRef: "Партнёр Фарма",
+      // 014 EARS-7: ended, nothing published and NO committed day — the
+      // UNDATED «запись готовится» plaque.
+      speakers: [{ expert: 2, role: "Спикер" }],
+    },
+    {
+      slug: "seed-005-ended-preparing",
+      state: "ended",
+      title: "Разбор: антикоагулянтная терапия при фибрилляции предсердий",
+      school: "Школа кардиологии",
+      startsAt: new Date(now - 3 * DAY),
+      durationMin: 90,
+      description:
+        "Завершённый эфир — регистрация закрыта. Выбор антикоагулянта у пожилых пациентов с фибрилляцией предсердий и хронической болезнью почек: оценка риска кровотечений, коррекция доз, переход между препаратами.",
+      specialties: ["Кардиология"],
+      partnerRef: "Партнёр Фарма",
       // 014 EARS-7 (#2996): the эфир ended, nothing is published yet, and the
       // operator has committed to a day — the DATED «запись готовится» plaque.
       recordingExpectedInDays: 5,
-      speakers: [{ expert: 2, role: "Спикер" }],
+      speakers: [
+        { expert: 1, role: "Ведущий" },
+        { expert: 3, role: "Спикер" },
+      ],
     },
     // ── wave-3 format × seats fixtures (#2996, 020 EARS-8/9/19) ─────────────
     // The four in-person shapes the event page's format block distinguishes:
@@ -676,9 +696,11 @@ export async function seedEvents(): Promise<void> {
       const { kindId, audience, participationFormat } =
         spec.classification ?? ACADEMY_FIXTURE;
       // 014 EARS-1 (#2996): a `date` column — the calendar day, never an instant.
+      // `null` (not `undefined`, which Drizzle skips) so a re-run clears a
+      // day the spec no longer sets.
       const recordingExpectedBy =
         spec.recordingExpectedInDays === undefined
-          ? undefined
+          ? null
           : new Date(now + spec.recordingExpectedInDays * DAY)
               .toISOString()
               .slice(0, 10);

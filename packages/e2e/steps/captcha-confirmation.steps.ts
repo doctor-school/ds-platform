@@ -11,6 +11,7 @@ import {
   fetchRecoveryCode,
   mailpitUrlFor,
   nativeRecoveryMail,
+  type AddressedMailCheckpoint,
 } from "../lib/mailpit.js";
 import { confirmOwnedPhone } from "../lib/owned-phone-confirmation.js";
 import {
@@ -29,6 +30,7 @@ import {
   smsSinkUrl,
   waitForSmsCode,
   type SinkContent,
+  type SmsCheckpoint,
 } from "../lib/sms-sink.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 
@@ -36,6 +38,7 @@ type Kind =
   "verification" | "email-otp" | "sms-otp" | "email-reset" | "sms-reset";
 interface Visitor extends OwnedCredentials {
   kind: Kind;
+  purpose: "confirmation" | "resend";
   context: BrowserContext;
   page: Page;
   phone: string;
@@ -44,13 +47,24 @@ interface Visitor extends OwnedCredentials {
   confirmationChecks?: number;
   resendChecks?: number;
   confirmation?: { status: number; body: boolean; tokenAbsent: boolean };
-  resent?: { status: number; fresh: boolean; exactCheck: boolean };
+  resent?: {
+    status: number;
+    acknowledgement: boolean;
+    fresh: boolean;
+    exactCheck: boolean;
+  };
 }
 const journeys = new WeakMap<Page, Visitor[]>();
 function visitors(page: Page) {
   const state = journeys.get(page);
   if (!state) throw new Error("S066 owned confirmation visitors absent");
   return state;
+}
+function selectedVisitors(page: Page, purpose: Visitor["purpose"]) {
+  return visitors(page).filter((visitor) => visitor.purpose === purpose);
+}
+function diagnostic(v: Visitor, path: string, phase: string) {
+  return `S066 ${v.purpose}/${v.kind} ${phase} ${path}`;
 }
 function reset(v: Visitor) {
   return v.kind.endsWith("reset");
@@ -64,6 +78,15 @@ function requestPath(v: Visitor) {
     : reset(v)
       ? "/v1/auth/password/reset"
       : "/v1/auth/login/otp/request";
+}
+function acknowledgement(v: Visitor, body: string) {
+  const status =
+    v.kind === "verification"
+      ? "resend_requested"
+      : reset(v)
+        ? "reset_requested"
+        : "otp_sent";
+  return body === JSON.stringify({ status });
 }
 function confirmationPath(v: Visitor) {
   return v.kind === "verification"
@@ -142,13 +165,6 @@ async function requestCode(v: Visitor, base: string, loginPath: string) {
   const sink = smsSinkUrl();
   const beforeSms =
     sms(v) && sink ? await captureSmsCheckpoint(sink, v.phone) : undefined;
-  if (v.kind === "verification") {
-    await open(
-      v.page,
-      `${base}/verify?email=${encodeURIComponent(v.email)}&returnTo=%2Faccount`,
-    );
-    return;
-  }
   await open(
     v.page,
     reset(v)
@@ -176,46 +192,71 @@ async function requestCode(v: Visitor, base: string, loginPath: string) {
     .getByTestId(reset(v) ? "reset-request-submit" : "otp-send")
     .click();
   const result = await pending;
-  expect(result.response.status(), `${v.kind} actual request accepted`).toBe(
-    200,
-  );
+  expect(
+    {
+      status: result.response.status(),
+      acknowledgement: acknowledgement(v, result.body),
+    },
+    diagnostic(v, requestPath(v), "initial actual response"),
+  ).toEqual({ status: 200, acknowledgement: true });
   await expect.poll(() => v.tokens.length).toBe(checks + 1);
   expect(
     result.response.request().headers()["x-smartcaptcha-token"] ===
       v.tokens.at(-1),
     "initial request carries its own emitted token",
   ).toBe(true);
-  if (sms(v)) {
-    if (!sink || !beforeSms) throw new Error("S066 requires SMS sink");
-    const pick = reset(v)
-      ? resetSmsCode
-      : (message: SinkContent) => {
-          if (
-            message.json?.contextInfo?.eventType !==
-            "session.otp.sms.challenged"
-          )
-            return null;
-          const args = message.json.args as
-            { oTP?: unknown; code?: unknown } | undefined;
-          const code = String(args?.oTP ?? args?.code ?? "");
-          return /^\d{6}$/.test(code) ? code : null;
-        };
-    v.code = await waitForSmsCode(
-      sink,
-      v.phone,
-      beforeSms,
-      pick,
-      reset(v) ? RESET_CODE_EVENT : "session.otp.sms.challenged",
-    );
-  } else
-    v.code = await fetchRecoveryCode(
-      nativeRecoveryMail(),
-      mailpit,
-      v.email,
-      mail,
-      reset(v) ? "reset" : "login",
-    );
+  v.code = await deliveredCode(v, base, mail, beforeSms, "initial");
   await expect(v.page.getByTestId(resendId(v))).toBeDisabled();
+}
+async function deliveredCode(
+  v: Visitor,
+  base: string,
+  mail: AddressedMailCheckpoint,
+  beforeSms: SmsCheckpoint | undefined,
+  phase: string,
+) {
+  const sink = smsSinkUrl();
+  const mailpit = process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(base);
+  try {
+    if (sms(v)) {
+      if (!sink || !beforeSms) throw new Error("S066 requires SMS sink");
+      const pick = reset(v)
+        ? resetSmsCode
+        : (message: SinkContent) => {
+            if (
+              message.json?.contextInfo?.eventType !==
+              "session.otp.sms.challenged"
+            )
+              return null;
+            const args = message.json.args as
+              { oTP?: unknown; code?: unknown } | undefined;
+            const code = String(args?.oTP ?? args?.code ?? "");
+            return /^\d{6}$/.test(code) ? code : null;
+          };
+      return await waitForSmsCode(
+        sink,
+        v.phone,
+        beforeSms,
+        pick,
+        reset(v) ? RESET_CODE_EVENT : "session.otp.sms.challenged",
+      );
+    } else
+      return await fetchRecoveryCode(
+        nativeRecoveryMail(),
+        mailpit,
+        v.email,
+        mail,
+        v.kind === "verification" ? "register" : reset(v) ? "reset" : "login",
+      );
+  } catch {
+    throw new Error(
+      diagnostic(
+        v,
+        requestPath(v),
+        `${phase}: no addressed delivery after accepted request`,
+      ),
+    );
+  }
 }
 
 Given(
@@ -227,82 +268,91 @@ Given(
       captchaTestTokenFromEnv();
     const state: Visitor[] = [];
     journeys.set(page, state);
-    for (const kind of [
-      "verification",
-      "email-otp",
-      "sms-otp",
-      "email-reset",
-      "sms-reset",
-    ] as const) {
-      const context = await browser.newContext({
-        locale: "ru-RU",
-        ...(httpCredentials ? { httpCredentials } : {}),
-      });
-      const v: Visitor = {
-        kind,
-        context,
-        page: await context.newPage(),
-        email: `captcha-confirm-3243-${randomUUID()}@example.test`,
-        password: `Owned-${randomUUID()}-aA1!`,
-        phone: freshConfirmablePhone(),
-        code: "",
-        tokens: [],
-      };
-      state.push(v);
-      await instrument(v);
-      const registered = await registerOwnedCredentials(
-        v.page,
-        world.hostBaseUrl,
-        v,
-        "/account",
-      );
-      expect(
-        registrationEvidence(
-          registered.response.request().postData() ?? "",
-          await registered.response.text(),
-          v,
-        ),
-      ).toEqual({
-        credentialsMatch: true,
-        consentMatches: true,
-        acknowledgementMatches: true,
-      });
-      v.code = registered.code;
-      expect(v.tokens.length, "registration emitted a check").toBe(1);
-      if (kind !== "verification") {
-        const pending = captureResponse(v.page, "/v1/auth/verify");
-        await inputSecret(
-          v.page.locator('input[autocomplete="one-time-code"]'),
-          v.code,
-        );
-        const accepted = await pending;
-        expect(accepted.response.status()).toBe(200);
-        expect(
-          verificationEvidence(
-            accepted.response.request().postData() ?? "",
-            accepted.body,
-            v,
-            v.code,
-          ),
-        ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
-        await v.page.waitForURL((url) => url.pathname === "/account");
-        await v.page.waitForLoadState("networkidle");
-        if (sms(v)) {
-          const sink = smsSinkUrl();
-          if (!sink) throw new Error("S066 SMS variant requires real SMS sink");
-          await confirmOwnedPhone(v.page, { phone: v.phone, sink });
+    for (const purpose of ["confirmation", "resend"] as const) {
+      for (const kind of [
+        "verification",
+        "email-otp",
+        "sms-otp",
+        "email-reset",
+        "sms-reset",
+      ] as const) {
+        const context = await browser.newContext({
+          locale: "ru-RU",
+          ...(httpCredentials ? { httpCredentials } : {}),
+        });
+        const v: Visitor = {
+          kind,
+          purpose,
+          context,
+          page: await context.newPage(),
+          email: `captcha-confirm-3243-${randomUUID()}@example.test`,
+          password: `Owned-${randomUUID()}-aA1!`,
+          phone: freshConfirmablePhone(),
+          code: "",
+          tokens: [],
+        };
+        state.push(v);
+        await instrument(v);
+        if (purpose === "resend") {
+          await v.page.clock.install();
+          const pause = await v.page.evaluate(() => Date.now() + 60_000);
+          await v.page.clock.pauseAt(new Date(pause));
         }
-        await logout(v);
-        await requestCode(v, world.hostBaseUrl, world.host.loginPath);
+        const registered = await registerOwnedCredentials(
+          v.page,
+          world.hostBaseUrl,
+          v,
+          "/account",
+        );
+        expect(
+          registrationEvidence(
+            registered.response.request().postData() ?? "",
+            await registered.response.text(),
+            v,
+          ),
+        ).toEqual({
+          credentialsMatch: true,
+          consentMatches: true,
+          acknowledgementMatches: true,
+        });
+        v.code = registered.code;
+        expect(v.tokens.length, "registration emitted a check").toBe(1);
+        if (kind !== "verification") {
+          const pending = captureResponse(v.page, "/v1/auth/verify");
+          await inputSecret(
+            v.page.locator('input[autocomplete="one-time-code"]'),
+            v.code,
+          );
+          const accepted = await pending;
+          expect(accepted.response.status()).toBe(200);
+          expect(
+            verificationEvidence(
+              accepted.response.request().postData() ?? "",
+              accepted.body,
+              v,
+              v.code,
+            ),
+          ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
+          await v.page.waitForURL((url) => url.pathname === "/account");
+          await v.page.waitForLoadState("networkidle");
+          if (sms(v)) {
+            const sink = smsSinkUrl();
+            if (!sink)
+              throw new Error("S066 SMS variant requires real SMS sink");
+            await confirmOwnedPhone(v.page, { phone: v.phone, sink });
+          }
+          await logout(v);
+          await requestCode(v, world.hostBaseUrl, world.host.loginPath);
+        }
+        v.confirmationChecks = v.tokens.length;
       }
-      v.confirmationChecks = v.tokens.length;
     }
   },
 );
 When(
   "the visitor submits that verification code or login OTP, or completes password reset",
   async ({ page, world }) => {
-    for (const v of visitors(page)) {
+    for (const v of selectedVisitors(page, "confirmation")) {
       const pending = captureResponse(v.page, confirmationPath(v));
       await inputSecret(
         v.page.locator('input[autocomplete="one-time-code"]'),
@@ -355,7 +405,7 @@ When(
 Then(
   "the portal sends the confirmation without requesting CAPTCHA",
   async ({ page }) => {
-    for (const v of visitors(page)) {
+    for (const v of selectedVisitors(page, "confirmation")) {
       expect(
         v.confirmation,
         `${v.kind} real success without CAPTCHA header`,
@@ -370,12 +420,7 @@ Then(
 When(
   "the visitor explicitly asks to resend a code",
   async ({ page, world }) => {
-    for (const v of visitors(page)) {
-      await logout(v);
-      await v.page.clock.install();
-      const pause = await v.page.evaluate(() => Date.now() + 60_000);
-      await v.page.clock.pauseAt(new Date(pause));
-      await requestCode(v, world.hostBaseUrl, world.host.loginPath);
+    for (const v of selectedVisitors(page, "resend")) {
       const before = [...v.tokens];
       v.resendChecks = before.length;
       // 003 EARS-17: only the browser countdown advances, never API/IdP time or counters.
@@ -390,6 +435,14 @@ When(
       expect(v.tokens.length, "countdown sends no challenge").toBe(
         before.length,
       );
+      const mail = await captureAddressedMailCheckpoint(
+        nativeRecoveryMail(),
+        process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+        v.email,
+      );
+      const sink = smsSinkUrl();
+      const beforeSms =
+        sms(v) && sink ? await captureSmsCheckpoint(sink, v.phone) : undefined;
       const pending = captureResponse(v.page, requestPath(v));
       await resend.click();
       const accepted = await pending;
@@ -399,6 +452,7 @@ When(
       ];
       v.resent = {
         status: accepted.response.status(),
+        acknowledgement: acknowledgement(v, accepted.body),
         fresh:
           !!token &&
           token === v.tokens.at(-1) &&
@@ -407,6 +461,20 @@ When(
             : token === captchaTestTokenFromEnv()),
         exactCheck: v.tokens.length === before.length + 1,
       };
+      expect(
+        v.resent,
+        diagnostic(
+          v,
+          requestPath(v),
+          "actual resend acknowledgement and token",
+        ),
+      ).toEqual({
+        status: 200,
+        acknowledgement: true,
+        fresh: true,
+        exactCheck: true,
+      });
+      await deliveredCode(v, world.hostBaseUrl, mail, beforeSms, "resend");
       // 003 EARS-17: dedicated resend journeys synchronize and assert cooldown reset;
       // S066 observes the accepted request before resuming this browser clock.
       await v.page.clock.resume();
@@ -416,11 +484,16 @@ When(
 Then(
   "the portal executes a new invisible check and uses a fresh token for that resend",
   async ({ page }) => {
-    for (const v of visitors(page)) {
+    for (const v of selectedVisitors(page, "resend")) {
       expect(
         v.resent,
         `${v.kind} real resend carries exactly one fresh frontend token`,
-      ).toEqual({ status: 200, fresh: true, exactCheck: true });
+      ).toEqual({
+        status: 200,
+        acknowledgement: true,
+        fresh: true,
+        exactCheck: true,
+      });
       expect(v.tokens.length).toBe(v.resendChecks! + 1);
     }
   },

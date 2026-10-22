@@ -233,7 +233,8 @@ it into a filter) and a missing `CI` (without it Playwright's `forbidOnly` is of
 then asserts the slot's `/v1/health` serves exactly that SHA before a scenario runs, and
 exits **2** on any of these refusals. It runs the storefront live-tier legs (below) like
 every other leg (#3191), except the ones `live-tiers.mjs` excludes with a printed reason
-(`live/academy/default`, `live/doctor/event-page`, `live/doctor/shell` — red on a slot,
+(`live/academy/default`, `live/academy/event-page`, `live/doctor/event-page`,
+`live/doctor/shell` — red on a slot,
 tracked in #3229) — `--no-live` is refused like the other narrowing flags — and a
 red live leg fails it. You do not normally run it by hand. For a
 target from `main` the `stage.yml` suite job runs it in Actions and posts the
@@ -341,7 +342,7 @@ them — or a live one that grew a `webServer` — fails `pnpm test:tools`.
 | ---------------------------- | ----------------------------------------------------------------------------------- | ----------------------- |
 | `live/academy/default`       | `portal/playwright.config.ts` (`e2e` + `bdd`)                                       | no — red on slot, #3229 |
 | `live/academy/account-live`  | `portal/playwright.account-live.config.ts`                                          | yes                     |
-| `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)      | yes                     |
+| `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)      | no — red on slot, #3229 |
 | `live/doctor/register-live`  | `doctor/playwright.register-live.config.ts`                                         | yes                     |
 | `live/doctor/congress`       | `doctor/playwright.congress.config.ts`                                              | yes                     |
 | `live/doctor/event-page`     | `doctor/playwright.event-page.config.ts`                                            | no — red on slot, #3229 |
@@ -358,7 +359,7 @@ the axe legs (`walks` selects none); `--no-live` drops them. The release check
 (`--expect-sha`) runs every leg the table marks «yes» (#3191). A leg marked «no» carries
 `releaseCheck: { excluded: "<reason>" }` in `live-tiers.mjs`: the release check prints
 `live: <leg> not in the release check — <reason>` and does not run it, while a plain slot
-run still does. The three excluded legs are red on a slot; #3229 owns bringing them back.
+run still does. The four excluded legs are red on a slot; #3229 owns bringing them back.
 
 **Derived for the slot (#3191).** The release check runs in Actions (`stage.yml` job
 `suite`, «The same check in Actions» above), which never reads the box: its env is the

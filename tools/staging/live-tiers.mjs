@@ -88,7 +88,7 @@ const CONGRESS_SIGNUP = [
  * (`e2e-stage.mjs --expect-sha`), which prints «live: <tier> not in the release
  * check — <reason>» instead of running it; a plain slot run still runs it. The
  * reason is mandatory (`releaseCheckExclusion` refuses an entry without one).
- * These three are red on a slot (#3191 proof run); #3229 owns their triage.
+ * These four are red on a slot (#3191 proof runs); #3229 owns their triage.
  */
 const RED_ON_SLOT_3229 = "red on slot — #3229";
 
@@ -267,6 +267,7 @@ export const LIVE_TIERS = Object.freeze([
     host: "academy",
     app: "apps/portal",
     pkg: "@ds/portal",
+    releaseCheck: { excluded: RED_ON_SLOT_3229 },
     config: "playwright.event-page.config.ts",
     rootDir: "e2e",
     gated: [],

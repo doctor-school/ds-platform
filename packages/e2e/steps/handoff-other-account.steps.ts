@@ -414,7 +414,7 @@ Then(
   },
 );
 
-After("@handoff-other-account", async ({ page }) => {
+After("@handoff-other-account", async ({ page, world }) => {
   const state = states.get(page);
   if (!state) return;
   try {
@@ -427,6 +427,10 @@ After("@handoff-other-account", async ({ page }) => {
         )
       )
         continue;
+      // #3172: a page left on the sign-in host's form (a failed step) would
+      // send the relative cleanup to the host; the session is the storefront's.
+      if (new URL(owned.url()).origin !== new URL(world.hostBaseUrl).origin)
+        await owned.goto(world.hostBaseUrl, { waitUntil: "load" });
       const result = await owned.evaluate(async () => {
         const logout = await fetch("/v1/auth/logout", {
           method: "POST",

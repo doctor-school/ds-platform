@@ -40,13 +40,15 @@ async function expectReplacement(
 ) {
   // #3172 — the storefront's `/verify` is an entry into the registration door
   // of the sign-in host: the replacement happens server-side (a `303`), so the
-  // page settles on the host's `/register` carrying only the IdP's auth
-  // request; the return target rides the transaction, never the form URL.
+  // page settles on the host's form carrying only the IdP's auth request — the
+  // IdP's arrival route, where the host opens the door the entry chose
+  // (`apps/login/lib/sign-in-entry.ts` `doorFor`: `verify` → registration).
+  // The return target rides the transaction, never the form URL.
   await expect(page.getByTestId("registration-form")).toBeVisible();
   const url = new URL(page.url());
   expect(isSignInHostForm(url)).toBe(true);
   expect(url.origin).not.toBe(new URL(base).origin);
-  expect(url.pathname).toBe("/register");
+  expect(url.pathname).not.toBe("/verify");
   expect([...url.searchParams.keys()]).toEqual([AUTH_REQUEST_PARAM]);
   const entry = entries.get(page);
   expect(entry?.origin, "the arrival entered through the storefront").toBe(
@@ -63,7 +65,7 @@ async function expectReplacement(
   await expect.poll(() => page.url()).toBe("about:blank");
   await page.goForward();
   await expect(page.getByTestId("registration-form")).toBeVisible();
-  expect(new URL(page.url()).pathname).toBe("/register");
+  expect(page.url()).toBe(url.toString());
   await expectNoVerificationRender(page);
 }
 
@@ -133,7 +135,7 @@ When(
   async ({ page, world }) => {
     const state = arrival(page);
     await arrive(state.page, new URL("/verify", world.hostBaseUrl).toString());
-    await state.page.waitForURL((url) => url.pathname === "/register");
+    await state.page.waitForURL((url) => isSignInHostForm(url));
     await state.page.waitForLoadState("networkidle");
   },
 );
@@ -174,7 +176,7 @@ When(
     const target = new URL("/verify", world.hostBaseUrl);
     target.searchParams.set("returnTo", RETURN_TO);
     await arrive(state.page, target.toString());
-    await state.page.waitForURL((url) => url.pathname === "/register");
+    await state.page.waitForURL((url) => isSignInHostForm(url));
     await state.page.waitForLoadState("networkidle");
   },
 );

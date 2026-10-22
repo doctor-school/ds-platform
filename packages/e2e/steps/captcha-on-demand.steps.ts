@@ -263,7 +263,15 @@ When(
         false,
       );
       await expect(owned.getByTestId(resend)).toBeVisible();
-      await owned.clock.fastForward(61_000);
+      // Each interval decrements React state once; fastForward deliberately
+      // coalesces intervals, so drive every synthetic second instead.
+      for (let second = 0; second < 61; second++) {
+        if (await owned.getByTestId(resend).isEnabled()) break;
+        await owned.clock.runFor(1000);
+        await owned.evaluate(
+          () => new Promise<void>((resolve) => queueMicrotask(resolve)),
+        );
+      }
       await expect(owned.getByTestId(resend)).toBeEnabled();
       await protectedSend(
         owned,

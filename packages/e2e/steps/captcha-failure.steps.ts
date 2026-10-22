@@ -306,6 +306,7 @@ Then(
     await owned.getByTestId("reset-request-submit").click();
     await calls(owned, 2);
     await expect(owned.getByTestId("reset-error")).toHaveText(unavailable);
+    await field.focus();
     await inputSecret(field, "invalid-address");
     await field.blur();
     await expect(field).toHaveAttribute("aria-invalid", "true");

@@ -6,6 +6,12 @@ import {
   inputSecret,
   registerOwnedCredentials,
 } from "../lib/owned-registration.js";
+import {
+  captureAddressedMailCheckpoint,
+  fetchRecoveryCode,
+  mailpitUrlFor,
+  nativeRecoveryMail,
+} from "../lib/mailpit.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import {
   assertStaffProfileFixtureScope,
@@ -20,6 +26,7 @@ interface Owner {
   email: string;
   password: string;
   sub: string;
+  initialName?: string | null;
 }
 interface StaffProfile {
   owners: Owner[];
@@ -48,30 +55,84 @@ async function logout(owner: Owner) {
     ),
   ).toBe(false);
 }
-async function login(owner: Owner, base: string, roles: StaffProfileRoles) {
+async function login(
+  owner: Owner,
+  base: string,
+  roles: StaffProfileRoles,
+  method: "password" | "email-code" = "password",
+) {
+  const previousCookies = (await owner.context.cookies())
+    .filter((cookie) => cookie.name === "__Host-ds_session")
+    .map((cookie) => cookie.value);
+  if (method === "email-code") expect(previousCookies.length).toBe(1);
   await owner.page.goto(`${base}/login?returnTo=%2Faccount`, {
     waitUntil: "load",
   });
   await owner.page.waitForLoadState("networkidle");
-  await inputSecret(
-    owner.page.locator('input[autocomplete="username"]'),
-    owner.email,
-  );
-  await inputSecret(
-    owner.page.locator('input[autocomplete="current-password"]'),
-    owner.password,
-  );
-  const accepted = captureResponse(owner.page, "/v1/auth/login");
-  await owner.page.getByTestId("password-login-submit").click();
-  const response = await accepted;
+  let response;
+  if (method === "password") {
+    await inputSecret(
+      owner.page.locator('input[autocomplete="username"]'),
+      owner.email,
+    );
+    await inputSecret(
+      owner.page.locator('input[autocomplete="current-password"]'),
+      owner.password,
+    );
+    const accepted = captureResponse(owner.page, "/v1/auth/login");
+    await owner.page.getByTestId("password-login-submit").click();
+    response = await accepted;
+  } else {
+    await owner.page.getByTestId("login-method-otp").click();
+    await owner.page.getByTestId("otp-channel-email").click();
+    await inputSecret(owner.page.getByTestId("otp-identifier"), owner.email);
+    const mail = nativeRecoveryMail();
+    const mailbox = process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(base);
+    const before = await captureAddressedMailCheckpoint(
+      mail,
+      mailbox,
+      owner.email,
+    );
+    const requested = captureResponse(owner.page, "/v1/auth/login/otp/request");
+    await owner.page.getByTestId("otp-send").click();
+    const sent = await requested;
+    expect(sent.response.status()).toBe(200);
+    expect(sent.body === '{"status":"otp_sent"}').toBe(true);
+    const code = await fetchRecoveryCode(
+      mail,
+      mailbox,
+      owner.email,
+      before,
+      "login",
+    );
+    const accepted = captureResponse(owner.page, "/v1/auth/login/otp");
+    await inputSecret(
+      owner.page.locator('input[autocomplete="one-time-code"]'),
+      code,
+    );
+    response = await accepted;
+    const command = response.response.request().postDataJSON();
+    expect(
+      command.identifier === owner.email &&
+        command.code === code &&
+        command.channel === "email",
+    ).toBe(true);
+  }
   expect(
     response.response.status(),
-    "owned role principal password accepted",
+    "owned role principal sign-in accepted",
   ).toBe(200);
-  await assertSecureSession(owner.page, response.response, base);
+  expect(response.body === '{"status":"authenticated"}').toBe(true);
+  await assertSecureSession(
+    owner.page,
+    response.response,
+    base,
+    previousCookies,
+  );
   await owner.page.waitForURL((url) => url.pathname === "/account");
+  const registrarOnly = roles.length === 1 && roles[0] === "event-registrar";
   const claims = await owner.page.evaluate(
-    async ({ sub, roles }) => {
+    async ({ sub, roles, registrarOnly }) => {
       const response = await fetch("/v1/auth/session", {
         credentials: "include",
       });
@@ -83,13 +144,34 @@ async function login(owner: Owner, base: string, roles: StaffProfileRoles) {
           Array.isArray(body.roles) &&
           JSON.stringify([...body.roles].sort()) ===
             JSON.stringify([...roles].sort()),
+        claimsAbsent:
+          !Object.hasOwn(body, "sub") &&
+          !Object.hasOwn(body, "roles") &&
+          !Object.hasOwn(body, "mfa"),
+        expectedRefusal: registrarOnly && body.statusCode === 403,
       };
     },
-    { sub: owner.sub, roles },
+    { sub: owner.sub, roles, registrarOnly },
   );
-  expect(claims).toEqual({ status: 200, sameSubject: true, exactRoles: true });
+  expect(claims).toEqual(
+    registrarOnly
+      ? {
+          status: 403,
+          sameSubject: false,
+          exactRoles: false,
+          claimsAbsent: true,
+          expectedRefusal: true,
+        }
+      : {
+          status: 200,
+          sameSubject: true,
+          exactRoles: true,
+          claimsAbsent: false,
+          expectedRefusal: false,
+        },
+  );
 }
-async function ownProfile(owner: Owner, name?: string) {
+async function ownProfile(owner: Owner, name?: string | null) {
   const result = await owner.page.evaluate(
     async ({ email, name }) => {
       const response = await fetch("/v1/me/profile", {
@@ -177,6 +259,16 @@ Given(
       );
       expect(session.roles).toEqual(["doctor_guest"]);
       owner.sub = session.sub as string;
+      owner.initialName = await owned.evaluate(async () => {
+        const response = await fetch("/v1/me/profile", {
+          credentials: "include",
+        });
+        const body = await response.json();
+        return body.displayName as string | null;
+      });
+      expect(
+        owner.initialName === null || typeof owner.initialName === "string",
+      ).toBe(true);
       await ownProfile(owner);
       await logout(owner);
     }
@@ -276,18 +368,40 @@ Then(
     expect(refused).toEqual({ profile: 403, name: 403, write: 403 });
     await expect(owner.page.getByTestId("profile-email")).toHaveCount(0);
     await expect(owner.page.getByTestId("profile-name-edit")).toHaveCount(0);
-    await logout(owner);
+    expect(
+      await owner.page.evaluate(
+        async () =>
+          (
+            await fetch("/v1/auth/logout", {
+              method: "POST",
+              credentials: "include",
+            })
+          ).status,
+      ),
+    ).toBe(403);
     await setOwnedStaffProfileRoles(
       owner.email,
       owner.sub,
       ["event-registrar"],
       ["event-registrar", "doctor_guest"],
     );
-    await login(owner, current.base, ["event-registrar", "doctor_guest"]);
-    await ownProfile(owner);
+    await login(
+      owner,
+      current.base,
+      ["event-registrar", "doctor_guest"],
+      "email-code",
+    );
+    await ownProfile(owner, owner.initialName);
     await expect(owner.page.getByTestId("profile-name-edit")).toBeVisible();
     await expect(owner.page.getByTestId("logout")).toBeEnabled();
-    await logout(owner);
+    const out = captureResponse(owner.page, "/v1/auth/logout");
+    await owner.page.getByTestId("logout").click();
+    expect((await out).response.status()).toBe(200);
+    expect(
+      (await owner.context.cookies()).some(
+        (cookie) => cookie.name === "__Host-ds_session",
+      ),
+    ).toBe(false);
   },
 );
 After("@staff-own-profile", async ({ page }) => {
@@ -313,12 +427,10 @@ After("@staff-own-profile", async ({ page }) => {
   if (cleanupFailed) {
     if (test.info().status === test.info().expectedStatus)
       throw new Error("Owned staff-profile logout failed during cleanup");
-    test
-      .info()
-      .annotations.push({
-        type: "cleanup-failed",
-        description:
-          "Owned staff-profile logout failed; original scenario failure retained; lead must inspect scoped cleanup.",
-      });
+    test.info().annotations.push({
+      type: "cleanup-failed",
+      description:
+        "Owned staff-profile logout failed; original scenario failure retained; lead must inspect scoped cleanup.",
+    });
   }
 });

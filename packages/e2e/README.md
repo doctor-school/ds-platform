@@ -1910,8 +1910,11 @@ It never creates role definitions, policies or grants. Every management request
 is logged without credentials or identity bytes. A fresh real password sign-in
 must carry exactly `platform_admin`, render the owner's profile, persist an
 inline name edit through reload, hide raw claims and sign out through the UI.
-An `event-registrar`-only session receives profile/name read/write 403; after
-logout and adding `doctor_guest` to that same owned grant, a fresh session admits
-its own profile. Native staff marker/mirror tests remain complementary. This is
+An `event-registrar`-only session receives session/profile/name read/write and
+logout 403 under the existing baseline-role allowlist. Adding `doctor_guest` to
+that same owned grant precedes an actual addressed email-code sign-in in the same
+context; the existing OTP replacement path revokes the prior forbidden session
+and mints a distinct cookie. The new exact-role session admits its unchanged own
+profile and signs out through the UI. Native staff marker/mirror tests remain complementary. This is
 retained Academy proof, not shared-sign-in-host or production acceptance; there
 is no product/render change or owner Stage-B slot.

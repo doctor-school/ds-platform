@@ -1696,11 +1696,10 @@ describe("golden live env (#3191) — derived from the dataset every slot is clo
     );
   });
 
-  it("keeps exactly the four slot-red legs out of the release check, each with a reason citing #3229", () => {
+  it("keeps exactly the three slot-red legs out of the release check, each with a reason citing #3229", () => {
     const excluded = LIVE_TIERS.filter((t) => t.releaseCheck);
     assert.deepEqual(excluded.map((t) => t.name).sort(), [
       "live/academy/default",
-      "live/academy/event-page",
       "live/doctor/event-page",
       "live/doctor/shell",
     ]);

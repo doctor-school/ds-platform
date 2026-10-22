@@ -11,8 +11,7 @@
 //
 // The only generalization is parameterization, never behaviour: `shipTreeCommand`
 // and `shipTree` take the live directory and the preserved-file list as options
-// whose DEFAULTS are production's exact values, so the default call renders the
-// byte-identical remote script it rendered before the move.
+// whose DEFAULTS are production's values (the fixed live tree PROD_LIVE_TREE, #2987).
 
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -184,6 +183,12 @@ const REMOTE_BASH =
 // (`local` is not an ssh destination this repository uses; `DS_STAGE_SSH` names one.)
 export const LOCAL_EXECUTOR = "local";
 
+// #2987: production's live tree on both prod boxes — a fixed path, never `~` or
+// `$HOME`: the root release unit (HOME=/root) and the break-glass operator
+// `breakglass` (its own home) address the tree deploy's runs always used, with
+// `compose/api-prod/.env` carried forward inside it.
+export const PROD_LIVE_TREE = "/home/deploy/ds-platform"; // no-hardcoded-path-ok: a fixed path on the prod boxes, not on this machine
+
 /** `[command, argv]` that hand `remoteCommand` to the box's shell — over ssh, or locally. */
 export function boxSpawnArgs(host, remoteCommand, extraOptions = []) {
   if (host === LOCAL_EXECUTOR) return ["bash", ["-c", remoteCommand]];
@@ -307,17 +312,23 @@ export function sshCapture(host, script, options = {}) {
 // Streams are piped in-process (Windows-safe - no shell pipe / redirection).
 //
 // `liveDir` and `preserved` are parameters whose DEFAULTS are production's own
-// values (#2194): the default call renders the byte-identical script it
-// rendered before this module existed, while a staging slot ships into
-// `$HOME/ds-platform.slots/<slot>` and preserves nothing - its compose
-// interpolation comes from `/etc/ds-platform/*.env`, never from a file inside
-// the tree (tech spec 2026-09-08 staging contour, SS3 "Host runtime").
+// values (#2194): production ships into the fixed PROD_LIVE_TREE, while a staging
+// slot ships into `$HOME/ds-platform.slots/<slot>` and preserves nothing - its
+// compose interpolation comes from `/etc/ds-platform/*.env`, never from a file
+// inside the tree (tech spec 2026-09-08 staging contour, SS3 "Host runtime").
 //
 // `preserved` entries are repo-relative paths carried forward from the previous
 // tree; an empty list renders no preserve section at all.
+//
+// `asRoot` (#2987, ds-api-prod) runs the whole script under `sudo -n bash -c`: the
+// tree there is written by the root release unit or by the break-glass operator
+// `breakglass`, neither of which owns deploy's home. The staging directory of an
+// absolute `liveDir` is its sibling, so the swap is a rename on one filesystem
+// whatever `$HOME` the writer has.
 export function shipTreeCommand({
-  liveDir = "$HOME/ds-platform",
+  liveDir = PROD_LIVE_TREE,
   preserved = ["infra/deploy/compose/api-prod/.env"],
+  asRoot = false,
 } = {}) {
   const varName = (i) => (i === 0 ? "preserved_rel" : `preserved_rel_${i}`);
   const preservedDecls = preserved
@@ -340,14 +351,17 @@ export function shipTreeCommand({
     })
     .join("");
   // The live tree of a slot sits one level below $HOME; its parent must exist
-  // before the swap `mv`. Production ships straight into $HOME, so the default
-  // call emits nothing here and keeps the script byte-identical.
-  const ensureParent = liveDir.replace(/^\$HOME\//, "").includes("/")
-    ? 'mkdir -p "$(dirname "$live")"\n'
-    : "";
-  return `set -eu
+  // before the swap `mv`. Production's fixed tree sits in deploy's existing home,
+  // so it emits nothing here.
+  const homeRelative = liveDir.startsWith("$HOME/");
+  const ensureParent =
+    homeRelative && liveDir.slice("$HOME/".length).includes("/")
+      ? 'mkdir -p "$(dirname "$live")"\n'
+      : "";
+  const workParent = homeRelative ? "$HOME" : liveDir.slice(0, liveDir.lastIndexOf("/"));
+  const script = `set -eu
 live="${liveDir}"
-work=$(mktemp -d "$HOME/ds-platform.ship.XXXXXX")
+work=$(mktemp -d "${workParent}/ds-platform.ship.XXXXXX")
 stage="$work/stage"
 previous="$work/previous"
 ${preservedDecls}swapping=0
@@ -379,6 +393,11 @@ mv "$stage" "$live"
 swapping=0
 rm -rf "$work"
 trap - EXIT HUP INT TERM`;
+  return asRoot ? `sudo -n bash -c ${shellQuote(script)}` : script;
+}
+
+function shellQuote(s) {
+  return `'${s.replaceAll("'", `'\\''`)}'`;
 }
 
 /**
@@ -400,7 +419,7 @@ trap - EXIT HUP INT TERM`;
 export async function shipTree(
   sha,
   host,
-  { liveDir, preserved, tmpPrefix = "ds-deploy", sourceDir } = {},
+  { liveDir, preserved, asRoot, tmpPrefix = "ds-deploy", sourceDir } = {},
 ) {
   const tmp = join(tmpdir(), `${tmpPrefix}-${sha.slice(0, 12)}.tar.gz`);
   if (host === LOCAL_EXECUTOR && !sourceDir) {
@@ -420,7 +439,7 @@ export async function shipTree(
   });
   try {
     await new Promise((resolve, reject) => {
-      const child = spawn(...boxSpawnArgs(host, shipTreeCommand({ liveDir, preserved })), {
+      const child = spawn(...boxSpawnArgs(host, shipTreeCommand({ liveDir, preserved, asRoot })), {
         stdio: ["pipe", "inherit", "inherit"],
       });
       child.on("error", reject);
@@ -487,7 +506,7 @@ export function releaseUnitName(env, sha, step) {
  * `hotfix/*`); on ds-stage-1 only the `main` converge of a SHA contained in `main`
  * does (#3125, `tools/staging/slot.mjs`).
  */
-export function releaseInstallScript(liveDir = "$HOME/ds-platform", { sha } = {}) {
+export function releaseInstallScript(liveDir = PROD_LIVE_TREE, { sha } = {}) {
   if (sha !== undefined) assertRelease("prod", sha);
   return [
     ...installDirLines(BOX_ENTRYPOINTS.map(({ dest }) => dest)),

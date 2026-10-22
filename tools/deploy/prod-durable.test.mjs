@@ -53,7 +53,7 @@ test("2982: data-prod up, the pre-migrate backup, the pull, migrate+up and the p
 });
 
 test("2982: the entrypoint is installed after the ship, the release opened, and closed only after the smoke", () => {
-  const install = deployBody.indexOf("releaseInstallScript(undefined, { sha })");
+  const install = deployBody.indexOf("releaseInstallScript(PROD_LIVE_TREE, { sha })");
   const opened = deployBody.indexOf("openReleaseSha = sha;");
   const firstStep = deployBody.indexOf("boxStep(");
   const shipped = deployBody.indexOf("shipTree(sha, DATA_PROD)");

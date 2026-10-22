@@ -670,8 +670,20 @@ validity/expiry on all five hosts. Exit non-zero on any failure. Hostnames defau
 vhosts and are env-overridable (`PROD_API_HOST` / `PROD_PORTAL_HOST` /
 `PROD_ADMIN_HOST` / `PROD_DOCTOR_HOST` / `PROD_ID_HOST`) for a staging clone.
 
-SSH host aliases (`ds-api-prod`, `ds-data-prod` via ProxyJump) resolve from
-`~/.ssh/config`; overridable via `DS_API_PROD_SSH` / `DS_DATA_PROD_SSH`.
+SSH host aliases resolve from `~/.ssh/config`; overridable via `DS_API_PROD_SSH` /
+`DS_DATA_PROD_SSH`. The break-glass run connects to ds-api-prod as
+`breakglass@ds-api-prod` (`BREAKGLASS_API_PROD`): on ds-api-prod `deploy` is the CI user
+with a forced command and no shell, so the operator's offline `breakglass` key is the
+only interactive login there. The alias names the address and that key; the `ds-data-prod`
+alias jumps through it (`ProxyJump breakglass@ds-api-prod`) and logs in to data-prod as
+`deploy`, as the box-local run's VPC hop does.
+
+Both prod boxes keep the live tree at the fixed `/home/deploy/ds-platform`
+(`PROD_LIVE_TREE`), never a `~`-relative path: the box-local run is root (HOME=/root)
+and the break-glass run is `breakglass`, and both address the tree deploy's runs always
+used, with `compose/api-prod/.env` carried forward inside it. On ds-api-prod the ship
+runs as root (`sudo -n bash -c`, `asRoot`), so its files are root-owned; on data-prod it
+runs as `deploy`.
 
 ## Release digest → Mattermost (`release-notes.mjs`, #868 / #968)
 

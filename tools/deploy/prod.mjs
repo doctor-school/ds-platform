@@ -158,6 +158,7 @@ import {
   DATA_PROD_HOP_KNOWN_HOSTS,
   LOCAL_EXECUTOR,
   PROD_HEALTH_URL,
+  PROD_LIVE_TREE,
   RELEASE_DRIVER_BIN,
   STALL_BUDGET_BUILD_MS,
   BOX_ENTRYPOINTS,
@@ -193,14 +194,17 @@ export {
 // --- config (env-overridable; SSH aliases live in ~/.ssh/config) ----------
 
 // `let`: a `--local` run (#3157) re-points both before its first step (`useLocalHosts`).
-let API_PROD = process.env.DS_API_PROD_SSH || "ds-api-prod";
+// #2987: the operator path is break-glass only, and on ds-api-prod deploy is the CI
+// user (forced command, no shell): the operator connects as `breakglass`.
+export const BREAKGLASS_API_PROD = "breakglass@ds-api-prod";
+let API_PROD = process.env.DS_API_PROD_SSH || BREAKGLASS_API_PROD;
 let DATA_PROD = process.env.DS_DATA_PROD_SSH || "ds-data-prod";
 // #3054: the entrypoint a run that ships no tree (`--rollback`) installs on the
 // boxes, read from the operator checkout's HEAD commit (with ds-deploy-entrypoint,
 // #2984: BOX_ENTRYPOINTS).
 const DS_RELEASE_PATH = "infra/deploy/bin/ds-release";
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
-const REMOTE_TREE = "~/ds-platform";
+const REMOTE_TREE = PROD_LIVE_TREE;
 const VPC_IP = process.env.DS_DATA_PROD_VPC_IP || "192.168.0.10";
 const IMAGE_RETENTION = 3;
 // #3157: the tree a `--local` run reads its target files from and ships — the codeload
@@ -376,7 +380,21 @@ function targetFile(sha, path) {
 
 /** The ship: the committed SHA (`git archive`), or on the box the tree it runs from. */
 function shipTree(sha, host) {
-  return shipCommittedTree(sha, host, LOCAL_TREE ? { sourceDir: LOCAL_TREE } : undefined);
+  return shipCommittedTree(sha, host, prodShipOptions(host, { api: API_PROD, localTree: LOCAL_TREE }));
+}
+
+/**
+ * #2987: the ship options of a prod box. Both boxes ship into PROD_LIVE_TREE; on
+ * ds-api-prod the writer is the root release unit or `breakglass`, never the tree's
+ * owner deploy, so that ship runs as root. data-prod is reached as deploy (the VPC hop,
+ * or the operator's ProxyJump) and ships as deploy.
+ */
+export function prodShipOptions(host, { api, localTree = null }) {
+  return {
+    liveDir: PROD_LIVE_TREE,
+    asRoot: host === api,
+    ...(localTree ? { sourceDir: localTree } : {}),
+  };
 }
 
 /**
@@ -1816,7 +1834,7 @@ async function deploy(hotfixRef = null, local = null) {
   walk.phase("install");
   for (const host of [API_PROD, DATA_PROD]) {
     // #2987: the install also keeps this tree as the box-side rollback's tooling tree.
-    await sshScript(host, releaseInstallScript(undefined, { sha }), { label: "install ds-release" });
+    await sshScript(host, releaseInstallScript(PROD_LIVE_TREE, { sha }), { label: "install ds-release" });
   }
   ok("ds-release + ds-deploy-entrypoint installed on both boxes");
   openReleaseSha = sha;

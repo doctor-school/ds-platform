@@ -707,7 +707,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the first success callback resumes that pending action exactly once with the fresh token
     And duplicate callbacks or a previously used token cannot replay the action
 
-  @EARS-17 @happy
+  @EARS-17 @happy @implemented @captcha-threshold
   Scenario: Password login challenges only after the backend threshold
     Given a visitor has entered an identifier and password
     When the visitor submits password login before the failed-login threshold

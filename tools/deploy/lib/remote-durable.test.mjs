@@ -24,6 +24,7 @@ import {
   releaseStepVerdict,
   releaseUnitName,
   runDurableStep,
+  treeSymlinkCheckLines,
 } from "./remote.mjs";
 
 const SHA = "0123456789abcdef0123456789abcdef01234567";
@@ -506,6 +507,7 @@ test("2987: a forward install records its tree — a kept copy and its SHA — f
     `if ! sudo test -d "${V}"; then`,
     `  sudo rm -rf -- "${V}.new"`,
     `  sudo cp -R -- "$HOME/ds-platform/." "${V}.new"`,
+    ...treeSymlinkCheckLines(`${V}.new`).map((l) => `  ${l}`),
     `  sudo chown -R root:root -- "${V}.new"`,
     `  sudo chmod -R go-w -- "${V}.new"`,
     `  sudo mv -T -- "${V}.new" "${V}"`,
@@ -522,6 +524,51 @@ test("2987: a forward install records its tree — a kept copy and its SHA — f
     () => releaseInstallScript("$HOME/ds-platform", { sha: "abc" }),
     /sha/,
   );
+});
+
+// The check runs for real under bash, `sudo` stubbed to run its argv as the caller.
+const SYMLINK_SKIP =
+  spawnSync("bash", ["-c", "command -v find && readlink -f / && d=$(mktemp -d) && ln -s / \"$d/l\" && test -L \"$d/l\"; rc=$?; rm -rf \"$d\"; exit $rc"], {
+    env: { ...process.env, MSYS: "winsymlinks:nativestrict" },
+    stdio: "ignore",
+  }).status !== 0 && "needs bash, find, readlink -f and real symlinks";
+
+test("2987: a copied tree with a symlink leaving it is refused and removed before chown", { skip: SYMLINK_SKIP }, () => {
+  const run = (setup) => {
+    const dir = mkdtempSync(join(tmpdir(), "ds-tree-links-"));
+    try {
+      const stubs = join(dir, "stubs");
+      const copy = join(dir, "trees", "v.new");
+      spawnSync("bash", ["-c", `mkdir -p "$1" "$2/apps/docs/content/skills" "$2/.agents" && printf x > "$3/outside"`, "_", stubs, copy, dir]);
+      writeFileSync(join(stubs, "sudo"), '#!/usr/bin/env bash\n"$@"\n');
+      chmodSync(join(stubs, "sudo"), 0o755);
+      spawnSync("bash", ["-c", setup], { cwd: copy, env: { ...process.env, MSYS: "winsymlinks:nativestrict" } });
+      const script = [...treeSymlinkCheckLines(copy.replace(/\\/g, "/")), "echo checked"].join("\n");
+      const r = spawnSync("bash", ["-c", script], {
+        env: { ...process.env, PATH: `${stubs}${delimiter}${process.env.PATH}` },
+        encoding: "utf8",
+      });
+      return { status: r.status, out: r.stdout + r.stderr, kept: existsSync(copy) };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  // The repo's own link (.agents/skills -> ../apps/docs/content/skills) stays inside.
+  const inside = run("ln -s ../apps/docs/content/skills .agents/skills");
+  assert.equal(inside.status, 0, inside.out);
+  assert.match(inside.out, /checked/);
+  assert.ok(inside.kept);
+  for (const [what, setup] of [
+    ["a relative escape", "ln -s ../../outside escape"],
+    ["an absolute escape", "ln -s /etc/passwd escape"],
+    ["a dangling escape", "ln -s /nonexistent/dir/file escape"],
+  ]) {
+    const r = run(setup);
+    assert.equal(r.status, 1, `${what}: ${r.out}`);
+    assert.match(r.out, /install refused: a symlink in the shipped tree resolves outside it/, what);
+    assert.doesNotMatch(r.out, /checked/, `${what}: the install stops`);
+    assert.ok(!r.kept, `${what}: the copy is removed`);
+  }
 });
 
 test("2987: the rollback's check and supersede exclude exactly its own unit", async () => {

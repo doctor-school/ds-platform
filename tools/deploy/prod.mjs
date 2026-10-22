@@ -155,6 +155,7 @@ import {
 } from "./lib/registry.mjs";
 import {
   DATA_PROD_HOP_KEY,
+  DATA_PROD_HOP_KNOWN_HOSTS,
   LOCAL_EXECUTOR,
   PROD_HEALTH_URL,
   RELEASE_DRIVER_BIN,
@@ -313,6 +314,7 @@ export function localProdHosts({ dataProdAddress = VPC_IP } = {}) {
       user: "deploy",
       address: dataProdAddress,
       identityFile: DATA_PROD_HOP_KEY,
+      knownHostsFile: DATA_PROD_HOP_KNOWN_HOSTS,
     }),
   };
 }

@@ -5,6 +5,10 @@
 #
 # A CI key in deploy's authorized_keys carries
 #   command="/usr/local/bin/ds-deploy-entrypoint",no-pty,no-port-forwarding,...
+# (on ds-api-prod `command="sudo -n /usr/local/bin/ds-deploy-entrypoint",...`: deploy's
+# one sudo right there, /etc/sudoers.d/90-ds-deploy, which keeps SSH_ORIGINAL_COMMAND
+# through sudo's env reset — spec §4 «sudo on prod»; the per-call `sudo` below is then
+# a no-op as root)
 # so sshd runs this file whatever the client asked for, and the request arrives in
 # SSH_ORIGINAL_COMMAND. It is split on single spaces into words — never `eval`d,
 # never handed to a shell — and must be exactly one of:

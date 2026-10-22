@@ -16,12 +16,12 @@ packages:
   - curl
 
 users:
+  # #2987: deploy is the CI user only (release-pipeline spec §4 «sudo on prod»): no
+  # group, no sudo rule but /etc/sudoers.d/90-ds-deploy below, and no key of its own —
+  # its CI keys (behind the forced command) are added by the lead with
+  # harden-ssh.sh --role prod. The operator path on prod is breakglass.
   - name: deploy
-    groups: [sudo, docker]
     shell: /bin/bash
-    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
-    ssh_authorized_keys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMhbEUW92rTm3l3HgO0ipwRSg1UnTRJrWYqit5Z2ViBV deploy@ds-api-prod"
   # #2984: the break-glass admin (release-pipeline spec §4). Its key is held
   # offline by the owner, carries no forced command and has full sudo (its own
   # sudoers file below); it is the only interactive admin path once root login is
@@ -56,6 +56,13 @@ write_files:
     permissions: "0440"
     content: |
       breakglass ALL=(ALL) NOPASSWD:ALL
+  # #2987: deploy's one sudo right, the same bytes as DEPLOY_SUDOERS_CONTENT of
+  # infra/deploy/bin/harden-ssh.sh (tools/deploy/harden-ssh.test.mjs pins them equal).
+  - path: /etc/sudoers.d/90-ds-deploy
+    permissions: "0440"
+    content: |
+      Defaults!/usr/local/bin/ds-deploy-entrypoint env_keep += "SSH_ORIGINAL_COMMAND"
+      deploy ALL=(root) NOPASSWD: /usr/local/bin/ds-deploy-entrypoint ""
   # What this box serves; ds-deploy-entrypoint serves `upload-report` on `stage` only.
   - path: /etc/ds-platform/box-role
     permissions: "0644"

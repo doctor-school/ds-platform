@@ -157,7 +157,7 @@ test("3157: on the box, api-prod is the local executor and data-prod the VPC hop
   const hosts = localProdHosts();
   assert.equal(hosts.api, LOCAL_EXECUTOR);
   assert.equal(hosts.data, "deploy@192.168.0.10");
-  assert.equal(DATA_PROD_HOP_KEY, "/home/deploy/.ssh/data-prod-hop");
+  assert.equal(DATA_PROD_HOP_KEY, "/home/deploy/.ssh/data-prod-hop");  // no-hardcoded-path-ok: a fixed path on the prod box (deploy's home), not on this machine
   const args = sshBaseArgs(hosts.data, ["-o", "ConnectTimeout=15"]);
   assert.deepEqual(args, [
     "-o",
@@ -172,6 +172,8 @@ test("3157: on the box, api-prod is the local executor and data-prod the VPC hop
     "BatchMode=yes",
     "-o",
     "StrictHostKeyChecking=yes",
+    "-o",
+    "UserKnownHostsFile=/home/deploy/.ssh/known_hosts",  // no-hardcoded-path-ok: a fixed path on the prod box (deploy's home), not on this machine
     "-o",
     "ConnectTimeout=15",
     "deploy@192.168.0.10",

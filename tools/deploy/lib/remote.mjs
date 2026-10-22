@@ -51,10 +51,14 @@ export function sshBaseArgs(host, extraOptions = []) {
 // `/home/deploy/.ssh/data-prod-hop` — the hop the operator's `ds-data-prod` alias
 // takes through its ProxyJump, so data-prod keeps no public ssh and no CI key (tech
 // spec 2026-10-16 release pipeline §4, §5 «Prod release driver»). The key is
-// deploy-owned 0600 beside deploy's `known_hosts` (which pins data-prod): the driver
-// unit runs as `deploy`, and `/etc/ds-platform` is root-only 0700. The destination
+// deploy-owned 0600 beside deploy's `known_hosts` (which pins data-prod) and is named
+// with it on every hop, whichever user the driver unit runs as (root on ds-api-prod,
+// #2987). The destination
 // carries its own identity flags on every channel `sshBaseArgs` opens to it.
-export const DATA_PROD_HOP_KEY = "/home/deploy/.ssh/data-prod-hop";
+export const DATA_PROD_HOP_KEY = "/home/deploy/.ssh/data-prod-hop";  // no-hardcoded-path-ok: a fixed path on the prod box (deploy's home), not on this machine
+// #2987: on ds-api-prod the driver unit runs as root (spec §4 «sudo on prod»), whose
+// own known_hosts does not pin data-prod; the hop names deploy's file explicitly.
+export const DATA_PROD_HOP_KNOWN_HOSTS = "/home/deploy/.ssh/known_hosts";  // no-hardcoded-path-ok: a fixed path on the prod box (deploy's home), not on this machine
 const HOP_OPTIONS = new Map();
 
 /**
@@ -62,7 +66,7 @@ const HOP_OPTIONS = new Map();
  * no other key, no password prompt, and a host key that must already be known (fail
  * closed — the box's `known_hosts` entry is provisioned with the key).
  */
-export function hopDestination({ user, address, identityFile }) {
+export function hopDestination({ user, address, identityFile, knownHostsFile }) {
   const destination = `${user}@${address}`;
   HOP_OPTIONS.set(destination, [
     "-i",
@@ -73,6 +77,7 @@ export function hopDestination({ user, address, identityFile }) {
     "BatchMode=yes",
     "-o",
     "StrictHostKeyChecking=yes",
+    ...(knownHostsFile ? ["-o", `UserKnownHostsFile=${knownHostsFile}`] : []),
   ]);
   return destination;
 }
@@ -516,6 +521,7 @@ function installedTreeLines(liveDir, sha) {
     `if ! sudo test -d "${version}"; then`,
     `  sudo rm -rf -- "${version}.new"`,
     `  sudo cp -R -- "${liveDir}/." "${version}.new"`,
+    ...treeSymlinkCheckLines(`${version}.new`).map((l) => `  ${l}`),
     `  sudo chown -R root:root -- "${version}.new"`,
     `  sudo chmod -R go-w -- "${version}.new"`,
     `  sudo mv -T -- "${version}.new" "${version}"`,
@@ -528,6 +534,25 @@ function installedTreeLines(liveDir, sha) {
     `for d in ${INSTALLED_TREES_DIR}/*; do [ "$d" = "${version}" ] || [ "$d" = "$prev" ] || sudo rm -rf -- "$d"; done`,
     `printf '%s %s\\n' ${sha} "${tree}" | sudo tee "${INSTALLED_TREE_FILE}.new" >/dev/null`,
     `sudo mv -- "${INSTALLED_TREE_FILE}.new" "${INSTALLED_TREE_FILE}"`,
+  ];
+}
+
+/**
+ * #2987: refuse a copied tree that holds a symlink resolving outside it. `cp -R`
+ * copies a symlink as a symlink, and `chown -R` does not follow it, so a link in the
+ * deploy-owned shipped tree could point root, which execs from the copy, at a
+ * deploy-writable file. Every link is resolved by root (`readlink -f`, which fails
+ * closed on an unresolvable link) against the canonical copy directory; any escape
+ * removes the copy and exits 1 before the copy is chowned or renamed.
+ */
+export function treeSymlinkCheckLines(dir) {
+  return [
+    `escaped=$(sudo find "${dir}" -type l -exec sh -c 'top=$(readlink -f -- "$0") || exit 1; for l; do t=$(readlink -f -- "$l") || t=; case $t in "$top"|"$top"/*) ;; *) printf "%s -> %s\\n" "$l" "\${t:-unresolvable}" ;; esac; done' "${dir}" {} +) || escaped="the symlink check failed"`,
+    `if [ -n "$escaped" ]; then`,
+    `  printf 'install refused: a symlink in the shipped tree resolves outside it:\\n%s\\n' "$escaped" >&2`,
+    `  sudo rm -rf -- "${dir}"`,
+    `  exit 1`,
+    `fi`,
   ];
 }
 

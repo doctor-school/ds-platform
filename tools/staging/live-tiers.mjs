@@ -75,6 +75,22 @@ const URL_ACADEMY = "E2E_PORTAL_URL";
 const ACCOUNT = ["E2E_DOCTOR_EMAIL", "E2E_DOCTOR_PASSWORD"];
 const ACCOUNT_2 = ["E2E_DOCTOR2_EMAIL", "E2E_DOCTOR2_PASSWORD"];
 const IDP_MAIL = ["IDP_ISSUER", "MAILPIT_URL"];
+const CONGRESS_SIGNUP = [
+  "CONGRESS_SIGNUP_EVENT_ID",
+  "CONGRESS_SIGNUP_CONSENT_VERSION",
+  "CONGRESS_SIGNUP_WINDOW_OPENS_AT",
+  "CONGRESS_SIGNUP_WINDOW_CLOSES_AT",
+  "CONGRESS_SIGNUP_EVENT_DAYS",
+];
+
+/**
+ * `releaseCheck: { excluded: "<reason>" }` keeps a tier out of the release check
+ * (`e2e-stage.mjs --expect-sha`), which prints «live: <tier> not in the release
+ * check — <reason>» instead of running it; a plain slot run still runs it. The
+ * reason is mandatory (`releaseCheckExclusion` refuses an entry without one).
+ * These four are red on a slot (#3191 proof runs); #3229 owns their triage.
+ */
+const RED_ON_SLOT_3229 = "red on slot — #3229";
 
 export const LIVE_TIERS = Object.freeze([
   {
@@ -82,6 +98,7 @@ export const LIVE_TIERS = Object.freeze([
     host: "academy",
     app: "apps/portal",
     pkg: "@ds/portal",
+    releaseCheck: { excluded: RED_ON_SLOT_3229 },
     config: "playwright.config.ts",
     rootDir: ".",
     // The `bdd` project's specs are generated; the `test:e2e` script runs this first.
@@ -89,6 +106,8 @@ export const LIVE_TIERS = Object.freeze([
     gated: [
       {
         file: "e2e/room.spec.ts",
+        slotReason:
+          "the golden dataset seeds only rutube streams — no YouTube, unavailable-provider, VK or CDNvideo room exists on a slot",
         requires: [
           URL_ACADEMY,
           ...ACCOUNT,
@@ -127,6 +146,8 @@ export const LIVE_TIERS = Object.freeze([
       },
       {
         file: "e2e/room-player-false-positive.spec.ts",
+        slotReason:
+          "the golden dataset seeds only rutube streams — no YouTube, unavailable-provider, VK or CDNvideo room exists on a slot",
         requires: [
           URL_ACADEMY,
           ...IDP_MAIL,
@@ -136,6 +157,8 @@ export const LIVE_TIERS = Object.freeze([
       },
       {
         file: "e2e/room-presence-count.spec.ts",
+        slotReason:
+          "a slot api runs the production heartbeat cadence (60 s); the spec needs ROOM_HEARTBEAT_INTERVAL_SECONDS ≤ 10",
         requires: [
           URL_ACADEMY,
           ...ACCOUNT,
@@ -160,6 +183,8 @@ export const LIVE_TIERS = Object.freeze([
       },
       {
         file: "e2e/signed-in-landing-live.spec.ts",
+        slotReason:
+          "the spec narrows an account's project grant through the IdP management API, whose service token the release check in Actions does not carry (an IdP management token is kept out of a public repo's Actions env)",
         requires: [
           URL_DOCTOR,
           ...IDP_MAIL,
@@ -201,15 +226,23 @@ export const LIVE_TIERS = Object.freeze([
     gated: [
       {
         file: "e2e/congress-submissions.spec.ts",
+        slotReason:
+          "the spec writes its congress fixture rows straight into the database, which on a slot is reachable only inside the box's docker network",
         requires: [URL_DOCTOR, ...IDP_MAIL, "DATABASE_URL"],
       },
       {
         file: "e2e/a11y/congress-axe.e2e.spec.ts",
+        slotReason:
+          "the spec writes its congress fixture rows straight into the database, which on a slot is reachable only inside the box's docker network",
         requires: [URL_DOCTOR, ...IDP_MAIL, "DATABASE_URL"],
       },
       {
+        // Its congress sign-up checks the api's `CONGRESS_SIGNUP_*` block first
+        // (`congressSignUpEnvProblem`).
         file: "e2e/login-handoff-live.spec.ts",
-        requires: [URL_DOCTOR, ...IDP_MAIL],
+        slotReason:
+          "its congress sign-up needs the api's CONGRESS_SIGNUP_* block, which lives only in the box's stage env — the release check in Actions reads no box env, and congress intake is closed",
+        requires: [URL_DOCTOR, ...IDP_MAIL, ...CONGRESS_SIGNUP],
       },
     ],
   },
@@ -218,6 +251,7 @@ export const LIVE_TIERS = Object.freeze([
     host: "doctor",
     app: "apps/doctor",
     pkg: "@ds/doctor",
+    releaseCheck: { excluded: RED_ON_SLOT_3229 },
     config: "playwright.event-page.config.ts",
     rootDir: "e2e",
     // Both specs `test.skip` with a reason when their slug / api URL is absent.
@@ -233,6 +267,7 @@ export const LIVE_TIERS = Object.freeze([
     host: "academy",
     app: "apps/portal",
     pkg: "@ds/portal",
+    releaseCheck: { excluded: RED_ON_SLOT_3229 },
     config: "playwright.event-page.config.ts",
     rootDir: "e2e",
     gated: [],
@@ -264,6 +299,8 @@ export const LIVE_TIERS = Object.freeze([
     gated: [
       {
         file: "e2e/event-register-one-tap.spec.ts",
+        slotReason:
+          "registration is append-only (005 has no cancel), so each run consumes two эфиры the account is not registered for; a slot's golden doctor is registered after the first run",
         requires: [
           URL_DOCTOR,
           ...ACCOUNT,
@@ -311,6 +348,8 @@ export const LIVE_TIERS = Object.freeze([
     gated: [
       {
         file: "e2e/room.spec.ts",
+        slotReason:
+          "the golden dataset seeds only rutube streams — no YouTube, unavailable-provider, VK or CDNvideo room exists on a slot; a slot api runs the production heartbeat cadence (60 s); the spec needs ROOM_HEARTBEAT_INTERVAL_SECONDS ≤ 10",
         requires: [
           URL_DOCTOR,
           ...ACCOUNT,
@@ -329,6 +368,7 @@ export const LIVE_TIERS = Object.freeze([
     host: "doctor",
     app: "apps/doctor",
     pkg: "@ds/doctor",
+    releaseCheck: { excluded: RED_ON_SLOT_3229 },
     config: "playwright.shell.config.ts",
     rootDir: "e2e",
     gated: [
@@ -353,3 +393,46 @@ export const HERMETIC_CONFIGS = Object.freeze([
   "apps/doctor/playwright.events.config.ts",
   "apps/doctor/playwright.return-context.config.ts",
 ]);
+
+/**
+ * The golden event slugs a live spec targets on a slot (#3191). Every slot is
+ * cloned from `ds_golden`, so these exist on each one; `e2e-stage.test.mjs` holds
+ * them against `packages/db/src/seed/golden/ids.ts` so a renamed seed fails
+ * `pnpm test:tools` instead of a slot run.
+ */
+export const GOLDEN_EVENT_SLUGS = Object.freeze({
+  /** Published, upcoming, `experts` audience — the Academy's not-live эфир. */
+  upcoming: GOLDEN_SLUGS.academyUpcoming,
+  /** Live, `doctors` audience — the doctor storefront's only live эфир. */
+  live: "golden-event-live",
+  /** Live, `experts` audience — the Academy's room. */
+  academyLive: "golden-event-live-academy",
+  /** Ended, with a published recording. */
+  pastWithRecording: GOLDEN_SLUGS.academyEndedRecorded,
+});
+
+/**
+ * The live-leg env a slot derives from the golden dataset, per storefront host;
+ * a tier's own `seededEnv` (#2996) wins over it for that tier's leg.
+ * Only values a spec can READ without consuming them: a spec that would consume
+ * a seeded state (one-tap registration) or needs a seed the golden dataset does
+ * not hold is declared with `slotReason` in its gated entry instead.
+ */
+export const GOLDEN_LIVE_ENV = Object.freeze({
+  academy: Object.freeze({
+    E2E_WEBINAR_SLUG_NOT_LIVE: GOLDEN_EVENT_SLUGS.upcoming,
+    E2E_WEBINAR_SLUG_LIVE: GOLDEN_EVENT_SLUGS.academyLive,
+    E2E_ROOM_SLUG_LIVE: GOLDEN_EVENT_SLUGS.academyLive,
+    E2E_ROOM_CHAT_SLUG: GOLDEN_EVENT_SLUGS.academyLive,
+    E2E_ROOM_SLUG_ENDED: GOLDEN_EVENT_SLUGS.pastWithRecording,
+  }),
+  doctor: Object.freeze({
+    E2E_WEBINAR_SLUG: GOLDEN_EVENT_SLUGS.live,
+    E2E_LANDING_EVENT_SLUG: GOLDEN_EVENT_SLUGS.live,
+    E2E_EVENTS_LOADED_PATH: "/events",
+    // A window years past the golden horizon: the feed answers with no card.
+    E2E_EVENTS_EMPTY_PATH: "/events?from=2035-01-01&to=2035-01-15",
+    // `golden-event-live` is the doctor storefront's live эфир on every slot.
+    E2E_EVENTS_EXPECT_LIVE: "present",
+  }),
+});

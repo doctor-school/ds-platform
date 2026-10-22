@@ -605,8 +605,9 @@ last pre-flight step:
    ordinary converge (`tools/staging/README.md`), which itself asserts the slot's
    public `/v1/health` serves the target.
 3. `node tools/staging/e2e-stage.mjs main --expect-sha <target>` — the full
-   suite. `--expect-sha` re-asserts the served SHA before any scenario runs and
-   refuses `--project` / `--grep` / `--no-axe`, an inherited `E2E_GREP` and a
+   suite, the axe legs and every storefront live-tier leg (#3191). `--expect-sha`
+   re-asserts the served SHA before any scenario runs and refuses `--project` /
+   `--grep` / `--no-axe` / `--no-live`, an inherited `E2E_GREP` and a
    missing `CI` (Playwright `forbidOnly`); the deploy's child env clears
    `E2E_GREP` and sets `CI=1`.
 4. `git worktree remove --force` the checkout, pass or fail.

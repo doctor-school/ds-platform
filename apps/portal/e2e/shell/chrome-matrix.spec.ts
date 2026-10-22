@@ -161,10 +161,16 @@ test.describe("008 EARS-12 academy chrome route-visibility matrix (e2e)", () => 
     }
 
     // 017 EARS-12: exactly ONE crossing out of this storefront, absolute,
-    // pointing at the doctor origin.
+    // pointing at the doctor origin — the stand's own doctor host when the run
+    // names one (a staging slot crosses to `doctor-<slot>`), else production's.
     const cross = page.getByTestId("footer-cross").getByRole("link");
     await expect(cross).toHaveCount(1);
-    await expect(cross).toHaveAttribute("href", "https://doctor.school/");
+    await expect(cross).toHaveAttribute(
+      "href",
+      process.env.E2E_DOCTOR_URL
+        ? new URL("/", process.env.E2E_DOCTOR_URL).toString()
+        : "https://doctor.school/",
+    );
   });
 
   test("008 EARS-14: the footer content column caps at the design-system container width on desktop", async ({

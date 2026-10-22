@@ -1,4 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
+import { prepareCaptchaForJourney } from "@ds/e2e/captcha-stub";
+import { standBasicAuthHeaders } from "@ds/e2e/stand-http-credentials";
 import { requireLiveStandEnv } from "./support/live-stand-env";
 
 /**
@@ -64,6 +66,7 @@ async function fetchMail(
   for (let attempt = 0; attempt < 30; attempt++) {
     const res = await fetch(
       `${MAILPIT_BASE}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
+      { headers: standBasicAuthHeaders() },
     );
     if (res.ok) {
       const data = (await res.json()) as {
@@ -76,7 +79,9 @@ async function fetchMail(
           (m.Subject ?? "").includes(subject),
       );
       if (hit?.ID) {
-        const msg = await fetch(`${MAILPIT_BASE}/api/v1/message/${hit.ID}`);
+        const msg = await fetch(`${MAILPIT_BASE}/api/v1/message/${hit.ID}`, {
+          headers: standBasicAuthHeaders(),
+        });
         if (msg.ok) {
           const body = (await msg.json()) as Partial<MailpitMessage>;
           return {
@@ -140,6 +145,15 @@ async function expectSignedIn(page: Page) {
 
 test.describe("021 EARS-13 / 003 EARS-23: a duplicate registration on the doctor host", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
+  // Registration and resend are captcha-gated: the stub on a slot, nothing on a
+  // local stand booted with bot protection off (`@ds/e2e/captcha-stub`).
+  test.beforeEach(async ({ context, baseURL }) => {
+    await prepareCaptchaForJourney(
+      context,
+      baseURL ?? process.env.E2E_DOCTOR_URL ?? "",
+      process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
+    );
+  });
 
   test("003 EARS-23/41/42: duplicate register → the same code step + a code mail (no link), an identical resend acknowledgement, and the code signs the owner in", async ({
     page,

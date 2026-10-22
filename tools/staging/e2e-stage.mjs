@@ -50,8 +50,8 @@ import {
   shortSha,
   slotHostnames,
 } from "./slot.mjs";
-import { GOLDEN_PASSWORD_ENV_VARS } from "./idp.mjs";
-import { LIVE_TIERS } from "./live-tiers.mjs";
+import { GOLDEN_IDP_ACCOUNTS, GOLDEN_PASSWORD_ENV_VARS } from "./idp.mjs";
+import { GOLDEN_LIVE_ENV, LIVE_TIERS } from "./live-tiers.mjs";
 
 /** The repo root — every leg runs from there, like the scripts in `package.json`. */
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -144,11 +144,10 @@ export function parseE2eArgs(argv) {
 
 /**
  * `--expect-sha` is the RELEASE CHECK `pnpm deploy:prod` runs before shipping (#2701):
- * the `main` slot, the whole suite, every axe leg. A narrowed run proves only its
- * slice, so the release check refuses any narrowing flag instead of passing on part
- * of it. The live-tier legs are the one exception, and not a flag: the release check
- * never runs them (see `RELEASE_CHECK_LIVE_NOTE`), so `--no-live` changes nothing
- * there and is not refused.
+ * the `main` slot, the whole suite, every axe leg and every live-tier leg (#3191)
+ * that `live-tiers.mjs` does not exclude from it with a printed reason.
+ * A narrowed run proves only its slice, so the release check refuses any narrowing
+ * flag — `--no-live` included — instead of passing on part of it.
  */
 function assertReleaseCheckShape(options) {
   if (options.slot !== "main") {
@@ -160,6 +159,7 @@ function assertReleaseCheckShape(options) {
     options.project !== undefined && "--project",
     options.grep !== undefined && "--grep",
     options.axe === false && "--no-axe",
+    options.live === false && "--no-live",
   ].filter(Boolean);
   if (narrowing.length > 0) {
     throw new SlotError(
@@ -281,17 +281,56 @@ export function captchaTestTokenEnv(operatorEnv, boxEnv) {
  * suite env: the shared IdP origin (one for every slot, `idpHostname`) and the shared
  * Mailpit (one per stand, behind the same basic-auth pair — README «Mailpit»).
  * Hostnames only: Playwright does not send `__Host-` cookies to `127.0.0.1`.
- * Operator keys (`IDP_SERVICE_TOKEN`, a branch `DATABASE_URL`, a reused doctor
- * account) are NOT derivable from a slot; a spec that needs one is reported «not
- * run — missing <names>» unless the operator exports it. Event slugs ARE: the slot
- * runs `seed:golden`, so a tier's `seededEnv` names the golden events
- * ({@link seededLegEnv}).
+ * The golden accounts and slugs come from `slotLiveStandEnv`; a key neither the
+ * slot's hostnames nor the golden dataset nor the Actions env carries is not
+ * derived, and its spec is reported «not run» (`live-tiers.mjs` `slotReason`).
+ * A tier's own golden slugs (`seededEnv`, {@link seededLegEnv}) win over the host's.
  */
 export function slotLiveEnv({ baseDomain }) {
   return {
     IDP_ISSUER: `https://${idpHostname(baseDomain)}`,
     MAILPIT_URL: `https://mailpit.${baseDomain}`,
   };
+}
+
+/** The golden accounts a live spec signs in as: `E2E_DOCTOR_*` and `E2E_DOCTOR2_*`. */
+const LIVE_DOCTOR_ACCOUNTS = Object.freeze([
+  { prefix: "E2E_DOCTOR", key: "doctorVerified" },
+  { prefix: "E2E_DOCTOR2", key: "doctorVerifiedW1" },
+]);
+
+/**
+ * The live legs' env DERIVED for a slot (#3191), so a live spec runs instead of
+ * reading «not run — missing». ONE derivation for both modes: its inputs are the
+ * operator's env and the golden passwords under their `DS_GOLDEN_PASSWORD_*`
+ * names (`goldenPasswordEnv` — the environment-`stage` secrets in Actions, the
+ * box's stage env over ssh), never anything else of the box. So the release check
+ * in Actions (no ssh, README «The same check in Actions») and an operator run with
+ * ssh hand a live spec the same env. An operator export wins over the defaults:
+ * - `E2E_DOCTOR_*` / `E2E_DOCTOR2_*` — the golden verified doctor and its first
+ *   worker-pool copy (`idp.mjs` GOLDEN_IDP_ACCOUNTS); no password ⇒ no account.
+ * - `GOLDEN_LIVE_ENV[host]` — the golden event slugs and `/events` paths a
+ *   spec of that storefront reads (`live-tiers.mjs`).
+ * A stand key Actions does not carry (an IdP management token, the congress
+ * sign-up block, a database URL) is not derived: its spec is declared with a
+ * `slotReason` in `live-tiers.mjs` and reported «not run».
+ */
+export function slotLiveStandEnv(operatorEnv, goldenPasswords, host) {
+  const env = {};
+  for (const [name, value] of Object.entries(GOLDEN_LIVE_ENV[host] ?? {})) {
+    env[name] = operatorEnv?.[name] || value;
+  }
+  for (const { prefix, key } of LIVE_DOCTOR_ACCOUNTS) {
+    const account = GOLDEN_IDP_ACCOUNTS.find((a) => a.key === key);
+    const email = operatorEnv?.[`${prefix}_EMAIL`] || account.username;
+    const password =
+      operatorEnv?.[`${prefix}_PASSWORD`] ||
+      goldenPasswords?.[account.passwordEnvVar];
+    if (!password) continue;
+    env[`${prefix}_EMAIL`] = email;
+    env[`${prefix}_PASSWORD`] = password;
+  }
+  return env;
 }
 
 const isSet = (env, name) => Boolean(env?.[name]?.trim());
@@ -330,7 +369,11 @@ export function planLiveLeg(tier, available) {
     };
   }
   const notRun = tier.gated
-    .map((g) => ({ file: g.file, missing: missingOf(g.requires) }))
+    .map((g) => ({
+      file: g.file,
+      missing: missingOf(g.requires),
+      ...(g.slotReason ? { byDesign: g.slotReason } : {}),
+    }))
     .filter((g) => g.missing.length > 0);
   const toLine = (file) => path.posix.relative(tier.rootDir, file);
   return {
@@ -343,12 +386,25 @@ export function planLiveLeg(tier, available) {
 }
 
 /**
- * The release check (`--expect-sha`) does not run the live-tier legs: on a slot they
- * still fail on spec-side reds and lack operator env, which #3191 resolves before
- * bringing them into the release check. The omission is printed, never silent.
+ * A live tier's exclusion from the release check (`releaseCheck.excluded` in
+ * `live-tiers.mjs`), or `undefined` when the release check runs it. An exclusion
+ * must carry its reason — the release record prints it — so an entry without one,
+ * or with any other key, is refused instead of dropping a leg silently.
  */
-export const RELEASE_CHECK_LIVE_NOTE =
-  "not run in the release check — until #3191";
+export function releaseCheckExclusion(tier) {
+  if (tier.releaseCheck === undefined) return undefined;
+  const { excluded, ...rest } = tier.releaseCheck ?? {};
+  if (
+    typeof excluded !== "string" ||
+    excluded.trim() === "" ||
+    Object.keys(rest).length > 0
+  ) {
+    throw new SlotError(
+      `${tier.name}: releaseCheck must be exactly { excluded: "<reason>" } with a non-empty reason`,
+    );
+  }
+  return excluded;
+}
 
 /**
  * A live leg's verdict. `ok` is what the exit code folds: a leg that RAN with a
@@ -373,7 +429,11 @@ export function liveLegVerdict({ name, plan, status, report }) {
   const skipped = sum("skipped");
   const notRun = plan.notRun.length
     ? ` · not run: ${plan.notRun
-        .map((n) => `${n.file} (missing ${n.missing.join(", ")})`)
+        .map((n) =>
+          n.byDesign
+            ? `${n.file} (by design: ${n.byDesign})`
+            : `${n.file} (missing ${n.missing.join(", ")})`,
+        )
         .join("; ")}`
     : "";
   const state =
@@ -514,7 +574,6 @@ export function renderVerdictBlock({
   summary,
   legs,
   live = [],
-  liveNote,
   axeNote,
   reportDir,
   preflightReason,
@@ -541,7 +600,6 @@ export function renderVerdictBlock({
     const text = leg.launched ? `${label} — ${leg.detail}` : leg.detail;
     return `${leg.name.padEnd(nameWidth)}${text}`;
   });
-  if (liveNote) lines.push(row("live", liveNote));
   if (liveLines.length > 0) {
     lines.push(row("live", liveLines[0]));
     for (const extra of liveLines.slice(1)) lines.push(indent(extra));
@@ -792,21 +850,32 @@ export async function runE2eStage(
 
   // The storefront LIVE-TIER configs (#3168): one leg each, selected by host like
   // the axe legs. Each leg gets the suite env plus the stand's IdP and Mailpit;
-  // what the operator exported on top (an operator key) counts as available.
-  // The release check leaves them out and says so in the verdict (#3191).
-  const releaseCheck = options.expectSha !== undefined;
+  // the golden accounts and slugs come from `slotLiveStandEnv` — the same env in
+  // Actions (no ssh) and over ssh. The release check runs them like every other
+  // leg (#3191), except a tier `live-tiers.mjs` excludes from it with a reason:
+  // that leg is named with its reason, never run, and a plain slot run keeps it.
   const live = [];
-  if (options.live && !releaseCheck) {
+  if (options.live) {
     for (const tier of LIVE_TIERS.filter((t) => axeHost(t.host))) {
+      const excluded = releaseCheckExclusion(tier);
+      if (options.expectSha !== undefined && excluded !== undefined) {
+        effects.log(
+          `live: ${tier.name} not in the release check — ${excluded}`,
+        );
+        continue;
+      }
       const reporting = liveLegReporting(
         env,
         suiteEnv.E2E_REPORT_DIR,
         tier.name,
       );
       const legEnv = {
-        ...seededLegEnv(tier, env),
         ...suiteEnv,
         ...slotLiveEnv({ baseDomain }),
+        ...slotLiveStandEnv(env, suiteEnv, tier.host),
+        // A tier's own golden slugs (#2996) are more specific than the host's.
+        ...seededLegEnv(tier, env),
+        E2E_API_URL: env.E2E_API_URL || new URL(healthUrl).origin,
         ...reporting.env,
       };
       const plan = planLiveLeg(tier, { ...env, ...legEnv });
@@ -864,7 +933,6 @@ export async function runE2eStage(
       summary,
       legs,
       live,
-      liveNote: releaseCheck ? RELEASE_CHECK_LIVE_NOTE : undefined,
       axeNote: axe.note,
       reportDir,
     }),

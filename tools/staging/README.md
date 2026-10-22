@@ -228,13 +228,15 @@ regressions. Raise the slot with `pnpm stage:slot up <slot> --ref <sha>` first.
 
 `pnpm e2e:stage main --expect-sha <40-char sha>` is the release check (tech spec C7,
 #2701). It is the full run and nothing less: it refuses any slot but `main`, any
-`--project` / `--grep` / `--no-axe`, an `E2E_GREP` in the env (the config would compile
+`--project` / `--grep` / `--no-axe` / `--no-live`, an `E2E_GREP` in the env (the config would compile
 it into a filter) and a missing `CI` (without it Playwright's `forbidOnly` is off). It
 then asserts the slot's `/v1/health` serves exactly that SHA before a scenario runs, and
-exits **2** on any of these refusals. It does **not** run the storefront live-tier legs
-(below) and prints `live: not run in the release check — until #3191` instead, so the
-omission is visible in the release record; #3191 brings them into the release check once
-their spec-side reds and missing slot env are resolved. You do not normally run it by hand. For a
+exits **2** on any of these refusals. It runs the storefront live-tier legs (below) like
+every other leg (#3191), except the ones `live-tiers.mjs` excludes with a printed reason
+(`live/academy/default`, `live/academy/event-page`, `live/doctor/event-page`,
+`live/doctor/shell` — red on a slot,
+tracked in #3229) — `--no-live` is refused like the other narrowing flags — and a
+red live leg fails it. You do not normally run it by hand. For a
 target from `main` the `stage.yml` suite job runs it in Actions and posts the
 `stage-suite` status the release pre-flight reads (below). For a `--ref` hotfix target,
 which is no `main` push, `pnpm deploy:prod` runs it on the PC as its last pre-flight step,
@@ -336,37 +338,78 @@ is their registry, and `e2e-stage.test.mjs` holds it against the tree: every
 an **axe** leg, or **hermetic** (owns a `webServer`, CI's), and a config in none of
 them — or a live one that grew a `webServer` — fails `pnpm test:tools`.
 
-| Leg                          | Config (`apps/<app>/…`)                                                             |
-| ---------------------------- | ----------------------------------------------------------------------------------- |
-| `live/academy/default`       | `portal/playwright.config.ts` (`e2e` + `bdd`)                                       |
-| `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)      |
-| `live/doctor/register-live`  | `doctor/playwright.register-live.config.ts`                                         |
-| `live/doctor/congress`       | `doctor/playwright.congress.config.ts`                                              |
-| `live/doctor/event-page`     | `doctor/playwright.event-page.config.ts`                                            |
-| `live/doctor/event-register` | `doctor/playwright.event-register.config.ts`                                        |
-| `live/doctor/events-live`    | `doctor/playwright.events-live.config.ts`                                           |
-| `live/doctor/room`           | `doctor/playwright.room.config.ts` (`room.spec.ts`; the axe twin is `axe/doctor`'s) |
-| `live/doctor/shell`          | `doctor/playwright.shell.config.ts`                                                 |
+| Leg                          | Config (`apps/<app>/…`)                                                             | Release check           |
+| ---------------------------- | ----------------------------------------------------------------------------------- | ----------------------- |
+| `live/academy/default`       | `portal/playwright.config.ts` (`e2e` + `bdd`)                                       | no — red on slot, #3229 |
+| `live/academy/account-live`  | `portal/playwright.account-live.config.ts`                                          | yes                     |
+| `live/academy/event-page`    | `portal/playwright.event-page.config.ts` (`event-page-020`, `webinar-archive`)      | no — red on slot, #3229 |
+| `live/doctor/register-live`  | `doctor/playwright.register-live.config.ts`                                         | yes                     |
+| `live/doctor/congress`       | `doctor/playwright.congress.config.ts`                                              | yes                     |
+| `live/doctor/event-page`     | `doctor/playwright.event-page.config.ts`                                            | no — red on slot, #3229 |
+| `live/doctor/event-register` | `doctor/playwright.event-register.config.ts`                                        | yes                     |
+| `live/doctor/events-live`    | `doctor/playwright.events-live.config.ts`                                           | yes                     |
+| `live/doctor/room`           | `doctor/playwright.room.config.ts` (`room.spec.ts`; the axe twin is `axe/doctor`'s) | yes                     |
+| `live/doctor/shell`          | `doctor/playwright.shell.config.ts`                                                 | no — red on slot, #3229 |
 
 Each leg gets the suite env plus `IDP_ISSUER=https://id.<base domain>` and
 `MAILPIT_URL=https://mailpit.<base domain>` (hostnames, never `127.0.0.1`: Playwright
 sends no `__Host-` cookie there); the doctor configs answer the basic-auth challenge
 through `@ds/e2e/stand-http-credentials`. `--project academy|doctor` selects legs like
 the axe legs (`walks` selects none); `--no-live` drops them. The release check
-(`--expect-sha`) never runs them and says so in its verdict — until #3191.
+(`--expect-sha`) runs every leg the table marks «yes» (#3191). A leg marked «no» carries
+`releaseCheck: { excluded: "<reason>" }` in `live-tiers.mjs`: the release check prints
+`live: <leg> not in the release check — <reason>` and does not run it, while a plain slot
+run still does. The four excluded legs are red on a slot; #3229 owns bringing them back.
+
+**Derived for the slot (#3191).** The release check runs in Actions (`stage.yml` job
+`suite`, «The same check in Actions» above), which never reads the box: its env is the
+base domain, the basic-auth pair, the captcha test token and the four golden passwords,
+nothing else. The rest of a leg's env is therefore derived from those and from repo data
+only — `slotLiveStandEnv` (`e2e-stage.mjs`), one derivation for both modes (over ssh the
+golden passwords come from the box's `stage.env` under the same `DS_GOLDEN_PASSWORD_*`
+names, and no other box key is handed over); an operator export wins over each value:
+
+- `E2E_DOCTOR_EMAIL`/`_PASSWORD` and `E2E_DOCTOR2_*` — the golden verified doctor and
+  its first worker-pool copy (`idp.mjs` GOLDEN_IDP_ACCOUNTS), with
+  `DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED`;
+- the golden event slugs and `/events` paths per storefront (`GOLDEN_LIVE_ENV` in
+  `live-tiers.mjs`, held against `packages/db/src/seed/golden/ids.ts`), and
+  `E2E_API_URL` = the slot's api origin.
 
 Event slugs come from the golden set the slot was seeded with (#2996): a tier's
 `seededEnv` (`live-tiers.mjs` → `GOLDEN_SLUGS`) names the golden event carrying each shape
 its specs assert, only that tier's leg receives them, and a value the operator exported
-wins. `apps/api/test/scripts/stage-event-page-slugs.spec.ts` builds the golden dataset and
+wins; it also wins over the host-wide
+`GOLDEN_LIVE_ENV` slug for that leg. `apps/api/test/scripts/stage-event-page-slugs.spec.ts` builds the golden dataset and
 fails when a mirrored slug stops carrying its shape.
 
-A slot cannot supply operator keys (`IDP_SERVICE_TOKEN`, `IDP_PROJECT_ID`, a branch
-`DATABASE_URL`) or a reused doctor account (`E2E_DOCTOR_EMAIL`/`_PASSWORD`). A spec gated on such a variable through `requireLiveStandEnv` would read a slot
-run as an _intended_ tier and fail loudly, so the registry declares what each gated spec
-requires and the leg keeps it out (`--test-list-invert`), printing it as `not run:
-<spec> (missing <names>)`; a config that throws at load without its env is not launched
-at all. Export the variable on this machine and the spec runs. The verdict block prints
+An IdP management token (`IDP_SERVICE_TOKEN`/`IDP_PROJECT_ID`), the api's
+`CONGRESS_SIGNUP_*` block and a `DATABASE_URL` are **not** derived and not added to the
+Actions env (a management token in a public repo's Actions env widens the blast radius;
+congress intake is closed): the specs that need them carry a `slotReason`.
+
+**Workers.** `live/academy/default` honours `E2E_WORKERS` (the suite job sets 4): its
+spec files run in parallel, each journey registering its own address and reading Mailpit
+by that recipient; the files signed in as the one golden doctor pair form the
+`golden-account` project, held to one worker (`apps/portal/playwright.config.ts`). The
+doctor live configs stay on one worker.
+
+Raw Node `fetch`es (Mailpit reads) carry the basic-auth pair through
+`standBasicAuthHeaders`, and raw api calls on a captcha-gated route carry the test token
+through `captchaTestTokenHeaders` (`@ds/e2e/captcha-stub`).
+
+A spec gated through `requireLiveStandEnv` on a variable the leg does not have would read
+a slot run as an _intended_ tier and fail loudly, so the registry declares what each gated
+spec requires and the leg keeps it out (`--test-list-invert`), printing it as `not run:
+<spec> (missing <names>)`. A spec a slot **cannot** run carries a `slotReason` and prints
+as `not run: <spec> (by design: <reason>)`: the provider-variant room specs (the golden
+dataset seeds only rutube streams), the heartbeat-cadence specs (a slot api runs the
+production 60 s cadence), the congress-submission specs (they write fixture rows straight
+into a database a slot keeps inside the box's docker network) and the one-tap
+registration (005 registration is append-only, so a run consumes its эфиры), the
+signed-in landing spec (an IdP management token) and the congress login hand-off (the
+`CONGRESS_SIGNUP_*` block). A config that throws at load without its env is not launched at all.
+Export the variable on this machine and the spec runs. The verdict block prints
 one `live:` line per config:
 
 - `PASS — ran N passed / 0 failed / M skipped` — at least one test passed;
@@ -376,7 +419,7 @@ one `live:` line per config:
 - `SKIPPED — ran 0 passed / 0 failed / M skipped` — every test skipped, never green;
 - `skipped — missing env <names>` — the config was not launched.
 
-A skipped leg is loud but **not fatal** (the slot cannot hold operator keys); the verdict
+A skipped leg is loud but **not fatal** (a key the release check does not carry); the verdict
 reads `PASS — <n> live legs skipped`. Each leg writes `results.json` (and in public-log
 mode the summary reporter, HTML and traces) under `live-<host>-<config>/` in the report dir.
 

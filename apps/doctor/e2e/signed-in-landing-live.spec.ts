@@ -5,6 +5,11 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
+import { captchaTestTokenHeaders } from "@ds/e2e/captcha-stub";
+import {
+  standBasicAuthHeaders,
+  standHttpCredentials,
+} from "@ds/e2e/stand-http-credentials";
 import { requireLiveStandEnv } from "./support/live-stand-env";
 
 /**
@@ -85,6 +90,7 @@ async function confirmationCode(
   for (let attempt = 0; attempt < 30; attempt++) {
     const res = await fetch(
       `${MAILPIT_BASE}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
+      { headers: standBasicAuthHeaders() },
     );
     if (res.ok) {
       const data = (await res.json()) as {
@@ -126,15 +132,24 @@ async function expectOk(
 async function provisionDoctor(specialty?: string) {
   const email = newEmail();
   const password = livePassword();
-  const api = await playwrightRequest.newContext({ baseURL: DOCTOR_URL });
+  const api = await playwrightRequest.newContext({
+    baseURL: DOCTOR_URL,
+    httpCredentials: standHttpCredentials(),
+  });
   try {
     const sentAt = new Date().toISOString();
-    await expectOk(api, "POST", "/v1/storefront/doctor/register", {
-      email,
-      password,
-      medicalWorkerDeclaration: true,
-      consent: [{ purpose: "partner-data-sharing", version: "v1" }],
-    });
+    await expectOk(
+      api,
+      "POST",
+      "/v1/storefront/doctor/register",
+      {
+        email,
+        password,
+        medicalWorkerDeclaration: true,
+        consent: [{ purpose: "partner-data-sharing", version: "v1" }],
+      },
+      captchaTestTokenHeaders(),
+    );
     const code = await confirmationCode(email, sentAt);
     // 003 EARS-23/41: confirm through the doctor door's code step with the
     // in-tab registration values — the bare `/v1/auth/verify` replaces the

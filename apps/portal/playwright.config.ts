@@ -64,11 +64,58 @@ const bddTestDir = defineBddConfig({
   outputDir: ".features-gen",
 });
 
+/**
+ * ── Workers (#3191) ──────────────────────────────────────────────────────────
+ * Spec FILES run in parallel on `E2E_WORKERS` workers (default 1 — the manual
+ * dev-stand pass keeps its serial order); the tests inside one file stay in file
+ * order (`fullyParallel: false`), since several files chain their steps. What
+ * once forced `workers: 1` — the shared Mailpit inbox — no longer races: every
+ * journey registers its own random address and reads Mailpit by that recipient
+ * (`support/mailpit.ts` searches `to:<email>`), as the main suite does
+ * (`packages/e2e/lib/owned-registration.ts`). What still cannot share a worker is
+ * the ONE golden doctor pair the run names (`E2E_DOCTOR_*` / `E2E_DOCTOR2_*`):
+ * two files signed in as it at once would log each other out and race its
+ * registrations. Those files form the `golden-account` project, held to one
+ * worker; it runs alongside the parallel projects.
+ */
+const workers = Number(process.env.E2E_WORKERS ?? 1);
+if (!Number.isInteger(workers) || workers < 1) {
+  throw new Error(
+    `E2E_WORKERS=${process.env.E2E_WORKERS} — expected a positive integer.`,
+  );
+}
+
+/** The specs that sign in as the run's golden doctor pair (`E2E_DOCTOR*_*`). */
+const GOLDEN_ACCOUNT_SPECS = [
+  /[\\/]event-page-parity\.e2e\.spec\.ts$/,
+  /[\\/]event-page-registered\.spec\.ts$/,
+  /[\\/]my-events\.spec\.ts$/,
+  /[\\/]return-to-origin\.spec\.ts$/,
+  /[\\/]room-chat\.spec\.ts$/,
+  /[\\/]room-presence-count\.spec\.ts$/,
+  /[\\/]room\.spec\.ts$/,
+  /[\\/]theme\.e2e\.spec\.ts$/,
+];
+
+/**
+ * The a11y/axe scans are separate gates: the dev-stand-gated manual pass
+ * (`test:axe` → `playwright.axe.config.ts`, under `e2e/a11y/`) and the hermetic
+ * CI page-level scan (`test:e2e:ci` → `playwright.ci.config.ts`,
+ * `a11y-axe.e2e.spec.ts`, #400). #3151: the shared /account auth-path body
+ * rides its own live tier (`playwright.account-live.config.ts`), and the
+ * #2996 event-page specs theirs (`playwright.event-page.config.ts`).
+ */
+const OWN_CONFIG_SPECS = [
+  /a11y\//,
+  /a11y-axe\.e2e\.spec\.ts/,
+  /account-auth-paths-live\.spec\.ts/,
+  /event-page-020\.e2e\.spec\.ts/,
+  /webinar-archive\.spec\.ts/,
+];
+
 export default defineConfig({
-  // Serial: the journeys create live Zitadel users and read a shared Mailpit
-  // inbox; parallel runs would race on the catch-all mailbox.
   fullyParallel: false,
-  workers: 1,
+  workers,
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: [["list"]],
@@ -84,21 +131,17 @@ export default defineConfig({
       name: "e2e",
       testDir: "./e2e",
       testMatch: /\.spec\.ts$/,
-      // The a11y/axe scans are separate gates: the dev-stand-gated manual pass
-      // (`test:axe` → `playwright.axe.config.ts`, under `e2e/a11y/`) and the
-      // hermetic CI page-level scan (`test:e2e:ci` → `playwright.ci.config.ts`,
-      // `a11y-axe.e2e.spec.ts`, #400). Keep both out of the default `test:e2e`.
-      // #3151: the shared /account auth-path body rides its own live tier
-      // (`test:e2e:account-live` → `playwright.account-live.config.ts`), and
-      // #2996: the event-page specs ride theirs
-      // (`test:e2e:event-page` → `playwright.event-page.config.ts`).
-      testIgnore: [
-        /a11y\//,
-        /a11y-axe\.e2e\.spec\.ts/,
-        /account-auth-paths-live\.spec\.ts/,
-        /event-page-020\.e2e\.spec\.ts/,
-        /webinar-archive\.spec\.ts/,
-      ],
+      testIgnore: [...OWN_CONFIG_SPECS, ...GOLDEN_ACCOUNT_SPECS],
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      // The files signed in as the one golden doctor pair: one worker, so no
+      // two of them hold its session at once (see «Workers» above).
+      name: "golden-account",
+      testDir: "./e2e",
+      testMatch: GOLDEN_ACCOUNT_SPECS,
+      testIgnore: OWN_CONFIG_SPECS,
+      workers: 1,
       use: { ...devices["Desktop Chrome"] },
     },
     {

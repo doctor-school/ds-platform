@@ -50,6 +50,19 @@ export function captchaTestTokenFromEnv(
   return token;
 }
 
+/**
+ * The captcha header for a RAW api call a live spec makes outside the browser
+ * (#3191): the test token as `x-smartcaptcha-token`, the header the widget
+ * plumbing sends. A stand booted with `BOT_PROTECTION_ENABLED=false` needs none;
+ * any other stand without the token is the named error, never a silent omission.
+ */
+export function captchaTestTokenHeaders(
+  env: Record<string, string | undefined> = process.env,
+): Record<string, string> {
+  if (env.BOT_PROTECTION_ENABLED === "false") return {};
+  return { "x-smartcaptcha-token": captchaTestTokenFromEnv(env) };
+}
+
 /** True for the Yandex `captcha.js` loader request — and nothing else. */
 export function isSmartCaptchaScriptUrl(url: URL): boolean {
   return (

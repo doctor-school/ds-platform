@@ -7,6 +7,7 @@ import {
   CaptchaTestTokenMissingError,
   captchaStubScript,
   captchaTestTokenFromEnv,
+  captchaTestTokenHeaders,
   installCaptchaStub,
   isSmartCaptchaScriptUrl,
   prepareCaptchaForJourney,
@@ -299,6 +300,31 @@ describe("prepareCaptchaForJourney", () => {
   it("leaves the original installCaptchaStub token requirement strict", async () => {
     vi.stubEnv("E2E_CAPTCHA_TEST_TOKEN", undefined);
     await expect(installCaptchaStub(target())).rejects.toThrow(
+      CaptchaTestTokenMissingError,
+    );
+  });
+});
+
+/**
+ * #3191 — a raw api call a live spec makes outside the browser (a congress
+ * sign-up, a registration through the doctor door) answers the api's captcha
+ * guard with the stand's test token, the header the widget plumbing sends.
+ */
+describe("captchaTestTokenHeaders", () => {
+  it("carries the test token as the x-smartcaptcha-token header", () => {
+    expect(
+      captchaTestTokenHeaders({ E2E_CAPTCHA_TEST_TOKEN: " tok " }),
+    ).toEqual({ "x-smartcaptcha-token": "tok" });
+  });
+
+  it("sends none against a stand booted with bot protection off", () => {
+    expect(captchaTestTokenHeaders({ BOT_PROTECTION_ENABLED: "false" })).toEqual(
+      {},
+    );
+  });
+
+  it("throws the named error when the token is absent on a guarded stand", () => {
+    expect(() => captchaTestTokenHeaders({})).toThrow(
       CaptchaTestTokenMissingError,
     );
   });

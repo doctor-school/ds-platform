@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { expect, type BrowserContext, type Page } from "@playwright/test";
+import {
+  expect,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from "@playwright/test";
 import {
   failureEvent,
   failureProbe,
@@ -19,6 +24,21 @@ interface State {
   themes: number;
 }
 const states = new WeakMap<Page, State>();
+async function exactFeedback(locator: Locator, copy: string) {
+  await expect(locator).toBeVisible();
+  // FormError's aria-hidden decoration is outside the localized sentence.
+  await expect
+    .poll(() =>
+      locator.evaluate((element) => {
+        const readable = element.cloneNode(true) as HTMLElement;
+        readable
+          .querySelectorAll('[aria-hidden="true"]')
+          .forEach((hidden) => hidden.remove());
+        return readable.textContent?.trim();
+      }),
+    )
+    .toBe(copy);
+}
 function state(page: Page) {
   const value = states.get(page);
   if (!value) throw new Error("S067 state missing");
@@ -117,7 +137,8 @@ Given(
         "retired theme callbacks cannot send the pending action",
       ).toBe(0);
       await failureEvent(owned, 1, "network-error");
-      await expect(owned.getByTestId("register-captcha-error")).toHaveText(
+      await exactFeedback(
+        owned.getByTestId("register-captcha-error"),
         unavailable,
       );
       value.themes++;
@@ -189,7 +210,8 @@ When(
             code: "BOT_PROTECTION_REJECTED",
           });
         }
-        await expect(owned.getByTestId("register-captcha-error")).toHaveText(
+        await exactFeedback(
+          owned.getByTestId("register-captcha-error"),
           variant.copy,
         );
         expect(
@@ -302,10 +324,10 @@ Then(
     await owned.getByTestId("reset-request-submit").click();
     await calls(owned, 1);
     await failureEvent(owned, 0, "network-error");
-    await expect(owned.getByTestId("reset-error")).toHaveText(unavailable);
+    await exactFeedback(owned.getByTestId("reset-error"), unavailable);
     await owned.getByTestId("reset-request-submit").click();
     await calls(owned, 2);
-    await expect(owned.getByTestId("reset-error")).toHaveText(unavailable);
+    await exactFeedback(owned.getByTestId("reset-error"), unavailable);
     await field.focus();
     await inputSecret(field, "invalid-address");
     await field.blur();

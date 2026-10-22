@@ -105,6 +105,18 @@ describe("state block generator (#2221)", () => {
     );
     expect(generateStatesBlock(edited)).toContain("var(--btn-hover,#000001)");
   });
+
+  it("keeps the reference block's untagged-control selectors (auth.dc.html link + ghost hover)", () => {
+    expect(BLOCK).toContain(
+      '[data-link]:hover,button[style*="text-underline-offset:4px"]:hover{text-decoration:underline!important}',
+    );
+    expect(BLOCK).toContain(
+      '[data-link]:active,button[style*="text-underline-offset:4px"]:active{opacity:',
+    );
+    expect(BLOCK).toContain(
+      '[data-ghost]:hover,button[style*="--tint-fg"]:hover{background:var(--tint,',
+    );
+  });
 });
 
 describe("stamp (#2221)", () => {

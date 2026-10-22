@@ -13,6 +13,7 @@ import { join } from "node:path";
 import {
   type ApprovedSourceManifest,
   bodyEvidenceVerdict,
+  canvasCoEdits,
   certifiedNaVerdict,
   latestModeAComparisonVerdict,
 } from "../ui-parity-lint";
@@ -957,5 +958,63 @@ describe("ui-parity Change-tier ship (#2584)", () => {
     const { code, stdout } = run("");
     expect(code).toBe(1);
     expect(stdout).not.toContain("Change-tier ship");
+  });
+});
+
+describe("ui-parity canvas co-edit: generated ds-states delta (#2221)", () => {
+  const B = "/* ds-states:begin */";
+  const E = "/* ds-states:end */";
+  const canvas = (block: string, body = "<p>body</p>") =>
+    `<style>a{}${B}${block}${E}</style>\n${body}\n`;
+  const reader =
+    (files: Record<string, { base: string | null; head: string | null }>) =>
+    (path: string) =>
+      files[path] ?? { base: null, head: null };
+
+  it("tokens.css + a canvas changed only inside the ds-states block is not a co-edit", () => {
+    const read = reader({
+      "design-source/auth.dc.html": {
+        base: canvas("[data-btn]{transition:all .15s}"),
+        head: canvas("[data-btn]{transition:all .2s}"),
+      },
+    });
+    expect(canvasCoEdits(["design-source/auth.dc.html"], read)).toEqual([]);
+  });
+
+  it("tokens.css + a canvas body change stays a co-edit", () => {
+    const read = reader({
+      "design-source/auth.dc.html": {
+        base: canvas("x"),
+        head: canvas("y", "<p>new copy</p>"),
+      },
+    });
+    expect(canvasCoEdits(["design-source/auth.dc.html"], read)).toEqual([
+      "design-source/auth.dc.html",
+    ]);
+  });
+
+  it("a new canvas (no base blob) or a canvas without markers stays a co-edit", () => {
+    const read = reader({
+      "design-source/new.dc.html": { base: null, head: canvas("x") },
+      "design-source/plain.dc.html": { base: "<p>a</p>", head: "<p>b</p>" },
+      "design-source/added-block.dc.html": {
+        base: "<style>a{}</style>\n<p>body</p>\n",
+        head: canvas("x"),
+      },
+    });
+    expect(
+      canvasCoEdits(
+        [
+          "design-source/new.dc.html",
+          "design-source/plain.dc.html",
+          "design-source/added-block.dc.html",
+        ],
+        read,
+      ),
+    ).toEqual([
+      "design-source/new.dc.html",
+      "design-source/plain.dc.html",
+      "design-source/added-block.dc.html",
+    ]);
   });
 });

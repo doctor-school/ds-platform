@@ -66,13 +66,13 @@ jobs:
         github.event.deployment.environment == 'production' )
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # release-notes.mjs runs `git cherry -v <prevSha> <newSha>` over the range and
           # post-release-digest.mjs runs `git tag --merged` / `git rev-list`, so the
           # full history + tags must be present (a shallow clone fails the range).
           fetch-depth: 0
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
       # workflow_dispatch / workflow_call have no Deployment event: resolve the

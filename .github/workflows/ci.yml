@@ -142,7 +142,7 @@ jobs:
     steps:
       # Full history: the classifier diffs the PR head against the PR base sha,
       # and both parents of the merge ref must be present.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Select discipline tests
@@ -232,11 +232,11 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -379,9 +379,9 @@ jobs:
       MAILPIT_URL: http://localhost:8025
       SMS_SINK_URL: http://localhost:8090
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - name: Build the data-layer Postgres image (pgvector + pg_partman)
@@ -596,7 +596,7 @@ jobs:
         run: node tools/scripts/otp-delivery-diagnostic.mjs
       - name: Upload OTP delivery diagnostic
         if: always() && github.event_name == 'workflow_dispatch' && inputs.otp_diagnostic
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: otp-delivery-diagnostic
           path: otp-delivery-diagnostic.json
@@ -607,7 +607,7 @@ jobs:
         run: node tools/scripts/api-e2e-diagnostics.mjs
       - name: Upload sanitized API provider diagnostics
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: api-e2e-diagnostics
           path: api-e2e-diagnostics.json
@@ -623,9 +623,9 @@ jobs:
   generated-artifacts:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm generate:api-client:check
@@ -648,11 +648,11 @@ jobs:
       issues: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
 
@@ -862,7 +862,7 @@ jobs:
       # remap BEFORE the `.lycheeignore` match, so excluded URLs need their raw
       # form listed there too (see the self-URL entry).
       - name: markdown-links
-        uses: lycheeverse/lychee-action@v2
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
           args: >-
             --no-progress --include-fragments
@@ -901,9 +901,9 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - name: Load guard severity policy
@@ -1235,6 +1235,18 @@ jobs:
         continue-on-error: ${{ steps.guard_policy.outputs.workflow-auth == 'WARN' }}
         run: pnpm exec tsx tools/lint/workflow-auth-lint.ts
 
+      # action-pin: every non-local `uses:` in .github/workflows (and any
+      # .github/actions/**/action.yml) is pinned to a 40-hex commit SHA with the
+      # exact release tag as a trailing `# vX.Y.Z` comment — a tag can be
+      # repointed upstream, a SHA cannot (#3005). Dependabot's github-actions
+      # ecosystem (.github/dependabot.yml) bumps SHA + comment together; this
+      # guard stops a new workflow from regressing to a tag pin. Static
+      # line-scan, no gh context. WARN v1 per ADR-0007 §2.6.
+      - name: WARN · action-pin
+        id: warn_action_pin
+        continue-on-error: ${{ steps.guard_policy.outputs.action-pin == 'WARN' }}
+        run: pnpm exec tsx tools/lint/action-pin-lint.ts
+
       # retained-data: retained-row lifecycle regression guard (#1404, slice C of
       # #1278). Application-owned Postgres data is retained LOGICALLY (soft-delete /
       # status transition) — retained rows back audit, consent and analytics — yet
@@ -1306,6 +1318,7 @@ jobs:
             tdd-signal=${{ steps.warn_tdd_signal.outcome }}
             product-note=${{ steps.warn_product_note.outcome }}
             workflow-auth=${{ steps.warn_workflow_auth.outcome }}
+            action-pin=${{ steps.warn_action_pin.outcome }}
             retained-data=${{ steps.warn_retained_data.outcome }}
         run: |
           failed="$(printf '%s\n' "$WARN_OUTCOMES" | grep -E '=failure$' | cut -d= -f1 || true)"
@@ -1350,9 +1363,9 @@ jobs:
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.run-playwright-axe == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # Build the showcase (and its workspace deps) so `next start` serves a real
@@ -1376,9 +1389,9 @@ jobs:
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.run-playwright-academy-demo == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @ds/academy-demo build
@@ -1403,9 +1416,9 @@ jobs:
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.run-playwright-axe-portal == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # Build the portal (and its workspace deps) so `next start` serves a real
@@ -1438,9 +1451,9 @@ jobs:
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.run-playwright-axe-doctor == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # `API_PROXY_TARGET` is BUILD-time here for the same reason as the admin
@@ -1511,9 +1524,9 @@ jobs:
       # factor in that store (apps/admin/e2e/support/staff-access.ts).
       REDIS_URL: redis://localhost:6379
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
 
@@ -1752,7 +1765,7 @@ jobs:
           echo '::group::redis'; docker logs --tail 100 ds-redis || true; echo '::endgroup::'
       - name: Upload the Playwright artifacts
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: admin-e2e-results
           path: apps/admin/test-results
@@ -1792,9 +1805,9 @@ jobs:
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.run-standalone-boot == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # Same cold-build path the `build` step exercises — no special env. The

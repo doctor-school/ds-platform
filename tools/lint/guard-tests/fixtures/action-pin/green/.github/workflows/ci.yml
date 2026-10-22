@@ -1,0 +1,15 @@
+name: ci
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Lychee
+        uses: "lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8" # v2.9.0
+      - uses: docker://alpine:3.20
+      - uses: ./.github/actions/setup
+  reuse:
+    uses: ./.github/workflows/release-digest.yml
+  nested:
+    uses: org/shared/.github/workflows/build.yml@3d3c42e5aac5ba805825da76410c181273ba90b1 # v1.2.3

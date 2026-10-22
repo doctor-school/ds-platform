@@ -152,7 +152,7 @@ Consequences: `room-return.ts` moves into `@ds/room` as the **first PR of wave 1
 | 1.7 | verify page + held-password replay; THROW-branch convergence (DEBT 2026-09-07)                                                  | yes                        | both    |
 | 1.8 | reset page                                                                                                                      | yes                        | both    |
 
-Allowed intermediate state after any PR: a unit is either wholly in the package or wholly on the host — a half-moved helper with a re-export shim may not outlive the next PR of the sequence; the doctor copy of a not-yet-switched unit keeps its `mirror-of` marker (or is the pre-existing fork, listed in the matrix). Waves 2–4 write their own sequence at the wave-entry gate; the wave-2 sequence starts from the `@ds/events-storefront` surface #2005 already created.
+Allowed intermediate state after any PR of waves 1–4: a unit is either wholly in the package or wholly on the host — a half-moved helper with a re-export shim may not outlive the next PR of the sequence; every wave has landed, so `mirror-of` markers are retired and a host copy of a package unit is a review `[BLOCKER]` (`request-mode-a-review` «Package mount»). Waves 2–4 write their own sequence at the wave-entry gate; the wave-2 sequence starts from the `@ds/events-storefront` surface #2005 already created.
 
 ### Stage 3 — cleanup of what already contradicts the approach
 

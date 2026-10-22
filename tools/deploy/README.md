@@ -4,16 +4,19 @@ Idempotent, one-command production deploy for the always-on Timeweb environment
 (api-prod public + data-prod private). Formalises the on-box runbook in
 [`infra/deploy/README.md`](../../infra/deploy/README.md) §5–§10 — that README is
 the operational SSOT; this directory is the executable form of its steady-state
-steps. The **per-redeploy** path (`deploy:prod`) is **agent-run** from the operator
-workstation over SSH (no CI job deploys today; the release-pipeline tech spec
-[`2026-10-16-release-pipeline-off-workstation-en.md`](../../apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md)
-is the plan that replaces this path), driven by the D+B trigger policy (release-cycle spec §10);
+steps. A production release runs in **Actions** (`deploy-prod.yml`, below): the
+agent dispatches it on the owner's word in chat, and the box-side release driver
+on ds-api-prod runs `prod.mjs --local` (release-pipeline tech spec
+[`2026-10-16-release-pipeline-off-workstation-en.md`](../../apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md);
+when to propose one: the D+B trigger policy, release-cycle spec §10). The
+workstation command `pnpm deploy:prod` is **break-glass** only, run as `breakglass`
+under the owner's offline key (hotfix `--ref`, `--rollback`, the gate exceptions);
 **first-time provisioning** (Terraform, DNS, secrets, Zitadel first-boot
 bootstrap) is a one-time human setup, out of the steady-state loop.
 
 | File                       | `pnpm` alias           | Role                                                                                                                                                                                                                                                                 |
 | -------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `prod.mjs`                 | `deploy:prod`          | Full deploy pipeline + `--rollback <sha>` (app-only revert).                                                                                                                                                                                                         |
+| `prod.mjs`                 | `deploy:prod`          | The release pipeline: run box-local by the release driver (`--local`, the Actions path), or from the workstation as break-glass (`--ref`, `--rollback <sha>`, the gate exceptions).                                                                                  |
 | `smoke-prod.mjs`           | `deploy:smoke`         | Live prod HTTP + TLS smoke; also called by `prod.mjs` post-`up -d`.                                                                                                                                                                                                  |
 | `release-notes.mjs`        | `deploy:release-notes` | Aggregated PROD release note to Mattermost (#868); render+POST seam fired from CI on `deployment_status: success` (`release-digest.yml`, #968).                                                                                                                      |
 | `live-broadcast-check.mjs` | `deploy:check-live`    | Read-only live-эфир probe (`GET /v1/public/events`, spec §10.4 item 7): `CLEAR` exit 0 / `LIVE`+`UNKNOWN` exit 1 (fail-closed); also a `prod.mjs` pre-flight hold.                                                                                                   |
@@ -24,10 +27,103 @@ bootstrap) is a one-time human setup, out of the steady-state loop.
 | `stage-main-check.mjs`     | —                      | Stage `main` check (#2701): the last pre-flight step of a `--ref` hotfix — converge the stage `main` slot to the target and run the full stage suite from a clean checkout of it (see below). A `main` target reads the `stage-suite` status instead.                |
 | `registry-retention.mjs`   | —                      | Container-registry retention (#3110), run only by `registry-retention.yml`: keeps the last 3 releases, the latest production deployment, the newest 3 `main` images, the open hotfix and PR heads, deletes the rest (`infra/deploy/README.md` → Container registry). |
 
-## `pnpm deploy:prod`
+## Release from Actions (`deploy-prod.yml`, #3158)
+
+The normal production release runs in Actions, never from a workstation (spec
+`apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md`
+§3 item 3, §5 «Prod release driver.»). On the owner's word in chat the agent
+dispatches it with that word verbatim:
 
 ```bash
-pnpm deploy:prod                    # deploy origin/main (default)
+gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_quote="<the owner's words>"
+```
+
+| Job         | What it does                                                                                                                                                                                                                                                                               |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `preflight` | refuses an empty / whitespace-only `owner_quote` first; then `node tools/deploy/release-runner.mjs preflight --sha <sha>`: SHA in `main` · `stage-suite` status success · CI green · release gate · live-broadcast gate · recorded `images-<sha>.json` exists                              |
+| `deploy`    | Environment `production` (`deployment: false`): `ssh deploy@<api-prod> "release prod <sha>" < images-<sha>.json`, polls `status prod <sha>` (status lines only), then `release-runner.mjs record`: release cut on success + the ONE Deployment record (success or failure, with the quote) |
+| `digest`    | on a newly recorded success only (`recorded=new`): calls `release-digest.yml` (`workflow_call`) with `MATTERMOST_WEBHOOK_URL` passed                                                                                                                                                       |
+
+- **Same gates as the workstation path, no escape hatch.** The checks are the
+  modules `pnpm deploy:prod` uses (`ci-gate.mjs`, `release-gate.mjs`,
+  `live-broadcast-check.mjs`, `lib/registry.mjs`); `stage-suite` (set by
+  `stage.yml`) replaces the operator's stage `main` check, as it does on the
+  workstation path for a `main` target. `--skip-ci-check`,
+  `--release-gate-exempt`, `--allow-live-broadcast` and `--ref` exist only on
+  `pnpm deploy:prod` (break-glass); the rollback runs here in rollback mode
+  (below), and `pnpm deploy:prod --rollback` stays its break-glass twin. The CI check drops the
+  check-runs of `deploy-prod.yml` itself by workflow path (an earlier failed
+  attempt on the same SHA is not CI).
+- **One release at a time.** `concurrency: deploy-prod`, never cancelled — its own
+  group, not the changesets workflow's `release`. A re-dispatch of the same SHA
+  reattaches to the running driver unit (`attached`) or reports
+  `already-succeeded`.
+- **Record.** `deployment-record.mjs` `recordDeployment` writes the Deployment
+  with `GITHUB_TOKEN`; the driver's `previousSha` is the basis of the
+  Deployment-record notes. Events of `GITHUB_TOKEN` start no workflow, which is
+  why the digest is called explicitly. A record that could not be written fails
+  the job (`::error::`).
+- **Lost contact.** When ssh to ds-api-prod fails four times in a row or the
+  release does not finish within 60 min, the poll sets the verdict `unknown`
+  before failing the job, and the record step writes the Deployment status
+  `error` (GitHub's «could not determine», distinct from `failure`): the driver
+  unit keeps running on the box. A re-dispatch of the same SHA records the
+  verdict — it reattaches (`attached`) or answers `already-succeeded`. Before a
+  success is recorded the runner reads the SHA's production Deployments: when one
+  already carries a `success` status it prints `↷ already recorded` and writes
+  nothing twice — no cut, no second record, no digest (`recorded=existing`); when
+  only the `error` record exists it records the success, cuts and posts the
+  digest as usual.
+- **Secrets.** `PROD_SSH_KEY` + `PROD_SSH_KNOWN_HOSTS` live in Environment
+  `production` (deployment branches `main`, no required reviewer) and reach only
+  the `deploy` job.
+
+### Rollback mode (#2987)
+
+When a release visibly broke production (failed post-deploy smoke, site or login
+down) the agent rolls it off without an owner word (spec §3 item 3 «Rollback
+mode», §9, §10 owner decision 2026-10-22) and reports to the owner at once:
+
+```bash
+gh workflow run deploy-prod.yml --ref main -f mode=rollback -f sha=<target sha> -f reason="<why>"
+```
+
+- **Pre-flight** (`release-runner.mjs rollback-preflight`): the `reason` is not
+  blank (it reaches steps only through `env:`); the SHA is the target of one of
+  the latest 3 `release-*` Releases (by date and sequence; drafts skipped); it is
+  strictly behind the live SHA (the newest production Deployment with a `success`
+  status; compare `<live>...<sha>` = `behind`); its `images-<sha>.json` is
+  recorded. No stage-suite, release-gate or live-broadcast check. The box repeats
+  the ancestry and release checks as the boundary and runs the migration floor.
+- **Deploy.** `ssh deploy@<api-prod> "rollback prod <sha>" < images-<sha>.json`,
+  then polls `rollback-status prod <sha>` (30 min, status lines only). The verdict
+  (`release-runner.mjs rollback-verdict`) reads the `-rollback` unit state as well
+  as the record: a dead, failed or absent unit is succeeded only with rc 0 and a
+  `succeeded` record, so a unit that died with its record still `running` is a
+  failure. Lost contact or the time-out is `unknown` → an `error` record.
+- **After a terminal status.** No release cut, no digest. `rollback-record` writes
+  the ONE Deployment record (`success` / `failure` / `error`) described
+  `rollback to <sha12> — <reason>`, with the reason and the rolled-off SHA in its
+  payload; `rollback-notice` posts «откат прода на <sha12>: <reason>» and the
+  outcome to Mattermost through `release-notes.mjs` `postToMattermost`.
+- **Break-glass stays on the workstation.** `pnpm deploy:prod --rollback`, the
+  hotfix `--ref`, `--skip-ci-check`, `--allow-live-broadcast` and
+  `--release-gate-exempt` are not on this path.
+
+## Break-glass: `pnpm deploy:prod`
+
+The workstation path, for what the release workflow deliberately does not do: a
+hotfix `--ref`, a workstation `--rollback`, and the gate exceptions. It runs only
+on the owner's word, under the owner's offline `breakglass` key: it connects to
+ds-api-prod as `breakglass@ds-api-prod` (`deploy` there is the CI user, forced
+command only), and to data-prod through that alias's ProxyJump as `deploy` (SSH
+aliases, below). The pipeline below is the same one the release driver runs
+box-local (`--local`); the workstation run adds the operator pre-flight (clean
+checkout, the PC stage check of a `--ref`), the release cut and the Deployment
+record.
+
+```bash
+pnpm deploy:prod                    # release origin/main (default)
 pnpm deploy:prod --ref <sha>        # HOTFIX: ship exactly <sha>, not all of main (#1881)
 pnpm deploy:prod --rollback <sha>   # app-only rollback to a prior SHA-tagged image
 pnpm deploy:prod --skip-ci-check    # escape hatch (loud warning)
@@ -244,7 +340,7 @@ The **deployed SHA is queryable over HTTP**: `GET /v1/health` → `{"version":�
 `main`/`hotfix/*` manifest exactly as a deploy pulls (same token check, digest proof and
 logout), and a target without one refuses with that cause.
 
-### Hotfix deploy (`--ref <sha>`)
+### Hotfix deploy (`--ref <sha>`, break-glass)
 
 `pnpm deploy:prod` ships the WHOLE `deployedSha..origin/main` range: one fix
 cannot be shipped without everything else merged since. When prod needs a single
@@ -793,105 +889,22 @@ A successful deploy leaves a durable, queryable trail. Every record step is
 **non-fatal by contract** — it runs only once the deploy has already succeeded,
 so a `gh`/webhook hiccup prints a warning and the deploy exit code stays 0.
 
-| Record                | When                                                             | Source / how                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| --------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **GitHub Deployment** | end of `deploy:prod` (#942)                                      | `deployment-record.mjs` posts a `Deployment(production, sha)` + `success` status carrying the release-notes digest; `log_url` = `/v1/health`.                                                                                                                                                                                                                                                                                                                            |
-| **Git tag + Release** | `deploy:prod` success, before the Deployment record (#996/§10.5) | The agent-run deploy is the release **initiator** (Option A): it cuts `release-YYYY.MM.DD-n` + a GitHub Release with auto-generated notes (`--generate-notes` since the previous release) at the **deployed SHA** via `cut-release.mjs` → `cutDeployRelease`. Skipped green on a redeploy of an already-released SHA (non-empty-range guard). The `Version Packages` merge no longer cuts a repo-level release — it maintains per-package version + `CHANGELOG.md` only. |
-| **Mattermost digest** | CI `deployment_status: success` (#868/#968)                      | `release-digest.yml` fires on the production Deployment's `success` status (or a manual `workflow_dispatch`); `tools/ci/post-release-digest.mjs` anchors `<prev>` on the previous `release-*` tag (repo-root baseline if none, #975) and posts via `release-notes.mjs`. Webhook = `secrets.MATTERMOST_WEBHOOK_URL` (CI only).                                                                                                                                            |
+| Record                | When                                                                                                    | Source / how                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **GitHub Deployment** | end of a release: `release-runner.mjs record` in `deploy-prod.yml`, or break-glass `deploy:prod` (#942) | `deployment-record.mjs` posts a `Deployment(production, sha)` + its status carrying the release-notes digest (and, on the Actions path, the owner quote); `log_url` = `/v1/health`.                                                                                                                                                                                                                                                                             |
+| **Git tag + Release** | release success, before the Deployment record (#996/§10.5)                                              | The release is the release **initiator** (Option A): it cuts `release-YYYY.MM.DD-n` + a GitHub Release with auto-generated notes (`--generate-notes` since the previous release) at the **deployed SHA** via `cut-release.mjs` → `cutDeployRelease`. Skipped green on a redeploy of an already-released SHA (non-empty-range guard). The `Version Packages` merge no longer cuts a repo-level release — it maintains per-package version + `CHANGELOG.md` only. |
+| **Mattermost digest** | `deploy-prod.yml` `digest` job; break-glass: CI `deployment_status: success` (#868/#968)                | `release-digest.yml`, called by `deploy-prod.yml` (`workflow_call`) on a newly recorded success, or fired by the break-glass Deployment's `success` status (or a manual `workflow_dispatch`); `tools/ci/post-release-digest.mjs` anchors `<prev>` on the previous `release-*` tag (repo-root baseline if none, #975) and posts via `release-notes.mjs`. Webhook = `secrets.MATTERMOST_WEBHOOK_URL` (CI only).                                                   |
 
 **`## Project reality` reads these at SessionStart.** The bootstrap (#939)
 derives the latest release (from Releases/tags), the currently deployed SHA (the
 latest production **Deployment** ⋈ the live `/v1/health` `version`), and the
 **merged-not-deployed** delta (product PRs merged into `main` but not yet
-present in the deployed SHA). A non-empty delta is the cue to `pnpm deploy:prod`
+present in the deployed SHA). A non-empty delta is the cue to propose a release
 (runbook: skill `run-prod-deploy` / `/deploy`).
 
-**Exit-code hygiene.** `deploy:prod` (and any deploy/merge/migrate command) runs
+**Exit-code hygiene.** `gh workflow run`, `deploy:prod` (and any deploy/merge/migrate command) runs
 as its **own statement** — never `pnpm deploy:prod | tee log`: a pipe returns the
 pipe's exit code (`tee`'s 0) and masks a non-zero deploy failure. Redirect with
 `> log 2>&1` and check `$?` if a transcript is needed. A watchdog `STALLED` exit
 is non-zero like any other failure — but it means "channel went quiet", not
 "remote work failed": run `pnpm deploy:probe` before deciding re-run vs rollback.
-
-## Release from Actions (`deploy-prod.yml`, #3158)
-
-The normal production release runs in Actions, never from a workstation (spec
-`apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md`
-§3 item 3, §5 «Prod release driver.»). On the owner's word in chat the agent
-dispatches it with that word verbatim:
-
-```bash
-gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_quote="<the owner's words>"
-```
-
-| Job         | What it does                                                                                                                                                                                                                                                                               |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `preflight` | refuses an empty / whitespace-only `owner_quote` first; then `node tools/deploy/release-runner.mjs preflight --sha <sha>`: SHA in `main` · `stage-suite` status success · CI green · release gate · live-broadcast gate · recorded `images-<sha>.json` exists                              |
-| `deploy`    | Environment `production` (`deployment: false`): `ssh deploy@<api-prod> "release prod <sha>" < images-<sha>.json`, polls `status prod <sha>` (status lines only), then `release-runner.mjs record`: release cut on success + the ONE Deployment record (success or failure, with the quote) |
-| `digest`    | on a newly recorded success only (`recorded=new`): calls `release-digest.yml` (`workflow_call`) with `MATTERMOST_WEBHOOK_URL` passed                                                                                                                                                       |
-
-- **Same gates as the workstation path, no escape hatch.** The checks are the
-  modules `pnpm deploy:prod` uses (`ci-gate.mjs`, `release-gate.mjs`,
-  `live-broadcast-check.mjs`, `lib/registry.mjs`); `stage-suite` (set by
-  `stage.yml`) replaces the operator's stage `main` check, as it does on the
-  workstation path for a `main` target. `--skip-ci-check`,
-  `--release-gate-exempt`, `--allow-live-broadcast` and `--ref` exist only on
-  `pnpm deploy:prod` (break-glass); the rollback runs here in rollback mode
-  (below), and `pnpm deploy:prod --rollback` stays its break-glass twin. The CI check drops the
-  check-runs of `deploy-prod.yml` itself by workflow path (an earlier failed
-  attempt on the same SHA is not CI).
-- **One release at a time.** `concurrency: deploy-prod`, never cancelled — its own
-  group, not the changesets workflow's `release`. A re-dispatch of the same SHA
-  reattaches to the running driver unit (`attached`) or reports
-  `already-succeeded`.
-- **Record.** `deployment-record.mjs` `recordDeployment` writes the Deployment
-  with `GITHUB_TOKEN`; the driver's `previousSha` is the basis of the
-  Deployment-record notes. Events of `GITHUB_TOKEN` start no workflow, which is
-  why the digest is called explicitly. A record that could not be written fails
-  the job (`::error::`).
-- **Lost contact.** When ssh to ds-api-prod fails four times in a row or the
-  release does not finish within 60 min, the poll sets the verdict `unknown`
-  before failing the job, and the record step writes the Deployment status
-  `error` (GitHub's «could not determine», distinct from `failure`): the driver
-  unit keeps running on the box. A re-dispatch of the same SHA records the
-  verdict — it reattaches (`attached`) or answers `already-succeeded`. Before a
-  success is recorded the runner reads the SHA's production Deployments: when one
-  already carries a `success` status it prints `↷ already recorded` and writes
-  nothing twice — no cut, no second record, no digest (`recorded=existing`); when
-  only the `error` record exists it records the success, cuts and posts the
-  digest as usual.
-- **Secrets.** `PROD_SSH_KEY` + `PROD_SSH_KNOWN_HOSTS` live in Environment
-  `production` (deployment branches `main`, no required reviewer) and reach only
-  the `deploy` job.
-
-### Rollback mode (#2987)
-
-When a release visibly broke production (failed post-deploy smoke, site or login
-down) the agent rolls it off without an owner word (spec §3 item 3 «Rollback
-mode», §9, §10 owner decision 2026-10-22) and reports to the owner at once:
-
-```bash
-gh workflow run deploy-prod.yml --ref main -f mode=rollback -f sha=<target sha> -f reason="<why>"
-```
-
-- **Pre-flight** (`release-runner.mjs rollback-preflight`): the `reason` is not
-  blank (it reaches steps only through `env:`); the SHA is the target of one of
-  the latest 3 `release-*` Releases (by date and sequence; drafts skipped); it is
-  strictly behind the live SHA (the newest production Deployment with a `success`
-  status; compare `<live>...<sha>` = `behind`); its `images-<sha>.json` is
-  recorded. No stage-suite, release-gate or live-broadcast check. The box repeats
-  the ancestry and release checks as the boundary and runs the migration floor.
-- **Deploy.** `ssh deploy@<api-prod> "rollback prod <sha>" < images-<sha>.json`,
-  then polls `rollback-status prod <sha>` (30 min, status lines only). The verdict
-  (`release-runner.mjs rollback-verdict`) reads the `-rollback` unit state as well
-  as the record: a dead, failed or absent unit is succeeded only with rc 0 and a
-  `succeeded` record, so a unit that died with its record still `running` is a
-  failure. Lost contact or the time-out is `unknown` → an `error` record.
-- **After a terminal status.** No release cut, no digest. `rollback-record` writes
-  the ONE Deployment record (`success` / `failure` / `error`) described
-  `rollback to <sha12> — <reason>`, with the reason and the rolled-off SHA in its
-  payload; `rollback-notice` posts «откат прода на <sha12>: <reason>» and the
-  outcome to Mattermost through `release-notes.mjs` `postToMattermost`.
-- **Break-glass stays on the workstation.** `pnpm deploy:prod --rollback`, the
-  hotfix `--ref`, `--skip-ci-check`, `--allow-live-broadcast` and
-  `--release-gate-exempt` are not on this path.

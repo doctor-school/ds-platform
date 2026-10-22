@@ -11,6 +11,25 @@ function required(name: string): string {
   return value;
 }
 
+export function assertStaffProfileFixtureScope(base: string): void {
+  const target = new URL(base);
+  const issuer = required("IDP_ISSUER").replace(/\/$/, "");
+  if (
+    !["localhost", "127.0.0.1", "[::1]"].includes(target.hostname) ||
+    process.env.E2E_AUTH_LIMIT_TIER !== "default" ||
+    process.env.E2E_WORKERS !== "1" ||
+    process.env.E2E_STAFF_ROLE_FIXTURE !== "true" ||
+    required("E2E_STAFF_FIXTURE_ISSUER").replace(/\/$/, "") !== issuer ||
+    new URL(issuer).hostname === "id.doctor.school"
+  ) {
+    throw new Error(
+      "Staff-profile fixture requires the explicit owned local contour",
+    );
+  }
+  required("E2E_STAFF_FIXTURE_LOG");
+  required("IDP_PROJECT_ID");
+  required("IDP_SERVICE_TOKEN");
+}
 /** 003 EARS-27 amendment #2456: scoped role fixture, never role provisioning. */
 export async function setOwnedStaffProfileRoles(
   email: string,

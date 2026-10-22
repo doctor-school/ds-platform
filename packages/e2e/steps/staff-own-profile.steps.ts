@@ -1,4 +1,4 @@
-﻿import { randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
@@ -8,10 +8,11 @@ import {
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import {
+  assertStaffProfileFixtureScope,
   setOwnedStaffProfileRoles,
   type StaffProfileRoles,
 } from "../lib/staff-profile-fixture.js";
-import { After, Given, Then, When } from "./support/auth-fixtures.js";
+import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 
 interface Owner {
   context: BrowserContext;
@@ -122,6 +123,7 @@ Given(
   "two uniquely owned verified Academy users are prepared for staff-profile role checks",
   async ({ page, browser, httpCredentials, world }) => {
     expect(world.host.id).toBe("academy");
+    assertStaffProfileFixtureScope(world.hostBaseUrl);
     const current: StaffProfile = { owners: [], base: world.hostBaseUrl };
     states.set(page, current);
     for (let index = 0; index < 2; index++) {
@@ -291,6 +293,32 @@ Then(
 After("@staff-own-profile", async ({ page }) => {
   const current = states.get(page);
   if (!current) return;
-  await Promise.all(current.owners.map((owner) => owner.context.close()));
+  let cleanupFailed = false;
+  for (const owner of current.owners) {
+    try {
+      if (
+        (await owner.context.cookies()).some(
+          (cookie) => cookie.name === "__Host-ds_session",
+        )
+      ) {
+        await logout(owner);
+      }
+    } catch {
+      cleanupFailed = true;
+    } finally {
+      await owner.context.close();
+    }
+  }
   states.delete(page);
+  if (cleanupFailed) {
+    if (test.info().status === test.info().expectedStatus)
+      throw new Error("Owned staff-profile logout failed during cleanup");
+    test
+      .info()
+      .annotations.push({
+        type: "cleanup-failed",
+        description:
+          "Owned staff-profile logout failed; original scenario failure retained; lead must inspect scoped cleanup.",
+      });
+  }
 });

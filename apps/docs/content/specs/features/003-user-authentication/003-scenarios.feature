@@ -1832,7 +1832,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   # Retained Academy baseline (#3256), not shared-sign-in-host acceptance.
   # Existing staff account amendment #2456; no statistics or grant-policy change.
-  @EARS-27 @EARS-28 @EARS-16 @EARS-10 @happy @staff-own-profile
+  @EARS-27 @EARS-28 @EARS-16 @EARS-10 @happy @staff-own-profile @default-auth-limits
   Scenario: Academy staff own-profile access preserves registrar confinement
     Given two uniquely owned verified Academy users are prepared for staff-profile role checks
     When the platform-admin-only Academy owner opens and edits their own profile then signs out

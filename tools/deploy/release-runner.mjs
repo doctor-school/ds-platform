@@ -250,9 +250,10 @@ export function preflightChecks({ sha, repo, cwd = process.cwd() }) {
         cwd,
         healthUrl: PROD_HEALTH_URL,
       });
-      const hold = formatReleaseGateHold(evaluateReleaseGate(probe));
+      const verdict = evaluateReleaseGate(probe);
+      const hold = formatReleaseGateHold(verdict);
       if (hold) throw new Error(hold);
-      return { line: formatReleaseGateClear(probe.basisSha) };
+      return { line: formatReleaseGateClear(probe.basisSha, verdict.notes) };
     },
     "live-broadcast": async () => {
       // The CLI's exit code is its contract (0 CLEAR; 1 LIVE or UNKNOWN — both hold).

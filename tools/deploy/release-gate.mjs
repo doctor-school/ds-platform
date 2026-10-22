@@ -21,6 +21,23 @@
 //      the body links with a `Closes #N` keyword — a gate that read only the
 //      body would ship an un-live-verified surface whenever the record was
 //      filed on the linked Issue, which the guard explicitly allows.
+//      A slice that is DARK on prod — its surface becomes reachable only
+//      through a later PR — records `Stage-B-dark-until: #M` (one PR number,
+//      same tolerance as the batched marker). Its author certifies by that
+//      record that the slice has no visible prod difference on its own; the
+//      reaching PR #M carries its own `Stage-B:` record (a GO, `pending`, or
+//      `batched at #<gate>`), so acceptance still gates the release that makes
+//      the surface visible. Because this record REMOVES a hold, a linked-Issue
+//      comment counts only when its author is OWNER, MEMBER or COLLABORATOR —
+//      the repo is public, so anyone can comment; the PR body (editable only
+//      by collaborators) stays an accepted source. Such a pair holds ONLY while
+//      #M is merged and reachable at the target (inside this release range, or
+//      already deployed); #M open, unmerged, or merged after the target clears
+//      the pair, reported as «dark until #M — not in this release». A
+//      malformed or conflicting marker, a #M that cannot be resolved, or a #M
+//      with no `Stage-B:` line at all HOLDS (fail-closed). This is
+//      what keeps one sliced feature from holding every other session's
+//      release while its later slice is still unfinished.
 //   3. Release-requires: #N in a selected PR's body holds that deployment while
 //      its pre-deploy prerequisite is OPEN. Rollout/post-release actions stay
 //      tracked separately, never circular preconditions of their own activation.
@@ -128,6 +145,62 @@ export function extractClosedIssues(body) {
   return out;
 }
 
+// `Stage-B-dark-until: #M` — same line decoration tolerance as MARKER_RE (which
+// cannot match it: `stage-b` is followed by `-dark`, not `:`).
+const DARK_UNTIL_RE =
+  /^[ \t>*_-]*stage-?b-dark-until[ \t]*:[ \t]*(.*?)[ \t]*$/gim;
+
+/**
+ * The reaching PR a dark slice names with `Stage-B-dark-until: #M`, or `null`
+ * when the text carries no such marker. PURE. Throws on a malformed value or
+ * two different PR numbers in one text — an unreadable certification must not
+ * clear a deferral (the probe turns the throw into UNKNOWN → hold).
+ *
+ * @param {string|null|undefined} text a PR body or an Issue comment
+ * @returns {number|null}
+ */
+export function extractDarkUntil(text) {
+  if (typeof text !== "string" || text.length === 0) return null;
+  // PR-template comments are instructions, not live declarations.
+  const clean = text.replace(/<!--[\s\S]*?-->/g, "");
+  let found = null;
+  for (const m of clean.matchAll(DARK_UNTIL_RE)) {
+    const value = /^#([1-9]\d*)$/.exec(m[1] ?? "");
+    const n = value ? Number(value[1]) : NaN;
+    if (!Number.isSafeInteger(n)) {
+      throw new Error(
+        "malformed Stage-B-dark-until: use a single #<PR number>",
+      );
+    }
+    if (found !== null && found !== n) {
+      throw new Error(
+        `conflicting Stage-B-dark-until markers (#${found} vs #${n})`,
+      );
+    }
+    found = n;
+  }
+  return found;
+}
+
+// Any `Stage-B:` record line (a GO, `pending`, `batched at #N`, N/A…) — the
+// reaching PR must carry one. `Stage-B-head:` / `-dark-until:` do not match.
+const STAGE_B_RECORD_RE = /^[ \t>*_-]*stage-?b[ \t]*:/im;
+
+/** Does `text` carry a live `Stage-B:` record line? PURE. */
+export function hasStageBRecord(text) {
+  if (typeof text !== "string") return false;
+  // PR-template comments are instructions, not live declarations.
+  return STAGE_B_RECORD_RE.test(text.replace(/<!--[\s\S]*?-->/g, ""));
+}
+
+// A comment may carry `Stage-B-dark-until` (which removes a hold) only from
+// these associations: the repo is public, so any account can comment.
+const TRUSTED_COMMENT_ASSOCIATIONS = new Set([
+  "OWNER",
+  "MEMBER",
+  "COLLABORATOR",
+]);
+
 /** Explicit PR-body prerequisites; malformed declarations fail closed. */
 export function extractReleaseRequires(body) {
   const refs = new Set();
@@ -158,9 +231,10 @@ export function extractReleaseRequires(body) {
  * @property {Array<{number:number,title:string}>|null} blockers OPEN Issues
  *   carrying `release-blocker`; `null` when the query failed (fail-closed).
  * @property {string=} blockersError first line of the blocker-query error.
- * @property {Array<{pr:number,gate:number,gateTitle:string}>|null} openBatched
+ * @property {Array<{pr:number,gate:number,gateTitle:string,darkUntil?:DarkUntil}>|null} openBatched
  *   merged-undeployed PR → OPEN batched-Stage-B gate pairs; `null` when the
- *   delta could not be enumerated (fail-closed).
+ *   delta could not be enumerated (fail-closed). `darkUntil` is present when
+ *   the PR records `Stage-B-dark-until: #M`.
  * @property {string=} openBatchedError first line of the delta error.
  * @property {Array<{pr:number,issue:number,title:string}>|null} openRequires
  *   OPEN prerequisites of selected PRs; null on unknown.
@@ -174,17 +248,29 @@ export function extractReleaseRequires(body) {
  */
 
 /**
+ * @typedef {Object} DarkUntil
+ * @property {number} pr the reaching PR #M.
+ * @property {boolean|null} reachable `true` when #M is merged and reachable at
+ *   the target (in this release range or already deployed), `false` when it is
+ *   not, `null` when #M could not be resolved (fail-closed → hold).
+ * @property {string=} detail why (`in this release`, `OPEN`, the lookup error…).
+ */
+
+/**
  * Reduce a probe to a hold/clear verdict. PURE — no I/O.
  *
  * HOLD on: any open `release-blocker` Issue; any merged-undeployed PR whose
  * batched-Stage-B gate Issue is still open; OR any UNKNOWN (a `null` list —
  * the evidence was not obtainable, so the gate cannot claim it is clear).
+ * A pair carrying `darkUntil` holds only while its reaching PR is reachable
+ * (`true`) or unresolved (`null`); an unreachable one becomes a `notes` line.
  *
  * @param {ReleaseGateProbe} probe
- * @returns {{hold: boolean, reasons: string[]}}
+ * @returns {{hold: boolean, reasons: string[], notes: string[]}}
  */
 export function evaluateReleaseGate(probe) {
   const reasons = [];
+  const notes = [];
   const p = probe ?? {};
 
   if (!Array.isArray(p.blockers)) {
@@ -206,13 +292,36 @@ export function evaluateReleaseGate(probe) {
         (p.openBatchedError ? ` (${p.openBatchedError})` : "") +
         " — fail-closed",
     );
-  } else if (p.openBatched.length > 0) {
-    reasons.push(
-      `${p.openBatched.length} merged-undeployed PR(s) defer Stage-B to a still-OPEN gate:`,
-    );
+  } else {
+    const holding = [];
     for (const b of p.openBatched) {
+      const pair = `PR #${b.pr} → gate #${b.gate} ${b.gateTitle}`.trimEnd();
+      const d = b.darkUntil;
+      if (!d) {
+        holding.push(`    ${pair}`);
+      } else if (d.reachable === false) {
+        notes.push(
+          `${pair}: dark until #${d.pr} — not in this release` +
+            (d.detail ? ` (${d.detail})` : ""),
+        );
+      } else if (d.reachable === true) {
+        holding.push(
+          `    ${pair} (dark until #${d.pr}, which is reachable at this target` +
+            (d.detail ? `: ${d.detail}` : "") +
+            ")",
+        );
+      } else {
+        holding.push(
+          `    ${pair} — UNKNOWN: could not resolve dark-until PR #${d.pr}` +
+            (d.detail ? ` (${d.detail})` : "") +
+            " — fail-closed",
+        );
+      }
+    }
+    if (holding.length > 0) {
       reasons.push(
-        `    PR #${b.pr} → gate #${b.gate} ${b.gateTitle}`.trimEnd(),
+        `${holding.length} merged-undeployed PR(s) defer Stage-B to a still-OPEN gate:`,
+        ...holding,
       );
     }
   }
@@ -239,14 +348,20 @@ export function evaluateReleaseGate(probe) {
     );
   }
 
-  return { hold: reasons.length > 0, reasons };
+  return { hold: reasons.length > 0, reasons, notes };
+}
+
+/** Indented `not holding:` lines for dark-until pairs that cleared. PURE. */
+function formatDarkNotes(notes) {
+  if (!Array.isArray(notes) || notes.length === 0) return "";
+  return notes.map((n) => `\n  not holding: ${n}`).join("");
 }
 
 /**
  * The operator-facing hold message for a verdict, or `null` when it is clear.
  * PURE — the caller decides whether to `die()` with it.
  *
- * @param {{hold: boolean, reasons: string[]}} verdict
+ * @param {{hold: boolean, reasons: string[], notes?: string[]}} verdict
  * @returns {string|null}
  */
 export function formatReleaseGateHold(verdict) {
@@ -254,6 +369,7 @@ export function formatReleaseGateHold(verdict) {
   return (
     `release gate (spec §10 — \`main\` stays deployable by default):\n  ` +
     verdict.reasons.join("\n  ") +
+    formatDarkNotes(verdict.notes) +
     `\n  Resolve the prerequisite / Stage-B gate, or remove a global label whose\n` +
     `  documented risk has ended (keep unfinished work open), or by\n` +
     `  REVERTING the offending PR from \`main\` (spec §10 revert norm). An\n` +
@@ -262,10 +378,19 @@ export function formatReleaseGateHold(verdict) {
   );
 }
 
-/** The clear line (single source for the `ok(...)` text). */
-export function formatReleaseGateClear(basisSha) {
+/**
+ * The clear line (single source for the `ok(...)` text), plus one
+ * `not holding:` line per dark-until pair the verdict cleared.
+ *
+ * @param {string|null} basisSha
+ * @param {string[]=} notes `verdict.notes`
+ */
+export function formatReleaseGateClear(basisSha, notes) {
   const basis = basisSha ? ` (delta basis ${basisSha.slice(0, 12)})` : "";
-  return `release gate clear — no open ${RELEASE_BLOCKER_LABEL} Issue, no open selected prerequisite, no open batched Stage-B gate${basis}`;
+  return (
+    `release gate clear — no open ${RELEASE_BLOCKER_LABEL} Issue, no open selected prerequisite, no open batched Stage-B gate${basis}` +
+    formatDarkNotes(notes)
+  );
 }
 
 // ── I/O probe seam (never throws) ───────────────────────────────────────────
@@ -323,6 +448,87 @@ export async function probeHealthSha(url) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Is the reaching PR #M of a dark slice reachable at `targetSha`? Never throws:
+ * a lookup failure is `reachable: null` (UNKNOWN → the pair holds).
+ *
+ * In the release range → reachable. Otherwise it must be read: OPEN / CLOSED
+ * unmerged → not reachable; MERGED → reachable iff its merge commit is an
+ * ancestor of the target (outside the range that means already deployed, so
+ * the dark slice would surface the moment it ships — it holds). A #M that
+ * would clear but carries no `Stage-B:` line is UNKNOWN (a typo naming an
+ * unrelated PR must not clear the pair silently).
+ *
+ * @param {number} m
+ * @param {number[]} deltaPrs PR numbers in `<basis>..<target>`
+ * @param {string} targetSha
+ * @param {(cmd: string, args: string[]) => string} exec
+ * @param {Map<number, DarkUntil>} cache
+ * @returns {DarkUntil}
+ */
+function resolveDarkUntil(m, deltaPrs, targetSha, exec, cache) {
+  const hit = cache.get(m);
+  if (hit) return hit;
+  /** @type {DarkUntil} */
+  let out;
+  if (deltaPrs.includes(m)) {
+    out = { pr: m, reachable: true, detail: "in this release" };
+  } else {
+    try {
+      const raw = exec("gh", [
+        "pr",
+        "view",
+        String(m),
+        "--json",
+        "number,state,mergeCommit,body",
+      ]);
+      const pr = JSON.parse(raw || "{}");
+      const state = String(pr.state ?? "").toUpperCase();
+      if (Number(pr.number) !== m) {
+        out = { pr: m, reachable: null, detail: "not a pull request" };
+      } else if (state === "OPEN" || state === "CLOSED") {
+        out = { pr: m, reachable: false, detail: state };
+      } else if (state === "MERGED") {
+        const oid = pr.mergeCommit?.oid;
+        if (typeof oid !== "string" || oid === "") {
+          out = {
+            pr: m,
+            reachable: null,
+            detail: "merged without a merge commit",
+          };
+        } else {
+          // Commits in `oid` that the target lacks: 0 ⇔ ancestor of the target.
+          const extra = Number(
+            exec("git", ["rev-list", "--count", `${targetSha}..${oid}`]),
+          );
+          out = !Number.isInteger(extra)
+            ? { pr: m, reachable: null, detail: "ancestry check unreadable" }
+            : extra === 0
+              ? { pr: m, reachable: true, detail: "already deployed" }
+              : { pr: m, reachable: false, detail: "merged after this target" };
+        }
+      } else {
+        out = {
+          pr: m,
+          reachable: null,
+          detail: `unknown state ${state || "(none)"}`,
+        };
+      }
+      if (out.reachable === false && !hasStageBRecord(pr.body)) {
+        out = {
+          pr: m,
+          reachable: null,
+          detail: `#${m} has no Stage-B: record`,
+        };
+      }
+    } catch (e) {
+      out = { pr: m, reachable: null, detail: firstLine(e) };
+    }
+  }
+  cache.set(m, out);
+  return out;
 }
 
 /**
@@ -436,8 +642,10 @@ export async function probeReleaseGate({
     const requires = [];
     /** @type {Map<number, {state: string, title: string}>} */
     const gateCache = new Map();
-    /** @type {Map<number, string[]>} linked-Issue number → comment bodies */
+    /** @type {Map<number, Array<{body: string, trusted: boolean}>>} linked-Issue number → comments */
     const issueCommentsCache = new Map();
+    /** @type {Map<number, DarkUntil>} reaching PR #M → resolution */
+    const darkCache = new Map();
     for (const n of prNumbers) {
       let body;
       try {
@@ -473,6 +681,18 @@ export async function probeReleaseGate({
       // the body links with a `Closes #N` keyword. Union, so a record filed in
       // either place holds the deploy.
       const refs = [...extractBatchedGateRefs(body)];
+      // Same union for `Stage-B-dark-until: #M`; a malformed or conflicting
+      // record throws → delta UNKNOWN → hold.
+      let darkUntilPr = extractDarkUntil(body);
+      const noteDarkUntil = (m) => {
+        if (m === null) return;
+        if (darkUntilPr !== null && darkUntilPr !== m) {
+          throw new Error(
+            `PR #${n}: conflicting Stage-B-dark-until markers (#${darkUntilPr} vs #${m})`,
+          );
+        }
+        darkUntilPr = m;
+      };
       for (const linked of extractClosedIssues(body)) {
         let comments = issueCommentsCache.get(linked);
         if (!comments) {
@@ -488,16 +708,27 @@ export async function probeReleaseGate({
           ]);
           const parsed = JSON.parse(issueRaw || "{}");
           comments = Array.isArray(parsed.comments)
-            ? parsed.comments.map((c) => String(c?.body ?? ""))
+            ? parsed.comments.map((c) => ({
+                body: String(c?.body ?? ""),
+                trusted: TRUSTED_COMMENT_ASSOCIATIONS.has(
+                  String(c?.authorAssociation ?? "").toUpperCase(),
+                ),
+              }))
             : [];
           issueCommentsCache.set(linked, comments);
         }
         for (const c of comments) {
-          for (const gate of extractBatchedGateRefs(c)) {
+          // A batched marker only ADDS a hold, so any author counts.
+          for (const gate of extractBatchedGateRefs(c.body)) {
             if (!refs.includes(gate)) refs.push(gate);
           }
+          if (c.trusted) noteDarkUntil(extractDarkUntil(c.body));
         }
       }
+
+      // Resolved only once the PR has an OPEN batched gate it could clear.
+      /** @type {DarkUntil|undefined} */
+      let darkUntil;
 
       for (const gate of refs) {
         let info = gateCache.get(gate);
@@ -517,7 +748,20 @@ export async function probeReleaseGate({
           gateCache.set(gate, info);
         }
         if (info.state === "OPEN") {
-          pairs.push({ pr: n, gate, gateTitle: info.title });
+          if (darkUntilPr !== null && !darkUntil) {
+            darkUntil = resolveDarkUntil(
+              darkUntilPr,
+              prNumbers,
+              targetSha,
+              exec,
+              darkCache,
+            );
+          }
+          pairs.push(
+            darkUntil
+              ? { pr: n, gate, gateTitle: info.title, darkUntil }
+              : { pr: n, gate, gateTitle: info.title },
+          );
         }
       }
     }

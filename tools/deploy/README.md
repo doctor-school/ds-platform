@@ -550,6 +550,30 @@ signal stands:
    matters: an app-only `--rollback` records no Deployment, so a
    Deployment-only basis can be NEWER than what runs and would narrow the range
    past undeployed PRs.
+
+   **Dark-on-prod slices (#3233).** A sliced feature can merge a slice whose
+   surface is reachable on prod only through a later PR #M (an app nothing
+   routes to yet, a refactor into a shared package). Its author records
+   `Stage-B-dark-until: #M` (exactly one PR number) next to the batched
+   marker, with the same line tolerance; the record IS the author's
+   certification that the slice alone makes no visible prod difference. It is
+   read from the PR body or from a comment on a `Closes`-linked Issue — but,
+   because it removes a hold and the repository is public, a comment counts
+   only when its `authorAssociation` is `OWNER`, `MEMBER` or `COLLABORATOR`
+   (any other author's marker is ignored and the pair holds). Such a pair
+   holds only while #M is merged and reachable at the target — inside this
+   release range, or (an authoring error the gate still catches) already
+   deployed. #M open, closed unmerged or merged after the target clears the
+   pair, and the gate output lists it as
+   `not holding: PR #<n> → gate #<g> …: dark until #M — not in this release`.
+   A malformed value, two different numbers for one PR, a #M that cannot be
+   resolved, or a #M whose body has no `Stage-B:` line at all HOLDS. The
+   reaching PR #M carries its own `Stage-B:` record (a GO, `pending`, or
+   `batched at #<gate>`), so the release that makes the surface visible is
+   still held until it is accepted. A PR without the
+   marker holds exactly as above. This keeps one unfinished sliced feature
+   from holding every parallel session's release.
+
 3. **Selected release prerequisites** — PR-body `Release-requires: #123, #456`
    lines name Issues that must be CLOSED before that PR ships. The gate checks
    only PRs in `<live deployed>..<selected target>` (including cherry-picked

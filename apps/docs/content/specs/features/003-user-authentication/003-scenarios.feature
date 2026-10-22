@@ -926,6 +926,15 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When that Academy owner enters a different inline display-name draft and presses Escape
     Then Escape restores the saved name without a display-name PUT and fresh profile and document reload preserve the original identity
 
+  # Retained Academy baseline projection (#3221), not shared-sign-in-host acceptance.
+  # Native account-cabinet Enter/Escape and display-name API trim/no-write tests stay retained.
+  @EARS-16 @EARS-27 @EARS-28 @happy @host:academy @display-name-trim
+  Scenario: Academy persists the trimmed Unicode profile name after Enter and reload
+    Given a uniquely registered verified Academy account is ready to submit a padded Unicode name by Enter
+    When the owned Academy user submits a space-padded Unicode display name with Enter
+    Then exactly one authenticated display-name PUT carries only the trimmed Unicode name and is accepted
+    And fresh profile and real account reload preserve the trimmed name, owner identity and Unicode initials
+
   @EARS-29 @happy @verification-mail
   Scenario: The verification code email is composed and sent by the BFF mailer, code-only
     Given a fresh owned Academy registration is completed in its requesting tab without consuming a code

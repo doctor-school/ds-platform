@@ -281,9 +281,11 @@ export function captchaTestTokenEnv(operatorEnv, boxEnv) {
  * suite env: the shared IdP origin (one for every slot, `idpHostname`) and the shared
  * Mailpit (one per stand, behind the same basic-auth pair — README «Mailpit»).
  * Hostnames only: Playwright does not send `__Host-` cookies to `127.0.0.1`.
- * Operator keys (`IDP_SERVICE_TOKEN`, a branch `DATABASE_URL`, seeded slugs, a
- * reused doctor account) are NOT derivable from a slot; a spec that needs one is
- * reported «not run — missing <names>» unless the operator exports it.
+ * Operator keys (`IDP_SERVICE_TOKEN`, a branch `DATABASE_URL`, a reused doctor
+ * account) are NOT derivable from a slot; a spec that needs one is reported «not
+ * run — missing <names>» unless the operator exports it. Event slugs ARE: the slot
+ * runs `seed:golden`, so a tier's `seededEnv` names the golden events
+ * ({@link seededLegEnv}).
  */
 export function slotLiveEnv({ baseDomain }) {
   return {
@@ -293,6 +295,20 @@ export function slotLiveEnv({ baseDomain }) {
 }
 
 const isSet = (env, name) => Boolean(env?.[name]?.trim());
+
+/**
+ * #2996 — a live tier's golden slugs (`seededEnv`, `live-tiers.mjs`), for that
+ * tier's leg only. An operator-exported value of the same name wins: the leg env
+ * overrides the inherited one, so a seeded slug is dropped wherever the operator
+ * already named their own.
+ */
+export function seededLegEnv(tier, operatorEnv) {
+  return Object.fromEntries(
+    Object.entries(tier.seededEnv ?? {}).filter(
+      ([name]) => !isSet(operatorEnv, name),
+    ),
+  );
+}
 
 /**
  * One live config's run plan against the env the leg will have. A config that
@@ -788,6 +804,7 @@ export async function runE2eStage(
         tier.name,
       );
       const legEnv = {
+        ...seededLegEnv(tier, env),
         ...suiteEnv,
         ...slotLiveEnv({ baseDomain }),
         ...reporting.env,

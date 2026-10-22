@@ -137,8 +137,10 @@ test.describe("014 EARS-4 public post-live event page (e2e)", () => {
       page.getByText("О чём событие", { exact: true }),
     ).toBeVisible();
     // `exact` because the assertion is about the section LABEL, not a
-    // substring other prose on the page may carry.
-    await expect(page.getByText("Спикеры", { exact: true })).toBeVisible();
+    // substring other prose on the page may carry. The label is the canvas's
+    // «Ведёт» (020 EARS-1, the shared `EventSpeakerCard`) since the Academy
+    // page moved onto the one event page (#2072 wave 3).
+    await expect(page.getByText("Ведёт", { exact: true })).toBeVisible();
 
     // The exactly-one-CTA invariant holds in the ended state: no participation
     // CTA, and no half-built player button pretending to be one.

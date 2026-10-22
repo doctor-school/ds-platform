@@ -133,7 +133,15 @@ test.describe("020 EARS-2 — the registration-free decision set", () => {
     await page.goto(`${BASE}/events/${SLUG}`, {
       waitUntil: "domcontentloaded",
     });
-    const guest = await page.getByTestId("event-page-open-part").innerHTML();
+    // A speaker photo is a presigned object-storage URL minted per request:
+    // its signing instant and signature differ between ANY two reads, guest or
+    // not (#2996 — the stand's speakers carry photos). Those request nonces are
+    // blanked; every other byte, the object key included, must still match.
+    const unsigned = (html: string) =>
+      html.replace(/(X-Amz-(?:Date|Signature))=[^&"]*/gu, "$1=");
+    const guest = unsigned(
+      await page.getByTestId("event-page-open-part").innerHTML(),
+    );
 
     // The open part is the host's projection of a `@Public()` read: `links` are
     // resolved from the HOST's route table, never from the viewer. A session
@@ -153,9 +161,9 @@ test.describe("020 EARS-2 — the registration-free decision set", () => {
     await page.goto(`${BASE}/events/${SLUG}`, {
       waitUntil: "domcontentloaded",
     });
-    const withSession = await page
-      .getByTestId("event-page-open-part")
-      .innerHTML();
+    const withSession = unsigned(
+      await page.getByTestId("event-page-open-part").innerHTML(),
+    );
 
     expect(withSession).toBe(guest);
   });
@@ -309,6 +317,12 @@ test.describe("020 EARS-8/9/19 — wave-3 PR 3.3 on the doctor host", () => {
     await page.goto(`${BASE!}/events/${HYBRID_SLUG}`, {
       waitUntil: "domcontentloaded",
     });
+    // The tabs are server-rendered Radix triggers: a click that lands before
+    // the client chunks hydrate them does nothing (a deployed build over a
+    // long network path loses that race every time). Same wait as
+    // `signInGoldenDoctor` (@ds/e2e/sign-in).
+    await page.waitForLoadState("load");
+    await page.waitForLoadState("networkidle");
     const tabs = page.getByTestId("event-format-tabs");
     // Seats remain → the policy offers registration → «очно» by default.
     await expect(tabs).toHaveAttribute("data-mode", "offline");
@@ -319,7 +333,9 @@ test.describe("020 EARS-8/9/19 — wave-3 PR 3.3 on the doctor host", () => {
     await expect(tabs).toHaveAttribute("data-mode", "online");
     await shoot(page, "doctor-hybrid-tab-online-desktop-light");
 
-    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.reload({ waitUntil: "load" });
+    // The keyboard step below needs the hydrated tablist too.
+    await page.waitForLoadState("networkidle");
     await expect(page.getByTestId("event-format-tabs")).toHaveAttribute(
       "data-mode",
       "online",

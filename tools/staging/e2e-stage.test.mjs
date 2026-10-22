@@ -16,12 +16,15 @@ import {
   runE2eStage,
   slotE2eEnv,
   slotLiveEnv,
+  slotLiveStandEnv,
   SUMMARY_REPORTER_PATH,
   summarizeReport,
 } from "./e2e-stage.mjs";
 import {
   AXE_LEG_CONFIGS,
   HERMETIC_CONFIGS,
+  GOLDEN_EVENT_SLUGS,
+  GOLDEN_LIVE_ENV,
   LIVE_TIERS,
 } from "./live-tiers.mjs";
 
@@ -1035,19 +1038,19 @@ describe("runE2eStage — the live legs", () => {
     assert.equal(code, 0, "skipped live legs are loud but not fatal");
     assert.match(
       out,
-      /live\/doctor\/events-live\s+skipped — missing env E2E_EVENTS_LOADED_PATH/,
-    );
-    assert.match(
-      out,
       /live\/doctor\/register-live\s+SKIPPED — ran 0 passed \/ 0 failed \/ 1 skipped/,
     );
     assert.match(out, /verdict:\s+PASS — \d+ live legs? skipped/);
-    // events-live is never launched: its config throws at load without its env.
-    assert.equal(
+    // #3191: a spec a slot cannot run says why, never «missing».
+    assert.match(
+      out,
+      /e2e\/event-register-one-tap\.spec\.ts \(by design: registration is append-only/,
+    );
+    // #3191: events-live's config env is derived from the golden dataset.
+    assert.ok(
       calls.some((c) =>
         c.argv.includes("--config=playwright.events-live.config.ts"),
       ),
-      false,
     );
   });
 
@@ -1152,19 +1155,39 @@ describe("release check (--expect-sha)", () => {
     assert.equal(calls[0].env.E2E_GREP, undefined);
   });
 
-  it("leaves the live legs out and says so in the verdict — until #3191", async () => {
-    for (const extra of [[], ["--no-live"]]) {
-      const { calls, lines, effects } = harness();
-      const code = await runE2eStage(["main", "--expect-sha", SHA, ...extra], {
-        env: RELEASE_ENV,
-        effects,
-      });
-      assert.equal(code, 0);
-      assert.equal(calls.filter(isLive).length, 0);
-      const out = lines.join("\n");
-      assert.match(out, /live:\s+not run in the release check — until #3191/);
-      assert.match(out, /verdict:\s+PASS$/m);
-    }
+  it("runs every live leg too (#3191), and prints each one's verdict", async () => {
+    const { calls, lines, effects } = harness();
+    const code = await runE2eStage(["main", "--expect-sha", SHA], {
+      env: RELEASE_ENV,
+      effects,
+    });
+    assert.equal(code, 0);
+    const configs = calls
+      .filter(isLive)
+      .map((c) => c.argv.find((t) => t.startsWith("--config=")));
+    for (const tier of LIVE_TIERS)
+      assert.ok(configs.includes(`--config=${tier.config}`), tier.name);
+    const out = lines.join("\n");
+    assert.doesNotMatch(out, /not run in the release check/);
+    assert.match(out, /live:\s+live\//);
+  });
+
+  it("fails the release check on a red live leg", async () => {
+    const { effects } = harness({
+      readReport: (file) => (isLiveReport(file) ? REPORT : LIVE_GREEN),
+    });
+    const code = await runE2eStage(["main", "--expect-sha", SHA], {
+      env: RELEASE_ENV,
+      effects,
+    });
+    assert.equal(code, 1);
+  });
+
+  it("refuses --no-live: the release check runs the live legs like every other leg", () => {
+    assert.throws(
+      () => parseE2eArgs(["main", "--expect-sha", SHA, "--no-live"]),
+      /full suite — drop --no-live/,
+    );
   });
 });
 
@@ -1303,5 +1326,157 @@ describe("E2E_PUBLIC_LOG=1 — the run's console is a public Actions log", () =>
         false,
       );
     }
+  });
+});
+
+// --- #3191: the live legs' env is derived from the slot, never left «missing» ---
+
+describe("slotLiveStandEnv (#3191)", () => {
+  const box = {
+    DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED: "box-verified",
+    IDP_SERVICE_TOKEN: "box-token",
+    IDP_PROJECT_ID: "box-project",
+    CONGRESS_SIGNUP_EVENT_ID: "evt",
+    CONGRESS_SIGNUP_CONSENT_VERSION: "v1",
+    CONGRESS_SIGNUP_WINDOW_OPENS_AT: "2026-01-01",
+    CONGRESS_SIGNUP_WINDOW_CLOSES_AT: "2027-01-01",
+    CONGRESS_SIGNUP_EVENT_DAYS: "2027-03-01",
+    POSTGRES_PASSWORD: "must-not-leak",
+  };
+
+  it("signs the live specs in as the golden verified doctor and its first pool copy", () => {
+    const env = slotLiveStandEnv({}, box);
+    assert.equal(env.E2E_DOCTOR_EMAIL, "golden.doctor.verified@example.test");
+    assert.equal(env.E2E_DOCTOR_PASSWORD, "box-verified");
+    assert.equal(
+      env.E2E_DOCTOR2_EMAIL,
+      "golden.doctor.verified.w1@example.test",
+    );
+    assert.equal(env.E2E_DOCTOR2_PASSWORD, "box-verified");
+  });
+
+  it("names no golden account when its password is unknown — the spec stays not-run", () => {
+    const env = slotLiveStandEnv({}, {});
+    assert.equal(env.E2E_DOCTOR_EMAIL, undefined);
+    assert.equal(env.E2E_DOCTOR2_EMAIL, undefined);
+  });
+
+  it("hands over the stand keys the slot api boots with, and nothing else of the box", () => {
+    const env = slotLiveStandEnv({}, box);
+    for (const name of [
+      "IDP_SERVICE_TOKEN",
+      "IDP_PROJECT_ID",
+      "CONGRESS_SIGNUP_EVENT_ID",
+      "CONGRESS_SIGNUP_CONSENT_VERSION",
+      "CONGRESS_SIGNUP_WINDOW_OPENS_AT",
+      "CONGRESS_SIGNUP_WINDOW_CLOSES_AT",
+      "CONGRESS_SIGNUP_EVENT_DAYS",
+    ])
+      assert.equal(env[name], box[name], name);
+    assert.equal(Object.values(env).includes("must-not-leak"), false);
+  });
+
+  it("lets an operator export win over the box and the golden default", () => {
+    const env = slotLiveStandEnv(
+      { IDP_SERVICE_TOKEN: "op-token", E2E_DOCTOR_EMAIL: "op@example.test" },
+      box,
+    );
+    assert.equal(env.IDP_SERVICE_TOKEN, "op-token");
+    assert.equal(env.E2E_DOCTOR_EMAIL, "op@example.test");
+  });
+
+  it("is what a live leg runs with", async () => {
+    const { calls, effects } = harness({
+      readBoxEnv: async () => ({ ...BOX_ENV, ...box }),
+    });
+    await runE2eStage(["pr-3191", "--project", "doctor"], {
+      env: { STAGE_BASIC_AUTH_PASS: "s3cret" },
+      effects,
+    });
+    const shell = calls.find((c) =>
+      c.argv.includes("--config=playwright.shell.config.ts"),
+    );
+    assert.equal(
+      shell.env.E2E_DOCTOR_EMAIL,
+      "golden.doctor.verified@example.test",
+    );
+    assert.equal(shell.env.IDP_SERVICE_TOKEN, "box-token");
+    // The suite leg is not handed the live-tier extras.
+    assert.equal(calls[0].env.IDP_SERVICE_TOKEN, undefined);
+  });
+});
+
+describe("golden live env (#3191) — derived from the dataset every slot is cloned from", () => {
+  it("names only slugs the golden catalogue publishes", () => {
+    const ids = repoFile("packages/db/src/seed/golden/ids.ts");
+    for (const [key, slug] of Object.entries(GOLDEN_EVENT_SLUGS))
+      assert.ok(ids.includes(`slug: "${slug}"`), `${key}: ${slug}`);
+  });
+
+  it("hands each storefront's legs its own golden slugs, an operator export winning", () => {
+    const academy = slotLiveStandEnv({}, {}, "academy");
+    assert.equal(academy.E2E_ROOM_SLUG_LIVE, GOLDEN_EVENT_SLUGS.academyLive);
+    const doctor = slotLiveStandEnv({}, {}, "doctor");
+    assert.equal(doctor.E2E_WEBINAR_SLUG, GOLDEN_EVENT_SLUGS.live);
+    assert.equal(doctor.E2E_ROOM_SLUG_LIVE, undefined);
+    assert.equal(
+      slotLiveStandEnv({ E2E_WEBINAR_SLUG: "op" }, {}, "doctor")
+        .E2E_WEBINAR_SLUG,
+      "op",
+    );
+    for (const host of Object.keys(GOLDEN_LIVE_ENV))
+      assert.ok(["academy", "doctor"].includes(host), host);
+  });
+
+  it("satisfies the events-live config's own checks", () => {
+    const env = GOLDEN_LIVE_ENV.doctor;
+    assert.ok(["present", "absent"].includes(env.E2E_EVENTS_EXPECT_LIVE));
+    for (const name of ["E2E_EVENTS_LOADED_PATH", "E2E_EVENTS_EMPTY_PATH"])
+      assert.match(env[name], /^\/events(?:\?|$)/, name);
+  });
+
+  it("reports a spec a slot cannot run by its declared reason, never as missing env", () => {
+    const tier = LIVE_TIERS.find((t) => t.name === "live/doctor/congress");
+    const plan = planLiveLeg(tier, {
+      E2E_DOCTOR_URL: "https://d",
+      IDP_ISSUER: "https://i",
+      MAILPIT_URL: "https://m",
+    });
+    const submissions = plan.notRun.find(
+      (n) => n.file === "e2e/congress-submissions.spec.ts",
+    );
+    assert.match(submissions.byDesign, /docker network/);
+    const verdict = liveLegVerdict({
+      name: tier.name,
+      plan,
+      status: 0,
+      report: LIVE_GREEN,
+    });
+    assert.match(
+      verdict.detail,
+      /congress-submissions\.spec\.ts \(by design: /,
+    );
+  });
+
+  it("gives every by-design reason a variable a slot genuinely lacks", () => {
+    const derivable = new Set([
+      ...Object.keys(GOLDEN_LIVE_ENV.academy),
+      ...Object.keys(GOLDEN_LIVE_ENV.doctor),
+      "E2E_PORTAL_URL",
+      "E2E_DOCTOR_URL",
+      "IDP_ISSUER",
+      "MAILPIT_URL",
+      "E2E_CAPTCHA_TEST_TOKEN",
+      "E2E_DOCTOR_EMAIL",
+      "E2E_DOCTOR_PASSWORD",
+      "E2E_DOCTOR2_EMAIL",
+      "E2E_DOCTOR2_PASSWORD",
+    ]);
+    for (const tier of LIVE_TIERS)
+      for (const g of tier.gated.filter((x) => x.slotReason))
+        assert.ok(
+          g.requires.some((name) => !derivable.has(name)),
+          `${tier.name} ${g.file}: declared by design but a slot derives every variable it requires`,
+        );
   });
 });

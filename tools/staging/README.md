@@ -228,13 +228,12 @@ regressions. Raise the slot with `pnpm stage:slot up <slot> --ref <sha>` first.
 
 `pnpm e2e:stage main --expect-sha <40-char sha>` is the release check (tech spec C7,
 #2701). It is the full run and nothing less: it refuses any slot but `main`, any
-`--project` / `--grep` / `--no-axe`, an `E2E_GREP` in the env (the config would compile
+`--project` / `--grep` / `--no-axe` / `--no-live`, an `E2E_GREP` in the env (the config would compile
 it into a filter) and a missing `CI` (without it Playwright's `forbidOnly` is off). It
 then asserts the slot's `/v1/health` serves exactly that SHA before a scenario runs, and
-exits **2** on any of these refusals. It does **not** run the storefront live-tier legs
-(below) and prints `live: not run in the release check — until #3191` instead, so the
-omission is visible in the release record; #3191 brings them into the release check once
-their spec-side reds and missing slot env are resolved. You do not normally run it by hand. For a
+exits **2** on any of these refusals. It runs the storefront live-tier legs (below) like
+every other leg (#3191) — `--no-live` is refused like the other narrowing flags — and a
+red live leg fails it. You do not normally run it by hand. For a
 target from `main` the `stage.yml` suite job runs it in Actions and posts the
 `stage-suite` status the release pre-flight reads (below). For a `--ref` hotfix target,
 which is no `main` push, `pnpm deploy:prod` runs it on the PC as its last pre-flight step,
@@ -352,15 +351,36 @@ Each leg gets the suite env plus `IDP_ISSUER=https://id.<base domain>` and
 sends no `__Host-` cookie there); the doctor configs answer the basic-auth challenge
 through `@ds/e2e/stand-http-credentials`. `--project academy|doctor` selects legs like
 the axe legs (`walks` selects none); `--no-live` drops them. The release check
-(`--expect-sha`) never runs them and says so in its verdict — until #3191.
+(`--expect-sha`) runs them all (#3191).
 
-A slot cannot supply operator keys (`IDP_SERVICE_TOKEN`, `IDP_PROJECT_ID`, a branch
-`DATABASE_URL`), a reused doctor account (`E2E_DOCTOR_EMAIL`/`_PASSWORD`) or seeded
-slugs. A spec gated on such a variable through `requireLiveStandEnv` would read a slot
-run as an _intended_ tier and fail loudly, so the registry declares what each gated spec
-requires and the leg keeps it out (`--test-list-invert`), printing it as `not run:
-<spec> (missing <names>)`; a config that throws at load without its env is not launched
-at all. Export the variable on this machine and the spec runs. The verdict block prints
+**Derived from the slot (#3191).** The rest of a leg's env is `slotLiveStandEnv`
+(`e2e-stage.mjs`); an operator export wins over each value:
+
+- `E2E_DOCTOR_EMAIL`/`_PASSWORD` and `E2E_DOCTOR2_*` — the golden verified doctor and
+  its first worker-pool copy (`idp.mjs` GOLDEN_IDP_ACCOUNTS), with the password the box
+  provisioned (`DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED`);
+- `IDP_SERVICE_TOKEN`, `IDP_PROJECT_ID` and the `CONGRESS_SIGNUP_*` block — read from
+  the box's `stage.env`, the same values the slot api boots with;
+- the golden event slugs and `/events` paths per storefront (`GOLDEN_LIVE_ENV` in
+  `live-tiers.mjs`, held against `packages/db/src/seed/golden/ids.ts`), and
+  `E2E_API_URL` = the slot's api origin.
+
+Raw Node `fetch`es (Mailpit reads) carry the basic-auth pair through
+`standBasicAuthHeaders`, and raw api calls on a captcha-gated route carry the test token
+through `captchaTestTokenHeaders` (`@ds/e2e/captcha-stub`).
+
+A spec gated through `requireLiveStandEnv` on a variable the leg does not have would read
+a slot run as an _intended_ tier and fail loudly, so the registry declares what each gated
+spec requires and the leg keeps it out (`--test-list-invert`), printing it as `not run:
+<spec> (missing <names>)`. A spec a slot **cannot** run carries a `slotReason` and prints
+as `not run: <spec> (by design: <reason>)`: the provider-variant room specs (the golden
+dataset seeds only rutube streams), the heartbeat-cadence specs (a slot api runs the
+production 60 s cadence), the congress-submission specs (they write fixture rows straight
+into a database a slot keeps inside the box's docker network) and the one-tap
+registration (005 registration is append-only, so a run consumes its эфиры). In Actions
+(`stage.yml`, which never reads the box) the box-derived keys are absent, so those specs
+print `missing`. A config that throws at load without its env is not launched at all.
+Export the variable on this machine and the spec runs. The verdict block prints
 one `live:` line per config:
 
 - `PASS — ran N passed / 0 failed / M skipped` — at least one test passed;

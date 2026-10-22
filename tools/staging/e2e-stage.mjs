@@ -50,8 +50,8 @@ import {
   shortSha,
   slotHostnames,
 } from "./slot.mjs";
-import { GOLDEN_PASSWORD_ENV_VARS } from "./idp.mjs";
-import { LIVE_TIERS } from "./live-tiers.mjs";
+import { GOLDEN_IDP_ACCOUNTS, GOLDEN_PASSWORD_ENV_VARS } from "./idp.mjs";
+import { GOLDEN_LIVE_ENV, LIVE_TIERS } from "./live-tiers.mjs";
 
 /** The repo root — every leg runs from there, like the scripts in `package.json`. */
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -144,11 +144,9 @@ export function parseE2eArgs(argv) {
 
 /**
  * `--expect-sha` is the RELEASE CHECK `pnpm deploy:prod` runs before shipping (#2701):
- * the `main` slot, the whole suite, every axe leg. A narrowed run proves only its
- * slice, so the release check refuses any narrowing flag instead of passing on part
- * of it. The live-tier legs are the one exception, and not a flag: the release check
- * never runs them (see `RELEASE_CHECK_LIVE_NOTE`), so `--no-live` changes nothing
- * there and is not refused.
+ * the `main` slot, the whole suite, every axe leg and every live-tier leg (#3191).
+ * A narrowed run proves only its slice, so the release check refuses any narrowing
+ * flag — `--no-live` included — instead of passing on part of it.
  */
 function assertReleaseCheckShape(options) {
   if (options.slot !== "main") {
@@ -160,6 +158,7 @@ function assertReleaseCheckShape(options) {
     options.project !== undefined && "--project",
     options.grep !== undefined && "--grep",
     options.axe === false && "--no-axe",
+    options.live === false && "--no-live",
   ].filter(Boolean);
   if (narrowing.length > 0) {
     throw new SlotError(
@@ -292,6 +291,62 @@ export function slotLiveEnv({ baseDomain }) {
   };
 }
 
+/**
+ * Stand keys the slot's own api boots with (`/etc/ds-platform/stage.env`) that a
+ * live spec needs too (#3191): the IdP service token + project the signed-in
+ * landing spec reconciles the account's grant with, and the `CONGRESS_SIGNUP_*`
+ * block the congress sign-up specs check before expecting «accepted».
+ */
+export const LIVE_STAND_BOX_KEYS = Object.freeze([
+  "IDP_SERVICE_TOKEN",
+  "IDP_PROJECT_ID",
+  "CONGRESS_SIGNUP_EVENT_ID",
+  "CONGRESS_SIGNUP_CONSENT_VERSION",
+  "CONGRESS_SIGNUP_WINDOW_OPENS_AT",
+  "CONGRESS_SIGNUP_WINDOW_CLOSES_AT",
+  "CONGRESS_SIGNUP_EVENT_DAYS",
+]);
+
+/** The golden accounts a live spec signs in as: `E2E_DOCTOR_*` and `E2E_DOCTOR2_*`. */
+const LIVE_DOCTOR_ACCOUNTS = Object.freeze([
+  { prefix: "E2E_DOCTOR", key: "doctorVerified" },
+  { prefix: "E2E_DOCTOR2", key: "doctorVerifiedW1" },
+]);
+
+/**
+ * The live legs' env DERIVED from the slot (#3191), so a live spec runs instead of
+ * reading «not run — missing». An operator export wins, then the box's stage env,
+ * then the golden dataset every slot is cloned from:
+ * - `E2E_DOCTOR_*` / `E2E_DOCTOR2_*` — the golden verified doctor and its first
+ *   worker-pool copy (`idp.mjs` GOLDEN_IDP_ACCOUNTS), with the password the box
+ *   provisioned them with; no password known ⇒ no account named.
+ * - `LIVE_STAND_BOX_KEYS` — the stand keys the slot api itself boots with.
+ * - `GOLDEN_LIVE_ENV[host]` — the golden event slugs and `/events` paths a
+ *   spec of that storefront reads (`live-tiers.mjs`).
+ * Nothing else of the box is handed over.
+ */
+export function slotLiveStandEnv(operatorEnv, boxEnv, host) {
+  const pick = (name) => operatorEnv?.[name] || boxEnv?.[name] || undefined;
+  const env = {};
+  for (const [name, value] of Object.entries(GOLDEN_LIVE_ENV[host] ?? {})) {
+    env[name] = operatorEnv?.[name] || value;
+  }
+  for (const name of LIVE_STAND_BOX_KEYS) {
+    const value = pick(name);
+    if (value) env[name] = value;
+  }
+  for (const { prefix, key } of LIVE_DOCTOR_ACCOUNTS) {
+    const account = GOLDEN_IDP_ACCOUNTS.find((a) => a.key === key);
+    const email = operatorEnv?.[`${prefix}_EMAIL`] || account.username;
+    const password =
+      operatorEnv?.[`${prefix}_PASSWORD`] || pick(account.passwordEnvVar);
+    if (!password) continue;
+    env[`${prefix}_EMAIL`] = email;
+    env[`${prefix}_PASSWORD`] = password;
+  }
+  return env;
+}
+
 const isSet = (env, name) => Boolean(env?.[name]?.trim());
 
 /**
@@ -314,7 +369,11 @@ export function planLiveLeg(tier, available) {
     };
   }
   const notRun = tier.gated
-    .map((g) => ({ file: g.file, missing: missingOf(g.requires) }))
+    .map((g) => ({
+      file: g.file,
+      missing: missingOf(g.requires),
+      ...(g.slotReason ? { byDesign: g.slotReason } : {}),
+    }))
     .filter((g) => g.missing.length > 0);
   const toLine = (file) => path.posix.relative(tier.rootDir, file);
   return {
@@ -325,14 +384,6 @@ export function planLiveLeg(tier, available) {
     ),
   };
 }
-
-/**
- * The release check (`--expect-sha`) does not run the live-tier legs: on a slot they
- * still fail on spec-side reds and lack operator env, which #3191 resolves before
- * bringing them into the release check. The omission is printed, never silent.
- */
-export const RELEASE_CHECK_LIVE_NOTE =
-  "not run in the release check — until #3191";
 
 /**
  * A live leg's verdict. `ok` is what the exit code folds: a leg that RAN with a
@@ -357,7 +408,11 @@ export function liveLegVerdict({ name, plan, status, report }) {
   const skipped = sum("skipped");
   const notRun = plan.notRun.length
     ? ` · not run: ${plan.notRun
-        .map((n) => `${n.file} (missing ${n.missing.join(", ")})`)
+        .map((n) =>
+          n.byDesign
+            ? `${n.file} (by design: ${n.byDesign})`
+            : `${n.file} (missing ${n.missing.join(", ")})`,
+        )
         .join("; ")}`
     : "";
   const state =
@@ -498,7 +553,6 @@ export function renderVerdictBlock({
   summary,
   legs,
   live = [],
-  liveNote,
   axeNote,
   reportDir,
   preflightReason,
@@ -525,7 +579,6 @@ export function renderVerdictBlock({
     const text = leg.launched ? `${label} — ${leg.detail}` : leg.detail;
     return `${leg.name.padEnd(nameWidth)}${text}`;
   });
-  if (liveNote) lines.push(row("live", liveNote));
   if (liveLines.length > 0) {
     lines.push(row("live", liveLines[0]));
     for (const extra of liveLines.slice(1)) lines.push(indent(extra));
@@ -776,11 +829,11 @@ export async function runE2eStage(
 
   // The storefront LIVE-TIER configs (#3168): one leg each, selected by host like
   // the axe legs. Each leg gets the suite env plus the stand's IdP and Mailpit;
-  // what the operator exported on top (an operator key) counts as available.
-  // The release check leaves them out and says so in the verdict (#3191).
-  const releaseCheck = options.expectSha !== undefined;
+  // what the operator exported on top (an operator key) counts as available, and
+  // the rest is derived from the slot (`slotLiveStandEnv`). The release check runs
+  // them like every other leg (#3191).
   const live = [];
-  if (options.live && !releaseCheck) {
+  if (options.live) {
     for (const tier of LIVE_TIERS.filter((t) => axeHost(t.host))) {
       const reporting = liveLegReporting(
         env,
@@ -790,6 +843,8 @@ export async function runE2eStage(
       const legEnv = {
         ...suiteEnv,
         ...slotLiveEnv({ baseDomain }),
+        ...slotLiveStandEnv(env, boxEnv, tier.host),
+        E2E_API_URL: env.E2E_API_URL || new URL(healthUrl).origin,
         ...reporting.env,
       };
       const plan = planLiveLeg(tier, { ...env, ...legEnv });
@@ -847,7 +902,6 @@ export async function runE2eStage(
       summary,
       legs,
       live,
-      liveNote: releaseCheck ? RELEASE_CHECK_LIVE_NOTE : undefined,
       axeNote: axe.note,
       reportDir,
     }),

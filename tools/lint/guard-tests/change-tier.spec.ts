@@ -361,6 +361,24 @@ describe("#3205: requiresStageCheck — the owner-consented Stage-check classes"
     ])
       expect(requiresStageCheck(path), path).toBe(false);
   });
+  it("#3249: a vendored canvas is never built or deployed — non-runtime, no Stage-check, not environment-sensitive", () => {
+    for (const path of [
+      "design-source/auth.dc.html",
+      "design-source/archive/auth/login.dc.html",
+      "design-source/auth-flow.js",
+    ]) {
+      expect(isNonRuntimePath(path), path).toBe(true);
+      expect(requiresStageCheck(path), path).toBe(false);
+      expect(isEnvironmentSensitivePath(path), path).toBe(false);
+    }
+    for (const path of [
+      "apps/portal/app/(auth)/login/page.tsx",
+      "packages/auth-flow/src/x.ts",
+    ]) {
+      expect(requiresStageCheck(path), path).toBe(true);
+      expect(isEnvironmentSensitivePath(path), path).toBe(true);
+    }
+  });
 });
 
 describe("#2807: test-only class, docs follow the code, wider Ship allowlist", () => {

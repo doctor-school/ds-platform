@@ -7,8 +7,9 @@
 # Verification, the `all` row): guest → «Участвовать» → 003 auth → returns
 # registered → «мои события» → back to the event page, plus logged-in one-tap and
 # ended/hidden gating. The whole run rides a deliberately non-Moscow browser
-# timezone (playwright.config `bdd` project), so the МСК labels prove no
-# viewer-local drift globally (EARS-11), not just in one tagged step.
+# timezone (playwright.config `bdd` project), so an online event's time proves the
+# viewer-zone rule (EARS-11 as amended 2026-10-02, #2537): the viewer's zone with
+# its label, never МСК.
 #
 # Seeded fixture events (005↔007 fixture seam, parent #564): the journey drives the
 # `seed-005-*` events (apps/api/scripts/seed-events.ts). "Done against the real
@@ -30,7 +31,7 @@ Feature: 005 Webinar registration journey — guest through auth to «мои с�
     And the register CTA is no longer offered
     When the doctor opens «мои события»
     Then the just-registered event is listed, linking back to its event page
-    And every listed time is labeled МСК with no drift to the viewer timezone
+    And the listed online event time reads in the viewer's zone with its label
     When the doctor opens the listed event from «мои события»
     Then the doctor is back on that event page in the registered state
 

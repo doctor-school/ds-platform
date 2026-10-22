@@ -1,3 +1,5 @@
+import { HOSTS } from "@ds/e2e/hosts";
+import { signInWithPassword } from "@ds/e2e/sign-in";
 import { test, expect, type Page } from "@playwright/test";
 import { requireLiveStandEnv } from "./support/live-stand-env";
 
@@ -87,11 +89,8 @@ async function login(
   email: string,
   password: string,
 ): Promise<void> {
-  await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("textbox", { name: /почта|email/i }).fill(email);
-  await page.getByRole("textbox", { name: /пароль|password/i }).fill(password);
-  await page.getByRole("button", { name: /войти|продолжить/i }).click();
-  await page.waitForURL(/\/account|\/webinars/);
+  // The shared live sign-in walk waits for the login card to hydrate first.
+  await signInWithPassword(page, HOSTS.academy, { email, password }, BASE);
 }
 
 /** Open the live room and return the chat composer input (visible chat pane). */
@@ -133,7 +132,9 @@ test.describe("006 EARS-3 live chat over Centrifugo (e2e)", () => {
 
       // Doctor B sees A's message appear in real time — no reload of page B.
       await expect(
-        pageB.getByTestId("room-chat-message").filter({ hasText: messageFromA }),
+        pageB
+          .getByTestId("room-chat-message")
+          .filter({ hasText: messageFromA }),
       ).toBeVisible({ timeout: 15_000 });
 
       // The reverse direction proves the bidirectional fan-out: B posts, A sees it.
@@ -147,7 +148,9 @@ test.describe("006 EARS-3 live chat over Centrifugo (e2e)", () => {
         .first()
         .click();
       await expect(
-        pageA.getByTestId("room-chat-message").filter({ hasText: messageFromB }),
+        pageA
+          .getByTestId("room-chat-message")
+          .filter({ hasText: messageFromB }),
       ).toBeVisible({ timeout: 15_000 });
     } finally {
       await ctxA.close();
@@ -163,7 +166,9 @@ test.describe("006 EARS-3 live chat over Centrifugo (e2e)", () => {
       const page = await ctx.newPage();
       await login(page, DOCTOR_A_EMAIL!, DOCTOR_A_PASSWORD!);
       const composer = await openRoomChat(page);
-      const send = page.getByRole("button", { name: /отправить|send/i }).first();
+      const send = page
+        .getByRole("button", { name: /отправить|send/i })
+        .first();
 
       // Empty and whitespace-only drafts are not sendable (the same rule the server
       // enforces) — the send control stays disabled, never posting garbage.

@@ -24,10 +24,19 @@ import { Given, Then, When } from "../support/fixtures";
  */
 
 const SEED = {
-  upcoming: process.env.E2E_WEBINAR_SLUG ?? "seed-005-upcoming",
+  upcoming:
+    process.env.E2E_JOURNEY_SLUG_UPCOMING ??
+    process.env.E2E_WEBINAR_SLUG ??
+    "seed-005-upcoming",
   live: process.env.E2E_WEBINAR_SLUG_LIVE ?? "seed-005-live",
-  ended: process.env.E2E_WEBINAR_SLUG_ENDED ?? "seed-005-ended",
-  hidden: process.env.E2E_WEBINAR_SLUG_HIDDEN ?? "seed-005-hidden",
+  ended:
+    process.env.E2E_JOURNEY_SLUG_ENDED ??
+    process.env.E2E_WEBINAR_SLUG_ENDED ??
+    "seed-005-ended",
+  hidden:
+    process.env.E2E_JOURNEY_SLUG_HIDDEN ??
+    process.env.E2E_WEBINAR_SLUG_HIDDEN ??
+    "seed-005-hidden",
 } as const;
 
 const PARTICIPATE = "Участвовать";
@@ -65,7 +74,9 @@ Given(
     // A genuine guest — no session cookie rides the request, so the public 004
     // page renders (never a per-user state, never a soft-wall).
     await context.clearCookies();
-    await page.goto(`/webinars/${world.slug}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`/webinars/${world.slug}`, {
+      waitUntil: "domcontentloaded",
+    });
   },
 );
 
@@ -93,19 +104,22 @@ Then(
   },
 );
 
-When("the guest opens the upcoming-broadcasts listing", async ({ page, context }) => {
-  await context.clearCookies();
-  await page.goto("/webinars", { waitUntil: "networkidle" });
-  // Cold-compile guard: on a Next dev stand the route's very first render can
-  // beat the seeded read model and paint the empty-state; a single reload lets the
-  // populated list settle. A genuinely empty listing still shows the empty-state
-  // after the reload, so this never masks a real regression (it just removes a
-  // first-compile race from the seeded discovery arc).
-  const emptyState = page.getByTestId("events-feed-empty");
-  if (await emptyState.isVisible().catch(() => false)) {
-    await page.reload({ waitUntil: "networkidle" });
-  }
-});
+When(
+  "the guest opens the upcoming-broadcasts listing",
+  async ({ page, context }) => {
+    await context.clearCookies();
+    await page.goto("/webinars", { waitUntil: "networkidle" });
+    // Cold-compile guard: on a Next dev stand the route's very first render can
+    // beat the seeded read model and paint the empty-state; a single reload lets the
+    // populated list settle. A genuinely empty listing still shows the empty-state
+    // after the reload, so this never masks a real regression (it just removes a
+    // first-compile race from the seeded discovery arc).
+    const emptyState = page.getByTestId("events-feed-empty");
+    if (await emptyState.isVisible().catch(() => false)) {
+      await page.reload({ waitUntil: "networkidle" });
+    }
+  },
+);
 
 Then(
   "the seeded upcoming event appears as a card labeled with the viewer's zone",
@@ -151,7 +165,9 @@ Given(
   async ({ page, context, world }, state: string) => {
     world.slug = slugForState(state);
     await context.clearCookies();
-    await page.goto(`/webinars/${world.slug}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`/webinars/${world.slug}`, {
+      waitUntil: "domcontentloaded",
+    });
   },
 );
 
@@ -159,8 +175,12 @@ Then(
   "the event page hero shows the {string} lifecycle signal",
   async ({ page }, badge: string) => {
     // EARS-4: the hero lifecycle badge reflects the state machine — never a
-    // contradictory signal.
-    await expect(page.getByText(badge, { exact: true }).first()).toBeVisible();
+    // contradictory signal. The upcoming badge carries the Stage-B countdown
+    // suffix «Скоро · через N дней» (#3229 slot run; the same reading as
+    // `event-page.e2e.spec.ts` EARS-4), so the badge is the WHOLE text or its head.
+    await expect(
+      page.getByText(new RegExp(`^${badge}(\\s·\\s.+)?$`)).first(),
+    ).toBeVisible();
   },
 );
 
@@ -212,10 +232,10 @@ Then(
 Then(
   "the «мероприятие скрыто» notice is shown with no participation CTA",
   async ({ page }) => {
-    await expect(page.getByText("Скрыто", { exact: true }).first()).toBeVisible();
     await expect(
-      page.getByText("Мероприятие скрыто").first(),
+      page.getByText("Скрыто", { exact: true }).first(),
     ).toBeVisible();
+    await expect(page.getByText("Мероприятие скрыто").first()).toBeVisible();
     // No participation affordance in any of its verbs (the fourth CTA-less render).
     await expect(
       page.getByRole("link", { name: PARTICIPATE, exact: true }),
@@ -234,20 +254,27 @@ Then(
     world.slug = SEED.live;
     // The feed card, not the «Идёт сейчас» strip above the feed that links the
     // same event page.
-    const card = page.getByTestId("events-feed").locator("[data-webinar-card]", {
-      has: page.locator(`a[href="/webinars/${world.slug}"]`),
-    });
+    const card = page
+      .getByTestId("events-feed")
+      .locator("[data-webinar-card]", {
+        has: page.locator(`a[href="/webinars/${world.slug}"]`),
+      });
     await expect(card).toBeVisible();
     // The live signal is inside the card itself (derived from state === 'live').
     await expect(card).toContainText(LIVE_LABEL);
   },
 );
 
-When("the guest opens the seeded live event's page", async ({ page, context, world }) => {
-  world.slug = SEED.live;
-  await context.clearCookies();
-  await page.goto(`/webinars/${world.slug}`, { waitUntil: "domcontentloaded" });
-});
+When(
+  "the guest opens the seeded live event's page",
+  async ({ page, context, world }) => {
+    world.slug = SEED.live;
+    await context.clearCookies();
+    await page.goto(`/webinars/${world.slug}`, {
+      waitUntil: "domcontentloaded",
+    });
+  },
+);
 
 Then("the event page shows the same «В эфире» signal", async ({ page }) => {
   // EARS-9: both surfaces read the one `EventLifecycleState`, so they cannot
@@ -270,7 +297,9 @@ Then(
 Then(
   "every online or hybrid card time reads in the viewer's zone and every offline card time in МСК",
   async ({ page }) => {
-    const cards = page.getByTestId("events-feed").locator("[data-webinar-card]");
+    const cards = page
+      .getByTestId("events-feed")
+      .locator("[data-webinar-card]");
     await expect(cards.first()).toBeVisible();
     const count = await cards.count();
     for (let index = 0; index < count; index++) {

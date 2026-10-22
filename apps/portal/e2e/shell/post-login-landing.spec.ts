@@ -36,9 +36,11 @@ test.describe("013 EARS-15 post-login landing is the return target, /webinars by
     // Drop the register auto-login session so `/login` drives a genuine sign-in.
     await context.clearCookies();
 
-    await page.goto("/login", { waitUntil: "domcontentloaded" });
-    await page.getByRole("textbox", { name: /почта|email/i }).fill(email);
-    await page.getByRole("textbox", { name: /пароль|password/i }).fill(password);
+    await page.goto("/login", { waitUntil: "load" });
+    // The hydration wait of `@ds/e2e/sign-in` — a pre-hydration click submits natively.
+    await page.waitForLoadState("networkidle");
+    await page.locator('input[autocomplete="username"]').fill(email);
+    await page.locator('input[autocomplete="current-password"]').fill(password);
     await page.getByRole("button", { name: /войти|продолжить/i }).click();
 
     // The landing is the discovery listing — exactly `/webinars`, no returnTo.
@@ -63,10 +65,11 @@ test.describe("013 EARS-15 post-login landing is the return target, /webinars by
     // same-origin guard drops it, so the landing is the DEFAULT, never the
     // attacker's host and never the Academy landing `/`.
     await page.goto("/login?returnTo=%2F%2Fevil.example", {
-      waitUntil: "domcontentloaded",
+      waitUntil: "load",
     });
-    await page.getByRole("textbox", { name: /почта|email/i }).fill(email);
-    await page.getByRole("textbox", { name: /пароль|password/i }).fill(password);
+    await page.waitForLoadState("networkidle");
+    await page.locator('input[autocomplete="username"]').fill(email);
+    await page.locator('input[autocomplete="current-password"]').fill(password);
     await page.getByRole("button", { name: /войти|продолжить/i }).click();
 
     await page.waitForURL((url) => new URL(url).pathname === "/webinars");

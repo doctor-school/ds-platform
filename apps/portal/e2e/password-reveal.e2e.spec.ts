@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { installCaptchaStub } from "@ds/e2e/captcha-stub";
 
 /**
  * 003 EARS-38 — the show-password toggle, browser tier (portal storefront).
@@ -141,6 +142,10 @@ test.describe("003 EARS-38 — show-password toggle", () => {
         body: JSON.stringify({}),
       }),
     );
+    // A slot's reset initiate is captcha-gated and its real SmartCaptcha never
+    // yields a token headless (#3229, slot trace: no reset POST). The ack above is
+    // stubbed, so no server ever reads the token: a stand-in one suffices.
+    await installCaptchaStub(page, "e2e-reset-ack-is-stubbed");
     await openAnonymous(page, "/reset");
     await page
       .locator('input[autocomplete="username"]')

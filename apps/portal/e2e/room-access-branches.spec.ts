@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { readyRegisterForm } from "./support/doctor-session";
 import { requireLiveStandEnv } from "./support/live-stand-env";
 import { fetchOtpCode } from "./support/mailpit";
 import { NOTIFICATION_SUBJECTS } from "./support/notification-subjects";
@@ -125,6 +126,9 @@ async function registerDoctor(
     ? `/register?returnTo=${encodeURIComponent(opts.returnTo)}`
     : "/register";
   await page.goto(`${BASE}${entry}`, { waitUntil: "domcontentloaded" });
+  // #3229: the shared captcha-stub + hydration wait — a click before the form
+  // hydrates submits it natively (`POST /register`) and never reaches /verify.
+  await readyRegisterForm(page);
   await page.locator('input[autocomplete="email"]').fill(email);
   await page.locator('input[autocomplete="new-password"]').fill(password);
   await page.getByTestId("register-submit").click();
@@ -146,8 +150,12 @@ async function loginAs(
   email: string,
   password: string,
 ): Promise<void> {
-  await page.getByRole("textbox", { name: /почта|email/i }).fill(email);
-  await page.getByRole("textbox", { name: /пароль|password/i }).fill(password);
+  // The hydration wait of `@ds/e2e/sign-in`: a click before the login card's
+  // client chunks run submits the form natively and nobody is signed in.
+  await page.waitForLoadState("load");
+  await page.waitForLoadState("networkidle");
+  await page.locator('input[autocomplete="username"]').fill(email);
+  await page.locator('input[autocomplete="current-password"]').fill(password);
   await page.getByRole("button", { name: /войти|продолжить/i }).click();
 }
 

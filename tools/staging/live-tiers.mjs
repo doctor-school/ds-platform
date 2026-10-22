@@ -68,6 +68,12 @@ export const GOLDEN_SLUGS = Object.freeze({
   academyHybridSoldOut: "golden-volume-event-540",
   /** Published online `doctors` event with speakers (the doctor storefront reads only `doctors`). */
   doctorUpcoming: "golden-volume-event-418",
+  /** `golden.events.hidden` — an `experts` event in the `hidden` state. */
+  academyHidden: "golden-event-hidden",
+  /** Published online `experts` event with speakers — the 005 one-tap journey's second event. */
+  academyUpcomingOneTap: "golden-volume-event-412",
+  /** Published online `experts` event with speakers — the 004 EARS-8 marker spec's own event. */
+  academyUpcomingMarker: "golden-volume-event-424",
 });
 
 const URL_DOCTOR = "E2E_DOCTOR_URL";
@@ -88,9 +94,18 @@ const CONGRESS_SIGNUP = [
  * (`e2e-stage.mjs --expect-sha`), which prints «live: <tier> not in the release
  * check — <reason>» instead of running it; a plain slot run still runs it. The
  * reason is mandatory (`releaseCheckExclusion` refuses an entry without one).
- * These four are red on a slot (#3191 proof runs); #3229 owns their triage.
+ * These three are red on a slot (#3191 proof runs); #3229 owns their triage.
  */
 const RED_ON_SLOT_3229 = "red on slot — #3229";
+
+/**
+ * The Academy default leg after the #3229 triage: one product deviation (008
+ * EARS-14 — no storefront footer on `/`, `apps/portal/lib/shell-config.ts`
+ * deferring to epic #2020), specs that pin the local `seed-*` shape the golden
+ * dataset does not hold, and the room-page journeys still red.
+ */
+const ACADEMY_DEFAULT_RED_3229 =
+  "red on slot — #3229: 008 EARS-14 footer absent on / (product, epic #2020); month-fidelity and webinars-feed-view pin the local seed shape; room journeys red";
 
 export const LIVE_TIERS = Object.freeze([
   {
@@ -98,11 +113,24 @@ export const LIVE_TIERS = Object.freeze([
     host: "academy",
     app: "apps/portal",
     pkg: "@ds/portal",
-    releaseCheck: { excluded: RED_ON_SLOT_3229 },
+    releaseCheck: { excluded: ACADEMY_DEFAULT_RED_3229 },
     config: "playwright.config.ts",
     rootDir: ".",
     // The `bdd` project's specs are generated; the `test:e2e` script runs this first.
     prepare: ["exec", "bddgen"],
+    // #3229: the 004/005 journeys and the 004 EARS-8 marker spec read their events
+    // under journey-only names (a local stand falls back to its `seed-005-*`
+    // fixtures). Never an event-page slug name (`E2E_WEBINAR_SLUG*`): #2996 keeps
+    // those on the event-page tier, so they cannot switch on this tier's
+    // event-page specs. Each journey registers a FRESH doctor, so a slot's golden
+    // events are never consumed.
+    seededEnv: {
+      E2E_JOURNEY_SLUG_UPCOMING: GOLDEN_SLUGS.academyUpcoming,
+      E2E_JOURNEY_SLUG_ONE_TAP: GOLDEN_SLUGS.academyUpcomingOneTap,
+      E2E_JOURNEY_SLUG_MARKER: GOLDEN_SLUGS.academyUpcomingMarker,
+      E2E_JOURNEY_SLUG_ENDED: GOLDEN_SLUGS.academyEndedRecorded,
+      E2E_JOURNEY_SLUG_HIDDEN: GOLDEN_SLUGS.academyHidden,
+    },
     gated: [
       {
         file: "e2e/room.spec.ts",
@@ -267,7 +295,6 @@ export const LIVE_TIERS = Object.freeze([
     host: "academy",
     app: "apps/portal",
     pkg: "@ds/portal",
-    releaseCheck: { excluded: RED_ON_SLOT_3229 },
     config: "playwright.event-page.config.ts",
     rootDir: "e2e",
     gated: [],

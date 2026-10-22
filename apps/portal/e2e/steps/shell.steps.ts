@@ -1,3 +1,5 @@
+import { HOSTS } from "@ds/e2e/hosts";
+import { signInWithPassword } from "@ds/e2e/sign-in";
 import { expect } from "@playwright/test";
 import { Given, Then, When } from "../support/fixtures";
 import {
@@ -33,32 +35,43 @@ const DOCTOR_INITIALS = "ИП";
 
 // ── Doctor logs in → lands on `/webinars` → shell nav → profile (EARS-1/2/6/7) ─
 
-Given("a registered doctor who is not yet signed in", async ({ page, context, world }) => {
-  // Mint a real 003 account with KNOWN credentials + a saved display name (so the
-  // avatar renders genuine initials), then drop the register auto-login session so
-  // the next step drives a deliberate `/login` — the true post-login landing.
-  const creds = await provisionDoctorCreds(page);
-  world.email = creds.email;
-  world.password = creds.password;
-  await setMyDisplayName(page, DOCTOR_NAME);
-  await context.clearCookies();
-});
+Given(
+  "a registered doctor who is not yet signed in",
+  async ({ page, context, world }) => {
+    // Mint a real 003 account with KNOWN credentials + a saved display name (so the
+    // avatar renders genuine initials), then drop the register auto-login session so
+    // the next step drives a deliberate `/login` — the true post-login landing.
+    const creds = await provisionDoctorCreds(page);
+    world.email = creds.email;
+    world.password = creds.password;
+    await setMyDisplayName(page, DOCTOR_NAME);
+    await context.clearCookies();
+  },
+);
 
-When("the doctor completes login via the feature-003 auth flow", async ({ page, world }) => {
-  await page.goto("/login", { waitUntil: "domcontentloaded" });
-  await page.getByRole("textbox", { name: /почта|email/i }).fill(world.email!);
-  await page.getByRole("textbox", { name: /пароль|password/i }).fill(world.password!);
-  await page.getByRole("button", { name: /войти|продолжить/i }).click();
-});
+When(
+  "the doctor completes login via the feature-003 auth flow",
+  async ({ page, world }) => {
+    // The shared live sign-in walk: it waits for the login card to hydrate
+    // before submitting (a pre-hydration click is a native `POST /login`).
+    await signInWithPassword(page, HOSTS.academy, {
+      email: world.email!,
+      password: world.password!,
+    });
+  },
+);
 
-Then("the doctor lands on the discovery front-door at {string}", async ({ page }, path: string) => {
-  // EARS-7 as re-pointed by 013 EARS-15: with no valid return target the
-  // post-login landing is the discovery listing — exactly `/webinars`.
-  await page.waitForURL((url) => new URL(url).pathname === path);
-  await expect(
-    page.getByRole("heading", { name: DISCOVERY_HEADING }),
-  ).toBeVisible();
-});
+Then(
+  "the doctor lands on the discovery front-door at {string}",
+  async ({ page }, path: string) => {
+    // EARS-7 as re-pointed by 013 EARS-15: with no valid return target the
+    // post-login landing is the discovery listing — exactly `/webinars`.
+    await page.waitForURL((url) => new URL(url).pathname === path);
+    await expect(
+      page.getByRole("heading", { name: DISCOVERY_HEADING }),
+    ).toBeVisible();
+  },
+);
 
 Then(
   "the persistent header shows the logo, the top-nav, a theme toggle, and the doctor's avatar icon",
@@ -109,9 +122,12 @@ When("the doctor activates the header avatar icon", async ({ page }) => {
   await page.getByTestId("shell-avatar").click();
 });
 
-Then("the shell navigates to the profile {string}", async ({ page }, path: string) => {
-  await expect(page).toHaveURL(new RegExp(`${escapeRe(path)}$`));
-});
+Then(
+  "the shell navigates to the profile {string}",
+  async ({ page }, path: string) => {
+    await expect(page).toHaveURL(new RegExp(`${escapeRe(path)}$`));
+  },
+);
 
 // ── Guest sees «Войти» and the same `/` (EARS-4/8) ────────────────────────────
 
@@ -120,14 +136,19 @@ Given("a visitor with no authenticated session", async ({ context }) => {
 });
 
 When("the visitor opens the discovery front-door", async ({ page }) => {
-  await page.goto("/", { waitUntil: "domcontentloaded" });
+  // The listing's route is `/webinars` (008 «Amendment — 2026-08-17»: `/` is
+  // the feature-013 Academy landing).
+  await page.goto("/webinars", { waitUntil: "domcontentloaded" });
 });
 
-Then("the discovery listing of upcoming broadcasts is shown", async ({ page }) => {
-  await expect(
-    page.getByRole("heading", { name: DISCOVERY_HEADING }),
-  ).toBeVisible();
-});
+Then(
+  "the discovery listing of upcoming broadcasts is shown",
+  async ({ page }) => {
+    await expect(
+      page.getByRole("heading", { name: DISCOVERY_HEADING }),
+    ).toBeVisible();
+  },
+);
 
 Then(
   "the header shows a «Войти» button and no avatar and no «Выйти»",
@@ -148,40 +169,49 @@ Then("the shell navigates to the login surface", async ({ page }) => {
 
 // ── Mobile ≡ collapse (EARS-11/2) ─────────────────────────────────────────────
 
-Given("a doctor on an authenticated surface at a mobile viewport", async ({ page }) => {
-  await page.setViewportSize({ width: 375, height: 800 });
-  // A fresh 003 doctor (lands on /account), then a hard load of the authenticated
-  // events surface so the header reads the session and renders the doctor branch
-  // at the mobile breakpoint — and so the ≡ selection is a REAL navigation away
-  // from the current route rather than a same-route no-op.
-  await provisionLoggedInDoctor(page);
-  await page.goto("/account/events", { waitUntil: "domcontentloaded" });
-});
+Given(
+  "a doctor on an authenticated surface at a mobile viewport",
+  async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    // A fresh 003 doctor (lands on /account), then a hard load of the authenticated
+    // events surface so the header reads the session and renders the doctor branch
+    // at the mobile breakpoint — and so the ≡ selection is a REAL navigation away
+    // from the current route rather than a same-route no-op.
+    await provisionLoggedInDoctor(page);
+    await page.goto("/account/events", { waitUntil: "domcontentloaded" });
+  },
+);
 
 When("the doctor opens the header ≡ navigation", async ({ page }) => {
   // The desktop nav is collapsed at ≤900px; the ≡ disclosure takes its place.
   await expect(page.getByTestId("shell-nav-desktop")).toBeHidden();
-  await shellHeader(page).getByTestId("shell-mobile-menu").locator("summary").click();
+  await shellHeader(page)
+    .getByTestId("shell-mobile-menu")
+    .locator("summary")
+    .click();
 });
 
-Then("the ≡ dropdown carries the same nav items as the desktop bar", async ({ page }) => {
-  // ONE host config value feeds both lists, so they cannot drift apart: the
-  // configured «Эфиры» (owner decision 2026-09-10, #2180) plus the signed-in
-  // auth link «Мои события» the canvas draws as a ≡ row (canvas line 50, 008
-  // EARS-11/#2243) — the same pair the desktop bar shows to this doctor.
-  const mobileNav = page.getByTestId("shell-nav-mobile");
-  await expect(mobileNav).toBeVisible();
-  const broadcasts = mobileNav.getByRole("link", { name: NAV_BROADCASTS });
-  await expect(broadcasts).toBeVisible();
-  await expect(broadcasts).toHaveAttribute("href", DISCOVERY_HREF);
-  const myEvents = mobileNav.getByRole("link", { name: MY_EVENTS_LABEL });
-  await expect(myEvents).toBeVisible();
-  await expect(myEvents).toHaveAttribute("href", MY_EVENTS_HREF);
-  await expect(mobileNav.getByRole("link")).toHaveText([
-    NAV_BROADCASTS,
-    MY_EVENTS_LABEL,
-  ]);
-});
+Then(
+  "the ≡ dropdown carries the same nav items as the desktop bar",
+  async ({ page }) => {
+    // ONE host config value feeds both lists, so they cannot drift apart: the
+    // configured «Эфиры» (owner decision 2026-09-10, #2180) plus the signed-in
+    // auth link «Мои события» the canvas draws as a ≡ row (canvas line 50, 008
+    // EARS-11/#2243) — the same pair the desktop bar shows to this doctor.
+    const mobileNav = page.getByTestId("shell-nav-mobile");
+    await expect(mobileNav).toBeVisible();
+    const broadcasts = mobileNav.getByRole("link", { name: NAV_BROADCASTS });
+    await expect(broadcasts).toBeVisible();
+    await expect(broadcasts).toHaveAttribute("href", DISCOVERY_HREF);
+    const myEvents = mobileNav.getByRole("link", { name: MY_EVENTS_LABEL });
+    await expect(myEvents).toBeVisible();
+    await expect(myEvents).toHaveAttribute("href", MY_EVENTS_HREF);
+    await expect(mobileNav.getByRole("link")).toHaveText([
+      NAV_BROADCASTS,
+      MY_EVENTS_LABEL,
+    ]);
+  },
+);
 
 Then(
   "selecting «Эфиры» in the ≡ dropdown navigates to {string}",

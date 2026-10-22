@@ -1,3 +1,5 @@
+import { HOSTS } from "@ds/e2e/hosts";
+import { signInWithPassword } from "@ds/e2e/sign-in";
 import { test, expect, type Browser, type Page } from "@playwright/test";
 import {
   ADMIN_ORIGIN,
@@ -120,7 +122,12 @@ test("EARS-6: the Предстоящие list shows the registered event with it
  * Self-provisioning + live-stand-gated via `LIVE_STAND`; inert on a bare CI run.
  */
 test.describe("014 EARS-9 my-events tabs (e2e)", () => {
-  const HIDDEN_SLUG = process.env.E2E_HIDDEN_SLUG ?? "seed-005-hidden";
+  // #3229: a slot hands the leg its golden live + hidden events (`E2E_WEBINAR_SLUG_LIVE`,
+  // `E2E_JOURNEY_SLUG_HIDDEN`); a local stand falls back to its `seed-005-*` fixtures.
+  const HIDDEN_SLUG =
+    process.env.E2E_HIDDEN_SLUG ??
+    process.env.E2E_JOURNEY_SLUG_HIDDEN ??
+    "seed-005-hidden";
 
   test("014 EARS-9: «Мои события» opens on Предстоящие, offers exactly Предстоящие|Записи, and deep-links the Записи tab", async ({
     page,
@@ -130,17 +137,22 @@ test.describe("014 EARS-9 my-events tabs (e2e)", () => {
     await provisionLoggedInDoctor(page);
 
     // A real registration so the default tab has content to be right ABOUT.
-    const status = await page.evaluate(async (slug) => {
-      const res = await fetch(
-        `/v1/events/${encodeURIComponent(slug)}/registration`,
-        {
-          method: "POST",
-          headers: { accept: "application/json" },
-          credentials: "include",
-        },
-      );
-      return res.status;
-    }, process.env.E2E_LIVE_SLUG ?? "seed-005-live");
+    const status = await page.evaluate(
+      async (slug) => {
+        const res = await fetch(
+          `/v1/events/${encodeURIComponent(slug)}/registration`,
+          {
+            method: "POST",
+            headers: { accept: "application/json" },
+            credentials: "include",
+          },
+        );
+        return res.status;
+      },
+      process.env.E2E_LIVE_SLUG ??
+        process.env.E2E_WEBINAR_SLUG_LIVE ??
+        "seed-005-live",
+    );
     expect(status).toBe(200);
 
     await page.goto(`${BASE}/account/events`, {
@@ -267,15 +279,13 @@ test.describe("005 EARS-7 my-events freshness (e2e)", () => {
 
     // Log the doctor in through the real 003 flow — the session cookie is bound to
     // this browser's fingerprint surface, which the SSR «мои события» read forwards.
-    await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-    // Locale-agnostic `autocomplete` selectors (#177): a label regex also matches
-    // the password tab and the «Показать пароль» toggle.
-    await page.locator('input[autocomplete="username"]').fill(DOCTOR_EMAIL!);
-    await page
-      .locator('input[autocomplete="current-password"]')
-      .fill(DOCTOR_PASSWORD!);
-    await page.getByTestId("password-login-submit").click();
-    await page.waitForURL(/\/account|\/webinars/);
+    // The shared live sign-in walk waits for the login card to hydrate first.
+    await signInWithPassword(
+      page,
+      HOSTS.academy,
+      { email: DOCTOR_EMAIL!, password: DOCTOR_PASSWORD! },
+      BASE,
+    );
 
     const cardSelector = `a[href="/webinars/${FRESH_SLUG}"]`;
 

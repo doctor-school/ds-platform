@@ -1888,3 +1888,33 @@ per-IP throttling and statistical timing coverage. Ordinary stage/release runs
 exclude this default-limit case; the real compiled local browser proof is recorded
 separately and makes no automatic stage/CI browser-coverage claim. This test-only
 projection changes no product behavior or render surface and needs no Stage-B slot.
+
+### Academy staff own profile (A002, 003 EARS-27/28 amendment #2456)
+
+`@staff-own-profile` (`steps/staff-own-profile.steps.ts`, #3256) uses the existing
+`@default-auth-limits` loopback-only contour with one worker and native default
+limits. Here that contour isolates the explicit owned role-grant fixture; this
+case makes no rate-threshold claim. It is excluded from ordinary stage/release
+C6 runs, without a runner/configuration change or a silent scenario skip.
+Set `E2E_AUTH_LIMIT_TIER=default`, `E2E_WORKERS=1`, a loopback `E2E_PORTAL_URL`,
+`E2E_STAFF_ROLE_FIXTURE=true`, `E2E_STAFF_FIXTURE_ISSUER` equal to the local
+`IDP_ISSUER`, and `E2E_STAFF_FIXTURE_LOG` to a private absolute JSONL path. The
+usual local IdP project/service credentials and actual Mailpit are required.
+Select only this scenario by `E2E_GREP` and record committed-source browser proof
+separately. Missing prerequisites fail; no production target is permitted.
+
+Two uniquely browser-registered, email-verified accounts own the test grants.
+The private fixture checks exact email, subject, project and previous roles,
+then updates only that existing owned grant with already provisioned roles.
+It never creates role definitions, policies or grants. Every management request
+is logged without credentials or identity bytes. A fresh real password sign-in
+must carry exactly `platform_admin`, render the owner's profile, persist an
+inline name edit through reload, hide raw claims and sign out through the UI.
+An `event-registrar`-only session receives session/profile/name read/write and
+logout 403 under the existing baseline-role allowlist. Adding `doctor_guest` to
+that same owned grant precedes an actual addressed email-code sign-in in the same
+context; the existing OTP replacement path revokes the prior forbidden session
+and mints a distinct cookie. The new exact-role session admits its unchanged own
+profile and signs out through the UI. Native staff marker/mirror tests remain complementary. This is
+retained Academy proof, not shared-sign-in-host or production acceptance; there
+is no product/render change or owner Stage-B slot.

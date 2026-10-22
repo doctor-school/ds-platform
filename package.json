@@ -78,6 +78,7 @@
     "lint:tdd-signal": "tsx tools/lint/tdd-signal-lint.ts",
     "lint:tsc-version": "tsx tools/lint/tsc-version-lint.ts",
     "lint:workflow-auth": "tsx tools/lint/workflow-auth-lint.ts",
+    "lint:action-pin": "tsx tools/lint/action-pin-lint.ts",
     "lint:oxlint": "oxlint -c .oxlintrc.json --disable-unicorn-plugin --disable-oxc-plugin --disable-typescript-plugin -A all apps packages",
     "lint:stylelint": "stylelint \"apps/**/*.css\" \"packages/**/*.css\"",
     "retro:tokens": "node tools/retro/token-ledger.mjs",

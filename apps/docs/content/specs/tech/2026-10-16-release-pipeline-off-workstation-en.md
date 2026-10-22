@@ -153,6 +153,8 @@ merge to main
 
 Today the push token is stored only on ds-stage-1 (`/etc/ds-platform/registry-push-token`). §8 step (a) moves it into the build Environment and removes it from the box.
 
+**Actions that receive these secrets are pinned.** Every `uses:` in the workflows, first-party `actions/*` included, is pinned to the commit its floating major tag ran when pinned, with that exact release tag as a comment; bumps come only through Renovate's `github-actions` manager (`renovate.json`, the repository's single dependency-update owner), and the `action-pin` guard enforces the pin (`tools/lint/action-pin-lint.ts`); a tag can be repointed upstream, a SHA cannot.
+
 **ssh hardening on ds-api-prod and ds-stage-1** (§8 step (c)) — the standard set for a key-only admin port open to the internet:
 
 - key-only authentication (already in place: `PasswordAuthentication no`);

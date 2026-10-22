@@ -698,7 +698,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then no SMS is sent to the provider
     And a generic "try again later" response is returned
 
-  @EARS-17 @happy
+  @EARS-17 @happy @implemented @captcha-on-demand
   Scenario: A protected auth send executes an invisible challenge only on demand
     Given no permanent CAPTCHA checkbox is rendered in the auth form
     When a visitor submits registration, requests an initial login or reset code, or clicks any code resend
@@ -706,6 +706,9 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And provider challenge UI appears only if Yandex requires interaction
     And the first success callback resumes that pending action exactly once with the fresh token
     And duplicate callbacks or a previously used token cannot replay the action
+    # Browser policy projection: observed supported captcha.js adapter; local API BOTOFF.
+    # Real send doors remain untouched. Fresh probe tokens and synthetic provider events
+    # prove frontend orchestration, not Yandex interaction or server token verification.
 
   @EARS-17 @happy @implemented @captcha-threshold @default-auth-limits
   Scenario: Password login challenges only after the backend threshold

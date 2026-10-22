@@ -6,6 +6,11 @@ import {
 } from "@playwright/test";
 import { congressSignUpEnvProblem } from "@ds/e2e/live-stand-env";
 import { captchaTestTokenHeaders } from "@ds/e2e/captcha-stub";
+import { AUTH_REQUEST_PARAM, isSignInHostForm } from "@ds/e2e/sign-in-host-api";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "@ds/e2e/storefront-entry-watch";
 import {
   standBasicAuthHeaders,
   standHttpCredentials,
@@ -81,6 +86,7 @@ test("003 EARS-44: the Congress hand-off opens the code step with the code alrea
   const ref = await signUpForCongress(email);
 
   const sentAt = Date.now();
+  watchStorefrontEntries(page, DOCTOR_URL);
   const response = await page.goto(
     `/login?method=code&handoff=${ref}&returnTo=%2Faccount%2Fcongress`,
   );
@@ -88,9 +94,21 @@ test("003 EARS-44: the Congress hand-off opens the code step with the code alrea
 
   await expect(page.getByTestId("otp-verify")).toBeVisible();
   await expect(page.getByText(email)).toBeVisible();
-  await expect(page).toHaveURL(
-    /\/login\?method=code&returnTo=%2Faccount%2Fcongress$/,
-  );
+  // #3172: the address bar is the sign-in host's code door carrying only the
+  // IdP's auth request — the reference is stripped; the return path rode this
+  // storefront's entry into the transaction (the landing below proves it).
+  const door = new URL(page.url());
+  expect(
+    isSignInHostForm(door) &&
+      door.pathname === "/login" &&
+      [...door.searchParams.keys()].join() === AUTH_REQUEST_PARAM,
+    "the address bar retains only the auth request",
+  ).toBe(true);
+  expectEnteredThrough(page, DOCTOR_URL, {
+    pathname: "/login",
+    method: "code",
+    returnTo: "/account/congress",
+  });
 
   const code = await mailedCode(email, "login", sentAt);
   await page.locator('input[autocomplete="one-time-code"]').fill(code);

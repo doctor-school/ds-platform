@@ -1,6 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 import { loginAsDoctor, DOCTOR_BASE } from "./support/doctor-session";
 import {
+  expectAtSignInHostFrom,
+  watchStorefrontEntries,
+} from "@ds/e2e/storefront-entry-watch";
+import {
   requireLiveStandEnv,
   requireShortHeartbeat,
 } from "./support/live-stand-env";
@@ -201,10 +205,16 @@ test.describe("006 EARS-6 denied-access routing on the doctor host (this host's 
     page.on("framenavigated", (frame) => {
       if (frame === page.mainFrame()) trail.push(frame.url());
     });
+    // #3172: this host's `/login` is a 303 entry; the form is the sign-in
+    // host's, the room return riding the entry into the transaction.
+    watchStorefrontEntries(page, DOCTOR_BASE);
     await page.goto(`${DOCTOR_BASE}${roomPath}`, {
       waitUntil: "domcontentloaded",
     });
-    await expect(page).toHaveURL(`${DOCTOR_BASE}${expectedLogin}`);
+    await expectAtSignInHostFrom(page, DOCTOR_BASE, {
+      pathname: "/login",
+      returnTo: roomPath,
+    });
     expect(
       trail.filter((url) => /academy|\/webinars\//.test(url)),
       `no academy URL may appear in the trail — trail: ${trail.join(" -> ")}`,

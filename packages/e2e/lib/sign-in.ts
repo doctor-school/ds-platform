@@ -138,7 +138,7 @@ export async function signInWithPassword(
     isSignInHostForm(page.url()),
     `the storefront entry ${host.loginPath} leads to the sign-in host form`,
   ).toBe(true);
-  await submitHostForm(page, host, credentials, storefrontOrigin);
+  await submitSignInHostForm(page, host, credentials, storefrontOrigin);
 }
 
 /**
@@ -156,7 +156,7 @@ export async function signInOnHostForm(
   storefrontOrigin: string,
 ): Promise<GoldenDoctor> {
   const doctor = resolveWorkerGoldenDoctor(seedName);
-  await submitHostForm(
+  await submitSignInHostForm(
     page,
     host,
     { email: doctor.email, password: goldenDoctorPassword(doctor) },
@@ -166,10 +166,12 @@ export async function signInOnHostForm(
 }
 
 /**
- * Fill and submit the sign-in host's password form once React has hydrated it
- * (see {@link signInGoldenDoctor}), then wait to be back on `storefrontOrigin`.
+ * Fill and submit the sign-in host's password form the page is ON once React has
+ * hydrated it (see {@link signInGoldenDoctor}), then wait to be back on
+ * `storefrontOrigin` off the login route. For a caller that names its own
+ * account and already reached the form (a gated address bounced a guest there).
  */
-async function submitHostForm(
+export async function submitSignInHostForm(
   page: Page,
   host: HostConfig,
   credentials: { readonly email: string; readonly password: string },

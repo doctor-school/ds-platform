@@ -1,4 +1,12 @@
 import { test, expect } from "@playwright/test";
+import { HOSTS } from "@ds/e2e/hosts";
+import { signInWithPassword, submitSignInHostForm } from "@ds/e2e/sign-in";
+import {
+  expectAtSignInHostFrom,
+  watchStorefrontEntries,
+} from "@ds/e2e/storefront-entry-watch";
+
+const BASE = process.env.E2E_PORTAL_URL ?? "http://localhost:3001";
 import { LIVE_STAND, provisionDoctorCreds } from "../support/doctor-session";
 import { DISCOVERY_HEADING, SCAFFOLD_COPY } from "../support/shell";
 
@@ -36,12 +44,9 @@ test.describe("013 EARS-15 post-login landing is the return target, /webinars by
     // Drop the register auto-login session so `/login` drives a genuine sign-in.
     await context.clearCookies();
 
-    await page.goto("/login", { waitUntil: "load" });
-    // The hydration wait of `@ds/e2e/sign-in` — a pre-hydration click submits natively.
-    await page.waitForLoadState("networkidle");
-    await page.locator('input[autocomplete="username"]').fill(email);
-    await page.locator('input[autocomplete="current-password"]').fill(password);
-    await page.getByRole("button", { name: /войти|продолжить/i }).click();
+    // The storefront `/login` entry → the sign-in host's form → back (#3172),
+    // through the shared hydration-safe walk of `@ds/e2e/sign-in`.
+    await signInWithPassword(page, HOSTS.academy, { email, password });
 
     // The landing is the discovery listing — exactly `/webinars`, no returnTo.
     await page.waitForURL((url) => new URL(url).pathname === "/webinars");
@@ -64,13 +69,20 @@ test.describe("013 EARS-15 post-login landing is the return target, /webinars by
     // A hostile protocol-relative target rides the auth round-trip; the shipped
     // same-origin guard drops it, so the landing is the DEFAULT, never the
     // attacker's host and never the Academy landing `/`.
+    watchStorefrontEntries(page, BASE);
     await page.goto("/login?returnTo=%2F%2Fevil.example", {
       waitUntil: "load",
     });
-    await page.waitForLoadState("networkidle");
-    await page.locator('input[autocomplete="username"]').fill(email);
-    await page.locator('input[autocomplete="current-password"]').fill(password);
-    await page.getByRole("button", { name: /войти|продолжить/i }).click();
+    await expectAtSignInHostFrom(page, BASE, {
+      pathname: "/login",
+      returnTo: "//evil.example",
+    });
+    await submitSignInHostForm(
+      page,
+      HOSTS.academy,
+      { email, password },
+      new URL(BASE).origin,
+    );
 
     await page.waitForURL((url) => new URL(url).pathname === "/webinars");
     expect(page.url()).not.toContain("evil.example");

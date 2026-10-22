@@ -1,6 +1,12 @@
 import { expect, type Page } from "@playwright/test";
 import { Given, Then, When, test } from "../support/fixtures";
 import {
+  expectAtSignInHostFrom,
+  watchStorefrontEntries,
+} from "@ds/e2e/storefront-entry-watch";
+
+const BASE = process.env.E2E_PORTAL_URL ?? "http://localhost:3001";
+import {
   LIVE_STAND,
   provisionLoggedInDoctor,
   submitRegisterAndVerify,
@@ -83,13 +89,19 @@ Given(
   },
 );
 
-When("the guest activates «Участвовать»", async ({ page }) => {
+When("the guest activates «Участвовать»", async ({ page, world }) => {
   // The public register CTA is a same-origin `/register?returnTo=/webinars/:slug`
   // link (server-resolved `ParticipationCta`) — clicking it carries the event context into 003.
   const cta = page.getByRole("link", { name: PARTICIPATE, exact: true });
   await expect(cta).toBeVisible();
+  // #3172: the storefront `/register` is a 303 entry; the form is the sign-in
+  // host's and the event context rides the entry into the API transaction.
+  watchStorefrontEntries(page, BASE);
   await cta.click();
-  await page.waitForURL(/\/register/);
+  await expectAtSignInHostFrom(page, BASE, {
+    pathname: "/register",
+    returnTo: `/webinars/${world.slug}`,
+  });
 });
 
 When("the guest completes the feature-003 signup flow", async ({ page }) => {
@@ -233,10 +245,10 @@ Then(
     // EARS-2 on a live event: the guest CTA is the same `/register?returnTo=…`
     // auth handoff as `published` — registration first (EARS-9), the room is 006
     // (#584). The event context (slug) rides the returnTo, never a dead room link.
-    await page.waitForURL(/\/register\?/);
-    expect(page.url()).toContain(
-      `returnTo=${encodeURIComponent(`/webinars/${world.slug}`)}`,
-    );
+    await expectAtSignInHostFrom(page, BASE, {
+      pathname: "/register",
+      returnTo: `/webinars/${world.slug}`,
+    });
   },
 );
 
@@ -273,13 +285,17 @@ Given("a guest with no session", async ({ context, world }) => {
 });
 
 When("the guest opens «мои события»", async ({ page }) => {
+  watchStorefrontEntries(page, BASE);
   await page.goto("/account/events", { waitUntil: "domcontentloaded" });
 });
 
 Then("the guest is redirected to the login screen", async ({ page }) => {
   // EARS-10: «мои события» is an authenticated surface — a guest is taken to login,
   // never served a blank or another doctor's data (unlike the public 004 pages).
-  await expect(page).toHaveURL(/\/login(?:$|[?#])/);
+  await expectAtSignInHostFrom(page, BASE, {
+    pathname: "/login",
+    returnTo: "/account/events",
+  });
 });
 
 Then("the MyEvents read is refused without a session", async ({ page }) => {

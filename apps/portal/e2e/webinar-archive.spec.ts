@@ -1,5 +1,9 @@
 import { HOSTS } from "@ds/e2e/hosts";
 import { signInWithPassword } from "@ds/e2e/sign-in";
+import {
+  expectAtSignInHostFrom,
+  watchStorefrontEntries,
+} from "@ds/e2e/storefront-entry-watch";
 import { test, expect, type Page } from "@playwright/test";
 
 /**
@@ -450,9 +454,14 @@ test.describe("014 EARS-5 the login gate and the mounted player (e2e)", () => {
     );
 
     // The href is only half the promise — the click has to actually land on the
-    // auth page carrying it, so the assertion follows the navigation.
+    // auth page carrying it, so the assertion follows the navigation: through the
+    // storefront's `/login` entry (#3172) to the sign-in host's form.
+    watchStorefrontEntries(page, BASE);
     await page.getByTestId("recording-gate-signin").click();
-    await page.waitForURL(new RegExp(`/login\\?returnTo=${encoded}$`));
+    await expectAtSignInHostFrom(page, BASE, {
+      pathname: "/login",
+      returnTo: `/webinars/${ENDED_SLUG}`,
+    });
   });
 
   test("014 EARS-5: a signed-in doctor gets the player itself — the gate is gone, one frame is mounted, and the recording meta rides with the card", async ({

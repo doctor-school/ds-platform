@@ -1,4 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
+import { HOSTS } from "@ds/e2e/hosts";
+import { submitSignInHostForm } from "@ds/e2e/sign-in";
+import {
+  expectAtSignInHostFrom,
+  watchStorefrontEntries,
+} from "@ds/e2e/storefront-entry-watch";
 import { readyRegisterForm } from "./support/doctor-session";
 import { requireLiveStandEnv } from "./support/live-stand-env";
 import { fetchOtpCode } from "./support/mailpit";
@@ -144,19 +150,22 @@ async function registerDoctor(
   return { email, password };
 }
 
-/** Log the doctor in through the real 003 password flow on the CURRENT /login page. */
+/**
+ * Log the doctor in through the real 003 password flow on the sign-in host form
+ * the page is ON (#3172: the room's guest bounce lands there through the
+ * storefront `/login` entry) — the shared hydration-safe walk of `@ds/e2e/sign-in`.
+ */
 async function loginAs(
   page: Page,
   email: string,
   password: string,
 ): Promise<void> {
-  // The hydration wait of `@ds/e2e/sign-in`: a click before the login card's
-  // client chunks run submits the form natively and nobody is signed in.
-  await page.waitForLoadState("load");
-  await page.waitForLoadState("networkidle");
-  await page.locator('input[autocomplete="username"]').fill(email);
-  await page.locator('input[autocomplete="current-password"]').fill(password);
-  await page.getByRole("button", { name: /войти|продолжить/i }).click();
+  await submitSignInHostForm(
+    page,
+    HOSTS.academy,
+    { email, password },
+    new URL(BASE).origin,
+  );
 }
 
 /**
@@ -214,16 +223,18 @@ test.describe("006 EARS-6 denied-access routing (auth/register/not-live front do
 
     // Log the doctor out and hit the room as a GUEST.
     await context.clearCookies();
+    watchStorefrontEntries(page, BASE);
     await page.goto(`${BASE}/webinars/${SLUG_LIVE}/room`, {
       waitUntil: "domcontentloaded",
     });
 
     // …the gate refuses server-side and the room routes THROUGH 003 auth, carrying
-    // a returnTo back to THIS room url (not a soft wall over a hidden player).
-    await page.waitForURL(/\/login\?/);
-    expect(page.url()).toContain(
-      `returnTo=${encodeURIComponent(`/webinars/${SLUG_LIVE}/room`)}`,
-    );
+    // a returnTo back to THIS room url (not a soft wall over a hidden player) — via
+    // the storefront `/login` entry to the sign-in host's form (#3172).
+    await expectAtSignInHostFrom(page, BASE, {
+      pathname: "/login",
+      returnTo: `/webinars/${SLUG_LIVE}/room`,
+    });
     await expectNoRoom(page);
 
     // On login the gate RE-EVALUATES: the doctor lands BACK on the room url (not
@@ -243,13 +254,14 @@ test.describe("006 EARS-6 denied-access routing (auth/register/not-live front do
 
     // Log out and hit the room as a GUEST: routed to login carrying the room.
     await context.clearCookies();
+    watchStorefrontEntries(page, BASE);
     await page.goto(`${BASE}/webinars/${SLUG_LIVE}/room`, {
       waitUntil: "domcontentloaded",
     });
-    await page.waitForURL(/\/login\?/);
-    expect(page.url()).toContain(
-      `returnTo=${encodeURIComponent(`/webinars/${SLUG_LIVE}/room`)}`,
-    );
+    await expectAtSignInHostFrom(page, BASE, {
+      pathname: "/login",
+      returnTo: `/webinars/${SLUG_LIVE}/room`,
+    });
 
     // Signing in returns to the room url, where the gate RE-RUNS and — the doctor
     // being unregistered — routes to the 005 register front door on the event

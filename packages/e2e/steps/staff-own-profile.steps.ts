@@ -5,6 +5,8 @@ import { captureResponse } from "../lib/captured-response.js";
 import {
   inputSecret,
   registerOwnedCredentials,
+  storefrontCallbackAcknowledgement,
+  verificationEvidence,
 } from "../lib/owned-registration.js";
 import {
   captureAddressedMailCheckpoint,
@@ -13,6 +15,11 @@ import {
   nativeRecoveryMail,
 } from "../lib/mailpit.js";
 import { assertSecureSession } from "../lib/secure-session.js";
+import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
+import {
+  expectAtSignInHostFrom,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import {
   assertStaffProfileFixtureScope,
   setOwnedStaffProfileRoles,
@@ -65,8 +72,15 @@ async function login(
     .filter((cookie) => cookie.name === "__Host-ds_session")
     .map((cookie) => cookie.value);
   if (method === "email-code") expect(previousCookies.length).toBe(1);
+  // #3172: the storefront's `/login` is a 303 entry; the form is the sign-in
+  // host's, and the return path rides the API transaction, not the form URL.
+  watchStorefrontEntries(owner.page, base);
   await owner.page.goto(`${base}/login?returnTo=%2Faccount`, {
     waitUntil: "load",
+  });
+  await expectAtSignInHostFrom(owner.page, base, {
+    pathname: "/login",
+    returnTo: "/account",
   });
   await owner.page.waitForLoadState("networkidle");
   let response;
@@ -79,7 +93,10 @@ async function login(
       owner.page.locator('input[autocomplete="current-password"]'),
       owner.password,
     );
-    const accepted = captureResponse(owner.page, "/v1/auth/login");
+    const accepted = captureResponse(
+      owner.page,
+      signInHostApiPath("/v1/auth/login"),
+    );
     await owner.page.getByTestId("password-login-submit").click();
     response = await accepted;
   } else {
@@ -93,7 +110,10 @@ async function login(
       mailbox,
       owner.email,
     );
-    const requested = captureResponse(owner.page, "/v1/auth/login/otp/request");
+    const requested = captureResponse(
+      owner.page,
+      signInHostApiPath("/v1/auth/login/otp/request"),
+    );
     await owner.page.getByTestId("otp-send").click();
     const sent = await requested;
     expect(sent.response.status()).toBe(200);
@@ -105,13 +125,16 @@ async function login(
       before,
       "login",
     );
-    const accepted = captureResponse(owner.page, "/v1/auth/login/otp");
+    const accepted = captureResponse(
+      owner.page,
+      signInHostApiPath("/v1/auth/login/otp"),
+    );
     await inputSecret(
       owner.page.locator('input[autocomplete="one-time-code"]'),
       code,
     );
     response = await accepted;
-    const command = response.response.request().postDataJSON();
+    const command = hostCommand(response.response.request().postDataJSON());
     expect(
       command.identifier === owner.email &&
         command.code === code &&
@@ -122,14 +145,16 @@ async function login(
     response.response.status(),
     "owned role principal sign-in accepted",
   ).toBe(200);
-  expect(response.body === '{"status":"authenticated"}').toBe(true);
+  expect(storefrontCallbackAcknowledgement(response.body, base)).toBe(true);
+  await owner.page.waitForURL(
+    (url) => url.origin === new URL(base).origin && url.pathname === "/account",
+  );
   await assertSecureSession(
     owner.page,
     response.response,
     base,
     previousCookies,
   );
-  await owner.page.waitForURL((url) => url.pathname === "/account");
   const registrarOnly = roles.length === 1 && roles[0] === "event-registrar";
   const claims = await owner.page.evaluate(
     async ({ sub, roles, registrarOnly }) => {
@@ -233,14 +258,30 @@ Given(
         owner,
         "/account",
       );
-      const verified = captureResponse(owned, "/v1/auth/verify");
+      const verified = captureResponse(
+        owned,
+        signInHostApiPath("/v1/auth/verify"),
+      );
       await inputSecret(
         owned.locator('input[autocomplete="one-time-code"]'),
         code,
       );
       const accepted = await verified;
       expect(accepted.response.status()).toBe(200);
-      await owned.waitForURL((url) => url.pathname === "/account");
+      expect(
+        verificationEvidence(
+          accepted.response.request().postData() ?? "",
+          accepted.body,
+          owner,
+          code,
+          current.base,
+        ),
+      ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
+      await owned.waitForURL(
+        (url) =>
+          url.origin === new URL(current.base).origin &&
+          url.pathname === "/account",
+      );
       await assertSecureSession(owned, accepted.response, current.base);
       const session = await owned.evaluate(async () => {
         const response = await fetch("/v1/auth/session", {

@@ -8,6 +8,12 @@
  * writer of that manifest is `pnpm design:vendor` (tools/design/vendor-canvas.mjs),
  * run on the bytes of a DesignSync `get_file` pull; this guard is its `--check`.
  *
+ * The same verdict carries the #2221 control-state checks on every non-archive
+ * canvas (tools/design/canvas-states.mjs): no untagged `<a>`/`<button>`, no
+ * off-token `style-hover`/`style-focus` (both over the shrink-only legacy
+ * baseline `design-source/states-baseline.json`), and a ds-states block equal
+ * to the tokens.css-generated text. Every failure names `file:line` or file.
+ *
  * Honest limit: the guard proves «manifest and bytes agree and the vendoring
  * was an explicit recorded act»; it cannot prove the bytes came from Claude
  * Design without network. What makes a code-side canvas edit impossible to
@@ -20,14 +26,14 @@
  */
 import {
   MANIFEST_REL,
-  checkProvenance,
+  checkCanvases,
   listCanvases,
   repoRoot,
 } from "../design/vendor-canvas.mjs";
 
 const TAG = "[canvas-provenance]";
 const root = repoRoot();
-const verdict = checkProvenance(root);
+const verdict = checkCanvases(root);
 if (!verdict.ok) {
   for (const problem of verdict.problems)
     process.stderr.write(`${TAG} ${problem}\n`);

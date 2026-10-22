@@ -747,7 +747,11 @@ jobs:
       # a deterministic hash comparison with no false-positive class. Honest
       # limit: it proves manifest and bytes agree and that the vendoring was a
       # recorded act, not that the bytes came from Claude Design; the structural
-      # control is ui-parity's co-edit BLOCK + base-ref canvas read.
+      # control is ui-parity's co-edit BLOCK + base-ref canvas read. The same
+      # step runs the #2221 control-state checks on every non-archive canvas
+      # (untagged control, off-token style-hover/style-focus — both over the
+      # shrink-only design-source/states-baseline.json — and ds-states block
+      # drift against the tokens.css-generated text).
       - name: canvas-provenance
         run: pnpm lint:canvas-provenance
 

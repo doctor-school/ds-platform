@@ -6,6 +6,7 @@ import { dirname, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+import { STATES_BEGIN, STATES_END } from "../design/canvas-states.mjs";
 import { ghViewJson } from "./lib/gh";
 import { normalizeTierFiles, resolveTier } from "./lib/change-tier";
 import {
@@ -93,6 +94,63 @@ export const CANVAS_NOT_ON_BASE =
  * never judges against a stale `origin/<base>`; offline, the read falls back
  * to whatever `origin/<base>` the tree already has.
  */
+/**
+ * The canvas outside its tokens.css-generated ds-states block (#2221), or null
+ * when the text has no single well-formed marker pair.
+ */
+function withoutStatesBlock(text: string): string | null {
+  const b = text.indexOf(STATES_BEGIN);
+  const e = text.indexOf(STATES_END);
+  if (b === -1 || e < b || text.indexOf(STATES_BEGIN, b + 1) !== -1) return null;
+  if (text.indexOf(STATES_END, e + 1) !== -1) return null;
+  return text.slice(0, b) + text.slice(e);
+}
+
+/**
+ * The PR's canvases that count as a canvas co-edit (#2389). A canvas whose only
+ * delta vs the base blob lies inside the ds-states block is generated output of
+ * a tokens.css change (`pnpm design:vendor --restamp`, #2221), not a reference
+ * edit; without that carve-out a token change could never merge, since the
+ * canvas-provenance block-drift check requires the restamp in the same PR. A
+ * new or deleted canvas, or any byte changed outside the markers, stays a
+ * co-edit.
+ */
+export function canvasCoEdits(
+  canvases: string[],
+  read: (path: string) => { base: string | null; head: string | null },
+): string[] {
+  return canvases.filter((path) => {
+    const { base, head } = read(path);
+    if (base === null || head === null || base === head) return true;
+    const b = withoutStatesBlock(base);
+    const h = withoutStatesBlock(head);
+    return b === null || h === null || b !== h;
+  });
+}
+
+/** One canvas at the PR head commit, read as a git object like the base read. */
+function headCanvasBlob(
+  source: string,
+  headOid: string,
+  repoRoot: string,
+): string | null {
+  if (!/^[0-9a-f]{40}$/.test(headOid)) return null;
+  const show = () =>
+    spawnSync("git", ["cat-file", "blob", `${headOid}:${source}`], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    });
+  let result = show();
+  if (result.status !== 0) {
+    spawnSync("git", ["fetch", "--quiet", "origin", headOid], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    });
+    result = show();
+  }
+  return result.status === 0 ? result.stdout : null;
+}
+
 function canvasBlob(source: string, repoRoot: string): string | null {
   if (!/^design-source\/[A-Za-z0-9._/-]+\.dc\.html$/i.test(source)) return null;
   const inside = relative(
@@ -429,9 +487,15 @@ export async function runUiParityGuard(): Promise<void> {
   // #2389 D1: a vendored canvas and the UI built against it never share a PR —
   // whatever the body declares, and before any N/A path can apply.
   const coEdit = classifyCanvasCoEdit(paths);
-  if (coEdit.canvases.length && coEdit.ui.length)
+  const coEditCanvases = coEdit.ui.length
+    ? canvasCoEdits(coEdit.canvases, (path) => ({
+        base: canvasBlob(path, REPO_ROOT),
+        head: headCanvasBlob(path, pr.headRefOid ?? "", REPO_ROOT),
+      }))
+    : [];
+  if (coEditCanvases.length)
     fail(
-      coEdit.canvases
+      coEditCanvases
         .map(
           (file) =>
             `canvas co-edit: ${file} is a vendored canvas; canvas changes happen in Claude Design → DesignSync pull → a design-source-only vendoring PR (AGENTS.md §6, #2389). Split this PR.`,

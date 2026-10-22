@@ -1,0 +1,12 @@
+{
+  "number": 3210,
+  "body": "## Summary\nDeploy docs, env templates and network terraform.\n\nStage-B: N/A — no render surface\n",
+  "labels": [],
+  "files": [
+    { "path": "infra/deploy/README.md" },
+    { "path": "infra/dev-stand/idp/bootstrap.md" },
+    { "path": "infra/deploy/terraform/network.tf" },
+    { "path": "infra/deploy/api.env.example" }
+  ],
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

@@ -11,6 +11,7 @@ import {
   isEnvironmentSensitivePath,
   isNonRuntimePath,
   normalizeTierFiles,
+  requiresStageCheck,
   resolveTier,
   type ChangeTier,
   type ChangeTierFile,
@@ -21,6 +22,7 @@ import { stageBComments } from "./lib/stage-b-comments";
 import {
   instructionQuoteSource,
   validateStageB,
+  validateStageCheck,
   stageBDecisions,
   stageBField,
   type StageBRecord,
@@ -261,25 +263,57 @@ async function main(): Promise<void> {
 
   const files = (pr.files ?? []).map((f) => f.path);
   const renderable = files.filter(isUiSourcePath);
+  const allFiles = normalizeTierFiles(pr.files ?? []);
+  const environmentSensitive = allFiles
+    .flatMap((f) => [f.path, f.previousPath ?? ""])
+    .filter((p) => p && isEnvironmentSensitivePath(p));
+  const stageCheckPaths = allFiles
+    .flatMap((f) => [f.path, f.previousPath ?? ""])
+    .filter((p) => p && requiresStageCheck(p));
+  const loadRecords = async (): Promise<StageBRecord[]> => {
+    const records: StageBRecord[] = [
+      { body: pr.body ?? "", updatedAt: pr.updatedAt },
+      ...(pr.comments ?? []),
+    ];
+    for (const num of extractClosedIssues(pr.body ?? "")) {
+      const issue = await ghIssue(num);
+      if (!issue)
+        fail(`Cannot reconcile linked Issue #${num} Stage-B decisions`);
+      records.push(...(issue.comments ?? []));
+    }
+    return records;
+  };
   if (!renderable.length) {
+    if (!stageCheckPaths.length) {
+      info(
+        `PR #${pr.number} touches no user-facing render surface, rule does not apply`,
+      );
+      process.exit(0);
+    }
+    // #3205: no owner Stage-B without a render surface, but a runtime change
+    // in the owner-consented classes needs the agent's slot check.
     info(
-      `PR #${pr.number} touches no user-facing render surface, rule does not apply`,
+      `PR #${pr.number} touches no render surface but Stage-check runtime file(s): ${stageCheckPaths.join(", ")}`,
     );
+    const check = validateStageCheck(
+      await loadRecords(),
+      pr.headRefOid ?? "",
+      pr.number,
+      checkRebaseEquivalence,
+      { headDelta: prOwnDelta },
+    );
+    if (!check.ok)
+      fail(
+        `PR #${pr.number} changes Stage-check runtime file(s) (${stageCheckPaths.join(", ")}): ${check.reason}`,
+      );
+    info(check.reason);
     process.exit(0);
   }
   info(
     `PR #${pr.number} is user-facing: ${renderable.length} rendered source file(s), e.g. ${renderable.slice(0, 3).join(", ")}`,
   );
 
-  const records: StageBRecord[] = [
-    { body: pr.body ?? "", updatedAt: pr.updatedAt },
-    ...(pr.comments ?? []),
-  ];
-  for (const num of extractClosedIssues(pr.body ?? "")) {
-    const issue = await ghIssue(num);
-    if (!issue) fail(`Cannot reconcile linked Issue #${num} Stage-B decisions`);
-    records.push(...(issue.comments ?? []));
-  }
+  const records = await loadRecords();
   const gates: Record<number, string> = {};
   const childDecision = stageBDecisions(records).at(-1);
   const batch = childDecision?.value.match(/^batched at #(\d+)$/i);
@@ -314,7 +348,6 @@ async function main(): Promise<void> {
     );
   // #2584: a declaration below its minimum gets the strictest (ask) rules here;
   // the change-tier guard refuses it on its own.
-  const allFiles = normalizeTierFiles(pr.files ?? []);
   const tier = resolveTier(
     pr.body ?? "",
     allFiles,
@@ -336,9 +369,7 @@ async function main(): Promise<void> {
     {
       headDelta: prOwnDelta,
       slotFree: {
-        environmentSensitive: allFiles
-          .flatMap((f) => [f.path, f.previousPath ?? ""])
-          .filter((p) => p && isEnvironmentSensitivePath(p)),
+        environmentSensitive,
         ciE2e: ciE2eOnHead(pr.statusCheckRollup),
       },
     },

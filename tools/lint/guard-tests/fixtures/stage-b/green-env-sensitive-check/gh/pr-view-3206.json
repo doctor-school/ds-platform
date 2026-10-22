@@ -1,0 +1,7 @@
+{
+  "number": 3206,
+  "body": "## Summary\nOne OIDC client per storefront.\n\nStage-B: N/A — no render surface\n\nStage-check: PASS — slot pr-3206, signed in on both storefronts\nStage-B-head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nStage-B-recorded-at: 2026-10-21T15:51:00Z\n",
+  "labels": [],
+  "files": [{ "path": "tools/staging/idp.mjs" }],
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

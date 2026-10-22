@@ -1,0 +1,13 @@
+{
+  "number": 3212,
+  "body": "## Summary\nSession refresh window.\n\nStage-B: N/A — no render surface\n\nStage-check: PASS — slot pr-3212, signed in and refreshed the session on both storefronts\nStage-B-head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nStage-B-recorded-at: 2026-10-21T15:51:00Z\n",
+  "labels": [],
+  "files": [{ "path": "apps/api/src/auth/session/refresh.service.ts" }],
+  "comments": [
+    {
+      "body": "Rule reminder, quoted:\nStage-check: PASS — slot pr-<N>, <what was driven>",
+      "createdAt": "2026-10-21T16:00:00Z"
+    }
+  ],
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

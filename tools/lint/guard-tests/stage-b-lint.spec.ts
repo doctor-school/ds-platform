@@ -270,4 +270,83 @@ describe("stage-b-lint", () => {
       expect(stderr).toContain("not an owner decision");
     });
   });
+
+  describe("#3205: environment-sensitive change with no render surface", () => {
+    it("red: env-sensitive runtime file, no UI file, no Stage-check record → exit 1", () => {
+      const { code, stderr } = runGuard(
+        GUARD,
+        caseDir("stage-b", "red-env-sensitive-no-check"),
+        { env: prEnv("3205", "red-env-sensitive-no-check") },
+      );
+      expect(code).toBe(1);
+      expect(stderr).toContain("tools/staging/idp.mjs");
+      expect(stderr).toContain("Stage-check");
+    });
+
+    it("green: env-sensitive runtime file + a body Stage-check PASS pinned to the head → exit 0", () => {
+      const { code, stdout } = runGuard(
+        GUARD,
+        caseDir("stage-b", "green-env-sensitive-check"),
+        { env: prEnv("3206", "green-env-sensitive-check") },
+      );
+      expect(code).toBe(0);
+      expect(stdout).toContain("slot pr-3206");
+    });
+
+    it("red: an auth source file / a mailer file with no Stage-check record → exit 1", () => {
+      for (const [name, pr, path] of [
+        [
+          "red-auth-source-no-check",
+          "3208",
+          "apps/api/src/auth/session/refresh.service.ts",
+        ],
+        ["red-mailer-no-check", "3209", "apps/api/src/mailer/transport.ts"],
+      ]) {
+        const { code, stderr } = runGuard(GUARD, caseDir("stage-b", name), {
+          env: prEnv(pr, name),
+        });
+        expect(code, name).toBe(1);
+        expect(stderr, name).toContain(path);
+      }
+    });
+
+    it("skip: infra docs, an IdP bootstrap doc, terraform and an env template → exit 0 unchanged", () => {
+      const { code, stdout } = runGuard(
+        GUARD,
+        caseDir("stage-b", "skip-infra-docs-templates"),
+        { env: prEnv("3210", "skip-infra-docs-templates") },
+      );
+      expect(code).toBe(0);
+      expect(stdout).toContain("rule does not apply");
+    });
+
+    it("green: a comment quoting the record template neither counts nor poisons the set → exit 0", () => {
+      const { code, stdout } = runGuard(
+        GUARD,
+        caseDir("stage-b", "green-auth-source-check-template-quote"),
+        { env: prEnv("3212", "green-auth-source-check-template-quote") },
+      );
+      expect(code).toBe(0);
+      expect(stdout).toContain("slot pr-3212");
+    });
+
+    it("red: a later FAIL whose text carries an <https://…> link beats the earlier PASS → exit 1", () => {
+      const { code, stderr } = runGuard(
+        GUARD,
+        caseDir("stage-b", "red-check-later-fail-link"),
+        { env: prEnv("3213", "red-check-later-fail-link") },
+      );
+      expect(code).toBe(1);
+      expect(stderr).toContain("FAIL");
+    });
+
+    it("green: the Stage-check PASS may live in a PR comment → exit 0", () => {
+      const { code } = runGuard(
+        GUARD,
+        caseDir("stage-b", "green-env-sensitive-check-comment"),
+        { env: prEnv("3207", "green-env-sensitive-check-comment") },
+      );
+      expect(code).toBe(0);
+    });
+  });
 });

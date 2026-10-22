@@ -21,6 +21,7 @@ import {
   isTestPath,
   normalizeTierFiles,
   parseDeclaredTier,
+  requiresStageCheck,
   resolveTier,
   type ChangeTierFile,
 } from "../lib/change-tier";
@@ -321,6 +322,44 @@ describe("#2699: evidence captures and non-runtime / environment-sensitive paths
       "apps/portal/middleware.test.ts",
     ])
       expect(isEnvironmentSensitivePath(path), path).toBe(false);
+  });
+});
+
+describe("#3205: requiresStageCheck — the owner-consented Stage-check classes", () => {
+  it("auth / session, IdP, email / SMS code delivery and captcha runtime files need the agent's slot check", () => {
+    for (const path of [
+      "tools/staging/idp.mjs",
+      "tools/deploy/idp-storefront-clients.mjs",
+      "infra/dev-stand/idp/provision.sh",
+      "apps/api/src/auth/idp/provision-storefront-clients.ts",
+      "apps/api/src/auth/sms-budget/sms-budget.service.ts",
+      "packages/auth-flow/src/login.ts",
+      "apps/portal/lib/auth-session.ts",
+      "apps/doctor/lib/account-session.ts",
+      "apps/portal/app/login/page.tsx",
+      "apps/portal/middleware.ts",
+      "apps/doctor/proxy.ts",
+      "apps/api/src/mailer/transport.ts",
+      "apps/api/src/bot-protection/captcha.guard.ts",
+    ])
+      expect(requiresStageCheck(path), path).toBe(true);
+  });
+  it("docs, templates, the rest of infra, migrations and tests do not", () => {
+    for (const path of [
+      "infra/deploy/README.md",
+      "infra/dev-stand/idp/bootstrap.md",
+      "infra/deploy/api.env.example",
+      "infra/dev-stand/.env.example",
+      "infra/deploy/terraform/network.tf",
+      "infra/deploy/bin/release-driver",
+      "infra/dev-stand/compose.core.yml",
+      "apps/api/drizzle/0050_x.sql",
+      "packages/db/src/schema/users.ts",
+      "tools/staging/idp.test.mjs",
+      "apps/api/src/auth/README.md",
+      "tools/deploy/prod.mjs",
+    ])
+      expect(requiresStageCheck(path), path).toBe(false);
   });
 });
 

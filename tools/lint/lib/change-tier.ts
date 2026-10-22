@@ -77,6 +77,15 @@ export const API_COPY_ALLOWLIST: readonly string[] = [
  * an Ask path (#2808) and environment-sensitive (#2699). */
 const AUTH_PAGE_RE =
   /(?:^|\/)app\/(?:.*\/)?(?:login|register|verify|reset|mfa)\//;
+/** `lib` auth modules (`lib/**auth*`) and session modules (`*session*` under `lib`). */
+const LIB_AUTH_RE = /(?:^|\/)lib\/(?:.*\/)?[^/]*auth/i;
+const LIB_SESSION_RE =
+  /(?:^|\/)lib\/(?:.*\/)?[^/]*session[^/]*\.[cm]?[jt]sx?$/i;
+/** The request middleware in front of every page. */
+const MIDDLEWARE_RE = /(?:^|\/)(?:middleware|proxy)\.[^/]+$/;
+const MAILER_RE = /^apps\/api\/src\/mailer\//;
+const BOT_PROTECTION_RE = /^apps\/api\/src\/bot-protection\//;
+const IDP_CAPTCHA_RE = /(?:^|[/._-])(?:idp|zitadel|captcha)/i;
 
 /** Ask areas: runtime code under these is ask; a test in them, or a
  * modified doc that follows the code, is not (#2807). */
@@ -88,11 +97,11 @@ const AREA_ASK_PATH_RES: readonly RegExp[] = [
   // before its review, so these must never reach Show. Plain UI route files
   // (page/layout/loading/error) stay Show.
   /^packages\/auth-flow\//,
-  /(?:^|\/)lib\/(?:.*\/)?[^/]*auth/i,
+  LIB_AUTH_RE,
   /(?:^|\/)app\/(?:.*\/)?\(auth\)\//,
   AUTH_PAGE_RE,
   /(?:^|\/)providers\/[^/]*auth/i,
-  /(?:^|\/)lib\/(?:.*\/)?[^/]*session[^/]*\.[cm]?[jt]sx?$/i,
+  LIB_SESSION_RE,
   /(?:^|\/)app\/(?:.*\/)?api\//,
   /(?:^|\/)route\.[cm]?[jt]sx?$/,
   /(?:^|\/)actions\//,
@@ -360,23 +369,51 @@ export function isNonRuntimePath(path: string): boolean {
  *             captcha enforcement `apps/api/src/bot-protection/**`.
  */
 const ENVIRONMENT_SENSITIVE_RES: readonly RegExp[] = [
-  /(?:^|\/)lib\/(?:.*\/)?[^/]*auth/i,
+  LIB_AUTH_RE,
   AUTH_PAGE_RE,
-  /(?:^|\/)(?:middleware|proxy)\.[^/]+$/,
+  MIDDLEWARE_RE,
   /^apps\/api\/drizzle\//,
   /^packages\/db\/src\/schema\//,
   /^infra\//,
-  /^apps\/api\/src\/mailer\//,
-  /^apps\/api\/src\/bot-protection\//,
-  /(?:^|[/._-])(?:idp|zitadel|captcha)/i,
+  MAILER_RE,
+  BOT_PROTECTION_RE,
+  IDP_CAPTCHA_RE,
 ];
+
+const hasAuthSegment = (path: string) =>
+  path.split("/").some((segment) => /auth/i.test(segment));
 
 export function isEnvironmentSensitivePath(path: string): boolean {
   if (isNonRuntimePath(path)) return false;
   return (
-    path.split("/").some((segment) => /auth/i.test(segment)) ||
+    hasAuthSegment(path) ||
     ENVIRONMENT_SENSITIVE_RES.some((re) => re.test(path))
   );
+}
+
+/**
+ * #3205: the owner-consented classes whose runtime change, with no render
+ * surface, needs the agent's recorded PR-slot check (`change-tiers.md` →
+ * Stage-B and stands, item 2): auth / login / registration / reset / session,
+ * IdP (`idp` / `zitadel`, incl. `infra/dev-stand/idp/**` and
+ * `tools/staging/idp*.mjs`), email / SMS code delivery and captcha. Docs and
+ * templates (`*.md(x)`, `*.example`) and the rest of `infra/**` (terraform,
+ * release driver, non-IdP dev stand) and migrations are not in them.
+ */
+const STAGE_CHECK_RES: readonly RegExp[] = [
+  LIB_AUTH_RE,
+  LIB_SESSION_RE,
+  AUTH_PAGE_RE,
+  MIDDLEWARE_RE,
+  MAILER_RE,
+  /(?:^|[/._-])sms(?:[/._-]|$)/i,
+  BOT_PROTECTION_RE,
+  IDP_CAPTCHA_RE,
+];
+
+export function requiresStageCheck(path: string): boolean {
+  if (isNonRuntimePath(path) || /\.(?:mdx?|example)$/i.test(path)) return false;
+  return hasAuthSegment(path) || STAGE_CHECK_RES.some((re) => re.test(path));
 }
 
 function isStructuralAskPath(path: string): boolean {

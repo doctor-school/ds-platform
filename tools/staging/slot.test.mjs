@@ -81,6 +81,7 @@ import {
   renderIdpRedirectUris,
   renderSlotDownEnv,
   renderSlotEnv,
+  renderSlotSignInEnv,
   resetIdentitiesLogLine,
   resetLogLine,
   resolveDesiredRedirectSet,
@@ -97,6 +98,7 @@ import {
   slotComposeFile,
   slotDatabaseName,
   slotEnvPath,
+  slotSignInEnvPath,
   slotHostnames,
   slotNetworkName,
   slotServiceSet,
@@ -175,12 +177,13 @@ test("the slot database name passes the golden-db identifier guard", () => {
   assert.equal(slotDatabaseName("pr-2034"), "ds_pr_2034");
 });
 
-test("the four hostnames of a slot follow the wildcard record", () => {
+test("the five hostnames of a slot follow the wildcard record — the sign-in host is login-<slot>", () => {
   assert.deepEqual(slotHostnames("pr-7", BASE), {
     academy: `academy-pr-7.${BASE}`,
     doctor: `doctor-pr-7.${BASE}`,
     admin: `admin-pr-7.${BASE}`,
     api: `api-pr-7.${BASE}`,
+    login: `login-pr-7.${BASE}`,
   });
   assert.throws(() => slotHostnames("pr-7", "not a domain"), SlotError);
 });
@@ -191,8 +194,70 @@ test("container aliases are exactly what the Caddy (slot) snippet dials", () => 
     portal: "pr-7-portal",
     doctor: "pr-7-doctor",
     admin: "pr-7-admin",
+    login: "pr-7-login",
     centrifugo: "pr-7-centrifugo",
   });
+});
+
+// --- the slot's sign-in host (#3171, ADR-0015 §4) -----------------------------
+
+const recordKeyIn = (text) => text.match(/^SIGN_IN_RECORD_KEY=(.+)$/m)?.[1];
+
+test("3171: the slot env carries the sign-in host's non-secret half — its own origin and the storefront /login pages", () => {
+  const env = renderSlotEnv({ slot: "pr-7", sha: SHA, baseDomain: BASE, redisDb: 3, goldenSubjects: SUBJECTS });
+  const lines = env.split("\n");
+  assert.ok(lines.includes(`IDP_SIGN_IN_BASE_URI=https://login-pr-7.${BASE}`));
+  assert.ok(lines.includes(`SIGN_IN_ACADEMY_LOGIN_URL=https://academy-pr-7.${BASE}/login`));
+  // EARS-67: the doctor storefront's /login is also the direct-visit fallback.
+  assert.ok(lines.includes(`SIGN_IN_DOCTOR_LOGIN_URL=https://doctor-pr-7.${BASE}/login`));
+  assert.doesNotMatch(env, /SIGN_IN_RECORD_KEY|IDP_(ACADEMY|DOCTOR)_CLIENT_ID/);
+});
+
+test("3171: the sign-in env is the slot's secret half — client ids plus a per-slot record key, kept across converges", () => {
+  assert.equal(slotSignInEnvPath("pr-7"), "/etc/ds-platform/slots/pr-7.sign-in.env");
+  const ids = { academy: "client-a", doctor: "client-d" };
+  const first = renderSlotSignInEnv({ slot: "pr-7", clientIds: ids, existing: "" });
+  assert.match(first, /^IDP_ACADEMY_CLIENT_ID=client-a$/m);
+  assert.match(first, /^IDP_DOCTOR_CLIENT_ID=client-d$/m);
+  const key = recordKeyIn(first);
+  assert.equal(Buffer.from(key, "base64").length, 32, "a fresh 32-byte AES-256-GCM key");
+  // A re-converge keeps the key (records sealed under it stay readable)...
+  assert.equal(renderSlotSignInEnv({ slot: "pr-7", clientIds: ids, existing: first }), first);
+  // ...and another slot never shares it.
+  assert.notEqual(recordKeyIn(renderSlotSignInEnv({ slot: "pr-8", clientIds: ids, existing: "" })), key);
+  // A malformed stored key is replaced, never handed to an api that refuses to boot on it.
+  const replaced = renderSlotSignInEnv({ slot: "pr-7", clientIds: ids, existing: "SIGN_IN_RECORD_KEY=short\n" });
+  assert.equal(Buffer.from(recordKeyIn(replaced), "base64").length, 32);
+  assert.throws(() => renderSlotSignInEnv({ slot: "pr-7", clientIds: { academy: "x" }, existing: "" }), SlotError);
+});
+
+test("3171: up converges the slot's storefront clients and writes the sign-in env BEFORE the api starts", () => {
+  const plan = planSlotUp({
+    slot: "pr-7",
+    sha: SHA,
+    images: IMAGES,
+    liveSlots: {},
+    baseDomain: BASE,
+    databaseExists: false,
+    subjects: SUBJECTS,
+    actor: "tech-lead",
+  });
+  const label = "converge the slot's sign-in host clients and env";
+  const signIn = stepOf(plan, label);
+  assert.equal(signIn.kind, "idp");
+  assert.equal(signIn.op, "sign-in-host");
+  assert.equal(signIn.membership, "include");
+  assert.ok(labels(plan).indexOf(label) < labels(plan).indexOf("up -d"));
+});
+
+test("3171: down keeps compose loadable without the sign-in env and removes a preview's", () => {
+  const plan = planSlotDown({ slot: "pr-7", liveSlots: {}, baseDomain: BASE });
+  const ensure = stepOf(plan, "ensure sign-in env");
+  // touch: never truncates a kept key (main's survives its own down).
+  assert.deepEqual(ensure.command, ["sudo", "touch", slotSignInEnvPath("pr-7")]);
+  assert.ok(labels(plan).indexOf("ensure sign-in env") < labels(plan).indexOf("compose down"));
+  assert.deepEqual(stepOf(plan, "remove sign-in env").command, ["sudo", "rm", "-f", slotSignInEnvPath("pr-7")]);
+  assert.ok(!labels(planSlotDown({ slot: "main", liveSlots: {}, baseDomain: BASE })).includes("remove sign-in env"));
 });
 
 test("a SHA that is not a full lowercase hex commit id is refused", () => {
@@ -921,6 +986,7 @@ test("up: ship → env → pull → verify → clone → bucket → migrate → 
     "verify recorded digests and boot",
     "clone database",
     "create slot bucket",
+    "converge the slot's sign-in host clients and env",
     "migrate",
     "seed:golden",
     "up -d",
@@ -1113,6 +1179,7 @@ test("down: env → detach → compose down → network → database → bucket 
   assert.deepEqual(labels(plan), [
     "forget the release state",
     "ensure slot env",
+    "ensure sign-in env",
     "detach caddy",
     "compose down",
     "remove slot network",
@@ -1121,6 +1188,7 @@ test("down: env → detach → compose down → network → database → bucket 
     "remove slot images",
     "remove the slot tree",
     "remove slot env",
+    "remove sign-in env",
     "converge the shared IdP redirect set",
   ]);
   assert.ok(stepOf(plan, "compose down").command.includes("-v"));

@@ -16,6 +16,7 @@ import {
   planStorefrontClients,
   storefrontAppName,
   storefrontClientConfig,
+  slotStorefrontClientIds,
   goldenDeletedSubject,
   parseGoldenSubjectsEnv,
   planGoldenIdentities,
@@ -1400,4 +1401,39 @@ test("003 EARS-60: a failed storefront client write aborts the converge", async 
     convergeStorefrontClients({ client, slots: ["pr-9"], baseDomain: BASE }),
     IdpError,
   );
+});
+
+test("003 EARS-60: the converge reports each live slot's storefront client ids — kept ones from the search, created ones from the create answer", async () => {
+  const client = createIdpClient({
+    fetch: stubFetch({
+      "POST /management/v1/projects/_search": {
+        body: { result: [{ id: "p1", name: "ds-platform-dev" }] },
+      },
+      "POST /management/v1/projects/p1/apps/_search": {
+        body: {
+          result: [
+            {
+              id: "d9",
+              name: "ds-storefront-doctor-pr-9",
+              oidcConfig: {
+                ...storefrontClientConfig({ storefront: "doctor", slot: "pr-9", baseDomain: BASE }),
+                clientId: "client-doctor-pr-9",
+              },
+            },
+          ],
+        },
+      },
+      "POST /management/v1/projects/p1/apps/oidc": {
+        body: { appId: "a9", clientId: "client-academy-pr-9" },
+      },
+    }),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  const result = await convergeStorefrontClients({ client, slots: ["pr-9"], baseDomain: BASE });
+  assert.deepEqual(slotStorefrontClientIds(result, "pr-9"), {
+    academy: "client-academy-pr-9",
+    doctor: "client-doctor-pr-9",
+  });
+  assert.throws(() => slotStorefrontClientIds(result, "pr-4"), IdpError);
 });

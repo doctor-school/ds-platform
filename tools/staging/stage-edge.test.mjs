@@ -33,7 +33,7 @@ const SPACES = /[^\S\n]+/;
 // issuance quota is the only bound the static edge has).
 const SLOT_ALTERNATION = `(${SLOT_NAME_RE.source.replace(/^\^\(\?:/, "").replace(/\)\$$/, "")})`;
 /** The one app-label alternation, as §3 «Hostnames» lists it. */
-const APP_ALTERNATION = "(academy|doctor|admin|api)";
+const APP_ALTERNATION = "(academy|doctor|admin|api|login)";
 
 function matcherRegexp(name) {
   // The DEFINITION line, not the prose that references the matcher by name: a
@@ -169,7 +169,25 @@ test("every public app label has an upstream in the map table", () => {
     "doctor doctor 3004",
     "admin admin 3002",
     "api api 3000",
+    "login login 3005",
   ]);
+});
+
+test("3171: login-<slot> routes to the slot's sign-in host container; api-<slot> is unchanged", () => {
+  const slot = new RegExp(matcherRegexp("stage_slot"));
+  const upstream = (host) => {
+    const match = slot.exec(host);
+    if (!match) return null;
+    const row = mapRows().find((line) => line.startsWith(`${match[1]} `));
+    const [, service, port] = row.split(" ");
+    return `${match[2]}-${service}:${port}`;
+  };
+  assert.equal(upstream("login-pr-7.stage.test"), "pr-7-login:3005");
+  assert.equal(upstream("login-main.stage.test"), "main-login:3005");
+  assert.equal(upstream("api-pr-7.stage.test"), "pr-7-api:3000");
+  assert.equal(upstream("login.stage.test"), null, "the sign-in host is per slot, never shared");
+  const ask = new RegExp(matcherRegexp("stage_ask").replace("{$STAGE_BASE_DOMAIN}", "stage\\.test"));
+  assert.ok(ask.test("/ask/login-pr-7.stage.test"), "login-<slot> gets a certificate");
 });
 
 test("nothing generated is imported or mounted any more", () => {

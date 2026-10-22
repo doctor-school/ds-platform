@@ -43,7 +43,7 @@
 #
 # CONTAINER NAMES. `container_name: ${SLOT}-<service>` is a CONTRACT, not a
 # convenience: the stg-infra Caddyfile `(slot)` snippet dials `<slot>-portal:3001`,
-# `<slot>-doctor:3004`, `<slot>-admin:3002`, `<slot>-api:3000` and
+# `<slot>-doctor:3004`, `<slot>-login:3005`, `<slot>-admin:3002`, `<slot>-api:3000` and
 # `<slot>-centrifugo:8000` by that exact name (`containerAliases` in
 # tools/staging/slot.mjs, unit-tested there). Changing either side alone silently
 # 502s the whole slot.
@@ -69,6 +69,9 @@ services:
     env_file:
       - /etc/ds-platform/stage.env
       - /etc/ds-platform/slots/${SLOT:?}.env
+      # Root-only, tool-written before `up -d` (`renderSlotSignInEnv`): the slot's
+      # storefront client ids + SIGN_IN_RECORD_KEY — the sign-in host's secret half.
+      - /etc/ds-platform/slots/${SLOT:?}.sign-in.env
     environment:
       # Assembled here, NOT written into the per-slot env file: that would copy
       # POSTGRES_PASSWORD into a second on-box file. `SLOT_DB` is the slot's clone
@@ -178,6 +181,35 @@ services:
           "node",
           "-e",
           "fetch('http://localhost:3004/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # --- login — Next.js standalone, the sign-in host (login-<slot>.…, ADR-0015 §4) --
+  # Its API calls go through its own same-origin proxy to `api` (API_PROXY_TARGET,
+  # build-time). /healthz is the probe: every page route asks the API's entry
+  # first (003 EARS-70), so no page can be one.
+  login:
+    image: ds-login:${DEPLOY_SHA:?}
+    container_name: ${SLOT:?}-login
+    restart: unless-stopped
+    env_file:
+      - /etc/ds-platform/stage.env
+      - /etc/ds-platform/slots/${SLOT:?}.env
+    environment:
+      PORT: "3005"
+    depends_on:
+      api:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3005/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 15s
       timeout: 5s

@@ -526,9 +526,11 @@ describe("release-gate evaluateReleaseGate() dark-until pairs", () => {
 describe("release-gate probe dark-until resolution", () => {
   const darkFixture = async ({
     body = "Closes #3170\nStage-B: batched at #3171\nStage-B-dark-until: #3228",
-    comments = [] as string[],
+    comments = [] as Array<
+      string | { body: string; authorAssociation: string }
+    >,
     subjects = "feat: sign-in host app (#3200)",
-    reaching = '{"number":3228,"state":"OPEN","mergeCommit":null}' as
+    reaching = '{"number":3228,"state":"OPEN","mergeCommit":null,"body":"Stage-B: pending"}' as
       string | Error,
     ancestry = "0",
   } = {}) => {
@@ -548,7 +550,11 @@ describe("release-gate probe dark-until resolution", () => {
         return JSON.stringify({ body: "Stage-B: batched at #3171" });
       if (args[0] === "issue" && args[2] === "3170")
         return JSON.stringify({
-          comments: comments.map((b) => ({ body: b })),
+          comments: comments.map((c) =>
+            typeof c === "string"
+              ? { body: c, authorAssociation: "MEMBER" }
+              : c,
+          ),
         });
       if (args[0] === "issue" && args[2] === "3171")
         return '{"state":"OPEN","title":"gate: sign-in"}';
@@ -581,7 +587,7 @@ describe("release-gate probe dark-until resolution", () => {
   it("clears when the reaching PR merged after the target", async () => {
     const r = await darkFixture({
       reaching:
-        '{"number":3228,"state":"MERGED","mergeCommit":{"oid":"later"}}',
+        '{"number":3228,"state":"MERGED","mergeCommit":{"oid":"later"},"body":"Stage-B: batched at #3171"}',
       ancestry: "3",
     });
     expect(evaluateReleaseGate(r).hold).toBe(false);
@@ -626,6 +632,50 @@ describe("release-gate probe dark-until resolution", () => {
       body: "Closes #3170\nStage-B: batched at #3171",
       comments: ["Stage-B-dark-until: #3228"],
     });
+    expect(evaluateReleaseGate(r).hold).toBe(false);
+  });
+
+  it.each(["NONE", "CONTRIBUTOR", "FIRST_TIME_CONTRIBUTOR"])(
+    "ignores a dark-until marker in a %s comment (the pair holds)",
+    async (authorAssociation) => {
+      const r = await darkFixture({
+        body: "Closes #3170\nStage-B: batched at #3171",
+        comments: [{ body: "Stage-B-dark-until: #3228", authorAssociation }],
+      });
+      expect(r.openBatched?.[0]?.darkUntil).toBeUndefined();
+      expect(evaluateReleaseGate(r).hold).toBe(true);
+    },
+  );
+
+  it("an untrusted comment still adds a batched hold", async () => {
+    const r = await darkFixture({
+      body: "Closes #3170",
+      comments: [
+        { body: "Stage-B: batched at #3171", authorAssociation: "NONE" },
+      ],
+    });
+    expect(evaluateReleaseGate(r).hold).toBe(true);
+  });
+
+  it("holds when the open reaching PR carries no Stage-B: line", async () => {
+    const r = await darkFixture({
+      reaching:
+        '{"number":3228,"state":"OPEN","mergeCommit":null,"body":"Stage-B-head: abc\\n<!-- Stage-B: GO -->"}',
+    });
+    expect(r.openBatched?.[0]?.darkUntil).toEqual({
+      pr: 3228,
+      reachable: null,
+      detail: "#3228 has no Stage-B: record",
+    });
+    expect(evaluateReleaseGate(r).hold).toBe(true);
+  });
+
+  it("does not look up the reaching PR when no batched gate is open", async () => {
+    const r = await darkFixture({
+      body: "Stage-B-dark-until: #3228",
+      reaching: new Error("must not be called"),
+    });
+    expect(r.openBatched).toEqual([]);
     expect(evaluateReleaseGate(r).hold).toBe(false);
   });
 

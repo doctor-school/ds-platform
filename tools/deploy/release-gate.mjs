@@ -23,15 +23,19 @@
 //      filed on the linked Issue, which the guard explicitly allows.
 //      A slice that is DARK on prod — its surface becomes reachable only
 //      through a later PR — records `Stage-B-dark-until: #M` (one PR number,
-//      same source set and tolerance as the batched marker). Its author
-//      certifies by that record that the slice has no visible prod difference
-//      on its own; the reaching PR #M carries its own `Stage-B: batched at
-//      #<gate>`, so acceptance still gates the release that makes the surface
-//      visible. Such a pair holds ONLY while #M is merged and reachable at the
-//      target (inside this release range, or already deployed); #M open,
-//      unmerged, or merged after the target clears the pair, reported as
-//      «dark until #M — not in this release». A malformed or conflicting
-//      marker, or a #M that cannot be resolved, HOLDS (fail-closed). This is
+//      same tolerance as the batched marker). Its author certifies by that
+//      record that the slice has no visible prod difference on its own; the
+//      reaching PR #M carries its own `Stage-B:` record (a GO, `pending`, or
+//      `batched at #<gate>`), so acceptance still gates the release that makes
+//      the surface visible. Because this record REMOVES a hold, a linked-Issue
+//      comment counts only when its author is OWNER, MEMBER or COLLABORATOR —
+//      the repo is public, so anyone can comment; the PR body (editable only
+//      by collaborators) stays an accepted source. Such a pair holds ONLY while
+//      #M is merged and reachable at the target (inside this release range, or
+//      already deployed); #M open, unmerged, or merged after the target clears
+//      the pair, reported as «dark until #M — not in this release». A
+//      malformed or conflicting marker, a #M that cannot be resolved, or a #M
+//      with no `Stage-B:` line at all HOLDS (fail-closed). This is
 //      what keeps one sliced feature from holding every other session's
 //      release while its later slice is still unfinished.
 //   3. Release-requires: #N in a selected PR's body holds that deployment while
@@ -177,6 +181,25 @@ export function extractDarkUntil(text) {
   }
   return found;
 }
+
+// Any `Stage-B:` record line (a GO, `pending`, `batched at #N`, N/A…) — the
+// reaching PR must carry one. `Stage-B-head:` / `-dark-until:` do not match.
+const STAGE_B_RECORD_RE = /^[ \t>*_-]*stage-?b[ \t]*:/im;
+
+/** Does `text` carry a live `Stage-B:` record line? PURE. */
+export function hasStageBRecord(text) {
+  if (typeof text !== "string") return false;
+  // PR-template comments are instructions, not live declarations.
+  return STAGE_B_RECORD_RE.test(text.replace(/<!--[\s\S]*?-->/g, ""));
+}
+
+// A comment may carry `Stage-B-dark-until` (which removes a hold) only from
+// these associations: the repo is public, so any account can comment.
+const TRUSTED_COMMENT_ASSOCIATIONS = new Set([
+  "OWNER",
+  "MEMBER",
+  "COLLABORATOR",
+]);
 
 /** Explicit PR-body prerequisites; malformed declarations fail closed. */
 export function extractReleaseRequires(body) {
@@ -434,7 +457,9 @@ export async function probeHealthSha(url) {
  * In the release range → reachable. Otherwise it must be read: OPEN / CLOSED
  * unmerged → not reachable; MERGED → reachable iff its merge commit is an
  * ancestor of the target (outside the range that means already deployed, so
- * the dark slice would surface the moment it ships — it holds).
+ * the dark slice would surface the moment it ships — it holds). A #M that
+ * would clear but carries no `Stage-B:` line is UNKNOWN (a typo naming an
+ * unrelated PR must not clear the pair silently).
  *
  * @param {number} m
  * @param {number[]} deltaPrs PR numbers in `<basis>..<target>`
@@ -457,7 +482,7 @@ function resolveDarkUntil(m, deltaPrs, targetSha, exec, cache) {
         "view",
         String(m),
         "--json",
-        "number,state,mergeCommit",
+        "number,state,mergeCommit,body",
       ]);
       const pr = JSON.parse(raw || "{}");
       const state = String(pr.state ?? "").toUpperCase();
@@ -489,6 +514,13 @@ function resolveDarkUntil(m, deltaPrs, targetSha, exec, cache) {
           pr: m,
           reachable: null,
           detail: `unknown state ${state || "(none)"}`,
+        };
+      }
+      if (out.reachable === false && !hasStageBRecord(pr.body)) {
+        out = {
+          pr: m,
+          reachable: null,
+          detail: `#${m} has no Stage-B: record`,
         };
       }
     } catch (e) {
@@ -610,7 +642,7 @@ export async function probeReleaseGate({
     const requires = [];
     /** @type {Map<number, {state: string, title: string}>} */
     const gateCache = new Map();
-    /** @type {Map<number, string[]>} linked-Issue number → comment bodies */
+    /** @type {Map<number, Array<{body: string, trusted: boolean}>>} linked-Issue number → comments */
     const issueCommentsCache = new Map();
     /** @type {Map<number, DarkUntil>} reaching PR #M → resolution */
     const darkCache = new Map();
@@ -676,28 +708,27 @@ export async function probeReleaseGate({
           ]);
           const parsed = JSON.parse(issueRaw || "{}");
           comments = Array.isArray(parsed.comments)
-            ? parsed.comments.map((c) => String(c?.body ?? ""))
+            ? parsed.comments.map((c) => ({
+                body: String(c?.body ?? ""),
+                trusted: TRUSTED_COMMENT_ASSOCIATIONS.has(
+                  String(c?.authorAssociation ?? "").toUpperCase(),
+                ),
+              }))
             : [];
           issueCommentsCache.set(linked, comments);
         }
         for (const c of comments) {
-          for (const gate of extractBatchedGateRefs(c)) {
+          // A batched marker only ADDS a hold, so any author counts.
+          for (const gate of extractBatchedGateRefs(c.body)) {
             if (!refs.includes(gate)) refs.push(gate);
           }
-          noteDarkUntil(extractDarkUntil(c));
+          if (c.trusted) noteDarkUntil(extractDarkUntil(c.body));
         }
       }
 
-      const darkUntil =
-        darkUntilPr === null
-          ? undefined
-          : resolveDarkUntil(
-              darkUntilPr,
-              prNumbers,
-              targetSha,
-              exec,
-              darkCache,
-            );
+      // Resolved only once the PR has an OPEN batched gate it could clear.
+      /** @type {DarkUntil|undefined} */
+      let darkUntil;
 
       for (const gate of refs) {
         let info = gateCache.get(gate);
@@ -717,6 +748,15 @@ export async function probeReleaseGate({
           gateCache.set(gate, info);
         }
         if (info.state === "OPEN") {
+          if (darkUntilPr !== null && !darkUntil) {
+            darkUntil = resolveDarkUntil(
+              darkUntilPr,
+              prNumbers,
+              targetSha,
+              exec,
+              darkCache,
+            );
+          }
           pairs.push(
             darkUntil
               ? { pr: n, gate, gateTitle: info.title, darkUntil }

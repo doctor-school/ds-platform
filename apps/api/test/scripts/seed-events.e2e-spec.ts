@@ -1,12 +1,20 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createDrizzle, eventRecordings, events } from "@ds/db";
-import { SEED_EVENT_KINDS } from "@ds/db/seed/golden";
-import { and, eq, isNull } from "drizzle-orm";
+import {
+  createDrizzle,
+  eventExperts,
+  eventRecordings,
+  events,
+  experts,
+} from "@ds/db";
+import { SEED_EVENT_KINDS, isGoldenVolumeUuid } from "@ds/db/seed/golden";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   SEED_CONGRESS_EVENT_ID,
   SEED_CONGRESS_EVENT_SLUG,
+  SEED_EVENT_PAGE_SLUGS,
+  SEED_SPEAKER_SLUGS,
   seedEvents,
 } from "../../scripts/seed-events.js";
 
@@ -140,5 +148,127 @@ describe("scripts/seed-events (#1851)", () => {
       id: other.id,
       venue: "Другая тестовая площадка",
     });
+  }, 60_000);
+
+  // #2996 — the event-page e2e specs on both hosts assert a speaker card, the
+  // «Спикеры» block and ≥1 `event_experts` link. The seed does not invent expert
+  // records: the speakers are the golden expert fixtures, upserted by their
+  // golden id and linked to every seed event those specs read.
+  async function readSpeakers(slug: string) {
+    return db
+      .select({
+        linkId: eventExperts.id,
+        expertId: eventExperts.expertId,
+        position: eventExperts.position,
+        role: eventExperts.role,
+        expertStatus: experts.status,
+      })
+      .from(eventExperts)
+      .innerJoin(events, eq(events.id, eventExperts.eventId))
+      .innerJoin(experts, eq(experts.id, eventExperts.expertId))
+      .where(and(eq(events.slug, slug), eq(eventExperts.status, "active")))
+      .orderBy(asc(eventExperts.position));
+  }
+
+  it("020 EARS-1: every seed event the event-page specs read carries published golden experts as its speakers, and a re-run keeps the same links", async () => {
+    expect(SEED_SPEAKER_SLUGS).toEqual(
+      expect.arrayContaining([
+        "seed-005-upcoming",
+        "seed-005-ended",
+        "seed-014-ended-month-ago",
+      ]),
+    );
+    const before = new Map<string, Awaited<ReturnType<typeof readSpeakers>>>();
+    for (const slug of SEED_SPEAKER_SLUGS) {
+      const speakers = await readSpeakers(slug);
+      expect(speakers.length, slug).toBeGreaterThan(0);
+      speakers.forEach((speaker, index) => {
+        expect(isGoldenVolumeUuid(speaker.expertId), slug).toBe(true);
+        expect(speaker.expertStatus, slug).toBe("published");
+        expect(speaker.position, slug).toBe(index);
+        expect(speaker.role, slug).toBeTruthy();
+      });
+      before.set(slug, speakers);
+    }
+
+    await seedEvents();
+
+    for (const slug of SEED_SPEAKER_SLUGS) {
+      expect(await readSpeakers(slug), slug).toEqual(before.get(slug));
+    }
+  }, 60_000);
+
+  it("014 EARS-7: the preparing fixture is an ended event with a committed readiness day and no published recording", async () => {
+    const slug = SEED_EVENT_PAGE_SLUGS.E2E_PREPARING_WEBINAR_SLUG;
+    const [row] = await db
+      .select({
+        id: events.id,
+        state: events.state,
+        recordingExpectedBy: events.recordingExpectedBy,
+      })
+      .from(events)
+      .where(eq(events.slug, slug));
+    expect(row).toBeDefined();
+    expect(row!.state).toBe("ended");
+    expect(row!.recordingExpectedBy).not.toBeNull();
+    const published = await db
+      .select({ id: eventRecordings.id })
+      .from(eventRecordings)
+      .where(
+        and(
+          eq(eventRecordings.eventId, row!.id),
+          eq(eventRecordings.status, "published"),
+          isNull(eventRecordings.deletedAt),
+        ),
+      );
+    expect(published).toEqual([]);
+    expect((await readSpeakers(slug)).length).toBeGreaterThan(0);
+  }, 60_000);
+
+  it("020 EARS-8/9: the wave-3 sweep shapes are registrable Academy events — offline and hybrid, with seats and sold out", async () => {
+    const readShape = async (slug: string) => {
+      const [row] = await db
+        .select({
+          state: events.state,
+          audience: events.audience,
+          participationFormat: events.participationFormat,
+          seatsLeft: events.seatsLeft,
+          venue: events.venue,
+          startsAt: events.startsAt,
+        })
+        .from(events)
+        .where(eq(events.slug, slug));
+      expect(row, slug).toBeDefined();
+      expect(row!.state, slug).toBe("published");
+      expect(row!.audience, slug).toBe("experts");
+      expect(row!.venue, slug).toBeTruthy();
+      expect(row!.startsAt.getTime(), slug).toBeGreaterThan(Date.now());
+      return row!;
+    };
+    const hybrid = await readShape(SEED_EVENT_PAGE_SLUGS.E2E_HYBRID_SLUG);
+    expect(hybrid.participationFormat).toBe("hybrid");
+    expect(hybrid.seatsLeft).toBeGreaterThan(0);
+    const hybridSoldOut = await readShape(
+      SEED_EVENT_PAGE_SLUGS.E2E_HYBRID_SOLDOUT_SLUG,
+    );
+    expect(hybridSoldOut.participationFormat).toBe("hybrid");
+    expect(hybridSoldOut.seatsLeft).toBe(0);
+    const offlineSoldOut = await readShape(
+      SEED_EVENT_PAGE_SLUGS.E2E_OFFLINE_SOLDOUT_SLUG,
+    );
+    expect(offlineSoldOut.participationFormat).toBe("offline");
+    expect(offlineSoldOut.seatsLeft).toBe(0);
+
+    const sweep = SEED_EVENT_PAGE_SLUGS.E2E_SWEEP_SLUGS.split(",");
+    const formats = new Set<string>();
+    for (const slug of sweep) {
+      const [row] = await db
+        .select({ participationFormat: events.participationFormat })
+        .from(events)
+        .where(eq(events.slug, slug));
+      expect(row, slug).toBeDefined();
+      formats.add(row!.participationFormat);
+    }
+    expect([...formats].sort()).toEqual(["hybrid", "offline", "online"]);
   }, 60_000);
 });

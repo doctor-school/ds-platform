@@ -21,7 +21,7 @@
  * explicit `.ts` extension native type stripping needs.
  */
 
-import { isUiSourcePath } from "./ui-surface.ts";
+import { isUiSourcePath, isVendoredCanvasPath } from "./ui-surface.ts";
 
 export type ChangeTier = "ship" | "show" | "ask";
 
@@ -336,8 +336,9 @@ function isUiEvidencePath(path: string): boolean {
 
 /**
  * #2699: files that change nothing a user runs — tests, changesets, evidence
- * captures, docs content (specs / ADRs / skills / product docs) and `.feature`
- * files. The Stage-B guard routes on the remaining (runtime) files and carries
+ * captures, docs content (specs / ADRs / skills / product docs), `.feature`
+ * files and vendored Claude Design canvases (`design-source/**`, the parity
+ * reference — never built or deployed, #3249). The Stage-B guard routes on the remaining (runtime) files and carries
  * a recorded GO over a delta made only of these.
  */
 export function isNonRuntimePath(path: string): boolean {
@@ -345,6 +346,7 @@ export function isNonRuntimePath(path: string): boolean {
     isTestPath(path) ||
     isChangesetPath(path) ||
     isUiEvidencePath(path) ||
+    isVendoredCanvasPath(path) ||
     /^apps\/docs\/content\/.+\.(?:mdx?|feature)$/.test(path) ||
     /\.feature$/.test(path)
   );

@@ -103,7 +103,7 @@ const CONGRESS_SIGNUP = [
  * (webinars-feed-view gate rows 31–32).
  */
 const ACADEMY_DEFAULT_RED_3229 =
-  "red on slot — #3229: 008 EARS-14 footer absent on / (product, epic #2020); month-fidelity «+N ещё» and webinars-feed-view rows 31–32 need a shape the golden dataset does not hold";
+  "red on slot — #3229: 008 EARS-14 footer absent on / (product, epic #2020); month-fidelity «+N ещё» pill cap waits for a slot golden re-seed carrying the dense Academy day";
 
 export const LIVE_TIERS = Object.freeze([
   {

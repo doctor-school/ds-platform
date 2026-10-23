@@ -1,4 +1,7 @@
-import { AUTH_REQUEST_PARAM, isSignInHostForm } from "../lib/sign-in-host-api.js";
+import {
+  AUTH_REQUEST_PARAM,
+  isSignInHostForm,
+} from "../lib/sign-in-host-api.js";
 import { isAuthCommandPath } from "../lib/sign-in-host-api.js";
 import { TOP_LEVEL_NAVIGATION_HEADERS } from "../lib/storefront-entry.js";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
@@ -42,9 +45,12 @@ async function expectReplacement(
   // of the sign-in host: the replacement happens server-side (a `303`), so the
   // page settles on the host's form carrying only the IdP's auth request — the
   // IdP's arrival route, where the host opens the door the entry chose
-  // (`apps/login/lib/sign-in-entry.ts` `doorFor`: `verify` → registration).
-  // The return target rides the transaction, never the form URL.
+  // (`apps/login/lib/sign-in-entry.ts` `doorFor`: `verify` → registration),
+  // and the rendered door settles the address on its own `/register` so Back /
+  // Forward re-enter that door (003 EARS-71). The return target rides the
+  // transaction, never the form URL.
   await expect(page.getByTestId("registration-form")).toBeVisible();
+  await page.waitForURL((u) => new URL(u).pathname === "/register");
   const url = new URL(page.url());
   expect(isSignInHostForm(url)).toBe(true);
   expect(url.origin).not.toBe(new URL(base).origin);

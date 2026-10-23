@@ -1,4 +1,10 @@
-import type { ReactElement } from "react";
+import {
+  Children,
+  Fragment,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -39,6 +45,7 @@ import {
   type SignInHostRender,
 } from "../server/sign-in-host";
 import { VerifyRoute } from "../verify/verify-route";
+import { SettleDoorPath } from "./settle-door-path";
 import { SignInHostRoute } from "./sign-in-host-route";
 
 const STOREFRONTS = { academy: ACADEMY_AUTH_FLOW, doctor: DOCTOR_AUTH_FLOW };
@@ -68,11 +75,20 @@ function handOver(value: SignInHostHandOver | string | null) {
   requestHeaders.value = headers;
 }
 
-async function mount(browser: Params = {}) {
+async function mountPage(browser: Params = {}) {
   return (await SignInHostRoute({
     storefronts: STOREFRONTS,
     searchParams: Promise.resolve(browser),
-  })) as DoorElement;
+  })) as ReactElement<{ children?: ReactNode }>;
+}
+
+/** The mounted storefront door (beside it the mount settles the address). */
+async function mount(browser: Params = {}) {
+  const page = await mountPage(browser);
+  if (page.type !== Fragment) return page as DoorElement;
+  return Children.toArray(page.props.children).find(
+    (child) => isValidElement(child) && child.type !== SettleDoorPath,
+  ) as DoorElement;
 }
 
 beforeEach(() => {
@@ -155,6 +171,17 @@ describe("003 EARS-60: the mounted storefront comes only from the entry hand-ove
     ] as const) {
       handOver({ door, render: RENDER });
       expect((await mount()).type).toBe(route);
+    }
+  });
+
+  it("003 EARS-71: the mount settles the address on the hand-over's door, beside the door", async () => {
+    for (const door of ["login", "register", "reset", "verify"] as const) {
+      handOver({ door, render: RENDER });
+      const page = await mountPage();
+      const settle = Children.toArray(page.props.children).find(
+        (child) => isValidElement(child) && child.type === SettleDoorPath,
+      ) as ReactElement<{ door: string }> | undefined;
+      expect(settle?.props.door).toBe(door);
     }
   });
 

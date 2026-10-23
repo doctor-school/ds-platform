@@ -1366,14 +1366,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
   @EARS-39 @EARS-41 @happy @cold-email-confirmation
   Scenario: A cold verification step still signs in by the code
     Given a uniquely registered Academy account awaits its fresh unconsumed confirmation code with the account return target
-    When the registrant hard reloads the Academy verification step before entering any code
+    When the registrant hard reloads the Academy verification step with the sign-in host's form state cleared before entering any code
     Then the reloaded step keeps the same address and account return target without private access
     When the registrant enters that same delivered six-digit code once on the cold step
     Then the cold verification submits only that address and code once and opens the verified owned account with a secure session
     And the verification journey never visits login, replays registration, or requests another code mail
     When a separate guest browser submits the original registration password for that account
     Then that password is refused generically and the guest has no private session or profile access
-    # Hard reload is the actual cold-state trigger; restored tabs and hold expiry
+    # On the sign-in host a plain reload stays warm (EARS-39 on the host: the
+    # creating browser's form state keeps the registration password); clearing
+    # that form-state cookie is the actual cold-state trigger. Restored tabs and hold expiry
     # remain in packages/auth-flow/src/verify/verify-door.test.tsx EARS-39/41.
     # Internal password invalidation: apps/api/src/auth/idp/zitadel.idp.spec.ts
     # EARS-41; retain both mocked contracts, which are not this live browser proof.

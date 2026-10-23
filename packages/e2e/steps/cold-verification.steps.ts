@@ -98,11 +98,7 @@ Given(
     state.visitedLogin = false;
     state.code = code;
     expect(
-      registrationEvidence(
-        response.request().postData() ?? "",
-        body,
-        state,
-      ),
+      registrationEvidence(response.request().postData() ?? "", body, state),
     ).toEqual({
       credentialsMatch: true,
       consentMatches: true,
@@ -122,7 +118,7 @@ Given(
 );
 
 When(
-  "the registrant hard reloads the Academy verification step before entering any code",
+  "the registrant hard reloads the Academy verification step with the sign-in host's form state cleared before entering any code",
   async ({ page }) => {
     const state = verification(page);
     const field = state.page.locator('input[autocomplete="one-time-code"]');
@@ -132,6 +128,16 @@ When(
       "confirmation code unconsumed before reload",
     ).toBe(true);
     state.beforeReload = state.page.url();
+    // 003 EARS-39 on the host: the creating browser's form state is the warm
+    // proof and survives a plain reload; the cold step is a cleared cookie.
+    // Only the sign-in host's own cookies go — the storefront's transaction
+    // (and with it the return target) stays.
+    const signInHost = new URL(state.beforeReload).hostname;
+    await state.context.clearCookies({ domain: signInHost });
+    expect(
+      (await state.context.cookies()).some((c) => c.domain === signInHost),
+      "sign-in host form state cleared",
+    ).toBe(false);
     const response = await state.page.reload({ waitUntil: "load" });
     expect(response?.status(), "real verification document reloaded").toBe(200);
     expect(

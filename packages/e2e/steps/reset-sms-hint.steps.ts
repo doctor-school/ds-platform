@@ -1,4 +1,6 @@
-import { hostCommand,
+import {
+  hostCommand,
+  isSignInHostForm,
   isAuthCommandPath,
   signInHostApiPath,
 } from "../lib/sign-in-host-api.js";
@@ -231,7 +233,7 @@ When(
 
 Then(
   "the reset email field has no SMS hint and the transition grants no private access or extra auth command",
-  async ({ page, world }) => {
+  async ({ page }) => {
     const state = journey(page);
     await expect(state.visitor.getByText(HINT, { exact: true })).toHaveCount(0);
     const identifier = state.visitor.getByLabel(
@@ -253,10 +255,10 @@ Then(
     expect(state.commands).toEqual([
       signInHostApiPath("/v1/auth/password/reset"),
     ]);
-    expect(new URL(state.visitor.url()).origin).toBe(
-      new URL(world.hostBaseUrl).origin,
-    );
-    expect(new URL(state.visitor.url()).pathname).toBe("/reset");
+    // #3172 — the reset door is the sign-in host's. Behind the IdP it renders
+    // on the host's `/login` (`doorFor`), so the door is proven by what
+    // renders (the reset request form above), not by the path.
+    expect(isSignInHostForm(state.visitor.url())).toBe(true);
     await assertNoPrivateRegistrationAccess(
       state.visitor,
       state.setCookie,

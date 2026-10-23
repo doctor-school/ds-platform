@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { signInHostApiPath } from "../lib/sign-in-host-api.js";
+import {
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import {
   expect,
   type BrowserContext,
@@ -94,10 +97,11 @@ Then(
 
 Then(
   "the Academy code step has a fresh delivered confirmation code that remains unconsumed",
-  async ({ page, world }) => {
+  async ({ page }) => {
     const state = registration(page);
     const url = new URL(state.page.url());
-    expect(url.origin).toBe(new URL(world.hostBaseUrl).origin);
+    // #3172 — the code step is the sign-in host's /verify door.
+    expect(isSignInHostForm(url)).toBe(true);
     expect(url.pathname).toBe("/verify");
     expect(
       url.searchParams.get("email") === state.email,
@@ -174,7 +178,7 @@ When(
 
 Then(
   "Academy rejects that confirmation generically on the same verification step without navigation or private access",
-  async ({ page, world }) => {
+  async ({ page }) => {
     const state = registration(page);
     const response = state.verification!;
     expect(response.status(), "confirmation code refused").toBe(400);
@@ -196,7 +200,8 @@ Then(
       state.page.locator('input[autocomplete="one-time-code"]'),
     ).toBeVisible();
     const url = new URL(state.page.url());
-    expect(url.origin).toBe(new URL(world.hostBaseUrl).origin);
+    // #3172 — the code step is the sign-in host's /verify door.
+    expect(isSignInHostForm(url)).toBe(true);
     expect(url.pathname).toBe("/verify");
     expect(
       url.searchParams.get("email") === state.email,

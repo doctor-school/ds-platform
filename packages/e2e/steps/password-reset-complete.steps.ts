@@ -1,5 +1,8 @@
 import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
-import { signInHostApiPath } from "../lib/sign-in-host-api.js";
+import {
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -249,7 +252,9 @@ Then(
     await expect
       .poll(() => reset.getByTestId("reset-error").ariaSnapshot())
       .toBe("- alert: Код не подошёл или пароль отклонён.");
-    expect(new URL(reset.url()).pathname).toBe("/reset");
+    // #3172 — the reset form is the sign-in host's door (rendered on the
+    // host's `/login` behind the IdP), proven by what renders, not the path.
+    expect(isSignInHostForm(reset.url())).toBe(true);
     await expect(
       reset.locator('input[autocomplete="one-time-code"]'),
     ).toBeVisible();

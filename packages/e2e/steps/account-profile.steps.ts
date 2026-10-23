@@ -217,9 +217,9 @@ Then(
     );
     await changePassword.click();
     await entry;
-    await owned.waitForURL(
-      (url) => url.pathname === "/reset" && isSignInHostForm(url),
-    );
+    // Behind the IdP the reset door renders on the host's `/login` (`doorFor`):
+    // proven by what renders below, not by the path.
+    await owned.waitForURL((url) => isSignInHostForm(url));
     await expect(owned.locator('input[autocomplete="username"]')).toBeVisible();
     await expect(owned.getByTestId("reset-request-submit")).toBeVisible();
     await owned.goBack({ waitUntil: "load" });

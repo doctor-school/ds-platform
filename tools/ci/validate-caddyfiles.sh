@@ -4,6 +4,8 @@
 # on the next deploy (prod outage 2026-10-23); `caddy validate` catches that
 # before merge. Env placeholders (`{$VAR}`) get syntactically valid stand-ins —
 # the check is about parsing and module provisioning, not the real values.
+# Scope: the deployed edges only (infra/deploy/compose/*); the local dev-stand
+# Caddyfile is out of scope.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"

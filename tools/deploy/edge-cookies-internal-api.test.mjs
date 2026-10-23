@@ -42,7 +42,10 @@ function siteBlocks(text) {
   return blocks;
 }
 
-const INTERNAL_HANDLE = `handle ${INTERNAL_API_PREFIX} ${INTERNAL_API_PREFIX}/* {`;
+// `handle` takes ONE matcher token, so the two paths live in a named matcher
+// (#3273: the two-token form crash-looped the prod edge).
+const INTERNAL_MATCHER = `@internal_api path ${INTERNAL_API_PREFIX} ${INTERNAL_API_PREFIX}/*`;
+const INTERNAL_HANDLE = "handle @internal_api {";
 
 test("ADR-0015 §4 req 2: the prod edge answers the internal API prefix 404 on every app vhost", () => {
   assert.equal(INTERNAL_API_PREFIX, "/v1/internal");
@@ -52,8 +55,10 @@ test("ADR-0015 §4 req 2: the prod edge answers the internal API prefix 404 on e
   );
   assert.ok(snippet, "the shared snippet exists");
   assert.deepEqual(
-    snippet.body.map((l) => l.trim()).filter(Boolean),
-    [INTERNAL_HANDLE, "respond 404", "}"],
+    snippet.body
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith("#")),
+    [INTERNAL_MATCHER, INTERNAL_HANDLE, "respond 404", "}"],
     "the snippet routes the prefix nowhere — no upstream",
   );
   const appHosts = ["academy", "new", "login", "admin", "api"].map(

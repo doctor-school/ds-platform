@@ -20,6 +20,7 @@
 # case-insensitive and judges the cleaned, unescaped path, so `/V1/Internal`,
 # `/v1//internal` and percent-encoded spellings land here as well.
 (internal_api_unreachable) {
+	# Caddy sorts a matcher-less `handle` after every matched one, so this block wins over each vhost's catch-all `handle`.
 	@internal_api path /v1/internal /v1/internal/*
 	handle @internal_api {
 		respond 404

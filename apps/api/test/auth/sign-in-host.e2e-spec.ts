@@ -43,13 +43,20 @@ import {
   SIGN_IN_HOST_IDP,
   ZitadelSignInHostIdp,
 } from "../../src/sign-in-host/sign-in-host.idp.js";
-import { SIGN_IN_HOST_SESSION_LIFETIME_SECONDS } from "../../src/sign-in-host/sign-in-host.policy.js";
+import {
+  SIGN_IN_HOST_IDLE_SECONDS,
+  SIGN_IN_HOST_SESSION_LIFETIME_SECONDS,
+} from "../../src/sign-in-host/sign-in-host.policy.js";
 import { SignInHostRecordStore } from "../../src/sign-in-host/sign-in-host-record.store.js";
 import {
   SIGN_IN_HOST_STATE_STORE,
   type SignInHostStateStore,
 } from "../../src/sign-in-host/sign-in-host-state.store.js";
-import { SIGN_IN_HOST_SETTINGS } from "../../src/sign-in-host/sign-in-host.tokens.js";
+import {
+  SIGN_IN_HOST_CLOCK,
+  SIGN_IN_HOST_SETTINGS,
+  type SignInHostClock,
+} from "../../src/sign-in-host/sign-in-host.tokens.js";
 import { PARTNER_DATA_SHARING_VERSION } from "../../src/storefront/doctor-register.service.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 import {
@@ -93,6 +100,7 @@ class Jar {
 async function compile(
   thresholds = RELAXED_RATE_LIMIT,
   settingsOverride?: { value: null },
+  clockOverride?: SignInHostClock,
 ) {
   const idp = new FakeIdpClient();
   const hostIdp = new FakeSignInHostIdp();
@@ -107,6 +115,10 @@ async function compile(
     builder = builder
       .overrideProvider(SIGN_IN_HOST_SETTINGS)
       .useValue(settingsOverride.value);
+  if (clockOverride)
+    builder = builder
+      .overrideProvider(SIGN_IN_HOST_CLOCK)
+      .useValue(clockOverride);
   const moduleRef: TestingModule = await builder.compile();
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
     new FastifyAdapter(),
@@ -123,12 +135,18 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
   let hostIdp: FakeSignInHostIdp;
   let pool: pg.Pool;
   const created: string[] = [];
+  let recordNow: Date | undefined;
 
   beforeAll(async () => {
-    ({ app, idp, hostIdp } = await compile());
+    ({ app, idp, hostIdp } = await compile(
+      RELAXED_RATE_LIMIT,
+      undefined,
+      () => recordNow ?? new Date(),
+    ));
     pool = app.get<pg.Pool>(DRIZZLE_POOL);
   });
   afterEach(async () => {
+    recordNow = undefined;
     for (const email of created.splice(0)) {
       await pool.query(
         "DELETE FROM sign_in_host_records WHERE subject IN (SELECT zitadel_sub FROM users WHERE email = $1)",
@@ -504,6 +522,152 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     expect(await recordRows(address)).toHaveLength(0);
     terminate.mockRestore();
   });
+
+  it.each([ACADEMY, DOCTOR])(
+    "EARS-64/68: S166 prompt=none with a foreign fingerprint refuses only the presented record for %s",
+    async (clientId) => {
+      const address = await account("silent-foreign");
+      const jar = new Jar();
+      const other = new Jar();
+      await signIn(jar, address, clientId);
+      await signIn(other, address, clientId);
+      const records = app.get(SignInHostRecordStore);
+      const cookieId = jar.values.get(RECORD_COOKIE_NAME)!;
+      const otherCookieId = other.values.get(RECORD_COOKIE_NAME)!;
+      const record = await records.find(cookieId);
+      const otherRecord = await records.find(otherCookieId);
+      expect(record).not.toBeNull();
+      expect(otherRecord).not.toBeNull();
+      const terminate = vi.spyOn(idp, "terminateSession");
+      const finalise = vi.spyOn(hostIdp, "finaliseWithSession");
+      const password = vi.spyOn(idp, "passwordLogin");
+      const finalisedBefore = hostIdp.finalised.length;
+      const authRequest = hostIdp.seedAuthRequest({
+        clientId,
+        prompt: ["none"],
+      });
+      try {
+        const { res, body } = await entry(jar, authRequest, {
+          ...DEVICE,
+          "user-agent": "OtherBrowser/2.0",
+        });
+        expect(res.statusCode).toBe(200);
+        expect(body).toEqual({
+          action: "redirect",
+          url: expect.stringContaining("error=login_required"),
+        });
+        expect(hostIdp.finalised.slice(finalisedBefore)).toEqual([
+          { id: authRequest, error: "login_required" },
+        ]);
+        expect(finalise).not.toHaveBeenCalled();
+        expect(password).not.toHaveBeenCalled();
+        expect(terminate).toHaveBeenCalledExactlyOnceWith(record!.session);
+        expect(res.cookies).toEqual([
+          expect.objectContaining({
+            name: RECORD_COOKIE_NAME,
+            value: "",
+            maxAge: 0,
+          }),
+        ]);
+        expect(jar.values.has(RECORD_COOKIE_NAME)).toBe(false);
+        expect(await records.find(cookieId)).toBeNull();
+        expect(await records.find(otherCookieId)).toEqual(otherRecord);
+        expect(await recordRows(address)).toHaveLength(1);
+        expect(other.values.get(RECORD_COOKIE_NAME)).toBe(otherCookieId);
+      } finally {
+        terminate.mockRestore();
+        finalise.mockRestore();
+        password.mockRestore();
+      }
+      const next = hostIdp.seedAuthRequest({ clientId, prompt: ["none"] });
+      expect((await entry(other, next)).body).toEqual({
+        action: "redirect",
+        url: expect.stringContaining("code="),
+      });
+      expect(hostIdp.finalised.at(-1)).toEqual({
+        id: next,
+        session: otherRecord!.session,
+      });
+    },
+  );
+
+  it.each(["idle", "absolute"] as const)(
+    "EARS-64/68: S166 the owning clock refuses a silent entry exactly at the %s record boundary",
+    async (boundary) => {
+      const address = await account(`silent-${boundary}`);
+      recordNow = new Date();
+      const start = recordNow.getTime();
+      const beforeJar = new Jar();
+      const expiredJar = new Jar();
+      await signIn(beforeJar, address);
+      await signIn(expiredJar, address);
+      const records = app.get(SignInHostRecordStore);
+      const expiredCookie = expiredJar.values.get(RECORD_COOKIE_NAME)!;
+      const expired = await records.find(expiredCookie);
+      expect(expired).not.toBeNull();
+      const boundaryMs =
+        boundary === "idle"
+          ? start + SIGN_IN_HOST_IDLE_SECONDS * 1000
+          : expired!.expiresAt.getTime();
+      if (boundary === "absolute") {
+        for (const days of [6, 12, 18, 24]) {
+          recordNow = new Date(start + days * 24 * 60 * 60 * 1000);
+          for (const jar of [beforeJar, expiredJar]) {
+            const request = hostIdp.seedAuthRequest({
+              clientId: DOCTOR,
+              prompt: ["none"],
+            });
+            expect((await entry(jar, request)).body).toEqual({
+              action: "redirect",
+              url: expect.stringContaining("code="),
+            });
+          }
+        }
+      }
+      recordNow = new Date(boundaryMs - 1);
+      const usableRequest = hostIdp.seedAuthRequest({
+        clientId: DOCTOR,
+        prompt: ["none"],
+      });
+      expect((await entry(beforeJar, usableRequest)).body).toEqual({
+        action: "redirect",
+        url: expect.stringContaining("code="),
+      });
+      const unaffectedCookie = beforeJar.values.get(RECORD_COOKIE_NAME)!;
+      const unaffected = await records.find(unaffectedCookie);
+      expect(unaffected!.expiresAt).toEqual(expired!.expiresAt);
+      recordNow = new Date(boundaryMs);
+      const terminate = vi.spyOn(idp, "terminateSession");
+      const finalise = vi.spyOn(hostIdp, "finaliseWithSession");
+      const authRequest = hostIdp.seedAuthRequest({
+        clientId: DOCTOR,
+        prompt: ["none"],
+      });
+      try {
+        const { res, body } = await entry(expiredJar, authRequest);
+        expect(res.statusCode).toBe(200);
+        expect(body).toEqual({
+          action: "redirect",
+          url: expect.stringContaining("error=login_required"),
+        });
+        expect(hostIdp.finalised.at(-1)).toEqual({
+          id: authRequest,
+          error: "login_required",
+        });
+        expect(finalise).not.toHaveBeenCalled();
+        expect(terminate).toHaveBeenCalledExactlyOnceWith(expired!.session);
+        expect(await records.find(expiredCookie)).toBeNull();
+        expect(expiredJar.values.has(RECORD_COOKIE_NAME)).toBe(false);
+        expect(res.cookies).toContainEqual(
+          expect.objectContaining({ name: RECORD_COOKIE_NAME, maxAge: 0 }),
+        );
+        expect(await records.find(unaffectedCookie)).toEqual(unaffected);
+      } finally {
+        terminate.mockRestore();
+        finalise.mockRestore();
+      }
+    },
+  );
 
   it("EARS-64/68: prompt=login and a short max_age render the form; the fresh credential replaces the record and rotates the cookie id", async () => {
     const address = await account("replace");

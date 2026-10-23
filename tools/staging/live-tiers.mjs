@@ -94,23 +94,14 @@ const CONGRESS_SIGNUP = [
  * (`e2e-stage.mjs --expect-sha`), which prints «live: <tier> not in the release
  * check — <reason>» instead of running it; a plain slot run still runs it. The
  * reason is mandatory (`releaseCheckExclusion` refuses an entry without one).
- *
- * The Academy default leg after the #3229 triage: one product deviation (008
- * EARS-14 — no storefront footer on `/`, `apps/portal/lib/shell-config.ts`
- * deferring to epic #2020), and the month-fidelity «+N ещё» pill cap, which
- * waits for the golden dense Academy day to reach the slot (the next `main`
- * converge seeds it).
+ * No leg carries one today: every live leg is in the release check (#3229).
  */
-const ACADEMY_DEFAULT_RED_3229 =
-  "red on slot — #3229: 008 EARS-14 footer absent on / (product, epic #2020); month-fidelity «+N ещё» pill cap until the golden dense Academy day reaches the slot (next main converge seeds it)";
-
 export const LIVE_TIERS = Object.freeze([
   {
     name: "live/academy/default",
     host: "academy",
     app: "apps/portal",
     pkg: "@ds/portal",
-    releaseCheck: { excluded: ACADEMY_DEFAULT_RED_3229 },
     config: "playwright.config.ts",
     rootDir: ".",
     // The `bdd` project's specs are generated; the `test:e2e` script runs this first.

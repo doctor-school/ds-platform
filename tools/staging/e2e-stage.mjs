@@ -27,6 +27,8 @@
  * ssh, the network, `pnpm` and `gh` are injected effects (`runE2eStage`), so
  * `e2e-stage.test.mjs` drives the whole command — pre-flight refusal, env derivation,
  * the axe gate, the verdict block, the exit codes — on a machine with no box.
+ * The live-tier registry is injectable too (`liveTiers`, default `LIVE_TIERS`), so
+ * the release-check exclusion path stays tested while no committed leg is excluded.
  */
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -724,7 +726,7 @@ export const realEffects = {
 
 export async function runE2eStage(
   argv,
-  { env = process.env, effects = realEffects } = {},
+  { env = process.env, effects = realEffects, liveTiers = LIVE_TIERS } = {},
 ) {
   const options = parseE2eArgs(argv);
   const { slot } = options;
@@ -858,7 +860,7 @@ export async function runE2eStage(
   // that leg is named with its reason, never run, and a plain slot run keeps it.
   const live = [];
   if (options.live) {
-    for (const tier of LIVE_TIERS.filter((t) => axeHost(t.host))) {
+    for (const tier of liveTiers.filter((t) => axeHost(t.host))) {
       const excluded = releaseCheckExclusion(tier);
       if (options.expectSha !== undefined && excluded !== undefined) {
         effects.log(

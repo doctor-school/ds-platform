@@ -2,6 +2,7 @@ import { expect, type Locator, type Page } from "@playwright/test";
 import { golden } from "@ds/db/seed/golden";
 
 import type { HostConfig } from "../hosts.js";
+import { reachFeedCard } from "../lib/feed-card.js";
 import { Given, Then, When } from "./support/fixtures.js";
 
 // Fixed golden content is asserted independently of the UI. Only the date is
@@ -15,38 +16,6 @@ const RECORDED_TITLE = "Прошедший эфир с записью (этал�
 // published edited cut runs 3600 s (golden dataset `pastEdited`).
 const RECORDING_STATUS = "Запись · 1 ч 00 мин";
 const RECORDING_CTA = "Смотреть запись";
-
-async function findCard(page: Page, link: Locator) {
-  // Generic navigation stops at DOMContentLoaded. The server-rendered feed link
-  // is already live then, before its client handler exists (archive trace #2253).
-  // Match the shared sign-in helper's initial client-readiness wait before clicks.
-  await page.waitForLoadState("load");
-  await page.waitForLoadState("networkidle");
-  // Reach the named event through the feed's real «Показать ещё» on either tense:
-  // each activation widens the URL horizon and renders the wider reading.
-  const seenHorizons = new Set<string>();
-  while ((await link.count()) === 0) {
-    const more = page.getByTestId("events-feed-show-more");
-    await expect(more, "named golden event must be reachable").toBeVisible();
-    await expect(more).toHaveAccessibleName(/^Показать ещё/);
-    const horizon = await more.getAttribute("href");
-    expect(horizon, "show-more link carries the wider horizon").toBeTruthy();
-    expect(
-      seenHorizons.has(horizon!),
-      "listing show-more must widen the horizon",
-    ).toBe(false);
-    seenHorizons.add(horizon!);
-    await more.click();
-    await page.waitForURL((url) => `${url.pathname}${url.search}` === horizon);
-    // The wider reading has rendered once the link no longer offers this horizon.
-    await expect(more).not.toHaveAttribute("href", horizon!);
-    await expect(page.locator("[data-webinar-card]").first()).toBeVisible();
-  }
-  await expect(link).toBeVisible();
-  const card = page.locator("[data-webinar-card]", { has: link });
-  await expect(card).toHaveCount(1);
-  return card;
-}
 
 /** The browser's IANA zone — the viewer zone the feed re-formats into. */
 async function viewerZoneOf(page: Page): Promise<string> {
@@ -166,7 +135,7 @@ Then(
   async ({ page, host, world }) => {
     if (!world.upcomingStartsAt)
       throw new Error("The golden event was not read before its card");
-    const card = await findCard(page, cardLink(page, host));
+    const card = await reachFeedCard(page, cardLink(page, host));
     for (const value of [TITLE, SCHOOL, ...SPECIALTIES, SPEAKER]) {
       await expect(card).toContainText(value);
     }
@@ -229,7 +198,7 @@ Then(
   async ({ page, host, world }) => {
     if (!world.recordedStartsAt)
       throw new Error("The recorded golden event was not read before its card");
-    const card = await findCard(page, recordedLink(page, host));
+    const card = await reachFeedCard(page, recordedLink(page, host));
     await expect(card).toContainText(RECORDED_TITLE);
     await expect(card).toContainText(RECORDING_STATUS);
     await expectShownDateTime(page, card, world.recordedStartsAt);

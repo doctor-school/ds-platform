@@ -1293,17 +1293,34 @@ describe("release check (--expect-sha)", () => {
         .sort(),
     );
     const out = lines.join("\n");
-    assert.match(out, /live:\s+live\/doctor\/register-live\s+PASS/);
+    for (const tier of LIVE_TIERS.filter((t) => !t.releaseCheck))
+      assert.match(
+        out,
+        new RegExp(`${tier.name.replaceAll("/", "\\/")}\\s+PASS`),
+        tier.name,
+      );
   });
 
   it("prints one line per excluded leg with its reason, and the leg never runs", async () => {
-    const { lines, effects } = harness();
+    // The registry under test carries an exclusion whether or not the
+    // committed one does: the mechanism holds with no leg excluded today.
+    const liveTiers = LIVE_TIERS.map((t) =>
+      t.name === "live/doctor/shell"
+        ? { ...t, releaseCheck: { excluded: "red on slot — #0000 example" } }
+        : t,
+    );
+    const { calls, lines, effects } = harness();
     await runE2eStage(["main", "--expect-sha", SHA], {
       env: RELEASE_ENV,
       effects,
+      liveTiers,
     });
     const out = lines.join("\n");
-    const excluded = LIVE_TIERS.filter((t) => t.releaseCheck);
+    const excluded = liveTiers.filter((t) => t.releaseCheck);
+    assert.ok(
+      !liveLegsRun(calls).includes(legKey(excluded[0])),
+      "the excluded leg never runs",
+    );
     assert.ok(excluded.length > 0);
     for (const tier of excluded) {
       const line = `live: ${tier.name} not in the release check — ${tier.releaseCheck.excluded}`;
@@ -1718,23 +1735,11 @@ describe("golden live env (#3191) — derived from the dataset every slot is clo
     );
   });
 
-  it("keeps exactly the slot-red Academy default leg out of the release check, with a reason citing #3229", () => {
-    const excluded = LIVE_TIERS.filter((t) => t.releaseCheck);
-    assert.deepEqual(excluded.map((t) => t.name).sort(), [
-      "live/academy/default",
-    ]);
+  it("keeps no live leg out of the release check — #3229 brought the last one, the Academy default leg, back green", () => {
     for (const tier of LIVE_TIERS) {
       assert.doesNotThrow(() => releaseCheckExclusion(tier), tier.name);
-      if (tier.releaseCheck)
-        assert.match(releaseCheckExclusion(tier), /#3229/, tier.name);
+      assert.equal(releaseCheckExclusion(tier), undefined, tier.name);
     }
-    // The Academy default leg names what keeps it out, the product deviation first.
-    assert.match(
-      releaseCheckExclusion(
-        LIVE_TIERS.find((t) => t.name === "live/academy/default"),
-      ),
-      /008 EARS-14 footer absent on \/ \(product, epic #2020\)/,
-    );
   });
 
   it("refuses an exclusion without a reason — a leg never leaves the release check silently", () => {

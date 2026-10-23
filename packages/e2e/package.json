@@ -14,7 +14,8 @@
     "./live-stand-env": "./lib/live-stand-env.ts",
     "./stand-http-credentials": "./lib/stand-http-credentials.ts",
     "./account-auth-paths": "./lib/account-auth-paths.ts",
-    "./admin-events": "./admin/index.ts"
+    "./admin-events": "./admin/index.ts",
+    "./feed-card": "./lib/feed-card.ts"
   },
   "scripts": {
     "check:host-tags": "tsx bin/check-host-tags.ts",

@@ -27,7 +27,9 @@ import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { hashIdentifier } from "../../src/auth/session/auth-audit.ledger.js";
 import { ZitadelIdpClient } from "../../src/auth/idp/zitadel.idp.js";
 import {
+  InMemoryLoginHandoffStore,
   LOGIN_HANDOFF_STORE,
+  LOGIN_HANDOFF_TTL_SECONDS,
   type LoginHandoffStore,
 } from "../../src/auth/login-handoff/login-handoff.store.js";
 import {
@@ -108,6 +110,7 @@ async function compile(
   settingsOverride?: { value: null },
   clockOverride?: SignInHostClock,
   stateOverride?: SignInHostStateStore,
+  handoffStoreOverride?: LoginHandoffStore,
 ) {
   const idp = new FakeIdpClient();
   const hostIdp = new FakeSignInHostIdp();
@@ -130,6 +133,10 @@ async function compile(
     builder = builder
       .overrideProvider(SIGN_IN_HOST_STATE_STORE)
       .useValue(stateOverride);
+  if (handoffStoreOverride)
+    builder = builder
+      .overrideProvider(LOGIN_HANDOFF_STORE)
+      .useValue(handoffStoreOverride);
   const moduleRef: TestingModule = await builder.compile();
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
     new FastifyAdapter(),
@@ -147,17 +154,21 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
   let pool: pg.Pool;
   const created: string[] = [];
   let recordNow: Date | undefined;
+  let handoffNow: number | undefined;
 
   beforeAll(async () => {
     ({ app, idp, hostIdp } = await compile(
       RELAXED_RATE_LIMIT,
       undefined,
       () => recordNow ?? new Date(),
+      undefined,
+      new InMemoryLoginHandoffStore(() => handoffNow ?? Date.now()),
     ));
     pool = app.get<pg.Pool>(DRIZZLE_POOL);
   });
   afterEach(async () => {
     recordNow = undefined;
+    handoffNow = undefined;
     for (const email of created.splice(0)) {
       await pool.query(
         "DELETE FROM sign_in_host_records WHERE subject IN (SELECT zitadel_sub FROM users WHERE email = $1)",
@@ -1320,6 +1331,181 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
       expect((await entry(jar, refused)).body.action).toBe("render");
     });
   });
+
+  it.each([
+    [ACADEMY, "academy"],
+    [DOCTOR, "doctor"],
+  ] as const)(
+    "EARS-44/64: S174 an exactly expired hand-off on %s cannot use a colleague's record, and the participant's code replaces only that record",
+    async (clientId, storefront) => {
+      const holder = await account("s174-holder");
+      const participant = await account("s174-participant");
+      const baseNow = Date.now();
+      handoffNow = baseNow;
+      recordNow = new Date(baseNow);
+      const jar = new Jar();
+      const unaffectedJar = new Jar();
+      await signIn(jar, holder, clientId);
+      await signIn(unaffectedJar, holder, clientId);
+
+      const records = app.get(SignInHostRecordStore);
+      const oldCookie = jar.values.get(RECORD_COOKIE_NAME)!;
+      const unaffectedCookie = unaffectedJar.values.get(RECORD_COOKIE_NAME)!;
+      const oldRecord = await records.find(oldCookie);
+      const unaffectedRecord = await records.find(unaffectedCookie);
+      expect(oldRecord).not.toBeNull();
+      expect(unaffectedRecord).not.toBeNull();
+      expect(oldCookie).not.toBe(unaffectedCookie);
+      const { rows } = await pool.query<{ id: string; zitadel_sub: string }>(
+        "SELECT id, zitadel_sub FROM users WHERE email = $1",
+        [participant],
+      );
+      const handoffs = app.get<LoginHandoffStore>(LOGIN_HANDOFF_STORE);
+      const ref = await handoffs.mint(rows[0]!.id, participant);
+      expect(await handoffs.peek(ref)).toEqual({
+        accountId: rows[0]!.id,
+        identifier: participant,
+      });
+
+      handoffNow = baseNow + LOGIN_HANDOFF_TTL_SECONDS * 1000;
+      recordNow = new Date(handoffNow);
+      const intent = await app
+        .get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE)
+        .putIntent(
+          { door: "login", method: "code", handoff: ref, clientId },
+          600,
+        );
+      const authRequest = hostIdp.seedAuthRequest({
+        clientId,
+        loginHint: intent,
+      });
+      const auth = app.get(AuthService);
+      const noSend = vi.spyOn(auth, "requestLoginOtp");
+      const noEmail = vi.spyOn(idp, "requestEmailLoginCode");
+      const noSms = vi.spyOn(idp, "requestSmsOtp");
+      const peek = vi.spyOn(handoffs, "peek");
+      const redeem = vi.spyOn(handoffs, "redeem");
+      const finalise = vi.spyOn(hostIdp, "finaliseWithSession");
+      const finaliseError = vi.spyOn(hostIdp, "finaliseWithError");
+      const terminate = vi.spyOn(idp, "terminateSession");
+      const otp = vi.spyOn(auth, "otpStep");
+      const spies = [
+        noSend,
+        noEmail,
+        noSms,
+        peek,
+        redeem,
+        finalise,
+        finaliseError,
+        terminate,
+        otp,
+      ];
+      try {
+        const { res, body } = await entry(jar, authRequest);
+        expect(res.statusCode).toBe(200);
+        expect(body).toEqual({
+          action: "render",
+          storefront,
+          door: "login",
+          authRequest,
+          csrf: expect.any(String),
+          intent: { method: "code", handoff: true },
+        });
+        expect(peek).toHaveBeenCalledWith(ref);
+        expect(redeem).not.toHaveBeenCalled();
+        expect(finalise).not.toHaveBeenCalled();
+        expect(finaliseError).not.toHaveBeenCalled();
+        expect(terminate).not.toHaveBeenCalled();
+        expect(otp).not.toHaveBeenCalled();
+        expect(noSend).not.toHaveBeenCalled();
+        expect(noEmail).not.toHaveBeenCalled();
+        expect(noSms).not.toHaveBeenCalled();
+        expect(res.cookies.map((c) => c.name)).toEqual([FORM_COOKIE_NAME]);
+        expect(jar.values.get(RECORD_COOKIE_NAME)).toBe(oldCookie);
+        expect(await records.find(oldCookie)).toEqual(oldRecord);
+        expect(await records.find(unaffectedCookie)).toEqual(unaffectedRecord);
+        expect(JSON.stringify(body)).not.toContain(ref);
+        expect(JSON.stringify(body)).not.toContain(holder);
+        if (body.action !== "render") throw new Error("not rendered");
+        const fields = { authRequest, csrf: body.csrf };
+
+        const refused = await post(jar, "login/otp/handoff", fields);
+        expect(refused.statusCode).toBe(200);
+        expect(refused.json()).toEqual({ status: "handoff_refused" });
+        expect(redeem).toHaveBeenCalledWith(ref);
+        expect(noSend).not.toHaveBeenCalled();
+        expect(noEmail).not.toHaveBeenCalled();
+        expect(noSms).not.toHaveBeenCalled();
+        expect(finalise).not.toHaveBeenCalled();
+        expect(terminate).not.toHaveBeenCalled();
+
+        const requested = await post(jar, "login/otp/request", {
+          identifier: participant,
+          channel: "email",
+          ...fields,
+        });
+        expect(requested.statusCode).toBe(200);
+        expect(noSend).toHaveBeenCalledTimes(1);
+        expect(noSend).toHaveBeenCalledWith(
+          { identifier: participant, channel: "email" },
+          expect.objectContaining({ ip: "127.0.0.1" }),
+        );
+        expect(noEmail).toHaveBeenCalledTimes(1);
+        expect(noSms).not.toHaveBeenCalled();
+        expect(finalise).not.toHaveBeenCalled();
+
+        const accepted = await post(jar, "login/otp", {
+          identifier: participant,
+          code: FAKE_VALID_CODE,
+          channel: "email",
+          ...fields,
+        });
+        expect(accepted.statusCode).toBe(200);
+        expect(accepted.json()).toMatchObject({ status: "redirect" });
+        expect(accepted.cookies.map((c) => c.name)).toEqual([
+          RECORD_COOKIE_NAME,
+        ]);
+        expect(accepted.cookies.map((c) => c.name)).not.toContain(
+          SESSION_COOKIE_NAME,
+        );
+        const newCookie = jar.values.get(RECORD_COOKIE_NAME)!;
+        expect(newCookie).toBeTruthy();
+        expect(newCookie).not.toBe(oldCookie);
+        const participantRecord = await records.find(newCookie);
+        expect(participantRecord?.session.sub).toBe(rows[0]!.zitadel_sub);
+        expect(await records.find(oldCookie)).toBeNull();
+        expect(await records.find(unaffectedCookie)).toEqual(unaffectedRecord);
+        expect(await recordRows(holder)).toHaveLength(1);
+        expect(await recordRows(participant)).toHaveLength(1);
+        expect(terminate).toHaveBeenCalledTimes(1);
+        expect(terminate).toHaveBeenCalledWith(oldRecord!.session);
+        expect(finalise).toHaveBeenCalledTimes(1);
+        expect(finalise).toHaveBeenCalledWith(
+          authRequest,
+          participantRecord!.session,
+        );
+        expect(finaliseError).not.toHaveBeenCalled();
+        expect(otp).toHaveBeenCalledTimes(1);
+        expect(otp).toHaveBeenCalledWith(
+          { identifier: participant, channel: "email", code: FAKE_VALID_CODE },
+          expect.any(Function),
+        );
+        expect(JSON.stringify(accepted.json())).not.toContain(ref);
+
+        const unaffectedRequest = hostIdp.seedAuthRequest({ clientId });
+        expect(
+          (await entry(unaffectedJar, unaffectedRequest)).body.action,
+        ).toBe("redirect");
+        expect(finalise).toHaveBeenLastCalledWith(
+          unaffectedRequest,
+          unaffectedRecord!.session,
+        );
+        expect(noSend).toHaveBeenCalledTimes(1);
+      } finally {
+        for (const spy of spies) spy.mockRestore();
+      }
+    },
+  );
 
   describe("EARS-71: S175 unusable entry intents", () => {
     let intentApp: Awaited<ReturnType<typeof compile>>;

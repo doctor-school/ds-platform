@@ -35,6 +35,11 @@ import { botProtectionMessages, botProtectionSiteKey } from "../bot-protection";
 import { createAuthClient } from "../client/auth-client";
 import { authErrorMessage } from "../errors";
 import { registerFieldHint, registerFieldRules } from "../fields";
+import {
+  clearRegistrationFormDraft,
+  readRegistrationFormDraft,
+  writeRegistrationFormDraft,
+} from "./registration-form-draft";
 import type {
   AuthFlowConsentsConfig,
   AuthFlowConsentsCopy,
@@ -234,8 +239,13 @@ export function RegisterDoor({
   const [commandError, setCommandError] = useState<string | null>(null);
   const [challengeError, setChallengeError] = useState<string | null>(null);
   // 003 EARS-24 amended — read once, on mount: the values this tab still holds
-  // from a registration whose code step the visitor stepped back from.
-  const [initialValues] = useState(() => peekPendingRegistration()?.form);
+  // from a registration whose code step the visitor stepped back from. The
+  // in-memory hold covers a client-side hop; after a full page load (the
+  // sign-in host's door hop) the tab's stored fields refill everything but the
+  // password, which is re-typed.
+  const [initialValues] = useState(
+    () => peekPendingRegistration()?.form ?? readRegistrationFormDraft(),
+  );
 
   const captcha = useBotProtectedAction({
     onVerified: () => setChallengeError(null),
@@ -289,6 +299,8 @@ export function RegisterDoor({
     // before that), and «← Изменить почту» refills the form from them. The
     // slot is a module singleton: it survives the client-side hop below.
     setPendingRegistration({ identifier: email, registration, form: values });
+    // …and the non-secret fields for a step reached by a full page load.
+    writeRegistrationFormDraft(values);
 
     // Row 51 / 003 EARS-24 — the address is confirmed on the host's `/verify`
     // route, and the arrival context rides along so the trip through the mail
@@ -319,6 +331,7 @@ export function RegisterDoor({
     // A hold left by an abandoned attempt must never survive into this one: the
     // code step would submit values this submit is about to replace.
     clearPendingRegistration();
+    clearRegistrationFormDraft();
     // 003 EARS-17 — the challenge runs BEFORE the command, the way both
     // storefronts ran it before this door and the way the sign-in door requests
     // a code: `request()` mounts ONE fresh widget and resumes the command with

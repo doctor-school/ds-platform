@@ -28,6 +28,7 @@ import { resolveAuthFlowCopy } from "../copy";
 import { withBoldDestination } from "../copy/destination";
 import { authErrorMessage } from "../errors";
 import { resolveVerificationCode } from "../fields";
+import { clearRegistrationFormDraft } from "../register/registration-form-draft";
 import { makeResolver } from "../form-resolver";
 import type { AuthFlowHostConfig, AuthFlowVerifyCopy } from "../host-config";
 import {
@@ -195,6 +196,7 @@ export function VerifyDoor({
         verifyRequestOf(email, values.code, held?.registration),
       );
       clearPendingRegistration();
+      clearRegistrationFormDraft();
       setSucceeded(true);
       // #2333 — the session exists now, so the landing is decided again for
       // it: the guest-render one could not see a profile specialty.
@@ -246,7 +248,8 @@ export function VerifyDoor({
       error={error}
       succeeded={succeeded}
       // 003 EARS-24 amended — «← Изменить почту»: back to this host's form,
-      // which refills from the values still held in this tab, the arrival
+      // which refills from the values still held in this tab (the password
+      // re-typed after a full page load), the arrival
       // target carried onward (rule S3).
       onBack={() =>
         router.push(withReturnTarget(config.routes.register, carriedTarget))

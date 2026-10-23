@@ -19,8 +19,14 @@ export function newNonce(): string {
   return btoa(String.fromCharCode(...bytes));
 }
 
-/** The SmartCaptcha origin the bot-protection widget frames and calls (EARS-17). */
-const SMARTCAPTCHA_ORIGIN = "https://smartcaptcha.yandexcloud.net";
+/**
+ * The SmartCaptcha origins the bot-protection widget frames and calls
+ * (EARS-17): `@yandex/smart-captcha` loads `captcha.js` from
+ * smartcaptcha.cloud.yandex.ru and the loader frames and calls the origin it
+ * was loaded from; smartcaptcha.yandexcloud.net is the vendor's alias.
+ */
+const SMARTCAPTCHA_ORIGINS =
+  "https://smartcaptcha.cloud.yandex.ru https://smartcaptcha.yandexcloud.net";
 
 /**
  * The page policy. `'unsafe-eval'` only under `next dev` (React Refresh); the
@@ -37,8 +43,8 @@ export function contentSecurityPolicy(
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     "font-src 'self'",
-    `connect-src 'self' ${SMARTCAPTCHA_ORIGIN}`,
-    `frame-src ${SMARTCAPTCHA_ORIGIN}`,
+    `connect-src 'self' ${SMARTCAPTCHA_ORIGINS}`,
+    `frame-src ${SMARTCAPTCHA_ORIGINS}`,
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'self'",

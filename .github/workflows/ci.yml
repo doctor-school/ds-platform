@@ -640,6 +640,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm generate:api-client:check
 
+  # ─── Caddyfile parse check (BLOCK, #3273) ─────────────────────────────
+  # `caddy validate` on every infra/deploy/compose/*/Caddyfile with the image the
+  # sibling compose.yml pins. An unparseable Caddyfile crash-loops the edge on the
+  # next deploy (prod outage 2026-10-23). No install — docker only.
+  caddyfile-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: bash tools/ci/validate-caddyfiles.sh
+
   # ─── BLOCK light guards (hard-red; wired into the `ci` needs-list) ────
   # Batch of the light-profile guards that are BLOCK today. Every step here is a
   # plain step: a failure fails the batch, which fails `ci`. No WARN member, so
@@ -1955,6 +1965,7 @@ jobs:
         changes,
         core,
         generated-artifacts,
+        caddyfile-validate,
         api-e2e,
         guards-block,
         playwright-axe,
@@ -1977,7 +1988,7 @@ jobs:
       # the two classes are enumerated EXPLICITLY, never derived from `needs.*`:
       #
       #   UNCONDITIONAL — `changes`, `core`, `generated-artifacts`,
-      #   `guards-block`. These carry no
+      #   `caddyfile-validate`, `guards-block`. These carry no
       #   `if:`, so `skipped` can only mean "an upstream need failed" and
       #   `success` is the ONLY green outcome. `changes` is in this class on
       #   purpose: it is what decides the other class, so a broken classifier
@@ -2001,6 +2012,7 @@ jobs:
             changes=${{ needs.changes.result }}
             core=${{ needs.core.result }}
             generated-artifacts=${{ needs['generated-artifacts'].result }}
+            caddyfile-validate=${{ needs['caddyfile-validate'].result }}
             guards-block=${{ needs['guards-block'].result }}
           PATH_GATED: |
             api-e2e=${{ needs['api-e2e'].result }}

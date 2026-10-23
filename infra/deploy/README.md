@@ -416,7 +416,10 @@ Pipeline (`tools/deploy/prod.mjs`), fail-closed and stops at the first red step:
    The script then compares the shipped `Caddyfile` and
    `centrifugo/config.json` with the files visible through the running containers
    and **restarts only consumers whose bind mount is stale**. It verifies both
-   mounts again after apply; a mismatch fails the deploy (#1175).
+   mounts again after apply; a mismatch fails the deploy (#1175). An unparseable
+   Caddyfile never gets this far: the BLOCK CI job `caddyfile-validate`
+   (`tools/ci/validate-caddyfiles.sh`) runs `caddy validate` on every
+   `compose/*/Caddyfile` with the image its sibling `compose.yml` pins (#3273).
 6. **Retention (DSO-127)** — keeps the **last 3** SHA-tagged images per repo
    (`ds-api-migrate` included), prunes older (never `:local`, never the running
    one) and drops the registry digest references of pruned images.

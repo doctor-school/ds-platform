@@ -16,6 +16,7 @@ import {
   mailpitUrlFor,
   nativeRecoveryMail,
 } from "../lib/mailpit.js";
+import { assertSecureSession } from "../lib/secure-session.js";
 import { signInGoldenDoctor } from "../lib/sign-in.js";
 import { resolveWorkerGoldenDoctor } from "../lib/worker-golden.js";
 import { gatedPasswordLogin } from "../lib/gated-password-login.js";
@@ -214,25 +215,23 @@ Then(
 
 Then(
   "the browser holds a host-only __Host-ds_session cookie with HttpOnly, Secure, and SameSite=Lax",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const response = loginResponses.get(page) ?? otpLoginResponses.get(page);
     expect(response, "login response was captured").toBeDefined();
     expect(response!.ok(), "login succeeded").toBe(true);
-    const setCookie = await response!.headerValue("set-cookie");
-    expect(setCookie, "login sets the BFF session cookie").toContain(
-      `${SESSION_COOKIE}=`,
+    // #3172 — the login command is the sign-in host's and mints no storefront
+    // session; the storefront's `/auth/callback` relays `__Host-ds_session` on
+    // the way back. The cookie is proven once the page is back on the
+    // storefront: in its jar, host-only, Path=/, HttpOnly, Secure, Lax.
+    const storefront = new URL(world.hostBaseUrl).origin;
+    await page.waitForURL(
+      (url) => url.origin === storefront && url.pathname !== "/auth/callback",
     );
-    expect(setCookie).not.toMatch(/(?:^|;)\s*Domain=/i);
-    const cookies = await page.context().cookies();
-    const session = cookies.find((cookie) => cookie.name === SESSION_COOKIE);
-    expect(session, "private session cookie exists").toBeDefined();
+    await assertSecureSession(page, response!, world.hostBaseUrl);
+    const session = (await page.context().cookies()).find(
+      (cookie) => cookie.name === SESSION_COOKIE,
+    );
     expect(session!.domain).toBe(new URL(page.url()).hostname);
-    expect(session!).toMatchObject({
-      path: "/",
-      httpOnly: true,
-      secure: true,
-      sameSite: "Lax",
-    });
   },
 );
 

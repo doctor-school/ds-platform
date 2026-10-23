@@ -368,18 +368,16 @@ Then(
     const visitor = await guest.newPage();
     state.guest = { context: guest, page: visitor };
     {
-      await visitor.goto(
-        new URL(world.host.loginPath, world.hostBaseUrl).toString(),
-        { waitUntil: "load" },
-      );
+      // #3172 — the storefront `/login` is now an entry to the sign-in host,
+      // whose origin has no storefront session or profile to observe. The
+      // replay targets the storefront's own credential BFF (still served) from
+      // a storefront page, where the same tab reads its session and profile.
+      await visitor.goto(`${world.hostBaseUrl}/`, { waitUntil: "load" });
       expect(
         (await guest.cookies()).some((cookie) => cookie.name === SESSION),
         "replay starts without the owner's session",
       ).toBe(false);
-      const pending = captureResponse(
-        visitor,
-        signInHostApiPath("/v1/auth/login/otp"),
-      );
+      const pending = captureResponse(visitor, "/v1/auth/login/otp");
       const evidence = await visitor.evaluate(
         async ({ identifier, code }) => {
           const response = await fetch("/v1/auth/login/otp", {

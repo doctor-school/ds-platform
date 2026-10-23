@@ -1035,6 +1035,163 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     expect(academyVerifyOnDoctor.statusCode).toBe(403);
   });
 
+  describe.each([
+    ["academy", ACADEMY, "register", "verify", ACADEMY_LOGIN],
+    [
+      "doctor",
+      DOCTOR,
+      "storefront/doctor/register",
+      "storefront/doctor/verify",
+      DOCTOR_LOGIN,
+    ],
+  ] as const)(
+    "EARS-39/41/66: S167 %s registration code state",
+    (storefront, clientId, registerPath, verifyPath, loginUrl) => {
+      async function pendingRegistration() {
+        const jar = new Jar();
+        const form = await render(jar, clientId, { prompt: ["create"] });
+        const address = email(`cold-${storefront}`);
+        const registered = await post(jar, registerPath, {
+          email: address,
+          password: PASSWORD,
+          ...(storefront === "doctor"
+            ? {
+                medicalWorkerDeclaration: true,
+                consent: [
+                  {
+                    purpose: PARTNER_DATA_SHARING_PURPOSE,
+                    version: PARTNER_DATA_SHARING_VERSION,
+                  },
+                ],
+              }
+            : { consent: CONSENT }),
+          authRequest: form.authRequest,
+          csrf: form.csrf,
+        });
+        expect(registered.statusCode).toBe(200);
+        expect(registered.json()).toEqual({ status: "pending_verification" });
+        expect(await recordRows(address)).toEqual([]);
+        return { jar, form, address };
+      }
+
+      it("EARS-39: S167 reopening a live registration form rejects the old binding before code verification and accepts the new binding", async () => {
+        const { jar, form, address } = await pendingRegistration();
+        const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+        const oldFormId = jar.values.get(FORM_COOKIE_NAME)!;
+        const oldJar = new Jar();
+        oldJar.values.set(FORM_COOKIE_NAME, oldFormId);
+        const { res: reopened, body } = await entry(jar, form.authRequest);
+        expect(reopened.statusCode).toBe(200);
+        expect(body).toMatchObject({
+          action: "render",
+          storefront,
+          door: "register",
+          authRequest: form.authRequest,
+        });
+        if (body.action !== "render") throw new Error("not rendered");
+        expect(jar.values.get(FORM_COOKIE_NAME)).not.toBe(oldFormId);
+        expect(body.csrf).not.toBe(form.csrf);
+        expect(await state.getForm(oldFormId)).toBeNull();
+        const verify = vi.spyOn(idp, "verifyEmail");
+        const finalise = vi.spyOn(hostIdp, "finaliseWithSession");
+        try {
+          const originalProof = {
+            email: address,
+            code: FAKE_VALID_CODE,
+            authRequest: form.authRequest,
+            csrf: form.csrf,
+          };
+          for (const staleJar of [oldJar, jar]) {
+            const refused = await post(staleJar, verifyPath, originalProof);
+            expect(refused.statusCode).toBe(403);
+            expect(refused.cookies).toEqual([]);
+          }
+          expect(verify).not.toHaveBeenCalled();
+          expect(finalise).not.toHaveBeenCalled();
+          expect(await recordRows(address)).toEqual([]);
+          const accepted = await post(jar, verifyPath, {
+            ...originalProof,
+            csrf: body.csrf,
+          });
+          expect(accepted.statusCode).toBe(200);
+          expect(accepted.json()).toEqual({
+            status: "redirect",
+            url: expect.stringContaining("code="),
+          });
+          expect(verify).toHaveBeenCalledTimes(1);
+          const record = await app
+            .get(SignInHostRecordStore)
+            .find(jar.values.get(RECORD_COOKIE_NAME)!);
+          expect(record).not.toBeNull();
+          expect(finalise).toHaveBeenCalledExactlyOnceWith(
+            form.authRequest,
+            record!.session,
+          );
+          expect(await recordRows(address)).toHaveLength(1);
+          expect(accepted.cookies.map((cookie) => cookie.name)).toEqual([
+            RECORD_COOKIE_NAME,
+          ]);
+          expect(jar.values.has(SESSION_COOKIE_NAME)).toBe(false);
+        } finally {
+          verify.mockRestore();
+          finalise.mockRestore();
+        }
+      });
+
+      it("EARS-66: S167 a code accepted after its reopened auth request expires keeps the host record and returns to the originating login", async () => {
+        const { jar, form, address } = await pendingRegistration();
+        const { body } = await entry(jar, form.authRequest);
+        expect(body.action).toBe("render");
+        if (body.action !== "render") throw new Error("not rendered");
+        hostIdp.expire(form.authRequest);
+        const finalisedBefore = hostIdp.finalised.length;
+        const accepted = await post(jar, verifyPath, {
+          email: address,
+          code: FAKE_VALID_CODE,
+          authRequest: form.authRequest,
+          csrf: body.csrf,
+        });
+        expect(accepted.statusCode).toBe(200);
+        expect(accepted.json()).toEqual({ status: "redirect", url: loginUrl });
+        expect(hostIdp.finalised).toHaveLength(finalisedBefore);
+        expect(accepted.cookies.map((cookie) => cookie.name)).toEqual([
+          RECORD_COOKIE_NAME,
+        ]);
+        expect(jar.values.has(SESSION_COOKIE_NAME)).toBe(false);
+        const recordId = jar.values.get(RECORD_COOKIE_NAME)!;
+        const records = app.get(SignInHostRecordStore);
+        const record = await records.find(recordId);
+        expect(record).not.toBeNull();
+        expect(await recordRows(address)).toHaveLength(1);
+        const verify = vi.spyOn(idp, "verifyEmail");
+        const send = vi.spyOn(idp, "requestEmailLoginCode");
+        try {
+          const nextRequest = hostIdp.seedAuthRequest({ clientId });
+          const { res, body: next } = await entry(jar, nextRequest);
+          expect(res.statusCode).toBe(200);
+          expect(next).toEqual({
+            action: "redirect",
+            url: expect.stringContaining("code="),
+          });
+          expect(hostIdp.finalised.at(-1)).toEqual({
+            id: nextRequest,
+            session: record!.session,
+          });
+          expect(res.cookies).toEqual([]);
+          expect(jar.values.get(RECORD_COOKIE_NAME)).toBe(recordId);
+          expect((await records.find(recordId))!.expiresAt).toEqual(
+            record!.expiresAt,
+          );
+          expect(verify).not.toHaveBeenCalled();
+          expect(send).not.toHaveBeenCalled();
+        } finally {
+          verify.mockRestore();
+          send.mockRestore();
+        }
+      });
+    },
+  );
+
   describe("EARS-44: the hand-off against a live record", () => {
     async function handoffIntent(ref: string): Promise<string> {
       const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);

@@ -6,6 +6,7 @@ import {
 } from "@nestjs/platform-fastify";
 import { Test, type TestingModule } from "@nestjs/testing";
 import type pg from "pg";
+import type { DrizzleHandle } from "@ds/db";
 import {
   afterAll,
   afterEach,
@@ -33,7 +34,10 @@ import {
   computeFingerprint,
   SESSION_COOKIE_NAME,
 } from "../../src/auth/session/session.cookie.js";
-import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
+import {
+  DRIZZLE_DB,
+  DRIZZLE_POOL,
+} from "../../src/database/database.tokens.js";
 import {
   FORM_COOKIE_NAME,
   FORM_STATE_TTL_SECONDS,
@@ -1085,6 +1089,156 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
       });
       expect((await entry(jar, refused)).body.action).toBe("render");
     });
+  });
+
+  describe("EARS-71: S175 unusable entry intents", () => {
+    let intentApp: Awaited<ReturnType<typeof compile>>;
+    let intentNow = Date.UTC(2026, 9, 23);
+    const state = new InMemorySignInHostStateStore(
+      Buffer.alloc(32, 17),
+      () => intentNow,
+    );
+
+    beforeAll(async () => {
+      intentApp = await compile(
+        RELAXED_RATE_LIMIT,
+        undefined,
+        undefined,
+        state,
+      );
+    });
+    afterAll(async () => {
+      await intentApp.app.close();
+    });
+
+    async function openIntent(
+      clientId: string,
+      door: "login" | "register",
+      loginHint?: string,
+    ) {
+      const authRequest = intentApp.hostIdp.seedAuthRequest({
+        clientId,
+        prompt: door === "register" ? ["create"] : [],
+        ...(loginHint === undefined ? {} : { loginHint }),
+      });
+      const res = await intentApp.app.inject({
+        method: "GET",
+        url: `/v1/sign-in-host/entry?authRequest=${authRequest}`,
+        headers: DEVICE,
+      });
+      return { res, authRequest };
+    }
+
+    for (const [clientId, storefront, foreignClient] of [
+      [ACADEMY, "academy", DOCTOR],
+      [DOCTOR, "doctor", ACADEMY],
+    ] as const) {
+      for (const door of ["login", "register"] as const) {
+        for (const unusable of [
+          "absent",
+          "malformed",
+          "unknown",
+          "spent",
+          "expired",
+          "foreign-client",
+        ] as const) {
+          it(`EARS-71: S175 ${storefront} ${door} with an ${unusable} intent renders only the ordinary form and performs no identity or credential work`, async () => {
+            const intent = {
+              clientId:
+                unusable === "foreign-client" ? foreignClient : clientId,
+              door:
+                door === "login" ? ("register" as const) : ("login" as const),
+              method: "code" as const,
+              eventTarget: "/webinars/s175-private-event",
+              handoff: "s175-private-handoff",
+            };
+            let hint: string | undefined;
+            if (unusable === "malformed") hint = "not-an-intent!";
+            else if (unusable === "unknown")
+              hint = randomBytes(32).toString("base64url");
+            else if (unusable !== "absent") {
+              hint = await state.putIntent(intent, 60);
+              if (unusable === "spent") {
+                const first = await openIntent(clientId, door, hint);
+                expect(first.res.statusCode).toBe(200);
+                expect(first.res.json()).toMatchObject({
+                  action: "render",
+                  door: intent.door,
+                  intent: {
+                    method: "code",
+                    eventTarget: intent.eventTarget,
+                    handoff: true,
+                  },
+                });
+              }
+              if (unusable === "expired") intentNow += 60_000;
+            }
+
+            const auth = intentApp.app.get(AuthService);
+            const db = intentApp.app.get<DrizzleHandle["db"]>(DRIZZLE_DB);
+            const handoffs =
+              intentApp.app.get<LoginHandoffStore>(LOGIN_HANDOFF_STORE);
+            const noWork = [
+              vi.spyOn(db, "select"),
+              vi.spyOn(intentApp.idp, "findUserByEmail"),
+              vi.spyOn(auth, "isOwnLoginHandoff"),
+              vi.spyOn(auth, "resolveLoginHandoff"),
+              vi.spyOn(handoffs, "peek"),
+              vi.spyOn(handoffs, "redeem"),
+              vi.spyOn(auth, "passwordStep"),
+              vi.spyOn(auth, "otpStep"),
+              vi.spyOn(auth, "requestLoginOtp"),
+              vi.spyOn(intentApp.idp, "requestEmailLoginCode"),
+              vi.spyOn(intentApp.idp, "requestSmsOtp"),
+              vi.spyOn(intentApp.hostIdp, "finaliseWithSession"),
+              vi.spyOn(intentApp.hostIdp, "finaliseWithError"),
+            ];
+            try {
+              const assertPlain = async (
+                targetClient = clientId,
+                targetStorefront = storefront,
+              ) => {
+                const { res, authRequest } = await openIntent(
+                  targetClient,
+                  door,
+                  hint,
+                );
+                expect(res.statusCode).toBe(200);
+                expect(res.json()).toEqual({
+                  action: "render",
+                  storefront: targetStorefront,
+                  door,
+                  authRequest,
+                  csrf: expect.any(String),
+                });
+                const cookie = res.cookies.find(
+                  (c) => c.name === FORM_COOKIE_NAME,
+                );
+                expect(cookie?.value).toBeTruthy();
+                expect(await state.getForm(cookie!.value)).toEqual({
+                  csrfToken: res.json().csrf,
+                  storefront: targetStorefront,
+                  authRequestId: authRequest,
+                });
+                expect(res.cookies.map((c) => c.name)).toEqual([
+                  FORM_COOKIE_NAME,
+                ]);
+              };
+              await assertPlain();
+              if (unusable === "foreign-client") {
+                await assertPlain(
+                  foreignClient,
+                  storefront === "academy" ? "doctor" : "academy",
+                );
+              }
+              for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
+            } finally {
+              for (const spy of noWork) spy.mockRestore();
+            }
+          });
+        }
+      }
+    }
   });
 
   describe("revoking every session of a subject ends its sign-in-host records", () => {

@@ -1,4 +1,5 @@
 import { expect } from "@playwright/test";
+import { reachFeedCard } from "@ds/e2e/feed-card";
 import { Given, Then, When } from "../support/fixtures";
 
 /**
@@ -127,9 +128,12 @@ Then(
     // EARS-8: the seeded upcoming event is a card linking to its page. The seed
     // is an online event, so after hydration its time plate reads in the
     // viewer's zone with that zone's label (004 «Amendment — 2026-10-02»).
-    const card = page.locator("[data-webinar-card]", {
-      has: page.locator(`a[href="/webinars/${world.slug}"]`),
-    });
+    // The feed pages by 10 (019 LD-2), so the guest scans through «Показать
+    // ещё» until the card is on screen (#3229).
+    const card = await reachFeedCard(
+      page,
+      page.locator(`a[href="/webinars/${world.slug}"]`),
+    );
     await expect(card).toBeVisible();
     await expect(card.locator("[data-time-plate]")).toContainText(
       VIEWER_ZONE_LABEL,

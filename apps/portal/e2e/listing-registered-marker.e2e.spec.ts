@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { reachFeedCard } from "@ds/e2e/feed-card";
 import { LIVE_STAND, provisionLoggedInDoctor } from "./support/doctor-session";
 
 /**
@@ -46,10 +47,13 @@ test.describe("004 EARS-8 listing-card registered marker (e2e)", () => {
   }) => {
     // A guest first: the public listing carries NO registered marker anywhere.
     await context.clearCookies();
+    // The feed pages by 10 (019 LD-2): each listing read reaches its card
+    // through «Показать ещё», wherever the seed instant puts it (#3229).
     await page.goto("/webinars", { waitUntil: "domcontentloaded" });
-    await expect(
-      page.locator(`a[href="/webinars/${CONTROL_SLUG}"]`).first(),
-    ).toBeVisible();
+    await reachFeedCard(
+      page,
+      page.locator(`a[href="/webinars/${CONTROL_SLUG}"]`),
+    );
     await expect(page.getByText(MARKER, { exact: false })).toHaveCount(0);
 
     // Provision a fresh 003 doctor and register them for the spare seeded event
@@ -65,18 +69,22 @@ test.describe("004 EARS-8 listing-card registered marker (e2e)", () => {
     // is a sibling of the card's stretched title link, so scope to the card
     // CONTAINER (`[data-webinar-card]`), not the title anchor.
     await page.goto("/webinars", { waitUntil: "domcontentloaded" });
-    const registeredCard = page.locator("[data-webinar-card]", {
-      has: page.locator(`a[href="/webinars/${SLUG}"]`),
-    });
+    const registeredCard = await reachFeedCard(
+      page,
+      page.locator(`a[href="/webinars/${SLUG}"]`),
+    );
     await expect(registeredCard).toBeVisible();
     await expect(
       registeredCard.getByText(MARKER, { exact: false }),
     ).toBeVisible();
 
     // …and every other card is unchanged — no marker outside the registered card.
-    const controlCard = page.locator("[data-webinar-card]", {
-      has: page.locator(`a[href="/webinars/${CONTROL_SLUG}"]`),
-    });
+    // A wider horizon keeps the nearer cards, so the registered one stays shown.
+    const controlCard = await reachFeedCard(
+      page,
+      page.locator(`a[href="/webinars/${CONTROL_SLUG}"]`),
+    );
+    await expect(registeredCard).toBeVisible();
     await expect(controlCard).toBeVisible();
     await expect(controlCard.getByText(MARKER, { exact: false })).toHaveCount(
       0,
@@ -87,9 +95,7 @@ test.describe("004 EARS-8 listing-card registered marker (e2e)", () => {
     // overlay is per-viewer, never baked into the public projection (EARS-10).
     await context.clearCookies();
     await page.goto("/webinars", { waitUntil: "domcontentloaded" });
-    await expect(
-      page.locator(`a[href="/webinars/${SLUG}"]`).first(),
-    ).toBeVisible();
+    await reachFeedCard(page, page.locator(`a[href="/webinars/${SLUG}"]`));
     await expect(page.getByText(MARKER, { exact: false })).toHaveCount(0);
   });
 });

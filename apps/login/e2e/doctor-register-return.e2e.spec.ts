@@ -82,12 +82,13 @@ test.describe("021 EARS-10: the accepted code on the sign-in host", () => {
           "/v1/sign-in-host/storefront/doctor/verify",
     );
     await registerAndConfirm(page, LIVE);
-    // 003 EARS-39 (host amendment): no in-tab registration value rides with
-    // the code — the host's form state holds the warm proof.
-    expect((await verify).postDataJSON()).toEqual({
+    // 003 EARS-24 amended: the code step renders in place on the register
+    // door's document, so the values typed there ride with the code.
+    expect((await verify).postDataJSON()).toMatchObject({
       ...formPostFields("doctor", "register", { eventTarget: LIVE }),
       email: EMAIL,
       code: CODE,
+      registration: { password: PASSWORD },
     });
 
     await page.waitForURL(isIdpCallback);

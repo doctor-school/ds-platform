@@ -241,8 +241,8 @@ test.describe("021 EARS-19: bot protection on the registration and resend forms"
 
   // 003 EARS-41/23 (#2556): the code step posts the doctor storefront's own
   // code command, which runs the one 003 engine and sets the session in its
-  // answer — the code is checked exactly once, in exactly one round trip. On
-  // the sign-in host the registration values stay in the host's form state.
+  // answer — the code is checked exactly once, in exactly one round trip,
+  // carrying the registration values typed on the same document.
   test("003 EARS-41 / 021 EARS-19.5: the code step submits the code once, bound to its auth request, through the storefront code command", async ({
     page,
   }) => {
@@ -261,15 +261,14 @@ test.describe("021 EARS-19: bot protection on the registration and resend forms"
       // it IS the submit — the same way the portal drives its code fields.
       page.locator('input[autocomplete="one-time-code"]').fill("482913"),
     ]);
-    // 003 EARS-39 (host amendment): the code step is a full page load on
-    // the sign-in host, so no in-tab registration value rides with the code
-    // — the host's form state holds the warm proof (API-tier tested).
-    expect(body(request)).toEqual({
+    // 003 EARS-24 amended: the code step renders in place on the register
+    // door's document, so the values typed there ride with the code.
+    expect(body(request)).toMatchObject({
       ...formPostFields("doctor", "register"),
       email: EMAIL,
       code: "482913",
+      registration: { password: PASSWORD },
     });
-    expect(body(request)).not.toHaveProperty("registration");
 
     // 021 EARS-10 (amended 2026-09-17) — the accepted code navigates away from
     // this surface instead of replacing it with an outcome card, so the

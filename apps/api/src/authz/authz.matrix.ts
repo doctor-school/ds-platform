@@ -5,9 +5,13 @@
  * authz.discovery.ts, so this module — the security-critical "is this row valid"
  * judgement — is trivially unit-testable without booting Nest or a database.
  */
+import { INTERNAL_API_PREFIX } from "@ds/schemas/internal-api";
 import { ROLES, type AuthzMeta } from "./authz.types.js";
 
-const ACCESS = new Set(["public", "authenticated", "pending-auth"]);
+/** `METHOD /v1/internal/…` — the derived endpoint of a route under the internal prefix. */
+const INTERNAL_ENDPOINT = new RegExp(`^[A-Z]+ ${INTERNAL_API_PREFIX}/`);
+
+const ACCESS = new Set(["public", "authenticated", "pending-auth", "internal"]);
 const CHECK = new Set(["none", "fast-path", "policy"]);
 const AUDIT = new Set(["none", "low-stakes", "high-stakes"]);
 const ROLE_SET = new Set<string>(ROLES);
@@ -73,7 +77,9 @@ export function validateRow(
     if (!hasRoles)
       at("`access: authenticated` requires a non-empty `required_roles`");
     if (check === "none")
-      at("`access: authenticated` requires `auth_check` in {fast-path, policy}");
+      at(
+        "`access: authenticated` requires `auth_check` in {fast-path, policy}",
+      );
   }
 
   // 011 EARS-4: a `pending-auth` row must name the role its pending principal was
@@ -89,6 +95,21 @@ export function validateRow(
     if (hasAttrs) at("`access: pending-auth` must not carry `object_attrs`");
   }
 
+  // 003 EARS-62: the internal class and the internal prefix are one thing —
+  // an internal row elsewhere would be an unguarded route, and a route under
+  // the prefix classed otherwise would advertise a browser-reachable API.
+  const underInternal = INTERNAL_ENDPOINT.test(endpoint);
+  if (access === "internal") {
+    if (!underInternal)
+      at(`\`access: internal\` is valid only under ${INTERNAL_API_PREFIX}/`);
+    if (check !== undefined && check !== "none")
+      at("`access: internal` requires `auth_check: none`");
+    if (hasRoles) at("`access: internal` must not carry `required_roles`");
+    if (hasAttrs) at("`access: internal` must not carry `object_attrs`");
+  } else if (underInternal && access !== undefined) {
+    at(`a route under ${INTERNAL_API_PREFIX}/ requires \`access: internal\``);
+  }
+
   if (hasAttrs && check !== "policy")
     at("`object_attrs` is only valid with `auth_check: policy`");
 
@@ -97,7 +118,11 @@ export function validateRow(
   // elevation to be fresh, so declaring either would publish a guarantee the
   // guard cannot make — and the matrix is read as security evidence.
   const { revalidate, stepUp } = meta;
-  if (revalidate !== undefined && revalidate !== "none" && revalidate !== "live")
+  if (
+    revalidate !== undefined &&
+    revalidate !== "none" &&
+    revalidate !== "live"
+  )
     at(`\`revalidate\` has invalid value "${String(revalidate)}"`);
   if (access !== "authenticated") {
     if (revalidate === "live")

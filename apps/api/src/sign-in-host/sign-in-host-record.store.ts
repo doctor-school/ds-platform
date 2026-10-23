@@ -97,6 +97,56 @@ export class SignInHostRecordStore {
   }
 
   /**
+   * 003 EARS-62 / EARS-10 — the record of `subject` that holds the Zitadel
+   * session `zitadelSessionId`, with its row key. The id is sealed with a
+   * per-row context, so the lookup narrows by the plain `subject` column (a
+   * person holds one record per browser) and opens each candidate.
+   */
+  async findBySession(
+    subject: string,
+    zitadelSessionId: string,
+  ): Promise<{ hash: string; record: SignInHostRecord } | null> {
+    const rows = await this.db
+      .select()
+      .from(signInHostRecords)
+      .where(eq(signInHostRecords.subject, subject));
+    for (const row of rows) {
+      const id = openAtRest(row.zitadelSessionId, this.key, row.cookieIdHash);
+      if (id === null || id !== zitadelSessionId) continue;
+      const token = openAtRest(row.sessionToken, this.key, row.cookieIdHash);
+      if (token === null) return null;
+      return {
+        hash: row.cookieIdHash,
+        record: {
+          session: {
+            zitadelSessionId: id,
+            sessionToken: token,
+            sub: row.subject,
+          },
+          fingerprint: row.fingerprint,
+          lastCredentialAt: row.lastCredentialAt,
+          lastFinalisedAt: row.lastFinalisedAt,
+          expiresAt: row.expiresAt,
+        },
+      };
+    }
+    return null;
+  }
+
+  /** 003 EARS-10 — delete the record holding `zitadelSessionId`; returns its session to terminate. */
+  async deleteBySession(
+    subject: string,
+    zitadelSessionId: string,
+  ): Promise<IdpSession | null> {
+    const found = await this.findBySession(subject, zitadelSessionId);
+    if (!found) return null;
+    await this.db
+      .delete(signInHostRecords) // retained-data-ok: ephemeral sign-in-host session state (EARS-64), deleted on sign-out (EARS-10) by design
+      .where(eq(signInHostRecords.cookieIdHash, found.hash));
+    return found.record.session;
+  }
+
+  /**
    * Every record of `subject`, deleted; returns their sessions to terminate
    * (003 EARS-12 / EARS-41 — every session of the subject ends).
    */

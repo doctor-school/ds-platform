@@ -131,7 +131,7 @@ export interface ZitadelConfig {
 /** Zitadel project-roles claim key (design §3, ADR-0001 §6 — `roles[]`). */
 const ZITADEL_PROJECT_ROLES_CLAIM = "urn:zitadel:iam:org:project:roles";
 
-const DEFAULT_OIDC_SCOPES = [
+export const DEFAULT_OIDC_SCOPES = [
   "openid",
   "profile",
   "offline_access",
@@ -1751,7 +1751,7 @@ export class ZitadelIdpClient implements IdpClient {
         if (!session) return null;
         // 003 EARS-23: set the submitted password only when the account has
         // none; fail-soft — an accepted code never turns into a failure.
-        if (registration) {
+        if (registration && "password" in registration) {
           try {
             if ((await this.hasPassword(user.userId)) === false) {
               await this.setPassword(user.userId, registration.password);
@@ -1766,8 +1766,18 @@ export class ZitadelIdpClient implements IdpClient {
 
       // Unverified (003 EARS-41). Read the credential state BEFORE the code is
       // consumed, so a provider fault leaves the account untouched.
+      const submitted =
+        registration && "password" in registration
+          ? registration.password
+          : undefined;
+      // The sign-in host's warm proof keeps the pre-verification password of
+      // exactly the account its form state recorded as created there.
+      const keep =
+        registration !== undefined &&
+        "keepPasswordOf" in registration &&
+        registration.keepPasswordOf === user.userId;
       let invalidate = false;
-      if (!registration) {
+      if (submitted === undefined && !keep) {
         const has = await this.hasPassword(user.userId);
         if (has === null) return null;
         invalidate = has;
@@ -1778,11 +1788,8 @@ export class ZitadelIdpClient implements IdpClient {
       // removal (DELETE on the password resource is 405, proven live #2556), so
       // invalidation is SetPassword with a random, never-recorded value.
       if (
-        (registration || invalidate) &&
-        !(await this.replacePreVerificationPassword(
-          user.userId,
-          registration?.password,
-        ))
+        (submitted !== undefined || invalidate) &&
+        !(await this.replacePreVerificationPassword(user.userId, submitted))
       ) {
         return { sub: user.userId, verifiedNow: true, session: null };
       }

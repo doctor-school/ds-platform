@@ -1,4 +1,8 @@
-﻿import { randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import {
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import {
   expect,
   type BrowserContext,
@@ -16,6 +20,7 @@ import {
   assertNoPrivateRegistrationAccess,
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
+import { captureResponse } from "../lib/captured-response.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
 
@@ -23,8 +28,11 @@ interface Registration extends OwnedCredentials {
   context: BrowserContext;
   page: Page;
   response?: Response;
+  /** The registration command's body, kept at arrival (the form navigates). */
+  body?: string;
   code?: string;
   verification?: Response;
+  verificationBody?: string;
   verificationRequests?: number;
   refusal?: ReturnType<typeof verificationRefusalEvidence>;
   submittedCode?: string;
@@ -76,7 +84,7 @@ Then(
     expect(
       registrationEvidence(
         response.request().postData() ?? "",
-        await response.text(),
+        state.body ?? "",
         state,
       ),
     ).toEqual({
@@ -89,10 +97,11 @@ Then(
 
 Then(
   "the Academy code step has a fresh delivered confirmation code that remains unconsumed",
-  async ({ page, world }) => {
+  async ({ page }) => {
     const state = registration(page);
     const url = new URL(state.page.url());
-    expect(url.origin).toBe(new URL(world.hostBaseUrl).origin);
+    // #3172 — the code step is the sign-in host's /verify door.
+    expect(isSignInHostForm(url)).toBe(true);
     expect(url.pathname).toBe("/verify");
     expect(
       url.searchParams.get("email") === state.email,
@@ -135,7 +144,8 @@ When(
     });
     state.page.on("request", (request) => {
       if (
-        new URL(request.url()).pathname === "/v1/auth/verify" &&
+        new URL(request.url()).pathname ===
+          signInHostApiPath("/v1/auth/verify") &&
         request.method() === "POST"
       )
         state.verificationRequests! += 1;
@@ -143,7 +153,8 @@ When(
     const refused = state.page
       .waitForResponse(
         (response) =>
-          new URL(response.url()).pathname === "/v1/auth/verify" &&
+          new URL(response.url()).pathname ===
+            signInHostApiPath("/v1/auth/verify") &&
           response.request().method() === "POST",
       )
       .then(async (response) => {
@@ -167,7 +178,7 @@ When(
 
 Then(
   "Academy rejects that confirmation generically on the same verification step without navigation or private access",
-  async ({ page, world }) => {
+  async ({ page }) => {
     const state = registration(page);
     const response = state.verification!;
     expect(response.status(), "confirmation code refused").toBe(400);
@@ -189,7 +200,8 @@ Then(
       state.page.locator('input[autocomplete="one-time-code"]'),
     ).toBeVisible();
     const url = new URL(state.page.url());
-    expect(url.origin).toBe(new URL(world.hostBaseUrl).origin);
+    // #3172 — the code step is the sign-in host's /verify door.
+    expect(isSignInHostForm(url)).toBe(true);
     expect(url.pathname).toBe("/verify");
     expect(
       url.searchParams.get("email") === state.email,
@@ -250,8 +262,8 @@ Then(
     const resent = state.page
       .waitForRequest(
         (request) =>
-          new URL(request.url()).pathname === "/v1/auth/verify" &&
-          request.method() === "POST",
+          new URL(request.url()).pathname ===
+            signInHostApiPath("/v1/auth/verify") && request.method() === "POST",
         { timeout: 2_000 },
       )
       .then(
@@ -278,37 +290,40 @@ When(
     state.verificationRequests = 0;
     state.page.on("request", (request) => {
       if (
-        new URL(request.url()).pathname === "/v1/auth/verify" &&
+        new URL(request.url()).pathname ===
+          signInHostApiPath("/v1/auth/verify") &&
         request.method() === "POST"
       ) {
         state.verificationRequests! += 1;
       }
     });
-    const verified = state.page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === "/v1/auth/verify" &&
-        response.request().method() === "POST",
+    const verified = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/verify"),
     );
     await inputSecret(
       state.page.locator('input[autocomplete="one-time-code"]'),
       state.code!,
     );
-    state.verification = await verified;
+    const { response, body } = await verified;
+    state.verification = response;
+    state.verificationBody = body;
   },
 );
 
 Then(
   "Academy automatically submits that code once and acknowledges verified without exposing credentials",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const state = registration(page);
     const response = state.verification!;
     expect(response.status(), "confirmation accepted").toBe(200);
     expect(
       verificationEvidence(
         response.request().postData() ?? "",
-        await response.text(),
+        state.verificationBody ?? "",
         state,
         state.code!,
+        world.hostBaseUrl,
       ),
     ).toEqual({
       credentialsMatch: true,

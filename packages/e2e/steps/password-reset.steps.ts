@@ -1,3 +1,4 @@
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
 import { installCaptchaStub } from "../lib/captcha-stub.js";
@@ -39,7 +40,8 @@ When(
       );
       const responsePending = page.waitForResponse(
         (response) =>
-          new URL(response.url()).pathname === "/v1/auth/password/reset" &&
+          new URL(response.url()).pathname ===
+            signInHostApiPath("/v1/auth/password/reset") &&
           response.request().method() === "POST",
       );
       await page.getByTestId("reset-request-submit").click();

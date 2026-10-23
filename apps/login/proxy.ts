@@ -3,10 +3,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   contentSecurityPolicy,
   HARDENING_HEADERS,
-  isTopLevelNavigation,
   newNonce,
 } from "@/lib/host-headers";
 import {
+  isTopLevelNavigation,
   SIGN_IN_HOST_ENTRY_HEADER,
   SIGN_IN_HOST_UNAVAILABLE_HEADER,
   writeSignInHostHandOver,

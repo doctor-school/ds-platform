@@ -26,7 +26,17 @@ export {
   type AuthRouteGuardInput,
 } from "./auth-route-guard";
 export { parkReturnTarget } from "./return-target-parking";
+export {
+  OIDC_TX_COOKIE,
+  STOREFRONT_CALLBACK_PATH,
+  storefrontCallback,
+  storefrontEntry,
+  type StorefrontEntry,
+  type StorefrontOidcDeps,
+  type StorefrontOidcHost,
+} from "./storefront-oidc";
 export { resolveOwnHandoff } from "./handoff-ownership";
+export { isTopLevelNavigation } from "./top-level-navigation";
 /**
  * Row 32 / #1987 - the account shape of the LANDING codec. It rides on the
  * server subpath because its only consumers are the hosts' server-side landing

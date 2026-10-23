@@ -23,6 +23,15 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = Number(process.env.DOCTOR_CI_PORT ?? 3211);
 const BASE = `http://127.0.0.1:${PORT}`;
 
+// #3172 — the sign-in entries (`/login`, `/register`, `/reset`, `/verify`)
+// answer a 303 built by the API's internal transaction endpoint; the tier
+// boots the shared double of that endpoint
+// (`packages/e2e/doubles/storefront-internal-api.mjs`), whose authorize URL
+// points back at itself so a followed entry lands on a real answer.
+const DOUBLE_PORT = Number(process.env.STOREFRONT_DOUBLE_PORT ?? 3217);
+const DOUBLE = `http://127.0.0.1:${DOUBLE_PORT}`;
+const DOUBLE_TOKEN = "storefront-double-token";
+
 export default defineConfig({
   testDir: "./e2e",
   // Every backend-REQUIRING spec lives in its own tier: the specialty
@@ -115,10 +124,27 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: {
-    command: `pnpm --filter @ds/doctor exec next start -p ${PORT} --keepAliveTimeout 125000`,
-    url: BASE,
-    timeout: 120_000,
-    reuseExistingServer: false,
-  },
+  webServer: [
+    {
+      command: "node ../../packages/e2e/doubles/storefront-internal-api.mjs",
+      url: `${DOUBLE}/health`,
+      env: {
+        STOREFRONT_DOUBLE_PORT: String(DOUBLE_PORT),
+        STOREFRONT_DOUBLE_TOKEN: DOUBLE_TOKEN,
+        STOREFRONT_DOUBLE_AUTHORIZE: `${DOUBLE}/oauth/v2/authorize`,
+      },
+      timeout: 30_000,
+      reuseExistingServer: false,
+    },
+    {
+      command: `pnpm --filter @ds/doctor exec next start -H 127.0.0.1 -p ${PORT} --keepAliveTimeout 125000`,
+      url: BASE,
+      env: {
+        INTERNAL_API_URL: DOUBLE,
+        INTERNAL_API_TOKEN: DOUBLE_TOKEN,
+      },
+      timeout: 120_000,
+      reuseExistingServer: false,
+    },
+  ],
 });

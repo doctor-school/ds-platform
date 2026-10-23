@@ -1,3 +1,4 @@
+import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -161,7 +162,10 @@ async function passwordSignIn(state: AbandonedPhone, base: string) {
       },
     },
     async () => {
-      const pending = captureResponse(state.page, "/v1/auth/login");
+      const pending = captureResponse(
+        state.page,
+        signInHostApiPath("/v1/auth/login"),
+      );
       await state.page.getByTestId("password-login-submit").click();
       return pending;
     },
@@ -236,7 +240,10 @@ Given(
       state,
       "/account",
     );
-    const pending = captureResponse(owned, "/v1/auth/verify");
+    const pending = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       owned.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -287,12 +294,15 @@ Then(
       await state.page.getByTestId("otp-channel-sms").click();
       await inputSecret(state.page.getByTestId("otp-identifier"), phone);
       const after = await captureSmsCheckpoint(state.sink, phone);
-      const pending = captureResponse(state.page, "/v1/auth/login/otp/request");
+      const pending = captureResponse(
+        state.page,
+        signInHostApiPath("/v1/auth/login/otp/request"),
+      );
       await state.page.getByTestId("otp-send").click();
       const answer = await pending;
       let exactCommand = false;
       try {
-        const body = answer.response.request().postDataJSON();
+        const body = hostCommand(answer.response.request().postDataJSON());
         exactCommand =
           Object.keys(body).sort().join() === "channel,identifier" &&
           body.channel === "sms" &&

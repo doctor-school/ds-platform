@@ -97,6 +97,7 @@ import {
   ACADEMY_FIXTURE,
   DOCTOR_FIXTURE,
 } from "../test-support/host-config-fixtures";
+import { VerifyDoor } from "./verify-door";
 import { VerifyEntry } from "./verify-entry";
 
 const EMAIL = "doc@example.com";
@@ -127,6 +128,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   clearPendingRegistration();
+  window.sessionStorage.clear();
   window.history.replaceState(null, "", "/");
 });
 
@@ -438,6 +440,26 @@ describe("005 EARS-2 guest-through-auth completion on /verify", () => {
     await user.click(screen.getByTestId("verify-back"));
 
     expect(peekPendingRegistration(EMAIL)?.registration).toEqual(REGISTRATION);
+  });
+
+  it("003 EARS-24: the in-place step's «← Изменить почту» is the registration door's own back, never a navigation", async () => {
+    const onBack = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <VerifyDoor
+        config={ACADEMY_FIXTURE}
+        email={EMAIL}
+        landing="/webinars"
+        onBack={onBack}
+      />,
+    );
+    await screen.findByTestId("verify-submit");
+
+    await user.click(screen.getByTestId("verify-back"));
+
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(h.push).not.toHaveBeenCalled();
+    expect(h.replace).not.toHaveBeenCalled();
   });
 });
 

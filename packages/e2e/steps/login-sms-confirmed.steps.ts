@@ -1,3 +1,5 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -110,7 +112,10 @@ Given(
       { email: state.email, password: `Owned-${randomUUID()}-aA1!` },
       "/account",
     );
-    const pending = captureResponse(owned, "/v1/auth/verify");
+    const pending = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       owned.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -186,13 +191,16 @@ When(
     await state.page.getByTestId("otp-channel-sms").click();
     await inputSecret(state.page.getByTestId("otp-identifier"), state.phone);
     const requestedAt = await captureSmsCheckpoint(state.sink, state.phone);
-    const pending = captureResponse(state.page, "/v1/auth/login/otp/request");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/login/otp/request"),
+    );
     await state.page.getByTestId("otp-send").click();
     const sent = await pending;
     let matches = false;
     let neutral = false;
     try {
-      const body = sent.response.request().postDataJSON();
+      const body = hostCommand(sent.response.request().postDataJSON());
       matches =
         Object.keys(body).sort().join(",") === "channel,identifier" &&
         body.channel === "sms" &&
@@ -239,20 +247,22 @@ When(
     );
     const field = state.page.locator('input[autocomplete="one-time-code"]');
     await expect(field).toHaveAttribute("maxlength", "6");
-    const pending = captureResponse(state.page, "/v1/auth/login/otp");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/login/otp"),
+    );
     await inputSecret(field, state.code);
     const signedIn = await pending;
     let matches = false;
     let noTokenBody = false;
     try {
-      const request = signedIn.response.request().postDataJSON();
+      const request = hostCommand(signedIn.response.request().postDataJSON());
       matches =
         request.code === state.code &&
         request.identifier === state.phone &&
         request.channel === "sms";
-      const body = JSON.parse(signedIn.body);
       noTokenBody =
-        Object.keys(body).length === 1 && body.status === "authenticated";
+        storefrontCallbackAcknowledgement(signedIn.body, world.hostBaseUrl);
     } catch {
       /* Assertions project only booleans. */
     }

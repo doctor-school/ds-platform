@@ -1,4 +1,6 @@
-﻿import { randomUUID } from "node:crypto";
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { randomUUID } from "node:crypto";
+import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
@@ -110,12 +112,15 @@ async function passwordAttempt(
     state.page.locator('input[autocomplete="current-password"]'),
     password,
   );
-  const pending = captureResponse(state.page, "/v1/auth/login");
+  const pending = captureResponse(
+    state.page,
+    signInHostApiPath("/v1/auth/login"),
+  );
   await state.page.getByTestId("password-login-submit").click();
   const result = await pending;
   let submitted = false;
   try {
-    const body = result.response.request().postDataJSON();
+    const body = hostCommand(result.response.request().postDataJSON());
     submitted = body.identifier === state.email && body.password === password;
   } catch {
     /* Never expose credential-bearing parser diagnostics. */
@@ -134,7 +139,10 @@ async function prepareVerifiedOwner(
     state,
     "/account",
   );
-  const pending = captureResponse(state.page, "/v1/auth/verify");
+  const pending = captureResponse(
+    state.page,
+    signInHostApiPath("/v1/auth/verify"),
+  );
   await inputSecret(
     state.page.locator('input[autocomplete="one-time-code"]'),
     code,
@@ -316,13 +324,13 @@ When(
           );
           const requested = captureResponse(
             state.page,
-            "/v1/auth/password/reset",
+            signInHostApiPath("/v1/auth/password/reset"),
           );
           await state.page.getByTestId("reset-request-submit").click();
           const send = await requested;
           let sameRequest = false;
           try {
-            const command = send.response.request().postDataJSON();
+            const command = hostCommand(send.response.request().postDataJSON());
             sameRequest =
               command.identifier === state.email &&
               Object.keys(command).length === 1 &&
@@ -355,13 +363,13 @@ When(
           );
           const completing = captureResponse(
             state.page,
-            "/v1/auth/password/reset/complete",
+            signInHostApiPath("/v1/auth/password/reset/complete"),
           );
           await state.page.locator('form button[type="submit"]').click();
           const accepted = await completing;
           let exactCompletion = false;
           try {
-            const command = accepted.response.request().postDataJSON();
+            const command = hostCommand(accepted.response.request().postDataJSON());
             exactCompletion =
               command.identifier === state.email &&
               command.code === delivery.code &&
@@ -376,10 +384,10 @@ When(
           }).toEqual({ status: 200, exactCompletion: true });
           let tokenFree = false;
           try {
-            const body = JSON.parse(accepted.body);
-            tokenFree =
-              body.status === "reset_completed" &&
-              Object.keys(body).length === 1;
+            tokenFree = storefrontCallbackAcknowledgement(
+              accepted.body,
+              world.hostBaseUrl,
+            );
           } catch {
             /* Never expose authentication response bytes. */
           }
@@ -440,13 +448,16 @@ async function proveAdmissions(state: ResetForgivenessJourney, base: string) {
       state.page.locator('input[autocomplete="username"]'),
       state.email,
     );
-    const pending = captureResponse(state.page, "/v1/auth/password/reset");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/password/reset"),
+    );
     await state.page.getByTestId("reset-request-submit").click();
     const result = await pending;
     let sameIdentifier = false;
     let neutral = false;
     try {
-      const request = result.response.request().postDataJSON();
+      const request = hostCommand(result.response.request().postDataJSON());
       sameIdentifier =
         request.identifier === state.email && Object.keys(request).length === 1;
       const body = JSON.parse(result.body);

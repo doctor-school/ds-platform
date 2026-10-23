@@ -403,6 +403,16 @@ export function toLedgerRow(
         reason: event.reason,
         metadata: { tier: ADMIN_TIER },
       };
+    case "StorefrontCallbackRejected":
+      // 003 EARS-62: the login-CSRF refusal of a storefront callback, in the
+      // same canonical `auth.session.rejected` id, storefront tier.
+      return {
+        eventType: "auth.session.rejected",
+        subjectId: event.sub,
+        sid: null,
+        reason: event.reason,
+        metadata: { tier: "storefront", client: event.client },
+      };
   }
 }
 

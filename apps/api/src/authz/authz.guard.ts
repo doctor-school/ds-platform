@@ -6,6 +6,7 @@ import {
   type ExecutionContext,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
+import { INTERNAL_API_PREFIX } from "@ds/schemas/internal-api";
 import { AUTHZ_KEY, type AuthzMeta, type Role } from "./authz.types.js";
 
 /** Minimal session-subject shape the guard reads off the request (populated by the 003 session guard). */
@@ -74,6 +75,18 @@ export class AuthzGuard implements CanActivate {
     // any engine-evaluated `auth_check` on these rows precisely so no reader can
     // mistake this for a guard-enforced check.
     if (meta.access === "pending-auth") return true;
+
+    // 003 EARS-62: `internal`. The caller is a storefront server, not a
+    // subject; `InternalApiMiddleware` already refused (404) any request
+    // without the internal credential. The guard's part is the invariant the
+    // matrix states: the class is admitted only on a request under the prefix.
+    if (meta.access === "internal") {
+      const url = context.switchToHttp().getRequest<{ url?: string }>()?.url;
+      if (url?.startsWith(`${INTERNAL_API_PREFIX}/`)) return true;
+      throw new ForbiddenException(
+        "an internal route is reachable only under the internal prefix",
+      );
+    }
 
     // access: authenticated — a valid session subject is required.
     const request = context.switchToHttp().getRequest<{

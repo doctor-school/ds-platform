@@ -498,11 +498,16 @@ at `login-<slot>.<base>` (the `login` container, port 3005), the Login V2 base U
 `ds-storefront-{academy,doctor}-<slot>` clients carry. Before `up -d`, the converge step
 «converge the slot's sign-in host clients and env» converges those two clients, reads
 their client ids and writes the root-only `/etc/ds-platform/slots/<slot>.sign-in.env`
-(0600): `IDP_{ACADEMY,DOCTOR}_CLIENT_ID` plus a per-slot `SIGN_IN_RECORD_KEY`, minted by
-the tool on the first converge (32 random bytes) and kept on every later one; only
-«kept»/«minted» is logged. The non-secret half (`IDP_SIGN_IN_BASE_URI`, the storefront
+(0600): `IDP_{ACADEMY,DOCTOR}_CLIENT_ID`, the two clients' `private_key_jwt` keys
+`IDP_{ACADEMY,DOCTOR}_CLIENT_KEY` (Zitadel JSON application keys, kept while their key id
+is still listed on the app, re-minted when revoked), plus a per-slot `SIGN_IN_RECORD_KEY`
+and `INTERNAL_API_TOKEN`, minted by the tool on the first converge (32 random bytes each)
+and kept on every later one; only key ids and «kept»/«minted» are logged. Only the api
+mounts it. The portal and doctor containers mount the root-only `<slot>.internal.env`
+instead — `INTERNAL_API_TOKEN` alone, the api's value from the same converge — and call
+the slot api at `INTERNAL_API_URL=http://api:3000` (003 EARS-62/71). The non-secret half (`IDP_SIGN_IN_BASE_URI`, the storefront
 `/login` URLs) is in `<slot>.env`. So the api's sign-in-host module is ON in every slot.
-`down` of a preview removes the file; `main` keeps its key. Nothing here is in `stage.env`.
+`down` of a preview removes both files; `main` keeps its key. Nothing here is in `stage.env`.
 
 The sign-in host only renders once the stage instance runs Login V2 **per app**: the
 instance flag `loginV2.required` must be `false`, or Zitadel sends every app to the

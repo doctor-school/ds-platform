@@ -1,3 +1,5 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -179,7 +181,7 @@ Given(
       { email: state.email, password: state.oldPassword },
       "/account",
     );
-    const verified = post(earlier, "/v1/auth/verify");
+    const verified = post(earlier, signInHostApiPath("/v1/auth/verify"));
     await input(earlier.locator('input[autocomplete="one-time-code"]'), code);
     expect((await verified).ok(), "registration code accepted").toBe(true);
     await earlier.waitForURL((url) => url.pathname === "/account");
@@ -214,7 +216,7 @@ When(
       .locator('input[autocomplete="username"]')
       .pressSequentially(state.phone);
     state.requestedAt = await captureSmsCheckpoint(state.sink, state.phone);
-    const requested = post(reset, "/v1/auth/password/reset");
+    const requested = post(reset, signInHostApiPath("/v1/auth/password/reset"));
     await reset.getByTestId("reset-request-submit").click();
     const response = await requested;
     expect(response.status(), "reset request status").toBe(200);
@@ -277,7 +279,7 @@ When(
     );
     const completed = captureResponse(
       reset,
-      "/v1/auth/password/reset/complete",
+      signInHostApiPath("/v1/auth/password/reset/complete"),
     );
     await reset.locator('form button[type="submit"]').click();
     state.completion = await completed;
@@ -292,7 +294,7 @@ Then(
     const { response, body } = state.completion!;
     expect(response.status(), "reset completion accepted").toBe(200);
     expect(
-      body === JSON.stringify({ status: "reset_completed" }),
+      storefrontCallbackAcknowledgement(body, world.hostBaseUrl),
       "token-free reset acknowledgement",
     ).toBe(true);
     await reset.waitForURL(
@@ -320,7 +322,7 @@ Then(
         password,
       );
       const answer = await gatedPasswordLogin(fresh, async () => {
-        const pending = post(fresh, "/v1/auth/login");
+        const pending = post(fresh, signInHostApiPath("/v1/auth/login"));
         await fresh.getByTestId("password-login-submit").click();
         return pending;
       });

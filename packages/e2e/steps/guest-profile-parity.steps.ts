@@ -1,4 +1,8 @@
 ﻿import { expect, type BrowserContext, type Page } from "@playwright/test";
+import {
+  expectAtSignInHostFrom,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
 
 const guests = new WeakMap<Page, { context: BrowserContext; page: Page }>();
@@ -109,12 +113,14 @@ Then(
   "both guest reads retain the same generic refusal and account navigation exposes no private profile or session",
   async ({ page, world }) => {
     const visitor = guest(page).page;
+    // #3172 — a guest on /account is bounced through the storefront's own login
+    // entry (carrying the account return path) to the sign-in host's door.
+    watchStorefrontEntries(visitor, world.hostBaseUrl);
     await visitor.goto(`${world.hostBaseUrl}/account`, { waitUntil: "load" });
-    await visitor.waitForURL(
-      (url) =>
-        url.origin === new URL(world.hostBaseUrl).origin &&
-        url.pathname === world.host.loginPath,
-    );
+    await expectAtSignInHostFrom(visitor, world.hostBaseUrl, {
+      pathname: world.host.loginPath,
+      returnTo: "/account",
+    });
     await expect(visitor.getByTestId("password-login-submit")).toBeVisible();
     for (const id of [
       "profile-name",

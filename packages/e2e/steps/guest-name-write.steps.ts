@@ -1,3 +1,4 @@
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -11,6 +12,10 @@ import {
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
+import {
+  expectAtSignInHostFrom,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
 
 const SESSION = "__Host-ds_session";
@@ -164,7 +169,10 @@ Given(
       state.base,
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
-    const registering = captureResponse(state.owner, "/v1/auth/register");
+    const registering = captureResponse(
+      state.owner,
+      signInHostApiPath("/v1/auth/register"),
+    );
     const { code } = await registerOwnedCredentials(
       state.owner,
       state.base,
@@ -188,7 +196,10 @@ Given(
       (await registration.response.headerValue("set-cookie")) ?? "",
       state,
     );
-    const verifying = captureResponse(state.owner, "/v1/auth/verify");
+    const verifying = captureResponse(
+      state.owner,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       state.owner.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -201,6 +212,7 @@ Given(
         verified.body,
         state,
         code,
+        world.hostBaseUrl,
       ),
     ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
     await state.owner.waitForURL(
@@ -232,9 +244,11 @@ Given(
       (await guestContext.cookies()).length,
       "fresh cookie-free guest",
     ).toBe(0);
-    await state.guest.goto(`${state.base}/login`, { waitUntil: "load" });
+    // #3172: `/login` leaves for the sign-in host; the guest's private writes
+    // are attempted from an ordinary storefront page that offers «Войти».
+    await state.guest.goto(`${state.base}/`, { waitUntil: "load" });
     await expect(
-      state.guest.getByTestId("password-login-submit"),
+      state.guest.getByRole("link", { name: "Войти" }).first(),
     ).toBeVisible();
     await assertGuest(state);
   },
@@ -294,12 +308,14 @@ Then(
   async ({ page, world }) => {
     const state = journey(page);
     await assertGuest(state);
+    // #3172 — a guest on /account is bounced through the storefront's own login
+    // entry (carrying the account return path) to the sign-in host's door.
+    watchStorefrontEntries(state.guest!, state.base);
     await state.guest!.goto(`${state.base}/account`, { waitUntil: "load" });
-    await state.guest!.waitForURL(
-      (url) =>
-        url.origin === new URL(state.base).origin &&
-        url.pathname === world.host.loginPath,
-    );
+    await expectAtSignInHostFrom(state.guest!, state.base, {
+      pathname: world.host.loginPath,
+      returnTo: "/account",
+    });
     await expect(
       state.guest!.getByTestId("password-login-submit"),
     ).toBeVisible();
@@ -348,7 +364,7 @@ After("@guest-name-write", async ({ page, $testInfo }) => {
           context.pages().find((candidate) => !candidate.isClosed()) ??
           (await context.newPage());
         if (new URL(active.url()).origin !== new URL(state.base).origin)
-          await active.goto(`${state.base}/login`);
+          await active.goto(`${state.base}/`);
         const result = await active.evaluate(async () => {
           const logout = await fetch("/v1/auth/logout", {
             method: "POST",

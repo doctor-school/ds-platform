@@ -29,6 +29,14 @@ export type SignInHostEnv = Pick<
   | "SIGN_IN_RECORD_KEY"
 >;
 
+/** 003 EARS-61/62 — a storefront's one registered `redirect_uri`: `/auth/callback` on its own origin. */
+export function storefrontCallbackUrl(
+  settings: SignInHostSettings,
+  client: SignInHostStorefront,
+): string {
+  return new URL("/auth/callback", settings.loginUrls[client]).href;
+}
+
 /**
  * `null` — the module is disabled and every sign-in-host route answers 404 —
  * unless every key is set: a partial block never runs half a sign-in host (a

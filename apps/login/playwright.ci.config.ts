@@ -30,7 +30,7 @@ export default defineConfig({
       reuseExistingServer: false,
     },
     {
-      command: `pnpm --filter @ds/login exec next start -p ${PORT} --keepAliveTimeout 125000`,
+      command: `pnpm --filter @ds/login exec next start -H 127.0.0.1 -p ${PORT} --keepAliveTimeout 125000`,
       url: `${BASE}/icon.svg`,
       env: { API_PROXY_TARGET: API },
       timeout: 120_000,

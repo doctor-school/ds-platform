@@ -24,6 +24,11 @@ export const LIVE_STAND =
   !!process.env.IDP_ISSUER &&
   !!process.env.MAILPIT_URL;
 
+/** The storefront every journey here starts and lands on. */
+const STOREFRONT_ORIGIN = new URL(
+  process.env.E2E_PORTAL_URL ?? "http://localhost:3001",
+).origin;
+
 /** A password satisfying the `@ds/schemas` creation baseline (#147). */
 const livePassword = (): string => `Prt-${Date.now()}-aA1!`;
 
@@ -39,8 +44,9 @@ const captchaReady = new WeakSet<BrowserContext>();
  * SmartCaptcha never yields a token headless, so the context gets the
  * `@ds/e2e/captcha-stub` stand-in (nothing on a local stand booted with bot
  * protection off). The stub must serve `captcha.js` before the page loads it,
- * so the form is reloaded after installing it — same URL, so a carried
- * `returnTo` survives. The `load` + `networkidle` wait is the hydration wait of
+ * so the form is reloaded after installing it — the sign-in host's register
+ * door (#3172: the storefront `/register` is a 303 entry), same URL, so the
+ * IdP's auth request — and the return path its transaction holds — survives. The `load` + `networkidle` wait is the hydration wait of
  * `@ds/e2e/sign-in`: a click before the client chunks run submits the form
  * natively (`POST /register`) and the walk never reaches `/verify`.
  */
@@ -54,13 +60,18 @@ export async function readyRegisterForm(page: Page): Promise<void> {
     );
     captchaReady.add(context);
   }
+  // The IdP lands on the host's `/login`; the rendered registration door
+  // settles the address on its own `/register` (003 EARS-71), so the reload
+  // re-enters that door, not the spent intent's `/login`.
+  await page.waitForURL((url) => new URL(url).pathname === "/register");
   await page.reload({ waitUntil: "load" });
   await page.waitForLoadState("networkidle");
 }
 
 /**
- * Fill + submit the register form the browser is CURRENTLY on (so any `returnTo`
- * already carried in the URL rides through to `/verify` and the post-auth resume),
+ * Fill + submit the register form the browser is CURRENTLY on (the sign-in
+ * host's, whose transaction already holds any `returnTo` the storefront entry
+ * carried, so it rides through `/verify` to the post-auth resume),
  * read the real verify OTP from Mailpit, and enter it. Entering the final digit
  * auto-submits and auto-logs-in (#175). Returns the provisioned email.
  *
@@ -110,9 +121,14 @@ export async function provisionLoggedInDoctor(page: Page): Promise<string> {
  * this resolves.
  */
 export async function waitForAuthenticatedLanding(page: Page): Promise<void> {
+  // Back on the storefront (#3172: the forms live on the sign-in host).
   await page.waitForURL((url) => {
-    const path = new URL(url).pathname;
-    return path === "/" || path === "/webinars" || path.startsWith("/account");
+    const landed = new URL(url);
+    const path = landed.pathname;
+    return (
+      landed.origin === STOREFRONT_ORIGIN &&
+      (path === "/" || path === "/webinars" || path.startsWith("/account"))
+    );
   });
 }
 

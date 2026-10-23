@@ -93,6 +93,33 @@ export const AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET = "auth:sending";
 export const AUTH_SENDING_DOOR_PER_IP_15MIN = 60;
 
 /**
+ * 003 EARS-62, ADR-0015 §4 req. 9 — the storefront callback's redeem keys its
+ * per-IP window under its own bucket, on the client IP the storefront server
+ * forwards (as the BFF rewrites do). It takes no identifier and runs once per
+ * sign-in and once per minted silent check.
+ */
+export const STOREFRONT_REDEEM_RATE_LIMIT_SCOPE = "oidc:redeem";
+
+/**
+ * The redeem's ceiling: 1200 per 15 minutes, the NAT sizing ADR-0015 §4 step 4
+ * sets for the silent path (`oidc:silent-check`) — tens of browsers behind one
+ * clinic or hospital address each mint a session on both storefronts after
+ * every silent check; a code is useless without the server-held verifier and
+ * the internal credential, so the bound is against flooding, not guessing.
+ */
+export const STOREFRONT_REDEEM_PER_IP_15MIN = 1200;
+
+/**
+ * 003 EARS-61, ADR-0015 §4 req. 9 — the storefront entries' transaction
+ * creation (sign-in, registration, reset, and the silent-check start) keys its
+ * per-IP window under its own bucket, on the forwarded client IP. It takes no
+ * identifier; the ceiling is the redeem's NAT sizing, since every redeem
+ * follows one transaction.
+ */
+export const STOREFRONT_ENTRY_RATE_LIMIT_SCOPE = "oidc:entry";
+export const STOREFRONT_ENTRY_PER_IP_15MIN = 1200;
+
+/**
  * EARS-13 defaults (ADR-0001 §7): per-user 10/15 min, per-IP 20/15 min (failed
  * verifications, #2684), sending-door per-IP 60/15 min (#2684), per-ASN
  * 100/h. The per-user ceiling was raised 5 → 10 (#222) so a legitimate
@@ -109,6 +136,8 @@ export const DEFAULT_RATE_LIMIT_THRESHOLDS: RateLimitThresholds = {
   scopedPerIpPer15Min: {
     [CONGRESS_SIGN_UP_RATE_LIMIT_SCOPE]: CONGRESS_SIGN_UP_PER_IP_15MIN,
     [AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET]: AUTH_SENDING_DOOR_PER_IP_15MIN,
+    [STOREFRONT_REDEEM_RATE_LIMIT_SCOPE]: STOREFRONT_REDEEM_PER_IP_15MIN,
+    [STOREFRONT_ENTRY_RATE_LIMIT_SCOPE]: STOREFRONT_ENTRY_PER_IP_15MIN,
   },
 };
 
@@ -269,4 +298,5 @@ export function resolveRateLimitThresholds(
  * requests or failed verifications. Its own per-address bucket still bounds
  * how fast one origin can probe references.
  */
-export const LOGIN_HANDOFF_OWNERSHIP_RATE_LIMIT_SCOPE = "auth:handoff-ownership";
+export const LOGIN_HANDOFF_OWNERSHIP_RATE_LIMIT_SCOPE =
+  "auth:handoff-ownership";

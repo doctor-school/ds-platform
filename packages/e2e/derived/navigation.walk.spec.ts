@@ -10,7 +10,8 @@ import {
 } from "../hosts.js";
 import { itemsFor, landingEvidence } from "../navigation-model.js";
 import type { NavigationItem } from "../navigation-model.js";
-import { signInGoldenDoctor } from "../lib/sign-in.js";
+import { signInGoldenDoctor, signInOnHostForm } from "../lib/sign-in.js";
+import { isSignInHostForm } from "../lib/sign-in-host-api.js";
 
 /**
  * #2805 — the signed-in doctor's cookies per host, for THIS worker process only
@@ -106,7 +107,7 @@ for (const hostId of HOST_IDS) {
         expect(response!.status(), `status of ${item.href}`).toBe(200);
 
         const landed = new URL(page.url()).pathname;
-        if (landed === host.loginPath && item.href !== host.loginPath) {
+        if (isSignInHostForm(page.url()) && item.href !== host.loginPath) {
           // The guest was sent to sign in. §6.3: assert the login surface really
           // rendered AND that the original destination survived as `returnTo`.
           await expect(
@@ -117,9 +118,18 @@ for (const hostId of HOST_IDS) {
             }),
             `the h1 of ${host.loginPath} after the ${item.href} redirect`,
           ).toBeVisible();
+          // #3172 — the original destination lives in the storefront's
+          // transaction now, not in the form URL: signing in on this form must
+          // land back on exactly item.href.
+          await signInOnHostForm(
+            page,
+            host,
+            WALK_DOCTOR,
+            new URL(baseUrlFor(host)).origin,
+          );
           expect(
-            new URL(page.url()).searchParams.get("returnTo"),
-            `returnTo after the ${item.href} redirect`,
+            new URL(page.url()).pathname,
+            `the landing after signing in from the ${item.href} redirect`,
           ).toBe(item.href);
           return;
         }

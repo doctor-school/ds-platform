@@ -1,3 +1,8 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import {
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -85,7 +90,7 @@ async function passwordSignIn(
   await input(page.locator('input[autocomplete="username"]'), email);
   await input(page.locator('input[autocomplete="current-password"]'), password);
   return gatedPasswordLogin(page, async () => {
-    const pending = post(page, "/v1/auth/login");
+    const pending = post(page, signInHostApiPath("/v1/auth/login"));
     await page.getByTestId("password-login-submit").click();
     return pending;
   });
@@ -148,7 +153,7 @@ Given(
       world.hostBaseUrl,
       2657,
     );
-    const verified = post(first, "/v1/auth/verify");
+    const verified = post(first, signInHostApiPath("/v1/auth/verify"));
     await input(first.locator('input[autocomplete="one-time-code"]'), code);
     expect((await verified).ok(), "delivered registration code accepted").toBe(
       true,
@@ -196,7 +201,7 @@ When(
       mailbox,
       state.email,
     );
-    const requested = post(reset, "/v1/auth/password/reset");
+    const requested = post(reset, signInHostApiPath("/v1/auth/password/reset"));
     await reset.getByTestId("reset-request-submit").click();
     expect((await requested).status(), "reset request accepted").toBe(200);
     const code = await fetchRecoveryCode(
@@ -225,7 +230,7 @@ When(
     );
     const completed = captureResponse(
       reset,
-      "/v1/auth/password/reset/complete",
+      signInHostApiPath("/v1/auth/password/reset/complete"),
     );
     await reset.locator('form button[type="submit"]').click();
     state.completion = await completed;
@@ -247,7 +252,9 @@ Then(
     await expect
       .poll(() => reset.getByTestId("reset-error").ariaSnapshot())
       .toBe("- alert: Код не подошёл или пароль отклонён.");
-    expect(new URL(reset.url()).pathname).toBe("/reset");
+    // #3172 — the reset form is the sign-in host's door (rendered on the
+    // host's `/login` behind the IdP), proven by what renders, not the path.
+    expect(isSignInHostForm(reset.url())).toBe(true);
     await expect(
       reset.locator('input[autocomplete="one-time-code"]'),
     ).toBeVisible();
@@ -279,7 +286,7 @@ Then(
     const { response, body } = state.completion!;
     expect(response.status(), "reset completion accepted").toBe(200);
     expect(
-      body === JSON.stringify({ status: "reset_completed" }),
+      storefrontCallbackAcknowledgement(body, world.hostBaseUrl),
       "token-free reset acknowledgement",
     ).toBe(true);
     await secureSession(
@@ -435,7 +442,10 @@ When(
       mailbox,
       state.email,
     );
-    const requested = post(reset, "/v1/auth/login/otp/request");
+    const requested = post(
+      reset,
+      signInHostApiPath("/v1/auth/login/otp/request"),
+    );
     await reset.getByTestId("otp-send").click();
     expect((await requested).status(), "login code requested").toBe(200);
     const code = await fetchRecoveryCode(
@@ -445,7 +455,10 @@ When(
       before,
       "login",
     );
-    const completed = captureResponse(reset, "/v1/auth/login/otp");
+    const completed = captureResponse(
+      reset,
+      signInHostApiPath("/v1/auth/login/otp"),
+    );
     await input(reset.locator('input[autocomplete="one-time-code"]'), code);
     state.completion = await completed;
   },
@@ -457,12 +470,13 @@ Then(
     const state = recovery(page);
     const { response, body } = state.completion!;
     expect(response.status(), "login code accepted").toBe(200);
+    // 003 EARS-5 (amended): the host answers with the storefront callback —
+    // its `code` is the IdP's encrypted single-use authorization code (a JWE,
+    // so JWT-shaped), never a token; the exact shape is the token-free proof.
     expect(
-      /access[_-]?token|refresh[_-]?token|eyJ[\w-]+\.[\w-]+\.[\w-]+/i.test(
-        body,
-      ),
+      storefrontCallbackAcknowledgement(body, world.hostBaseUrl),
       "token-free login acknowledgement",
-    ).toBe(false);
+    ).toBe(true);
     await secureSession(
       state.recovered!,
       response,

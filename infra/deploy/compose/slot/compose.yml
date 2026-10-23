@@ -70,7 +70,8 @@ services:
       - /etc/ds-platform/stage.env
       - /etc/ds-platform/slots/${SLOT:?}.env
       # Root-only, tool-written before `up -d` (`renderSlotSignInEnv`): the slot's
-      # storefront client ids + SIGN_IN_RECORD_KEY — the sign-in host's secret half.
+      # storefront client ids + private_key_jwt keys, SIGN_IN_RECORD_KEY and
+      # INTERNAL_API_TOKEN — the sign-in host's secret half. The api ALONE mounts it.
       - /etc/ds-platform/slots/${SLOT:?}.sign-in.env
     environment:
       # Assembled here, NOT written into the per-slot env file: that would copy
@@ -132,8 +133,16 @@ services:
     env_file:
       - /etc/ds-platform/stage.env
       - /etc/ds-platform/slots/${SLOT:?}.env
+      # Root-only, ONLY INTERNAL_API_TOKEN (003 EARS-62/71; `renderSlotInternalEnv`,
+      # the api's own value from the same converge): the bearer this server's
+      # callback presents to the api's `/v1/internal/*` routes. Never the sign-in
+      # env — a storefront server holds no client key and no record key.
+      - /etc/ds-platform/slots/${SLOT:?}.internal.env
     environment:
       PORT: "3001"
+      # The api on this slot's own compose network — never a public host: the
+      # internal prefix has no route on any edge (ADR-0015 §4 req. 2).
+      INTERNAL_API_URL: http://api:3000
       # Staging-contour only (#2981): serves /__contour/app-paths-manifest.json, the
       # route list the IMAGE mounts, to the derived route walk. Every image carries
       # the manifest; no production compose sets this, so prod answers 404 there.
@@ -167,8 +176,11 @@ services:
     env_file:
       - /etc/ds-platform/stage.env
       - /etc/ds-platform/slots/${SLOT:?}.env
+      # INTERNAL_API_TOKEN only, as for the portal above.
+      - /etc/ds-platform/slots/${SLOT:?}.internal.env
     environment:
       PORT: "3004"
+      INTERNAL_API_URL: http://api:3000
       # Staging-contour only — see the portal block above.
       CONTOUR_MANIFEST: "1"
     depends_on:

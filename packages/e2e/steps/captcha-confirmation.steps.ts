@@ -1,3 +1,4 @@
+import { isSignInHostForm, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -23,6 +24,7 @@ import {
   inputSecret,
   registerOwnedCredentials,
   registrationEvidence,
+  storefrontCallbackAcknowledgement,
   verificationEvidence,
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
@@ -81,10 +83,10 @@ function sms(v: Visitor) {
 }
 function requestPath(v: Visitor) {
   return v.kind === "verification"
-    ? "/v1/auth/verify/resend"
+    ? signInHostApiPath("/v1/auth/verify/resend")
     : reset(v)
-      ? "/v1/auth/password/reset"
-      : "/v1/auth/login/otp/request";
+      ? signInHostApiPath("/v1/auth/password/reset")
+      : signInHostApiPath("/v1/auth/login/otp/request");
 }
 function acknowledgement(v: Visitor, body: string) {
   const status =
@@ -97,10 +99,10 @@ function acknowledgement(v: Visitor, body: string) {
 }
 function confirmationPath(v: Visitor) {
   return v.kind === "verification"
-    ? "/v1/auth/verify"
+    ? signInHostApiPath("/v1/auth/verify")
     : reset(v)
-      ? "/v1/auth/password/reset/complete"
-      : "/v1/auth/login/otp";
+      ? signInHostApiPath("/v1/auth/password/reset/complete")
+      : signInHostApiPath("/v1/auth/login/otp");
 }
 function resendId(v: Visitor) {
   return v.kind === "verification"
@@ -387,7 +389,7 @@ Given(
         expect(
           registrationEvidence(
             registered.response.request().postData() ?? "",
-            await registered.response.text(),
+            registered.body,
             v,
           ),
         ).toEqual({
@@ -398,7 +400,10 @@ Given(
         v.code = registered.code;
         expect(v.tokens.length, "registration emitted a check").toBe(1);
         if (kind !== "verification") {
-          const pending = captureResponse(v.page, "/v1/auth/verify");
+          const pending = captureResponse(
+            v.page,
+            signInHostApiPath("/v1/auth/verify"),
+          );
           await inputSecret(
             v.page.locator('input[autocomplete="one-time-code"]'),
             v.code,
@@ -411,10 +416,20 @@ Given(
               accepted.body,
               v,
               v.code,
+              world.hostBaseUrl,
             ),
           ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
-          await v.page.waitForURL((url) => url.pathname === "/account");
+          await v.page.waitForURL(
+            (url) =>
+              url.origin === new URL(world.hostBaseUrl).origin &&
+              url.pathname === "/account",
+          );
           await v.page.waitForLoadState("networkidle");
+          await assertSecureSession(
+            v.page,
+            accepted.response,
+            world.hostBaseUrl,
+          );
           if (sms(v)) {
             const sink = smsSinkUrl();
             if (!sink)
@@ -427,10 +442,14 @@ Given(
         } else if (purpose === "resend") {
           // Install only for the owning code-screen countdown, after registration.
           await controlledCountdown(v);
-          await open(
-            v.page,
-            `${world.hostBaseUrl}/verify?email=${encodeURIComponent(v.email)}&returnTo=%2Faccount`,
-          );
+          // #3172 — the code step is the sign-in host's, where registration
+          // left the page (`/verify?authRequest=…&email=…`; the `/account`
+          // return target rides the transaction): re-open that same step.
+          const step = new URL(v.page.url());
+          expect(isSignInHostForm(step)).toBe(true);
+          expect(step.pathname).toBe("/verify");
+          expect(step.searchParams.get("email")).toBe(v.email);
+          await open(v.page, step.toString());
         }
         v.confirmationChecks = v.tokens.length;
       }
@@ -454,20 +473,24 @@ When(
         await v.page.locator('form button[type="submit"]').click();
       }
       const accepted = await pending;
-      const expected =
-        v.kind === "verification"
-          ? "verified"
-          : reset(v)
-            ? "reset_completed"
-            : "authenticated";
       v.confirmation = {
         status: accepted.response.status(),
-        body: accepted.body === JSON.stringify({ status: expected }),
+        // 003 EARS-5 (amended): every credential step on the host answers
+        // with the storefront's own callback (verified / reset / signed in
+        // are proven at the landing below).
+        body: storefrontCallbackAcknowledgement(
+          accepted.body,
+          world.hostBaseUrl,
+        ),
         tokenAbsent: !(
           "x-smartcaptcha-token" in accepted.response.request().headers()
         ),
       };
-      await v.page.waitForURL((url) => url.pathname === "/account");
+      await v.page.waitForURL(
+        (url) =>
+          url.origin === new URL(world.hostBaseUrl).origin &&
+          url.pathname === "/account",
+      );
       await v.page.waitForLoadState("networkidle");
       await assertSecureSession(v.page, accepted.response, world.hostBaseUrl);
       const identity = await v.page.evaluate(async (email) => {

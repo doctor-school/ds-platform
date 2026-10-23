@@ -72,7 +72,10 @@ services:
     # beside this file so pull + up + rollback all reference `ds-api:<sha>`.
     image: ds-api:${DEPLOY_SHA:?}
     restart: unless-stopped
-    env_file: [/etc/ds-platform/api.env] # DATABASE_URL/REDIS_URL → data-prod PRIVATE IP
+    # api-sign-in.env: root-only, tool-written by the pre-swap IdP converge
+    # (provision.sh step 3.bis.2) — the storefront clients' private_key_jwt keys and
+    # INTERNAL_API_TOKEN (003 EARS-62/71). The api ALONE loads it.
+    env_file: [/etc/ds-platform/api.env, /etc/ds-platform/api-sign-in.env] # DATABASE_URL/REDIS_URL → data-prod PRIVATE IP
     # PORT (default 3000) comes from api.env; binds 0.0.0.0 (apps/api/src/main.ts).
     environment:
       # The deployed commit SHA — surfaced at GET /v1/health (DSO-127) so an
@@ -83,7 +86,10 @@ services:
       # stale or direct visit returns to. The client ids are the ones the pre-swap
       # IdP converge read back (`pnpm deploy:prod` writes them into `.env`); the
       # SIGN_IN_RECORD_KEY secret is owner-placed in api.env. Any one unset ⇒ the
-      # module is disabled (404).
+      # module is disabled (404). The storefront clients' private_key_jwt keys and
+      # INTERNAL_API_TOKEN (003 EARS-62) are written into api-sign-in.env by that
+      # same converge (provision.sh step 3.bis.2) — never into `.env` or api.env,
+      # never printed.
       IDP_SIGN_IN_BASE_URI: https://login.doctor.school
       SIGN_IN_ACADEMY_LOGIN_URL: https://academy.doctor.school/login
       SIGN_IN_DOCTOR_LOGIN_URL: https://new.doctor.school/login
@@ -117,7 +123,12 @@ services:
     # (via env_file) stays — harmless.
     image: ds-portal:${DEPLOY_SHA:?}
     restart: unless-stopped
-    env_file: [/etc/ds-platform/api.env] # API_PROXY_TARGET=http://api:3000 (same-origin BFF proxy)
+    # internal.env: root-only, INTERNAL_API_TOKEN ONLY (the api's value, written by
+    # the same converge) — never api-sign-in.env, so this server holds no client
+    # key. It still loads the whole api.env for its other runtime variables: that
+    # pre-existing over-exposure (every api.env secret reaches the storefront
+    # servers) is tracked as #3258.
+    env_file: [/etc/ds-platform/api.env, /etc/ds-platform/internal.env] # API_PROXY_TARGET=http://api:3000 (same-origin BFF proxy)
     # Dockerfile bakes PORT=3001 + HOSTNAME=0.0.0.0 (Next standalone).
     environment:
       # Pin explicitly: the shared api.env env_file must never leak an api PORT
@@ -125,6 +136,11 @@ services:
       # overrode the image's ENV PORT=3001, the portal bound 3000, and Caddy's
       # portal:3001 upstream broke). compose `environment:` outranks env_file.
       PORT: "3001"
+      # The api's internal routes (003 EARS-62/71): this server's callback calls
+      # `/v1/internal/*` on the compose network, never through a public host (no
+      # edge routes the prefix, ADR-0015 §4 req. 2), with the INTERNAL_API_TOKEN
+      # bearer it reads from internal.env.
+      INTERNAL_API_URL: http://api:3000
       # Pin OFF (#2981): the `/__contour/app-paths-manifest.json` route answers only
       # when the runtime CONTOUR_MANIFEST is exactly "1" (slot compose). Pinned here
       # so a stray line in the shared api.env env_file can never expose it in prod.
@@ -205,12 +221,16 @@ services:
     # portal (apps/doctor/next.config.ts).
     image: ds-doctor:${DEPLOY_SHA:?}
     restart: unless-stopped
-    env_file: [/etc/ds-platform/api.env] # API_PROXY_TARGET=http://api:3000 (same-origin BFF proxy)
+    # internal.env (INTERNAL_API_TOKEN only), never api-sign-in.env — as on the
+    # portal; the whole-api.env load is the pre-existing exposure tracked as #3258.
+    env_file: [/etc/ds-platform/api.env, /etc/ds-platform/internal.env] # API_PROXY_TARGET=http://api:3000 (same-origin BFF proxy)
     environment:
       # Pin explicitly (portal precedent, DSO-100): the shared api.env env_file
       # must never leak an api PORT value into a Next app. compose `environment:`
       # outranks env_file. 3004 matches the Dockerfile ENV + the Caddy upstream.
       PORT: "3004"
+      # Internal API base + internal.env INTERNAL_API_TOKEN, as on the portal.
+      INTERNAL_API_URL: http://api:3000
       # Pin OFF, as on the portal (#2981): the contour manifest route stays 404 in prod.
       CONTOUR_MANIFEST: "0"
       # SmartCaptcha CLIENT key — RUNTIME env, same `.env` source as the portal

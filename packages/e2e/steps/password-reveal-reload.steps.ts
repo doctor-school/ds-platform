@@ -13,6 +13,11 @@ import {
   registrationUrl,
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
+import { isSignInHostForm } from "../lib/sign-in-host-api.js";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
 
 interface RevealEffects {
@@ -98,6 +103,7 @@ Given(
       ...(httpCredentials ? { httpCredentials } : {}),
     });
     const owned = await context.newPage();
+    watchStorefrontEntries(owned, world.hostBaseUrl);
     const state: RevealReload = {
       context,
       page: owned,
@@ -110,6 +116,11 @@ Given(
     await owned.goto(registrationUrl(world.hostBaseUrl, "/account"), {
       waitUntil: "load",
     });
+    // #3172 — the IdP lands on the host's `/login`; the rendered registration
+    // door settles the address on its own `/register` (003 EARS-71), which is
+    // what the later real reload re-enters.
+    expect(isSignInHostForm(owned.url())).toBe(true);
+    await owned.waitForURL((url) => new URL(url).pathname === "/register");
     await owned.waitForLoadState("networkidle");
     await expect(field(state)).toBeVisible();
     await expect(toggle(state)).toBeEnabled();
@@ -364,16 +375,22 @@ When(
 
 Then(
   "the new registration document masks the password and restores the unpressed show action without private access",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const state = visitor(page);
     expect(
       new URL(state.page.url()).pathname === "/register",
       "same registration door",
     ).toBe(true);
+    // #3172 — the door is the sign-in host's, in the transaction the
+    // storefront entry opened with the account return target.
     expect(
-      new URL(state.page.url()).searchParams.get("returnTo") === "/account",
-      "account return target retained",
+      isSignInHostForm(state.page.url()),
+      "still the sign-in host's form",
     ).toBe(true);
+    expectEnteredThrough(state.page, world.hostBaseUrl, {
+      pathname: "/register",
+      returnTo: "/account",
+    });
     await assertToggle(state, false);
     await assertNoPrivateRegistrationAccess(state.page, "", state);
   },

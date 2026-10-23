@@ -521,13 +521,17 @@ export class AuthService {
     code: string,
     registration: VerifyRegistration | undefined,
     accept: SessionAcceptor<T>,
+    warm?: { keepPasswordOf: string },
   ): Promise<T | null> {
     const issued = issuedCode(code);
     if (issued === null) return null;
+    // 003 EARS-41: the in-tab password (classic warm step) or the sign-in
+    // host's form-state proof that this browser created the account (host warm
+    // step); neither => the cold step.
     const result = await this.idp.submitEmailCode(
       identifier,
       issued,
-      registration ? { password: registration.password } : undefined,
+      registration ? { password: registration.password } : warm,
     );
     if (!result) return null;
     let revokedAt: Date | null = null;
@@ -798,6 +802,18 @@ export class AuthService {
    * identical response with no duplicate account and no consent row.
    */
   async register(req: RegisterRequest): Promise<RegisterResponse> {
+    return (await this.registerAccount(req)).body;
+  }
+
+  /**
+   * {@link register}, also telling the server-side caller which account the
+   * registration CREATED (`null` when the address already existed, EARS-16/23)
+   * — the sign-in host records it as its warm-step proof (003 EARS-24/41). The
+   * HTTP response stays the one enumeration-safe body.
+   */
+  async registerAccount(
+    req: RegisterRequest,
+  ): Promise<{ body: RegisterResponse; created: string | null }> {
     // EARS-20: refuse before any IdP side-effect or PD row exists.
     if (req.consent.length === 0) {
       throw new BadRequestException(GENERIC_FAILURE);
@@ -942,7 +958,10 @@ export class AuthService {
       void this.dispatchReRegistrationCode(req.email);
     }
 
-    return { status: "pending_verification" };
+    return {
+      body: { status: "pending_verification" },
+      created: created.alreadyExisted ? null : created.sub,
+    };
   }
 
   /**
@@ -1261,12 +1280,14 @@ export class AuthService {
   async verifyStep<T>(
     req: VerifyRequest,
     accept: SessionAcceptor<T>,
+    warm?: { keepPasswordOf: string },
   ): Promise<T> {
     const accepted = await this.acceptEmailCode(
       req.email,
       req.code,
       req.registration,
       accept,
+      warm,
     );
     if (!accepted) {
       // #1112: the rejected code is observable on our side; the code itself

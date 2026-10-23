@@ -32,6 +32,15 @@ export interface SessionRecord {
   fingerprint: string;
   /** Epoch ms at which the session expires (drives the store TTL). */
   expiresAtMs: number;
+  /**
+   * 003 EARS-8 (amended) / EARS-62 — set only on a session the storefront
+   * callback minted: the storefront client it was redeemed for. Such a session
+   * is LINKED to the shared Zitadel session `zitadelSessionId` the sign-in-host
+   * record holds, and every revocation of that Zitadel session revokes it
+   * (EARS-10 one sign-out, EARS-64 replacement). Absent on a session the
+   * storefront's own forms minted, whose sign-out keeps its own behaviour.
+   */
+  oidcClient?: "academy" | "doctor" | undefined;
 }
 
 export interface SessionStore {
@@ -60,6 +69,12 @@ export interface SessionStore {
    * are untouched.
    */
   deleteBySub(sub: string): Promise<void>;
+  /**
+   * 003 EARS-10 / EARS-64: delete every LINKED session (`oidcClient` set) of
+   * the Zitadel session `zitadelSessionId`, on both storefronts, and return
+   * the deleted records (each owes its `SessionRevoked`). Idempotent.
+   */
+  deleteLinked(zitadelSessionId: string): Promise<SessionRecord[]>;
 }
 
 /** DI token the {@link SessionStore} port is bound to (fake or Redis adapter). */

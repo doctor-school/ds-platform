@@ -1,3 +1,8 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { handoffCommandWithoutReference, hostCommand,
+  isAuthCommandPath,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { installCaptchaStub } from "../lib/captcha-stub.js";
@@ -117,7 +122,10 @@ Given(
       account,
       "/account",
     );
-    const pending = captureResponse(state.page, "/v1/auth/verify");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       state.page.locator('input[autocomplete="one-time-code"]'),
       registered.code,
@@ -175,7 +183,7 @@ Given(
     );
     state.page.on("request", (request) => {
       const pathname = new URL(request.url()).pathname;
-      if (request.method() === "POST" && pathname.startsWith("/v1/auth/"))
+      if (request.method() === "POST" && isAuthCommandPath(pathname))
         state.authPosts.push(pathname);
     });
   },
@@ -196,7 +204,10 @@ When(
       mailpitFor(world.hostBaseUrl),
       state.email,
     );
-    const pending = captureResponse(state.page, "/v1/auth/login/otp/handoff");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/login/otp/handoff"),
+    );
     await state.page.goto(target.toString(), { waitUntil: "load" });
     state.redeemed = await pending;
   },
@@ -217,9 +228,10 @@ Then(
     try {
       const submitted = state.redeemed.response.request().postDataJSON();
       const answer = JSON.parse(state.redeemed.body);
+      // 003 EARS-44 (host): the body names no reference (the form state
+      // holds it); the answer still names the hand-off account.
       correct =
-        Object.keys(submitted).length === 1 &&
-        submitted.ref === state.reference &&
+        handoffCommandWithoutReference(submitted, state.reference) &&
         Object.keys(answer).length === 2 &&
         answer.status === "otp_sent" &&
         answer.identifier === state.email;
@@ -269,7 +281,9 @@ Then(
     await expect(
       state.page.locator('input[autocomplete="one-time-code"]'),
     ).toHaveValue("");
-    expect(state.authPosts).toEqual(["/v1/auth/login/otp/handoff"]);
+    expect(state.authPosts).toEqual([
+      signInHostApiPath("/v1/auth/login/otp/handoff"),
+    ]);
     await state.page.screenshot({
       path: test.info().outputPath("other-account-y-code.png"),
     });
@@ -278,10 +292,13 @@ Then(
 
 When(
   "the visitor enters Y's delivered hand-off code once in that Academy tab",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const state = stateFor(page);
     if (!state.code) throw new Error("Delivered Y sign-in code is missing");
-    const pending = captureResponse(state.page, "/v1/auth/login/otp");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/login/otp"),
+    );
     await inputSecret(
       state.page.locator('input[autocomplete="one-time-code"]'),
       state.code,
@@ -289,13 +306,13 @@ When(
     state.accepted = await pending;
     let correct = false;
     try {
-      const request = state.accepted.response.request().postDataJSON();
+      const request = hostCommand(state.accepted.response.request().postDataJSON());
       correct =
         Object.keys(request).length === 3 &&
         request.identifier === state.email &&
         request.channel === "email" &&
         request.code === state.code &&
-        state.accepted.body === '{"status":"authenticated"}';
+        storefrontCallbackAcknowledgement(state.accepted.body, world.hostBaseUrl);
     } catch {
       /* Discard code-bearing parser diagnostics. */
     }
@@ -387,14 +404,17 @@ Then(
     expect(
       state.authPosts,
       "one handoff redemption and one code submission",
-    ).toEqual(["/v1/auth/login/otp/handoff", "/v1/auth/login/otp"]);
+    ).toEqual([
+      signInHostApiPath("/v1/auth/login/otp/handoff"),
+      signInHostApiPath("/v1/auth/login/otp"),
+    ]);
     await state.page.screenshot({
       path: test.info().outputPath("other-account-y-profile.png"),
     });
   },
 );
 
-After("@handoff-other-account", async ({ page }) => {
+After("@handoff-other-account", async ({ page, world }) => {
   const state = states.get(page);
   if (!state) return;
   try {
@@ -407,6 +427,10 @@ After("@handoff-other-account", async ({ page }) => {
         )
       )
         continue;
+      // #3172: a page left on the sign-in host's form (a failed step) would
+      // send the relative cleanup to the host; the session is the storefront's.
+      if (new URL(owned.url()).origin !== new URL(world.hostBaseUrl).origin)
+        await owned.goto(world.hostBaseUrl, { waitUntil: "load" });
       const result = await owned.evaluate(async () => {
         const logout = await fetch("/v1/auth/logout", {
           method: "POST",

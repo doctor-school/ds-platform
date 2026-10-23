@@ -82,6 +82,9 @@ import {
   renderSlotDownEnv,
   renderSlotEnv,
   renderSlotSignInEnv,
+  renderSlotInternalEnv,
+  convergeSlotSignInEnv,
+  slotClientKeysOf,
   resetIdentitiesLogLine,
   resetLogLine,
   resolveDesiredRedirectSet,
@@ -99,6 +102,7 @@ import {
   slotDatabaseName,
   slotEnvPath,
   slotSignInEnvPath,
+  slotInternalEnvPath,
   slotHostnames,
   slotNetworkName,
   slotServiceSet,
@@ -213,22 +217,184 @@ test("3171: the slot env carries the sign-in host's non-secret half — its own 
   assert.doesNotMatch(env, /SIGN_IN_RECORD_KEY|IDP_(ACADEMY|DOCTOR)_CLIENT_ID/);
 });
 
+const KEYS = { academy: "a2V5LWE=", doctor: "a2V5LWQ=" };
+
 test("3171: the sign-in env is the slot's secret half — client ids plus a per-slot record key, kept across converges", () => {
   assert.equal(slotSignInEnvPath("pr-7"), "/etc/ds-platform/slots/pr-7.sign-in.env");
   const ids = { academy: "client-a", doctor: "client-d" };
-  const first = renderSlotSignInEnv({ slot: "pr-7", clientIds: ids, existing: "" });
+  const first = renderSlotSignInEnv({ slot: "pr-7", clientIds: ids, clientKeys: KEYS, existing: "" });
   assert.match(first, /^IDP_ACADEMY_CLIENT_ID=client-a$/m);
   assert.match(first, /^IDP_DOCTOR_CLIENT_ID=client-d$/m);
   const key = recordKeyIn(first);
   assert.equal(Buffer.from(key, "base64").length, 32, "a fresh 32-byte AES-256-GCM key");
   // A re-converge keeps the key (records sealed under it stay readable)...
-  assert.equal(renderSlotSignInEnv({ slot: "pr-7", clientIds: ids, existing: first }), first);
+  assert.equal(renderSlotSignInEnv({ slot: "pr-7", clientIds: ids, clientKeys: KEYS, existing: first }), first);
   // ...and another slot never shares it.
-  assert.notEqual(recordKeyIn(renderSlotSignInEnv({ slot: "pr-8", clientIds: ids, existing: "" })), key);
+  assert.notEqual(recordKeyIn(renderSlotSignInEnv({ slot: "pr-8", clientIds: ids, clientKeys: KEYS, existing: "" })), key);
   // A malformed stored key is replaced, never handed to an api that refuses to boot on it.
-  const replaced = renderSlotSignInEnv({ slot: "pr-7", clientIds: ids, existing: "SIGN_IN_RECORD_KEY=short\n" });
+  const replaced = renderSlotSignInEnv({ slot: "pr-7", clientIds: ids, clientKeys: KEYS, existing: "SIGN_IN_RECORD_KEY=short\n" });
   assert.equal(Buffer.from(recordKeyIn(replaced), "base64").length, 32);
-  assert.throws(() => renderSlotSignInEnv({ slot: "pr-7", clientIds: { academy: "x" }, existing: "" }), SlotError);
+  assert.throws(() => renderSlotSignInEnv({ slot: "pr-7", clientIds: { academy: "x" }, clientKeys: KEYS, existing: "" }), SlotError);
+  assert.throws(() => renderSlotSignInEnv({ slot: "pr-7", clientIds: ids, clientKeys: { academy: "k" }, existing: "" }), SlotError);
+});
+
+const tokenIn = (env) => /^INTERNAL_API_TOKEN=(.+)$/m.exec(env)?.[1] ?? "";
+
+test("3172: the sign-in env carries the client keys and a per-slot INTERNAL_API_TOKEN, kept across converges", () => {
+  const ids = { academy: "client-a", doctor: "client-d" };
+  const first = renderSlotSignInEnv({ slot: "pr-7", clientIds: ids, clientKeys: KEYS, existing: "" });
+  assert.match(first, /^IDP_ACADEMY_CLIENT_KEY=a2V5LWE=$/m);
+  assert.match(first, /^IDP_DOCTOR_CLIENT_KEY=a2V5LWQ=$/m);
+  const token = tokenIn(first);
+  assert.ok(Buffer.byteLength(token) >= 32, "the api refuses a token under 32 bytes");
+  // Kept across a re-converge (the storefront servers keep authenticating)...
+  assert.equal(tokenIn(renderSlotSignInEnv({ slot: "pr-7", clientIds: ids, clientKeys: KEYS, existing: first })), token);
+  // ...never shared with another slot, and a too-short stored token is replaced.
+  assert.notEqual(tokenIn(renderSlotSignInEnv({ slot: "pr-8", clientIds: ids, clientKeys: KEYS, existing: "" })), token);
+  const short = renderSlotSignInEnv({ slot: "pr-7", clientIds: ids, clientKeys: KEYS, existing: "INTERNAL_API_TOKEN=short\n" });
+  assert.ok(Buffer.byteLength(tokenIn(short)) >= 32);
+  assert.deepEqual(slotClientKeysOf(first), KEYS);
+});
+
+const KEY_MARKER = "PRIVATE-KEY-MATERIAL";
+const keyFile = (keyId, appId) =>
+  Buffer.from(
+    JSON.stringify({ type: "application", keyId, key: `${KEY_MARKER}-${keyId}`, appId, clientId: `${appId}@ds` }),
+  ).toString("base64");
+/** A fake IdP client over the two key routes: ListAppKeys answers `listed[appId]`. */
+function fakeKeyIdp({ listed = {}, addFails = false } = {}) {
+  const calls = [];
+  return {
+    calls,
+    async request(method, path, body) {
+      calls.push(`${method} ${path}`);
+      const match = /^\/management\/v1\/projects\/p1\/apps\/([^/]+)\/keys(\/_search)?$/.exec(path);
+      if (!match || method !== "POST") throw new Error(`unrouted ${method} ${path}`);
+      if (match[2]) return { result: (listed[match[1]] ?? []).map((id) => ({ id })) };
+      assert.deepEqual(body, { type: "KEY_TYPE_JSON" });
+      if (addFails) throw new Error(`${method} ${path} answered 500`);
+      return { id: `new-${match[1]}`, keyDetails: keyFile(`new-${match[1]}`, match[1]) };
+    },
+  };
+}
+const CONVERGED = {
+  projectId: "p1",
+  clientIds: { "ds-storefront-academy-pr-7": "client-a", "ds-storefront-doctor-pr-7": "client-d" },
+  appIds: { "ds-storefront-academy-pr-7": "app-a", "ds-storefront-doctor-pr-7": "app-d" },
+};
+const lineOf = (env, name) => new RegExp(`^${name}=(.*)$`, "m").exec(env)?.[1];
+
+test("3172: the slot converge mints absent client keys straight into the written file and logs only key ids", async () => {
+  const written = [];
+  const internal = [];
+  const lines = [];
+  await convergeSlotSignInEnv({
+    client: fakeKeyIdp(),
+    result: CONVERGED,
+    slot: "pr-7",
+    readExisting: async () => "",
+    write: async (contents) => written.push(contents),
+    writeInternal: async (contents) => internal.push(contents),
+    log: (line) => lines.push(line),
+  });
+  assert.equal(written.length, 1);
+  assert.equal(internal.length, 1);
+  // The storefront servers' file carries the api's token and nothing else.
+  assert.equal(lineOf(internal[0], "INTERNAL_API_TOKEN"), tokenIn(written[0]));
+  assert.deepEqual(
+    internal[0].split(/\r?\n/).filter((line) => line && !line.startsWith("#")),
+    [`INTERNAL_API_TOKEN=${tokenIn(written[0])}`],
+  );
+  assert.equal(lineOf(written[0], "IDP_ACADEMY_CLIENT_KEY"), keyFile("new-app-a", "app-a"));
+  assert.equal(lineOf(written[0], "IDP_DOCTOR_CLIENT_KEY"), keyFile("new-app-d", "app-d"));
+  const log = lines.join("\n");
+  assert.ok(!log.includes(KEY_MARKER), "no key material in the log");
+  assert.ok(!log.includes(keyFile("new-app-a", "app-a")));
+  assert.ok(!log.includes(tokenIn(written[0])), "no token in the log");
+  assert.match(log, /key new-app-a minted/);
+  assert.match(log, /internal api token minted/);
+});
+
+test("3172: the slot converge keeps a stored key still listed on its app and replaces a revoked one", async () => {
+  const existing = [
+    `IDP_ACADEMY_CLIENT_KEY=${keyFile("old-a", "app-a")}`,
+    `IDP_DOCTOR_CLIENT_KEY=${keyFile("old-d", "app-d")}`,
+    `INTERNAL_API_TOKEN=${"t".repeat(44)}`,
+    "",
+  ].join("\n");
+  const client = fakeKeyIdp({ listed: { "app-a": ["x", "old-a"], "app-d": [] } });
+  const written = [];
+  const internal = [];
+  const lines = [];
+  await convergeSlotSignInEnv({
+    client,
+    result: CONVERGED,
+    slot: "pr-7",
+    readExisting: async () => existing,
+    write: async (contents) => written.push(contents),
+    writeInternal: async (contents) => internal.push(contents),
+    log: (line) => lines.push(line),
+  });
+  assert.equal(lineOf(internal[0], "INTERNAL_API_TOKEN"), "t".repeat(44), "the kept token is the one sliced out");
+  assert.ok(!client.calls.includes("POST /management/v1/projects/p1/apps/app-a/keys"), "a kept key is not re-minted");
+  assert.equal(lineOf(written[0], "IDP_ACADEMY_CLIENT_KEY"), keyFile("old-a", "app-a"));
+  assert.equal(lineOf(written[0], "IDP_DOCTOR_CLIENT_KEY"), keyFile("new-app-d", "app-d"));
+  assert.equal(tokenIn(written[0]), "t".repeat(44));
+  assert.ok(!lines.join("\n").includes(KEY_MARKER));
+  assert.match(lines.join("\n"), /key old-a kept/);
+  assert.match(lines.join("\n"), /internal api token kept/);
+});
+
+test("3172: a client key the IdP cannot produce refuses the slot converge before anything is written", async () => {
+  const written = [];
+  const attempt = (client, result) =>
+    convergeSlotSignInEnv({
+      client,
+      result,
+      slot: "pr-7",
+      readExisting: async () => "",
+      write: async (contents) => written.push(contents),
+      writeInternal: async (contents) => written.push(contents),
+    });
+  await assert.rejects(attempt(fakeKeyIdp({ addFails: true }), CONVERGED), SlotError);
+  await assert.rejects(attempt(fakeKeyIdp(), { ...CONVERGED, appIds: {} }), SlotError);
+  assert.deepEqual(written, []);
+});
+
+test("3172: the internal env is the token-only slice of the sign-in env; no key ever reaches it", () => {
+  assert.equal(slotInternalEnvPath("pr-7"), "/etc/ds-platform/slots/pr-7.internal.env");
+  const signIn = renderSlotSignInEnv({
+    slot: "pr-7",
+    clientIds: { academy: "client-academy-7", doctor: "client-doctor-7" },
+    clientKeys: KEYS,
+    existing: "",
+  });
+  const internal = renderSlotInternalEnv({ slot: "pr-7", signInEnv: signIn });
+  assert.equal(lineOf(internal, "INTERNAL_API_TOKEN"), tokenIn(signIn));
+  for (const name of ["IDP_ACADEMY_CLIENT_KEY", "IDP_DOCTOR_CLIENT_KEY", "SIGN_IN_RECORD_KEY", "IDP_ACADEMY_CLIENT_ID"]) {
+    assert.equal(lineOf(internal, name), undefined, `${name} is not in the internal env`);
+    assert.ok(!internal.includes(lineOf(signIn, name)), `${name}'s value is not in the internal env`);
+  }
+  assert.throws(() => renderSlotInternalEnv({ slot: "pr-7", signInEnv: "INTERNAL_API_TOKEN=short" }), SlotError);
+});
+
+test("3172: in the slot compose only the api mounts the sign-in env; portal and doctor mount only the internal env", () => {
+  const compose = readFileSync(new URL("../../infra/deploy/compose/slot/compose.yml", import.meta.url), "utf8");
+  const serviceBlock = (name) => {
+    const start = compose.search(new RegExp(`^  ${name}:$`, "m"));
+    assert.ok(start >= 0, `service ${name}`);
+    const rest = compose.slice(start + 1);
+    const next = rest.search(/^ {2}[a-z][a-z0-9-]*:$/m);
+    return next < 0 ? rest : rest.slice(0, next);
+  };
+  const mounts = (block) => [...block.matchAll(/^\s+- (\/etc\/ds-platform\/\S+)$/gm)].map((m) => m[1]);
+  const signIn = "/etc/ds-platform/slots/${SLOT:?}.sign-in.env";
+  const internal = "/etc/ds-platform/slots/${SLOT:?}.internal.env";
+  assert.ok(mounts(serviceBlock("api")).includes(signIn));
+  for (const storefront of ["portal", "doctor"]) {
+    assert.ok(!mounts(serviceBlock(storefront)).includes(signIn), `${storefront} must not mount the sign-in env`);
+    assert.ok(mounts(serviceBlock(storefront)).includes(internal), `${storefront} mounts the internal env`);
+  }
 });
 
 test("3171: up converges the slot's storefront clients and writes the sign-in env BEFORE the api starts", () => {
@@ -254,9 +420,15 @@ test("3171: down keeps compose loadable without the sign-in env and removes a pr
   const plan = planSlotDown({ slot: "pr-7", liveSlots: {}, baseDomain: BASE });
   const ensure = stepOf(plan, "ensure sign-in env");
   // touch: never truncates a kept key (main's survives its own down).
-  assert.deepEqual(ensure.command, ["sudo", "touch", slotSignInEnvPath("pr-7")]);
+  assert.deepEqual(ensure.command, ["sudo", "touch", slotSignInEnvPath("pr-7"), slotInternalEnvPath("pr-7")]);
   assert.ok(labels(plan).indexOf("ensure sign-in env") < labels(plan).indexOf("compose down"));
-  assert.deepEqual(stepOf(plan, "remove sign-in env").command, ["sudo", "rm", "-f", slotSignInEnvPath("pr-7")]);
+  assert.deepEqual(stepOf(plan, "remove sign-in env").command, [
+    "sudo",
+    "rm",
+    "-f",
+    slotSignInEnvPath("pr-7"),
+    slotInternalEnvPath("pr-7"),
+  ]);
   assert.ok(!labels(planSlotDown({ slot: "main", liveSlots: {}, baseDomain: BASE })).includes("remove sign-in env"));
 });
 

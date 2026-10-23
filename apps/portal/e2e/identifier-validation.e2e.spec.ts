@@ -208,8 +208,12 @@ test.describe("EARS-22: portal /reset identifier validation (client-side, ungate
 
     // ── reject the bare numeric (#196 bug report) ───────────────────────
     await id.fill(BAD_NUMERIC);
+    // No navigation off the reset door. Behind the sign-in host the IdP lands
+    // on the host's `/login`, which renders the door the entry chose
+    // (`doorFor`, #3172) — so the door's own URL is the reference, not `/reset`.
+    const doorUrl = page.url();
     await page.getByTestId("reset-request-submit").click();
-    await expect(page).toHaveURL(/\/reset/);
+    await expect(page).toHaveURL(doorUrl);
     await expectInvalid(id);
 
     // ── accept a valid email ─────────────────────────────────────────────

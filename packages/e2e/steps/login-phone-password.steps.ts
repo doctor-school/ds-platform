@@ -1,3 +1,5 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -168,7 +170,10 @@ Given(
       state,
       "/account",
     );
-    const pending = captureResponse(owned, "/v1/auth/verify");
+    const pending = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       owned.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -262,12 +267,15 @@ When(
       },
       async () => {
         try {
-          const pending = captureResponse(state.page, "/v1/auth/login");
+          const pending = captureResponse(
+            state.page,
+            signInHostApiPath("/v1/auth/login"),
+          );
           await state.page.getByTestId("password-login-submit").click();
           const result = await pending;
           let exactCommand = false;
           try {
-            const body = result.response.request().postDataJSON();
+            const body = hostCommand(result.response.request().postDataJSON());
             exactCommand =
               Object.keys(body).sort().join(",") === "identifier,password" &&
               body.identifier === state.phone &&
@@ -279,7 +287,7 @@ When(
             {
               status: result.response.status(),
               exactCommand,
-              tokenFree: result.body === '{"status":"authenticated"}',
+              tokenFree: storefrontCallbackAcknowledgement(result.body, world.hostBaseUrl),
             },
             "confirmed phone accepted by actual password endpoint",
           ).toEqual({ status: 200, exactCommand: true, tokenFree: true });

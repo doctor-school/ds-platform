@@ -1,3 +1,5 @@
+import { captureResponse } from "../lib/captured-response.js";
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -81,7 +83,7 @@ When(
       "exactly eight lowercase letters, without other character classes",
     ).toBe(true);
     state.password = password;
-    const { response, code } = await registerOwnedCredentials(
+    const { response, body, code } = await registerOwnedCredentials(
       state.page,
       world.hostBaseUrl,
       state,
@@ -90,7 +92,7 @@ When(
     expect(
       registrationEvidence(
         response.request().postData() ?? "",
-        await response.text(),
+        body,
         state,
       ),
     ).toEqual({
@@ -113,31 +115,33 @@ When(
 
 When(
   "the length-only registrant enters that fresh delivered confirmation code once",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const state = registration(page);
     if (!state.code) throw new Error("Fresh owned verification mail required");
     state.page.on("request", (request) => {
       if (request.method() !== "POST") return;
       const path = new URL(request.url()).pathname;
-      if (path === "/v1/auth/verify") state.verificationRequests += 1;
-      if (path === "/v1/auth/login" || path.startsWith("/v1/auth/login/"))
+      if (path === signInHostApiPath("/v1/auth/verify"))
+        state.verificationRequests += 1;
+      if (
+        path === signInHostApiPath("/v1/auth/login") ||
+        path.startsWith(signInHostApiPath("/v1/auth/login/"))
+      )
         state.extraLoginRequests += 1;
     });
-    const verified = state.page
-      .waitForResponse(
-        (response) =>
-          new URL(response.url()).pathname === "/v1/auth/verify" &&
-          response.request().method() === "POST",
-      )
-      .then(async (response) => {
-        state.verifyEvidence = verificationEvidence(
-          response.request().postData() ?? "",
-          await response.text(),
-          state,
-          state.code!,
-        );
-        return response;
-      });
+    const verified = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/verify"),
+    ).then(({ response, body }) => {
+      state.verifyEvidence = verificationEvidence(
+        response.request().postData() ?? "",
+        body,
+        state,
+        state.code!,
+        world.hostBaseUrl,
+      );
+      return response;
+    });
     await inputSecret(
       state.page.locator('input[autocomplete="one-time-code"]'),
       state.code,

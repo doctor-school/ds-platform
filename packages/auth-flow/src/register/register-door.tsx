@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 import {
   DOCTOR_REGISTER_CONSENT_REFUSAL_CODES,
@@ -18,7 +17,6 @@ import {
   clearPendingRegistration,
   isBotProtectionRejected,
   isBotProtectionRequired,
-  peekPendingRegistration,
   RegisterCard,
   setPendingRegistration,
   useBotProtectedAction,
@@ -35,6 +33,9 @@ import { botProtectionMessages, botProtectionSiteKey } from "../bot-protection";
 import { createAuthClient } from "../client/auth-client";
 import { authErrorMessage } from "../errors";
 import { registerFieldHint, registerFieldRules } from "../fields";
+import type { CompletionTarget } from "../client/signed-in-landing";
+import { settleAddress } from "../sign-in-host/settle-door-path";
+import { VerifyDoor } from "../verify/verify-door";
 import type {
   AuthFlowConsentsConfig,
   AuthFlowConsentsCopy,
@@ -55,13 +56,17 @@ import { RegisterGlyph } from "./register-glyph";
  * composition the two hosts used to own twice: the live BFF command, the
  * bot-protection retry-once orchestration, the EARS-16 outcome mapping, the
  * consent READ MODEL → recorded acceptances projection, the held registration
- * values the code step submits with the code (003 EARS-41), and the hop out of
- * an accepted command.
+ * values the code step submits with the code (003 EARS-41), and the step out
+ * of an accepted command.
  *
- * Row 51: an accepted registration hands the address to the host's `/verify`
- * route (003 EARS-24) — the one confirmation mechanism on every host, so the
- * step survives a reload or a new tab and carries the arrival target in its
- * query (021 EARS-10).
+ * Row 51 / 003 EARS-24 amended: an accepted registration renders the ONE code
+ * step (`VerifyDoor`) IN PLACE on this document — no navigation, because the
+ * sign-in host refuses a non-top-level request to a door (EARS-70) — so the
+ * typed values stay in this tab's memory and ride with the code (EARS-41,
+ * EARS-23 re-registration). The address settles onto the host's `/verify`
+ * (address + arrival target, 021 EARS-10) without a history entry, so a reload
+ * enters that route's step; «← Изменить почту» shows the form again with every
+ * typed field and settles the address back onto this door.
  */
 export type RegisterDoorProps = {
   /** Everything that differs between the two storefronts (rows 9, 47-64). */
@@ -81,6 +86,16 @@ export type RegisterDoorProps = {
   returnTo?: string | null;
   /** The gate context the visitor arrived from — the plate above the card (021 EARS-2). */
   returnContextPlate?: ReactNode;
+  /**
+   * The targets of the in-place code step, resolved by the mount from the SAME
+   * arrival the host's `/verify` route resolves them from
+   * (`resolveRegistrationArrival`): the эфир intent completed after the code
+   * (021 EARS-10), the rule S3 carry, and the mount's signed-in re-decisions.
+   */
+  returnTarget?: string | null;
+  carriedTarget?: string | null;
+  resolveSignedInLanding?: () => Promise<string>;
+  resolveCompletionTarget?: () => Promise<CompletionTarget>;
 };
 
 /** The declaration's own key: a DECLARATION is not a consent purpose (021 EARS-4). */
@@ -219,12 +234,15 @@ export function RegisterDoor({
   landing,
   returnTo = null,
   returnContextPlate,
+  returnTarget = null,
+  carriedTarget = null,
+  resolveSignedInLanding,
+  resolveCompletionTarget,
 }: RegisterDoorProps) {
   // #2027 PR 1.6 — `copy.register` is REQUIRED on the config now that both
   // storefronts mount this door, so there is nothing left to assert here.
   const resolvedCopy = resolveAuthFlowCopy(config);
   const copy = resolvedCopy.register;
-  const router = useRouter();
   const errors = resolvedCopy.errors;
   const consents = config.consents;
   // One client per host config — the registration ROUTE differs per storefront
@@ -233,9 +251,16 @@ export function RegisterDoor({
 
   const [commandError, setCommandError] = useState<string | null>(null);
   const [challengeError, setChallengeError] = useState<string | null>(null);
-  // 003 EARS-24 amended — read once, on mount: the values this tab still holds
-  // from a registration whose code step the visitor stepped back from.
-  const [initialValues] = useState(() => peekPendingRegistration()?.form);
+  // 003 EARS-24 amended — the in-place code step: the address the code went
+  // to while it shows, `null` while the form shows. Every open of the door
+  // starts on the empty form; nothing is read from or written to storage.
+  const [codeStepFor, setCodeStepFor] = useState<string | null>(null);
+  // The values typed into this document, held in memory for «← Изменить
+  // почту», which shows the form again with every field — the password
+  // included. A new document (a reload, another tab) holds nothing.
+  const [initialValues, setInitialValues] = useState<
+    RegisterCardValues | undefined
+  >(undefined);
 
   const captcha = useBotProtectedAction({
     onVerified: () => setChallengeError(null),
@@ -286,19 +311,30 @@ export function RegisterDoor({
     await authClient.register({ email, ...registration }, captchaToken);
     // 003 EARS-41 / EARS-23 amended — hold the typed values for the code step:
     // it submits them WITH the code (nothing is written to an existing account
-    // before that), and «← Изменить почту» refills the form from them. The
-    // slot is a module singleton: it survives the client-side hop below.
+    // before that). The step renders in place, so this document's memory is
+    // all the hold needs.
     setPendingRegistration({ identifier: email, registration, form: values });
+    setInitialValues(values);
 
-    // Row 51 / 003 EARS-24 — the address is confirmed on the host's `/verify`
-    // route, and the arrival context rides along so the trip through the mail
-    // survives it (021 EARS-10).
-    router.push(
+    // Row 51 / 003 EARS-24 amended — the code step renders in place, and the
+    // address settles onto the host's `/verify` with the address and the
+    // arrival context (021 EARS-10), without a history entry: a reload then
+    // enters that route's step, naming the address.
+    settleAddress(
       withReturnTarget(
         `${config.routes.verify}${config.routes.verify.includes("?") ? "&" : "?"}email=${encodeURIComponent(email)}`,
         returnTo,
       ),
     );
+    setCodeStepFor(email);
+  }
+
+  // 003 EARS-24 amended — «← Изменить почту» of the in-place step: the form
+  // again, every typed field from memory (the remount key below refills it),
+  // and the address settled back onto this door without a history entry.
+  function backToForm() {
+    settleAddress(withReturnTarget(config.routes.register, returnTo));
+    setCodeStepFor(null);
   }
 
   function onSubmit(values: RegisterCardValues) {
@@ -391,13 +427,32 @@ export function RegisterDoor({
   const attribution = config.register.attribution;
   const pointsPromise = config.register.pointsPromise;
 
+  if (codeStepFor !== null) {
+    // 003 EARS-24 amended / EARS-42 — the one code step, on this document.
+    return (
+      <VerifyDoor
+        config={config}
+        email={codeStepFor}
+        landing={landing}
+        {...(resolveSignedInLanding ? { resolveSignedInLanding } : {})}
+        {...(resolveCompletionTarget ? { resolveCompletionTarget } : {})}
+        returnTarget={returnTarget}
+        carriedTarget={carriedTarget}
+        onBack={backToForm}
+        returnContextPlate={returnContextPlate}
+      />
+    );
+  }
+
   return (
     <RegisterCard
       icon={<RegisterGlyph icon={config.brand.registerIcon ?? "user-plus"} />}
       copy={cardCopy}
-      // 003 EARS-24 amended — «← Изменить почту» on the code step lands here
-      // with the visitor's typed values still held in this tab.
+      // 003 EARS-24 amended — «← Изменить почту» on the in-place code step
+      // shows the form again with every value typed into this document.
       initialValues={initialValues}
+      // The card reads its values once, at mount.
+      key={initialValues ? "refilled" : "empty"}
       // #2331 — the already-registered visitor's way out, on BOTH doors, with
       // the arrival context carried onward (rule S3).
       footer={

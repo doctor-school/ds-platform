@@ -1,3 +1,10 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { isSignInHostForm, signInHostApiPath } from "../lib/sign-in-host-api.js";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
+import { baseUrlFor, SIGN_IN_HOST } from "../hosts.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -128,7 +135,10 @@ Given(
       state,
       "/account",
     );
-    const pending = captureResponse(state.page, "/v1/auth/verify");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       state.page.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -162,12 +172,19 @@ When(
     const login = new URL(world.host.loginPath, state.base);
     login.searchParams.set("method", "password");
     login.searchParams.set("returnTo", EXTERNAL);
+    watchStorefrontEntries(state.page, state.base);
     await state.page.goto(login.toString(), { waitUntil: "load" });
     await state.page.waitForLoadState("networkidle");
+    // #3172: the credential form is the sign-in host's, entered through
+    // Academy's own entry with the external target — never the external host.
     expect(
-      new URL(state.page.url()).origin === new URL(state.base).origin,
-      "login remains on Academy",
+      isSignInHostForm(state.page.url(), baseUrlFor(SIGN_IN_HOST)),
+      "login remains on the platform's sign-in host form",
     ).toBe(true);
+    expectEnteredThrough(state.page, state.base, {
+      pathname: world.host.loginPath,
+      returnTo: EXTERNAL,
+    });
     await inputSecret(
       state.page.locator('input[autocomplete="username"]'),
       state.email,
@@ -176,13 +193,16 @@ When(
       state.page.locator('input[autocomplete="current-password"]'),
       state.password,
     );
-    const pending = captureResponse(state.page, "/v1/auth/login");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/login"),
+    );
     await state.page.getByRole("button", { name: /Войти|Продолжить/i }).click();
     const accepted = await pending;
     expect(
       {
         status: accepted.response.status(),
-        acknowledgementMatches: accepted.body === '{"status":"authenticated"}',
+        acknowledgementMatches: storefrontCallbackAcknowledgement(accepted.body, world.hostBaseUrl),
       },
       "real password login succeeds",
     ).toEqual({ status: 200, acknowledgementMatches: true });

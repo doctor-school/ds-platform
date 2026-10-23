@@ -710,8 +710,23 @@ test.describe("Feature 013 — static public Academy home", () => {
     // A client-side navigation keeps the root layout mounted; an unmatched
     // parallel slot would keep its previous content, so the slot's catch-all
     // must replace the home footer with nothing.
-    await page.getByTestId("shell-login").click();
-    await expect(page).toHaveURL(/\/login/);
+    // The header's first nav item is a router link (a soft navigation); the
+    // guest «Войти» is a document link to the sign-in entry (003 EARS-61,
+    // #3172), so it cannot be the probe.
+    const away = page.getByTestId("shell-nav-desktop").getByRole("link").first();
+    const href = await away.getAttribute("href");
+    expect(href, "a non-root destination").toMatch(/^\/[^/?#]/);
+    await page.evaluate(() => {
+      (window as Window & { __softProbe?: boolean }).__softProbe = true;
+    });
+    await away.click();
+    await expect(page).toHaveURL(new RegExp(`${href}$`));
+    expect(
+      await page.evaluate(
+        () => (window as Window & { __softProbe?: boolean }).__softProbe,
+      ),
+      "the navigation was client-side (the document survived)",
+    ).toBe(true);
     await expect(page.getByTestId("academy-footer-wordmark")).toHaveCount(0);
   });
 });

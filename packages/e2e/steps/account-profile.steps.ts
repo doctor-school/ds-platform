@@ -1,3 +1,8 @@
+import {
+  isAuthCommandPath,
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -47,7 +52,7 @@ Given(
     profiles.set(page, state);
     owned.on("request", (request) => {
       const pathname = new URL(request.url()).pathname;
-      if (request.method() === "POST" && pathname.startsWith("/v1/auth/"))
+      if (request.method() === "POST" && isAuthCommandPath(pathname))
         state.authPosts.push(pathname);
     });
     await prepareCaptchaForJourney(
@@ -55,7 +60,10 @@ Given(
       baseURL ?? "",
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
-    const registered = captureResponse(owned, "/v1/auth/register");
+    const registered = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/register"),
+    );
     const { code } = await registerOwnedCredentials(
       owned,
       world.hostBaseUrl,
@@ -74,7 +82,10 @@ Given(
       consentMatches: true,
       acknowledgementMatches: true,
     });
-    const accepted = captureResponse(owned, "/v1/auth/verify");
+    const accepted = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       owned.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -87,6 +98,7 @@ Given(
         verified.body,
         state,
         code,
+        world.hostBaseUrl,
       ),
     ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
     await owned.waitForURL(
@@ -195,13 +207,19 @@ Then(
       "href",
       "/reset?returnTo=%2Faccount",
     );
-    await changePassword.click();
-    await owned.waitForURL(
-      (url) =>
-        url.origin === new URL(world.hostBaseUrl).origin &&
-        url.pathname === "/reset" &&
-        url.searchParams.get("returnTo") === "/account",
+    // #3172 — the storefront's `/reset?returnTo=/account` is the entry; the
+    // reset form is the sign-in host's, and the return path rides the
+    // transaction (the completed reset's landing is the stand journey's check).
+    const entry = owned.waitForRequest(
+      (req) =>
+        req.isNavigationRequest() &&
+        req.url() === `${world.hostBaseUrl}/reset?returnTo=%2Faccount`,
     );
+    await changePassword.click();
+    await entry;
+    // Behind the IdP the reset door renders on the host's `/login` (`doorFor`):
+    // proven by what renders below, not by the path.
+    await owned.waitForURL((url) => isSignInHostForm(url));
     await expect(owned.locator('input[autocomplete="username"]')).toBeVisible();
     await expect(owned.getByTestId("reset-request-submit")).toBeVisible();
     await owned.goBack({ waitUntil: "load" });
@@ -269,7 +287,10 @@ Then(
     expect(
       state.authPosts,
       "profile inventory requests no reset or logout",
-    ).toEqual(["/v1/auth/register", "/v1/auth/verify"]);
+    ).toEqual([
+      signInHostApiPath("/v1/auth/register"),
+      signInHostApiPath("/v1/auth/verify"),
+    ]);
   },
 );
 

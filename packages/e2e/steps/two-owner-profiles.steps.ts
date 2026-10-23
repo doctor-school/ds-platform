@@ -1,3 +1,4 @@
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -162,7 +163,10 @@ Given(
         state.base,
         process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
       );
-      const registered = captureResponse(owned.page, "/v1/auth/register");
+      const registered = captureResponse(
+        owned.page,
+        signInHostApiPath("/v1/auth/register"),
+      );
       const { code } = await registerOwnedCredentials(
         owned.page,
         state.base,
@@ -181,7 +185,10 @@ Given(
         consentMatches: true,
         acknowledgementMatches: true,
       });
-      const pending = captureResponse(owned.page, "/v1/auth/verify");
+      const pending = captureResponse(
+        owned.page,
+        signInHostApiPath("/v1/auth/verify"),
+      );
       await inputSecret(
         owned.page.locator('input[autocomplete="one-time-code"]'),
         code,
@@ -196,6 +203,7 @@ Given(
           verified.body,
           owned,
           code,
+          world.hostBaseUrl,
         ),
       ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
       await owned.page.waitForURL(
@@ -280,7 +288,7 @@ After("@two-owner-profiles", async ({ page, $testInfo }) => {
       ) {
         if (owned.page.isClosed()) owned.page = await owned.context.newPage();
         if (!owned.page.url().startsWith(`${state.base}/`))
-          await owned.page.goto(`${state.base}/login`);
+          await owned.page.goto(`${state.base}/`);
         const status = await owned.page.evaluate(
           async () =>
             (

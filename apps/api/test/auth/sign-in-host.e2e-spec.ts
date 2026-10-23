@@ -36,6 +36,7 @@ import {
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import {
   FORM_COOKIE_NAME,
+  FORM_STATE_TTL_SECONDS,
   RECORD_COOKIE_NAME,
 } from "../../src/sign-in-host/sign-in-host.cookies.js";
 import { FakeSignInHostIdp } from "../../src/sign-in-host/sign-in-host.idp.fake.js";
@@ -49,6 +50,7 @@ import {
 } from "../../src/sign-in-host/sign-in-host.policy.js";
 import { SignInHostRecordStore } from "../../src/sign-in-host/sign-in-host-record.store.js";
 import {
+  InMemorySignInHostStateStore,
   SIGN_IN_HOST_STATE_STORE,
   type SignInHostStateStore,
 } from "../../src/sign-in-host/sign-in-host-state.store.js";
@@ -101,6 +103,7 @@ async function compile(
   thresholds = RELAXED_RATE_LIMIT,
   settingsOverride?: { value: null },
   clockOverride?: SignInHostClock,
+  stateOverride?: SignInHostStateStore,
 ) {
   const idp = new FakeIdpClient();
   const hostIdp = new FakeSignInHostIdp();
@@ -119,6 +122,10 @@ async function compile(
     builder = builder
       .overrideProvider(SIGN_IN_HOST_CLOCK)
       .useValue(clockOverride);
+  if (stateOverride)
+    builder = builder
+      .overrideProvider(SIGN_IN_HOST_STATE_STORE)
+      .useValue(stateOverride);
   const moduleRef: TestingModule = await builder.compile();
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
     new FastifyAdapter(),
@@ -439,6 +446,195 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     const { body } = await entry(jar, authRequest);
     expect(body).toEqual({ action: "redirect", url: ACADEMY_LOGIN });
   });
+
+  it.each([
+    ["academy", ACADEMY, ACADEMY_LOGIN, "doctor", DOCTOR],
+    ["doctor", DOCTOR, DOCTOR_LOGIN, "academy", ACADEMY],
+  ] as const)(
+    "EARS-66: S168 stale requests use the recorded %s form despite forged storefront hints",
+    async (_storefront, clientId, loginUrl, forgedStorefront, forgedClient) => {
+      const jar = new Jar();
+      const { authRequest } = await render(jar, clientId);
+      const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+      const formId = jar.values.get(FORM_COOKIE_NAME)!;
+      const before = await state.getForm(formId);
+      hostIdp.expire(authRequest);
+      const guards = [
+        vi.spyOn(idp, "passwordLogin"),
+        vi.spyOn(idp, "verifyEmail"),
+        vi.spyOn(idp, "verifyPhone"),
+        vi.spyOn(idp, "loginWithEmailOtp"),
+        vi.spyOn(idp, "loginWithSmsOtp"),
+        vi.spyOn(hostIdp, "finaliseWithSession"),
+        vi.spyOn(hostIdp, "finaliseWithError"),
+      ];
+      try {
+        for (const requestId of [
+          undefined,
+          "not a valid id!",
+          "V2_unknown_s168",
+          authRequest,
+        ]) {
+          const query = new URLSearchParams({
+            storefront: forgedStorefront,
+            client_id: forgedClient,
+            returnTo: "https://evil.test/login",
+          });
+          if (requestId !== undefined) query.set("authRequest", requestId);
+          const res = await app.inject({
+            method: "GET",
+            url: `/v1/sign-in-host/entry?${query}`,
+            headers: {
+              ...DEVICE,
+              cookie: `${jar.header()}; storefront=${forgedStorefront}; client_id=${forgedClient}`,
+              "x-storefront": forgedStorefront,
+              "x-client-id": forgedClient,
+              "x-ds-sign-in-entry": "forged-render",
+            },
+          });
+          expect(res.statusCode).toBe(200);
+          expect(res.json()).toEqual({ action: "redirect", url: loginUrl });
+          expect(res.cookies).toEqual([]);
+          expect(await state.getForm(formId)).toEqual(before);
+        }
+        for (const guard of guards) expect(guard).not.toHaveBeenCalled();
+      } finally {
+        for (const guard of guards) guard.mockRestore();
+        await state.deleteForm(formId);
+      }
+    },
+  );
+
+  it.each(["absent", "unknown", "malformed", "deleted"] as const)(
+    "EARS-67: S168 %s form state and an unopened stale request ignore forged Academy selection",
+    async (formState) => {
+      const jar = new Jar();
+      const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+      if (formState === "deleted") {
+        await render(jar, ACADEMY);
+        await state.deleteForm(jar.values.get(FORM_COOKIE_NAME)!);
+      } else if (formState !== "absent") {
+        jar.values.set(
+          FORM_COOKIE_NAME,
+          formState === "malformed"
+            ? "invalid-form!"
+            : randomBytes(32).toString("base64url"),
+        );
+      }
+      const guards = [
+        vi.spyOn(idp, "passwordLogin"),
+        vi.spyOn(idp, "verifyEmail"),
+        vi.spyOn(idp, "verifyPhone"),
+        vi.spyOn(idp, "loginWithEmailOtp"),
+        vi.spyOn(idp, "loginWithSmsOtp"),
+        vi.spyOn(hostIdp, "finaliseWithSession"),
+        vi.spyOn(hostIdp, "finaliseWithError"),
+      ];
+      try {
+        const unopened = [ACADEMY, DOCTOR].map((clientId) => {
+          const requestId = hostIdp.seedAuthRequest({ clientId });
+          hostIdp.expire(requestId);
+          return requestId;
+        });
+        for (const requestId of [
+          undefined,
+          "not a valid id!",
+          "V2_unknown_s168",
+          ...unopened,
+        ]) {
+          const query = new URLSearchParams({
+            storefront: "academy",
+            client_id: ACADEMY,
+            returnTo: ACADEMY_LOGIN,
+          });
+          if (requestId !== undefined) query.set("authRequest", requestId);
+          const res = await app.inject({
+            method: "GET",
+            url: `/v1/sign-in-host/entry?${query}`,
+            headers: {
+              ...DEVICE,
+              cookie: `${jar.header()}; storefront=academy; client_id=${ACADEMY}`,
+              "x-storefront": "academy",
+              "x-client-id": ACADEMY,
+              "x-ds-sign-in-entry": "forged-render",
+            },
+          });
+          expect(res.statusCode).toBe(200);
+          expect(res.json()).toEqual({ action: "redirect", url: DOCTOR_LOGIN });
+          expect(res.cookies).toEqual([]);
+        }
+        for (const guard of guards) expect(guard).not.toHaveBeenCalled();
+      } finally {
+        for (const guard of guards) guard.mockRestore();
+      }
+    },
+  );
+
+  it.each([
+    ["academy", ACADEMY],
+    ["doctor", DOCTOR],
+  ] as const)(
+    "EARS-67: S168 an expired %s form cannot select the fallback destination",
+    async (_storefront, clientId) => {
+      let now = Date.now();
+      const state = new InMemorySignInHostStateStore(
+        Buffer.alloc(32, 7),
+        () => now,
+      );
+      const isolated = await compile(
+        RELAXED_RATE_LIMIT,
+        undefined,
+        () => new Date(now),
+        state,
+      );
+      const jar = new Jar();
+      const authRequest = isolated.hostIdp.seedAuthRequest({ clientId });
+      try {
+        const opened = await isolated.app.inject({
+          method: "GET",
+          url: `/v1/sign-in-host/entry?authRequest=${authRequest}`,
+          headers: DEVICE,
+        });
+        expect(opened.statusCode).toBe(200);
+        expect(opened.json()).toMatchObject({ action: "render" });
+        jar.apply(opened.cookies);
+        const formId = jar.values.get(FORM_COOKIE_NAME)!;
+        expect(await state.getForm(formId)).not.toBeNull();
+        isolated.hostIdp.expire(authRequest);
+        const guards = [
+          vi.spyOn(isolated.idp, "passwordLogin"),
+          vi.spyOn(isolated.idp, "verifyEmail"),
+          vi.spyOn(isolated.idp, "verifyPhone"),
+          vi.spyOn(isolated.idp, "loginWithEmailOtp"),
+          vi.spyOn(isolated.idp, "loginWithSmsOtp"),
+          vi.spyOn(isolated.hostIdp, "finaliseWithSession"),
+          vi.spyOn(isolated.hostIdp, "finaliseWithError"),
+        ];
+        try {
+          now += FORM_STATE_TTL_SECONDS * 1000;
+          const res = await isolated.app.inject({
+            method: "GET",
+            url: `/v1/sign-in-host/entry?authRequest=${authRequest}&storefront=academy&client_id=${ACADEMY}`,
+            headers: {
+              ...DEVICE,
+              cookie: `${jar.header()}; storefront=academy; client_id=${ACADEMY}`,
+              "x-storefront": "academy",
+              "x-client-id": ACADEMY,
+            },
+          });
+          expect(res.statusCode).toBe(200);
+          expect(res.json()).toEqual({ action: "redirect", url: DOCTOR_LOGIN });
+          expect(res.cookies).toEqual([]);
+          expect(await state.getForm(formId)).toBeNull();
+          for (const guard of guards) expect(guard).not.toHaveBeenCalled();
+        } finally {
+          for (const guard of guards) guard.mockRestore();
+        }
+      } finally {
+        await isolated.app.close();
+      }
+    },
+  );
 
   it("EARS-68: prompt=none without a record finalises login_required", async () => {
     const authRequest = hostIdp.seedAuthRequest({

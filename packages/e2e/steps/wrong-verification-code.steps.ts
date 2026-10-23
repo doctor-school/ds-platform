@@ -13,6 +13,7 @@ import {
   verificationEvidence,
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
+import { openHostCodeStep } from "../lib/storefront-entry-watch.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import {
   readWrongVerificationSnapshot,
@@ -177,10 +178,8 @@ Given(
         } else value.wrongCode = differentVerificationCode(code);
       }
       // A fresh document drops held registration credentials: every class submits the same code-only contract.
-      await owned.goto(
-        `${world.hostBaseUrl}/verify?${new URLSearchParams({ email: probe.email, returnTo: "/account" })}`,
-        { waitUntil: "load" },
-      );
+      // #3172 — the code step is the sign-in host's /verify door.
+      await openHostCodeStep(owned, world.hostBaseUrl, probe.email, "/account");
       await owned.waitForLoadState("networkidle");
       await expect(
         owned.locator('input[autocomplete="one-time-code"]'),

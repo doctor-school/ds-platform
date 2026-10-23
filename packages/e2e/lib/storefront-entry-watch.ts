@@ -90,6 +90,36 @@ export function expectEnteredThrough(
 }
 
 /**
+ * A guest's code step for `email` on the sign-in host (#3172). The storefront
+ * `/verify` is the REGISTRATION entry and carries no address (003 EARS-61): it
+ * lands on the host's registration door. The host's own `/verify` names its
+ * door itself (`doorFor`) and reads the address from its query — the very page
+ * the registration door's submit hops to — so it is opened on the same auth
+ * request, exactly as the door's own navigation does. `returnTo` rides the
+ * storefront entry into the transaction.
+ */
+export async function openHostCodeStep(
+  page: Page,
+  base: string,
+  email: string,
+  returnTo?: string,
+): Promise<void> {
+  watchStorefrontEntries(page, base);
+  const entry = new URL("/verify", base);
+  if (returnTo !== undefined) entry.searchParams.set("returnTo", returnTo);
+  await page.goto(entry.toString(), { waitUntil: "load" });
+  await page.waitForURL((url) => isSignInHostForm(url));
+  expectEnteredThrough(page, base, {
+    pathname: "/verify",
+    returnTo: returnTo ?? null,
+  });
+  const step = new URL(page.url());
+  step.pathname = "/verify";
+  step.searchParams.set("email", email);
+  await page.goto(step.toString(), { waitUntil: "load" });
+}
+
+/**
  * A guest bounced off a gated storefront address (or sent into a door) ends on
  * the sign-in host's form, having entered through the storefront `base`'s own
  * entry with `expected.returnTo` — the replacement for reading `returnTo` off

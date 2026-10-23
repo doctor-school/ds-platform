@@ -21,6 +21,7 @@ import {
   verificationEvidence,
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
+import { openHostCodeStep } from "../lib/storefront-entry-watch.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import { test, After, Given, Then, When } from "./support/auth-fixtures.js";
 
@@ -214,10 +215,8 @@ When(
       (await context.cookies()).some((cookie) => cookie.name === SESSION),
       "replay browser has no owner's cookie",
     ).toBe(false);
-    await visitor.goto(
-      `${world.hostBaseUrl}/verify?${new URLSearchParams({ email: value.email, returnTo: "/account" })}`,
-      { waitUntil: "load" },
-    );
+    // #3172 — the code step is the sign-in host's /verify door.
+    await openHostCodeStep(visitor, world.hostBaseUrl, value.email, "/account");
     await visitor.waitForLoadState("networkidle");
     await assertNoPrivateRegistrationAccess(visitor, "", value);
     value.beforeReplay = await captureAddressedMailCheckpoint(

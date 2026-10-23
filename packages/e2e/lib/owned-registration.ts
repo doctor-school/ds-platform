@@ -125,19 +125,10 @@ export function registrationEvidence(
 ) {
   const request = parsedObject(requestText);
   const response = parsedObject(responseText);
-  const consent = request.consent;
-  const accepted =
-    Array.isArray(consent) && consent.length === 1 ? consent[0] : null;
   return {
     credentialsMatch:
       request.email === account.email && request.password === account.password,
-    // 003 EARS-20: apps/portal/lib/auth-flow.host-config.ts consents contract.
-    consentMatches:
-      accepted !== null &&
-      typeof accepted === "object" &&
-      Object.keys(accepted).length === 2 &&
-      accepted.purpose === "tos" &&
-      accepted.version === "2026-01",
+    consentMatches: academyConsentMatches(request.consent),
     acknowledgementMatches:
       Object.keys(response).length === 1 &&
       response.status === "pending_verification",
@@ -163,12 +154,16 @@ export function registrationEvidence(
  *                                           with a fresh `__Host-ds_session`
  *                                           (`lib/secure-session.ts`, at the
  *                                           calling step's landing)
- *   held password rides with the code     → the code command carries NO
- *                                           registration value: no
- *                                           `registration` key, and the
- *                                           password appears nowhere in its body
- *                                           (the host's form state holds the
- *                                           warm proof, EARS-39 host)
+ *   held password rides with the code     → unchanged on the WARM step (the
+ *                                           host renders the code step in place,
+ *                                           003 EARS-24): the code command
+ *                                           carries `registration` with exactly
+ *                                           the typed password and the ticked
+ *                                           consent (EARS-41/23). Only the COLD
+ *                                           step (after a reload, EARS-41) sends
+ *                                           the code alone, the password nowhere
+ *                                           in its body
+ *                                           ({@link coldVerificationEvidence})
  *   refusal shape / no enumeration / copy → unchanged: the host command keeps
  *                                           the storefront's exact 400 body
  *                                           ({@link verificationRefusalEvidence})
@@ -207,24 +202,65 @@ export function storefrontCallbackAcknowledgement(
   );
 }
 
-/** The code command names the owned address and code and carries no registration value. */
+/** 003 EARS-20: the Academy consent contract (apps/portal/lib/auth-flow.host-config.ts). */
+function academyConsentMatches(consent: unknown): boolean {
+  const accepted =
+    Array.isArray(consent) && consent.length === 1 ? consent[0] : null;
+  return (
+    accepted !== null &&
+    typeof accepted === "object" &&
+    Object.keys(accepted).length === 2 &&
+    accepted.purpose === "tos" &&
+    accepted.version === "2026-01"
+  );
+}
+
+/**
+ * Which code step sent the command: `warm` — the in-place step right after the
+ * accepted registration form, holding the typed values (003 EARS-24/41);
+ * `cold` — the step reached after a reload, holding nothing (003 EARS-41).
+ */
+type CodeStep = "warm" | "cold";
+
+/**
+ * The code command names the owned address and code on the host form state;
+ * the warm step carries exactly the typed password and ticked consent as
+ * `registration`, the cold step no registration value and no password.
+ */
 function codeCommandMatches(
   requestText: string,
   account: OwnedCredentials,
   code: string,
+  step: CodeStep,
 ): boolean {
   const request = parsedObject(requestText);
-  return (
+  const addressed =
     request.email === account.email &&
     request.code === code &&
     typeof request.authRequest === "string" &&
-    request.authRequest.length > 0 &&
-    !Object.hasOwn(request, "registration") &&
-    !requestText.includes(account.password)
+    request.authRequest.length > 0;
+  if (step === "cold")
+    return (
+      addressed &&
+      !Object.hasOwn(request, "registration") &&
+      !requestText.includes(account.password)
+    );
+  const registration = request.registration;
+  return (
+    addressed &&
+    registration !== null &&
+    typeof registration === "object" &&
+    !Array.isArray(registration) &&
+    Object.keys(registration).length === 2 &&
+    (registration as Record<string, unknown>).password === account.password &&
+    academyConsentMatches((registration as Record<string, unknown>).consent)
   );
 }
 
-/** Project secrets to booleans before assertions can include response diagnostics. */
+/**
+ * 003 EARS-3/41: the warm in-place code step's command and answer, secrets
+ * projected to booleans before assertions can include response diagnostics.
+ */
 export function verificationEvidence(
   requestText: string,
   responseText: string,
@@ -233,7 +269,7 @@ export function verificationEvidence(
   base: string,
 ) {
   return {
-    credentialsMatch: codeCommandMatches(requestText, account, code),
+    credentialsMatch: codeCommandMatches(requestText, account, code, "warm"),
     acknowledgementMatches: storefrontCallbackAcknowledgement(
       responseText,
       base,
@@ -251,7 +287,7 @@ export function coldVerificationEvidence(
 ) {
   const request = parsedObject(requestText);
   return {
-    credentialsMatch: codeCommandMatches(requestText, account, code),
+    credentialsMatch: codeCommandMatches(requestText, account, code, "cold"),
     codeOnly:
       Object.keys(request).length === 4 &&
       ["email", "code", "authRequest", "csrf"].every((key) =>
@@ -287,7 +323,12 @@ export function verificationRefusalEvidence(
 ) {
   const response = parsedObject(responseText);
   return {
-    credentialsMatch: codeCommandMatches(requestText, account, submitted),
+    credentialsMatch: codeCommandMatches(
+      requestText,
+      account,
+      submitted,
+      "warm",
+    ),
     wrongCode:
       /^\d{6}$/.test(delivered) &&
       /^\d{6}$/.test(submitted) &&

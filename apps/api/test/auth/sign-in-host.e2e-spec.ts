@@ -1092,7 +1092,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
         expect(jar.values.get(FORM_COOKIE_NAME)).not.toBe(oldFormId);
         expect(body.csrf).not.toBe(form.csrf);
         expect(await state.getForm(oldFormId)).toBeNull();
-        const verify = vi.spyOn(idp, "verifyEmail");
+        const verify = vi.spyOn(idp, "submitEmailCode");
         const finalise = vi.spyOn(hostIdp, "finaliseWithSession");
         try {
           const originalProof = {
@@ -1118,7 +1118,11 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
             status: "redirect",
             url: expect.stringContaining("code="),
           });
-          expect(verify).toHaveBeenCalledTimes(1);
+          expect(verify).toHaveBeenCalledExactlyOnceWith(
+            address,
+            FAKE_VALID_CODE,
+            undefined,
+          );
           const record = await app
             .get(SignInHostRecordStore)
             .find(jar.values.get(RECORD_COOKIE_NAME)!);
@@ -1163,7 +1167,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
         const record = await records.find(recordId);
         expect(record).not.toBeNull();
         expect(await recordRows(address)).toHaveLength(1);
-        const verify = vi.spyOn(idp, "verifyEmail");
+        const verify = vi.spyOn(idp, "submitEmailCode");
         const send = vi.spyOn(idp, "requestEmailLoginCode");
         try {
           const nextRequest = hostIdp.seedAuthRequest({ clientId });

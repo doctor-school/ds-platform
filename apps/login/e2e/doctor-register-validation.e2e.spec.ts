@@ -228,15 +228,14 @@ test.describe("021 EARS-11: the confirmation code on a phone", () => {
       page.waitForRequest(CONFIRM_ROUTE),
       code.fill("482913"),
     ]);
-    // 003 EARS-39 (host amendment): the code step is a full page load on
-    // the sign-in host, so no in-tab registration value rides with the code
-    // — the host's form state holds the warm proof (API-tier tested).
-    expect(body(request)).toEqual({
+    // 003 EARS-24 amended: the code step renders in place on the register
+    // door's document, so the values typed there ride with the code.
+    expect(body(request)).toMatchObject({
       ...formPostFields("doctor", "register"),
       email: EMAIL,
       code: "482913",
+      registration: { password: PASSWORD },
     });
-    expect(body(request)).not.toHaveProperty("registration");
 
     // 021 EARS-10 (amended 2026-09-17) — the accepted code navigates; the
     // confirmation surface leaving the DOM is what says the command succeeded.

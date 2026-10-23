@@ -1,27 +1,48 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Request } from "@playwright/test";
 
-import { doorPath } from "./support/sign-in-door";
+import {
+  doorPath,
+  formPostFields,
+  fulfillHostRedirect,
+  hostRoute,
+  isIdpCallback,
+} from "./support/sign-in-door";
 
 /**
- * 003 EARS-24 amended (#3172) — «← Изменить почту» on the registration code
- * step returns to the registration form with its entered fields preserved in
- * the same tab, except the password, which is re-typed.
- *
- * On the sign-in host the door hops to its code step by a FULL page load (the
- * host proxy refuses non-top-level requests to a door, EARS-70), so the
- * in-memory hold of the storefront forms does not survive the hop: the typed
- * non-secret fields ride the tab's `sessionStorage` instead, and the password
- * is never written there (003-design «No password is stored anywhere new»).
+ * 003 EARS-24 amended (#3172) — on the sign-in host the registration code
+ * step renders IN PLACE on the register door's document: no navigation (the
+ * host proxy refuses a non-top-level request to a door, EARS-70), so the
+ * typed values stay in this tab's memory. They ride with the code (EARS-41,
+ * the EARS-23 re-registration applies them), and «← Изменить почту» returns
+ * to the form with every entered field, the password included. The address
+ * settles onto `/verify?email=…` and back onto `/register` without a history
+ * entry; nothing is written to browser storage.
  */
 
 const EMAIL = "doctor@clinic.ru";
 const PASSWORD = "correct horse battery";
 const PROMO = "PROMO-2026";
+const CONFIRM_ROUTE = hostRoute("/v1/storefront/doctor/verify");
 
 /** Tick a consent through its label — the hit area of the checkbox primitive. */
 async function tick(page: Page, testId: string) {
   await page.getByTestId(testId).locator("xpath=ancestor::label[1]").click();
   await expect(page.getByTestId(testId)).toBeChecked();
+}
+
+/** A mark on the current document: it survives only while no page load happens. */
+async function markDocument(page: Page) {
+  await page.evaluate(() => {
+    (window as unknown as { __sameDocument?: boolean }).__sameDocument = true;
+  });
+}
+
+async function isSameDocument(page: Page): Promise<boolean> {
+  return page.evaluate(
+    () =>
+      (window as unknown as { __sameDocument?: boolean }).__sameDocument ===
+      true,
+  );
 }
 
 async function fillAndSubmit(page: Page) {
@@ -31,41 +52,108 @@ async function fillAndSubmit(page: Page) {
   await page.getByTestId("register-promo").fill(PROMO);
   await tick(page, "register-medworker");
   await tick(page, "register-partner-data");
+  await markDocument(page);
   await page.getByTestId("register-submit").click();
-  await expect(page).toHaveURL(/\/verify\?/);
   await expect(page.getByTestId("verify-back")).toBeVisible();
 }
 
-test.describe("003 EARS-24: «← Изменить почту» on the sign-in host", () => {
+function body(request: Request): Record<string, unknown> {
+  return JSON.parse(request.postData() ?? "{}") as Record<string, unknown>;
+}
+
+test.describe("003 EARS-24: the in-place code step on the sign-in host", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test("003 EARS-24: back from the code step refills the typed fields in the same tab, the password re-typed", async ({
+  test("003 EARS-24: the code step renders on the door's own document and the address settles on /verify without a history entry", async ({
+    page,
+  }) => {
+    await page.goto(doorPath("doctor", "register"));
+    const depth = await page.evaluate(() => window.history.length);
+    await fillAndSubmit(page);
+
+    expect(await isSameDocument(page)).toBe(true);
+    const settled = new URL(page.url());
+    expect(settled.pathname).toBe("/verify");
+    expect(settled.searchParams.get("email")).toBe(EMAIL);
+    expect(settled.searchParams.get("authRequest")).toBe(
+      formPostFields("doctor", "register").authRequest,
+    );
+    expect(await page.evaluate(() => window.history.length)).toBe(depth);
+    await expect(page.getByTestId("verify-card")).toContainText(EMAIL);
+  });
+
+  test("003 EARS-24: back from the code step keeps every typed field, the password included", async ({
     page,
   }) => {
     await fillAndSubmit(page);
+    const depth = await page.evaluate(() => window.history.length);
 
     await page.getByTestId("verify-back").click();
 
-    await expect(page).toHaveURL(/\/register\?/);
     await expect(page.getByTestId("register-email")).toHaveValue(EMAIL);
+    await expect(page.getByTestId("register-password")).toHaveValue(PASSWORD);
     await expect(page.getByTestId("register-promo")).toHaveValue(PROMO);
     await expect(page.getByTestId("register-medworker")).toBeChecked();
     await expect(page.getByTestId("register-partner-data")).toBeChecked();
-    await expect(page.getByTestId("register-password")).toHaveValue("");
+    expect(await isSameDocument(page)).toBe(true);
+    expect(new URL(page.url()).pathname).toBe("/register");
+    expect(await page.evaluate(() => window.history.length)).toBe(depth);
   });
 
-  test("003 EARS-24: the password is never written to the tab's storage", async ({
+  test("003 EARS-23 / EARS-41: the code is posted WITH the password and consents typed on this document", async ({
+    page,
+  }) => {
+    await page.route(CONFIRM_ROUTE, fulfillHostRedirect);
+    await fillAndSubmit(page);
+
+    const [request] = await Promise.all([
+      page.waitForRequest(CONFIRM_ROUTE),
+      page.locator('input[autocomplete="one-time-code"]').fill("482913"),
+    ]);
+
+    const sent = body(request);
+    expect(sent).toMatchObject({
+      ...formPostFields("doctor", "register"),
+      email: EMAIL,
+      code: "482913",
+      registration: { password: PASSWORD, medicalWorkerDeclaration: true },
+    });
+    const consent = (sent.registration as { consent: { purpose: string }[] })
+      .consent;
+    expect(consent.length).toBeGreaterThan(0);
+    await page.waitForURL(isIdpCallback);
+  });
+
+  test("003 EARS-24: nothing is written to the tab's storage", async ({
+    page,
+  }) => {
+    await fillAndSubmit(page);
+    await page.getByTestId("verify-back").click();
+    await expect(page.getByTestId("register-email")).toHaveValue(EMAIL);
+
+    const stored = await page.evaluate(() => ({
+      session: window.sessionStorage.length,
+      local: window.localStorage.length,
+    }));
+    expect(stored).toEqual({ session: 0, local: 0 });
+  });
+
+  test("003 EARS-24 / EARS-39: a reload of the code step enters the host's /verify step naming the address; its Back opens the form empty", async ({
     page,
   }) => {
     await fillAndSubmit(page);
 
-    const stored = await page.evaluate(() =>
-      JSON.stringify({ ...window.sessionStorage, ...window.localStorage }),
-    );
-    expect(stored).not.toContain(PASSWORD);
+    await page.reload();
+
+    await expect(page.getByTestId("verify-card")).toContainText(EMAIL);
+    expect(await isSameDocument(page)).toBe(false);
+    await page.getByTestId("verify-back").click();
+    await expect(page.getByTestId("register-submit")).toBeVisible();
+    await expect(page.getByTestId("register-email")).toHaveValue("");
+    await expect(page.getByTestId("register-password")).toHaveValue("");
   });
 
-  test("003 EARS-24: a fresh open of the door in the same tab after an abandoned submit is empty — only the back step refills", async ({
+  test("003 EARS-24: a fresh open of the door in the same tab after an abandoned submit is empty", async ({
     page,
   }) => {
     await fillAndSubmit(page);
@@ -75,6 +163,7 @@ test.describe("003 EARS-24: «← Изменить почту» on the sign-in h
 
     await expect(page.getByTestId("register-submit")).toBeVisible();
     await expect(page.getByTestId("register-email")).toHaveValue("");
+    await expect(page.getByTestId("register-password")).toHaveValue("");
     await expect(page.getByTestId("register-promo")).toHaveValue("");
     await expect(page.getByTestId("register-medworker")).not.toBeChecked();
     await expect(page.getByTestId("register-partner-data")).not.toBeChecked();

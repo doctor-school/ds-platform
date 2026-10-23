@@ -97,8 +97,8 @@ import {
   ACADEMY_FIXTURE,
   DOCTOR_FIXTURE,
 } from "../test-support/host-config-fixtures";
+import { VerifyDoor } from "./verify-door";
 import { VerifyEntry } from "./verify-entry";
-import { takeRegistrationBackStep } from "../register/registration-form-draft";
 
 const EMAIL = "doc@example.com";
 const PASSWORD = "Sup3r$ecretPw!9";
@@ -442,18 +442,24 @@ describe("005 EARS-2 guest-through-auth completion on /verify", () => {
     expect(peekPendingRegistration(EMAIL)?.registration).toEqual(REGISTRATION);
   });
 
-  it("003 EARS-24: «← Изменить почту» marks its hop in this tab so the form refills; nothing else does", async () => {
-    // Drop a marker an earlier back-click in this file left unconsumed.
-    takeRegistrationBackStep();
+  it("003 EARS-24: the in-place step's «← Изменить почту» is the registration door's own back, never a navigation", async () => {
+    const onBack = vi.fn();
     const user = userEvent.setup();
-    await mountSettled();
-    expect(takeRegistrationBackStep()).toBe(false);
+    render(
+      <VerifyDoor
+        config={ACADEMY_FIXTURE}
+        email={EMAIL}
+        landing="/webinars"
+        onBack={onBack}
+      />,
+    );
+    await screen.findByTestId("verify-submit");
 
     await user.click(screen.getByTestId("verify-back"));
 
-    expect(takeRegistrationBackStep()).toBe(true);
-    // One-shot: consumed by the register mount it was written for.
-    expect(takeRegistrationBackStep()).toBe(false);
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(h.push).not.toHaveBeenCalled();
+    expect(h.replace).not.toHaveBeenCalled();
   });
 });
 
@@ -528,17 +534,6 @@ describe("003 EARS-41: one submission — the code, with the held values while t
 
     await waitFor(() => expect(h.replace).toHaveBeenCalledTimes(1));
     expect(peekPendingRegistration()).toBeNull();
-  });
-
-  it("003 EARS-24: an accepted code drops the registration fields the tab stored for «← Изменить почту»", async () => {
-    window.sessionStorage.setItem(
-      "ds.auth-flow.registration-form",
-      JSON.stringify({ email: EMAIL, promoCode: "", consents: {} }),
-    );
-    await enterCode();
-
-    await waitFor(() => expect(h.replace).toHaveBeenCalledTimes(1));
-    expect(window.sessionStorage.length).toBe(0);
   });
 
   it("003 EARS-16 / EARS-41: a refused code keeps the visitor on the step with the generic error and the held values kept for the retry", async () => {

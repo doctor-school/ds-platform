@@ -351,6 +351,20 @@ describe("storefront entry", () => {
     });
   });
 
+  it("003 EARS-61: the storefront /verify is the registration entry and carries no address", async () => {
+    const api = fakeApi();
+    const res = await storefrontEntry(
+      get("/verify?email=doctor%40clinic.ru"),
+      ACADEMY,
+      "verify",
+      { fetchImpl: api.fetchImpl, env: ENV },
+    );
+    const sent = api.internal("transaction")[0]?.body;
+    expect(sent).toMatchObject({ door: "register" });
+    expect(JSON.stringify(sent)).not.toContain("clinic.ru");
+    expect(res.headers.get("location") ?? "").not.toContain("clinic.ru");
+  });
+
   it("003 EARS-43 / EARS-44: a signed-in browser keeps the existing redirect to its landing and starts no transaction", async () => {
     const signedIn = { cookie: "__Host-ds_session=live-sid" };
     const api = fakeApi({ signedIn: true });

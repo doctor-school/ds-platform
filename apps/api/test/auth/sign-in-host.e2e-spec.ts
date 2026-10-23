@@ -1197,10 +1197,13 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
   );
 
   describe("EARS-44: the hand-off against a live record", () => {
-    async function handoffIntent(ref: string): Promise<string> {
+    async function handoffIntent(
+      ref: string,
+      clientId = DOCTOR,
+    ): Promise<string> {
       const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
       return state.putIntent(
-        { door: "login", method: "code", handoff: ref, clientId: DOCTOR },
+        { door: "login", method: "code", handoff: ref, clientId },
         600,
       );
     }
@@ -1214,22 +1217,88 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
         .mint(rows[0]!.id, address);
     }
 
-    it("EARS-44: a live reference of the record's own account finalises with the record, redeems nothing and sends no code", async () => {
-      const address = await account("handoff-own");
-      const jar = new Jar();
-      await signIn(jar, address);
-      const ref = await mint(address);
-      const store = app.get<LoginHandoffStore>(LOGIN_HANDOFF_STORE);
-      const redeem = vi.spyOn(store, "redeem");
-      const authRequest = hostIdp.seedAuthRequest({
-        clientId: DOCTOR,
-        loginHint: await handoffIntent(ref),
-      });
-      const { body } = await entry(jar, authRequest);
-      expect(body.action === "redirect" && body.url).toContain("code=");
-      expect(redeem).not.toHaveBeenCalled();
-      redeem.mockRestore();
-    });
+    it.each([
+      ["academy", ACADEMY, DOCTOR],
+      ["doctor", DOCTOR, ACADEMY],
+    ] as const)(
+      "EARS-44: S173 a live own reference finalises for %s without credentials, sends, redemption or record replacement",
+      async (_storefront, clientId, initialClient) => {
+        const address = await account("handoff-own");
+        const jar = new Jar();
+        await signIn(jar, address, initialClient);
+        const cookieId = jar.values.get(RECORD_COOKIE_NAME)!;
+        const records = app.get(SignInHostRecordStore);
+        const before = await records.find(cookieId);
+        expect(before).not.toBeNull();
+        const ref = await mint(address);
+        const store = app.get<LoginHandoffStore>(LOGIN_HANDOFF_STORE);
+        const reference = await store.peek(ref);
+        expect(reference).toEqual({
+          accountId: expect.any(String),
+          identifier: address,
+        });
+        const auth = app.get(AuthService);
+        const noWork = [
+          vi.spyOn(store, "redeem"),
+          vi.spyOn(auth, "passwordStep"),
+          vi.spyOn(auth, "otpStep"),
+          vi.spyOn(auth, "requestLoginOtp"),
+          vi.spyOn(idp, "passwordLogin"),
+          vi.spyOn(idp, "verifyEmail"),
+          vi.spyOn(idp, "verifyPhone"),
+          vi.spyOn(idp, "loginWithEmailOtp"),
+          vi.spyOn(idp, "loginWithSmsOtp"),
+          vi.spyOn(idp, "requestEmailLoginCode"),
+          vi.spyOn(idp, "requestSmsOtp"),
+          vi.spyOn(idp, "terminateSession"),
+          vi.spyOn(hostIdp, "setSessionLifetime"),
+          vi.spyOn(hostIdp, "finaliseWithError"),
+        ];
+        const finalise = vi.spyOn(hostIdp, "finaliseWithSession");
+        const lifetimes = hostIdp.lifetimes.length;
+        try {
+          for (const elapsedSeconds of [1, 2]) {
+            recordNow = new Date(
+              before!.lastFinalisedAt.getTime() + elapsedSeconds * 1000,
+            );
+            const authRequest = hostIdp.seedAuthRequest({
+              clientId,
+              loginHint: await handoffIntent(ref, clientId),
+            });
+            const { res, body } = await entry(jar, authRequest);
+            expect(res.statusCode).toBe(200);
+            expect(body).toEqual({
+              action: "redirect",
+              url: expect.stringContaining("code="),
+            });
+            expect(res.payload).not.toContain(ref);
+            expect(JSON.stringify(res.headers)).not.toContain(ref);
+            expect(res.cookies).toEqual([]);
+            expect(jar.values.get(RECORD_COOKIE_NAME)).toBe(cookieId);
+            expect(hostIdp.finalised.at(-1)).toEqual({
+              id: authRequest,
+              session: before!.session,
+            });
+            expect(finalise).toHaveBeenLastCalledWith(
+              authRequest,
+              before!.session,
+            );
+            expect(await records.find(cookieId)).toEqual({
+              ...before,
+              lastFinalisedAt: recordNow,
+            });
+            expect(await recordRows(address)).toHaveLength(1);
+            expect(await store.peek(ref)).toEqual(reference);
+          }
+          expect(finalise).toHaveBeenCalledTimes(2);
+          expect(hostIdp.lifetimes).toHaveLength(lifetimes);
+          for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
+        } finally {
+          finalise.mockRestore();
+          for (const spy of noWork) spy.mockRestore();
+        }
+      },
+    );
 
     it("EARS-44: another account's reference never uses the live record — the code form renders", async () => {
       const holder = await account("handoff-holder");

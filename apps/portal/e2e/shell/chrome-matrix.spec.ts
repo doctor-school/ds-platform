@@ -1,3 +1,4 @@
+import { isSignInHostForm } from "@ds/e2e/sign-in-host-api";
 import { test, expect, type Page } from "@playwright/test";
 import { LIVE_STAND, submitRegisterAndVerify } from "../support/doctor-session";
 import {
@@ -90,11 +91,11 @@ test.describe("008 EARS-12 academy chrome route-visibility matrix (e2e)", () => 
 
     for (const route of AUTH_ROUTES) {
       await page.goto(route, { waitUntil: "domcontentloaded" });
-      // The route really served itself — an absence assertion after a redirect
-      // would prove nothing.
-      expect(new URL(page.url()).pathname, `${route} serves itself`).toBe(
-        route,
-      );
+      // #3172: each storefront auth route is an entry into the sign-in host,
+      // whose door renders the form — so the surface under test is the host
+      // form the entry reached (an absence assertion anywhere else would prove
+      // nothing).
+      await page.waitForURL((url) => isSignInHostForm(url));
       await expectChromeAbsent(page, route);
       // …and the surface really rendered its OWN chrome: `AuthShell`'s brand
       // panel stands in place of the storefront header (#237).

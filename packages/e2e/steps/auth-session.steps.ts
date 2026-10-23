@@ -16,6 +16,7 @@ import {
   mailpitUrlFor,
   nativeRecoveryMail,
 } from "../lib/mailpit.js";
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import { signInGoldenDoctor } from "../lib/sign-in.js";
 import { resolveWorkerGoldenDoctor } from "../lib/worker-golden.js";
@@ -237,11 +238,23 @@ Then(
 
 Then(
   "neither the login response nor JavaScript-readable browser stores expose access or refresh tokens",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const loginBody = loginBodies.get(page);
     expect(loginBody, "login response body was captured").toBeDefined();
-    expect(loginBody).not.toMatch(/access[_-]?token|refresh[_-]?token/i);
-    expect(loginBody).not.toMatch(/eyJ[\w-]+\.[\w-]+\.[\w-]+/);
+    // #3172 — the sign-in host answers the storefront callback URL, whose
+    // `code` is the IdP's single-use authorization code (an encrypted JWE the
+    // storefront redeems server-side), not a token. The answer must be exactly
+    // that acknowledgement; everything else in it is checked for tokens.
+    expect(
+      storefrontCallbackAcknowledgement(loginBody!, world.hostBaseUrl),
+      "the login answer is the storefront callback acknowledgement",
+    ).toBe(true);
+    const ack = JSON.parse(loginBody!) as { url: string };
+    const callback = new URL(ack.url);
+    callback.searchParams.delete("code");
+    const withoutCode = JSON.stringify({ ...ack, url: callback.toString() });
+    expect(withoutCode).not.toMatch(/access[_-]?token|refresh[_-]?token/i);
+    expect(withoutCode).not.toMatch(/eyJ[\w-]+\.[\w-]+\.[\w-]+/);
     const clientState = await page.evaluate(() => ({
       cookie: document.cookie,
       local: Object.entries(window.localStorage),

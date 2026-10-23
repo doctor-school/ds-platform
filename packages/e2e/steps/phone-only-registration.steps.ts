@@ -1,5 +1,7 @@
-import { hostCommand,
+import {
+  hostCommand,
   isAuthCommandPath,
+  isSignInHostForm,
   signInHostApiPath,
 } from "../lib/sign-in-host-api.js";
 import { randomInt, randomUUID } from "node:crypto";
@@ -306,7 +308,10 @@ Then(
         observed.response.response.status(),
         "phone-only never 500s",
       ).not.toBe(500);
-    expect(new URL(state.page.url()).pathname).toBe("/register");
+    // #3172 — still the sign-in host's registration door (rendered on the
+    // host's `/login` behind the IdP): proven by what renders, not the path.
+    expect(isSignInHostForm(state.page.url())).toBe(true);
+    await expect(state.page.getByTestId("register-submit")).toBeVisible();
     await assertNoPrivateRegistrationAccess(state.page, "", state);
   },
 );

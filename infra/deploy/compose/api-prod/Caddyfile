@@ -20,7 +20,8 @@
 # case-insensitive and judges the cleaned, unescaped path, so `/V1/Internal`,
 # `/v1//internal` and percent-encoded spellings land here as well.
 (internal_api_unreachable) {
-	handle /v1/internal /v1/internal/* {
+	@internal_api path /v1/internal /v1/internal/*
+	handle @internal_api {
 		respond 404
 	}
 }

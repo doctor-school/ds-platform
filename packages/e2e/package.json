@@ -1,6 +1,6 @@
 {
   "name": "@ds/e2e",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "DS Platform end-to-end regression contract (C6) — shared Gherkin step definitions, the two derived walks, and the host navigation-model contract both storefronts render from (tech spec 2026-09-08-staging-previews-and-regression-contour-en.md §6).",

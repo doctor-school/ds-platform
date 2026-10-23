@@ -116,15 +116,11 @@ Given(
     await owned.goto(registrationUrl(world.hostBaseUrl, "/account"), {
       waitUntil: "load",
     });
-    // #3172 — the IdP lands on the host's `/login`, which renders the door the
-    // entry intent named once (003 EARS-71); a reload of that arrival would
-    // render the login door. The host's own `/register` names its door itself
-    // (`doorFor`) on the same auth request — the ready form under test, whose
-    // reload must give back the same registration door.
+    // #3172 — the IdP lands on the host's `/login`; the rendered registration
+    // door settles the address on its own `/register` (003 EARS-71), which is
+    // what the later real reload re-enters.
     expect(isSignInHostForm(owned.url())).toBe(true);
-    const registerDoor = new URL(owned.url());
-    registerDoor.pathname = "/register";
-    await owned.goto(registerDoor.toString(), { waitUntil: "load" });
+    await owned.waitForURL((url) => new URL(url).pathname === "/register");
     await owned.waitForLoadState("networkidle");
     await expect(field(state)).toBeVisible();
     await expect(toggle(state)).toBeEnabled();

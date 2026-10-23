@@ -44,9 +44,9 @@ const captchaReady = new WeakSet<BrowserContext>();
  * SmartCaptcha never yields a token headless, so the context gets the
  * `@ds/e2e/captcha-stub` stand-in (nothing on a local stand booted with bot
  * protection off). The stub must serve `captcha.js` before the page loads it,
- * so the form is re-opened after installing it — the sign-in host's register
- * door (#3172: the storefront `/register` is a 303 entry), same auth request, so the IdP's auth
- * request — and the return path its transaction holds — survives. The `load` + `networkidle` wait is the hydration wait of
+ * so the form is reloaded after installing it — the sign-in host's register
+ * door (#3172: the storefront `/register` is a 303 entry), same URL, so the
+ * IdP's auth request — and the return path its transaction holds — survives. The `load` + `networkidle` wait is the hydration wait of
  * `@ds/e2e/sign-in`: a click before the client chunks run submits the form
  * natively (`POST /register`) and the walk never reaches `/verify`.
  */
@@ -60,14 +60,11 @@ export async function readyRegisterForm(page: Page): Promise<void> {
     );
     captchaReady.add(context);
   }
-  // Not a reload: the IdP lands on the host's `/login`, which renders the door
-  // the entry intent named, and that intent is spent on the first read (003
-  // EARS-71) — a reload of `/login?authRequest=…` renders the LOGIN door. The
-  // host's own `/register` path names its door itself (`doorFor`), on the same
-  // auth request, exactly as the login door's «Создать аккаунт» link does.
-  const registerDoor = new URL(page.url());
-  registerDoor.pathname = "/register";
-  await page.goto(registerDoor.toString(), { waitUntil: "load" });
+  // The IdP lands on the host's `/login`; the rendered registration door
+  // settles the address on its own `/register` (003 EARS-71), so the reload
+  // re-enters that door, not the spent intent's `/login`.
+  await page.waitForURL((url) => new URL(url).pathname === "/register");
+  await page.reload({ waitUntil: "load" });
   await page.waitForLoadState("networkidle");
 }
 

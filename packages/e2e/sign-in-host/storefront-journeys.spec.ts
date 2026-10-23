@@ -5,11 +5,13 @@ import {
   expect,
   test,
   type Browser,
+  type BrowserContext,
   type Page,
   type Response,
 } from "@playwright/test";
 
 import { HOSTS, baseUrlFor, type HostId } from "../hosts.js";
+import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import {
   captureAddressedMailCheckpoint,
   fetchRecoveryCode,
@@ -64,6 +66,18 @@ const origin = (id: HostId) => new URL(base(id)).origin;
 const startPath = (id: HostId) => HOSTS[id].eventsPath;
 /** The gated page whose guest bounce stores a return path on any stand. */
 const STORED_PATH = "/account";
+
+/**
+ * The host's forms are captcha-gated: the stub on a slot (the real invisible
+ * widget yields no token headless), nothing on a local stand booted with bot
+ * protection off (`captcha-stub.ts`). Installed before the first navigation.
+ */
+const prepareCaptcha = (target: BrowserContext, baseURL: string) =>
+  prepareCaptchaForJourney(
+    target,
+    baseURL,
+    process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
+  );
 /**
  * The stand's one shared inbox, whichever storefront sent the mail: its host
  * is derived from the Academy slot URL (as doctor-landing.spec does) — the
@@ -181,6 +195,7 @@ async function registeredAccount(
   const account = ownedAccount(id);
   const context = await browser.newContext({ locale: "ru-RU" });
   try {
+    await prepareCaptcha(context, base(id));
     const page = await context.newPage();
     await page.goto(`${base(id)}/register`, { waitUntil: "load" });
     await registerOnHostForm(page, id, account);
@@ -251,6 +266,7 @@ function isDark(page: Page): Promise<boolean> {
 for (const id of STOREFRONTS) {
   test.describe(`ADR-0015 §4 (${id}): storefront → sign-in host → storefront`, () => {
     test.use({ viewport: { width: 1440, height: 900 }, locale: "ru-RU" });
+    test.beforeEach(({ context }) => prepareCaptcha(context, base(id)));
 
     test(`ADR-0015 §4 req. 6 (${id}): after signing out, «Войти» shows the credential form — no silent re-sign-in`, async ({
       page,

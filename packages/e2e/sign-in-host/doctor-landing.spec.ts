@@ -5,10 +5,12 @@ import {
   expect,
   test,
   type APIRequestContext,
+  type BrowserContext,
   type Page,
 } from "@playwright/test";
 
 import { HOSTS, baseUrlFor } from "../hosts.js";
+import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import {
   captureAddressedMailCheckpoint,
   fetchRecoveryCode,
@@ -61,6 +63,20 @@ const HOME = "/";
 const CARDIOLOGY = "Кардиология";
 
 const doctorBase = () => baseUrlFor(HOSTS.doctor);
+
+/**
+ * The host's forms are captcha-gated: the stub on a slot (the real invisible
+ * widget yields no token headless), nothing on a local stand booted with bot
+ * protection off (`captcha-stub.ts`). Installed before the first navigation.
+ */
+const prepareCaptcha = (target: BrowserContext, baseURL: string) =>
+  prepareCaptchaForJourney(
+    target,
+    baseURL,
+    process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
+  );
+
+test.beforeEach(({ context }) => prepareCaptcha(context, doctorBase()));
 const mailbox = () =>
   process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(baseUrlFor(HOSTS.academy));
 
@@ -312,6 +328,7 @@ test.describe("021 EARS-3: LD-4 — where the direct arrival lands", () => {
     for (const remembered of [false, true]) {
       const context = await browser.newContext();
       try {
+        await prepareCaptcha(context, doctorBase());
         const page = await context.newPage();
         if (remembered) {
           await chooseGuestSpecialty(

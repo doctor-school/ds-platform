@@ -25,6 +25,13 @@ import {
 // and inside the webinar room — those carry their own chrome (spec §Constraints).
 const ROUTES = ["/", "/account", "/account/events"] as const;
 
+// 008 EARS-14 exception, owner decision 2026-10-23: `/` is the interim stub
+// home, to be replaced by the redesigned home, which gets the single unified
+// footer. The seam is tracked in #1323 (dismantle the interim home); the full
+// home's PR removes this set so `/` asserts the footer like every other route.
+// Header, top-nav and theme toggle stay asserted on `/`.
+const INTERIM_HOME_NO_SHARED_FOOTER_1323: ReadonlySet<string> = new Set(["/"]);
+
 test.describe("008 EARS-1 persistent app-shell header presence (e2e)", () => {
   test.skip(!LIVE_STAND, "requires a live portal + real Zitadel + Mailpit");
 
@@ -57,7 +64,9 @@ test.describe("008 EARS-1 persistent app-shell header presence (e2e)", () => {
         `theme toggle present on ${route}`,
       ).toBeVisible();
       // 008 EARS-14 — the footer is part of the persistent chrome too, on
-      // every non-hidden route (new on this host with #2180).
+      // every non-hidden route (new on this host with #2180) — except the
+      // interim home (#1323, above).
+      if (INTERIM_HOME_NO_SHARED_FOOTER_1323.has(route)) continue;
       await expect(
         page.getByTestId("storefront-footer"),
         `footer present on ${route}`,

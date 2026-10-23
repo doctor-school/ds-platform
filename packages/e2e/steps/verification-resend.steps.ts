@@ -22,6 +22,7 @@ import {
   verificationEvidence,
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
+import { openHostCodeStep } from "../lib/storefront-entry-watch.js";
 import { assertSecureSession } from "../lib/secure-session.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 
@@ -177,15 +178,18 @@ Given(
     );
     await Promise.all(
       state.visitors.map(async (visitor) => {
-        const route = new URL("/verify", world.hostBaseUrl);
-        route.searchParams.set("email", visitor.email);
-        route.searchParams.set("returnTo", "/account");
         visitor.page.on("request", (request) => {
           const path = new URL(request.url()).pathname;
           if (request.method() === "POST" && isAuthCommandPath(path))
             visitor.authPosts.push(path);
         });
-        await visitor.page.goto(route.toString(), { waitUntil: "load" });
+        // #3172 — the code step is the sign-in host's /verify door.
+        await openHostCodeStep(
+          visitor.page,
+          world.hostBaseUrl,
+          visitor.email,
+          "/account",
+        );
         await visitor.page.waitForLoadState("networkidle");
         const card = visitor.page.getByTestId("verify-card");
         await expect(card).toBeVisible();

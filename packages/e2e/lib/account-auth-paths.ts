@@ -330,9 +330,11 @@ export function defineAccountAuthPathTests(bound: AccountAuthPathsHost): void {
       await entry;
       // #3172 — the reset door is the sign-in host's; the return path rides
       // the transaction, and the completed reset landing on /account proves it.
-      await expect(page).toHaveURL(
-        (url) => url.pathname === bound.resetPath && isSignInHostForm(url),
-      );
+      // The IdP arrives on the host's `/login`, which renders the door the
+      // entry chose (`doorFor`, apps/login/lib/sign-in-entry.ts): the reset
+      // door is proven by what renders, not by the path.
+      await expect(page).toHaveURL((url) => isSignInHostForm(url));
+      await expect(page.getByTestId("reset-request-submit")).toBeVisible();
       await page.waitForLoadState("networkidle");
 
       const before = await captureAddressedMailCheckpoint(

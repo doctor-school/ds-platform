@@ -80,3 +80,40 @@ export function clearRegistrationFormDraft(): void {
     // Blocked storage holds nothing to drop.
   }
 }
+
+/*
+ * The refill is a property of the «← Изменить почту» step ONLY (003 EARS-24
+ * amended): any other open of the door — a second registration in the same
+ * tab after an abandoned code step — starts empty. The back step therefore
+ * marks its own navigation with a one-shot flag in the same per-tab storage,
+ * consumed by the next register mount. Chosen over a query flag on the back
+ * URL: the URL stays clean, and a flag in this tab's storage cannot be handed
+ * to another tab (or forged into a link) to prefill someone else's form. The
+ * module flag mirrors it so a same-document hop still refills where storage
+ * is blocked.
+ */
+const BACK_KEY = "ds.auth-flow.registration-back";
+let backStepInMemory = false;
+
+/** «← Изменить почту»: the next register mount in this tab is the way back. */
+export function markRegistrationBackStep(): void {
+  backStepInMemory = true;
+  try {
+    window.sessionStorage.setItem(BACK_KEY, "1");
+  } catch {
+    // Blocked storage: only a same-document hop still refills.
+  }
+}
+
+/** Whether this mount was reached by the back step — consumed on read. */
+export function takeRegistrationBackStep(): boolean {
+  let marked = backStepInMemory;
+  backStepInMemory = false;
+  try {
+    if (window.sessionStorage.getItem(BACK_KEY) !== null) marked = true;
+    window.sessionStorage.removeItem(BACK_KEY);
+  } catch {
+    // Blocked storage holds no marker.
+  }
+  return marked;
+}

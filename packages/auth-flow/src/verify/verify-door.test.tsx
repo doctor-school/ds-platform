@@ -98,6 +98,7 @@ import {
   DOCTOR_FIXTURE,
 } from "../test-support/host-config-fixtures";
 import { VerifyEntry } from "./verify-entry";
+import { takeRegistrationBackStep } from "../register/registration-form-draft";
 
 const EMAIL = "doc@example.com";
 const PASSWORD = "Sup3r$ecretPw!9";
@@ -439,6 +440,20 @@ describe("005 EARS-2 guest-through-auth completion on /verify", () => {
     await user.click(screen.getByTestId("verify-back"));
 
     expect(peekPendingRegistration(EMAIL)?.registration).toEqual(REGISTRATION);
+  });
+
+  it("003 EARS-24: «← Изменить почту» marks its hop in this tab so the form refills; nothing else does", async () => {
+    // Drop a marker an earlier back-click in this file left unconsumed.
+    takeRegistrationBackStep();
+    const user = userEvent.setup();
+    await mountSettled();
+    expect(takeRegistrationBackStep()).toBe(false);
+
+    await user.click(screen.getByTestId("verify-back"));
+
+    expect(takeRegistrationBackStep()).toBe(true);
+    // One-shot: consumed by the register mount it was written for.
+    expect(takeRegistrationBackStep()).toBe(false);
   });
 });
 

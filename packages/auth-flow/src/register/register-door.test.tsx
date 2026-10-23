@@ -83,6 +83,8 @@ import {
   DOCTOR_FIXTURE,
 } from "../test-support/host-config-fixtures";
 import { RegisterDoor } from "./register-door";
+import { markRegistrationBackStep } from "./registration-form-draft";
+import { renderToString } from "react-dom/server";
 import { BotProtectionErrorCodes } from "@ds/schemas";
 
 /** Both host shapes, for every rule the door owns rather than a host states. */
@@ -438,6 +440,8 @@ describe("003 EARS-41 / 021 EARS-15.4: what the door holds for the code step", (
         registration: { password: PASSWORD, consent: [] },
         form: { email: EMAIL, password: PASSWORD, promoCode: "", consents: {} },
       });
+      // The back step marks its own navigation (same-document hop).
+      markRegistrationBackStep();
 
       await renderDoor(config);
 
@@ -463,13 +467,80 @@ describe("003 EARS-41 / 021 EARS-15.4: what the door holds for the code step", (
       cleanup();
       // A full page load: the in-memory hold is gone, the tab's storage is not.
       clearPendingRegistration();
+      // «← Изменить почту» marked the hop before navigating.
+      markRegistrationBackStep();
 
       await renderDoor(config);
 
-      expect(screen.getByTestId("register-email")).toHaveValue(EMAIL);
+      await waitFor(() =>
+        expect(screen.getByTestId("register-email")).toHaveValue(EMAIL),
+      );
       expect(screen.getByTestId("register-password")).toHaveValue("");
     },
   );
+
+  it.each(HOSTS)(
+    "003 EARS-24: a fresh open of the %s door in the same tab — not reached by «← Изменить почту» — is empty and drops the stale fields",
+    async (_name, config) => {
+      await submitForm(config);
+      await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+      cleanup();
+      // The visitor abandons the code step and opens the door anew (full load).
+      clearPendingRegistration();
+
+      await renderDoor(config);
+
+      expect(screen.getByTestId("register-email")).toHaveValue("");
+      const boxes = screen
+        .getByTestId("registration-form")
+        .querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+      for (const box of Array.from(boxes)) expect(box.checked).toBe(false);
+      await waitFor(() => expect(window.sessionStorage.length).toBe(0));
+    },
+  );
+
+  it("003 EARS-24: an in-memory hold refills nothing on a fresh open — only the back step refills", async () => {
+    setPendingRegistration({
+      identifier: EMAIL,
+      registration: { password: PASSWORD, consent: [] },
+      form: { email: EMAIL, password: PASSWORD, promoCode: "", consents: {} },
+    });
+
+    await renderDoor(DOCTOR_FIXTURE);
+
+    expect(screen.getByTestId("register-email")).toHaveValue("");
+    expect(screen.getByTestId("register-password")).toHaveValue("");
+  });
+
+  it("003 EARS-24: the back marker is one-shot — the next open after the refill is empty", async () => {
+    await submitForm(DOCTOR_FIXTURE);
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    cleanup();
+    clearPendingRegistration();
+    markRegistrationBackStep();
+    await renderDoor(DOCTOR_FIXTURE);
+    await waitFor(() =>
+      expect(screen.getByTestId("register-email")).toHaveValue(EMAIL),
+    );
+    cleanup();
+
+    await renderDoor(DOCTOR_FIXTURE);
+
+    expect(screen.getByTestId("register-email")).toHaveValue("");
+  });
+
+  it("003 EARS-24: the server render never reads the tab — the refill is applied after mount (no hydration mismatch)", async () => {
+    await submitForm(DOCTOR_FIXTURE);
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    cleanup();
+    markRegistrationBackStep();
+
+    const html = renderToString(
+      <RegisterDoor config={DOCTOR_FIXTURE} landing="/" />,
+    );
+
+    expect(html).not.toContain(EMAIL);
+  });
 
   it("003 EARS-24: a new submit drops the stored fields of the abandoned attempt, kept dropped past a refusal", async () => {
     await submitForm(DOCTOR_FIXTURE);
@@ -477,9 +548,14 @@ describe("003 EARS-41 / 021 EARS-15.4: what the door holds for the code step", (
     cleanup();
     clearPendingRegistration();
     register.mockReset().mockRejectedValue(authError(400));
+    // Back from the code step: the form refills, then is submitted anew.
+    markRegistrationBackStep();
 
     const user = setupUser();
     await renderDoor(DOCTOR_FIXTURE);
+    await waitFor(() =>
+      expect(screen.getByTestId("register-email")).toHaveValue(EMAIL),
+    );
     await user.type(screen.getByTestId("register-password"), PASSWORD);
     await user.click(screen.getByTestId("register-submit"));
 

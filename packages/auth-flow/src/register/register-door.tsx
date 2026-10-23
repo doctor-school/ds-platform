@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -38,6 +38,7 @@ import { registerFieldHint, registerFieldRules } from "../fields";
 import {
   clearRegistrationFormDraft,
   readRegistrationFormDraft,
+  takeRegistrationBackStep,
   writeRegistrationFormDraft,
 } from "./registration-form-draft";
 import type {
@@ -238,14 +239,25 @@ export function RegisterDoor({
 
   const [commandError, setCommandError] = useState<string | null>(null);
   const [challengeError, setChallengeError] = useState<string | null>(null);
-  // 003 EARS-24 amended — read once, on mount: the values this tab still holds
-  // from a registration whose code step the visitor stepped back from. The
-  // in-memory hold covers a client-side hop; after a full page load (the
-  // sign-in host's door hop) the tab's stored fields refill everything but the
-  // password, which is re-typed.
-  const [initialValues] = useState(
-    () => peekPendingRegistration()?.form ?? readRegistrationFormDraft(),
-  );
+  // 003 EARS-24 amended — the form refills ONLY when «← Изменить почту» led
+  // here (its one-shot marker); any other open starts empty and drops what an
+  // abandoned attempt left in this tab. The in-memory hold covers a
+  // client-side hop; after a full page load (the sign-in host's door hop) the
+  // tab's stored fields refill everything but the password, which is
+  // re-typed. Read AFTER mount: the server render and the first client render
+  // are both the empty form, so the tab never causes a hydration mismatch.
+  const [initialValues, setInitialValues] = useState<
+    RegisterCardValues | undefined
+  >(undefined);
+  useEffect(() => {
+    if (takeRegistrationBackStep()) {
+      const held =
+        peekPendingRegistration()?.form ?? readRegistrationFormDraft();
+      if (held) setInitialValues(held);
+      return;
+    }
+    clearRegistrationFormDraft();
+  }, []);
 
   const captcha = useBotProtectedAction({
     onVerified: () => setChallengeError(null),
@@ -411,6 +423,8 @@ export function RegisterDoor({
       // 003 EARS-24 amended — «← Изменить почту» on the code step lands here
       // with the visitor's typed values still held in this tab.
       initialValues={initialValues}
+      // The card reads its values once; the refill arrives after mount.
+      key={initialValues ? "refilled" : "empty"}
       // #2331 — the already-registered visitor's way out, on BOTH doors, with
       // the arrival context carried onward (rule S3).
       footer={

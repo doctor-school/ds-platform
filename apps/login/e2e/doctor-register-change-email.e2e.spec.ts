@@ -65,6 +65,21 @@ test.describe("003 EARS-24: «← Изменить почту» on the sign-in h
     expect(stored).not.toContain(PASSWORD);
   });
 
+  test("003 EARS-24: a fresh open of the door in the same tab after an abandoned submit is empty — only the back step refills", async ({
+    page,
+  }) => {
+    await fillAndSubmit(page);
+
+    // The visitor abandons the code step and opens the door anew.
+    await page.goto(doorPath("doctor", "register"));
+
+    await expect(page.getByTestId("register-submit")).toBeVisible();
+    await expect(page.getByTestId("register-email")).toHaveValue("");
+    await expect(page.getByTestId("register-promo")).toHaveValue("");
+    await expect(page.getByTestId("register-medworker")).not.toBeChecked();
+    await expect(page.getByTestId("register-partner-data")).not.toBeChecked();
+  });
+
   test("003 EARS-24: another tab opens the form empty", async ({
     page,
     context,

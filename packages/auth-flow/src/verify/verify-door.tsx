@@ -28,7 +28,10 @@ import { resolveAuthFlowCopy } from "../copy";
 import { withBoldDestination } from "../copy/destination";
 import { authErrorMessage } from "../errors";
 import { resolveVerificationCode } from "../fields";
-import { clearRegistrationFormDraft } from "../register/registration-form-draft";
+import {
+  clearRegistrationFormDraft,
+  markRegistrationBackStep,
+} from "../register/registration-form-draft";
 import { makeResolver } from "../form-resolver";
 import type { AuthFlowHostConfig, AuthFlowVerifyCopy } from "../host-config";
 import {
@@ -248,12 +251,14 @@ export function VerifyDoor({
       error={error}
       succeeded={succeeded}
       // 003 EARS-24 amended — «← Изменить почту»: back to this host's form,
-      // which refills from the values still held in this tab (the password
+      // which refills (this step alone) from the values still held in this tab (the password
       // re-typed after a full page load), the arrival
       // target carried onward (rule S3).
-      onBack={() =>
-        router.push(withReturnTarget(config.routes.register, carriedTarget))
-      }
+      onBack={() => {
+        // One-shot marker: only this step refills the form (003 EARS-24).
+        markRegistrationBackStep();
+        router.push(withReturnTarget(config.routes.register, carriedTarget));
+      }}
       resend={{
         nonce: resendNonce,
         onResend: () => captcha.request(onResend),

@@ -470,12 +470,13 @@ Then(
     const state = recovery(page);
     const { response, body } = state.completion!;
     expect(response.status(), "login code accepted").toBe(200);
+    // 003 EARS-5 (amended): the host answers with the storefront callback —
+    // its `code` is the IdP's encrypted single-use authorization code (a JWE,
+    // so JWT-shaped), never a token; the exact shape is the token-free proof.
     expect(
-      /access[_-]?token|refresh[_-]?token|eyJ[\w-]+\.[\w-]+\.[\w-]+/i.test(
-        body,
-      ),
+      storefrontCallbackAcknowledgement(body, world.hostBaseUrl),
       "token-free login acknowledgement",
-    ).toBe(false);
+    ).toBe(true);
     await secureSession(
       state.recovered!,
       response,

@@ -121,6 +121,36 @@ async function setConsent(page: Page, testId: string) {
 }
 
 /**
+ * 003 EARS-41/23 on the doctor door (DoctorVerifyRegistrationSchema): the warm
+ * code step's `registration` is exactly the typed password, the medical-worker
+ * declaration and the one ticked consent, partner-data sharing (021 EARS-5).
+ * A boolean, so the password never reaches a report.
+ */
+function heldDoctorRegistration(
+  registration: unknown,
+  account: OwnedCredentials,
+): boolean {
+  if (
+    registration === null ||
+    typeof registration !== "object" ||
+    Array.isArray(registration)
+  )
+    return false;
+  const held = registration as Record<string, unknown>;
+  const consent = held.consent;
+  return (
+    Object.keys(held).length === 3 &&
+    held.password === account.password &&
+    held.medicalWorkerDeclaration === true &&
+    Array.isArray(consent) &&
+    consent.length === 1 &&
+    typeof consent[0] === "object" &&
+    consent[0] !== null &&
+    (consent[0] as Record<string, unknown>).purpose === "partner-data-sharing"
+  );
+}
+
+/**
  * Walk 021 on the sign-in host form the page ALREADY stands on: fill the door,
  * submit, read the delivered code and type it. Returns the code command the
  * accepted code sent, for the caller to inspect.
@@ -177,9 +207,10 @@ async function completeRegistrationFromHere(
     // Booleans only: the code and the address stay out of the report.
     emailMatches: sent.email === account.email,
     codeMatches: sent.code === code,
-    // 003 EARS-39 (host amendment): no in-tab registration value rides with
-    // the code — the host's form state holds the warm proof.
-    noRegistrationValues: !Object.hasOwn(sent, "registration"),
+    // 003 EARS-24/41, 021 EARS-5: the warm in-place step sends the typed
+    // values with the code — the password, the declaration and the ticked
+    // partner-data consent, nothing else.
+    heldRegistrationValues: heldDoctorRegistration(sent.registration, account),
   };
 }
 
@@ -227,11 +258,11 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
       returnTo: `/webinars/${LIVE}`,
     });
     // 003 EARS-41/23 (#2556) — the doctor storefront's code command, on the
-    // host API: the address and the code.
+    // host API: the address, the code and the held registration values.
     expect(sent).toEqual({
       emailMatches: true,
       codeMatches: true,
-      noRegistrationValues: true,
+      heldRegistrationValues: true,
     });
 
     // The owner's objection, as an assertion: no acknowledgement screen stands

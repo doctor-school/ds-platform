@@ -17,6 +17,8 @@ const request = {
 const ack = { status: "pending_verification" };
 const base = "https://academy.example.test";
 const form = { authRequest: "V2_synthetic", csrf: "synthetic-csrf" };
+/** 003 EARS-24/41: the values the warm in-place code step holds and sends. */
+const held = { password: account.password, consent: request.consent };
 /** 003 EARS-5 (amended): the host answers with the storefront's own callback. */
 const hostRedirect = JSON.stringify({
   status: "redirect",
@@ -64,8 +66,11 @@ describe("cold verification evidence without secret diagnostics", () => {
     { ...submitted, email: "other@example.test" },
     { ...submitted, code: "654321" },
     { ...submitted, authRequest: undefined },
+    // a cold step holds nothing: a registration value or the password is wrong
+    { ...submitted, registration: held },
+    { ...submitted, held: account.password },
   ])(
-    "EARS-41: a different identity, code or form cannot prove the owned confirmation %#",
+    "EARS-41: a different identity, code or form, or any held value, cannot prove the cold confirmation %#",
     (request) => {
       expect(
         coldVerificationEvidence(
@@ -82,7 +87,11 @@ describe("cold verification evidence without secret diagnostics", () => {
     null,
     {},
     { status: "verified" },
-    { status: "redirect", url: `${base}/auth/callback?code=c&state=s`, access_token: "synthetic-secret" },
+    {
+      status: "redirect",
+      url: `${base}/auth/callback?code=c&state=s`,
+      access_token: "synthetic-secret",
+    },
   ])(
     "EARS-41: refuses an inexact or credential-bearing acknowledgement %#",
     (response) => {
@@ -122,11 +131,17 @@ describe("the storefront callback acknowledgement (003 EARS-5 amended)", () => {
   });
   it.each([
     // another storefront's callback is another client's transaction
-    { status: "redirect", url: "https://doctor.example.test/auth/callback?code=c&state=s" },
+    {
+      status: "redirect",
+      url: "https://doctor.example.test/auth/callback?code=c&state=s",
+    },
     { status: "redirect", url: `${base}/account?code=c&state=s` },
     { status: "redirect", url: `${base}/auth/callback?state=s` },
     { status: "redirect", url: `${base}/auth/callback?code=c` },
-    { status: "redirect", url: `${base}/auth/callback?code=c&state=s&error=access_denied` },
+    {
+      status: "redirect",
+      url: `${base}/auth/callback?code=c&state=s&error=access_denied`,
+    },
     { status: "redirect", url: "not a url" },
     { status: "verified" },
     { status: "redirect" },
@@ -165,6 +180,7 @@ describe("wrong confirmation code evidence", () => {
     email: account.email,
     code: submittedCode,
     ...form,
+    registration: held,
   });
   const refusal = {
     statusCode: 400,
@@ -253,8 +269,8 @@ describe("wrong confirmation code evidence", () => {
 
 describe("verification evidence without secret diagnostics", () => {
   const code = "123456";
-  const submitted = { email: account.email, code, ...form };
-  it("EARS-3: accepts the owned code without a registration value and the storefront callback acknowledgement", () => {
+  const submitted = { email: account.email, code, ...form, registration: held };
+  it("EARS-3: accepts the owned code with the held registration values and the storefront callback acknowledgement", () => {
     expect(
       verificationEvidence(
         JSON.stringify(submitted),
@@ -268,13 +284,24 @@ describe("verification evidence without secret diagnostics", () => {
   it.each([
     { ...submitted, email: "other@example.test" },
     { ...submitted, code: "654321" },
-    // 003 EARS-39 (host): the code command carries no registration value
+    { ...submitted, authRequest: "" },
+    // 003 EARS-24/41: the warm in-place step carries exactly the typed values
+    { email: account.email, code, ...form },
     { ...submitted, registration: { password: account.password } },
     { ...submitted, registration: {} },
-    { ...submitted, held: account.password },
-    { ...submitted, authRequest: "" },
+    { ...submitted, registration: { ...held, password: "other-password" } },
+    { ...submitted, registration: { ...held, consent: [] } },
+    {
+      ...submitted,
+      registration: {
+        ...held,
+        consent: [{ purpose: "tos", version: "2025-01" }],
+      },
+    },
+    { ...submitted, registration: { ...held, extra: account.password } },
+    { ...submitted, registration: [held] },
   ])(
-    "EARS-39: rejects a different identity or code, or any registration value %#",
+    "EARS-41: rejects a different identity or code, or anything but the held registration values %#",
     (request) => {
       expect(
         verificationEvidence(

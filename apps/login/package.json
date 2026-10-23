@@ -1,6 +1,6 @@
 {
   "name": "@ds/login",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "DS Platform sign-in host — login.doctor.school, the first-party login UI both storefronts' OIDC clients use (Next.js 16 App Router, ADR-0015 §4).",

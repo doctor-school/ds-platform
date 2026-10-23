@@ -1,4 +1,5 @@
 import {
+  hostCommand,
   isAuthCommandPath,
   signInHostApiPath,
 } from "../lib/sign-in-host-api.js";
@@ -119,13 +120,11 @@ Given(
       }
       state.resetRequests += 1;
       try {
-        const body: unknown = JSON.parse(request.postData() ?? "");
+        // #3172 — the host's reset form posts the storefront command plus its
+        // form-post fields (003 EARS-70); the command is the identifier alone.
+        const body = hostCommand(JSON.parse(request.postData() ?? ""));
         state.resetInputsMatch.push(
-          body !== null &&
-            typeof body === "object" &&
-            Object.keys(body).length === 1 &&
-            "identifier" in body &&
-            body.identifier === state.email,
+          Object.keys(body).length === 1 && body.identifier === state.email,
         );
       } catch {
         state.resetInputsMatch.push(false);

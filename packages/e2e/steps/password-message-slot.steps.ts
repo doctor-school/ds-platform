@@ -208,7 +208,9 @@ Then(
     // storefront's registration entry into the transaction.
     const url = new URL(page.url());
     expect(isSignInHostForm(url)).toBe(true);
-    expect(url.pathname).toBe("/register");
+    // Behind the IdP the registration door renders on the host's `/login`
+    // (`doorFor`): the door is proven by what renders, not by the path.
+    await expect(page.getByTestId("register-email")).toBeVisible();
     expectEnteredThrough(page, world.hostBaseUrl, {
       pathname: "/register",
       returnTo: "/account",

@@ -12,6 +12,10 @@ import {
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
+import {
+  expectAtSignInHostFrom,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
 
 const SESSION = "__Host-ds_session";
@@ -304,12 +308,14 @@ Then(
   async ({ page, world }) => {
     const state = journey(page);
     await assertGuest(state);
+    // #3172 — a guest on /account is bounced through the storefront's own login
+    // entry (carrying the account return path) to the sign-in host's door.
+    watchStorefrontEntries(state.guest!, state.base);
     await state.guest!.goto(`${state.base}/account`, { waitUntil: "load" });
-    await state.guest!.waitForURL(
-      (url) =>
-        url.origin === new URL(state.base).origin &&
-        url.pathname === world.host.loginPath,
-    );
+    await expectAtSignInHostFrom(state.guest!, state.base, {
+      pathname: world.host.loginPath,
+      returnTo: "/account",
+    });
     await expect(
       state.guest!.getByTestId("password-login-submit"),
     ).toBeVisible();

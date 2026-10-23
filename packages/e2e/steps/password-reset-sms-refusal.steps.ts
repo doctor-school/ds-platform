@@ -472,9 +472,9 @@ When(
         ),
       )
       .toBe(true);
-    expect(new URL(reset.url()).pathname).toBe("/reset");
-    // #3172 — the reset form is the sign-in host's; the account return path
-    // rode the storefront's reset entry into the transaction.
+    // #3172 — the reset form is the sign-in host's door (rendered on the
+    // host's `/login` behind the IdP, proven by the form, not the path); the
+    // account return path rode the storefront's reset entry.
     expect(isSignInHostForm(reset.url())).toBe(true);
     expectEnteredThrough(reset, world.hostBaseUrl, {
       pathname: "/reset",

@@ -91,6 +91,11 @@ Given(
       state,
       "/account",
     );
+    // #3172 — the registration entry itself arrives through the IdP on the
+    // host's `/login`, which renders the REGISTRATION door (`doorFor`). The
+    // watch is over the confirmation that follows: from the code step on, no
+    // navigation may reach the login door.
+    state.visitedLogin = false;
     state.code = code;
     expect(
       registrationEvidence(

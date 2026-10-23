@@ -69,8 +69,9 @@ export const DOCTOR_AUTH_FLOW = {
   routes: {
     login: "/login",
     register: "/register",
-    // 003 EARS-24 — the confirmation route the registration door hops to, the
-    // same one the Academy serves (`app/(auth)/verify/page.tsx`).
+    // 003 EARS-24 / EARS-61 — the confirmation route the registration door hops
+    // to: the storefront's registration entry (`app/(auth)/verify/route.ts`);
+    // the confirmation itself runs on the sign-in host (`apps/login/app/verify/page.tsx`).
     verify: "/verify",
     reset: "/reset",
     account: "/account",

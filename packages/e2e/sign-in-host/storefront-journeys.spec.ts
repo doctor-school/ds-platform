@@ -502,10 +502,17 @@ for (const id of STOREFRONTS) {
       await settled(page);
       // The guest door is registration; the account exists, so the visitor
       // takes the host's own way to sign in, carrying the same transaction.
+      // The IdP already landed on the host's `/login` (rendering the register
+      // door), so a URL wait is satisfied before the (client-side) hop: wait
+      // for the login door itself to render, else the register door's fields
+      // are filled and then replaced, and the submit sends nothing.
       await page.getByRole("link", { name: /Уже есть аккаунт/ }).click();
-      await page.waitForURL(
-        (url) => url.pathname === "/login" && isSignInHostForm(url),
-      );
+      await expect(page.getByTestId("password-login-submit")).toBeVisible();
+      expect(
+        new URL(page.url()).pathname === "/login" &&
+          isSignInHostForm(page.url()),
+        "on the host's login door",
+      ).toBe(true);
       await settled(page);
       expect((await submitPassword(page, account)).status()).toBe(200);
       await expectBackSignedIn(page, id, event, account);

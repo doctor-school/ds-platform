@@ -331,6 +331,21 @@ describe("storefront entry", () => {
     }
   });
 
+  it("003 EARS-12: a reset entry that carries no return target returns to this storefront's account page; a carried one stands", async () => {
+    const entered = async (path: string) => {
+      const api = fakeApi();
+      await storefrontEntry(get(path), ACADEMY, "reset", {
+        fetchImpl: api.fetchImpl,
+        env: ENV,
+      });
+      return api.internal("transaction")[0]?.body?.returnPath;
+    };
+    expect(await entered("/reset")).toBe(ACADEMY.config.routes.account);
+    expect(await entered("/reset?returnTo=%2Fwebinars%2Flive-1")).toBe(
+      "/webinars/live-1",
+    );
+  });
+
   it("003 EARS-12 / EARS-71: /reset records the reset door's intent; /verify opens the registration door", async () => {
     const reset = fakeApi();
     await storefrontEntry(get("/reset"), ACADEMY, "reset", {

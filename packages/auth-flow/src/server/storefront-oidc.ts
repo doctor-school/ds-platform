@@ -289,7 +289,12 @@ export async function storefrontEntry(
     throw new Error(
       "storefront entry: INTERNAL_API_URL / INTERNAL_API_TOKEN unset",
     );
-  const landingTarget = resolveReturnLandingPath(config, returnTo);
+  // A reset that carries no return target ends on this storefront's account
+  // page (#221: the account page's change-password hand-off, EARS-28), as the
+  // reset door's own landing always did; a carried target stands.
+  const landingTarget =
+    resolveReturnLandingPath(config, returnTo) ??
+    (entry === "reset" ? config.routes.account : undefined);
   const intent = entryIntent(entry, params, returnTo, handoff);
   const toRegister = registrationToComplete(config, returnTo);
   const body: StorefrontTransactionRequest = {

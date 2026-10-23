@@ -124,3 +124,83 @@ function withFetchedHeaders(response: Response, fetched: APIResponse): Response 
     },
   });
 }
+
+/** What a {@link sendHostCommandFromForm} probe really put on the wire. */
+export interface SentHostCommand extends CapturedResponse {
+  /** The JSON body the API received (the probe's command + the form fields). */
+  sent: string;
+  /** The request headers the API received. */
+  sentHeaders: Record<string, string>;
+}
+
+/**
+ * A BFF contract probe on the sign-in host (#3172): sends `command` to the
+ * host API `pathname` AS the door's own form post. A host command is only
+ * accepted with the form-post fields of the door's auth request — `authRequest`
+ * and the `csrf` bound to its form-state cookie (003 EARS-69/70) — and the
+ * `csrf` never reaches the DOM. So the door's real submit (`submit`) is
+ * intercepted once and its body REPLACED by `command` plus those two fields
+ * from the door's own post; `headers` overrides request headers (`null`
+ * removes one). The API's answer reaches the page unchanged, and the returned
+ * `sent` / `sentHeaders` are what the API received — the page's `Request`
+ * still shows the form's original body, so evidence reads `sent`.
+ */
+export async function sendHostCommandFromForm(
+  page: Page,
+  pathname: string,
+  command: Record<string, unknown>,
+  submit: () => Promise<void>,
+  headers: Record<string, string | null> = {},
+): Promise<SentHostCommand> {
+  let resolveSent: (value: {
+    fetched: APIResponse;
+    sent: string;
+    sentHeaders: Record<string, string>;
+  }) => void = () => undefined;
+  const sentPromise = new Promise<{
+    fetched: APIResponse;
+    sent: string;
+    sentHeaders: Record<string, string>;
+  }>((resolve) => {
+    resolveSent = resolve;
+  });
+  const handler = async (route: Route) => {
+    const original = route.request().postDataJSON() as Record<string, unknown>;
+    const sent = JSON.stringify({
+      ...command,
+      authRequest: original.authRequest,
+      csrf: original.csrf,
+    });
+    const sentHeaders: Record<string, string> = {
+      ...(await route.request().allHeaders()),
+    };
+    // The body is replaced: its length is the new body's, set by the fetch.
+    delete sentHeaders["content-length"];
+    for (const [name, value] of Object.entries(headers)) {
+      if (value === null) delete sentHeaders[name.toLowerCase()];
+      else sentHeaders[name.toLowerCase()] = value;
+    }
+    const fetched = await route.fetch({ postData: sent, headers: sentHeaders });
+    await fetched.body();
+    resolveSent({ fetched, sent, sentHeaders });
+    await route.fulfill({ response: fetched });
+  };
+  await page.route(
+    (url: URL) => url.pathname === pathname,
+    handler,
+    { times: 1 },
+  );
+  const response = page.waitForResponse(
+    (candidate) =>
+      new URL(candidate.url()).pathname === pathname &&
+      candidate.request().method() === "POST",
+  );
+  await submit();
+  const { fetched, sent, sentHeaders } = await sentPromise;
+  return {
+    response: withFetchedHeaders(await response, fetched),
+    body: await fetched.text(),
+    sent,
+    sentHeaders,
+  };
+}

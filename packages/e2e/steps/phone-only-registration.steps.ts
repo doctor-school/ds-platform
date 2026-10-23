@@ -10,7 +10,8 @@ import {
 } from "../lib/captcha-stub.js";
 import {
   captureResponse,
-  type CapturedResponse,
+  sendHostCommandFromForm,
+  type SentHostCommand,
 } from "../lib/captured-response.js";
 import {
   readOwnedPhoneAccountCount,
@@ -19,6 +20,7 @@ import {
 } from "../lib/owned-auth-observation.js";
 import {
   assertNoPrivateRegistrationAccess,
+  inputSecret,
   registerOwnedCredentials,
   registrationEvidence,
   registrationUrl,
@@ -27,7 +29,7 @@ import {
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
 
 interface PhoneRefusal {
-  response: CapturedResponse;
+  response: SentHostCommand;
   evidence: {
     phoneOnlyPayload: boolean;
     captchaProofMatches: boolean;
@@ -74,11 +76,11 @@ function parsedObject(text: string): Record<string, unknown> {
 }
 
 function refusalEvidence(
-  observed: CapturedResponse,
+  observed: SentHostCommand,
   phone: string,
   state: PhoneOnlyRegistration,
 ): PhoneRefusal["evidence"] {
-  const request = hostCommand(parsedObject(observed.response.request().postData() ?? ""));
+  const request = hostCommand(parsedObject(observed.sent));
   const response = parsedObject(observed.body);
   const errors = response.errors;
   const issue =
@@ -104,8 +106,7 @@ function refusalEvidence(
       accepted.purpose === "tos" &&
       accepted.version === "2026-01",
     captchaProofMatches:
-      observed.response.request().headers()["x-smartcaptcha-token"] ===
-      state.captchaToken,
+      observed.sentHeaders["x-smartcaptcha-token"] === state.captchaToken,
     genericRefusal:
       Object.keys(response).length === 3 &&
       response.statusCode === 400 &&
@@ -219,38 +220,31 @@ When(
       state.usersBeforeRefusal = await readOwnedUserCount(state.contour, {
         email: state.email,
       });
+    // #3172 — the registration BFF is the sign-in host's, which takes a command
+    // only as the door's own form post (authRequest + csrf). Each probe rides
+    // the door's real submit with its body replaced by the phone-only payload,
+    // so the door's fields only need to let the form post.
+    await inputSecret(
+      state.page.locator('input[autocomplete="email"]'),
+      state.email,
+    );
+    await inputSecret(
+      state.page.locator('input[autocomplete="new-password"]'),
+      state.password,
+    );
     for (const phone of state.phones) {
-      // 003 EARS-2/16: probe the public request contract without modifying the form.
-      const pending = captureResponse(
+      // 003 EARS-2/16: probe the public request contract.
+      const response = await sendHostCommandFromForm(
         state.page,
         signInHostApiPath("/v1/auth/register"),
-      );
-      await state.page.evaluate(
-        async ({ phone, password, token }) => {
-          try {
-            const response = await fetch("/v1/auth/register", {
-              method: "POST",
-              credentials: "include",
-              headers: {
-                "Content-Type": "application/json",
-                ...(token !== undefined
-                  ? { "x-smartcaptcha-token": token }
-                  : {}),
-              },
-              body: JSON.stringify({
-                phone,
-                password,
-                consent: [{ purpose: "tos", version: "2026-01" }],
-              }),
-            });
-            await response.text();
-          } catch {
-            throw new Error("Phone-only registration request failed");
-          }
+        {
+          phone,
+          password: state.password,
+          consent: [{ purpose: "tos", version: "2026-01" }],
         },
-        { phone, password: state.password, token: state.captchaToken },
+        () => state.page.getByTestId("register-submit").click(),
+        { "x-smartcaptcha-token": state.captchaToken ?? null },
       );
-      const response = await pending;
       state.refusals.push({
         response,
         evidence: refusalEvidence(response, phone, state),

@@ -341,14 +341,15 @@ When(
       "different policy-conforming replay proposal",
     ).toBe(true);
     const guest = await privatePage(browser, state, world.hostBaseUrl);
-    await guest.goto(`${world.hostBaseUrl}/reset`, { waitUntil: "load" });
+    // #3172 — the storefront `/reset` is now an entry to the sign-in host,
+    // whose origin has no storefront session or profile to observe. The replay
+    // targets the storefront's own reset BFF (still served) from a storefront
+    // page, where the same tab reads its session and profile.
+    await guest.goto(`${world.hostBaseUrl}/`, { waitUntil: "load" });
     await guest.waitForLoadState("networkidle");
     await noPrivateAccess(guest);
     // Replay the retained code without requesting a replacement challenge.
-    const pending = captureResponse(
-      guest,
-      signInHostApiPath("/v1/auth/password/reset/complete"),
-    );
+    const pending = captureResponse(guest, "/v1/auth/password/reset/complete");
     const evidence = await guest.evaluate(
       async ({ identifier, code, newPassword }) => {
         const response = await fetch("/v1/auth/password/reset/complete", {

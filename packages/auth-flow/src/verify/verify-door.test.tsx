@@ -127,6 +127,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   clearPendingRegistration();
+  window.sessionStorage.clear();
   window.history.replaceState(null, "", "/");
 });
 
@@ -512,6 +513,17 @@ describe("003 EARS-41: one submission — the code, with the held values while t
 
     await waitFor(() => expect(h.replace).toHaveBeenCalledTimes(1));
     expect(peekPendingRegistration()).toBeNull();
+  });
+
+  it("003 EARS-24: an accepted code drops the registration fields the tab stored for «← Изменить почту»", async () => {
+    window.sessionStorage.setItem(
+      "ds.auth-flow.registration-form",
+      JSON.stringify({ email: EMAIL, promoCode: "", consents: {} }),
+    );
+    await enterCode();
+
+    await waitFor(() => expect(h.replace).toHaveBeenCalledTimes(1));
+    expect(window.sessionStorage.length).toBe(0);
   });
 
   it("003 EARS-16 / EARS-41: a refused code keeps the visitor on the step with the generic error and the held values kept for the retry", async () => {

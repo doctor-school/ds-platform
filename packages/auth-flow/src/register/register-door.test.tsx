@@ -118,6 +118,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   clearPendingRegistration();
+  window.sessionStorage.clear();
 });
 
 /** No fake timers here, so the typing delay is pure wall-clock waiting. */
@@ -445,6 +446,61 @@ describe("003 EARS-41 / 021 EARS-15.4: what the door holds for the code step", (
     },
   );
 
+  it("003 EARS-24: an accepted registration keeps the typed fields in the tab's storage, never the password", async () => {
+    await submitForm(DOCTOR_FIXTURE);
+
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    const stored = JSON.stringify({ ...window.sessionStorage });
+    expect(stored).toContain(EMAIL);
+    expect(stored).not.toContain(PASSWORD);
+  });
+
+  it.each(HOSTS)(
+    "003 EARS-24: after a full page load the %s form refills from the tab's stored fields, the password re-typed",
+    async (_name, config) => {
+      await submitForm(config);
+      await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+      cleanup();
+      // A full page load: the in-memory hold is gone, the tab's storage is not.
+      clearPendingRegistration();
+
+      await renderDoor(config);
+
+      expect(screen.getByTestId("register-email")).toHaveValue(EMAIL);
+      expect(screen.getByTestId("register-password")).toHaveValue("");
+    },
+  );
+
+  it("003 EARS-24: a new submit drops the stored fields of the abandoned attempt, kept dropped past a refusal", async () => {
+    await submitForm(DOCTOR_FIXTURE);
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    cleanup();
+    clearPendingRegistration();
+    register.mockReset().mockRejectedValue(authError(400));
+
+    const user = setupUser();
+    await renderDoor(DOCTOR_FIXTURE);
+    await user.type(screen.getByTestId("register-password"), PASSWORD);
+    await user.click(screen.getByTestId("register-submit"));
+
+    await waitFor(() => expect(register).toHaveBeenCalledTimes(1));
+    expect(window.sessionStorage.length).toBe(0);
+  });
+
+  it("003 EARS-24: blocked storage leaves the form empty rather than failing", async () => {
+    const getItem = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(() => {
+        throw new DOMException("blocked", "SecurityError");
+      });
+    try {
+      await renderDoor(DOCTOR_FIXTURE);
+      expect(screen.getByTestId("register-email")).toHaveValue("");
+    } finally {
+      getItem.mockRestore();
+    }
+  });
+
   it("003 EARS-42: with nothing held the form opens empty", async () => {
     await renderDoor(ACADEMY_FIXTURE);
 
@@ -705,6 +761,7 @@ describe("003 EARS-24 (#2455): one confirmation mechanism — the door never bec
       push.mockReset();
       // Each pass is a fresh visitor: the previous pass's hold would refill it.
       clearPendingRegistration();
+      window.sessionStorage.clear();
       await submitForm(config);
 
       await waitFor(() =>

@@ -64,8 +64,13 @@ const origin = (id: HostId) => new URL(base(id)).origin;
 const startPath = (id: HostId) => HOSTS[id].eventsPath;
 /** The gated page whose guest bounce stores a return path on any stand. */
 const STORED_PATH = "/account";
-const mailbox = (id: HostId) =>
-  process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(base(id));
+/**
+ * The stand's one shared inbox, whichever storefront sent the mail: its host
+ * is derived from the Academy slot URL (as doctor-landing.spec does) — the
+ * doctor slot host carries no Mailpit derivation.
+ */
+const mailbox = () =>
+  process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(base("academy"));
 
 function ownedAccount(id: HostId): OwnedCredentials {
   return {
@@ -151,7 +156,7 @@ async function registerOnHostForm(
   }).toPass({ timeout: 15_000 });
   const before = await captureAddressedMailCheckpoint(
     nativeRecoveryMail(),
-    mailbox(id),
+    mailbox(),
     account.email,
   );
   await page.getByTestId("register-submit").click();
@@ -159,7 +164,7 @@ async function registerOnHostForm(
   await settled(page);
   const code = await fetchRecoveryCode(
     nativeRecoveryMail(),
-    mailbox(id),
+    mailbox(),
     account.email,
     before,
     "register",
@@ -306,13 +311,13 @@ for (const id of STOREFRONTS) {
       await inputSecret(page.getByTestId("otp-identifier"), account.email);
       const before = await captureAddressedMailCheckpoint(
         nativeRecoveryMail(),
-        mailbox(id),
+        mailbox(),
         account.email,
       );
       await page.getByTestId("otp-send").click();
       const code = await fetchRecoveryCode(
         nativeRecoveryMail(),
-        mailbox(id),
+        mailbox(),
         account.email,
         before,
         "login",
@@ -362,13 +367,13 @@ for (const id of STOREFRONTS) {
       );
       const before = await captureAddressedMailCheckpoint(
         nativeRecoveryMail(),
-        mailbox(id),
+        mailbox(),
         account.email,
       );
       await page.getByTestId("reset-request-submit").click();
       const code = await fetchRecoveryCode(
         nativeRecoveryMail(),
-        mailbox(id),
+        mailbox(),
         account.email,
         before,
         "reset",

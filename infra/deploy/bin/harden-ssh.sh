@@ -25,6 +25,11 @@
 #     (deploy may run the entrypoint as root, nothing else; `visudo -cf`), deploy's
 #     rules in other sudoers.d files removed, deploy out of groups sudo and docker,
 #     and every deploy key line not behind the prod forced command removed;
+#   - data the same (#3313, spec §4, §5 «Data-prod verbs.»), with deploy's one key the
+#     api-prod hop line `restrict,from="<ip>" <key>`, rewritten behind the forced
+#     command `sudo -n /usr/local/bin/ds-deploy-entrypoint`; refused (nothing changed)
+#     unless the installed entrypoint serves the data verbs and deploy holds exactly
+#     one hop line; data takes no --ci-pubkey (no CI key reaches the data box);
 #   - /etc/ds-platform/box-role = the role;
 #   - fail2ban and unattended-upgrades enabled and running.
 # `sshd -t` runs BEFORE `systemctl reload ssh`; on failure the sshd files are
@@ -52,16 +57,22 @@ SUDOERS_D=$ROOT/etc/sudoers.d
 DEPLOY_SUDOERS=$SUDOERS_D/90-ds-deploy
 
 # The forced command of a CI key. On prod the entrypoint runs as root through the
-# one sudo right deploy holds there (DEPLOY_SUDOERS_CONTENT below); on stage and data
-# deploy keeps its sudo and the entrypoint elevates per call.
+# one sudo right deploy holds there (DEPLOY_SUDOERS_CONTENT below); on stage deploy
+# keeps its sudo and the entrypoint elevates per call. Data takes no CI key; its hop
+# key gets the prod form (HOP_FORCED below).
 ENTRYPOINT=/usr/local/bin/ds-deploy-entrypoint
 KEY_RESTRICTIONS=no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding
 # Any CI line, either role's form: what the operator-key refusal below tells apart
 # from an unrestricted line.
 RESTRICTED_RE='^command="(sudo -n )?/usr/local/bin/ds-deploy-entrypoint",'
 PROD_CI_RE='^command="sudo -n /usr/local/bin/ds-deploy-entrypoint",'
+# Data (#3313): the hop line of the release driver on ds-api-prod, before or after the
+# converge (the forced-command prefix).
+HOP_FORCED='command="sudo -n /usr/local/bin/ds-deploy-entrypoint",'
+HOP_RE='^(command="sudo -n /usr/local/bin/ds-deploy-entrypoint",)?restrict,from="([0-9]{1,3}\.){3}[0-9]{1,3}" '
+INSTALLED_ENTRYPOINT=$ROOT$ENTRYPOINT
 
-# Prod only (spec §4 «sudo on prod»): deploy may run the entrypoint as root with no
+# Prod and data (spec §4 «sudo on prod», #3313): deploy may run the entrypoint as root with no
 # argument, and sudo keeps SSH_ORIGINAL_COMMAND (the request) through its env reset.
 # infra/deploy/cloud-init/api-prod.yaml writes the same bytes; the tests pin them.
 DEPLOY_SUDOERS_CONTENT='Defaults!/usr/local/bin/ds-deploy-entrypoint env_keep += "SSH_ORIGINAL_COMMAND"
@@ -101,6 +112,7 @@ done
 [[ $role =~ ^(prod|stage|data)$ ]] || usage "--role must be prod, stage or data"
 [[ -n $breakglass_file ]] || usage "--breakglass-pubkey <file> is required"
 [[ -n $ROOT || $dry_run == 1 || $EUID -eq 0 ]] || usage "run as root (sudo)"
+[[ $role != data || ${#ci_files[@]} == 0 ]] || usage "--role data takes no --ci-pubkey: no CI key reaches the data box"
 if [[ $role == prod ]]; then
   # no-user-rc: sshd would run deploy's own ~/.ssh/rc as deploy before the sudo.
   CI_KEY_OPTIONS="command=\"sudo -n $ENTRYPOINT\",$KEY_RESTRICTIONS,no-user-rc"
@@ -133,6 +145,22 @@ for f in ${ci_files[@]+"${ci_files[@]}"}; do
     usage "$f is already an unrestricted key of deploy (the operator key?); a CI key must be a new key"
   fi
 done
+
+# --- data: the preconditions of the narrowing, before anything changes (#3313) -------
+# The hop key then reaches only the entrypoint, so it must already serve the data
+# verbs (installed by a release, spec §5 «Transition.»), and the one hop line to
+# rewrite must be unambiguous.
+if [[ $role == data ]]; then
+  grep -q '^DATA_VERBS=' "$INSTALLED_ENTRYPOINT" 2>/dev/null ||
+    fail "$INSTALLED_ENTRYPOINT serves no data verbs: run a release first; nothing was changed"
+  hop_count=$(grep -cE "$HOP_RE" "$DEPLOY_KEYS" 2>/dev/null || true)
+  [[ $hop_count == 1 ]] ||
+    fail "$DEPLOY_KEYS holds ${hop_count:-0} hop lines (restrict,from=\"<ip>\" <key>), not exactly one; nothing was changed"
+  hop_line=$(grep -E "$HOP_RE" "$DEPLOY_KEYS")
+  hop_key=${hop_line#*\" }
+  [[ $hop_key =~ $PUBKEY_RE ]] || fail "the hop line carries no bare public key; nothing was changed"
+  want_hop=$HOP_FORCED${hop_line#"$HOP_FORCED"}
+fi
 
 changed=0 sshd_changed=0
 backups=()
@@ -257,14 +285,14 @@ for key in ${ci_keys[@]+"${ci_keys[@]}"}; do
   fi
 done
 
-# --- prod: deploy holds the entrypoint and nothing else (spec §4 «sudo on prod») ----
+# --- prod, data: deploy holds the entrypoint and nothing else (spec §4 «sudo on prod»)
 # Its one sudo right is written first, then every other right goes: the rules other
 # sudoers.d files give it (cloud-init's 90-cloud-init-users), groups sudo and docker
 # (docker is root-equivalent; the Actions path runs as root and needs neither), and
 # every key line not behind the prod forced command — the operator key above all.
 # The operator path on prod is breakglass, so nothing of deploy's goes before
 # breakglass is proven in place.
-if [[ $role == prod ]]; then
+if [[ $role == prod || $role == data ]]; then
   if ! { [[ -f $DEPLOY_SUDOERS ]] && [[ $(cat "$DEPLOY_SUDOERS"; printf x) == "${DEPLOY_SUDOERS_CONTENT}x" ]]; }; then
     note "write $DEPLOY_SUDOERS"
     [[ $dry_run == 1 ]] || install_sudoers "$DEPLOY_SUDOERS" "$DEPLOY_SUDOERS_CONTENT" "the deploy sudoers file"
@@ -274,7 +302,7 @@ if [[ $role == prod ]]; then
   # The files above are not a working login: only a converge run from a breakglass
   # session proves one, before the operator's own deploy session loses its key.
   [[ $dry_run == 1 || ${SUDO_USER-} == breakglass ]] ||
-    fail "run --role prod from a breakglass session (sudo as breakglass); deploy's sudo rights and keys were left as they are"
+    fail "run --role $role from a breakglass session (sudo as breakglass); deploy's sudo rights and keys were left as they are"
   for f in "$SUDOERS_D"/*; do
     [[ -f $f && $f != "$DEPLOY_SUDOERS" && $f != "$BREAKGLASS_SUDOERS" && ${f##*/} != *.* ]] || continue
     grep -Eq '^[[:space:]]*deploy[[:space:]]' "$f" || continue
@@ -290,12 +318,21 @@ if [[ $role == prod ]]; then
       [[ $dry_run == 1 ]] || gpasswd ${ROOT:+--root "$ROOT"} -d deploy "$g" >/dev/null
     fi
   done
-  if [[ -f $DEPLOY_KEYS ]] && grep -Ev '^[[:space:]]*(#|$)' "$DEPLOY_KEYS" | grep -Eqv "$PROD_CI_RE"; then
+  if [[ $role == prod ]] && [[ -f $DEPLOY_KEYS ]] && grep -Ev '^[[:space:]]*(#|$)' "$DEPLOY_KEYS" | grep -Eqv "$PROD_CI_RE"; then
     note "remove every deploy key not behind the prod forced command from $DEPLOY_KEYS"
     if [[ $dry_run == 0 ]]; then
       rest=$(grep -E "$PROD_CI_RE" "$DEPLOY_KEYS" || true)
       cp -p "$DEPLOY_KEYS" "$DEPLOY_KEYS.ds-harden.new"
       { [[ -z $rest ]] || printf '%s\n' "$rest"; } >"$DEPLOY_KEYS.ds-harden.new"
+      mv -f "$DEPLOY_KEYS.ds-harden.new" "$DEPLOY_KEYS"
+    fi
+  fi
+  # Data: deploy keeps the hop line, behind the forced command, and no other key.
+  if [[ $role == data ]] && ! [[ $(cat "$DEPLOY_KEYS"; printf x) == "$want_hop"$'\n'x ]]; then
+    note "put the hop key behind the forced command and remove every other deploy key from $DEPLOY_KEYS"
+    if [[ $dry_run == 0 ]]; then
+      cp -p "$DEPLOY_KEYS" "$DEPLOY_KEYS.ds-harden.new"
+      printf '%s\n' "$want_hop" >"$DEPLOY_KEYS.ds-harden.new"
       mv -f "$DEPLOY_KEYS.ds-harden.new" "$DEPLOY_KEYS"
     fi
   fi

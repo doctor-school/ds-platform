@@ -88,7 +88,9 @@ for (const [file, role] of Object.entries(ROLES)) {
       );
       assert.equal(deployUser[1], "    shell: /bin/bash\n", "no group, no sudo rule, no key of its own");
     } else {
-      // Stage (PR slots keep the operator lifecycle) and data (PR 5) are unchanged.
+      // Stage (PR slots keep the operator lifecycle) keeps deploy's sudo. A new data box
+      // starts the same: its hop line comes from the provisioning runbook and the first
+      // release installs the data verbs, then `harden-ssh.sh --role data` (#3313) narrows.
       assert.ok(!yaml.includes("/etc/sudoers.d/90-ds-deploy"));
       assert.match(deployUser[1], /^ {4}sudo: \["ALL=\(ALL\) NOPASSWD:ALL"\]$/m);
     }
@@ -149,6 +151,8 @@ const FORCED =
   'command="/usr/local/bin/ds-deploy-entrypoint",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding';
 const FORCED_PROD =
   'command="sudo -n /usr/local/bin/ds-deploy-entrypoint",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-user-rc';
+const HOP = 'restrict,from="192.168.0.20" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHOPKEYxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ds-api-prod-hop';
+const HOP_FORCED = `command="sudo -n /usr/local/bin/ds-deploy-entrypoint",${HOP}`;
 const CLOUD_INIT_USERS = "# Created by cloud-init\n\n# User rules for deploy\ndeploy ALL=(ALL) NOPASSWD:ALL\n";
 const GROUPS = "root:x:0:\nsudo:x:27:deploy\ndocker:x:999:deploy\ndeploy:x:1000:\n";
 
@@ -459,6 +463,95 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
     assert.match(r.out, /would remove deploy from group docker/);
     assert.match(r.out, /would remove every deploy key not behind the prod forced command/);
     assert.deepEqual(snapshot(), before);
+  });
+
+  // #3313: the data box. The installed entrypoint serves the data verbs (a release ran)
+  // and deploy holds the operator key plus the one hop line of ds-api-prod.
+  const dataArgs = (...extra) => ["--role", "data", "--breakglass-pubkey", join(keys, "breakglass.pub"), ...extra];
+  const dataBox = ({ entrypoint = "DATA_VERBS='capabilities ship'\n", deployKeys = `${OPERATOR}\n${HOP}\n` } = {}) => {
+    mkdirSync(join(root, "usr/local/bin"), { recursive: true });
+    if (entrypoint !== null) writeFileSync(join(root, "usr/local/bin/ds-deploy-entrypoint"), entrypoint);
+    writeFileSync(join(root, "home/deploy/.ssh/authorized_keys"), deployKeys);
+  };
+
+  it("3313: on data, the hop key reaches only the entrypoint as root and deploy holds nothing else", () => {
+    dataBox();
+    const r = run(dataArgs());
+    assert.equal(r.status, 0, r.out);
+    assert.equal(read("home/deploy/.ssh/authorized_keys"), `${HOP_FORCED}\n`, "the operator key is gone");
+    assert.equal(read("etc/sudoers.d/90-ds-deploy"), scriptDeploySudoers());
+    assert.equal(read("etc/sudoers.d/90-cloud-init-users"), "# Created by cloud-init\n\n# User rules for deploy\n");
+    assert.equal(read("etc/group"), "root:x:0:\nsudo:x:27:\ndocker:x:999:\ndeploy:x:1000:\n");
+    assert.equal(read("etc/ds-platform/box-role"), "data\n");
+    assert.equal(read("root/.ssh/authorized_keys"), "");
+    const before = snapshot();
+    rmSync(join(dir, "calls.log"));
+    const again = run(dataArgs());
+    assert.equal(again.status, 0, again.out);
+    assert.match(again.out, /nothing to change/);
+    assert.deepEqual(snapshot(), before);
+    assert.doesNotMatch(calls(), /visudo|gpasswd|reload/);
+  });
+
+  it("3313: on data, nothing changes while the installed entrypoint serves no data verbs", () => {
+    for (const entrypoint of [null, "#!/usr/bin/env bash\nOBSERVATIONS='x'\n"]) {
+      dataBox({ entrypoint });
+      const before = snapshot();
+      const r = run(dataArgs());
+      assert.equal(r.status, 1, r.out);
+      assert.match(r.out, /serves no data verbs: run a release first/);
+      assert.deepEqual(snapshot(), before);
+      assert.equal(calls(), "");
+    }
+  });
+
+  it("3313: on data, nothing changes unless deploy holds exactly one hop line", () => {
+    for (const deployKeys of [`${OPERATOR}\n`, `${HOP}\n${HOP.replace("0.20", "0.21")}\n`, `${OPERATOR}\n${HOP_FORCED}\n${HOP}\n`]) {
+      dataBox({ deployKeys });
+      const before = snapshot();
+      const r = run(dataArgs());
+      assert.equal(r.status, 1, r.out);
+      assert.match(r.out, /hop lines .* not exactly one; nothing was changed/);
+      assert.deepEqual(snapshot(), before);
+      assert.equal(calls(), "");
+    }
+  });
+
+  it("3313: on data, a hop line already behind the forced command is kept and the rest goes", () => {
+    dataBox({ deployKeys: `${OPERATOR}\n# note\n${HOP_FORCED}\n` });
+    const r = run(dataArgs());
+    assert.equal(r.status, 0, r.out);
+    assert.equal(read("home/deploy/.ssh/authorized_keys"), `${HOP_FORCED}\n`);
+  });
+
+  it("3313: on data, nothing of deploy's goes unless the run comes from a breakglass session", () => {
+    dataBox();
+    const r = run(dataArgs(), { SUDO_USER: "deploy" });
+    assert.notEqual(r.status, 0, r.out);
+    assert.match(r.out, /run --role data from a breakglass session/);
+    assert.equal(read("home/deploy/.ssh/authorized_keys"), `${OPERATOR}\n${HOP}\n`);
+    assert.equal(read("etc/sudoers.d/90-cloud-init-users"), CLOUD_INIT_USERS);
+    assert.equal(read("etc/group"), GROUPS);
+  });
+
+  it("3313: --dry-run on data names the narrowing and changes nothing", () => {
+    dataBox();
+    const before = snapshot();
+    const r = run(dataArgs("--dry-run"), { SUDO_USER: "deploy" });
+    assert.equal(r.status, 0, r.out);
+    assert.match(r.out, /would write .*90-ds-deploy/);
+    assert.match(r.out, /would remove deploy's rule from .*90-cloud-init-users/);
+    assert.match(r.out, /would remove deploy from group sudo/);
+    assert.match(r.out, /would put the hop key behind the forced command and remove every other deploy key/);
+    assert.deepEqual(snapshot(), before);
+  });
+
+  it("3313: --role data takes no CI key", () => {
+    dataBox();
+    const r = run(dataArgs("--ci-pubkey", join(keys, "ci-prod.pub")));
+    assert.equal(r.status, 2, r.out);
+    assert.match(r.out, /takes no --ci-pubkey/);
+    assert.equal(calls(), "");
   });
 
   for (const [what, args] of [

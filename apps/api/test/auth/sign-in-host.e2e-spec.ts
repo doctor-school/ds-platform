@@ -4482,7 +4482,50 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
         loginHint: await handoffIntent("unknown-reference"),
       });
       expect((await entry(jar, refused)).body.action).toBe("render");
+      // 003 EARS-44 S1755: nor does a reload of that form — twice.
+      for (let reload = 0; reload < 2; reload++) {
+        const again = await entry(jar, refused);
+        expect(again.body).toMatchObject({
+          action: "render",
+          intent: { method: "code", handoff: false },
+        });
+      }
     });
+
+    it.each([
+      ["academy", ACADEMY],
+      ["doctor", DOCTOR],
+    ] as const)(
+      "003 EARS-44: S1755 a reload of the %s code step renders the code method again without the hand-off",
+      async (_storefront, clientId) => {
+        // The entry only reads the intent; the reference is redeemed by the
+        // host page's own command, so any reference shows the carry here.
+        const jar = new Jar();
+        const authRequest = hostIdp.seedAuthRequest({
+          clientId,
+          loginHint: await handoffIntent("s1755-reference", clientId),
+        });
+        const first = await entry(jar, authRequest);
+        expect(first.body).toMatchObject({
+          action: "render",
+          door: "login",
+          intent: { method: "code", handoff: true },
+        });
+        // The reload: same auth request, the form-state cookie the first render set.
+        const reload = await entry(jar, authRequest);
+        expect(reload.body).toMatchObject({ action: "render", door: "login" });
+        expect(reload.body.action === "render" && reload.body.intent).toEqual({
+          method: "code",
+          handoff: false,
+        });
+        // Another auth request in the same browser carries nothing over.
+        const other = hostIdp.seedAuthRequest({ clientId });
+        const fresh = await entry(jar, other);
+        expect(fresh.body.action === "render" && fresh.body.intent).toBe(
+          undefined,
+        );
+      },
+    );
   });
 
   it.each([

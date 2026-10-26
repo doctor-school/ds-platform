@@ -163,12 +163,20 @@ export class SignInHostService {
       };
     }
 
-    // EARS-71: the intent is spent on this read whatever happens next.
-    const intent = await resolveEntryIntent(
+    // EARS-71: the intent is spent on this read whatever happens next. A
+    // reload of the same auth request (EARS-44 amended) re-renders the method
+    // the spent intent opened, from this browser's own form state for THIS
+    // auth request — never its hand-off or event target, so nothing is sent
+    // again and no card returns.
+    const fresh = await resolveEntryIntent(
       this.state,
       request.loginHint,
       request.clientId,
     );
+    const intent = fresh ?? reloadedIntent(prior, request.id);
+    const handoffSpent =
+      Boolean(fresh?.handoff) ||
+      (!fresh && prior?.authRequestId === request.id && !!prior.handoffSpent);
 
     const now = this.clock();
     const live = await this.liveRecord(
@@ -198,6 +206,8 @@ export class SignInHostService {
       // subject: nothing redeemed, no code sent). A refused or foreign
       // reference never rides the record, whosever it is: the form renders
       // and an accepted code replaces the record.
+      // A reload of a hand-off form keeps that rule: the record never answers.
+      !(!fresh && handoffSpent) &&
       (!intent?.handoff ||
         (await this.auth.isOwnLoginHandoff(
           intent.handoff,
@@ -243,6 +253,7 @@ export class SignInHostService {
         storefront,
         authRequestId: request.id,
         intent,
+        ...(handoffSpent ? { handoffSpent: true as const } : {}),
         // 003 EARS-24/39: the register door reaches its code step by a full
         // page load, i.e. a new render; the registration this browser created
         // for THIS auth request moves to the fresh form state with it.
@@ -516,6 +527,20 @@ export class SignInHostService {
   loginUrlOf(storefront: SignInHostStorefront): string {
     return this.enabled().loginUrls[storefront];
   }
+}
+
+/**
+ * 003 EARS-44 (amended) / EARS-71 — the intent a reload of the SAME auth
+ * request re-renders: the door and method the spent intent opened, from this
+ * browser's own form state; never its hand-off reference or event target.
+ */
+function reloadedIntent(
+  prior: FormState | null,
+  authRequestId: string,
+): EntryIntent | undefined {
+  const spent = prior?.authRequestId === authRequestId ? prior.intent : null;
+  if (!spent?.method) return undefined;
+  return { door: spent.door, method: spent.method, clientId: spent.clientId };
 }
 
 function publicIntent(intent: EntryIntent) {

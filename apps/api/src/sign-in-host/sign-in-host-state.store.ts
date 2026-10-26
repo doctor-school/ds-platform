@@ -75,6 +75,12 @@ export interface FormState {
   readonly storefront: SignInHostStorefront;
   readonly authRequestId: string;
   readonly intent?: EntryIntent | undefined;
+  /**
+   * 003 EARS-44 (amended) — this form's auth request was opened by a hand-off
+   * intent. A reload re-renders its code method without the reference, and a
+   * live sign-in-host record never answers it, as on the first render.
+   */
+  readonly handoffSpent?: true | undefined;
   readonly registration?: FormRegistration | undefined;
 }
 
@@ -202,6 +208,7 @@ class StateCodec {
       ...(state.intent
         ? { intent: this.encodeIntent(state.intent, context) }
         : {}),
+      ...(state.handoffSpent ? { handoffSpent: true } : {}),
       ...(state.registration ? { registration: state.registration } : {}),
     });
   }
@@ -213,6 +220,7 @@ class StateCodec {
         storefront?: SignInHostStorefront;
         authRequestId?: string;
         intent?: Serialised;
+        handoffSpent?: unknown;
         registration?: Partial<FormRegistration>;
       };
       if (!parsed.csrfToken || !parsed.storefront || !parsed.authRequestId)
@@ -239,6 +247,9 @@ class StateCodec {
         storefront: parsed.storefront,
         authRequestId: parsed.authRequestId,
         ...(intent ? { intent } : {}),
+        ...(parsed.handoffSpent === true
+          ? { handoffSpent: true as const }
+          : {}),
         ...(registration ? { registration } : {}),
       };
     } catch {

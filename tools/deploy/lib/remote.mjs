@@ -432,7 +432,7 @@ function shellQuote(s) {
 export async function shipTree(
   sha,
   host,
-  { liveDir, preserved, asRoot, tmpPrefix = "ds-deploy", sourceDir } = {},
+  { liveDir, preserved, asRoot, tmpPrefix = "ds-deploy", sourceDir, remoteCommand } = {},
 ) {
   const tmp = join(tmpdir(), `${tmpPrefix}-${sha.slice(0, 12)}.tar.gz`);
   if (host === LOCAL_EXECUTOR && !sourceDir) {
@@ -452,7 +452,9 @@ export async function shipTree(
   });
   try {
     await new Promise((resolve, reject) => {
-      const child = spawn(...boxSpawnArgs(host, shipTreeCommand({ liveDir, preserved, asRoot })), {
+      // #3313: ds-data-prod takes the archive through its `ship <sha>` verb instead.
+      const command = remoteCommand ?? shipTreeCommand({ liveDir, preserved, asRoot });
+      const child = spawn(...boxSpawnArgs(host, command), {
         stdio: ["pipe", "inherit", "inherit"],
       });
       child.on("error", reject);
@@ -480,11 +482,15 @@ export const DS_RELEASE_BIN = "/usr/local/bin/ds-release";
 export const DS_DEPLOY_ENTRYPOINT_BIN = "/usr/local/bin/ds-deploy-entrypoint";
 // #2985: the box-side release driver the entrypoint's `release` verb execs.
 export const RELEASE_DRIVER_BIN = "/usr/local/lib/ds-platform/release-driver";
+export const POSTGRES_PROBE_BIN = "/usr/local/lib/ds-platform/postgres-artifact-probe.py";
 /** Box binary → its path in the repository tree, in install order. */
 export const BOX_ENTRYPOINTS = [
   { dest: DS_RELEASE_BIN, path: "infra/deploy/bin/ds-release" },
   { dest: DS_DEPLOY_ENTRYPOINT_BIN, path: "infra/deploy/bin/ds-deploy-entrypoint" },
   { dest: RELEASE_DRIVER_BIN, path: "infra/deploy/bin/release-driver" },
+  // #3313: the data box runs the PostgreSQL probe only from this root-owned copy
+  // (spec §5 «Data-prod verbs.»); the other boxes carry it unused.
+  { dest: POSTGRES_PROBE_BIN, path: "tools/deploy/postgres-artifact-probe.py" },
 ];
 export const RELEASE_STATE_ROOT = "/var/lib/ds-platform/release";
 export const RELEASE_POLL_MS = 10 * 1000;
@@ -776,11 +782,22 @@ export async function runDurableStep(
     maxPollFailures = RELEASE_POLL_MAX_FAILURES,
     maxLostReads = RELEASE_POLL_MAX_LOST,
     now = Date.now,
+    // #3313: ds-data-prod starts and reads its units through its own verbs.
+    startStep,
+    readStatus,
   },
 ) {
   const unit = releaseUnitName(env, sha, step);
-  const start = () =>
-    capture(host, releaseStartScript({ env, sha, step, script, retryFailed }), { stderr: "pipe" });
+  const start =
+    startStep ??
+    (() => capture(host, releaseStartScript({ env, sha, step, script, retryFailed }), { stderr: "pipe" }));
+  const readStatusLine =
+    readStatus ??
+    (() =>
+      capture(host, releaseStatusScript(env, sha), {
+        sshOptions: ["-o", "ConnectTimeout=15"],
+        stderr: "pipe",
+      }));
   let started;
   try {
     started = await start();
@@ -804,12 +821,7 @@ export async function runDurableStep(
     const elapsed = Math.round((now() - t0) / 1000);
     let status;
     try {
-      status = parseReleaseStatus(
-        await capture(host, releaseStatusScript(env, sha), {
-          sshOptions: ["-o", "ConnectTimeout=15"],
-          stderr: "pipe",
-        }),
-      );
+      status = parseReleaseStatus(await readStatusLine());
       failures = 0;
     } catch (error) {
       // The box answered: its record is unreadable. Not lost contact, not transient.

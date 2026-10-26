@@ -179,28 +179,14 @@ export async function assertRollbackAllowed({
  * construction.
  *
  * @param {object} deps
- * @param {(host: string, script: string) => Promise<string>} deps.sshCapture
- * @param {string} deps.host       data-prod ssh alias
- * @param {string} deps.composeDir remote data-prod compose directory
- * @param {string} [deps.dbUser]
- * @param {string} [deps.dbName]
+ * @param {() => Promise<string>} deps.readPresence  `ABSENT` | `PRESENT`
  */
-export function makeProdCutoverReader({
-  sshCapture,
-  host,
-  composeDir,
-  dbUser = process.env.DS_PROD_DB_USER || "ds",
-  dbName = process.env.DS_PROD_DB_NAME || "ds_prod",
-}) {
+export function makeProdCutoverReader({ readPresence }) {
   return async () => {
-    // `-v ON_ERROR_STOP=1`: a failing probe must surface as a non-zero exit
-    // (→ FLOOR_UNREADABLE), never as empty stdout that reads like an answer.
-    const out = await sshCapture(
-      host,
-      `cd ${composeDir}
-sudo docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -qAt -U ${dbUser} -d ${dbName} -c "SELECT CASE WHEN to_regclass('public.${LEGACY_SPEAKER_TABLE}') IS NULL THEN 'ABSENT' ELSE 'PRESENT' END"
-`,
-    );
+    // #3313: ds-data-prod's `rollback-floor` verb runs the fixed read box-side
+    // (`ds-deploy-entrypoint`, `-v ON_ERROR_STOP=1`: a failing read is a non-zero
+    // exit → FLOOR_UNREADABLE, never empty stdout that reads like an answer).
+    const out = await readPresence();
     const presence = out.trim().split(/\r?\n/).pop()?.trim();
     if (presence === "ABSENT") return { legacyTablePresent: false };
     if (presence === "PRESENT") return { legacyTablePresent: true };

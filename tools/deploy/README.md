@@ -323,9 +323,11 @@ only under `pnpm deploy:prod --retry-failed`. A closed attempt is archived
 of a new SHA marks the previous one `superseded`. While a release is open, a deploy of
 another SHA is refused and names the open SHA; if a failed run could not close it (the box
 was unreachable), close it by hand: `ssh ds-api-prod 'sudo ds-release finish prod <sha>
-failed'` (and the same on ds-data-prod). `--rollback` ships no tree, so it first installs
-`/usr/local/bin/ds-release` on both boxes from the operator checkout's
-`infra/deploy/bin/ds-release` (streamed over ssh, sha256-checked). It takes no lease, but it refuses,
+failed'` and, on ds-data-prod, its `finish` verb: `ssh ds-data-prod "sudo -n env
+SSH_ORIGINAL_COMMAND='finish <sha> failed' /usr/local/bin/ds-deploy-entrypoint"`.
+`--rollback` ships no tree, so it first installs `/usr/local/bin/ds-release` on ds-api-prod
+from the operator checkout's `infra/deploy/bin/ds-release` (streamed over ssh,
+sha256-checked); ds-data-prod keeps the entrypoint and `ds-release` its last release installed. It takes no lease, but it refuses,
 naming the unit, while any `ds-prod-*` step unit still runs on either box
 (`ds-release check prod`), and its `up -d` runs through `ds-release supersede prod`, under
 the env lock, marking the recorded attempts `superseded` — so deploying the rolled-off SHA
@@ -471,6 +473,18 @@ stay on the operator path above.
   data-prod is `deploy@<data-prod VPC IP>` (`DS_DATA_PROD_VPC_IP`, default `192.168.0.10`)
   with `-i /home/deploy/.ssh/data-prod-hop`, `IdentitiesOnly`, `BatchMode` and
   `StrictHostKeyChecking=yes` (`hopDestination`) — the hop the operator's ProxyJump takes.
+  Both reach ds-data-prod only through the data verbs of `ds-deploy-entrypoint`
+  (`lib/data-prod.mjs`; spec §5 «Data-prod verbs.», #3313): `postgres-probe`,
+  `postgres-checkpoint`, `ship`, `install`, `data-env`, `data-up`, `backup`,
+  `backup-info`, `rollback-floor`, `finish`, `check`, `supersede`, `capabilities`. A
+  payload is one JSON object or the tree archive on stdin, checked box-side; no script
+  travels. The client asks `capabilities` once per run, first as the forced command of the
+  converged hop key, then through `sudo -n` (a shell login: `breakglass`, or `deploy`
+  before the converge). **Transition:** when neither answers, the installed entrypoint
+  predates the data verbs; the run installs the box entrypoints from the tree it holds
+  through `deploy`'s shell, once, and asks again. After the owner's `harden-ssh.sh --role
+data` converge (it refuses until the verbs are installed) that branch is never taken;
+  delete it, and `bootstrapSources`, once the converge has run.
 - **No downgrade.** The driver (before it starts the unit) and the run itself (right
   after its previous-SHA read) refuse a SHA that does not descend from the live prod SHA,
   the running `ds-api:<sha>` tag: GitHub `compare <live>...<sha>` must answer `ahead` or
@@ -576,7 +590,9 @@ pnpm deploy:prod --postgres-artifacts <certificate.json>
 ```
 
 Omit `--certificate` for read-only validation of the unchanged deployment. The
-check command uses the normal `DS_DATA_PROD_SSH`/SSH alias and never calls deploy,
+check command uses the normal `DS_DATA_PROD_SSH`/SSH alias, reaches ds-data-prod only
+through its `postgres-probe` verb (the box's installed probe; any release after #3313
+installed it) and never calls deploy,
 build, init, stanza-create or SQL writes. The deploy writes an image-ID-only
 compose overlay after the guard, disabling PostgreSQL build/pull at activation;
 this prevents an uninspected on-box rebuild from replacing a verified artifact.
@@ -802,14 +818,15 @@ SSH host aliases resolve from `~/.ssh/config`; overridable via `DS_API_PROD_SSH`
 with a forced command and no shell, so the operator's offline `breakglass` key is the
 only interactive login there. The alias names the address and that key; the `ds-data-prod`
 alias jumps through it (`ProxyJump breakglass@ds-api-prod`) and logs in to data-prod as
-`deploy`, as the box-local run's VPC hop does.
+`breakglass` too: after the `--role data` converge `deploy` holds only the hop key behind
+the forced command (#3313). The run calls the same data verbs through `sudo -n`.
 
 Both prod boxes keep the live tree at the fixed `/home/deploy/ds-platform`
 (`PROD_LIVE_TREE`), never a `~`-relative path: the box-local run is root (HOME=/root)
 and the break-glass run is `breakglass`, and both address the tree deploy's runs always
 used, with `compose/api-prod/.env` carried forward inside it. On ds-api-prod the ship
 runs as root (`sudo -n bash -c`, `asRoot`), so its files are root-owned; on data-prod it
-runs as `deploy`.
+is the `ship` verb, whose entrypoint checks every archive path before it extracts.
 
 ## Release digest → Mattermost (`release-notes.mjs`, #868 / #968)
 

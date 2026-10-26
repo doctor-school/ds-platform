@@ -117,9 +117,12 @@ test("EARS-6: canonical deployment seam rechecks before executing a mutation", a
   let reads = 0;
   const guard = await preparePostgresDeployment("test", {
     readTarget: () => ({ ...f, files }),
-    capture: async () => {
-      reads++;
-      return JSON.stringify(f.live);
+    client: {
+      call: async (words) => {
+        assert.deepEqual(words, ["postgres-probe"]);
+        reads++;
+        return JSON.stringify(f.live);
+      },
     },
   });
   let mutations = 0;

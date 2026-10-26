@@ -28,6 +28,10 @@
 #                             slot (stage box only; Issue #3119), its parameters as
 #                             one JSON object on stdin
 #
+#   the data-prod verbs     -> served on the data box only (Issue #3313; spec §5
+#                             «Data-prod verbs.»), the forced command of the hop key
+#                             from ds-api-prod: see DATA_VERBS below
+#
 # observe runs only the observations OBSERVE_PY below defines (its OBSERVATIONS
 # table, pinned equal to the case arm by the tests): never SQL or shell from the
 # client. Every parameter is checked against its own pattern box-side and reaches
@@ -475,6 +479,336 @@ release_status() {
   printf '%s,"driver":%s}\n' "${line%\}}" "$driver"
 }
 
+# --- data-prod verbs (Issue #3313; spec §5 «Data-prod verbs.») ---------------------
+# The hop key from ds-api-prod reaches these on the box whose role is `data` only.
+# Every script is fixed here or in an installed root-owned file; a payload is one
+# JSON object checked field by field by DATA_PY below, or the tree archive.
+# infra/deploy/bin/harden-ssh.sh --role data refuses an installed entrypoint without
+# this line; tools/deploy/lib/data-prod.mjs and the tests pin the list.
+DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede'
+DATA_LIVE_TREE=$ROOT/home/deploy/ds-platform
+DATA_COMPOSE=$DATA_LIVE_TREE/infra/deploy/compose/data-prod
+DATA_STATE_FILE=$ROOT/home/deploy/ds-platform-postgres-state.json
+POSTGRES_PROBE=$ROOT/usr/local/lib/ds-platform/postgres-artifact-probe.py
+# Box entrypoint = its path in the shipped tree; tools/deploy/lib/remote.mjs
+# BOX_ENTRYPOINTS, pinned equal by the tests.
+DATA_INSTALL=(
+  /usr/local/bin/ds-release=infra/deploy/bin/ds-release
+  /usr/local/bin/ds-deploy-entrypoint=infra/deploy/bin/ds-deploy-entrypoint
+  /usr/local/lib/ds-platform/release-driver=infra/deploy/bin/release-driver
+  /usr/local/lib/ds-platform/postgres-artifact-probe.py=tools/deploy/postgres-artifact-probe.py
+)
+MAX_DATA_PAYLOAD_BYTES=65536
+MAX_SHIP_BYTES=$(override DS_ENTRYPOINT_MAX_SHIP_BYTES $((256 * 1024 * 1024)))                      # 256 MiB gzip stream
+MAX_SHIP_UNPACKED_BYTES=$(override DS_ENTRYPOINT_MAX_SHIP_UNPACKED_BYTES $((2 * 1024 * 1024 * 1024))) # 2 GiB unpacked
+MAX_SHIP_ENTRIES=$(override DS_ENTRYPOINT_MAX_SHIP_ENTRIES 100000)
+[[ $MAX_SHIP_BYTES =~ ^[0-9]+$ && $MAX_SHIP_UNPACKED_BYTES =~ ^[0-9]+$ && $MAX_SHIP_ENTRIES =~ ^[0-9]+$ ]] ||
+  { echo "ds-deploy-entrypoint: bad cap override" >&2; exit 2; }
+ROLLBACK_UNIT_RE='^ds-prod-[0-9a-f]{12}-rollback$'
+
+# argv: action, then the action's paths; stdin: the payload. Exit 0 done (the
+# result on stdout) · 2 a bad payload · 3 unsafe or unreadable (one fixed reason on
+# stdout, nothing written).
+read -r -d '' DATA_PY <<'PY' || true
+import base64, ipaddress, json, os, re, shutil, sys, tarfile, tempfile
+
+action = sys.argv[1]
+
+def stop(code, reason):
+    sys.stdout.write(reason + "\n")
+    sys.exit(code)
+
+IMAGE_ID = re.compile("sha256:[0-9a-f]{64}")
+IMAGE_REF = re.compile("[a-z0-9][a-z0-9./:_-]{1,254}")
+HEX64 = re.compile("[0-9a-f]{64}")
+SYSTEM_ID = re.compile("[0-9]{15,20}")
+ABS_PATH = re.compile("(/[A-Za-z0-9_.-]+)+")
+REL_PATH = re.compile("[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*")
+ENV_NAME = re.compile("[A-Za-z_][A-Za-z0-9_]{0,127}")
+ROLES = ("postgres", "pgbackrest")
+
+def payload(keys, optional=()):
+    raw = sys.stdin.buffer.read(65537)
+    if len(raw) > 65536:
+        stop(2, "the payload exceeds 65536 bytes")
+    try:
+        value = json.loads(raw.decode("utf-8"))
+    except ValueError:
+        stop(2, "the payload is not one JSON object")
+    if not isinstance(value, dict) or not set(keys) <= set(value) <= set(keys) | set(optional):
+        stop(2, "bad payload for " + action)
+    return value
+
+def check(ok):
+    if not ok:
+        stop(2, "bad payload for " + action)
+
+def images(value, pattern):
+    check(isinstance(value, dict) and set(value) == set(ROLES)
+          and all(isinstance(value[r], str) and pattern.fullmatch(value[r]) for r in ROLES))
+    return {r: value[r] for r in ROLES}
+
+def scalar(v):
+    return v is None or isinstance(v, (bool, int, float)) or (
+        isinstance(v, str) and len(v) <= 4096 and v.isprintable())
+
+def write(path, text):
+    # Whole or not at all: a temp file beside it (0600), then one rename.
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".ds-entrypoint.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except OSError:
+        os.unlink(tmp)
+        stop(3, "the file could not be written")
+
+if action == "postgres-probe":
+    # Only the fields the probe reads reach it, each checked; anything else is refused.
+    req = payload(("target", "preferRecordedImages", "paths"), ("sourceHash",))
+    t = req["target"]
+    check(isinstance(t, dict))
+    for key in ("mount", "sidecarMount"):
+        check(isinstance(t.get(key), dict) and isinstance(t[key].get("target"), str)
+              and ABS_PATH.fullmatch(t[key]["target"]) is not None)
+    env = t.get("environment")
+    check(isinstance(env, dict) and set(env) == set(ROLES) and all(
+        isinstance(env[r], dict) and len(env[r]) <= 64
+        and all(isinstance(k, str) and ENV_NAME.fullmatch(k) and scalar(v) for k, v in env[r].items())
+        for r in ROLES))
+    paths = req["paths"]
+    check(isinstance(paths, list) and len(paths) <= 256 and all(
+        isinstance(p, str) and REL_PATH.fullmatch(p) and ".." not in p.split("/") for p in paths))
+    check(isinstance(req["preferRecordedImages"], bool))
+    check("sourceHash" not in req or (isinstance(req["sourceHash"], str) and HEX64.fullmatch(req["sourceHash"])))
+    clean = {
+        "target": {"mount": {"target": t["mount"]["target"]},
+                   "sidecarMount": {"target": t["sidecarMount"]["target"]},
+                   "images": images(t.get("images"), IMAGE_REF),
+                   "environment": {r: env[r] for r in ROLES}},
+        "preferRecordedImages": req["preferRecordedImages"],
+        "paths": paths,
+    }
+    if "sourceHash" in req:
+        clean["sourceHash"] = req["sourceHash"]
+    sys.stdout.write(base64.b64encode(json.dumps(clean).encode()).decode() + "\n")
+    sys.exit(0)
+
+if action == "postgres-checkpoint":
+    state_file = sys.argv[2]
+    rec = payload(("schema", "sourceHash", "systemId", "images"))
+    check(type(rec["schema"]) is int and rec["schema"] == 1)
+    check(isinstance(rec["sourceHash"], str) and HEX64.fullmatch(rec["sourceHash"]) is not None)
+    check(isinstance(rec["systemId"], str) and SYSTEM_ID.fullmatch(rec["systemId"]) is not None)
+    state = {"schema": 1, "sourceHash": rec["sourceHash"], "systemId": rec["systemId"],
+             "images": images(rec["images"], IMAGE_ID)}
+    write(state_file, json.dumps(state, separators=(",", ":")) + "\n")
+    sys.stdout.write("PostgreSQL checkpoint written\n")
+    sys.exit(0)
+
+if action == "data-env":
+    compose = sys.argv[2]
+    req = payload(("vpcIp", "images"))
+    try:
+        check(isinstance(req["vpcIp"], str) and str(ipaddress.IPv4Address(req["vpcIp"])) == req["vpcIp"])
+    except ValueError:
+        check(False)
+    ids = images(req["images"], IMAGE_ID)
+    if not os.path.isdir(compose):
+        stop(3, "the data-prod compose directory is missing (ship first)")
+    write(os.path.join(compose, ".env"), "VPC_IP=" + req["vpcIp"] + "\n")
+    write(os.path.join(compose, ".postgres-artifacts.json"),
+          json.dumps({"services": {r: {"image": ids[r]} for r in ROLES}}) + "\n")
+    sys.stdout.write("data-prod compose env written\n")
+    sys.exit(0)
+
+if action == "ship":
+    # argv: archive dest max_unpacked max_entries. The tree's one top directory is
+    # stripped; the members are checked like an upload-report, except that a symlink
+    # that resolves inside the tree is kept (the tree carries one).
+    archive, dest = sys.argv[2], sys.argv[3]
+    max_unpacked, max_entries = int(sys.argv[4]), int(sys.argv[5])
+    members, total = [], 0
+    try:
+        tar = tarfile.open(archive, mode="r:gz")
+        for m in tar:
+            if len(members) >= max_entries:
+                stop(2, f"the tree holds more than {max_entries} entries")
+            parts = m.name.split("/")
+            if m.name.startswith("/") or ".." in parts:
+                stop(3, "the tree holds an absolute or .. path")
+            rest = [p for p in parts[1:] if p not in ("", ".")]
+            if not rest:
+                continue
+            if m.issym():
+                link = os.path.normpath(os.path.join(*rest[:-1], m.linkname)) if len(rest) > 1 else os.path.normpath(m.linkname)
+                if m.linkname.startswith("/") or link == ".." or link.startswith("../"):
+                    stop(3, "the tree holds a link outside it")
+            elif not (m.isreg() or m.isdir()):
+                stop(3, "the tree holds a hard link or special file")
+            m.name = "/".join(rest)
+            total += m.size
+            if total > max_unpacked:
+                stop(2, f"the tree unpacks to more than {max_unpacked} bytes")
+            members.append(m)
+    except (tarfile.TarError, EOFError, OSError):
+        stop(3, "the tree is not a readable gzip tar stream")
+    # Owner from us, never from the archive; nobody but root may write the tree.
+    for m in members:
+        m.uid = m.gid = 0
+        m.uname = m.gname = "root"
+        m.mode &= 0o755
+    try:
+        os.makedirs(dest, mode=0o755)
+        if hasattr(tarfile, "data_filter"):
+            tar.extractall(dest, members=members, filter="data")
+        else:
+            tar.extractall(dest, members=members)
+    except Exception:
+        shutil.rmtree(dest, ignore_errors=True)
+        stop(3, "the tree could not be extracted")
+    sys.exit(0)
+
+stop(2, "unknown data action")
+PY
+
+require_data_box() {
+  local role
+  role=$(sudo cat "$BOX_ROLE_FILE" 2>/dev/null || true)
+  [[ $role == data ]] || refuse "$verb is served by the data box only"
+}
+
+# One DATA_PY action with the client's stdin capped; its stdout is the result.
+data_py() {
+  local out rc=0
+  out=$(head -c "$((MAX_DATA_PAYLOAD_BYTES + 1))" | sudo python3 -I -X utf8 -c "$DATA_PY" "$@") || rc=$?
+  case $rc in
+    0) printf '%s\n' "$out" ;;
+    2) reject "${out:-bad payload}" ;;
+    *) refuse "${out:-the payload could not be applied}" ;;
+  esac
+}
+
+ship_tree() {
+  local sha=$1 parent size reason rc
+  parent=$(dirname "$DATA_LIVE_TREE")
+  # Beside the live tree (one filesystem: the swap is a rename), never /tmp.
+  ship_work=$(sudo mktemp -d -p "$parent" .ds-platform.ship.XXXXXX) # global: the EXIT trap outlives this function
+  trap 'sudo rm -rf -- "${ship_work:-}"' EXIT
+  head -c "$((MAX_SHIP_BYTES + 1))" | sudo tee -- "$ship_work/tree.tar.gz" >/dev/null
+  size=$(sudo stat -c %s -- "$ship_work/tree.tar.gz")
+  ((size <= MAX_SHIP_BYTES)) || reject "the tree stream exceeds $MAX_SHIP_BYTES bytes"
+  rc=0
+  reason=$(sudo python3 -I -X utf8 -c "$DATA_PY" ship "$ship_work/tree.tar.gz" "$ship_work/stage" \
+    "$MAX_SHIP_UNPACKED_BYTES" "$MAX_SHIP_ENTRIES") || rc=$?
+  if ((rc != 0)); then
+    ((rc == 2)) && reject "$reason"
+    refuse "${reason:-the tree could not be extracted}"
+  fi
+  if sudo test -e "$DATA_LIVE_TREE"; then sudo mv -- "$DATA_LIVE_TREE" "$ship_work/previous"; fi
+  if ! sudo mv -- "$ship_work/stage" "$DATA_LIVE_TREE"; then
+    if ! sudo mv -- "$ship_work/previous" "$DATA_LIVE_TREE"; then
+      printf '%s: EMERGENCY: the previous tree remains at %s\n' "$TAG" "$ship_work/previous" >&2
+      ship_work= # the previous tree stays for the operator
+    fi
+    refuse "the tree could not be swapped in"
+  fi
+  printf '%s: tree %s shipped\n' "$TAG" "$sha"
+}
+
+install_entrypoints() {
+  local sha=$1 pair
+  for pair in "${DATA_INSTALL[@]}"; do
+    sudo test -f "$DATA_LIVE_TREE/${pair#*=}" || refuse "the shipped tree has no ${pair#*=} (ship first)"
+  done
+  sudo install -d -m 0755 -o root -g root "$ROOT/usr/local/lib/ds-platform"
+  # `install` replaces each file by a new inode, so this running script keeps its own.
+  for pair in "${DATA_INSTALL[@]}"; do
+    sudo install -m 0755 -o root -g root -- "$DATA_LIVE_TREE/${pair#*=}" "$ROOT${pair%%=*}"
+  done
+  printf '%s: box entrypoints of %s installed\n' "$TAG" "$sha"
+}
+
+# The durable step units of data-prod: the step script is fixed here; ds-release
+# copies it root-only and runs it in ds-prod-<sha12>-<step>.
+data_step() {
+  local step=$1 sha=$2 retry=$3 script
+  case $step in
+    up)
+      script="cd '$DATA_COMPOSE'
+docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest
+docker compose up -d --no-deps redis"
+      ;;
+    backup)
+      script="cd '$DATA_COMPOSE'
+docker compose exec -T pgbackrest /usr/local/bin/backup.sh incr"
+      ;;
+  esac
+  step_file=$(sudo mktemp) # global: the EXIT trap outlives this function
+  trap 'sudo rm -f -- "${step_file:-}"' EXIT
+  printf '%s\n' "$script" | sudo tee -- "$step_file" >/dev/null
+  sudo "$DS_RELEASE" release ${retry:+--retry-failed} prod "$sha" "$step" "$step_file"
+}
+
+# check | supersede [<rollback unit>]
+release_lock_verb() {
+  local name=$1 unit=${2-}
+  if [[ -n $unit ]]; then
+    sudo "$DS_RELEASE" "$name" --except "$unit" prod
+  else
+    sudo "$DS_RELEASE" "$name" prod
+  fi
+}
+
+data_verb() {
+  local n=${#words[@]}
+  case "$verb" in
+    capabilities | postgres-probe | postgres-checkpoint | data-env | backup-info | rollback-floor)
+      ((n == 1)) || reject "usage: $verb" ;;
+    ship | install)
+      ((n == 2)) || reject "usage: $verb <sha>"
+      check_sha "${words[1]}" ;;
+    data-up | backup)
+      ((n == 2)) || [[ $n == 3 && ${words[2]} == retry-failed ]] || reject "usage: $verb <sha> [retry-failed]"
+      check_sha "${words[1]}" ;;
+    finish)
+      [[ $n == 3 && ${words[2]} =~ ^(succeeded|failed)$ ]] || reject "usage: finish <sha> succeeded|failed"
+      check_sha "${words[1]}" ;;
+    check | supersede)
+      ((n == 1)) || [[ $n == 2 && ${words[1]} =~ $ROLLBACK_UNIT_RE ]] ||
+        reject "usage: $verb [ds-prod-<sha12>-rollback]" ;;
+  esac
+  accepted
+  require_data_box
+  case "$verb" in
+    capabilities)
+      printf '{"role":"data","verbs":["%s"]}\n' "${DATA_VERBS// /\",\"}" ;;
+    postgres-probe)
+      local request
+      request=$(data_py postgres-probe)
+      sudo test -f "$POSTGRES_PROBE" || refuse "the PostgreSQL probe is not installed"
+      # The probe reads the live tree and the checkpoint under deploy's home.
+      exec sudo env HOME="$ROOT/home/deploy" python3 -I "$POSTGRES_PROBE" "$request" </dev/null ;;
+    postgres-checkpoint) data_py postgres-checkpoint "$DATA_STATE_FILE" ;;
+    data-env) data_py data-env "$DATA_COMPOSE" ;;
+    ship) ship_tree "${words[1]}" ;;
+    install) install_entrypoints "${words[1]}"; exit 0 ;;
+    data-up) data_step up "${words[1]}" "${words[2]-}" </dev/null ;;
+    backup) data_step backup "${words[1]}" "${words[2]-}" </dev/null ;;
+    backup-info)
+      cd "$DATA_COMPOSE"
+      sudo docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info </dev/null | sed -n '1,20p' ;;
+    rollback-floor)
+      # The 0036 floor read of tools/deploy/rollback-floor.mjs. ON_ERROR_STOP: a
+      # failed read is an exit, never empty output that reads like an answer.
+      cd "$DATA_COMPOSE"
+      sudo docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -qAt -U ds -d ds_prod -c \
+        "SELECT CASE WHEN to_regclass('public.event_speakers') IS NULL THEN 'ABSENT' ELSE 'PRESENT' END" </dev/null ;;
+    finish) exec sudo "$DS_RELEASE" finish prod "${words[1]}" "${words[2]}" </dev/null ;;
+    check | supersede) release_lock_verb "$verb" "${words[1]-}" </dev/null ;;
+  esac
+}
+
 case "$verb" in
   status)
     [[ ${#words[@]} -eq 3 ]] || reject "usage: status <env> <sha>"
@@ -523,7 +857,11 @@ case "$verb" in
     accepted
     observe "${words[1]}"
     ;;
+  capabilities | postgres-probe | postgres-checkpoint | ship | install | data-env | data-up | backup | \
+    backup-info | rollback-floor | finish | check | supersede)
+    data_verb
+    ;;
   *)
-    reject "unknown command (allowed: status, release, rollback, rollback-status, upload-report, observe)"
+    reject "unknown command (allowed: status, release, rollback, rollback-status, upload-report, observe; on the data box also: ${DATA_VERBS// /, })"
     ;;
 esac

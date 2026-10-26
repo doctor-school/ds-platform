@@ -447,25 +447,19 @@ export async function guardedPostgresStep(options) {
   return identity;
 }
 
-export function postgresProbeScript({
+/** The probe's request (#3313: the stdin of ds-data-prod's `postgres-probe` verb). */
+export function postgresProbeRequest({
   target,
   files,
   sourceHash,
   preferRecordedImages = false,
 }) {
-  const request = Buffer.from(
-    JSON.stringify({
-      target,
-      sourceHash,
-      preferRecordedImages,
-      paths: Object.keys(files).sort(),
-    }),
-  ).toString("base64");
-  const python = readFileSync(
-    new URL("./postgres-artifact-probe.py", import.meta.url),
-    "utf8",
-  );
-  return `python3 - '${request}' <<'DS_POSTGRES_PROBE'\n${python}\nDS_POSTGRES_PROBE\n`;
+  return {
+    target,
+    sourceHash,
+    preferRecordedImages,
+    paths: Object.keys(files).sort(),
+  };
 }
 
 export function certifiedTarget(target, certificate) {
@@ -495,13 +489,14 @@ export function postgresImageOverride(live) {
   return JSON.stringify({ services });
 }
 
-export function postgresStateScript(live, sourceHash = live.sourceHash) {
+/** The checkpoint record (#3313: the stdin of ds-data-prod's `postgres-checkpoint`). */
+export function postgresStateRecord(live, sourceHash = live.sourceHash) {
   requireFact(
     /^[a-f0-9]{64}$/.test(sourceHash) &&
       /^\d{15,20}$/.test(live.source.systemId),
     "invalid durable source record",
   );
-  const state = JSON.stringify({
+  return JSON.stringify({
     schema: 1,
     sourceHash,
     systemId: live.source.systemId,
@@ -509,5 +504,9 @@ export function postgresStateScript(live, sourceHash = live.sourceHash) {
       ["postgres", "pgbackrest"].map((role) => [role, live.images[role].id]),
     ),
   });
+}
+
+export function postgresStateScript(live, sourceHash = live.sourceHash) {
+  const state = postgresStateRecord(live, sourceHash);
   return `umask 077\nprintf '%s\\n' '${state}' > "$HOME/ds-platform-postgres-state.json.next"\nmv "$HOME/ds-platform-postgres-state.json.next" "$HOME/ds-platform-postgres-state.json"\n`;
 }

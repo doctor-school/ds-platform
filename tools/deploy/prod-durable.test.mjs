@@ -20,17 +20,15 @@ const deployBody = SOURCE.slice(
 );
 
 test("2982: data-prod up, the pre-migrate backup, the pull, migrate+up and the prune are durable units", () => {
-  for (const [host, step] of [
-    ["DATA_PROD", "up"],
-    ["DATA_PROD", "backup"],
-    ["API_PROD", "migrate"],
-    ["API_PROD", "prune"],
-  ]) {
-    assert.match(
-      deployBody,
-      new RegExp(`boxStep\\(\\s*${host},\\s*sha,\\s*"${step}"`),
-      `${host} ${step}`,
-    );
+  for (const step of ["migrate", "prune"]) {
+    assert.match(deployBody, new RegExp(`boxStep\\(\\s*API_PROD,\\s*sha,\\s*"${step}"`), step);
+  }
+  // #3313: ds-data-prod's units start through its verbs, their scripts fixed box-side.
+  for (const step of ["up", "backup"]) {
+    assert.match(deployBody, new RegExp(`dataProdStep\\(sha, "${step}",`), step);
+  }
+  for (const boxSide of ["backup.sh incr", "up -d --no-build --pull never", "pgbackrest --stanza=ds info"]) {
+    assert.ok(!SOURCE.includes(boxSide), `${boxSide} lives in ds-deploy-entrypoint only`);
   }
   assert.match(
     SOURCE,
@@ -39,8 +37,6 @@ test("2982: data-prod up, the pre-migrate backup, the pull, migrate+up and the p
   for (const streamed of [
     "migrateAndUpScript()",
     "retentionScript()",
-    "backup.sh incr",
-    "up -d --no-build --pull never",
   ]) {
     const at = deployBody.indexOf(streamed);
     assert.ok(at > 0, streamed);
@@ -55,12 +51,13 @@ test("2982: data-prod up, the pre-migrate backup, the pull, migrate+up and the p
 test("2982: the entrypoint is installed after the ship, the release opened, and closed only after the smoke", () => {
   const install = deployBody.indexOf("releaseInstallScript(PROD_LIVE_TREE, { sha })");
   const opened = deployBody.indexOf("openReleaseSha = sha;");
-  const firstStep = deployBody.indexOf("boxStep(");
-  const shipped = deployBody.indexOf("shipTree(sha, DATA_PROD)");
+  const firstStep = deployBody.search(/boxStep\(|dataProdStep\(/);
+  const shipped = deployBody.indexOf("shipDataProd(sha)");
+  const dataInstall = deployBody.indexOf('dataProd().call(["install", sha])');
   const smoke = deployBody.indexOf("await runSmoke(sha, services);");
   const finish = deployBody.indexOf("await finishReleaseSucceeded(sha);");
   assert.ok(
-    shipped > 0 && shipped < install && install < opened && opened < firstStep,
+    shipped > 0 && shipped < install && install < dataInstall && dataInstall < opened && opened < firstStep,
   );
   assert.ok(smoke > 0 && smoke < finish);
   // Every failure exit — die() included — closes the open release as failed.
@@ -86,7 +83,8 @@ test("2982: the rollback refuses while a box step still runs, then supersedes th
   assert.ok(check < pull, "the check runs before the first state change");
   assert.ok(pull < up, "the up -d runs inside `ds-release supersede` (env lock held)");
   assert.match(rollback, /for \(const host of \[API_PROD, DATA_PROD\]\)[\s\S]{0,200}releaseCheckScript/);
-  assert.match(rollback, /DATA_PROD, releaseSupersedeScript\(RELEASE_ENV, undefined, own\)/);
+  assert.match(rollback, /host === DATA_PROD\) await dataProd\(\)\.call\(\["check", \.\.\.dataProdExcept\(own\)\]\)/);
+  assert.match(rollback, /dataProd\(\)\.call\(\["supersede", \.\.\.dataProdExcept\(own\)\]/);
 });
 
 test("2987: the box-side rollback is the same rollback(): it installs nothing, reads the fetched target tree and excludes only its own unit", () => {
@@ -115,7 +113,7 @@ test("2987: the box-side rollback is the same rollback(): it installs nothing, r
   assert.ok(rollback.indexOf("rollbackTargetVerdict(") < fetchAt);
 });
 
-test("3054: the rollback installs ds-release on both boxes from the operator checkout before its first check", () => {
+test("3054/3313: the rollback installs ds-release on ds-api-prod from the operator checkout before its first check", () => {
   const rollback = SOURCE.slice(SOURCE.indexOf("async function rollback("));
   const install = rollback.indexOf("releaseInstallFromSourceScript(");
   const check = rollback.indexOf("releaseCheckScript(RELEASE_ENV, own)");
@@ -123,16 +121,15 @@ test("3054: the rollback installs ds-release on both boxes from the operator che
   assert.ok(install < check, "the install precedes the first ds-release call");
   const beforeCheck = rollback.slice(0, check);
   assert.doesNotMatch(beforeCheck, /releaseInstallScript\(|shipTree\(/, "never from a shipped tree");
-  assert.match(
-    beforeCheck,
-    /for \(const host of \[API_PROD, DATA_PROD\]\)[\s\S]{0,200}releaseInstallFromSourceScript\(/,
-  );
+  // #3313: ds-data-prod takes no script; it keeps its last forward release's entrypoints.
+  assert.match(beforeCheck, /sshScript\(API_PROD, releaseInstallFromSourceScript\(releaseSources\)/);
+  assert.doesNotMatch(beforeCheck, /sshScript\(DATA_PROD/);
   assert.match(beforeCheck, /committedReleaseSources\(\)/, "the bytes are HEAD's blobs");
   assert.doesNotMatch(beforeCheck, /readFileSync\(/, "never the working-tree file");
   // A failed install names the host through die(), like the check loop.
   assert.match(
     beforeCheck,
-    /releaseInstallFromSourceScript\([\s\S]{0,200}catch \(e\) \{\s*die\(\s*`--rollback: cannot install ds-release on \$\{host\}/,
+    /releaseInstallFromSourceScript\([\s\S]{0,200}catch \(e\) \{\s*die\(\s*`--rollback: cannot install ds-release on \$\{API_PROD\}/,
   );
 });
 
@@ -178,9 +175,10 @@ test("2984/2985: the rollback installs every box entrypoint, each HEAD's blob", 
       "/usr/local/bin/ds-release",
       "/usr/local/bin/ds-deploy-entrypoint",
       "/usr/local/lib/ds-platform/release-driver",
+      "/usr/local/lib/ds-platform/postgres-artifact-probe.py",
     ],
   );
-  for (const { source } of sources) {
+  for (const { source } of sources.filter(({ dest }) => !dest.endsWith(".py"))) {
     assert.match(source.subarray(0, 64).toString("utf8"), /^#!\/usr\/bin\/env bash\n/);
   }
 });

@@ -656,6 +656,135 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     },
   );
 
+  it.each([
+    ["academy", ACADEMY, ACADEMY_LOGIN],
+    ["doctor", DOCTOR, DOCTOR_LOGIN],
+  ] as const)(
+    "EARS-66: S168 a stale %s request preserves the live browser record for a new silent request",
+    async (storefront, clientId, loginUrl) => {
+      const address = await account(`s168-live-${storefront}`);
+      recordNow = new Date();
+      const jar = new Jar();
+      await signIn(jar, address, clientId);
+      const records = app.get(SignInHostRecordStore);
+      const recordId = jar.values.get(RECORD_COOKIE_NAME)!;
+      const original = await records.find(recordId);
+      expect(original).not.toBeNull();
+      expect(hostIdp.finalised.at(-1)).toMatchObject({
+        session: original!.session,
+      });
+      const auth = app.get(AuthService);
+      const noWork = [
+        vi.spyOn(auth, "passwordStep"),
+        vi.spyOn(auth, "otpStep"),
+        vi.spyOn(auth, "verifyStep"),
+        vi.spyOn(auth, "requestLoginOtp"),
+        vi.spyOn(idp, "passwordLogin"),
+        vi.spyOn(idp, "submitEmailCode"),
+        vi.spyOn(idp, "loginWithEmailOtp"),
+        vi.spyOn(idp, "loginWithSmsOtp"),
+        vi.spyOn(idp, "requestEmailLoginCode"),
+        vi.spyOn(idp, "requestSmsOtp"),
+        vi.spyOn(idp, "terminateSession"),
+        vi.spyOn(hostIdp, "setSessionLifetime"),
+        vi.spyOn(hostIdp, "finaliseWithError"),
+        vi.spyOn(records, "insert"),
+        vi.spyOn(records, "delete"),
+      ];
+      const finalise = vi.spyOn(hostIdp, "finaliseWithSession");
+      const lifetimes = [...hostIdp.lifetimes];
+      const finalised = [...hostIdp.finalised];
+      try {
+        const form = await render(jar, clientId, { prompt: ["login"] });
+        expect(form.body).toEqual({
+          action: "render",
+          storefront,
+          door: "login",
+          authRequest: form.authRequest,
+          csrf: form.csrf,
+        });
+        expect(jar.values.get(RECORD_COOKIE_NAME)).toBe(recordId);
+        expect(await records.find(recordId)).toEqual(original);
+        const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+        const formId = jar.values.get(FORM_COOKIE_NAME)!;
+        const binding = await state.getForm(formId);
+        expect(binding).toEqual({
+          csrfToken: form.csrf,
+          storefront,
+          authRequestId: form.authRequest,
+        });
+        const before = await pool.query<Record<string, unknown>>(
+          "SELECT * FROM sign_in_host_records WHERE subject = (SELECT zitadel_sub FROM users WHERE email = $1)",
+          [address],
+        );
+        expect(before.rows).toHaveLength(1);
+        const cookies = [...jar.values];
+        recordNow = new Date(original!.lastFinalisedAt.getTime() + 1000);
+        hostIdp.expire(form.authRequest);
+        expect(await hostIdp.readAuthRequest(form.authRequest)).toBeNull();
+
+        const stale = await entry(jar, form.authRequest);
+        expect(stale.res.statusCode).toBe(200);
+        expect(stale.body).toEqual({ action: "redirect", url: loginUrl });
+        expect(stale.res.cookies).toEqual([]);
+        expect([...jar.values]).toEqual(cookies);
+        expect(await state.getForm(formId)).toEqual(binding);
+        expect(await records.find(recordId)).toEqual(original);
+        expect(
+          (
+            await pool.query<Record<string, unknown>>(
+              "SELECT * FROM sign_in_host_records WHERE subject = (SELECT zitadel_sub FROM users WHERE email = $1)",
+              [address],
+            )
+          ).rows,
+        ).toEqual(before.rows);
+        expect(hostIdp.finalised).toEqual(finalised);
+        expect(hostIdp.lifetimes).toEqual(lifetimes);
+        expect(finalise).not.toHaveBeenCalled();
+        for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
+
+        recordNow = new Date(original!.lastFinalisedAt.getTime() + 2000);
+        const nextRequest = hostIdp.seedAuthRequest({
+          clientId,
+          prompt: ["none"],
+        });
+        const next = await entry(jar, nextRequest);
+        expect(next.res.statusCode).toBe(200);
+        expect(next.body).toEqual({
+          action: "redirect",
+          url: expect.stringContaining("code="),
+        });
+        expect(finalise).toHaveBeenCalledExactlyOnceWith(
+          nextRequest,
+          original!.session,
+        );
+        expect(hostIdp.finalised).toEqual([
+          ...finalised,
+          { id: nextRequest, session: original!.session },
+        ]);
+        expect(next.res.cookies).toEqual([]);
+        expect([...jar.values]).toEqual(cookies);
+        expect(await records.find(recordId)).toEqual({
+          ...original,
+          lastFinalisedAt: recordNow,
+        });
+        expect(
+          (
+            await pool.query<Record<string, unknown>>(
+              "SELECT * FROM sign_in_host_records WHERE subject = (SELECT zitadel_sub FROM users WHERE email = $1)",
+              [address],
+            )
+          ).rows,
+        ).toEqual([{ ...before.rows[0], last_finalised_at: recordNow }]);
+        expect(hostIdp.lifetimes).toEqual(lifetimes);
+        for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
+      } finally {
+        finalise.mockRestore();
+        for (const spy of noWork) spy.mockRestore();
+      }
+    },
+  );
+
   it("EARS-68: prompt=none without a record finalises login_required", async () => {
     const authRequest = hostIdp.seedAuthRequest({
       clientId: DOCTOR,

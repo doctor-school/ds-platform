@@ -118,6 +118,33 @@ test.describe("003 EARS-5: Back after the sign-in is the page before it", () => 
     await expect.poll(() => page.url()).toBe(storefrontPageUrl("login"));
     expect(page.url().startsWith(HOST_ORIGIN)).toBe(false);
   });
+
+  test("003 EARS-39: the code accepted on a reloaded code step reaches the IdP callback — the reloaded step leaves by replacing its own entry, never by stepping back to the spent form", async ({
+    page,
+  }) => {
+    const once = `${Date.now().toString(36)}r${test.info().workerIndex}`;
+    await page.goto(EVENT_PAGE);
+    await page.goto(doorPath("doctor", "register", { once }));
+    await submitRegistration(page);
+
+    await page.reload();
+    await expect(page.getByTestId("verify-card")).toContainText(EMAIL);
+    const formRequests: string[] = [];
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname === "/register") {
+        formRequests.push(request.url());
+      }
+    });
+    await page.locator('input[autocomplete="one-time-code"]').fill("482913");
+    await page.waitForURL(isIdpCallback);
+    expect(formRequests).toEqual([]);
+
+    // The form's entry (another document) stays behind the returned page:
+    // Back opens its spent auth request, which EARS-66 sends to the storefront.
+    await page.goBack();
+    await expect.poll(() => page.url()).toBe(storefrontPageUrl("login"));
+    expect(page.url().startsWith(HOST_ORIGIN)).toBe(false);
+  });
 });
 
 test.describe("003 EARS-24: the code step's own history entry", () => {

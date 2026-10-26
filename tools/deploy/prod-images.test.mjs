@@ -260,10 +260,12 @@ test("2981: every `${VAR:?}` the api-prod compose requires is rendered by every 
   assert.ok(shipTreeCommand({ liveDir: "~/ds-platform" }).includes("infra/deploy/compose/api-prod/.env"));
   // … and both paths that set the SHA write it BEFORE their first compose call:
   // the deploy before the pull/migrate/up/runtime-config steps, the rollback
-  // before its `up -d`. Runtime-config compare/restart only run after a deploy.
+  // before its `up -d`. Runtime-config compare/restart only run after a deploy; the
+  // pre-ship backup (#3274) reads the `.env` the previous release left (the ship
+  // keeps it), and a failed `ps` there falls back to the file on disk.
   const deployEnvAt = PROD_SOURCE.indexOf("${deployShaEnvScript(sha)}\n`,\n    { label: \"api-prod DEPLOY_SHA\" }");
   const migrateAt = PROD_SOURCE.indexOf('await boxStep(API_PROD, sha, "migrate", migrateAndUpScript()');
-  const runtimeAt = PROD_SOURCE.indexOf("await applyRuntimeConfigs();");
+  const runtimeAt = PROD_SOURCE.indexOf("await applyRuntimeConfigsOrDie({ rollbackHint: true });");
   assert.ok(deployEnvAt > 0 && deployEnvAt < migrateAt && migrateAt < runtimeAt);
   const rollbackAt = PROD_SOURCE.indexOf("async function rollback(");
   const rollbackEnvAt = PROD_SOURCE.indexOf("${deployShaEnvScript(sha)}\nsudo docker compose up -d", rollbackAt);
@@ -278,6 +280,7 @@ test("2981: every `${VAR:?}` the api-prod compose requires is rendered by every 
       "sudo docker compose up -d",
       'container_id=$(sudo docker compose ps -q "$service")',
       "sudo docker compose restart ${services.join(\" \")}",
+      'container_id=$(sudo docker compose ps -q "$service" 2>/dev/null || true)',
       "sudo docker compose up -d --no-deps redis",
       "sudo docker compose exec -T pgbackrest /usr/local/bin/backup.sh incr",
       "sudo docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info | sed -n '1,20p'",

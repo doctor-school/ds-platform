@@ -244,6 +244,7 @@ export const DEPLOY_PLAN = Object.freeze([
   "service-set",
   "postgres-verify",
   "previous-sha",
+  "runtime-config-backup",
   "ship",
   "install",
   "data-prod-env",
@@ -251,6 +252,7 @@ export const DEPLOY_PLAN = Object.freeze([
   "backup",
   "pull",
   "boot-verify",
+  "runtime-config-validate",
   "idp",
   "migrate",
   "runtime-configs",
@@ -655,6 +657,313 @@ export function runtimeConfigRestartScript(services) {
   return `cd ${API_COMPOSE}
 sudo docker compose restart ${services.join(" ")}
 `;
+}
+
+// #3274: a shipped Caddyfile that does not parse took the prod edge down (#3273).
+// The previous configs are kept outside the shipped tree (every ship replaces it),
+// the shipped Caddyfile is validated on its pinned image before any swap, and a
+// failed apply puts the previous configs back. Spec 2026-10-16 §5 «Edge config».
+export const PREVIOUS_RUNTIME_CONFIG_DIR = "/var/lib/ds-platform/runtime-config/previous";
+const RUNTIME_CONFIG_MOUNTS = [
+  { service: "caddy", file: "Caddyfile", mounted: "/etc/caddy/Caddyfile" },
+  { service: "centrifugo", file: "centrifugo/config.json", mounted: "/centrifugo/config.json" },
+];
+const API_COMPOSE_PATH = "infra/deploy/compose/api-prod";
+
+function assertFullSha(sha) {
+  if (!/^[0-9a-f]{40}$/.test(String(sha))) throw new Error(`runtime config backup needs a full SHA, got: ${sha}`);
+}
+
+/**
+ * The backup of the configs the running containers serve, taken for the release
+ * (or rollback) of `target`. A re-entered run of the same target keeps the backup
+ * its first entry took — by then the tree, or even the mounts, may already carry
+ * the target's bytes. A new target retakes it through the running containers (the
+ * bytes actually served, whatever tree an earlier failed run left on disk); only a
+ * service whose container cannot be read falls back to the file on disk. A
+ * rollback records its own key (`rollback-<sha>`): the backup a forward release of
+ * that same SHA once took holds the configs from before it, not the running ones.
+ */
+export function runtimeConfigBackupScript(
+  target,
+  { composeDir = API_COMPOSE, backupDir = PREVIOUS_RUNTIME_CONFIG_DIR, rollback = false } = {},
+) {
+  assertFullSha(target);
+  const key = rollback ? `rollback-${target}` : target;
+  return `set -u
+cd '${composeDir}' || exit 1
+dir='${backupDir}'
+recorded=$(sudo cat "$dir/for" 2>/dev/null || true)
+if [ "$recorded" = '${key}' ]; then
+  echo 'runtime-config-backup=kept ${key}'
+  exit 0
+fi
+# umask 077: the backup dir and its files are root 0700/0600 as they are created.
+umask 077
+sudo mkdir -p "$dir/centrifugo" || exit 1
+sudo rm -f "$dir/for"
+copy=$(mktemp)
+save() {
+  local service="$1" shipped_path="$2" mounted_path="$3" container_id source
+  container_id=$(sudo docker compose ps -q "$service" 2>/dev/null || true)
+  if [ -n "$container_id" ] && sudo docker exec "$container_id" cat "$mounted_path" >"$copy" 2>/dev/null; then
+    source=running
+  elif sudo cat "$shipped_path" >"$copy" 2>/dev/null; then
+    source=disk
+  else
+    echo "runtime-config-backup=FAILED $service"
+    sudo rm -f "$copy"
+    exit 1
+  fi
+  sudo cp "$copy" "$dir/$shipped_path" || exit 1
+  echo "$service=$source"
+}
+${RUNTIME_CONFIG_MOUNTS.map((m) => `save ${m.service} ${m.file} ${m.mounted}`).join("\n")}
+sudo rm -f "$copy"
+printf '%s\\n' '${key}' | sudo tee "$dir/for" >/dev/null || exit 1
+echo 'runtime-config-backup=taken ${key}'
+`;
+}
+
+/** Puts the backed-up configs back into the compose dir; prints its verdict line. */
+export function runtimeConfigRestoreScript({
+  composeDir = API_COMPOSE,
+  backupDir = PREVIOUS_RUNTIME_CONFIG_DIR,
+} = {}) {
+  return `set -u
+cd '${composeDir}' || exit 1
+dir='${backupDir}'
+recorded=$(sudo cat "$dir/for" 2>/dev/null || true)
+if [ -z "$recorded" ]; then
+  echo 'runtime-config-restore=NO-BACKUP'
+  exit 0
+fi
+${RUNTIME_CONFIG_MOUNTS.map(
+  (m) =>
+    `{ sudo cp "$dir/${m.file}" '${m.file}.ds-restore' && sudo chmod 0644 '${m.file}.ds-restore' && sudo mv -f '${m.file}.ds-restore' '${m.file}'; } || { echo 'runtime-config-restore=FAILED ${m.file}'; exit 0; }`,
+).join("\n")}
+echo "runtime-config-restore=restored (backup taken for $recorded)"
+`;
+}
+
+/** The verdict line of a backup or restore script: `{ ok, detail }`, fail-closed. */
+export function runtimeConfigStepVerdict(output, kind) {
+  const line = String(output ?? "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .find((l) => l.startsWith(`runtime-config-${kind}=`));
+  if (!line) return { ok: false, detail: `no runtime-config-${kind} verdict` };
+  const detail = line.slice(`runtime-config-${kind}=`.length);
+  const ok = kind === "backup" ? /^(kept|taken) /.test(detail) : detail.startsWith("restored ");
+  return { ok, detail };
+}
+
+/**
+ * `caddy validate` of the Caddyfile in the compose dir on the caddy image that
+ * dir's compose.yml pins — the image the swap would run it on (the same command
+ * as tools/ci/validate-caddyfiles.sh). No published port: the live caddy keeps :80/:443.
+ */
+export function caddyValidateScript({ composeDir = API_COMPOSE } = {}) {
+  return `set -u
+cd '${composeDir}' || exit 1
+image="$(grep -Eo 'image:[[:space:]]*caddy:[^[:space:]]+' compose.yml | head -n1 | sed -E 's/image:[[:space:]]*//' || true)"
+if [ -z "$image" ]; then
+  echo 'caddy-validate=NO-IMAGE'
+  exit 0
+fi
+log=$(mktemp)
+if sudo docker run --rm -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" "$image" \\
+     caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile >"$log" 2>&1; then
+  echo "caddy-validate=VALID $image"
+else
+  echo "caddy-validate=INVALID $image"
+  echo '---- caddy validate (last 40) ----'
+  tail -n 40 "$log"
+fi
+rm -f "$log"
+`;
+}
+
+/** The verdict of `caddyValidateScript`: only an explicit VALID passes. */
+export function caddyValidateVerdict(output) {
+  const line = String(output ?? "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .find((l) => l.startsWith("caddy-validate="));
+  if (!line) return { ok: false, reason: "no caddy-validate verdict" };
+  const verdict = line.slice("caddy-validate=".length);
+  if (/^VALID \S+$/.test(verdict)) return { ok: true, image: verdict.slice("VALID ".length) };
+  return { ok: false, reason: `Caddyfile ${verdict}` };
+}
+
+/**
+ * The Centrifugo config must parse as a JSON object — the shape
+ * `centrifugo --config=…` loads (its secrets come from the env file, not this file).
+ */
+export function centrifugoConfigVerdict(text) {
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return { ok: true };
+    return { ok: false, reason: "centrifugo/config.json is not a JSON object" };
+  } catch (e) {
+    return { ok: false, reason: `centrifugo/config.json does not parse: ${e.message}` };
+  }
+}
+
+/**
+ * The pre-swap check of the runtime configs now in the compose dir. Invalid → the
+ * previous configs go back on disk (so the tree matches what still runs) and the
+ * result names the restore; nothing here swaps a container.
+ */
+export async function validateRuntimeConfigs({
+  centrifugoConfig,
+  validate = () => sshCapture(API_PROD, caddyValidateScript()),
+  restore = () => sshCapture(API_PROD, runtimeConfigRestoreScript()),
+  log = (message) => console.log(message),
+}) {
+  const centrifugo = centrifugoConfigVerdict(centrifugoConfig);
+  let caddy = { ok: false, reason: "caddy validate did not run" };
+  if (centrifugo.ok) {
+    const out = await validate();
+    log(out.split(/\r?\n/).filter(Boolean).map((l) => `      ${l}`).join("\n"));
+    caddy = caddyValidateVerdict(out);
+  }
+  if (centrifugo.ok && caddy.ok) return { ok: true, image: caddy.image };
+  const reason = centrifugo.ok ? caddy.reason : centrifugo.reason;
+  const restored = runtimeConfigStepVerdict(
+    await restore().catch((e) => `runtime-config-restore=FAILED ${e.message}`),
+    "restore",
+  );
+  return {
+    ok: false,
+    reason,
+    restore: restored.ok
+      ? `the previous configs were put back on disk — ${restored.detail}`
+      : `the previous configs were NOT put back on disk (${restored.detail})`,
+  };
+}
+
+/**
+ * Writes the given runtime config files into the compose dir (the rollback's
+ * target configs). Base64 keeps the bytes exact through the script transport.
+ */
+export function runtimeConfigInstallScript(files, { composeDir = API_COMPOSE } = {}) {
+  const known = RUNTIME_CONFIG_MOUNTS.map((m) => m.file);
+  const names = Object.keys(files);
+  if (names.length !== known.length || names.some((name) => !known.includes(name))) {
+    throw new Error(`runtime config install needs exactly ${known.join(" + ")}`);
+  }
+  return `set -eu
+cd '${composeDir}'
+${known
+  .map(
+    (name) =>
+      `printf '%s' '${Buffer.from(files[name], "utf8").toString("base64")}' | base64 -d | sudo tee '${name}.ds-new' >/dev/null
+sudo chmod 0644 '${name}.ds-new'
+sudo mv -f '${name}.ds-new' '${name}'`,
+  )
+  .join("\n")}
+echo 'runtime-config-install=done'
+`;
+}
+
+/**
+ * `applyRuntimeConfigs`, and on its failure the previous configs back on disk, both
+ * services restarted onto them and re-compared. Throws with the restore's result.
+ */
+export async function applyRuntimeConfigsOrRestore({
+  compare = () => sshCapture(API_PROD, runtimeConfigComparisonScript()),
+  restart = (script) => sshScript(API_PROD, script, { label: "runtime config restart" }),
+  restore = () => sshCapture(API_PROD, runtimeConfigRestoreScript()),
+  log = (message) => console.log(message),
+} = {}) {
+  try {
+    return await applyRuntimeConfigs({ compare, restart, log });
+  } catch (err) {
+    const restored = runtimeConfigStepVerdict(
+      await restore().catch((e) => `runtime-config-restore=FAILED ${e.message}`),
+      "restore",
+    );
+    let result;
+    if (!restored.ok) {
+      result = `the previous configs were NOT restored (${restored.detail})`;
+    } else {
+      try {
+        await restart(runtimeConfigRestartScript(RUNTIME_CONFIG_SERVICES));
+        const stale = runtimeConfigServicesToRestart(await compare());
+        result =
+          stale.length === 0
+            ? `the previous configs were restored and caddy + centrifugo restarted onto them — ${restored.detail}`
+            : `the previous configs were restored on disk but ${stale.join(", ")} still do(es) not mount them — ${restored.detail}`;
+      } catch (e) {
+        result = `the previous configs were restored on disk, but the restart onto them failed (${e.message}) — ${restored.detail}`;
+      }
+    }
+    throw new Error(`${err.message}; ${result}`, { cause: err });
+  }
+}
+
+/** Takes (or, on a re-entered run of `target`, keeps) the runtime config backup. */
+async function backupRuntimeConfigs(target, { rollback = false } = {}) {
+  const out = await sshCapture(API_PROD, runtimeConfigBackupScript(target, { rollback })).catch(
+    (e) => `runtime-config-backup=FAILED ${e.message}`,
+  );
+  const verdict = runtimeConfigStepVerdict(out, "backup");
+  if (!verdict.ok) {
+    die(
+      `cannot keep the running Caddy + Centrifugo configs (${verdict.detail}) — nothing was shipped or swapped`,
+    );
+  }
+  ok(`runtime configs backed up in ${PREVIOUS_RUNTIME_CONFIG_DIR}: ${verdict.detail}`);
+}
+
+/** Puts the backed-up configs back into the compose dir; returns the restore detail. */
+async function restoreRuntimeConfigsOnDisk() {
+  const verdict = runtimeConfigStepVerdict(
+    await sshCapture(API_PROD, runtimeConfigRestoreScript()).catch(
+      (err) => `runtime-config-restore=FAILED ${err.message}`,
+    ),
+    "restore",
+  );
+  return verdict.detail;
+}
+
+/** The pre-swap gate: `die` on an invalid config, after the previous ones are back on disk. */
+async function assertRuntimeConfigsValid(files, { swapped }) {
+  const verdict = await validateRuntimeConfigs({ centrifugoConfig: files["centrifugo/config.json"] });
+  if (!verdict.ok) {
+    die(
+      `the edge config does NOT validate: ${verdict.reason}
+` +
+        `  ${swapped} — the PREVIOUS containers still serve the PREVIOUS configs;
+` +
+        `  ${verdict.restore}.
+` +
+        `  Fix the config on main and re-run (#3274).`,
+    );
+  }
+  ok(`Caddyfile validates on ${verdict.image}; centrifugo/config.json parses`);
+}
+
+async function applyRuntimeConfigsOrDie({ rollbackHint = false } = {}) {
+  try {
+    await applyRuntimeConfigsOrRestore();
+  } catch (e) {
+    die(`runtime config apply failed: ${e.message}`, { rollbackHint });
+  }
+}
+
+/** The target's runtime config files, byte-exact (the extracted tree, or `git show`). */
+function targetRuntimeConfigs(sha) {
+  return Object.fromEntries(
+    RUNTIME_CONFIG_MOUNTS.map(({ file }) => {
+      const path = `${API_COMPOSE_PATH}/${file}`;
+      if (LOCAL_TREE) return [file, readFileSync(join(LOCAL_TREE, ...path.split("/")), "utf8")];
+      const r = spawnSync("git", ["show", `${sha}:${path}`], { encoding: "utf8" });
+      if (r.status !== 0) throw new Error(`\`git show ${sha.slice(0, 12)}:${path}\` exited ${r.status}`);
+      return [file, r.stdout];
+    }),
+  );
 }
 
 export async function applyRuntimeConfigs({
@@ -1831,6 +2140,12 @@ async function deploy(hotfixRef = null, local = null) {
     }
   }
 
+  // #3274: the configs the running caddy/centrifugo serve, kept outside the tree the
+  // ship below replaces — the restore source of a failed validate or apply.
+  walk.phase("runtime-config-backup");
+  step("#3274: keep the running Caddy + Centrifugo configs (BEFORE the ship)");
+  await backupRuntimeConfigs(sha);
+
   const shipLabel =
     hotfixRef && prevSha
       ? `${targetLabel} (base ${prevSha.slice(0, 12)})`
@@ -1956,6 +2271,19 @@ ${deployShaEnvScript(sha)}
   walk.phase("boot-verify");
   await verifyImagesBoot(sha, services);
 
+  step("#3274: PRE-SWAP edge config validate (old containers still serving)");
+  walk.phase("runtime-config-validate");
+  let shippedConfigs;
+  try {
+    shippedConfigs = targetRuntimeConfigs(sha);
+  } catch (e) {
+    die(
+      `cannot read the shipped runtime configs of ${sha.slice(0, 12)} (${e.message}) —` +
+        " nothing was swapped; the previous containers still serve the previous configs",
+    );
+  }
+  await assertRuntimeConfigsValid(shippedConfigs, { swapped: "Nothing was swapped" });
+
   step("#2149: PRE-SWAP IdP converge + SMTP and policy read-back");
   t = Date.now();
   walk.phase("idp");
@@ -1972,7 +2300,7 @@ ${deployShaEnvScript(sha)}
   step("api-prod: apply bind-mounted Caddy + Centrifugo configs (#1175)");
   t = Date.now();
   walk.phase("runtime-configs");
-  await applyRuntimeConfigs();
+  await applyRuntimeConfigsOrDie({ rollbackHint: true });
   ok("Caddy + Centrifugo run with the shipped configs", t);
 
   walk.phase("verify-running-sha");
@@ -2328,28 +2656,66 @@ done`,
       "\n    the instance keeps what the last forward deploy converged it to.",
   );
 
+  // #3274: the rollback puts back the target's runtime configs too — validated before
+  // the swap, applied after it, the configs running now kept as the restore source.
+  // Both paths read them from the target commit (the fetched tree, or `git show`).
+  step("#3274: target Caddy + Centrifugo configs → api-prod, validated (BEFORE the swap)");
+  let targetConfigs;
+  try {
+    targetConfigs = targetRuntimeConfigs(sha);
+  } catch (e) {
+    die(`--rollback: cannot read the target's runtime configs (${e.message}); prod was not rolled back`);
+  }
+  await backupRuntimeConfigs(sha, { rollback: true });
+  try {
+    await sshScript(API_PROD, runtimeConfigInstallScript(targetConfigs), {
+      label: "rollback runtime configs",
+    });
+  } catch (e) {
+    const restored = await restoreRuntimeConfigsOnDisk();
+    die(
+      `--rollback: cannot write the target's runtime configs (${e.message}); nothing was rolled back;` +
+        ` restore of the running configs on disk: ${restored}`,
+    );
+  }
+  await assertRuntimeConfigsValid(targetConfigs, { swapped: "Nothing was rolled back" });
+
   // #2982: the rollback moves prod off the SHAs the boxes recorded, so it
   // supersedes their release records under the env lock (refused while a step
   // unit runs): a later deploy of the SHA rolled off then runs every step again
   // instead of answering from verdicts that no longer describe the containers.
-  await sshScript(DATA_PROD, releaseSupersedeScript(RELEASE_ENV, undefined, own), {
-    label: "supersede the data-prod release record",
-  });
-  step("api-prod: up -d previous tag (NO build, NO migrate — app tier only)");
-  await sshScript(
-    API_PROD,
-    releaseSupersedeScript(
-      RELEASE_ENV,
-      `cd ${API_COMPOSE}
+  // #3274: the target's configs are on disk from here; a supersede or `up -d` that
+  // fails puts the running ones back, so the tree matches what still runs.
+  try {
+    await sshScript(DATA_PROD, releaseSupersedeScript(RELEASE_ENV, undefined, own), {
+      label: "supersede the data-prod release record",
+    });
+    step("api-prod: up -d previous tag (NO build, NO migrate — app tier only)");
+    await sshScript(
+      API_PROD,
+      releaseSupersedeScript(
+        RELEASE_ENV,
+        `cd ${API_COMPOSE}
 # Same DEPLOY_SHA-only rewrite as the deploy path — never clobber the other
 # non-secret interpolation vars (SMARTCAPTCHA_SITE_KEY, #729/#186).
 ${deployShaEnvScript(sha)}
 sudo docker compose up -d
 `,
-      own,
-    ),
-    { label: "rollback up" },
-  );
+        own,
+      ),
+      { label: "rollback up" },
+    );
+  } catch (e) {
+    const restored = await restoreRuntimeConfigsOnDisk();
+    die(
+      `--rollback: the supersede / up -d failed (${e.message}); the target's runtime configs` +
+        ` were written but not applied; restore of the running configs on disk: ${restored}`,
+    );
+  }
+
+  step("api-prod: apply the target's bind-mounted Caddy + Centrifugo configs (#3274)");
+  await applyRuntimeConfigsOrDie();
+  ok("Caddy + Centrifugo run with the target's configs");
 
   step("Verify the RUNNING containers carry the rollback SHA");
   await verifyRunningSha(sha, services);

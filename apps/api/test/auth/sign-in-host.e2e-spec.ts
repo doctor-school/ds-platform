@@ -3017,11 +3017,6 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
       const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
       const formCookie = jar.values.get(FORM_COOKIE_NAME)!;
       const binding = await state.getForm(formCookie);
-      expect(binding).toEqual({
-        csrfToken: form.csrf,
-        storefront,
-        authRequestId: form.authRequest,
-      });
       const cookies = [...jar.values];
       const pending = await pool.query<{
         zitadel_sub: string;
@@ -3033,6 +3028,19 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
           email_verified: false,
         }),
       ]);
+      // 003 EARS-24/41: the form state carries the registration marker of the
+      // account this browser just created, bound to this auth request.
+      expect(binding).toEqual({
+        csrfToken: form.csrf,
+        storefront,
+        authRequestId: form.authRequest,
+        registration: {
+          sub: pending.rows[0]!.zitadel_sub,
+          email: address,
+          authRequestId: form.authRequest,
+          createdAt: expect.any(Number),
+        },
+      });
       const consents = await pool.query(
         "SELECT cr.* FROM consent_records cr JOIN users u ON u.id = cr.user_id WHERE u.email = $1 ORDER BY cr.id",
         [address],
@@ -3181,7 +3189,10 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
           RECORD_COOKIE_NAME,
         ]);
         expect(jar.values.get(FORM_COOKIE_NAME)).toBe(formCookie);
-        expect(await state.getForm(formCookie)).toEqual(binding);
+        // The accepted code spends the single-use registration marker; the
+        // rest of the binding is unchanged.
+        const { registration: _spent, ...unspent } = binding!;
+        expect(await state.getForm(formCookie)).toEqual(unspent);
         expect(jar.values.has(SESSION_COOKIE_NAME)).toBe(false);
       } finally {
         for (const spy of spies) spy.mockRestore();
@@ -6443,6 +6454,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
           storefront,
           authRequestId: authRequest,
           intent,
+          // 003 EARS-44 (amended): the hand-off render marks the form spent.
+          handoffSpent: true,
         });
         const cookies = [...jar.values];
         const fields = { authRequest, csrf: body.csrf };
@@ -6612,6 +6625,9 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
             door: "login",
             authRequest,
             csrf: expect.any(String),
+            // 003 EARS-71 (S1755): a reload of the same auth request carries
+            // the code method without the hand-off.
+            intent: { method: "code", handoff: false },
           });
           if (fresh.action !== "render") throw new Error("not rendered");
           const freshFormId = jar.values.get(FORM_COOKIE_NAME)!;
@@ -6622,6 +6638,10 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
             csrfToken: fresh.csrf,
             storefront,
             authRequestId: authRequest,
+            // The reference is not carried; the spent mark keeps a live record
+            // from answering the reloaded form (EARS-44 amended).
+            intent: { door: "login", method: "code", clientId },
+            handoffSpent: true,
           });
           expect(reopened.cookies.map((cookie) => cookie.name)).toEqual([
             FORM_COOKIE_NAME,

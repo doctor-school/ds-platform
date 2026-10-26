@@ -81,7 +81,7 @@ describe("004 EARS-12 (amended): the card's time, as the event page states it", 
     return document.querySelector('[data-testid="return-context-card"]')!;
   }
 
-  it("003 EARS-71: S-C1 an online or hybrid event reads in the viewer's zone with its label, as on the event page", () => {
+  it("004 EARS-12: an online or hybrid event reads in the viewer's zone with its label, as on the event page", () => {
     for (const format of ["online", "hybrid"] as const) {
       const card = cardOf({ ...EVENT, format });
       expect(card.textContent).toContain("23:00");
@@ -91,7 +91,7 @@ describe("004 EARS-12 (amended): the card's time, as the event page states it", 
     }
   });
 
-  it("003 EARS-71: S-C1 an offline event stays on МСК whatever the viewer's zone", () => {
+  it("004 EARS-12: an offline event stays on МСК whatever the viewer's zone", () => {
     const card = cardOf({ ...EVENT, format: "offline" });
     expect(card.textContent).toContain("19:00");
     expect(card.textContent).toContain("МСК");

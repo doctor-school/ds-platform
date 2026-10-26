@@ -67,7 +67,12 @@ async function expectNoWayBack(page: Page, testId: string) {
 }
 
 test.describe("021 EARS-2: the return context on the wide layout", () => {
-  test.use({ viewport: { width: 1440, height: 900 } });
+  // 004 EARS-12: an online event reads in the viewer's zone, so the browser's
+  // zone is pinned rather than inherited from the machine running the tier.
+  test.use({
+    viewport: { width: 1440, height: 900 },
+    timezoneId: "Asia/Bangkok",
+  });
 
   test("021 EARS-2.1: the gate event renders in the split's left half through the shared card unit", async ({
     page,
@@ -86,10 +91,13 @@ test.describe("021 EARS-2: the return context on the wide layout", () => {
     await expect(panel.locator("[data-webinar-card]")).toContainText(
       "Школа ортобиологии",
     );
-    // Rendered in МСК, the event's own clock (EARS-12) — the double's instant
-    // is 16:00Z, which is 19:00 in Europe/Moscow.
-    await expect(panel.locator("[data-webinar-card]")).toContainText("19:00");
-    await expect(panel.locator("[data-webinar-card]")).toContainText("МСК");
+    // The double's event is online: it reads in the viewer's zone with its
+    // label (004 EARS-12) — 16:00Z is 23:00 in Asia/Bangkok (GMT+7), not МСК.
+    // The fixture offers no offline event, whose МСК clock the unit tier pins.
+    const card = panel.locator("[data-webinar-card]");
+    await expect(card).toContainText("23:00");
+    await expect(card).toContainText("GMT+7");
+    await expect(card).not.toContainText("МСК");
 
     // The panel is genuinely to the LEFT of the form column (#237 column order).
     const panelBox = await panel.boundingBox();

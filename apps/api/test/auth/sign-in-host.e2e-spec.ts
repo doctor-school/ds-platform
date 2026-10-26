@@ -1194,7 +1194,13 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
         const accepted = await post(jar, verifyPath, {
           email: address,
           code: FAKE_VALID_CODE,
-          registration: { password: PASSWORD, consent },
+          registration: {
+            password: PASSWORD,
+            consent,
+            ...(storefront === "doctor"
+              ? { medicalWorkerDeclaration: true }
+              : {}),
+          },
           ...fields,
         });
         expect(accepted.statusCode).toBe(200);
@@ -1205,7 +1211,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
         expect(verify).toHaveBeenCalledExactlyOnceWith(
           address,
           FAKE_VALID_CODE,
-          undefined,
+          { password: PASSWORD },
         );
         const newCookie = jar.values.get(RECORD_COOKIE_NAME)!;
         expect(newCookie).toBeTruthy();

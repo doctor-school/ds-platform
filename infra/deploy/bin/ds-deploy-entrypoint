@@ -497,6 +497,7 @@ DATA_INSTALL=(
   /usr/local/bin/ds-deploy-entrypoint=infra/deploy/bin/ds-deploy-entrypoint
   /usr/local/lib/ds-platform/release-driver=infra/deploy/bin/release-driver
   /usr/local/lib/ds-platform/postgres-artifact-probe.py=tools/deploy/postgres-artifact-probe.py
+  /usr/local/lib/ds-platform/harden-ssh.sh=infra/deploy/bin/harden-ssh.sh
 )
 MAX_DATA_PAYLOAD_BYTES=65536
 MAX_SHIP_BYTES=$(override DS_ENTRYPOINT_MAX_SHIP_BYTES $((256 * 1024 * 1024)))                      # 256 MiB gzip stream

@@ -2241,6 +2241,10 @@ async function deploy(hotfixRef = null, local = null) {
   // #3313: ds-data-prod installs from the tree it was just shipped, box-side.
   await dataProd().call(["install", sha]);
   ok("ds-release + ds-deploy-entrypoint installed on both boxes");
+  // #3320: the Actions run converges ds-data-prod's hop to the forced command itself,
+  // before any data-prod state change (a no-op once converged); the workstation path
+  // reaches it as breakglass, a shell login, and never converges.
+  if (local) await dataProd().converge();
   openReleaseSha = sha;
 
   step("data-prod: bring up persistence plane (idempotent)");

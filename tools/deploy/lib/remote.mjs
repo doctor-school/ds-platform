@@ -483,6 +483,7 @@ export const DS_DEPLOY_ENTRYPOINT_BIN = "/usr/local/bin/ds-deploy-entrypoint";
 // #2985: the box-side release driver the entrypoint's `release` verb execs.
 export const RELEASE_DRIVER_BIN = "/usr/local/lib/ds-platform/release-driver";
 export const POSTGRES_PROBE_BIN = "/usr/local/lib/ds-platform/postgres-artifact-probe.py";
+export const HARDEN_SSH_BIN = "/usr/local/lib/ds-platform/harden-ssh.sh";
 /** Box binary → its path in the repository tree, in install order. */
 export const BOX_ENTRYPOINTS = [
   { dest: DS_RELEASE_BIN, path: "infra/deploy/bin/ds-release" },
@@ -491,6 +492,9 @@ export const BOX_ENTRYPOINTS = [
   // #3313: the data box runs the PostgreSQL probe only from this root-owned copy
   // (spec §5 «Data-prod verbs.»); the other boxes carry it unused.
   { dest: POSTGRES_PROBE_BIN, path: "tools/deploy/postgres-artifact-probe.py" },
+  // #3320: the prod release converges ds-data-prod by running this root-owned copy
+  // (`--role data --from-release`); the other boxes carry it unused.
+  { dest: HARDEN_SSH_BIN, path: "infra/deploy/bin/harden-ssh.sh" },
 ];
 export const RELEASE_STATE_ROOT = "/var/lib/ds-platform/release";
 export const RELEASE_POLL_MS = 10 * 1000;

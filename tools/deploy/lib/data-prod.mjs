@@ -12,7 +12,7 @@
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
 
-import { DS_DEPLOY_ENTRYPOINT_BIN, boxSpawnArgs, releaseInstallFromSourceScript, sshScript } from "./remote.mjs";
+import { DS_DEPLOY_ENTRYPOINT_BIN, HARDEN_SSH_BIN, boxSpawnArgs, releaseInstallFromSourceScript, sshScript } from "./remote.mjs";
 
 /** The verbs the entrypoint serves on the data box; pinned equal to its DATA_VERBS. */
 export const DATA_VERBS = [
@@ -115,6 +115,7 @@ export function createDataProdClient({
   log = (line) => console.log(line),
 }) {
   let form = null;
+  let unreachable = null; // set by a converge after which the forced command does not answer
   const ask = async (f) => {
     try {
       return servesDataVerbs(await run(host, dataVerbCommand("capabilities", f), { label: "capabilities" }));
@@ -132,6 +133,7 @@ export function createDataProdClient({
     },
     /** The command form, found on first use. */
     async ready() {
+      if (unreachable) throw unreachable;
       if (form) return form;
       form = await detect();
       if (form) return form;
@@ -151,6 +153,32 @@ export function createDataProdClient({
     /** The ssh command of `words` if the form is already known, else null (sync callers). */
     knownCommand(words) {
       return form ? dataVerbCommand(words.join(" "), form) : null;
+    },
+    /**
+     * The release's own converge of ds-data-prod (#3320; spec §5 «Data-prod verbs.»
+     * «Converge.»), after the data `install` and before any data-prod state change.
+     * The form that answered `capabilities` tells the state: the forced command means
+     * converged (a no-op); `sudo` means the hop still has deploy's shell and sudo, so
+     * the installed root-owned harden-ssh.sh narrows the box, and the run goes on only
+     * once the forced command answers. Only the hop calls this: a breakglass login
+     * answers through `sudo` on a converged box too.
+     */
+    async converge() {
+      if ((await client.ready()) === "forced") {
+        log(`  ✓ ${host}: already converged: capabilities answers through the forced command`);
+        return;
+      }
+      const command = `sudo -n ${HARDEN_SSH_BIN} --role data --from-release`;
+      log(`  ↻ ${host}: converging the hop to the forced command (${command})`);
+      // A refused converge changed nothing: the `sudo` form stays the run's.
+      await run(host, command, { label: "converge", stream: true });
+      form = await detect();
+      if (form !== "forced") {
+        unreachable = new Error(`${host}: the forced command does not answer after the converge`);
+        form = null;
+        throw unreachable;
+      }
+      log(`  ✓ ${host}: converged: capabilities answers through the forced command`);
     },
     /** Run one verb; `options` as runBoxCommand's. */
     async call(words, options = {}) {

@@ -702,6 +702,76 @@ test("3313: without bytes to install, a box that serves no data verbs refuses th
   await assert.rejects(client.call(["check"]), /serves no data-prod verbs/);
 });
 
+// --- #3320: the release converges ds-data-prod itself -------------------------------
+const CONVERGE = "sudo -n /usr/local/lib/ds-platform/harden-ssh.sh --role data --from-release";
+
+test("3320: a converged box (the forced command answers) makes the converge a no-op", async () => {
+  const fake = fakeDataProd((command) => (command === "capabilities" ? CAPABILITIES : "ok"));
+  const lines = [];
+  const client = createDataProdClient({ host: "deploy@vpc", run: fake.run, log: (l) => lines.push(l) });
+  await client.converge();
+  assert.deepEqual(fake.calls.map((c) => c.command), ["capabilities"]);
+  assert.match(lines.join("\n"), /already converged: capabilities answers through the forced command/);
+});
+
+test("3320: verbs answering only through sudo -n: the release runs the installed harden-ssh, then re-probes the forced form", async () => {
+  let converged = false;
+  const fake = fakeDataProd((command) => {
+    if (command === CONVERGE) {
+      converged = true;
+      return "";
+    }
+    if (command === "capabilities") return converged ? CAPABILITIES : new Error("exited 127");
+    if (command.includes("'capabilities'")) return converged ? new Error("exited 1: sudo: a password is required") : CAPABILITIES;
+    return "ok";
+  });
+  const lines = [];
+  const client = createDataProdClient({ host: "deploy@vpc", run: fake.run, log: (l) => lines.push(l) });
+  await client.call(["install", SHA_3313]);
+  await client.converge();
+  await client.call(["data-env"], { input: "{}" });
+  const commands = fake.calls.map((c) => c.command);
+  assert.equal(commands.filter((c) => c === CONVERGE).length, 1, "one converge");
+  assert.ok(commands.indexOf(CONVERGE) > commands.findIndex((c) => c.includes(`install ${SHA_3313}`)), "after install");
+  assert.equal(commands.at(-2), "capabilities", "re-probed as the forced command");
+  assert.equal(commands.at(-1), "data-env", "the rest of the run goes bare");
+  assert.equal(client.knownCommand(["finish", SHA_3313, "failed"]), `finish ${SHA_3313} failed`);
+  assert.match(lines.join("\n"), /converging .*harden-ssh\.sh --role data --from-release/);
+  assert.match(lines.join("\n"), /converged: capabilities answers through the forced command/);
+});
+
+test("3320: a failed converge, or one after which the forced command still does not answer, fails the run", async () => {
+  const refused = fakeDataProd((command) => {
+    if (command === CONVERGE) return new Error("converge on deploy@vpc exited 1: harden-ssh: no user breakglass");
+    if (command === "capabilities") return new Error("exited 127");
+    return CAPABILITIES;
+  });
+  const a = createDataProdClient({ host: "deploy@vpc", run: refused.run, log: () => {} });
+  await assert.rejects(a.converge(), /no user breakglass/);
+  const unchanged = fakeDataProd((command) => {
+    if (command === CONVERGE) return "";
+    if (command === "capabilities") return new Error("exited 127");
+    return CAPABILITIES;
+  });
+  const b = createDataProdClient({ host: "deploy@vpc", run: unchanged.run, log: () => {} });
+  await assert.rejects(b.converge(), /the forced command does not answer after the converge/);
+  await assert.rejects(b.call(["data-env"]), /the forced command does not answer after the converge/, "no verb runs after it");
+});
+
+test("3320: the data install places harden-ssh.sh root-owned beside the entrypoints", () => {
+  assert.ok(
+    BOX_ENTRYPOINTS.some(({ dest, path }) => dest === "/usr/local/lib/ds-platform/harden-ssh.sh" && path === "infra/deploy/bin/harden-ssh.sh"),
+  );
+});
+
+test("3320: the --local release converges ds-data-prod after its install and before any data-prod state change", () => {
+  const source = readFileSync(join(import.meta.dirname, "prod.mjs"), "utf8");
+  const install = source.indexOf('await dataProd().call(["install", sha]);');
+  const converge = source.indexOf("if (local) await dataProd().converge();");
+  const env = source.indexOf('walk.phase("data-prod-env");');
+  assert.ok(install > 0 && converge > install && env > converge, "install → converge → data-prod-env");
+});
+
 test("3313: prod.mjs reaches ds-data-prod only through its verbs — no script, no shell form", () => {
   const source = readFileSync(join(import.meta.dirname, "prod.mjs"), "utf8");
   assert.doesNotMatch(source, /(sshScript|sshCapture|boxStep)\(\s*DATA_PROD\b/);

@@ -79,7 +79,8 @@ test.describe("004 EARS-8 listing-card registered marker (e2e)", () => {
     ).toBeVisible();
 
     // …and every other card is unchanged — no marker outside the registered card.
-    // A wider horizon keeps the nearer cards, so the registered one stays shown.
+    // A wider horizon keeps the nearer cards (019 LD-2), so the registered one
+    // stays shown.
     const controlCard = await reachFeedCard(
       page,
       page.locator(`a[href="/webinars/${CONTROL_SLUG}"]`),

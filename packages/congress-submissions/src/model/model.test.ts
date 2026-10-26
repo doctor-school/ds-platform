@@ -437,24 +437,30 @@ describe("row meta and date line", () => {
 });
 
 describe("046 EARS-10 — the chooser note names the concrete deadlines", () => {
-  const prod = [
+  const twoWindows = [
     intake({ kind: "oral", lastDay: "2027-01-15" }),
     intake({ kind: "poster", lastDay: "2027-01-29" }),
     intake({ kind: "abstract", lastDay: "2027-01-29", submitLimit: 3 }),
   ];
 
-  it("046 EARS-10: the production settings read the owner-approved note exactly", () => {
-    expect(pickerNote(prod)).toBe(
+  it("046 EARS-10: oral and the other kinds closing on different days read the owner-approved note exactly", () => {
+    expect(pickerNote(twoWindows)).toBe(
       "Устные доклады принимаются до 15 января 2027, постерные доклады и тезисы — до 29 января 2027 включительно. Докладов и постеров — сколько угодно, тезисов — не больше 3.",
     );
   });
 
   it("046 EARS-10: kinds sharing a last day are grouped; three distinct days are three clauses", () => {
-    expect(pickerNote(prod.map((k) => ({ ...k, lastDay: "2027-01-29" })))).toBe(
+    expect(
+      pickerNote(twoWindows.map((k) => ({ ...k, lastDay: "2027-01-29" }))),
+    ).toBe(
       "Устные и постерные доклады и тезисы принимаются до 29 января 2027 включительно. Докладов и постеров — сколько угодно, тезисов — не больше 3.",
     );
     expect(
-      pickerNote([prod[0]!, { ...prod[1]!, lastDay: "2027-01-22" }, prod[2]!]),
+      pickerNote([
+        twoWindows[0]!,
+        { ...twoWindows[1]!, lastDay: "2027-01-22" },
+        twoWindows[2]!,
+      ]),
     ).toBe(
       "Устные доклады принимаются до 15 января 2027, постерные доклады — до 22 января 2027, тезисы — до 29 января 2027 включительно. Докладов и постеров — сколько угодно, тезисов — не больше 3.",
     );
@@ -462,15 +468,19 @@ describe("046 EARS-10 — the chooser note names the concrete deadlines", () => 
 
   it("046 EARS-10: talks and posters sharing a window read «Устные и постерные доклады» — «доклады» is not repeated", () => {
     expect(
-      pickerNote([prod[0]!, { ...prod[1]!, lastDay: "2027-01-15" }, prod[2]!]),
+      pickerNote([
+        twoWindows[0]!,
+        { ...twoWindows[1]!, lastDay: "2027-01-15" },
+        twoWindows[2]!,
+      ]),
     ).toBe(
       "Устные и постерные доклады принимаются до 15 января 2027, тезисы — до 29 января 2027 включительно. Докладов и постеров — сколько угодно, тезисов — не больше 3.",
     );
     expect(
       pickerNote([
-        { ...prod[0]!, lastDay: "2027-01-29" },
-        { ...prod[1]!, lastDay: "2027-01-15" },
-        prod[2]!,
+        { ...twoWindows[0]!, lastDay: "2027-01-29" },
+        { ...twoWindows[1]!, lastDay: "2027-01-15" },
+        twoWindows[2]!,
       ]),
     ).toBe(
       "Устные доклады и тезисы принимаются до 29 января 2027, постерные доклады — до 15 января 2027 включительно. Докладов и постеров — сколько угодно, тезисов — не больше 3.",
@@ -480,10 +490,10 @@ describe("046 EARS-10 — the chooser note names the concrete deadlines", () => 
   it("046 EARS-10: a kind not yet open reads «приём откроется {date}» as on its card", () => {
     expect(
       pickerNote([
-        prod[0]!,
-        prod[1]!,
+        twoWindows[0]!,
+        twoWindows[1]!,
         {
-          ...prod[2]!,
+          ...twoWindows[2]!,
           state: "not-yet-open",
           opensAt: "2027-01-09T21:00:00.000Z",
         },
@@ -494,16 +504,22 @@ describe("046 EARS-10 — the chooser note names the concrete deadlines", () => 
   });
 
   it("046 EARS-10: with no abstract limit the «тезисов — не больше N» clause is left out", () => {
-    const note = pickerNote(prod.map((k) => ({ ...k, submitLimit: null })));
+    const note = pickerNote(
+      twoWindows.map((k) => ({ ...k, submitLimit: null })),
+    );
     expect(note).toBe(
       "Устные доклады принимаются до 15 января 2027, постерные доклады и тезисы — до 29 января 2027 включительно. Докладов и постеров — сколько угодно.",
     );
   });
 
   it("046 EARS-10: no «пока приём открыт» anywhere; a kind not offered is not named", () => {
-    expect(pickerNote(prod)).not.toContain("пока приём открыт");
+    expect(pickerNote(twoWindows)).not.toContain("пока приём открыт");
     expect(
-      pickerNote([prod[0]!, { ...prod[1]!, offered: false }, prod[2]!]),
+      pickerNote([
+        twoWindows[0]!,
+        { ...twoWindows[1]!, offered: false },
+        twoWindows[2]!,
+      ]),
     ).toBe(
       "Устные доклады принимаются до 15 января 2027, тезисы — до 29 января 2027 включительно. Докладов и постеров — сколько угодно, тезисов — не больше 3.",
     );

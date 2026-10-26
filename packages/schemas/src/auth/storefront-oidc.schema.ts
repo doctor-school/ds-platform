@@ -130,14 +130,17 @@ const OPAQUE_ID = /^[A-Za-z0-9_-]{43}$/;
 
 /**
  * `POST /v1/internal/oidc/redeem` — the storefront callback: the transaction
- * named by `__Host-ds_oidc_tx`, the callback's `state` and `code` (absent for
- * an OIDC `error` answer, which only spends the transaction). The API takes
- * the transaction single-use, checks `state` against it, and redeems with its
- * held verifier and nonce at the storefront's one registered callback URI.
+ * named by `__Host-ds_oidc_tx` (absent when the browser holds none), the
+ * callback's `state` and `code` (absent for an OIDC `error` answer, which only
+ * spends the transaction). The API takes the transaction single-use, checks
+ * `state` against it, and redeems with its held verifier and nonce at the
+ * storefront's one registered callback URI; a `state` that is not the
+ * browser's own transaction still spends the transaction it names and its
+ * code, and mints nothing (EARS-62).
  */
 export const StorefrontRedeemRequestSchema = z.strictObject({
   client: SignInHostStorefrontSchema,
-  txId: z.string().regex(OPAQUE_ID),
+  txId: z.string().regex(OPAQUE_ID).optional(),
   /** Empty when the callback carried none: it never matches, and the transaction is burnt. */
   state: z.string().max(512),
   code: z.string().min(1).max(2048).optional(),

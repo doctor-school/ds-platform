@@ -379,11 +379,14 @@ export async function storefrontCallback(
 
   const txId = readCookie(request.headers.get("cookie"), OIDC_TX_COOKIE);
   const api = internalApi(env);
-  // No transaction cookie: nothing to redeem from (an unsolicited callback, or
-  // a browser that kept no cookie) — nothing is minted.
-  if (!txId || !api) return land(null);
-
   const params = new URL(request.url).searchParams;
+  const state = (params.get("state") ?? "").slice(0, 512);
+  // Neither a transaction cookie nor a `state`: nothing names a transaction.
+  // A `state` without the browser's cookie (a callback completed in another
+  // browser, login CSRF) is still redeemed before the answer, so its code is
+  // spent and can never be presented again; the API mints nothing for it.
+  if (!api || (!txId && !state)) return land(null);
+
   const code = params.get("code");
   let res: Response;
   try {
@@ -392,8 +395,8 @@ export async function storefrontCallback(
       headers: internalHeaders(api, request.headers),
       body: JSON.stringify({
         client: host.client,
-        txId,
-        state: (params.get("state") ?? "").slice(0, 512),
+        ...(txId ? { txId } : {}),
+        state,
         // An OIDC `error` answer carries no code: the redeem only spends the
         // transaction and returns where it started.
         ...(code && !params.has("error") ? { code } : {}),

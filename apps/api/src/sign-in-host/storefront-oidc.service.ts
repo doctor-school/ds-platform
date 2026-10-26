@@ -213,40 +213,26 @@ export class StorefrontOidcService
    * failure is the one generic 401 and mints nothing; it carries the
    * transaction's return path and door when the browser named its own live
    * transaction, so the callback still lands where the person started.
+   *
+   * A callback whose `state` is not the browser's own transaction — no
+   * transaction cookie, or another one (login CSRF, ADR-0015 §4 req. 3) — still
+   * redeems before it answers: the transaction the `state` names is taken
+   * (single use) and its code exchanged once with that transaction's held
+   * verifier, the tokens discarded, so the code can never be presented again.
    */
   async redeem(
     req: StorefrontRedeemRequest,
     fingerprint: string,
   ): Promise<RedeemOutcome> {
     const clientId = this.clientIdOf(req.client);
-    const tx = await this.state.takeTransaction(req.txId);
+    const own = req.txId ? await this.state.takeTransaction(req.txId) : null;
     // The bound intent never outlives its transaction (EARS-71).
-    if (tx?.intentId) await this.state.takeIntent(tx.intentId);
-    if (!tx || tx.clientId !== clientId) throw refused(null);
-    if (!sameValue(tx.state, req.state)) {
-      // A `state` that is not this browser's transaction (login CSRF, ADR-0015
-      // §4 req. 3): the code is still spent with this transaction's verifier
-      // and its tokens discarded; the transaction is burnt (taken above).
-      const discarded = req.code
-        ? await this.oidc.redeemCode({
-            clientId,
-            code: req.code,
-            codeVerifier: tx.verifier,
-            redirectUri: this.callbackOf(req.client),
-          })
-        : null;
-      this.logger.warn(
-        "security: storefront callback state does not match the browser's transaction; transaction burnt, tokens discarded",
-      );
-      // EARS-62 — the security audit event of a foreign `state`.
-      await this.audit.record({
-        type: "StorefrontCallbackRejected",
-        sub: discarded?.idToken.sub ?? null,
-        client: req.client,
-        reason: "state_mismatch",
-      });
-      throw refused(tx);
+    if (own?.intentId) await this.state.takeIntent(own.intentId);
+    const mine = own && own.clientId === clientId ? own : null;
+    if (!mine || !sameValue(mine.state, req.state)) {
+      return this.refuseForeignState(req, mine);
     }
+    const tx = mine;
     // An OIDC error answer (the person aborted, `login_required`) carries no
     // code: the transaction is spent and nothing is minted. A transaction
     // without a verifier is never redeemed.
@@ -309,6 +295,49 @@ export class StorefrontOidcService
       door: tx.door,
       completeRegistration: tx.completeRegistration ?? null,
     };
+  }
+
+  /**
+   * EARS-62 (req. 3) — the callback's `state` is not the browser's own live
+   * transaction. The transaction it names is spent and its code redeemed once
+   * and discarded; nothing is minted. An unknown `state` names no
+   * transaction, so no exchange runs: Zitadel's token endpoint checks the
+   * code against the authorize request's PKCE `S256` challenge, and only the
+   * API ever held that request's verifier — a code whose transaction is gone
+   * (spent, expired, never ours) cannot be redeemed by anyone. A browser
+   * transaction that names another `state` lends its own verifier instead
+   * (the code can only be its own then).
+   */
+  private async refuseForeignState(
+    req: StorefrontRedeemRequest,
+    mine: StorefrontTransaction | null,
+  ): Promise<never> {
+    const named = req.state
+      ? await this.state.takeTransactionByState(req.state)
+      : null;
+    if (named?.intentId) await this.state.takeIntent(named.intentId);
+    const spender = named ?? mine;
+    if (!spender) throw refused(null);
+    const discarded =
+      req.code && spender.verifier
+        ? await this.oidc.redeemCode({
+            clientId: spender.clientId,
+            code: req.code,
+            codeVerifier: spender.verifier,
+            redirectUri: this.callbackOf(spender.client),
+          })
+        : null;
+    this.logger.warn(
+      "security: storefront callback state is not the browser's transaction; transaction spent, tokens discarded",
+    );
+    // EARS-62 — the security audit event of a foreign `state`.
+    await this.audit.record({
+      type: "StorefrontCallbackRejected",
+      sub: discarded?.idToken.sub ?? null,
+      client: req.client,
+      reason: "state_mismatch",
+    });
+    throw refused(mine);
   }
 }
 

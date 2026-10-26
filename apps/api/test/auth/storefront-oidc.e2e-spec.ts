@@ -528,9 +528,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
     it("EARS-62 (req. 3): a foreign state burns the transaction, discards the tokens and appends auth.session.rejected (state_mismatch, storefront tier)", async () => {
       const address = await account("csrf-audit");
       const session = await hostSignIn(new Jar(), address);
-      const other = await transaction("doctor");
-      const mine = await code(session, "doctor");
-      const forged = await redeem({ ...mine, state: other.state });
+      // The attacker's own authorize request completes in the victim's
+      // browser: its state and code arrive with the victim's transaction.
+      const attack = await code(session, "doctor");
+      const victim = await transaction("doctor");
+      const forged = await redeem({ ...attack, txId: victim.txId });
       expect(forged.statusCode).toBe(401);
       expect(sessionCookie(forged)).toBeUndefined();
       const rows = await pool.query<{
@@ -549,6 +551,58 @@ describe.skipIf(!process.env.DATABASE_URL)(
           }),
         },
       ]);
+    });
+
+    it("003 EARS-62: a callback with no or a foreign transaction cookie still redeems its code by state — the transaction is spent, the code exchanged once and discarded, nothing minted, and the attacker's replay is refused", async () => {
+      const session = await hostSignIn(new Jar(), await account("replay-hole"));
+      const countRejected = async () =>
+        (
+          await pool.query(
+            "SELECT 1 FROM audit_ledger WHERE subject_id = $1 AND event_type = 'auth.session.rejected'",
+            [session.sub],
+          )
+        ).rowCount;
+
+      // The victim's browser holds no transaction cookie.
+      const a = await code(session, "academy");
+      const { txId: _attackerTx, ...noCookie } = a;
+      let before = oidc.attempts.length;
+      const blind = await redeem(noCookie);
+      expect(blind.statusCode).toBe(401);
+      expect(blind.json()).toMatchObject({ returnPath: null, door: null });
+      expect(sessionCookie(blind)).toBeUndefined();
+      expect(oidc.attempts.slice(before).map((x) => x.code)).toEqual([a.code]);
+      // The attacker presents the same callback with their own transaction.
+      before = oidc.attempts.length;
+      const replay = await redeem(a);
+      expect(replay.statusCode).toBe(401);
+      expect(sessionCookie(replay)).toBeUndefined();
+      expect(oidc.attempts.length).toBe(before);
+
+      // The victim's browser holds its own, different transaction: it lands
+      // where the victim started.
+      const b = await code(session, "academy");
+      const victim = await transaction("academy", { returnPath: "/v" });
+      before = oidc.attempts.length;
+      const foreign = await redeem({ ...b, txId: victim.txId });
+      expect(foreign.statusCode).toBe(401);
+      expect(foreign.json()).toMatchObject({ returnPath: "/v", door: "login" });
+      expect(sessionCookie(foreign)).toBeUndefined();
+      expect(oidc.attempts.slice(before).map((x) => x.code)).toEqual([b.code]);
+      expect((await redeem(b)).statusCode).toBe(401);
+      expect(sessionCookie(await redeem(b))).toBeUndefined();
+
+      // An unknown state names no transaction: nothing holds a verifier, no
+      // exchange runs.
+      before = oidc.attempts.length;
+      const unknown = await redeem({
+        client: "academy",
+        state: "no-such-state",
+        code: "whatever",
+      });
+      expect(unknown.statusCode).toBe(401);
+      expect(oidc.attempts.length).toBe(before);
+      expect(await countRejected()).toBe(2);
     });
 
     it("005 EARS-2: the carried эфир registration rides the transaction and comes back with the minted session only", async () => {

@@ -467,10 +467,31 @@ describe("storefront callback", () => {
     expect(session.join()).not.toContain("attacker-sid");
   });
 
-  it("003 EARS-62 (req. 3): an unsolicited callback — no transaction cookie — redeems nothing and mints nothing", async () => {
-    const api = fakeApi();
+  it("003 EARS-62 (req. 3): a callback without a transaction cookie still redeems its code by state before it answers, so the code is spent, and mints nothing", async () => {
+    const api = fakeApi({
+      redeem: () =>
+        Response.json(
+          { message: "redeem refused", returnPath: null, door: null },
+          { status: 401 },
+        ),
+    });
     const res = await storefrontCallback(
       get("/auth/callback?code=c&state=s"),
+      ACADEMY,
+      { fetchImpl: api.fetchImpl, env: ENV },
+    );
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/webinars#");
+    expect(api.internal("redeem").map((c) => c.body)).toEqual([
+      { client: "academy", state: "s", code: "c" },
+    ]);
+    expect(setCookies(res).join()).not.toContain("__Host-ds_session");
+  });
+
+  it("003 EARS-62 (req. 3): an unsolicited callback with neither a transaction cookie nor a state redeems nothing and mints nothing", async () => {
+    const api = fakeApi();
+    const res = await storefrontCallback(
+      get("/auth/callback?code=c"),
       ACADEMY,
       { fetchImpl: api.fetchImpl, env: ENV },
     );

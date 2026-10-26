@@ -20,7 +20,10 @@ import { openAtRest, sealAtRest } from "../common/crypto/at-rest.js";
  *   their opaque id (the storefront's `__Host-ds_oidc_tx`): the `state`,
  *   `nonce` and PKCE verifier the API generated, the return path, the door,
  *   the kind and the bound intent id — the whole record an at-rest envelope,
- *   readable at most once (the callback's redeem takes it).
+ *   readable at most once (the callback's redeem takes it). A second key,
+ *   `SHA-256(state)`, points at the transaction's key, so the callback can
+ *   take it by the `state` it carries when the browser holds no (or another)
+ *   transaction cookie (EARS-62); taking it either way removes both keys.
  *
  * Only `SHA-256(id)` ever reaches a key, and the hand-off reference is an
  * at-rest envelope (`common/crypto/at-rest.ts`), so a Redis dump carries no
@@ -95,6 +98,11 @@ export interface SignInHostStateStore {
   /** Read and delete in one step (single use): a second read of the same id is `null`. */
   takeTransaction(id: string): Promise<StorefrontTransaction | null>;
   /**
+   * 003 EARS-62 — take the transaction whose `state` this is (single use,
+   * shared with {@link takeTransaction}: either take spends it for both).
+   */
+  takeTransactionByState(state: string): Promise<StorefrontTransaction | null>;
+  /**
    * 003 EARS-12 / EARS-41 defence in depth — the moment every session of
    * `subject` was last revoked, kept for as long as any record can live; a
    * record whose credential step precedes it is refused even if its row
@@ -117,6 +125,7 @@ const FORM_PREFIX = "sign-in-host:form:";
 const INTENT_PREFIX = "sign-in-host:intent:";
 const REVOKED_PREFIX = "sign-in-host:revoked:";
 const TX_PREFIX = "sign-in-host:tx:";
+const TX_STATE_PREFIX = "sign-in-host:tx-state:";
 
 function parseInstant(raw: string | null): Date | null {
   if (raw === null) return null;
@@ -309,11 +318,37 @@ export class RedisSignInHostStateStore implements SignInHostStateStore {
       "EX",
       ttlSeconds,
     );
+    // The index holds the transaction's key (a hash), never its id.
+    await this.redis.set(
+      hashed(TX_STATE_PREFIX, tx.state),
+      k,
+      "EX",
+      ttlSeconds,
+    );
     return id;
   }
 
   async takeTransaction(id: string): Promise<StorefrontTransaction | null> {
-    const k = hashed(TX_PREFIX, id);
+    const tx = await this.takeAt(hashed(TX_PREFIX, id));
+    if (tx) await this.redis.del(hashed(TX_STATE_PREFIX, tx.state));
+    return tx;
+  }
+
+  async takeTransactionByState(
+    state: string,
+  ): Promise<StorefrontTransaction | null> {
+    const k = await this.redis.eval(
+      TAKE_SCRIPT,
+      1,
+      hashed(TX_STATE_PREFIX, state),
+    );
+    if (typeof k !== "string" || !k.startsWith(TX_PREFIX)) return null;
+    const tx = await this.takeAt(k);
+    // A pointer whose transaction carries another state is not this one's.
+    return tx && tx.state === state ? tx : null;
+  }
+
+  private async takeAt(k: string): Promise<StorefrontTransaction | null> {
     const raw = await this.redis.eval(TAKE_SCRIPT, 1, k);
     return typeof raw === "string"
       ? this.codec.decodeTransaction(raw, k)
@@ -412,14 +447,29 @@ export class InMemorySignInHostStateStore implements SignInHostStateStore {
     const id = newOpaqueId();
     const k = hashed(TX_PREFIX, id);
     this.write(k, this.codec.encodeTransaction(tx, k), ttlSeconds);
+    this.write(hashed(TX_STATE_PREFIX, tx.state), k, ttlSeconds);
     return Promise.resolve(id);
   }
 
   takeTransaction(id: string): Promise<StorefrontTransaction | null> {
-    const k = hashed(TX_PREFIX, id);
+    const tx = this.takeAt(hashed(TX_PREFIX, id));
+    if (tx) this.entries.delete(hashed(TX_STATE_PREFIX, tx.state));
+    return Promise.resolve(tx);
+  }
+
+  takeTransactionByState(state: string): Promise<StorefrontTransaction | null> {
+    const pointer = hashed(TX_STATE_PREFIX, state);
+    const k = this.read(pointer);
+    this.entries.delete(pointer);
+    if (!k?.startsWith(TX_PREFIX)) return Promise.resolve(null);
+    const tx = this.takeAt(k);
+    return Promise.resolve(tx && tx.state === state ? tx : null);
+  }
+
+  private takeAt(k: string): StorefrontTransaction | null {
     const raw = this.read(k);
     this.entries.delete(k);
-    return Promise.resolve(raw ? this.codec.decodeTransaction(raw, k) : null);
+    return raw ? this.codec.decodeTransaction(raw, k) : null;
   }
 
   markSubjectRevoked(subject: string, at: Date, ttlSeconds: number) {

@@ -24,6 +24,9 @@ import { afterEach, beforeEach, describe, it, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
+import { DATA_VERBS } from "./lib/data-prod.mjs";
+import { BOX_ENTRYPOINTS } from "./lib/remote.mjs";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const ENTRYPOINT = resolve(here, "../../infra/deploy/bin/ds-deploy-entrypoint");
 const DS_RELEASE = resolve(here, "../../infra/deploy/bin/ds-release");
@@ -47,6 +50,29 @@ test("2984: the entrypoint checks env and sha with ds-release's own regexes", ()
   for (const name of ["ENV_RE", "SHA_RE"]) {
     assert.equal(pick(ENTRYPOINT, name), pick(DS_RELEASE, name), `${name} is one definition`);
   }
+});
+
+test("3313: the data verbs are one list: DATA_VERBS, the case arm, the client", () => {
+  const lines = readFileSync(ENTRYPOINT, "utf8").split("\n");
+  const line = lines.find((l) => l.startsWith("DATA_VERBS="));
+  assert.ok(line, "the entrypoint defines DATA_VERBS");
+  assert.deepEqual(line.slice("DATA_VERBS='".length, -1).split(" "), DATA_VERBS);
+  const start = lines.indexOf("  capabilities | postgres-probe | postgres-checkpoint | ship | install | data-env | data-up | backup | \\");
+  assert.ok(start > 0, "one case arm dispatches the data verbs");
+  const arm = `${lines[start].slice(0, -1)}${lines[start + 1]}`.trim().replace(/\)$/, "");
+  assert.deepEqual(arm.split(/\s*\|\s*/), DATA_VERBS);
+  assert.equal(lines[start + 2], "    data_verb");
+});
+
+test("3313: the data box installs the BOX_ENTRYPOINTS of remote.mjs, in order", () => {
+  const lines = readFileSync(ENTRYPOINT, "utf8").split("\n");
+  const start = lines.indexOf("DATA_INSTALL=(");
+  assert.ok(start > 0, "DATA_INSTALL is defined");
+  const end = lines.indexOf(")", start);
+  assert.deepEqual(
+    lines.slice(start + 1, end).map((l) => l.trim()),
+    BOX_ENTRYPOINTS.map(({ dest, path }) => `${dest}=${path}`),
+  );
 });
 
 // A minimal ustar writer: the archives below carry links and paths that a
@@ -677,5 +703,269 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.deepEqual(seen, { url: "/admin/v1/policies/password/complexity", auth: "Bearer pat-secret-value" });
     assert.equal(stdout, '{"policy":{"minLength":"8","hasUppercase":false}}\n');
     assert.doesNotMatch(stdout + stderr, /pat-secret/);
+  });
+
+  // --- 3313: the data-prod verbs ------------------------------------------------------
+  const IMG = (c) => `sha256:${c.repeat(64)}`;
+  const tree = () => join(root, "home/deploy/ds-platform");
+  const dockerStub = (out = "") => {
+    writeFileSync(
+      join(stubs, "docker"),
+      `#!/usr/bin/env bash\necho "docker $* @$PWD" >> "$STUB_DIR/docker.log"\nprintf '%s' '${out}'\n`,
+    );
+    chmodSync(join(stubs, "docker"), 0o755);
+  };
+  const shipped = (entries) =>
+    gzipSync(tarArchive([{ name: "ds-platform/", type: "5" }, ...entries]));
+
+  it("3313: the data verbs refuse (exit 3) on any box but the data box", () => {
+    for (const role of [undefined, "prod", "stage"]) {
+      if (role) setRole(role);
+      for (const command of ["capabilities", `ship ${SHA}`, `finish ${SHA} succeeded`, "check"]) {
+        const r = run(command, { input: "" });
+        assert.equal(r.status, 3, `${role}: ${command}`);
+        assert.match(r.stderr, /is served by the data box only/);
+      }
+    }
+    assert.equal(log("ds-release"), "", "nothing ran");
+  });
+
+  it("3313: capabilities names the data verbs on the data box", () => {
+    setRole("data");
+    const r = run("capabilities");
+    assert.equal(r.status, 0, r.stderr);
+    const answer = JSON.parse(r.stdout);
+    assert.equal(answer.role, "data");
+    assert.ok(answer.verbs.includes("ship") && answer.verbs.includes("postgres-probe"));
+  });
+
+  for (const command of [
+    "capabilities now",
+    `ship ${SHA.slice(0, 12)}`,
+    `install ${SHA} now`,
+    `data-up ${SHA} retry`,
+    `finish ${SHA} done`,
+    `check ds-prod-${SHA.slice(0, 12)}-migrate`,
+    `supersede ds-prod-${SHA.slice(0, 12)}-rollback extra`,
+    "backup-info all",
+  ]) {
+    it(`3313: rejects \`${command}\` (exit 2, auth.warning) before any action`, () => {
+      setRole("data");
+      const r = run(command, { input: "" });
+      assert.equal(r.status, 2, String(r.stderr));
+      assert.match(log("logger"), /auth\.warning rejected:/);
+      assert.equal(log("ds-release"), "");
+    });
+  }
+
+  it("3313: postgres-checkpoint writes the checked record whole, deploy's checkpoint file", () => {
+    setRole("data");
+    mkdirSync(join(root, "home/deploy"), { recursive: true });
+    const record = {
+      schema: 1,
+      sourceHash: "a".repeat(64),
+      systemId: "7544271560000000001",
+      images: { postgres: IMG("b"), pgbackrest: IMG("c") },
+    };
+    const r = run("postgres-checkpoint", { input: JSON.stringify(record) });
+    assert.equal(r.status, 0, String(r.stderr));
+    const file = join(root, "home/deploy/ds-platform-postgres-state.json");
+    assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), record);
+  });
+
+  for (const [label, patch] of [
+    ["an extra field", { extra: "x" }],
+    ["a string schema", { schema: "1" }],
+    ["a mutable image tag", { images: { postgres: "ds-postgres:latest", pgbackrest: IMG("c") } }],
+    ["a short system id", { systemId: "123" }],
+  ]) {
+    it(`3313: postgres-checkpoint rejects ${label} (exit 2) and writes nothing`, () => {
+      setRole("data");
+      mkdirSync(join(root, "home/deploy"), { recursive: true });
+      const record = {
+        schema: 1,
+        sourceHash: "a".repeat(64),
+        systemId: "7544271560000000001",
+        images: { postgres: IMG("b"), pgbackrest: IMG("c") },
+        ...patch,
+      };
+      const r = run("postgres-checkpoint", { input: JSON.stringify(record) });
+      assert.equal(r.status, 2, String(r.stderr));
+      assert.equal(existsSync(join(root, "home/deploy/ds-platform-postgres-state.json")), false);
+    });
+  }
+
+  it("3313: data-env writes VPC_IP and the image override from checked fields only", () => {
+    setRole("data");
+    const compose = join(tree(), "infra/deploy/compose/data-prod");
+    mkdirSync(compose, { recursive: true });
+    const ok = run("data-env", {
+      input: JSON.stringify({ vpcIp: "192.168.0.10", images: { postgres: IMG("b"), pgbackrest: IMG("c") } }),
+    });
+    assert.equal(ok.status, 0, String(ok.stderr));
+    assert.equal(readFileSync(join(compose, ".env"), "utf8"), "VPC_IP=192.168.0.10\n");
+    assert.deepEqual(JSON.parse(readFileSync(join(compose, ".postgres-artifacts.json"), "utf8")), {
+      services: { postgres: { image: IMG("b") }, pgbackrest: { image: IMG("c") } },
+    });
+    for (const vpcIp of ["192.168.0.256", "192.168.0.10\nX=1", "::1"]) {
+      const bad = run("data-env", {
+        input: JSON.stringify({ vpcIp, images: { postgres: IMG("b"), pgbackrest: IMG("c") } }),
+      });
+      assert.equal(bad.status, 2, vpcIp);
+    }
+    assert.equal(readFileSync(join(compose, ".env"), "utf8"), "VPC_IP=192.168.0.10\n");
+  });
+
+  it("3313: postgres-probe runs the installed probe with only the checked request fields, HOME=deploy's", () => {
+    setRole("data");
+    const probe = join(root, "usr/local/lib/ds-platform/postgres-artifact-probe.py");
+    mkdirSync(dirname(probe), { recursive: true });
+    writeFileSync(
+      probe,
+      'import base64, json, os, sys\nprint(json.dumps({"home": os.environ["HOME"], "request": json.loads(base64.b64decode(sys.argv[1]))}))\n',
+    );
+    const target = {
+      mount: { name: "pgdata", target: "/var/lib/postgresql/data", rw: true },
+      sidecarMount: { name: "pgdata", target: "/var/lib/postgresql/data", rw: false },
+      images: { postgres: "ds-postgres:abc", pgbackrest: IMG("c") },
+      environment: { postgres: { PGDATA: "/var/lib/postgresql/data/pgdata" }, pgbackrest: {} },
+      major: 17,
+    };
+    const request = { target, sourceHash: "d".repeat(64), preferRecordedImages: true, paths: ["compose.yml", "postgres/Dockerfile"] };
+    const r = run("postgres-probe", { input: JSON.stringify(request) });
+    assert.equal(r.status, 0, String(r.stderr));
+    const seen = JSON.parse(r.stdout);
+    assert.equal(seen.home, join(root, "home/deploy"));
+    assert.deepEqual(seen.request, {
+      target: {
+        mount: { target: target.mount.target },
+        sidecarMount: { target: target.sidecarMount.target },
+        images: target.images,
+        environment: target.environment,
+      },
+      preferRecordedImages: true,
+      paths: request.paths,
+      sourceHash: request.sourceHash,
+    });
+    for (const bad of [
+      { ...request, paths: ["../etc/shadow"] },
+      { ...request, script: "rm -rf /" },
+      { ...request, target: { ...target, images: { postgres: "$(id)", pgbackrest: IMG("c") } } },
+      { ...request, target: { ...target, mount: { target: "relative" } } },
+    ]) {
+      assert.equal(run("postgres-probe", { input: JSON.stringify(bad) }).status, 2, JSON.stringify(bad).slice(0, 80));
+    }
+  });
+
+  it("3313: ship swaps the checked tree into deploy's live tree, root-owned modes, top dir stripped", () => {
+    setRole("data");
+    mkdirSync(join(tree(), "old"), { recursive: true });
+    const r = run(`ship ${SHA}`, {
+      input: shipped([
+        { name: "ds-platform/infra/", type: "5" },
+        { name: "ds-platform/infra/a.txt", body: "A" },
+        { name: "ds-platform/apps/", type: "5" },
+        { name: "ds-platform/.agents", type: "2", link: "apps" },
+      ]),
+    });
+    assert.equal(r.status, 0, String(r.stderr));
+    assert.equal(readFileSync(join(tree(), "infra/a.txt"), "utf8"), "A");
+    assert.equal(existsSync(join(tree(), "old")), false, "the previous tree is gone");
+    assert.deepEqual(
+      readdirSync(join(root, "home/deploy")).filter((n) => n.startsWith(".ds-platform.ship")),
+      [],
+      "no staging directory left",
+    );
+  });
+
+  for (const [what, entries] of [
+    ["a link outside the tree", [{ name: "ds-platform/x", type: "2", link: "../../etc/passwd" }]],
+    ["an absolute link", [{ name: "ds-platform/x", type: "2", link: "/etc/passwd" }]],
+    ["a hard link", [{ name: "ds-platform/x", type: "1", link: "ds-platform/y" }]],
+    ["a .. path", [{ name: "ds-platform/../x", body: "x" }]],
+  ]) {
+    it(`3313: ship refuses a tree with ${what} and keeps the live tree`, () => {
+      setRole("data");
+      mkdirSync(join(tree(), "old"), { recursive: true });
+      const r = run(`ship ${SHA}`, { input: shipped(entries) });
+      assert.equal(r.status, 3, String(r.stderr));
+      assert.ok(existsSync(join(tree(), "old")), "live tree untouched");
+    });
+  }
+
+  it("3313: ship rejects a stream over the cap (exit 2)", () => {
+    setRole("data");
+    mkdirSync(join(root, "home/deploy"), { recursive: true });
+    const r = run(`ship ${SHA}`, {
+      input: shipped([{ name: "ds-platform/a", body: "x".repeat(4096) }]),
+      env: { DS_ENTRYPOINT_MAX_SHIP_BYTES: "64" },
+    });
+    assert.equal(r.status, 2);
+  });
+
+  it("3313: install puts every box entrypoint of the shipped tree in place", () => {
+    setRole("data");
+    for (const { path } of BOX_ENTRYPOINTS) {
+      mkdirSync(dirname(join(tree(), path)), { recursive: true });
+      writeFileSync(join(tree(), path), `# ${path}\n`);
+    }
+    const r = run(`install ${SHA}`);
+    assert.equal(r.status, 0, String(r.stderr));
+    for (const { dest, path } of BOX_ENTRYPOINTS) {
+      assert.equal(readFileSync(join(root, dest), "utf8"), `# ${path}\n`, dest);
+    }
+  });
+
+  it("3313: data-up and backup start their durable unit with the fixed step script", () => {
+    setRole("data");
+    writeFileSync(
+      join(root, "usr/local/bin/ds-release"),
+      '#!/usr/bin/env bash\necho "ds-release-called ${@:1:$#-1}" >> "$STUB_DIR/ds-release.log"\ncat "${@: -1}" >> "$STUB_DIR/ds-release.log"\n',
+    );
+    assert.equal(run(`data-up ${SHA}`).status, 0);
+    assert.equal(run(`backup ${SHA} retry-failed`).status, 0);
+    const compose = join(tree(), "infra/deploy/compose/data-prod");
+    assert.equal(
+      log("ds-release"),
+      `ds-release-called release prod ${SHA} up\ncd '${compose}'\n` +
+        "docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest\n" +
+        "docker compose up -d --no-deps redis\n" +
+        `ds-release-called release --retry-failed prod ${SHA} backup\ncd '${compose}'\n` +
+        "docker compose exec -T pgbackrest /usr/local/bin/backup.sh incr\n",
+    );
+  });
+
+  it("3313: finish, check and supersede call ds-release for prod only", () => {
+    setRole("data");
+    const unit = `ds-prod-${SHA.slice(0, 12)}-rollback`;
+    for (const command of [`finish ${SHA} failed`, "check", `check ${unit}`, `supersede ${unit}`]) {
+      assert.equal(run(command).status, 0, command);
+    }
+    assert.equal(
+      log("ds-release"),
+      [
+        `ds-release-called finish prod ${SHA} failed`,
+        "ds-release-called check prod",
+        `ds-release-called check --except ${unit} prod`,
+        `ds-release-called supersede --except ${unit} prod`,
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("3313: rollback-floor and backup-info run their fixed read in the data-prod compose dir", () => {
+    setRole("data");
+    const compose = join(tree(), "infra/deploy/compose/data-prod");
+    mkdirSync(compose, { recursive: true });
+    dockerStub("ABSENT");
+    const floor = run("rollback-floor");
+    assert.equal(floor.status, 0, floor.stderr);
+    assert.equal(floor.stdout, "ABSENT");
+    assert.equal(run("backup-info").status, 0);
+    assert.equal(
+      log("docker"),
+      `docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -qAt -U ds -d ds_prod -c SELECT CASE WHEN to_regclass('public.event_speakers') IS NULL THEN 'ABSENT' ELSE 'PRESENT' END @${compose}\n` +
+        `docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info @${compose}\n`,
+    );
   });
 });

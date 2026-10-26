@@ -480,11 +480,15 @@ export const DS_RELEASE_BIN = "/usr/local/bin/ds-release";
 export const DS_DEPLOY_ENTRYPOINT_BIN = "/usr/local/bin/ds-deploy-entrypoint";
 // #2985: the box-side release driver the entrypoint's `release` verb execs.
 export const RELEASE_DRIVER_BIN = "/usr/local/lib/ds-platform/release-driver";
+export const POSTGRES_PROBE_BIN = "/usr/local/lib/ds-platform/postgres-artifact-probe.py";
 /** Box binary → its path in the repository tree, in install order. */
 export const BOX_ENTRYPOINTS = [
   { dest: DS_RELEASE_BIN, path: "infra/deploy/bin/ds-release" },
   { dest: DS_DEPLOY_ENTRYPOINT_BIN, path: "infra/deploy/bin/ds-deploy-entrypoint" },
   { dest: RELEASE_DRIVER_BIN, path: "infra/deploy/bin/release-driver" },
+  // #3313: the data box runs the PostgreSQL probe only from this root-owned copy
+  // (spec §5 «Data-prod verbs.»); the other boxes carry it unused.
+  { dest: POSTGRES_PROBE_BIN, path: "tools/deploy/postgres-artifact-probe.py" },
 ];
 export const RELEASE_STATE_ROOT = "/var/lib/ds-platform/release";
 export const RELEASE_POLL_MS = 10 * 1000;

@@ -64,13 +64,27 @@ describe("#3171: the explicit theme choice travels to the sign-in host as a pref
       expect(document.cookie).toContain("ds-theme=light");
     });
 
-    it("syncThemeCookie carries an earlier stored choice, and clears the cookie once the choice is gone", () => {
+    it("syncThemeCookie carries an earlier stored choice that is not travelling yet", () => {
       localStorage.setItem(THEME_STORAGE_KEY, "dark");
       syncThemeCookie();
       expect(document.cookie).toContain("ds-theme=dark");
-      localStorage.removeItem(THEME_STORAGE_KEY);
+    });
+
+    it("#3171: a storefront with no choice of its own leaves the shared cookie — the other storefront's choice — standing", () => {
+      // The Academy chose dark; its cookie is shared with the doctor storefront
+      // (one parent domain), whose own localStorage holds no choice.
+      document.cookie = "ds-theme=dark; Path=/";
       syncThemeCookie();
-      expect(document.cookie).not.toContain("ds-theme=");
+      expect(document.cookie).toContain("ds-theme=dark");
+    });
+
+    it("#3171: a travelling choice is never overwritten by a mount — only an explicit toggle replaces it", () => {
+      document.cookie = "ds-theme=dark; Path=/";
+      localStorage.setItem(THEME_STORAGE_KEY, "light");
+      syncThemeCookie();
+      expect(document.cookie).toContain("ds-theme=dark");
+      persistTheme("light");
+      expect(document.cookie).toContain("ds-theme=light");
     });
   });
 });

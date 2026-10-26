@@ -69,8 +69,9 @@ export function ThemeToggle({
   );
 
   // Every storefront page mounts this toggle in its header: the place a choice
-  // made before the preference cookie existed, or one since cleared, is brought
-  // in line for the sign-in host (#3171).
+  // made before the preference cookie existed starts travelling to the sign-in
+  // host (#3171). It never clears or overwrites the cookie — that may carry the
+  // other storefront's later choice.
   useEffect(() => {
     syncThemeCookie();
   }, []);

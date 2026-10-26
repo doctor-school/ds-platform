@@ -146,11 +146,23 @@ export function writeThemeCookie(theme: Theme | null): void {
 }
 
 /**
- * Bring the cookie in line with the stored choice: a choice made before the
- * cookie existed starts travelling, and a cleared choice stops travelling.
+ * Start a choice made before the cookie existed travelling — and nothing else.
+ * The cookie is shared by BOTH storefronts (one parent domain) while each keeps
+ * its own `localStorage`, so this storefront holding no choice (or another
+ * one) says nothing about the travelling choice: it may be the other
+ * storefront's, made later. Only an explicit toggle (`persistTheme`) replaces
+ * a travelling choice; a mount only fills an empty cookie.
  */
 export function syncThemeCookie(): void {
-  writeThemeCookie(readStoredTheme());
+  const stored = readStoredTheme();
+  if (stored === null) return;
+  let travelling: Theme | null = null;
+  try {
+    travelling = themeFromCookieHeader(document.cookie);
+  } catch {
+    return;
+  }
+  if (travelling === null) writeThemeCookie(stored);
 }
 
 /** Read the preference cookie out of a request `Cookie` header (server side). */

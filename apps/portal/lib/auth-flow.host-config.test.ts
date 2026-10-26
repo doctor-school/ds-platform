@@ -55,8 +55,8 @@ describe("ACADEMY_AUTH_FLOW.routes", () => {
 const config: AuthFlowHostConfig = ACADEMY_AUTH_FLOW;
 
 const RETURN_EVENT = {
-  time: "19:00",
-  dateLabel: "28 августа · чт",
+  startsAt: "2026-08-28T16:00:00.000Z",
+  format: "online" as const,
   school: "Школа ортобиологии",
   title: "PRP при гонартрозе: показания, протоколы, ошибки",
   specialties: ["Травматология"],

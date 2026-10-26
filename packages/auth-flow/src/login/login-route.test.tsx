@@ -119,8 +119,8 @@ const DOCTOR = {
 } as const;
 
 const EVENT = {
-  time: "19:00",
-  dateLabel: "27 августа · чт",
+  startsAt: "2026-08-27T16:00:00.000Z",
+  format: "online" as const,
   school: "Школа ортобиологии",
   title: "PRP при гонартрозе",
   specialties: ["Травматология"],
@@ -1019,11 +1019,13 @@ describe("2981: the sign-in door's site key comes from runtime env", () => {
 
   it("2981: a set SMARTCAPTCHA_SITE_KEY reaches the door; unset hands it no key", async () => {
     vi.stubEnv("SMARTCAPTCHA_SITE_KEY", "ysc1_runtime");
-    const keyed = (await doorOf(ACADEMY_FIXTURE, {})).props as unknown as Configured;
+    const keyed = (await doorOf(ACADEMY_FIXTURE, {}))
+      .props as unknown as Configured;
     expect(keyed.config.botProtection?.siteKey).toBe("ysc1_runtime");
 
     vi.stubEnv("SMARTCAPTCHA_SITE_KEY", undefined);
-    const keyless = (await doorOf(DOCTOR_FIXTURE, {})).props as unknown as Configured;
+    const keyless = (await doorOf(DOCTOR_FIXTURE, {}))
+      .props as unknown as Configured;
     expect(keyless.config.botProtection?.siteKey).toBeUndefined();
   });
 });

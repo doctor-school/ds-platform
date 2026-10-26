@@ -46,8 +46,6 @@ export { isTopLevelNavigation } from "./top-level-navigation";
 export { parseAccountReturnTarget } from "../return-target";
 export {
   RETURN_CONTEXT_PARAM,
-  formatMskDateLabel,
-  formatMskTime,
   isAccountReturnTarget,
   isLandOnlyReturnTarget,
   isRoomReturnTarget,

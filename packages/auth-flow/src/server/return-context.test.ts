@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   RETURN_CONTEXT_PARAM,
-  formatMskDateLabel,
-  formatMskTime,
   isAccountReturnTarget,
   readReturnEvent,
   resolveCarriedReturnTarget,
@@ -105,8 +103,9 @@ describe("021 EARS-2: resolveReturnContext", () => {
     expect(resolved).not.toBeNull();
     expect(resolved!.title).toBe(EVENT.title);
     expect(resolved!.school).toBe("Школа ортобиологии");
-    expect(resolved!.time).toBe("19:00");
-    expect(resolved!.dateLabel).toBe("27 августа · чт");
+    // The instant and the format travel; the card states the time (004 EARS-12).
+    expect(resolved!.startsAt).toBe(EVENT.startsAt);
+    expect(resolved!.format).toBe(EVENT.format);
     // The projection narrows the speaker rows to name-only — no credentials.
     expect(resolved!.speakers).toEqual([{ name: "Анна Соколова" }]);
   });
@@ -183,15 +182,6 @@ describe("021 EARS-2: resolveReturnContext", () => {
     await expect(
       resolveReturnContext("/webinars/prp-pri-gonartroze", impl),
     ).resolves.toBeNull();
-  });
-
-  it("021 EARS-12: both formatters render the event's own МСК clock", () => {
-    // 16:00Z is 19:00 in Europe/Moscow; the label must not drift to the runtime
-    // zone, and the short weekday carries no trailing period on any ICU build.
-    expect(formatMskTime("2026-08-27T16:00:00.000Z")).toBe("19:00");
-    expect(formatMskDateLabel("2026-08-27T16:00:00.000Z")).toBe(
-      "27 августа · чт",
-    );
   });
 });
 

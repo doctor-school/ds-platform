@@ -55,8 +55,8 @@ describe("DOCTOR_AUTH_FLOW.routes", () => {
  * rather than on the stand.
  */
 const RETURN_EVENT = {
-  time: "19:00",
-  dateLabel: "28 августа · чт",
+  startsAt: "2026-08-28T16:00:00.000Z",
+  format: "online" as const,
   school: "Школа ортобиологии",
   title: "PRP при гонартрозе: показания, протоколы, ошибки",
   specialties: ["Травматология"],

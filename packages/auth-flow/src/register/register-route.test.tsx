@@ -72,8 +72,8 @@ const DOCTOR = {
 } as const;
 
 const EVENT = {
-  time: "19:00",
-  dateLabel: "27 августа · чт",
+  startsAt: "2026-08-27T16:00:00.000Z",
+  format: "online" as const,
   school: "Школа ортобиологии",
   title: "PRP при гонартрозе",
   specialties: ["Травматология"],
@@ -432,9 +432,10 @@ describe("2981: the site key reaches the door from runtime env", () => {
   it("2981: a set SMARTCAPTCHA_SITE_KEY reaches the sign-up door, its shell and the /verify step", async () => {
     vi.stubEnv("SMARTCAPTCHA_SITE_KEY", "ysc1_runtime");
 
-    const shell = (await shellOf(DOCTOR_FIXTURE, {})) as unknown as ReactElement<
-      Configured & ShellProps
-    >;
+    const shell = (await shellOf(
+      DOCTOR_FIXTURE,
+      {},
+    )) as unknown as ReactElement<Configured & ShellProps>;
     const door = shell.props.children.props as unknown as Configured;
     const step = (await stepOf(ACADEMY_FIXTURE, {})) as unknown as Configured;
 

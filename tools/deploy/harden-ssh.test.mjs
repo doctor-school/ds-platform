@@ -220,6 +220,7 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
       [
         '[[ $1 == --root ]] && { prefix=$2; shift 2; }',
         '[[ $1 == -d ]] || exit 2',
+        '[[ -z ${STUB_GPASSWD_RC:-} ]] || exit "$STUB_GPASSWD_RC"',
         'sed -E -i "/^$3:/ { s/([:,])$2(,|\\$)/\\1/; s/,\\$// }" "$prefix/etc/group"',
       ].join("\n"),
     );
@@ -552,6 +553,135 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
     assert.equal(r.status, 2, r.out);
     assert.match(r.out, /takes no --ci-pubkey/);
     assert.equal(calls(), "");
+  });
+
+  // #3320: the prod release converges ds-data-prod itself, over the hop, as deploy
+  // (SUDO_USER=deploy): box-side checks that the break-glass path is in place and
+  // usable take the place of the breakglass-session proof.
+  const releaseArgs = (...extra) => ["--role", "data", "--from-release", ...extra];
+  const breakglassBox = ({
+    passwd = "breakglass:x:1001:1001::/home/breakglass:/bin/bash\n",
+    shadow = "breakglass:!:20000:0:99999:7:::\n",
+    keys: bgKeys = `${BREAKGLASS}\n`,
+    sudoers = "breakglass ALL=(ALL) NOPASSWD:ALL\n",
+  } = {}) => {
+    writeFileSync(join(root, "etc/passwd"), `root:x:0:0::/root:/bin/bash\ndeploy:x:1000:1000::/home/deploy:/bin/bash\n${passwd}`);
+    writeFileSync(join(root, "etc/shadow"), `root:*:20000:0:99999:7:::\ndeploy:!:20000:0:99999:7:::\n${shadow}`);
+    mkdirSync(join(root, "home/breakglass/.ssh"), { recursive: true });
+    if (bgKeys !== null) writeFileSync(join(root, "home/breakglass/.ssh/authorized_keys"), bgKeys);
+    if (sudoers !== null) writeFileSync(join(root, "etc/sudoers.d/91-ds-breakglass"), sudoers);
+  };
+
+  it("3320: from a release, data narrows as deploy once the break-glass path checks out, breakglass untouched", () => {
+    dataBox();
+    breakglassBox();
+    const r = run(releaseArgs(), { SUDO_USER: "deploy" });
+    assert.equal(r.status, 0, r.out);
+    assert.equal(read("home/deploy/.ssh/authorized_keys"), `${HOP_FORCED}\n`, "the operator key is gone");
+    assert.equal(read("etc/sudoers.d/90-ds-deploy"), scriptDeploySudoers());
+    assert.equal(read("etc/sudoers.d/90-cloud-init-users"), "# Created by cloud-init\n\n# User rules for deploy\n");
+    assert.equal(read("etc/group"), "root:x:0:\nsudo:x:27:\ndocker:x:999:\ndeploy:x:1000:\n");
+    assert.equal(read("etc/ds-platform/box-role"), "data\n");
+    assert.equal(read("root/.ssh/authorized_keys"), "");
+    assert.equal(read("home/breakglass/.ssh/authorized_keys"), `${BREAKGLASS}\n`, "the box's own break-glass key stays");
+    assert.equal(read("etc/sudoers.d/91-ds-breakglass"), "breakglass ALL=(ALL) NOPASSWD:ALL\n");
+    assert.doesNotMatch(calls(), /useradd|chown/, "a release never writes the break-glass user");
+    assert.match(calls(), /visudo -cf .*91-ds-breakglass/, "the break-glass sudoers file is checked");
+    assert.match(calls(), /^sshd -t/m);
+    const before = snapshot();
+    rmSync(join(dir, "calls.log"));
+    const again = run(releaseArgs(), { SUDO_USER: "deploy" });
+    assert.equal(again.status, 0, again.out);
+    assert.match(again.out, /nothing to change/);
+    assert.deepEqual(snapshot(), before);
+  });
+
+  const NARROWED_GROUPS = "root:x:0:\nsudo:x:27:\ndocker:x:999:\ndeploy:x:1000:\n";
+
+  it("3320: an interrupted converge (hop line already forced, deploy still holding the cloud-init rule and groups) is finished by the next release", () => {
+    dataBox({ deployKeys: `${HOP_FORCED}\n` });
+    breakglassBox();
+    const r = run(releaseArgs(), { SUDO_USER: "root" });
+    assert.equal(r.status, 0, r.out);
+    assert.doesNotMatch(r.out, /nothing to change/);
+    assert.equal(read("home/deploy/.ssh/authorized_keys"), `${HOP_FORCED}\n`);
+    assert.equal(read("etc/sudoers.d/90-ds-deploy"), scriptDeploySudoers());
+    assert.equal(read("etc/sudoers.d/90-cloud-init-users"), "# Created by cloud-init\n\n# User rules for deploy\n");
+    assert.equal(read("etc/group"), NARROWED_GROUPS);
+  });
+
+  it("3320: a converge that stopped after the hop rewrite and before its reload is finished, reload included, by the next release", () => {
+    dataBox();
+    breakglassBox();
+    const stopped = run(releaseArgs(), { SUDO_USER: "root", STUB_GPASSWD_RC: "1" });
+    assert.notEqual(stopped.status, 0, stopped.out);
+    assert.equal(read("home/deploy/.ssh/authorized_keys"), `${HOP_FORCED}\n`, "the hop line went first");
+    assert.notEqual(read("etc/group"), NARROWED_GROUPS, "deploy is still in a group");
+    assert.doesNotMatch(calls(), /systemctl reload ssh/, "the run stopped before its reload");
+    rmSync(join(dir, "calls.log"));
+    const next = run(releaseArgs(), { SUDO_USER: "root" });
+    assert.equal(next.status, 0, next.out);
+    assert.equal(read("etc/group"), NARROWED_GROUPS);
+    assert.match(calls(), /^systemctl reload ssh$/m, "the sshd files the stopped run wrote take effect");
+  });
+
+  for (const [what, box, env, message] of [
+    ["no breakglass user", { passwd: "" }, {}, /no user breakglass/],
+    ["a breakglass without a login shell", { passwd: "breakglass:x:1001:1001::/home/breakglass:/usr/sbin/nologin\n" }, {}, /breakglass has no login shell/],
+    ["an expired breakglass account", { shadow: "breakglass:!:20000:0:99999:7::1:\n" }, {}, /breakglass is locked: its account expired/],
+    ["no breakglass shadow entry", { shadow: "" }, {}, /breakglass is locked: no shadow entry/],
+    ["no breakglass authorized_keys", { keys: null }, {}, /breakglass's authorized_keys holds no key/],
+    ["a breakglass authorized_keys with comments only", { keys: "# none\n\n" }, {}, /breakglass's authorized_keys holds no key/],
+    ["no breakglass sudoers file", { sudoers: null }, {}, /91-ds-breakglass grants breakglass no NOPASSWD sudo/],
+    ["a breakglass sudoers file visudo rejects", {}, { STUB_VISUDO_RC: "1" }, /visudo -c rejects .*91-ds-breakglass/],
+    ["sshd -t rejecting the new config", {}, { STUB_SSHD_T_RC: "1" }, /sshd -t rejected the config/],
+  ]) {
+    it(`3320: from a release, data refuses and changes nothing on ${what}`, () => {
+      dataBox();
+      breakglassBox(box);
+      const before = snapshot();
+      const r = run(releaseArgs(), { SUDO_USER: "deploy", ...env });
+      assert.equal(r.status, 1, r.out);
+      assert.match(r.out, message);
+      assert.match(r.out, /nothing was changed/);
+      assert.deepEqual(snapshot(), before);
+      assert.doesNotMatch(calls(), /gpasswd|reload|useradd/);
+    });
+  }
+
+  it("3320: --dry-run from a release runs the break-glass checks and names the narrowing", () => {
+    dataBox();
+    breakglassBox();
+    const before = snapshot();
+    const r = run(releaseArgs("--dry-run"), { SUDO_USER: "deploy" });
+    assert.equal(r.status, 0, r.out);
+    assert.match(r.out, /would put the hop key behind the forced command/);
+    assert.deepEqual(snapshot(), before);
+    breakglassBox({ keys: "" });
+    assert.equal(run(releaseArgs("--dry-run"), { SUDO_USER: "deploy" }).status, 1);
+  });
+
+  it("3320: --from-release is data's, and takes no break-glass key", () => {
+    dataBox();
+    breakglassBox();
+    for (const args of [
+      ["--role", "prod", "--from-release"],
+      ["--role", "stage", "--from-release"],
+      releaseArgs("--breakglass-pubkey", join(keys, "breakglass.pub")),
+      ["--role", "data"],
+    ]) {
+      const r = run(args, { SUDO_USER: "deploy" });
+      assert.equal(r.status, 2, `${args.join(" ")}: ${r.out}`);
+    }
+    assert.equal(calls(), "");
+  });
+
+  it("3320: --role prod still narrows nothing of deploy's outside a breakglass session", () => {
+    const r = run(prodArgs(), { SUDO_USER: "deploy" });
+    assert.notEqual(r.status, 0, r.out);
+    assert.match(r.out, /run --role prod from a breakglass session/);
+    assert.equal(read("etc/sudoers.d/90-cloud-init-users"), CLOUD_INIT_USERS);
+    assert.equal(read("etc/group"), GROUPS);
   });
 
   for (const [what, args] of [

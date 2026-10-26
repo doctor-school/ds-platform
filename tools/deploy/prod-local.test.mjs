@@ -702,6 +702,131 @@ test("3313: without bytes to install, a box that serves no data verbs refuses th
   await assert.rejects(client.call(["check"]), /serves no data-prod verbs/);
 });
 
+// --- #3320: the release converges ds-data-prod itself -------------------------------
+// The box proves the converge: every release runs the `converge <sha>` verb (the
+// installed harden-ssh.sh --role data --from-release, which prints `nothing to change`
+// once done), so a converge that stopped after the hop line went behind the forced
+// command is finished by the next release instead of being read as converged.
+const CONVERGE_FORCED = `converge ${SHA_3313}`;
+const CONVERGE_SUDO = `sudo -n env SSH_ORIGINAL_COMMAND='converge ${SHA_3313}' /usr/local/bin/ds-deploy-entrypoint`;
+
+test("3320: the forced command answering is not proof: an interrupted converge is finished by the next release", async () => {
+  // Interrupted state: the hop line is already forced, deploy still holds the
+  // cloud-init rule and its groups. Only the box can tell; the release asks it.
+  let narrowed = false;
+  const fake = fakeDataProd((command) => {
+    if (command === CONVERGE_FORCED) {
+      narrowed = true;
+      return "harden-ssh: remove deploy's rule from /etc/sudoers.d/90-cloud-init-users";
+    }
+    if (command === "capabilities") return CAPABILITIES;
+    if (command.includes("'capabilities'")) return new Error("exited 2");
+    return "ok";
+  });
+  const lines = [];
+  const client = createDataProdClient({ host: "deploy@vpc", run: fake.run, log: (l) => lines.push(l) });
+  await client.converge(SHA_3313);
+  assert.equal(narrowed, true, "the converge verb ran through the forced command");
+  const commands = fake.calls.map((c) => c.command);
+  assert.deepEqual(commands, ["capabilities", CONVERGE_FORCED, "capabilities"]);
+  assert.doesNotMatch(lines.join("\n"), /already converged/);
+  assert.match(lines.join("\n"), /converged: capabilities answers through the forced command/);
+});
+
+test("3320: verbs answering only through sudo -n: the release runs the converge verb that way, then re-probes the forced form", async () => {
+  let converged = false;
+  const fake = fakeDataProd((command) => {
+    if (command === CONVERGE_SUDO) {
+      converged = true;
+      return "";
+    }
+    if (command === "capabilities") return converged ? CAPABILITIES : new Error("exited 127");
+    if (command.includes("'capabilities'")) return converged ? new Error("exited 1: sudo: a password is required") : CAPABILITIES;
+    return "ok";
+  });
+  const lines = [];
+  const client = createDataProdClient({ host: "deploy@vpc", run: fake.run, log: (l) => lines.push(l) });
+  await client.call(["install", SHA_3313]);
+  await client.converge(SHA_3313);
+  await client.call(["data-env"], { input: "{}" });
+  const commands = fake.calls.map((c) => c.command);
+  assert.equal(commands.filter((c) => c === CONVERGE_SUDO).length, 1, "one converge");
+  assert.ok(!commands.some((c) => c.includes("harden-ssh")), "no script or binary beyond the verb");
+  assert.equal(commands.at(-2), "capabilities", "re-probed as the forced command");
+  assert.equal(commands.at(-1), "data-env", "the rest of the run goes bare");
+  assert.equal(client.knownCommand(["finish", SHA_3313, "failed"]), `finish ${SHA_3313} failed`);
+  assert.match(lines.join("\n"), /converge .*harden-ssh\.sh --role data --from-release/);
+  assert.match(lines.join("\n"), /converged: capabilities answers through the forced command/);
+});
+
+test("3320: a converged box runs the converge verb on every release and goes on when it changes nothing", async () => {
+  const fake = fakeDataProd((command) => {
+    if (command === CONVERGE_FORCED) return "harden-ssh: nothing to change";
+    return command === "capabilities" ? CAPABILITIES : new Error("exited 2");
+  });
+  const client = createDataProdClient({ host: "deploy@vpc", run: fake.run, log: () => {} });
+  await client.converge(SHA_3313);
+  assert.deepEqual(fake.calls.map((c) => c.command), ["capabilities", CONVERGE_FORCED, "capabilities"]);
+  assert.equal(client.knownCommand(["data-env"]), "data-env");
+});
+
+test("3320: a failed converge, or one after which the forced command still does not answer, fails the run", async () => {
+  const refused = fakeDataProd((command) => {
+    if (command === CONVERGE_SUDO) return new Error("converge on deploy@vpc exited 1: harden-ssh: no user breakglass");
+    if (command === "capabilities") return new Error("exited 127");
+    return CAPABILITIES;
+  });
+  const a = createDataProdClient({ host: "deploy@vpc", run: refused.run, log: () => {} });
+  await assert.rejects(a.converge(SHA_3313), /no user breakglass/);
+  assert.equal(a.knownCommand(["finish", SHA_3313, "failed"]), `sudo -n env SSH_ORIGINAL_COMMAND='finish ${SHA_3313} failed' /usr/local/bin/ds-deploy-entrypoint`);
+  const unchanged = fakeDataProd((command) => {
+    if (command === CONVERGE_SUDO) return "";
+    if (command === "capabilities") return new Error("exited 127");
+    return CAPABILITIES;
+  });
+  const b = createDataProdClient({ host: "deploy@vpc", run: unchanged.run, log: () => {} });
+  await assert.rejects(b.converge(SHA_3313), /the forced command does not answer after the converge/);
+  await assert.rejects(b.call(["data-env"]), /the forced command does not answer after the converge/, "no verb runs after it");
+});
+
+test("3320: a converge that failed after the hop rewrite re-probes, so `finish … failed` still reaches ds-data-prod", async () => {
+  let rewritten = false;
+  const fake = fakeDataProd((command) => {
+    if (command === CONVERGE_SUDO) {
+      rewritten = true; // the hop line went behind the forced command, then gpasswd failed
+      return new Error("converge on deploy@vpc exited 1");
+    }
+    if (command === "capabilities") return rewritten ? CAPABILITIES : new Error("exited 127");
+    if (command.includes("'capabilities'")) return rewritten ? new Error("exited 2") : CAPABILITIES;
+    return "ok";
+  });
+  const client = createDataProdClient({ host: "deploy@vpc", run: fake.run, log: () => {} });
+  await assert.rejects(client.converge(SHA_3313), /converge on deploy@vpc exited 1/);
+  assert.equal(client.knownCommand(["finish", SHA_3313, "failed"]), `finish ${SHA_3313} failed`);
+  assert.equal(await client.call(["finish", SHA_3313, "failed"]), "ok");
+  assert.equal(fake.calls.at(-1).command, `finish ${SHA_3313} failed`);
+});
+
+test("3320: an entrypoint that predates the converge verb still answers the probe (this run's install serves the verb)", () => {
+  const before = DATA_VERBS.filter((v) => v !== "converge");
+  assert.ok(DATA_VERBS.includes("converge"));
+  assert.equal(servesDataVerbs(JSON.stringify({ role: "data", verbs: before })), true);
+});
+
+test("3320: the data install places harden-ssh.sh root-owned beside the entrypoints", () => {
+  assert.ok(
+    BOX_ENTRYPOINTS.some(({ dest, path }) => dest === "/usr/local/lib/ds-platform/harden-ssh.sh" && path === "infra/deploy/bin/harden-ssh.sh"),
+  );
+});
+
+test("3320: the --local release converges ds-data-prod after its install and before any data-prod state change", () => {
+  const source = readFileSync(join(import.meta.dirname, "prod.mjs"), "utf8");
+  const install = source.indexOf('await dataProd().call(["install", sha]);');
+  const converge = source.indexOf("if (local) await dataProd().converge(sha);");
+  const env = source.indexOf('walk.phase("data-prod-env");');
+  assert.ok(install > 0 && converge > install && env > converge, "install → converge → data-prod-env");
+});
+
 test("3313: prod.mjs reaches ds-data-prod only through its verbs — no script, no shell form", () => {
   const source = readFileSync(join(import.meta.dirname, "prod.mjs"), "utf8");
   assert.doesNotMatch(source, /(sshScript|sshCapture|boxStep)\(\s*DATA_PROD\b/);

@@ -485,11 +485,12 @@ release_status() {
 # JSON object checked field by field by DATA_PY below, or the tree archive.
 # infra/deploy/bin/harden-ssh.sh --role data refuses an installed entrypoint without
 # this line; tools/deploy/lib/data-prod.mjs and the tests pin the list.
-DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede'
+DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-env data-up backup backup-info rollback-floor finish check supersede converge'
 DATA_LIVE_TREE=$ROOT/home/deploy/ds-platform
 DATA_COMPOSE=$DATA_LIVE_TREE/infra/deploy/compose/data-prod
 DATA_STATE_FILE=$ROOT/home/deploy/ds-platform-postgres-state.json
 POSTGRES_PROBE=$ROOT/usr/local/lib/ds-platform/postgres-artifact-probe.py
+HARDEN_SSH=$ROOT/usr/local/lib/ds-platform/harden-ssh.sh
 # Box entrypoint = its path in the shipped tree; tools/deploy/lib/remote.mjs
 # BOX_ENTRYPOINTS, pinned equal by the tests.
 DATA_INSTALL=(
@@ -497,6 +498,7 @@ DATA_INSTALL=(
   /usr/local/bin/ds-deploy-entrypoint=infra/deploy/bin/ds-deploy-entrypoint
   /usr/local/lib/ds-platform/release-driver=infra/deploy/bin/release-driver
   /usr/local/lib/ds-platform/postgres-artifact-probe.py=tools/deploy/postgres-artifact-probe.py
+  /usr/local/lib/ds-platform/harden-ssh.sh=infra/deploy/bin/harden-ssh.sh
 )
 MAX_DATA_PAYLOAD_BYTES=65536
 MAX_SHIP_BYTES=$(override DS_ENTRYPOINT_MAX_SHIP_BYTES $((256 * 1024 * 1024)))                      # 256 MiB gzip stream
@@ -765,7 +767,7 @@ data_verb() {
   case "$verb" in
     capabilities | postgres-probe | postgres-checkpoint | data-env | backup-info | rollback-floor)
       ((n == 1)) || reject "usage: $verb" ;;
-    ship | install)
+    ship | install | converge)
       ((n == 2)) || reject "usage: $verb <sha>"
       check_sha "${words[1]}" ;;
     data-up | backup)
@@ -793,6 +795,13 @@ data_verb() {
     data-env) data_py data-env "$DATA_COMPOSE" ;;
     ship) ship_tree "${words[1]}" ;;
     install) install_entrypoints "${words[1]}"; exit 0 ;;
+    converge)
+      # The release's converge of this box (#3320; spec §5 «Data-prod verbs.»), every
+      # release: the box entrypoints of the shipped <sha> tree go in place first, so
+      # the harden-ssh.sh it runs is this release's, root-owned; it is idempotent and
+      # prints `nothing to change` once the box is converged. Its exit is the verb's.
+      install_entrypoints "${words[1]}"
+      exec sudo "$HARDEN_SSH" --role data --from-release </dev/null ;;
     data-up) data_step up "${words[1]}" "${words[2]-}" </dev/null ;;
     backup) data_step backup "${words[1]}" "${words[2]-}" </dev/null ;;
     backup-info)
@@ -858,7 +867,7 @@ case "$verb" in
     observe "${words[1]}"
     ;;
   capabilities | postgres-probe | postgres-checkpoint | ship | install | data-env | data-up | backup | \
-    backup-info | rollback-floor | finish | check | supersede)
+    backup-info | rollback-floor | finish | check | supersede | converge)
     data_verb
     ;;
   *)

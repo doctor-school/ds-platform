@@ -476,15 +476,27 @@ stay on the operator path above.
   Both reach ds-data-prod only through the data verbs of `ds-deploy-entrypoint`
   (`lib/data-prod.mjs`; spec §5 «Data-prod verbs.», #3313): `postgres-probe`,
   `postgres-checkpoint`, `ship`, `install`, `data-env`, `data-up`, `backup`,
-  `backup-info`, `rollback-floor`, `finish`, `check`, `supersede`, `capabilities`. A
+  `backup-info`, `rollback-floor`, `finish`, `check`, `supersede`, `converge`,
+  `capabilities`. A
   payload is one JSON object or the tree archive on stdin, checked box-side; no script
   travels. The client asks `capabilities` once per run, first as the forced command of the
   converged hop key, then through `sudo -n` (a shell login: `breakglass`, or `deploy`
   before the converge). **Transition:** when neither answers, the installed entrypoint
   predates the data verbs; the run installs the box entrypoints from the tree it holds
-  through `deploy`'s shell, once, and asks again. After the owner's `harden-ssh.sh --role
-data` converge (it refuses until the verbs are installed) that branch is never taken;
-  delete it, and `bootstrapSources`, once the converge has run.
+  through `deploy`'s shell, once, and asks again. **Converge (#3320):** right after its
+  data `install` and before `data-prod-env`, the `--local` run converges ds-data-prod
+  itself (`client.converge()`), every release: the `converge <sha>` verb, through the
+  form that answered (forced once converged, `sudo -n` before), installs the shipped box
+  entrypoints and runs the root-owned `harden-ssh.sh --role data --from-release`; the
+  run then asks `capabilities` again and goes on only when the verb exited 0 and the
+  forced command answers. The answering form alone is no proof — a converge stopped after
+  the hop rewrite is finished by the next one. A refused or failed converge fails the run
+  before any data-prod state change, after a re-probe so `finish … failed` still lands.
+  The log shows `↻ ds-data-prod: converge <sha12>: …` then `✓ … converged`; a
+  converged box prints `nothing to change`. `capabilities` must name every verb but
+  `converge` (an older entrypoint serves the run until this run's `install`). No owner server step
+  is in the path. The transition and the pre-converge `sudo` branch of the hop go, with
+  `bootstrapSources`, after the first release that converged (#3320).
 - **No downgrade.** The driver (before it starts the unit) and the run itself (right
   after its previous-SHA read) refuse a SHA that does not descend from the live prod SHA,
   the running `ds-api:<sha>` tag: GitHub `compare <live>...<sha>` must answer `ahead` or
@@ -818,8 +830,10 @@ SSH host aliases resolve from `~/.ssh/config`; overridable via `DS_API_PROD_SSH`
 with a forced command and no shell, so the operator's offline `breakglass` key is the
 only interactive login there. The alias names the address and that key; the `ds-data-prod`
 alias jumps through it (`ProxyJump breakglass@ds-api-prod`) and logs in to data-prod as
-`breakglass` too: after the `--role data` converge `deploy` holds only the hop key behind
-the forced command (#3313). The run calls the same data verbs through `sudo -n`.
+`breakglass` too: once a release has converged ds-data-prod, `deploy` holds only the hop
+key behind the forced command (#3313, #3320). The run calls the same data verbs through
+`sudo -n`. This alias is break-glass documentation: the release path needs no alias and
+no owner step.
 
 Both prod boxes keep the live tree at the fixed `/home/deploy/ds-platform`
 (`PROD_LIVE_TREE`), never a `~`-relative path: the box-local run is root (HOME=/root)

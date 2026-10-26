@@ -18,6 +18,7 @@ import {
   DS_DEPLOY_ENTRYPOINT_BIN,
   RELEASE_DRIVER_BIN,
   POSTGRES_PROBE_BIN,
+  HARDEN_SSH_BIN,
   releaseInstallFromSourceScript,
   releaseInstallScript,
   releaseStartScript,
@@ -53,6 +54,7 @@ test("2982/2984/2985: every box entrypoint is installed from the shipped tree, i
       `sudo install -m 0755 "/home/deploy/ds-platform/infra/deploy/bin/ds-deploy-entrypoint" ${DS_DEPLOY_ENTRYPOINT_BIN}`,  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
       `sudo install -m 0755 "/home/deploy/ds-platform/infra/deploy/bin/release-driver" ${RELEASE_DRIVER_BIN}`,  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
       `sudo install -m 0755 "/home/deploy/ds-platform/tools/deploy/postgres-artifact-probe.py" ${POSTGRES_PROBE_BIN}`,  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
+      `sudo install -m 0755 "/home/deploy/ds-platform/infra/deploy/bin/harden-ssh.sh" ${HARDEN_SSH_BIN}`,  // no-hardcoded-path-ok: the fixed prod tree on the boxes, not on this machine
     ].join("\n"),
   );
   assert.equal(RELEASE_DRIVER_BIN, "/usr/local/lib/ds-platform/release-driver");
@@ -503,8 +505,8 @@ test("2987: a forward install records its tree — a kept copy and its SHA — f
   // The binaries first, exactly as before; then the tree they came from: a
   // root-owned, not group/other-writable version directory filled under `.new` and
   // renamed whole, a `tree` symlink switched by one rename, current + previous kept.
-  assert.equal(lines.slice(0, 5).join("\n"), releaseInstallScript());
-  assert.deepEqual(lines.slice(5), [
+  assert.equal(lines.slice(0, 6).join("\n"), releaseInstallScript());
+  assert.deepEqual(lines.slice(6), [
     `sudo install -d -m 0755 -o root -g root ${INSTALLED_TREES_DIR}`,
     `if ! sudo test -d "${V}"; then`,
     `  sudo rm -rf -- "${V}.new"`,

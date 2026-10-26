@@ -12,7 +12,7 @@
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
 
-import { DS_DEPLOY_ENTRYPOINT_BIN, boxSpawnArgs, releaseInstallFromSourceScript, sshScript } from "./remote.mjs";
+import { DS_DEPLOY_ENTRYPOINT_BIN, HARDEN_SSH_BIN, boxSpawnArgs, releaseInstallFromSourceScript, sshScript } from "./remote.mjs";
 
 /** The verbs the entrypoint serves on the data box; pinned equal to its DATA_VERBS. */
 export const DATA_VERBS = [
@@ -29,7 +29,13 @@ export const DATA_VERBS = [
   "finish",
   "check",
   "supersede",
+  "converge",
 ];
+
+// The verbs the capabilities probe requires: an entrypoint that predates `converge`
+// still serves the run up to its `install`, and the entrypoint that install places
+// serves `converge` (#3320).
+const PROBE_VERBS = DATA_VERBS.filter((v) => v !== "converge");
 
 // The entrypoint's own COMMAND_RE / COMMAND_MAX: what it admits as a request.
 const REQUEST_RE = /^[a-z0-9-]+( [a-z0-9-]+)*$/;
@@ -58,7 +64,7 @@ export function dataVerbCommand(request, form) {
 export function servesDataVerbs(stdout) {
   try {
     const answer = JSON.parse(String(stdout).trim());
-    return answer?.role === "data" && DATA_VERBS.every((v) => answer.verbs?.includes(v));
+    return answer?.role === "data" && PROBE_VERBS.every((v) => answer.verbs?.includes(v));
   } catch {
     return false;
   }
@@ -115,6 +121,7 @@ export function createDataProdClient({
   log = (line) => console.log(line),
 }) {
   let form = null;
+  let unreachable = null; // set by a converge after which the forced command does not answer
   const ask = async (f) => {
     try {
       return servesDataVerbs(await run(host, dataVerbCommand("capabilities", f), { label: "capabilities" }));
@@ -132,6 +139,7 @@ export function createDataProdClient({
     },
     /** The command form, found on first use. */
     async ready() {
+      if (unreachable) throw unreachable;
       if (form) return form;
       form = await detect();
       if (form) return form;
@@ -151,6 +159,40 @@ export function createDataProdClient({
     /** The ssh command of `words` if the form is already known, else null (sync callers). */
     knownCommand(words) {
       return form ? dataVerbCommand(words.join(" "), form) : null;
+    },
+    /**
+     * The release's own converge of ds-data-prod (#3320; spec §5 «Data-prod verbs.»
+     * «Converge.»), after the data `install` and before any data-prod state change.
+     * The box proves it, every release: the `converge <sha>` verb runs the installed
+     * root-owned harden-ssh.sh --role data --from-release (idempotent, `nothing to
+     * change` once done) through whichever form answered — the forced command once
+     * converged, `sudo -n` before. Which form answers is no proof: a converge that
+     * stopped after the hop line went behind the forced command leaves deploy's other
+     * rights in place, and only the next run of harden-ssh.sh finishes them. The run
+     * goes on only when the verb exited 0 and the forced command answers. Only the hop
+     * calls this: a breakglass login answers through `sudo` on a converged box too.
+     */
+    async converge(sha) {
+      const through = await client.ready();
+      log(
+        `  ↻ ${host}: converge ${sha.slice(0, 12)}: ${HARDEN_SSH_BIN} --role data --from-release, through ${through === "forced" ? "the forced command" : "sudo -n"}`,
+      );
+      try {
+        await client.call(["converge", sha], { stream: true });
+      } catch (error) {
+        // A converge that failed after the hop rewrite answers only through the
+        // forced command now: re-probe, so the run's `finish … failed` still lands.
+        form = await detect();
+        if (!form) unreachable = new Error(`${host}: no data-prod command form answers after the failed converge`);
+        throw error;
+      }
+      form = await detect();
+      if (form !== "forced") {
+        unreachable = new Error(`${host}: the forced command does not answer after the converge`);
+        form = null;
+        throw unreachable;
+      }
+      log(`  ✓ ${host}: converged: capabilities answers through the forced command`);
     },
     /** Run one verb; `options` as runBoxCommand's. */
     async call(words, options = {}) {

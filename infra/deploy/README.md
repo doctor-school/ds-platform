@@ -181,7 +181,7 @@ sudo bash harden-ssh.sh --role stage --breakglass-pubkey breakglass-stage-1.pub 
   --ci-pubkey ci-stage.pub --dry-run          # read the plan
 sudo bash harden-ssh.sh --role stage --breakglass-pubkey breakglass-stage-1.pub \
   --ci-pubkey ci-stage.pub
-# prod: --role prod, from a breakglass session (below); data-prod: --role data, no --ci-pubkey
+# prod: --role prod, from a breakglass session (below); data-prod: the release runs --role data --from-release (below)
 ```
 
 It runs `sshd -t` before `systemctl reload ssh` and restores the sshd files without a
@@ -210,21 +210,41 @@ exactly one hop line; it takes no `--ci-pubkey` (no CI key reaches the data box)
 `90-ds-deploy`, rewrites the hop line to
 `command="sudo -n /usr/local/bin/ds-deploy-entrypoint",restrict,from="<api-prod VPC IP>" <key>`,
 removes every other `deploy` key (the operator key included), `deploy`'s other sudoers
-rules and its groups `sudo` and `docker`. Run it once, from a `breakglass` session on
-ds-data-prod, after the first prod release that carries #3313:
+rules and its groups `sudo` and `docker`; the hop line goes first, so a run that stops
+part-way leaves a box one of the two forms still serves, and the next release's
+`converge` finishes it.
+
+**The prod release runs it — no owner step (#3320).** Every Actions release calls the
+data verb `converge <sha>` right after its data `install`: the entrypoint installs the box
+entrypoints of the shipped tree (a root-owned `/usr/local/lib/ds-platform/harden-ssh.sh`
+among them), then runs it `--role data --from-release`. It goes through the forced command
+once converged and through `sudo -n` before; the run goes on only when the verb exited 0
+and the forced command answers `capabilities`. The answering form is no proof: a converge
+that stopped after the hop rewrite is finished by the next release's `converge`, and from
+a release the script reloads ssh every run. A converged box prints `nothing to change`. `--from-release` writes nothing of `breakglass`'s and takes no
+key; in place of the breakglass-session proof it checks box-side, before any change, that
+the break-glass path is usable — user `breakglass` exists with a login shell and an
+unexpired account, its `authorized_keys` holds a key, `91-ds-breakglass` passes `visudo -c`
+and grants it NOPASSWD sudo, and `sshd -t` passes with the new config — and refuses,
+changing nothing, when any check fails (the release then fails before any data-prod
+state change). Every release log shows `↻ ds-data-prod: converge <sha12>: …
+harden-ssh.sh --role data --from-release, through …`, the script's lines (`nothing to
+change` once converged) and `✓ … converged: capabilities answers through the forced command`.
+
+Break-glass only (a rebuilt box with no release yet, or a release refused by the checks
+above): the same converge from a `breakglass` session on ds-data-prod, with the key:
 
 ```bash
-# copy main's infra/deploy/bin/harden-ssh.sh and the breakglass PUBLIC key over, then
 # in a breakglass session (ssh -J breakglass@ds-api-prod breakglass@192.168.0.10):
 sudo bash harden-ssh.sh --role data --breakglass-pubkey breakglass-prod.pub --dry-run   # read the plan
 sudo bash harden-ssh.sh --role data --breakglass-pubkey breakglass-prod.pub
 ```
 
-Then prove the hop from ds-api-prod (the `capabilities` verb answers the data verb list,
+Prove the hop from ds-api-prod (the `capabilities` verb answers the data verb list,
 anything else exits 2): `sudo -u deploy ssh -i /home/deploy/.ssh/data-prod-hop -o IdentitiesOnly=yes
 -o BatchMode=yes deploy@192.168.0.10 capabilities`. A NEW data-prod box starts from
 cloud-init with `deploy`'s sudo and gets the hop line below; its first release installs the
-data verbs, then the same converge narrows it.
+data verbs and converges it.
 
 **Data-prod hop key (ds-api-prod → ds-data-prod, once, #3157):** the prod release
 driver's unit runs on ds-api-prod and reaches ds-data-prod over the VPC as `deploy` with a
@@ -250,8 +270,8 @@ sudo -u deploy sh -c 'cat >> ~/.ssh/known_hosts' < /tmp/data-prod.hostkey; rm -f
 restrict,from="192.168.0.20" ssh-ed25519 AAAA… ds-api-prod-hop
 ```
 
-`restrict` turns off pty, every forwarding and the user rc. Until the `--role data`
-converge above the line carries no forced command and reaches `deploy`'s sudo; the converge
+`restrict` turns off pty, every forwarding and the user rc. Until the release's `--role
+data` converge above the line carries no forced command and reaches `deploy`'s sudo; the converge
 puts it behind `sudo -n /usr/local/bin/ds-deploy-entrypoint`, so it reaches only the data
 verbs. That forced command is not a privilege boundary against the key's holder: `ship`,
 `install` and `data-up` put a tree, root entrypoints and a compose file of the holder's

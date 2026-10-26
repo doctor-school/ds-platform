@@ -2046,6 +2046,259 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
       },
     );
 
+    it("EARS-68: S173 prompt=login with a live own handoff requires fresh code and replaces only the presented browser record", async () => {
+      const address = await account("s173-fresh-own");
+      recordNow = new Date();
+      const jar = new Jar();
+      const other = new Jar();
+      await signIn(jar, address);
+      await signIn(other, address);
+      const records = app.get(SignInHostRecordStore);
+      const oldCookie = jar.values.get(RECORD_COOKIE_NAME)!;
+      const otherCookie = other.values.get(RECORD_COOKIE_NAME)!;
+      const oldRecord = await records.find(oldCookie);
+      const otherRecord = await records.find(otherCookie);
+      expect(oldRecord).not.toBeNull();
+      expect(otherRecord).not.toBeNull();
+      expect(otherCookie).not.toBe(oldCookie);
+      expect(otherRecord!.session.sub).toBe(oldRecord!.session.sub);
+      expect(otherRecord!.session.zitadelSessionId).not.toBe(
+        oldRecord!.session.zitadelSessionId,
+      );
+      const before = await recordRows(address);
+      expect(before).toHaveLength(2);
+      const ref = await mint(address);
+      const handoffs = app.get<LoginHandoffStore>(LOGIN_HANDOFF_STORE);
+      const reference = await handoffs.peek(ref);
+      expect(reference).toEqual({
+        accountId: expect.any(String),
+        identifier: address,
+      });
+      const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+      const hint = await handoffIntent(ref, ACADEMY);
+      const authRequest = hostIdp.seedAuthRequest({
+        clientId: ACADEMY,
+        prompt: ["login"],
+        loginHint: hint,
+      });
+      const auth = app.get(AuthService);
+      const own = vi.spyOn(auth, "isOwnLoginHandoff");
+      const resolve = vi.spyOn(auth, "resolveLoginHandoff");
+      const peek = vi.spyOn(handoffs, "peek");
+      const redeem = vi.spyOn(handoffs, "redeem");
+      const request = vi.spyOn(auth, "requestLoginOtp");
+      const send = vi.spyOn(idp, "requestEmailLoginCode");
+      const otp = vi.spyOn(auth, "otpStep");
+      const verify = vi.spyOn(idp, "submitEmailCode");
+      const terminate = vi.spyOn(idp, "terminateSession");
+      const lifetime = vi.spyOn(hostIdp, "setSessionLifetime");
+      const finalise = vi.spyOn(hostIdp, "finaliseWithSession");
+      const insert = vi.spyOn(records, "insert");
+      const remove = vi.spyOn(records, "delete");
+      const noWork = [
+        vi.spyOn(auth, "passwordStep"),
+        vi.spyOn(auth, "verifyStep"),
+        vi.spyOn(idp, "findUserByEmail"),
+        vi.spyOn(idp, "passwordLogin"),
+        vi.spyOn(idp, "loginWithEmailOtp"),
+        vi.spyOn(idp, "loginWithSmsOtp"),
+        vi.spyOn(idp, "requestSmsOtp"),
+        vi.spyOn(hostIdp, "finaliseWithError"),
+        vi.spyOn(records, "deleteBySubject"),
+        vi.spyOn(records, "touchFinalised"),
+      ];
+      const spies = [
+        own,
+        resolve,
+        peek,
+        redeem,
+        request,
+        send,
+        otp,
+        verify,
+        terminate,
+        lifetime,
+        finalise,
+        insert,
+        remove,
+        ...noWork,
+      ];
+      const finalisedBefore = hostIdp.finalised.length;
+      try {
+        const { res, body } = await entry(jar, authRequest);
+        expect(res.statusCode).toBe(200);
+        expect(body).toEqual({
+          action: "render",
+          storefront: "academy",
+          door: "login",
+          authRequest,
+          csrf: expect.any(String),
+          intent: { method: "code", handoff: true },
+        });
+        if (body.action !== "render") throw new Error("not rendered");
+        const formId = jar.values.get(FORM_COOKIE_NAME)!;
+        const binding = {
+          csrfToken: body.csrf,
+          storefront: "academy",
+          authRequestId: authRequest,
+          intent: {
+            door: "login",
+            method: "code",
+            handoff: ref,
+            clientId: ACADEMY,
+          },
+        };
+        expect(await state.getForm(formId)).toEqual(binding);
+        expect(res.cookies.map((cookie) => cookie.name)).toEqual([
+          FORM_COOKIE_NAME,
+        ]);
+        expect(jar.values.get(RECORD_COOKIE_NAME)).toBe(oldCookie);
+        expect(await records.find(oldCookie)).toEqual(oldRecord);
+        expect(await records.find(otherCookie)).toEqual(otherRecord);
+        expect(await recordRows(address)).toEqual(before);
+        const projection = JSON.stringify({ body, headers: res.headers });
+        for (const secret of [
+          ref,
+          hint,
+          address,
+          reference!.accountId,
+          oldCookie,
+          otherCookie,
+          oldRecord!.session.sub,
+          oldRecord!.session.zitadelSessionId,
+          oldRecord!.session.sessionToken,
+          otherRecord!.session.zitadelSessionId,
+          otherRecord!.session.sessionToken,
+        ])
+          expect(projection).not.toContain(secret);
+        for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+        expect(hostIdp.finalised).toHaveLength(finalisedBefore);
+
+        const fields = { authRequest, csrf: body.csrf };
+        const sent = await post(jar, "login/otp/handoff", fields);
+        expect(sent.statusCode).toBe(200);
+        expect(sent.json()).toEqual({
+          status: "otp_sent",
+          identifier: address,
+        });
+        expect(sent.cookies).toEqual([]);
+        expect(resolve).toHaveBeenCalledExactlyOnceWith(ref, undefined);
+        expect(redeem).toHaveBeenCalledExactlyOnceWith(ref);
+        expect(request).toHaveBeenCalledExactlyOnceWith(
+          { identifier: address, channel: "email" },
+          expect.objectContaining({ ip: "127.0.0.1" }),
+        );
+        expect(send).toHaveBeenCalledExactlyOnceWith(address);
+        expect(await send.mock.results[0]!.value).toBe("challenge");
+        expect(await state.getForm(formId)).toEqual(binding);
+        expect(jar.values.get(RECORD_COOKIE_NAME)).toBe(oldCookie);
+        expect(await records.find(oldCookie)).toEqual(oldRecord);
+        expect(await records.find(otherCookie)).toEqual(otherRecord);
+        expect(await recordRows(address)).toEqual(before);
+        for (const spy of [
+          peek,
+          otp,
+          verify,
+          terminate,
+          lifetime,
+          finalise,
+          insert,
+          remove,
+          ...noWork,
+        ])
+          expect(spy).not.toHaveBeenCalled();
+
+        const accepted = await post(jar, "login/otp", {
+          identifier: address,
+          channel: "email",
+          code: FAKE_VALID_CODE,
+          ...fields,
+        });
+        expect(accepted.statusCode).toBe(200);
+        expect(accepted.json()).toEqual({
+          status: "redirect",
+          url: expect.stringContaining("code="),
+        });
+        expect(otp).toHaveBeenCalledExactlyOnceWith(
+          { identifier: address, channel: "email", code: FAKE_VALID_CODE },
+          expect.any(Function),
+        );
+        expect(verify).toHaveBeenCalledExactlyOnceWith(
+          address,
+          FAKE_VALID_CODE,
+          undefined,
+        );
+        expect(await verify.mock.results[0]!.value).toMatchObject({
+          sub: oldRecord!.session.sub,
+          verifiedNow: false,
+        });
+        const freshCookie = jar.values.get(RECORD_COOKIE_NAME)!;
+        expect(freshCookie).toBeTruthy();
+        expect([oldCookie, otherCookie]).not.toContain(freshCookie);
+        const fresh = await records.find(freshCookie);
+        expect(fresh?.session.sub).toBe(oldRecord!.session.sub);
+        expect(fresh!.session.zitadelSessionId).not.toBe(
+          oldRecord!.session.zitadelSessionId,
+        );
+        expect(fresh!.session.zitadelSessionId).not.toBe(
+          otherRecord!.session.zitadelSessionId,
+        );
+        expect(await records.find(oldCookie)).toBeNull();
+        expect(await records.find(otherCookie)).toEqual(otherRecord);
+        expect(await recordRows(address)).toHaveLength(2);
+        expect(remove).toHaveBeenCalledExactlyOnceWith(oldCookie);
+        expect(terminate).toHaveBeenCalledExactlyOnceWith(oldRecord!.session);
+        expect(insert).toHaveBeenCalledTimes(1);
+        expect(lifetime).toHaveBeenCalledTimes(1);
+        expect(lifetime).toHaveBeenCalledWith(
+          expect.objectContaining({ sub: oldRecord!.session.sub }),
+          SIGN_IN_HOST_SESSION_LIFETIME_SECONDS,
+        );
+        expect(finalise).toHaveBeenCalledExactlyOnceWith(
+          authRequest,
+          fresh!.session,
+        );
+        expect(hostIdp.finalised.slice(finalisedBefore)).toEqual([
+          { id: authRequest, session: fresh!.session },
+        ]);
+        expect(accepted.cookies.map((cookie) => cookie.name)).toEqual([
+          RECORD_COOKIE_NAME,
+        ]);
+        expect(jar.values.get(FORM_COOKIE_NAME)).toBe(formId);
+        expect(jar.values.has(SESSION_COOKIE_NAME)).toBe(false);
+        expect(other.values.get(RECORD_COOKIE_NAME)).toBe(otherCookie);
+        expect(own).toHaveBeenCalledExactlyOnceWith(ref, undefined);
+        expect(peek).not.toHaveBeenCalled();
+        for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
+
+        const nextRequest = hostIdp.seedAuthRequest({
+          clientId: ACADEMY,
+          prompt: ["none"],
+        });
+        const reused = await entry(other, nextRequest);
+        expect(reused.res.statusCode).toBe(200);
+        expect(reused.body).toEqual({
+          action: "redirect",
+          url: expect.stringContaining("code="),
+        });
+        expect(reused.res.cookies).toEqual([]);
+        expect(finalise).toHaveBeenCalledTimes(2);
+        expect(finalise).toHaveBeenLastCalledWith(
+          nextRequest,
+          otherRecord!.session,
+        );
+        expect(await records.find(otherCookie)).toEqual(otherRecord);
+        expect(terminate).toHaveBeenCalledTimes(1);
+        expect(remove).toHaveBeenCalledTimes(1);
+        expect(insert).toHaveBeenCalledTimes(1);
+        expect(lifetime).toHaveBeenCalledTimes(1);
+        expect(send).toHaveBeenCalledTimes(1);
+        expect(verify).toHaveBeenCalledTimes(1);
+      } finally {
+        for (const spy of spies) spy.mockRestore();
+      }
+    });
+
     it("EARS-44: another account's reference never uses the live record — the code form renders", async () => {
       const holder = await account("handoff-holder");
       const owner = await account("handoff-owner");

@@ -2163,6 +2163,169 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
       expect(events).toContain("auth.login.success");
     });
 
+    it.each([
+      ["academy", ACADEMY],
+      ["doctor", DOCTOR],
+    ] as const)(
+      "EARS-43/44: S172 a guest %s hand-off sends once, then reload rotates the binding and refuses stale replay",
+      async (storefront, clientId) => {
+        const address = await account(`s172-${storefront}`);
+        const { rows } = await pool.query<{ id: string; zitadel_sub: string }>(
+          "SELECT id, zitadel_sub FROM users WHERE email = $1",
+          [address],
+        );
+        const handoffs = app.get<LoginHandoffStore>(LOGIN_HANDOFF_STORE);
+        const ref = await handoffs.mint(rows[0]!.id, address);
+        const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+        const intent = await state.putIntent(
+          { door: "login", method: "code", handoff: ref, clientId },
+          600,
+        );
+        const authRequest = hostIdp.seedAuthRequest({
+          clientId,
+          loginHint: intent,
+        });
+        const jar = new Jar();
+        const auth = app.get(AuthService);
+        const db = app.get<DrizzleHandle["db"]>(DRIZZLE_DB);
+        const redeem = vi.spyOn(handoffs, "redeem");
+        const resolve = vi.spyOn(auth, "resolveLoginHandoff");
+        const own = vi.spyOn(auth, "isOwnLoginHandoff");
+        const select = vi.spyOn(db, "select");
+        const request = vi.spyOn(auth, "requestLoginOtp");
+        const send = vi.spyOn(idp, "requestEmailLoginCode");
+        const noAuthentication = [
+          vi.spyOn(auth, "passwordStep"),
+          vi.spyOn(auth, "otpStep"),
+          vi.spyOn(idp, "passwordLogin"),
+          vi.spyOn(idp, "submitEmailCode"),
+          vi.spyOn(idp, "loginWithEmailOtp"),
+          vi.spyOn(idp, "loginWithSmsOtp"),
+          vi.spyOn(idp, "requestSmsOtp"),
+          vi.spyOn(hostIdp, "setSessionLifetime"),
+          vi.spyOn(hostIdp, "finaliseWithSession"),
+          vi.spyOn(hostIdp, "finaliseWithError"),
+          vi.spyOn(app.get(SignInHostRecordStore), "insert"),
+        ];
+        try {
+          const { res, body } = await entry(jar, authRequest);
+          expect(res.statusCode).toBe(200);
+          expect(body).toEqual({
+            action: "render",
+            storefront,
+            door: "login",
+            authRequest,
+            csrf: expect.any(String),
+            intent: { method: "code", handoff: true },
+          });
+          for (const secret of [
+            ref,
+            address,
+            rows[0]!.id,
+            rows[0]!.zitadel_sub,
+            PASSWORD,
+          ]) {
+            expect(res.payload).not.toContain(secret);
+            expect(JSON.stringify(res.headers)).not.toContain(secret);
+          }
+          expect(res.cookies.map((cookie) => cookie.name)).toEqual([
+            FORM_COOKIE_NAME,
+          ]);
+          expect(redeem).not.toHaveBeenCalled();
+          expect(request).not.toHaveBeenCalled();
+          expect(send).not.toHaveBeenCalled();
+          if (body.action !== "render") throw new Error("not rendered");
+          const oldFormId = jar.values.get(FORM_COOKIE_NAME)!;
+          const oldJar = new Jar();
+          oldJar.values.set(FORM_COOKIE_NAME, oldFormId);
+          const fields = { authRequest, csrf: body.csrf };
+          const since = await now();
+          const accepted = await post(jar, "login/otp/handoff", fields);
+          expect(accepted.statusCode).toBe(200);
+          expect(accepted.json()).toEqual({
+            status: "otp_sent",
+            identifier: address,
+          });
+          expect(accepted.cookies).toEqual([]);
+          expect(redeem).toHaveBeenCalledExactlyOnceWith(ref);
+          expect(request).toHaveBeenCalledExactlyOnceWith(
+            { identifier: address, channel: "email" },
+            expect.objectContaining({ ip: "127.0.0.1" }),
+          );
+          expect(send).toHaveBeenCalledExactlyOnceWith(address);
+          expect(await ledger(address, since)).toEqual(["auth.otp.sent"]);
+
+          const { res: reopened, body: fresh } = await entry(jar, authRequest);
+          expect(reopened.statusCode).toBe(200);
+          expect(fresh).toEqual({
+            action: "render",
+            storefront,
+            door: "login",
+            authRequest,
+            csrf: expect.any(String),
+          });
+          if (fresh.action !== "render") throw new Error("not rendered");
+          const freshFormId = jar.values.get(FORM_COOKIE_NAME)!;
+          expect(freshFormId).not.toBe(oldFormId);
+          expect(fresh.csrf).not.toBe(body.csrf);
+          expect(await state.getForm(oldFormId)).toBeNull();
+          expect(await state.getForm(freshFormId)).toEqual({
+            csrfToken: fresh.csrf,
+            storefront,
+            authRequestId: authRequest,
+          });
+          expect(reopened.cookies.map((cookie) => cookie.name)).toEqual([
+            FORM_COOKIE_NAME,
+          ]);
+          expect(redeem).toHaveBeenCalledTimes(1);
+          expect(request).toHaveBeenCalledTimes(1);
+          expect(send).toHaveBeenCalledTimes(1);
+
+          select.mockClear();
+          own.mockClear();
+          resolve.mockClear();
+          for (const staleJar of [oldJar, jar]) {
+            const refused = await post(staleJar, "login/otp/handoff", fields);
+            expect(refused.statusCode).toBe(403);
+            expect(refused.cookies).toEqual([]);
+          }
+          expect(select).not.toHaveBeenCalled();
+          expect(own).not.toHaveBeenCalled();
+          expect(resolve).not.toHaveBeenCalled();
+          const refused = await post(jar, "login/otp/handoff", {
+            authRequest,
+            csrf: fresh.csrf,
+          });
+          expect(refused.statusCode).toBe(200);
+          expect(refused.json()).toEqual({ status: "handoff_refused" });
+          expect(refused.cookies).toEqual([]);
+          expect(resolve).toHaveBeenCalledExactlyOnceWith(undefined, undefined);
+          expect(select).not.toHaveBeenCalled();
+          expect(own).not.toHaveBeenCalled();
+          expect(redeem).toHaveBeenCalledExactlyOnceWith(ref);
+          expect(request).toHaveBeenCalledTimes(1);
+          expect(send).toHaveBeenCalledTimes(1);
+          for (const spy of noAuthentication)
+            expect(spy).not.toHaveBeenCalled();
+          expect(jar.values.has(RECORD_COOKIE_NAME)).toBe(false);
+          expect(jar.values.has(SESSION_COOKIE_NAME)).toBe(false);
+          expect(await recordRows(address)).toEqual([]);
+          expect(await ledger(address, since)).toEqual(["auth.otp.sent"]);
+        } finally {
+          for (const spy of [
+            redeem,
+            resolve,
+            own,
+            select,
+            request,
+            send,
+            ...noAuthentication,
+          ])
+            spy.mockRestore();
+        }
+      },
+    );
+
     it("EARS-18: a live hand-off redeemed on the host appends exactly one auth.otp.sent", async () => {
       const address = await account("audit-handoff");
       const { rows } = await pool.query<{ id: string }>(

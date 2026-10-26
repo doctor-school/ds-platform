@@ -17,6 +17,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -71,6 +72,37 @@ test("2985: the driver checks env and sha with ds-release's own regexes", () => 
       `${name} is one definition`,
     );
   }
+});
+
+// #3297: the lock directory and its checks are one definition in both scripts.
+const fn = (file, name) => {
+  const text = readFileSync(file, "utf8");
+  const start = text.indexOf(`\n${name}() {\n`);
+  assert.ok(start >= 0, `${file} defines ${name}()`);
+  return text.slice(start, text.indexOf("\n}\n", start) + 3);
+};
+
+test("3297: the driver locks where ds-release locks: a root-owned dir for root, never /run/lock itself", () => {
+  for (const name of [
+    "default_lock_dir",
+    "lock_dir_problem",
+    "lock_file_problem",
+  ]) {
+    assert.equal(
+      fn(DRIVER, name),
+      fn(DS_RELEASE, name),
+      `${name} is one definition`,
+    );
+  }
+  const body = fn(DRIVER, "default_lock_dir");
+  assert.match(body, /\$EUID -eq 0 \]\]; then printf '\/run\/ds-platform'/);
+  assert.match(
+    body,
+    /\/run\/lock\/ds-platform-%s/,
+    "a non-root caller locks in its own subdirectory",
+  );
+  assert.match(pick(DRIVER, "LOCK_DIR"), /\$\(default_lock_dir\)/);
+  assert.match(pick(DS_RELEASE, "LOCK_DIR"), /\$\(default_lock_dir\)/);
 });
 
 test("2985: the driver's image set and manifest refs are the registry's", () => {
@@ -461,6 +493,59 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       `ds-release-driver: refused: env stage-main is leased by release ${OTHER.slice(0, 12)}, which has not finished\n`,
     );
     notStarted();
+  });
+
+  describe("3297: the lock directory", () => {
+    const lockDir = () => join(dir, "lock");
+
+    it("creates the lock directory 0755, owned by the caller, and locks there", () => {
+      const r = run(["stage-main", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(statSync(lockDir()).mode & 0o777, 0o755);
+      assert.ok(
+        existsSync(join(lockDir(), "ds-release-driver-stage-main.lock")),
+      );
+    });
+
+    it("refuses, naming the path and its owner, a lock path that exists but cannot be opened", () => {
+      const lock = join(lockDir(), "ds-release-driver-stage-main.lock");
+      mkdirSync(lock, { recursive: true }); // EISDIR for every uid, root included
+      const r = run(["stage-main", SHA]);
+      assert.equal(r.status, 3);
+      assert.equal(r.stdout, "");
+      assert.match(
+        r.stderr,
+        new RegExp(
+          `^ds-release-driver: refused: cannot open lock ${lock.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\(owner [a-z_][a-z0-9_-]*\\)\n$`,
+        ),
+      );
+      assert.doesNotMatch(r.stderr, /Permission denied|Is a directory/);
+      notStarted();
+    });
+
+    it("refuses a group- or other-writable lock directory", () => {
+      mkdirSync(lockDir());
+      chmodSync(lockDir(), 0o1777);
+      const r = run(["stage-main", SHA]);
+      assert.equal(r.status, 3);
+      assert.match(
+        r.stderr,
+        /^ds-release-driver: refused: lock directory \S+ is group- or other-writable \(mode 1777\)\n$/,
+      );
+      notStarted();
+    });
+
+    it("refuses a lock directory that is a symlink", () => {
+      mkdirSync(join(dir, "elsewhere"));
+      symlinkSync(join(dir, "elsewhere"), lockDir());
+      const r = run(["stage-main", SHA]);
+      assert.equal(r.status, 3);
+      assert.match(
+        r.stderr,
+        /^ds-release-driver: refused: lock directory \S+ is a symlink\n$/,
+      );
+      notStarted();
+    });
   });
 
   it("asks GitHub, without a token, whether the SHA is on main", () => {
@@ -1035,6 +1120,21 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       const r = run(["rollback", "prod", SHA]);
       assert.equal(r.status, 3);
       assert.match(r.stderr, /live prod SHA is unknown/);
+      notStarted();
+    });
+
+    it("3297: refuses, naming the path and its owner, a lock path that exists but cannot be opened", () => {
+      const lock = join(dir, "lock", "ds-release-driver-prod.lock");
+      mkdirSync(lock, { recursive: true });
+      const r = run(["rollback", "prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.ok(
+        r.stderr.startsWith(
+          `ds-release-driver: refused: cannot open lock ${lock} (owner `,
+        ),
+        r.stderr,
+      );
+      assert.doesNotMatch(r.stderr, /Permission denied|Is a directory/);
       notStarted();
     });
 

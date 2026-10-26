@@ -308,8 +308,13 @@ session no longer kills the step. The deploy starts (or attaches to) the unit, t
 `sudo ds-release status prod <sha>` every 10 s and prints one status line per poll; the
 full step log stays in the box's journal (`sudo journalctl -u ds-prod-<sha12>-<step>`).
 Each box keeps its status file `/var/lib/ds-platform/release/prod/<sha>.json` (tech spec
-2026-10-16 release pipeline §5). The release stays open from the first box step until it
-is closed after the smoke; any failure exit closes it as `failed`. Recorded verdicts
+2026-10-16 release pipeline §5) and takes its env lock `/run/ds-platform/ds-prod.lock` in
+a root-owned 0755 directory, never the world-writable `/run/lock` (#3297); the release
+driver locks `ds-release-driver-<env>.lock` there too when it runs as root (ds-api-prod),
+in its own `/run/lock/ds-platform-deploy` as `deploy` on ds-stage-1. A lock directory that
+is a symlink, foreign-owned or group/other-writable, or a lock file that cannot be opened,
+is refused (exit 3) naming the path and its owner. The release stays open from the first
+box step until it is closed after the smoke; any failure exit closes it as `failed`. Recorded verdicts
 answer only within that open attempt: a re-run of the same SHA whose run never closed it
 (the operator session died) returns each recorded verdict — backup and migrate are never
 repeated — or reattaches to a step still running, and a step recorded as `failed` re-runs

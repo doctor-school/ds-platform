@@ -27,8 +27,38 @@
 # corrupt status file).
 set -euo pipefail
 
+# The lock directory (#3297; spec §5 «Lock and lease»). A root caller — ds-release on
+# every box, the prod release driver — locks in /run/ds-platform, root-owned 0755:
+# never in the world-writable sticky /run/lock, where any uid can create the lock file
+# first and fs.protected_regular then denies even root's O_CREAT open of it. A non-root
+# caller (the stage driver, as deploy) cannot write there and locks in its own
+# /run/lock/ds-platform-<user>. /run is tmpfs, so the directory is (re)created and
+# checked on every call: it must be a real directory owned by the caller and writable
+# by nobody else. This block is one definition in ds-release and the release driver
+# (tools/deploy/release-driver.test.mjs).
+default_lock_dir() {
+  if [[ $EUID -eq 0 ]]; then printf '/run/ds-platform'; else printf '/run/lock/ds-platform-%s' "$(id -un)"; fi
+}
+# Prints why <dir> is no lock directory for this caller; nothing when it is one.
+lock_dir_problem() {
+  local dir=$1 uid owner mode
+  [[ -e $dir || -L $dir ]] || mkdir -m 0755 -- "$dir" 2>/dev/null || true
+  if [[ -L $dir ]]; then printf 'lock directory %s is a symlink' "$dir"; return 0; fi
+  if [[ -e $dir && ! -d $dir ]]; then printf 'lock directory %s is not a directory' "$dir"; return 0; fi
+  if [[ ! -d $dir ]]; then printf 'lock directory %s is missing and cannot be created' "$dir"; return 0; fi
+  read -r uid owner mode < <(stat -c '%u %U %a' -- "$dir")
+  if [[ $uid != "$EUID" ]]; then printf 'lock directory %s is owned by %s, not by the caller' "$dir" "$owner"; return 0; fi
+  if (( 8#$mode & 8#022 )); then printf 'lock directory %s is group- or other-writable (mode %s)' "$dir" "$mode"; fi
+  return 0
+}
+# The refusal for a lock path the caller cannot open, instead of bash's bare
+# `Permission denied`.
+lock_file_problem() {
+  printf 'cannot open lock %s (owner %s)' "$1" "$(stat -c %U -- "$1" 2>/dev/null || printf unknown)"
+}
+
 STATE_ROOT=${DS_RELEASE_STATE_ROOT:-/var/lib/ds-platform/release}
-LOCK_DIR=${DS_RELEASE_LOCK_DIR:-/run/lock}
+LOCK_DIR=${DS_RELEASE_LOCK_DIR:-$(default_lock_dir)}
 SELF=${DS_RELEASE_SELF:-/usr/local/bin/ds-release}
 
 ENV_RE='^(prod|stage-main|stage-pr-[1-9][0-9]*)$'
@@ -52,8 +82,10 @@ env_dir() { printf '%s/%s' "$STATE_ROOT" "$1"; }
 # The env lease: every mutating call holds the env lock for its whole (short)
 # life. `status` only reads a file that is replaced atomically, so it takes none.
 take_lock() {
-  mkdir -p "$LOCK_DIR"
-  exec 9>"$LOCK_DIR/ds-$1.lock"
+  local problem lock=$LOCK_DIR/ds-$1.lock
+  problem=$(lock_dir_problem "$LOCK_DIR")
+  [[ -z $problem ]] || refuse "$problem"
+  { exec 9>"$lock"; } 2>/dev/null || refuse "$(lock_file_problem "$lock")"
   flock -n 9 || refuse "env $1 is busy: another ds-release call holds $LOCK_DIR/ds-$1.lock"
 }
 
@@ -357,8 +389,11 @@ cmd_exec() {
   run_as "$user" "$script"
   rc=$?
   set -e
-  exec 9>"$LOCK_DIR/ds-$env.lock"
-  flock -w 300 9 || say "env lock not taken within 300s; recording the verdict anyway"
+  if { exec 9>"$LOCK_DIR/ds-$env.lock"; } 2>/dev/null; then
+    flock -w 300 9 || say "env lock not taken within 300s; recording the verdict anyway"
+  else
+    say "$(lock_file_problem "$LOCK_DIR/ds-$env.lock"); recording the verdict anyway"
+  fi
   js end-step "$file" "$step" "$rc"
   exit "$rc"
 }

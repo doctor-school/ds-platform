@@ -13,10 +13,12 @@
  * - A finished credential step leaves for the URL the API named (the IdP's
  *   callback, then the storefront's) by REPLACING the host's entry
  *   (`leaveHost`); from the code step it first steps back onto the form's
- *   entry of the same document, so no host entry survives the sign-in. Back
- *   from the page the person returns to is the page they were on before it —
- *   never a host address whose auth request is spent (EARS-66 would send it on
- *   to the storefront's landing).
+ *   entry of the same document, so no host entry stands BEHIND the returned
+ *   page: Back from it is the page the person was on before — never a host
+ *   address whose auth request is spent (EARS-66 would send it on to the
+ *   storefront's landing). A browser can overwrite an entry but never drop
+ *   one, so the code step's entry survives AHEAD of the returned page; Forward
+ *   opens its spent auth request, which EARS-66 sends to the storefront.
  */
 
 /** The `history.state` key of the code step's own entry: the address the code went to. */

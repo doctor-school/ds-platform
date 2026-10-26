@@ -4,8 +4,9 @@
 // real `@ds/auth-flow` door with no api, IdP or DB.
 //
 // An auth request id names the answer (see `support/sign-in-door.ts`):
-// `<storefront>-<door>[-code][-handoff][-at-<event slug>]` — the door and the
-// EARS-71 intent the storefront entry would have recorded. Every other auth
+// `<storefront>-<door>[-code][-handoff][-once-<token>][-at-<event slug>]` — the
+// door and the EARS-71 intent the storefront entry would have recorded; a
+// `-once-` request is SPENT by its finished credential step. Every other auth
 // request is the API's redirect answer for an unknown one.
 //
 // Beside the entry it answers what a mounted door reads on the SERVER through
@@ -42,7 +43,7 @@ const RENDERS = {
 };
 
 const GRAMMAR =
-  /^(doctor|academy)-(login|register|reset)(-code)?(-handoff)?(?:-at-([a-z0-9-]+))?$/;
+  /^(doctor|academy)-(login|register|reset)(-code)?(-handoff)?(?:-once-[a-z0-9]+)?(?:-at-([a-z0-9-]+))?$/;
 
 function renderFor(authRequest) {
   if (RENDERS[authRequest]) return RENDERS[authRequest];
@@ -169,8 +170,17 @@ function readJson(req, done) {
   });
 }
 
-const redirect = (res) =>
+/** The `-once-` auth requests a finished credential step has spent. */
+const SPENT = new Set();
+const SPENDS = /-once-[a-z0-9]+/;
+
+/** A finished step: the API finalises the request and names the IdP callback. */
+const redirect = (res, body) => {
+  const authRequest =
+    typeof body?.authRequest === "string" ? body.authRequest : "";
+  if (SPENDS.test(authRequest)) SPENT.add(authRequest);
   json(res, 200, { status: "redirect", url: IDP_CALLBACK });
+};
 
 createServer((req, res) => {
   const url = new URL(req.url ?? "/", `http://127.0.0.1:${PORT}`);
@@ -190,6 +200,13 @@ createServer((req, res) => {
 
   if (url.pathname === "/v1/sign-in-host/entry") {
     const authRequest = url.searchParams.get("authRequest") ?? "";
+    // EARS-66 — a spent auth request is sent on to the storefront's `/login`.
+    if (SPENT.has(authRequest)) {
+      return json(res, 200, {
+        action: "redirect",
+        url: `http://127.0.0.1:${PORT}/__storefront/login`,
+      });
+    }
     const render = renderFor(authRequest);
     if (!render) {
       return json(res, 200, {
@@ -227,11 +244,11 @@ createServer((req, res) => {
               error: "Bad Request",
               message: "the request could not be completed",
             })
-          : redirect(res),
+          : redirect(res, body),
       );
     }
     if (url.pathname === "/v1/sign-in-host/login") {
-      return readJson(req, () => redirect(res));
+      return readJson(req, (body) => redirect(res, body));
     }
   }
 

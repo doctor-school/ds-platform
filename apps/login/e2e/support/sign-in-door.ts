@@ -8,9 +8,10 @@ import type { Route } from "@playwright/test";
  * `support/sign-in-entry-api.mjs` (the tier's double of the API).
  *
  * An auth request id names the answer the double gives:
- * `<storefront>-<door>[-code][-handoff][-at-<event slug>]` — the storefront's
- * door, the EARS-71 intent the storefront entry would have recorded
- * (`?method=code`, a hand-off reference, an event target), and nothing else.
+ * `<storefront>-<door>[-code][-handoff][-once-<token>][-at-<event slug>]` — the
+ * storefront's door, the EARS-71 intent the storefront entry would have
+ * recorded (`?method=code`, a hand-off reference, an event target), and
+ * whether the double spends it on a finished step (`once`), nothing else.
  */
 export type Storefront = "doctor" | "academy";
 export type Door = "login" | "register" | "reset";
@@ -22,6 +23,12 @@ export interface DoorIntent {
   readonly handoff?: boolean;
   /** The эфир slug of the storefront entry's `?returnTo=` (EARS-71). */
   readonly eventTarget?: string;
+  /**
+   * A per-test token (`[a-z0-9]+`) naming an auth request of its own that the
+   * double SPENDS on a finished credential step: its entry then answers the
+   * API's EARS-66 redirect to the storefront's `/login` (`/__storefront/login`).
+   */
+  readonly once?: string;
 }
 
 export function authRequestId(
@@ -33,6 +40,7 @@ export function authRequestId(
     `${storefront}-${door}`,
     intent.code ? "-code" : "",
     intent.handoff ? "-handoff" : "",
+    intent.once ? `-once-${intent.once}` : "",
     intent.eventTarget ? `-at-${intent.eventTarget}` : "",
   ].join("");
 }

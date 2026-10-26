@@ -380,13 +380,11 @@ describe("021 EARS-10 (#2331): the already-registered visitor's way out", () => 
       ?.getAttribute("href");
 
   it.each(HOSTS)(
-    "021 EARS-10: the sign-in link on the %s door carries a safe arrival context onward",
+    "003 EARS-71: the sign-in link on the %s door is the plain login door even with a safe arrival context — the next door reads its context from the entry intent, never the link",
     async (_name, config) => {
       await renderDoor(config, { returnTo: SAFE_TARGET });
 
-      expect(signInHref(config)).toBe(
-        `${config.routes.login}?returnTo=${encodeURIComponent(SAFE_TARGET)}`,
-      );
+      expect(signInHref(config)).toBe(config.routes.login);
     },
   );
 

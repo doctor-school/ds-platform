@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 
 import {
   doorPath,
+  HOST_ORIGIN,
   isIdpCallback,
   storefrontPageUrl,
 } from "./support/sign-in-door";
@@ -10,11 +11,12 @@ import {
  * 003 EARS-5 / EARS-24 / EARS-70 / EARS-71 (#3172) — the sign-in host is ONE
  * stop of the person's journey. A hop between its doors replaces the host's
  * history entry, the registration code step takes one same-document entry of
- * its own, and the finished credential step leaves by replacing whatever the
- * host holds: browser Back from the page the person returns to is the page
- * they signed in from — never a host address whose auth request is spent,
- * which the API sends on to the storefront's landing (EARS-66), entry after
- * entry. The page "before" is a page of the tier's double; the IdP callback
+ * its own, and the finished credential step leaves by replacing the entry the
+ * person is on (off the code step: the form's): browser Back from the page the
+ * person returns to is the page they signed in from — never a host address
+ * whose auth request is spent, which the API sends on to the storefront's
+ * landing (EARS-66), entry after entry. The code step's entry the browser
+ * keeps ahead of it opens, on Forward, that spent request: the storefront. The page "before" is a page of the tier's double; the IdP callback
  * stands for the storefront page the callback returns to.
  */
 const EVENT_PAGE = storefrontPageUrl("webinars/prp-pri-gonartroze");
@@ -94,6 +96,27 @@ test.describe("003 EARS-5: Back after the sign-in is the page before it", () => 
     expect(await historyLength(page)).toBeLessThanOrEqual(depth + 1);
     await page.goBack();
     await expect.poll(() => page.url()).toBe(EVENT_PAGE);
+  });
+
+  test("003 EARS-5: Forward past the returned page opens the kept code-step entry, whose spent auth request lands on the storefront — never the sign-in host", async ({
+    page,
+  }) => {
+    const once = `${Date.now().toString(36)}w${test.info().workerIndex}`;
+    await page.goto(EVENT_PAGE);
+    await page.goto(doorPath("doctor", "register", { once }));
+    await submitRegistration(page);
+
+    await page.locator('input[autocomplete="one-time-code"]').fill("482913");
+    await page.waitForURL(isIdpCallback);
+
+    await page.goBack();
+    await expect.poll(() => page.url()).toBe(EVENT_PAGE);
+    await page.goForward();
+    await page.waitForURL(isIdpCallback);
+
+    await page.goForward();
+    await expect.poll(() => page.url()).toBe(storefrontPageUrl("login"));
+    expect(page.url().startsWith(HOST_ORIGIN)).toBe(false);
   });
 });
 

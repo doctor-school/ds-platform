@@ -85,9 +85,9 @@ export type RegisterDoorProps = {
    */
   landing: string;
   /**
-   * The RAW carried `returnTo` param, for the footer LINKS and the `/verify` hop
-   * only. Guarded by the same-origin rule at each consumption point, so a hostile
-   * value is never propagated onward.
+   * The RAW carried `returnTo` param, for the code step's `/verify` address and
+   * the way back to the form only. Guarded by the same-origin rule at each
+   * consumption point, so a hostile value is never propagated onward.
    */
   returnTo?: string | null;
   /** The gate context the visitor arrived from — the plate above the card (021 EARS-2). */
@@ -476,13 +476,13 @@ export function RegisterDoor({
       initialValues={initialValues}
       // The card reads its values once, at mount.
       key={initialValues ? "refilled" : "empty"}
-      // #2331 — the already-registered visitor's way out, on BOTH doors, with
-      // the arrival context carried onward (rule S3).
+      // #2331 — the already-registered visitor's way out, on BOTH doors: the
+      // plain login door. The door renders only on the sign-in host, whose next
+      // door drops every browser param and reads the arrival context from the
+      // entry intent (003 EARS-71), so a carried `returnTo` would be dead.
       footer={
         <DsLink asChild>
-          <DoorLink href={withReturnTarget(config.routes.login, returnTo)}>
-            {copy.haveAccount}
-          </DoorLink>
+          <DoorLink href={config.routes.login}>{copy.haveAccount}</DoorLink>
         </DsLink>
       }
       returnContextSlot={returnContextPlate}

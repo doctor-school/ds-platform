@@ -599,3 +599,143 @@ test(
     }
   },
 );
+
+// --- #3313: ds-data-prod only through its verbs ----------------------------------------
+import {
+  DATA_VERBS,
+  createDataProdClient,
+  dataVerbCommand,
+  servesDataVerbs,
+} from "./lib/data-prod.mjs";
+import { dataProdEnvPayload, dataProdExcept, treeReleaseSources } from "./prod.mjs";
+import { BOX_ENTRYPOINTS } from "./lib/remote.mjs";
+
+const SHA_3313 = "0123456789abcdef0123456789abcdef01234567";
+const CAPABILITIES = JSON.stringify({ role: "data", verbs: DATA_VERBS });
+
+test("3313: a data-prod request is the ssh command itself, or the same request through sudo -n", () => {
+  assert.equal(dataVerbCommand(`ship ${SHA_3313}`, "forced"), `ship ${SHA_3313}`);
+  assert.equal(
+    dataVerbCommand(`finish ${SHA_3313} failed`, "sudo"),
+    `sudo -n env SSH_ORIGINAL_COMMAND='finish ${SHA_3313} failed' /usr/local/bin/ds-deploy-entrypoint`,
+  );
+  assert.equal(dataVerbCommand(`status prod ${SHA_3313}`, "forced"), `status prod ${SHA_3313}`);
+  for (const bad of ["ship x'; id", "ship  x", "upload-report x", "release prod x", "check\nid", ""]) {
+    assert.throws(() => dataVerbCommand(bad, "forced"), bad);
+  }
+  assert.throws(() => dataVerbCommand("capabilities", "shell"), /unknown data-prod command form/);
+});
+
+test("3313: only the data box's full capabilities answer counts", () => {
+  assert.equal(servesDataVerbs(CAPABILITIES), true);
+  assert.equal(servesDataVerbs(JSON.stringify({ role: "prod", verbs: DATA_VERBS })), false);
+  assert.equal(servesDataVerbs(JSON.stringify({ role: "data", verbs: ["capabilities"] })), false);
+  assert.equal(servesDataVerbs("bash: capabilities: command not found"), false);
+});
+
+function fakeDataProd(answers) {
+  const calls = [];
+  const run = async (host, command, options) => {
+    calls.push({ host, command, input: options?.input });
+    const answer = answers(command, calls.length);
+    if (answer instanceof Error) throw answer;
+    return answer;
+  };
+  return { calls, run };
+}
+
+test("3313: after the converge the hop's forced command answers, and every verb goes bare", async () => {
+  const fake = fakeDataProd((command) => (command === "capabilities" ? CAPABILITIES : "ok"));
+  const scripts = [];
+  const client = createDataProdClient({ host: "deploy@vpc", run: fake.run, script: async (...a) => scripts.push(a) });
+  assert.equal(await client.call(["postgres-checkpoint"], { input: "{}" }), "ok");
+  await client.call(["install", SHA_3313]);
+  assert.deepEqual(
+    fake.calls.map((c) => c.command),
+    ["capabilities", "postgres-checkpoint", `install ${SHA_3313}`],
+  );
+  assert.equal(fake.calls[1].input, "{}");
+  assert.deepEqual(scripts, [], "no script ever reaches ds-data-prod");
+  assert.equal(client.knownCommand(["finish", SHA_3313, "failed"]), `finish ${SHA_3313} failed`);
+});
+
+test("3313: a shell login (breakglass, or deploy before the converge) runs the same verbs through sudo -n", async () => {
+  const fake = fakeDataProd((command) => {
+    if (command === "capabilities") return new Error("exited 127: capabilities: command not found");
+    if (command.includes("SSH_ORIGINAL_COMMAND='capabilities'")) return CAPABILITIES;
+    return "ok";
+  });
+  const client = createDataProdClient({ host: "ds-data-prod", run: fake.run, script: async () => assert.fail("no install") });
+  await client.call(["backup-info"]);
+  assert.equal(fake.calls.at(-1).command, "sudo -n env SSH_ORIGINAL_COMMAND='backup-info' /usr/local/bin/ds-deploy-entrypoint");
+});
+
+test("3313 transition: an entrypoint without the data verbs is replaced from the run's bytes once, then the verbs run", async () => {
+  let installed = false;
+  const fake = fakeDataProd((command) => {
+    if (command === "capabilities") return new Error("exited 127");
+    if (command.includes("'capabilities'")) return installed ? CAPABILITIES : new Error("exited 2: unknown command");
+    return "ok";
+  });
+  const scripts = [];
+  const client = createDataProdClient({
+    host: "deploy@vpc",
+    run: fake.run,
+    bootstrapSources: () => [{ source: Buffer.from("#!/usr/bin/env bash\n"), dest: "/usr/local/bin/ds-deploy-entrypoint" }],
+    script: async (host, script, options) => {
+      scripts.push({ host, script, options });
+      installed = true;
+    },
+    log: () => {},
+  });
+  await client.call(["postgres-probe"], { input: "{}" });
+  await client.call(["check"]);
+  assert.equal(scripts.length, 1, "one from-source install");
+  assert.match(scripts[0].script, /sha256sum -c --status/, "the checked from-source install");
+  assert.match(scripts[0].script, /sudo install -m 0755 "\$f0" \/usr\/local\/bin\/ds-deploy-entrypoint/);
+  assert.equal(fake.calls.at(-1).command, "sudo -n env SSH_ORIGINAL_COMMAND='check' /usr/local/bin/ds-deploy-entrypoint");
+});
+
+test("3313: without bytes to install, a box that serves no data verbs refuses the run", async () => {
+  const fake = fakeDataProd(() => new Error("exited 2"));
+  const client = createDataProdClient({ host: "deploy@vpc", run: fake.run });
+  await assert.rejects(client.call(["check"]), /serves no data-prod verbs/);
+});
+
+test("3313: prod.mjs reaches ds-data-prod only through its verbs — no script, no shell form", () => {
+  const source = readFileSync(join(import.meta.dirname, "prod.mjs"), "utf8");
+  assert.doesNotMatch(source, /(sshScript|sshCapture|boxStep)\(\s*DATA_PROD/);
+  assert.doesNotMatch(source, /shipTree\(sha, DATA_PROD\)/);
+  assert.doesNotMatch(source, /postgresStateScript\(/);
+  for (const verb of ["postgres-checkpoint", "install", "data-env", "backup-info", "rollback-floor", "finish", "check", "supersede"]) {
+    assert.ok(source.includes(`dataProd().call(["${verb}"`), verb);
+  }
+  assert.match(source, /dataProd\(\)\.command\(\["ship", sha\]\)/);
+  assert.match(source, /dataProd\(\)\.call\(\["postgres-probe"\]/);
+});
+
+test("3313: the data-env payload carries the VPC address and the immutable image ids only", () => {
+  const live = { targetImages: { postgres: { id: `sha256:${"b".repeat(64)}` }, pgbackrest: { id: `sha256:${"c".repeat(64)}` } } };
+  assert.deepEqual(JSON.parse(dataProdEnvPayload(live, "192.168.0.10")), {
+    vpcIp: "192.168.0.10",
+    images: { postgres: live.targetImages.postgres.id, pgbackrest: live.targetImages.pgbackrest.id },
+  });
+  assert.deepEqual(dataProdExcept({}), []);
+  assert.deepEqual(dataProdExcept({ exceptUnit: "ds-prod-0123456789ab-rollback" }), ["ds-prod-0123456789ab-rollback"]);
+});
+
+test("3313: the box-local transition install reads every box entrypoint from the tree it runs from", () => {
+  const tree = mkdtempSync(join(tmpdir(), "ds-3313-tree-"));
+  try {
+    for (const { path } of BOX_ENTRYPOINTS) {
+      mkdirSync(join(tree, dirname(path)), { recursive: true });
+      writeFileSync(join(tree, path), `# ${path}\n`);
+    }
+    assert.deepEqual(
+      treeReleaseSources(tree).map(({ source, dest }) => [dest, String(source)]),
+      BOX_ENTRYPOINTS.map(({ dest, path }) => [dest, `# ${path}\n`]),
+    );
+  } finally {
+    rmSync(tree, { recursive: true, force: true });
+  }
+});

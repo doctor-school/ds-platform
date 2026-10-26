@@ -281,9 +281,6 @@ test("2981: every `${VAR:?}` the api-prod compose requires is rendered by every 
       'container_id=$(sudo docker compose ps -q "$service")',
       "sudo docker compose restart ${services.join(\" \")}",
       'container_id=$(sudo docker compose ps -q "$service" 2>/dev/null || true)',
-      "sudo docker compose up -d --no-deps redis",
-      "sudo docker compose exec -T pgbackrest /usr/local/bin/backup.sh incr",
-      "sudo docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info | sed -n '1,20p'",
       "sudo docker compose up -d",
     ],
   );

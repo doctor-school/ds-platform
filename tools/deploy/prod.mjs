@@ -118,8 +118,9 @@ import {
   certifiedTarget,
   guardedPostgresStep,
   postgresImageOverride,
+  postgresProbeRequest,
   postgresProbeScript,
-  postgresStateScript,
+  postgresStateRecord,
   readPostgresTarget,
   readPostgresTargetFromTree,
 } from "./postgres-guard.mjs";
@@ -176,6 +177,7 @@ import {
   sshScript as boxScript,
 } from "./lib/remote.mjs";
 import { OPTIONAL_VHOST_PROBES } from "./smoke-prod.mjs";
+import { createDataProdClient } from "./lib/data-prod.mjs";
 
 // The ssh/ship primitives live in ./lib/remote.mjs so the staging slot tool
 // drives its box through exactly the same channel (#2194). They are re-exported
@@ -212,7 +214,7 @@ const IMAGE_RETENTION = 3;
 // which reads and ships the committed SHA through git).
 let LOCAL_TREE = null;
 const API_COMPOSE = `${REMOTE_TREE}/infra/deploy/compose/api-prod`;
-const DATA_COMPOSE = `${REMOTE_TREE}/infra/deploy/compose/data-prod`;
+// #3313: ds-data-prod's compose dir is the entrypoint's DATA_COMPOSE, addressed by its verbs.
 
 // --- #2981: the recorded release images ------------------------------------
 // api-prod builds nothing. A release runs only the digests `runtime-images.yml`
@@ -383,6 +385,60 @@ function targetFile(sha, path) {
 /** The ship: the committed SHA (`git archive`), or on the box the tree it runs from. */
 function shipTree(sha, host) {
   return shipCommittedTree(sha, host, prodShipOptions(host, { api: API_PROD, localTree: LOCAL_TREE }));
+}
+
+// #3313: ds-data-prod is reached only through the data verbs of its entrypoint (spec §5
+// «Data-prod verbs.»), one client per run, created on first use (after --local has
+// chosen the hosts). Its transition install takes the entrypoints this run holds: the
+// tree it runs from on the box, HEAD's committed blobs on the workstation.
+let dataProdClient = null;
+function dataProd() {
+  dataProdClient ??= createDataProdClient({
+    host: DATA_PROD,
+    bootstrapSources: () => (LOCAL_TREE ? treeReleaseSources(LOCAL_TREE) : committedReleaseSources()),
+  });
+  return dataProdClient;
+}
+
+/** Every box entrypoint read from an extracted tree, as `[{ source, dest }]`. */
+export function treeReleaseSources(tree) {
+  return BOX_ENTRYPOINTS.map(({ dest, path }) => ({ source: readFileSync(join(tree, ...path.split("/"))), dest }));
+}
+
+async function shipDataProd(sha) {
+  return shipCommittedTree(sha, DATA_PROD, {
+    ...prodShipOptions(DATA_PROD, { api: API_PROD, localTree: LOCAL_TREE }),
+    remoteCommand: await dataProd().command(["ship", sha]),
+  });
+}
+
+/** The data-env payload: the VPC address and the recorded PostgreSQL image ids. */
+export function dataProdEnvPayload(live, vpcIp = VPC_IP) {
+  const { services } = JSON.parse(postgresImageOverride(live));
+  return JSON.stringify({
+    vpcIp,
+    images: { postgres: services.postgres.image, pgbackrest: services.pgbackrest.image },
+  });
+}
+
+/** `--except <unit>` of the box-side rollback, as the data verbs' optional word. */
+export function dataProdExcept({ exceptUnit } = {}) {
+  return exceptUnit === undefined ? [] : [exceptUnit];
+}
+
+/** A durable data-prod step (`up`, `backup`): started and polled through its verbs. */
+function dataProdStep(sha, step, label) {
+  const verb = step === "up" ? "data-up" : step;
+  return runDurableStep(DATA_PROD, {
+    env: RELEASE_ENV,
+    sha,
+    step,
+    label,
+    retryFailed: RETRY_FAILED,
+    startStep: () => dataProd().call([verb, sha, ...(RETRY_FAILED ? ["retry-failed"] : [])]),
+    readStatus: () =>
+      dataProd().call(["status", RELEASE_ENV, sha], { sshOptions: ["-o", "ConnectTimeout=15"] }),
+  });
 }
 
 /**
@@ -1322,11 +1378,10 @@ function boxStep(host, sha, step, script, label) {
 let openReleaseSha = null;
 
 async function finishReleaseSucceeded(sha) {
-  for (const host of [API_PROD, DATA_PROD]) {
-    await sshScript(host, releaseFinishScript(RELEASE_ENV, sha, "succeeded"), {
-      label: "ds-release finish",
-    });
-  }
+  await sshScript(API_PROD, releaseFinishScript(RELEASE_ENV, sha, "succeeded"), {
+    label: "ds-release finish",
+  });
+  console.log(await dataProd().call(["finish", sha, "succeeded"]));
   openReleaseSha = null;
 }
 
@@ -1334,9 +1389,19 @@ async function finishReleaseSucceeded(sha) {
 // open, which is right — a re-run of the same SHA reattaches to it.
 function closeOpenReleaseAsFailed() {
   if (!openReleaseSha) return;
-  const script = releaseFinishScript(RELEASE_ENV, openReleaseSha, "failed");
+  const sha = openReleaseSha;
   openReleaseSha = null;
   for (const host of [API_PROD, DATA_PROD]) {
+    // #3313: ds-data-prod's `finish` verb, in the form this run already found (a
+    // release is open only after the data-prod calls that found it).
+    const script =
+      host === DATA_PROD
+        ? (dataProdClient?.knownCommand(["finish", sha, "failed"]) ?? null)
+        : releaseFinishScript(RELEASE_ENV, sha, "failed");
+    if (!script) {
+      console.error(`  ⚠ ${host}: the release stays open (no data-prod call was made). Close it with its \`finish ${sha} failed\` verb`);
+      continue;
+    }
     const r = spawnSync(
       ...boxSpawnArgs(host, script, ["-o", "ConnectTimeout=15", "-o", "BatchMode=yes"]),
       { stdio: ["ignore", "inherit", "pipe"], encoding: "utf8", timeout: 60_000 },
@@ -2037,7 +2102,7 @@ ${probed.map((s) => `probe ${s.name} ${s.image} ${s.port}`).join("\n")}`,
 // Read-only preflight; each subsequent guarded callback re-reads the cluster.
 export async function preparePostgresDeployment(
   sha,
-  { capture = sshCapture, certificate, readTarget = readPostgresTarget } = {},
+  { capture, certificate, readTarget = readPostgresTarget } = {},
 ) {
   const plan = readTarget(sha);
   const probePlan = {
@@ -2045,8 +2110,16 @@ export async function preparePostgresDeployment(
     target: certifiedTarget(plan.target, certificate),
     preferRecordedImages: !certificate,
   };
+  // #3313: ds-data-prod's `postgres-probe` verb; `capture(host, script)` is the shell
+  // transport of the read-only operator check (postgres-artifact-check.mjs).
   const read = async () =>
-    JSON.parse(await capture(DATA_PROD, postgresProbeScript(probePlan)));
+    JSON.parse(
+      capture
+        ? await capture(DATA_PROD, postgresProbeScript(probePlan))
+        : await dataProd().call(["postgres-probe"], {
+            input: JSON.stringify(postgresProbeRequest(probePlan)),
+          }),
+    );
   let live = await read();
   const expected = assertPostgresEvidence({ ...plan, live, certificate });
   return {
@@ -2156,22 +2229,20 @@ async function deploy(hotfixRef = null, local = null) {
   await postgres.run(async ({ live }) => {
     // Outside the shipped tree: an interrupted archive swap must not rewrite
     // the provenance of the still-running PostgreSQL image on re-entry.
-    await sshScript(DATA_PROD, postgresStateScript(live), {
-      label: "PostgreSQL source checkpoint",
-    });
+    await dataProd().call(["postgres-checkpoint"], { input: postgresStateRecord(live) });
     await shipTree(sha, API_PROD);
   });
   ok(`archive → ${API_PROD}`, t);
   t = Date.now();
-  await postgres.run(() => shipTree(sha, DATA_PROD));
+  await postgres.run(() => shipDataProd(sha));
   ok(`archive → ${DATA_PROD}`, t);
   // #2982: the durable entrypoint comes from the tree just shipped, every run (with
   // the CI keys' forced command ds-deploy-entrypoint, #2984).
   walk.phase("install");
-  for (const host of [API_PROD, DATA_PROD]) {
-    // #2987: the install also keeps this tree as the box-side rollback's tooling tree.
-    await sshScript(host, releaseInstallScript(PROD_LIVE_TREE, { sha }), { label: "install ds-release" });
-  }
+  // #2987: the install also keeps this tree as the box-side rollback's tooling tree.
+  await sshScript(API_PROD, releaseInstallScript(PROD_LIVE_TREE, { sha }), { label: "install ds-release" });
+  // #3313: ds-data-prod installs from the tree it was just shipped, box-side.
+  await dataProd().call(["install", sha]);
   ok("ds-release + ds-deploy-entrypoint installed on both boxes");
   openReleaseSha = sha;
 
@@ -2183,32 +2254,12 @@ async function deploy(hotfixRef = null, local = null) {
   // the compose calls after it (#2982).
   walk.phase("data-prod-env");
   await postgres.run(({ live }) =>
-    sshScript(
-      DATA_PROD,
-      `cd ${DATA_COMPOSE}
-printf 'VPC_IP=%s\\n' '${VPC_IP}' > .env
-printf '%s\\n' '${postgresImageOverride(live)}' > .postgres-artifacts.json
-`,
-      { label: "data-prod compose env" },
-    ),
+    dataProd().call(["data-env"], { input: dataProdEnvPayload(live) }),
   );
   walk.phase("data-prod-up");
-  await postgres.run(() =>
-    boxStep(
-      DATA_PROD,
-      sha,
-      "up",
-      `cd ${DATA_COMPOSE}
-sudo docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest
-sudo docker compose up -d --no-deps redis
-`,
-      "data-prod up",
-    ),
-  );
+  await postgres.run(() => dataProdStep(sha, "up", "data-prod up"));
   await postgres.run(({ live, sourceHash }) =>
-    sshScript(DATA_PROD, postgresStateScript(live, sourceHash), {
-      label: "PostgreSQL artifact checkpoint",
-    }),
+    dataProd().call(["postgres-checkpoint"], { input: postgresStateRecord(live, sourceHash) }),
   );
   ok("postgres + redis + pgbackrest up", t);
 
@@ -2219,21 +2270,8 @@ sudo docker compose up -d --no-deps redis
   // combined with synchronous WAL archiving it yields PITR to just-before-migrate
   // so an app-only rollback never needs a DB rollback.
   walk.phase("backup");
-  await boxStep(
-    DATA_PROD,
-    sha,
-    "backup",
-    `cd ${DATA_COMPOSE}
-sudo docker compose exec -T pgbackrest /usr/local/bin/backup.sh incr
-`,
-    "pgbackrest checkpoint",
-  );
-  const info = await sshCapture(
-    DATA_PROD,
-    `cd ${DATA_COMPOSE}
-sudo docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info | sed -n '1,20p'
-`,
-  );
+  await dataProdStep(sha, "backup", "pgbackrest checkpoint");
+  const info = await dataProd().call(["backup-info"]);
   ok("pre-migrate incr backup taken", t);
   console.log(
     info
@@ -2561,9 +2599,7 @@ async function rollback(shaArg, local = null) {
     const verdict = await assertRollbackAllowed({
       sha,
       readProdCutoverState: makeProdCutoverReader({
-        sshCapture,
-        host: DATA_PROD,
-        composeDir: DATA_COMPOSE,
+        readPresence: () => dataProd().call(["rollback-floor"]),
       }),
       // The box has no git: the fetched target tree answers (#2987).
       targetCarriesMigration: local
@@ -2596,16 +2632,16 @@ async function rollback(shaArg, local = null) {
     } catch (e) {
       die(`--rollback: ${e.message}`);
     }
-    for (const host of [API_PROD, DATA_PROD]) {
-      try {
-        await sshScript(host, releaseInstallFromSourceScript(releaseSources), {
-          label: "install ds-release",
-        });
-      } catch (e) {
-        die(`--rollback: cannot install ds-release on ${host} (${e.message}); prod was not rolled back`);
-      }
+    // #3313: ds-data-prod takes no script; it keeps the entrypoints its last forward
+    // release installed (the floor read above already reached its verbs).
+    try {
+      await sshScript(API_PROD, releaseInstallFromSourceScript(releaseSources), {
+        label: "install ds-release",
+      });
+    } catch (e) {
+      die(`--rollback: cannot install ds-release on ${API_PROD} (${e.message}); prod was not rolled back`);
     }
-    ok("ds-release + ds-deploy-entrypoint installed on both boxes from the operator checkout");
+    ok("ds-release + ds-deploy-entrypoint installed on ds-api-prod from the operator checkout");
   }
 
   // #2982: a release step outlives the operator session that started it. A
@@ -2613,7 +2649,8 @@ async function rollback(shaArg, local = null) {
   // being rolled off back) is refused, read-only, before the first state change.
   for (const host of [API_PROD, DATA_PROD]) {
     try {
-      await sshCapture(host, releaseCheckScript(RELEASE_ENV, own), { stderr: "pipe" });
+      if (host === DATA_PROD) await dataProd().call(["check", ...dataProdExcept(own)]);
+      else await sshCapture(host, releaseCheckScript(RELEASE_ENV, own), { stderr: "pipe" });
     } catch (e) {
       die(`--rollback refused on ${host}: ${e.message}`);
     }
@@ -2687,9 +2724,7 @@ done`,
   // #3274: the target's configs are on disk from here; a supersede or `up -d` that
   // fails puts the running ones back, so the tree matches what still runs.
   try {
-    await sshScript(DATA_PROD, releaseSupersedeScript(RELEASE_ENV, undefined, own), {
-      label: "supersede the data-prod release record",
-    });
+    await dataProd().call(["supersede", ...dataProdExcept(own)], { stream: true });
     step("api-prod: up -d previous tag (NO build, NO migrate — app tier only)");
     await sshScript(
       API_PROD,

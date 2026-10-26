@@ -516,7 +516,7 @@ test("3274: the rollback writes and validates the target's configs before its up
     "await backupRuntimeConfigs(sha, { rollback: true });",
     "runtimeConfigInstallScript(targetConfigs)",
     'await assertRuntimeConfigsValid(targetConfigs, { swapped: "Nothing was rolled back" });',
-    "DATA_PROD, releaseSupersedeScript(RELEASE_ENV, undefined, own)",
+    'dataProd().call(["supersede", ...dataProdExcept(own)]',
     '{ label: "rollback up" }',
     "await applyRuntimeConfigsOrDie();",
     "await verifyRunningSha(sha, services);",
@@ -532,7 +532,7 @@ test("3274: a rollback that dies between the validate and its up -d puts the run
   );
   assert.match(
     swap,
-    /try \{[\s\S]*DATA_PROD, releaseSupersedeScript\(RELEASE_ENV, undefined, own\)[\s\S]*\{ label: "rollback up" \}[\s\S]*\} catch \(e\) \{[\s\S]*await restoreRuntimeConfigsOnDisk\(\)[\s\S]*die\(/,
+    /try \{[\s\S]*dataProd\(\)\.call\(\["supersede", \.\.\.dataProdExcept\(own\)\][\s\S]*\{ label: "rollback up" \}[\s\S]*\} catch \(e\) \{[\s\S]*await restoreRuntimeConfigsOnDisk\(\)[\s\S]*die\(/,
   );
 });
 

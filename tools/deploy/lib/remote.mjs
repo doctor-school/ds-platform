@@ -432,7 +432,7 @@ function shellQuote(s) {
 export async function shipTree(
   sha,
   host,
-  { liveDir, preserved, asRoot, tmpPrefix = "ds-deploy", sourceDir } = {},
+  { liveDir, preserved, asRoot, tmpPrefix = "ds-deploy", sourceDir, remoteCommand } = {},
 ) {
   const tmp = join(tmpdir(), `${tmpPrefix}-${sha.slice(0, 12)}.tar.gz`);
   if (host === LOCAL_EXECUTOR && !sourceDir) {
@@ -452,7 +452,9 @@ export async function shipTree(
   });
   try {
     await new Promise((resolve, reject) => {
-      const child = spawn(...boxSpawnArgs(host, shipTreeCommand({ liveDir, preserved, asRoot })), {
+      // #3313: ds-data-prod takes the archive through its `ship <sha>` verb instead.
+      const command = remoteCommand ?? shipTreeCommand({ liveDir, preserved, asRoot });
+      const child = spawn(...boxSpawnArgs(host, command), {
         stdio: ["pipe", "inherit", "inherit"],
       });
       child.on("error", reject);
@@ -780,11 +782,22 @@ export async function runDurableStep(
     maxPollFailures = RELEASE_POLL_MAX_FAILURES,
     maxLostReads = RELEASE_POLL_MAX_LOST,
     now = Date.now,
+    // #3313: ds-data-prod starts and reads its units through its own verbs.
+    startStep,
+    readStatus,
   },
 ) {
   const unit = releaseUnitName(env, sha, step);
-  const start = () =>
-    capture(host, releaseStartScript({ env, sha, step, script, retryFailed }), { stderr: "pipe" });
+  const start =
+    startStep ??
+    (() => capture(host, releaseStartScript({ env, sha, step, script, retryFailed }), { stderr: "pipe" }));
+  const readStatusLine =
+    readStatus ??
+    (() =>
+      capture(host, releaseStatusScript(env, sha), {
+        sshOptions: ["-o", "ConnectTimeout=15"],
+        stderr: "pipe",
+      }));
   let started;
   try {
     started = await start();
@@ -808,12 +821,7 @@ export async function runDurableStep(
     const elapsed = Math.round((now() - t0) / 1000);
     let status;
     try {
-      status = parseReleaseStatus(
-        await capture(host, releaseStatusScript(env, sha), {
-          sshOptions: ["-o", "ConnectTimeout=15"],
-          stderr: "pipe",
-        }),
-      );
+      status = parseReleaseStatus(await readStatusLine());
       failures = 0;
     } catch (error) {
       // The box answered: its record is unreadable. Not lost contact, not transient.

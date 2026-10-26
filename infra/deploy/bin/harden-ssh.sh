@@ -7,6 +7,13 @@
 #
 #   sudo harden-ssh.sh --role prod|stage|data --breakglass-pubkey <file>
 #                      [--ci-pubkey <file>]... [--dry-run]
+#   sudo harden-ssh.sh --role data --from-release [--dry-run]
+#
+# --from-release (#3320) is the prod release's own data-prod converge, run over the
+# hop as deploy from the root-owned copy the data `install` verb places at
+# /usr/local/lib/ds-platform/harden-ssh.sh. It writes nothing of breakglass's: it
+# checks, before any change, that the break-glass path is in place and usable (see
+# check_breakglass_path) and refuses, changing nothing, when it is not.
 #
 # It converges:
 #   - /etc/ssh/sshd_config.d/10-ds-hardening.conf (the drop-in below);
@@ -98,19 +105,26 @@ say() { printf 'harden-ssh: %s\n' "$*"; }
 usage() { printf 'harden-ssh: %s\n' "$*" >&2; exit 2; }
 fail() { printf 'harden-ssh: %s\n' "$*" >&2; exit 1; }
 
-role= breakglass_file= dry_run=0
+role= breakglass_file= dry_run=0 from_release=0
 ci_files=()
 while [[ $# -gt 0 ]]; do
   case $1 in
     --role) role=${2-}; shift 2 || usage "--role needs a value" ;;
     --breakglass-pubkey) breakglass_file=${2-}; shift 2 || usage "--breakglass-pubkey needs a file" ;;
     --ci-pubkey) ci_files+=("${2-}"); shift 2 || usage "--ci-pubkey needs a file" ;;
+    --from-release) from_release=1; shift ;;
     --dry-run) dry_run=1; shift ;;
     *) usage "unknown argument: $1" ;;
   esac
 done
 [[ $role =~ ^(prod|stage|data)$ ]] || usage "--role must be prod, stage or data"
-[[ -n $breakglass_file ]] || usage "--breakglass-pubkey <file> is required"
+if [[ $from_release == 1 ]]; then
+  [[ $role == data ]] || usage "--from-release is --role data's: the release converges ds-data-prod only"
+  [[ -z $breakglass_file ]] ||
+    usage "--from-release takes no --breakglass-pubkey: the break-glass user is the box's own and is only checked"
+else
+  [[ -n $breakglass_file ]] || usage "--breakglass-pubkey <file> is required"
+fi
 [[ -n $ROOT || $dry_run == 1 || $EUID -eq 0 ]] || usage "run as root (sudo)"
 [[ $role != data || ${#ci_files[@]} == 0 ]] || usage "--role data takes no --ci-pubkey: no CI key reaches the data box"
 if [[ $role == prod ]]; then
@@ -131,7 +145,8 @@ read_pubkey() {
 }
 key_body() { local f; read -r _ f _ <<<"$1"; printf '%s' "$f"; }
 
-breakglass_key=$(read_pubkey "$breakglass_file")
+breakglass_key=
+[[ $from_release == 1 ]] || breakglass_key=$(read_pubkey "$breakglass_file")
 ci_keys=()
 for f in ${ci_files[@]+"${ci_files[@]}"}; do
   k=$(read_pubkey "$f")
@@ -161,6 +176,39 @@ if [[ $role == data ]]; then
   [[ $hop_key =~ $PUBKEY_RE ]] || fail "the hop line carries no bare public key; nothing was changed"
   want_hop=$HOP_FORCED${hop_line#"$HOP_FORCED"}
 fi
+
+sudoers_line='breakglass ALL=(ALL) NOPASSWD:ALL
+'
+
+# --- data from a release: the break-glass path, proven box-side (#3320) -------------
+# The release runs this over the hop as deploy, so no breakglass session proves the
+# login. These checks stand in for it, before anything changes: the user exists with
+# a login shell and an unexpired account (a `!` password is the normal key-only
+# state, not a lock), its authorized_keys holds a key, its sudoers file passes
+# `visudo -c` and grants it NOPASSWD sudo; `sshd -t` runs right after the sshd files
+# below. The key itself is the box's own and is never rewritten from here.
+SHADOW=$ROOT/etc/shadow
+KEY_TYPE_RE='(^|[[:space:],"])(ssh-ed25519|sk-ssh-ed25519@openssh\.com|ecdsa-sha2-nistp(256|384|521)|ssh-rsa) [A-Za-z0-9+/]{16,}=*([[:space:]]|$)'
+refuse_release() { fail "$*; nothing was changed"; }
+check_breakglass_path() {
+  local entry shell expire today
+  entry=$(grep '^breakglass:' "$PASSWD" 2>/dev/null | head -n1) || true
+  [[ -n $entry ]] || refuse_release "no user breakglass on this box: the break-glass path is not in place"
+  shell=${entry##*:}
+  [[ -n $shell && $shell != */nologin && $shell != */false ]] ||
+    refuse_release "breakglass has no login shell ($shell)"
+  entry=$(grep '^breakglass:' "$SHADOW" 2>/dev/null | head -n1) || true
+  [[ -n $entry ]] || refuse_release "breakglass is locked: no shadow entry in $SHADOW"
+  IFS=: read -r _ _ _ _ _ _ _ expire _ <<<"$entry"
+  today=$(($(date +%s) / 86400))
+  [[ -z $expire ]] || ((expire > today)) || refuse_release "breakglass is locked: its account expired (day $expire)"
+  grep -Ev '^[[:space:]]*(#|$)' "$BREAKGLASS_HOME/.ssh/authorized_keys" 2>/dev/null | grep -Eq "$KEY_TYPE_RE" ||
+    refuse_release "breakglass's authorized_keys holds no key"
+  grep -qxF "${sudoers_line%$'\n'}" "$BREAKGLASS_SUDOERS" 2>/dev/null ||
+    refuse_release "$BREAKGLASS_SUDOERS grants breakglass no NOPASSWD sudo"
+  visudo -cf "$BREAKGLASS_SUDOERS" >/dev/null || refuse_release "visudo -c rejects $BREAKGLASS_SUDOERS"
+}
+[[ $from_release == 0 ]] || check_breakglass_path
 
 changed=0 sshd_changed=0
 backups=()
@@ -201,6 +249,7 @@ install_sudoers() {
 }
 
 breakglass_ready() {
+  [[ $from_release == 0 ]] || return 0 # check_breakglass_path passed above
   grep -q '^breakglass:' "$PASSWD" &&
     [[ $(cat "$BREAKGLASS_HOME/.ssh/authorized_keys" 2>/dev/null) == "$breakglass_key" ]] &&
     [[ $(cat "$BREAKGLASS_SUDOERS" 2>/dev/null; printf x) == "${sudoers_line}x" ]]
@@ -240,14 +289,18 @@ if [[ -f $SSHD_CONFIG ]] && grep -E "$ROOTLOGIN_RE" "$SSHD_CONFIG" | grep -Eqv "
   fi
   sshd_changed=1
 fi
+# From a release the new sshd config is proven before anything else changes.
+if [[ $from_release == 1 && $dry_run == 0 ]] && ! sshd -t -f "$SSHD_CONFIG"; then
+  restore_sshd_files
+  refuse_release "sshd -t rejected the config; sshd files restored, ssh NOT reloaded"
+fi
 
-# --- breakglass user ----------------------------------------------------------------
+# --- breakglass user (a release only checks it, above) --------------------------------
+if [[ $from_release == 0 ]]; then
 if ! grep -q '^breakglass:' "$PASSWD" 2>/dev/null; then
   note "create user breakglass (bash, group sudo)"
   [[ $dry_run == 1 ]] || useradd ${ROOT:+--prefix "$ROOT"} -m -s /bin/bash -G sudo breakglass
 fi
-sudoers_line='breakglass ALL=(ALL) NOPASSWD:ALL
-'
 if ! { [[ -f $BREAKGLASS_SUDOERS ]] && [[ $(cat "$BREAKGLASS_SUDOERS"; printf x) == "${sudoers_line}x" ]]; }; then
   note "write $BREAKGLASS_SUDOERS"
   [[ $dry_run == 1 ]] || install_sudoers "$BREAKGLASS_SUDOERS" "$sudoers_line" "the breakglass sudoers file"
@@ -255,6 +308,7 @@ fi
 if converge_file "$BREAKGLASS_HOME/.ssh/authorized_keys" 0600 "$breakglass_key"$'\n' && [[ $dry_run == 0 ]]; then
   chmod 0700 "$BREAKGLASS_HOME/.ssh"
   chown -R breakglass:breakglass "$BREAKGLASS_HOME/.ssh"
+fi
 fi
 
 # --- root keys: only once break-glass is proven in place ------------------------------
@@ -300,9 +354,22 @@ if [[ $role == prod || $role == data ]]; then
   [[ $dry_run == 1 ]] || breakglass_ready ||
     fail "breakglass is not in place; deploy's sudo rights and keys were left as they are"
   # The files above are not a working login: only a converge run from a breakglass
-  # session proves one, before the operator's own deploy session loses its key.
-  [[ $dry_run == 1 || ${SUDO_USER-} == breakglass ]] ||
+  # session proves one, before the operator's own deploy session loses its key. A
+  # data run from a release has proven the break-glass path box-side instead (#3320).
+  [[ $dry_run == 1 || $from_release == 1 || ${SUDO_USER-} == breakglass ]] ||
     fail "run --role $role from a breakglass session (sudo as breakglass); deploy's sudo rights and keys were left as they are"
+  # Data: deploy keeps the hop line, behind the forced command, and no other key. It
+  # goes first: a hop session lost right after it leaves a box the forced command
+  # serves (the next release goes on through the verbs); lost before it, deploy keeps
+  # its shell and sudo and the next release converges again.
+  if [[ $role == data ]] && ! [[ $(cat "$DEPLOY_KEYS"; printf x) == "$want_hop"$'\n'x ]]; then
+    note "put the hop key behind the forced command and remove every other deploy key from $DEPLOY_KEYS"
+    if [[ $dry_run == 0 ]]; then
+      cp -p "$DEPLOY_KEYS" "$DEPLOY_KEYS.ds-harden.new"
+      printf '%s\n' "$want_hop" >"$DEPLOY_KEYS.ds-harden.new"
+      mv -f "$DEPLOY_KEYS.ds-harden.new" "$DEPLOY_KEYS"
+    fi
+  fi
   for f in "$SUDOERS_D"/*; do
     [[ -f $f && $f != "$DEPLOY_SUDOERS" && $f != "$BREAKGLASS_SUDOERS" && ${f##*/} != *.* ]] || continue
     grep -Eq '^[[:space:]]*deploy[[:space:]]' "$f" || continue
@@ -324,15 +391,6 @@ if [[ $role == prod || $role == data ]]; then
       rest=$(grep -E "$PROD_CI_RE" "$DEPLOY_KEYS" || true)
       cp -p "$DEPLOY_KEYS" "$DEPLOY_KEYS.ds-harden.new"
       { [[ -z $rest ]] || printf '%s\n' "$rest"; } >"$DEPLOY_KEYS.ds-harden.new"
-      mv -f "$DEPLOY_KEYS.ds-harden.new" "$DEPLOY_KEYS"
-    fi
-  fi
-  # Data: deploy keeps the hop line, behind the forced command, and no other key.
-  if [[ $role == data ]] && ! [[ $(cat "$DEPLOY_KEYS"; printf x) == "$want_hop"$'\n'x ]]; then
-    note "put the hop key behind the forced command and remove every other deploy key from $DEPLOY_KEYS"
-    if [[ $dry_run == 0 ]]; then
-      cp -p "$DEPLOY_KEYS" "$DEPLOY_KEYS.ds-harden.new"
-      printf '%s\n' "$want_hop" >"$DEPLOY_KEYS.ds-harden.new"
       mv -f "$DEPLOY_KEYS.ds-harden.new" "$DEPLOY_KEYS"
     fi
   fi

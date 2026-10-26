@@ -6,7 +6,9 @@ import { expect, type Locator, type Page } from "@playwright/test";
  * each activation widens the URL horizon and renders the wider reading). A
  * card's position depends on the seed instant (a slot's golden season is
  * relative to its own pin), so a spec never assumes it is on the first screen
- * (#3229). Returns the one `[data-webinar-card]` holding `link`.
+ * (#3229). Returns the one `[data-webinar-card]` holding `link`. Every call
+ * first waits for `load` + `networkidle`, so a second call on an already
+ * settled page pays that wait again.
  */
 export async function reachFeedCard(page: Page, link: Locator) {
   // Generic navigation stops at DOMContentLoaded. The server-rendered feed link

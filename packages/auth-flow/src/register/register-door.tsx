@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import Link from "next/link";
 
 import {
   DOCTOR_REGISTER_CONSENT_REFUSAL_CODES,
@@ -34,6 +33,12 @@ import { createAuthClient } from "../client/auth-client";
 import { authErrorMessage } from "../errors";
 import { registerFieldHint, registerFieldRules } from "../fields";
 import type { CompletionTarget } from "../client/signed-in-landing";
+import { DoorLink } from "../sign-in-host/door-link";
+import {
+  codeStepOf,
+  isLeavingHost,
+  pushCodeStep,
+} from "../sign-in-host/host-history";
 import { settleAddress } from "../sign-in-host/settle-door-path";
 import { VerifyDoor } from "../verify/verify-door";
 import type {
@@ -63,10 +68,11 @@ import { RegisterGlyph } from "./register-glyph";
  * step (`VerifyDoor`) IN PLACE on this document — no navigation, because the
  * sign-in host refuses a non-top-level request to a door (EARS-70) — so the
  * typed values stay in this tab's memory and ride with the code (EARS-41,
- * EARS-23 re-registration). The address settles onto the host's `/verify`
- * (address + arrival target, 021 EARS-10) without a history entry, so a reload
- * enters that route's step; «← Изменить почту» shows the form again with every
- * typed field and settles the address back onto this door.
+ * EARS-23 re-registration). The step takes its own same-document history
+ * entry on the host's `/verify` (address + arrival target, 021 EARS-10), so a
+ * reload enters that route's step; browser Back — and «← Изменить почту», which
+ * steps back the same way — shows the form again with every typed field, and
+ * Forward the step.
  */
 export type RegisterDoorProps = {
   /** Everything that differs between the two storefronts (rows 9, 47-64). */
@@ -316,23 +322,40 @@ export function RegisterDoor({
     setPendingRegistration({ identifier: email, registration, form: values });
     setInitialValues(values);
 
-    // Row 51 / 003 EARS-24 amended — the code step renders in place, and the
-    // address settles onto the host's `/verify` with the address and the
-    // arrival context (021 EARS-10), without a history entry: a reload then
-    // enters that route's step, naming the address.
-    settleAddress(
+    // Row 51 / 003 EARS-24 amended — the code step renders in place on its
+    // OWN history entry, on the host's `/verify` with the address and the
+    // arrival context (021 EARS-10): a reload enters that route's step, naming
+    // the address; Back returns to this form, Forward to the step.
+    pushCodeStep(
       withReturnTarget(
         `${config.routes.verify}${config.routes.verify.includes("?") ? "&" : "?"}email=${encodeURIComponent(email)}`,
         returnTo,
       ),
+      email,
     );
     setCodeStepFor(email);
   }
 
-  // 003 EARS-24 amended — «← Изменить почту» of the in-place step: the form
-  // again, every typed field from memory (the remount key below refills it),
-  // and the address settled back onto this door without a history entry.
+  // 003 EARS-24 amended — Back / Forward between the form's entry and the code
+  // step's own: the entry names which shows. The form refills every typed
+  // field from memory (the remount key below). Once a finished step leaves the
+  // host (`leaveHost` steps back off the code step's entry), nothing changes.
+  useEffect(() => {
+    function onPopState(event: PopStateEvent) {
+      if (isLeavingHost()) return;
+      setCodeStepFor(codeStepOf(event.state));
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  // 003 EARS-24 amended — «← Изменить почту» of the in-place step is browser
+  // Back off the step's own entry: the same form, the same Forward.
   function backToForm() {
+    if (codeStepOf(window.history.state) !== null) {
+      window.history.back();
+      return;
+    }
     settleAddress(withReturnTarget(config.routes.register, returnTo));
     setCodeStepFor(null);
   }
@@ -457,9 +480,9 @@ export function RegisterDoor({
       // the arrival context carried onward (rule S3).
       footer={
         <DsLink asChild>
-          <Link href={withReturnTarget(config.routes.login, returnTo)}>
+          <DoorLink href={withReturnTarget(config.routes.login, returnTo)}>
             {copy.haveAccount}
-          </Link>
+          </DoorLink>
         </DsLink>
       }
       returnContextSlot={returnContextPlate}

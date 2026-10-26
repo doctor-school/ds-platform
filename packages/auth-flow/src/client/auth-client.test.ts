@@ -423,9 +423,13 @@ describe("003 EARS-70: the sign-in host transport", () => {
     });
   });
 
-  it("003 EARS-5: a redirect success navigates top-level and never settles", async () => {
+  it("003 EARS-5: a redirect success leaves top-level by REPLACING the host's history entry and never settles", async () => {
     const assign = vi.fn();
-    vi.stubGlobal("window", { location: { assign } });
+    const replace = vi.fn();
+    vi.stubGlobal("window", {
+      location: { assign, replace },
+      history: { state: null },
+    });
     fetchMock.mockResolvedValueOnce(
       json({ status: "redirect", url: "https://id.example/callback?x=1" }),
     );
@@ -435,8 +439,9 @@ describe("003 EARS-70: the sign-in host transport", () => {
       .login({ identifier: "doc@clinic.ru", password: "x" })
       .then(() => (settled = true));
     await vi.waitFor(() =>
-      expect(assign).toHaveBeenCalledWith("https://id.example/callback?x=1"),
+      expect(replace).toHaveBeenCalledWith("https://id.example/callback?x=1"),
     );
+    expect(assign).not.toHaveBeenCalled();
     await new Promise((r) => setTimeout(r, 10));
     expect(settled).toBe(false);
   });

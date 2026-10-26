@@ -14,9 +14,10 @@ import {
  * host proxy refuses a non-top-level request to a door, EARS-70), so the
  * typed values stay in this tab's memory. They ride with the code (EARS-41,
  * the EARS-23 re-registration applies them), and «← Изменить почту» returns
- * to the form with every entered field, the password included. The address
- * settles onto `/verify?email=…` and back onto `/register` without a history
- * entry; nothing is written to browser storage.
+ * to the form with every entered field, the password included. The step takes
+ * its own same-document history entry on `/verify?email=…`, so browser Back
+ * (like «← Изменить почту») returns to the filled form on `/register`; nothing
+ * is written to browser storage.
  */
 
 const EMAIL = "doctor@clinic.ru";
@@ -64,7 +65,7 @@ function body(request: Request): Record<string, unknown> {
 test.describe("003 EARS-24: the in-place code step on the sign-in host", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test("003 EARS-24: the code step renders on the door's own document and the address settles on /verify without a history entry", async ({
+  test("003 EARS-24: the code step renders on the door's own document and takes its own history entry on /verify", async ({
     page,
   }) => {
     await page.goto(doorPath("doctor", "register"));
@@ -78,7 +79,7 @@ test.describe("003 EARS-24: the in-place code step on the sign-in host", () => {
     expect(settled.searchParams.get("authRequest")).toBe(
       formPostFields("doctor", "register").authRequest,
     );
-    expect(await page.evaluate(() => window.history.length)).toBe(depth);
+    expect(await page.evaluate(() => window.history.length)).toBe(depth + 1);
     await expect(page.getByTestId("verify-card")).toContainText(EMAIL);
   });
 

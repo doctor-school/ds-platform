@@ -36,6 +36,7 @@ import {
   type CompletionTarget,
 } from "../client/signed-in-landing";
 import { consentRefusalMessage } from "../register/consent-refusal";
+import { hopHostDoor } from "../sign-in-host/host-history";
 import { withReturnTarget } from "@ds/schemas";
 import { VerifyGlyph } from "./verify-glyph";
 
@@ -258,12 +259,13 @@ export function VerifyDoor({
       succeeded={succeeded}
       // 003 EARS-24 amended — «← Изменить почту»: in place, the door that
       // rendered this step shows its form again with every typed field; on
-      // the `/verify` route (nothing held) back to this host's empty form,
-      // the arrival target carried onward (rule S3).
+      // the `/verify` route (nothing held) a door hop to this host's empty
+      // form (`hopHostDoor`, EARS-70), the arrival target carried onward
+      // (rule S3).
       onBack={
         onBack ??
         (() =>
-          router.push(withReturnTarget(config.routes.register, carriedTarget)))
+          hopHostDoor(withReturnTarget(config.routes.register, carriedTarget)))
       }
       resend={{
         nonce: resendNonce,

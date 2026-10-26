@@ -28,6 +28,7 @@ import type {
 } from "@ds/schemas";
 
 import type { AuthFlowApiConfig } from "../host-config";
+import { leaveHost } from "../sign-in-host/host-history";
 
 /**
  * The ONE same-origin BFF auth client both storefronts mount (#2027, gate rows
@@ -176,9 +177,11 @@ export function createAuthClient(api: AuthFlowApiConfig) {
     if (redirect) {
       // 003 EARS-5 (amended) — the host's credential step is done: the API
       // finalised the auth request, and the browser leaves for the URL it
-      // named as a top-level navigation. The promise never settles, so no
-      // storefront completion of the calling screen runs on this origin.
-      window.location.assign(redirect);
+      // named as a top-level navigation that REPLACES the host's history
+      // entry (`leaveHost`): Back from the returned page is the page before
+      // the sign-in, never this spent address. The promise never settles, so
+      // no storefront completion of the calling screen runs on this origin.
+      leaveHost(redirect);
       return new Promise<TRes>(() => {});
     }
     return answer;

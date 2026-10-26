@@ -312,7 +312,7 @@ const address = () => `${window.location.pathname}${window.location.search}`;
 
 describe("005 EARS-2 / gate row 51: where an accepted registration goes next", () => {
   it.each(HOSTS)(
-    "003 EARS-24: the %s address settles on the /verify step with the address and a safe arrival context, without a history entry",
+    "003 EARS-24: the %s code step takes its OWN history entry on /verify with the address and a safe arrival context",
     async (_name, config) => {
       const depth = window.history.length;
       await submitForm(config, { returnTo: SAFE_TARGET });
@@ -321,7 +321,34 @@ describe("005 EARS-2 / gate row 51: where an accepted registration goes next", (
       expect(address()).toBe(
         `/verify?email=${encodeURIComponent(EMAIL)}&returnTo=${encodeURIComponent(SAFE_TARGET)}`,
       );
+      expect(window.history.length).toBe(depth + 1);
+    },
+  );
+
+  it.each(HOSTS)(
+    "003 EARS-24: browser Back from the %s code step returns to the form with EVERY typed field; Forward returns to the step",
+    async (_name, config) => {
+      await submitForm(config, { returnTo: SAFE_TARGET });
+      await screen.findByTestId("verify-submit");
+      const depth = window.history.length;
+
+      act(() => window.history.back());
+
+      expect(await screen.findByTestId("register-email")).toHaveValue(EMAIL);
+      expect(screen.getByTestId("register-password")).toHaveValue(PASSWORD);
+      const boxes = screen
+        .getByTestId("registration-form")
+        .querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+      for (const box of Array.from(boxes)) expect(box.checked).toBe(true);
+      // The form's own entry: the address the door opened on.
+      expect(address()).toBe("/register");
+
+      act(() => window.history.forward());
+
+      expect(await screen.findByTestId("verify-submit")).toBeInTheDocument();
+      expect(screen.getByTestId("verify-card")).toHaveTextContent(EMAIL);
       expect(window.history.length).toBe(depth);
+      expect(push).not.toHaveBeenCalled();
     },
   );
 
@@ -460,10 +487,9 @@ describe("003 EARS-41 / 021 EARS-15.4: what the door holds for the code step", (
         .getByTestId("registration-form")
         .querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
       for (const box of Array.from(boxes)) expect(box.checked).toBe(true);
-      // The address settles back on the door, without a history entry.
-      expect(address()).toBe(
-        `/register?returnTo=${encodeURIComponent(SAFE_TARGET)}`,
-      );
+      // The step's own entry is left the way browser Back leaves it: the
+      // address is the door's again and no entry is added.
+      await waitFor(() => expect(address()).toBe("/register"));
       expect(window.history.length).toBe(depth);
       expect(push).not.toHaveBeenCalled();
     },

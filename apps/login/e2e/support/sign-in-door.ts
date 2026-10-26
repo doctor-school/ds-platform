@@ -81,6 +81,11 @@ const DOUBLE_PORT = Number(process.env.LOGIN_FAKE_API_PORT ?? 3216);
  */
 export const IDP_CALLBACK_URL = `http://127.0.0.1:${DOUBLE_PORT}/__idp/callback`;
 
+/** A storefront page of the double, the page a sign-in starts from (#3172). */
+export function storefrontPageUrl(name: string): string {
+  return `http://127.0.0.1:${DOUBLE_PORT}/__storefront/${name}`;
+}
+
 /** The host's success answer (`SignInHostStepResponseSchema`). */
 export function fulfillHostRedirect(route: Route): Promise<void> {
   return route.fulfill({

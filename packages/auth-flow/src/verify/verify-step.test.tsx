@@ -31,12 +31,20 @@ const h = vi.hoisted(() => ({
   registerForEvent: vi.fn(),
   push: vi.fn(),
   replace: vi.fn(),
+  hop: vi.fn(),
   refresh: vi.fn(),
   calls: [] as string[],
 }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: h.push, replace: h.replace, refresh: h.refresh }),
+}));
+
+// 003 EARS-70 / 71 — a hop between the host's doors is a top-level navigation
+// replacing the host's history entry, never a router navigation.
+vi.mock("../sign-in-host/host-history", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../sign-in-host/host-history")>()),
+  hopHostDoor: (href: string) => h.hop(href),
 }));
 
 vi.mock("../client/auth-client", async (importOriginal) => ({
@@ -122,6 +130,7 @@ beforeEach(() => {
   h.registerForEvent.mockReset().mockResolvedValue(undefined);
   h.push.mockReset();
   h.replace.mockReset();
+  h.hop.mockReset();
   clearPendingRegistration();
   // jsdom runs no layout and the `input-otp` code field probes the point under
   // the pointer on a timer; without the stub the first interaction throws.
@@ -501,9 +510,10 @@ describe("003 EARS-24 / row 76: the step's words and hops on the doctor /verify"
     );
 
     expect(screen.queryByTestId("verify-card")).toBeNull();
-    expect(h.replace).toHaveBeenCalledWith(
+    expect(h.hop).toHaveBeenCalledWith(
       `/register?returnTo=${encodeURIComponent(CARRIED_TARGET)}`,
     );
+    expect(h.replace).not.toHaveBeenCalled();
   });
 
   it("003 EARS-3 (#2455): the doctor confirms with the address and the code — no target travels with them", async () => {
@@ -520,7 +530,8 @@ describe("003 EARS-24 / row 76: the step's words and hops on the doctor /verify"
   /** «← Изменить почту» on the doctor code step, pressed; the hop it made. */
   async function backHref() {
     await setupUser().click(screen.getByTestId("verify-back"));
-    return h.push.mock.calls[0]?.[0] as string;
+    expect(h.push).not.toHaveBeenCalled();
+    return h.hop.mock.calls[0]?.[0] as string;
   }
 
   it("021 EARS-13 / 003 EARS-42: «← Изменить почту» carries the rule S3 target back to the registration door", async () => {

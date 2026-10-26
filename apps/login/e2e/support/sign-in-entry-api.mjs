@@ -176,6 +176,13 @@ createServer((req, res) => {
   const url = new URL(req.url ?? "/", `http://127.0.0.1:${PORT}`);
   if (url.pathname === "/health") return json(res, 200, { status: "ok" });
 
+  // A storefront page the person signs in FROM (#3172 history): where Back
+  // from the returned page must land.
+  if (url.pathname.startsWith("/__storefront/")) {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end("<!doctype html><title>Storefront page</title>");
+  }
+
   if (url.pathname === "/__idp/callback") {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     return res.end("<!doctype html><title>IdP callback</title>");

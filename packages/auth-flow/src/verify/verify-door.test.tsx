@@ -38,6 +38,7 @@ const h = vi.hoisted(() => ({
   registerForEvent: vi.fn(),
   push: vi.fn(),
   replace: vi.fn(),
+  hop: vi.fn(),
   refresh: vi.fn(),
   captchaMode: "bypass" as "bypass" | "manual",
   captchaProps: undefined as CaptchaProps | undefined,
@@ -45,6 +46,13 @@ const h = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: h.push, replace: h.replace, refresh: h.refresh }),
+}));
+
+// 003 EARS-70 / 71 — a hop between the host's doors is a top-level navigation
+// replacing the host's history entry, never a router navigation.
+vi.mock("../sign-in-host/host-history", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../sign-in-host/host-history")>()),
+  hopHostDoor: (href: string) => h.hop(href),
 }));
 
 vi.mock("../client/auth-client", async (importOriginal) => ({
@@ -113,6 +121,7 @@ beforeEach(() => {
     .mockResolvedValue({ status: "resend_requested" });
   h.registerForEvent.mockReset().mockResolvedValue({ registered: true });
   h.push.mockReset();
+  h.hop.mockReset();
   h.replace.mockReset();
   h.refresh.mockReset();
   h.captchaMode = "bypass";
@@ -417,9 +426,10 @@ describe("005 EARS-2 guest-through-auth completion on /verify", () => {
 
     await user.click(screen.getByTestId("verify-back"));
 
-    expect(h.push).toHaveBeenCalledWith(
+    expect(h.hop).toHaveBeenCalledWith(
       "/register?returnTo=%2Fwebinars%2Fahilles-042",
     );
+    expect(h.push).not.toHaveBeenCalled();
     expect(h.verify).not.toHaveBeenCalled();
   });
 
@@ -429,7 +439,7 @@ describe("005 EARS-2 guest-through-auth completion on /verify", () => {
 
     await user.click(screen.getByTestId("verify-back"));
 
-    expect(h.push).toHaveBeenCalledWith("/register");
+    expect(h.hop).toHaveBeenCalledWith("/register");
   });
 
   it("003 EARS-42: stepping back keeps the held values, so the form refills from them", async () => {
@@ -565,8 +575,8 @@ describe("003 EARS-40: a /verify with no address goes to /register (#2394)", () 
     window.history.replaceState(null, "", "/verify");
     mount({});
 
-    await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/register"));
-    expect(h.replace).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(h.hop).toHaveBeenCalledWith("/register"));
+    expect(h.hop).toHaveBeenCalledTimes(1);
     expect(h.push).not.toHaveBeenCalled();
     expect(screen.queryByTestId("verify-card")).not.toBeInTheDocument();
     expect(screen.queryByText("ваш аккаунт", { exact: false })).toBeNull();
@@ -581,7 +591,7 @@ describe("003 EARS-40: a /verify with no address goes to /register (#2394)", () 
     mount({ returnTo: "/webinars/ahilles-042" });
 
     await waitFor(() =>
-      expect(h.replace).toHaveBeenCalledWith(
+      expect(h.hop).toHaveBeenCalledWith(
         "/register?returnTo=%2Fwebinars%2Fahilles-042",
       ),
     );
@@ -592,7 +602,7 @@ describe("003 EARS-40: a /verify with no address goes to /register (#2394)", () 
     window.history.replaceState(null, "", "/verify");
     mount({ returnTo: "https://evil.example/phish" });
 
-    await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/register"));
+    await waitFor(() => expect(h.hop).toHaveBeenCalledWith("/register"));
   });
 
   it("003 EARS-40: the ?email= seed renders the step with the address as typed and its resend, no redirect", async () => {
@@ -603,6 +613,7 @@ describe("003 EARS-40: a /verify with no address goes to /register (#2394)", () 
     );
     expect(screen.getByTestId("verify-resend")).toBeInTheDocument();
     expect(h.replace).not.toHaveBeenCalled();
+    expect(h.hop).not.toHaveBeenCalled();
   });
 
   it("003 EARS-42 (#2607): the address stands bold exactly as typed, and a long one wraps inside the column", async () => {
@@ -619,7 +630,7 @@ describe("003 EARS-40: a /verify with no address goes to /register (#2394)", () 
     window.history.replaceState(null, "", "/verify#email=doc%40example.com");
     mount({});
 
-    await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/register"));
+    await waitFor(() => expect(h.hop).toHaveBeenCalledWith("/register"));
     expect(screen.queryByTestId("verify-card")).not.toBeInTheDocument();
   });
 });

@@ -31,10 +31,9 @@ export function SettleDoorPath({ door }: { door: SignInHostPageDoor }): null {
 /**
  * Replace the CURRENT history entry's address with `href` — no new entry, no
  * navigation, no request — so a later reload / Back / Forward re-enters the
- * door that address names. The one address settle of the sign-in host: the
- * door path above, and the registration door's in-place code step (003
- * EARS-24 amended), which settles onto `/verify?email=…` and back onto
- * `/register` the same way.
+ * door that address names: the door path above. The host's other history
+ * moves (door hops, the code step's own entry, leaving) live in
+ * `host-history.ts`.
  */
 export function settleAddress(href: string): void {
   window.history.replaceState(window.history.state, "", href);

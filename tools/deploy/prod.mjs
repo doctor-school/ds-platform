@@ -917,6 +917,17 @@ async function backupRuntimeConfigs(target, { rollback = false } = {}) {
   ok(`runtime configs backed up in ${PREVIOUS_RUNTIME_CONFIG_DIR}: ${verdict.detail}`);
 }
 
+/** Puts the backed-up configs back into the compose dir; returns the restore detail. */
+async function restoreRuntimeConfigsOnDisk() {
+  const verdict = runtimeConfigStepVerdict(
+    await sshCapture(API_PROD, runtimeConfigRestoreScript()).catch(
+      (err) => `runtime-config-restore=FAILED ${err.message}`,
+    ),
+    "restore",
+  );
+  return verdict.detail;
+}
+
 /** The pre-swap gate: `die` on an invalid config, after the previous ones are back on disk. */
 async function assertRuntimeConfigsValid(files, { swapped }) {
   const verdict = await validateRuntimeConfigs({ centrifugoConfig: files["centrifugo/config.json"] });
@@ -2262,7 +2273,16 @@ ${deployShaEnvScript(sha)}
 
   step("#3274: PRE-SWAP edge config validate (old containers still serving)");
   walk.phase("runtime-config-validate");
-  await assertRuntimeConfigsValid(targetRuntimeConfigs(sha), { swapped: "Nothing was swapped" });
+  let shippedConfigs;
+  try {
+    shippedConfigs = targetRuntimeConfigs(sha);
+  } catch (e) {
+    die(
+      `cannot read the shipped runtime configs of ${sha.slice(0, 12)} (${e.message}) —` +
+        " nothing was swapped; the previous containers still serve the previous configs",
+    );
+  }
+  await assertRuntimeConfigsValid(shippedConfigs, { swapped: "Nothing was swapped" });
 
   step("#2149: PRE-SWAP IdP converge + SMTP and policy read-back");
   t = Date.now();
@@ -2652,15 +2672,10 @@ done`,
       label: "rollback runtime configs",
     });
   } catch (e) {
-    const restored = runtimeConfigStepVerdict(
-      await sshCapture(API_PROD, runtimeConfigRestoreScript()).catch(
-        (err) => `runtime-config-restore=FAILED ${err.message}`,
-      ),
-      "restore",
-    );
+    const restored = await restoreRuntimeConfigsOnDisk();
     die(
       `--rollback: cannot write the target's runtime configs (${e.message}); nothing was rolled back;` +
-        ` restore of the running configs on disk: ${restored.detail}`,
+        ` restore of the running configs on disk: ${restored}`,
     );
   }
   await assertRuntimeConfigsValid(targetConfigs, { swapped: "Nothing was rolled back" });
@@ -2669,24 +2684,34 @@ done`,
   // supersedes their release records under the env lock (refused while a step
   // unit runs): a later deploy of the SHA rolled off then runs every step again
   // instead of answering from verdicts that no longer describe the containers.
-  await sshScript(DATA_PROD, releaseSupersedeScript(RELEASE_ENV, undefined, own), {
-    label: "supersede the data-prod release record",
-  });
-  step("api-prod: up -d previous tag (NO build, NO migrate — app tier only)");
-  await sshScript(
-    API_PROD,
-    releaseSupersedeScript(
-      RELEASE_ENV,
-      `cd ${API_COMPOSE}
+  // #3274: the target's configs are on disk from here; a supersede or `up -d` that
+  // fails puts the running ones back, so the tree matches what still runs.
+  try {
+    await sshScript(DATA_PROD, releaseSupersedeScript(RELEASE_ENV, undefined, own), {
+      label: "supersede the data-prod release record",
+    });
+    step("api-prod: up -d previous tag (NO build, NO migrate — app tier only)");
+    await sshScript(
+      API_PROD,
+      releaseSupersedeScript(
+        RELEASE_ENV,
+        `cd ${API_COMPOSE}
 # Same DEPLOY_SHA-only rewrite as the deploy path — never clobber the other
 # non-secret interpolation vars (SMARTCAPTCHA_SITE_KEY, #729/#186).
 ${deployShaEnvScript(sha)}
 sudo docker compose up -d
 `,
-      own,
-    ),
-    { label: "rollback up" },
-  );
+        own,
+      ),
+      { label: "rollback up" },
+    );
+  } catch (e) {
+    const restored = await restoreRuntimeConfigsOnDisk();
+    die(
+      `--rollback: the supersede / up -d failed (${e.message}); the target's runtime configs` +
+        ` were written but not applied; restore of the running configs on disk: ${restored}`,
+    );
+  }
 
   step("api-prod: apply the target's bind-mounted Caddy + Centrifugo configs (#3274)");
   await applyRuntimeConfigsOrDie();

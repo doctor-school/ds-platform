@@ -22,7 +22,7 @@ bootstrap) is a one-time human setup, out of the steady-state loop.
 | `live-broadcast-check.mjs` | `deploy:check-live`    | Read-only live-эфир probe (`GET /v1/public/events`, spec §10.4 item 7): `CLEAR` exit 0 / `LIVE`+`UNKNOWN` exit 1 (fail-closed); also a `prod.mjs` pre-flight hold.                                                                                                   |
 | `deploy-probe.mjs`         | `deploy:probe`         | One-line box-reality probe (#905): health SHA + running api/portal/admin images/status over ssh; the STALLED watchdog message routes here.                                                                                                                           |
 | `rollback-floor.mjs`       | —                      | Rollback compatibility-floor guard (012 EARS-24, #1607): refuses a `--rollback` target that predates migration 0036 once prod has applied it (see below).                                                                                                            |
-| `idp-policy.mjs`           | —                      | Pure seams for the pipeline-owned IdP provision converge (#1997): the password-complexity read-back verdict and the `@ds/schemas` `PASSWORD_MIN_LENGTH` extraction consumed by `prod.mjs` (see step 5b).                                                             |
+| `idp-policy.mjs`           | —                      | Pure seams for the pipeline-owned IdP provision converge (#1997): the password-complexity read-back verdict and the `@ds/schemas` `PASSWORD_MIN_LENGTH` extraction consumed by `prod.mjs` (see step 5c).                                                             |
 | `release-gate.mjs`         | —                      | Release-blocker + open-batched-Stage-B pre-flight hold (#1662): probe + pure verdict consumed by `prod.mjs` (see below).                                                                                                                                             |
 | `stage-main-check.mjs`     | —                      | Stage `main` check (#2701): the last pre-flight step of a `--ref` hotfix — converge the stage `main` slot to the target and run the full stage suite from a clean checkout of it (see below). A `main` target reads the `stage-suite` status instead.                |
 | `registry-retention.mjs`   | —                      | Container-registry retention (#3110), run only by `registry-retention.yml`: keeps the last 3 releases, the latest production deployment, the newest 3 `main` images, the open hotfix and PR heads, deletes the rest (`infra/deploy/README.md` → Container registry). |
@@ -209,14 +209,6 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    A failed apply (restart or post-restart compare) puts the backed-up configs
    back, restarts caddy + centrifugo onto them, compares again and fails the
    release with that restore result (#3274).
-   5b. **Pre-swap edge config validate (#3274)** — right after the boot verify,
-   before IdP, `migrate` and `up -d`: `caddy validate` of the shipped
-   `Caddyfile` on the caddy image the shipped `compose.yml` pins (the command of
-   `tools/ci/validate-caddyfiles.sh`, no published port), and the shipped
-   `centrifugo/config.json` must parse as a JSON object (a JSON parse, not
-   `centrifugo checkconfig`: its secrets come from the env file). Invalid →
-   the backed-up configs go back on disk, so the tree matches what still runs,
-   and the deploy stops: nothing was swapped, prod still serves the previous config.
    5a. **Pre-swap boot verify (#1410)** — between `pull` and `migrate`/`up -d`, the
    freshly pulled **`ds-portal:<sha>`, `ds-admin:<sha>` and `ds-doctor:<sha>`**
    (#1723) are each started as a
@@ -233,7 +225,15 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    step 6. CI's static twin is the `standalone-boot` job
    (`tools/ci/standalone-boot-check.mjs`), which boots the same standalone entry
    on every PR.
-   5b. **IdP provision converge + read-back (#1997/#2149)** — before migration
+   5b. **Pre-swap edge config validate (#3274)** — right after the boot verify,
+   before IdP, `migrate` and `up -d`: `caddy validate` of the shipped
+   `Caddyfile` on the caddy image the shipped `compose.yml` pins (the command of
+   `tools/ci/validate-caddyfiles.sh`, no published port), and the shipped
+   `centrifugo/config.json` must parse as a JSON object (a JSON parse, not
+   `centrifugo checkconfig`: its secrets come from the env file). Invalid →
+   the backed-up configs go back on disk, so the tree matches what still runs,
+   and the deploy stops: nothing was swapped, prod still serves the previous config.
+   5c. **IdP provision converge + read-back (#1997/#2149)** — before migration
    and application replacement, while the previous application is serving, the pipeline runs
    `infra/dev-stand/idp/provision.sh` on api-prod with the `infra/deploy/README.md`
    step 9 environment (`api.env` sourced as root inside `sudo bash -c`; the script

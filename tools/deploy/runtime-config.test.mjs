@@ -499,7 +499,7 @@ test("3274: the release keeps the configs before the ship and validates them aft
   );
   const at = (needle) => indexIn(body, needle);
   assert.ok(at("await backupRuntimeConfigs(sha);") < at("await shipTree(sha, API_PROD);"));
-  const validate = at("await assertRuntimeConfigsValid(targetRuntimeConfigs(sha)");
+  const validate = at("await assertRuntimeConfigsValid(shippedConfigs, { swapped: \"Nothing was swapped\" });");
   assert.ok(at("await verifyImagesBoot(sha, services);") < validate);
   assert.ok(validate < at("await provisionIdp(sha);"));
   assert.ok(at("await provisionIdp(sha);") < at('boxStep(API_PROD, sha, "migrate"'));
@@ -522,6 +522,35 @@ test("3274: the rollback writes and validates the target's configs before its up
     "await verifyRunningSha(sha, services);",
   ].map(at);
   assert.deepEqual(order, [...order].sort((a, b) => a - b));
+});
+
+test("3274: a rollback that dies between the validate and its up -d puts the running configs back on disk", () => {
+  const body = SOURCE.slice(SOURCE.indexOf("async function rollback("), SOURCE.indexOf("// --- entry"));
+  const swap = body.slice(
+    indexIn(body, 'await assertRuntimeConfigsValid(targetConfigs, { swapped: "Nothing was rolled back" });'),
+    indexIn(body, "await applyRuntimeConfigsOrDie();"),
+  );
+  assert.match(
+    swap,
+    /try \{[\s\S]*DATA_PROD, releaseSupersedeScript\(RELEASE_ENV, undefined, own\)[\s\S]*\{ label: "rollback up" \}[\s\S]*\} catch \(e\) \{[\s\S]*await restoreRuntimeConfigsOnDisk\(\)[\s\S]*die\(/,
+  );
+});
+
+test("3274: the restore-on-disk helper reports its verdict, never throws", () => {
+  const helper = SOURCE.slice(SOURCE.indexOf("async function restoreRuntimeConfigsOnDisk(")).slice(0, 600);
+  assert.match(helper, /runtimeConfigRestoreScript\(\)\)\.catch\(/);
+  assert.match(helper, /runtimeConfigStepVerdict\(/);
+});
+
+test("3274: an unreadable target config on the deploy path dies naming the state", () => {
+  const body = SOURCE.slice(
+    SOURCE.indexOf("async function deploy("),
+    SOURCE.indexOf("function cutReleaseAtDeployedSha("),
+  );
+  assert.match(
+    body,
+    /try \{\s*shippedConfigs = targetRuntimeConfigs\(sha\);\s*\} catch \(e\) \{\s*die\([\s\S]{0,300}nothing was swapped/,
+  );
 });
 
 test("3274: both rollback paths read the target's configs from the target commit", () => {

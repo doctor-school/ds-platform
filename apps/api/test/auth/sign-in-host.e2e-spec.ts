@@ -1701,6 +1701,127 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     },
   );
 
+  it("EARS-24/71: A001 a registration event intent renders once over a live record and reopens as a plain registration form", async () => {
+    const address = await account("a001-event-context");
+    const jar = new Jar();
+    await signIn(jar, address);
+    const records = app.get(SignInHostRecordStore);
+    const recordId = jar.values.get(RECORD_COOKIE_NAME)!;
+    const before = await records.find(recordId);
+    expect(before).not.toBeNull();
+    const previousForm = jar.values.get(FORM_COOKIE_NAME)!;
+    const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+    const previousBinding = await state.getForm(previousForm);
+    const eventTarget = "a001-registration-event";
+    const intent = {
+      door: "register" as const,
+      eventTarget,
+      clientId: ACADEMY,
+    };
+    const hint = await state.putIntent(intent, 600);
+    const authRequest = hostIdp.seedAuthRequest({
+      clientId: ACADEMY,
+      prompt: ["create"],
+      loginHint: hint,
+    });
+    const auth = app.get(AuthService);
+    const handoffs = app.get<LoginHandoffStore>(LOGIN_HANDOFF_STORE);
+    const noWork = [
+      vi.spyOn(auth, "register"),
+      vi.spyOn(auth, "passwordStep"),
+      vi.spyOn(auth, "otpStep"),
+      vi.spyOn(auth, "verifyStep"),
+      vi.spyOn(auth, "requestLoginOtp"),
+      vi.spyOn(auth, "resendEmailVerification"),
+      vi.spyOn(auth, "isOwnLoginHandoff"),
+      vi.spyOn(auth, "resolveLoginHandoff"),
+      vi.spyOn(handoffs, "peek"),
+      vi.spyOn(handoffs, "redeem"),
+      vi.spyOn(idp, "findUserByEmail"),
+      vi.spyOn(idp, "passwordLogin"),
+      vi.spyOn(idp, "submitEmailCode"),
+      vi.spyOn(idp, "requestEmailLoginCode"),
+      vi.spyOn(idp, "requestSmsOtp"),
+      vi.spyOn(idp, "terminateSession"),
+      vi.spyOn(hostIdp, "setSessionLifetime"),
+      vi.spyOn(hostIdp, "finaliseWithSession"),
+      vi.spyOn(hostIdp, "finaliseWithError"),
+    ];
+    try {
+      const first = await entry(jar, authRequest);
+      expect(first.res.statusCode).toBe(200);
+      expect(first.body).toEqual({
+        action: "render",
+        storefront: "academy",
+        door: "register",
+        authRequest,
+        csrf: expect.any(String),
+        intent: { eventTarget, handoff: false },
+      });
+      if (first.body.action !== "render") throw new Error("not rendered");
+      const firstForm = jar.values.get(FORM_COOKIE_NAME)!;
+      expect(firstForm).toBeTruthy();
+      expect(firstForm).not.toBe(previousForm);
+      expect(first.body.csrf).not.toBe(previousBinding?.csrfToken);
+      expect(await state.getForm(previousForm)).toBeNull();
+      expect(await state.getForm(firstForm)).toEqual({
+        csrfToken: first.body.csrf,
+        storefront: "academy",
+        authRequestId: authRequest,
+        intent,
+      });
+      expect(jar.values.get(RECORD_COOKIE_NAME)).toBe(recordId);
+      expect(await records.find(recordId)).toEqual(before);
+      for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
+
+      const reopened = await entry(jar, authRequest);
+      expect(reopened.res.statusCode).toBe(200);
+      expect(reopened.body).toEqual({
+        action: "render",
+        storefront: "academy",
+        door: "register",
+        authRequest,
+        csrf: expect.any(String),
+      });
+      if (reopened.body.action !== "render") throw new Error("not rendered");
+      const nextForm = jar.values.get(FORM_COOKIE_NAME)!;
+      expect(nextForm).toBeTruthy();
+      expect(nextForm).not.toBe(firstForm);
+      expect(reopened.body.csrf).not.toBe(first.body.csrf);
+      expect(await state.getForm(firstForm)).toBeNull();
+      expect(await state.getForm(nextForm)).toEqual({
+        csrfToken: reopened.body.csrf,
+        storefront: "academy",
+        authRequestId: authRequest,
+      });
+      expect(await state.takeIntent(hint)).toBeNull();
+      for (const { res } of [first, reopened]) {
+        expect(res.cookies.map((cookie) => cookie.name)).toEqual([
+          FORM_COOKIE_NAME,
+        ]);
+        const projection = JSON.stringify({
+          body: res.json(),
+          headers: res.headers,
+        });
+        for (const secret of [
+          hint,
+          address,
+          recordId,
+          before!.session.sub,
+          before!.session.zitadelSessionId,
+          before!.session.sessionToken,
+        ])
+          expect(projection).not.toContain(secret);
+      }
+      expect(jar.values.get(RECORD_COOKIE_NAME)).toBe(recordId);
+      expect(await records.find(recordId)).toEqual(before);
+      expect(await recordRows(address)).toHaveLength(1);
+      for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
+    } finally {
+      for (const spy of noWork) spy.mockRestore();
+    }
+  });
+
   describe("EARS-71: S175 unusable entry intents", () => {
     let intentApp: Awaited<ReturnType<typeof compile>>;
     let intentNow = Date.UTC(2026, 9, 23);

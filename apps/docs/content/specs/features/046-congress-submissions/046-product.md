@@ -30,7 +30,7 @@ The organisers of the 2027 congress want three kinds of materials from participa
 
 **Who reviews.** The **program committee** of the congress works in the Doctor.School admin: a list of every sent submission with filters by kind, status, date and author, and a card that opens at the side with the full text and the author's contacts, where the committee sets the status and writes the comment. Everyone in the committee sees all submissions; there is no distribution between reviewers. The role is given per congress by the Doctor.School team.
 
-**Dates and limits are settings.** Intake opens «по готовности» — when the organisers are ready — and closes on 15 January 2027 for oral talks and on 29 January 2027 for posters and abstracts, each inclusive, until 23:59 Moscow time. Abstracts are limited to 3 per author — every sent abstract counts, whatever became of it; talks and posters are unlimited. All of this, and the counting rule below, is changed by a Doctor.School administrator on a settings screen in the admin, without a platform release.
+**Dates and limits are settings.** Intake opens «по готовности» — when the organisers are ready — and closes on 18 December 2026 for every kind — oral talks, poster talks and abstracts — inclusive, until 23:59 Moscow time. Abstracts are limited to 3 per author — every sent abstract counts, whatever became of it; talks and posters are unlimited. All of this, and the counting rule below, is changed by a Doctor.School administrator on a settings screen in the admin, without a platform release.
 
 ## User stories
 

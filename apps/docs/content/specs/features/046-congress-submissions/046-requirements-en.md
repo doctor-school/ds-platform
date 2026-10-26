@@ -104,7 +104,7 @@ The list row of EARS-11 shows, after the kind, in one neuter form for every kind
   - Three kinds; the kind belongs to the submission; many submissions per account, any mix, any time while the kind is open; abstracts are not a talk application; «Подать тезисы по этой работе» on a talk or poster.
   - Poster age by birth date, blocked at 40 or older on the event start date; birth date asked once and reused.
   - Program committee: an event-bound role; everyone with it sees all submissions of the event; no assignment.
-  - Opening date «по готовности»; deadlines — oral until 15 January 2027, poster and abstracts until 29 January 2027.
+  - Opening date «по готовности»; deadline — all kinds (oral, poster, abstracts) until 18 December 2026.
 - Customer decisions (решение заказчика, 2026-09-29), binding for this spec:
   - The abstract limit of 3 counts every sent abstract — sent, in review, accepted, rejected, needs revision and withdrawn after review started; only drafts do not count.
   - An author may withdraw a submission of any kind until it is decided (`accepted` / `rejected`): while it is `submitted` and its kind's intake is open, «Забрать на исправление» returns it to a draft and frees its slot; after review has started, or once its kind's intake has closed, «Отозвать» makes it the final status `withdrawn` «Отозвана» — read-only, never resent, still occupying its slot.

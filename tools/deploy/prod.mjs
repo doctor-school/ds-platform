@@ -2244,7 +2244,7 @@ async function deploy(hotfixRef = null, local = null) {
   // #3320: the Actions run converges ds-data-prod's hop to the forced command itself,
   // before any data-prod state change (a no-op once converged); the workstation path
   // reaches it as breakglass, a shell login, and never converges.
-  if (local) await dataProd().converge();
+  if (local) await dataProd().converge(sha);
   openReleaseSha = sha;
 
   step("data-prod: bring up persistence plane (idempotent)");

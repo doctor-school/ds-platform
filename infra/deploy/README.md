@@ -217,7 +217,8 @@ again.
 **The prod release runs it — no owner step (#3320).** The data `install` verb places a
 root-owned copy at `/usr/local/lib/ds-platform/harden-ssh.sh`; right after it, while
 `capabilities` still answers only through `sudo -n` (the hop has `deploy`'s shell and
-sudo), the Actions run calls `sudo -n /usr/local/lib/ds-platform/harden-ssh.sh --role data
+sudo), the Actions run calls `install` once more (the entrypoint that served the first
+call may predate harden-ssh.sh in its install list; the one it installed does not), then `sudo -n /usr/local/lib/ds-platform/harden-ssh.sh --role data
 --from-release` over the hop and goes on only once the forced command answers. A converged
 box makes the step a no-op. `--from-release` writes nothing of `breakglass`'s and takes no
 key; in place of the breakglass-session proof it checks box-side, before any change, that

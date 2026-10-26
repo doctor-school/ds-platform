@@ -163,11 +163,15 @@ export function createDataProdClient({
      * once the forced command answers. Only the hop calls this: a breakglass login
      * answers through `sudo` on a converged box too.
      */
-    async converge() {
+    async converge(sha) {
       if ((await client.ready()) === "forced") {
         log(`  ✓ ${host}: already converged: capabilities answers through the forced command`);
         return;
       }
+      // The run's `install` was served by the entrypoint installed before it, whose
+      // install list may predate harden-ssh.sh; the one it just installed is this
+      // run's, so a second `install` places harden-ssh.sh from the shipped tree.
+      await client.call(["install", sha]);
       const command = `sudo -n ${HARDEN_SSH_BIN} --role data --from-release`;
       log(`  ↻ ${host}: converging the hop to the forced command (${command})`);
       // A refused converge changed nothing: the `sudo` form stays the run's.

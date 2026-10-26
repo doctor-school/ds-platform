@@ -709,7 +709,7 @@ test("3320: a converged box (the forced command answers) makes the converge a no
   const fake = fakeDataProd((command) => (command === "capabilities" ? CAPABILITIES : "ok"));
   const lines = [];
   const client = createDataProdClient({ host: "deploy@vpc", run: fake.run, log: (l) => lines.push(l) });
-  await client.converge();
+  await client.converge(SHA_3313);
   assert.deepEqual(fake.calls.map((c) => c.command), ["capabilities"]);
   assert.match(lines.join("\n"), /already converged: capabilities answers through the forced command/);
 });
@@ -728,11 +728,17 @@ test("3320: verbs answering only through sudo -n: the release runs the installed
   const lines = [];
   const client = createDataProdClient({ host: "deploy@vpc", run: fake.run, log: (l) => lines.push(l) });
   await client.call(["install", SHA_3313]);
-  await client.converge();
+  await client.converge(SHA_3313);
   await client.call(["data-env"], { input: "{}" });
   const commands = fake.calls.map((c) => c.command);
   assert.equal(commands.filter((c) => c === CONVERGE).length, 1, "one converge");
-  assert.ok(commands.indexOf(CONVERGE) > commands.findIndex((c) => c.includes(`install ${SHA_3313}`)), "after install");
+  const at = commands.indexOf(CONVERGE);
+  assert.equal(
+    commands[at - 1],
+    `sudo -n env SSH_ORIGINAL_COMMAND='install ${SHA_3313}' /usr/local/bin/ds-deploy-entrypoint`,
+    "a second install, served by this run's entrypoint, places harden-ssh.sh right before it runs",
+  );
+  assert.equal(commands.filter((c) => c.includes(`install ${SHA_3313}`)).length, 2);
   assert.equal(commands.at(-2), "capabilities", "re-probed as the forced command");
   assert.equal(commands.at(-1), "data-env", "the rest of the run goes bare");
   assert.equal(client.knownCommand(["finish", SHA_3313, "failed"]), `finish ${SHA_3313} failed`);
@@ -747,14 +753,14 @@ test("3320: a failed converge, or one after which the forced command still does 
     return CAPABILITIES;
   });
   const a = createDataProdClient({ host: "deploy@vpc", run: refused.run, log: () => {} });
-  await assert.rejects(a.converge(), /no user breakglass/);
+  await assert.rejects(a.converge(SHA_3313), /no user breakglass/);
   const unchanged = fakeDataProd((command) => {
     if (command === CONVERGE) return "";
     if (command === "capabilities") return new Error("exited 127");
     return CAPABILITIES;
   });
   const b = createDataProdClient({ host: "deploy@vpc", run: unchanged.run, log: () => {} });
-  await assert.rejects(b.converge(), /the forced command does not answer after the converge/);
+  await assert.rejects(b.converge(SHA_3313), /the forced command does not answer after the converge/);
   await assert.rejects(b.call(["data-env"]), /the forced command does not answer after the converge/, "no verb runs after it");
 });
 
@@ -767,7 +773,7 @@ test("3320: the data install places harden-ssh.sh root-owned beside the entrypoi
 test("3320: the --local release converges ds-data-prod after its install and before any data-prod state change", () => {
   const source = readFileSync(join(import.meta.dirname, "prod.mjs"), "utf8");
   const install = source.indexOf('await dataProd().call(["install", sha]);');
-  const converge = source.indexOf("if (local) await dataProd().converge();");
+  const converge = source.indexOf("if (local) await dataProd().converge(sha);");
   const env = source.indexOf('walk.phase("data-prod-env");');
   assert.ok(install > 0 && converge > install && env > converge, "install → converge → data-prod-env");
 });

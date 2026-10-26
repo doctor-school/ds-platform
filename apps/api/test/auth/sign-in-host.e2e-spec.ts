@@ -1461,6 +1461,201 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     expect(await recordRows(address)).toHaveLength(0);
   });
 
+  it("EARS-70: S170 cross-site valid OTP posts preserve the live identity and original form for same-origin recovery", async () => {
+    const holder = await account("s170-holder");
+    const attacker = await account("s170-attacker");
+    recordNow = new Date();
+    const jar = new Jar();
+    const other = new Jar();
+    await signIn(jar, holder);
+    await signIn(other, holder);
+    const records = app.get(SignInHostRecordStore);
+    const oldCookie = jar.values.get(RECORD_COOKIE_NAME)!;
+    const otherCookie = other.values.get(RECORD_COOKIE_NAME)!;
+    const oldRecord = await records.find(oldCookie);
+    const otherRecord = await records.find(otherCookie);
+    expect(oldRecord).not.toBeNull();
+    expect(otherRecord).not.toBeNull();
+    expect(otherCookie).not.toBe(oldCookie);
+    const form = await render(jar, ACADEMY, { prompt: ["login"] });
+    const fields = { authRequest: form.authRequest, csrf: form.csrf };
+    const sent = await post(jar, "login/otp/request", {
+      identifier: attacker,
+      channel: "email",
+      ...fields,
+    });
+    expect(sent.statusCode).toBe(200);
+    expect(sent.json()).toEqual({ status: "otp_sent" });
+    const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+    const formId = jar.values.get(FORM_COOKIE_NAME)!;
+    const binding = await state.getForm(formId);
+    expect(binding).toEqual({
+      csrfToken: form.csrf,
+      storefront: "academy",
+      authRequestId: form.authRequest,
+    });
+    const cookies = [...jar.values];
+    const before = await pool.query(
+      "SELECT * FROM sign_in_host_records WHERE subject = $1 ORDER BY cookie_id_hash",
+      [oldRecord!.session.sub],
+    );
+    expect(before.rows).toHaveLength(2);
+    expect(await recordRows(attacker)).toEqual([]);
+    const request = await hostIdp.readAuthRequest(form.authRequest);
+    expect(request).not.toBeNull();
+    const finalised = [...hostIdp.finalised];
+    const lifetimes = [...hostIdp.lifetimes];
+    const auth = app.get(AuthService);
+    const otp = vi.spyOn(auth, "otpStep");
+    const verify = vi.spyOn(idp, "submitEmailCode");
+    const terminate = vi.spyOn(idp, "terminateSession");
+    const insert = vi.spyOn(records, "insert");
+    const remove = vi.spyOn(records, "delete");
+    const lifetime = vi.spyOn(hostIdp, "setSessionLifetime");
+    const finalise = vi.spyOn(hostIdp, "finaliseWithSession");
+    const noWork = [
+      vi.spyOn(auth, "passwordStep"),
+      vi.spyOn(auth, "verifyStep"),
+      vi.spyOn(auth, "requestLoginOtp"),
+      vi.spyOn(idp, "passwordLogin"),
+      vi.spyOn(idp, "loginWithEmailOtp"),
+      vi.spyOn(idp, "loginWithSmsOtp"),
+      vi.spyOn(idp, "requestEmailLoginCode"),
+      vi.spyOn(idp, "requestSmsOtp"),
+      vi.spyOn(records, "deleteBySubject"),
+      vi.spyOn(records, "touchFinalised"),
+      vi.spyOn(hostIdp, "finaliseWithError"),
+    ];
+    const spies = [
+      otp,
+      verify,
+      terminate,
+      insert,
+      remove,
+      lifetime,
+      finalise,
+      ...noWork,
+    ];
+    const payload = {
+      identifier: attacker,
+      channel: "email",
+      code: FAKE_VALID_CODE,
+      ...fields,
+    };
+    const rejectedHeaders: Array<Record<string, string>> = [
+      { origin: "https://evil.test" },
+      { origin: HOST_ORIGIN, "sec-fetch-site": "cross-site" },
+    ];
+    try {
+      for (const headers of rejectedHeaders) {
+        const refused = await post(jar, "login/otp", payload, headers);
+        expect(refused.statusCode).toBe(403);
+        expect(refused.cookies).toEqual([]);
+        expect(
+          Object.keys(refused.headers).filter((name) =>
+            name.startsWith("access-control-"),
+          ),
+        ).toEqual([]);
+        for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+        expect([...jar.values]).toEqual(cookies);
+        expect(await state.getForm(formId)).toEqual(binding);
+        expect(await records.find(oldCookie)).toEqual(oldRecord);
+        expect(await records.find(otherCookie)).toEqual(otherRecord);
+        expect(
+          (
+            await pool.query(
+              "SELECT * FROM sign_in_host_records WHERE subject = $1 ORDER BY cookie_id_hash",
+              [oldRecord!.session.sub],
+            )
+          ).rows,
+        ).toEqual(before.rows);
+        expect(await recordRows(attacker)).toEqual([]);
+        expect(await hostIdp.readAuthRequest(form.authRequest)).toEqual(
+          request,
+        );
+        expect(hostIdp.finalised).toEqual(finalised);
+        expect(hostIdp.lifetimes).toEqual(lifetimes);
+      }
+
+      const accepted = await post(jar, "login/otp", payload);
+      expect(accepted.statusCode).toBe(200);
+      expect(accepted.json()).toEqual({
+        status: "redirect",
+        url: expect.stringContaining("code="),
+      });
+      expect(otp).toHaveBeenCalledExactlyOnceWith(
+        { identifier: attacker, channel: "email", code: FAKE_VALID_CODE },
+        expect.any(Function),
+      );
+      expect(verify).toHaveBeenCalledExactlyOnceWith(
+        attacker,
+        FAKE_VALID_CODE,
+        undefined,
+      );
+      const freshCookie = jar.values.get(RECORD_COOKIE_NAME)!;
+      expect(freshCookie).toBeTruthy();
+      expect([oldCookie, otherCookie]).not.toContain(freshCookie);
+      const fresh = await records.find(freshCookie);
+      expect(fresh).not.toBeNull();
+      expect(fresh!.session.sub).not.toBe(oldRecord!.session.sub);
+      expect(fresh!.session.sub).toBe(
+        (await verify.mock.results[0]!.value)!.sub,
+      );
+      expect(await records.find(oldCookie)).toBeNull();
+      expect(await records.find(otherCookie)).toEqual(otherRecord);
+      expect(await recordRows(holder)).toHaveLength(1);
+      expect(await recordRows(attacker)).toHaveLength(1);
+      expect(remove).toHaveBeenCalledExactlyOnceWith(oldCookie);
+      expect(terminate).toHaveBeenCalledExactlyOnceWith(oldRecord!.session);
+      expect(insert).toHaveBeenCalledTimes(1);
+      expect(lifetime).toHaveBeenCalledExactlyOnceWith(
+        fresh!.session,
+        SIGN_IN_HOST_SESSION_LIFETIME_SECONDS,
+      );
+      expect(finalise).toHaveBeenCalledExactlyOnceWith(
+        form.authRequest,
+        fresh!.session,
+      );
+      expect(hostIdp.finalised).toEqual([
+        ...finalised,
+        { id: form.authRequest, session: fresh!.session },
+      ]);
+      expect(accepted.cookies.map((cookie) => cookie.name)).toEqual([
+        RECORD_COOKIE_NAME,
+      ]);
+      expect(jar.values.get(FORM_COOKIE_NAME)).toBe(formId);
+      expect(await state.getForm(formId)).toEqual(binding);
+      expect(jar.values.has(SESSION_COOKIE_NAME)).toBe(false);
+      for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
+
+      const nextRequest = hostIdp.seedAuthRequest({
+        clientId: ACADEMY,
+        prompt: ["none"],
+      });
+      const reused = await entry(other, nextRequest);
+      expect(reused.res.statusCode).toBe(200);
+      expect(reused.body).toEqual({
+        action: "redirect",
+        url: expect.stringContaining("code="),
+      });
+      expect(reused.res.cookies).toEqual([]);
+      expect(other.values.get(RECORD_COOKIE_NAME)).toBe(otherCookie);
+      expect(await records.find(otherCookie)).toEqual(otherRecord);
+      expect(finalise).toHaveBeenCalledTimes(2);
+      expect(finalise).toHaveBeenLastCalledWith(
+        nextRequest,
+        otherRecord!.session,
+      );
+      expect(verify).toHaveBeenCalledTimes(1);
+      expect(terminate).toHaveBeenCalledTimes(1);
+      expect(remove).toHaveBeenCalledTimes(1);
+      expect(insert).toHaveBeenCalledTimes(1);
+      expect(lifetime).toHaveBeenCalledTimes(1);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
+
   it("EARS-25: the registration code is re-sent on the host through the storefront's resend, bound to the form", async () => {
     const jar = new Jar();
     const form = await render(jar, DOCTOR, { prompt: ["create"] });

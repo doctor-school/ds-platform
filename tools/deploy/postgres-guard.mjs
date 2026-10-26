@@ -462,17 +462,6 @@ export function postgresProbeRequest({
   };
 }
 
-export function postgresProbeScript(plan) {
-  const request = Buffer.from(JSON.stringify(postgresProbeRequest(plan))).toString(
-    "base64",
-  );
-  const python = readFileSync(
-    new URL("./postgres-artifact-probe.py", import.meta.url),
-    "utf8",
-  );
-  return `python3 - '${request}' <<'DS_POSTGRES_PROBE'\n${python}\nDS_POSTGRES_PROBE\n`;
-}
-
 export function certifiedTarget(target, certificate) {
   if (!certificate) return target;
   const images = {};

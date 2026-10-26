@@ -119,7 +119,6 @@ import {
   guardedPostgresStep,
   postgresImageOverride,
   postgresProbeRequest,
-  postgresProbeScript,
   postgresStateRecord,
   readPostgresTarget,
   readPostgresTargetFromTree,
@@ -2102,7 +2101,7 @@ ${probed.map((s) => `probe ${s.name} ${s.image} ${s.port}`).join("\n")}`,
 // Read-only preflight; each subsequent guarded callback re-reads the cluster.
 export async function preparePostgresDeployment(
   sha,
-  { capture, certificate, readTarget = readPostgresTarget } = {},
+  { client, certificate, readTarget = readPostgresTarget } = {},
 ) {
   const plan = readTarget(sha);
   const probePlan = {
@@ -2110,15 +2109,13 @@ export async function preparePostgresDeployment(
     target: certifiedTarget(plan.target, certificate),
     preferRecordedImages: !certificate,
   };
-  // #3313: ds-data-prod's `postgres-probe` verb; `capture(host, script)` is the shell
-  // transport of the read-only operator check (postgres-artifact-check.mjs).
+  // #3313: ds-data-prod's `postgres-probe` verb. `client` is the read-only operator
+  // check's own audited data-prod client (postgres-artifact-check.mjs) — same verb.
   const read = async () =>
     JSON.parse(
-      capture
-        ? await capture(DATA_PROD, postgresProbeScript(probePlan))
-        : await dataProd().call(["postgres-probe"], {
-            input: JSON.stringify(postgresProbeRequest(probePlan)),
-          }),
+      await (client ?? dataProd()).call(["postgres-probe"], {
+        input: JSON.stringify(postgresProbeRequest(probePlan)),
+      }),
     );
   let live = await read();
   const expected = assertPostgresEvidence({ ...plan, live, certificate });

@@ -704,14 +704,18 @@ test("3313: without bytes to install, a box that serves no data verbs refuses th
 
 test("3313: prod.mjs reaches ds-data-prod only through its verbs — no script, no shell form", () => {
   const source = readFileSync(join(import.meta.dirname, "prod.mjs"), "utf8");
-  assert.doesNotMatch(source, /(sshScript|sshCapture|boxStep)\(\s*DATA_PROD/);
+  assert.doesNotMatch(source, /(sshScript|sshCapture|boxStep)\(\s*DATA_PROD\b/);
   assert.doesNotMatch(source, /shipTree\(sha, DATA_PROD\)/);
   assert.doesNotMatch(source, /postgresStateScript\(/);
+  assert.doesNotMatch(source, /postgresProbeScript\(/);
+  const check = readFileSync(join(import.meta.dirname, "postgres-artifact-check.mjs"), "utf8");
+  assert.match(check, /createDataProdClient\(/, "the operator check uses the data verbs");
+  assert.doesNotMatch(check, /bash|spawnSync|capture/, "the operator check keeps no shell transport");
   for (const verb of ["postgres-checkpoint", "install", "data-env", "backup-info", "rollback-floor", "finish", "check", "supersede"]) {
     assert.ok(source.includes(`dataProd().call(["${verb}"`), verb);
   }
   assert.match(source, /dataProd\(\)\.command\(\["ship", sha\]\)/);
-  assert.match(source, /dataProd\(\)\.call\(\["postgres-probe"\]/);
+  assert.match(source, /\(client \?\? dataProd\(\)\)\.call\(\["postgres-probe"\]/);
 });
 
 test("3313: the data-env payload carries the VPC address and the immutable image ids only", () => {

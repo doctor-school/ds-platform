@@ -13,7 +13,7 @@
 //     container aliases, tree directory. Every name is derived, never passed in, so a
 //     slot cannot be addressed two ways;
 //   * live-state parsing — `parseLiveSlots` over `docker ps`, `parseEnvFile` over the
-//     box env files, `parseAvailBytes` over `df`. The box answers; nothing is cached;
+//     box env files; free disk is measured BY THE BOX (`freeSpaceFloorScript`). Nothing is cached;
 //   * remote RENDERING — `quoteCommand` and `remoteWriteScript` turn a plan step into
 //     the text one ssh invocation runs. Nothing in this file executes locally;
 //   * the ordered plans for `up` / `sync` / `down` / `reset` / `gc`, returned as DATA.
@@ -227,15 +227,25 @@ export const SLOT_LOG_DIR = "/var/log/ds-platform";
 export const SLOT_LOG_PATH = `${SLOT_LOG_DIR}/slot.log`;
 
 /**
- * Free-disk floor for the unconditional prune.
+ * Free-disk floor on the Docker root — held by every `up`/`sync` BEFORE it ships or
+ * pulls, and by `gc` (#3248).
  *
- * Below this much free space on the Docker root, `gc` additionally prunes dangling
- * and unreferenced images. The `ds-*:<sha>` images no live slot runs are removed
- * regardless of free space.
+ * Below it the box reclaims: the `ds-*:<sha>` images no container uses, the registry
+ * digest records no kept tag shares, then `image prune -af --filter until=24h`. A
+ * converge still below it after reclaiming refuses to pull: a full disk takes the
+ * shared stg-infra postgres down with it (`postmaster.pid: No space left on device`).
+ * Above it nothing extra runs, so the BuildKit cache survives a healthy box.
  */
 export const GC_FREE_SPACE_FLOOR = "10GB";
 export const GC_FREE_SPACE_FLOOR_BYTES = 10 * 1024 ** 3;
 export const DOCKER_ROOT = "/var/lib/docker";
+/** Seconds between the progress probes of a long reclaim (see `progressShell`). */
+export const RECLAIM_BEAT_SECONDS = 30;
+/**
+ * No-output budget of a reclaim step. A reclaim prints a line whenever free space
+ * moved; a phase that frees nothing for this long is treated as a hang.
+ */
+export const STALL_BUDGET_RECLAIM_MS = 15 * 60 * 1000;
 
 // --- name derivation ---------------------------------------------------------
 
@@ -485,28 +495,6 @@ export function parseEnvFile(text) {
     env[key] = value;
   }
   return env;
-}
-
-/**
- * Free bytes on the BOX, from `df -B1 --output=avail`.
- *
- * The operator runs this tool from a laptop, so `statfs` here would measure the wrong
- * disk entirely and prune (or fail to prune) the box on a number that has nothing to
- * do with it. Output that is not a number throws rather than defaulting to «plenty».
- */
-export function parseAvailBytes(text) {
-  const lines = String(text ?? "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const last = lines.at(-1);
-  if (!last || !/^[0-9]+$/.test(last)) {
-    throw new SlotError(
-      `could not read free space from \`df -B1 --output=avail\`: expected a number, ` +
-        `got ${String(text ?? "").slice(0, 120)}`,
-    );
-  }
-  return Number(last);
 }
 
 // --- remote rendering --------------------------------------------------------
@@ -1450,18 +1438,22 @@ export function planUnreferencedImageGc({ images, liveSlots }) {
   // Same shape as the teardown's image removal: an image a previous `gc` or `down`
   // already took is the desired end state, while one that is there and refuses to go
   // (still referenced by a stopped container) is an operator's problem, not a shrug.
-  const commands = remove.length
-    ? [
-        {
-          kind: "ensure-absent",
-          label: "remove unreferenced slot images",
-          items: remove.map((ref) => ({
-            probe: ["sudo", "docker", "image", "inspect", ref],
-            remove: ["sudo", "docker", "image", "rm", ref],
-          })),
-        },
-      ]
-    : [];
+  const commands = [
+    ...(remove.length
+      ? [
+          {
+            kind: "ensure-absent",
+            label: "remove unreferenced slot images",
+            items: remove.map((ref) => ({
+              probe: ["sudo", "docker", "image", "inspect", ref],
+              remove: ["sudo", "docker", "image", "rm", ref],
+            })),
+          },
+        ]
+      : []),
+    // #3042: AFTER the tags go — a record is garbage once no kept tag shares its ID.
+    { kind: "registry-records", label: "remove registry digest records no kept tag shares" },
+  ];
   return { remove, commands };
 }
 
@@ -1479,23 +1471,16 @@ export function slotsWithClosedPrs(liveSlots, openPrNumbers) {
 }
 
 /**
- * The second, CONDITIONAL half of gc — see `GC_FREE_SPACE_FLOOR`.
- *
- * Above the floor nothing runs: an unconditional prune on a healthy box throws away
- * the BuildKit cache the next stg-infra `postgres` build would reuse.
+ * The free-disk floor step — see `GC_FREE_SPACE_FLOOR`. Measured and acted on BY THE
+ * BOX (`freeSpaceFloorScript`), so the verdict is the disk as it is at that moment,
+ * re-measured after reclaiming. `refuse`: a converge fails rather than pull onto a
+ * disk it would fill; `gc` reclaims what it can and reports.
  */
-export function planPruneByFreeSpace({ freeBytes }) {
-  if (freeBytes >= GC_FREE_SPACE_FLOOR_BYTES) return { commands: [] };
+export function planFreeSpaceFloor({ refuse }) {
   return {
-    commands: [
-      {
-        // `image prune` is idempotent by itself: nothing to reclaim exits 0. So a
-        // failure here is a real docker failure, and it fails `gc`.
-        kind: "sh",
-        label: `free disk below ${GC_FREE_SPACE_FLOOR} — pruning unreferenced images`,
-        command: ["sudo", "docker", "image", "prune", "-af", "--filter", "until=24h"],
-      },
-    ],
+    kind: "disk-floor",
+    label: `hold the ${GC_FREE_SPACE_FLOOR} free-disk floor`,
+    refuse: Boolean(refuse),
   };
 }
 
@@ -1609,6 +1594,9 @@ export function planSlotUp({
   const hosts = Object.values(hostMap);
 
   const steps = [
+    // #3248: before anything lands on the disk — a pull onto a full disk takes the
+    // shared stg-infra postgres (and with it every slot's sign-in) down.
+    planFreeSpaceFloor({ refuse: true }),
     {
       kind: "ship",
       label: "ship the tree",
@@ -1894,6 +1882,8 @@ const REMOTE_ONLY_KINDS = Object.freeze({
   "verify-running": "verifyRunning",
   health: "health",
   prune: "prune",
+  "disk-floor": "diskFloor",
+  "registry-records": "registryRecords",
 });
 
 /**
@@ -1931,6 +1921,8 @@ export async function runSlotPlan(
     verifyRunning,
     health,
     prune,
+    diskFloor,
+    registryRecords,
     log = () => {},
   },
 ) {
@@ -1940,6 +1932,8 @@ export async function runSlotPlan(
     verifyRunning,
     health,
     prune,
+    diskFloor,
+    registryRecords,
   };
 
   const present = async (item, step) => {
@@ -2423,12 +2417,6 @@ async function readBoxImages() {
   return out.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 }
 
-async function readBoxFreeBytes() {
-  return parseAvailBytes(
-    await sshCapture(STAGE_1, `sudo df -B1 --output=avail ${DOCKER_ROOT}`),
-  );
-}
-
 async function boxDatabaseExists(name) {
   const out = await sshCapture(
     STAGE_1,
@@ -2592,7 +2580,121 @@ export function assertRunningVerdict(stdout, { slot, sha }) {
 }
 
 /**
- * Image retention + BuildKit cache cap — production's `prune_repo` verbatim.
+ * The containers' requested images (`in_use`) and the SHAs of the bundles they belong
+ * to (`in_use_shas`). One-shot migrate has no container after `--rm`, but belongs to
+ * the same bundle, and cached images retain their old CreatedAt: neither age nor a
+ * missing container may evict that bundle.
+ */
+const IN_USE_SHELL = `ids=$(sudo docker ps -aq)
+in_use=""
+if [ -n "$ids" ]; then
+  in_use=$(sudo docker inspect --format '{{.Config.Image}}' $ids)
+fi
+in_use_shas=$(printf '%s\\n' "$in_use" | awk -F: '/^ds-/ && $2 ~ /^[0-9a-f]+$/ && length($2)==40 {print $2}')
+`;
+
+/**
+ * #3042: the registry digest records no kept `ds-*` tag shares an image ID with —
+ * production's retention block (`tools/deploy/prod.mjs` `retentionScript`).
+ *
+ * A pull leaves `<registry>/<image>@sha256:…` beside the local `ds-<image>:<sha>` tag;
+ * on the containerd image store it is a record of its own and keeps the layers alive
+ * after the tag is pruned — the leak that filled the stage disk. Stage pulls PR images
+ * from `<registry>/pr/<image>` too, and a reference filter's `*` does not cross a `/`,
+ * so both depths are listed. `rmi` without `-f`: a running container's image is
+ * refused and kept. Each removal prints a line — the progress a full-disk run shows.
+ */
+export function registryRecordsScript() {
+  return `kept_ids=$(sudo docker images --format '{{.Repository}} {{.ID}}' | awk '$1 ~ /^ds-/ {print $2}' | sort -u)
+sudo docker images --digests --filter 'reference=${IMAGE_REGISTRY}/*' --filter 'reference=${IMAGE_REGISTRY}/*/*' --format '{{.Repository}}@{{.Digest}} {{.ID}}' \\
+  | while read -r ref id; do
+      if printf '%s\\n' "$kept_ids" | grep -Fxq "$id"; then continue; fi
+      if sudo docker rmi "$ref" >/dev/null 2>&1; then echo "  removed $ref"; fi
+    done
+`;
+}
+
+/**
+ * `with_progress <label> <command…>`: the command in the background, the box's free
+ * space probed every `beatSeconds`, one line printed whenever it MOVED (#3248).
+ *
+ * On a full disk the 24h prune runs for tens of minutes without a line, and the
+ * operator-side stall watchdog called a prune that completed STALLED. The beat is the
+ * real progress signal, not a keep-alive: a prune that frees nothing prints nothing,
+ * so a genuine hang still trips `STALL_BUDGET_RECLAIM_MS`. The command's own exit
+ * status is the step's (`wait`).
+ */
+export function progressShell(beatSeconds = RECLAIM_BEAT_SECONDS) {
+  return `avail() { sudo df -B1 --output=avail ${DOCKER_ROOT} | tail -n 1 | tr -d ' '; }
+gib() { awk -v b="$1" 'BEGIN { printf "%.1f GiB", b / 1073741824 }'; }
+# The verdict's input: a \`df\` that does not answer a number fails the step — never
+# a default to «plenty» (the operator's own disk is never measured: this runs on the box).
+free_bytes() {
+  v=$(avail)
+  case "$v" in
+    ""|*[!0-9]*) echo "✗ could not read free space on ${DOCKER_ROOT} from df: '$v'" >&2; return 1 ;;
+  esac
+  echo "$v"
+}
+with_progress() {
+  label="$1"; shift
+  "$@" &
+  pid=$!
+  last=$(avail); started=$(date +%s); tick=0
+  while kill -0 "$pid" 2>/dev/null; do
+    sleep 1; tick=$((tick + 1))
+    if [ "$tick" -ge ${beatSeconds} ]; then
+      tick=0; now=$(avail)
+      if [ "$now" != "$last" ]; then
+        echo "  … $label still running ($(( $(date +%s) - started ))s): $(gib "$now") free"
+        last="$now"
+      fi
+    fi
+  done
+  wait "$pid"
+}
+`;
+}
+
+/**
+ * The free-disk floor, held by the box (#3248) — see `GC_FREE_SPACE_FLOOR`.
+ *
+ * Above the floor: one line, nothing removed. Below it, in order: the `ds-*:<sha>`
+ * tags no container's bundle uses, the registry digest records no kept tag shares,
+ * then the 24h image prune — then the disk is measured again. Still below: a converge
+ * (`refuse`) exits 1 naming the free space, before a pull fills the disk; `gc` says so
+ * and exits 0, having reclaimed what it could.
+ */
+export function freeSpaceFloorScript({ refuse, beatSeconds = RECLAIM_BEAT_SECONDS }) {
+  const below = refuse
+    ? `echo "✗ $(gib "$free") free on ${DOCKER_ROOT} after reclaiming — below the ${GC_FREE_SPACE_FLOOR} floor; refusing to pull onto a disk the pull would fill. Free space on the box (slot.mjs gc, closed PR slots) and re-run." >&2
+    exit 1`
+    : `echo "⚠ $(gib "$free") free on ${DOCKER_ROOT} after reclaiming — still below the ${GC_FREE_SPACE_FLOOR} floor"`;
+  return `${progressShell(beatSeconds)}free=$(free_bytes)
+if [ "$free" -ge ${GC_FREE_SPACE_FLOOR_BYTES} ]; then
+  echo "  $(gib "$free") free on ${DOCKER_ROOT} — at or above the ${GC_FREE_SPACE_FLOOR} floor, nothing to reclaim"
+else
+  echo "  $(gib "$free") free on ${DOCKER_ROOT} — below the ${GC_FREE_SPACE_FLOOR} floor, reclaiming"
+${IN_USE_SHELL}sudo docker images --format '{{.Repository}}:{{.Tag}}' \\
+  | { grep -E '${SLOT_IMAGE_RE.source}' || true; } \\
+  | while IFS= read -r ref; do
+      if printf '%s\\n' "$in_use" | grep -Fxq "$ref"; then continue; fi
+      if printf '%s\\n' "$in_use_shas" | grep -Fxq "\${ref##*:}"; then continue; fi
+      if sudo docker rmi "$ref" >/dev/null 2>&1; then echo "  removed $ref"; fi
+    done
+${registryRecordsScript()}with_progress "image prune" sudo docker image prune -af --filter until=24h
+  free=$(free_bytes)
+  if [ "$free" -lt ${GC_FREE_SPACE_FLOOR_BYTES} ]; then
+    ${below}
+  fi
+  echo "  $(gib "$free") free on ${DOCKER_ROOT} after reclaiming"
+fi
+`;
+}
+
+/**
+ * Image retention + BuildKit cache cap — production's `retentionScript`: `prune_repo`
+ * verbatim, then its registry digest record block (#3042).
  *
  * The repo list is DERIVED from the box rather than hard-coded the way production
  * hard-codes its four: a slot converges arbitrary branches, and a branch that adds a
@@ -2604,15 +2706,7 @@ export function assertRunningVerdict(stdout, { slot, sha }) {
  * Docker's refusal remains a final race safety net, not the retention authority.
  */
 export function pruneScript({ retention, reservedSpace }) {
-  return `ids=$(sudo docker ps -aq)
-in_use=""
-if [ -n "$ids" ]; then
-  in_use=$(sudo docker inspect --format '{{.Config.Image}}' $ids)
-fi
-# One-shot migrate has no container after --rm, but belongs to the same bundle.
-# Cached images retain their old CreatedAt; age alone must not evict that bundle.
-in_use_shas=$(printf '%s\n' "$in_use" | awk -F: '/^ds-/ && $2 ~ /^[0-9a-f]+$/ && length($2)==40 {print $2}')
-prune_repo() {
+  return `${IN_USE_SHELL}prune_repo() {
   repo="$1"; keep="$2"
   # \`|| true\` on grep: under pipefail a grep that filters out EVERY line (only
   # \`:local\` tags exist yet) exits 1. "Nothing to prune" is success, not failure.
@@ -2632,7 +2726,7 @@ sudo docker images --format '{{.Repository}}' \\
   | while IFS= read -r repo; do
       if [ -n "$repo" ]; then prune_repo "$repo" ${retention}; fi
     done
-# \`buildx prune --reserved-space\`, NOT \`builder prune --filter until=\`: on the
+${registryRecordsScript()}# \`buildx prune --reserved-space\`, NOT \`builder prune --filter until=\`: on the
 # containerd snapshotter the \`until=\` filter can silently reclaim 0 bytes (#1419).
 sudo docker buildx prune -f --reserved-space ${reservedSpace} || true
 echo "build cache after prune:"; sudo docker system df --format '  {{.Type}}: {{.Size}} (reclaimable {{.Reclaimable}})' || true
@@ -2882,7 +2976,11 @@ function realEffects(
     sshScript(STAGE_1, script, {
       label: step?.label ?? "slot",
       stallBudgetMs:
-        step?.stallBudget === "build" ? STALL_BUDGET_BUILD_MS : STALL_BUDGET_DEFAULT_MS,
+        step?.stallBudget === "reclaim"
+          ? STALL_BUDGET_RECLAIM_MS
+          : step?.stallBudget === "build"
+            ? STALL_BUDGET_BUILD_MS
+            : STALL_BUDGET_DEFAULT_MS,
     });
   // #2982: a step carrying a `durable` unit runs through ds-release — started or
   // attached, then polled — so a killed operator session never kills it.
@@ -3024,6 +3122,12 @@ function realEffects(
         ...step,
         stallBudget: "build",
       }),
+    // #3248: streamed, never durable — idempotent, and re-measured on every run. The
+    // reclaim budget, because a full-disk prune is legitimately long; its progress
+    // lines (free space moving) keep a working reclaim from reading as a stall.
+    diskFloor: (step) =>
+      streamed(freeSpaceFloorScript({ refuse: step.refuse }), { ...step, stallBudget: "reclaim" }),
+    registryRecords: (step) => streamed(registryRecordsScript(), { ...step, stallBudget: "reclaim" }),
     idp: async (step) => {
       const client = createIdpClient({
         fetch: globalThis.fetch,
@@ -3251,8 +3355,10 @@ async function main() {
       images: await readBoxImages(),
       liveSlots,
     });
-    const prune = planPruneByFreeSpace({ freeBytes: await readBoxFreeBytes() });
-    await runSlotPlan({ steps: [...images.commands, ...prune.commands] }, effects);
+    await runSlotPlan(
+      { steps: [...images.commands, planFreeSpaceFloor({ refuse: false })] },
+      effects,
+    );
     console.log(
       `gc: ${images.remove.length} unreferenced slot image(s) removed; ` +
         `free disk floor ${GC_FREE_SPACE_FLOOR}`,

@@ -69,7 +69,7 @@ async function plannedCalls(options, shaInMain = () => true) {
     return undefined;
   };
   const effects = Object.fromEntries(
-    ["sql", "sh", "write", "append", "idp", "ship", "verifyImages", "verifyRunning", "health", "prune"].map(
+    ["sql", "sh", "write", "append", "idp", "ship", "verifyImages", "verifyRunning", "health", "prune", "diskFloor"].map(
       (kind) => [kind, record(kind)],
     ),
   );
@@ -97,6 +97,10 @@ test("2985: the local converge plans exactly the operator's steps, in order", as
   );
   assert.ok(operator.calls.length > 10, "a real plan ran");
   assert.ok(operator.calls.some(([kind]) => kind === "ship"));
+  // #3248: the free-disk floor is held before anything is shipped or pulled.
+  const floor = operator.calls.findIndex(([kind]) => kind === "diskFloor");
+  assert.ok(floor >= 0 && floor < operator.calls.findIndex(([kind]) => kind === "ship"));
+  assert.equal(operator.calls[floor][1][0].refuse, true);
   assert.deepEqual(local.calls, operator.calls);
   assert.equal(local.line, operator.line);
 });

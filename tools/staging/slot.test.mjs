@@ -62,11 +62,12 @@ import {
   healthVerdict,
   migrateCommandPlan,
   parseArgs,
-  parseAvailBytes,
   parseEnvFile,
   parseLiveSlots,
   liveSlotsScript,
-  planPruneByFreeSpace,
+  planFreeSpaceFloor,
+  freeSpaceFloorScript,
+  registryRecordsScript,
   planResetIdentities,
   planSlotDown,
   planSlotReset,
@@ -409,12 +410,12 @@ test("the box env file is parsed, not sourced", () => {
   assert.ok(!("MALFORMED" in env));
 });
 
-test("free space on the box is read from `df`, never from the operator's own disk", () => {
-  assert.equal(parseAvailBytes("Avail\n123456789\n"), 123456789);
-  assert.equal(parseAvailBytes("42"), 42);
-  assert.throws(() => parseAvailBytes("not a number"), SlotError);
+test("free space on the box is read from its own `df` — an unreadable answer fails, never «plenty»", () => {
+  const box = runOnFakeBox(freeSpaceFloorScript({ refuse: true }), { images: [], digests: [], avail: "n/a" });
+  assert.notEqual(box.status, 0);
+  assert.match(box.stderr, /could not read free space/);
+  assert.deepEqual(box.log, []);
 });
-
 // --- database ----------------------------------------------------------------
 
 test("a preview database is dropped and re-cloned from the golden template", () => {
@@ -939,26 +940,20 @@ test("gc removes only `ds-*:<sha>` images no live slot is running", () => {
   ]);
 });
 
-test("gc never touches the shared infra images, and plans nothing when there is nothing to do", () => {
+test("gc never touches the shared infra images, and removes no image when there is nothing to do", () => {
   const plan = planUnreferencedImageGc({
     images: ["caddy:2", "postgres:17", "ghcr.io/zitadel/zitadel:v2"],
     liveSlots: live({}),
   });
   assert.deepEqual(plan.remove, []);
-  assert.deepEqual(plan.commands, []);
+  // Only the registry-record sweep, which derives its own set from the box (#3042).
+  assert.deepEqual(plan.commands.map((step) => step.kind), ["registry-records"]);
 });
 
 test("gc takes down the slots whose PR is no longer open, and never `main`", () => {
   const slots = live({ main: [], "pr-7": [], "pr-8": [] });
   assert.deepEqual(slotsWithClosedPrs(slots, [8]), ["pr-7"]);
   assert.deepEqual(slotsWithClosedPrs(slots, [7, 8]), []);
-});
-
-test("the unconditional prune only fires below the free-disk floor", () => {
-  assert.deepEqual(planPruneByFreeSpace({ freeBytes: GC_FREE_SPACE_FLOOR_BYTES }).commands, []);
-  const low = planPruneByFreeSpace({ freeBytes: GC_FREE_SPACE_FLOOR_BYTES - 1 });
-  assert.equal(low.commands.length, 1);
-  assert.equal(low.commands[0].command[0], "sudo");
 });
 
 // --- the ordered plans -------------------------------------------------------
@@ -977,8 +972,9 @@ function upPlan(overrides = {}) {
   });
 }
 
-test("up: ship → env → pull → verify → clone → bucket → migrate → seed → up → caddy → idp → verify → health → prune → identities", () => {
+test("up: floor → ship → env → pull → verify → clone → bucket → migrate → seed → up → caddy → idp → verify → health → prune → identities", () => {
   assert.deepEqual(labels(upPlan()), [
+    "hold the 10GB free-disk floor",
     "ship the tree",
     "write slot env",
     "pull recorded images",
@@ -1577,6 +1573,7 @@ test("`up` converges the golden identities FIRST — its subjects are the plan's
     verifyRunning: async () => {},
     health: async () => {},
     prune: async () => {},
+    diskFloor: async () => {},
   };
   const line = await runSlotCommand({
     options: { command: "up", slot: "pr-7", sha: SHA, actor: "tech-lead" },
@@ -1611,6 +1608,7 @@ async function shippedStep(options, shaInMain) {
     verifyRunning: async () => {},
     health: async () => {},
     prune: async () => {},
+    diskFloor: async () => {},
   };
   await runSlotCommand({
     options: { actor: "tech-lead", ...options },
@@ -2145,6 +2143,7 @@ sudo() {
     "inspect --format") echo ds-api:${SHA} ;;
     "images --format") printf 'ds-api\\nds-api-migrate\\n' ;;
     "images ds-api"|"images ds-api-migrate") printf '2026-09-17\\tnewest\\n2026-09-16\\t${SHA}\\n2026-09-15\\t${SHA2}\\n' ;;
+    "images --digests") : ;;
     "rmi "*) echo "$2" >> "$REMOVED" ;;
     "buildx prune"|"system df") : ;;
     *) echo "unexpected docker command: $*" >&2; return 1 ;;
@@ -2274,6 +2273,7 @@ test("2982: a converge that fails closes its release as failed, then rethrows", 
     verifyRunning: async () => {},
     health: async () => {},
     prune: async () => {},
+    diskFloor: async () => {},
   };
   await assert.rejects(
     runSlotCommand({
@@ -2283,4 +2283,169 @@ test("2982: a converge that fails closes its release as failed, then rethrows", 
     /boot probe failed/,
   );
   assert.equal(commands.at(-1), `sudo ${DS_RELEASE_BIN} finish stage-pr-7 ${SHA} failed`);
+});
+
+// --- #3042 / #3248: registry digest records, the free-disk floor, progress ----
+
+const BASH = process.platform === "win32" ? join(process.env.ProgramFiles, "Git", "bin", "bash.exe") : "bash";
+
+/**
+ * A fake box: `sudo docker …` / `sudo df …` answered from files in a temp dir, every
+ * `rmi` and `image prune` recorded. `AVAIL` holds the free bytes `df` reports; a
+ * successful `image prune` raises it to `PRUNED_AVAIL`.
+ */
+function runOnFakeBox(script, { images, digests, running = [], avail, prunedAvail = avail, refuseRmi = [], pruneSteps = [] }) {
+  const dir = mkdtempSync(join(tmpdir(), "slot-floor-"));
+  const p = (name) => join(dir, name).replaceAll("\\", "/");
+  writeFileSync(p("images"), images.join("\n") + "\n");
+  writeFileSync(p("digests"), digests.join("\n") + (digests.length ? "\n" : ""));
+  writeFileSync(p("running"), running.join("\n") + (running.length ? "\n" : ""));
+  writeFileSync(p("avail"), String(avail));
+  writeFileSync(p("refuse"), refuseRmi.join("\n") + "\n");
+  writeFileSync(p("log"), "");
+  try {
+    const result = spawnSync(BASH, ["--noprofile", "--norc", "-s"], {
+      encoding: "utf8",
+      timeout: 60_000,
+      input: `
+set -euo pipefail
+D='${p("")}'
+sudo() {
+  if [ "$1" = df ]; then printf 'Avail\n%s\n' "$(cat "$D/avail")"; return; fi
+  shift
+  case "$1 $2" in
+    "ps -aq") if [ -s "$D/running" ]; then echo cid; fi ;;
+    "inspect --format") cat "$D/running" ;;
+    "images --format")
+      case "$3" in
+        *Repository*ID*) awk '{print $1, $3}' "$D/images" ;;
+        *Repository*Tag*) awk '{print $1 ":" $2}' "$D/images" ;;
+        *) awk '{print $1}' "$D/images" ;;
+      esac ;;
+    "images --digests") cat "$D/digests" ;;
+    "images ds-"*) awk -v r="$2" '$1==r {print "2026-10-0" NR "\t" $2}' "$D/images" ;;
+    "rmi "*)
+      if grep -Fxq "$2" "$D/refuse"; then return 1; fi
+      echo "rmi $2" >> "$D/log"
+      awk -v ref="$2" '$1 ":" $2 != ref' "$D/images" > "$D/images.next"; mv "$D/images.next" "$D/images" ;;
+    "image prune") for a in ${pruneSteps.join(" ")}; do sleep 1; if [ "$a" != same ]; then echo "$a" > "$D/avail"; fi; done; echo "image prune $*" >> "$D/log"; echo ${prunedAvail} > "$D/avail" ;;
+    "buildx prune"|"system df") : ;;
+    *) echo "unexpected docker command: $*" >&2; return 1 ;;
+  esac
+}
+${script}`,
+    });
+    return { ...result, log: readFileSync(p("log"), "utf8").trim().split("\n").filter(Boolean) };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const REG = IMAGE_REGISTRY;
+const FLOOR = GC_FREE_SPACE_FLOOR_BYTES;
+
+test("3042: retention drops registry digest records no kept `ds-*` tag shares — the orphan and the `pr/` one too", () => {
+  const box = runOnFakeBox(pruneScript({ retention: 1, reservedSpace: BUILD_CACHE_RESERVED_SPACE }), {
+    // `ds-api` keeps its newest tag (id1); the older SHA2 tag (id2) is pruned.
+    images: [`ds-api ${SHA2} id2`, `ds-api ${SHA} id1`],
+    digests: [
+      `${REG}/api@sha256:kept id1`,
+      `${REG}/api@sha256:pruned id2`,
+      `${REG}/api@sha256:orphan id3`,
+      `${REG}/pr/api@sha256:prorphan id4`,
+      `${REG}/api@sha256:running id5`,
+    ],
+    refuseRmi: [`${REG}/api@sha256:running`],
+    avail: FLOOR * 2,
+  });
+  assert.equal(box.status, 0, box.stderr);
+  assert.deepEqual(box.log, [
+    `rmi ds-api:${SHA2}`,
+    `rmi ${REG}/api@sha256:pruned`,
+    `rmi ${REG}/api@sha256:orphan`,
+    `rmi ${REG}/pr/api@sha256:prorphan`,
+  ]);
+  // Both registry namespaces are listed: `*` does not cross a `/` in a reference filter.
+  assert.ok(registryRecordsScript().includes(`reference=${REG}/*/*`));
+});
+
+test("3042: `gc` drops the registry digest records too, even with no slot image to remove", () => {
+  const plan = planUnreferencedImageGc({ images: ["caddy:2"], liveSlots: live({}) });
+  assert.deepEqual(plan.remove, []);
+  assert.deepEqual(plan.commands.map((step) => step.kind), ["registry-records"]);
+});
+
+test("3248: above the floor the floor step reclaims nothing — the BuildKit cache stays", () => {
+  const box = runOnFakeBox(freeSpaceFloorScript({ refuse: true }), {
+    images: [`ds-api ${SHA2} id2`],
+    digests: [`${REG}/api@sha256:orphan id3`],
+    avail: FLOOR,
+  });
+  assert.equal(box.status, 0, box.stderr);
+  assert.deepEqual(box.log, []);
+});
+
+test("3248: below the floor it reclaims unreferenced slot images, registry orphans and the 24h prune", () => {
+  const box = runOnFakeBox(freeSpaceFloorScript({ refuse: true }), {
+    images: [`ds-api ${SHA} id1`, `ds-api-migrate ${SHA} id6`, `ds-api ${SHA2} id2`, "caddy 2 id9"],
+    digests: [`${REG}/api@sha256:a id1`, `${REG}/api@sha256:orphan id3`],
+    running: [`ds-api:${SHA}`],
+    avail: FLOOR - 1,
+    prunedAvail: FLOOR * 3,
+  });
+  assert.equal(box.status, 0, box.stderr);
+  // The running SHA's bundle (incl. its one-shot migrate image) is kept.
+  assert.deepEqual(box.log, [
+    `rmi ds-api:${SHA2}`,
+    `rmi ${REG}/api@sha256:orphan`,
+    "image prune image prune -af --filter until=24h",
+  ]);
+  assert.match(box.stdout, /below the 10GB floor/);
+});
+
+test("3248: still below the floor after reclaiming, `up` refuses to pull and names the free space", () => {
+  const box = runOnFakeBox(freeSpaceFloorScript({ refuse: true }), {
+    images: [], digests: [], avail: 1024 ** 3, prunedAvail: 2 * 1024 ** 3,
+  });
+  assert.equal(box.status, 1);
+  assert.match(box.stderr, /2\.0 GiB free/);
+  assert.match(box.stderr, /refusing to pull/);
+});
+
+test("3248: `gc` still below the floor warns but exits 0 — it reclaimed what it could", () => {
+  const box = runOnFakeBox(freeSpaceFloorScript({ refuse: false }), {
+    images: [], digests: [], avail: 1024 ** 3, prunedAvail: 2 * 1024 ** 3,
+  });
+  assert.equal(box.status, 0, box.stderr);
+  assert.match(box.stdout, /2\.0 GiB free/);
+});
+
+test("3248: a long prune prints progress while it frees space, and nothing while it frees none", () => {
+  const moving = runOnFakeBox(freeSpaceFloorScript({ refuse: false, beatSeconds: 1 }), {
+    images: [], digests: [], avail: FLOOR - 3,
+    pruneSteps: [FLOOR - 2, FLOOR - 1, FLOOR, FLOOR + 1], prunedAvail: FLOOR * 2,
+  });
+  assert.equal(moving.status, 0, moving.stderr);
+  assert.ok((moving.stdout.match(/image prune still running/g) ?? []).length >= 2, moving.stdout);
+  // A prune that frees nothing prints no beat: the stall watchdog still sees a hang.
+  const stuck = runOnFakeBox(freeSpaceFloorScript({ refuse: false, beatSeconds: 1 }), {
+    images: [], digests: [], avail: FLOOR - 3, pruneSteps: ["same", "same", "same"], prunedAvail: FLOOR - 3,
+  });
+  assert.equal(stuck.status, 0, stuck.stderr);
+  assert.doesNotMatch(stuck.stdout, /still running/);
+});
+
+test("3248: `up` holds the free-disk floor BEFORE anything is shipped or pulled", () => {
+  const steps = upPlan().steps;
+  const floor = steps.findIndex((step) => step.kind === "disk-floor");
+  const pull = steps.findIndex((step) => step.label === "pull recorded images");
+  assert.equal(floor, 0);
+  assert.ok(pull > floor);
+  assert.equal(steps[floor].refuse, true);
+});
+
+test("3248: `gc` holds the floor without refusing", () => {
+  const step = planFreeSpaceFloor({ refuse: false });
+  assert.equal(step.kind, "disk-floor");
+  assert.equal(step.refuse, false);
 });

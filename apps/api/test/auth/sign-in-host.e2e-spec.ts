@@ -807,6 +807,194 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     },
   );
 
+  it.each(["silent", "interactive"] as const)(
+    "EARS-64: S166 an IdP-refused live session removes only its browser record on %s reuse",
+    async (mode) => {
+      recordNow = new Date();
+      const address = await account(`s166-idp-refused-${mode}`);
+      const jar = new Jar();
+      const other = new Jar();
+      await signIn(jar, address);
+      await signIn(other, address);
+      const records = app.get(SignInHostRecordStore);
+      const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+      const cookieId = jar.values.get(RECORD_COOKIE_NAME)!;
+      const otherCookieId = other.values.get(RECORD_COOKIE_NAME)!;
+      const record = await records.find(cookieId);
+      const otherRecord = await records.find(otherCookieId);
+      expect(record).not.toBeNull();
+      expect(otherRecord).not.toBeNull();
+      expect(otherCookieId).not.toBe(cookieId);
+      expect(otherRecord!.session.zitadelSessionId).not.toBe(
+        record!.session.zitadelSessionId,
+      );
+      expect(record!.fingerprint).toBe(deviceFingerprint());
+      expect(record!.expiresAt.getTime()).toBeGreaterThan(recordNow.getTime());
+      expect(record!.lastFinalisedAt.getTime()).toBeGreaterThan(
+        recordNow.getTime() - SIGN_IN_HOST_IDLE_SECONDS * 1000,
+      );
+      expect(await recordRows(address)).toHaveLength(2);
+      const priorForm = jar.values.get(FORM_COOKIE_NAME)!;
+      const priorBinding = await state.getForm(priorForm);
+      const lifetimesBefore = hostIdp.lifetimes.length;
+      const finalisedBefore = hostIdp.finalised.length;
+      const authRequest = hostIdp.seedAuthRequest({
+        clientId: DOCTOR,
+        prompt: mode === "silent" ? ["none"] : [],
+      });
+      const request = await hostIdp.readAuthRequest(authRequest);
+      expect(request).toMatchObject({ id: authRequest, clientId: DOCTOR });
+      const finalise = vi.spyOn(hostIdp, "finaliseWithSession");
+      const finaliseError = vi.spyOn(hostIdp, "finaliseWithError");
+      const terminate = vi.spyOn(idp, "terminateSession");
+      const remove = vi.spyOn(records, "delete");
+      const touch = vi.spyOn(records, "touchFinalised");
+      const putForm = vi.spyOn(state, "putForm");
+      const auth = app.get(AuthService);
+      const noWork = [
+        vi.spyOn(records, "insert"),
+        vi.spyOn(hostIdp, "setSessionLifetime"),
+        vi.spyOn(auth, "passwordStep"),
+        vi.spyOn(auth, "otpStep"),
+        vi.spyOn(auth, "verifyStep"),
+        vi.spyOn(auth, "requestLoginOtp"),
+        vi.spyOn(idp, "passwordLogin"),
+        vi.spyOn(idp, "submitEmailCode"),
+        vi.spyOn(idp, "loginWithEmailOtp"),
+        vi.spyOn(idp, "loginWithSmsOtp"),
+        vi.spyOn(idp, "requestEmailLoginCode"),
+        vi.spyOn(idp, "requestSmsOtp"),
+      ];
+      hostIdp.deadSessions.add(record!.session.zitadelSessionId);
+      try {
+        expect(await records.find(cookieId)).toEqual(record);
+        const { res, body } = await entry(jar, authRequest);
+        expect(res.statusCode).toBe(200);
+        expect(finalise).toHaveBeenCalledExactlyOnceWith(
+          authRequest,
+          record!.session,
+        );
+        expect(await finalise.mock.results[0]!.value).toBeNull();
+        expect(remove).toHaveBeenCalledExactlyOnceWith(cookieId);
+        expect(terminate).toHaveBeenCalledExactlyOnceWith(record!.session);
+        expect(touch).not.toHaveBeenCalled();
+        expect(await records.find(cookieId)).toBeNull();
+        expect(jar.values.has(RECORD_COOKIE_NAME)).toBe(false);
+        expect(jar.values.has(SESSION_COOKIE_NAME)).toBe(false);
+        expect(res.cookies).toContainEqual(
+          expect.objectContaining({
+            name: RECORD_COOKIE_NAME,
+            value: "",
+            maxAge: 0,
+          }),
+        );
+        if (mode === "silent") {
+          expect(body).toEqual({
+            action: "redirect",
+            url: expect.stringContaining("error=login_required"),
+          });
+          expect(finaliseError).toHaveBeenCalledExactlyOnceWith(
+            authRequest,
+            "login_required",
+          );
+          expect(hostIdp.finalised.slice(finalisedBefore)).toEqual([
+            { id: authRequest, error: "login_required" },
+          ]);
+          expect(await hostIdp.readAuthRequest(authRequest)).toBeNull();
+          expect(putForm).not.toHaveBeenCalled();
+          expect(jar.values.get(FORM_COOKIE_NAME)).toBe(priorForm);
+          expect(await state.getForm(priorForm)).toEqual(priorBinding);
+          expect(res.cookies.map((cookie) => cookie.name)).toEqual([
+            RECORD_COOKIE_NAME,
+          ]);
+        } else {
+          expect(body).toEqual({
+            action: "render",
+            storefront: "doctor",
+            door: "login",
+            authRequest,
+            csrf: expect.any(String),
+          });
+          if (body.action !== "render") throw new Error("not rendered");
+          const formId = jar.values.get(FORM_COOKIE_NAME)!;
+          expect(formId).not.toBe(priorForm);
+          expect(body.csrf).not.toBe(priorBinding?.csrfToken);
+          expect(await state.getForm(formId)).toEqual({
+            csrfToken: body.csrf,
+            storefront: "doctor",
+            authRequestId: authRequest,
+          });
+          expect(putForm).toHaveBeenCalledExactlyOnceWith(
+            formId,
+            expect.objectContaining({
+              csrfToken: body.csrf,
+              storefront: "doctor",
+              authRequestId: authRequest,
+            }),
+            FORM_STATE_TTL_SECONDS,
+          );
+          expect(await state.getForm(priorForm)).toBeNull();
+          expect(finaliseError).not.toHaveBeenCalled();
+          expect(hostIdp.finalised).toHaveLength(finalisedBefore);
+          expect(await hostIdp.readAuthRequest(authRequest)).toEqual(request);
+          expect(res.cookies.map((cookie) => cookie.name)).toEqual([
+            RECORD_COOKIE_NAME,
+            FORM_COOKIE_NAME,
+          ]);
+        }
+        expect(await records.find(otherCookieId)).toEqual(otherRecord);
+        expect(await recordRows(address)).toHaveLength(1);
+        expect(other.values.get(RECORD_COOKIE_NAME)).toBe(otherCookieId);
+        expect(hostIdp.lifetimes).toHaveLength(lifetimesBefore);
+        for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
+
+        const nextRequest = hostIdp.seedAuthRequest({
+          clientId: DOCTOR,
+          prompt: ["none"],
+        });
+        const next = await entry(other, nextRequest);
+        expect(next.res.statusCode).toBe(200);
+        expect(next.body).toEqual({
+          action: "redirect",
+          url: expect.stringContaining("code="),
+        });
+        expect(next.res.cookies).toEqual([]);
+        expect(finalise).toHaveBeenCalledTimes(2);
+        expect(finalise).toHaveBeenLastCalledWith(
+          nextRequest,
+          otherRecord!.session,
+        );
+        expect(await finalise.mock.results[1]!.value).toContain("code=");
+        expect(hostIdp.finalised.at(-1)).toEqual({
+          id: nextRequest,
+          session: otherRecord!.session,
+        });
+        expect(await records.find(otherCookieId)).toEqual(otherRecord);
+        expect(other.values.get(RECORD_COOKIE_NAME)).toBe(otherCookieId);
+        expect(remove).toHaveBeenCalledTimes(1);
+        expect(terminate).toHaveBeenCalledTimes(1);
+        expect(touch).toHaveBeenCalledExactlyOnceWith(otherCookieId, recordNow);
+        expect(hostIdp.lifetimes).toHaveLength(lifetimesBefore);
+        for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
+      } finally {
+        hostIdp.deadSessions.delete(record!.session.zitadelSessionId);
+        hostIdp.expire(authRequest);
+        for (const spy of [
+          finalise,
+          finaliseError,
+          terminate,
+          remove,
+          touch,
+          putForm,
+          ...noWork,
+        ])
+          spy.mockRestore();
+        await state.deleteForm(priorForm);
+        await state.deleteForm(jar.values.get(FORM_COOKIE_NAME)!);
+      }
+    },
+  );
+
   it.each(["idle", "absolute"] as const)(
     "EARS-64/68: S166 the owning clock refuses a silent entry exactly at the %s record boundary",
     async (boundary) => {

@@ -810,8 +810,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
   it.each(["silent", "interactive"] as const)(
     "EARS-64: S166 an IdP-refused live session removes only its browser record on %s reuse",
     async (mode) => {
-      recordNow = new Date();
       const address = await account(`s166-idp-refused-${mode}`);
+      recordNow = new Date();
       const jar = new Jar();
       const other = new Jar();
       await signIn(jar, address);

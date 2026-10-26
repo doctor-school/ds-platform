@@ -1615,9 +1615,11 @@ Feature: Net-new web authentication producing a doctor_guest identity
   Scenario: A hostile return path or redirect URI never leaves the storefront
     Given a signed-out browser on the Academy
     When the guest opens the Academy sign-in entry with a returnTo of "//evil.example", "https://evil.example" or "/\evil.example"
-    Then the stored return path is "/" and the sign-in ends on "/#"
-    When the guest opens it with a returnTo path longer than 2048 characters
-    Then the return path is cut to its path, or to "/" when the path alone is longer
+    Then no return path is stored and the sign-in ends on the Academy's landing "/webinars#"
+    When the guest opens it with a returnTo of an event page whose query makes it longer than 2048 characters
+    Then the stored return path is cut to the event page's path and the sign-in ends on it
+    When the guest opens it with a returnTo whose path alone is longer than 2048 characters
+    Then no return path is stored and the sign-in ends on the Academy's landing "/webinars#"
     When an authorize request names a look-alike redirect_uri for the Academy client
     Then no authorization code is issued to it
 

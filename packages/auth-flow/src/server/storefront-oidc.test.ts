@@ -247,6 +247,37 @@ describe("storefront entry", () => {
     expect(toStorefrontReturnPath(`/${"a".repeat(2100)}`)).toBe("/");
   });
 
+  it("003 EARS-61 (req. 1): S1615 an entry whose return target's query passes 2048 characters stores the target cut to its path; a path alone longer stores none", async () => {
+    for (const [host, stored] of [
+      [ACADEMY, "/webinars/live-1"],
+      [DOCTOR, "/events/live-1"],
+    ] as const) {
+      const long = fakeApi();
+      await storefrontEntry(
+        get(
+          `/login?returnTo=${encodeURIComponent(`/webinars/live-1?x=${"a".repeat(2100)}`)}`,
+        ),
+        host,
+        "login",
+        { fetchImpl: long.fetchImpl, env: ENV },
+      );
+      expect(long.internal("transaction")[0]?.body).toMatchObject({
+        returnPath: stored,
+      });
+
+      const longPath = fakeApi();
+      await storefrontEntry(
+        get(`/login?returnTo=${encodeURIComponent(`/${"a".repeat(2100)}`)}`),
+        host,
+        "login",
+        { fetchImpl: longPath.fetchImpl, env: ENV },
+      );
+      expect(longPath.internal("transaction")[0]?.body).not.toHaveProperty(
+        "returnPath",
+      );
+    }
+  });
+
   it("003 EARS-71 / EARS-43: /login?method=code records the code-method intent; a plain /login records none", async () => {
     const plain = fakeApi();
     await storefrontEntry(get("/login"), ACADEMY, "login", {

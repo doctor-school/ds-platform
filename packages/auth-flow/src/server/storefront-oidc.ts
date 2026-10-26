@@ -5,6 +5,7 @@ import {
   StorefrontTransactionResponseSchema,
   forwardedHeaders,
   forwardedSessionFrom,
+  STOREFRONT_RETURN_PATH_MAX,
   parseReturnTarget,
   toStorefrontReturnPath,
   type SignInHostDoor,
@@ -261,7 +262,13 @@ export async function storefrontEntry(
   const { config } = host;
   const url = new URL(request.url);
   const params = url.searchParams;
-  const returnTo = firstOf(params.get(RETURN_CONTEXT_PARAM));
+  // EARS-61: a target past the 2048 cap is cut to its path (or `/`) BEFORE
+  // the landing rules read it, so an overlong query costs only the query.
+  const rawReturnTo = firstOf(params.get(RETURN_CONTEXT_PARAM));
+  const returnTo =
+    rawReturnTo !== undefined && rawReturnTo.length > STOREFRONT_RETURN_PATH_MAX
+      ? toStorefrontReturnPath(rawReturnTo)
+      : rawReturnTo;
   const handoff =
     entry === "login" && params.get("method") === "code"
       ? resolveHandoffRef(params.getAll("handoff"))

@@ -3690,15 +3690,19 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
             status: "redirect",
             url: expect.stringContaining("code="),
           });
-          expect(verify).toHaveBeenCalledExactlyOnceWith(
-            address,
-            FAKE_VALID_CODE,
-            undefined,
-          );
           const record = await app
             .get(SignInHostRecordStore)
             .find(jar.values.get(RECORD_COOKIE_NAME)!);
           expect(record).not.toBeNull();
+          // 003 EARS-24/39 amended: the reopened form is a new render in the
+          // SAME browser for the SAME auth request and address, so it is the
+          // warm step — the password typed at this registration is kept for
+          // exactly the account it created (the stale binding stayed cold: 403).
+          expect(verify).toHaveBeenCalledExactlyOnceWith(
+            address,
+            FAKE_VALID_CODE,
+            { keepPasswordOf: record!.session.sub },
+          );
           expect(finalise).toHaveBeenCalledExactlyOnceWith(
             form.authRequest,
             record!.session,

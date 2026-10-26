@@ -610,11 +610,26 @@ SmartCaptcha SITE key (#2981): the portal and doctor slot containers load the bo
 coherent trio — `stage.env.example` → «Bot protection», enforced by `up|sync` (#2207) — and a key
 placed or changed after a slot is up reaches it on a container recreate, never a new image.
 
-**Disk.** `pnpm stage:slot gc` removes slot-tagged images whose slot is not live, and
-only then, if free space on `/var/lib/docker` is below **10 GB**, additionally runs
-`docker image prune -af --filter until=24h`. It is an **operator subcommand and not a
-timer**: the box runs no unit of ours, so nothing sweeps nightly — `status` prints the
-free-space figure that tells an operator to run it. The 10 GB is the same figure
+**Disk.** Every slot pull leaves two references per image: the local `ds-<image>:<sha>` tag
+and the registry digest record (`<registry>/<image>@sha256:…`, `<registry>/pr/<image>@…`
+for a PR build) with the same image ID. Removing the tag alone keeps the layers alive, so
+the converge's retention (`prune images and build cache`) and `gc` both drop every registry
+digest record no kept `ds-*` tag shares an image ID with — production's retention block;
+`rmi` without `-f`, so a running container's image is refused and kept.
+
+The box holds a **10 GB** free-space floor on `/var/lib/docker`, measured on the box. Every
+`up`/`sync` checks it FIRST, before anything is shipped or pulled: below it, the box removes
+the `ds-*:<sha>` images no container's bundle uses, the orphaned registry digest records and
+then runs `docker image prune -af --filter until=24h`, and measures again. A converge still
+below the floor refuses with the free space in its message rather than pull onto a disk it
+would fill — a full disk takes the shared `postgres` down (`postmaster.pid: No space left
+on device`), and every slot's sign-in with it. Above the floor nothing extra runs, so the
+BuildKit cache survives. `pnpm stage:slot gc` is the **operator subcommand** (not a timer:
+the box runs no unit of ours) that additionally removes slot-tagged images whose slot is not
+live and holds the same floor; still below it after reclaiming, `gc` warns and exits 0. A
+full-disk prune runs for tens of minutes: it prints a line whenever free space moves, under
+a 15-minute no-output budget, so a working reclaim never reads as `STALLED` while one that
+frees nothing for 15 minutes still does. The 10 GB is the same figure
 as `BUILD_CACHE_RESERVED_SPACE` (`tools/staging/slot.mjs`) and api-prod's daemon
 `builder.gc` cap, by a **different mechanism**: there it is a BuildKit cache cap
 (`buildx prune --reserved-space`), here a free-disk floor. `gc` never calls `buildx`.

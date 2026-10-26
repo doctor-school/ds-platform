@@ -681,9 +681,11 @@ asserts the two copies of the regexp agree and that nothing generated is importe
 
 ## `gc` — an operator subcommand, not a timer
 
-`pnpm stage:slot gc` reclaims Docker disk on the box down to a free-space floor. The box
-runs no unit of ours, so there is nothing nightly about it: an operator runs it, and
-`status` prints the free-space figure that tells them to.
+`pnpm stage:slot gc` reclaims Docker disk on the box: slot images no live slot runs, the
+registry digest records no kept `ds-*` tag shares, and — below the 10 GB free-space floor —
+the 24h image prune. The box runs no unit of ours, so there is nothing nightly about it: an
+operator runs it. The floor itself does not wait for an operator: every `up`/`sync` holds it
+before anything is shipped or pulled, and refuses to pull when reclaiming cannot restore it.
 
 Operating detail — the compose projects, Redis allocation, the preview cap and the `gc`
 free-disk floor — lives in

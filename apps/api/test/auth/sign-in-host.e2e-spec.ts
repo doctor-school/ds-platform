@@ -3004,6 +3004,127 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     });
 
     it.each([
+      ["academy", ACADEMY, DOCTOR],
+      ["doctor", DOCTOR, ACADEMY],
+    ] as const)(
+      "EARS-70: S172 first refused %s hand-off form posts preserve the unused reference for the original valid form",
+      async (storefront, clientId, foreignClient) => {
+        const address = await account(`s172-first-binding-${storefront}`);
+        const { rows } = await pool.query<{ id: string }>(
+          "SELECT id FROM users WHERE email = $1",
+          [address],
+        );
+        const handoffs = app.get<LoginHandoffStore>(LOGIN_HANDOFF_STORE);
+        const ref = await handoffs.mint(rows[0]!.id, address);
+        const reference = await handoffs.peek(ref);
+        expect(reference).toEqual({
+          accountId: rows[0]!.id,
+          identifier: address,
+        });
+        const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+        const intent = {
+          door: "login" as const,
+          method: "code" as const,
+          handoff: ref,
+          clientId,
+        };
+        const hint = await state.putIntent(intent, 600);
+        const authRequest = hostIdp.seedAuthRequest({
+          clientId,
+          loginHint: hint,
+        });
+        const foreignRequest = hostIdp.seedAuthRequest({
+          clientId: foreignClient,
+        });
+        const jar = new Jar();
+        const { res, body } = await entry(jar, authRequest);
+        expect(res.statusCode).toBe(200);
+        expect(body).toEqual({
+          action: "render",
+          storefront,
+          door: "login",
+          authRequest,
+          csrf: expect.any(String),
+          intent: { method: "code", handoff: true },
+        });
+        if (body.action !== "render") throw new Error("not rendered");
+        const formId = jar.values.get(FORM_COOKIE_NAME)!;
+        const binding = await state.getForm(formId);
+        expect(binding).toEqual({
+          csrfToken: body.csrf,
+          storefront,
+          authRequestId: authRequest,
+          intent,
+        });
+        const cookies = [...jar.values];
+        const fields = { authRequest, csrf: body.csrf };
+        const auth = app.get(AuthService);
+        const resolve = vi.spyOn(auth, "resolveLoginHandoff");
+        const redeem = vi.spyOn(handoffs, "redeem");
+        const request = vi.spyOn(auth, "requestLoginOtp");
+        const send = vi.spyOn(idp, "requestEmailLoginCode");
+        const noAuthentication = [
+          vi.spyOn(auth, "passwordStep"),
+          vi.spyOn(auth, "otpStep"),
+          vi.spyOn(auth, "verifyStep"),
+          vi.spyOn(idp, "passwordLogin"),
+          vi.spyOn(idp, "submitEmailCode"),
+          vi.spyOn(idp, "loginWithEmailOtp"),
+          vi.spyOn(idp, "loginWithSmsOtp"),
+          vi.spyOn(idp, "requestSmsOtp"),
+          vi.spyOn(hostIdp, "setSessionLifetime"),
+          vi.spyOn(hostIdp, "finaliseWithSession"),
+          vi.spyOn(hostIdp, "finaliseWithError"),
+          vi.spyOn(app.get(SignInHostRecordStore), "insert"),
+        ];
+        const spies = [resolve, redeem, request, send, ...noAuthentication];
+        for (const spy of spies) spy.mockClear();
+        try {
+          for (const [browser, payload] of [
+            [jar, { ...fields, csrf: "wrong" }],
+            [new Jar(), fields],
+            [jar, { ...fields, authRequest: foreignRequest }],
+          ] as const) {
+            const refused = await post(browser, "login/otp/handoff", payload);
+            expect(refused.statusCode).toBe(403);
+            expect(refused.cookies).toEqual([]);
+            for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+            expect([...jar.values]).toEqual(cookies);
+            expect(await state.getForm(formId)).toEqual(binding);
+            expect(await handoffs.peek(ref)).toEqual(reference);
+          }
+
+          const accepted = await post(jar, "login/otp/handoff", fields);
+          expect(accepted.statusCode).toBe(200);
+          expect(accepted.json()).toEqual({
+            status: "otp_sent",
+            identifier: address,
+          });
+          expect(accepted.cookies).toEqual([]);
+          expect(resolve).toHaveBeenCalledExactlyOnceWith(ref, undefined);
+          expect(redeem).toHaveBeenCalledExactlyOnceWith(ref);
+          expect(request).toHaveBeenCalledExactlyOnceWith(
+            { identifier: address, channel: "email" },
+            expect.objectContaining({ ip: "127.0.0.1" }),
+          );
+          expect(send).toHaveBeenCalledExactlyOnceWith(address);
+          for (const spy of noAuthentication)
+            expect(spy).not.toHaveBeenCalled();
+          expect([...jar.values]).toEqual(cookies);
+          expect(await state.getForm(formId)).toEqual(binding);
+          expect(jar.values.has(RECORD_COOKIE_NAME)).toBe(false);
+          expect(jar.values.has(SESSION_COOKIE_NAME)).toBe(false);
+          expect(await recordRows(address)).toEqual([]);
+        } finally {
+          for (const spy of spies) spy.mockRestore();
+          await state.deleteForm(formId);
+          hostIdp.expire(authRequest);
+          hostIdp.expire(foreignRequest);
+        }
+      },
+    );
+
+    it.each([
       ["academy", ACADEMY],
       ["doctor", DOCTOR],
     ] as const)(

@@ -128,11 +128,11 @@ Note: redis runs AOF with **no `maxmemory` / eviction policy set yet** — fine 
 Tech spec `apps/docs/content/specs/tech/2026-10-16-release-pipeline-off-workstation-en.md`
 §4, §8 step (c). Three kinds of key reach a box, and root reaches none:
 
-| Key                              | User         | What it can do                                                                                                                                                                                                                                          |
-| -------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Operator key (unchanged)         | `deploy`     | an interactive shell with `NOPASSWD:ALL` sudo: `pnpm deploy:prod`, `pnpm stage:slot`. Narrowed in step (f).                                                                                                                                             |
-| CI keys (one per Environment)    | `deploy`     | only the forced command `/usr/local/bin/ds-deploy-entrypoint` (`no-pty`, no forwarding): `status <env> <sha>`, `release <env> <sha>`, and `upload-report <sha>` on stage-1. Anything else exits 2 and is logged (`journalctl -t ds-deploy-entrypoint`). |
-| Break-glass key (owner, offline) | `breakglass` | an interactive shell with full sudo, no forced command — the admin path once root login is off.                                                                                                                                                         |
+| Key                              | User         | What it can do                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Operator key                     | `deploy`     | ds-stage-1 only: an interactive shell with `NOPASSWD:ALL` sudo, for the agent-driven PR slots (`pnpm stage:slot`). Removed on ds-api-prod in step (f) (`harden-ssh.sh --role prod`): there `deploy` has no key but the CI keys and its one sudo rule.                                                                                                                                                                                                                                                                           |
+| CI keys (one per Environment)    | `deploy`     | only the forced command (`no-pty`, no forwarding): `/usr/local/bin/ds-deploy-entrypoint` on ds-stage-1; `sudo -n /usr/local/bin/ds-deploy-entrypoint` with `no-user-rc` on ds-api-prod, whose one sudo rule `/etc/sudoers.d/90-ds-deploy` allows exactly that. Verbs: `status <env> <sha>`, `release <env> <sha>`, on ds-api-prod `rollback prod <sha>` and `rollback-status prod <sha>`, on ds-stage-1 `upload-report <sha>` and `observe <name>`. Anything else exits 2 and is logged (`journalctl -t ds-deploy-entrypoint`). |
+| Break-glass key (owner, offline) | `breakglass` | an interactive shell with full sudo, no forced command — the admin path once root login is off.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 Settings: `/etc/ssh/sshd_config.d/10-ds-hardening.conf` (`PermitRootLogin no`,
 `PasswordAuthentication no`, `KbdInteractiveAuthentication no`, `MaxStartups 10:30:60`),
@@ -433,13 +433,16 @@ local dev). `curl -s https://api.doctor.school/v1/health | jq .version`.
 The script is the **steady-state** path only. **First-time provisioning**
 (Terraform §§1–3, DNS §4, out-of-band secrets §6, and the **Zitadel first-boot
 bootstrap** §9) stays the manual runbook below — those are one-time, not
-per-deploy. Run them once; from then on `pnpm deploy:prod` is the whole deploy.
+per-deploy. Run them once; from then on a release is one Actions `deploy-prod.yml` run,
+executed box-side by the prod release driver (release-pipeline spec §5 «Prod release
+driver.»); `pnpm deploy:prod` is break-glass, run under the `breakglass` user.
 
 ## Apply order
 
-> **Steps 5–8 + 10 are what `pnpm deploy:prod` automates** on every redeploy —
-> they are documented here as the manual fallback + the record of what the
-> script does on the box. Steps 1–4, 6 (secrets), and 9 (Zitadel first-boot) are
+> **Steps 5–8 + 10 are what the prod release driver runs** on every release
+> (Actions `deploy-prod.yml`; `pnpm deploy:prod` is the break-glass path under
+> `breakglass`) — they are documented here as the manual fallback + the record
+> of what the pipeline does on the box. Steps 1–4, 6 (secrets), and 9 (Zitadel first-boot) are
 > **first-time provisioning**, run once by hand.
 
 1. **Prereqs:** `cp .env.example .env` and set `TWC_TOKEN` (an account-level Timeweb

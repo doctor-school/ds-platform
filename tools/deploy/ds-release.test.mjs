@@ -14,6 +14,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -279,9 +280,20 @@ describe(
       // #2985: the read-only `lease` answers the same question before any start.
       const leased = ds(["lease", "prod", SHA_B]);
       assert.equal(leased.code, 3);
-      assert.match(leased.err, /^ds-release: refused: env prod is leased by release aaaaaaaaaaaa, which has not finished$/);
-      assert.equal(ds(["lease", "prod", SHA_A]).code, 0, "the holder's own SHA is not refused");
-      assert.equal(ds(["lease", "stage-main", SHA_B]).code, 0, "nothing holds an env with no record");
+      assert.match(
+        leased.err,
+        /^ds-release: refused: env prod is leased by release aaaaaaaaaaaa, which has not finished$/,
+      );
+      assert.equal(
+        ds(["lease", "prod", SHA_A]).code,
+        0,
+        "the holder's own SHA is not refused",
+      );
+      assert.equal(
+        ds(["lease", "stage-main", SHA_B]).code,
+        0,
+        "nothing holds an env with no record",
+      );
 
       // Another env is independent.
       const stage = ds(["release", "stage-pr-12", SHA_B, "pull", other]);
@@ -290,7 +302,11 @@ describe(
       const finished = ds(["finish", "prod", SHA_A, "succeeded"]);
       assert.equal(finished.code, 0, finished.err);
       assert.equal(readShape("prod", SHA_A).state, "succeeded");
-      assert.equal(ds(["lease", "prod", SHA_B]).code, 0, "a finished release frees the env");
+      assert.equal(
+        ds(["lease", "prod", SHA_B]).code,
+        0,
+        "a finished release frees the env",
+      );
       rmSync(join(root, "systemctl.log"), { force: true });
       const next = ds(["release", "prod", SHA_B, "pull", other]);
       assert.equal(next.code, 0, next.err);
@@ -306,6 +322,61 @@ describe(
         /ds-stage-pr-12-/,
         "another env's units are never touched",
       );
+    });
+
+    it("3297: refuses, naming the path and its owner, an env lock that exists but cannot be opened", () => {
+      const lock = join(root, "lock", "ds-stage-pr-77.lock");
+      mkdirSync(lock, { recursive: true }); // EISDIR for every uid, root included
+      try {
+        const r = ds([
+          "release",
+          "stage-pr-77",
+          SHA_A,
+          "up",
+          scriptFile("up77", "true\n"),
+        ]);
+        assert.equal(r.code, 3);
+        assert.equal(r.out, "");
+        assert.ok(
+          r.err.startsWith(
+            `ds-release: refused: cannot open lock ${lock} (owner `,
+          ),
+          r.err,
+        );
+        assert.match(r.err, /\(owner [a-z_][a-z0-9_-]*\)$/);
+        assert.doesNotMatch(r.err, /Permission denied|Is a directory/);
+        assert.equal(startCount("ds-stage-pr-77-"), 0, "no step unit started");
+      } finally {
+        rmSync(lock, { recursive: true, force: true });
+      }
+    });
+
+    it("3297: refuses a group- or other-writable or symlinked lock directory", () => {
+      const lockDir = join(root, "lock");
+      const script = scriptFile("up78", "true\n");
+      mkdirSync(lockDir, { recursive: true });
+      chmodSync(lockDir, 0o1777);
+      try {
+        const r = ds(["release", "stage-pr-78", SHA_A, "up", script]);
+        assert.equal(r.code, 3);
+        assert.equal(
+          r.err,
+          `ds-release: refused: lock directory ${lockDir} is group- or other-writable (mode 1777)`,
+        );
+      } finally {
+        chmodSync(lockDir, 0o755);
+      }
+      const link = join(root, "lock-link");
+      symlinkSync(lockDir, link);
+      const r = ds(["release", "stage-pr-78", SHA_A, "up", script], {
+        DS_RELEASE_LOCK_DIR: link,
+      });
+      assert.equal(r.code, 3);
+      assert.equal(
+        r.err,
+        `ds-release: refused: lock directory ${link} is a symlink`,
+      );
+      assert.equal(startCount("ds-stage-pr-78-"), 0, "no step unit started");
     });
 
     it("refuses while another ds-release call holds the env lock", () => {
@@ -327,7 +398,11 @@ describe(
       const script = scriptFile("prune", `[ -e "${flag}" ] || exit 7\n`);
       assert.equal(ds(["release", "prod", SHA_B, "prune", script]).code, 0);
       const doc = waitStep("prod", SHA_B, "prune");
-      assert.equal(doc.state, "running", "a failed step leaves the release open until `finish`");
+      assert.equal(
+        doc.state,
+        "running",
+        "a failed step leaves the release open until `finish`",
+      );
       assert.equal(doc.steps.at(-1).rc, 7);
       assert.match(doc.error, /prune exited 7/);
 
@@ -444,13 +519,28 @@ describe(
 
       assert.equal(ds(["release", "prod", SHA_B, "migrate", migrate]).code, 0);
       waitStep("prod", SHA_B, "migrate");
-      assert.equal(readShape("prod", SHA_A).state, "superseded", "a new SHA supersedes the last one");
-      assert.equal(ds(["finish", "prod", SHA_B, "failed"]).code, 0, "smoke RED closes B as failed");
+      assert.equal(
+        readShape("prod", SHA_A).state,
+        "superseded",
+        "a new SHA supersedes the last one",
+      );
+      assert.equal(
+        ds(["finish", "prod", SHA_B, "failed"]).code,
+        0,
+        "smoke RED closes B as failed",
+      );
 
       const marker = join(root, "rolled-back");
-      const rollback = ds(["supersede", "prod", scriptFile("rollback-up", `echo "$HOME" > "${marker}"\n`)]);
+      const rollback = ds([
+        "supersede",
+        "prod",
+        scriptFile("rollback-up", `echo "$HOME" > "${marker}"\n`),
+      ]);
       assert.equal(rollback.code, 0, rollback.err);
-      assert.ok(existsSync(marker), "the rollback script ran under the env lock");
+      assert.ok(
+        existsSync(marker),
+        "the rollback script ran under the env lock",
+      );
       assert.equal(readShape("prod", SHA_B).state, "superseded");
 
       const again = ds(["release", "prod", SHA_B, "migrate", migrate]);
@@ -459,15 +549,25 @@ describe(
       const fresh = waitStep("prod", SHA_B, "migrate");
       assert.equal(fresh.state, "running");
       assert.equal(fresh.steps.length, 1);
-      assert.equal(runs(counter), "run\nrun\n", "a fresh attempt re-runs the step");
+      assert.equal(
+        runs(counter),
+        "run\nrun\n",
+        "a fresh attempt re-runs the step",
+      );
       const archived = readdirSync(join(root, "state", "prod")).filter(
         (f) =>
           f.startsWith(`${SHA_B}.`) &&
           f.endsWith(".json") &&
           f !== `${SHA_B}.json`,
       );
-      assert.equal(archived.length, 1, "the closed attempt is archived, not lost");
-      const old = JSON.parse(readFileSync(join(root, "state", "prod", archived[0]), "utf8"));
+      assert.equal(
+        archived.length,
+        1,
+        "the closed attempt is archived, not lost",
+      );
+      const old = JSON.parse(
+        readFileSync(join(root, "state", "prod", archived[0]), "utf8"),
+      );
       assert.equal(old.state, "superseded");
       assert.equal(ds(["finish", "prod", SHA_B, "succeeded"]).code, 0);
     });
@@ -489,26 +589,55 @@ describe(
 
     it("refuses a rollback, a check and any other SHA's start while a unit runs — and never reaps it", () => {
       const gate = join(root, "seed3-gate");
-      const seed = scriptFile("seed3", `while [ ! -e "${gate}" ]; do sleep 0.05; done\n`);
+      const seed = scriptFile(
+        "seed3",
+        `while [ ! -e "${gate}" ]; do sleep 0.05; done\n`,
+      );
       assert.equal(ds(["release", "stage-pr-3", SHA_A, "seed", seed]).code, 0);
       const marker = join(root, "rollback3");
-      const refused = ds(["supersede", "stage-pr-3", scriptFile("rb3", `touch "${marker}"\n`)]);
+      const refused = ds([
+        "supersede",
+        "stage-pr-3",
+        scriptFile("rb3", `touch "${marker}"\n`),
+      ]);
       assert.equal(refused.code, 3);
-      assert.match(refused.err, /ds-stage-pr-3-aaaaaaaaaaaa-seed\.service is still running/);
+      assert.match(
+        refused.err,
+        /ds-stage-pr-3-aaaaaaaaaaaa-seed\.service is still running/,
+      );
       assert.ok(!existsSync(marker), "nothing ran");
-      assert.equal(readShape("stage-pr-3", SHA_A).state, "running", "nothing changed");
+      assert.equal(
+        readShape("stage-pr-3", SHA_A).state,
+        "running",
+        "nothing changed",
+      );
       const check = ds(["check", "stage-pr-3"]);
       assert.equal(check.code, 3);
-      assert.match(check.err, /ds-stage-pr-3-aaaaaaaaaaaa-seed\.service is still running/);
+      assert.match(
+        check.err,
+        /ds-stage-pr-3-aaaaaaaaaaaa-seed\.service is still running/,
+      );
 
       // Even with its record closed under it, a live unit of another SHA blocks a start.
       editRecord("stage-pr-3", SHA_A, { state: "failed" });
       rmSync(join(root, "systemctl.log"), { force: true });
-      const other = ds(["release", "stage-pr-3", SHA_B, "pull", scriptFile("p3", "true\n")]);
+      const other = ds([
+        "release",
+        "stage-pr-3",
+        SHA_B,
+        "pull",
+        scriptFile("p3", "true\n"),
+      ]);
       assert.equal(other.code, 3);
-      assert.match(other.err, /ds-stage-pr-3-aaaaaaaaaaaa-seed\.service is still running/);
+      assert.match(
+        other.err,
+        /ds-stage-pr-3-aaaaaaaaaaaa-seed\.service is still running/,
+      );
       assert.ok(!existsSync(statusFile("stage-pr-3", SHA_B)));
-      assert.doesNotMatch(runs(join(root, "systemctl.log")), /ds-stage-pr-3-aaaaaaaaaaaa-seed/);
+      assert.doesNotMatch(
+        runs(join(root, "systemctl.log")),
+        /ds-stage-pr-3-aaaaaaaaaaaa-seed/,
+      );
 
       writeFileSync(gate, "");
       waitStep("stage-pr-3", SHA_A, "seed");
@@ -596,7 +725,10 @@ describe(
       ]) {
         const r = ds(args);
         assert.notEqual(r.code, 0);
-        assert.match(r.err, /^ds-release: corrupt status file .*stage-pr-9\/a{40}\.json/m);
+        assert.match(
+          r.err,
+          /^ds-release: corrupt status file .*stage-pr-9\/a{40}\.json/m,
+        );
         assert.doesNotMatch(r.err, /Traceback/);
       }
     });
@@ -604,7 +736,13 @@ describe(
     it("writes every record through a unique temp file", () => {
       const dir = join(root, "state", "stage-pr-11");
       mkdirSync(join(dir, `${SHA_A}.json.tmp`), { recursive: true });
-      const r = ds(["release", "stage-pr-11", SHA_A, "up", scriptFile("up11", "true\n")]);
+      const r = ds([
+        "release",
+        "stage-pr-11",
+        SHA_A,
+        "up",
+        scriptFile("up11", "true\n"),
+      ]);
       assert.equal(r.code, 0, r.err);
       assert.equal(waitStep("stage-pr-11", SHA_A, "up").steps[0].rc, 0);
     });
@@ -612,10 +750,15 @@ describe(
     it("runs the step as the calling operator through runuser, as on the real boxes", () => {
       const out = join(root, "runuser-out");
       const script = scriptFile("up13", `echo "$HOME $USER" > "${out}"\n`);
-      const r = ds(["release", "stage-pr-13", SHA_A, "up", script], { SUDO_USER: "dsop" });
+      const r = ds(["release", "stage-pr-13", SHA_A, "up", script], {
+        SUDO_USER: "dsop",
+      });
       assert.equal(r.code, 0, r.err);
       assert.equal(waitStep("stage-pr-13", SHA_A, "up").steps[0].rc, 0);
-      assert.match(runs(join(root, "runuser.log")), /^-u dsop -- env HOME=\/ USER=dsop LOGNAME=dsop bash --norc/m);
+      assert.match(
+        runs(join(root, "runuser.log")),
+        /^-u dsop -- env HOME=\/ USER=dsop LOGNAME=dsop bash --norc/m,
+      );
       assert.equal(runs(out), "/ dsop\n");
     });
   },

@@ -10,10 +10,10 @@ import { VerifyAddressGate, VerifyStep } from "./verify-entry";
 
 /**
  * `<VerifyRoute>` — the ONE server mount of the confirmation step (#2027 PR
- * 1.7; ADR-0013 A1 cross-front reuse), the sibling of `RegisterRoute`. Every
- * host confirms a new address here (003 EARS-24, #2455): the registration door
- * hops to `routes.verify` with `?email=` and the arrival `returnTo`, so the
- * step survives a reload or a new tab. The host route file is a MOUNT naming
+ * 1.7; ADR-0013 A1 cross-front reuse), the sibling of `RegisterRoute`. The
+ * registration door renders its code step in place and settles the address on
+ * `routes.verify` (003 EARS-24); this mount is what a reload or a new tab of
+ * that address enters, so the step survives both. The host route file is a MOUNT naming
  * its own `AuthFlowHostConfig`; everything below is host-neutral.
  *
  * Server-side, before the first byte of HTML, it takes the SAME decision the

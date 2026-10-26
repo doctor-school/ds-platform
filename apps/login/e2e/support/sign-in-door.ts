@@ -39,7 +39,7 @@ export function authRequestId(
 
 /**
  * The host path a door renders on. `page` is the door page itself
- * (`/verify` is the code step a door hops to on the same auth request).
+ * (`/verify` is the code step's own address on the same auth request, 003 EARS-24).
  */
 export function doorPath(
   storefront: Storefront,

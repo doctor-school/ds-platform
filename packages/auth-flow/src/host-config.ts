@@ -485,8 +485,9 @@ export type AuthFlowRoutes = {
   readonly login: string;
   readonly register: string;
   /**
-   * The confirmation route (003 EARS-24, rows 51, 76) — every host confirms a
-   * new address on a route of its own, which the registration door hops to.
+   * The confirmation route (003 EARS-24, rows 51, 76): on the sign-in host the
+   * address the in-place code step settles on and the route its reload enters;
+   * on a storefront the registration entry (003 EARS-61).
    */
   readonly verify: string;
   readonly reset: string;

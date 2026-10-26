@@ -93,9 +93,9 @@ export function expectEnteredThrough(
  * A guest's code step for `email` on the sign-in host (#3172). The storefront
  * `/verify` is the REGISTRATION entry and carries no address (003 EARS-61): it
  * lands on the host's registration door. The host's own `/verify` names its
- * door itself (`doorFor`) and reads the address from its query — the very page
- * the registration door's submit hops to — so it is opened on the same auth
- * request, exactly as the door's own navigation does. `returnTo` rides the
+ * door itself (`doorFor`) and reads the address from its query — the route a
+ * reload of the in-place code step enters (003 EARS-24) — so it is opened on
+ * the same auth request. `returnTo` rides the
  * storefront entry into the transaction.
  */
 export async function openHostCodeStep(

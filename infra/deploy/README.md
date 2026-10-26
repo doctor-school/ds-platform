@@ -253,8 +253,12 @@ restrict,from="192.168.0.20" ssh-ed25519 AAAA… ds-api-prod-hop
 `restrict` turns off pty, every forwarding and the user rc. Until the `--role data`
 converge above the line carries no forced command and reaches `deploy`'s sudo; the converge
 puts it behind `sudo -n /usr/local/bin/ds-deploy-entrypoint`, so it reaches only the data
-verbs — the accepted risk of tech spec §4 (ds-api-prod already holds the database owner
-credentials). Prove it from ds-api-prod as shown above (`… deploy@192.168.0.10 capabilities`).
+verbs. That forced command is not a privilege boundary against the key's holder: `ship`,
+`install` and `data-up` put a tree, root entrypoints and a compose file of the holder's
+choosing on ds-data-prod, so the key stays root-equivalent there — the accepted risk of tech
+spec §4 (ds-api-prod already holds the database owner credentials). What it buys: no
+interactive shell and no ad-hoc command, every call one allowlisted, logged verb, and
+`deploy` without its general sudo for any other key. Prove it from ds-api-prod as shown above (`… deploy@192.168.0.10 capabilities`).
 
 **Node on stage-1 and ds-api-prod (post-boot, once):** the release driver runs
 `tools/staging/slot.mjs` on stage-1 and `tools/deploy/prod.mjs` on ds-api-prod, so each

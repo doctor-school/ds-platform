@@ -106,6 +106,12 @@ gh workflow run deploy-prod.yml --ref main -f mode=rollback -f sha=<target sha> 
   `rollback to <sha12> — <reason>`, with the reason and the rolled-off SHA in its
   payload; `rollback-notice` posts «откат прода на <sha12>: <reason>» and the
   outcome to Mattermost through `release-notes.mjs` `postToMattermost`.
+- **Runtime configs (#3274).** The rollback puts the target's `Caddyfile` and
+  `centrifugo/config.json` (from the fetched target tree; the break-glass
+  `--rollback` reads them with `git show <sha>:<path>`) into the live compose
+  dir after keeping the running ones, validates them like a release before its
+  `up -d` (invalid → the running configs go back on disk, nothing is rolled
+  back), and applies them after the `up -d` with the same restore on failure.
 - **Break-glass stays on the workstation.** `pnpm deploy:prod --rollback`, the
   hotfix `--ref`, `--skip-ci-check`, `--allow-live-broadcast` and
   `--release-gate-exempt` are not on this path.
@@ -166,6 +172,14 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    pointer if it does not. A `pr/<N>` manifest never reaches production.
 2. **Ship** — `git archive <sha>` streamed over SSH to both boxes (compose files
    and configs; no deploy key). Streams are piped in-process → Windows-safe.
+   Right before it, the **runtime config backup (#3274)** keeps the `Caddyfile`
+   and `centrifugo/config.json` the running caddy / centrifugo serve (read through
+   `docker exec cat`; a container that cannot be read falls back to its file on
+   disk) in `/var/lib/ds-platform/runtime-config/previous/` (root 0700/0600),
+   outside the tree the ship replaces. The backup records the SHA it was taken for:
+   a re-entered run of that SHA keeps it, so a re-run never overwrites it with
+   already-shipped bytes; the next SHA retakes it (a rollback records its own
+   `rollback-<sha>` key).
 3. **data-prod** — PostgreSQL guard before shipping and before persistence-plane
    mutations, then immutable inspected server/sidecar images with
    `up -d --no-build --pull never --wait`. Redis retains its normal `up` path.
@@ -192,6 +206,17 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    files visible through the running containers and **restart only consumers
    whose bind mount is stale**. Both mounts are compared again after apply, so
    a mismatch fails the deploy instead of requiring a manual SSH step (#1175).
+   A failed apply (restart or post-restart compare) puts the backed-up configs
+   back, restarts caddy + centrifugo onto them, compares again and fails the
+   release with that restore result (#3274).
+   5b. **Pre-swap edge config validate (#3274)** — right after the boot verify,
+   before IdP, `migrate` and `up -d`: `caddy validate` of the shipped
+   `Caddyfile` on the caddy image the shipped `compose.yml` pins (the command of
+   `tools/ci/validate-caddyfiles.sh`, no published port), and the shipped
+   `centrifugo/config.json` must parse as a JSON object (a JSON parse, not
+   `centrifugo checkconfig`: its secrets come from the env file). Invalid →
+   the backed-up configs go back on disk, so the tree matches what still runs,
+   and the deploy stops: nothing was swapped, prod still serves the previous config.
    5a. **Pre-swap boot verify (#1410)** — between `pull` and `migrate`/`up -d`, the
    freshly pulled **`ds-portal:<sha>`, `ds-admin:<sha>` and `ds-doctor:<sha>`**
    (#1723) are each started as a

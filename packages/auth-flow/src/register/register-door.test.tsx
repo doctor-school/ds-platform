@@ -30,8 +30,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const push = vi.fn();
 const replace = vi.fn();
+const refresh = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push, replace }),
+  useRouter: () => ({ push, replace, refresh }),
 }));
 
 const register = vi.fn();
@@ -112,6 +113,7 @@ type DoorProps = {
 beforeEach(() => {
   push.mockReset();
   replace.mockReset();
+  refresh.mockReset();
   register.mockReset().mockResolvedValue({ status: "pending_verification" });
   verify.mockReset().mockResolvedValue({ status: "verified" });
   captchaMode = "bypass";
@@ -487,6 +489,11 @@ describe("003 EARS-41 / 021 EARS-15.4: what the door holds for the code step", (
         (sent as { password?: string }).password,
         "the new password rides with the code (EARS-23 re-registration)",
       ).toBe(PASSWORD);
+      // The confirmed step lands like the verify door (008 EARS-5): replace, then refresh.
+      await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+      expect(replace.mock.invocationCallOrder[0]!).toBeLessThan(
+        refresh.mock.invocationCallOrder[0]!,
+      );
     },
   );
 

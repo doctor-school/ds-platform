@@ -1230,6 +1230,210 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     expect(stale.values.has(RECORD_COOKIE_NAME)).toBe(false);
   });
 
+  it("EARS-68: S166 positive max_age reuses at the credential boundary but recent reuse cannot defer the next fresh credential", async () => {
+    const address = await account("s166-max-age");
+    recordNow = new Date();
+    const jar = new Jar();
+    const other = new Jar();
+    await signIn(jar, address);
+    await signIn(other, address);
+    const records = app.get(SignInHostRecordStore);
+    const oldCookie = jar.values.get(RECORD_COOKIE_NAME)!;
+    const otherCookie = other.values.get(RECORD_COOKIE_NAME)!;
+    const original = await records.find(oldCookie);
+    const otherRecord = await records.find(otherCookie);
+    expect(original).not.toBeNull();
+    expect(otherRecord).not.toBeNull();
+    expect(otherCookie).not.toBe(oldCookie);
+    const finalisedBefore = [...hostIdp.finalised];
+    const lifetimesBefore = [...hostIdp.lifetimes];
+    const password = vi.spyOn(idp, "passwordLogin");
+    const terminate = vi.spyOn(idp, "terminateSession");
+    const insert = vi.spyOn(records, "insert");
+    const remove = vi.spyOn(records, "delete");
+    const touch = vi.spyOn(records, "touchFinalised");
+    const lifetime = vi.spyOn(hostIdp, "setSessionLifetime");
+    const finalise = vi.spyOn(hostIdp, "finaliseWithSession");
+    const finaliseError = vi.spyOn(hostIdp, "finaliseWithError");
+    const spies = [
+      password,
+      terminate,
+      insert,
+      remove,
+      touch,
+      lifetime,
+      finalise,
+      finaliseError,
+    ];
+    try {
+      const maxAgeSeconds = 60;
+      recordNow = new Date(
+        original!.lastCredentialAt.getTime() + maxAgeSeconds * 1000,
+      );
+      const boundaryRequest = hostIdp.seedAuthRequest({
+        clientId: ACADEMY,
+        maxAgeSeconds,
+      });
+      const reused = await entry(jar, boundaryRequest);
+      expect(reused.res.statusCode).toBe(200);
+      expect(reused.body).toEqual({
+        action: "redirect",
+        url: expect.stringContaining("code="),
+      });
+      expect(reused.res.cookies).toEqual([]);
+      expect(jar.values.get(RECORD_COOKIE_NAME)).toBe(oldCookie);
+      expect(finalise).toHaveBeenCalledExactlyOnceWith(
+        boundaryRequest,
+        original!.session,
+      );
+      expect(touch).toHaveBeenCalledExactlyOnceWith(oldCookie, recordNow);
+      const recentlyUsed = { ...original, lastFinalisedAt: recordNow };
+      expect(await records.find(oldCookie)).toEqual(recentlyUsed);
+      expect(await records.find(otherCookie)).toEqual(otherRecord);
+      expect(hostIdp.lifetimes).toEqual(lifetimesBefore);
+      for (const spy of [
+        password,
+        terminate,
+        insert,
+        remove,
+        lifetime,
+        finaliseError,
+      ])
+        expect(spy).not.toHaveBeenCalled();
+
+      recordNow = new Date(recordNow.getTime() + 1);
+      const authRequest = hostIdp.seedAuthRequest({
+        clientId: ACADEMY,
+        maxAgeSeconds,
+      });
+      const opened = await entry(jar, authRequest);
+      expect(opened.res.statusCode).toBe(200);
+      expect(opened.body).toEqual({
+        action: "render",
+        storefront: "academy",
+        door: "login",
+        authRequest,
+        csrf: expect.any(String),
+      });
+      if (opened.body.action !== "render") throw new Error("not rendered");
+      const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+      const formId = jar.values.get(FORM_COOKIE_NAME)!;
+      const binding = {
+        csrfToken: opened.body.csrf,
+        storefront: "academy",
+        authRequestId: authRequest,
+      };
+      expect(await state.getForm(formId)).toEqual(binding);
+      expect(opened.res.cookies.map((cookie) => cookie.name)).toEqual([
+        FORM_COOKIE_NAME,
+      ]);
+      expect(await records.find(oldCookie)).toEqual(recentlyUsed);
+      expect(await records.find(otherCookie)).toEqual(otherRecord);
+      expect(await recordRows(address)).toHaveLength(2);
+      expect(jar.values.get(RECORD_COOKIE_NAME)).toBe(oldCookie);
+      expect(finalise).toHaveBeenCalledTimes(1);
+      expect(touch).toHaveBeenCalledTimes(1);
+      expect(hostIdp.finalised).toEqual([
+        ...finalisedBefore,
+        { id: boundaryRequest, session: original!.session },
+      ]);
+      expect(hostIdp.lifetimes).toEqual(lifetimesBefore);
+      for (const spy of [
+        password,
+        terminate,
+        insert,
+        remove,
+        lifetime,
+        finaliseError,
+      ])
+        expect(spy).not.toHaveBeenCalled();
+      const projection = JSON.stringify({
+        body: opened.body,
+        headers: opened.res.headers,
+      });
+      for (const secret of [
+        address,
+        oldCookie,
+        otherCookie,
+        original!.session.sub,
+        original!.session.zitadelSessionId,
+        original!.session.sessionToken,
+      ])
+        expect(projection).not.toContain(secret);
+
+      const accepted = await post(jar, "login", {
+        identifier: address,
+        password: PASSWORD,
+        authRequest,
+        csrf: opened.body.csrf,
+      });
+      expect(accepted.statusCode).toBe(200);
+      expect(accepted.json()).toEqual({
+        status: "redirect",
+        url: expect.stringContaining("code="),
+      });
+      expect(password).toHaveBeenCalledExactlyOnceWith(address, PASSWORD);
+      const freshCookie = jar.values.get(RECORD_COOKIE_NAME)!;
+      expect(freshCookie).toBeTruthy();
+      expect([oldCookie, otherCookie]).not.toContain(freshCookie);
+      const fresh = await records.find(freshCookie);
+      expect(fresh?.session.sub).toBe(original!.session.sub);
+      expect(fresh!.session.zitadelSessionId).not.toBe(
+        original!.session.zitadelSessionId,
+      );
+      expect(fresh!.lastCredentialAt).toEqual(recordNow);
+      expect(fresh!.expiresAt.getTime()).toBe(
+        recordNow.getTime() + SIGN_IN_HOST_SESSION_LIFETIME_SECONDS * 1000,
+      );
+      expect(await records.find(oldCookie)).toBeNull();
+      expect(await records.find(otherCookie)).toEqual(otherRecord);
+      expect(await recordRows(address)).toHaveLength(2);
+      expect(terminate).toHaveBeenCalledExactlyOnceWith(original!.session);
+      expect(remove).toHaveBeenCalledExactlyOnceWith(oldCookie);
+      expect(insert).toHaveBeenCalledTimes(1);
+      expect(lifetime).toHaveBeenCalledExactlyOnceWith(
+        fresh!.session,
+        SIGN_IN_HOST_SESSION_LIFETIME_SECONDS,
+      );
+      expect(finalise).toHaveBeenCalledTimes(2);
+      expect(finalise).toHaveBeenLastCalledWith(authRequest, fresh!.session);
+      expect(finaliseError).not.toHaveBeenCalled();
+      expect(accepted.cookies.map((cookie) => cookie.name)).toEqual([
+        RECORD_COOKIE_NAME,
+      ]);
+      expect(await state.getForm(formId)).toEqual(binding);
+      expect(jar.values.get(FORM_COOKIE_NAME)).toBe(formId);
+      expect(jar.values.has(SESSION_COOKIE_NAME)).toBe(false);
+
+      const independentRequest = hostIdp.seedAuthRequest({
+        clientId: ACADEMY,
+        prompt: ["none"],
+      });
+      const independent = await entry(other, independentRequest);
+      expect(independent.body).toEqual({
+        action: "redirect",
+        url: expect.stringContaining("code="),
+      });
+      expect(independent.res.cookies).toEqual([]);
+      expect(finalise).toHaveBeenCalledTimes(3);
+      expect(finalise).toHaveBeenLastCalledWith(
+        independentRequest,
+        otherRecord!.session,
+      );
+      expect(other.values.get(RECORD_COOKIE_NAME)).toBe(otherCookie);
+      expect(await records.find(otherCookie)).toEqual({
+        ...otherRecord,
+        lastFinalisedAt: recordNow,
+      });
+      expect(terminate).toHaveBeenCalledTimes(1);
+      expect(remove).toHaveBeenCalledTimes(1);
+      expect(insert).toHaveBeenCalledTimes(1);
+      expect(lifetime).toHaveBeenCalledTimes(1);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
+
   it("EARS-70: a form post off the host origin, cross-site, without the form cookie or with a wrong CSRF token is the one 403", async () => {
     const address = await account("csrf");
     const jar = new Jar();

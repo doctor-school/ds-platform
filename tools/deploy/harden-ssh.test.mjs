@@ -220,6 +220,7 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
       [
         '[[ $1 == --root ]] && { prefix=$2; shift 2; }',
         '[[ $1 == -d ]] || exit 2',
+        '[[ -z ${STUB_GPASSWD_RC:-} ]] || exit "$STUB_GPASSWD_RC"',
         'sed -E -i "/^$3:/ { s/([:,])$2(,|\\$)/\\1/; s/,\\$// }" "$prefix/etc/group"',
       ].join("\n"),
     );
@@ -593,6 +594,35 @@ describe("2984: harden-ssh.sh on a fixture root", { skip: SKIP }, () => {
     assert.equal(again.status, 0, again.out);
     assert.match(again.out, /nothing to change/);
     assert.deepEqual(snapshot(), before);
+  });
+
+  const NARROWED_GROUPS = "root:x:0:\nsudo:x:27:\ndocker:x:999:\ndeploy:x:1000:\n";
+
+  it("3320: an interrupted converge (hop line already forced, deploy still holding the cloud-init rule and groups) is finished by the next release", () => {
+    dataBox({ deployKeys: `${HOP_FORCED}\n` });
+    breakglassBox();
+    const r = run(releaseArgs(), { SUDO_USER: "root" });
+    assert.equal(r.status, 0, r.out);
+    assert.doesNotMatch(r.out, /nothing to change/);
+    assert.equal(read("home/deploy/.ssh/authorized_keys"), `${HOP_FORCED}\n`);
+    assert.equal(read("etc/sudoers.d/90-ds-deploy"), scriptDeploySudoers());
+    assert.equal(read("etc/sudoers.d/90-cloud-init-users"), "# Created by cloud-init\n\n# User rules for deploy\n");
+    assert.equal(read("etc/group"), NARROWED_GROUPS);
+  });
+
+  it("3320: a converge that stopped after the hop rewrite and before its reload is finished, reload included, by the next release", () => {
+    dataBox();
+    breakglassBox();
+    const stopped = run(releaseArgs(), { SUDO_USER: "root", STUB_GPASSWD_RC: "1" });
+    assert.notEqual(stopped.status, 0, stopped.out);
+    assert.equal(read("home/deploy/.ssh/authorized_keys"), `${HOP_FORCED}\n`, "the hop line went first");
+    assert.notEqual(read("etc/group"), NARROWED_GROUPS, "deploy is still in a group");
+    assert.doesNotMatch(calls(), /systemctl reload ssh/, "the run stopped before its reload");
+    rmSync(join(dir, "calls.log"));
+    const next = run(releaseArgs(), { SUDO_USER: "root" });
+    assert.equal(next.status, 0, next.out);
+    assert.equal(read("etc/group"), NARROWED_GROUPS);
+    assert.match(calls(), /^systemctl reload ssh$/m, "the sshd files the stopped run wrote take effect");
   });
 
   for (const [what, box, env, message] of [

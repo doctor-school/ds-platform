@@ -29,7 +29,13 @@ export const DATA_VERBS = [
   "finish",
   "check",
   "supersede",
+  "converge",
 ];
+
+// The verbs the capabilities probe requires: an entrypoint that predates `converge`
+// still serves the run up to its `install`, and the entrypoint that install places
+// serves `converge` (#3320).
+const PROBE_VERBS = DATA_VERBS.filter((v) => v !== "converge");
 
 // The entrypoint's own COMMAND_RE / COMMAND_MAX: what it admits as a request.
 const REQUEST_RE = /^[a-z0-9-]+( [a-z0-9-]+)*$/;
@@ -58,7 +64,7 @@ export function dataVerbCommand(request, form) {
 export function servesDataVerbs(stdout) {
   try {
     const answer = JSON.parse(String(stdout).trim());
-    return answer?.role === "data" && DATA_VERBS.every((v) => answer.verbs?.includes(v));
+    return answer?.role === "data" && PROBE_VERBS.every((v) => answer.verbs?.includes(v));
   } catch {
     return false;
   }
@@ -157,25 +163,29 @@ export function createDataProdClient({
     /**
      * The release's own converge of ds-data-prod (#3320; spec §5 «Data-prod verbs.»
      * «Converge.»), after the data `install` and before any data-prod state change.
-     * The form that answered `capabilities` tells the state: the forced command means
-     * converged (a no-op); `sudo` means the hop still has deploy's shell and sudo, so
-     * the installed root-owned harden-ssh.sh narrows the box, and the run goes on only
-     * once the forced command answers. Only the hop calls this: a breakglass login
-     * answers through `sudo` on a converged box too.
+     * The box proves it, every release: the `converge <sha>` verb runs the installed
+     * root-owned harden-ssh.sh --role data --from-release (idempotent, `nothing to
+     * change` once done) through whichever form answered — the forced command once
+     * converged, `sudo -n` before. Which form answers is no proof: a converge that
+     * stopped after the hop line went behind the forced command leaves deploy's other
+     * rights in place, and only the next run of harden-ssh.sh finishes them. The run
+     * goes on only when the verb exited 0 and the forced command answers. Only the hop
+     * calls this: a breakglass login answers through `sudo` on a converged box too.
      */
     async converge(sha) {
-      if ((await client.ready()) === "forced") {
-        log(`  ✓ ${host}: already converged: capabilities answers through the forced command`);
-        return;
+      const through = await client.ready();
+      log(
+        `  ↻ ${host}: converge ${sha.slice(0, 12)}: ${HARDEN_SSH_BIN} --role data --from-release, through ${through === "forced" ? "the forced command" : "sudo -n"}`,
+      );
+      try {
+        await client.call(["converge", sha], { stream: true });
+      } catch (error) {
+        // A converge that failed after the hop rewrite answers only through the
+        // forced command now: re-probe, so the run's `finish … failed` still lands.
+        form = await detect();
+        if (!form) unreachable = new Error(`${host}: no data-prod command form answers after the failed converge`);
+        throw error;
       }
-      // The run's `install` was served by the entrypoint installed before it, whose
-      // install list may predate harden-ssh.sh; the one it just installed is this
-      // run's, so a second `install` places harden-ssh.sh from the shipped tree.
-      await client.call(["install", sha]);
-      const command = `sudo -n ${HARDEN_SSH_BIN} --role data --from-release`;
-      log(`  ↻ ${host}: converging the hop to the forced command (${command})`);
-      // A refused converge changed nothing: the `sudo` form stays the run's.
-      await run(host, command, { label: "converge", stream: true });
       form = await detect();
       if (form !== "forced") {
         unreachable = new Error(`${host}: the forced command does not answer after the converge`);

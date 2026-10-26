@@ -359,9 +359,10 @@ if [[ $role == prod || $role == data ]]; then
   [[ $dry_run == 1 || $from_release == 1 || ${SUDO_USER-} == breakglass ]] ||
     fail "run --role $role from a breakglass session (sudo as breakglass); deploy's sudo rights and keys were left as they are"
   # Data: deploy keeps the hop line, behind the forced command, and no other key. It
-  # goes first: a hop session lost right after it leaves a box the forced command
-  # serves (the next release goes on through the verbs); lost before it, deploy keeps
-  # its shell and sudo and the next release converges again.
+  # goes first: a run that stops after it leaves a box the forced command serves, and
+  # the next release's `converge` verb runs this again and finishes the narrowing;
+  # stopped before it, deploy keeps its shell and sudo and the next release converges
+  # through `sudo -n`.
   if [[ $role == data ]] && ! [[ $(cat "$DEPLOY_KEYS"; printf x) == "$want_hop"$'\n'x ]]; then
     note "put the hop key behind the forced command and remove every other deploy key from $DEPLOY_KEYS"
     if [[ $dry_run == 0 ]]; then
@@ -425,7 +426,10 @@ for want in 'permitrootlogin no' 'passwordauthentication no' 'kbdinteractiveauth
   fi
 done
 drop_backups
-if [[ $sshd_changed == 1 ]]; then
+# From a release the reload is every run's: a converge that stopped after writing the
+# sshd files and before this reload left them unloaded, and the next release has no
+# other way to tell (#3320). A reload keeps the running sessions, the hop's too.
+if [[ $sshd_changed == 1 || $from_release == 1 ]]; then
   systemctl reload ssh
   say "ssh reloaded"
 fi

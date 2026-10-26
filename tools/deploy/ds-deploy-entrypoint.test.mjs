@@ -748,6 +748,9 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     `check ds-prod-${SHA.slice(0, 12)}-migrate`,
     `supersede ds-prod-${SHA.slice(0, 12)}-rollback extra`,
     "backup-info all",
+    "converge",
+    `converge ${SHA.slice(0, 12)}`,
+    `converge ${SHA} now`,
   ]) {
     it(`3313: rejects \`${command}\` (exit 2, auth.warning) before any action`, () => {
       setRole("data");
@@ -914,6 +917,27 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     for (const { dest, path } of BOX_ENTRYPOINTS) {
       assert.equal(readFileSync(join(root, dest), "utf8"), `# ${path}\n`, dest);
     }
+  });
+
+  it("3320: converge installs the shipped entrypoints, then runs the installed harden-ssh.sh --role data --from-release", () => {
+    setRole("data");
+    for (const { path } of BOX_ENTRYPOINTS) {
+      mkdirSync(dirname(join(tree(), path)), { recursive: true });
+      writeFileSync(
+        join(tree(), path),
+        path.endsWith("harden-ssh.sh")
+          ? '#!/usr/bin/env bash\necho "harden-ssh-called $*" >> "$STUB_DIR/harden.log"\necho "harden-ssh: nothing to change"\n'
+          : `# ${path}\n`,
+      );
+    }
+    const r = run(`converge ${SHA}`);
+    assert.equal(r.status, 0, String(r.stderr));
+    assert.match(r.stdout, new RegExp(`box entrypoints of ${SHA} installed`));
+    assert.match(r.stdout, /harden-ssh: nothing to change/);
+    assert.equal(log("harden"), "harden-ssh-called --role data --from-release\n");
+    assert.match(log("sudo"), /usr\/local\/lib\/ds-platform\/harden-ssh\.sh --role data --from-release$/m);
+    writeFileSync(join(tree(), "infra/deploy/bin/harden-ssh.sh"), "#!/usr/bin/env bash\necho refused >&2; exit 1\n");
+    assert.equal(run(`converge ${SHA}`).status, 1, "the converge exits as harden-ssh.sh does");
   });
 
   it("3313: data-up and backup start their durable unit with the fixed step script", () => {

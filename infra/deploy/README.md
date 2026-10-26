@@ -210,24 +210,26 @@ exactly one hop line; it takes no `--ci-pubkey` (no CI key reaches the data box)
 `90-ds-deploy`, rewrites the hop line to
 `command="sudo -n /usr/local/bin/ds-deploy-entrypoint",restrict,from="<api-prod VPC IP>" <key>`,
 removes every other `deploy` key (the operator key included), `deploy`'s other sudoers
-rules and its groups `sudo` and `docker`; the hop line goes first, so a hop session lost
-mid-run leaves either a box the forced command serves or one the next release converges
-again.
+rules and its groups `sudo` and `docker`; the hop line goes first, so a run that stops
+part-way leaves a box one of the two forms still serves, and the next release's
+`converge` finishes it.
 
-**The prod release runs it — no owner step (#3320).** The data `install` verb places a
-root-owned copy at `/usr/local/lib/ds-platform/harden-ssh.sh`; right after it, while
-`capabilities` still answers only through `sudo -n` (the hop has `deploy`'s shell and
-sudo), the Actions run calls `install` once more (the entrypoint that served the first
-call may predate harden-ssh.sh in its install list; the one it installed does not), then `sudo -n /usr/local/lib/ds-platform/harden-ssh.sh --role data
---from-release` over the hop and goes on only once the forced command answers. A converged
-box makes the step a no-op. `--from-release` writes nothing of `breakglass`'s and takes no
+**The prod release runs it — no owner step (#3320).** Every Actions release calls the
+data verb `converge <sha>` right after its data `install`: the entrypoint installs the box
+entrypoints of the shipped tree (a root-owned `/usr/local/lib/ds-platform/harden-ssh.sh`
+among them), then runs it `--role data --from-release`. It goes through the forced command
+once converged and through `sudo -n` before; the run goes on only when the verb exited 0
+and the forced command answers `capabilities`. The answering form is no proof: a converge
+that stopped after the hop rewrite is finished by the next release's `converge`, and from
+a release the script reloads ssh every run. A converged box prints `nothing to change`. `--from-release` writes nothing of `breakglass`'s and takes no
 key; in place of the breakglass-session proof it checks box-side, before any change, that
 the break-glass path is usable — user `breakglass` exists with a login shell and an
 unexpired account, its `authorized_keys` holds a key, `91-ds-breakglass` passes `visudo -c`
 and grants it NOPASSWD sudo, and `sshd -t` passes with the new config — and refuses,
 changing nothing, when any check fails (the release then fails before any data-prod
-state change). The release log shows `↻ ds-data-prod: converging the hop to the forced
-command` and `✓ … converged`; the next release logs `✓ … already converged`.
+state change). Every release log shows `↻ ds-data-prod: converge <sha12>: …
+harden-ssh.sh --role data --from-release, through …`, the script's lines (`nothing to
+change` once converged) and `✓ … converged: capabilities answers through the forced command`.
 
 Break-glass only (a rebuilt box with no release yet, or a release refused by the checks
 above): the same converge from a `breakglass` session on ds-data-prod, with the key:

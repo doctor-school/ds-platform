@@ -476,7 +476,8 @@ stay on the operator path above.
   Both reach ds-data-prod only through the data verbs of `ds-deploy-entrypoint`
   (`lib/data-prod.mjs`; spec §5 «Data-prod verbs.», #3313): `postgres-probe`,
   `postgres-checkpoint`, `ship`, `install`, `data-env`, `data-up`, `backup`,
-  `backup-info`, `rollback-floor`, `finish`, `check`, `supersede`, `capabilities`. A
+  `backup-info`, `rollback-floor`, `finish`, `check`, `supersede`, `converge`,
+  `capabilities`. A
   payload is one JSON object or the tree archive on stdin, checked box-side; no script
   travels. The client asks `capabilities` once per run, first as the forced command of the
   converged hop key, then through `sudo -n` (a shell login: `breakglass`, or `deploy`
@@ -484,12 +485,16 @@ stay on the operator path above.
   predates the data verbs; the run installs the box entrypoints from the tree it holds
   through `deploy`'s shell, once, and asks again. **Converge (#3320):** right after its
   data `install` and before `data-prod-env`, the `--local` run converges ds-data-prod
-  itself (`client.converge()`): answered through `sudo -n`, it runs the installed
-  `sudo -n /usr/local/lib/ds-platform/harden-ssh.sh --role data --from-release` over the
-  hop, then asks `capabilities` again and goes on only when the forced command answers;
-  a refused or failed converge fails the run before any data-prod state change. The log
-  shows `↻ ds-data-prod: converging the hop to the forced command` then `✓ … converged`;
-  a converged box logs `✓ … already converged` and changes nothing. No owner server step
+  itself (`client.converge()`), every release: the `converge <sha>` verb, through the
+  form that answered (forced once converged, `sudo -n` before), installs the shipped box
+  entrypoints and runs the root-owned `harden-ssh.sh --role data --from-release`; the
+  run then asks `capabilities` again and goes on only when the verb exited 0 and the
+  forced command answers. The answering form alone is no proof — a converge stopped after
+  the hop rewrite is finished by the next one. A refused or failed converge fails the run
+  before any data-prod state change, after a re-probe so `finish … failed` still lands.
+  The log shows `↻ ds-data-prod: converge <sha12>: …` then `✓ … converged`; a
+  converged box prints `nothing to change`. `capabilities` must name every verb but
+  `converge` (an older entrypoint serves the run until this run's `install`). No owner server step
   is in the path. The transition and the pre-converge `sudo` branch of the hop go, with
   `bootstrapSources`, after the first release that converged (#3320).
 - **No downgrade.** The driver (before it starts the unit) and the run itself (right

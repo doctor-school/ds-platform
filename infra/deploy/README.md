@@ -970,11 +970,14 @@ deploy.
    gh workflow run deploy-prod.yml --ref main -f mode=redeploy -f sha=<live sha> -f owner_quote="<owner word>"
    ```
 
-   It runs that SHA's release again on the box as a fresh attempt, with every
-   container of the api compose recreated (`up -d --force-recreate`), and writes a new
-   Deployment record; no Release, no digest (`tools/deploy/README.md` «Redeploy
-   mode»). Break-glass `pnpm deploy:prod` over the `breakglass` key stays the fallback
-   when Actions or the box driver is unavailable.
+   It re-runs that SHA's app-tier release steps on the box as a fresh attempt (no
+   box-tooling install, no ds-data-prod phase), with every container of the api
+   compose recreated (`up -d --force-recreate`), and writes a new Deployment record;
+   no Release, no digest (`tools/deploy/README.md` «Redeploy mode»). Break-glass
+   `pnpm deploy:prod` over the `breakglass` key stays the fallback when Actions or
+   the box driver is unavailable. The Actions redeploy needs a live prod SHA that
+   contains #3354; before that release ships, or after a rollback to an older SHA,
+   the route is break-glass `pnpm deploy:prod`.
 
 5. **Ship source + pull images.** Ship the merged `origin/main` tree to the boxes
    (Apply order step 5 / a `deploy-prod.yml` release does this), then bring that SHA's

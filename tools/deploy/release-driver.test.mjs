@@ -270,7 +270,10 @@ describe("2985: release-driver", { skip: SKIP }, () => {
         '    echo "{}" > "$DOCKER_CONFIG/config.json"; exit 0 ;;',
         "  logout) exit 0 ;;",
         // #3157: the running api container's image, from $STUB_DIR/live-image.
-        '  inspect) [[ -f $STUB_DIR/live-image ]] || exit 1; cat "$STUB_DIR/live-image" ;;',
+        // #3354: the n-th inspect answers from live-image.<n> when that file exists.
+        '  inspect) n=$(( $(cat "$STUB_DIR/inspect.count" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$STUB_DIR/inspect.count"',
+        '    f=$STUB_DIR/live-image; [[ -f $f.$n ]] && f=$f.$n',
+        '    [[ -f $f ]] || exit 1; cat "$f" ;;',
         "  manifest) ref=${!#}; f=$STUB_DIR/registry/${ref//[\\/:]/_}.json",
         '    [[ -f $f ]] || { echo "no such manifest" >&2; exit 1; }; cat "$f" ;;',
         "esac",
@@ -1057,6 +1060,29 @@ describe("2985: release-driver", { skip: SKIP }, () => {
         /^inspect ds-api-prod-api-1 --format \{\{\.Config\.Image\}\}$/m,
       );
       assert.match(log("docker.log"), /^manifest inspect --verbose /m);
+    });
+
+    it("re-reads the live SHA under the driver lock: a rollback that ended meanwhile refuses the redeploy", () => {
+      setUnit(exited(0), PROD_UNIT);
+      setRecord("succeeded");
+      // The first inspect (before the lock) finds <sha> live; the one under the lock
+      // finds the SHA a break-glass rollback put back in between.
+      writeFileSync(join(dir, "live-image.2"), `ds-api:${LIVE}\n`);
+      writeFileSync(join(dir, "compare-live.json"), JSON.stringify({ status: "ahead" }));
+      const r = run(["redeploy", "prod", SHA]);
+      assert.equal(r.status, 3, r.stderr);
+      assert.match(
+        r.stderr,
+        new RegExp(`not the live prod SHA ${LIVE.slice(0, 12)} — a newer SHA is a release`),
+      );
+      assert.equal(
+        (log("docker.log").match(/^inspect ds-api-prod-api-1 /gm) ?? []).length,
+        2,
+        "the live SHA is read again under the lock",
+      );
+      assert.doesNotMatch(log("ds-release.log"), /^lease /m);
+      assert.equal(log("systemctl.log"), "");
+      assert.equal(log("systemd-run.args"), "");
     });
 
     it("`status prod <sha>` keeps finding the redeploy: unit-state reports the same unit running", () => {

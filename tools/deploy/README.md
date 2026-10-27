@@ -118,7 +118,11 @@ gh workflow run deploy-prod.yml --ref main -f mode=redeploy -f sha=<live sha> -f
   `up -d` only for a changed configuration or image, and its documentation does
   not count an `env_file`'s contents
   ([docker compose up](https://docs.docker.com/reference/cli/docker/compose/up/)).
-  A redeploy while that unit runs attaches (`attached`).
+  A redeploy while that unit runs attaches (`attached`) — and that running unit
+  may be the SHA's _release_ run, which swaps with the bare `up -d` (no
+  `--force-recreate`); the workflow still writes a redeploy record for it. The
+  driver re-reads the live SHA under its lock, so a rollback that ended in
+  between refuses the redeploy.
 - **After a terminal status.** No release cut and no digest (no new code).
   `redeploy-record` writes a new Deployment record of every run —
   `redeploy @ <sha12> — «<quote>»`, payload `kind: redeploy` — even though the

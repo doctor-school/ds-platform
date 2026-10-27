@@ -251,6 +251,7 @@ export const DEPLOY_PLAN = Object.freeze([
   "preflight",
   "test-token",
   "service-set",
+  "runtime-env",
   "postgres-verify",
   "previous-sha",
   "runtime-config-backup",
@@ -1200,45 +1201,115 @@ async function assertProdApiEnvHasNoTestToken() {
   ok(`${API_PROD_ENV_FILE}: no BOT_PROTECTION_TEST_TOKEN`);
 }
 
-// --- #3171: the sign-in host's record key is owner-placed in api.env ---------
-// The api's sign-in-host module stays disabled (404) without SIGN_IN_RECORD_KEY;
-// a release whose target ships the sign-in host refuses before any box change
-// instead of shipping a host whose every form post 404s. Counted, never printed.
-export function apiEnvRecordKeyProbeScript(envFile = API_PROD_ENV_FILE) {
-  return `if sudo test -r '${envFile}'; then
+// --- #1468: api.env carries every variable the runtime-env contract requires --
+// 2026-08-25 the api was swapped onto a box without LIFECYCLE_IMPACT_TOKEN_SECRET
+// and crash-looped behind a 502. The contract is the shipped SHA's own file (the
+// extracted tree on the box, `git show` on the operator path), the same list the
+// api's production boot refuses without. The probe prints names and states only —
+// a value never leaves the box — and the verdict fails closed. The #3171 record-key
+// check is the contract's `when: { image: "ds-login" }` entry.
+export const RUNTIME_ENV_CONTRACT_PATH = "packages/schemas/src/runtime-env/runtime-env-contract.json";
+const RUNTIME_ENV_CONTAINERS = new Set(["api", "admin", "portal", "doctor", "login"]);
+const RUNTIME_ENV_NAME = /^[A-Z][A-Z0-9_]*$/;
+const RUNTIME_ENV_STATES = new Set(["absent", "empty", "placeholder", "ok"]);
+
+export function parseRuntimeEnvContract(text) {
+  const bad = (why) => new Error(`malformed runtime-env contract (${RUNTIME_ENV_CONTRACT_PATH}): ${why}`);
+  let c;
+  try {
+    c = JSON.parse(text);
+  } catch (e) {
+    throw bad(e.message);
+  }
+  if (typeof c?.envFile !== "string" || !c.envFile.startsWith("/")) throw bad("envFile");
+  if (!Array.isArray(c.variables) || c.variables.length === 0) throw bad("variables");
+  for (const v of c.variables) {
+    if (typeof v?.name !== "string" || !RUNTIME_ENV_NAME.test(v.name)) throw bad(`name ${JSON.stringify(v?.name)}`);
+    if (!Array.isArray(v.containers) || v.containers.length === 0 || !v.containers.every((x) => RUNTIME_ENV_CONTAINERS.has(x))) {
+      throw bad(`${v.name}.containers`);
+    }
+    if (typeof v.ref !== "string" || !v.ref.trim()) throw bad(`${v.name}.ref`);
+    if (v.when !== undefined && (typeof v.when?.image !== "string" || !v.when.image)) throw bad(`${v.name}.when`);
+  }
+  return c;
+}
+
+/** The names this release requires: every unconditional entry, plus those whose image it ships. */
+export function requiredRuntimeEnv(contract, services) {
+  const images = new Set((services ?? []).map((s) => s.image));
+  return contract.variables.filter((v) => v.when === undefined || images.has(v.when.image)).map((v) => v.name);
+}
+
+// The LAST assignment wins, as for compose env_file and the runbook's `. api.env`.
+// The transport runs this under `bash -euo pipefail` (remote.mjs `remoteBash`): a grep
+// miss (exit 1) on an absent variable must not abort the probe, hence `|| true`.
+export function apiEnvRuntimeEnvProbeScript(names, envFile = API_PROD_ENV_FILE) {
+  for (const n of names) {
+    if (!RUNTIME_ENV_NAME.test(n)) throw new Error(`runtime-env: refusing an unsafe variable name ${JSON.stringify(n)}`);
+  }
+  return `f='${envFile}'
+if sudo test -r "$f"; then
   echo api-env=readable
-  echo "record-key-lines=$(sudo grep -cE '^[[:space:]]*(export[[:space:]]+)?SIGN_IN_RECORD_KEY=[^[:space:]]' '${envFile}' || true)"
+  for n in ${names.join(" ")}; do
+    v=$( { sudo grep -E "^[[:space:]]*(export[[:space:]]+)?$n=" "$f" || true; } | tail -n 1)
+    if [ -z "$v" ]; then s=absent
+    else
+      v=\${v#*=}
+      v=$(printf '%s' "$v" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^"(.*)"$/\\1/; s/^'"'"'(.*)'"'"'$/\\1/; s/^[[:space:]]+//; s/[[:space:]]+$//')
+      if [ -z "$v" ]; then s=empty
+      else case "$v" in *"<"*">"*) s=placeholder ;; *) s=ok ;; esac
+      fi
+    fi
+    echo "var=$n:$s"
+  done
+  v=
 else
   echo api-env=unreadable
 fi
 `;
 }
 
-export function apiEnvRecordKeyVerdict(output) {
+export function apiEnvRuntimeEnvVerdict(output, names) {
+  const unchanged = "Nothing was changed.";
   const lines = String(output ?? "").split(/\r?\n/);
-  const count = lines.map((line) => line.match(/^record-key-lines=(\d+)$/)).find(Boolean);
-  if (!lines.includes("api-env=readable") || !count) {
-    return {
-      ok: false,
-      reason: `could not read ${API_PROD_ENV_FILE} on api-prod to prove it carries SIGN_IN_RECORD_KEY`,
-    };
+  if (!lines.includes("api-env=readable")) {
+    return { ok: false, reason: `could not read ${API_PROD_ENV_FILE} on api-prod to prove it carries the required runtime variables. ${unchanged}` };
   }
-  return Number(count[1]) >= 1
+  const states = new Map();
+  for (const line of lines) {
+    const m = line.match(/^var=([A-Z][A-Z0-9_]*):(\w+)$/);
+    if (m && RUNTIME_ENV_STATES.has(m[2])) states.set(m[1], m[2]);
+  }
+  if (!names.every((n) => states.has(n))) {
+    return { ok: false, reason: `unrecognised runtime-env probe output for ${API_PROD_ENV_FILE}. ${unchanged}` };
+  }
+  const failing = names.filter((n) => states.get(n) !== "ok");
+  return failing.length === 0
     ? { ok: true }
     : {
         ok: false,
         reason:
-          `${API_PROD_ENV_FILE} on api-prod has no SIGN_IN_RECORD_KEY — the sign-in host's at-rest key ` +
-          "is owner-placed before the release that ships it (infra/deploy/README.md §\"Sign-in host roll-out\")",
+          `${API_PROD_ENV_FILE} on api-prod lacks required runtime variable(s): ` +
+          `${failing.map((n) => `${n} (${states.get(n)})`).join(", ")}. ${unchanged} ` +
+          "Add them on the box and re-dispatch (infra/deploy/README.md §\"Runtime env refusal\").",
       };
 }
 
-async function assertProdApiEnvHasRecordKey(services) {
-  if (!(services ?? []).some((s) => s.image === "ds-login")) return;
-  step("#3171: api-prod env carries the sign-in host's record key");
-  const verdict = apiEnvRecordKeyVerdict(await sshCapture(API_PROD, apiEnvRecordKeyProbeScript()));
+async function assertProdApiEnvCarriesRuntimeEnv(sha, services) {
+  step("#1468: api-prod env carries every variable the runtime-env contract requires");
+  let contract;
+  try {
+    contract = parseRuntimeEnvContract(targetFile(sha, RUNTIME_ENV_CONTRACT_PATH));
+  } catch (e) {
+    die(`cannot read the runtime-env contract of ${sha.slice(0, 12)} (${e.message}). Nothing was changed.`);
+  }
+  if (contract.envFile !== API_PROD_ENV_FILE) {
+    die(`the runtime-env contract names ${contract.envFile}, the release reads ${API_PROD_ENV_FILE}. Nothing was changed.`);
+  }
+  const names = requiredRuntimeEnv(contract, services);
+  const verdict = apiEnvRuntimeEnvVerdict(await sshCapture(API_PROD, apiEnvRuntimeEnvProbeScript(names)), names);
   if (!verdict.ok) die(verdict.reason);
-  ok(`${API_PROD_ENV_FILE}: SIGN_IN_RECORD_KEY present`);
+  ok(`${API_PROD_ENV_FILE}: ${names.length} required runtime variables set`);
 }
 
 // --- #3172: the storefront redeem secrets, split by who may read them -----
@@ -2370,6 +2441,10 @@ async function deploy(hotfixRef = null, local = null) {
     sha,
     hotfixRef ? `hotfix ${sha.slice(0, 12)}` : "origin/main",
   );
+  // #1468: before the first state change (runtime-config-backup), after the service
+  // set because a contract entry can depend on the images this release ships.
+  walk.phase("runtime-env");
+  await assertProdApiEnvCarriesRuntimeEnv(sha, services);
   const certIndex = process.argv.indexOf("--postgres-artifacts");
   const certificate =
     certIndex < 0
@@ -2554,7 +2629,6 @@ ${deployShaEnvScript(sha)}
   step("#2149: PRE-SWAP IdP converge + SMTP and policy read-back");
   t = Date.now();
   walk.phase("idp");
-  await assertProdApiEnvHasRecordKey(services);
   // #1997: the IdP converge is forward-only, and a rollback runs none; nor does a redeploy.
   if (!redeploy) await provisionIdp(sha);
   ok(redeploy ? "IdP left as the last forward release converged it" : "prod IdP converged and read back before app swap", t);

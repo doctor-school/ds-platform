@@ -1,3 +1,7 @@
+import {
+  apiBootRequiredRuntimeEnv,
+  isUnsetRuntimeEnvValue,
+} from "@ds/schemas/runtime-env";
 import { z } from "zod";
 
 import { SMARTCAPTCHA_VALIDATE_URL } from "../bot-protection/smart-captcha.provider.js";
@@ -472,8 +476,30 @@ const NON_PRODUCTION_ENVIRONMENTS: ReadonlySet<string> = new Set([
   "test",
 ]);
 
+/**
+ * #1468 — the variables a production api refuses to boot without: the
+ * runtime-env contract's unconditional `api` entries (`@ds/schemas/runtime-env`,
+ * the same list the release gate checks on the box before any state change).
+ * Read once; a blank or `<placeholder>` value counts as missing.
+ */
+const PRODUCTION_REQUIRED_ENV: readonly string[] = apiBootRequiredRuntimeEnv();
+
 /** The boot contract: the field schema plus the cross-field production refusals. */
 const ApiEnvBootSchema = ApiEnvSchema.superRefine((env, ctx) => {
+  if (env.NODE_ENV === "production") {
+    const missing = PRODUCTION_REQUIRED_ENV.filter((name) => {
+      const value = env[name];
+      return typeof value !== "string" || isUnsetRuntimeEnvValue(value);
+    });
+    for (const name of missing) {
+      // Names only — a value (even a placeholder) never reaches the message.
+      ctx.addIssue({
+        code: "custom",
+        path: [name],
+        message: `${name} is required in production (runtime-env contract, #1468); missing: ${missing.join(", ")}`,
+      });
+    }
+  }
   if (
     env.BOT_PROTECTION_TEST_TOKEN !== undefined &&
     !NON_PRODUCTION_ENVIRONMENTS.has(env.SENTRY_ENVIRONMENT)

@@ -14,10 +14,12 @@ import test from "node:test";
 import {
   API_SIGN_IN_ENV_FILE,
   INTERNAL_ENV_FILE,
+  RUNTIME_ENV_CONTRACT_PATH,
   STOREFRONT_SECRET_NAMES,
-  apiEnvRecordKeyProbeScript,
-  apiEnvRecordKeyVerdict,
+  apiEnvRuntimeEnvVerdict,
+  parseRuntimeEnvContract,
   provisionWritesStorefrontSecrets,
+  requiredRuntimeEnv,
   storefrontSecretsProbeScript,
   storefrontSecretsVerdict,
   smokeEnvFor,
@@ -64,16 +66,18 @@ test("3171: the smoke probes the sign-in host only for a target that ships ds-lo
   assert.equal(isLoginProbeSkipped("skip"), true);
 });
 
-test("3171: the record key probe counts SIGN_IN_RECORD_KEY assignments and never prints the file", () => {
-  const script = apiEnvRecordKeyProbeScript();
-  assert.match(script, /grep -cE/);
-  assert.doesNotMatch(script, /\bcat\b/);
-  assert.equal(apiEnvRecordKeyVerdict("api-env=readable\nrecord-key-lines=1\n").ok, true);
-  for (const output of ["api-env=readable\nrecord-key-lines=0\n", "api-env=unreadable\n", "", "garbage"]) {
-    const verdict = apiEnvRecordKeyVerdict(output);
-    assert.equal(verdict.ok, false);
-    assert.match(verdict.reason, /SIGN_IN_RECORD_KEY/);
-  }
+test("3171: the record key is required (via the #1468 runtime-env gate) only for a target that ships ds-login", () => {
+  const contract = parseRuntimeEnvContract(
+    readFileSync(join(import.meta.dirname, "..", "..", ...RUNTIME_ENV_CONTRACT_PATH.split("/")), "utf8"),
+  );
+  const all = ["ds-api", "ds-portal", "ds-admin", "ds-doctor", "ds-login"].map((image) => ({ image }));
+  const names = requiredRuntimeEnv(contract, all);
+  assert.ok(names.includes("SIGN_IN_RECORD_KEY"));
+  assert.equal(requiredRuntimeEnv(contract, all.filter((s) => s.image !== "ds-login")).includes("SIGN_IN_RECORD_KEY"), false);
+  const states = names.map((n) => `var=${n}:${n === "SIGN_IN_RECORD_KEY" ? "absent" : "ok"}`).join("\n");
+  const verdict = apiEnvRuntimeEnvVerdict(`api-env=readable\n${states}\n`, names);
+  assert.equal(verdict.ok, false);
+  assert.match(verdict.reason, /SIGN_IN_RECORD_KEY \(absent\)/);
 });
 
 // --- #3172: the storefront redeem secrets, split by who may read them ---

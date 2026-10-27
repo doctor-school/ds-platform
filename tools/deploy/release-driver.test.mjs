@@ -815,7 +815,7 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       writeFileSync(join(dir, "live-image"), `${image}\n`);
       writeFileSync(join(dir, "compare-live.json"), JSON.stringify({ status }));
     };
-    const DOWNGRADE = `ds-release-driver: refused: ${SHA} does not descend from the live prod SHA ${LIVE.slice(0, 12)} — a downgrade is a rollback (pnpm deploy:prod --rollback)\n`;
+    const DOWNGRADE = `ds-release-driver: refused: ${SHA} does not descend from the live prod SHA ${LIVE.slice(0, 12)} — a downgrade is a rollback (deploy-prod.yml with mode: rollback)\n`;
     beforeEach(() => {
       setRole("prod");
       setLive("ahead");

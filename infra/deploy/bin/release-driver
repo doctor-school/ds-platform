@@ -295,7 +295,7 @@ check_on_main() {
 
 # Prod only (#3157): a release moves production forward. A SHA that does not descend
 # from the one production runs is a downgrade — a rollback, which goes through
-# `pnpm deploy:prod --rollback` and its migration floor, never through a release.
+# `deploy-prod.yml` with `mode: rollback` and its migration floor, never through a release.
 # The live SHA is the running api container's image tag `ds-api:<sha>`, the same read
 # as prod.mjs's previous-SHA step; compare <live>...<sha> must be `ahead` or
 # `identical` (a re-run). An unknown live SHA (no running api: a fresh box) refuses —
@@ -316,7 +316,7 @@ check_descends_from_live() {
   status=$(compare_status "$live" "$sha") || status=
   case $status in
     ahead | identical) ;;
-    *) refuse "refused: $sha does not descend from the live prod SHA ${live:0:12} — a downgrade is a rollback (pnpm deploy:prod --rollback)" ;;
+    *) refuse "refused: $sha does not descend from the live prod SHA ${live:0:12} — a downgrade is a rollback (deploy-prod.yml with mode: rollback)" ;;
   esac
 }
 

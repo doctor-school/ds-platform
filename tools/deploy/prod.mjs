@@ -521,7 +521,7 @@ export function descendsFromLiveVerdict({ live, sha, status }) {
   if (status === "ahead" || status === "identical") return { ok: true };
   return {
     ok: false,
-    reason: `${sha} does not descend from the live prod SHA ${live.slice(0, 12)} — a downgrade is a rollback (pnpm deploy:prod --rollback)`,
+    reason: `${sha} does not descend from the live prod SHA ${live.slice(0, 12)} — a downgrade is a rollback (deploy-prod.yml with mode: rollback)`,
   };
 }
 

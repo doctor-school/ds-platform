@@ -339,7 +339,7 @@ test("3157: a box-local release refuses a SHA that does not descend from the liv
       status,
     );
   }
-  const downgrade = `${SHA} does not descend from the live prod SHA ${live.slice(0, 12)} — a downgrade is a rollback (pnpm deploy:prod --rollback)`;
+  const downgrade = `${SHA} does not descend from the live prod SHA ${live.slice(0, 12)} — a downgrade is a rollback (deploy-prod.yml with mode: rollback)`;
   for (const status of ["behind", "diverged", null, "", "weird"]) {
     assert.deepEqual(
       descendsFromLiveVerdict({ live, sha: SHA, status }),

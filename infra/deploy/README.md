@@ -953,12 +953,16 @@ deploy.
 
    - **OFF** — `BOT_PROTECTION_ENABLED=false` and comment out
      `SMARTCAPTCHA_SERVER_KEY` in `api.env`; empty `SMARTCAPTCHA_SITE_KEY=` in
-     the compose `.env`; `pnpm deploy:prod` (it recreates the storefront
-     containers, which read the key at runtime); the clients then submit tokenless and the api guard stays wired and no-ops
+     the compose `.env`; break-glass `pnpm deploy:prod` on the owner's word, over the
+     `breakglass` key (it recreates the storefront containers, which read the key at
+     runtime); the clients then submit tokenless and the api guard stays wired and no-ops
      (003 design §10.1 fallback).
    - **ON** — restore `BOT_PROTECTION_ENABLED=true` plus the `ysc2_` server half
      in `api.env` and `SMARTCAPTCHA_SITE_KEY=ysc1_…` in the compose `.env`, run
-     the keypair-identifier checks in step 3, then `pnpm deploy:prod`.
+     the keypair-identifier checks in step 3, then the same break-glass `pnpm deploy:prod`.
+
+   Either direction runs break-glass because Actions has no route yet that recreates the
+   prod containers at the live SHA after an env change — tracked in #3354.
 
 5. **Ship source + pull images.** Ship the merged `origin/main` tree to the boxes
    (Apply order step 5 / a `deploy-prod.yml` release does this), then bring that SHA's

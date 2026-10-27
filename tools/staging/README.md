@@ -202,10 +202,10 @@ slot on a timer — `gc` is an operator subcommand and reclaims disk, not live s
 
 The C6 regression contract (`packages/e2e`) driven against a slot's **public** hostnames
 — the edge a reviewer uses, basic auth included. Tech spec C4 / §8 step 7: a preview
-verdict is pasted into the PR body **by hand**, and the `main` run is the release check
-`pnpm deploy:prod` performs itself (below); there is deliberately no CI check-run and no
-GitHub status, because staging is operated by hand like production (#2202) and a runner
-would have to hold the stand's credentials to reach the slot at all.
+verdict is pasted into the PR body **by hand**, and the `main` run is the release check:
+the `stage.yml` suite job runs it in Actions for every `main` target and posts the
+`stage-suite` status the Actions release pre-flight requires; `pnpm deploy:prod` runs it on
+the PC only for a break-glass hotfix `--ref` target (below, «The release check»).
 
 ```bash
 export STAGE_BASIC_AUTH_PASS="…"          # same variable the converge needs, see above

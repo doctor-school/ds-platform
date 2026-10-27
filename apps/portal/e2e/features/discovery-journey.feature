@@ -29,7 +29,7 @@ Feature: 004 Public webinar discovery — a guest reads an event page and scans 
   Scenario: A guest opens a sponsor link, reads the page, scans the listing, and returns via a card
     Given a guest opens the seeded upcoming event by its direct link
     Then the full event page is server-rendered without authentication
-    And the page carries the title, a МСК start time, and one «Участвовать» CTA
+    And the page carries the title, a start time in the viewer's zone, and one «Участвовать» CTA
     When the guest opens the upcoming-broadcasts listing
     Then the seeded upcoming event appears as a card labeled with the viewer's zone
     When the guest activates that listing card

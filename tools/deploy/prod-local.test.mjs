@@ -21,17 +21,20 @@ import {
   BREAKGLASS_API_PROD,
   DEPLOY_PLAN,
   OPERATOR_ONLY_STEPS,
+  REDEPLOY_SKIPPED_STEPS,
   compareStatus,
   deployPlan,
   descendsFromLiveVerdict,
   fetchTargetTree,
   localProdHosts,
+  migrateAndUpScript,
   parseLocalFlags,
   rollbackTargetVerdict,
   planWalker,
   prodScriptOptions,
   prodShipOptions,
   recordPreviousShaScript,
+  recreateScript,
 } from "./prod.mjs";
 import {
   readPostgresTarget,
@@ -102,7 +105,7 @@ test("3157: the smoke runs inside the release, before finish, on both paths", ()
 
 test("3157: deploy() walks exactly the plan, in its order", () => {
   const walked = [
-    ...deployBody.matchAll(/walk\.(phase|operatorPhase)\("([a-z-]+)"\)/g),
+    ...deployBody.matchAll(/walk\.(phase|operatorPhase|releasePhase)\("([a-z-]+)"\)/g),
   ];
   assert.deepEqual(
     walked.map((m) => m[2]),
@@ -112,6 +115,11 @@ test("3157: deploy() walks exactly the plan, in its order", () => {
     assert.equal(
       kind === "operatorPhase",
       OPERATOR_ONLY_STEPS.includes(id),
+      id,
+    );
+    assert.equal(
+      kind === "releasePhase",
+      REDEPLOY_SKIPPED_STEPS.includes(id),
       id,
     );
   }
@@ -141,7 +149,10 @@ test("3157: the walker refuses a phase out of order, and a run that leaves one o
 
   const local = planWalker({ local: true });
   assert.equal(local.operatorPhase("preflight"), false);
-  for (const id of deployPlan({ local: true })) local.phase(id);
+  for (const id of deployPlan({ local: true })) {
+    if (REDEPLOY_SKIPPED_STEPS.includes(id)) assert.equal(local.releasePhase(id), true, id);
+    else local.phase(id);
+  }
   assert.equal(local.operatorPhase("release-cut"), false);
   assert.equal(local.operatorPhase("deployment-record"), false);
   local.done();
@@ -797,7 +808,7 @@ test("3320: the --local release converges ds-data-prod after its install and bef
   const source = readFileSync(join(import.meta.dirname, "prod.mjs"), "utf8");
   const install = source.indexOf('await dataProd().call(["install", sha]);');
   const converge = source.indexOf("if (local) await dataProd().converge(sha);");
-  const env = source.indexOf('walk.phase("data-prod-env");');
+  const env = source.indexOf('if (walk.releasePhase("data-prod-env")) {');
   assert.ok(install > 0 && converge > install && env > converge, "install → converge → data-prod-env");
 });
 
@@ -836,4 +847,143 @@ test("3320: only --local takes the forced form; the workstation path keeps break
   assert.doesNotMatch(source, /bootstrapSources|treeReleaseSources/);
   const check = readFileSync(join(import.meta.dirname, "postgres-artifact-check.mjs"), "utf8");
   assert.match(check, /form: "sudo"/, "the operator check logs in as breakglass");
+});
+
+test("3354: --local admits --redeploy as its other mode flag, never with --rollback", () => {
+  assert.deepEqual(
+    parseLocalFlags(["--local", "--redeploy", "--images-file", "-"]),
+    { local: { imagesFile: "-", redeploy: true } },
+  );
+  assert.deepEqual(
+    parseLocalFlags(["--local", "--images-file", "-"]).local.redeploy,
+    undefined,
+  );
+  assert.match(
+    parseLocalFlags([
+      "--local",
+      "--redeploy",
+      "--rollback",
+      SHA,
+      "--images-file",
+      "-",
+    ]).error,
+    /--redeploy.*--rollback|--rollback.*--redeploy/,
+  );
+  assert.match(
+    parseLocalFlags(["--local", "--redeploy", "--redeploy", "--images-file", "-"])
+      .error,
+    /takes no other flag/,
+  );
+  // An operator run has no redeploy: it is the box-side mode of the workflow.
+  assert.match(parseLocalFlags(["--redeploy"]).error, /--local/);
+});
+
+test("3354: a redeploy skips what a rollback skips: no box tooling install, no data-prod phase", () => {
+  // Spec §5 «Two trees» (a): the tooling tree is the newest forward release's, and a
+  // rollback never re-installs box entrypoints nor converges ds-data-prod. A redeploy
+  // of the live SHA (which, after a rollback, is older than the tooling tree) follows
+  // that rule: it ships no data-prod tree and touches ds-data-prod not at all.
+  assert.deepEqual(
+    [...REDEPLOY_SKIPPED_STEPS],
+    ["postgres-verify", "install", "data-prod-env", "data-prod-up", "backup"],
+  );
+  const redeploy = deployPlan({ local: true, redeploy: true });
+  assert.deepEqual(
+    redeploy,
+    deployPlan({ local: true }).filter((id) => !REDEPLOY_SKIPPED_STEPS.includes(id)),
+  );
+  for (const id of [
+    "test-token",
+    "previous-sha",
+    "ship",
+    "pull",
+    "boot-verify",
+    "runtime-config-validate",
+    "idp",
+    "migrate",
+    "runtime-configs",
+    "verify-running-sha",
+    "prune",
+    "smoke",
+    "finish",
+  ]) {
+    assert.ok(redeploy.includes(id), `the redeploy keeps ${id}`);
+  }
+  // A redeploy is the box-side run only.
+  assert.throws(() => deployPlan({ redeploy: true }), /--local/);
+  assert.throws(() => planWalker({ redeploy: true }), /--local/);
+
+  const walk = planWalker({ local: true, redeploy: true });
+  for (const id of DEPLOY_PLAN) {
+    if (OPERATOR_ONLY_STEPS.includes(id)) assert.equal(walk.operatorPhase(id), false, id);
+    else if (REDEPLOY_SKIPPED_STEPS.includes(id)) assert.equal(walk.releasePhase(id), false, id);
+    else walk.phase(id);
+  }
+  walk.done();
+  const release = planWalker({ local: true });
+  release.operatorPhase("preflight");
+  release.phase("test-token");
+  release.phase("service-set");
+  assert.equal(release.releasePhase("postgres-verify"), true);
+  assert.throws(() => planWalker().phase("install"), /release-only/);
+  assert.throws(() => planWalker().releasePhase("ship"), /runs on every path/);
+});
+
+test("3354: the redeploy's install, data-prod and IdP phases are guarded; it finishes on api-prod only", () => {
+  const between = (from, to) => {
+    const at = deployBody.indexOf(from);
+    assert.ok(at > 0, from);
+    return deployBody.slice(at, deployBody.indexOf(to, at));
+  };
+  assert.match(deployBody, /const redeploy = Boolean\(local\?\.redeploy\);/);
+  const install = between('if (walk.releasePhase("install")) {', "openReleaseSha = sha;");
+  for (const write of [
+    "releaseInstallScript(PROD_LIVE_TREE, { sha })",
+    'dataProd().call(["install", sha])',
+    "dataProd().converge(sha)",
+  ]) {
+    assert.ok(install.includes(write), `${write} runs only inside the release's install phase`);
+  }
+  assert.match(
+    deployBody,
+    /const postgres = walk\.releasePhase\("postgres-verify"\)\s*\?\s*await preparePostgresDeployment\(/,
+  );
+  for (const id of ["data-prod-env", "data-prod-up", "backup"]) {
+    assert.match(deployBody, new RegExp(`if \\(walk\\.releasePhase\\("${id}"\\)\\) \\{`), id);
+  }
+  // The ship: a redeploy re-ships the api-prod tree of the live SHA only.
+  const ship = between('walk.phase("ship");', 'if (walk.releasePhase("install"))');
+  assert.match(ship, /if \(redeploy\) \{\s*await shipTree\(sha, API_PROD\);\s*\} else \{/);
+  assert.ok(ship.indexOf("shipDataProd(sha)") > ship.indexOf("} else {"));
+  // The IdP converge is forward-only (#1997): a redeploy runs the record-key check only.
+  assert.match(deployBody, /await assertProdApiEnvHasRecordKey\(services\);\s*(\/\/[^\n]*\n\s*)?if \(!redeploy\) await provisionIdp\(sha\);/);
+  // The release is open on the boxes it reached: a redeploy never calls ds-data-prod's finish.
+  assert.match(
+    deployBody,
+    /openReleaseSha = sha;\s*openReleaseHosts = redeploy \? \[API_PROD\] : \[API_PROD, DATA_PROD\];/,
+  );
+  const finish = SOURCE.slice(
+    SOURCE.indexOf("async function finishReleaseSucceeded("),
+    SOURCE.indexOf("function closeOpenReleaseAsFailed("),
+  );
+  assert.match(finish, /if \(openReleaseHosts\.includes\(DATA_PROD\)\) \{\s*console\.log\(await dataProd\(\)\.call\(\["finish", sha, "succeeded"\]\)\);/);
+  const close = SOURCE.slice(SOURCE.indexOf("function closeOpenReleaseAsFailed("));
+  assert.match(close, /for \(const host of hosts\)/);
+});
+
+test("3354: the redeploy's swap is up -d --force-recreate without a migrate; a release keeps migrate + bare up -d", () => {
+  const release = migrateAndUpScript();
+  assert.match(release, /--profile migrate run --rm migrate/);
+  assert.match(release, /\nsudo docker compose up -d\n/);
+  assert.doesNotMatch(release, /--force-recreate/);
+  const recreate = recreateScript();
+  assert.match(recreate, /\nsudo docker compose up -d --force-recreate\n/);
+  // No migrate: the live SHA's migrations ran when it was released, and the pre-migrate
+  // backup that anchors one is a data-prod step a redeploy does not run.
+  assert.doesNotMatch(recreate, /--profile migrate/);
+  assert.match(
+    deployBody,
+    /if \(redeploy\) \{\s*step\("[^"]*"\);\s*await boxStep\(API_PROD, sha, "recreate", recreateScript\(\), "api-prod redeploy"\);\s*\} else \{/,
+  );
+  assert.match(deployBody, /await boxStep\(API_PROD, sha, "migrate", migrateAndUpScript\(\), "api-prod deploy"\);/);
 });

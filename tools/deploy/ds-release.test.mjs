@@ -763,3 +763,67 @@ describe(
     });
   },
 );
+
+describe(
+  "3354: a redeploy of a SHA whose attempt closed succeeded (systemd stubbed)",
+  { skip: !toolsPresent && "needs bash + flock + python3 + getent" },
+  () => {
+    before(setup);
+    after(() => rmSync(root, { recursive: true, force: true }));
+
+    it("opens a fresh attempt in which every durable step runs again", () => {
+      const sha = "d".repeat(40);
+      const steps = ["up", "backup", "pull", "migrate", "prune"];
+      const counter = join(root, "step-runs");
+      const scripts = Object.fromEntries(
+        steps.map((s) => [s, scriptFile(s, `echo ${s} >> "${counter}"\n`)]),
+      );
+      const attempt = () => {
+        for (const step of steps) {
+          const r = ds(["release", "prod", sha, step, scripts[step]]);
+          assert.equal(r.code, 0, r.err);
+          assert.match(
+            r.out,
+            new RegExp(`ds-prod-dddddddddddd-${step} started`),
+          );
+          assert.doesNotMatch(r.out, /not re-run/);
+          assert.equal(waitStep("prod", sha, step).state, "running");
+        }
+        assert.equal(ds(["finish", "prod", sha, "succeeded"]).code, 0);
+      };
+
+      attempt();
+      assert.equal(readShape("prod", sha).state, "succeeded");
+      attempt();
+
+      const ran = runs(counter).trim().split("\n");
+      for (const step of steps) {
+        assert.equal(
+          ran.filter((s) => s === step).length,
+          2,
+          `${step} ran in both attempts`,
+        );
+        assert.equal(startCount(`ds-prod-dddddddddddd-${step}`), 2);
+      }
+      const archived = readdirSync(join(root, "state", "prod")).filter(
+        (f) =>
+          f.startsWith(`${sha}.`) && f.endsWith(".json") && f !== `${sha}.json`,
+      );
+      assert.equal(archived.length, 1, "the succeeded attempt is archived");
+      const old = JSON.parse(
+        readFileSync(join(root, "state", "prod", archived[0]), "utf8"),
+      );
+      assert.equal(old.state, "succeeded");
+      assert.deepEqual(
+        old.steps.map((s) => s.name),
+        steps,
+      );
+      const fresh = readShape("prod", sha);
+      assert.equal(fresh.state, "succeeded");
+      assert.deepEqual(
+        fresh.steps.map((s) => s.name),
+        steps,
+      );
+    });
+  },
+);

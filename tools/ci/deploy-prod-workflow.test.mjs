@@ -26,7 +26,7 @@ const environmentOf = (job) =>
 const stepRuns = (job) => (job.steps ?? []).map((s) => s.run ?? "").join("\n");
 
 describe("deploy-prod.yml", () => {
-  it("is a workflow_dispatch with sha, mode (release | rollback), owner_quote and reason, and nothing else", () => {
+  it("is a workflow_dispatch with sha, mode (release | rollback | redeploy), owner_quote and reason, and nothing else", () => {
     assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch"]);
     const inputs = wf.on.workflow_dispatch.inputs;
     assert.deepEqual(Object.keys(inputs).sort(), [
@@ -38,7 +38,7 @@ describe("deploy-prod.yml", () => {
     assert.equal(inputs.sha.required, true);
     assert.equal(inputs.sha.type, "string");
     assert.equal(inputs.mode.type, "choice");
-    assert.deepEqual(inputs.mode.options, ["release", "rollback"]);
+    assert.deepEqual(inputs.mode.options, ["release", "rollback", "redeploy"]);
     assert.equal(inputs.mode.default, "release");
     // Each mode's own text input is enforced by the first step, per mode.
     for (const name of ["owner_quote", "reason"]) {
@@ -53,7 +53,7 @@ describe("deploy-prod.yml", () => {
       OWNER_QUOTE: "${{ inputs.owner_quote }}",
       REASON: "${{ inputs.reason }}",
     });
-    const release = step.run.indexOf("release)");
+    const release = step.run.indexOf("release | redeploy)");
     const rollback = step.run.indexOf("rollback)");
     assert.ok(release > 0 && rollback > release);
     assert.match(
@@ -82,7 +82,7 @@ describe("deploy-prod.yml", () => {
   it("2987: rollback mode runs its own pre-flight, rollback prod / rollback-status prod, its record and notice — never the release path", () => {
     const pre = wf.jobs.preflight.steps;
     const byId = (steps, id) => steps.find((s) => s.id === id);
-    assert.equal(byId(pre, "preflight").if, "inputs.mode != 'rollback'");
+    assert.equal(byId(pre, "preflight").if, "inputs.mode == 'release'");
     const rbPre = byId(pre, "rollback-preflight");
     assert.equal(rbPre.if, "inputs.mode == 'rollback'");
     assert.match(
@@ -91,7 +91,7 @@ describe("deploy-prod.yml", () => {
     );
     assert.equal(
       wf.jobs.preflight.outputs["images-run-id"],
-      "${{ steps.preflight.outputs.images-run-id || steps.rollback-preflight.outputs.images-run-id }}",
+      "${{ steps.preflight.outputs.images-run-id || steps.rollback-preflight.outputs.images-run-id || steps.redeploy-preflight.outputs.images-run-id }}",
     );
     const steps = wf.jobs.deploy.steps;
     for (const id of ["release", "poll"]) {
@@ -132,7 +132,51 @@ describe("deploy-prod.yml", () => {
       "${{ secrets.MATTERMOST_WEBHOOK_URL }}",
     );
     // No release cut and no digest in rollback mode.
-    assert.match(wf.jobs.digest.if, /^inputs\.mode != 'rollback' && /);
+    assert.match(wf.jobs.digest.if, /^inputs\.mode == 'release' && /);
+  });
+
+  it("3354: redeploy mode re-runs the live SHA through the release driver — own pre-flight and record, no release cut, no digest", () => {
+    const byId = (steps, id) => steps.find((s) => s.id === id);
+    const first = wf.jobs.preflight.steps[0];
+    // The owner's word is required exactly as for a release.
+    assert.match(
+      first.run,
+      /release \| redeploy\)[\s\S]*\$\{OWNER_QUOTE\/\/\[\[:space:\]\]\/\}[\s\S]*exit 1[\s\S]*rollback\)/,
+    );
+    assert.match(first.run, /mode must be release, rollback or redeploy/);
+    const pre = byId(wf.jobs.preflight.steps, "redeploy-preflight");
+    assert.equal(pre.if, "inputs.mode == 'redeploy'");
+    assert.equal(pre.env.OWNER_QUOTE, "${{ inputs.owner_quote }}");
+    assert.match(
+      pre.run,
+      /release-runner\.mjs redeploy-preflight --sha "\$SHA"/,
+    );
+    const steps = wf.jobs.deploy.steps;
+    // The same start, poll and status-only log as a release: only the verb differs.
+    const start = byId(steps, "release");
+    assert.equal(start.if, "inputs.mode != 'rollback'");
+    assert.equal(start.env.MODE, "${{ inputs.mode }}");
+    assert.equal(byId(steps, "poll").if, "inputs.mode != 'rollback'");
+    const record = byId(steps, "redeploy-record");
+    assert.equal(
+      record.if,
+      "always() && inputs.mode == 'redeploy' && steps.poll.outputs.terminal != ''",
+    );
+    assert.equal(record.env.OWNER_QUOTE, "${{ inputs.owner_quote }}");
+    assert.equal(record.env.TERMINAL, "${{ steps.poll.outputs.terminal }}");
+    assert.match(
+      record.run,
+      /release-runner\.mjs redeploy-record --sha "\$SHA" --state "\$TERMINAL"/,
+    );
+    // Only the release's own record step cuts a Release and feeds the digest.
+    const cuts = steps.filter((s) =>
+      /release-runner\.mjs record /.test(s.run ?? ""),
+    );
+    assert.deepEqual(
+      cuts.map((s) => s.id),
+      ["record"],
+    );
+    assert.match(wf.jobs.digest.if, /^inputs\.mode == 'release' && /);
   });
 
   it("refuses an empty or whitespace-only owner_quote before any other step", () => {
@@ -236,7 +280,11 @@ describe("deploy-prod.yml", () => {
     const deploy = stepRuns(wf.jobs.deploy);
     assert.match(
       deploy,
-      /"release prod \$SHA" \\\n\s+< "manifest\/images-\$SHA\.json"/,
+      /"\$verb prod \$SHA" \\\n\s+< "manifest\/images-\$SHA\.json"/,
+    );
+    assert.match(
+      deploy,
+      /verb=release\nif \[ "\$MODE" = redeploy \]; then verb=redeploy; fi/,
     );
     assert.match(deploy, /"status prod \$SHA"/);
     assert.match(deploy, /StrictHostKeyChecking=yes/);
@@ -268,7 +316,7 @@ describe("deploy-prod.yml", () => {
     );
     assert.equal(
       record.if,
-      "always() && inputs.mode != 'rollback' && steps.poll.outputs.terminal != ''",
+      "always() && inputs.mode == 'release' && steps.poll.outputs.terminal != ''",
     );
     assert.equal(record.env.OWNER_QUOTE, "${{ inputs.owner_quote }}");
     assert.match(
@@ -326,7 +374,7 @@ describe("deploy-prod.yml", () => {
     assert.equal(job.uses, "./.github/workflows/release-digest.yml");
     assert.equal(
       job.if,
-      "inputs.mode != 'rollback' && needs.deploy.result == 'success' && needs.deploy.outputs.recorded == 'new'",
+      "inputs.mode == 'release' && needs.deploy.result == 'success' && needs.deploy.outputs.recorded == 'new'",
     );
     assert.deepEqual(job.with, { sha: "${{ inputs.sha }}" });
     assert.deepEqual(job.secrets, {

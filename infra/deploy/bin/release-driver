@@ -18,6 +18,17 @@
 #       ds-<env>-<sha12>-driver, then returns: ONE status line on stdout,
 #         ds-release-driver: started <unit> | attached <unit> | already-succeeded
 #       exit 0. A refusal is one line on stderr and exit 3; usage exit 2.
+#   release-driver redeploy prod <sha>       < images-<sha>.json   (#3354)
+#       The release of the LIVE prod SHA run again (prod box only), so every
+#       container is recreated with the box's current env files: the release's
+#       own checks, lease and unit ds-prod-<sha12>-driver, plus <sha> == the live
+#       prod SHA (a newer SHA is a release, an older one a rollback — the refusal
+#       names the mode), and never `already-succeeded`: a finished run is reset and
+#       started again, which ds-release's attempt semantics run as a fresh attempt
+#       (its closed attempt is archived). Answers `started <unit>` / `attached <unit>`.
+#   release-driver _redeploy prod <sha>   (the redeploy unit's own process)
+#       As `_run prod <sha>`, with prod.mjs --local --redeploy (recreates every
+#       container of the api compose).
 #   release-driver unit-state <env> <sha>
 #       One JSON object {"unit", "active", "rc", "previousSha"} — the entrypoint's
 #       `status` adds it to the ds-release status line as `driver`.
@@ -413,7 +424,35 @@ read_manifest() {
   [[ -z $reason ]] || refuse "refused: bad manifest: $reason"
 }
 
-cmd_release() {
+# #3354: a redeploy re-runs the live SHA only. <sha> must be exactly the running api's
+# SHA; anything else is refused naming the mode it is (compare <live>...<sha>).
+# [<live>]: a live SHA the caller has just read (empty: unknown), checked as read.
+check_is_live() {
+  local sha=$1 live=${2-} status
+  (($# >= 2)) || live=$(live_prod_sha)
+  [[ -n $live ]] ||
+    refuse "refused: the live prod SHA is unknown (no running ds-api-prod-api-1) — there is no release to redeploy"
+  [[ $live != "$sha" ]] || return 0
+  status=$(compare_status "$live" "$sha") || status=
+  case $status in
+    ahead) refuse "refused: $sha is not the live prod SHA ${live:0:12} — a newer SHA is a release (deploy-prod.yml with mode: release)" ;;
+    behind) refuse "refused: $sha is not the live prod SHA ${live:0:12} — an older SHA is a rollback (deploy-prod.yml with mode: rollback)" ;;
+    *) refuse "refused: $sha is not the live prod SHA ${live:0:12} — a redeploy re-runs the live SHA only" ;;
+  esac
+}
+
+cmd_release() { release_unit release "$@"; }
+
+cmd_redeploy() {
+  check_args "$@"
+  [[ $1 == prod ]] || refuse "refused: a redeploy serves prod only, not $1"
+  release_unit redeploy "$@"
+}
+
+# <mode> release | redeploy: one path, so a redeploy is the release machinery itself.
+release_unit() {
+  local mode=$1
+  shift
   check_args "$@"
   local env=$1 sha=$2 unit manifest reason state rc out user record
   check_role "$env"
@@ -433,7 +472,11 @@ cmd_release() {
   fi
   command -v curl >/dev/null || fail "curl is not installed"
   check_on_main "$sha"
-  [[ $env != prod ]] || check_descends_from_live "$sha"
+  if [[ $mode == redeploy ]]; then
+    check_is_live "$sha"
+  elif [[ $env == prod ]]; then
+    check_descends_from_live "$sha"
+  fi
   check_registry_digests "$sha" "$manifest"
 
   # One driver call per env at a time: two triggers of one SHA must not both start it.
@@ -443,6 +486,12 @@ cmd_release() {
   if [[ $state == active || $state == activating ]]; then
     say "attached $unit"
     return 0
+  fi
+
+  # #3354: the live SHA again, under the lock (a local read): a break-glass rollback
+  # that ended since the check above must not be undone by this redeploy.
+  if [[ $mode == redeploy ]]; then
+    check_is_live "$sha" "$(live_prod_sha)"
   fi
 
   # #2987: a rollback of this very SHA is not a release step the lease sees (its unit
@@ -465,7 +514,8 @@ cmd_release() {
     record=$(sudo "$DS_RELEASE" status "$env" "$sha" 2>/dev/null |
       python3 -I -c 'import json,sys; r=json.load(sys.stdin).get("release") or {}; print(r.get("state",""))' ||
       true)
-    if [[ $rc == 0 && $record == succeeded ]]; then
+    # A redeploy exists to run a succeeded release again (#3354).
+    if [[ $mode == release && $rc == 0 && $record == succeeded ]]; then
       say "already-succeeded"
       return 0
     fi
@@ -476,6 +526,8 @@ cmd_release() {
     sudo systemctl reset-failed "$unit.service" >/dev/null 2>&1 || true
   fi
 
+  local process=_run label=
+  [[ $mode != redeploy ]] || process=_redeploy label="redeploy "
   user=$(id -un)
   [[ $user =~ $USER_RE ]] || usage "unusable caller user"
   sudo install -d -m 0700 -o root -g root "$MANIFEST_DIR"
@@ -490,8 +542,8 @@ cmd_release() {
   if ! sudo systemd-run --quiet --unit="$unit" --remain-after-exit -p KillMode=mixed \
     --uid="$user" -p StandardInput="file:$MANIFEST_DIR/$sha.json" \
     -p StandardOutput=journal -p StandardError=journal \
-    --description="ds-release-driver $env ${sha:0:12}" \
-    "$SELF" _run "$env" "$sha" >/dev/null 2>&1; then
+    --description="ds-release-driver ${label}$env ${sha:0:12}" \
+    "$SELF" "$process" "$env" "$sha" >/dev/null 2>&1; then
     fail "systemd-run could not start $unit"
   fi
   say "started $unit"
@@ -720,13 +772,24 @@ cmd_run_rollback() {
 
 # The unit's process: the operator converge / release, run on the box from the SHA's
 # own tree.
-cmd_run() {
+cmd_run() { run_unit release "$@"; }
+
+cmd_run_redeploy() {
+  check_args "$@"
+  [[ $1 == prod ]] || usage "the redeploy runs prod only"
+  run_unit redeploy "$@"
+}
+
+run_unit() {
+  local mode=$1
+  shift
   check_args "$@"
   local env=$1 sha=$2
   local -a command
-  case $env in
-    stage-main) command=(tools/staging/slot.mjs up main --ref "$sha" --local --images-file -) ;;
-    prod) command=(tools/deploy/prod.mjs --local --images-file -) ;;
+  case $env/$mode in
+    stage-main/release) command=(tools/staging/slot.mjs up main --ref "$sha" --local --images-file -) ;;
+    prod/release) command=(tools/deploy/prod.mjs --local --images-file -) ;;
+    prod/redeploy) command=(tools/deploy/prod.mjs --local --redeploy --images-file -) ;;
     *) usage "the driver runs stage-main and prod only" ;;
   esac
   command -v curl >/dev/null || fail "curl is not installed"
@@ -750,7 +813,9 @@ main() {
     record-previous) shift; cmd_record_previous "$@" ;;
     rollback) shift; cmd_rollback "$@" ;;
     rollback-status) shift; cmd_rollback_status "$@" ;;
+    redeploy) shift; cmd_redeploy "$@" ;;
     _run) shift; cmd_run "$@" ;;
+    _redeploy) shift; cmd_run_redeploy "$@" ;;
     _rollback) shift; cmd_run_rollback "$@" ;;
     *) cmd_release "$@" ;;
   esac

@@ -22,6 +22,9 @@
 #   rollback-status prod <sha>
 #                          -> release-driver rollback-status prod <sha>: the rollback
 #                             record and the -rollback unit state (prod box only)
+#   redeploy prod <sha>    -> release-driver redeploy prod <sha> (prod box only; the
+#                             live SHA's release run again, every container
+#                             recreated; stdin = its images-<sha>.json; #3354)
 #   upload-report <sha>    -> a tar stream on stdin into
 #                             /var/lib/ds-platform/e2e-reports/<sha>/ (stage box only)
 #   observe <name>         -> one named read-only observation of the stage `main`
@@ -850,6 +853,15 @@ case "$verb" in
     fi
     exec "$RELEASE_DRIVER" "$verb" prod "${words[2]}"
     ;;
+  redeploy)
+    [[ ${#words[@]} -eq 3 && ${words[1]} == prod ]] || reject "usage: redeploy prod <sha>"
+    check_sha "${words[2]}"
+    accepted
+    role=$(sudo cat "$BOX_ROLE_FILE" 2>/dev/null || true)
+    [[ $role == prod ]] || refuse "redeploy is served by the prod box only"
+    [[ -x $RELEASE_DRIVER ]] || refuse "release driver not installed: no box-side redeploy on this box"
+    exec "$RELEASE_DRIVER" redeploy prod "${words[2]}"
+    ;;
   upload-report)
     [[ ${#words[@]} -eq 2 ]] || reject "usage: upload-report <sha>"
     check_sha "${words[1]}"
@@ -871,6 +883,6 @@ case "$verb" in
     data_verb
     ;;
   *)
-    reject "unknown command (allowed: status, release, rollback, rollback-status, upload-report, observe; on the data box also: ${DATA_VERBS// /, })"
+    reject "unknown command (allowed: status, release, rollback, rollback-status, redeploy, upload-report, observe; on the data box also: ${DATA_VERBS// /, })"
     ;;
 esac

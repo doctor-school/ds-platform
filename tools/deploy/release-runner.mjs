@@ -36,6 +36,21 @@
 //       The Mattermost notice «откат прода на <sha12>: <reason>» with the outcome,
 //       through the digest's poster ($MATTERMOST_WEBHOOK_URL; unset skips green).
 //
+// Redeploy mode (#3354; spec §3 item 3 «Redeploy mode», §9 «An env file changed on
+// the box»):
+//
+//   redeploy-preflight --sha <sha>
+//       Before the box is touched: the owner quote ($OWNER_QUOTE — env only) is not
+//       blank, the SHA has a success production Deployment (it really was
+//       released) and its `images-<sha>.json` is recorded. No stage-suite, CI,
+//       release-gate or live-broadcast check: the SHA passed them when it was
+//       released; the box driver refuses any SHA but the live one. Writes
+//       `images-run-id=<id>` to $GITHUB_OUTPUT.
+//   redeploy-record --sha <sha> --state succeeded|failed|unknown
+//       A new Deployment record of this run, `redeploy @ <sha12> — «<quote>»`, even
+//       when the SHA's release record exists; no release cut. Exits 1 when it could
+//       not be written.
+//
 // Every check is the workstation path's own module (ci-gate, release-gate,
 // live-broadcast-check, lib/registry, deployment-record, cut-release); this file
 // only orders them for a runner, which holds no box access. There is no escape
@@ -98,6 +113,8 @@ const COMMAND_FLAGS = Object.freeze({
   "rollback-verdict": ["--sha"],
   "rollback-record": ["--sha", "--state", "--from-sha"],
   "rollback-notice": ["--sha", "--state"],
+  "redeploy-preflight": ["--sha"],
+  "redeploy-record": ["--sha", "--state"],
 });
 
 /** Parse the CLI. Unknown flags are refused, so no escape hatch can be passed. */
@@ -131,7 +148,9 @@ export function parseRunnerArgs(argv) {
       error: `--state must be succeeded|failed|unknown, got: ${state ?? "(none)"}`,
     };
   }
-  if (command === "rollback-notice") return { command, sha, state };
+  if (command === "rollback-notice" || command === "redeploy-record") {
+    return { command, sha, state };
+  }
   const shaFlag = command === "record" ? "--previous-sha" : "--from-sha";
   const other = values[shaFlag] || null;
   if (other !== null && !FULL_SHA.test(other)) {
@@ -640,6 +659,90 @@ export async function runRollbackNotice({
   log("✓ rollback notice posted to Mattermost");
 }
 
+// --- #3354: redeploy mode -------------------------------------------------------
+
+/** The redeploy pre-flight, in order (spec §3 item 3 «Redeploy mode»). */
+export const REDEPLOY_PREFLIGHT_ORDER = Object.freeze([
+  "owner-quote",
+  "released",
+  "recorded-images",
+]);
+
+/** The redeploy pre-flight checks, wired to `gh` and the recorded-images reader. */
+export function redeployPreflightChecks({
+  sha,
+  repo,
+  ownerQuote,
+  cwd = process.cwd(),
+  gh = (args) => capture("gh", args, cwd),
+  resolveImages = (args) => resolveRecordedImagesViaGh(args),
+}) {
+  const short = sha.slice(0, 12);
+  const checks = {
+    "owner-quote": async () => {
+      if (!String(ownerQuote ?? "").trim()) {
+        throw new Error(
+          "owner_quote is empty — a production redeploy needs the owner's word",
+        );
+      }
+      return { line: `owner quote present (${String(ownerQuote).length} chars)` };
+    },
+    released: async () => {
+      if (!(await successRecordExistsViaGh({ sha, gh }))) {
+        throw new Error(
+          `${short} has no success production Deployment — it was never released; a new SHA ships with mode: release`,
+        );
+      }
+      return { line: `${short} has a success production Deployment (${repo})` };
+    },
+    "recorded-images": async () => {
+      const resolved = await resolveImages({ ...PROD_MANIFEST_POLICY, sha });
+      return {
+        line: `recorded \`${resolved.ref}\` images for ${short} (run ${resolved.run.url})`,
+        imagesRunId: resolved.run.databaseId,
+      };
+    },
+  };
+  return REDEPLOY_PREFLIGHT_ORDER.map((name) => ({ name, run: checks[name] }));
+}
+
+/**
+ * After a terminal redeploy status: a new Deployment record of this run with the
+ * owner quote, success and failure alike — never the release's `existing`
+ * short-circuit, never a release cut (a redeploy ships no new code).
+ *
+ * @returns {Promise<{ok: boolean, recorded: "new", error?: string, deploymentId?: number}>}
+ */
+export async function runRedeployRecord({
+  sha,
+  state,
+  ownerQuote,
+  create = (args) => createDeploymentRecord(args),
+  log = (l) => console.log(l),
+}) {
+  if (!String(ownerQuote ?? "").trim()) {
+    throw new Error(
+      "owner_quote is empty — a redeploy record needs the owner's word",
+    );
+  }
+  const deploymentState = RECORD_STATES[state];
+  const res = create({
+    sha,
+    releaseTag: null,
+    notesText: "",
+    healthUrl: PROD_HEALTH_URL,
+    state: deploymentState,
+    ownerQuote,
+    redeploy: true,
+  });
+  if (res.ok) {
+    log(
+      `✓ GitHub Deployment recorded (#${res.deploymentId}, redeploy ${deploymentState})`,
+    );
+  }
+  return { ...res, recorded: "new" };
+}
+
 async function readStdin() {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
@@ -690,6 +793,18 @@ async function main() {
     if (verdict.exitCode !== 0) process.exit(verdict.exitCode);
     return;
   }
+  if (args.command === "redeploy-record") {
+    const verdict = reportRecord(
+      await runRedeployRecord({
+        sha: args.sha,
+        state: args.state,
+        ownerQuote: process.env.OWNER_QUOTE,
+      }),
+    );
+    if (verdict.message) console.error(verdict.message);
+    if (verdict.exitCode !== 0) process.exit(verdict.exitCode);
+    return;
+  }
   if (args.command === "rollback-notice") {
     await runRollbackNotice({
       sha: args.sha,
@@ -699,18 +814,28 @@ async function main() {
     });
     return;
   }
-  if (args.command === "preflight" || args.command === "rollback-preflight") {
+  if (
+    args.command === "preflight" ||
+    args.command === "rollback-preflight" ||
+    args.command === "redeploy-preflight"
+  ) {
     const repo = repoName();
-    const res = await runPreflight({
-      checks:
-        args.command === "preflight"
-          ? preflightChecks({ sha: args.sha, repo })
-          : rollbackPreflightChecks({
-              sha: args.sha,
-              repo,
-              reason: process.env.REASON,
-            }),
-    });
+    const checks = {
+      preflight: () => preflightChecks({ sha: args.sha, repo }),
+      "rollback-preflight": () =>
+        rollbackPreflightChecks({
+          sha: args.sha,
+          repo,
+          reason: process.env.REASON,
+        }),
+      "redeploy-preflight": () =>
+        redeployPreflightChecks({
+          sha: args.sha,
+          repo,
+          ownerQuote: process.env.OWNER_QUOTE,
+        }),
+    }[args.command]();
+    const res = await runPreflight({ checks });
     if (!res.ok) {
       console.error(
         `::error::pre-flight refused (${res.failed}): ${res.reason}`,

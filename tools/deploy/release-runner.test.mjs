@@ -8,16 +8,19 @@ import { describe, it } from "node:test";
 import { buildDeploymentPayload } from "./deployment-record.mjs";
 import {
   PREFLIGHT_ORDER,
+  REDEPLOY_PREFLIGHT_ORDER,
   ROLLBACK_PREFLIGHT_ORDER,
   buildRollbackNotice,
   liveProdShaViaGh,
   parseRunnerArgs,
   preflightChecks,
+  redeployPreflightChecks,
   reportRecord,
   rollbackPreflightChecks,
   rollbackVerdict,
   runPreflight,
   runRecord,
+  runRedeployRecord,
   runRollbackNotice,
   runRollbackRecord,
   stageSuiteProblem,
@@ -869,5 +872,235 @@ describe("rollback notice", () => {
       log: () => {},
     });
     assert.equal(posted.length, 1);
+  });
+});
+
+// --- #3354: redeploy mode -------------------------------------------------------
+
+describe("parseRunnerArgs — redeploy commands", () => {
+  it("reads redeploy-preflight and redeploy-record", () => {
+    assert.deepEqual(parseRunnerArgs(["redeploy-preflight", "--sha", SHA]), {
+      command: "redeploy-preflight",
+      sha: SHA,
+    });
+    assert.deepEqual(
+      parseRunnerArgs(["redeploy-record", "--sha", SHA, "--state", "unknown"]),
+      { command: "redeploy-record", sha: SHA, state: "unknown" },
+    );
+  });
+
+  it("has no escape hatch: a basis, a reason or any other flag is refused", () => {
+    for (const flag of ["--previous-sha", "--from-sha", "--ref", "--force"]) {
+      assert.match(
+        parseRunnerArgs([
+          "redeploy-record",
+          "--sha",
+          SHA,
+          "--state",
+          "succeeded",
+          flag,
+          PREV,
+        ]).error,
+        /unknown argument/,
+        flag,
+      );
+    }
+    assert.match(
+      parseRunnerArgs(["redeploy-preflight", "--sha", SHA, "--state", "x"])
+        .error,
+      /unknown argument/,
+    );
+  });
+});
+
+describe("redeployPreflightChecks", () => {
+  const world = (over = {}) => {
+    const w = {
+      ownerQuote: "перезапусти прод с капчей",
+      deployments: [{ id: 5, sha: SHA }],
+      statuses: { 5: [{ state: "inactive" }, { state: "success" }] },
+      images: async () => ({
+        ref: "main",
+        run: { url: "https://example.test/run/9", databaseId: 9 },
+      }),
+      calls: [],
+      ...over,
+    };
+    w.gh = (args) => {
+      w.calls.push(args);
+      const p = args[1];
+      if (p.includes("/statuses")) {
+        return JSON.stringify(w.statuses[Number(p.split("/")[4])] ?? []);
+      }
+      if (p.includes("/deployments")) return JSON.stringify(w.deployments);
+      throw new Error(`unexpected gh ${p}`);
+    };
+    return w;
+  };
+  const preflight = (w) =>
+    runPreflight({
+      checks: redeployPreflightChecks({
+        sha: SHA,
+        repo: "o/r",
+        ownerQuote: w.ownerQuote,
+        gh: w.gh,
+        resolveImages: w.images,
+      }),
+      log: () => {},
+    });
+
+  it("checks the quote, that the SHA was released, and the manifest — no stage-suite, CI, gate or broadcast", () => {
+    assert.deepEqual(REDEPLOY_PREFLIGHT_ORDER, [
+      "owner-quote",
+      "released",
+      "recorded-images",
+    ]);
+    const names = redeployPreflightChecks({ sha: SHA, repo: "o/r" }).map(
+      (c) => c.name,
+    );
+    assert.deepEqual(names, [...REDEPLOY_PREFLIGHT_ORDER]);
+  });
+
+  it("passes a SHA with a success production Deployment and its manifest", async () => {
+    const w = world();
+    assert.deepEqual(await preflight(w), { ok: true, imagesRunId: 9 });
+    assert.ok(
+      w.calls.some((a) =>
+        a[1].includes(`deployments?sha=${SHA}&environment=production`),
+      ),
+      "asks for this SHA's production Deployments",
+    );
+  });
+
+  it("refuses a blank owner quote before anything is asked", async () => {
+    const w = world({ ownerQuote: " \n " });
+    const res = await preflight(w);
+    assert.equal(res.ok, false);
+    assert.equal(res.failed, "owner-quote");
+    assert.equal(w.calls.length, 0);
+  });
+
+  it("refuses a SHA that was never released (only failure / error records)", async () => {
+    const w = world({ statuses: { 5: [{ state: "failure" }] } });
+    const res = await preflight(w);
+    assert.equal(res.failed, "released");
+    assert.match(res.reason, /no success production Deployment/);
+    assert.match(res.reason, /mode: release/);
+  });
+});
+
+describe("runRedeployRecord", () => {
+  const make = () => {
+    const calls = [];
+    return {
+      calls,
+      create: (args) => {
+        calls.push(args);
+        return { ok: true, deploymentId: 21 };
+      },
+      log: () => {},
+    };
+  };
+
+  for (const [state, deploymentState] of [
+    ["succeeded", "success"],
+    ["failed", "failure"],
+    ["unknown", "error"],
+  ]) {
+    it(`${state}: a new ${deploymentState} record with the quote, no release cut`, async () => {
+      const deps = make();
+      const res = await runRedeployRecord({
+        sha: SHA,
+        state,
+        ownerQuote: "перезапусти",
+        ...deps,
+      });
+      assert.deepEqual(res, { ok: true, deploymentId: 21, recorded: "new" });
+      assert.equal(deps.calls.length, 1);
+      const [args] = deps.calls;
+      assert.equal(args.state, deploymentState);
+      assert.equal(args.releaseTag, null);
+      assert.equal(args.notesText, "");
+      assert.equal(args.ownerQuote, "перезапусти");
+      assert.equal(args.redeploy, true);
+    });
+  }
+
+  it("writes a record even when a success Deployment of the SHA exists (one per run)", async () => {
+    const deps = make();
+    await runRedeployRecord({
+      sha: SHA,
+      state: "succeeded",
+      ownerQuote: "q",
+      ...deps,
+    });
+    await runRedeployRecord({
+      sha: SHA,
+      state: "succeeded",
+      ownerQuote: "q",
+      ...deps,
+    });
+    assert.equal(deps.calls.length, 2);
+  });
+
+  it("refuses a blank quote before writing anything", async () => {
+    const deps = make();
+    await assert.rejects(
+      runRedeployRecord({
+        sha: SHA,
+        state: "succeeded",
+        ownerQuote: "",
+        ...deps,
+      }),
+      /owner_quote is empty/,
+    );
+    assert.equal(deps.calls.length, 0);
+  });
+});
+
+describe("buildDeploymentPayload — redeploy", () => {
+  const base = {
+    sha: SHA,
+    releaseTag: null,
+    notesText: "",
+    healthUrl: "https://api.example/v1/health",
+    nowIso: "2026-10-27T00:00:00.000Z",
+    redeploy: true,
+  };
+
+  it("describes the record `redeploy @ <sha12> — «<quote>»`, kind redeploy, the quote in the payload", () => {
+    const { deployment, status } = buildDeploymentPayload({
+      ...base,
+      state: "success",
+      ownerQuote: "капча ON",
+    });
+    assert.equal(
+      deployment.description,
+      `redeploy @ ${SHA.slice(0, 12)} — «капча ON»`,
+    );
+    assert.equal(deployment.ref, SHA);
+    assert.equal(deployment.environment, "production");
+    assert.equal(deployment.payload.kind, "redeploy");
+    assert.equal(deployment.payload.ownerQuote, "капча ON");
+    assert.equal(deployment.payload.releaseTag, null);
+    assert.equal(deployment.payload.notes, "");
+    assert.equal(status.state, "success");
+    assert.equal(status.description, `redeploy @ ${SHA.slice(0, 12)}`);
+  });
+
+  it("a failed or lost-contact redeploy says so in its status", () => {
+    const failed = buildDeploymentPayload({
+      ...base,
+      state: "failure",
+      ownerQuote: "q",
+    });
+    assert.match(failed.status.description, /^redeploy failed @ /);
+    assert.match(failed.deployment.description, /^failed redeploy @ /);
+    const unknown = buildDeploymentPayload({
+      ...base,
+      state: "error",
+      ownerQuote: "q",
+    });
+    assert.match(unknown.status.description, /^redeploy verdict unknown @ /);
   });
 });

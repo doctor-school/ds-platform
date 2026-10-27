@@ -39,6 +39,22 @@ name: Deploy prod
 #               cut, the ONE Deployment record `rollback to <sha12> — <reason>` and the
 #               Mattermost notice «откат прода на <sha12>: <reason>». No digest.
 #
+# Redeploy mode (#3354; spec §3 item 3 «Redeploy mode», §5 «Prod release driver.»,
+# §9 «An env file changed on the box»):
+#
+#   gh workflow run deploy-prod.yml --ref main -f mode=redeploy -f sha=<live sha> -f owner_quote="<the owner's words>"
+#
+#   preflight — refuses a blank owner_quote exactly as a release does, then
+#               `release-runner.mjs redeploy-preflight`: the SHA has a success
+#               production Deployment (it really was released) and its
+#               `images-<sha>.json` is recorded. No stage-suite, CI, release-gate or
+#               live-broadcast check: the SHA passed them when it was released.
+#   deploy    — the same start, poll and status-only log as a release, with the verb
+#               `redeploy prod <sha>`: the driver refuses unless <sha> is the live prod
+#               SHA and runs that release again as a fresh attempt, every container
+#               recreated with the box's current env files. Then no release cut and
+#               a new Deployment record `redeploy @ <sha12> — «<quote>»`. No digest.
+#
 # The rollback runs on this path; the escape hatches do not: no skip-ci-check,
 # release-gate exemption, live-broadcast override or hotfix ref. Those stay
 # break-glass on the workstation path (`pnpm deploy:prod`).
@@ -51,15 +67,16 @@ on:
         required: true
         type: string
       mode:
-        description: "`release` (default) or `rollback` to a recent release behind the live SHA."
+        description: "`release` (default), `rollback` to a recent release behind the live SHA, or `redeploy` of the live SHA (recreates its containers with the box's current env files)."
         required: false
         default: release
         type: choice
         options:
           - release
           - rollback
+          - redeploy
       owner_quote:
-        description: "Release mode: the owner's word in chat that authorises this release, verbatim."
+        description: "Release and redeploy mode: the owner's word in chat that authorises this run, verbatim."
         required: false
         type: string
       reason:
@@ -99,7 +116,7 @@ jobs:
       pull-requests: read
       statuses: read
     outputs:
-      images-run-id: ${{ steps.preflight.outputs.images-run-id || steps.rollback-preflight.outputs.images-run-id }}
+      images-run-id: ${{ steps.preflight.outputs.images-run-id || steps.rollback-preflight.outputs.images-run-id || steps.redeploy-preflight.outputs.images-run-id }}
     steps:
       - name: Refuse an empty owner quote or rollback reason
         env:
@@ -108,9 +125,9 @@ jobs:
           REASON: ${{ inputs.reason }}
         run: |
           case "$MODE" in
-            release)
+            release | redeploy)
               if [ -z "${OWNER_QUOTE//[[:space:]]/}" ]; then
-                echo "::error::owner_quote is empty — every production release needs the owner's word in chat"
+                echo "::error::owner_quote is empty — every production release and redeploy needs the owner's word in chat"
                 exit 1
               fi
               echo "owner quote: present (${#OWNER_QUOTE} chars)" ;;
@@ -121,7 +138,7 @@ jobs:
               fi
               echo "rollback reason: present (${#REASON} chars)" ;;
             *)
-              echo "::error::mode must be release or rollback"
+              echo "::error::mode must be release, rollback or redeploy"
               exit 1 ;;
           esac
 
@@ -141,7 +158,7 @@ jobs:
 
       - name: Runner pre-flight
         id: preflight
-        if: inputs.mode != 'rollback'
+        if: inputs.mode == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -155,6 +172,15 @@ jobs:
           GH_REPO: ${{ github.repository }}
           REASON: ${{ inputs.reason }}
         run: node tools/deploy/release-runner.mjs rollback-preflight --sha "$SHA"
+
+      - name: Redeploy pre-flight
+        id: redeploy-preflight
+        if: inputs.mode == 'redeploy'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          OWNER_QUOTE: ${{ inputs.owner_quote }}
+        run: node tools/deploy/release-runner.mjs redeploy-preflight --sha "$SHA"
 
   deploy:
     needs: preflight
@@ -209,25 +235,31 @@ jobs:
       - name: Start the release driver
         id: release
         if: inputs.mode != 'rollback'
+        env:
+          MODE: ${{ inputs.mode }}
         run: |
+          # A redeploy is the same driver run of the live SHA, as a fresh attempt.
+          verb=release
+          if [ "$MODE" = redeploy ]; then verb=redeploy; fi
           set +e
           line=$(ssh -i "$RUNNER_TEMP/prod-ssh/key" \
             -o UserKnownHostsFile="$RUNNER_TEMP/prod-ssh/known_hosts" \
             -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 \
-            "$PROD_SSH_USER@$PROD_SSH_HOST" "release prod $SHA" \
+            "$PROD_SSH_USER@$PROD_SSH_HOST" "$verb prod $SHA" \
             < "manifest/images-$SHA.json" 2>&1)
           rc=$?
           set -e
           # The driver prints ONE status line (no secret, no journal, no compose
           # output); only its first line is ever shown.
           first=$(printf '%s\n' "$line" | head -n 1)
-          echo "release: rc=$rc $first"
-          # `started` / `attached` / `already-succeeded` — the poll needs to know.
+          echo "$verb: rc=$rc $first"
+          # `started` / `attached` / `already-succeeded` (a release only) — the poll
+          # needs to know.
           echo "outcome=$(printf '%s' "$first" | awk '{print $2}')" >> "$GITHUB_OUTPUT"
           case "$rc" in
             0) ;;
-            3) echo "::error::release refused: $first"; exit 1 ;;
-            *) echo "::error::release failed (rc=$rc)"; exit 1 ;;
+            3) echo "::error::$verb refused: $first"; exit 1 ;;
+            *) echo "::error::$verb failed (rc=$rc)"; exit 1 ;;
           esac
 
       - name: Poll the driver until it is terminal
@@ -399,7 +431,7 @@ jobs:
       # success already recorded for the SHA writes nothing (`recorded=existing`).
       - name: Release cut and the Deployment record
         id: record
-        if: always() && inputs.mode != 'rollback' && steps.poll.outputs.terminal != ''
+        if: always() && inputs.mode == 'release' && steps.poll.outputs.terminal != ''
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -409,6 +441,17 @@ jobs:
         run: |
           node tools/deploy/release-runner.mjs record --sha "$SHA" \
             --state "$TERMINAL" --previous-sha "$PREVIOUS_SHA"
+
+      # Redeploy: no release cut, a new Deployment record of every run, with the quote.
+      - name: The redeploy Deployment record
+        id: redeploy-record
+        if: always() && inputs.mode == 'redeploy' && steps.poll.outputs.terminal != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          OWNER_QUOTE: ${{ inputs.owner_quote }}
+          TERMINAL: ${{ steps.poll.outputs.terminal }}
+        run: node tools/deploy/release-runner.mjs redeploy-record --sha "$SHA" --state "$TERMINAL"
 
       # Rollback: no release cut, the ONE Deployment record with the reason.
       - name: The rollback Deployment record
@@ -435,9 +478,9 @@ jobs:
 
   digest:
     needs: deploy
-    # Only a newly written success record: a re-dispatch whose success is already
-    # recorded posts no second digest.
-    if: inputs.mode != 'rollback' && needs.deploy.result == 'success' && needs.deploy.outputs.recorded == 'new'
+    # Only a release's newly written success record: a re-dispatch whose success is
+    # already recorded posts no second digest; a rollback or redeploy ships no new code.
+    if: inputs.mode == 'release' && needs.deploy.result == 'success' && needs.deploy.outputs.recorded == 'new'
     permissions:
       contents: read
       deployments: read

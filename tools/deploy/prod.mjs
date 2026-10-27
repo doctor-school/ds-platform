@@ -280,9 +280,29 @@ export const DEPLOY_PLAN = Object.freeze([
  */
 export const OPERATOR_ONLY_STEPS = Object.freeze(["preflight", "release-cut", "deployment-record"]);
 
+/**
+ * The phases a redeploy of the live SHA (#3354) skips: the ones that install box
+ * tooling or reach ds-data-prod. A rollback runs none of them (spec §5 «Two trees»
+ * (a): the tooling tree is the newest forward release's, a rollback never re-installs
+ * box entrypoints), and after a rollback the live SHA is older than that tree — so a
+ * redeploy, which recreates the app tier only, follows the rollback's rule.
+ */
+export const REDEPLOY_SKIPPED_STEPS = Object.freeze([
+  "postgres-verify",
+  "install",
+  "data-prod-env",
+  "data-prod-up",
+  "backup",
+]);
+
 /** The phases a run executes, in order. */
-export function deployPlan({ local = false } = {}) {
-  return DEPLOY_PLAN.filter((id) => !local || !OPERATOR_ONLY_STEPS.includes(id));
+export function deployPlan({ local = false, redeploy = false } = {}) {
+  if (redeploy && !local) throw new Error("a redeploy is the box-side run of --local only");
+  return DEPLOY_PLAN.filter(
+    (id) =>
+      (!local || !OPERATOR_ONLY_STEPS.includes(id)) &&
+      (!redeploy || !REDEPLOY_SKIPPED_STEPS.includes(id)),
+  );
 }
 
 /**
@@ -291,8 +311,8 @@ export function deployPlan({ local = false } = {}) {
  * executes it. Either refuses a phase out of `DEPLOY_PLAN` order or a skipped phase
  * this run executes; `done()` refuses a run that left one out.
  */
-export function planWalker({ local = false } = {}) {
-  const plan = deployPlan({ local });
+export function planWalker({ local = false, redeploy = false } = {}) {
+  const plan = deployPlan({ local, redeploy });
   let at = 0;
   const advance = (id) => {
     const index = DEPLOY_PLAN.indexOf(id, at);
@@ -305,7 +325,13 @@ export function planWalker({ local = false } = {}) {
   return {
     phase(id) {
       if (OPERATOR_ONLY_STEPS.includes(id)) throw new Error(`${id} is an operator-only phase`);
+      if (REDEPLOY_SKIPPED_STEPS.includes(id)) throw new Error(`${id} is a release-only phase`);
       advance(id);
+    },
+    /** A phase a release runs and a redeploy skips: answers whether this run runs it. */
+    releasePhase(id) {
+      if (!REDEPLOY_SKIPPED_STEPS.includes(id)) throw new Error(`${id} runs on every path`);
+      return advance(id);
     },
     operatorPhase(id) {
       if (!OPERATOR_ONLY_STEPS.includes(id)) throw new Error(`${id} runs on every path`);
@@ -346,18 +372,26 @@ const LOCAL_FLAG = "--local";
 const IMAGES_FILE_FLAG = "--images-file";
 
 const ROLLBACK_FLAG = "--rollback";
+const REDEPLOY_FLAG = "--redeploy";
 
 /**
- * `--local [--rollback <sha>] --images-file <path|->` (`-`: the inherited stdin).
- * `--rollback <sha>` (the full SHA) is the one mode flag `--local` admits: the
- * box-side rollback's run from the tooling tree (#2987, spec §5 «Prod rollback»).
- * Nothing else goes with them: a hotfix `--ref` and every escape hatch stay on the
- * operator path (spec §5 «Prod release driver»). Returns `{ local: null }`,
- * `{ local: { imagesFile } }`, `{ local: { imagesFile, rollback } }` or `{ error }`.
+ * `--local [--rollback <sha> | --redeploy] --images-file <path|->` (`-`: the
+ * inherited stdin). The mode flags `--local` admits, one at most:
+ * `--rollback <sha>` (the full SHA), the box-side rollback's run from the tooling
+ * tree (#2987, spec §5 «Prod rollback»), and `--redeploy`, the release driver's
+ * re-run of the live SHA that recreates every container (#3354, spec §3 item 3
+ * «Redeploy mode»). Nothing else goes with them: a hotfix `--ref` and every escape
+ * hatch stay on the operator path (spec §5 «Prod release driver»). Returns
+ * `{ local: null }`, `{ local: { imagesFile } }`, `{ local: { imagesFile, rollback } }`,
+ * `{ local: { imagesFile, redeploy: true } }` or `{ error }`.
  */
 export function parseLocalFlags(args) {
   const local = args.includes(LOCAL_FLAG);
   const at = args.indexOf(IMAGES_FILE_FLAG);
+  const rd = args.indexOf(REDEPLOY_FLAG);
+  if (!local && at < 0 && rd >= 0) {
+    return { error: "`--redeploy` is the box-side run of `--local` only" };
+  }
   if (!local && at < 0) return { local: null };
   if (!local || at < 0) return { error: "`--local` and `--images-file <path|->` go together" };
   const imagesFile = args[at + 1];
@@ -372,7 +406,15 @@ export function parseLocalFlags(args) {
       return { error: "`--local --rollback` takes the full 40-hex SHA of the target" };
     }
   }
-  const taken = new Set([at, at + 1, ...(rb >= 0 ? [rb, rb + 1] : [])]);
+  if (rb >= 0 && rd >= 0) {
+    return { error: "`--redeploy` and `--rollback` are two modes: pass one" };
+  }
+  const taken = new Set([
+    at,
+    at + 1,
+    ...(rb >= 0 ? [rb, rb + 1] : []),
+    ...(rd >= 0 ? [rd] : []),
+  ]);
   const rest = args.filter((arg, index) => arg !== LOCAL_FLAG && !taken.has(index));
   if (rest.length > 0) {
     return {
@@ -381,7 +423,8 @@ export function parseLocalFlags(args) {
         " every escape hatch stay on the operator path",
     };
   }
-  return { local: rollback ? { imagesFile, rollback } : { imagesFile } };
+  if (rollback) return { local: { imagesFile, rollback } };
+  return { local: rd >= 0 ? { imagesFile, redeploy: true } : { imagesFile } };
 }
 
 /** A file of the target commit: `git show` on the operator path, the extracted tree on the box. */
@@ -643,6 +686,10 @@ echo "retained ds-api tags:"; sudo docker images ds-api --format '  {{.Tag}} ({{
  * tagged with the same SHA, so nothing is (re)built: no `--build`.
  * `</dev/null`: compose run attaches the container's stdin by default — never let
  * it read this shell's stdin (see REMOTE_BASH; defense in depth).
+ * A redeploy swaps with `recreateScript()` instead: `up -d` recreates a container
+ * only when Compose sees its configuration or image changed, and Compose's docs do
+ * not count an `env_file`'s contents among those changes
+ * (https://docs.docker.com/reference/cli/docker/compose/up/).
  */
 export function migrateAndUpScript() {
   return `cd ${API_COMPOSE}
@@ -650,6 +697,19 @@ echo '── migrate (drizzle-kit; idempotent) ──'
 sudo docker compose --profile migrate run --rm migrate </dev/null
 echo '── up -d ──'
 sudo docker compose up -d
+`;
+}
+
+/**
+ * The swap of a redeploy of the live SHA (#3354): every container of the api compose
+ * recreated, so each re-reads the box's env files. No migrate: the SHA's migrations
+ * ran when it was released, and the pre-migrate backup that anchors one is a
+ * data-prod step a redeploy does not run (REDEPLOY_SKIPPED_STEPS).
+ */
+export function recreateScript() {
+  return `cd ${API_COMPOSE}
+echo '── up -d --force-recreate (redeploy of the live SHA) ──'
+sudo docker compose up -d --force-recreate
 `;
 }
 
@@ -1417,12 +1477,16 @@ function boxStep(host, sha, step, script, label) {
 // finished release frees the env lease for another SHA, so every failure exit closes
 // it as failed — `die()` included, which is synchronous and exits.
 let openReleaseSha = null;
+// The boxes that release is open on: a redeploy (#3354) reaches api-prod only.
+let openReleaseHosts = [];
 
 async function finishReleaseSucceeded(sha) {
   await sshScript(API_PROD, releaseFinishScript(RELEASE_ENV, sha, "succeeded"), {
     label: "ds-release finish",
   });
-  console.log(await dataProd().call(["finish", sha, "succeeded"]));
+  if (openReleaseHosts.includes(DATA_PROD)) {
+    console.log(await dataProd().call(["finish", sha, "succeeded"]));
+  }
   openReleaseSha = null;
 }
 
@@ -1431,8 +1495,9 @@ async function finishReleaseSucceeded(sha) {
 function closeOpenReleaseAsFailed() {
   if (!openReleaseSha) return;
   const sha = openReleaseSha;
+  const hosts = openReleaseHosts;
   openReleaseSha = null;
-  for (const host of [API_PROD, DATA_PROD]) {
+  for (const host of hosts) {
     // #3313: ds-data-prod's `finish` verb, in the form this run already found (a
     // release is open only after the data-prod calls that found it).
     const script =
@@ -2178,7 +2243,9 @@ export async function preparePostgresDeployment(
 
 // `local` (#3157): `{ imagesFile }` of a box-local run, null on the operator path.
 async function deploy(hotfixRef = null, local = null) {
-  const walk = planWalker({ local: Boolean(local) });
+  // #3354: a redeploy of the live SHA recreates the app tier only (REDEPLOY_SKIPPED_STEPS).
+  const redeploy = Boolean(local?.redeploy);
+  const walk = planWalker({ local: Boolean(local), redeploy });
   const { sha, images } = walk.operatorPhase("preflight")
     ? await preflight(hotfixRef)
     : await readLocalRelease(local.imagesFile);
@@ -2196,16 +2263,14 @@ async function deploy(hotfixRef = null, local = null) {
     certIndex < 0
       ? undefined
       : JSON.parse(readFileSync(process.argv[certIndex + 1], "utf8"));
-  walk.phase("postgres-verify");
-  step(
-    "PostgreSQL: verify cluster, backup path, mounts and immutable target artifacts",
-  );
-  const postgres = await preparePostgresDeployment(sha, {
-    certificate,
-    ...(LOCAL_TREE
-      ? { readTarget: (target) => readPostgresTargetFromTree(target, LOCAL_TREE) }
-      : {}),
-  });
+  const postgres = walk.releasePhase("postgres-verify")
+    ? await preparePostgresDeployment(sha, {
+        certificate,
+        ...(LOCAL_TREE
+          ? { readTarget: (target) => readPostgresTargetFromTree(target, LOCAL_TREE) }
+          : {}),
+      })
+    : null;
   // What the banners call the thing being shipped: `origin/main` for the normal
   // train, an explicit «hotfix @ <sha>» for `--ref` (#1881) — a deploy log that
   // says "origin/main" while shipping a cherry-pick branch is a lie the next
@@ -2263,65 +2328,74 @@ async function deploy(hotfixRef = null, local = null) {
       ? `${targetLabel} (base ${prevSha.slice(0, 12)})`
       : targetLabel;
   walk.phase("ship");
-  step(`Ship ${shipLabel} → both boxes`);
   let t = Date.now();
-  await postgres.run(async ({ live }) => {
-    // Outside the shipped tree: an interrupted archive swap must not rewrite
-    // the provenance of the still-running PostgreSQL image on re-entry.
-    await dataProd().call(["postgres-checkpoint"], { input: postgresStateRecord(live) });
+  if (redeploy) {
     await shipTree(sha, API_PROD);
-  });
-  ok(`archive → ${API_PROD}`, t);
-  t = Date.now();
-  await postgres.run(() => shipDataProd(sha));
-  ok(`archive → ${DATA_PROD}`, t);
-  // #2982: the durable entrypoint comes from the tree just shipped, every run (with
-  // the CI keys' forced command ds-deploy-entrypoint, #2984).
-  walk.phase("install");
-  // #2987: the install also keeps this tree as the box-side rollback's tooling tree.
-  await sshScript(API_PROD, releaseInstallScript(PROD_LIVE_TREE, { sha }), { label: "install ds-release" });
-  // #3313: ds-data-prod installs from the tree it was just shipped, box-side.
-  await dataProd().call(["install", sha]);
-  ok("ds-release + ds-deploy-entrypoint installed on both boxes");
-  // #3320: the Actions run converges ds-data-prod's hop to the forced command itself,
-  // before any data-prod state change (a no-op once converged); the workstation path
-  // reaches it as breakglass, a shell login, and never converges.
-  if (local) await dataProd().converge(sha);
+  } else {
+    step(`Ship ${shipLabel} → both boxes`);
+    await postgres.run(async ({ live }) => {
+      // Outside the shipped tree: an interrupted archive swap must not rewrite
+      // the provenance of the still-running PostgreSQL image on re-entry.
+      await dataProd().call(["postgres-checkpoint"], { input: postgresStateRecord(live) });
+      await shipTree(sha, API_PROD);
+    });
+    ok(`archive → ${API_PROD}`, t);
+    t = Date.now();
+    await postgres.run(() => shipDataProd(sha));
+  }
+  ok(`archive → ${redeploy ? API_PROD : DATA_PROD}`, t);
+  // #2982: the durable entrypoint comes from the tree just shipped, every release
+  // (with the CI keys' forced command ds-deploy-entrypoint, #2984).
+  if (walk.releasePhase("install")) {
+    // #2987: the install also keeps this tree as the box-side rollback's tooling tree.
+    await sshScript(API_PROD, releaseInstallScript(PROD_LIVE_TREE, { sha }), { label: "install ds-release" });
+    // #3313: ds-data-prod installs from the tree it was just shipped, box-side.
+    await dataProd().call(["install", sha]);
+    ok("ds-release + ds-deploy-entrypoint installed on both boxes");
+    // #3320: the Actions run converges ds-data-prod's hop to the forced command itself,
+    // before any data-prod state change (a no-op once converged); the workstation path
+    // reaches it as breakglass, a shell login, and never converges.
+    if (local) await dataProd().converge(sha);
+  }
   openReleaseSha = sha;
+  openReleaseHosts = redeploy ? [API_PROD] : [API_PROD, DATA_PROD];
 
-  step("data-prod: bring up persistence plane (idempotent)");
-  t = Date.now();
   // The compose interpolation files live INSIDE the shipped tree, which every ship
   // replaces — so they are rewritten on every run, outside the durable unit: a
   // re-run whose `up` returns its recorded verdict still leaves them in place for
   // the compose calls after it (#2982).
-  walk.phase("data-prod-env");
-  await postgres.run(({ live }) =>
-    dataProd().call(["data-env"], { input: dataProdEnvPayload(live) }),
-  );
-  walk.phase("data-prod-up");
-  await postgres.run(() => dataProdStep(sha, "up", "data-prod up"));
-  await postgres.run(({ live, sourceHash }) =>
-    dataProd().call(["postgres-checkpoint"], { input: postgresStateRecord(live, sourceHash) }),
-  );
-  ok("postgres + redis + pgbackrest up", t);
+  if (walk.releasePhase("data-prod-env")) {
+    step("data-prod: bring up persistence plane (idempotent)");
+    t = Date.now();
+    await postgres.run(({ live }) =>
+      dataProd().call(["data-env"], { input: dataProdEnvPayload(live) }),
+    );
+  }
+  if (walk.releasePhase("data-prod-up")) {
+    await postgres.run(() => dataProdStep(sha, "up", "data-prod up"));
+    await postgres.run(({ live, sourceHash }) =>
+      dataProd().call(["postgres-checkpoint"], { input: postgresStateRecord(live, sourceHash) }),
+    );
+    ok("postgres + redis + pgbackrest up", t);
+  }
 
-  step("DSO-129: pgbackrest pre-migrate checkpoint (BEFORE migrate)");
-  t = Date.now();
   // Reuse the on-box-proven wrapper (same one cron runs); `incr` is the fast,
   // correct pre-migrate anchor at the pre-pilot's near-zero write volume —
   // combined with synchronous WAL archiving it yields PITR to just-before-migrate
   // so an app-only rollback never needs a DB rollback.
-  walk.phase("backup");
-  await dataProdStep(sha, "backup", "pgbackrest checkpoint");
-  const info = await dataProd().call(["backup-info"]);
-  ok("pre-migrate incr backup taken", t);
-  console.log(
-    info
-      .split(/\r?\n/)
-      .map((l) => `      ${l}`)
-      .join("\n"),
-  );
+  if (walk.releasePhase("backup")) {
+    step("DSO-129: pgbackrest pre-migrate checkpoint (BEFORE migrate)");
+    t = Date.now();
+    await dataProdStep(sha, "backup", "pgbackrest checkpoint");
+    const info = await dataProd().call(["backup-info"]);
+    ok("pre-migrate incr backup taken", t);
+    console.log(
+      info
+        .split(/\r?\n/)
+        .map((l) => `      ${l}`)
+        .join("\n"),
+    );
+  }
 
   // ORDER (#1410): pull → boot-verify → migrate → up -d. The recorded app images
   // are pulled and PROVEN TO BOOT before the database is migrated and before any
@@ -2369,14 +2443,20 @@ ${deployShaEnvScript(sha)}
   t = Date.now();
   walk.phase("idp");
   await assertProdApiEnvHasRecordKey(services);
-  await provisionIdp(sha);
-  ok("prod IdP converged and read back before app swap", t);
+  // #1997: the IdP converge is forward-only, and a rollback runs none; nor does a redeploy.
+  if (!redeploy) await provisionIdp(sha);
+  ok(redeploy ? "IdP left as the last forward release converged it" : "prod IdP converged and read back before app swap", t);
 
-  step("api-prod: migrate → up -d");
   t = Date.now();
   walk.phase("migrate");
-  await boxStep(API_PROD, sha, "migrate", migrateAndUpScript(), "api-prod deploy");
-  ok("migrate + up -d", t);
+  if (redeploy) {
+    step("api-prod: up -d --force-recreate (redeploy: no migrate)");
+    await boxStep(API_PROD, sha, "recreate", recreateScript(), "api-prod redeploy");
+  } else {
+    step("api-prod: migrate → up -d");
+    await boxStep(API_PROD, sha, "migrate", migrateAndUpScript(), "api-prod deploy");
+  }
+  ok(redeploy ? "up -d --force-recreate" : "migrate + up -d", t);
 
   step("api-prod: apply bind-mounted Caddy + Centrifugo configs (#1175)");
   t = Date.now();

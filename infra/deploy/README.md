@@ -924,7 +924,8 @@ deploy.
 
    The site key is RUNTIME env (#2981 — the images are environment-agnostic):
    the storefront server mounts read it per request, so a key change needs only a
-   container recreate (`docker compose up -d portal doctor`), never a rebuild.
+   container recreate at the live SHA (a `deploy-prod.yml` redeploy, below), never a
+   rebuild.
 
 4. **Converge the on-box env (out-of-band, root:root 0600).** On api-prod,
    ensure `/etc/ds-platform/api.env` contains the wave-1 blocks from
@@ -953,16 +954,30 @@ deploy.
 
    - **OFF** — `BOT_PROTECTION_ENABLED=false` and comment out
      `SMARTCAPTCHA_SERVER_KEY` in `api.env`; empty `SMARTCAPTCHA_SITE_KEY=` in
-     the compose `.env`; break-glass `pnpm deploy:prod` on the owner's word, over the
-     `breakglass` key (it recreates the storefront containers, which read the key at
-     runtime); the clients then submit tokenless and the api guard stays wired and no-ops
-     (003 design §10.1 fallback).
+     the compose `.env`; then, on the owner's word, the redeploy of the live SHA
+     (it recreates every container, the api and the storefronts that read the key at
+     runtime included); the clients then submit tokenless and the api guard stays wired
+     and no-ops (003 design §10.1 fallback).
    - **ON** — restore `BOT_PROTECTION_ENABLED=true` plus the `ysc2_` server half
      in `api.env` and `SMARTCAPTCHA_SITE_KEY=ysc1_…` in the compose `.env`, run
-     the keypair-identifier checks in step 3, then the same break-glass `pnpm deploy:prod`.
+     the keypair-identifier checks in step 3, then the same redeploy.
 
-   Either direction runs break-glass because Actions has no route yet that recreates the
-   prod containers at the live SHA after an env change — tracked in #3354.
+   The redeploy is the Actions route (#3354): the live SHA is the one the latest
+   successful production Deployment names (`/v1/health` `version` agrees), and the
+   owner's word is passed verbatim —
+
+   ```bash
+   gh workflow run deploy-prod.yml --ref main -f mode=redeploy -f sha=<live sha> -f owner_quote="<owner word>"
+   ```
+
+   It re-runs that SHA's app-tier release steps on the box as a fresh attempt (no
+   box-tooling install, no ds-data-prod phase), with every container of the api
+   compose recreated (`up -d --force-recreate`), and writes a new Deployment record;
+   no Release, no digest (`tools/deploy/README.md` «Redeploy mode»). Break-glass
+   `pnpm deploy:prod` over the `breakglass` key stays the fallback when Actions or
+   the box driver is unavailable. The Actions redeploy needs a live prod SHA that
+   contains #3354; before that release ships, or after a rollback to an older SHA,
+   the route is break-glass `pnpm deploy:prod`.
 
 5. **Ship source + pull images.** Ship the merged `origin/main` tree to the boxes
    (Apply order step 5 / a `deploy-prod.yml` release does this), then bring that SHA's

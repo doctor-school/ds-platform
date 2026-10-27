@@ -20,7 +20,7 @@ const deployBody = SOURCE.slice(
 );
 
 test("2982: data-prod up, the pre-migrate backup, the pull, migrate+up and the prune are durable units", () => {
-  for (const step of ["migrate", "prune"]) {
+  for (const step of ["migrate", "recreate", "prune"]) {
     assert.match(deployBody, new RegExp(`boxStep\\(\\s*API_PROD,\\s*sha,\\s*"${step}"`), step);
   }
   // #3313: ds-data-prod's units start through its verbs, their scripts fixed box-side.
@@ -36,6 +36,7 @@ test("2982: data-prod up, the pre-migrate backup, the pull, migrate+up and the p
   );
   for (const streamed of [
     "migrateAndUpScript()",
+    "recreateScript()",
     "retentionScript()",
   ]) {
     const at = deployBody.indexOf(streamed);

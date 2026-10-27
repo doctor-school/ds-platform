@@ -2375,6 +2375,215 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     },
   );
 
+  it("EARS-70: S167 an exactly expired Academy form refuses the registration code before verification and a fresh binding accepts it", async () => {
+    let stateNow = Date.now();
+    const state = new InMemorySignInHostStateStore(
+      Buffer.alloc(32, 7),
+      () => stateNow,
+    );
+    const isolated = await compile(
+      RELAXED_RATE_LIMIT,
+      undefined,
+      undefined,
+      state,
+    );
+    const jar = new Jar();
+    const address = email("s167-form-expiry");
+    const authRequest = isolated.hostIdp.seedAuthRequest({
+      clientId: ACADEMY,
+      prompt: ["create"],
+    });
+    try {
+      const opened = await isolated.app.inject({
+        method: "GET",
+        url: `/v1/sign-in-host/entry?authRequest=${authRequest}`,
+        headers: DEVICE,
+      });
+      expect(opened.statusCode).toBe(200);
+      const form = opened.json() as SignInHostEntryResponse;
+      expect(form).toEqual({
+        action: "render",
+        storefront: "academy",
+        door: "register",
+        authRequest,
+        csrf: expect.any(String),
+      });
+      if (form.action !== "render") throw new Error("not rendered");
+      jar.apply(opened.cookies);
+      const formId = jar.values.get(FORM_COOKIE_NAME)!;
+      const binding = await state.getForm(formId);
+      expect(binding).toEqual({
+        csrfToken: form.csrf,
+        storefront: "academy",
+        authRequestId: authRequest,
+      });
+      const expiresAt = stateNow + FORM_STATE_TTL_SECONDS * 1000;
+      const registered = await isolated.app.inject({
+        method: "POST",
+        url: "/v1/sign-in-host/register",
+        headers: {
+          ...DEVICE,
+          origin: HOST_ORIGIN,
+          "sec-fetch-site": "same-origin",
+          cookie: jar.header(),
+        },
+        payload: {
+          email: address,
+          password: PASSWORD,
+          consent: CONSENT,
+          authRequest,
+          csrf: form.csrf,
+        },
+      });
+      expect(registered.statusCode).toBe(200);
+      expect(registered.json()).toEqual({ status: "pending_verification" });
+      expect(registered.cookies).toEqual([]);
+      const pending = await pool.query("SELECT * FROM users WHERE email = $1", [
+        address,
+      ]);
+      expect(pending.rows).toEqual([
+        expect.objectContaining({ email_verified: false }),
+      ]);
+      const cookies = [...jar.values];
+      const request = await isolated.hostIdp.readAuthRequest(authRequest);
+      expect(request).not.toBeNull();
+      const records = isolated.app.get(SignInHostRecordStore);
+      const verify = vi.spyOn(isolated.idp, "submitEmailCode");
+      const verifyStep = vi.spyOn(isolated.app.get(AuthService), "verifyStep");
+      const insert = vi.spyOn(records, "insert");
+      const lifetime = vi.spyOn(isolated.hostIdp, "setSessionLifetime");
+      const finalise = vi.spyOn(isolated.hostIdp, "finaliseWithSession");
+      const finaliseError = vi.spyOn(isolated.hostIdp, "finaliseWithError");
+      const terminate = vi.spyOn(isolated.idp, "terminateSession");
+      const spies = [
+        verify,
+        verifyStep,
+        insert,
+        lifetime,
+        finalise,
+        finaliseError,
+        terminate,
+      ];
+      const payload = {
+        email: address,
+        code: FAKE_VALID_CODE,
+        authRequest,
+        csrf: form.csrf,
+      };
+      try {
+        stateNow = expiresAt - 1;
+        expect(await state.getForm(formId)).toEqual(binding);
+        stateNow = expiresAt;
+        const refused = await isolated.app.inject({
+          method: "POST",
+          url: "/v1/sign-in-host/verify",
+          headers: {
+            ...DEVICE,
+            origin: HOST_ORIGIN,
+            "sec-fetch-site": "same-origin",
+            cookie: jar.header(),
+          },
+          payload,
+        });
+        expect(refused.statusCode).toBe(403);
+        expect(refused.json()).toMatchObject({ message: "form refused" });
+        expect(refused.cookies).toEqual([]);
+        expect(await state.getForm(formId)).toBeNull();
+        for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+        expect([...jar.values]).toEqual(cookies);
+        expect(await recordRows(address)).toEqual([]);
+        expect(
+          (await pool.query("SELECT * FROM users WHERE email = $1", [address]))
+            .rows,
+        ).toEqual(pending.rows);
+        expect(
+          await isolated.idp.getUser(pending.rows[0]!.zitadel_sub),
+        ).toMatchObject({ email: address, emailVerified: false });
+        expect(await isolated.hostIdp.readAuthRequest(authRequest)).toEqual(
+          request,
+        );
+
+        const reopened = await isolated.app.inject({
+          method: "GET",
+          url: `/v1/sign-in-host/entry?authRequest=${authRequest}`,
+          headers: { ...DEVICE, cookie: jar.header() },
+        });
+        expect(reopened.statusCode).toBe(200);
+        const fresh = reopened.json() as SignInHostEntryResponse;
+        expect(fresh).toEqual({
+          action: "render",
+          storefront: "academy",
+          door: "register",
+          authRequest,
+          csrf: expect.any(String),
+        });
+        if (fresh.action !== "render") throw new Error("not rendered");
+        jar.apply(reopened.cookies);
+        const freshId = jar.values.get(FORM_COOKIE_NAME)!;
+        expect(freshId).not.toBe(formId);
+        expect(fresh.csrf).not.toBe(form.csrf);
+        expect(await state.getForm(freshId)).toEqual({
+          csrfToken: fresh.csrf,
+          storefront: "academy",
+          authRequestId: authRequest,
+        });
+        for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+        const accepted = await isolated.app.inject({
+          method: "POST",
+          url: "/v1/sign-in-host/verify",
+          headers: {
+            ...DEVICE,
+            origin: HOST_ORIGIN,
+            "sec-fetch-site": "same-origin",
+            cookie: jar.header(),
+          },
+          payload: { ...payload, csrf: fresh.csrf },
+        });
+        expect(accepted.statusCode).toBe(200);
+        expect(accepted.json()).toEqual({
+          status: "redirect",
+          url: expect.stringContaining("code="),
+        });
+        jar.apply(accepted.cookies);
+        expect(verify).toHaveBeenCalledExactlyOnceWith(
+          address,
+          FAKE_VALID_CODE,
+          undefined,
+        );
+        expect(verifyStep).toHaveBeenCalledTimes(1);
+        const recordId = jar.values.get(RECORD_COOKIE_NAME)!;
+        const record = await records.find(recordId);
+        expect(record?.session.sub).toBe(pending.rows[0]!.zitadel_sub);
+        expect(insert).toHaveBeenCalledTimes(1);
+        expect(lifetime).toHaveBeenCalledExactlyOnceWith(
+          record!.session,
+          SIGN_IN_HOST_SESSION_LIFETIME_SECONDS,
+        );
+        expect(finalise).toHaveBeenCalledExactlyOnceWith(
+          authRequest,
+          record!.session,
+        );
+        expect(finaliseError).not.toHaveBeenCalled();
+        expect(isolated.hostIdp.finalised).toEqual([
+          { id: authRequest, session: record!.session },
+        ]);
+        expect(await recordRows(address)).toHaveLength(1);
+        expect(
+          await isolated.idp.getUser(pending.rows[0]!.zitadel_sub),
+        ).toMatchObject({ email: address, emailVerified: true });
+        expect(accepted.cookies.map((cookie) => cookie.name)).toEqual([
+          RECORD_COOKIE_NAME,
+        ]);
+        expect(jar.values.get(FORM_COOKIE_NAME)).toBe(freshId);
+        expect(jar.values.has(SESSION_COOKIE_NAME)).toBe(false);
+      } finally {
+        for (const spy of spies) spy.mockRestore();
+      }
+    } finally {
+      await isolated.app.close();
+    }
+  });
+
   describe.each([
     ["academy", ACADEMY, "register", "verify", ACADEMY_LOGIN],
     [

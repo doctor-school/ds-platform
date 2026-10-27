@@ -3084,7 +3084,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
         });
         expect(wrong.statusCode).toBe(401);
         expect(wrong.json()).toMatchObject({
-          message: "the request could not be completed",
+          message: "invalid credentials",
         });
         expect(wrong.cookies).toEqual([]);
         expect(otp).toHaveBeenCalledExactlyOnceWith(

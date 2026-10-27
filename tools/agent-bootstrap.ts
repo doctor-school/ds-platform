@@ -19,6 +19,11 @@
  * `blocked … — by #X` (open native `blocked_by` edges); the first ready child
  * is marked `next →`. A failed fetch prints `(unknown — see Warnings)`.
  *
+ * `## Stage suite (main)` (#3269): the newest main commit's `stage-suite` status
+ * and the newest green SHA (`tools/staging/stage-suite.mjs`, shared with
+ * `pnpm pr:land`); a `## Warnings` row when main is red (naming the first red
+ * commit of the streak) or the newest commit has no verdict > 1 h after it.
+ *
  * Hard rule: NEVER throw an unhandled error. Every failure path returns a
  * printable warning so the SessionStart hook does not crash. Exit code is
  * always 0 (warnings reported in a "Warnings" section).
@@ -65,6 +70,11 @@ import {
   probeStageSlots,
   renderStageSlotSection,
 } from "./staging/slot-probe.mjs";
+import {
+  probeStageSuite,
+  renderStageSuiteSection,
+  stageSuiteWarnings,
+} from "./staging/stage-suite.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -926,6 +936,7 @@ async function main(): Promise<void> {
     stageSlots,
     mergedShow,
     epics,
+    stageSuite,
   ] = await Promise.all([
     gitState(),
     ghIssues(["--assignee", "@me", "--label", "agent-working"]),
@@ -959,6 +970,8 @@ async function main(): Promise<void> {
     ghMergedShowPRs(),
     // Open epics + native sub-issue progress and child readiness (#2957).
     ghOpenEpics(),
+    // main's `stage-suite` verdict + newest green SHA (#3269). Never throws.
+    probeStageSuite(),
   ]);
   // The slot probe collects its own degrade reasons (unreachable box, a failing
   // `gh pr view`) instead of reaching into the module-level list; merge them so
@@ -1201,6 +1214,11 @@ async function main(): Promise<void> {
 
   out.push("## Stage slots");
   out.push(...renderStageSlotSection(stageSlots));
+  out.push("");
+
+  out.push("## Stage suite (main)");
+  out.push(...renderStageSuiteSection(stageSuite));
+  warnings.push(...stageSuiteWarnings(stageSuite));
   out.push("");
 
   out.push("## Active specs");

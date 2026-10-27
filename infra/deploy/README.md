@@ -375,9 +375,7 @@ Timeweb Cloud container registry (#2981, tech spec
     keeps its images) ∪ the newest 3 first-parent `main` commits that have an image
     (stage `main`) ∪ the newest first-parent `main` commit whose `stage-suite` commit
     status is `success` (the release candidate — a release refuses any other, so it
-    survives `main` moving past it with red suites; the walk reads at most the newest
-    50 `main` commits, `STAGE_SUITE_WALK_DEPTH`, and keeps none when none of them is
-    green) ∪ the heads of the open `hotfix/*`
+    survives `main` moving past it with red suites) ∪ the heads of the open `hotfix/*`
     branches (a pending `pnpm deploy:prod --ref` candidate) ∪ the open PR heads;
   - per `pr/<image>` repo: the heads of the currently open pull requests;
   - everything else is deleted (`DELETE /v2/<repo>/manifests/<digest>`). Tags that are
@@ -386,9 +384,12 @@ Timeweb Cloud container registry (#2981, tech spec
     production deployment, the hotfix branches, the open PRs or `main` cannot be
     listed, a release target is not a full SHA, or a tag listing cannot be proven
     complete (a Link-less page is confirmed by a `last=` probe), nothing is deleted
-    and the run fails; a refused DELETE stops the run and fails it. A `stage-suite`
-    status that cannot be read ends the walk unconcluded: every `main` commit back to
-    and including that one is kept, and the run warns and names why in its summary.
+    and the run fails; a refused DELETE stops the run and fails it. The same holds
+    when the release candidate is not found: a `stage-suite` status that cannot be
+    read, or no green one among the newest 200 `main` commits
+    (`STAGE_SUITE_WALK_DEPTH`, a cost bound on the status reads), deletes nothing and
+    fails the run naming why — the candidate may lie further back, so no partial keep
+    is safe.
 
   It runs daily and after every `main` Runtime images run (whatever its conclusion —
   a run that failed on a full registry is exactly when space is needed); both

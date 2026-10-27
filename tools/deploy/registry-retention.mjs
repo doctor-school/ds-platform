@@ -292,8 +292,6 @@ async function main() {
   const stageSuite = await findGreenStageSuite(history, (sha) =>
     stageSuiteState(repo, sha),
   );
-  if (stageSuite.unreadableSha)
-    console.error(`::warning::registry retention: ${stageSuite.reason}`);
   const plan = planRetention({
     tags,
     releases,

@@ -1,14 +1,19 @@
 #!/usr/bin/env node
 // DS Platform — idempotent prod deploy (DSO-126/127/128/129).
 //
-// One command reproducibly rolls `origin/main` onto the always-on Timeweb prod
-// environment (api-prod public + data-prod private), formalising the manual
-// runbook in infra/deploy/README.md §5–§10. The manual path stays valid as an
-// appendix — this script does not replace first-time provisioning (Terraform,
-// DNS, secrets, Zitadel first-boot bootstrap); it is the STEADY-STATE redeploy.
+// The one release pipeline for the always-on Timeweb prod environment (api-prod
+// public + data-prod private), formalising the manual runbook in
+// infra/deploy/README.md §5–§10; it does not replace first-time provisioning
+// (Terraform, DNS, secrets, Zitadel first-boot bootstrap). Two entry points run it:
+//   - `--local` — the box-local release/rollback body: the prod release driver on
+//     ds-api-prod runs it for every Actions `deploy-prod.yml` release and its
+//     rollback mode (below);
+//   - `pnpm deploy:prod` — the break-glass workstation command (owner's word, the
+//     owner's offline `breakglass` key): a hotfix `--ref`, a workstation
+//     `--rollback`, and the gate exceptions.
 //
-//   Usage:
-//     pnpm deploy:prod                 deploy origin/main (default)
+//   Usage (break-glass, workstation):
+//     pnpm deploy:prod                 release origin/main (default)
 //     pnpm deploy:prod --ref <sha>        HOTFIX deploy: ship exactly <sha> (a
 //                                          cherry-pick branch cut FROM the SHA
 //                                          running in prod) instead of all of
@@ -997,10 +1002,23 @@ export async function rollbackSwapFailureReport({
   let mounts;
   try {
     const stale = runtimeConfigServicesToRestart(await compare());
-    mounts =
-      stale.length === 0
-        ? "caddy + centrifugo serve the configs now on disk"
-        : `${stale.join(", ")} do(es) not serve the configs now on disk — restart it onto them`;
+    if (restored.ok) {
+      mounts =
+        stale.length === 0
+          ? "caddy + centrifugo serve the configs now on disk"
+          : `${stale.join(", ")} do(es) not serve the configs now on disk — restart it onto them`;
+    } else {
+      // The rollback aborted, so the running release stays; the target's configs on
+      // disk are the wrong ones and no service may be restarted onto them.
+      const onTarget = RUNTIME_CONFIG_SERVICES.filter((s) => !stale.includes(s));
+      mounts = [
+        onTarget.length > 0 && `${onTarget.join(", ")} serve(s) the target's configs`,
+        stale.length > 0 && `${stale.join(", ")} still serve(s) the running configs`,
+        `put the running configs back from ${PREVIOUS_RUNTIME_CONFIG_DIR}/ before any restart`,
+      ]
+        .filter(Boolean)
+        .join("; ");
+    }
   } catch (e) {
     mounts = `the running mounts could not be compared (${e.message})`;
   }

@@ -12,7 +12,7 @@ name: Product note → Mattermost
 #
 # Environment marker (Issue #657): every delivered message carries an explicit
 # DEV/prod footer, driven by DELIVERY_ENV. A merge into main only reaches the DEV
-# stand (deploy:prod is manual), so the delivery step sets DELIVERY_ENV: dev; the
+# stand (a prod release is a separate `deploy-prod.yml` run on the owner's word), so the delivery step sets DELIVERY_ENV: dev; the
 # script refuses to post (exit 1) if the marker is unset/unknown.
 #
 # Injection safety: the PR body/title/url are passed through `env:` (never
@@ -42,8 +42,8 @@ jobs:
       - name: Post the Product note to Mattermost
         env:
           MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_WEBHOOK_URL }}
-          # Merge into main = the change is live on the DEV stand only (deploy:prod is a
-          # separate manual step), so a merge-triggered note is DEV by definition (Issue #657).
+          # Merge into main = the change is live on the DEV stand only (a prod release is a
+          # separate `deploy-prod.yml` run), so a merge-triggered note is DEV by definition (Issue #657).
           DELIVERY_ENV: dev
           # PR_LABELS gates delivery to product-kind PRs (feature/bug) only — process/dev
           # PRs (docs/tooling/chore/refactor/dependencies) are suppressed (Issue #847).

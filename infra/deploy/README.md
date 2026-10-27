@@ -61,8 +61,9 @@ infra/deploy/
 
 A **third** VPS, separate from this production plane and not part of any deploy path
 described below. It runs the STAGE stand: one shared service project plus a live
-preview slot per pull request. Nothing here deploys to it and `pnpm deploy:prod`
-never touches it.
+preview slot per pull request. Nothing here deploys to it, and neither the
+production release (`deploy-prod.yml`) nor the break-glass `pnpm deploy:prod`
+touches it.
 
 - Terraform: `terraform/stage-1.tf` — its **own** VPC (`twc_vpc.stage`), no peering
   and no route to `twc_vpc.ds`. That absent route, not a firewall rule, is what keeps
@@ -401,7 +402,8 @@ Timeweb Cloud container registry (#2981, tech spec
   (kept SHAs, per-repo counts) to its step summary. The job runs only on `main`, so no
   branch's code holds the push token's delete right. A deleted manifest's layers are
   freed when the registry's garbage collection runs, not at the DELETE. Consequence:
-  `pnpm deploy:prod --rollback <sha>` can reach only the last 3 releases — an older
+  a rollback (`deploy-prod.yml` rollback mode, or the break-glass
+  `pnpm deploy:prod --rollback <sha>`) can reach only the last 3 releases — an older
   SHA's recorded digests are gone, unless it is still the latest successful production
   deployment, the newest green-`stage-suite` `main` commit or among the newest 3
   `main` images. The job's token reads commit statuses (`statuses: read`). Policy and planner:
@@ -417,11 +419,15 @@ Timeweb Cloud container registry (#2981, tech spec
   - **Stage** — every slot converge (`tools/staging/slot.mjs up|sync|reset`); a commit
     with no recorded images is not staged (`tools/staging/README.md` → «`slot.mjs` in
     one paragraph»).
-  - **Production** — `pnpm deploy:prod` resolves the manifest in its pre-flight and
-    accepts only a release build (`ref: "main"`, or `ref: "hotfix/<N>-<slug>"` for a
-    `--ref` hotfix — `runtime-images.yml` also runs on `hotfix/**` pushes; release-namespace
-    digests, never `pr/`; the exact release SHA); it also checks that `/etc/ds-platform/registry-pull-token` exists on
-    ds-api-prod and refuses with this section as the pointer if not. The api-prod
+  - **Production** — the release workflow's pre-flight (`release-runner.mjs
+preflight`) and the break-glass `pnpm deploy:prod` pre-flight resolve the manifest
+    and accept only a release build (`ref: "main"`, or `ref: "hotfix/<N>-<slug>"` for a
+    break-glass `--ref` hotfix — `runtime-images.yml` also runs on `hotfix/**` pushes;
+    six release-namespace digests, five for a target that predates `login`, never
+    `pr/`; the exact release SHA); the workflow hands that `images-<sha>.json` to the
+    box-side driver on stdin. The break-glass pre-flight also checks that
+    `/etc/ds-platform/registry-pull-token` exists on ds-api-prod and refuses with this
+    section as the pointer if not. The api-prod
     compose has no `build:` and tags every `ds-*` image `${DEPLOY_SHA:?}`; an app-only
     rollback whose target tags were pruned pulls that SHA's recorded release digests
     (`tools/deploy/README.md` → steps 1 and 5) — present in the registry for the last
@@ -431,67 +437,33 @@ Timeweb Cloud container registry (#2981, tech spec
     `0600`, never through chat, an env file or this repo. Check without printing it:
     `ssh <box> 'sudo test -s /etc/ds-platform/registry-pull-token && echo ok'`.
 
-## Deploy — one command (`pnpm deploy:prod`)
+## Release (`deploy-prod.yml`; break-glass `pnpm deploy:prod`)
 
-The **steady-state redeploy** is a single idempotent command (DSO-126) that
-formalises the manual steps 5–8 + 10 below — nothing hand-run on the box:
+A production release is one Actions `deploy-prod.yml` run, dispatched on the
+owner's word; its rollback mode rolls a broken release off. The workflow runs the
+gates, then `ssh deploy@<api-prod> "release prod <sha>"`: the prod release driver
+(`infra/deploy/bin/release-driver`) runs `tools/deploy/prod.mjs --local` on
+ds-api-prod from the released SHA's tree — the box steps 5–8 + 10 below, with
+data-prod reached over the VPC hop. Nothing is hand-run on the box and nothing is
+built on it: api-prod pulls the six recorded release images (five for a target
+that predates `login`), data-prod runs its inspected images with `--no-build`.
+Jobs, gates, the box steps and the rollback mode: `tools/deploy/README.md` →
+«Release from Actions»; the pipeline steps themselves: same file, «Break-glass:
+`pnpm deploy:prod`» (one pipeline, run box-local by the driver).
 
-```bash
-pnpm deploy:prod                 # deploy origin/main (the default)
-pnpm deploy:prod --rollback <sha>   # app-only rollback to a prior SHA tag (see Rollback)
-pnpm deploy:prod --skip-ci-check    # escape hatch (logs a loud warning)
-```
-
-Pipeline (`tools/deploy/prod.mjs`), fail-closed and stops at the first red step:
-
-1. **Pre-flight** — refuses a **dirty working tree**, a HEAD **≠ `origin/main`**,
-   or a **red CI** for that SHA (latest check-run per name via `gh api
-…/commits/<sha>/check-runs`). The deployed commit is `origin/main`'s SHA.
-2. **Ship** — `git archive <sha>` streamed over SSH to a sibling staging tree on
-   **both** boxes; only after successful extraction does it replace
-   `~/ds-platform`. The gitignored api-prod compose `.env` (the non-secret
-   `DEPLOY_SHA` / `SMARTCAPTCHA_SITE_KEY` interpolation file) is the single
-   carried-forward file; other untracked files are not preserved. The tree needs
-   no deploy key (README step 5); the api-prod images come from the registry (step 5 below).
-3. **data-prod** — `docker compose up -d --build` (idempotent). Builds run with
-   **`BUILDX_NO_DEFAULT_ATTESTATIONS=1`** so an unchanged build yields a
-   byte-identical image ID: a no-op redeploy is a **true no-op** and does NOT
-   recreate the `postgres` container (#486 — without it, BuildKit's default
-   provenance attestation churns the image digest every build → `up -d` recreates
-   → a ~24s persistence blip). A real Dockerfile/context change still rebuilds and
-   recreates. (api-prod builds nothing since #2981 — step 5.)
-4. **Checkpoint (DSO-129)** — a pgbackrest **pre-migrate `incr` backup** (the
-   same `backup.sh` cron runs) **before** any migration, so a restore point
-   exists at the pre-migrate state. See [Prod migration rule](#prod-migration-rule--expandcontract).
-5. **api-prod** — `pull` (the recorded `main`/`hotfix/*` digests, see «Container registry»;
-   nothing is built) → pre-swap boot verify → `migrate` (idempotent drizzle-kit,
-   the pulled `ds-api-migrate:<sha>`) → `up -d`. Images are SHA-tagged
-   **`ds-api:<sha>` / `ds-api-migrate:<sha>` / `ds-portal:<sha>` / `ds-admin:<sha>` /
-   `ds-doctor:<sha>`** (DSO-127) — the compose `image:` reads `${DEPLOY_SHA:?}` from
-   a `.env` the script writes beside `compose.yml`.
-   The script then compares the shipped `Caddyfile` and
-   `centrifugo/config.json` with the files visible through the running containers
-   and **restarts only consumers whose bind mount is stale**. It verifies both
-   mounts again after apply; a mismatch fails the deploy (#1175). An unparseable
-   Caddyfile never gets this far: the BLOCK CI job `caddyfile-validate`
-   (`tools/ci/validate-caddyfiles.sh`) runs `caddy validate` on every
-   `compose/*/Caddyfile` with the image its sibling `compose.yml` pins (#3273).
-6. **Retention (DSO-127)** — keeps the **last 3** SHA-tagged images per repo
-   (`ds-api-migrate` included), prunes older (never `:local`, never the running
-   one) and drops the registry digest references of pruned images.
-7. **Smoke (DSO-128)** — `tools/deploy/smoke-prod.mjs --expect-sha <sha>`; a red
-   smoke fails the deploy loud and prints the rollback pointer.
+`pnpm deploy:prod` is **break-glass only** — a hotfix `--ref`, a workstation
+`--rollback`, and the gate exceptions (`--skip-ci-check`, `--allow-live-broadcast`,
+`--release-gate-exempt`) — run on the owner's word under the owner's offline
+`breakglass` key (`tools/deploy/README.md` → «Break-glass: `pnpm deploy:prod`»).
 
 The **deployed SHA is queryable over HTTP** (DSO-127): the api reports it at
 `GET /v1/health` → `{"version":"<sha>", …}` (from the `DEPLOY_SHA` env; unset in
 local dev). `curl -s https://api.doctor.school/v1/health | jq .version`.
 
-The script is the **steady-state** path only. **First-time provisioning**
-(Terraform §§1–3, DNS §4, out-of-band secrets §6, and the **Zitadel first-boot
-bootstrap** §9) stays the manual runbook below — those are one-time, not
-per-deploy. Run them once; from then on a release is one Actions `deploy-prod.yml` run,
-executed box-side by the prod release driver (release-pipeline spec §5 «Prod release
-driver.»); `pnpm deploy:prod` is break-glass, run under the `breakglass` user.
+**First-time provisioning** (Terraform §§1–3, DNS §4, out-of-band secrets §6, and
+the **Zitadel first-boot bootstrap** §9) stays the manual runbook below — those are
+one-time, not per-release. Run them once; from then on every release is a
+`deploy-prod.yml` run.
 
 ## Apply order
 
@@ -656,8 +628,9 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
    **First pull the release images and pin `DEPLOY_SHA`** (#2981). The api-prod
    compose has no `build:` and names every `ds-*` image `ds-<image>:${DEPLOY_SHA:?}`,
    so every `docker compose` call below (and in step 9) refuses until the box `.env`
-   names a SHA whose five images are present. On a steady-state box `pnpm deploy:prod`
-   does this itself, but on a fresh or rebuilt box it cannot run before this step and
+   names a SHA whose six recorded images (five for a SHA that predates `login`) are
+   present. On a provisioned box every release (the release driver) does this itself,
+   but on a fresh or rebuilt box it cannot run before this step and
    step 9, so do it by hand once. This is the same pull `tools/deploy/lib/registry.mjs`
    performs: the SHA step 5 shipped, its `main` manifest from `runtime-images.yml`,
    pulled by digest. Prerequisite: the pull token is on the box («Container registry»).
@@ -765,10 +738,11 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
      # only, no key. They stay unused until the storefront sign-in wiring ships (#3006).
      ```
 
-   - **`pnpm deploy:prod` runs this provision step for you (#1997).** The converge
-     steps in that script are the managed owner of the prod IdP configuration too
-     (login / notification / password-complexity policies, active providers, message
-     texts), so the deploy pipeline owns the run: after `up -d` and before the
+   - **Every release runs this provision step for you (#1997)** — the release
+     driver's `prod.mjs --local` run, and the break-glass `pnpm deploy:prod` the same
+     way. The converge steps in that script are the managed owner of the prod IdP
+     configuration too (login / notification / password-complexity policies, active
+     providers, message texts), so the release pipeline owns the run: after `up -d` and before the
      truthful-success verify it executes exactly the command above on api-prod and
      then READS THE POLICY BACK from the instance (`GET
 /admin/v1/policies/password/complexity` with the bootstrap PAT, on the box —
@@ -863,7 +837,7 @@ The webinars wave-1 increment onto the already-live 003 stand: admin app
 (`admin.doctor.school`), Centrifugo room chat, S3 `uploads` bucket, prod
 SmartCaptcha (#186). The repo payload (compose/Caddy/Terraform/env templates) is
 apply-ready; the steps below cover **initial provisioning or recovery** — after
-them, `pnpm deploy:prod` covers steady-state redeploys (it pulls every recorded
+them, every `deploy-prod.yml` release covers redeploys (it pulls every recorded
 `ds-*` image, admin included, and the migrate step picks up the wave-1
 events/rooms migrations like any other). Out-of-band provider resources and
 on-box values still have to satisfy the invariants below before each affected
@@ -987,8 +961,8 @@ deploy.
      the keypair-identifier checks in step 3, then `pnpm deploy:prod`.
 
 5. **Ship source + pull images.** Ship the merged `origin/main` tree to the boxes
-   (Apply order step 5 / `pnpm deploy:prod` does this), then bring that SHA's five
-   recorded images (admin included) onto api-prod and pin `DEPLOY_SHA` exactly as
+   (Apply order step 5 / a `deploy-prod.yml` release does this), then bring that SHA's
+   recorded images (six; five for a SHA that predates `login`; admin included) onto api-prod and pin `DEPLOY_SHA` exactly as
    Apply order step 8 «First pull the release images and pin `DEPLOY_SHA`» does —
    api-prod builds nothing since #2981, and every compose call in steps 6–7 refuses
    without that `.env` line and those images. The captcha site key is runtime env
@@ -996,8 +970,8 @@ deploy.
 
 6. **One-shot migrations.** The wave-1 events/rooms migrations are ordinary
    Drizzle migrations through the existing one-shot service — no new mechanism.
-   (A pgbackrest pre-migrate checkpoint first, per DSO-129 — `pnpm deploy:prod`
-   does this automatically on the scripted path.)
+   (A pgbackrest pre-migrate checkpoint first, per DSO-129 — every release run
+   does this automatically.)
 
    ```bash
    sudo docker compose --profile migrate run --rm migrate
@@ -1041,8 +1015,8 @@ deploy.
 > on 2026-07-13 both drivable affordances the lead skipped broke in the owner's
 > hands within minutes (#842 unsigned-S3 PDF link, #843 stale live surfaces).
 > Only after this pass does the owner get the smoke checklist.
-> The deploy and this pre-flight are **ONE atomic unit**: do not launch
-> `pnpm deploy:prod` unless the session has context headroom left to run (or
+> The deploy and this pre-flight are **ONE atomic unit**: do not dispatch
+> `deploy-prod.yml` (or run the break-glass `pnpm deploy:prod`) unless the session has context headroom left to run (or
 > dispatch, paying only the ≤30-line verdict) the pre-flight tail in the SAME
 > session — prod must never cross a session boundary deployed-but-unverified
 > (2026-07-13, the #729 fix redeploy did exactly that).
@@ -1094,17 +1068,20 @@ Two independent failure classes, two independent reverts (DSO-127) — never
 conflate them:
 
 - **Bad APP build** (api/portal code regression, healthy DB) → **app-only
-  rollback**, one command, no rebuild:
+  rollback**, no rebuild — the release workflow's rollback mode
+  (`tools/deploy/README.md` → «Rollback mode»), or its break-glass twin:
 
   ```bash
-  pnpm deploy:prod --rollback <previous-sha>
+  gh workflow run deploy-prod.yml --ref main -f mode=rollback -f sha=<previous-sha> -f reason="<why>"
+  pnpm deploy:prod --rollback <previous-sha>   # break-glass, under `breakglass`
   ```
 
   It `up -d`s the `ds-*:<sha>` images (kept by retention — the **last 3** SHAs;
   a pruned target is pulled again from its recorded `main`/`hotfix/*` manifest,
   and a target without one refuses), rewrites the `DEPLOY_SHA` `.env`, and
   re-smokes. It does **not** build, migrate, or touch the DB. Manual equivalent on
-  the box, only while all five `ds-*:<sha>` tags of the target are present
+  the box, only while all recorded `ds-*:<sha>` tags of the target are present (six;
+  five for a target that predates `login`)
   (`sudo docker image ls --filter 'reference=ds-*:<sha>'`; otherwise pull them first
   as in Apply order step 8): edit the `DEPLOY_SHA=` line
   in `~/ds-platform/infra/deploy/compose/api-prod/.env` (do NOT `printf … > .env`
@@ -1167,7 +1144,7 @@ across a host change, so anyone signed in re-authenticates on the new host
 cut over during a scheduled webinar.
 
 **Precondition — step 1 (DNS) must be verified live BEFORE the deploy step runs.**
-The Caddyfile vhost rides in whichever `pnpm deploy:prod` happens first, for any
+The Caddyfile vhost rides in whichever release happens first, for any
 unrelated feature. Until the new name resolves to api-prod, that deploy silently
 sends every portal user to whatever else answers on that name. Do not deploy on
 an unverified step 1.
@@ -1528,7 +1505,7 @@ every public vhost (ADR-0015 §4 req 2).
 
 ## Build-cache GC on `api-prod` (#1419)
 
-**Since #2981 nothing is built on `api-prod`**: `pnpm deploy:prod` pulls the recorded
+**Since #2981 nothing is built on `api-prod`**: a release pulls the recorded
 registry digests (see «Container registry»), so a deploy adds no BuildKit cache and
 the post-deploy `buildx prune` step is gone from `tools/deploy/prod.mjs`. What
 remains is the cache the on-box builds left behind, reclaimed once by hand

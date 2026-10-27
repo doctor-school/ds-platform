@@ -116,7 +116,10 @@ gh workflow run deploy-prod.yml --ref main -f mode=rollback -f sha=<target sha> 
   (the supersede or the `up -d` failing) puts the running configs back on disk,
   then compares the running mounts with them and reports the result: a service
   the `up -d` already (re)started serves the target's config and is named for a
-  restart onto the restored file.
+  restart onto the restored file. When that restore itself fails, the target's
+  configs stay on disk: the report names which service serves them and which still
+  serves the running ones, and says to put the running configs back from
+  `/var/lib/ds-platform/runtime-config/previous/` before any restart.
 - **Break-glass stays on the workstation.** `pnpm deploy:prod --rollback`, the
   hotfix `--ref`, `--skip-ci-check`, `--allow-live-broadcast` and
   `--release-gate-exempt` are not on this path.

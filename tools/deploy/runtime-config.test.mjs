@@ -563,7 +563,19 @@ test("2987: a rollback that dies after its up -d started a service reports the c
     compare: async () => "caddy=mismatch\ncentrifugo=match",
   });
   assert.match(noRestore, /NOT put back on disk \(NO-BACKUP\)/);
-  assert.match(noRestore, /caddy do\(es\) not serve the configs now on disk/);
+  // The target's configs stay on disk after an aborted rollback: a service that does
+  // not serve them still serves the running ones and must not be restarted onto them.
+  assert.match(noRestore, /caddy still serve\(s\) the running configs/);
+  assert.match(noRestore, /centrifugo serve\(s\) the target's configs/);
+  assert.match(noRestore, /\/var\/lib\/ds-platform\/runtime-config\/previous\/ before any restart/);
+  assert.doesNotMatch(noRestore, /restart it onto them/);
+
+  const noRestoreAllTarget = await rollbackSwapFailureReport({
+    restore: async () => "runtime-config-restore=FAILED ssh exited 255",
+    compare: async () => "caddy=match\ncentrifugo=match",
+  });
+  assert.match(noRestoreAllTarget, /caddy, centrifugo serve\(s\) the target's configs/);
+  assert.doesNotMatch(noRestoreAllTarget, /still serve/);
 
   const unreadable = await rollbackSwapFailureReport({
     restore: restored,

@@ -2498,10 +2498,18 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
     const oldFormId = jar.values.get(FORM_COOKIE_NAME)!;
     const oldBinding = await state.getForm(oldFormId);
+    // EARS-39 amended: the registration that created the account records it in
+    // this form state for the warm code step of the same form.
     expect(oldBinding).toEqual({
       csrfToken: form.csrf,
       storefront: "academy",
       authRequestId: form.authRequest,
+      registration: {
+        sub: expect.any(String),
+        email: address,
+        authRequestId: form.authRequest,
+        createdAt: expect.any(Number),
+      },
     });
     const oldJar = new Jar();
     oldJar.values.set(FORM_COOKIE_NAME, oldFormId);
@@ -2521,6 +2529,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
       email: address,
       emailVerified: false,
     });
+    expect(oldBinding!.registration?.sub).toBe(pending.rows[0]!.zitadel_sub);
     const request = await hostIdp.readAuthRequest(form.authRequest);
     expect(request).not.toBeNull();
     const reopened = await entry(jar, form.authRequest);
@@ -2538,10 +2547,14 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     expect(formId).not.toBe(oldFormId);
     expect(freshCsrf).not.toBe(form.csrf);
     expect(await state.getForm(oldFormId)).toBeNull();
+    // EARS-39 amended: a new render for the same auth request moves this
+    // browser's registration marker to the fresh form state; only the old
+    // binding (cookie + CSRF) is retired.
     const binding = {
       csrfToken: freshCsrf,
       storefront: "academy",
       authRequestId: form.authRequest,
+      registration: oldBinding!.registration,
     };
     expect(await state.getForm(formId)).toEqual(binding);
     expect(reopened.res.cookies.map((cookie) => cookie.name)).toEqual([
@@ -2640,15 +2653,16 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
         status: "redirect",
         url: expect.stringContaining("code="),
       });
+      // EARS-39 amended: the fresh form state's registration marker makes this
+      // the warm step — the password typed at registration is kept.
       expect(verifyStep).toHaveBeenCalledExactlyOnceWith(
         { email: address, code: FAKE_VALID_CODE },
         expect.any(Function),
+        { keepPasswordOf: pending.rows[0]!.zitadel_sub },
       );
-      expect(verify).toHaveBeenCalledExactlyOnceWith(
-        address,
-        FAKE_VALID_CODE,
-        undefined,
-      );
+      expect(verify).toHaveBeenCalledExactlyOnceWith(address, FAKE_VALID_CODE, {
+        keepPasswordOf: pending.rows[0]!.zitadel_sub,
+      });
       const recordId = jar.values.get(RECORD_COOKIE_NAME)!;
       expect(recordId).toBeTruthy();
       const record = await records.find(recordId);
@@ -2690,7 +2704,10 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
       expect(await records.find(recordId)).toEqual(record);
       expect([...jar.values]).toEqual(acceptedCookies);
       expect([...oldJar.values]).toEqual(oldCookies);
-      expect(await state.getForm(formId)).toEqual(binding);
+      // The accepted code spends the single-use registration marker; the rest
+      // of the binding is unchanged.
+      const { registration: _spent, ...unspent } = binding;
+      expect(await state.getForm(formId)).toEqual(unspent);
     } finally {
       for (const spy of spies) spy.mockRestore();
       await state.deleteForm(formId);
@@ -3558,11 +3575,9 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
         expect.any(Function),
         { keepPasswordOf: pending.rows[0]!.zitadel_sub },
       );
-      expect(verify).toHaveBeenCalledExactlyOnceWith(
-        address,
-        FAKE_VALID_CODE,
-        { keepPasswordOf: pending.rows[0]!.zitadel_sub },
-      );
+      expect(verify).toHaveBeenCalledExactlyOnceWith(address, FAKE_VALID_CODE, {
+        keepPasswordOf: pending.rows[0]!.zitadel_sub,
+      });
       const checked = await verify.mock.results[0]!.value;
       expect(checked).toMatchObject({
         sub: pending.rows[0]!.zitadel_sub,

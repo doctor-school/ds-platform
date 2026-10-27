@@ -110,6 +110,10 @@ test("releaseMilestoneTrack picks only the track releases", () => {
   assert.equal(releaseMilestoneTrack("Витрина А3 — Каталоги"), null);
   assert.equal(releaseMilestoneTrack("Академия В3 — Каталоги"), null);
   assert.equal(releaseMilestoneTrack("Витрина В3x"), null);
+  // A dotted point release stays a release, as under the pre-#3375 `R\d+\b`.
+  assert.equal(releaseMilestoneTrack("Витрина R1.1 — Доделки MVP после запуска"), "track:doctor");
+  assert.equal(releaseMilestoneTrack("Витрина В1.1 — Доделки MVP после запуска"), "track:doctor");
+  assert.equal(releaseMilestoneTrack("Витрина В1."), null);
   assert.equal(releaseMilestoneTrack("Академия · Позже"), null);
   assert.equal(releaseMilestoneTrack("Витрина · Позже"), null);
   assert.equal(releaseMilestoneTrack("Platform ops & hardening"), null);

@@ -81,8 +81,9 @@ export const LEGACY_RELEASE_LETTER = "R";
  * The track of a numbered track release («Академия А1 — …», «Витрина В2 — …»,
  * or the legacy «Академия R1 — …»), else null — a dateless «· Позже» bucket, the
  * fallback milestone and anything else are not releases. Each track takes only
- * its own letter, so «Витрина А1» is not a release. JS `\b` is ASCII-only, so
- * the number ends at whitespace, an em dash or the end of the title.
+ * its own letter, so «Витрина А1» is not a release; a dotted point release
+ * («Витрина R1.1 — …») is one. JS `\b` is ASCII-only, so the number ends at
+ * whitespace, an em dash or the end of the title.
  * @param {string|null|undefined} milestoneTitle
  * @returns {string|null}
  */
@@ -90,7 +91,7 @@ export function releaseMilestoneTrack(milestoneTitle) {
   const title = str(milestoneTitle);
   for (const [track, prefix] of Object.entries(TRACK_MILESTONE_PREFIXES)) {
     const letters = `[${LEGACY_RELEASE_LETTER}${TRACK_RELEASE_LETTERS[track]}]`;
-    if (new RegExp(`^${prefix}\\s+${letters}\\d+(?=\\s|—|$)`).test(title)) return track;
+    if (new RegExp(`^${prefix}\\s+${letters}\\d+(?:\\.\\d+)*(?=\\s|—|$)`).test(title)) return track;
   }
   return null;
 }

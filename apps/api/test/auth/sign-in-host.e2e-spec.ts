@@ -71,6 +71,7 @@ import {
   MEDICAL_WORKER_DECLARATION_VERSION,
   PARTNER_DATA_SHARING_VERSION,
 } from "../../src/storefront/doctor-register.service.js";
+import { FakeMailer } from "../../src/mailer/mailer.fake.js";
 import { MAILER, type Mailer } from "../../src/mailer/mailer.types.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 import {
@@ -118,11 +119,15 @@ async function compile(
   stateOverride?: SignInHostStateStore,
   handoffStoreOverride?: LoginHandoffStore,
 ) {
-  const idp = new FakeIdpClient();
   const hostIdp = new FakeSignInHostIdp();
   let builder = Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(MAILER)
+    .useValue(new FakeMailer())
     .overrideProvider(IDP_CLIENT)
-    .useValue(idp)
+    .useFactory({
+      factory: (mailer: Mailer) => new FakeIdpClient(mailer),
+      inject: [MAILER],
+    })
     .overrideProvider(SIGN_IN_HOST_IDP)
     .useValue(hostIdp)
     .overrideProvider(RATE_LIMIT_THRESHOLDS)
@@ -144,6 +149,7 @@ async function compile(
       .overrideProvider(LOGIN_HANDOFF_STORE)
       .useValue(handoffStoreOverride);
   const moduleRef: TestingModule = await builder.compile();
+  const idp = moduleRef.get<FakeIdpClient>(IDP_CLIENT);
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
     new FastifyAdapter(),
   );
@@ -2473,6 +2479,223 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     expect(refused.statusCode).toBe(403);
     expect(resend).not.toHaveBeenCalled();
     resend.mockRestore();
+  });
+
+  it("EARS-39: S167 reopening Academy registration refuses stale resend before delivery and the new binding resends and verifies", async () => {
+    const jar = new Jar();
+    const form = await render(jar, ACADEMY, { prompt: ["create"] });
+    const address = email("s167-reopened-resend");
+    const registered = await post(jar, "register", {
+      email: address,
+      password: PASSWORD,
+      consent: CONSENT,
+      authRequest: form.authRequest,
+      csrf: form.csrf,
+    });
+    expect(registered.statusCode).toBe(200);
+    expect(registered.json()).toEqual({ status: "pending_verification" });
+    expect(registered.cookies).toEqual([]);
+    const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+    const oldFormId = jar.values.get(FORM_COOKIE_NAME)!;
+    const oldBinding = await state.getForm(oldFormId);
+    expect(oldBinding).toEqual({
+      csrfToken: form.csrf,
+      storefront: "academy",
+      authRequestId: form.authRequest,
+    });
+    const oldJar = new Jar();
+    oldJar.values.set(FORM_COOKIE_NAME, oldFormId);
+    const oldCookies = [...oldJar.values];
+    const pending = await pool.query<{
+      zitadel_sub: string;
+      email_verified: boolean;
+    }>("SELECT * FROM users WHERE email = $1", [address]);
+    expect(pending.rows).toEqual([
+      expect.objectContaining({
+        zitadel_sub: expect.any(String),
+        email_verified: false,
+      }),
+    ]);
+    const pendingIdentity = await idp.getUser(pending.rows[0]!.zitadel_sub);
+    expect(pendingIdentity).toMatchObject({
+      email: address,
+      emailVerified: false,
+    });
+    const request = await hostIdp.readAuthRequest(form.authRequest);
+    expect(request).not.toBeNull();
+    const reopened = await entry(jar, form.authRequest);
+    expect(reopened.res.statusCode).toBe(200);
+    expect(reopened.body).toEqual({
+      action: "render",
+      storefront: "academy",
+      door: "register",
+      authRequest: form.authRequest,
+      csrf: expect.any(String),
+    });
+    if (reopened.body.action !== "render") throw new Error("not rendered");
+    const freshCsrf = reopened.body.csrf;
+    const formId = jar.values.get(FORM_COOKIE_NAME)!;
+    expect(formId).not.toBe(oldFormId);
+    expect(freshCsrf).not.toBe(form.csrf);
+    expect(await state.getForm(oldFormId)).toBeNull();
+    const binding = {
+      csrfToken: freshCsrf,
+      storefront: "academy",
+      authRequestId: form.authRequest,
+    };
+    expect(await state.getForm(formId)).toEqual(binding);
+    expect(reopened.res.cookies.map((cookie) => cookie.name)).toEqual([
+      FORM_COOKIE_NAME,
+    ]);
+    const cookies = [...jar.values];
+    const records = app.get(SignInHostRecordStore);
+    const auth = app.get(AuthService);
+    const resend = vi.spyOn(auth, "resendEmailVerification");
+    const issue = vi.spyOn(idp, "resendEmailVerification");
+    const mail = vi.spyOn(app.get<Mailer>(MAILER), "sendVerificationCodeEmail");
+    const verifyStep = vi.spyOn(auth, "verifyStep");
+    const verify = vi.spyOn(idp, "submitEmailCode");
+    const insert = vi.spyOn(records, "insert");
+    const lifetime = vi.spyOn(hostIdp, "setSessionLifetime");
+    const finalise = vi.spyOn(hostIdp, "finaliseWithSession");
+    const finaliseError = vi.spyOn(hostIdp, "finaliseWithError");
+    const terminate = vi.spyOn(idp, "terminateSession");
+    const spies = [
+      resend,
+      issue,
+      mail,
+      verifyStep,
+      verify,
+      insert,
+      lifetime,
+      finalise,
+      finaliseError,
+      terminate,
+    ];
+    const finalised = [...hostIdp.finalised];
+    const lifetimes = [...hostIdp.lifetimes];
+    const stalePayload = {
+      identifier: address,
+      authRequest: form.authRequest,
+      csrf: form.csrf,
+    };
+    try {
+      for (const browser of [oldJar, jar]) {
+        const refused = await post(browser, "verify/resend", stalePayload);
+        expect(refused.statusCode).toBe(403);
+        expect(refused.json()).toMatchObject({ message: "form refused" });
+        expect(refused.cookies).toEqual([]);
+        for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+        expect([...oldJar.values]).toEqual(oldCookies);
+        expect([...jar.values]).toEqual(cookies);
+        expect(await state.getForm(oldFormId)).toBeNull();
+        expect(await state.getForm(formId)).toEqual(binding);
+        expect(
+          (await pool.query("SELECT * FROM users WHERE email = $1", [address]))
+            .rows,
+        ).toEqual(pending.rows);
+        expect(await idp.getUser(pending.rows[0]!.zitadel_sub)).toEqual(
+          pendingIdentity,
+        );
+        expect(await recordRows(address)).toEqual([]);
+        expect(await hostIdp.readAuthRequest(form.authRequest)).toEqual(
+          request,
+        );
+        expect(hostIdp.finalised).toEqual(finalised);
+        expect(hostIdp.lifetimes).toEqual(lifetimes);
+      }
+
+      const sent = await post(jar, "verify/resend", {
+        ...stalePayload,
+        csrf: freshCsrf,
+      });
+      expect(sent.statusCode).toBe(200);
+      expect(sent.json()).toEqual({ status: "resend_requested" });
+      expect(sent.cookies).toEqual([]);
+      expect(resend).toHaveBeenCalledExactlyOnceWith(address);
+      expect(issue).toHaveBeenCalledExactlyOnceWith(address);
+      expect(await issue.mock.results[0]!.value).toBe(true);
+      expect(mail).toHaveBeenCalledExactlyOnceWith(address, FAKE_VALID_CODE);
+      for (const spy of spies.slice(3)) expect(spy).not.toHaveBeenCalled();
+      expect([...jar.values]).toEqual(cookies);
+      expect(await state.getForm(formId)).toEqual(binding);
+      expect(await recordRows(address)).toEqual([]);
+      expect(
+        (await pool.query("SELECT * FROM users WHERE email = $1", [address]))
+          .rows,
+      ).toEqual(pending.rows);
+      expect(await idp.getUser(pending.rows[0]!.zitadel_sub)).toEqual(
+        pendingIdentity,
+      );
+      expect(await hostIdp.readAuthRequest(form.authRequest)).toEqual(request);
+
+      const accepted = await post(jar, "verify", {
+        email: address,
+        code: FAKE_VALID_CODE,
+        authRequest: form.authRequest,
+        csrf: freshCsrf,
+      });
+      expect(accepted.statusCode).toBe(200);
+      expect(accepted.json()).toEqual({
+        status: "redirect",
+        url: expect.stringContaining("code="),
+      });
+      expect(verifyStep).toHaveBeenCalledExactlyOnceWith(
+        { email: address, code: FAKE_VALID_CODE },
+        expect.any(Function),
+      );
+      expect(verify).toHaveBeenCalledExactlyOnceWith(
+        address,
+        FAKE_VALID_CODE,
+        undefined,
+      );
+      const recordId = jar.values.get(RECORD_COOKIE_NAME)!;
+      expect(recordId).toBeTruthy();
+      const record = await records.find(recordId);
+      expect(record?.session.sub).toBe(pending.rows[0]!.zitadel_sub);
+      expect(insert).toHaveBeenCalledTimes(1);
+      expect(lifetime).toHaveBeenCalledExactlyOnceWith(
+        record!.session,
+        SIGN_IN_HOST_SESSION_LIFETIME_SECONDS,
+      );
+      expect(finalise).toHaveBeenCalledExactlyOnceWith(
+        form.authRequest,
+        record!.session,
+      );
+      expect(finaliseError).not.toHaveBeenCalled();
+      expect(terminate).not.toHaveBeenCalled();
+      expect(hostIdp.finalised).toEqual([
+        ...finalised,
+        { id: form.authRequest, session: record!.session },
+      ]);
+      expect(accepted.cookies.map((cookie) => cookie.name)).toEqual([
+        RECORD_COOKIE_NAME,
+      ]);
+      expect(jar.values.has(SESSION_COOKIE_NAME)).toBe(false);
+      expect(await recordRows(address)).toHaveLength(1);
+      expect(await idp.getUser(pending.rows[0]!.zitadel_sub)).toMatchObject({
+        email: address,
+        emailVerified: true,
+      });
+      const acceptedCookies = [...jar.values];
+      const staleAgain = await post(oldJar, "verify/resend", stalePayload);
+      expect(staleAgain.statusCode).toBe(403);
+      expect(staleAgain.json()).toMatchObject({ message: "form refused" });
+      expect(staleAgain.cookies).toEqual([]);
+      expect(resend).toHaveBeenCalledTimes(1);
+      expect(issue).toHaveBeenCalledTimes(1);
+      expect(mail).toHaveBeenCalledTimes(1);
+      expect(verify).toHaveBeenCalledTimes(1);
+      expect(finalise).toHaveBeenCalledTimes(1);
+      expect(await records.find(recordId)).toEqual(record);
+      expect([...jar.values]).toEqual(acceptedCookies);
+      expect([...oldJar.values]).toEqual(oldCookies);
+      expect(await state.getForm(formId)).toEqual(binding);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+      await state.deleteForm(formId);
+      hostIdp.expire(form.authRequest);
+    }
   });
 
   it("EARS-24: each storefront's registration runs on the host through its own register command; a mismatched door is refused", async () => {

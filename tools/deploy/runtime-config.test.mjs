@@ -27,6 +27,7 @@ import {
   caddyValidateScript,
   caddyValidateVerdict,
   centrifugoConfigVerdict,
+  rollbackSwapFailureReport,
   runtimeConfigBackupScript,
   runtimeConfigComparisonScript,
   runtimeConfigInstallScript,
@@ -532,8 +533,60 @@ test("3274: a rollback that dies between the validate and its up -d puts the run
   );
   assert.match(
     swap,
-    /try \{[\s\S]*dataProd\(\)\.call\(\["supersede", \.\.\.dataProdExcept\(own\)\][\s\S]*\{ label: "rollback up" \}[\s\S]*\} catch \(e\) \{[\s\S]*await restoreRuntimeConfigsOnDisk\(\)[\s\S]*die\(/,
+    /try \{[\s\S]*dataProd\(\)\.call\(\["supersede", \.\.\.dataProdExcept\(own\)\][\s\S]*\{ label: "rollback up" \}[\s\S]*\} catch \(e\) \{[\s\S]*die\([\s\S]*await rollbackSwapFailureReport\(\)/,
   );
+  const report = SOURCE.slice(SOURCE.indexOf("export async function rollbackSwapFailureReport(")).slice(0, 900);
+  assert.ok(report.indexOf("await restore()") < report.indexOf("await compare()"), "restore, then compare");
+});
+
+test("2987: a rollback that dies after its up -d started a service reports the compared mounts, not a fixed «not applied»", async () => {
+  const restored = async () => `runtime-config-restore=restored (backup taken for rollback-${TARGET})`;
+
+  // A service that was DOWN came up under `up -d` with the target's config: after the
+  // on-disk restore its mount no longer matches the file on disk.
+  const started = await rollbackSwapFailureReport({
+    restore: restored,
+    compare: async () => "caddy=match\ncentrifugo=mismatch",
+  });
+  assert.match(started, /put back on disk \(restored \(backup taken for rollback-/);
+  assert.match(started, /centrifugo do\(es\) not serve the configs now on disk/);
+  assert.doesNotMatch(started, /not applied/);
+
+  const untouched = await rollbackSwapFailureReport({
+    restore: restored,
+    compare: async () => "caddy=match\ncentrifugo=match",
+  });
+  assert.match(untouched, /caddy \+ centrifugo serve the configs now on disk/);
+
+  const noRestore = await rollbackSwapFailureReport({
+    restore: async () => "runtime-config-restore=NO-BACKUP",
+    compare: async () => "caddy=mismatch\ncentrifugo=match",
+  });
+  assert.match(noRestore, /NOT put back on disk \(NO-BACKUP\)/);
+  // The target's configs stay on disk after an aborted rollback: a service that does
+  // not serve them still serves the running ones and must not be restarted onto them.
+  assert.match(noRestore, /caddy still serve\(s\) the running configs/);
+  assert.match(noRestore, /centrifugo serve\(s\) the target's configs/);
+  assert.match(noRestore, /\/var\/lib\/ds-platform\/runtime-config\/previous\/ before any restart/);
+  assert.doesNotMatch(noRestore, /restart it onto them/);
+
+  const noRestoreAllTarget = await rollbackSwapFailureReport({
+    restore: async () => "runtime-config-restore=FAILED ssh exited 255",
+    compare: async () => "caddy=match\ncentrifugo=match",
+  });
+  assert.match(noRestoreAllTarget, /caddy, centrifugo serve\(s\) the target's configs/);
+  assert.doesNotMatch(noRestoreAllTarget, /still serve/);
+
+  const unreadable = await rollbackSwapFailureReport({
+    restore: restored,
+    compare: async () => {
+      throw new Error("ssh exited 255");
+    },
+  });
+  assert.match(unreadable, /running mounts could not be compared \(ssh exited 255\)/);
+
+  const body = SOURCE.slice(SOURCE.indexOf("async function rollback("), SOURCE.indexOf("// --- entry"));
+  assert.doesNotMatch(body, /written but not applied/);
 });
 
 test("3274: the restore-on-disk helper reports its verdict, never throws", () => {

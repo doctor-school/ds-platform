@@ -1,14 +1,19 @@
 #!/usr/bin/env node
 // DS Platform — idempotent prod deploy (DSO-126/127/128/129).
 //
-// One command reproducibly rolls `origin/main` onto the always-on Timeweb prod
-// environment (api-prod public + data-prod private), formalising the manual
-// runbook in infra/deploy/README.md §5–§10. The manual path stays valid as an
-// appendix — this script does not replace first-time provisioning (Terraform,
-// DNS, secrets, Zitadel first-boot bootstrap); it is the STEADY-STATE redeploy.
+// The one release pipeline for the always-on Timeweb prod environment (api-prod
+// public + data-prod private), formalising the manual runbook in
+// infra/deploy/README.md §5–§10; it does not replace first-time provisioning
+// (Terraform, DNS, secrets, Zitadel first-boot bootstrap). Two entry points run it:
+//   - `--local` — the box-local release/rollback body: the prod release driver on
+//     ds-api-prod runs it for every Actions `deploy-prod.yml` release and its
+//     rollback mode (below);
+//   - `pnpm deploy:prod` — the break-glass workstation command (owner's word, the
+//     owner's offline `breakglass` key): a hotfix `--ref`, a workstation
+//     `--rollback`, and the gate exceptions.
 //
-//   Usage:
-//     pnpm deploy:prod                 deploy origin/main (default)
+//   Usage (break-glass, workstation):
+//     pnpm deploy:prod                 release origin/main (default)
 //     pnpm deploy:prod --ref <sha>        HOTFIX deploy: ship exactly <sha> (a
 //                                          cherry-pick branch cut FROM the SHA
 //                                          running in prod) instead of all of
@@ -516,7 +521,7 @@ export function descendsFromLiveVerdict({ live, sha, status }) {
   if (status === "ahead" || status === "identical") return { ok: true };
   return {
     ok: false,
-    reason: `${sha} does not descend from the live prod SHA ${live.slice(0, 12)} — a downgrade is a rollback (pnpm deploy:prod --rollback)`,
+    reason: `${sha} does not descend from the live prod SHA ${live.slice(0, 12)} — a downgrade is a rollback (deploy-prod.yml with mode: rollback)`,
   };
 }
 
@@ -976,6 +981,48 @@ async function restoreRuntimeConfigsOnDisk() {
     "restore",
   );
   return verdict.detail;
+}
+
+/**
+ * A rollback that died after installing the target's configs: the running configs
+ * back on disk, then the running mounts compared against what is on disk — an
+ * `up -d` that got far enough to (re)start a service left it serving the target's.
+ */
+export async function rollbackSwapFailureReport({
+  restore = () => sshCapture(API_PROD, runtimeConfigRestoreScript()),
+  compare = () => sshCapture(API_PROD, runtimeConfigComparisonScript()),
+} = {}) {
+  const restored = runtimeConfigStepVerdict(
+    await restore().catch((e) => `runtime-config-restore=FAILED ${e.message}`),
+    "restore",
+  );
+  const disk = restored.ok
+    ? `the running configs were put back on disk (${restored.detail})`
+    : `the running configs were NOT put back on disk (${restored.detail}) — the target's stay there`;
+  let mounts;
+  try {
+    const stale = runtimeConfigServicesToRestart(await compare());
+    if (restored.ok) {
+      mounts =
+        stale.length === 0
+          ? "caddy + centrifugo serve the configs now on disk"
+          : `${stale.join(", ")} do(es) not serve the configs now on disk — restart it onto them`;
+    } else {
+      // The rollback aborted, so the running release stays; the target's configs on
+      // disk are the wrong ones and no service may be restarted onto them.
+      const onTarget = RUNTIME_CONFIG_SERVICES.filter((s) => !stale.includes(s));
+      mounts = [
+        onTarget.length > 0 && `${onTarget.join(", ")} serve(s) the target's configs`,
+        stale.length > 0 && `${stale.join(", ")} still serve(s) the running configs`,
+        `put the running configs back from ${PREVIOUS_RUNTIME_CONFIG_DIR}/ before any restart`,
+      ]
+        .filter(Boolean)
+        .join("; ");
+    }
+  } catch (e) {
+    mounts = `the running mounts could not be compared (${e.message})`;
+  }
+  return `${disk}; ${mounts}`;
 }
 
 /** The pre-swap gate: `die` on an invalid config, after the previous ones are back on disk. */
@@ -2737,11 +2784,7 @@ sudo docker compose up -d
       { label: "rollback up" },
     );
   } catch (e) {
-    const restored = await restoreRuntimeConfigsOnDisk();
-    die(
-      `--rollback: the supersede / up -d failed (${e.message}); the target's runtime configs` +
-        ` were written but not applied; restore of the running configs on disk: ${restored}`,
-    );
+    die(`--rollback: the supersede / up -d failed (${e.message}); ${await rollbackSwapFailureReport()}`);
   }
 
   step("api-prod: apply the target's bind-mounted Caddy + Centrifugo configs (#3274)");

@@ -31,7 +31,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           version-script: pnpm run version-packages
           publish-script: pnpm run release
-          # Repo-level release tags/Releases are cut by `pnpm deploy:prod`, never here
+          # Repo-level release tags/Releases are cut at deploy time, never here
           # (see the NOTE below). Both must be false together: the action errors out if
           # `create-github-releases` is true while `push-git-tags` is false.
           create-github-releases: false
@@ -41,9 +41,10 @@ jobs:
   # been RETIRED from this workflow. The former `tag-release` job cut a release on
   # the `Version Packages` merge — which never fired for a changeset-less
   # product/app-only wave, and (once the deploy also cut a release) would produce a
-  # SECOND, ahead-of-prod release. The agent-run `pnpm deploy:prod` is now the sole
-  # release initiator: it cuts `release-YYYY.MM.DD-n` at the DEPLOYED SHA via
-  # `tools/release/cut-release.mjs` → `cutDeployRelease` (release == what shipped).
+  # SECOND, ahead-of-prod release. The production release cuts it instead: a
+  # successful `deploy-prod.yml` run (`release-runner.mjs record`; the break-glass
+  # `pnpm deploy:prod` the same way) cuts `release-YYYY.MM.DD-n` at the DEPLOYED SHA
+  # via `tools/release/cut-release.mjs` → `cutDeployRelease` (release == what shipped).
   # The changesets `release` job above STAYS — it maintains per-package `version` +
   # `CHANGELOG.md` (the §D1 changelog SSOT); only the repo-level release cut moved
   # to deploy time.

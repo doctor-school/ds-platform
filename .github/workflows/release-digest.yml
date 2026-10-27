@@ -1,11 +1,11 @@
 name: Release digest → Mattermost
 
 # Fire the aggregated PROD release digest (Issue #868) from CI on a successful
-# production Deployment (Issue #968). `deploy:prod` ships from the operator's
-# workstation over SSH, not from CI, so `secrets.MATTERMOST_WEBHOOK_URL` never existed
-# on that path and the digest had NEVER fired (the #950 `.env.local` fallback was a
-# crutch, now retired). But `deploy:prod` records a GitHub Deployment + `success`
-# status (#942/#954), which fires this workflow — where the secret already lives.
+# production Deployment (Issue #968). The break-glass `pnpm deploy:prod` runs from
+# the operator's workstation over SSH, not from CI, so `secrets.MATTERMOST_WEBHOOK_URL`
+# does not exist on that path; it records a GitHub Deployment + `success` status
+# (#942/#954) with the operator's token, which fires this workflow — where the secret
+# lives.
 #
 # Mirrors product-note-mattermost.yml (the per-PR delivery): the secret is injected
 # via `env:` (never interpolated into a shell `run:`), and the resolver skips green
@@ -14,12 +14,12 @@ name: Release digest → Mattermost
 # TAG (#975) and delegates the render+POST to tools/deploy/release-notes.mjs — the
 # ONE digest seam (#847).
 #
-# `workflow_call` (#3158): the release workflow `deploy-prod.yml` calls it after a
-# successful release with the released `sha` and the webhook secret passed — a
-# called workflow gets only the secrets its caller passes, and the Deployment
-# record that workflow writes with GITHUB_TOKEN starts no `deployment_status` run.
-# `deployment_status` stays for the workstation path (`pnpm deploy:prod`) until
-# spec 2026-10-16-release-pipeline-off-workstation §8 step (f).
+# `workflow_call` (#3158): the release workflow `deploy-prod.yml` — the normal
+# production release — calls it after a successful release with the released `sha`
+# and the webhook secret passed: a called workflow gets only the secrets its caller
+# passes, and the Deployment record that workflow writes with GITHUB_TOKEN starts no
+# `deployment_status` run. `deployment_status` serves the break-glass path
+# (`pnpm deploy:prod`).
 #
 # `workflow_dispatch` re-fires the digest by hand (e.g. to backfill a release whose
 # automatic post was missed). With no `sha` input it targets the current prod

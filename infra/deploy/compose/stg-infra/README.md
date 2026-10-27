@@ -619,8 +619,11 @@ digest record no kept `ds-*` tag shares an image ID with — production's retent
 
 The box holds a **10 GB** free-space floor on `/var/lib/docker`, measured on the box. Every
 `up`/`sync` checks it FIRST, before anything is shipped or pulled: below it, the box removes
-the `ds-*:<sha>` images no container's bundle uses, the orphaned registry digest records and
-then runs `docker image prune -af --filter until=24h`, and measures again. A converge still
+the `ds-*:<sha>` images no container's bundle uses — except the newest four of each repo
+(`main` + the three-preview cap), so another slot's fresh pull survives the window before its
+`up -d` — and the orphaned registry digest records, then runs the dangling-image prune
+`docker image prune -f --filter until=24h` (no `-a`: it would delete the kept tags too), and
+measures again. A converge still
 below the floor refuses with the free space in its message rather than pull onto a disk it
 would fill — a full disk takes the shared `postgres` down (`postmaster.pid: No space left
 on device`), and every slot's sign-in with it. Above the floor nothing extra runs, so the

@@ -230,14 +230,22 @@ export const SLOT_LOG_PATH = `${SLOT_LOG_DIR}/slot.log`;
  * Free-disk floor on the Docker root — held by every `up`/`sync` BEFORE it ships or
  * pulls, and by `gc` (#3248).
  *
- * Below it the box reclaims: the `ds-*:<sha>` images no container uses, the registry
- * digest records no kept tag shares, then `image prune -af --filter until=24h`. A
+ * Below it the box reclaims: the `ds-*:<sha>` images no container's bundle uses beyond
+ * the newest `FLOOR_KEEP_NEWEST` of each repo, the registry digest records no kept tag
+ * shares, then the dangling-image prune `image prune -f --filter until=24h`. A
  * converge still below it after reclaiming refuses to pull: a full disk takes the
  * shared stg-infra postgres down with it (`postmaster.pid: No space left on device`).
  * Above it nothing extra runs, so the BuildKit cache survives a healthy box.
  */
 export const GC_FREE_SPACE_FLOOR = "10GB";
 export const GC_FREE_SPACE_FLOOR_BYTES = 10 * 1024 ** 3;
+/**
+ * Tags per `ds-*` repo the below-floor reclaim never removes, newest by CreatedAt
+ * (#3306): one per slot that can converge at once (`main` + the preview cap), so a
+ * slot's fresh pull of a current build survives another slot's reclaim in the window
+ * between its pull and its `up -d`, where no container uses it yet.
+ */
+export const FLOOR_KEEP_NEWEST = 1 + PREVIEW_SLOT_CAP;
 export const DOCKER_ROOT = "/var/lib/docker";
 /** Seconds between the progress probes of a long reclaim (see `progressShell`). */
 export const RECLAIM_BEAT_SECONDS = 30;
@@ -2660,10 +2668,17 @@ with_progress() {
  * The free-disk floor, held by the box (#3248) — see `GC_FREE_SPACE_FLOOR`.
  *
  * Above the floor: one line, nothing removed. Below it, in order: the `ds-*:<sha>`
- * tags no container's bundle uses, the registry digest records no kept tag shares,
- * then the 24h image prune — then the disk is measured again. Still below: a converge
- * (`refuse`) exits 1 naming the free space, before a pull fills the disk; `gc` says so
- * and exits 0, having reclaimed what it could.
+ * tags no container's bundle uses, past the newest `FLOOR_KEEP_NEWEST` of their repo;
+ * the registry digest records no kept tag shares; then the 24h DANGLING-image prune —
+ * then the disk is measured again. Still below: a converge (`refuse`) exits 1 naming
+ * the free space, before a pull fills the disk; `gc` says so and exits 0, having
+ * reclaimed what it could.
+ *
+ * The prune takes no `-a` (#3306): `-a` removes every image no container uses, tagged
+ * or not, so it would delete the very tags this step keeps — the running bundle's
+ * one-shot migrate image and another slot's fresh pull — whenever they were built more
+ * than 24h ago. The tags are reclaimed by the explicit loop above, which decides what
+ * is kept; non-`ds-` images stay out of reach, as in `pruneScript`.
  */
 export function freeSpaceFloorScript({ refuse, beatSeconds = RECLAIM_BEAT_SECONDS }) {
   const below = refuse
@@ -2675,14 +2690,23 @@ if [ "$free" -ge ${GC_FREE_SPACE_FLOOR_BYTES} ]; then
   echo "  $(gib "$free") free on ${DOCKER_ROOT} — at or above the ${GC_FREE_SPACE_FLOOR} floor, nothing to reclaim"
 else
   echo "  $(gib "$free") free on ${DOCKER_ROOT} — below the ${GC_FREE_SPACE_FLOOR} floor, reclaiming"
-${IN_USE_SHELL}sudo docker images --format '{{.Repository}}:{{.Tag}}' \\
-  | { grep -E '${SLOT_IMAGE_RE.source}' || true; } \\
-  | while IFS= read -r ref; do
-      if printf '%s\\n' "$in_use" | grep -Fxq "$ref"; then continue; fi
-      if printf '%s\\n' "$in_use_shas" | grep -Fxq "\${ref##*:}"; then continue; fi
-      if sudo docker rmi "$ref" >/dev/null 2>&1; then echo "  removed $ref"; fi
+${IN_USE_SHELL}sudo docker images --format '{{.Repository}}' \\
+  | { grep -E '^ds-[a-z0-9][a-z0-9-]*$' || true; } \\
+  | sort -u \\
+  | while IFS= read -r repo; do
+      sudo docker images "$repo" --format '{{.CreatedAt}}\\t{{.Tag}}' \\
+        | sort -r \\
+        | awk -F'\\t' '{print $2}' \\
+        | { grep -E '^[0-9a-f]{40}$' || true; } \\
+        | awk -v k=${FLOOR_KEEP_NEWEST} 'NR>k' \\
+        | while IFS= read -r tag; do
+            ref="$repo:$tag"
+            if printf '%s\\n' "$in_use" | grep -Fxq "$ref"; then continue; fi
+            if printf '%s\\n' "$in_use_shas" | grep -Fxq "$tag"; then continue; fi
+            if sudo docker rmi "$ref" >/dev/null 2>&1; then echo "  removed $ref"; fi
+          done
     done
-${registryRecordsScript()}with_progress "image prune" sudo docker image prune -af --filter until=24h
+${registryRecordsScript()}with_progress "image prune" sudo docker image prune -f --filter until=24h
   free=$(free_bytes)
   if [ "$free" -lt ${GC_FREE_SPACE_FLOOR_BYTES} ]; then
     ${below}

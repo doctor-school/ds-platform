@@ -98,7 +98,7 @@ Then(
     const section = page.getByTestId("event-programme");
     await expect(section).toBeVisible();
     await expect(
-      section.getByRole("heading", { name: "Программа", exact: true }),
+      section.getByText("Программа", { exact: true }),
     ).toBeVisible();
     const statement = section.getByTestId("event-programme-statement");
     await expect(statement).toBeVisible();
@@ -134,9 +134,11 @@ async function expectNoParticipation({ page }: { page: Page }) {
     }),
   ).toHaveCount(0);
   // 004 EARS-4/5 exclude participation; 014's recording-account entry remains valid.
-  const participationLinks = page
-    .getByRole("main")
-    .locator('a[href]:not([data-testid="recording-gate-signup"])');
+  const main = page.getByRole("main");
+  await expect(main).toBeVisible();
+  const participationLinks = main.locator(
+    'a[href]:not([data-testid="recording-gate-signup"])',
+  );
   const destinations = await participationLinks.evaluateAll((links) =>
     links.map((link) => new URL((link as HTMLAnchorElement).href).pathname),
   );
@@ -158,7 +160,7 @@ Then("no participation CTA is shown", expectNoParticipation);
 Then('a public "Мероприятие скрыто" notice is rendered', async ({ page }) => {
   await expect(page.getByText("Скрыто", { exact: true }).first()).toBeVisible();
   await expect(
-    page.getByText("Мероприятие скрыто", { exact: true }).first(),
+    page.getByRole("main").getByText(/^Мероприятие скрыто — участие в нём больше не предлагается$/u),
   ).toBeVisible();
 });
 

@@ -797,6 +797,242 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     );
   });
 
+  it("EARS-64: S166 a missing opaque record clears only its cookie on silent Academy entry and preserves independent reuse and password recovery", async () => {
+    const address = await account("s166-missing-record");
+    recordNow = new Date();
+    const other = new Jar();
+    await signIn(other, address);
+    const records = app.get(SignInHostRecordStore);
+    const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+    const otherCookie = other.values.get(RECORD_COOKIE_NAME)!;
+    const otherRecord = await records.find(otherCookie);
+    expect(otherRecord).not.toBeNull();
+    const otherCookies = [...other.values];
+    const jar = new Jar();
+    const prior = await render(jar, ACADEMY);
+    const priorForm = jar.values.get(FORM_COOKIE_NAME)!;
+    const priorBinding = await state.getForm(priorForm);
+    expect(priorBinding).toEqual({
+      csrfToken: prior.csrf,
+      storefront: "academy",
+      authRequestId: prior.authRequest,
+    });
+    const priorRequest = await hostIdp.readAuthRequest(prior.authRequest);
+    expect(priorRequest).not.toBeNull();
+    const missingCookie = randomBytes(32).toString("base64url");
+    expect(missingCookie).not.toBe(otherCookie);
+    expect(await records.find(missingCookie)).toBeNull();
+    jar.values.set(RECORD_COOKIE_NAME, missingCookie);
+    const before = await pool.query(
+      "SELECT * FROM sign_in_host_records WHERE subject = $1 ORDER BY cookie_id_hash",
+      [otherRecord!.session.sub],
+    );
+    expect(before.rows).toHaveLength(1);
+    const finalised = [...hostIdp.finalised];
+    const lifetimes = [...hostIdp.lifetimes];
+    const auth = app.get(AuthService);
+    const find = vi.spyOn(records, "find");
+    const putForm = vi.spyOn(state, "putForm");
+    const password = vi.spyOn(idp, "passwordLogin");
+    const insert = vi.spyOn(records, "insert");
+    const lifetime = vi.spyOn(hostIdp, "setSessionLifetime");
+    const finalise = vi.spyOn(hostIdp, "finaliseWithSession");
+    const refused = vi.spyOn(hostIdp, "finaliseWithError");
+    const noWork = [
+      vi.spyOn(auth, "otpStep"),
+      vi.spyOn(auth, "verifyStep"),
+      vi.spyOn(auth, "requestLoginOtp"),
+      vi.spyOn(idp, "submitEmailCode"),
+      vi.spyOn(idp, "loginWithEmailOtp"),
+      vi.spyOn(idp, "loginWithSmsOtp"),
+      vi.spyOn(idp, "requestEmailLoginCode"),
+      vi.spyOn(idp, "requestSmsOtp"),
+      vi.spyOn(idp, "terminateSession"),
+      vi.spyOn(records, "delete"),
+      vi.spyOn(records, "deleteBySubject"),
+    ];
+    const passwordStep = vi.spyOn(auth, "passwordStep");
+    const touch = vi.spyOn(records, "touchFinalised");
+    const spies = [
+      find,
+      putForm,
+      password,
+      insert,
+      lifetime,
+      finalise,
+      refused,
+      passwordStep,
+      touch,
+      ...noWork,
+    ];
+    try {
+      const silentRequest = hostIdp.seedAuthRequest({
+        clientId: ACADEMY,
+        prompt: ["none"],
+      });
+      const silent = await entry(jar, silentRequest);
+      expect(silent.res.statusCode).toBe(200);
+      expect(silent.body).toEqual({
+        action: "redirect",
+        url: expect.stringContaining("error=login_required"),
+      });
+      expect(find).toHaveBeenCalledExactlyOnceWith(missingCookie);
+      expect(await find.mock.results[0]!.value).toBeNull();
+      expect(refused).toHaveBeenCalledExactlyOnceWith(
+        silentRequest,
+        "login_required",
+      );
+      expect(hostIdp.finalised).toEqual([
+        ...finalised,
+        { id: silentRequest, error: "login_required" },
+      ]);
+      expect(await hostIdp.readAuthRequest(silentRequest)).toBeNull();
+      expect(silent.res.cookies).toEqual([
+        expect.objectContaining({
+          name: RECORD_COOKIE_NAME,
+          value: "",
+          maxAge: 0,
+        }),
+      ]);
+      expect([...jar.values]).toEqual([[FORM_COOKIE_NAME, priorForm]]);
+      expect(await state.getForm(priorForm)).toEqual(priorBinding);
+      expect(await hostIdp.readAuthRequest(prior.authRequest)).toEqual(
+        priorRequest,
+      );
+      expect(await records.find(otherCookie)).toEqual(otherRecord);
+      expect(
+        (
+          await pool.query(
+            "SELECT * FROM sign_in_host_records WHERE subject = $1 ORDER BY cookie_id_hash",
+            [otherRecord!.session.sub],
+          )
+        ).rows,
+      ).toEqual(before.rows);
+      expect([...other.values]).toEqual(otherCookies);
+      expect(hostIdp.lifetimes).toEqual(lifetimes);
+      for (const spy of [
+        putForm,
+        password,
+        insert,
+        lifetime,
+        finalise,
+        passwordStep,
+        touch,
+        ...noWork,
+      ])
+        expect(spy).not.toHaveBeenCalled();
+
+      const independentRequest = hostIdp.seedAuthRequest({
+        clientId: ACADEMY,
+        prompt: ["none"],
+      });
+      const independent = await entry(other, independentRequest);
+      expect(independent.res.statusCode).toBe(200);
+      expect(independent.body).toEqual({
+        action: "redirect",
+        url: expect.stringContaining("code="),
+      });
+      expect(independent.res.cookies).toEqual([]);
+      expect(finalise).toHaveBeenCalledExactlyOnceWith(
+        independentRequest,
+        otherRecord!.session,
+      );
+      expect(touch).toHaveBeenCalledExactlyOnceWith(otherCookie, recordNow);
+      expect(await records.find(otherCookie)).toEqual(otherRecord);
+      expect([...other.values]).toEqual(otherCookies);
+      expect(hostIdp.lifetimes).toEqual(lifetimes);
+      for (const spy of [
+        putForm,
+        password,
+        insert,
+        lifetime,
+        passwordStep,
+        ...noWork,
+      ])
+        expect(spy).not.toHaveBeenCalled();
+
+      const freshForm = await render(jar, ACADEMY);
+      const freshFormId = jar.values.get(FORM_COOKIE_NAME)!;
+      expect(freshFormId).not.toBe(priorForm);
+      expect(freshForm.csrf).not.toBe(prior.csrf);
+      expect(await state.getForm(priorForm)).toBeNull();
+      const freshBinding = {
+        csrfToken: freshForm.csrf,
+        storefront: "academy",
+        authRequestId: freshForm.authRequest,
+      };
+      expect(await state.getForm(freshFormId)).toEqual(freshBinding);
+      expect(putForm).toHaveBeenCalledExactlyOnceWith(
+        freshFormId,
+        expect.objectContaining(freshBinding),
+        FORM_STATE_TTL_SECONDS,
+      );
+      for (const spy of [password, insert, lifetime, passwordStep, ...noWork])
+        expect(spy).not.toHaveBeenCalled();
+      const accepted = await post(jar, "login", {
+        identifier: address,
+        password: PASSWORD,
+        authRequest: freshForm.authRequest,
+        csrf: freshForm.csrf,
+      });
+      expect(accepted.statusCode).toBe(200);
+      expect(accepted.json()).toEqual({
+        status: "redirect",
+        url: expect.stringContaining("code="),
+      });
+      expect(password).toHaveBeenCalledExactlyOnceWith(address, PASSWORD);
+      expect(passwordStep).toHaveBeenCalledTimes(1);
+      const checked = await password.mock.results[0]!.value;
+      expect(checked.outcome).toBe("authenticated");
+      if (checked.outcome !== "authenticated")
+        throw new Error("not authenticated");
+      const freshCookie = jar.values.get(RECORD_COOKIE_NAME)!;
+      expect(freshCookie).toBeTruthy();
+      expect([missingCookie, otherCookie]).not.toContain(freshCookie);
+      const fresh = await records.find(freshCookie);
+      expect(fresh?.session).toEqual(checked.session);
+      expect(fresh!.session.sub).toBe(otherRecord!.session.sub);
+      expect(fresh!.session.zitadelSessionId).not.toBe(
+        otherRecord!.session.zitadelSessionId,
+      );
+      expect(fresh!.lastCredentialAt).toEqual(recordNow);
+      expect(fresh!.expiresAt.getTime()).toBe(
+        recordNow.getTime() + SIGN_IN_HOST_SESSION_LIFETIME_SECONDS * 1000,
+      );
+      expect(insert).toHaveBeenCalledTimes(1);
+      expect(lifetime).toHaveBeenCalledExactlyOnceWith(
+        fresh!.session,
+        SIGN_IN_HOST_SESSION_LIFETIME_SECONDS,
+      );
+      expect(finalise).toHaveBeenCalledTimes(2);
+      expect(finalise).toHaveBeenLastCalledWith(
+        freshForm.authRequest,
+        fresh!.session,
+      );
+      expect(refused).toHaveBeenCalledTimes(1);
+      expect(hostIdp.finalised).toEqual([
+        ...finalised,
+        { id: silentRequest, error: "login_required" },
+        { id: independentRequest, session: otherRecord!.session },
+        { id: freshForm.authRequest, session: fresh!.session },
+      ]);
+      expect(accepted.cookies.map((cookie) => cookie.name)).toEqual([
+        RECORD_COOKIE_NAME,
+      ]);
+      expect(jar.values.has(SESSION_COOKIE_NAME)).toBe(false);
+      expect(await state.getForm(freshFormId)).toEqual(freshBinding);
+      expect(await records.find(missingCookie)).toBeNull();
+      expect(await records.find(otherCookie)).toEqual(otherRecord);
+      expect([...other.values]).toEqual(otherCookies);
+      expect(await recordRows(address)).toHaveLength(2);
+      for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+      await state.deleteForm(jar.values.get(FORM_COOKIE_NAME)!);
+      hostIdp.expire(prior.authRequest);
+    }
+  });
+
   it("EARS-5: a host credential step sets the 30-day lifetime, sets the record cookie, finalises, and mints no storefront session", async () => {
     const address = await account("lifetime");
     const jar = new Jar();

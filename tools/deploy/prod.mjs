@@ -2397,13 +2397,8 @@ ${deployShaEnvScript(sha)}
   step("api-prod: migrate → up -d");
   t = Date.now();
   walk.phase("migrate");
-  await boxStep(
-    API_PROD,
-    sha,
-    "migrate",
-    migrateAndUpScript({ forceRecreate: Boolean(local?.redeploy) }),
-    "api-prod deploy",
-  );
+  const migrateAndUp = migrateAndUpScript({ forceRecreate: Boolean(local?.redeploy) });
+  await boxStep(API_PROD, sha, "migrate", migrateAndUp, "api-prod deploy");
   ok("migrate + up -d", t);
 
   step("api-prod: apply bind-mounted Caddy + Centrifugo configs (#1175)");

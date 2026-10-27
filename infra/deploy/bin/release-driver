@@ -426,9 +426,10 @@ read_manifest() {
 
 # #3354: a redeploy re-runs the live SHA only. <sha> must be exactly the running api's
 # SHA; anything else is refused naming the mode it is (compare <live>...<sha>).
+# [<live>]: a live SHA the caller has just read (empty: unknown), checked as read.
 check_is_live() {
-  local sha=$1 live status
-  live=$(live_prod_sha)
+  local sha=$1 live=${2-} status
+  (($# >= 2)) || live=$(live_prod_sha)
   [[ -n $live ]] ||
     refuse "refused: the live prod SHA is unknown (no running ds-api-prod-api-1) — there is no release to redeploy"
   [[ $live != "$sha" ]] || return 0
@@ -489,8 +490,8 @@ release_unit() {
 
   # #3354: the live SHA again, under the lock (a local read): a break-glass rollback
   # that ended since the check above must not be undone by this redeploy.
-  if [[ $mode == redeploy && $(live_prod_sha) != "$sha" ]]; then
-    check_is_live "$sha"
+  if [[ $mode == redeploy ]]; then
+    check_is_live "$sha" "$(live_prod_sha)"
   fi
 
   # #2987: a rollback of this very SHA is not a release step the lease sees (its unit

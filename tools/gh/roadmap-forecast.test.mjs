@@ -103,7 +103,15 @@ test("forecastFor: target = today + days; undefined carries a reason", () => {
 test("releaseMilestoneTrack picks only the track releases", () => {
   assert.equal(releaseMilestoneTrack("Академия R1 — Архив записей"), "track:academy");
   assert.equal(releaseMilestoneTrack("Витрина R1 — MVP витрины"), "track:doctor");
+  // #3375 Cyrillic track letters — each track takes only its own letter.
+  assert.equal(releaseMilestoneTrack("Академия А3 — Каталоги"), "track:academy");
+  assert.equal(releaseMilestoneTrack("Витрина В3 — Переезд аудитории"), "track:doctor");
+  assert.equal(releaseMilestoneTrack("Витрина В12"), "track:doctor");
+  assert.equal(releaseMilestoneTrack("Витрина А3 — Каталоги"), null);
+  assert.equal(releaseMilestoneTrack("Академия В3 — Каталоги"), null);
+  assert.equal(releaseMilestoneTrack("Витрина В3x"), null);
   assert.equal(releaseMilestoneTrack("Академия · Позже"), null);
+  assert.equal(releaseMilestoneTrack("Витрина · Позже"), null);
   assert.equal(releaseMilestoneTrack("Platform ops & hardening"), null);
   assert.equal(releaseMilestoneTrack(null), null);
 });

@@ -36,6 +36,7 @@ import {
   buildSubIssueLinkArgs,
   bodyText,
   reuseFieldError,
+  productTrackMilestoneError,
 } from "./create-issue.mjs";
 import { EARS_KIND_LABEL, ROADMAP_LABEL } from "./lib/roadmap-taxonomy.mjs";
 
@@ -394,4 +395,61 @@ test("ensureRoadmapLabel appends the label only on a roadmap level, never twice"
   ]) {
     assert.deepEqual(ensureRoadmapLabel(args), args);
   }
+});
+
+// ── product-track milestone home (#3375) ────────────────────────────────────
+const OPEN_MILESTONES = [
+  "Витрина R1 — MVP витрины",
+  "Витрина В3 — Переезд аудитории",
+  "Витрина · Позже",
+  "Академия А3 — Каталоги",
+  "Академия · Позже",
+  FALLBACK_MILESTONE,
+];
+const neverListed = () => {
+  throw new Error("open milestones must be listed only to word a refusal");
+};
+
+test("productTrackMilestoneError refuses the fallback for a product track", () => {
+  const err = productTrackMilestoneError(
+    ["--label", "track:doctor"], FALLBACK_MILESTONE, () => OPEN_MILESTONES,
+  );
+  assert.match(err, /track:doctor/);
+  assert.ok(err.includes("«Витрина R1 — MVP витрины»"));
+  assert.ok(err.includes("«Витрина В3 — Переезд аудитории»"));
+  assert.ok(err.includes("«Витрина · Позже»"));
+  assert.ok(!err.includes("«Академия А3 — Каталоги»"));
+  const academy = productTrackMilestoneError(
+    ["--label=track:academy"], FALLBACK_MILESTONE, () => OPEN_MILESTONES,
+  );
+  assert.ok(academy.includes("«Академия А3 — Каталоги»"));
+  assert.ok(!academy.includes("Витрина"));
+});
+
+test("productTrackMilestoneError refuses the other track's milestone", () => {
+  const err = productTrackMilestoneError(
+    ["--label", "track:academy"], "Витрина В3 — Переезд аудитории", () => [],
+  );
+  assert.match(err, /\(none open\)/);
+});
+
+test("productTrackMilestoneError accepts the track's own release, old R and new letters, and «· Позже»", () => {
+  for (const m of ["Витрина R1 — MVP витрины", "Витрина В3 — Переезд аудитории", "Витрина · Позже"])
+    assert.equal(productTrackMilestoneError(["--label", "track:doctor"], m, neverListed), null);
+  for (const m of ["Академия R1 — Архив записей", "Академия А3 — Каталоги", "Академия · Позже"])
+    assert.equal(productTrackMilestoneError(["--label", "track:academy"], m, neverListed), null);
+});
+
+test("productTrackMilestoneError keeps the fallback for track:platform", () => {
+  assert.equal(
+    productTrackMilestoneError(["--label", "track:platform"], FALLBACK_MILESTONE, neverListed),
+    null,
+  );
+  assert.equal(
+    productTrackMilestoneError(["--label", "track:platform"], "Академия А3 — Каталоги", neverListed),
+    null,
+  );
+  // No effective milestone (an epic) or no track label: other gates own it.
+  assert.equal(productTrackMilestoneError(["--label", "track:doctor"], null, neverListed), null);
+  assert.equal(productTrackMilestoneError([], FALLBACK_MILESTONE, neverListed), null);
 });

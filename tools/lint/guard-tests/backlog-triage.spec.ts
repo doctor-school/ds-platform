@@ -856,6 +856,32 @@ describe("backlog-triage queue grouping (#1855)", () => {
     ]);
   });
 
+  it("queue heads and annotation read the #3375 Cyrillic letters alongside legacy R", () => {
+    const renamed = [
+      { title: "Витрина В3 — Переезд аудитории", due_on: "2026-11-10T00:00:00Z", state: "open" },
+      { title: "Витрина R4 — Эфиры", due_on: "2026-12-01T00:00:00Z", state: "open" },
+      { title: "Витрина · Позже", due_on: null, state: "open" },
+      { title: "Академия А3 — Каталоги", due_on: "2026-11-20T00:00:00Z", state: "open" },
+      { title: "Platform ops & hardening", due_on: null, state: "open" },
+    ];
+    expect(trackQueueHeads(renamed)).toEqual([
+      { track: "track:doctor", head: "Витрина В3 — Переезд аудитории" },
+      { track: "track:academy", head: "Академия А3 — Каталоги" },
+    ]);
+    expect(
+      queueAnnotationFor(
+        { title: "форма", labels: ["track:doctor"], milestone: "Витрина R4 — Эфиры" },
+        renamed,
+      ),
+    ).toEqual({ position: "AHEAD-OF-QUEUE", head: "Витрина В3 — Переезд аудитории" });
+    expect(
+      queueAnnotationFor(
+        { title: "каталог", labels: ["track:academy"], milestone: "Академия А3 — Каталоги" },
+        renamed,
+      ),
+    ).toEqual({ position: "QUEUE-HEAD", head: "Академия А3 — Каталоги" });
+  });
+
   it("formatReport prints QUEUE-HEAD rows before AHEAD-OF-QUEUE ones, tagged with the head", () => {
     const head = classify(issue(900, ["tooling"], "форма регистрации"), []);
     head.queue = { position: "QUEUE-HEAD", head: "Витрина R1 — MVP витрины" };

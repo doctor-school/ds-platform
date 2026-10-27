@@ -1,0 +1,37 @@
+{
+  "$comment": "#1468 — the ONE list of runtime variables production's /etc/ds-platform/api.env must carry. Read by the api's production boot check (apps/api/src/config/env.schema.ts), by the release gate's `runtime-env` phase (tools/deploy/prod.mjs, from the shipped SHA's tree) and by the template parity test (infra/deploy/api.env.example). A variable without `when` is required by every release; `when.image` makes it required only when the release's service set ships that image. Adding a variable the api refuses to boot without means adding it here; tests fail otherwise.",
+  "envFile": "/etc/ds-platform/api.env",
+  "variables": [
+    {
+      "name": "DATABASE_URL",
+      "containers": ["api"],
+      "ref": "DSO-100 spec §5.4"
+    },
+    {
+      "name": "AUDIT_IDENTIFIER_PEPPER",
+      "containers": ["api"],
+      "ref": "#141"
+    },
+    {
+      "name": "LIFECYCLE_IMPACT_TOKEN_SECRET",
+      "containers": ["api"],
+      "ref": "012-design §3.1, #1468"
+    },
+    {
+      "name": "SIGN_IN_RECORD_KEY",
+      "containers": ["api"],
+      "ref": "ADR-0015 §4, #3171",
+      "when": { "image": "ds-login" }
+    },
+    {
+      "name": "ACADEMY_PUBLIC_ORIGIN",
+      "containers": ["admin", "doctor"],
+      "ref": "#2619, #3147"
+    },
+    {
+      "name": "DOCTOR_PUBLIC_ORIGIN",
+      "containers": ["portal"],
+      "ref": "#3147"
+    }
+  ]
+}

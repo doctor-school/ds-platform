@@ -460,6 +460,36 @@ The **deployed SHA is queryable over HTTP** (DSO-127): the api reports it at
 `GET /v1/health` → `{"version":"<sha>", …}` (from the `DEPLOY_SHA` env; unset in
 local dev). `curl -s https://api.doctor.school/v1/health | jq .version`.
 
+### Runtime env refusal (#1468)
+
+Before any production state change, every release and redeploy checks that
+`/etc/ds-platform/api.env` on ds-api-prod sets each variable of the runtime-env
+contract (`packages/schemas/src/runtime-env/runtime-env-contract.json` of the
+released SHA; the REQUIRED lines of `api.env.example`). The api's production boot
+refuses the same set, so a release that passed this check cannot crash-loop on a
+missing one (2026-08-25: `LIFECYCLE_IMPACT_TOKEN_SECRET`, 250 restarts, API 502).
+The refusal reads:
+
+```text
+✗ DEPLOY FAILED: /etc/ds-platform/api.env on api-prod lacks required runtime variable(s): LIFECYCLE_IMPACT_TOKEN_SECRET (absent). Nothing was changed. Add them on the box and re-dispatch …
+```
+
+- **What it means.** Each named variable is `absent`, `empty` or still a
+  `placeholder` (`<…>` from the template) in its last assignment. Only names and
+  states are printed; the probe never reads a value out. «could not read …» or
+  «unrecognised … probe output» means the check itself could not prove the file —
+  also fail-closed. The previous release keeps serving: nothing was backed up,
+  shipped, pulled or swapped.
+- **Recovery.** The owner adds the variable on the box as in «Apply order» step 6
+  (out-of-band secrets): `sudo cp /etc/ds-platform/api.env /etc/ds-platform/api.env.bak-<ts>`,
+  edit as root, keep `root:root 0600`, generate a secret on the box (the template
+  comment names the command, e.g. `openssl rand -hex 32`), never in git or chat.
+  Evidence is a count, e.g. `sudo grep -c '^LIFECYCLE_IMPACT_TOKEN_SECRET=' /etc/ds-platform/api.env` → `1`.
+  Then re-dispatch the same `deploy-prod.yml` run (same SHA, same mode).
+- **A new required variable** goes into the contract in the PR that makes the
+  code need it: tests fail when an api fail-closed throw names a variable the
+  contract lacks, and when `api.env.example`'s REQUIRED marks differ from it.
+
 **First-time provisioning** (Terraform §§1–3, DNS §4, out-of-band secrets §6, and
 the **Zitadel first-boot bootstrap** §9) stays the manual runbook below — those are
 one-time, not per-release. Run them once; from then on every release is a
@@ -1502,9 +1532,10 @@ target that ships no `ds-login` image (an older rollback target, #1896).
 
 3. **[OWNER-PLACED] `SIGN_IN_RECORD_KEY` in `/etc/ds-platform/api.env`** (root:root
    `0600`, template `api.env.example`): `openssl rand -base64 32`, generated on the
-   box, never in git or chat. `pnpm deploy:prod` refuses a target that ships
-   `ds-login` before any box change unless the line is present — it counts the
-   assignment over ssh (`record-key-lines=N`), never reads the value out.
+   box, never in git or chat. A release whose target ships `ds-login` refuses
+   before any box change unless the line is set — the runtime-env check
+   («Runtime env refusal» below, #1468) reports `SIGN_IN_RECORD_KEY (absent)` and
+   never reads the value out.
    Evidence: that count, e.g.
    `ssh api-prod "sudo grep -c '^SIGN_IN_RECORD_KEY=' /etc/ds-platform/api.env"` → `1`.
    `IDP_ACADEMY_CLIENT_KEY`, `IDP_DOCTOR_CLIENT_KEY` and `INTERNAL_API_TOKEN` (003

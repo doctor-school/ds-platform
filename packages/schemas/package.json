@@ -13,6 +13,10 @@
       "types": "./dist/health/index.d.ts",
       "default": "./dist/health/index.js"
     },
+    "./runtime-env": {
+      "types": "./dist/runtime-env/index.d.ts",
+      "default": "./dist/runtime-env/index.js"
+    },
     "./internal-api": {
       "types": "./src/internal-api/index.d.ts",
       "default": "./src/internal-api/index.js"

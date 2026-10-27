@@ -110,8 +110,8 @@ gh workflow run deploy-prod.yml --ref main -f mode=redeploy -f sha=<live sha> -f
   release's, no ds-data-prod converge), `data-prod-env`, `data-prod-up`,
   `backup`, the IdP converge and the migrate (`REDEPLOY_SKIPPED_STEPS` in
   `prod.mjs`), and ships the api-prod tree only. It **runs** the test-token
-  refusal, the previous-SHA read, the runtime config backup, the api-prod ship,
-  `pull`, boot verify, the edge config validate, the record-key check, the swap,
+  refusal, the runtime-env check (#1468), the previous-SHA read, the runtime config backup, the api-prod ship,
+  `pull`, boot verify, the edge config validate, the swap,
   runtime configs, `verify-running-sha`, `prune`, smoke and `finish` (ds-api-prod
   only). The swap is the durable step `recreate`,
   `docker compose up -d --force-recreate` with no migrate: Compose recreates on
@@ -230,6 +230,17 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    `sudo test -s`) that api-prod holds the pull token
    `/etc/ds-platform/registry-pull-token`, and refuses with the provisioning
    pointer if it does not. A `pr/<N>` manifest never reaches production.
+   **Runtime env (#1468)** — phase `runtime-env`, after `test-token` and
+   `service-set` and before `runtime-config-backup` (the first state change), in a
+   release and a redeploy alike. It reads the runtime-env contract
+   (`packages/schemas/src/runtime-env/runtime-env-contract.json`) from the shipped
+   SHA's own tree, takes every unconditional entry plus each `when: { image }`
+   entry whose image the release ships (`SIGN_IN_RECORD_KEY` with `ds-login`), and
+   probes `/etc/ds-platform/api.env` over ssh: per name the last assignment is
+   `absent`, `empty`, `placeholder` (a `<…>` template value) or `ok` — names and
+   states only, never a value. Anything but `ok`, an unreadable file or unrecognised
+   probe output refuses with the failing names and «Nothing was changed». Recovery:
+   `infra/deploy/README.md` → «Runtime env refusal».
 2. **Ship** — `git archive <sha>` streamed over SSH to both boxes (compose files
    and configs; no deploy key). Streams are piped in-process → Windows-safe.
    Right before it, the **runtime config backup (#3274)** keeps the `Caddyfile`

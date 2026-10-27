@@ -68,6 +68,7 @@ test("3157: the local plan is the operator plan minus the pre-flight, the releas
   );
   for (const id of [
     "test-token",
+    "runtime-env",
     "postgres-verify",
     "previous-sha",
     "ship",
@@ -894,6 +895,7 @@ test("3354: a redeploy skips what a rollback skips: no box tooling install, no d
   );
   for (const id of [
     "test-token",
+    "runtime-env",
     "previous-sha",
     "ship",
     "pull",
@@ -924,6 +926,7 @@ test("3354: a redeploy skips what a rollback skips: no box tooling install, no d
   release.operatorPhase("preflight");
   release.phase("test-token");
   release.phase("service-set");
+  release.phase("runtime-env");
   assert.equal(release.releasePhase("postgres-verify"), true);
   assert.throws(() => planWalker().phase("install"), /release-only/);
   assert.throws(() => planWalker().releasePhase("ship"), /runs on every path/);
@@ -955,8 +958,9 @@ test("3354: the redeploy's install, data-prod and IdP phases are guarded; it fin
   const ship = between('walk.phase("ship");', 'if (walk.releasePhase("install"))');
   assert.match(ship, /if \(redeploy\) \{\s*await shipTree\(sha, API_PROD\);\s*\} else \{/);
   assert.ok(ship.indexOf("shipDataProd(sha)") > ship.indexOf("} else {"));
-  // The IdP converge is forward-only (#1997): a redeploy runs the record-key check only.
-  assert.match(deployBody, /await assertProdApiEnvHasRecordKey\(services\);\s*(\/\/[^\n]*\n\s*)?if \(!redeploy\) await provisionIdp\(sha\);/);
+  // The IdP converge is forward-only (#1997): a redeploy skips it. The record key is
+  // the #1468 runtime-env gate's, which both run before any state change.
+  assert.match(deployBody, /walk\.phase\("idp"\);\s*(\/\/[^\n]*\n\s*)?if \(!redeploy\) await provisionIdp\(sha\);/);
   // The release is open on the boxes it reached: a redeploy never calls ds-data-prod's finish.
   assert.match(
     deployBody,

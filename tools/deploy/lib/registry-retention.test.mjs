@@ -6,6 +6,8 @@ import assert from "node:assert/strict";
 
 import {
   RetentionError,
+  STAGE_SUITE_WALK_DEPTH,
+  findGreenStageSuite,
   parseBearerChallenge,
   nextTagRequest,
   parseNextLink,
@@ -16,7 +18,14 @@ import {
 
 const sha = (n) => n.toString(16).padStart(40, "0");
 const digest = (n) => `sha256:${n.toString(16).padStart(64, "0")}`;
-const RELEASE_REPOS = ["api", "api-migrate", "portal", "admin", "doctor", "login"];
+const RELEASE_REPOS = [
+  "api",
+  "api-migrate",
+  "portal",
+  "admin",
+  "doctor",
+  "login",
+];
 
 /** Every image repo carries the same tags; `pr/*` the same PR tags. */
 function registry(mainTags, prTags = []) {
@@ -33,7 +42,10 @@ const releases = (...pairs) => pairs.map(([tag, s]) => ({ tag, sha: s }));
 function baseInput(overrides = {}) {
   // main history, newest first: 20 .. 1
   const mainHistory = Array.from({ length: 20 }, (_, i) => sha(20 - i));
+  const history = overrides.mainHistory ?? mainHistory;
   return {
+    // the newest main commit is the green release candidate unless a test says otherwise
+    stageSuite: { greenSha: history[0] ?? null, walked: 1 },
     tags: registry(mainHistory.map((s, i) => [s, digest(1000 + i)])),
     releases: releases(
       ["release-2026.10.20-1", sha(10)],
@@ -399,4 +411,105 @@ test("parseBearerChallenge reads realm, service and scope", () => {
     },
   );
   assert.equal(parseBearerChallenge('Basic realm="x"'), null);
+});
+
+const GREEN_LABEL = "newest green stage-suite";
+
+test("the newest green stage-suite main commit is kept beyond the 3-main window (release candidate, #3240)", () => {
+  // main moved 6 commits past the green candidate, each with a red stage-suite
+  const plan = planRetention(
+    baseInput({
+      stageSuite: { greenSha: sha(14), walked: 7 },
+    }),
+  );
+  assert.deepEqual(plan.mainShas, [sha(20), sha(19), sha(18)]);
+  const api = plan.repos.find((r) => r.repo === "api");
+  const kept = api.keep.find((k) => k.tag === sha(14));
+  assert.ok(kept, "the green candidate is kept");
+  assert.equal(kept.reason, GREEN_LABEL);
+  assert.ok(!api.delete.flatMap((d) => d.tags).includes(sha(14)));
+  assert.match(
+    renderPlanSummary(plan, { dryRun: true }),
+    new RegExp(`${GREEN_LABEL}.*${sha(14)}`),
+  );
+});
+
+test("fail closed: the stage-suite walk result is missing, has no green commit, or is not a main commit", () => {
+  assert.throws(
+    () => planRetention(baseInput({ stageSuite: undefined })),
+    RetentionError,
+  );
+  // an unconcluded walk never reaches the planner as a partial keep
+  assert.throws(
+    () => planRetention(baseInput({ stageSuite: { greenSha: null } })),
+    RetentionError,
+  );
+  assert.throws(
+    () => planRetention(baseInput({ stageSuite: { greenSha: "abc" } })),
+    RetentionError,
+  );
+  assert.throws(
+    () => planRetention(baseInput({ stageSuite: { greenSha: sha(99) } })),
+    /not in main history/,
+  );
+});
+
+test("findGreenStageSuite walks main newest-first and stops at the first success", async () => {
+  const states = {
+    [sha(20)]: "failure",
+    [sha(19)]: "pending",
+    [sha(18)]: null,
+    [sha(17)]: "success",
+  };
+  const read = [];
+  const result = await findGreenStageSuite(
+    Array.from({ length: 20 }, (_, i) => sha(20 - i)),
+    async (s) => {
+      read.push(s);
+      return states[s] ?? "failure";
+    },
+  );
+  assert.equal(result.greenSha, sha(17));
+  assert.equal(result.walked, 4);
+  assert.deepEqual(read, [sha(20), sha(19), sha(18), sha(17)]);
+});
+
+test("fail closed: a stage-suite status that cannot be read refuses the whole run — the green candidate may lie further back", async () => {
+  // sha(17) is green, but the walk cannot see past the unreadable sha(19)
+  const states = { [sha(17)]: "success" };
+  await assert.rejects(
+    findGreenStageSuite([sha(20), sha(19), sha(18), sha(17)], async (s) => {
+      if (s === sha(19)) throw new Error("HTTP 502");
+      return states[s] ?? "failure";
+    }),
+    (error) =>
+      error instanceof RetentionError &&
+      error.message.includes(sha(19)) &&
+      /HTTP 502/.test(error.message),
+  );
+});
+
+test(`fail closed: no green stage-suite within STAGE_SUITE_WALK_DEPTH (${STAGE_SUITE_WALK_DEPTH}) main commits refuses the run`, async () => {
+  assert.equal(STAGE_SUITE_WALK_DEPTH, 200);
+  let reads = 0;
+  await assert.rejects(
+    findGreenStageSuite(
+      Array.from({ length: 250 }, (_, i) => sha(250 - i)),
+      async () => {
+        reads += 1;
+        return "pending";
+      },
+    ),
+    (error) =>
+      error instanceof RetentionError && /newest 200/.test(error.message),
+  );
+  assert.equal(reads, STAGE_SUITE_WALK_DEPTH);
+});
+
+test("fail closed: a main history shorter than the bound with no green stage-suite refuses the run", async () => {
+  await assert.rejects(
+    findGreenStageSuite([sha(2), sha(1)], async () => null),
+    (error) =>
+      error instanceof RetentionError && /2 main commits/.test(error.message),
+  );
 });

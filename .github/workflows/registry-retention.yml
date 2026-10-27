@@ -3,7 +3,8 @@ name: Registry retention
 # Prunes the container registry to the retention policy (#3110;
 # infra/deploy/README.md → Container registry; planner
 # tools/deploy/lib/registry-retention.mjs): per release repo the latest 3 releases,
-# the newest 3 `main` commits with an image, the latest successful production
+# the newest 3 `main` commits with an image, the newest `main` commit with a green
+# `stage-suite` status (the release candidate), the latest successful production
 # deployment, the open `hotfix/*` heads and the open PR heads; per `pr/*` repo the
 # open PR heads.
 #   - schedule: daily (deletes).
@@ -30,6 +31,7 @@ permissions:
   contents: read
   pull-requests: read
   deployments: read
+  statuses: read
 
 # One run at a time; a queued run waits rather than cancelling one mid-delete.
 concurrency:

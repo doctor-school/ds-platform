@@ -373,7 +373,9 @@ Timeweb Cloud container registry (#2981, tech spec
     GitHub Releases (production + 2 rollback targets) ∪ the SHA of the latest
     successful production GitHub Deployment (a deploy whose release cut failed still
     keeps its images) ∪ the newest 3 first-parent `main` commits that have an image
-    (the next release candidate, stage `main`) ∪ the heads of the open `hotfix/*`
+    (stage `main`) ∪ the newest first-parent `main` commit whose `stage-suite` commit
+    status is `success` (the release candidate — a release refuses any other, so it
+    survives `main` moving past it with red suites) ∪ the heads of the open `hotfix/*`
     branches (a pending `pnpm deploy:prod --ref` candidate) ∪ the open PR heads;
   - per `pr/<image>` repo: the heads of the currently open pull requests;
   - everything else is deleted (`DELETE /v2/<repo>/manifests/<digest>`). Tags that are
@@ -382,7 +384,12 @@ Timeweb Cloud container registry (#2981, tech spec
     production deployment, the hotfix branches, the open PRs or `main` cannot be
     listed, a release target is not a full SHA, or a tag listing cannot be proven
     complete (a Link-less page is confirmed by a `last=` probe), nothing is deleted
-    and the run fails; a refused DELETE stops the run and fails it.
+    and the run fails; a refused DELETE stops the run and fails it. The same holds
+    when the release candidate is not found: a `stage-suite` status that cannot be
+    read, or no green one among the newest 200 `main` commits
+    (`STAGE_SUITE_WALK_DEPTH`, a cost bound on the status reads), deletes nothing and
+    fails the run naming why — the candidate may lie further back, so no partial keep
+    is safe.
 
   It runs daily and after every `main` Runtime images run (whatever its conclusion —
   a run that failed on a full registry is exactly when space is needed); both
@@ -395,7 +402,8 @@ Timeweb Cloud container registry (#2981, tech spec
   freed when the registry's garbage collection runs, not at the DELETE. Consequence:
   `pnpm deploy:prod --rollback <sha>` can reach only the last 3 releases — an older
   SHA's recorded digests are gone, unless it is still the latest successful production
-  deployment or among the newest 3 `main` images. Policy and planner:
+  deployment, the newest green-`stage-suite` `main` commit or among the newest 3
+  `main` images. The job's token reads commit statuses (`statuses: read`). Policy and planner:
   `tools/deploy/lib/registry-retention.mjs`; runner: `tools/deploy/registry-retention.mjs`.
 
 - **Stage and production both consume it; neither box builds.** The shared mechanics

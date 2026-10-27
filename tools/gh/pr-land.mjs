@@ -35,6 +35,10 @@
  *                   one compact summary line (bot branches like
  *                   `changeset-release/main` can appear post-merge).
  *
+ * Before stage 1 it prints a WARNING when main's newest `stage-suite` verdict is
+ * red, naming the first red commit of the streak (`tools/staging/stage-suite.mjs`,
+ * #3269) — information only: it never refuses and never changes the exit code.
+ *
  * Exit-code discipline: every stage is its own spawn (argv arrays — no shell,
  * no pipe, memory `feedback_no_pipe_exit_significant_commands`); the first
  * non-zero stage stops the tail immediately, prints the stage name + a
@@ -71,6 +75,10 @@ import {
 } from "./merge-gate.mjs";
 import { shouldMerge } from "./merge-when-green.mjs";
 import { DIRTY_EXIT, DIRTY_LINE_PREFIX } from "../dev/worktree-teardown.mjs";
+import {
+  probeStageSuite,
+  stageSuiteLandWarning,
+} from "../staging/stage-suite.mjs";
 
 const TAG = "[pr:land]";
 const GH_MAX_BUFFER = 64 * 1024 * 1024; // large payloads overflow the 1 MiB default (#315).
@@ -503,7 +511,7 @@ function die(msg, code = 3) {
   process.exit(code);
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
   const rawPr = args[0];
   const prNumber = Number(rawPr);
@@ -530,6 +538,13 @@ function main() {
   // merge-gate/merge-when-green, exit 4) BEFORE any stage runs.
   const cwd = process.cwd();
   if (isWorktreeCwd(cwd)) die(cwdGuardMessage(cwd), 4);
+
+  // main's `stage-suite` verdict (#3269): a red main is a printed WARNING only —
+  // never a refusal, never an exit code (the probe itself never throws).
+  const stageWarning = stageSuiteLandWarning(await probeStageSuite());
+  if (stageWarning)
+    process.stdout.write(`${TAG} ${stageWarning}
+`);
 
   landPr(prNumber, extraArgs);
 }

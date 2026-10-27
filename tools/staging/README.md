@@ -245,7 +245,11 @@ writes nothing to GitHub.
 ### The same check in Actions: `.github/workflows/stage.yml` (#2985)
 
 Every successful `runtime-images.yml` run of a push to `main` triggers
-`.github/workflows/stage.yml` (one run at a time, group `stage-main`, never cancelled):
+`.github/workflows/stage.yml` (one run at a time, group `stage-main`, never cancelled).
+`pnpm bootstrap` shows the newest main commit's `stage-suite` and the newest green SHA (a
+`## Warnings` row when main is red, or the newest commit has no verdict > 1 h after it), and
+`pnpm pr:land` prints a WARNING naming the first red commit of a red streak
+(`tools/staging/stage-suite.mjs`, #3269). The run:
 
 1. **`converge`** (environment `stage`) sets the commit status `stage-suite` to
    `pending`, downloads `images-<sha>.json` from the triggering run and sends it over

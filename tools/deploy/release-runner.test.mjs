@@ -884,13 +884,7 @@ describe("parseRunnerArgs — redeploy commands", () => {
       sha: SHA,
     });
     assert.deepEqual(
-      parseRunnerArgs([
-        "redeploy-record",
-        "--sha",
-        SHA,
-        "--state",
-        "unknown",
-      ]),
+      parseRunnerArgs(["redeploy-record", "--sha", SHA, "--state", "unknown"]),
       { command: "redeploy-record", sha: SHA, state: "unknown" },
     );
   });
@@ -1052,7 +1046,12 @@ describe("runRedeployRecord", () => {
   it("refuses a blank quote before writing anything", async () => {
     const deps = make();
     await assert.rejects(
-      runRedeployRecord({ sha: SHA, state: "succeeded", ownerQuote: "", ...deps }),
+      runRedeployRecord({
+        sha: SHA,
+        state: "succeeded",
+        ownerQuote: "",
+        ...deps,
+      }),
       /owner_quote is empty/,
     );
     assert.equal(deps.calls.length, 0);

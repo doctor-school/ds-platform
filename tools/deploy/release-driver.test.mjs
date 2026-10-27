@@ -1047,7 +1047,10 @@ describe("2985: release-driver", { skip: SKIP }, () => {
         SHA,
       ]);
       // The release's own checks and lease.
-      assert.match(log("ds-release.log"), new RegExp(`^lease prod ${SHA}$`, "m"));
+      assert.match(
+        log("ds-release.log"),
+        new RegExp(`^lease prod ${SHA}$`, "m"),
+      );
       assert.match(log("curl.log"), new RegExp(`/compare/main\\.\\.\\.${SHA}`));
       assert.match(
         log("docker.log"),
@@ -1089,8 +1092,14 @@ describe("2985: release-driver", { skip: SKIP }, () => {
     });
 
     for (const [status, mode] of [
-      ["ahead", "a newer SHA is a release (deploy-prod.yml with mode: release)"],
-      ["behind", "an older SHA is a rollback (deploy-prod.yml with mode: rollback)"],
+      [
+        "ahead",
+        "a newer SHA is a release (deploy-prod.yml with mode: release)",
+      ],
+      [
+        "behind",
+        "an older SHA is a rollback (deploy-prod.yml with mode: rollback)",
+      ],
       ["diverged", "a redeploy re-runs the live SHA only"],
     ]) {
       it(`refuses a SHA that is not the live one (compare ${status}), naming the right mode`, () => {
@@ -1125,7 +1134,10 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       serve("api", digestOf("f"));
       r = run(["redeploy", "prod", SHA]);
       assert.equal(r.status, 3);
-      assert.match(r.stderr, /the manifest digest of api is not the one the registry serves/);
+      assert.match(
+        r.stderr,
+        /the manifest digest of api is not the one the registry serves/,
+      );
       notStarted();
     });
 

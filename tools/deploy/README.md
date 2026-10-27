@@ -57,7 +57,8 @@ gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_
 - **One release at a time.** `concurrency: deploy-prod`, never cancelled — its own
   group, not the changesets workflow's `release`. A re-dispatch of the same SHA
   reattaches to the running driver unit (`attached`) or reports
-  `already-succeeded`.
+  `already-succeeded`; to run a succeeded release of the live SHA again (an env
+  file changed on the box) dispatch redeploy mode (below).
 - **Record.** `deployment-record.mjs` `recordDeployment` writes the Deployment
   with `GITHUB_TOKEN`; the driver's `previousSha` is the basis of the
   Deployment-record notes. Events of `GITHUB_TOKEN` start no workflow, which is
@@ -77,6 +78,43 @@ gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_
 - **Secrets.** `PROD_SSH_KEY` + `PROD_SSH_KNOWN_HOSTS` live in Environment
   `production` (deployment branches `main`, no required reviewer) and reach only
   the `deploy` job.
+
+### Redeploy mode (#3354)
+
+When an env file on the box changed — the captcha toggle in `api.env` and the
+compose `.env` (`infra/deploy/README.md`), a rotated key — the containers must be
+recreated at the SHA production already runs. On the owner's word:
+
+```bash
+gh workflow run deploy-prod.yml --ref main -f mode=redeploy -f sha=<live sha> -f owner_quote="<owner word>"
+```
+
+- **Pre-flight** (`release-runner.mjs redeploy-preflight`): the `owner_quote` is
+  not blank (env only, as in a release); the SHA has a production Deployment with
+  a `success` status (it really was released); its `images-<sha>.json` is
+  recorded. No stage-suite, CI, release-gate or live-broadcast check: the SHA
+  passed them when it was released.
+- **Deploy.** `ssh deploy@<api-prod> "redeploy prod <sha>" < images-<sha>.json`
+  and the release's own poll of `status prod <sha>` (status lines only). The box
+  driver runs the release's checks (role, manifest, on-main, registry digests,
+  lock, rollback unit, lease) and refuses unless `<sha>` is the live prod SHA (the
+  running `ds-api-prod-api-1`'s image tag): a newer SHA is a `release`, an older
+  one a `rollback`, and the refusal names that mode. Where a release answers
+  `already-succeeded`, a redeploy resets the finished unit and starts
+  `ds-prod-<sha12>-driver` again — `_redeploy` runs the SHA's own
+  `prod.mjs --local --redeploy` — and `ds-release` opens a fresh attempt (the
+  closed, succeeded one is archived), so every step runs again. The swap is
+  `docker compose up -d --force-recreate`: Compose recreates on `up -d` only for a
+  changed configuration or image, and its documentation does not count an
+  `env_file`'s contents
+  ([docker compose up](https://docs.docker.com/reference/cli/docker/compose/up/)).
+  A redeploy while that unit runs attaches (`attached`).
+- **After a terminal status.** No release cut and no digest (no new code).
+  `redeploy-record` writes a new Deployment record of every run —
+  `redeploy @ <sha12> — «<quote>»`, payload `kind: redeploy` — even though the
+  SHA's release record exists; lost contact records `error`, as a release does.
+- **Fallback.** Break-glass `pnpm deploy:prod` re-ships the live SHA when Actions
+  or the box driver is unavailable.
 
 ### Rollback mode (#2987)
 

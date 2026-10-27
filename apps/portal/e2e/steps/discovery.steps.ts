@@ -93,12 +93,19 @@ Then(
 );
 
 Then(
-  "the page carries the title, a МСК start time, and one «Участвовать» CTA",
+  "the page carries the title, a start time in the viewer's zone, and one «Участвовать» CTA",
   async ({ page }) => {
-    // EARS-2/EARS-3: the decision set is present (title + МСК start) and there is
+    // EARS-2/EARS-3: the decision set is present (title + start time) and there is
     // EXACTLY ONE primary participation CTA (the guest register handoff).
+    // EARS-12 as amended: the server bytes say МСК; after hydration an online or
+    // hybrid event states its time in the viewer's zone (America/New_York here),
+    // an offline one stays МСК. The retrying assertion waits for that switch.
     await expect(page.getByRole("heading", { level: 1 })).not.toBeEmpty();
-    await expect(page.locator("body")).toContainText("МСК");
+    const kicker =
+      (await page.getByTestId("event-page-kicker").textContent()) ?? "";
+    await expect(page.getByTestId("event-page-hero")).toContainText(
+      /Очно/u.test(kicker) ? "(МСК)" : /\(GMT-\d{1,2}\)/u,
+    );
     await expect(
       page.getByRole("link", { name: PARTICIPATE, exact: true }),
     ).toHaveCount(1);

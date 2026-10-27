@@ -112,6 +112,11 @@ gh workflow run deploy-prod.yml --ref main -f mode=rollback -f sha=<target sha> 
   dir after keeping the running ones, validates them like a release before its
   `up -d` (invalid → the running configs go back on disk, nothing is rolled
   back), and applies them after the `up -d` with the same restore on failure.
+  A rollback that dies between installing the target's configs and the `up -d`
+  (the supersede or the `up -d` failing) puts the running configs back on disk,
+  then compares the running mounts with them and reports the result: a service
+  the `up -d` already (re)started serves the target's config and is named for a
+  restart onto the restored file.
 - **Break-glass stays on the workstation.** `pnpm deploy:prod --rollback`, the
   hotfix `--ref`, `--skip-ci-check`, `--allow-live-broadcast` and
   `--release-gate-exempt` are not on this path.
@@ -122,8 +127,8 @@ The workstation path, for what the release workflow deliberately does not do: a
 hotfix `--ref`, a workstation `--rollback`, and the gate exceptions. It runs only
 on the owner's word, under the owner's offline `breakglass` key: it connects to
 ds-api-prod as `breakglass@ds-api-prod` (`deploy` there is the CI user, forced
-command only), and to data-prod through that alias's ProxyJump as `deploy` (SSH
-aliases, below). The pipeline below is the same one the release driver runs
+command only), and to data-prod through that alias's ProxyJump as `breakglass` too
+(`deploy` there holds only the hop key behind its forced command; SSH aliases, below). The pipeline below is the same one the release driver runs
 box-local (`--local`); the workstation run adds the operator pre-flight (clean
 checkout, the PC stage check of a `--ref`), the release cut and the Deployment
 record.
@@ -163,8 +168,8 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    `images-<sha>.json` manifest (`lib/registry.mjs`, shared with the stage
    slots). A release accepts only a release build: a `push`/dispatch run on
    `main` (manifest `ref: "main"`) or on the `--ref` target's
-   `hotfix/<N>-<slug>` branch (manifest `ref: "hotfix/<N>-<slug>"`), five
-   release-namespace digest references (never `pr/`) for exactly that SHA. No run, a run still in progress, a failed run, an expired
+   `hotfix/<N>-<slug>` branch (manifest `ref: "hotfix/<N>-<slug>"`), six
+   release-namespace digest references (five for a target that predates `login`) (never `pr/`) for exactly that SHA. No run, a run still in progress, a failed run, an expired
    artifact or a bad manifest refuses with its cause — there is no build
    fallback and no flag to build. The same step checks (read-only,
    `sudo test -s`) that api-prod holds the pull token
@@ -190,9 +195,10 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
 5. **api-prod** — **pull** (#2981: nothing is built on the box; one `next build`
    beside live production on the swapless 8 GB box stalled the site for ~17 min
    on 2026-09-18, #2283): the box logs in with the pull token read from its
-   root-only file inside its own shell, pulls each of the five recorded digests,
-   tags it **`ds-api:<sha>` / `ds-api-migrate:<sha>` / `ds-portal:<sha>` /
-   `ds-admin:<sha>` / `ds-doctor:<sha>`** and logs out (trap + explicit); a tag
+   root-only file inside its own shell, pulls each of the six recorded digests
+   (five for a target that predates `login`), tags it **`ds-api:<sha>` /
+   `ds-api-migrate:<sha>` / `ds-portal:<sha>` / `ds-admin:<sha>` /
+   `ds-doctor:<sha>` / `ds-login:<sha>`** and logs out (trap + explicit); a tag
    that already carries its recorded digest is reused. Every tag's RepoDigests
    must then contain its manifest digest, or the deploy stops →
    **pre-swap boot verify (#1410)** → **IdP convergence/readback (#2149)** →
@@ -381,7 +387,7 @@ exactly that commit instead (#1881, release-cycle spec §10.11).
 
 **Images come from the hotfix branch's own `runtime-images` run (#2981).** api-prod
 builds nothing; `runtime-images.yml` also runs on every push to `hotfix/**`, pushes
-the five images under the release namespace (no `pr/` prefix) and records
+the six images under the release namespace (no `pr/` prefix) and records
 `images-<sha>.json` with `ref: "hotfix/<N>-<slug>"` (a branch name of any other
 shape fails that run). The release pre-flight — and the stage `main` check, which
 converges slot `main` to the same target — accepts that manifest for exactly the

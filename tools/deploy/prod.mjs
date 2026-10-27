@@ -978,6 +978,35 @@ async function restoreRuntimeConfigsOnDisk() {
   return verdict.detail;
 }
 
+/**
+ * A rollback that died after installing the target's configs: the running configs
+ * back on disk, then the running mounts compared against what is on disk — an
+ * `up -d` that got far enough to (re)start a service left it serving the target's.
+ */
+export async function rollbackSwapFailureReport({
+  restore = () => sshCapture(API_PROD, runtimeConfigRestoreScript()),
+  compare = () => sshCapture(API_PROD, runtimeConfigComparisonScript()),
+} = {}) {
+  const restored = runtimeConfigStepVerdict(
+    await restore().catch((e) => `runtime-config-restore=FAILED ${e.message}`),
+    "restore",
+  );
+  const disk = restored.ok
+    ? `the running configs were put back on disk (${restored.detail})`
+    : `the running configs were NOT put back on disk (${restored.detail}) — the target's stay there`;
+  let mounts;
+  try {
+    const stale = runtimeConfigServicesToRestart(await compare());
+    mounts =
+      stale.length === 0
+        ? "caddy + centrifugo serve the configs now on disk"
+        : `${stale.join(", ")} do(es) not serve the configs now on disk — restart it onto them`;
+  } catch (e) {
+    mounts = `the running mounts could not be compared (${e.message})`;
+  }
+  return `${disk}; ${mounts}`;
+}
+
 /** The pre-swap gate: `die` on an invalid config, after the previous ones are back on disk. */
 async function assertRuntimeConfigsValid(files, { swapped }) {
   const verdict = await validateRuntimeConfigs({ centrifugoConfig: files["centrifugo/config.json"] });
@@ -2737,11 +2766,7 @@ sudo docker compose up -d
       { label: "rollback up" },
     );
   } catch (e) {
-    const restored = await restoreRuntimeConfigsOnDisk();
-    die(
-      `--rollback: the supersede / up -d failed (${e.message}); the target's runtime configs` +
-        ` were written but not applied; restore of the running configs on disk: ${restored}`,
-    );
+    die(`--rollback: the supersede / up -d failed (${e.message}); ${await rollbackSwapFailureReport()}`);
   }
 
   step("api-prod: apply the target's bind-mounted Caddy + Centrifugo configs (#3274)");

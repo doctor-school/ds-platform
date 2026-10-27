@@ -195,8 +195,7 @@ argument, `SSH_ORIGINAL_COMMAND` kept through sudo's env reset), and the CI keys
 `command="sudo -n /usr/local/bin/ds-deploy-entrypoint",…,no-user-rc`. Once `breakglass` is proven in
 place the converge also removes `deploy`'s rules from every other sudoers.d file (cloud-init's
 `90-cloud-init-users`), takes `deploy` out of groups `sudo` and `docker`, and removes every
-`deploy` key line not behind the prod forced command — the operator key (and its interim
-`from=` line) included; it refuses to unless it runs from a `breakglass` session
+`deploy` key line not behind the prod forced command — the former operator key included; it refuses to unless it runs from a `breakglass` session
 (`SUDO_USER=breakglass`). Run it from that session, in this order: (1) prove a
 `breakglass` login on both prod boxes; (2) converge with `--role prod --ci-pubkey <prod CI
 key>` (`--dry-run` first); (3) prove the Actions path with a `status` call and a
@@ -266,14 +265,16 @@ ssh-keygen -lf /tmp/data-prod.hostkey   # compare with data-prod's own, below
 ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
 # back on ds-api-prod, only when both fingerprints are equal:
 sudo -u deploy sh -c 'cat >> ~/.ssh/known_hosts' < /tmp/data-prod.hostkey; rm -f /tmp/data-prod.hostkey
-# on ds-data-prod: one line in ~deploy/.ssh/authorized_keys
+# on a NEW ds-data-prod: the bootstrap line in ~deploy/.ssh/authorized_keys
 restrict,from="192.168.0.20" ssh-ed25519 AAAA… ds-api-prod-hop
+# its first release's converge rewrites it to the form the live box carries:
+# command="sudo -n /usr/local/bin/ds-deploy-entrypoint",restrict,from="192.168.0.20" ssh-ed25519 AAAA… ds-api-prod-hop
 ```
 
-`restrict` turns off pty, every forwarding and the user rc. Until the release's `--role
-data` converge above the line carries no forced command and reaches `deploy`'s sudo; the converge
-puts it behind `sudo -n /usr/local/bin/ds-deploy-entrypoint`, so it reaches only the data
-verbs. That forced command is not a privilege boundary against the key's holder: `ship`,
+`restrict` turns off pty, every forwarding and the user rc. Only on a new box, before its
+first release's `--role data` converge above, does the bootstrap line carry no forced command
+and reach `deploy`'s sudo; the converge puts it behind `sudo -n
+/usr/local/bin/ds-deploy-entrypoint`, so it reaches only the data verbs. That forced command is not a privilege boundary against the key's holder: `ship`,
 `install` and `data-up` put a tree, root entrypoints and a compose file of the holder's
 choosing on ds-data-prod, so the key stays root-equivalent there — the accepted risk of tech
 spec §4 (ds-api-prod already holds the database owner credentials). What it buys: no

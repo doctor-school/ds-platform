@@ -31,6 +31,8 @@ export interface StepWorld {
   upcomingStartsAt?: string;
   /** Actual slot date of the named golden recorded event. */
   recordedStartsAt?: string;
+  /** The public event selected by one 004 lifecycle scenario. */
+  publicEvent?: { slug: string; title: string };
   /** State the 019 events-feed journey carries from one step to the next. */
   eventsFeed?: EventsFeedWorld;
 }
@@ -93,7 +95,12 @@ export interface EditorWrites {
     token: string;
     kinds: { title: string; detailUrl: string; retired: boolean }[];
     /** `hidden` once the scenario itself took the event off the storefronts. */
-    events: { id: string; title: string; kindTitle: string; hidden?: boolean }[];
+    events: {
+      id: string;
+      title: string;
+      kindTitle: string;
+      hidden?: boolean;
+    }[];
   };
 }
 

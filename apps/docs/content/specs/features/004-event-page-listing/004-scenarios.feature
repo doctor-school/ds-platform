@@ -21,6 +21,31 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       When the visitor activates the golden upcoming card
       Then the visitor lands on the golden event page showing its matching title
 
+  Rule: Public event states remain readable without participation dead ends
+
+    @EARS-2 @edge @public-event-states
+    Scenario: An event with no program PDF renders the program section without a broken link
+      Given a published event that has no program PDF
+      When a visitor opens the event page
+      Then the program section renders without a download affordance
+      And no broken or empty PDF link is shown
+
+    @EARS-4 @failure @public-event-states
+    Scenario: An ended event shows no dead CTA
+      Given an event in the "ended" state
+      When a visitor opens the event page
+      Then the page states the broadcast has ended
+      And no participation CTA links to a room or registration
+
+    # 007 Amendment - 2026-09-02 renames archived to hidden.
+    @EARS-5 @happy @public-event-states
+    Scenario: A hidden event's distributed link degrades to a public notice, not a dead end
+      Given a hidden event whose direct link was previously distributed
+      When a visitor opens that link
+      Then a public "Мероприятие скрыто" notice is rendered
+      And no participation CTA is shown
+      And the response is neither a 404 nor a redirect to the listing
+
   Rule: Remaining public event and calendar scenarios
 
     Background:
@@ -47,13 +72,6 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       Then the page shows the title, school/series, start date and start time labeled МСК, description, speakers with credentials, target specialty chips, and backing partners
       And a downloadable program PDF link is present
 
-    @EARS-2 @edge
-    Scenario: An event with no program PDF renders the program section without a broken link
-      Given a published event that has no program PDF
-      When a visitor opens the event page
-      Then the program section renders without a download affordance
-      And no broken or empty PDF link is shown
-
     @EARS-3 @happy
     Scenario: The page offers exactly one «Участвовать» CTA that enters registration
       Given a published (upcoming) event
@@ -76,13 +94,6 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
         | live      | live     |
         | ended     | ended    |
 
-    @EARS-4 @failure
-    Scenario: An ended event shows no dead CTA
-      Given an event in the "ended" state
-      When a visitor opens the event page
-      Then the page states the broadcast has ended
-      And no participation CTA links to a room or registration
-
     @EARS-9 @happy
     Scenario: A live event routes toward the room
       Given an event in the "live" state
@@ -95,14 +106,6 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
     # (status "Скрыто", command "Скрыть") and `EventArchived` becomes `EventHidden`; the
     # meaning and every assertion here are unchanged. See 007-requirements-en.md ->
     # Amendment - 2026-09-02.
-
-    @EARS-5 @happy
-    Scenario: An archived event's distributed link degrades to a public notice, not a dead end
-      Given an archived event whose direct link was previously distributed
-      When a visitor opens that link
-      Then a public "мероприятие в архиве" notice is rendered
-      And no participation CTA is shown
-      And the response is neither a 404 nor a redirect to the listing
 
     @EARS-6 @failure
     Scenario: A draft event is not publicly reachable

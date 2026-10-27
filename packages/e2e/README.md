@@ -436,6 +436,18 @@ listing controls when the named card is not on the first page. The separate 004
 empty-state test remains app-local; this journey does not claim the broader
 listing ordering/filtering or authentication scenarios.
 
+The three 004 `@public-event-states` scenarios
+(`steps/public-event-page.steps.ts`, #3383) read existing golden fixtures before
+opening their public pages: `upcoming` without a programme PDF,
+`pastWithRecording` in the ended state, and `hidden` through its direct link.
+The ended/no-CTA scenario replaces the one app-local ended/no-dead-link case;
+the hidden scenario replaces the two app-local hidden notice/CTA cases from
+`apps/portal/e2e/event-page.e2e.spec.ts`. The no-PDF assertion adds shared browser
+coverage while retaining the API projection check. Mobile geometry, other
+app-local cases, and API/unit boundaries remain separate. This slice proves
+public state rendering and participation-link absence; it does not drive account
+entry, recording playback, or the full lifecycle/calendar matrix.
+
 The 019 doctor events journeys (`steps/events-feed.steps.ts`, Issue #2256) run
 the `/events` feed of the doctor storefront from its golden data: the guest
 reading, the day groups and «Показать ещё», the compact month's day pick, the

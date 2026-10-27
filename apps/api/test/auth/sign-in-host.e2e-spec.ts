@@ -71,6 +71,7 @@ import {
   MEDICAL_WORKER_DECLARATION_VERSION,
   PARTNER_DATA_SHARING_VERSION,
 } from "../../src/storefront/doctor-register.service.js";
+import { FakeMailer } from "../../src/mailer/mailer.fake.js";
 import { MAILER, type Mailer } from "../../src/mailer/mailer.types.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 import {
@@ -120,6 +121,8 @@ async function compile(
 ) {
   const hostIdp = new FakeSignInHostIdp();
   let builder = Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(MAILER)
+    .useValue(new FakeMailer())
     .overrideProvider(IDP_CLIENT)
     .useFactory({
       factory: (mailer: Mailer) => new FakeIdpClient(mailer),

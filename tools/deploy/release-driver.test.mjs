@@ -990,6 +990,201 @@ describe("2985: release-driver", { skip: SKIP }, () => {
     });
   });
 
+  describe("3354: the prod redeploy of the live SHA", () => {
+    const PROD_UNIT = `ds-prod-${SHA.slice(0, 12)}-driver`;
+    const RB_UNIT = `ds-prod-${SHA.slice(0, 12)}-rollback`;
+    const LIVE = "d".repeat(40);
+    const exited = (status) => ({
+      LoadState: "loaded",
+      ActiveState: "active",
+      SubState: "exited",
+      ExecMainCode: 1,
+      ExecMainStatus: status,
+    });
+    const running = {
+      LoadState: "loaded",
+      ActiveState: "active",
+      SubState: "running",
+      ExecMainCode: 0,
+      ExecMainStatus: 0,
+    };
+    // The running api carries <image>; a compare of another live SHA answers <status>.
+    const setLive = (sha, status = "identical") => {
+      writeFileSync(join(dir, "live-image"), `ds-api:${sha}\n`);
+      writeFileSync(join(dir, "compare-live.json"), JSON.stringify({ status }));
+    };
+    beforeEach(() => {
+      setRole("prod");
+      setLive(SHA);
+    });
+
+    it("re-runs the live SHA's finished, succeeded release as a fresh unit run — never already-succeeded", () => {
+      setUnit(exited(0), PROD_UNIT);
+      setRecord("succeeded");
+      const r = run(["redeploy", "prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, `ds-release-driver: started ${PROD_UNIT}\n`);
+      assert.equal(r.stderr, "");
+      // The finished unit is reset first, so its name is free for the new run.
+      assert.equal(
+        log("systemctl.log"),
+        `stop ${PROD_UNIT}.service\nreset-failed ${PROD_UNIT}.service\n`,
+      );
+      const argv = log("systemd-run.args").trim().split("\n");
+      for (const want of [
+        `--unit=${PROD_UNIT}`,
+        "--remain-after-exit",
+        "KillMode=mixed",
+        "StandardOutput=journal",
+        "StandardError=journal",
+      ]) {
+        assert.ok(argv.includes(want), `systemd-run gets ${want}`);
+      }
+      assert.deepEqual(argv.slice(-4), [
+        "/usr/local/lib/ds-platform/release-driver",
+        "_redeploy",
+        "prod",
+        SHA,
+      ]);
+      // The release's own checks and lease.
+      assert.match(log("ds-release.log"), new RegExp(`^lease prod ${SHA}$`, "m"));
+      assert.match(log("curl.log"), new RegExp(`/compare/main\\.\\.\\.${SHA}`));
+      assert.match(
+        log("docker.log"),
+        /^inspect ds-api-prod-api-1 --format \{\{\.Config\.Image\}\}$/m,
+      );
+      assert.match(log("docker.log"), /^manifest inspect --verbose /m);
+    });
+
+    it("`status prod <sha>` keeps finding the redeploy: unit-state reports the same unit running", () => {
+      setUnit(exited(0), PROD_UNIT);
+      setRecord("succeeded");
+      assert.equal(run(["redeploy", "prod", SHA]).status, 0);
+      const r = run(["unit-state", "prod", SHA], { input: "" });
+      assert.equal(r.status, 0, r.stderr);
+      assert.deepEqual(JSON.parse(r.stdout), {
+        unit: PROD_UNIT,
+        active: "active",
+        rc: null,
+        previousSha: null,
+      });
+    });
+
+    it("starts for a live SHA with no finished unit on the box (a reboot forgot it)", () => {
+      setRecord("succeeded");
+      const r = run(["redeploy", "prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, `ds-release-driver: started ${PROD_UNIT}\n`);
+    });
+
+    it("attaches to a running unit of the SHA, before GitHub or the registry", () => {
+      setUnit(running, PROD_UNIT);
+      rmSync(join(dir, "compare.json"));
+      writeFileSync(join(dir, "login-fails"), "");
+      const r = run(["redeploy", "prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, `ds-release-driver: attached ${PROD_UNIT}\n`);
+      assert.equal(log("curl.log"), "");
+      notStarted();
+    });
+
+    for (const [status, mode] of [
+      ["ahead", "a newer SHA is a release (deploy-prod.yml with mode: release)"],
+      ["behind", "an older SHA is a rollback (deploy-prod.yml with mode: rollback)"],
+      ["diverged", "a redeploy re-runs the live SHA only"],
+    ]) {
+      it(`refuses a SHA that is not the live one (compare ${status}), naming the right mode`, () => {
+        setLive(LIVE, status);
+        const r = run(["redeploy", "prod", SHA]);
+        assert.equal(r.status, 3);
+        assert.equal(
+          r.stderr,
+          `ds-release-driver: refused: ${SHA} is not the live prod SHA ${LIVE.slice(0, 12)} — ${mode}\n`,
+        );
+        notStarted();
+      });
+    }
+
+    it("refuses when the live prod SHA is unknown (no running api)", () => {
+      rmSync(join(dir, "live-image"));
+      const r = run(["redeploy", "prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.equal(
+        r.stderr,
+        "ds-release-driver: refused: the live prod SHA is unknown (no running ds-api-prod-api-1) — there is no release to redeploy\n",
+      );
+      notStarted();
+    });
+
+    it("refuses a SHA not on main and a digest the registry does not serve, as a release does", () => {
+      setCompare("diverged");
+      let r = run(["redeploy", "prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.match(r.stderr, /is not on main \(compare status: diverged\)/);
+      setCompare("behind");
+      serve("api", digestOf("f"));
+      r = run(["redeploy", "prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.match(r.stderr, /the manifest digest of api is not the one the registry serves/);
+      notStarted();
+    });
+
+    it("waits while the SHA's rollback unit runs, and while another SHA holds the lease", () => {
+      setUnit(running, RB_UNIT);
+      let r = run(["redeploy", "prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.equal(
+        r.stderr,
+        `ds-release-driver: refused: ${RB_UNIT} is still running; wait for it to end\n`,
+      );
+      rmSync(join(units, `${RB_UNIT}.props`));
+      writeFileSync(join(dir, "lease"), OTHER);
+      r = run(["redeploy", "prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.match(r.stderr, /refused: env prod is leased by release/);
+      notStarted();
+    });
+
+    it("serves prod on the prod box only", () => {
+      for (const env of ["stage-main", "stage-pr-7"]) {
+        const r = run(["redeploy", env, SHA]);
+        assert.equal(r.status, 3, env);
+        assert.equal(
+          r.stderr,
+          `ds-release-driver: refused: a redeploy serves prod only, not ${env}\n`,
+        );
+      }
+      setRole("stage");
+      const r = run(["redeploy", "prod", SHA]);
+      assert.equal(r.status, 3);
+      assert.equal(
+        r.stderr,
+        "ds-release-driver: refused: the stage box serves stage-main, not prod\n",
+      );
+      notStarted();
+    });
+
+    it("rejects bad arguments as usage", () => {
+      for (const args of [
+        ["redeploy", "prod"],
+        ["redeploy", "prod", SHA.slice(0, 12)],
+        ["redeploy", "prod", SHA, "extra"],
+      ]) {
+        assert.equal(run(args).status, 2, args.join(" "));
+      }
+      notStarted();
+    });
+
+    it("a release of the live SHA still answers already-succeeded (only a redeploy re-runs it)", () => {
+      setUnit(exited(0), PROD_UNIT);
+      setRecord("succeeded");
+      const r = run(["prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, "ds-release-driver: already-succeeded\n");
+      notStarted();
+    });
+  });
+
   describe("2987: the box-side prod rollback", () => {
     const RB_UNIT = `ds-prod-${SHA.slice(0, 12)}-rollback`;
     const PROD_UNIT = `ds-prod-${SHA.slice(0, 12)}-driver`;
@@ -1764,6 +1959,31 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       assert.equal(log("node.saw-tree"), "// the prod tree\n");
       assert.equal(log("node.stdin"), manifest());
       assert.deepEqual(readdirSync(home), [], "the work directory is removed");
+    });
+
+    it("3354: a redeploy runs the live SHA's own prod.mjs --local --redeploy, manifest on stdin", () => {
+      const r = run(["_redeploy", "prod", SHA]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.match(
+        log("curl.args"),
+        new RegExp(
+          `https://codeload\\.github\\.com/doctor-school/ds-platform/tar\\.gz/${SHA}`,
+        ),
+      );
+      const argv = log("node.args").trim().split("\n");
+      assert.match(argv[0], /\/tree\/tools\/deploy\/prod\.mjs$/);
+      assert.deepEqual(argv.slice(1), [
+        "--local",
+        "--redeploy",
+        "--images-file",
+        "-",
+      ]);
+      assert.equal(log("node.stdin"), manifest());
+      assert.equal(
+        run(["_redeploy", "prod", SHA], { env: { NODE_RC: "4" } }).status,
+        4,
+      );
+      assert.equal(run(["_redeploy", "stage-main", SHA]).status, 2);
     });
 
     it("3157: a red prod release is the unit's exit status", () => {

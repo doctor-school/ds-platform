@@ -35,7 +35,7 @@ test("2982: data-prod up, the pre-migrate backup, the pull, migrate+up and the p
     /if \(durable\) await boxStep\(API_PROD, sha, "pull", script, label\);/,
   );
   for (const streamed of [
-    "migrateAndUpScript()",
+    "migrateAndUpScript({ forceRecreate: Boolean(local?.redeploy) })",
     "retentionScript()",
   ]) {
     const at = deployBody.indexOf(streamed);

@@ -89,6 +89,9 @@ function firstNonEmptyLine(text) {
  *   record (#2987, spec 2026-10-16-release-pipeline-off-workstation §3 item 3
  *   «Rollback mode»): described `rollback to <sha12> — <reason>`, its payload
  *   carries the reason and the rolled-off SHA instead of release notes.
+ * @param {boolean} [args.redeploy] a redeploy record (#3354, same spec §3 item 3
+ *   «Redeploy mode»): the live SHA run again, described `redeploy @ <sha12> —
+ *   «<quote>»`, no release tag and no notes (it ships no new code).
  */
 export function buildDeploymentPayload({
   sha,
@@ -99,6 +102,7 @@ export function buildDeploymentPayload({
   state = "success",
   ownerQuote = null,
   rollback = null,
+  redeploy = false,
 }) {
   if (!DEPLOYMENT_STATES.has(state)) {
     throw new Error(
@@ -107,6 +111,7 @@ export function buildDeploymentPayload({
   }
   const shortSha = typeof sha === "string" ? sha.slice(0, SHORT) : "";
   if (rollback) return buildRollbackPayload({ sha, shortSha, healthUrl, nowIso, state, rollback });
+  if (redeploy) return buildRedeployPayload({ sha, shortSha, healthUrl, nowIso, state, ownerQuote });
   const tagLabel = releaseTag ?? "(untagged)";
   const notes = notesText ?? "";
   const failed = state === "failure";
@@ -187,6 +192,44 @@ function buildRollbackPayload({ sha, shortSha, healthUrl, nowIso, state, rollbac
   };
 }
 
+function buildRedeployPayload({ sha, shortSha, healthUrl, nowIso, state, ownerQuote }) {
+  const quote = ownerQuote ? String(ownerQuote) : null;
+  const prefix = state === "failure" ? "failed " : state === "error" ? "unknown " : "";
+  const intent = `${prefix}redeploy @ ${shortSha}`;
+  const statusSummary =
+    state === "failure"
+      ? `redeploy failed @ ${shortSha}`
+      : state === "error"
+        ? `redeploy verdict unknown @ ${shortSha}: lost contact with the driver`
+        : `redeploy @ ${shortSha}`;
+  return {
+    deployment: {
+      ref: sha,
+      environment: "production",
+      auto_merge: false,
+      required_contexts: [],
+      description: truncate(
+        stripAstral(quote ? `${intent} — «${quote}»` : intent),
+        GH_DESCRIPTION_MAX,
+      ),
+      payload: {
+        kind: "redeploy",
+        releaseTag: null,
+        notes: "",
+        deployedAt: nowIso,
+        state,
+        ownerQuote: quote,
+      },
+    },
+    status: {
+      state,
+      log_url: healthUrl,
+      environment: "production",
+      description: truncate(stripAstral(statusSummary), GH_DESCRIPTION_MAX),
+    },
+  };
+}
+
 /** POST a JSON body to a `gh api` path via stdin (safest for the nested `payload`).
  *  Returns `{ ok, data? , error? }` — never throws. */
 function ghApiPost(path, body, cwd) {
@@ -231,6 +274,7 @@ export function createDeploymentRecord({
   state = "success",
   ownerQuote = null,
   rollback = null,
+  redeploy = false,
   cwd = process.cwd(),
 }) {
   try {
@@ -244,6 +288,7 @@ export function createDeploymentRecord({
       state,
       ownerQuote,
       rollback,
+      redeploy,
     });
 
     const created = ghApiPost(

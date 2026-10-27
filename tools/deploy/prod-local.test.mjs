@@ -26,6 +26,7 @@ import {
   descendsFromLiveVerdict,
   fetchTargetTree,
   localProdHosts,
+  migrateAndUpScript,
   parseLocalFlags,
   rollbackTargetVerdict,
   planWalker,
@@ -836,4 +837,51 @@ test("3320: only --local takes the forced form; the workstation path keeps break
   assert.doesNotMatch(source, /bootstrapSources|treeReleaseSources/);
   const check = readFileSync(join(import.meta.dirname, "postgres-artifact-check.mjs"), "utf8");
   assert.match(check, /form: "sudo"/, "the operator check logs in as breakglass");
+});
+
+test("3354: --local admits --redeploy as its other mode flag, never with --rollback", () => {
+  assert.deepEqual(
+    parseLocalFlags(["--local", "--redeploy", "--images-file", "-"]),
+    { local: { imagesFile: "-", redeploy: true } },
+  );
+  assert.deepEqual(
+    parseLocalFlags(["--local", "--images-file", "-"]).local.redeploy,
+    undefined,
+  );
+  assert.match(
+    parseLocalFlags([
+      "--local",
+      "--redeploy",
+      "--rollback",
+      SHA,
+      "--images-file",
+      "-",
+    ]).error,
+    /--redeploy.*--rollback|--rollback.*--redeploy/,
+  );
+  assert.match(
+    parseLocalFlags(["--local", "--redeploy", "--redeploy", "--images-file", "-"])
+      .error,
+    /takes no other flag/,
+  );
+  // An operator run has no redeploy: it is the box-side mode of the workflow.
+  assert.match(parseLocalFlags(["--redeploy"]).error, /--local/);
+});
+
+test("3354: a redeploy recreates every container of the api compose; a release keeps the bare up -d", () => {
+  const release = migrateAndUpScript();
+  assert.match(release, /\nsudo docker compose up -d\n/);
+  assert.doesNotMatch(release, /--force-recreate/);
+  assert.equal(migrateAndUpScript({ forceRecreate: false }), release);
+  const redeploy = migrateAndUpScript({ forceRecreate: true });
+  assert.match(redeploy, /\nsudo docker compose up -d --force-recreate\n/);
+  // The migrate run is the same (idempotent) in both.
+  assert.equal(
+    redeploy.replace(" --force-recreate", ""),
+    release,
+  );
+  assert.match(
+    SOURCE,
+    /migrateAndUpScript\(\{ forceRecreate: Boolean\(local\?\.redeploy\) \}\)/,
+  );
 });

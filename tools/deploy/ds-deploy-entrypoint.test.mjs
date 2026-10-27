@@ -298,7 +298,40 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     }
   });
 
+  it("3354: redeploy prod execs the driver's redeploy path on the prod box, the manifest on stdin", () => {
+    setRole("prod");
+    installDriver(
+      'cat > "$STUB_DIR/driver-stdin.log"; echo "driver-called $*"',
+    );
+    const r = run(`redeploy prod ${SHA}`, { input: '{"sha":"t"}' });
+    assert.equal(r.status, 0, String(r.stderr));
+    assert.equal(String(r.stdout), `driver-called redeploy prod ${SHA}\n`);
+    assert.equal(log("driver-stdin"), '{"sha":"t"}');
+    assert.match(log("logger"), /auth\.info accepted: redeploy prod/);
+    assert.equal(log("ds-release"), "", "the driver alone decides");
+  });
+
+  it("3354: redeploy is refused without a driver, on the stage box and on a box without a role", () => {
+    setRole("prod");
+    const none = run(`redeploy prod ${SHA}`);
+    assert.equal(none.status, 3, "no driver: the redeploy is refused");
+    assert.match(String(none.stderr), /release driver not installed/);
+    installDriver('echo "driver-called $*"');
+    for (const role of ["stage", null]) {
+      if (role) setRole(role);
+      else rmSync(join(root, "etc/ds-platform/box-role"), { force: true });
+      const r = run(`redeploy prod ${SHA}`);
+      assert.equal(r.status, 3, `redeploy on ${role}`);
+      assert.match(r.stderr, /redeploy is served by the prod box only/);
+      assert.equal(r.stdout, "", "the driver never ran");
+    }
+  });
+
   const rejected = [
+    ["a redeploy of another env", `redeploy stage-main ${SHA}`],
+    ["a redeploy with an extra argument", `redeploy prod ${SHA} --force`],
+    ["a redeploy without a sha", "redeploy prod"],
+    ["a redeploy with a short sha", "redeploy prod 0123456"],
     ["a rollback of another env", `rollback stage-main ${SHA}`],
     ["a rollback-status of another env", `rollback-status stage-pr-3 ${SHA}`],
     ["a rollback with an extra argument", `rollback prod ${SHA} now`],

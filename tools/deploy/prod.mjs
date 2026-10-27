@@ -346,18 +346,26 @@ const LOCAL_FLAG = "--local";
 const IMAGES_FILE_FLAG = "--images-file";
 
 const ROLLBACK_FLAG = "--rollback";
+const REDEPLOY_FLAG = "--redeploy";
 
 /**
- * `--local [--rollback <sha>] --images-file <path|->` (`-`: the inherited stdin).
- * `--rollback <sha>` (the full SHA) is the one mode flag `--local` admits: the
- * box-side rollback's run from the tooling tree (#2987, spec §5 «Prod rollback»).
- * Nothing else goes with them: a hotfix `--ref` and every escape hatch stay on the
- * operator path (spec §5 «Prod release driver»). Returns `{ local: null }`,
- * `{ local: { imagesFile } }`, `{ local: { imagesFile, rollback } }` or `{ error }`.
+ * `--local [--rollback <sha> | --redeploy] --images-file <path|->` (`-`: the
+ * inherited stdin). The mode flags `--local` admits, one at most:
+ * `--rollback <sha>` (the full SHA), the box-side rollback's run from the tooling
+ * tree (#2987, spec §5 «Prod rollback»), and `--redeploy`, the release driver's
+ * re-run of the live SHA that recreates every container (#3354, spec §3 item 3
+ * «Redeploy mode»). Nothing else goes with them: a hotfix `--ref` and every escape
+ * hatch stay on the operator path (spec §5 «Prod release driver»). Returns
+ * `{ local: null }`, `{ local: { imagesFile } }`, `{ local: { imagesFile, rollback } }`,
+ * `{ local: { imagesFile, redeploy: true } }` or `{ error }`.
  */
 export function parseLocalFlags(args) {
   const local = args.includes(LOCAL_FLAG);
   const at = args.indexOf(IMAGES_FILE_FLAG);
+  const rd = args.indexOf(REDEPLOY_FLAG);
+  if (!local && at < 0 && rd >= 0) {
+    return { error: "`--redeploy` is the box-side run of `--local` only" };
+  }
   if (!local && at < 0) return { local: null };
   if (!local || at < 0) return { error: "`--local` and `--images-file <path|->` go together" };
   const imagesFile = args[at + 1];
@@ -372,7 +380,15 @@ export function parseLocalFlags(args) {
       return { error: "`--local --rollback` takes the full 40-hex SHA of the target" };
     }
   }
-  const taken = new Set([at, at + 1, ...(rb >= 0 ? [rb, rb + 1] : [])]);
+  if (rb >= 0 && rd >= 0) {
+    return { error: "`--redeploy` and `--rollback` are two modes: pass one" };
+  }
+  const taken = new Set([
+    at,
+    at + 1,
+    ...(rb >= 0 ? [rb, rb + 1] : []),
+    ...(rd >= 0 ? [rd] : []),
+  ]);
   const rest = args.filter((arg, index) => arg !== LOCAL_FLAG && !taken.has(index));
   if (rest.length > 0) {
     return {
@@ -381,7 +397,8 @@ export function parseLocalFlags(args) {
         " every escape hatch stay on the operator path",
     };
   }
-  return { local: rollback ? { imagesFile, rollback } : { imagesFile } };
+  if (rollback) return { local: { imagesFile, rollback } };
+  return { local: rd >= 0 ? { imagesFile, redeploy: true } : { imagesFile } };
 }
 
 /** A file of the target commit: `git show` on the operator path, the extracted tree on the box. */
@@ -643,13 +660,18 @@ echo "retained ds-api tags:"; sudo docker images ds-api --format '  {{.Tag}} ({{
  * tagged with the same SHA, so nothing is (re)built: no `--build`.
  * `</dev/null`: compose run attaches the container's stdin by default — never let
  * it read this shell's stdin (see REMOTE_BASH; defense in depth).
+ * `forceRecreate` (#3354, a redeploy of the live SHA): `up -d` recreates a container
+ * only when Compose sees its configuration or image changed, and Compose's docs do
+ * not count an `env_file`'s contents among those changes
+ * (https://docs.docker.com/reference/cli/docker/compose/up/), so a redeploy, whose
+ * whole point is that every container re-reads the box's env files, forces it.
  */
-export function migrateAndUpScript() {
+export function migrateAndUpScript({ forceRecreate = false } = {}) {
   return `cd ${API_COMPOSE}
 echo '── migrate (drizzle-kit; idempotent) ──'
 sudo docker compose --profile migrate run --rm migrate </dev/null
 echo '── up -d ──'
-sudo docker compose up -d
+sudo docker compose up -d${forceRecreate ? " --force-recreate" : ""}
 `;
 }
 
@@ -2375,7 +2397,13 @@ ${deployShaEnvScript(sha)}
   step("api-prod: migrate → up -d");
   t = Date.now();
   walk.phase("migrate");
-  await boxStep(API_PROD, sha, "migrate", migrateAndUpScript(), "api-prod deploy");
+  await boxStep(
+    API_PROD,
+    sha,
+    "migrate",
+    migrateAndUpScript({ forceRecreate: Boolean(local?.redeploy) }),
+    "api-prod deploy",
+  );
   ok("migrate + up -d", t);
 
   step("api-prod: apply bind-mounted Caddy + Centrifugo configs (#1175)");

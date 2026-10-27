@@ -264,7 +264,7 @@ test("2981: every `${VAR:?}` the api-prod compose requires is rendered by every 
   // pre-ship backup (#3274) reads the `.env` the previous release left (the ship
   // keeps it), and a failed `ps` there falls back to the file on disk.
   const deployEnvAt = PROD_SOURCE.indexOf("${deployShaEnvScript(sha)}\n`,\n    { label: \"api-prod DEPLOY_SHA\" }");
-  const migrateAt = PROD_SOURCE.indexOf('await boxStep(API_PROD, sha, "migrate", migrateAndUpScript()');
+  const migrateAt = PROD_SOURCE.indexOf('migrateAndUpScript({ forceRecreate: Boolean(local?.redeploy) })');
   const runtimeAt = PROD_SOURCE.indexOf("await applyRuntimeConfigsOrDie({ rollbackHint: true });");
   assert.ok(deployEnvAt > 0 && deployEnvAt < migrateAt && migrateAt < runtimeAt);
   const rollbackAt = PROD_SOURCE.indexOf("async function rollback(");
@@ -277,7 +277,7 @@ test("2981: every `${VAR:?}` the api-prod compose requires is rendered by every 
     composeCalls.map((line) => line.trim()),
     [
       "sudo docker compose --profile migrate run --rm migrate </dev/null",
-      "sudo docker compose up -d",
+      'sudo docker compose up -d${forceRecreate ? " --force-recreate" : ""}',
       'container_id=$(sudo docker compose ps -q "$service")',
       "sudo docker compose restart ${services.join(\" \")}",
       'container_id=$(sudo docker compose ps -q "$service" 2>/dev/null || true)',

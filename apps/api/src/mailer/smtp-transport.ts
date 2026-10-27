@@ -114,7 +114,11 @@ export function createBoundedSmtpTransport(
       const absoluteTimer = setTimeout(timeout, absolute);
       const smtpOptions: SMTPTransport.Options = {
         ...options,
-        connectionTimeout: deadlines.connection,
+        // Nodemailer (>= 10.1.0) bounds the greeting wait by what is left of
+        // connectionTimeout counted from connect(). The TCP/TLS connect is
+        // bounded by connectionTimer above, so the greeting keeps its own
+        // `greeting` budget only when nodemailer's deadline spans both phases.
+        connectionTimeout: deadlines.connection + deadlines.greeting,
         greetingTimeout: deadlines.greeting,
         socketTimeout: deadlines.socket,
         // Real providers always use implicit TLS. Intercept is explicitly plaintext.

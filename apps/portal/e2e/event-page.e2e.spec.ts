@@ -100,17 +100,8 @@ test("EARS-3: a guest sees exactly one primary «Участвовать» CTA th
 });
 
 /**
- * 004 EARS-4 — the event page reflects the current lifecycle state from the
- * single `EventLifecycleState`, swapping the hero badge, the status-card time
- * plate, and the CTA affordance per the canvas `status` enum — never a signal
- * contradicting the machine. Three renders are driven on three seeded fixtures:
- *   • upcoming (`published`) — «Скоро» badge + «Участвовать» → registration.
- *   • live — «В эфире» live signal + «Участвовать» → registration TOO (005
- *     EARS-1/EARS-9: register-during-live is a normal path). The room and its
- *     navigation are 006 (#584) — no render links to `/room` until it ships
- *     (a `/room` link would 404, the #673 Stage-B rework finding).
- *   • ended — «Эфир завершён» + NO participation CTA (no dead link).
- * The registration flow is a seam (005) — asserted by route, not driven here.
+ * 004 EARS-4: the ended/no-CTA case moved to the shared public-event-page
+ * steps (#3383); these app-local checks retain the upcoming/live seam.
  */
 
 // Gate row 30 (D9, 004 «Amendment — 2026-10-02»): the browser runs in Asia/Yekaterinburg.
@@ -174,85 +165,6 @@ test.describe("004 EARS-4 lifecycle render swap (e2e)", () => {
       "href",
       `/register?returnTo=${encodeURIComponent(`/webinars/${SLUG_LIVE}`)}`,
     );
-  });
-
-  test("EARS-4: the ended render shows the ended affordance and carries NO participation CTA (no dead link)", async ({
-    page,
-    context,
-  }) => {
-    test.skip(!SLUG_ENDED, "requires a seeded ended event slug");
-    await context.clearCookies();
-    await page.goto(`${BASE}/webinars/${SLUG_ENDED}`, {
-      waitUntil: "domcontentloaded",
-    });
-
-    // The ended lifecycle signal is present…
-    await expect(page.getByText("Эфир завершён").first()).toBeVisible();
-    // …and there is NO participation CTA anywhere (no dead link — EARS-4 invariant).
-    await expect(
-      page.getByRole("link", { name: "Участвовать", exact: true }),
-    ).toHaveCount(0);
-    await expect(
-      page.getByRole("link", { name: "Записаться", exact: true }),
-    ).toHaveCount(0);
-  });
-});
-
-/**
- * 004 EARS-5 — a hidden event reached via a previously-distributed direct
- * link renders a public «мероприятие скрыто» notice with NO participation CTA
- * (owner decision, variant «а»): the sponsor link degrades gracefully in place
- * instead of dead-ending on a 404 or bouncing to the listing. The hidden
- * notice is the FOURTH render mode on the same page shell (beyond the canvas's
- * upcoming/live/ended), a text notice replacing the status card's CTA column —
- * no new geometry (design §5.1). Requires a seeded `hidden` event slug (the
- * 004↔007 fixture seam, parent #549).
- */
-test.describe("004 EARS-5 hidden direct-link notice (e2e)", () => {
-  test("EARS-5: a hidden direct link renders the «скрыт» notice on the page (a reachable 200, not a 404 or a redirect)", async ({
-    page,
-    context,
-  }) => {
-    test.skip(!SLUG_HIDDEN, "requires a seeded hidden event slug");
-    await context.clearCookies();
-
-    // The distributed link degrades to a reachable page, never a 404 dead-end
-    // and never a 3xx bounce to the listing (owner variant «а»).
-    const response = await page.goto(`${BASE}/webinars/${SLUG_HIDDEN}`, {
-      waitUntil: "domcontentloaded",
-    });
-    expect(response?.status()).toBe(200);
-    // It stayed on the event URL — not redirected to the listing.
-    expect(new URL(page.url()).pathname).toBe(`/webinars/${SLUG_HIDDEN}`);
-
-    // The «скрыт» hero badge + the hidden notice are present.
-    await expect(
-      page.getByText("Скрыто", { exact: true }).first(),
-    ).toBeVisible();
-    await expect(page.getByText("Мероприятие скрыто").first()).toBeVisible();
-  });
-
-  test("EARS-5: the hidden render carries NO participation CTA (no dead link)", async ({
-    page,
-    context,
-  }) => {
-    test.skip(!SLUG_HIDDEN, "requires a seeded hidden event slug");
-    await context.clearCookies();
-    await page.goto(`${BASE}/webinars/${SLUG_HIDDEN}`, {
-      waitUntil: "domcontentloaded",
-    });
-
-    // No participation affordance in any of its verbs — the hidden notice is
-    // the fourth CTA-less render mode (EARS-5, mirroring the `ended` invariant).
-    await expect(
-      page.getByRole("link", { name: "Участвовать", exact: true }),
-    ).toHaveCount(0);
-    await expect(
-      page.getByRole("link", { name: "Записаться", exact: true }),
-    ).toHaveCount(0);
-    await expect(
-      page.getByRole("link", { name: "Смотреть эфир", exact: true }),
-    ).toHaveCount(0);
   });
 });
 

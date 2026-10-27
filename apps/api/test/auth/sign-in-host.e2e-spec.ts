@@ -3798,6 +3798,142 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     }
   });
 
+  it("EARS-71: S176 denied clients preserve a legitimate Academy login event intent for its rightful request", async () => {
+    const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+    const intent = {
+      door: "login" as const,
+      method: "code" as const,
+      eventTarget: "s176-login-event",
+      clientId: ACADEMY,
+    };
+    const hint = await state.putIntent(intent, 600);
+    const jar = new Jar();
+    const auth = app.get(AuthService);
+    const db = app.get<DrizzleHandle["db"]>(DRIZZLE_DB);
+    const handoffs = app.get<LoginHandoffStore>(LOGIN_HANDOFF_STORE);
+    const take = vi.spyOn(state, "takeIntent");
+    const putForm = vi.spyOn(state, "putForm");
+    const denied = vi.spyOn(hostIdp, "finaliseWithError");
+    const noWork = [
+      vi.spyOn(db, "select"),
+      vi.spyOn(auth, "passwordStep"),
+      vi.spyOn(auth, "otpStep"),
+      vi.spyOn(auth, "verifyStep"),
+      vi.spyOn(auth, "requestLoginOtp"),
+      vi.spyOn(auth, "isOwnLoginHandoff"),
+      vi.spyOn(auth, "resolveLoginHandoff"),
+      vi.spyOn(handoffs, "peek"),
+      vi.spyOn(handoffs, "redeem"),
+      vi.spyOn(idp, "findUserByEmail"),
+      vi.spyOn(idp, "passwordLogin"),
+      vi.spyOn(idp, "submitEmailCode"),
+      vi.spyOn(idp, "loginWithEmailOtp"),
+      vi.spyOn(idp, "loginWithSmsOtp"),
+      vi.spyOn(idp, "requestEmailLoginCode"),
+      vi.spyOn(idp, "requestSmsOtp"),
+      vi.spyOn(idp, "terminateSession"),
+      vi.spyOn(hostIdp, "setSessionLifetime"),
+      vi.spyOn(hostIdp, "finaliseWithSession"),
+      vi.spyOn(app.get(SignInHostRecordStore), "insert"),
+    ];
+    const finalised = [...hostIdp.finalised];
+    const refusedRequests: string[] = [];
+    let rightfulRequest: string | undefined;
+    try {
+      for (const clientId of [
+        process.env.IDP_CLIENT_ID || "admin-client-e2e",
+        "unmapped-client-s176",
+      ]) {
+        const authRequest = hostIdp.seedAuthRequest({
+          clientId,
+          loginHint: hint,
+        });
+        refusedRequests.push(authRequest);
+        const { res, body } = await entry(jar, authRequest);
+        expect(res.statusCode).toBe(200);
+        expect(body).toEqual({
+          action: "redirect",
+          url: expect.stringContaining("error=access_denied"),
+        });
+        expect(denied).toHaveBeenLastCalledWith(authRequest, "access_denied");
+        expect(await denied.mock.results.at(-1)!.value).toBe(
+          body.action === "redirect" && body.url,
+        );
+        expect(hostIdp.finalised).toEqual([
+          ...finalised,
+          ...refusedRequests.map((id) => ({ id, error: "access_denied" })),
+        ]);
+        expect(res.cookies).toEqual([]);
+        expect([...jar.values]).toEqual([]);
+        expect(take).not.toHaveBeenCalled();
+        expect(putForm).not.toHaveBeenCalled();
+        expect(JSON.stringify({ body, headers: res.headers })).not.toContain(
+          hint,
+        );
+        for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
+      }
+      expect(denied).toHaveBeenCalledTimes(2);
+
+      rightfulRequest = hostIdp.seedAuthRequest({
+        clientId: ACADEMY,
+        loginHint: hint,
+      });
+      const { res, body } = await entry(jar, rightfulRequest);
+      expect(res.statusCode).toBe(200);
+      expect(body).toEqual({
+        action: "render",
+        storefront: "academy",
+        door: "login",
+        authRequest: rightfulRequest,
+        csrf: expect.any(String),
+        intent: {
+          method: "code",
+          eventTarget: intent.eventTarget,
+          handoff: false,
+        },
+      });
+      if (body.action !== "render") throw new Error("not rendered");
+      expect(take).toHaveBeenCalledExactlyOnceWith(hint);
+      expect(await take.mock.results[0]!.value).toEqual(intent);
+      expect(denied.mock.invocationCallOrder[1]).toBeLessThan(
+        take.mock.invocationCallOrder[0]!,
+      );
+      const formId = jar.values.get(FORM_COOKIE_NAME)!;
+      expect(formId).toBeTruthy();
+      const binding = {
+        csrfToken: body.csrf,
+        storefront: "academy",
+        authRequestId: rightfulRequest,
+        intent,
+      };
+      expect(putForm).toHaveBeenCalledExactlyOnceWith(
+        formId,
+        binding,
+        FORM_STATE_TTL_SECONDS,
+      );
+      expect(await state.getForm(formId)).toEqual(binding);
+      expect(res.cookies.map((cookie) => cookie.name)).toEqual([
+        FORM_COOKIE_NAME,
+      ]);
+      expect([...jar.values.keys()]).toEqual([FORM_COOKIE_NAME]);
+      const projection = JSON.stringify({ body, headers: res.headers });
+      for (const secret of [hint, ACADEMY, ...refusedRequests])
+        expect(projection).not.toContain(secret);
+      expect(denied).toHaveBeenCalledTimes(2);
+      expect(hostIdp.finalised).toEqual([
+        ...finalised,
+        ...refusedRequests.map((id) => ({ id, error: "access_denied" })),
+      ]);
+      for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
+    } finally {
+      for (const spy of [take, putForm, denied, ...noWork]) spy.mockRestore();
+      const formId = jar.values.get(FORM_COOKIE_NAME);
+      if (formId) await state.deleteForm(formId);
+      for (const request of refusedRequests) hostIdp.expire(request);
+      if (rightfulRequest) hostIdp.expire(rightfulRequest);
+    }
+  });
+
   describe("EARS-71: S175 unusable entry intents", () => {
     let intentApp: Awaited<ReturnType<typeof compile>>;
     let intentNow = Date.UTC(2026, 9, 23);

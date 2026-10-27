@@ -1434,6 +1434,201 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     }
   });
 
+  it("EARS-68: S166 a refused fresh-session lifetime preserves the old record and bound form for a successful password retry", async () => {
+    const address = await account("s166-lifetime-refused");
+    recordNow = new Date();
+    const jar = new Jar();
+    const other = new Jar();
+    await signIn(jar, address);
+    await signIn(other, address);
+    const records = app.get(SignInHostRecordStore);
+    const oldCookie = jar.values.get(RECORD_COOKIE_NAME)!;
+    const otherCookie = other.values.get(RECORD_COOKIE_NAME)!;
+    const oldRecord = await records.find(oldCookie);
+    const otherRecord = await records.find(otherCookie);
+    expect(oldRecord).not.toBeNull();
+    expect(otherRecord).not.toBeNull();
+    expect(otherCookie).not.toBe(oldCookie);
+    const form = await render(jar, ACADEMY, { prompt: ["login"] });
+    expect(form.body).toMatchObject({ storefront: "academy", door: "login" });
+    const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+    const formId = jar.values.get(FORM_COOKIE_NAME)!;
+    const binding = await state.getForm(formId);
+    expect(binding).toEqual({
+      csrfToken: form.csrf,
+      storefront: "academy",
+      authRequestId: form.authRequest,
+    });
+    const cookies = [...jar.values];
+    const before = await pool.query(
+      "SELECT * FROM sign_in_host_records WHERE subject = $1 ORDER BY cookie_id_hash",
+      [oldRecord!.session.sub],
+    );
+    expect(before.rows).toHaveLength(2);
+    const request = await hostIdp.readAuthRequest(form.authRequest);
+    expect(request).not.toBeNull();
+    const finalised = [...hostIdp.finalised];
+    const lifetimes = [...hostIdp.lifetimes];
+    const password = vi.spyOn(idp, "passwordLogin");
+    const terminate = vi.spyOn(idp, "terminateSession");
+    const lifetime = vi
+      .spyOn(hostIdp, "setSessionLifetime")
+      .mockResolvedValueOnce(null);
+    const insert = vi.spyOn(records, "insert");
+    const remove = vi.spyOn(records, "delete");
+    const finalise = vi.spyOn(hostIdp, "finaliseWithSession");
+    const finaliseError = vi.spyOn(hostIdp, "finaliseWithError");
+    const spies = [
+      password,
+      terminate,
+      lifetime,
+      insert,
+      remove,
+      finalise,
+      finaliseError,
+    ];
+    const payload = {
+      identifier: address,
+      password: PASSWORD,
+      authRequest: form.authRequest,
+      csrf: form.csrf,
+    };
+    try {
+      const refused = await post(jar, "login", payload);
+      expect(refused.statusCode).toBe(503);
+      expect(refused.json()).toMatchObject({
+        message: "sign-in temporarily unavailable",
+      });
+      expect(refused.cookies).toEqual([]);
+      expect(password).toHaveBeenCalledExactlyOnceWith(address, PASSWORD);
+      const checked = await password.mock.results[0]!.value;
+      expect(checked.outcome).toBe("authenticated");
+      if (checked.outcome !== "authenticated")
+        throw new Error("not authenticated");
+      expect(checked.session.sub).toBe(oldRecord!.session.sub);
+      expect([
+        oldRecord!.session.zitadelSessionId,
+        otherRecord!.session.zitadelSessionId,
+      ]).not.toContain(checked.session.zitadelSessionId);
+      expect(lifetime).toHaveBeenCalledExactlyOnceWith(
+        checked.session,
+        SIGN_IN_HOST_SESSION_LIFETIME_SECONDS,
+      );
+      expect(await lifetime.mock.results[0]!.value).toBeNull();
+      expect(terminate).toHaveBeenCalledExactlyOnceWith(checked.session);
+      expect(lifetime.mock.invocationCallOrder[0]).toBeLessThan(
+        terminate.mock.invocationCallOrder[0]!,
+      );
+      for (const spy of [insert, remove, finalise, finaliseError])
+        expect(spy).not.toHaveBeenCalled();
+      expect([...jar.values]).toEqual(cookies);
+      expect(await state.getForm(formId)).toEqual(binding);
+      expect(await records.find(oldCookie)).toEqual(oldRecord);
+      expect(await records.find(otherCookie)).toEqual(otherRecord);
+      expect(
+        (
+          await pool.query(
+            "SELECT * FROM sign_in_host_records WHERE subject = $1 ORDER BY cookie_id_hash",
+            [oldRecord!.session.sub],
+          )
+        ).rows,
+      ).toEqual(before.rows);
+      expect(await hostIdp.readAuthRequest(form.authRequest)).toEqual(request);
+      expect(hostIdp.finalised).toEqual(finalised);
+      expect(hostIdp.lifetimes).toEqual(lifetimes);
+
+      const accepted = await post(jar, "login", payload);
+      expect(accepted.statusCode).toBe(200);
+      expect(accepted.json()).toEqual({
+        status: "redirect",
+        url: expect.stringContaining("code="),
+      });
+      expect(password).toHaveBeenCalledTimes(2);
+      expect(password).toHaveBeenNthCalledWith(2, address, PASSWORD);
+      const retry = await password.mock.results[1]!.value;
+      expect(retry.outcome).toBe("authenticated");
+      if (retry.outcome !== "authenticated")
+        throw new Error("not authenticated");
+      expect(retry.session.zitadelSessionId).not.toBe(
+        checked.session.zitadelSessionId,
+      );
+      const freshCookie = jar.values.get(RECORD_COOKIE_NAME)!;
+      expect(freshCookie).toBeTruthy();
+      expect([oldCookie, otherCookie]).not.toContain(freshCookie);
+      const fresh = await records.find(freshCookie);
+      expect(fresh?.session).toEqual(retry.session);
+      expect(fresh!.lastCredentialAt).toEqual(recordNow);
+      expect(fresh!.expiresAt.getTime()).toBe(
+        recordNow.getTime() + SIGN_IN_HOST_SESSION_LIFETIME_SECONDS * 1000,
+      );
+      expect(await records.find(oldCookie)).toBeNull();
+      expect(await records.find(otherCookie)).toEqual(otherRecord);
+      expect(await recordRows(address)).toHaveLength(2);
+      expect(lifetime).toHaveBeenCalledTimes(2);
+      expect(lifetime).toHaveBeenNthCalledWith(
+        2,
+        retry.session,
+        SIGN_IN_HOST_SESSION_LIFETIME_SECONDS,
+      );
+      expect(await lifetime.mock.results[1]!.value).toEqual(retry.session);
+      expect(terminate).toHaveBeenCalledTimes(2);
+      expect(terminate).toHaveBeenNthCalledWith(2, oldRecord!.session);
+      expect(remove).toHaveBeenCalledExactlyOnceWith(oldCookie);
+      expect(insert).toHaveBeenCalledTimes(1);
+      expect(lifetime.mock.invocationCallOrder[1]).toBeLessThan(
+        terminate.mock.invocationCallOrder[1]!,
+      );
+      expect(terminate.mock.invocationCallOrder[1]).toBeLessThan(
+        remove.mock.invocationCallOrder[0]!,
+      );
+      expect(remove.mock.invocationCallOrder[0]).toBeLessThan(
+        insert.mock.invocationCallOrder[0]!,
+      );
+      expect(finalise).toHaveBeenCalledExactlyOnceWith(
+        form.authRequest,
+        fresh!.session,
+      );
+      expect(finaliseError).not.toHaveBeenCalled();
+      expect(hostIdp.finalised).toEqual([
+        ...finalised,
+        { id: form.authRequest, session: fresh!.session },
+      ]);
+      expect(await hostIdp.readAuthRequest(form.authRequest)).toBeNull();
+      expect(accepted.cookies.map((cookie) => cookie.name)).toEqual([
+        RECORD_COOKIE_NAME,
+      ]);
+      expect(jar.values.get(FORM_COOKIE_NAME)).toBe(formId);
+      expect(await state.getForm(formId)).toEqual(binding);
+      expect(jar.values.has(SESSION_COOKIE_NAME)).toBe(false);
+
+      const nextRequest = hostIdp.seedAuthRequest({
+        clientId: ACADEMY,
+        prompt: ["none"],
+      });
+      const reused = await entry(other, nextRequest);
+      expect(reused.res.statusCode).toBe(200);
+      expect(reused.body).toEqual({
+        action: "redirect",
+        url: expect.stringContaining("code="),
+      });
+      expect(reused.res.cookies).toEqual([]);
+      expect(other.values.get(RECORD_COOKIE_NAME)).toBe(otherCookie);
+      expect(await records.find(otherCookie)).toEqual(otherRecord);
+      expect(finalise).toHaveBeenCalledTimes(2);
+      expect(finalise).toHaveBeenLastCalledWith(
+        nextRequest,
+        otherRecord!.session,
+      );
+      expect(password).toHaveBeenCalledTimes(2);
+      expect(lifetime).toHaveBeenCalledTimes(2);
+      expect(terminate).toHaveBeenCalledTimes(2);
+      expect(remove).toHaveBeenCalledTimes(1);
+      expect(insert).toHaveBeenCalledTimes(1);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
+
   it("EARS-70: a form post off the host origin, cross-site, without the form cookie or with a wrong CSRF token is the one 403", async () => {
     const address = await account("csrf");
     const jar = new Jar();

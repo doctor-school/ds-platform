@@ -5078,6 +5078,193 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     }
   });
 
+  it("EARS-71: S175 concurrent Academy requests consume one entry intent once and retain independent form bindings", async () => {
+    const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+    const intent = {
+      door: "login" as const,
+      method: "code" as const,
+      eventTarget: "s175-concurrent-private-event",
+      clientId: ACADEMY,
+    };
+    const hint = await state.putIntent(intent, 600);
+    const requests = [0, 1, 2].map(() =>
+      hostIdp.seedAuthRequest({ clientId: ACADEMY, loginHint: hint }),
+    );
+    expect(new Set(requests).size).toBe(3);
+    const jars = requests.map(() => new Jar());
+    const actualRead = hostIdp.readAuthRequest.bind(hostIdp);
+    const views = await Promise.all(requests.map((id) => actualRead(id)));
+    for (const view of views) expect(view).not.toBeNull();
+    let releaseReads!: () => void;
+    const bothRead = new Promise<void>((resolve) => {
+      releaseReads = resolve;
+    });
+    let entered = 0;
+    const take = vi.spyOn(state, "takeIntent");
+    const read = vi
+      .spyOn(hostIdp, "readAuthRequest")
+      .mockImplementation(async (id) => {
+        const view = await actualRead(id);
+        if (id === requests[0] || id === requests[1]) {
+          entered += 1;
+          if (entered === 2) releaseReads();
+          await bothRead;
+        }
+        return view;
+      });
+    const putForm = vi.spyOn(state, "putForm");
+    const auth = app.get(AuthService);
+    const records = app.get(SignInHostRecordStore);
+    const db = app.get<DrizzleHandle["db"]>(DRIZZLE_DB);
+    const noWork = [
+      vi.spyOn(db, "select"),
+      vi.spyOn(auth, "register"),
+      vi.spyOn(auth, "passwordStep"),
+      vi.spyOn(auth, "otpStep"),
+      vi.spyOn(auth, "verifyStep"),
+      vi.spyOn(auth, "requestLoginOtp"),
+      vi.spyOn(auth, "isOwnLoginHandoff"),
+      vi.spyOn(auth, "resolveLoginHandoff"),
+      vi.spyOn(idp, "findUserByEmail"),
+      vi.spyOn(idp, "passwordLogin"),
+      vi.spyOn(idp, "submitEmailCode"),
+      vi.spyOn(idp, "requestEmailVerification"),
+      vi.spyOn(idp, "requestEmailLoginCode"),
+      vi.spyOn(idp, "requestSmsOtp"),
+      vi.spyOn(idp, "terminateSession"),
+      vi.spyOn(hostIdp, "setSessionLifetime"),
+      vi.spyOn(hostIdp, "finaliseWithSession"),
+      vi.spyOn(hostIdp, "finaliseWithError"),
+      vi.spyOn(records, "find"),
+      vi.spyOn(records, "insert"),
+      vi.spyOn(records, "delete"),
+      vi.spyOn(records, "touchFinalised"),
+    ];
+    const finalised = [...hostIdp.finalised];
+    const lifetimes = [...hostIdp.lifetimes];
+    try {
+      const concurrent = await Promise.all([
+        entry(jars[0]!, requests[0]),
+        entry(jars[1]!, requests[1]),
+      ]);
+      expect(entered).toBe(2);
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(take).toHaveBeenCalledTimes(2);
+      expect(take.mock.calls).toEqual([[hint], [hint]]);
+      const resolved = await Promise.all(
+        take.mock.results.map((result) => result.value),
+      );
+      expect(resolved).toEqual(expect.arrayContaining([intent, null]));
+      expect(
+        concurrent.filter(
+          ({ body }) => body.action === "render" && body.intent,
+        ),
+      ).toHaveLength(1);
+      const formIds: string[] = [];
+      const bindings = [];
+      for (const [index, { res, body }] of concurrent.entries()) {
+        expect(res.statusCode).toBe(200);
+        expect(body.action).toBe("render");
+        if (body.action !== "render") throw new Error("not rendered");
+        expect(body).toEqual({
+          action: "render",
+          storefront: "academy",
+          door: "login",
+          authRequest: requests[index],
+          csrf: expect.any(String),
+          ...(body.intent
+            ? {
+                intent: {
+                  method: "code",
+                  eventTarget: intent.eventTarget,
+                  handoff: false,
+                },
+              }
+            : {}),
+        });
+        const formId = jars[index]!.values.get(FORM_COOKIE_NAME)!;
+        expect(formId).toMatch(/^[A-Za-z0-9_-]{43}$/);
+        expect(body.csrf).toMatch(/^[A-Za-z0-9_-]{43}$/);
+        expect(formId).not.toBe(body.csrf);
+        const binding = {
+          csrfToken: body.csrf,
+          storefront: "academy",
+          authRequestId: requests[index],
+          ...(body.intent ? { intent } : {}),
+        };
+        expect(await state.getForm(formId)).toEqual(binding);
+        expect(putForm).toHaveBeenCalledWith(
+          formId,
+          expect.objectContaining(binding),
+          FORM_STATE_TTL_SECONDS,
+        );
+        formIds.push(formId);
+        bindings.push(binding);
+        expect(res.cookies.map((cookie) => cookie.name)).toEqual([
+          FORM_COOKIE_NAME,
+        ]);
+        expect([...jars[index]!.values.keys()]).toEqual([FORM_COOKIE_NAME]);
+        expect(JSON.stringify({ body, headers: res.headers })).not.toContain(
+          hint,
+        );
+        if (!body.intent) expect(res.payload).not.toContain(intent.eventTarget);
+      }
+      expect(new Set(formIds).size).toBe(2);
+      expect(new Set(bindings.map((binding) => binding.csrfToken)).size).toBe(
+        2,
+      );
+      expect(putForm).toHaveBeenCalledTimes(2);
+      for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
+
+      const replay = await entry(jars[2]!, requests[2]);
+      expect(replay.res.statusCode).toBe(200);
+      expect(replay.body).toEqual({
+        action: "render",
+        storefront: "academy",
+        door: "login",
+        authRequest: requests[2],
+        csrf: expect.any(String),
+      });
+      if (replay.body.action !== "render") throw new Error("not rendered");
+      const replayId = jars[2]!.values.get(FORM_COOKIE_NAME)!;
+      expect(formIds).not.toContain(replayId);
+      expect(await state.getForm(replayId)).toEqual({
+        csrfToken: replay.body.csrf,
+        storefront: "academy",
+        authRequestId: requests[2],
+      });
+      expect(replay.res.cookies.map((cookie) => cookie.name)).toEqual([
+        FORM_COOKIE_NAME,
+      ]);
+      expect([...jars[2]!.values.keys()]).toEqual([FORM_COOKIE_NAME]);
+      expect(take).toHaveBeenCalledTimes(3);
+      expect(take).toHaveBeenLastCalledWith(hint);
+      expect(await take.mock.results[2]!.value).toBeNull();
+      expect(putForm).toHaveBeenCalledTimes(3);
+      expect(
+        JSON.stringify({ body: replay.body, headers: replay.res.headers }),
+      ).not.toContain(hint);
+      expect(replay.res.payload).not.toContain(intent.eventTarget);
+      for (const [index, formId] of formIds.entries())
+        expect(await state.getForm(formId)).toEqual(bindings[index]);
+      expect(await Promise.all(requests.map((id) => actualRead(id)))).toEqual(
+        views,
+      );
+      expect(hostIdp.finalised).toEqual(finalised);
+      expect(hostIdp.lifetimes).toEqual(lifetimes);
+      for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
+    } finally {
+      releaseReads();
+      for (const spy of [take, read, putForm, ...noWork]) spy.mockRestore();
+      for (const jar of jars) {
+        const formId = jar.values.get(FORM_COOKIE_NAME);
+        if (formId) await state.deleteForm(formId);
+      }
+      await state.takeIntent(hint);
+      for (const request of requests) hostIdp.expire(request);
+    }
+  });
+
   describe("EARS-71: S175 unusable entry intents", () => {
     let intentApp: Awaited<ReturnType<typeof compile>>;
     let intentNow = Date.UTC(2026, 9, 23);

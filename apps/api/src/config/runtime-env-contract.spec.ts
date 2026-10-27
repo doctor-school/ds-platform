@@ -7,7 +7,7 @@ import {
 } from "@ds/schemas/runtime-env";
 import { describe, expect, it } from "vitest";
 
-import { loadEnv } from "./env.schema.js";
+import { ApiEnvSchema, loadEnv } from "./env.schema.js";
 
 /**
  * #1468 — the api's production boot reads the same required set the release
@@ -39,6 +39,18 @@ describe("1468: the api production boot enforces the runtime-env contract", () =
       "AUDIT_IDENTIFIER_PEPPER",
       "LIFECYCLE_IMPACT_TOKEN_SECRET",
     ]);
+  });
+
+  it("every ApiEnvSchema field the api cannot boot without is in the contract's api set", () => {
+    // A field with no `.optional()` / `.default()` refuses the boot when its
+    // variable is absent (as DATABASE_URL does), so the release gate must know it.
+    const hardRequired = Object.entries(ApiEnvSchema.shape)
+      .filter(([, field]) => !field.safeParse(undefined).success)
+      .map(([name]) => name);
+    expect(hardRequired).toContain("DATABASE_URL");
+    expect(
+      hardRequired.filter((n) => !apiBootRequiredRuntimeEnv().includes(n)),
+    ).toEqual([]);
   });
 
   it("boots in production with every contract api variable present", () => {
@@ -97,20 +109,35 @@ describe("1468: the api production boot enforces the runtime-env contract", () =
 // --- startup throws cannot escape the contract ------------------------------
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..", "..", "..");
-const SCANNED = ["apps/api/src", "apps/admin/lib"];
+/**
+ * The api, the admin, both storefronts (portal = Academy, doctor) and the shared
+ * storefront shell whose sibling-origin reader both storefronts call at request
+ * time (#3147). A directory is walked; a file is read as is.
+ */
+const SCANNED = [
+  "apps/api/src",
+  "apps/admin/app",
+  "apps/admin/lib",
+  "apps/portal/app",
+  "apps/portal/lib",
+  "apps/portal/middleware.ts",
+  "apps/doctor/app",
+  "apps/doctor/lib",
+  "apps/doctor/proxy.ts",
+  "packages/storefront-shell/src",
+];
 
-function sources(dir: string): string[] {
+const SOURCE_FILE = /\.(ts|tsx)$/;
+const TEST_FILE = /\.(spec|test|e2e-spec)\.tsx?$/;
+
+function sources(path: string): string[] {
+  if (!statSync(path).isDirectory()) {
+    return SOURCE_FILE.test(path) && !TEST_FILE.test(path) ? [path] : [];
+  }
   const out: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const path = join(dir, entry);
-    if (statSync(path).isDirectory()) {
-      if (entry !== "node_modules") out.push(...sources(path));
-    } else if (
-      /\.(ts|tsx)$/.test(entry) &&
-      !/\.(spec|test|e2e-spec)\.tsx?$/.test(entry)
-    ) {
-      out.push(path);
-    }
+  for (const entry of readdirSync(path)) {
+    if (entry === "node_modules") continue;
+    out.push(...sources(join(path, entry)));
   }
   return out;
 }
@@ -130,18 +157,53 @@ function requiredEnvThrows(source: string): string[] {
     const decl = new RegExp(`\\b${m[1]}\\s*=\\s*"([A-Z][A-Z0-9_]+)"`).exec(
       source,
     );
-    if (decl) names.add(decl[1]!);
+    if (decl) {
+      names.add(decl[1]!);
+      continue;
+    }
+    // The boot check's own refusal loops over the contract's names
+    // (`for (const name of …)` in a module reading `@ds/schemas/runtime-env`).
+    if (
+      source.includes('"@ds/schemas/runtime-env"') &&
+      new RegExp(`\\bfor \\(const ${m[1]} of\\b`).test(source)
+    ) {
+      continue;
+    }
+    // `const name = NAMES[key]` over `const NAMES = { a: "X_Y", … }`: every value.
+    const lookup = new RegExp(`\\b${m[1]}\\s*=\\s*(\\w+)\\[`).exec(source);
+    const table =
+      lookup &&
+      new RegExp(`\\b${lookup[1]}\\s*=\\s*\\{([^}]*)\\}`).exec(source);
+    if (!table) {
+      // Fail closed: a throw the scan cannot resolve must not pass silently.
+      names.add(`<unresolved \${${m[1]}}>`);
+      continue;
+    }
+    for (const v of table[1]!.matchAll(/"([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)"/g)) {
+      names.add(v[1]!);
+    }
   }
   return [...names];
 }
 
-describe("1468: every env variable the api/admin refuses to run without is in the contract", () => {
+describe("1468: every env variable the api/admin/storefronts refuse to run without is in the contract", () => {
   it("the scanner finds both spellings (literal and via a name constant)", () => {
     expect(
       requiredEnvThrows(
         'throw new Error("FOO_BAR is required: x"); const N_ENV = "BAZ_QUX"; throw new Error(`${N_ENV} is not set`);',
       ).sort(),
     ).toEqual(["BAZ_QUX", "FOO_BAR"]);
+  });
+
+  it("the scanner resolves a name looked up in a constant table, and flags what it cannot resolve", () => {
+    expect(
+      requiredEnvThrows(
+        'const T = { a: "ONE_ENV", b: "TWO_ENV" } as const; const name = T[host]; throw new Error(`${name} is not set`);',
+      ).sort(),
+    ).toEqual(["ONE_ENV", "TWO_ENV"]);
+    expect(
+      requiredEnvThrows("throw new Error(`${dynamic} is required`);"),
+    ).toEqual(["<unresolved ${dynamic}>"]);
   });
 
   it("finds the known fail-closed secrets (the scan is not vacuous)", () => {
@@ -155,15 +217,30 @@ describe("1468: every env variable the api/admin refuses to run without is in th
     expect(found).toContain("LIFECYCLE_IMPACT_TOKEN_SECRET");
     expect(found).toContain("AUDIT_IDENTIFIER_PEPPER");
     expect(found).toContain("ACADEMY_PUBLIC_ORIGIN");
+    expect(found).toContain("DOCTOR_PUBLIC_ORIGIN");
   });
 
-  it("no scanned throw names a variable missing from the contract", () => {
+  it("no scanned throw names a variable that neither the contract nor the prod compose supplies", () => {
+    // A value the prod compose file pins literally under `environment:` (e.g. a
+    // volume path) never comes from api.env, so it is not the contract's; an
+    // interpolated `${…}` value is not a pin.
+    const pinned = new Set(
+      [
+        ...readFileSync(
+          join(REPO_ROOT, "infra/deploy/compose/api-prod/compose.yml"),
+          "utf8",
+        ).matchAll(/^\s+([A-Z][A-Z0-9_]+):[ \t]*(?!\$\{)(\S.*)$/gm),
+      ].map((m) => m[1]!),
+    );
+    expect(pinned).toContain("ACADEMY_SUBMISSIONS_DIR");
     const contract = new Set(RUNTIME_ENV_CONTRACT.variables.map((v) => v.name));
     const missing: string[] = [];
     for (const dir of SCANNED) {
       for (const file of sources(join(REPO_ROOT, dir))) {
         for (const name of requiredEnvThrows(readFileSync(file, "utf8"))) {
-          if (!contract.has(name)) missing.push(`${name} (${file})`);
+          if (!contract.has(name) && !pinned.has(name)) {
+            missing.push(`${name} (${file})`);
+          }
         }
       }
     }

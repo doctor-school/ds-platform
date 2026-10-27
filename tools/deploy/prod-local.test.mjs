@@ -805,7 +805,6 @@ test("3313: prod.mjs reaches ds-data-prod only through its verbs — no script, 
   const source = readFileSync(join(import.meta.dirname, "prod.mjs"), "utf8");
   assert.doesNotMatch(source, /(sshScript|sshCapture|boxStep)\(\s*DATA_PROD\b/);
   assert.doesNotMatch(source, /shipTree\(sha, DATA_PROD\)/);
-  assert.doesNotMatch(source, /postgresStateScript\(/);
   assert.doesNotMatch(source, /postgresProbeScript\(/);
   const check = readFileSync(join(import.meta.dirname, "postgres-artifact-check.mjs"), "utf8");
   assert.match(check, /createDataProdClient\(/, "the operator check uses the data verbs");

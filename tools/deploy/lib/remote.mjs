@@ -172,9 +172,9 @@ export function createStallWatchdog({
 // --norc: with stdin on the ssh channel, bash's remote-shell heuristic would
 // source /etc/bash.bashrc (PS1 unbound under -u → stderr noise); inhibit it.
 // #3338: the script runs from a file, never as one `-c` argument — Linux caps a single
-// argv string at 128 KiB (MAX_ARG_STRLEN), and the data-prod transition install of
-// every BOX_ENTRYPOINT is larger (E2BIG before a line ran). mktemp makes the file
-// user-only; no `exec`, so the EXIT trap removes it, and the shell exits with bash's rc.
+// argv string at 128 KiB (MAX_ARG_STRLEN), and the workstation `--rollback` from-source
+// install of every BOX_ENTRYPOINT to ds-api-prod is larger (E2BIG before a line ran).
+// mktemp makes the file user-only; no `exec`, so the EXIT trap removes it, and the shell exits with bash's rc.
 const drained = (bash) => `f=$(mktemp) && trap 'rm -f "$f"' EXIT && cat >"$f" && ${bash} --norc -euo pipefail "$f"`;
 const REMOTE_BASH = drained("bash");
 

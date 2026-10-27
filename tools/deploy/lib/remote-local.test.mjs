@@ -5,14 +5,17 @@
 // watchdog. The live runs need a POSIX bash/tar — CI Linux; skipped on Windows.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { committedReleaseSources } from "../prod.mjs";
 import {
+  BOX_ENTRYPOINTS,
   LOCAL_EXECUTOR,
   boxSpawnArgs,
+  releaseInstallFromSourceScript,
   remoteBash,
   shipTree,
   shipTreeCommand,
@@ -24,7 +27,9 @@ import {
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 const POSIX =
   process.platform !== "win32" &&
-  spawnSync("bash", ["-c", "command -v tar && command -v mktemp"], { stdio: "ignore" }).status === 0;
+  spawnSync("bash", ["-c", "command -v tar && command -v mktemp && command -v base64 && command -v sha256sum"], {
+    stdio: "ignore",
+  }).status === 0;
 const SKIP = !POSIX && "needs a POSIX bash and tar";
 
 test("2985: the local executor hands the box's shell the very command ssh would", () => {
@@ -50,12 +55,10 @@ test("2985: sshScript runs locally under -euo pipefail, the semantics of a strea
 });
 
 test("2987: asRoot hands the drained script whole to `sudo -n bash`; the plain form is unchanged", () => {
-  assert.equal(remoteBash(), 'script=$(cat); exec bash --norc -euo pipefail -c "$script"');
+  const drain = `f=$(mktemp) && trap 'rm -f "$f"' EXIT && cat >"$f" && `;
+  assert.equal(remoteBash(), `${drain}bash --norc -euo pipefail "$f"`);
   assert.equal(remoteBash({ asRoot: false }), remoteBash());
-  assert.equal(
-    remoteBash({ asRoot: true }),
-    'script=$(cat); exec sudo -n bash --norc -euo pipefail -c "$script"',
-  );
+  assert.equal(remoteBash({ asRoot: true }), `${drain}sudo -n bash --norc -euo pipefail "$f"`);
 });
 
 test("2987: an asRoot script and capture run through sudo with the script intact", { skip: SKIP }, async () => {
@@ -77,6 +80,46 @@ test("2987: an asRoot script and capture run through sudo with the script intact
     assert.equal(readFileSync(join(dir, "sudo.log"), "utf8"), "-n\nbash\n".repeat(3), "the plain form never calls sudo");
   } finally {
     process.env.PATH = path;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// #3338: a script larger than one argv string (Linux MAX_ARG_STRLEN, 128 KiB) — the
+// data-prod transition install of every BOX_ENTRYPOINT among them — runs whole,
+// through both command forms, from a temp file removed on exit, its rc kept.
+test("3338: both command forms run a script past 128 KiB, the real transition install included", { skip: SKIP }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ds-big-script-"));
+  const scratch = join(dir, "tmp");
+  mkdirSync(scratch);
+  const saved = { PATH: process.env.PATH, TMPDIR: process.env.TMPDIR };
+  try {
+    // A sudo stand-in: `-n …` runs the rest (the root form); any other call is
+    // only recorded (the install script's `sudo install` lines).
+    writeFileSync(
+      join(dir, "sudo"),
+      `#!/usr/bin/env bash\nif [[ $1 == -n ]]; then shift; exec "$@"; fi\nprintf '%s\\n' "$*" >>"${dir}/sudo.log"\n`,
+      { mode: 0o755 },
+    );
+    process.env.PATH = `${dir}:${saved.PATH}`;
+    process.env.TMPDIR = scratch;
+    const install = releaseInstallFromSourceScript(committedReleaseSources());
+    const big = `${": ".concat("x".repeat(200)).concat("\n").repeat(1000)}echo "big $((6 * 7))"\n`;
+    assert.ok(Buffer.byteLength(big) > 131072);
+    for (const asRoot of [false, true]) {
+      assert.equal(await sshCapture(LOCAL_EXECUTOR, big, { asRoot }), "big 42");
+      await sshScript(LOCAL_EXECUTOR, install, { label: "install", asRoot });
+      await assert.rejects(sshScript(LOCAL_EXECUTOR, `${big}exit 7\n`, { label: "rc", asRoot }), /rc on local exited 7/);
+    }
+    const installs = readFileSync(join(dir, "sudo.log"), "utf8").split("\n").filter((l) => /^install -m 0755 /.test(l));
+    assert.deepEqual(
+      installs.map((l) => l.split(" ").at(-1)),
+      [...BOX_ENTRYPOINTS, ...BOX_ENTRYPOINTS].map(({ dest }) => dest),
+    );
+    assert.deepEqual(readdirSync(scratch), [], "no script file is left behind");
+  } finally {
+    process.env.PATH = saved.PATH;
+    if (saved.TMPDIR === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = saved.TMPDIR;
     rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -161,8 +161,8 @@ export function createStallWatchdog({
 // Run a bash script on a box, fed over stdin (no shell-quoting hell). Streams
 // the box's stdout/stderr live. Rejects on non-zero exit.
 //
-// The remote command DRAINS the whole script into a variable first
-// (`script=$(cat)`) and only then executes it. Never use a bare `bash -s`
+// The remote command DRAINS the whole script into a temp file first
+// (`cat >"$f"`) and only then executes it. Never use a bare `bash -s`
 // here: bash -s reads the script from stdin INCREMENTALLY, so any command
 // that itself reads stdin — `docker compose run` attaches the container's
 // stdin by default — silently EATS the rest of the script and bash exits 0
@@ -171,15 +171,18 @@ export function createStallWatchdog({
 // kept running :local while the script reported "DEPLOY OK").
 // --norc: with stdin on the ssh channel, bash's remote-shell heuristic would
 // source /etc/bash.bashrc (PS1 unbound under -u → stderr noise); inhibit it.
-const REMOTE_BASH =
-  'script=$(cat); exec bash --norc -euo pipefail -c "$script"';
+// #3338: the script runs from a file, never as one `-c` argument — Linux caps a single
+// argv string at 128 KiB (MAX_ARG_STRLEN), and the data-prod transition install of
+// every BOX_ENTRYPOINT is larger (E2BIG before a line ran). mktemp makes the file
+// user-only; no `exec`, so the EXIT trap removes it, and the shell exits with bash's rc.
+const drained = (bash) => `f=$(mktemp) && trap 'rm -f "$f"' EXIT && cat >"$f" && ${bash} --norc -euo pipefail "$f"`;
+const REMOTE_BASH = drained("bash");
 
 // #2987: the same command run as root — the script still drained first, then handed
 // whole to `sudo -n bash`. The break-glass operator `breakglass` reaches ds-api-prod
 // as itself, and the live tree there (PROD_LIVE_TREE) is root's; every script it
 // sends that box goes through this form (`asRoot` on sshScript / sshCapture).
-const REMOTE_BASH_ROOT =
-  'script=$(cat); exec sudo -n bash --norc -euo pipefail -c "$script"';
+const REMOTE_BASH_ROOT = drained("sudo -n bash");
 
 /** The command a box's shell is handed for a stdin-fed script: as the user, or as root. */
 export function remoteBash({ asRoot = false } = {}) {

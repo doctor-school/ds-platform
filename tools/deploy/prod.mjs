@@ -1241,6 +1241,8 @@ export function requiredRuntimeEnv(contract, services) {
 }
 
 // The LAST assignment wins, as for compose env_file and the runbook's `. api.env`.
+// The transport runs this under `bash -euo pipefail` (remote.mjs `remoteBash`): a grep
+// miss (exit 1) on an absent variable must not abort the probe, hence `|| true`.
 export function apiEnvRuntimeEnvProbeScript(names, envFile = API_PROD_ENV_FILE) {
   for (const n of names) {
     if (!RUNTIME_ENV_NAME.test(n)) throw new Error(`runtime-env: refusing an unsafe variable name ${JSON.stringify(n)}`);
@@ -1249,7 +1251,7 @@ export function apiEnvRuntimeEnvProbeScript(names, envFile = API_PROD_ENV_FILE) 
 if sudo test -r "$f"; then
   echo api-env=readable
   for n in ${names.join(" ")}; do
-    v=$(sudo grep -E "^[[:space:]]*(export[[:space:]]+)?$n=" "$f" | tail -n 1)
+    v=$( { sudo grep -E "^[[:space:]]*(export[[:space:]]+)?$n=" "$f" || true; } | tail -n 1)
     if [ -z "$v" ]; then s=absent
     else
       v=\${v#*=}

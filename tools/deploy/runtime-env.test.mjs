@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { remoteBash } from "./lib/remote.mjs";
 import {
   DEPLOY_PLAN,
   REDEPLOY_SKIPPED_STEPS,
@@ -49,7 +50,11 @@ const bash = spawnSync(
 );
 const SKIP_SHELL = bash.status !== 0 && "needs bash";
 
-/** Run the probe under bash against a fixture env file (`sudo` stripped, as the test-token test does). */
+/**
+ * Run the probe against a fixture env file (`sudo` stripped, as the test-token test
+ * does) exactly as the ssh transport runs it: the box is handed `remoteBash()` and
+ * the script on stdin, so the shell mode (`bash --norc -euo pipefail`) is the real one.
+ */
 function probe(content, names) {
   const dir = mkdtempSync(join(tmpdir(), "ds-1468-"));
   try {
@@ -59,7 +64,10 @@ function probe(content, names) {
       names,
       file.replaceAll("\\", "/"),
     ).replaceAll("sudo ", "");
-    const run = spawnSync("bash", ["-c", script], { encoding: "utf8" });
+    const run = spawnSync("bash", ["-c", remoteBash()], {
+      input: script,
+      encoding: "utf8",
+    });
     assert.equal(run.status, 0, run.stderr);
     return run.stdout;
   } finally {

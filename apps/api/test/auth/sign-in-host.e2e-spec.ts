@@ -3988,6 +3988,9 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
             handoff: ref,
             clientId: ACADEMY,
           },
+          // 003 EARS-44 (amended) / EARS-71: the hand-off render marks the
+          // form spent, so its reload never rides the live record.
+          handoffSpent: true,
         };
         expect(await state.getForm(formId)).toEqual(binding);
         expect(res.cookies.map((cookie) => cookie.name)).toEqual([
@@ -4815,6 +4818,9 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
           storefront: "academy",
           authRequestId: authRequest,
           intent,
+          // 003 EARS-44 (amended) / EARS-71: the hand-off render marks the
+          // form spent, so its reload never rides the colleague's record.
+          handoffSpent: true,
         };
         expect(await state.getForm(formId)).toEqual(binding);
         expect(res.cookies.map((cookie) => cookie.name)).toEqual([

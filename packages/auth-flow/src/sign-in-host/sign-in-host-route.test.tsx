@@ -46,8 +46,7 @@ import {
 } from "../server/sign-in-host";
 import { VerifyRoute } from "../verify/verify-route";
 import { SettleDoorPath } from "./settle-door-path";
-import { AUTH_FLOW_PAGE_TITLES } from "../copy";
-import { SignInHostRoute, signInHostMetadata } from "./sign-in-host-route";
+import { SignInHostRoute } from "./sign-in-host-route";
 
 const STOREFRONTS = { academy: ACADEMY_AUTH_FLOW, doctor: DOCTOR_AUTH_FLOW };
 
@@ -250,23 +249,5 @@ describe("the entry could not be read: the host says so in the forms' own words"
   it("an unknown value is no state at all (not found)", async () => {
     unavailable("bogus");
     await expect(mount()).rejects.toThrow("NEXT_NOT_FOUND");
-  });
-});
-
-describe("003 EARS-71: the host page's tab title is the rendered door's", () => {
-  it("003 EARS-71: the title follows the door the hand-over renders, not the address it arrived on", async () => {
-    for (const door of ["login", "register", "reset", "verify"] as const) {
-      handOver({ door, render: RENDER });
-      expect(await signInHostMetadata("login")).toEqual({
-        title: AUTH_FLOW_PAGE_TITLES[door],
-      });
-    }
-  });
-
-  it("003 EARS-71: with no hand-over the page keeps its own door's title", async () => {
-    handOver(null);
-    expect(await signInHostMetadata("reset")).toEqual({
-      title: AUTH_FLOW_PAGE_TITLES.reset,
-    });
   });
 });

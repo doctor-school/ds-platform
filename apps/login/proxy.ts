@@ -104,21 +104,28 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     return harden(withCookies(res, entry.setCookies), csp);
   }
 
+  const door = doorFor(
+    pathDoor,
+    entry.answer,
+    request.headers.get("sec-fetch-site"),
+  );
   const forwarded = new Headers(request.headers);
   forwarded.set(
     SIGN_IN_HOST_ENTRY_HEADER,
-    writeSignInHostHandOver({
-      door: doorFor(
-        pathDoor,
-        entry.answer,
-        request.headers.get("sec-fetch-site"),
-      ),
-      render: entry.answer,
-    }),
+    writeSignInHostHandOver({ door, render: entry.answer }),
   );
   forwarded.delete(SIGN_IN_HOST_UNAVAILABLE_HEADER);
   forwarded.set("content-security-policy", csp);
-  const res = NextResponse.next({ request: { headers: forwarded } });
+  // 003 EARS-71 — a door the entry chose on the `/login` arrival renders on
+  // its OWN page (a rewrite, same query), so the tab carries the storefront's
+  // title for that door; the address settles on that path client-side.
+  const res =
+    door === pathDoor
+      ? NextResponse.next({ request: { headers: forwarded } })
+      : NextResponse.rewrite(
+          new URL(`/${door}${request.nextUrl.search}`, request.url),
+          { request: { headers: forwarded } },
+        );
   return harden(withCookies(res, entry.setCookies), csp);
 }
 

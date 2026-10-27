@@ -142,6 +142,11 @@ describe("003 EARS-60: the form is chosen only by the API's entry answer", () =>
         arrival.headers.get(`x-middleware-request-${ENTRY_HEADER}`),
       )?.door,
     ).toBe("register");
+    // The door's own page renders it — its storefront title included — while
+    // the address stays the arrival's until the door settles it (same query).
+    expect(arrival.headers.get("x-middleware-rewrite")).toBe(
+      "http://localhost:3005/register?authRequest=V2_1",
+    );
 
     const hop = await proxy(
       request("/login?authRequest=V2_1", {
@@ -153,6 +158,8 @@ describe("003 EARS-60: the form is chosen only by the API's entry answer", () =>
       readEntryHeader(hop.headers.get(`x-middleware-request-${ENTRY_HEADER}`))
         ?.door,
     ).toBe("login");
+    expect(hop.headers.get("x-middleware-rewrite")).toBeNull();
+    expect(hop.headers.get("x-middleware-next")).toBe("1");
   });
 });
 

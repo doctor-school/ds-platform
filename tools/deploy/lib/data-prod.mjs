@@ -5,14 +5,14 @@
 // ds-data-prod serves only the data verbs of `infra/deploy/bin/ds-deploy-entrypoint`.
 // The hop key of the release driver on ds-api-prod sits behind the forced command
 // `sudo -n /usr/local/bin/ds-deploy-entrypoint`, so the verb travels as the ssh
-// command itself; a login with a shell (`breakglass` on the workstation path, or
-// `deploy` before the converge) runs the same verb through `sudo -n`. A payload is
-// one JSON object or the tree archive on stdin — never a script.
+// command itself; the `breakglass` login of the workstation path has a shell and
+// runs the same verb through `sudo -n`. A payload is one JSON object or the tree
+// archive on stdin — never a script.
 
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
 
-import { DS_DEPLOY_ENTRYPOINT_BIN, HARDEN_SSH_BIN, boxSpawnArgs, releaseInstallFromSourceScript, sshScript } from "./remote.mjs";
+import { DS_DEPLOY_ENTRYPOINT_BIN, HARDEN_SSH_BIN, boxSpawnArgs } from "./remote.mjs";
 
 /** The verbs the entrypoint serves on the data box; pinned equal to its DATA_VERBS. */
 export const DATA_VERBS = [
@@ -31,11 +31,6 @@ export const DATA_VERBS = [
   "supersede",
   "converge",
 ];
-
-// The verbs the capabilities probe requires: an entrypoint that predates `converge`
-// still serves the run up to its `install`, and the entrypoint that install places
-// serves `converge` (#3320).
-const PROBE_VERBS = DATA_VERBS.filter((v) => v !== "converge");
 
 // The entrypoint's own COMMAND_RE / COMMAND_MAX: what it admits as a request.
 const REQUEST_RE = /^[a-z0-9-]+( [a-z0-9-]+)*$/;
@@ -64,7 +59,7 @@ export function dataVerbCommand(request, form) {
 export function servesDataVerbs(stdout) {
   try {
     const answer = JSON.parse(String(stdout).trim());
-    return answer?.role === "data" && PROBE_VERBS.every((v) => answer.verbs?.includes(v));
+    return answer?.role === "data" && DATA_VERBS.every((v) => answer.verbs?.includes(v));
   } catch {
     return false;
   }
@@ -101,95 +96,71 @@ export function runBoxCommand(
 }
 
 /**
- * The data-prod client of one run. The command form is found once, by asking
- * `capabilities` as the forced command, then through `sudo -n`.
- *
- * Transition (spec §5 «Data-prod verbs.» «Transition.»): when neither answers, the
- * hop still has `deploy`'s shell and sudo and the installed entrypoint predates the
- * data verbs — the first release after #3313. The client then installs the box
- * entrypoints from `bootstrapSources()` ([{ source, dest }], the bytes the run
- * holds) through that shell, the checked from-source install of the workstation
- * `--rollback`, and asks again. `harden-ssh.sh --role data` refuses until the
- * installed entrypoint serves the data verbs, so after the converge this branch is
- * never taken; delete it (and `bootstrapSources`) once the converge has run.
+ * The data-prod client of one run, in the one command form its login takes (spec §5
+ * «Data-prod verbs.» «Transport.»): `forced` for the hop key of the `--local` run,
+ * whose forced command is the only thing it reaches; `sudo` for the `breakglass`
+ * shell login of the workstation path. The form is asked `capabilities` once, on
+ * first use; a form that does not answer refuses the run — the other form is never
+ * tried, so a hop whose forced command stopped answering is not served through sudo.
  */
-export function createDataProdClient({
-  host,
-  bootstrapSources,
-  run = runBoxCommand,
-  script = sshScript,
-  log = (line) => console.log(line),
-}) {
-  let form = null;
+export function createDataProdClient({ host, form, run = runBoxCommand, log = (line) => console.log(line) }) {
+  if (form !== "forced" && form !== "sudo") throw new Error(`unknown data-prod command form ${JSON.stringify(form)}`);
+  const through = form === "forced" ? "the forced command" : "sudo -n";
+  let answered = false;
   let unreachable = null; // set by a converge after which the forced command does not answer
-  const ask = async (f) => {
+  const ask = async () => {
     try {
-      return servesDataVerbs(await run(host, dataVerbCommand("capabilities", f), { label: "capabilities" }));
+      return servesDataVerbs(await run(host, dataVerbCommand("capabilities", form), { label: "capabilities" }));
     } catch {
       return false;
     }
-  };
-  const detect = async () => {
-    for (const f of ["forced", "sudo"]) if (await ask(f)) return f;
-    return null;
   };
   const client = {
     get host() {
       return host;
     },
-    /** The command form, found on first use. */
+    /** The command form, once `capabilities` answered through it. */
     async ready() {
       if (unreachable) throw unreachable;
-      if (form) return form;
-      form = await detect();
-      if (form) return form;
-      if (!bootstrapSources) throw new Error(`${host} serves no data-prod verbs`);
-      log(`  ↻ ${host}: the installed entrypoint predates the data-prod verbs — installing it from this run's tree (#3313 transition)`);
-      await script(host, releaseInstallFromSourceScript(bootstrapSources()), {
-        label: "install the data-prod verbs",
-      });
-      form = (await ask("sudo")) ? "sudo" : null;
-      if (!form) throw new Error(`${host} still serves no data-prod verbs after the install`);
+      if (answered) return form;
+      answered = await ask();
+      if (!answered) throw new Error(`${host} serves no data-prod verbs through ${through}`);
       return form;
     },
-    /** The ssh command of `words`, once the form is known. */
+    /** The ssh command of `words`, once the form answered. */
     async command(words) {
       return dataVerbCommand(words.join(" "), await client.ready());
     },
-    /** The ssh command of `words` if the form is already known, else null (sync callers). */
+    /** The ssh command of `words` if the form already answered, else null (sync callers). */
     knownCommand(words) {
-      return form ? dataVerbCommand(words.join(" "), form) : null;
+      return answered ? dataVerbCommand(words.join(" "), form) : null;
     },
     /**
      * The release's own converge of ds-data-prod (#3320; spec §5 «Data-prod verbs.»
-     * «Converge.»), after the data `install` and before any data-prod state change.
-     * The box proves it, every release: the `converge <sha>` verb runs the installed
-     * root-owned harden-ssh.sh --role data --from-release (idempotent, `nothing to
-     * change` once done) through whichever form answered — the forced command once
-     * converged, `sudo -n` before. Which form answers is no proof: a converge that
-     * stopped after the hop line went behind the forced command leaves deploy's other
-     * rights in place, and only the next run of harden-ssh.sh finishes them. The run
-     * goes on only when the verb exited 0 and the forced command answers. Only the hop
-     * calls this: a breakglass login answers through `sudo` on a converged box too.
+     * «Converge.»), after the data `install` and before any data-prod state change,
+     * through the hop's forced command only. The box proves it, every release: the
+     * `converge <sha>` verb runs the installed root-owned harden-ssh.sh --role data
+     * --from-release (idempotent, `nothing to change` once done). The forced command
+     * answering is no proof: a converge that stopped after the hop line went behind it
+     * leaves deploy's other rights in place, and only the next run of harden-ssh.sh
+     * finishes them. The run goes on only when the verb exited 0 and the forced command
+     * still answers.
      */
     async converge(sha) {
-      const through = await client.ready();
-      log(
-        `  ↻ ${host}: converge ${sha.slice(0, 12)}: ${HARDEN_SSH_BIN} --role data --from-release, through ${through === "forced" ? "the forced command" : "sudo -n"}`,
-      );
+      if (form !== "forced") throw new Error(`${host}: only the hop's forced command converges ds-data-prod`);
+      await client.ready();
+      log(`  ↻ ${host}: converge ${sha.slice(0, 12)}: ${HARDEN_SSH_BIN} --role data --from-release, through ${through}`);
       try {
         await client.call(["converge", sha], { stream: true });
       } catch (error) {
-        // A converge that failed after the hop rewrite answers only through the
-        // forced command now: re-probe, so the run's `finish … failed` still lands.
-        form = await detect();
-        if (!form) unreachable = new Error(`${host}: no data-prod command form answers after the failed converge`);
+        // Re-probe, so the run's `finish … failed` still lands when the box answers.
+        answered = await ask();
+        if (!answered) unreachable = new Error(`${host}: the forced command does not answer after the failed converge`);
         throw error;
       }
-      form = await detect();
-      if (form !== "forced") {
+      answered = await ask();
+      if (!answered) {
         unreachable = new Error(`${host}: the forced command does not answer after the converge`);
-        form = null;
         throw unreachable;
       }
       log(`  ✓ ${host}: converged: capabilities answers through the forced command`);

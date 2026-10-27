@@ -37,6 +37,7 @@ try {
   };
   const client = createDataProdClient({
     host: process.env.DS_DATA_PROD_SSH || "ds-data-prod",
+    form: "sudo",
     run,
   });
   const result = await preparePostgresDeployment(value("--ref"), {

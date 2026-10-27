@@ -212,6 +212,9 @@ const IMAGE_RETENTION = 3;
 // tree of the released SHA the release driver extracted (null on the operator path,
 // which reads and ships the committed SHA through git).
 let LOCAL_TREE = null;
+// #3320: the data-prod command form of the run's login (lib/data-prod.mjs): the
+// workstation's `breakglass` shell, or the `--local` hop key's forced command.
+let DATA_PROD_FORM = "sudo";
 const API_COMPOSE = `${REMOTE_TREE}/infra/deploy/compose/api-prod`;
 // #3313: ds-data-prod's compose dir is the entrypoint's DATA_COMPOSE, addressed by its verbs.
 
@@ -330,6 +333,7 @@ function useLocalHosts() {
   const hosts = localProdHosts();
   API_PROD = hosts.api;
   DATA_PROD = hosts.data;
+  DATA_PROD_FORM = "forced";
   LOCAL_TREE = REPO_ROOT;
 }
 
@@ -388,20 +392,11 @@ function shipTree(sha, host) {
 
 // #3313: ds-data-prod is reached only through the data verbs of its entrypoint (spec §5
 // «Data-prod verbs.»), one client per run, created on first use (after --local has
-// chosen the hosts). Its transition install takes the entrypoints this run holds: the
-// tree it runs from on the box, HEAD's committed blobs on the workstation.
+// chosen the hosts and the form: the hop's forced command, else breakglass's sudo -n).
 let dataProdClient = null;
 function dataProd() {
-  dataProdClient ??= createDataProdClient({
-    host: DATA_PROD,
-    bootstrapSources: () => (LOCAL_TREE ? treeReleaseSources(LOCAL_TREE) : committedReleaseSources()),
-  });
+  dataProdClient ??= createDataProdClient({ host: DATA_PROD, form: DATA_PROD_FORM });
   return dataProdClient;
-}
-
-/** Every box entrypoint read from an extracted tree, as `[{ source, dest }]`. */
-export function treeReleaseSources(tree) {
-  return BOX_ENTRYPOINTS.map(({ dest, path }) => ({ source: readFileSync(join(tree, ...path.split("/"))), dest }));
 }
 
 async function shipDataProd(sha) {

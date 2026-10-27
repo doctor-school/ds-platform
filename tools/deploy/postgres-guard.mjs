@@ -505,8 +505,3 @@ export function postgresStateRecord(live, sourceHash = live.sourceHash) {
     ),
   });
 }
-
-export function postgresStateScript(live, sourceHash = live.sourceHash) {
-  const state = postgresStateRecord(live, sourceHash);
-  return `umask 077\nprintf '%s\\n' '${state}' > "$HOME/ds-platform-postgres-state.json.next"\nmv "$HOME/ds-platform-postgres-state.json.next" "$HOME/ds-platform-postgres-state.json"\n`;
-}

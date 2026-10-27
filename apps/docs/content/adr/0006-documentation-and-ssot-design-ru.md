@@ -946,14 +946,14 @@ Feature: <Feature name>
 
 Decomposition spec'а на атомарные задачи происходит в GitHub Issues (один EARS-handler ≈ один Issue), не в Git-файле. Spec удерживает intent (EARS-N requirement), Issues — execution state.
 
-**Milestone vs spec.** GitHub Milestone — это **один поставляемый релиз одного трека**, с русским именем `«<Трек> R<n> — <результат>»` (например `«Академия R1 — Архив записей»`), несущий 1–4 feature-level Issues; `R<n>` нумеруется внутри трека, и два трека никогда не делят milestone. Milestone — это **не** spec-папка и **не** долгоживущая тема: milestone независим от спек. Спека, которую реализует конкретная работа, привязывается к ней **лейблом** `feature:NNN-<slug>`, slug которого и есть имя spec-папки (`apps/docs/content/specs/features/NNN-<slug>/`). Поэтому один релиз может нести Issues нескольких спек, а Issues одной спеки — разъехаться по релизам.
+**Milestone vs spec.** GitHub Milestone — это **один поставляемый релиз одного трека**, с русским именем `«<Трек> <буква><n> — <результат>»` — буква это кириллическая начальная буква трека, «А» для Академии и «В» для Витрины (например `«Академия А3 — Каталоги»`, `«Витрина В3 — Переезд аудитории»`), — несущий 1–4 feature-level Issues; номер считается внутри трека, и два трека никогда не делят milestone. Milestone — это **не** spec-папка и **не** долгоживущая тема: milestone независим от спек. Спека, которую реализует конкретная работа, привязывается к ней **лейблом** `feature:NNN-<slug>`, slug которого и есть имя spec-папки (`apps/docs/content/specs/features/NNN-<slug>/`). Поэтому один релиз может нести Issues нескольких спек, а Issues одной спеки — разъехаться по релизам.
 
 **Setup для каждого feature:**
 
-1. **Назначить релизный Milestone.** Положить feature в milestone того релиза, в котором он едет, либо открыть следующий релиз его трека (имя релиза `«<Трек> R<n> — <результат>»`, не `NNN-<slug>`); всё, что дальше двух ближайших релизов, идёт в backlog-milestone трека («Академия · Позже» / «Витрина · Позже»):
+1. **Назначить релизный Milestone.** Положить feature в milestone того релиза, в котором он едет, либо открыть следующий релиз его трека (имя релиза `«<Трек> <буква><n> — <результат>»`, не `NNN-<slug>`); всё, что дальше двух ближайших релизов, идёт в backlog-milestone трека («Академия · Позже» / «Витрина · Позже»):
 
    ```
-   Академия R1 — Архив записей — ближайший релиз трека «Академия»; несёт 1–4 feature-level Issues, включая этот feature.
+   Академия А3 — Каталоги — ближайший релиз трека «Академия»; несёт 1–4 feature-level Issues, включая этот feature.
    ```
 
 2. **Create Issues** через [`open-ears-issues`](../skills/open-ears-issues/SKILL.md), используя только `pnpm issue:create`. Скилл задаёт создание parent/child, наследование релизного milestone, обязательные kind/source/track labels, нативные связи технических зависимостей и интеграционные deliverables для user-facing поверхностей. Каноничны его действующие команды и контракт полей; рецепт создания здесь не дублируется.
@@ -962,7 +962,7 @@ Decomposition spec'а на атомарные задачи происходит 
 
 4. **AI agent workflow при работе:**
    ```bash
-   gh issue list --milestone "Академия R1 — Архив записей" --label "feature:001-doctor-onboarding" --state open
+   gh issue list --milestone "Академия А3 — Каталоги" --label "feature:001-doctor-onboarding" --state open
    gh issue view N    # read Issue + linked spec
    # implement → commit → push → PR auto-closes Issue on merge
    ```
@@ -1022,7 +1022,7 @@ Phase 0.5 (после Phase 0 готов):
 
 - Product Lead pilot edit Vision через PR (smoke test авторства).
 - Tech Lead пишет первый feature-spec в SDD-формате (`docs/content/specs/features/001-doctor-onboarding/` — 3 файла, без tasks.md).
-- **Создать (или переиспользовать) релизный GitHub Milestone** (например `«Академия R1 — Архив записей»`) + Issues per EARS-handler через `pnpm issue:create` и `open-ears-issues`, каждый с лейблом `feature:001-doctor-onboarding`. Заполнить frontmatter `tracker:` URL в `NNN-requirements.md`.
+- **Создать (или переиспользовать) релизный GitHub Milestone** (например `«Академия А3 — Каталоги»`) + Issues per EARS-handler через `pnpm issue:create` и `open-ears-issues`, каждый с лейблом `feature:001-doctor-onboarding`. Заполнить frontmatter `tracker:` URL в `NNN-requirements.md`.
 - **Setup GitHub Project v2 «DS Platform Implementation»** с swimlanes by feature label.
 - Drift detection в CI начинает блокировать merge.
 

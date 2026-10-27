@@ -96,6 +96,27 @@ export function releaseMilestoneTrack(milestoneTitle) {
   return null;
 }
 
+/** The Latin twin a hand-typed title can carry in place of each Cyrillic letter. */
+const LATIN_LOOKALIKES = Object.freeze({ "А": "A", "В": "B" });
+
+/**
+ * The Cyrillic letter a track-prefixed numbered title SHOULD carry when it was
+ * typed with its Latin look-alike («Витрина B3 — …» → "В"), else null. Such a
+ * title still reads as the track's milestone but is not a release, so
+ * `roadmap:forecast` would silently drop it.
+ * @param {string|null|undefined} milestoneTitle
+ * @returns {string|null}
+ */
+export function releaseLetterLookalike(milestoneTitle) {
+  const title = str(milestoneTitle);
+  for (const [track, prefix] of Object.entries(TRACK_MILESTONE_PREFIXES)) {
+    const cyrillic = TRACK_RELEASE_LETTERS[track];
+    const latin = LATIN_LOOKALIKES[cyrillic];
+    if (new RegExp(`^${prefix}\\s+${latin}\\d+(?:\\.\\d+)*(?=\\s|—|$)`).test(title)) return cyrillic;
+  }
+  return null;
+}
+
 /**
  * Feature title prefix ↔ the track label that prefix implies.
  * `[Академия][NNN] …` is an academy feature, `[Витрина][NNN] …` a showcase one.

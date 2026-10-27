@@ -453,3 +453,15 @@ test("productTrackMilestoneError keeps the fallback for track:platform", () => {
   assert.equal(productTrackMilestoneError(["--label", "track:doctor"], null, neverListed), null);
   assert.equal(productTrackMilestoneError([], FALLBACK_MILESTONE, neverListed), null);
 });
+
+test("productTrackMilestoneError refuses a Latin look-alike release letter (#3375)", () => {
+  const err = productTrackMilestoneError(
+    ["--label", "track:doctor"], "Витрина B3 — Переезд аудитории", neverListed,
+  );
+  assert.match(err, /Latin/);
+  assert.ok(err.includes("«В»"));
+  const platform = productTrackMilestoneError(
+    ["--label", "track:platform"], "Академия A3 — Каталоги", neverListed,
+  );
+  assert.ok(platform.includes("«А»"));
+});

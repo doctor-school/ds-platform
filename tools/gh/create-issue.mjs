@@ -75,6 +75,7 @@ import {
   isEpicTitle,
   milestoneTrack,
   ownsRoadmapLabel,
+  releaseLetterLookalike,
 } from "./lib/roadmap-taxonomy.mjs";
 
 // Large payloads (board lists, GraphQL) overflow spawnSync's default 1 MiB
@@ -474,7 +475,9 @@ export function milestoneError(args, { parent = null } = {}) {
  * §7.1): a `track:doctor` / `track:academy` Issue takes a release or the
  * «· Позже» backlog of that track, never «Platform ops & hardening» or the
  * other track's milestone — misrouted product work disappears from its track's
- * release rotation. `track:platform` keeps the fallback. Returns null when
+ * release rotation. `track:platform` keeps the fallback. Any track refuses a
+ * milestone typed with a Latin look-alike release letter («Витрина B3»), which
+ * would otherwise drop out of the forecast unnoticed. Returns null when
  * valid (or when there is no effective milestone — an epic, or a gate already
  * refused by `milestoneError`).
  * @param {string[]} args  the gh passthrough
@@ -484,9 +487,16 @@ export function milestoneError(args, { parent = null } = {}) {
  * @returns {string|null}
  */
 export function productTrackMilestoneError(args, milestone, listOpenMilestones) {
+  const name = typeof milestone === "string" ? milestone.trim() : "";
+  const cyrillic = releaseLetterLookalike(name);
+  if (cyrillic)
+    return (
+      `«${name}» carries a Latin look-alike of the release letter «${cyrillic}» — ` +
+      `rename the milestone to the Cyrillic letter first, or roadmap:forecast ` +
+      `drops that release (spec §7.1, #3375).`
+    );
   const track = collectTrackLabels(args)[0];
   if (!track || !(track in TRACK_MILESTONE_PREFIXES)) return null;
-  const name = typeof milestone === "string" ? milestone.trim() : "";
   if (!name) return null;
   if (milestoneTrack(name) === track) return null;
   const own = (listOpenMilestones() ?? []).filter((t) => milestoneTrack(t) === track);

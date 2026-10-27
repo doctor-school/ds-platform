@@ -118,11 +118,13 @@ async function compile(
   stateOverride?: SignInHostStateStore,
   handoffStoreOverride?: LoginHandoffStore,
 ) {
-  const idp = new FakeIdpClient();
   const hostIdp = new FakeSignInHostIdp();
   let builder = Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(IDP_CLIENT)
-    .useValue(idp)
+    .useFactory({
+      factory: (mailer: Mailer) => new FakeIdpClient(mailer),
+      inject: [MAILER],
+    })
     .overrideProvider(SIGN_IN_HOST_IDP)
     .useValue(hostIdp)
     .overrideProvider(RATE_LIMIT_THRESHOLDS)
@@ -144,6 +146,7 @@ async function compile(
       .overrideProvider(LOGIN_HANDOFF_STORE)
       .useValue(handoffStoreOverride);
   const moduleRef: TestingModule = await builder.compile();
+  const idp = moduleRef.get<FakeIdpClient>(IDP_CLIENT);
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
     new FastifyAdapter(),
   );

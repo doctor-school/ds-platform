@@ -5588,6 +5588,48 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     }
   });
 
+  it.each([
+    ["academy", ACADEMY],
+    ["doctor", DOCTOR],
+  ] as const)(
+    "EARS-71: a %s reset entry from an event keeps its event target from the form state for the same auth request — the hop to the sign-in door re-renders that door with the event, never the reset door",
+    async (storefront, clientId) => {
+      const jar = new Jar();
+      const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+      const eventTarget = `reset-event-${storefront}`;
+      const intent = { door: "reset" as const, eventTarget, clientId };
+      const hint = await state.putIntent(intent, 600);
+      const authRequest = hostIdp.seedAuthRequest({
+        clientId,
+        loginHint: hint,
+      });
+
+      const first = await entry(jar, authRequest);
+      expect(first.body).toEqual({
+        action: "render",
+        storefront,
+        door: "reset",
+        authRequest,
+        csrf: expect.any(String),
+        intent: { eventTarget, handoff: false },
+      });
+
+      // «Вернуться ко входу» / a reload: the intent is spent, the event stays;
+      // the door is the auth request's own (EARS-71: no reset door off /reset).
+      const hop = await entry(jar, authRequest);
+      expect(hop.body).toEqual({
+        action: "render",
+        storefront,
+        door: "login",
+        authRequest,
+        csrf: expect.any(String),
+        intent: { eventTarget, handoff: false },
+      });
+      expect(await state.takeIntent(hint)).toBeNull();
+      await state.deleteForm(jar.values.get(FORM_COOKIE_NAME)!);
+    },
+  );
+
   describe("EARS-71: S175 unusable entry intents", () => {
     let intentApp: Awaited<ReturnType<typeof compile>>;
     let intentNow = Date.UTC(2026, 9, 23);

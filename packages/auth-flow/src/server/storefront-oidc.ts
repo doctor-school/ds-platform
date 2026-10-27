@@ -216,7 +216,9 @@ function doorOf(entry: StorefrontEntry): SignInHostDoor {
 /**
  * EARS-71 — the intent an entry records, or `undefined` for the plain form of
  * its door: `?method=code` (with its hand-off reference, EARS-44), the reset
- * door, and an event return target (its slug only).
+ * door, and an event return target (its slug only) on every door — the reset
+ * entry's included, so «Вернуться ко входу» opens the sign-in form with that
+ * event's card, as the storefront's reset door linked it.
  */
 function entryIntent(
   entry: StorefrontEntry,
@@ -229,7 +231,7 @@ function entryIntent(
   const intent: StorefrontEntryIntent = {
     ...(code ? { method: "code" as const } : {}),
     ...(code && handoff ? { handoff } : {}),
-    ...(eventTarget && entry !== "reset" ? { eventTarget } : {}),
+    ...(eventTarget ? { eventTarget } : {}),
   };
   if (entry === "reset" || Object.keys(intent).length > 0) return intent;
   return undefined;

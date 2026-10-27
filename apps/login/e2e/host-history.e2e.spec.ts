@@ -129,6 +129,30 @@ test.describe("003 EARS-5: Back after the sign-in is the page before it", () => 
     });
   }
 
+  test("003 EARS-71: a reset entry from an event leads back to the sign-in form with that event's card — «Вернуться ко входу», then a reload", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const panel = page.getByTestId("return-context-panel");
+    await page.goto(doorPath("doctor", "reset", { eventTarget: EVENT_SLUG }));
+    await expect(
+      page.getByRole("link", { name: /Вернуться ко входу/ }),
+    ).toBeVisible();
+    // The reset door draws no card, on the storefront or the host.
+    await expect(panel).toHaveCount(0);
+
+    await page.getByRole("link", { name: /Вернуться ко входу/ }).click();
+    await expect(page.getByTestId("password-login-form")).toBeVisible();
+    await expect.poll(() => new URL(page.url()).pathname).toBe("/login");
+    await expect(panel.locator("[data-webinar-card]")).toContainText(
+      EVENT_TITLE,
+    );
+    await expect(panel).toContainText(RETURN_CONTEXT.login);
+    await page.reload();
+    await expect(page.getByTestId("password-login-form")).toBeVisible();
+    await expect(panel).toContainText(RETURN_CONTEXT.login);
+  });
+
   test("003 EARS-71 / EARS-24: the registration code step keeps the event's return-context card, and so does its reload on /verify", async ({
     page,
   }) => {

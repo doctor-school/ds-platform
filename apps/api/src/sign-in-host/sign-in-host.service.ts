@@ -186,8 +186,12 @@ export class SignInHostService {
       setCookies,
     );
 
+    // Only a fresh intent names the door: Zitadel's arrival on `/login` opens
+    // the door the entry chose. A re-render's door is the auth request's own
+    // (`prompt=create` or login) — off `/login` its path fixes it anyway — so a
+    // kept event target never turns a hop back to `/login` into the reset door.
     const door: SignInHostDoor =
-      intent?.door ??
+      fresh?.door ??
       (request.prompt.includes("create") ? "register" : "login");
     // A form-only entry — registration, reset — and the EARS-68
     // fresh-credential asks all render the form even with a record.

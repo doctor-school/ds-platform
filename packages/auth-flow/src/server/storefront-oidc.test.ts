@@ -397,6 +397,20 @@ describe("storefront entry", () => {
     });
   });
 
+  it("003 EARS-71: a /reset entry from an event records the event target with the reset door, as /login and /register do", async () => {
+    const api = fakeApi();
+    await storefrontEntry(
+      get("/reset?returnTo=%2Fwebinars%2Flive-1"),
+      ACADEMY,
+      "reset",
+      { fetchImpl: api.fetchImpl, env: ENV },
+    );
+    expect(api.internal("transaction")[0]?.body).toMatchObject({
+      door: "reset",
+      intent: { eventTarget: "live-1" },
+    });
+  });
+
   it("003 EARS-61: the storefront /verify is the registration entry and carries no address", async () => {
     const api = fakeApi();
     const res = await storefrontEntry(

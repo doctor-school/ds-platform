@@ -1822,6 +1822,25 @@ Feature: Net-new web authentication producing a doctor_guest identity
       | Academy    |
       | doctor     |
 
+  # Owner directive 2026-10-27 (PR #3265). App-local tests:
+  # apps/login/e2e/host-history.e2e.spec.ts EARS-71 reset entry,
+  # packages/auth-flow/src/server/storefront-oidc.test.ts (the recorded intent) and
+  # apps/api/test/auth/sign-in-host.e2e-spec.ts (the kept target, the sign-in door).
+  @EARS-71 @happy @entry-intent-event-target-reset
+  Scenario Outline: A guest who opened password recovery from an event returns to the sign-in form with that event's card
+    Given a guest on the page of a published эфир on the <storefront> storefront
+    When the guest opens password recovery with that эфир as the return target
+    Then the sign-in host shows the reset form without a return-context card
+    When the guest follows «Вернуться ко входу»
+    Then the sign-in host shows the sign-in form with the login variant of that эфир's return-context card
+    When the guest reloads the page
+    Then the login variant of that эфир's return-context card is still shown
+
+    Examples:
+      | storefront |
+      | Academy    |
+      | doctor     |
+
   # Academy retained-baseline projection (#3180), not shared-sign-in-host acceptance.
   # Existing native login and SMS-budget contracts remain retained; no expiry proof.
   @EARS-7 @EARS-8 @EARS-17 @EARS-41 @EARS-42 @happy @login-sms-resend

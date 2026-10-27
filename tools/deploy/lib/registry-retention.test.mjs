@@ -6,6 +6,8 @@ import assert from "node:assert/strict";
 
 import {
   RetentionError,
+  STAGE_SUITE_WALK_DEPTH,
+  findGreenStageSuite,
   parseBearerChallenge,
   nextTagRequest,
   parseNextLink,
@@ -16,7 +18,14 @@ import {
 
 const sha = (n) => n.toString(16).padStart(40, "0");
 const digest = (n) => `sha256:${n.toString(16).padStart(64, "0")}`;
-const RELEASE_REPOS = ["api", "api-migrate", "portal", "admin", "doctor", "login"];
+const RELEASE_REPOS = [
+  "api",
+  "api-migrate",
+  "portal",
+  "admin",
+  "doctor",
+  "login",
+];
 
 /** Every image repo carries the same tags; `pr/*` the same PR tags. */
 function registry(mainTags, prTags = []) {
@@ -33,7 +42,15 @@ const releases = (...pairs) => pairs.map(([tag, s]) => ({ tag, sha: s }));
 function baseInput(overrides = {}) {
   // main history, newest first: 20 .. 1
   const mainHistory = Array.from({ length: 20 }, (_, i) => sha(20 - i));
+  const history = overrides.mainHistory ?? mainHistory;
   return {
+    // the newest main commit is the green release candidate unless a test says otherwise
+    stageSuite: {
+      greenSha: history[0] ?? null,
+      unreadableSha: null,
+      reason: null,
+      walked: 1,
+    },
     tags: registry(mainHistory.map((s, i) => [s, digest(1000 + i)])),
     releases: releases(
       ["release-2026.10.20-1", sha(10)],
@@ -399,4 +416,124 @@ test("parseBearerChallenge reads realm, service and scope", () => {
     },
   );
   assert.equal(parseBearerChallenge('Basic realm="x"'), null);
+});
+
+const GREEN_LABEL = "newest green stage-suite";
+
+test("the newest green stage-suite main commit is kept beyond the 3-main window (release candidate, #3240)", () => {
+  // main moved 6 commits past the green candidate, each with a red stage-suite
+  const plan = planRetention(
+    baseInput({
+      stageSuite: {
+        greenSha: sha(14),
+        unreadableSha: null,
+        reason: null,
+        walked: 7,
+      },
+    }),
+  );
+  assert.deepEqual(plan.mainShas, [sha(20), sha(19), sha(18)]);
+  const api = plan.repos.find((r) => r.repo === "api");
+  const kept = api.keep.find((k) => k.tag === sha(14));
+  assert.ok(kept, "the green candidate is kept");
+  assert.equal(kept.reason, GREEN_LABEL);
+  assert.ok(!api.delete.flatMap((d) => d.tags).includes(sha(14)));
+  assert.match(
+    renderPlanSummary(plan, { dryRun: true }),
+    new RegExp(`${GREEN_LABEL}.*${sha(14)}`),
+  );
+});
+
+test("fail closed: an unreadable stage-suite keeps every main commit back to and including it", () => {
+  const plan = planRetention(
+    baseInput({
+      stageSuite: {
+        greenSha: null,
+        unreadableSha: sha(12),
+        reason: "HTTP 502",
+        walked: 9,
+      },
+    }),
+  );
+  const api = plan.repos.find((r) => r.repo === "api");
+  const keptTags = new Set(api.keep.map((k) => k.tag));
+  for (let n = 20; n >= 12; n -= 1)
+    assert.ok(keptTags.has(sha(n)), `keeps ${n}`);
+  assert.ok(!keptTags.has(sha(11)));
+  assert.equal(
+    api.keep.find((k) => k.tag === sha(13)).reason,
+    "stage-suite unreadable (fail closed)",
+  );
+  assert.match(renderPlanSummary(plan, { dryRun: true }), /HTTP 502/);
+});
+
+test("fail closed: the stage-suite walk result is missing or inconsistent", () => {
+  assert.throws(
+    () => planRetention(baseInput({ stageSuite: undefined })),
+    RetentionError,
+  );
+  assert.throws(
+    () =>
+      planRetention(
+        baseInput({ stageSuite: { greenSha: "abc", unreadableSha: null } }),
+      ),
+    RetentionError,
+  );
+  assert.throws(
+    () =>
+      planRetention(
+        baseInput({ stageSuite: { greenSha: sha(99), unreadableSha: null } }),
+      ),
+    /not in main history/,
+  );
+});
+
+test("findGreenStageSuite walks main newest-first and stops at the first success", async () => {
+  const states = {
+    [sha(20)]: "failure",
+    [sha(19)]: "pending",
+    [sha(18)]: null,
+    [sha(17)]: "success",
+  };
+  const read = [];
+  const result = await findGreenStageSuite(
+    Array.from({ length: 20 }, (_, i) => sha(20 - i)),
+    async (s) => {
+      read.push(s);
+      return states[s] ?? "failure";
+    },
+  );
+  assert.equal(result.greenSha, sha(17));
+  assert.equal(result.unreadableSha, null);
+  assert.equal(result.walked, 4);
+  assert.deepEqual(read, [sha(20), sha(19), sha(18), sha(17)]);
+});
+
+test("findGreenStageSuite: a status that cannot be read ends the walk unconcluded (fail closed)", async () => {
+  const result = await findGreenStageSuite(
+    [sha(20), sha(19), sha(18)],
+    async (s) => {
+      if (s === sha(19)) throw new Error("HTTP 502");
+      return "failure";
+    },
+  );
+  assert.equal(result.greenSha, null);
+  assert.equal(result.unreadableSha, sha(19));
+  assert.match(result.reason, /HTTP 502/);
+});
+
+test(`findGreenStageSuite reads at most STAGE_SUITE_WALK_DEPTH (${STAGE_SUITE_WALK_DEPTH}) main commits`, async () => {
+  assert.equal(STAGE_SUITE_WALK_DEPTH, 50);
+  let reads = 0;
+  const result = await findGreenStageSuite(
+    Array.from({ length: 80 }, (_, i) => sha(80 - i)),
+    async () => {
+      reads += 1;
+      return "failure";
+    },
+  );
+  assert.equal(reads, STAGE_SUITE_WALK_DEPTH);
+  assert.equal(result.greenSha, null);
+  assert.equal(result.unreadableSha, null);
+  assert.match(result.reason, /newest 50/);
 });

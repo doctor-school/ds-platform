@@ -7,8 +7,9 @@
 // (`RECORDED_IMAGE_NAMES`): the targets of the latest
 // RELEASES_KEPT `release-*` releases (prod + rollback targets — `pnpm deploy:prod
 // --rollback` re-pulls a pruned SHA's recorded digests) ∪ the newest MAIN_SHAS_KEPT
-// first-parent `main` commits that have an image (the next release candidate and
-// stage `main`) ∪ the SHA of the latest successful production GitHub Deployment
+// first-parent `main` commits that have an image (stage `main`) ∪ the newest `main`
+// commit whose `stage-suite` status is `success` (the release candidate, #3240;
+// an unreadable status keeps every `main` commit back to it) ∪ the SHA of the latest successful production GitHub Deployment
 // (the release cut is non-fatal to a deploy, so a running SHA may have no release)
 // ∪ the heads of the open `hotfix/*` branches (a hotfix is cut from production and
 // pushes under the release namespace, so its pending images are on neither of the
@@ -33,6 +34,91 @@ export class RetentionError extends Error {
 
 export const RELEASES_KEPT = 3;
 export const MAIN_SHAS_KEPT = 3;
+/** How many first-parent `main` commits the `stage-suite` walk reads at most. */
+export const STAGE_SUITE_WALK_DEPTH = 50;
+const GREEN_STAGE_SUITE = "newest green stage-suite";
+const STAGE_SUITE_UNREADABLE = "stage-suite unreadable (fail closed)";
+
+/**
+ * The release candidate: the newest `main` commit whose `stage-suite` commit status
+ * is `success` (#3240) — a release refuses any other, so pruning it blocks the
+ * release once `main` moves MAIN_SHAS_KEPT commits past it with a red suite.
+ * `readState(sha)` resolves the state (null when there is none) and throws when the
+ * status cannot be read; a throw ends the walk unconcluded at that commit.
+ *
+ * @returns {Promise<{greenSha: string|null, unreadableSha: string|null,
+ *   reason: string|null, walked: number}>}
+ */
+export async function findGreenStageSuite(
+  mainHistory,
+  readState,
+  depth = STAGE_SUITE_WALK_DEPTH,
+) {
+  const walk = mainHistory.slice(0, depth);
+  for (let i = 0; i < walk.length; i += 1) {
+    let state;
+    try {
+      state = await readState(walk[i]);
+    } catch (error) {
+      return {
+        greenSha: null,
+        unreadableSha: walk[i],
+        reason: `stage-suite of ${walk[i]} could not be read: ${error.message}`,
+        walked: i + 1,
+      };
+    }
+    if (state === "success")
+      return {
+        greenSha: walk[i],
+        unreadableSha: null,
+        reason: null,
+        walked: i + 1,
+      };
+  }
+  return {
+    greenSha: null,
+    unreadableSha: null,
+    reason: `no green stage-suite among the newest ${depth} main commits`,
+    walked: walk.length,
+  };
+}
+
+/** The SHAs the `stage-suite` walk keeps, each with its reason. */
+function stageSuiteKeeps(stageSuite, mainHistory) {
+  if (!stageSuite || typeof stageSuite !== "object") {
+    throw new RetentionError(
+      "stage-suite walk result missing — refusing to decide what the release candidate is",
+    );
+  }
+  const { greenSha, unreadableSha } = stageSuite;
+  for (const [name, value] of [
+    ["green", greenSha],
+    ["unreadable", unreadableSha],
+  ]) {
+    if (value != null && !FULL_SHA_RE.test(String(value))) {
+      throw new RetentionError(
+        `stage-suite walk: ${name} commit ${JSON.stringify(value)} is not a full 40-character SHA`,
+      );
+    }
+    if (value != null && !mainHistory.includes(value)) {
+      throw new RetentionError(
+        `stage-suite walk: ${name} commit ${value} is not in main history`,
+      );
+    }
+  }
+  if (greenSha && unreadableSha) {
+    throw new RetentionError(
+      "stage-suite walk: both a green and an unreadable commit — inconsistent result",
+    );
+  }
+  if (unreadableSha) {
+    const upTo = mainHistory.indexOf(unreadableSha);
+    return mainHistory
+      .slice(0, upTo + 1)
+      .map((s) => [s, STAGE_SUITE_UNREADABLE]);
+  }
+  return greenSha ? [[greenSha, GREEN_STAGE_SUITE]] : [];
+}
 
 const FULL_SHA_RE = /^[0-9a-f]{40}$/;
 const DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
@@ -128,6 +214,8 @@ function assertTagListing(tags, repos) {
  * @param {string[]} input.hotfixHeads head SHAs of the `hotfix/*` branches
  * @param {string} input.productionSha SHA of the latest successful production
  *   GitHub Deployment
+ * @param {object} input.stageSuite the `findGreenStageSuite` result over
+ *   `mainHistory`
  */
 export function planRetention({
   tags,
@@ -136,6 +224,7 @@ export function planRetention({
   openPrHeads,
   hotfixHeads,
   productionSha,
+  stageSuite,
 }) {
   const repos = retentionRepos();
   assertTagListing(tags, repos);
@@ -152,6 +241,7 @@ export function planRetention({
       `latest successful production deployment: ${JSON.stringify(productionSha)} is not a full 40-character SHA — refusing to decide what production runs`,
     );
   }
+  const stageSuiteKept = stageSuiteKeeps(stageSuite, mainHistory);
 
   const releaseRepos = repos.filter((r) => !r.startsWith("pr/"));
   const inRegistry = new Set(
@@ -168,6 +258,7 @@ export function planRetention({
   };
   keepOnce(productionSha, "production deployment");
   for (const s of mainShas) keepOnce(s, "main");
+  for (const [s, reason] of stageSuiteKept) keepOnce(s, reason);
   for (const s of hotfixHeads) keepOnce(s, "hotfix branch");
   for (const s of openPrHeads) keepOnce(s, "open PR");
   const prKeep = new Map(openPrHeads.map((s) => [s, "open PR"]));
@@ -214,10 +305,24 @@ export function planRetention({
     releaseShas,
     mainShas,
     productionSha,
+    stageSuite: {
+      greenSha: stageSuite.greenSha ?? null,
+      unreadableSha: stageSuite.unreadableSha ?? null,
+      reason: stageSuite.reason ?? null,
+      walked: stageSuite.walked ?? null,
+    },
     hotfixHeads: [...hotfixHeads],
     openPrHeads: [...openPrHeads],
     repos: plan,
   };
+}
+
+function stageSuiteSummary({ greenSha, unreadableSha, reason, walked }) {
+  if (greenSha)
+    return `Release candidate kept (${GREEN_STAGE_SUITE}, ${walked} of at most ${STAGE_SUITE_WALK_DEPTH} main commits read): \`${greenSha}\``;
+  if (unreadableSha)
+    return `${STAGE_SUITE_UNREADABLE}: every main commit back to and including \`${unreadableSha}\` kept — ${reason}`;
+  return `Release candidate: none kept — ${reason}`;
 }
 
 /** Markdown for `$GITHUB_STEP_SUMMARY` and the log. */
@@ -228,6 +333,7 @@ export function renderPlanSummary(plan, { dryRun }) {
     `- Releases kept (latest ${RELEASES_KEPT}): ${plan.releaseShas.map((s) => `\`${s}\``).join(", ")}`,
     `- Main SHAs kept (newest ${MAIN_SHAS_KEPT} with an image): ${plan.mainShas.map((s) => `\`${s}\``).join(", ") || "none"}`,
     `- Latest successful production deployment kept: \`${plan.productionSha}\``,
+    `- ${stageSuiteSummary(plan.stageSuite)}`,
     `- Hotfix branch heads kept: ${plan.hotfixHeads.map((s) => `\`${s}\``).join(", ") || "none"}`,
     `- Open PR heads kept (release and \`pr/\` repos): ${plan.openPrHeads.length}`,
     "",

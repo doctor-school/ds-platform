@@ -7,7 +7,8 @@
 //   REGISTRY_TOKEN     the push token (push + pull + delete); required
 //   GITHUB_REPOSITORY  owner/name whose releases, production deployments, hotfix
 //                      branches and open PRs set the keep-set
-//   GH_TOKEN           for `gh api` (contents, pull-requests, deployments: read)
+//   GH_TOKEN           for `gh api` (contents, pull-requests, deployments,
+//                      statuses: read)
 //   DRY_RUN            "true" prints the plan only; anything else deletes
 //   GITHUB_STEP_SUMMARY optional; the plan and the result are appended to it
 //
@@ -29,6 +30,7 @@ import { promisify } from "node:util";
 import { IMAGE_REGISTRY } from "./lib/registry.mjs";
 import {
   RetentionError,
+  findGreenStageSuite,
   nextTagRequest,
   parseBearerChallenge,
   parseNextLink,
@@ -244,6 +246,18 @@ async function latestProductionSha(repo) {
   );
 }
 
+/** The state of the latest `stage-suite` commit status on `sha` (`stage.yml`), or
+ *  null when there is none; throws when the status cannot be read. */
+async function stageSuiteState(repo, sha) {
+  const [state] = await ghLines([
+    "api",
+    `repos/${repo}/commits/${sha}/status?per_page=100`,
+    "--jq",
+    '.statuses[] | select(.context == "stage-suite") | .state',
+  ]);
+  return state ?? null;
+}
+
 async function mainHistory() {
   await run("git", ["fetch", "--quiet", "--filter=tree:0", "origin", "main"]);
   const { stdout } = await run(
@@ -275,6 +289,11 @@ async function main() {
       latestProductionSha(repo),
       mainHistory(),
     ]);
+  const stageSuite = await findGreenStageSuite(history, (sha) =>
+    stageSuiteState(repo, sha),
+  );
+  if (stageSuite.unreadableSha)
+    console.error(`::warning::registry retention: ${stageSuite.reason}`);
   const plan = planRetention({
     tags,
     releases,
@@ -282,6 +301,7 @@ async function main() {
     openPrHeads,
     hotfixHeads,
     productionSha,
+    stageSuite,
   });
   summarize(renderPlanSummary(plan, { dryRun }));
   if (dryRun) return;

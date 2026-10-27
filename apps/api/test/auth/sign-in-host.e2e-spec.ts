@@ -786,6 +786,146 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     },
   );
 
+  it("EARS-66: S168 a silent Academy request lost after its genuine read recovers through the fixed entry and a fresh bound form", async () => {
+    const jar = new Jar();
+    const state = app.get<SignInHostStateStore>(SIGN_IN_HOST_STATE_STORE);
+    const records = app.get(SignInHostRecordStore);
+    const auth = app.get(AuthService);
+    const db = app.get<DrizzleHandle["db"]>(DRIZZLE_DB);
+    const authRequest = hostIdp.seedAuthRequest({
+      clientId: ACADEMY,
+      prompt: ["none"],
+    });
+    const originalRead = hostIdp.readAuthRequest.bind(hostIdp);
+    const read = vi
+      .spyOn(hostIdp, "readAuthRequest")
+      .mockImplementationOnce(async (id) => {
+        const view = await originalRead(id);
+        expect(view).toMatchObject({
+          id: authRequest,
+          clientId: ACADEMY,
+          prompt: ["none"],
+        });
+        hostIdp.expire(id);
+        return view;
+      });
+    const refused = vi.spyOn(hostIdp, "finaliseWithError");
+    const putForm = vi.spyOn(state, "putForm");
+    const noWork = [
+      vi.spyOn(db, "select"),
+      vi.spyOn(auth, "register"),
+      vi.spyOn(auth, "passwordStep"),
+      vi.spyOn(auth, "otpStep"),
+      vi.spyOn(auth, "verifyStep"),
+      vi.spyOn(auth, "requestLoginOtp"),
+      vi.spyOn(idp, "createUser"),
+      vi.spyOn(idp, "findUserByEmail"),
+      vi.spyOn(idp, "passwordLogin"),
+      vi.spyOn(idp, "submitEmailCode"),
+      vi.spyOn(idp, "loginWithEmailOtp"),
+      vi.spyOn(idp, "loginWithSmsOtp"),
+      vi.spyOn(idp, "requestEmailVerification"),
+      vi.spyOn(idp, "requestEmailLoginCode"),
+      vi.spyOn(idp, "requestSmsOtp"),
+      vi.spyOn(idp, "terminateSession"),
+      vi.spyOn(hostIdp, "setSessionLifetime"),
+      vi.spyOn(hostIdp, "finaliseWithSession"),
+      vi.spyOn(records, "find"),
+      vi.spyOn(records, "insert"),
+      vi.spyOn(records, "delete"),
+      vi.spyOn(records, "touchFinalised"),
+    ];
+    const finalised = [...hostIdp.finalised];
+    const lifetimes = [...hostIdp.lifetimes];
+    let interactiveRequest: string | undefined;
+    try {
+      expect([...jar.values]).toEqual([]);
+      const query = new URLSearchParams({
+        authRequest,
+        client_id: DOCTOR,
+        storefront: "doctor",
+        returnTo: "https://evil.test/login",
+        redirect_uri: "https://evil.test/auth/callback",
+      });
+      const silent = await app.inject({
+        method: "GET",
+        url: `/v1/sign-in-host/entry?${query}`,
+        headers: {
+          ...DEVICE,
+          "x-client-id": DOCTOR,
+          "x-storefront": "doctor",
+          "x-ds-sign-in-entry": "https://evil.test/login",
+        },
+      });
+      expect(silent.statusCode).toBe(200);
+      expect(silent.json()).toEqual({ action: "redirect", url: ACADEMY_LOGIN });
+      expect(read).toHaveBeenCalledExactlyOnceWith(authRequest);
+      expect(refused).toHaveBeenCalledExactlyOnceWith(
+        authRequest,
+        "login_required",
+      );
+      expect(read.mock.invocationCallOrder[0]).toBeLessThan(
+        refused.mock.invocationCallOrder[0]!,
+      );
+      expect(await refused.mock.results[0]!.value).toBeNull();
+      expect(await originalRead(authRequest)).toBeNull();
+      expect(silent.cookies).toEqual([]);
+      expect([...jar.values]).toEqual([]);
+      expect(putForm).not.toHaveBeenCalled();
+      expect(hostIdp.finalised).toEqual(finalised);
+      expect(hostIdp.lifetimes).toEqual(lifetimes);
+      for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
+
+      read.mockRestore();
+      interactiveRequest = hostIdp.seedAuthRequest({ clientId: ACADEMY });
+      expect(interactiveRequest).not.toBe(authRequest);
+      const interactive = await entry(jar, interactiveRequest);
+      expect(interactive.res.statusCode).toBe(200);
+      expect(interactive.body).toEqual({
+        action: "render",
+        storefront: "academy",
+        door: "login",
+        authRequest: interactiveRequest,
+        csrf: expect.any(String),
+      });
+      if (interactive.body.action !== "render") throw new Error("not rendered");
+      expect(interactive.body.csrf).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      const formId = jar.values.get(FORM_COOKIE_NAME)!;
+      expect(formId).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(formId).not.toBe(interactive.body.csrf);
+      const binding = {
+        csrfToken: interactive.body.csrf,
+        storefront: "academy",
+        authRequestId: interactiveRequest,
+      };
+      expect(putForm).toHaveBeenCalledExactlyOnceWith(
+        formId,
+        expect.objectContaining(binding),
+        FORM_STATE_TTL_SECONDS,
+      );
+      expect(await state.getForm(formId)).toEqual(binding);
+      expect(interactive.res.cookies.map((cookie) => cookie.name)).toEqual([
+        FORM_COOKIE_NAME,
+      ]);
+      expect([...jar.values.keys()]).toEqual([FORM_COOKIE_NAME]);
+      expect(await originalRead(interactiveRequest)).toMatchObject({
+        id: interactiveRequest,
+        clientId: ACADEMY,
+        prompt: [],
+      });
+      expect(refused).toHaveBeenCalledTimes(1);
+      expect(hostIdp.finalised).toEqual(finalised);
+      expect(hostIdp.lifetimes).toEqual(lifetimes);
+      for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
+    } finally {
+      for (const spy of [read, refused, putForm, ...noWork]) spy.mockRestore();
+      const formId = jar.values.get(FORM_COOKIE_NAME);
+      if (formId) await state.deleteForm(formId);
+      hostIdp.expire(authRequest);
+      if (interactiveRequest) hostIdp.expire(interactiveRequest);
+    }
+  });
+
   it("EARS-68: prompt=none without a record finalises login_required", async () => {
     const authRequest = hostIdp.seedAuthRequest({
       clientId: DOCTOR,

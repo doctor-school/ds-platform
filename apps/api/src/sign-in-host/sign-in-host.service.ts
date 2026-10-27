@@ -164,10 +164,10 @@ export class SignInHostService {
     }
 
     // EARS-71: the intent is spent on this read whatever happens next. A
-    // reload of the same auth request (EARS-44 amended) re-renders the method
-    // the spent intent opened, from this browser's own form state for THIS
-    // auth request — never its hand-off or event target, so nothing is sent
-    // again and no card returns.
+    // reload of the same auth request (EARS-44 amended), and a hop between its
+    // doors, re-render the method and the event target the spent intent
+    // opened, from this browser's own form state for THIS auth request —
+    // never its hand-off, so nothing is sent again; the event's card stays.
     const fresh = await resolveEntryIntent(
       this.state,
       request.loginHint,
@@ -530,17 +530,23 @@ export class SignInHostService {
 }
 
 /**
- * 003 EARS-44 (amended) / EARS-71 — the intent a reload of the SAME auth
- * request re-renders: the door and method the spent intent opened, from this
- * browser's own form state; never its hand-off reference or event target.
+ * 003 EARS-44 (amended) / EARS-71 — the intent a reload or door hop of the
+ * SAME auth request re-renders: the door, method and event target the spent
+ * intent opened, from this browser's own form state; never its hand-off
+ * reference (owner Stage-B finding 2026-10-27, PR #3265: the card stays).
  */
 function reloadedIntent(
   prior: FormState | null,
   authRequestId: string,
 ): EntryIntent | undefined {
   const spent = prior?.authRequestId === authRequestId ? prior.intent : null;
-  if (!spent?.method) return undefined;
-  return { door: spent.door, method: spent.method, clientId: spent.clientId };
+  if (!spent?.method && !spent?.eventTarget) return undefined;
+  return {
+    door: spent.door,
+    ...(spent.method ? { method: spent.method } : {}),
+    ...(spent.eventTarget ? { eventTarget: spent.eventTarget } : {}),
+    clientId: spent.clientId,
+  };
 }
 
 function publicIntent(intent: EntryIntent) {

@@ -78,10 +78,15 @@ export function signInHostConfig(
  * EARS-71 — the search params the mounted door reads, built ONLY from the
  * entry answer: the resolved intent's method (`method=code`) and its event
  * reference as THIS storefront's event path (`returnTo`, which the shared
- * return-context read turns into the card). Every param of the browser's URL
- * is dropped: an unknown, spent or foreign intent arrives as no intent and
- * renders the plain form, with no card. The verify door keeps the address it
- * was hopped to with (`email`), the one value a door hands the next.
+ * return-context read turns into the card on the sign-in and registration
+ * doors and the registration's code step — the doors that draw it on the
+ * storefront). The answer carries the event for the life of the auth request
+ * (the API re-reads it from this browser's form state on a door hop or a
+ * reload), so the card follows the person across the doors. Every param of
+ * the browser's URL is dropped: an unknown, spent or foreign intent arrives as
+ * no intent and renders the plain form, with no card. The verify door keeps
+ * the address it was hopped to with (`email`), the one value a door hands the
+ * next.
  */
 export function signInHostSearchParams(
   storefront: AuthFlowHostConfig,
@@ -92,7 +97,7 @@ export function signInHostSearchParams(
   const params: Record<string, string> = {};
   const intent = render.intent;
   if (door === "login" && intent?.method === "code") params.method = "code";
-  if (intent?.eventTarget && (door === "login" || door === "register")) {
+  if (intent?.eventTarget && door !== "reset") {
     params.returnTo = storefront.routes.eventPathTemplate.replace(
       ":slug",
       encodeURIComponent(intent.eventTarget),

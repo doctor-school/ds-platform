@@ -1,3 +1,4 @@
+import { DEFAULT_AUTH_FLOW_COPY } from "@ds/auth-flow/copy";
 import { test, expect, type Page } from "@playwright/test";
 
 import {
@@ -20,6 +21,10 @@ import {
  * stands for the storefront page the callback returns to.
  */
 const EVENT_PAGE = storefrontPageUrl("webinars/prp-pri-gonartroze");
+/** The double's fixture эфир (`support/sign-in-entry-api.mjs`). */
+const EVENT_SLUG = "prp-pri-gonartroze";
+const EVENT_TITLE = "PRP при гонартрозе";
+const RETURN_CONTEXT = DEFAULT_AUTH_FLOW_COPY.returnContext;
 const EMAIL = "doctor@clinic.ru";
 const PASSWORD = "correct horse battery";
 
@@ -80,6 +85,71 @@ test.describe("003 EARS-5: Back after the sign-in is the page before it", () => 
     expect(await historyLength(page)).toBe(depth);
     await page.goBack();
     await expect.poll(() => page.url()).toBe(EVENT_PAGE);
+  });
+
+  for (const storefront of ["doctor", "academy"] as const) {
+    test(`003 EARS-71: on the ${storefront} sign-in host a hop between the doors keeps the event's return-context card — register → «Уже есть аккаунт? Войти» → «Создать аккаунт», each reloaded`, async ({
+      page,
+    }) => {
+      // Owner Stage-B finding 2026-10-27 (PR #3265): the card follows the same
+      // auth request across the doors, the login variant on the sign-in form
+      // and the registration variant on the registration form.
+      await page.setViewportSize({ width: 1280, height: 900 });
+      const panel = page.getByTestId("return-context-panel");
+      const expectCard = async (variant: "login" | "register") => {
+        await expect(panel.locator("[data-webinar-card]")).toContainText(
+          EVENT_TITLE,
+        );
+        await expect(panel).toContainText(RETURN_CONTEXT[variant]);
+        await expect(panel).not.toContainText(
+          RETURN_CONTEXT[variant === "login" ? "register" : "login"],
+        );
+      };
+
+      await page.goto(
+        doorPath(storefront, "register", { eventTarget: EVENT_SLUG }),
+      );
+      await expectCard("register");
+
+      await page.getByRole("link", { name: /Уже есть аккаунт/ }).click();
+      await expect(page.getByTestId("password-login-form")).toBeVisible();
+      await expect.poll(() => new URL(page.url()).pathname).toBe("/login");
+      await expectCard("login");
+      await page.reload();
+      await expect(page.getByTestId("password-login-form")).toBeVisible();
+      await expectCard("login");
+
+      await page.getByRole("link", { name: "Создать аккаунт" }).click();
+      await expect(page.getByTestId("register-email")).toBeVisible();
+      await expect.poll(() => new URL(page.url()).pathname).toBe("/register");
+      await expectCard("register");
+      await page.reload();
+      await expect(page.getByTestId("register-email")).toBeVisible();
+      await expectCard("register");
+    });
+  }
+
+  test("003 EARS-71 / EARS-24: the registration code step keeps the event's return-context card, and so does its reload on /verify", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const panel = page.getByTestId("return-context-panel");
+    await page.goto(
+      doorPath("doctor", "register", { eventTarget: EVENT_SLUG }),
+    );
+    await submitRegistration(page);
+    await expect(panel.locator("[data-webinar-card]")).toContainText(
+      EVENT_TITLE,
+    );
+    await expect(panel).toContainText(RETURN_CONTEXT.register);
+
+    await page.reload();
+    await expect(page.getByTestId("verify-card")).toContainText(EMAIL);
+    await expect.poll(() => new URL(page.url()).pathname).toBe("/verify");
+    await expect(panel.locator("[data-webinar-card]")).toContainText(
+      EVENT_TITLE,
+    );
+    await expect(panel).toContainText(RETURN_CONTEXT.register);
   });
 
   test("003 EARS-24 / EARS-5: the accepted registration code leaves no host entry behind — Back is the storefront page", async ({

@@ -4973,7 +4973,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
     },
   );
 
-  it("EARS-24/71: A001 a registration event intent renders once over a live record and reopens as a plain registration form", async () => {
+  it("EARS-24/71: A001 a registration event intent renders once over a live record and its re-renders of the same auth request keep the event target from the form state, never the spent intent", async () => {
     const address = await account("a001-event-context");
     const jar = new Jar();
     await signIn(jar, address);
@@ -5046,6 +5046,10 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
       expect(await records.find(recordId)).toEqual(before);
       for (const spy of noWork) expect(spy).not.toHaveBeenCalled();
 
+      // 003 EARS-71 (owner Stage-B finding 2026-10-27, PR #3265): a hop to the
+      // other door or a reload of the same auth request re-renders the event
+      // target from this browser's own form state — twice over, the kept
+      // target travels with each fresh form state — while the intent stays spent.
       const reopened = await entry(jar, authRequest);
       expect(reopened.res.statusCode).toBe(200);
       expect(reopened.body).toEqual({
@@ -5054,6 +5058,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
         door: "register",
         authRequest,
         csrf: expect.any(String),
+        intent: { eventTarget, handoff: false },
       });
       if (reopened.body.action !== "render") throw new Error("not rendered");
       const nextForm = jar.values.get(FORM_COOKIE_NAME)!;
@@ -5065,9 +5070,40 @@ describe.skipIf(!process.env.DATABASE_URL)("Sign-in host API (e2e)", () => {
         csrfToken: reopened.body.csrf,
         storefront: "academy",
         authRequestId: authRequest,
+        intent,
       });
       expect(await state.takeIntent(hint)).toBeNull();
-      for (const { res } of [first, reopened]) {
+      const again = await entry(jar, authRequest);
+      expect(again.body).toMatchObject({
+        action: "render",
+        door: "register",
+        intent: { eventTarget, handoff: false },
+      });
+
+      // Another auth request in the same browser keeps nothing of it.
+      const other = hostIdp.seedAuthRequest({
+        clientId: ACADEMY,
+        prompt: ["create"],
+      });
+      const elsewhere = await entry(jar, other);
+      expect(elsewhere.body).toEqual({
+        action: "render",
+        storefront: "academy",
+        door: "register",
+        authRequest: other,
+        csrf: expect.any(String),
+      });
+      // ... and once that form state is overwritten, the first auth request
+      // re-renders plain (the one-form-state rule): no card.
+      const overwritten = await entry(jar, authRequest);
+      expect(overwritten.body).toEqual({
+        action: "render",
+        storefront: "academy",
+        door: "register",
+        authRequest,
+        csrf: expect.any(String),
+      });
+      for (const { res } of [first, reopened, again, elsewhere, overwritten]) {
         expect(res.cookies.map((cookie) => cookie.name)).toEqual([
           FORM_COOKIE_NAME,
         ]);

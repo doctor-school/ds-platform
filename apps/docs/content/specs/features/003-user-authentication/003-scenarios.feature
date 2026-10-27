@@ -1799,6 +1799,29 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the guest signs in
     Then the guest lands signed in on "/webinars/<slug>"
 
+  # Owner Stage-B finding 2026-10-27, PR #3265. App-local tests:
+  # apps/login/e2e/host-history.e2e.spec.ts EARS-71 (both storefronts, the hop,
+  # each reload; the code step's reload on /verify) and
+  # apps/api/test/auth/sign-in-host.e2e-spec.ts A001 (the form-state re-read).
+  @EARS-71 @happy @entry-intent-event-target-door-hop
+  Scenario Outline: A guest from an event page keeps that event's card while switching between the sign-in and registration forms
+    Given a guest on the page of a published эфир on the <storefront> storefront
+    When the guest follows the registration link from that page
+    Then the sign-in host shows the registration form with the registration variant of that эфир's return-context card
+    When the guest follows «Уже есть аккаунт? Войти»
+    Then the sign-in host shows the sign-in form with the login variant of that эфир's return-context card
+    When the guest reloads the page
+    Then the login variant of that эфир's return-context card is still shown
+    When the guest follows «Создать аккаунт»
+    Then the sign-in host shows the registration form with the registration variant of that эфир's return-context card
+    When the guest reloads the page
+    Then the registration variant of that эфир's return-context card is still shown
+
+    Examples:
+      | storefront |
+      | Academy    |
+      | doctor     |
+
   # Academy retained-baseline projection (#3180), not shared-sign-in-host acceptance.
   # Existing native login and SMS-budget contracts remain retained; no expiry proof.
   @EARS-7 @EARS-8 @EARS-17 @EARS-41 @EARS-42 @happy @login-sms-resend

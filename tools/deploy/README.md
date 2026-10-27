@@ -479,24 +479,22 @@ stay on the operator path above.
   `backup-info`, `rollback-floor`, `finish`, `check`, `supersede`, `converge`,
   `capabilities`. A
   payload is one JSON object or the tree archive on stdin, checked box-side; no script
-  travels. The client asks `capabilities` once per run, first as the forced command of the
-  converged hop key, then through `sudo -n` (a shell login: `breakglass`, or `deploy`
-  before the converge). **Transition:** when neither answers, the installed entrypoint
-  predates the data verbs; the run installs the box entrypoints from the tree it holds
-  through `deploy`'s shell, once, and asks again. **Converge (#3320):** right after its
-  data `install` and before `data-prod-env`, the `--local` run converges ds-data-prod
-  itself (`client.converge()`), every release: the `converge <sha>` verb, through the
-  form that answered (forced once converged, `sudo -n` before), installs the shipped box
-  entrypoints and runs the root-owned `harden-ssh.sh --role data --from-release`; the
-  run then asks `capabilities` again and goes on only when the verb exited 0 and the
-  forced command answers. The answering form alone is no proof — a converge stopped after
-  the hop rewrite is finished by the next one. A refused or failed converge fails the run
+  travels. Each run mode takes one command form (`DATA_PROD_FORM`): the `--local` run
+  sends the verb as the ssh command, to the forced command of the hop key; the
+  workstation path's `breakglass` shell login sends it through `sudo -n`. The client asks
+  `capabilities` once per run in that form only; a form that does not answer refuses the
+  run (the other form is never tried) — `capabilities` must name every verb.
+  **Converge (#3320):** right after its data `install` and before `data-prod-env`, the
+  `--local` run converges ds-data-prod itself (`client.converge()`), every release: the
+  `converge <sha>` verb, through the forced command, installs the shipped box entrypoints
+  and runs the root-owned `harden-ssh.sh --role data --from-release`; the run then asks
+  `capabilities` again and goes on only when the verb exited 0 and the forced command
+  answers. The forced command answering alone is no proof — a converge stopped after the
+  hop rewrite is finished by the next one. A refused or failed converge fails the run
   before any data-prod state change, after a re-probe so `finish … failed` still lands.
   The log shows `↻ ds-data-prod: converge <sha12>: …` then `✓ … converged`; a
-  converged box prints `nothing to change`. `capabilities` must name every verb but
-  `converge` (an older entrypoint serves the run until this run's `install`). No owner server step
-  is in the path. The transition and the pre-converge `sudo` branch of the hop go, with
-  `bootstrapSources`, after the first release that converged (#3320).
+  converged box prints `nothing to change`. The workstation path never converges. No owner
+  server step is in the path.
 - **No downgrade.** The driver (before it starts the unit) and the run itself (right
   after its previous-SHA read) refuse a SHA that does not descend from the live prod SHA,
   the running `ds-api:<sha>` tag: GitHub `compare <live>...<sha>` must answer `ahead` or

@@ -85,9 +85,10 @@ test("2987: an asRoot script and capture run through sudo with the script intact
 });
 
 // #3338: a script larger than one argv string (Linux MAX_ARG_STRLEN, 128 KiB) — the
-// data-prod transition install of every BOX_ENTRYPOINT among them — runs whole,
-// through both command forms, from a temp file removed on exit, its rc kept.
-test("3338: both command forms run a script past 128 KiB, the real transition install included", { skip: SKIP }, async () => {
+// from-source install of every BOX_ENTRYPOINT (the workstation `--rollback`'s) among
+// them — runs whole, through both command forms, from a temp file removed on exit,
+// its rc kept.
+test("3338: both command forms run a script past 128 KiB, the real from-source install included", { skip: SKIP }, async () => {
   const dir = mkdtempSync(join(tmpdir(), "ds-big-script-"));
   const scratch = join(dir, "tmp");
   mkdirSync(scratch);

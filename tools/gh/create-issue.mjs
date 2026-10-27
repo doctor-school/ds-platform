@@ -68,10 +68,14 @@ import { pathToFileURL } from "node:url";
 
 import {
   EARS_KIND_LABEL,
+  FALLBACK_MILESTONE,
   ROADMAP_LABEL,
+  TRACK_MILESTONE_PREFIXES,
   classifyIssueTaxonomy,
   isEpicTitle,
+  milestoneTrack,
   ownsRoadmapLabel,
+  releaseLetterLookalike,
 } from "./lib/roadmap-taxonomy.mjs";
 
 // Large payloads (board lists, GraphQL) overflow spawnSync's default 1 MiB
@@ -442,8 +446,8 @@ export function hasMilestone(args) {
   );
 }
 
-/** The standing fallback milestone for ops/process Issues (#1137). */
-export const FALLBACK_MILESTONE = "Platform ops & hardening";
+// The standing fallback milestone (#1137) — `track:platform` only (#3375).
+export { FALLBACK_MILESTONE };
 
 /**
  * The milestone-requirement error (#1137 + #1729). Returns null when a
@@ -461,8 +465,47 @@ export function milestoneError(args, { parent = null } = {}) {
   if (parent != null) return null;
   return (
     `every new Issue needs a milestone — pass --milestone <name>, the ` +
-    `track release milestone the Issue ships in; use «${FALLBACK_MILESTONE}» as the ` +
-    `standing fallback for ops/process work.`
+    `track release milestone the Issue ships in; a \`track:platform\` Issue uses ` +
+    `«${FALLBACK_MILESTONE}» as the standing fallback for ops/process work.`
+  );
+}
+
+/**
+ * A product-track Issue homes on a milestone of its OWN track (#3375, spec
+ * §7.1): a `track:doctor` / `track:academy` Issue takes a release or the
+ * «· Позже» backlog of that track, never «Platform ops & hardening» or the
+ * other track's milestone — misrouted product work disappears from its track's
+ * release rotation. `track:platform` keeps the fallback. Any track refuses a
+ * milestone typed with a Latin look-alike release letter («Витрина B3»), which
+ * would otherwise drop out of the forecast unnoticed. Returns null when
+ * valid (or when there is no effective milestone — an epic, or a gate already
+ * refused by `milestoneError`).
+ * @param {string[]} args  the gh passthrough
+ * @param {string|null} milestone  the effective milestone (passed or inherited)
+ * @param {() => string[]} listOpenMilestones  titles of the repo's open
+ *   milestones; called only to word a refusal
+ * @returns {string|null}
+ */
+export function productTrackMilestoneError(args, milestone, listOpenMilestones) {
+  const name = typeof milestone === "string" ? milestone.trim() : "";
+  const cyrillic = releaseLetterLookalike(name);
+  if (cyrillic)
+    return (
+      `«${name}» carries a Latin look-alike of the release letter «${cyrillic}» — ` +
+      `rename the milestone to the Cyrillic letter first, or roadmap:forecast ` +
+      `drops that release (spec §7.1, #3375).`
+    );
+  const track = collectTrackLabels(args)[0];
+  if (!track || !(track in TRACK_MILESTONE_PREFIXES)) return null;
+  if (!name) return null;
+  if (milestoneTrack(name) === track) return null;
+  const own = (listOpenMilestones() ?? []).filter((t) => milestoneTrack(t) === track);
+  return (
+    `a \`${track}\` Issue must home on a milestone of its own track — a ` +
+    `«${TRACK_MILESTONE_PREFIXES[track]} …» release or «${TRACK_MILESTONE_PREFIXES[track]} · Позже»; ` +
+    `«${name}» is not one (spec §7.1, #3375). Open milestones of this track: ` +
+    (own.length ? own.map((t) => `«${t}»`).join(", ") : "(none open)") +
+    "."
   );
 }
 
@@ -725,7 +768,8 @@ function main() {
         "  an `epic: …` title needs NO milestone and rejects one (an epic spans releases).\n" +
         `  Required (fail-closed, BEFORE any gh call): exactly ONE source label (#1009) — ${SOURCE_LABELS.join(" | ")};\n` +
         `  exactly ONE kind label (#1137) — ${KIND_LABELS.join(" | ")}; exactly ONE track label (#1583) — ${TRACK_LABELS.join(" | ")};\n` +
-        `  and a --milestone (fallback «${FALLBACK_MILESTONE}»).\n` +
+        `  and a --milestone: a product track (track:doctor / track:academy) takes a milestone of its OWN\n` +
+        `  track (a release or «· Позже»); only track:platform may use the fallback «${FALLBACK_MILESTONE}».\n` +
         "  Every tracked Issue (#1821, ADR-0013 §A1) additionally needs a body `Reuse:` line —\n" +
         "  `canon: <path>` | `extract-from: <path> (#N)` | `new: <reason>`; check the capability-ownership registry first.\n" +
         "  Issue Type is auto-derived from the kind label; assignee defaults to @me (both overridable via --type/--assignee).\n" +
@@ -814,6 +858,19 @@ function main() {
       );
     }
   }
+
+  //   • product-track home (#3375): a `track:doctor` / `track:academy` Issue —
+  //     passed or inherited milestone alike — lands on its own track's
+  //     milestone, never the platform fallback. Still before any write.
+  const trackHomeErr = productTrackMilestoneError(
+    passthrough,
+    inheritedMilestone ?? milestoneValue(passthrough),
+    () =>
+      (gh(["api", `repos/${REPO}/milestones?state=open&per_page=100`]) ?? []).map(
+        (m) => m.title,
+      ),
+  );
+  if (trackHomeErr) die(trackHomeErr);
 
   // Auto-derive the org Issue Type from the kind label and default the assignee
   // to @me when the caller left them off — both overridable via an explicit

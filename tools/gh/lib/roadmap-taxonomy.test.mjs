@@ -11,6 +11,7 @@ import {
   isReleaseGateTitle,
   featureTitlePrefix,
   milestoneTrack,
+  releaseLetterLookalike,
   ownsBoardDates,
   ownsRoadmapLabel,
   ROADMAP_LABEL,
@@ -493,4 +494,21 @@ test("rule (e) stray-roadmap-label fires when a non-roadmap level carries it", (
 test("both roadmap-label rules are named in ROADMAP_RULES", () => {
   assert.ok(ROADMAP_RULES["missing-roadmap-label"]);
   assert.ok(ROADMAP_RULES["stray-roadmap-label"]);
+});
+
+test("releaseLetterLookalike flags a Latin twin of the track's Cyrillic letter (#3375)", () => {
+  // Latin B / A look like «В» / «А» but drop the release from roadmap:forecast.
+  assert.equal(releaseLetterLookalike("Витрина B3 — Переезд аудитории"), "В");
+  assert.equal(releaseLetterLookalike("Академия A3 — Каталоги"), "А");
+  assert.equal(releaseLetterLookalike("Витрина B1.1 — Доделки"), "В");
+  for (const ok of [
+    "Витрина В3 — Переезд аудитории",
+    "Академия А3 — Каталоги",
+    "Витрина R1 — MVP витрины",
+    "Витрина · Позже",
+    "Platform ops & hardening",
+    "Витрина Bonus",
+    null,
+  ])
+    assert.equal(releaseLetterLookalike(ok), null);
 });

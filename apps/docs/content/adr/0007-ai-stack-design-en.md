@@ -63,7 +63,7 @@ The orchestrated iteration cycle (`do-feature-iteration` orchestrates these):
 2. PLAN
    - If no parent Issue for the spec yet → create +
      sub-issues per EARS handler via `pnpm issue:create`
-       --milestone "<Трек> R<n> — <результат>" --label "feature:NNN-<slug>"
+       --milestone "<Трек> <буква><n> — <результат>" --label "feature:NNN-<slug>"
    - If parent exists → pick an open sub-issue or open a new one
      (if a gap is discovered during the work)
 

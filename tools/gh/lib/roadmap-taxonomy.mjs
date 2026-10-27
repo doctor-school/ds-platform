@@ -47,7 +47,11 @@ export const ROADMAP_LABEL = "roadmap";
 /** Title prefix of a release-gate Issue. */
 export const RELEASE_GATE_TITLE_PREFIX = "gate:";
 
-/** The standing fallback milestone for ops/process Issues (#1137). */
+/**
+ * The standing fallback milestone for `track:platform` ops/process Issues
+ * (#1137). A product-track Issue never homes here (#3375) — it lands on a
+ * milestone of its own track.
+ */
 export const FALLBACK_MILESTONE = "Platform ops & hardening";
 
 /**
@@ -59,6 +63,59 @@ export const TRACK_MILESTONE_PREFIXES = Object.freeze({
   "track:academy": "Академия",
   "track:doctor": "Витрина",
 });
+
+/**
+ * Track label ↔ the Cyrillic release letter of that track (#3375):
+ * «Академия А3 — …», «Витрина В3 — …». The pre-#3375 Latin `R` («Академия R1 —
+ * …») is still accepted until every milestone is renamed.
+ */
+export const TRACK_RELEASE_LETTERS = Object.freeze({
+  "track:academy": "А",
+  "track:doctor": "В",
+});
+
+/** The pre-#3375 release letter, shared by both tracks. */
+export const LEGACY_RELEASE_LETTER = "R";
+
+/**
+ * The track of a numbered track release («Академия А1 — …», «Витрина В2 — …»,
+ * or the legacy «Академия R1 — …»), else null — a dateless «· Позже» bucket, the
+ * fallback milestone and anything else are not releases. Each track takes only
+ * its own letter, so «Витрина А1» is not a release; a dotted point release
+ * («Витрина R1.1 — …») is one. JS `\b` is ASCII-only, so the number ends at
+ * whitespace, an em dash or the end of the title.
+ * @param {string|null|undefined} milestoneTitle
+ * @returns {string|null}
+ */
+export function releaseMilestoneTrack(milestoneTitle) {
+  const title = str(milestoneTitle);
+  for (const [track, prefix] of Object.entries(TRACK_MILESTONE_PREFIXES)) {
+    const letters = `[${LEGACY_RELEASE_LETTER}${TRACK_RELEASE_LETTERS[track]}]`;
+    if (new RegExp(`^${prefix}\\s+${letters}\\d+(?:\\.\\d+)*(?=\\s|—|$)`).test(title)) return track;
+  }
+  return null;
+}
+
+/** The Latin twin a hand-typed title can carry in place of each Cyrillic letter. */
+const LATIN_LOOKALIKES = Object.freeze({ "А": "A", "В": "B" });
+
+/**
+ * The Cyrillic letter a track-prefixed numbered title SHOULD carry when it was
+ * typed with its Latin look-alike («Витрина B3 — …» → "В"), else null. Such a
+ * title still reads as the track's milestone but is not a release, so
+ * `roadmap:forecast` would silently drop it.
+ * @param {string|null|undefined} milestoneTitle
+ * @returns {string|null}
+ */
+export function releaseLetterLookalike(milestoneTitle) {
+  const title = str(milestoneTitle);
+  for (const [track, prefix] of Object.entries(TRACK_MILESTONE_PREFIXES)) {
+    const cyrillic = TRACK_RELEASE_LETTERS[track];
+    const latin = LATIN_LOOKALIKES[cyrillic];
+    if (new RegExp(`^${prefix}\\s+${latin}\\d+(?:\\.\\d+)*(?=\\s|—|$)`).test(title)) return cyrillic;
+  }
+  return null;
+}
 
 /**
  * Feature title prefix ↔ the track label that prefix implies.

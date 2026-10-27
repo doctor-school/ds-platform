@@ -67,10 +67,10 @@ import {
   EARS_KIND_LABEL,
   RELEASE_GATE_TITLE_PREFIX,
   TARGET_DATE_FIELD,
-  TRACK_MILESTONE_PREFIXES,
   classifyIssueTaxonomy,
   isReleaseGateTitle,
   ownsBoardDates,
+  releaseMilestoneTrack,
 } from "./lib/roadmap-taxonomy.mjs";
 
 const GH_MAX_BUFFER = 64 * 1024 * 1024;
@@ -200,18 +200,9 @@ export function isGateTitle(title) {
   return /^\s*release\s+\d+\s+gate\s*:/i.test(typeof title === "string" ? title : "");
 }
 
-/**
- * Is this milestone a track release («Академия R1 — …», «Витрина R2 — …»)?
- * Returns its track label, or null for dateless «· Позже» buckets, the
- * «Platform ops & hardening» fallback and anything else.
- */
-export function releaseMilestoneTrack(milestoneTitle) {
-  const title = typeof milestoneTitle === "string" ? milestoneTitle.trim() : "";
-  for (const [track, prefix] of Object.entries(TRACK_MILESTONE_PREFIXES)) {
-    if (new RegExp(`^${prefix}\\s+R\\d+\\b`).test(title)) return track;
-  }
-  return null;
-}
+// Is this milestone a track release («Академия А1 — …», «Витрина В2 — …», legacy
+// «… R1 — …»)? One definition, owned by the taxonomy (#3375).
+export { releaseMilestoneTrack };
 
 /**
  * The Issues of a milestone whose board Target date this script owns, split

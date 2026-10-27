@@ -27,6 +27,7 @@ import {
   IMAGE_RETENTION,
   MINIO_CONTAINER,
   PREVIEW_SLOT_CAP,
+  FLOOR_KEEP_NEWEST,
   REDIS_CONTAINER,
   SLOT_ENV_DIR,
   STAGE_ENV_FILE,
@@ -2292,7 +2293,10 @@ const BASH = process.platform === "win32" ? join(process.env.ProgramFiles, "Git"
 /**
  * A fake box: `sudo docker …` / `sudo df …` answered from files in a temp dir, every
  * `rmi` and `image prune` recorded. `AVAIL` holds the free bytes `df` reports; a
- * successful `image prune` raises it to `PRUNED_AVAIL`.
+ * successful `image prune` raises it to `PRUNED_AVAIL`. An `image prune -a` logs a
+ * `pruned <ref>` line for every image no running container uses — what Docker would
+ * remove — so a test of the kept set sees the prune too, not only the `rmi` loop.
+ * `images` lists `<repo> <tag> <id>` lines, oldest first.
  */
 function runOnFakeBox(script, { images, digests, running = [], avail, prunedAvail = avail, refuseRmi = [], pruneSteps = [] }) {
   const dir = mkdtempSync(join(tmpdir(), "slot-floor-"));
@@ -2328,7 +2332,18 @@ sudo() {
       if grep -Fxq "$2" "$D/refuse"; then return 1; fi
       echo "rmi $2" >> "$D/log"
       awk -v ref="$2" '$1 ":" $2 != ref' "$D/images" > "$D/images.next"; mv "$D/images.next" "$D/images" ;;
-    "image prune") for a in ${pruneSteps.join(" ")}; do sleep 1; if [ "$a" != same ]; then echo "$a" > "$D/avail"; fi; done; echo "image prune $*" >> "$D/log"; echo ${prunedAvail} > "$D/avail" ;;
+    "image prune")
+      for a in ${pruneSteps.join(" ")}; do sleep 1; if [ "$a" != same ]; then echo "$a" > "$D/avail"; fi; done
+      echo "image prune $*" >> "$D/log"
+      # Docker's semantics: \`-a\` removes every image no container uses, tagged or not
+      # (the fake's images are all older than 24h); without it only dangling images go,
+      # and every fake image carries a tag.
+      case " $* " in
+        *" -a"*) awk 'NR==FNR {used[$0]; next} (($1 ":" $2) in used)' "$D/running" "$D/images" > "$D/survivors"
+          awk 'NR==FNR {kept[$1 ":" $2]; next} !(($1 ":" $2) in kept) {print "pruned " $1 ":" $2}' "$D/survivors" "$D/images" >> "$D/log"
+          mv "$D/survivors" "$D/images" ;;
+      esac
+      echo ${prunedAvail} > "$D/avail" ;;
     "buildx prune"|"system df") : ;;
     *) echo "unexpected docker command: $*" >&2; return 1 ;;
   esac
@@ -2385,22 +2400,58 @@ test("3248: above the floor the floor step reclaims nothing — the BuildKit cac
   assert.deepEqual(box.log, []);
 });
 
-test("3248: below the floor it reclaims unreferenced slot images, registry orphans and the 24h prune", () => {
+test("3248: below the floor it reclaims registry orphans and the 24h dangling prune, keeping the running bundle", () => {
   const box = runOnFakeBox(freeSpaceFloorScript({ refuse: true }), {
-    images: [`ds-api ${SHA} id1`, `ds-api-migrate ${SHA} id6`, `ds-api ${SHA2} id2`, "caddy 2 id9"],
+    images: [`ds-api ${SHA2} id2`, `ds-api ${SHA} id1`, `ds-api-migrate ${SHA} id6`, "caddy 2 id9"],
     digests: [`${REG}/api@sha256:a id1`, `${REG}/api@sha256:orphan id3`],
     running: [`ds-api:${SHA}`],
     avail: FLOOR - 1,
     prunedAvail: FLOOR * 3,
   });
   assert.equal(box.status, 0, box.stderr);
-  // The running SHA's bundle (incl. its one-shot migrate image) is kept.
+  // The running SHA's bundle — its one-shot migrate image too, which no container
+  // uses — survives the prune as well as the `rmi` loop: the fake prune removes what
+  // Docker's would, and nothing is logged `pruned`.
   assert.deepEqual(box.log, [
-    `rmi ds-api:${SHA2}`,
     `rmi ${REG}/api@sha256:orphan`,
-    "image prune image prune -af --filter until=24h",
+    "image prune image prune -f --filter until=24h",
   ]);
   assert.match(box.stdout, /below the 10GB floor/);
+});
+
+test("3306: below the floor the newest FLOOR_KEEP_NEWEST tags per repo survive — a concurrent converge keeps its fresh pull", () => {
+  assert.equal(FLOOR_KEEP_NEWEST, 1 + PREVIEW_SLOT_CAP);
+  const sha = (c) => c.repeat(40);
+  // Oldest first: `ds-api` carries two old tags and FLOOR_KEEP_NEWEST newer ones. The
+  // newest is another slot's fresh pull, not yet `up -d` — no container uses it.
+  const older = [sha("1"), sha("2")];
+  const newest = ["3", "4", "5", "6"].map(sha);
+  const box = runOnFakeBox(freeSpaceFloorScript({ refuse: true }), {
+    images: [
+      ...older.map((tag, i) => `ds-api ${tag} old${i}`),
+      ...newest.map((tag, i) => `ds-api ${tag} new${i}`),
+      `ds-web ${sha("7")} web0`,
+    ],
+    digests: [],
+    running: [`ds-api:${older[0]}`],
+    avail: FLOOR - 1,
+    prunedAvail: FLOOR * 3,
+  });
+  assert.equal(box.status, 0, box.stderr);
+  // Only the old tag no container uses goes; the running old tag stays, and so does
+  // every one of the newest — the prune does not take them either.
+  assert.deepEqual(box.log, [`rmi ds-api:${older[1]}`, "image prune image prune -f --filter until=24h"]);
+});
+
+test("3306: the old `prune -af` would have taken a kept tag — the fake prune is genuine", () => {
+  const box = runOnFakeBox("sudo docker image prune -af --filter until=24h", {
+    images: [`ds-api ${SHA} id1`, `ds-api-migrate ${SHA} id6`],
+    digests: [],
+    running: [`ds-api:${SHA}`],
+    avail: FLOOR,
+  });
+  assert.equal(box.status, 0, box.stderr);
+  assert.deepEqual(box.log, ["image prune image prune -af --filter until=24h", `pruned ds-api-migrate:${SHA}`]);
 });
 
 test("3248: still below the floor after reclaiming, `up` refuses to pull and names the free space", () => {

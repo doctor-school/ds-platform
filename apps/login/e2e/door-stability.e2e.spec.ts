@@ -1,6 +1,7 @@
+import { AUTH_FLOW_PAGE_TITLES } from "@ds/auth-flow/copy";
 import { test, expect, type Page } from "@playwright/test";
 
-import { authRequestId, type Door } from "./support/sign-in-door";
+import { authRequestId, doorPath, type Door } from "./support/sign-in-door";
 
 /**
  * 003 EARS-71 (door stability, lead decision) — Zitadel lands every auth
@@ -27,6 +28,9 @@ for (const door of ["register", "reset"] as const) {
     await page.goto("about:blank");
     await page.goto(`/login?authRequest=${id}`);
     await expectDoor(page, door);
+    // The tab names the door rendered, as the storefront's own page did —
+    // never the sign-in title of the `/login` address it arrived on.
+    await expect(page).toHaveTitle(AUTH_FLOW_PAGE_TITLES[door]);
     await page.waitForURL((url) => url.pathname === `/${door}`);
     const settled = new URL(page.url());
     expect(settled.search).toBe(`?authRequest=${id}`);
@@ -35,6 +39,7 @@ for (const door of ["register", "reset"] as const) {
     await page.reload({ waitUntil: "load" });
     expect(new URL(page.url()).pathname).toBe(`/${door}`);
     await expectDoor(page, door);
+    await expect(page).toHaveTitle(AUTH_FLOW_PAGE_TITLES[door]);
 
     await page.goBack();
     await expect.poll(() => page.url()).toBe("about:blank");
@@ -43,3 +48,27 @@ for (const door of ["register", "reset"] as const) {
     expect(page.url()).toBe(settled.toString());
   });
 }
+
+/**
+ * 003 EARS-71 — each door of the sign-in host carries the storefront's own
+ * tab title for that door (`AUTH_FLOW_PAGE_TITLES`, the storefront pages'
+ * metadata): a direct door address, and a hop that renders another door.
+ */
+test("003 EARS-71: every host door carries the storefront's title for that door, a hop included", async ({
+  page,
+}) => {
+  for (const door of ["login", "register", "reset"] as const) {
+    await page.goto(doorPath("doctor", door));
+    await expect(page).toHaveTitle(AUTH_FLOW_PAGE_TITLES[door]);
+  }
+  await page.goto(
+    doorPath("doctor", "register", {}, "verify") + "&email=doctor%40clinic.ru",
+  );
+  await expect(page.getByTestId("verify-card")).toBeVisible();
+  await expect(page).toHaveTitle(AUTH_FLOW_PAGE_TITLES.verify);
+
+  await page.goto(doorPath("doctor", "login"));
+  await page.getByRole("link", { name: "Создать аккаунт" }).click();
+  await expect(page.getByTestId("registration-form")).toBeVisible();
+  await expect(page).toHaveTitle(AUTH_FLOW_PAGE_TITLES.register);
+});

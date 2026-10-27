@@ -1,13 +1,14 @@
-import type { Metadata } from "next";
-
-import { AUTH_FLOW_PAGE_TITLES } from "@ds/auth-flow/copy";
-import { SignInHostRoute } from "@ds/auth-flow/sign-in-host/route";
+import {
+  SignInHostRoute,
+  signInHostMetadata,
+} from "@ds/auth-flow/sign-in-host/route";
 
 import { SIGN_IN_HOST_STOREFRONTS } from "../../lib/sign-in-host.host-config";
 
-export const metadata: Metadata = {
-  title: AUTH_FLOW_PAGE_TITLES.verify,
-};
+/** 003 EARS-71 — the title of the door rendered, which the entry may choose. */
+export function generateMetadata() {
+  return signInHostMetadata("verify");
+}
 
 export default async function SignInHostVerifyPage({
   searchParams,

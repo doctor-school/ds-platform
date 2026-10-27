@@ -1,14 +1,19 @@
 import type { ReactElement } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// No proxy hand-over in a unit run: each page keeps its own door's title.
+vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 import { AUTH_FLOW_PAGE_TITLES } from "@ds/auth-flow/copy";
 import { SignInHostRoute } from "@ds/auth-flow/sign-in-host/route";
 
 import { SIGN_IN_HOST_STOREFRONTS } from "../lib/sign-in-host.host-config";
-import LoginPage, { metadata as loginMeta } from "./login/page";
-import RegisterPage, { metadata as registerMeta } from "./register/page";
-import ResetPage, { metadata as resetMeta } from "./reset/page";
-import VerifyPage, { metadata as verifyMeta } from "./verify/page";
+import LoginPage, { generateMetadata as loginMeta } from "./login/page";
+import RegisterPage, {
+  generateMetadata as registerMeta,
+} from "./register/page";
+import ResetPage, { generateMetadata as resetMeta } from "./reset/page";
+import VerifyPage, { generateMetadata as verifyMeta } from "./verify/page";
 
 /**
  * 003 EARS-60 (#3170) — every door page of the sign-in host is the ONE
@@ -34,7 +39,7 @@ describe("003 EARS-60: the host's door pages mount the shared sign-in host route
       expect(el.type).toBe(SignInHostRoute);
       expect(el.props.storefronts).toBe(SIGN_IN_HOST_STOREFRONTS);
       expect(el.props.searchParams).toBe(searchParams);
-      expect(meta.title).toBe(AUTH_FLOW_PAGE_TITLES[door]);
+      expect((await meta()).title).toBe(AUTH_FLOW_PAGE_TITLES[door]);
     });
   }
 

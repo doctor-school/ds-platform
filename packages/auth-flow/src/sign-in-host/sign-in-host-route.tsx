@@ -1,9 +1,10 @@
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { FormError } from "@ds/design-system/form";
 
-import { DEFAULT_AUTH_FLOW_COPY } from "../copy";
+import { AUTH_FLOW_PAGE_TITLES, DEFAULT_AUTH_FLOW_COPY } from "../copy";
 import { LoginRoute } from "../login/login-route";
 import { RegisterRoute } from "../register/register-route";
 import { ResetRoute } from "../reset/reset-route";
@@ -27,6 +28,23 @@ const DOOR_ROUTES: Record<SignInHostPageDoor, typeof LoginRoute> = {
   reset: ResetRoute,
   verify: VerifyRoute,
 };
+
+/**
+ * 003 EARS-71 — the tab title of a host door page: the storefront's own title
+ * for the door the hand-over RENDERS (`AUTH_FLOW_PAGE_TITLES`, the titles the
+ * storefront door pages carried), so the IdP's `/login` arrival on the
+ * registration or reset door is titled as that door, before and after the
+ * address settles on the door's path. With no hand-over (an unread entry, a
+ * not-found) the page keeps its own path door's title.
+ */
+export async function signInHostMetadata(
+  pathDoor: SignInHostPageDoor,
+): Promise<Metadata> {
+  const handOver = readSignInHostHandOver(
+    (await headers()).get(SIGN_IN_HOST_ENTRY_HEADER),
+  );
+  return { title: AUTH_FLOW_PAGE_TITLES[handOver?.door ?? pathDoor] };
+}
 
 /**
  * 003 EARS-60 / 71, ADR-0015 §4 — the sign-in host's ONE page mount (#3170).

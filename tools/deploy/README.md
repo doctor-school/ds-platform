@@ -103,10 +103,20 @@ gh workflow run deploy-prod.yml --ref main -f mode=redeploy -f sha=<live sha> -f
   `already-succeeded`, a redeploy resets the finished unit and starts
   `ds-prod-<sha12>-driver` again — `_redeploy` runs the SHA's own
   `prod.mjs --local --redeploy` — and `ds-release` opens a fresh attempt (the
-  closed, succeeded one is archived), so every step runs again. The swap is
-  `docker compose up -d --force-recreate`: Compose recreates on `up -d` only for a
-  changed configuration or image, and its documentation does not count an
-  `env_file`'s contents
+  closed, succeeded one is archived). The redeploy recreates the app tier only
+  and follows the rollback's rule for box tooling and ds-data-prod (tech spec §5
+  «Two trees» (a)): it **skips** `postgres-verify`, `install` (no `ds-release` /
+  entrypoint / release-driver install, `installed-tree` stays the newest forward
+  release's, no ds-data-prod converge), `data-prod-env`, `data-prod-up`,
+  `backup`, the IdP converge and the migrate (`REDEPLOY_SKIPPED_STEPS` in
+  `prod.mjs`), and ships the api-prod tree only. It **runs** the test-token
+  refusal, the previous-SHA read, the runtime config backup, the api-prod ship,
+  `pull`, boot verify, the edge config validate, the record-key check, the swap,
+  runtime configs, `verify-running-sha`, `prune`, smoke and `finish` (ds-api-prod
+  only). The swap is the durable step `recreate`,
+  `docker compose up -d --force-recreate` with no migrate: Compose recreates on
+  `up -d` only for a changed configuration or image, and its documentation does
+  not count an `env_file`'s contents
   ([docker compose up](https://docs.docker.com/reference/cli/docker/compose/up/)).
   A redeploy while that unit runs attaches (`attached`).
 - **After a terminal status.** No release cut and no digest (no new code).

@@ -23,7 +23,7 @@
   "dependencies": {
     "@ds/design-system": "workspace:*",
     "@ds/schemas": "workspace:*",
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "peerDependencies": {
     "next": "^16.0.0",

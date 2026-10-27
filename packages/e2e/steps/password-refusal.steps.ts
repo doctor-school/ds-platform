@@ -1,3 +1,11 @@
+import {
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 
@@ -31,10 +39,17 @@ function registration(key: Page): RefusedRegistration {
 }
 
 async function expectSameContext(state: RefusedRegistration, base: string) {
+  // #3172 — the form is the sign-in host's; the return path rode the
+  // storefront's registration entry into the transaction.
   const url = new URL(state.page.url());
-  expect(url.origin).toBe(new URL(base).origin);
-  expect(url.pathname).toBe("/register");
-  expect(url.searchParams.get("returnTo")).toBe(RETURN_TO);
+  expect(isSignInHostForm(url)).toBe(true);
+  // Behind the IdP the registration door renders on the host's `/login`
+  // (`doorFor`): the door is proven by what renders, not by the path.
+  await expect(state.page.getByTestId("register-email")).toBeVisible();
+  expectEnteredThrough(state.page, base, {
+    pathname: "/register",
+    returnTo: RETURN_TO,
+  });
   expect(
     (await state.page.getByTestId("register-email").inputValue()) ===
       state.email,
@@ -88,6 +103,7 @@ Given(
       ...(httpCredentials ? { httpCredentials } : {}),
     });
     const owned = await context.newPage();
+    watchStorefrontEntries(owned, world.hostBaseUrl);
     const state: RefusedRegistration = {
       context,
       page: owned,
@@ -100,7 +116,8 @@ Given(
     owned.on("request", (request) => {
       if (
         request.method() === "POST" &&
-        new URL(request.url()).pathname === "/v1/auth/register"
+        new URL(request.url()).pathname ===
+          signInHostApiPath("/v1/auth/register")
       ) {
         state.registrationRequests += 1;
       }

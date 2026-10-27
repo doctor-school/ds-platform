@@ -2,6 +2,10 @@ import AxeBuilder from "@axe-core/playwright";
 import { MAIN_LANDMARK_RULES } from "@ds/e2e";
 import { test, expect, type Page } from "@playwright/test";
 import { loginAsDoctor, DOCTOR_BASE } from "./support/doctor-session";
+import {
+  expectAtSignInHostFrom,
+  watchStorefrontEntries,
+} from "@ds/e2e/storefront-entry-watch";
 import { requireLiveStandEnv } from "./support/live-stand-env";
 
 /**
@@ -42,8 +46,14 @@ test.describe("014 EARS-9 (#1972): «Мои события» on the doctor store
   test("014 EARS-6: a guest on /account/events lands on this host's door carrying the page", async ({
     page,
   }) => {
+    // #3172: this host's door is the sign-in host's form, entered through this
+    // storefront's `/login` carrying the page.
+    watchStorefrontEntries(page, DOCTOR_BASE);
     await page.goto(DOCTOR_BASE + "/account/events");
-    await expect(page).toHaveURL(/\/login\?returnTo=%2Faccount%2Fevents$/);
+    await expectAtSignInHostFrom(page, DOCTOR_BASE, {
+      pathname: "/login",
+      returnTo: "/account/events",
+    });
   });
 
   test("014 EARS-9: a signed-in doctor sees both tabs, rows on this host's paths, reached from the /account hub", async ({
@@ -165,8 +175,12 @@ test.describe("019 EARS-13: /account/events presentation on the doctor storefron
       }) => {
         await useTheme(page, theme);
         await page.setViewportSize(size);
+        watchStorefrontEntries(page, DOCTOR_BASE);
         await page.goto(DOCTOR_BASE + "/account/events");
-        await expect(page).toHaveURL(/\/login\?returnTo=%2Faccount%2Fevents$/);
+        await expectAtSignInHostFrom(page, DOCTOR_BASE, {
+          pathname: "/login",
+          returnTo: "/account/events",
+        });
         await assertPresentation(
           page,
           `guest /account/events → /login (${viewport}, ${theme})`,

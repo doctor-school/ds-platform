@@ -103,13 +103,16 @@ const GOLDEN_ACCOUNT_SPECS = [
  * CI page-level scan (`test:e2e:ci` → `playwright.ci.config.ts`,
  * `a11y-axe.e2e.spec.ts`, #400). #3151: the shared /account auth-path body
  * rides its own live tier (`playwright.account-live.config.ts`), and the
- * #2996 event-page specs theirs (`playwright.event-page.config.ts`).
+ * #2996 event-page specs theirs (`playwright.event-page.config.ts`). #3172:
+ * the sign-in entry spec reads the internal-API double's transaction log, so
+ * it runs only on the backend-free tier (`playwright.ci.config.ts`).
  */
 const OWN_CONFIG_SPECS = [
   /a11y\//,
   /a11y-axe\.e2e\.spec\.ts/,
   /account-auth-paths-live\.spec\.ts/,
   /event-page-020\.e2e\.spec\.ts/,
+  /storefront-entry\.e2e\.spec\.ts/,
   /webinar-archive\.spec\.ts/,
 ];
 

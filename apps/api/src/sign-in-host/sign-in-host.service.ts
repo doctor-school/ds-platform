@@ -15,6 +15,7 @@ import type {
   SignInHostStorefront,
 } from "@ds/schemas";
 import { AuthService, type SessionAcceptor } from "../auth/auth.service.js";
+import { SessionService } from "../auth/session/session.service.js";
 import {
   IDP_CLIENT,
   type IdpClient,
@@ -107,6 +108,7 @@ export class SignInHostService {
     @Inject(SignInHostRecordStore)
     private readonly records: SignInHostRecordStore,
     @Inject(AuthService) private readonly auth: AuthService,
+    @Inject(SessionService) private readonly sessions: SessionService,
   ) {}
 
   /** The module is disabled until every sign-in-host key is set: 404, as if the route did not exist. */
@@ -161,12 +163,20 @@ export class SignInHostService {
       };
     }
 
-    // EARS-71: the intent is spent on this read whatever happens next.
-    const intent = await resolveEntryIntent(
+    // EARS-71: the intent is spent on this read whatever happens next. A
+    // reload of the same auth request (EARS-44 amended), and a hop between its
+    // doors, re-render the method and the event target the spent intent
+    // opened, from this browser's own form state for THIS auth request —
+    // never its hand-off, so nothing is sent again; the event's card stays.
+    const fresh = await resolveEntryIntent(
       this.state,
       request.loginHint,
       request.clientId,
     );
+    const intent = fresh ?? reloadedIntent(prior, request.id);
+    const handoffSpent =
+      Boolean(fresh?.handoff) ||
+      (!fresh && prior?.authRequestId === request.id && !!prior.handoffSpent);
 
     const now = this.clock();
     const live = await this.liveRecord(
@@ -176,8 +186,12 @@ export class SignInHostService {
       setCookies,
     );
 
+    // Only a fresh intent names the door: Zitadel's arrival on `/login` opens
+    // the door the entry chose. A re-render's door is the auth request's own
+    // (`prompt=create` or login) — off `/login` its path fixes it anyway — so a
+    // kept event target never turns a hop back to `/login` into the reset door.
     const door: SignInHostDoor =
-      intent?.door ??
+      fresh?.door ??
       (request.prompt.includes("create") ? "register" : "login");
     // A form-only entry — registration, reset — and the EARS-68
     // fresh-credential asks all render the form even with a record.
@@ -196,6 +210,8 @@ export class SignInHostService {
       // subject: nothing redeemed, no code sent). A refused or foreign
       // reference never rides the record, whosever it is: the form renders
       // and an accepted code replaces the record.
+      // A reload of a hand-off form keeps that rule: the record never answers.
+      !(!fresh && handoffSpent) &&
       (!intent?.handoff ||
         (await this.auth.isOwnLoginHandoff(
           intent.handoff,
@@ -236,7 +252,19 @@ export class SignInHostService {
     const csrf = newOpaqueId();
     await this.state.putForm(
       formId,
-      { csrfToken: csrf, storefront, authRequestId: request.id, intent },
+      {
+        csrfToken: csrf,
+        storefront,
+        authRequestId: request.id,
+        intent,
+        ...(handoffSpent ? { handoffSpent: true as const } : {}),
+        // 003 EARS-24/39: the register door reaches its code step by a full
+        // page load, i.e. a new render; the registration this browser created
+        // for THIS auth request moves to the fresh form state with it.
+        ...(prior?.registration?.authRequestId === request.id
+          ? { registration: prior.registration }
+          : {}),
+      },
       FORM_STATE_TTL_SECONDS,
     );
     if (priorFormId) await this.state.deleteForm(priorFormId);
@@ -299,6 +327,59 @@ export class SignInHostService {
       throw new ForbiddenException(FORM_REFUSED);
   }
 
+  /**
+   * 003 EARS-24/41 — a registration on this form CREATED the account `sub`:
+   * record it in the form state (bound to the host's form-state cookie and to
+   * this auth request, for the form state's own lifetime), so the code step of
+   * the same browser is the warm step. A registration that created nothing (an
+   * already-registered address, EARS-16/23) records nothing.
+   */
+  async recordRegistration(
+    form: CheckedForm,
+    created: { sub: string; email: string } | null,
+  ): Promise<void> {
+    if (!created) return;
+    await this.state.putForm(
+      form.formCookieId,
+      {
+        ...form.state,
+        registration: {
+          sub: created.sub,
+          email: created.email.trim().toLowerCase(),
+          authRequestId: form.state.authRequestId,
+          createdAt: this.clock().getTime(),
+        },
+      },
+      FORM_STATE_TTL_SECONDS,
+    );
+  }
+
+  /**
+   * 003 EARS-41 — the account whose pre-verification password the code step
+   * keeps: the one this form's registration created, for the same address and
+   * the same auth request. Anything else (another browser, a cleared cookie, a
+   * new auth request, another address) ⇒ `undefined`: the cold path.
+   */
+  warmRegistration(form: CheckedForm, email: string): string | undefined {
+    const r = form.state.registration;
+    if (
+      !r ||
+      r.authRequestId !== form.state.authRequestId ||
+      r.email !== email.trim().toLowerCase()
+    )
+      return undefined;
+    return r.sub;
+  }
+
+  /** Spend the registration marker once its code step was accepted (single use). */
+  async spendRegistration(form: CheckedForm): Promise<void> {
+    if (!form.state.registration) return;
+    const live = await this.state.getForm(form.formCookieId);
+    if (!live?.registration) return;
+    const { registration: _spent, ...rest } = live;
+    await this.state.putForm(form.formCookieId, rest, FORM_STATE_TTL_SECONDS);
+  }
+
   /** The hand-off reference the form's spent intent carried (EARS-44 on the host), if any. */
   handoffOf(form: CheckedForm): string | undefined {
     return form.state.intent?.handoff;
@@ -352,7 +433,12 @@ export class SignInHostService {
       const priorId = req.cookies[recordCookieName];
       if (priorId) {
         const prior = await this.records.find(priorId);
-        if (prior) await this.idp.terminateSession(prior.session);
+        if (prior) {
+          // EARS-64: the replaced shared session ends everywhere — its Zitadel
+          // session and every storefront session linked to it (EARS-10).
+          await this.idp.terminateSession(prior.session);
+          await this.sessions.revokeLinked(prior.session.zitadelSessionId);
+        }
         await this.records.delete(priorId);
       }
       const now = this.clock();
@@ -436,6 +522,7 @@ export class SignInHostService {
     setCookies: string[],
   ): Promise<void> {
     await this.idp.terminateSession(session);
+    await this.sessions.revokeLinked(session.zitadelSessionId);
     await this.records.delete(cookieId);
     setCookies.push(clearRecordCookie());
   }
@@ -444,6 +531,26 @@ export class SignInHostService {
   loginUrlOf(storefront: SignInHostStorefront): string {
     return this.enabled().loginUrls[storefront];
   }
+}
+
+/**
+ * 003 EARS-44 (amended) / EARS-71 — the intent a reload or door hop of the
+ * SAME auth request re-renders: the door, method and event target the spent
+ * intent opened, from this browser's own form state; never its hand-off
+ * reference (owner Stage-B finding 2026-10-27, PR #3265: the card stays).
+ */
+function reloadedIntent(
+  prior: FormState | null,
+  authRequestId: string,
+): EntryIntent | undefined {
+  const spent = prior?.authRequestId === authRequestId ? prior.intent : null;
+  if (!spent?.method && !spent?.eventTarget) return undefined;
+  return {
+    door: spent.door,
+    ...(spent.method ? { method: spent.method } : {}),
+    ...(spent.eventTarget ? { eventTarget: spent.eventTarget } : {}),
+    clientId: spent.clientId,
+  };
 }
 
 function publicIntent(intent: EntryIntent) {

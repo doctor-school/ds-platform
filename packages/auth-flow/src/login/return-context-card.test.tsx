@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthLayout } from "@ds/design-system/blocks";
 
 import { DEFAULT_AUTH_FLOW_COPY } from "../copy";
@@ -33,6 +33,11 @@ import {
  */
 afterEach(cleanup);
 
+// The viewer's zone after mount — the event page's own mechanism, pinned here.
+vi.mock("@ds/events-storefront/ui", () => ({
+  useViewerZone: () => "Asia/Bangkok",
+}));
+
 /** The package's two assurance lines — asserted by reference, never by wording. */
 const ASSURANCE = DEFAULT_AUTH_FLOW_COPY.returnContext;
 
@@ -47,8 +52,9 @@ function renderToStaticMarkup(node: ReactNode): string {
 const EVENT: ReturnContextEvent = {
   title: "Ортобиология в практике травматолога",
   school: "Школа ортобиологии",
-  dateLabel: "12 октября",
-  time: "19:00",
+  // 16:00Z — 19:00 МСК, 23:00 in Bangkok (GMT+7).
+  startsAt: "2026-10-12T16:00:00.000Z",
+  format: "online",
   specialties: ["Травматология"],
   speakers: [{ name: "Иванов И. И." }],
 };
@@ -62,6 +68,36 @@ function renderPanel(variant: "register" | "login") {
     />,
   );
 }
+
+describe("004 EARS-12 (amended): the card's time, as the event page states it", () => {
+  function cardOf(event: ReturnContextEvent): HTMLElement {
+    render(
+      <ReturnContextPanel
+        config={DOCTOR_FIXTURE}
+        event={event}
+        variant="login"
+      />,
+    );
+    return document.querySelector('[data-testid="return-context-card"]')!;
+  }
+
+  it("004 EARS-12: an online or hybrid event reads in the viewer's zone with its label, as on the event page", () => {
+    for (const format of ["online", "hybrid"] as const) {
+      const card = cardOf({ ...EVENT, format });
+      expect(card.textContent).toContain("23:00");
+      expect(card.textContent).toContain("GMT+7");
+      expect(card.textContent).not.toContain("МСК");
+      cleanup();
+    }
+  });
+
+  it("004 EARS-12: an offline event stays on МСК whatever the viewer's zone", () => {
+    const card = cardOf({ ...EVENT, format: "offline" });
+    expect(card.textContent).toContain("19:00");
+    expect(card.textContent).toContain("МСК");
+    expect(card.textContent).toContain("12 октября · пн");
+  });
+});
 
 describe("021 #1955: the return-context assurance line", () => {
   it("021 #1955.1: the login door promises the return happens on sign-in, not after an email", () => {

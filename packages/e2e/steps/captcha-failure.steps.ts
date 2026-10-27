@@ -11,6 +11,7 @@ import {
   installFailureProvider,
 } from "../lib/captcha-failure.js";
 import { inputSecret } from "../lib/owned-registration.js";
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 
 const rejected = "Проверка истекла или не пройдена. Подтвердите ещё раз.";
@@ -18,6 +19,9 @@ const unavailable =
   "Не удалось выполнить проверку. Проверьте подключение к интернету и попробуйте ещё раз.";
 const required = "Подтвердите, что вы не робот.";
 type Theme = "light" | "dark";
+// #3172: the storefront's `/register` is a 303 entry; the form `open` lands on is
+// the sign-in host's, and its register command posts to the host API.
+const REGISTER_COMMAND = signInHostApiPath("/v1/auth/register");
 interface State {
   context: BrowserContext;
   results: string[];
@@ -117,7 +121,7 @@ Given(
       let requests = 0;
       owned.on("request", (request) => {
         if (
-          new URL(request.url()).pathname === "/v1/auth/register" &&
+          new URL(request.url()).pathname === REGISTER_COMMAND &&
           request.method() === "POST"
         )
           requests++;
@@ -174,7 +178,7 @@ When(
         owned.on("request", (request) => {
           if (
             request.method() !== "POST" ||
-            new URL(request.url()).pathname !== "/v1/auth/register"
+            new URL(request.url()).pathname !== REGISTER_COMMAND
           )
             return;
           const body = JSON.parse(request.postData() ?? "{}") as Record<
@@ -195,7 +199,7 @@ When(
           variant.name === "rejected"
             ? owned.waitForResponse(
                 (response) =>
-                  new URL(response.url()).pathname === "/v1/auth/register" &&
+                  new URL(response.url()).pathname === REGISTER_COMMAND &&
                   response.request().method() === "POST",
               )
             : undefined;
@@ -253,7 +257,7 @@ When(
         ).toBe(before);
         const accepted = owned.waitForResponse(
           (response) =>
-            new URL(response.url()).pathname === "/v1/auth/register" &&
+            new URL(response.url()).pathname === REGISTER_COMMAND &&
             response.request().method() === "POST",
         );
         const freshToken = `s067-valid-${randomUUID()}`;

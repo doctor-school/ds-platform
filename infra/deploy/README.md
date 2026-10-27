@@ -1507,6 +1507,16 @@ target that ships no `ds-login` image (an older rollback target, #1896).
    assignment over ssh (`record-key-lines=N`), never reads the value out.
    Evidence: that count, e.g.
    `ssh api-prod "sudo grep -c '^SIGN_IN_RECORD_KEY=' /etc/ds-platform/api.env"` → `1`.
+   `IDP_ACADEMY_CLIENT_KEY`, `IDP_DOCTOR_CLIENT_KEY` and `INTERNAL_API_TOKEN` (003
+   EARS-62) are **tool-written** — never by hand, never into `api.env` (the portal and
+   doctor load the whole `api.env`; that wider exposure is #3258): the pre-swap IdP
+   converge (provision.sh step 3.bis.2) keeps or mints them into the root-only
+   `/etc/ds-platform/api-sign-in.env` (`IDP_SECRET_ENV_FILE`, loaded by the api alone)
+   and writes the same `INTERNAL_API_TOKEN`, alone, into the root-only
+   `/etc/ds-platform/internal.env` (`IDP_INTERNAL_ENV_FILE`, loaded by the portal and
+   doctor, which call `INTERNAL_API_URL=http://api:3000`, compose.yml). It logs key ids
+   only; before the swap the deploy counts the names per file, checks the token is equal
+   in both and that `api.env` carries no client key — values never leave the box.
 
 4. **Deploy.** `pnpm deploy:prod` — Caddy restarts on the stale bind-mounted
    `Caddyfile` (#1175), issues the `login.` certificate on first request, and the

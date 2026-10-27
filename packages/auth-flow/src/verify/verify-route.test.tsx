@@ -57,8 +57,8 @@ const DOCTOR = {
 } as const;
 
 const EVENT = {
-  time: "19:00",
-  dateLabel: "27 августа · чт",
+  startsAt: "2026-08-27T16:00:00.000Z",
+  format: "online" as const,
   school: "Школа ортобиологии",
   title: "PRP при гонартрозе",
   specialties: ["Травматология"],

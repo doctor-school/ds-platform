@@ -12,9 +12,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * `apps/portal/app/register/page.test.tsx`: the behaviour they describe is no
  * longer a per-host projection but the package door, so each runs over the
  * fixture whose branch it is about and over BOTH fixtures where the rule is
- * host-neutral - which is the point of the lift. The scenarios of the INLINE
- * confirmation step (021 EARS-10/15 beyond the submit) belong to that unit and
- * stay with it; this file owns the form step and the row-51 fork out of it.
+ * host-neutral - which is the point of the lift. The code step itself (021
+ * EARS-10/15 beyond the submit) belongs to `verify-door.test.tsx`; this file
+ * owns the form step, the in-place step out of it (003 EARS-24 amended) and
+ * the way back.
  *
  * Mocked seams, and why each is the honest one:
  *   - `../client/auth-client` - the door builds its client from `config.api`
@@ -29,14 +30,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const push = vi.fn();
 const replace = vi.fn();
+const refresh = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push, replace }),
+  useRouter: () => ({ push, replace, refresh }),
 }));
 
 const register = vi.fn();
+const verify = vi.fn();
 vi.mock("../client/auth-client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../client/auth-client")>()),
-  createAuthClient: () => ({ register }),
+  createAuthClient: () => ({
+    register,
+    verify,
+    resendVerification: vi.fn(),
+  }),
 }));
 
 type CaptchaProps = {
@@ -106,8 +113,12 @@ type DoorProps = {
 beforeEach(() => {
   push.mockReset();
   replace.mockReset();
+  refresh.mockReset();
   register.mockReset().mockResolvedValue({ status: "pending_verification" });
+  verify.mockReset().mockResolvedValue({ status: "verified" });
   captchaMode = "bypass";
+  // Every scenario opens the door at its own address, one history entry deep.
+  window.history.replaceState(null, "", "/register");
   captchaProps = undefined;
   clearPendingRegistration();
   // jsdom runs no layout and `userEvent` probes the point under the pointer
@@ -118,6 +129,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   clearPendingRegistration();
+  window.sessionStorage.clear();
 });
 
 /** No fake timers here, so the typing delay is pure wall-clock waiting. */
@@ -266,7 +278,7 @@ describe("#337 / gate row 63: how the in-flight submit reads", () => {
     expect(submit.querySelector(".animate-spin")).not.toBeNull();
 
     act(() => release?.());
-    await waitFor(() => expect(push).toHaveBeenCalled());
+    await screen.findByTestId("verify-submit");
   });
 
   it("#2027: the doctor door reads its pending submit exactly as the Academy one does", async () => {
@@ -295,37 +307,68 @@ describe("#337 / gate row 63: how the in-flight submit reads", () => {
 const SAFE_TARGET = "/webinars/cardio";
 const HOSTILE_TARGET = "//evil.example/steal";
 
+/** The address bar as the visitor reads it. */
+const address = () => `${window.location.pathname}${window.location.search}`;
+
 describe("005 EARS-2 / gate row 51: where an accepted registration goes next", () => {
-  it("005 EARS-2: a host that serves a /verify route hands the address — and a safe arrival context — to it", async () => {
-    await submitForm(ACADEMY_FIXTURE, { returnTo: SAFE_TARGET });
+  it.each(HOSTS)(
+    "003 EARS-24: the %s code step takes its OWN history entry on /verify with the address and a safe arrival context",
+    async (_name, config) => {
+      const depth = window.history.length;
+      await submitForm(config, { returnTo: SAFE_TARGET });
 
-    await waitFor(() =>
-      expect(push).toHaveBeenCalledWith(
+      await screen.findByTestId("verify-submit");
+      expect(address()).toBe(
         `/verify?email=${encodeURIComponent(EMAIL)}&returnTo=${encodeURIComponent(SAFE_TARGET)}`,
-      ),
-    );
-  });
+      );
+      expect(window.history.length).toBe(depth + 1);
+    },
+  );
 
-  it("005 EARS-2: a cross-origin arrival context is dropped rather than propagated into the /verify hop", async () => {
+  it.each(HOSTS)(
+    "003 EARS-24: browser Back from the %s code step returns to the form with EVERY typed field; Forward returns to the step",
+    async (_name, config) => {
+      await submitForm(config, { returnTo: SAFE_TARGET });
+      await screen.findByTestId("verify-submit");
+      const depth = window.history.length;
+
+      act(() => window.history.back());
+
+      expect(await screen.findByTestId("register-email")).toHaveValue(EMAIL);
+      expect(screen.getByTestId("register-password")).toHaveValue(PASSWORD);
+      const boxes = screen
+        .getByTestId("registration-form")
+        .querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+      for (const box of Array.from(boxes)) expect(box.checked).toBe(true);
+      // The form's own entry: the address the door opened on.
+      expect(address()).toBe("/register");
+
+      act(() => window.history.forward());
+
+      expect(await screen.findByTestId("verify-submit")).toBeInTheDocument();
+      expect(screen.getByTestId("verify-card")).toHaveTextContent(EMAIL);
+      expect(window.history.length).toBe(depth);
+      expect(push).not.toHaveBeenCalled();
+    },
+  );
+
+  it("005 EARS-2: a cross-origin arrival context is dropped rather than propagated into the settled /verify address", async () => {
     await submitForm(ACADEMY_FIXTURE, { returnTo: HOSTILE_TARGET });
 
-    await waitFor(() =>
-      expect(push).toHaveBeenCalledWith(
-        `/verify?email=${encodeURIComponent(EMAIL)}`,
-      ),
-    );
+    await screen.findByTestId("verify-submit");
+    expect(address()).toBe(`/verify?email=${encodeURIComponent(EMAIL)}`);
   });
 
-  it("003 EARS-24 (#2455): the doctor door hands the address and the arrival context to its /verify route exactly as the Academy door does", async () => {
-    await submitForm(DOCTOR_FIXTURE, { returnTo: SAFE_TARGET });
+  it.each(HOSTS)(
+    "003 EARS-24: an accepted registration on the %s door is not a navigation — the router is never asked",
+    async (_name, config) => {
+      await submitForm(config, { returnTo: SAFE_TARGET });
 
-    await waitFor(() =>
-      expect(push).toHaveBeenCalledWith(
-        `/verify?email=${encodeURIComponent(EMAIL)}&returnTo=${encodeURIComponent(SAFE_TARGET)}`,
-      ),
-    );
-    expect(replace).not.toHaveBeenCalled();
-  });
+      await screen.findByTestId("verify-submit");
+      expect(push).not.toHaveBeenCalled();
+      expect(replace).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("021 EARS-10 (#2331): the already-registered visitor's way out", () => {
@@ -337,13 +380,11 @@ describe("021 EARS-10 (#2331): the already-registered visitor's way out", () => 
       ?.getAttribute("href");
 
   it.each(HOSTS)(
-    "021 EARS-10: the sign-in link on the %s door carries a safe arrival context onward",
+    "003 EARS-71: the sign-in link on the %s door is the plain login door even with a safe arrival context — the next door reads its context from the entry intent, never the link",
     async (_name, config) => {
       await renderDoor(config, { returnTo: SAFE_TARGET });
 
-      expect(signInHref(config)).toBe(
-        `${config.routes.login}?returnTo=${encodeURIComponent(SAFE_TARGET)}`,
-      );
+      expect(signInHref(config)).toBe(config.routes.login);
     },
   );
 
@@ -430,20 +471,121 @@ describe("003 EARS-41 / 021 EARS-15.4: what the door holds for the code step", (
   });
 
   it.each(HOSTS)(
-    "003 EARS-42: «← Изменить почту» lands the %s visitor on the form with the values this tab still holds",
+    "003 EARS-24: «← Изменить почту» on the in-place step brings the %s visitor back to the form with EVERY typed field, the password included",
     async (_name, config) => {
-      setPendingRegistration({
-        identifier: EMAIL,
-        registration: { password: PASSWORD, consent: [] },
-        form: { email: EMAIL, password: PASSWORD, promoCode: "", consents: {} },
+      const user = await submitForm(config, { returnTo: SAFE_TARGET });
+      await screen.findByTestId("verify-submit");
+      const depth = window.history.length;
+
+      await user.click(screen.getByTestId("verify-back"));
+
+      expect(await screen.findByTestId("register-email")).toHaveValue(EMAIL);
+      expect(screen.getByTestId("register-password")).toHaveValue(PASSWORD);
+      const boxes = screen
+        .getByTestId("registration-form")
+        .querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+      for (const box of Array.from(boxes)) expect(box.checked).toBe(true);
+      // The step's own entry is left the way browser Back leaves it: the
+      // address is the door's again and no entry is added.
+      await waitFor(() => expect(address()).toBe("/register"));
+      expect(window.history.length).toBe(depth);
+      expect(push).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(HOSTS)(
+    "003 EARS-41 / EARS-23: the in-place %s step submits the code WITH the values typed in this document",
+    async (_name, config) => {
+      const user = await submitForm(config);
+      await screen.findByTestId("verify-submit");
+      const { email: _email, ...sent } = lastBody();
+
+      await user.click(screen.getByRole("textbox"));
+      await user.keyboard("482913");
+
+      await waitFor(() => expect(verify).toHaveBeenCalledTimes(1));
+      expect(verify).toHaveBeenCalledWith({
+        email: EMAIL,
+        code: "482913",
+        registration: sent,
       });
+      expect(
+        (sent as { password?: string }).password,
+        "the new password rides with the code (EARS-23 re-registration)",
+      ).toBe(PASSWORD);
+      // The confirmed step lands like the verify door (008 EARS-5): replace, then refresh.
+      await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+      expect(replace.mock.invocationCallOrder[0]!).toBeLessThan(
+        refresh.mock.invocationCallOrder[0]!,
+      );
+    },
+  );
+
+  it.each(HOSTS)(
+    "003 EARS-24: the %s registration writes nothing to browser storage — the typed values live in this document only",
+    async (_name, config) => {
+      const setItem = vi.spyOn(Storage.prototype, "setItem");
+      try {
+        const user = await submitForm(config);
+        await screen.findByTestId("verify-submit");
+        await user.click(screen.getByTestId("verify-back"));
+        await screen.findByTestId("register-email");
+
+        expect(setItem).not.toHaveBeenCalled();
+        expect(window.sessionStorage.length).toBe(0);
+        expect(window.localStorage.length).toBe(0);
+      } finally {
+        setItem.mockRestore();
+      }
+    },
+  );
+
+  it.each(HOSTS)(
+    "003 EARS-24: a fresh open of the %s door — a new document — is empty",
+    async (_name, config) => {
+      await submitForm(config);
+      await screen.findByTestId("verify-submit");
+      cleanup();
+      // A new document: the in-memory hold is gone with the old one.
+      clearPendingRegistration();
 
       await renderDoor(config);
 
-      expect(screen.getByTestId("register-email")).toHaveValue(EMAIL);
-      expect(screen.getByTestId("register-password")).toHaveValue(PASSWORD);
+      expect(screen.getByTestId("register-email")).toHaveValue("");
+      expect(screen.getByTestId("register-password")).toHaveValue("");
+      const boxes = screen
+        .getByTestId("registration-form")
+        .querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+      for (const box of Array.from(boxes)) expect(box.checked).toBe(false);
     },
   );
+
+  it("003 EARS-24: an in-memory hold refills nothing on a fresh open — only the back step refills", async () => {
+    setPendingRegistration({
+      identifier: EMAIL,
+      registration: { password: PASSWORD, consent: [] },
+      form: { email: EMAIL, password: PASSWORD, promoCode: "", consents: {} },
+    });
+
+    await renderDoor(DOCTOR_FIXTURE);
+
+    expect(screen.getByTestId("register-email")).toHaveValue("");
+    expect(screen.getByTestId("register-password")).toHaveValue("");
+  });
+
+  it("003 EARS-24: a submit after «← Изменить почту» replaces the held values, kept dropped past a refusal", async () => {
+    const user = await submitForm(DOCTOR_FIXTURE);
+    await screen.findByTestId("verify-submit");
+    await user.click(screen.getByTestId("verify-back"));
+    await screen.findByTestId("register-email");
+    register.mockReset().mockRejectedValue(authError(400));
+
+    await user.click(screen.getByTestId("register-submit"));
+
+    await waitFor(() => expect(register).toHaveBeenCalledTimes(1));
+    expect(peekPendingRegistration()).toBeNull();
+    expect(screen.queryByTestId("verify-submit")).toBeNull();
+  });
 
   it("003 EARS-42: with nothing held the form opens empty", async () => {
     await renderDoor(ACADEMY_FIXTURE);
@@ -699,23 +841,16 @@ describe("021 EARS-2: the gate context beside the form", () => {
   });
 });
 
-describe("003 EARS-24 (#2455): one confirmation mechanism — the door never becomes the code step", () => {
-  it("003 EARS-24: on either host an accepted registration leaves the form for /verify and never renders a code field in place", async () => {
-    for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
-      push.mockReset();
-      // Each pass is a fresh visitor: the previous pass's hold would refill it.
-      clearPendingRegistration();
+describe("003 EARS-24 amended: the code step renders in place on the door's own document", () => {
+  it.each(HOSTS)(
+    "003 EARS-24: on the %s door an accepted registration replaces the form with the one code step naming the address",
+    async (_name, config) => {
       await submitForm(config);
 
-      await waitFor(() =>
-        expect(push).toHaveBeenCalledWith(
-          `/verify?email=${encodeURIComponent(EMAIL)}`,
-        ),
-      );
-      expect(
-        screen.queryByLabelText(resolveAuthFlowCopy(config).verify.codeLabel),
-      ).toBeNull();
-      cleanup();
-    }
-  });
+      await screen.findByTestId("verify-submit");
+      // The form is gone, so the door cannot be submitted twice.
+      expect(screen.queryByTestId("registration-form")).toBeNull();
+      expect(screen.getByTestId("verify-card")).toHaveTextContent(EMAIL);
+    },
+  );
 });

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { type LoginRequest, type OtpChannel } from "@ds/schemas";
@@ -45,6 +44,7 @@ import { withReturnTarget } from "@ds/schemas";
 import { LoginGlyph } from "./login-glyph";
 import { stripHandoffFromAddressBar } from "./login-handoff";
 import type { ReactNode } from "react";
+import { renderDoorLink } from "../sign-in-host/door-link";
 
 /**
  * The ONE client sign-in door of the platform (#2027 PR 1.5, gate rows 21, 33–46).
@@ -597,8 +597,9 @@ export function LoginDoor({
           register: withReturnTarget(config.routes.register, returnTo),
           reset: withReturnTarget(config.routes.reset, returnTo),
         }}
-        // Next.js `<Link>` keeps the footer links on client-side navigation.
-        renderLink={({ href, children }) => <Link href={href}>{children}</Link>}
+        // 003 EARS-70 — plain door links: the host answers a door only for a
+        // top-level navigation, so a router link's RSC prefetch is refused (403).
+        renderLink={renderDoorLink}
         defaultMethod={defaultMethod}
         onMethodChange={onMethodChange}
         password={{

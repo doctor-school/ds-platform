@@ -26,7 +26,7 @@ uses, so nothing can reach the whole flow through one export (PR 1.1 rework D20)
 | `@ds/auth-flow/shell`          | `AuthShell` — the frame every auth screen on both storefronts sits in (#2027 PR 1.5).                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `@ds/auth-flow/login`          | The sign-in door (#2027 PR 1.5): `LoginDoor`, `LoginGlyph`, and the return-context card (`ReturnContextPanel` / `ReturnContextPlate` / `returnContextSlots`).                                                                                                                                                                                                                                                                                                                                                         |
 | `@ds/auth-flow/login/route`    | `LoginRoute` — the ONE server mount of that door: `guardAuthRoute`, then the door; `?method=code` opens it on «По коду» (003 EARS-43, closed allow-list via `resolveLoginMethod`).                                                                                                                                                                                                                                                                                                                                    |
-| `@ds/auth-flow/register`       | The sign-up door (#2027 PR 1.6): `RegisterDoor` (an accepted registration hops to `routes.verify`), `RegisterGlyph`.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `@ds/auth-flow/register`       | The sign-up door (#2027 PR 1.6): `RegisterDoor` (an accepted registration renders its code step in place on its own history entry on `routes.verify`, 003 EARS-24), `RegisterGlyph`.                                                                                                                                                                                                                                                                                                                                  |
 | `@ds/auth-flow/verify`         | The confirmation step (#2027 PR 1.7), one body on both hosts — the canvas «Подтверждение» screen: `VerifyDoor`, `VerifyEntry` / `VerifyAddressGate` + `VerifyStep` (the `?email=` seed; without it, a replace onto `/register` carrying `returnTo`, nothing painted — 003 EARS-40), `VerifyGlyph`, `VERIFY_TEST_IDS`.                                                                                                                                                                                                 |
 | `@ds/auth-flow/verify/route`   | `VerifyRoute` — the ONE server mount of that step on every host (003 EARS-24): the same arrival decision `RegisterRoute` takes (`guardAuthRoute`, the landing, the эфир to complete, the carry), the return-context panel, then the step.                                                                                                                                                                                                                                                                             |
 | `@ds/auth-flow/reset`          | The password-recovery flow (#2027 PR 1.8), one body on both hosts — the canvas «Сброс» screen: `ResetDoor` (both stages over `PasswordRecoveryCard`), `ResetGlyph`.                                                                                                                                                                                                                                                                                                                                                   |
@@ -103,7 +103,7 @@ hands a redirect to Next — none can ride into a browser bundle. `@ds/room/serv
 and `@ds/events-storefront/server` draw the same line the same way, and that is
 the repo convention (the `server-only` package is not in this repo).
 
-Three rules live there, each stated once for both storefronts:
+Four rules live there, each stated once for both storefronts:
 
 - **The session read.** `resolveServerAuth(headers)` recognises
   `__Host-ds_session` on a NAME boundary, issues the authenticated upstream read
@@ -129,6 +129,24 @@ Three rules live there, each stated once for both storefronts:
   `/verify` — the same on both storefronts (#2443); `@ds/auth-flow/client` reads
   and clears the same cookie in the browser. The query param wins when present;
   the parked copy is the fallback for a hop that lost it (014 EARS-6).
+- **The storefront OIDC entry and callback** (`storefront-oidc.ts`, 003
+  EARS-61/62/71, ADR-0015 §4). `storefrontEntry` is every storefront sign-in
+  door (`/login`, `/register`, `/reset`, `/verify`): it renders no form — it
+  asks the API's internal `POST /v1/internal/oidc/transaction` for a
+  transaction (the API generates and holds `state`, `nonce` and the PKCE
+  verifier, stores the return path, the entry intent and the carried 005
+  EARS-2 эфир registration, and builds the authorize URL), keeps only the
+  opaque id in `__Host-ds_oidc_tx` (host-only, `HttpOnly`, `Secure`,
+  `SameSite=Lax`, 3600 s) and answers `303` to the authorize URL; a signed-in
+  browser keeps the redirect to its landing. `storefrontCallback` is
+  `GET /auth/callback`: it redeems `{txId, state, code}` through
+  `POST /v1/internal/oidc/redeem`, relays the API's `__Host-ds_session`
+  cookie unchanged, completes the carried эфир registration with that session
+  (unless the эфир is gone), clears `__Host-ds_oidc_tx` and answers
+  `303 <path>#` with `Cache-Control: no-store` — every refusal too; a `POST`
+  is refused unread. Both reach the API at `INTERNAL_API_URL` with the
+  `INTERNAL_API_TOKEN` bearer, server-side only, forwarding the browser's
+  fingerprint headers and client chain.
 
 ## The five rules of the auth flow (S1–S5)
 
@@ -224,7 +242,13 @@ transport bound to them;
 and `apps/doctor/lib/auth-flow-routes.ts` for the ROUTE values, which are read by
 server code (the auth-screen guards, the Academy middleware, the doctor
 storefront layout) and so are kept out of the client module that binds the
-browser auth client at module scope.
+browser auth client at module scope. The storefront sign-in doors and the
+callback are one-line route handlers over the `StorefrontOidcHost` bindings
+`ACADEMY_STOREFRONT_OIDC` / `DOCTOR_STOREFRONT_OIDC` (`@ds/auth-flow/hosts`):
+`apps/portal/app/{login,register,reset,verify,auth/callback}/route.ts` and
+`apps/doctor/app/(auth)/{login,register,reset,verify}/route.ts` +
+`apps/doctor/app/auth/callback/route.ts`; the door forms themselves render on
+the sign-in host `apps/login`.
 
 Both hosts also declare the dependency, list `@ds/auth-flow` in
 `transpilePackages`, and `@source "../../../packages/auth-flow/src"` in

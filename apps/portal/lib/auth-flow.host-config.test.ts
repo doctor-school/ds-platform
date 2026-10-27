@@ -55,8 +55,8 @@ describe("ACADEMY_AUTH_FLOW.routes", () => {
 const config: AuthFlowHostConfig = ACADEMY_AUTH_FLOW;
 
 const RETURN_EVENT = {
-  time: "19:00",
-  dateLabel: "28 августа · чт",
+  startsAt: "2026-08-28T16:00:00.000Z",
+  format: "online" as const,
   school: "Школа ортобиологии",
   title: "PRP при гонартрозе: показания, протоколы, ошибки",
   specialties: ["Травматология"],
@@ -86,7 +86,7 @@ describe("ACADEMY_AUTH_FLOW: the return-context card", () => {
 
 describe("ACADEMY_AUTH_FLOW — the registration door this host mounts", () => {
   it("003 EARS-24: this host serves the confirmation step on its own `/verify` route", () => {
-    // 003 EARS-24 — the registration door hops here after the ack.
+    // 003 EARS-24 — the registration door settles its in-place code step on this route.
     expect(config.routes.verify).toBe("/verify");
   });
 

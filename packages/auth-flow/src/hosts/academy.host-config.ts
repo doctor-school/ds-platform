@@ -1,4 +1,5 @@
 import type { AuthFlowApiConfig, AuthFlowHostConfig } from "../host-config";
+import type { StorefrontOidcHost } from "../server/storefront-oidc";
 
 /**
  * What the Academy states about itself so the shared auth flow can serve it
@@ -115,3 +116,14 @@ export const ACADEMY_AUTH_FLOW = {
     wordingVersion: "2026-01",
   },
 } satisfies AuthFlowHostConfig;
+
+/**
+ * 003 EARS-61 / EARS-62 — this storefront as an OIDC client of the sign-in
+ * host: the client key the API's per-environment map resolves to its Zitadel
+ * `client_id` and its one `redirect_uri` (`/auth/callback`,
+ * `STOREFRONT_CALLBACK_PATH`), and the config its landing rules come from.
+ */
+export const ACADEMY_STOREFRONT_OIDC = {
+  client: "academy",
+  config: ACADEMY_AUTH_FLOW,
+} as const satisfies StorefrontOidcHost;

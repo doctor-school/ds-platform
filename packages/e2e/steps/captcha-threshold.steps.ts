@@ -1,3 +1,5 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -112,7 +114,10 @@ Given(
       state,
       "/account",
     );
-    const verified = captureResponse(owned, "/v1/auth/verify");
+    const verified = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       owned.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -200,7 +205,7 @@ Given(
     owned.on("request", (req) => {
       if (
         req.method() === "POST" &&
-        new URL(req.url()).pathname === "/v1/auth/login"
+        new URL(req.url()).pathname === signInHostApiPath("/v1/auth/login")
       )
         state.posts++;
     });
@@ -222,7 +227,10 @@ When(
   async ({ page }) => {
     const state = journey(page);
     for (let attempt = 0; attempt < 3; attempt++) {
-      const pending = captureResponse(state.page, "/v1/auth/login");
+      const pending = captureResponse(
+        state.page,
+        signInHostApiPath("/v1/auth/login"),
+      );
       await state.page.getByTestId("password-login-submit").click();
       const result = await pending;
       expect(
@@ -257,7 +265,10 @@ When(
   async ({ page }) => {
     const state = journey(page);
     await inputSecret(password(state.page), state.password);
-    const pending = captureResponse(state.page, "/v1/auth/login");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/login"),
+    );
     await state.page.getByTestId("password-login-submit").click();
     const result = await pending;
     expect(result.response.status()).toBe(403);
@@ -288,12 +299,15 @@ Then(
         (await password(state.page).inputValue()) === state.wrong,
       "both form fields really changed while the original action is pending",
     ).toBe(true);
-    const pending = captureResponse(state.page, "/v1/auth/login");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/login"),
+    );
     await state.page.evaluate(() =>
       (window as unknown as CaptchaWindow).__threshold3242.solve(),
     );
     const accepted = await pending;
-    const command = accepted.response.request().postDataJSON();
+    const command = hostCommand(accepted.response.request().postDataJSON());
     expect({
       status: accepted.response.status(),
       original:
@@ -303,7 +317,7 @@ Then(
       freshProof:
         accepted.response.request().headers()["x-smartcaptcha-token"] ===
         captchaTestTokenFromEnv(),
-      acknowledgement: accepted.body === '{"status":"authenticated"}',
+      acknowledgement: storefrontCallbackAcknowledgement(accepted.body, world.hostBaseUrl),
     }).toEqual({
       status: 200,
       original: true,

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 /**
  * 020 EARS-5 (#1768) — the guest hand-off from the doctor event page into
@@ -30,8 +30,6 @@ import { expect, test, type Page } from "@playwright/test";
 
 /** The эфир the double answers for — the same fixture `register-return.spec.ts` walks. */
 const LIVE = "prp-pri-gonartroze";
-/** Its title, as the double serves it: what the door must name back to the guest. */
-const TITLE = "PRP при гонартрозе: показания, протоколы, ошибки";
 
 /**
  * The hand-off URL the api BUILDS for this host — the assertion target of
@@ -39,56 +37,10 @@ const TITLE = "PRP при гонартрозе: показания, проток
  * (`/register?returnTo=` + the percent-escaped doctor event path) rather than
  * recomputed, so a change in either half fails this test.
  */
+/** The shared internal-API double's transaction log (`playwright.return-context.config.ts`). */
+const TRANSACTIONS = `http://127.0.0.1:${process.env.STOREFRONT_DOUBLE_PORT ?? 3217}/__transactions`;
+
 const HANDOFF = `/register?returnTo=${encodeURIComponent(`/events/${LIVE}`)}`;
-
-const EMAIL = "doctor@clinic.ru";
-const PASSWORD = "correct horse battery";
-
-/**
- * Put a consent into the ticked state through its label — the hit area of the
- * checkbox primitive. Idempotent, because the fill below is retried: a second
- * click on an already-ticked box would UNtick it.
- */
-async function setConsent(page: Page, testId: string) {
-  const box = page.getByTestId(testId);
-  if (!(await box.isChecked())) {
-    await box.locator("xpath=ancestor::label[1]").click();
-  }
-  await expect(box).toBeChecked({ timeout: 2_000 });
-}
-
-/**
- * Walk 021 from the door the guest ALREADY stands on — no `goto`, because the
- * point of this tier is that the guest arrived here by pressing the CTA.
- */
-async function completeRegistrationFromHere(page: Page) {
-  // The door was reached by a real link press, so the browser did a full
-  // document load and the form is server-rendered BEFORE React attaches. A
-  // value typed into that pre-hydration DOM is discarded by the first client
-  // render, and the submit stays disabled on a form that looks filled in. The
-  // retry is that wait, expressed as the outcome it waits for: the form is
-  // filled when the door itself agrees it is complete.
-  await expect(async () => {
-    await setConsent(page, "register-medworker");
-    await setConsent(page, "register-partner-data");
-    await page.getByTestId("register-email").fill(EMAIL);
-    await page.getByTestId("register-password").fill(PASSWORD);
-    await expect(page.getByTestId("register-submit")).toBeEnabled({
-      timeout: 2_000,
-    });
-  }).toPass({ timeout: 15_000 });
-
-  await page.getByTestId("register-submit").click();
-
-  await expect(page.getByTestId("verify-submit")).toBeVisible();
-  // The slotted OTP field auto-submits on completion (#175), so filling it IS
-  // the submit; the code itself is never checked here.
-  await page.locator("input[autocomplete=\"one-time-code\"]").fill("482913");
-  // 021 EARS-10 (amended 2026-09-17) — the accepted code NAVIGATES; there is no
-  // outcome card to wait for, so the confirmation surface leaving the DOM is
-  // what says the journey completed.
-  await expect(page.getByTestId("verify-submit")).toHaveCount(0);
-}
 
 test.describe("020 EARS-5: the guest hand-off into 021 and the exact return", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
@@ -110,41 +62,41 @@ test.describe("020 EARS-5: the guest hand-off into 021 and the exact return", ()
     await expect(cta).toContainText("Участвовать");
     await expect(cta).toHaveAttribute("href", HANDOFF);
 
+    // #3172 — `/register` is the storefront's 303 entry into the sign-in
+    // host: it records this page as the EARS-71 event target, the return
+    // path and the registration the callback completes (005 EARS-2). The
+    // card the guest then meets on the host is proven on the sign-in host
+    // tier (`doctor-register-return-context.e2e.spec.ts` 021 EARS-2.1).
+    const entry = page.waitForResponse(
+      (res) =>
+        res.request().isNavigationRequest() &&
+        new URL(res.url()).pathname === "/register",
+    );
     await cta.click();
-    await expect(page).toHaveURL(HANDOFF);
-
-    // The door names what the guest is coming back to — the hand-off is
-    // legible, not a silent parameter.
-    const panel = page.getByTestId("return-context-panel");
-    await expect(panel).toBeVisible();
-    await expect(panel.locator("[data-webinar-card]")).toContainText(TITLE);
+    const answer = await entry;
+    expect(answer.status()).toBe(303);
+    expect(new URL(answer.url()).search).toBe(
+      `?returnTo=${encodeURIComponent(`/events/${LIVE}`)}`,
+    );
+    await expect(page).toHaveURL(/\/oauth\/v2\/authorize\?.*state=tx-\d+/);
+    const state = new URL(page.url()).searchParams.get("state")!;
+    const sent = (await (
+      await page.request.get(TRANSACTIONS)
+    ).json()) as Record<string, unknown>[];
+    expect(sent[Number(state.slice(3)) - 1]).toMatchObject({
+      client: "doctor",
+      door: "register",
+      returnPath: `/events/${LIVE}`,
+      intent: { eventTarget: LIVE },
+      completeRegistration: LIVE,
+    });
   });
 
-  test("020 EARS-5.2: completing 021 returns the doctor to exactly the event page they left, signed in", async ({
-    page,
-    context,
-  }) => {
-    await context.clearCookies();
-    await page.goto(`/events/${LIVE}`, { waitUntil: "domcontentloaded" });
-    await page.getByTestId("event-signup-cta").click();
-    await expect(page).toHaveURL(HANDOFF);
-
-    await completeRegistrationFromHere(page);
-
-    // EXACTLY that URL: the confirmation lands the doctor on the page the
-    // journey started on, not the storefront home and not the cabinet — and it
-    // lands them there itself, with no tap in between (021 EARS-10, amended
-    // 2026-09-17).
-    await expect(page).toHaveURL(new RegExp(`/events/${LIVE}$`));
-
-    // 021 EARS-15 parity: the doctor lands SIGNED IN, so the page they came
-    // back to no longer offers them the door they just walked through.
-    const header = page.getByTestId("storefront-header");
-    await expect(
-      header.getByRole("link", { name: "Личный кабинет" }),
-    ).toBeVisible();
-    await expect(header.getByRole("link", { name: "Войти" })).toHaveCount(0);
-  });
+  // #3172 — 020 EARS-5.2 («completing 021 returns the doctor to exactly the
+  // event page they left, signed in») is the storefront callback's landing
+  // now (003 EARS-62, 005 EARS-2): proven by the stand journeys
+  // (`packages/e2e`); the registration journey up to the host's success
+  // answer rides `apps/login/e2e/doctor-register-return.e2e.spec.ts`.
 
   test("020 EARS-5.3: the event page hands 021 off and hosts none of it — no form, no consent, no attribution", async ({
     page,
@@ -160,7 +112,7 @@ test.describe("020 EARS-5: the guest hand-off into 021 and the exact return", ()
     await expect(page.getByTestId("register-submit")).toHaveCount(0);
     await expect(page.getByTestId("register-medworker")).toHaveCount(0);
     await expect(page.getByTestId("register-partner-data")).toHaveCount(0);
-    await expect(page.locator("[data-testid^=\"register-\"]")).toHaveCount(0);
+    await expect(page.locator('[data-testid^="register-"]')).toHaveCount(0);
     // Scoped to the PAGE, not the document: since #2180 the shared chrome owns a
     // `<form role="search">` in the header on every doctor route (017 EARS-5), so
     // a document-wide `form` count would assert the absence of the header rather

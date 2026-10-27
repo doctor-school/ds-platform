@@ -1,5 +1,4 @@
 import { test, expect, type BrowserContext } from "@playwright/test";
-import { DEFAULT_AUTH_FLOW_COPY } from "@ds/auth-flow/copy";
 
 /**
  * #1955 — the two `/login` behaviours that are decided on the SERVER, against a
@@ -18,12 +17,9 @@ import { DEFAULT_AUTH_FLOW_COPY } from "@ds/auth-flow/copy";
  * doors are compared against one fixture rather than two.
  */
 const GATE_ARRIVAL = "/login?returnTo=%2Fwebinars%2Fprp-pri-gonartroze";
-const EVENT_TITLE = "PRP при гонартрозе";
-
-/** The login door's own assurance line — sign-in returns the doctor on the spot. */
-const LOGIN_ASSURANCE = DEFAULT_AUTH_FLOW_COPY.returnContext.login;
-/** The registration door's line — it must NOT appear on the sign-in door. */
-const REGISTER_ASSURANCE = DEFAULT_AUTH_FLOW_COPY.returnContext.register;
+// #3172 — the door's return-context copy (#1955 rows 1-2) renders on the
+// sign-in host from the entry intent: `apps/login/e2e/doctor-login-arrival.e2e.spec.ts`.
+// The signed-in redirect is still THIS storefront entry's decision.
 
 /**
  * Put the double's live session on the doctor origin. `__Host-` requires
@@ -43,34 +39,6 @@ async function signIn(context: BrowserContext, baseURL: string): Promise<void> {
     },
   ]);
 }
-
-test("021 #1955: the sign-in door promises the return happens on SIGN-IN, not after an email", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto(GATE_ARRIVAL);
-
-  const panel = page.getByTestId("return-context-panel");
-  await expect(panel).toBeVisible();
-  await expect(panel.locator("[data-webinar-card]")).toContainText(EVENT_TITLE);
-
-  // The whole point of the fix: the shared panel now states the step THIS door
-  // actually takes. Telling a doctor who already has an account to wait for a
-  // confirmation letter sends them looking for mail that is never sent.
-  await expect(panel).toContainText(LOGIN_ASSURANCE);
-  await expect(panel).not.toContainText(REGISTER_ASSURANCE);
-});
-
-test("021 #1955: the registration door beside it keeps its own confirmation wording", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto("/register?returnTo=%2Fwebinars%2Fprp-pri-gonartroze");
-
-  const panel = page.getByTestId("return-context-panel");
-  await expect(panel).toContainText(REGISTER_ASSURANCE);
-  await expect(panel).not.toContainText(LOGIN_ASSURANCE);
-});
 
 test("017 #1955: a signed-in doctor arriving at /login is returned to the эфир they came from", async ({
   page,
@@ -106,8 +74,14 @@ test("017 #1955: a signed-in doctor arriving at /login directly lands on the LD-
 test("017 #1955: a guest still gets the door — the guard closes it to nobody else", async ({
   page,
 }) => {
+  // A guest's entry hands over to the sign-in host (#3172): a 303 to the
+  // authorize URL (this tier's double answers it); the form there is proven
+  // on the sign-in host tier (`apps/login/e2e/doctor-login.e2e.spec.ts`).
+  const entry = page.waitForResponse(
+    (res) => new URL(res.url()).pathname === "/login",
+  );
   await page.goto("/login");
 
-  await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByTestId("password-login-form")).toBeVisible();
+  expect((await entry).status()).toBe(303);
+  await expect(page).toHaveURL(/\/oauth\/v2\/authorize\?.*state=tx-\d+/);
 });

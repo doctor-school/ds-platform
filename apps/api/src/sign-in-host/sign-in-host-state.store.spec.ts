@@ -83,3 +83,42 @@ describe("subject revocation fence (003 EARS-12)", () => {
     expect(await store.subjectRevokedAt("sub-1")).toBeNull();
   });
 });
+
+// 003 EARS-62 — the callback finds a transaction by its `state` too, so a
+// callback without the browser's own cookie still spends it (single use,
+// whichever way it is taken).
+describe("storefront transaction by state (003 EARS-62)", () => {
+  const tx = {
+    client: "academy" as const,
+    clientId: "academy-client",
+    kind: "interactive" as const,
+    door: "login" as const,
+    state: "st4te-value",
+    nonce: "n0nce",
+    verifier: "v3rifier",
+  };
+
+  it("003 EARS-62: a transaction is taken once by its state, and then neither its state nor its id finds it", async () => {
+    const store = new InMemorySignInHostStateStore(randomBytes(32));
+    const id = await store.putTransaction(tx, 60);
+    expect(await store.takeTransactionByState("another-state")).toBeNull();
+    expect(await store.takeTransactionByState(tx.state)).toEqual(tx);
+    expect(await store.takeTransactionByState(tx.state)).toBeNull();
+    expect(await store.takeTransaction(id)).toBeNull();
+  });
+
+  it("003 EARS-62: a transaction taken by its id is no longer found by its state", async () => {
+    const store = new InMemorySignInHostStateStore(randomBytes(32));
+    const id = await store.putTransaction(tx, 60);
+    expect(await store.takeTransaction(id)).toEqual(tx);
+    expect(await store.takeTransactionByState(tx.state)).toBeNull();
+  });
+
+  it("003 EARS-62: the state index keeps no usable transaction id or state", async () => {
+    const store = new InMemorySignInHostStateStore(randomBytes(32));
+    const id = await store.putTransaction(tx, 60);
+    const values = store.storedValues().join("\n");
+    expect(values).not.toContain(id);
+    expect(values).not.toContain(tx.state);
+  });
+});

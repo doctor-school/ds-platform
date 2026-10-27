@@ -1,4 +1,6 @@
-﻿import { randomUUID } from "node:crypto";
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { randomUUID } from "node:crypto";
+import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
@@ -83,12 +85,15 @@ async function passwordAttempt(
     state.page.locator('input[autocomplete="current-password"]'),
     password,
   );
-  const pending = captureResponse(state.page, "/v1/auth/login");
+  const pending = captureResponse(
+    state.page,
+    signInHostApiPath("/v1/auth/login"),
+  );
   await state.page.getByTestId("password-login-submit").click();
   const result = await pending;
   let submitted = false;
   try {
-    const body = result.response.request().postDataJSON();
+    const body = hostCommand(result.response.request().postDataJSON());
     submitted = body.identifier === state.email && body.password === password;
   } catch {
     /* Never expose credential-bearing parser diagnostics. */
@@ -127,7 +132,10 @@ Given(
       state,
       "/account",
     );
-    const pending = captureResponse(state.page, "/v1/auth/verify");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       state.page.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -223,9 +231,10 @@ When(
         succeeded = true;
         let tokenFree = false;
         try {
-          const body = JSON.parse(accepted.body);
-          tokenFree =
-            body.status === "authenticated" && Object.keys(body).length === 1;
+          tokenFree = storefrontCallbackAcknowledgement(
+            accepted.body,
+            world.hostBaseUrl,
+          );
         } catch {
           /* Never expose authentication response bytes. */
         }
@@ -268,13 +277,16 @@ Then(
         state.page.locator('input[autocomplete="username"]'),
         state.email,
       );
-      const pending = captureResponse(state.page, "/v1/auth/password/reset");
+      const pending = captureResponse(
+        state.page,
+        signInHostApiPath("/v1/auth/password/reset"),
+      );
       await state.page.getByTestId("reset-request-submit").click();
       const result = await pending;
       let sameIdentifier = false;
       let neutral = false;
       try {
-        const request = result.response.request().postDataJSON();
+        const request = hostCommand(result.response.request().postDataJSON());
         sameIdentifier =
           request.identifier === state.email &&
           Object.keys(request).length === 1;

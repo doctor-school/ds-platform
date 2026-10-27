@@ -1,3 +1,9 @@
+import {
+  isAuthCommandPath,
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
+import { expectEnteredThrough } from "../lib/storefront-entry-watch.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -75,7 +81,7 @@ Given(
     ).toBe(0);
     owned.on("request", (request) => {
       const pathname = new URL(request.url()).pathname;
-      if (request.method() === "POST" && pathname.startsWith("/v1/auth/"))
+      if (request.method() === "POST" && isAuthCommandPath(pathname))
         state.authPosts.push(pathname);
     });
     await prepareCaptchaForJourney(
@@ -83,7 +89,10 @@ Given(
       baseURL ?? world.hostBaseUrl,
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
-    const pending = captureResponse(owned, "/v1/auth/register");
+    const pending = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/register"),
+    );
     const { response, code } = await registerOwnedCredentials(
       owned,
       world.hostBaseUrl,
@@ -108,7 +117,13 @@ Given(
       new URL(owned.url()).searchParams.get("email") === state.email,
       "the requesting code step retains the owned address",
     ).toBe(true);
-    expect(new URL(owned.url()).searchParams.get("returnTo")).toBe("/account");
+    // #3172 — the code step is the sign-in host's; the account return path
+    // rode the storefront's registration entry into the transaction.
+    expect(isSignInHostForm(owned.url())).toBe(true);
+    expectEnteredThrough(owned, world.hostBaseUrl, {
+      pathname: "/register",
+      returnTo: "/account",
+    });
     expect(
       (await owned
         .locator('input[autocomplete="one-time-code"]')
@@ -265,12 +280,15 @@ Then(
 
 When(
   "the registrant rejects a different code and enters that delivered verification code once in the same Academy tab",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const state = registration(page);
     if (!state.code) throw new Error("The real verification code is missing");
     const codeField = state.page.locator('input[autocomplete="one-time-code"]');
     const wrong = differentVerificationCode(state.code);
-    const refusalPending = captureResponse(state.page, "/v1/auth/verify");
+    const refusalPending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(codeField, wrong);
     const rejected = await refusalPending;
     expect(rejected.response.status(), "different code refused").toBe(400);
@@ -303,7 +321,10 @@ When(
       (await codeField.inputValue()) === "",
       "registrant clears refused digits before entering the delivered code",
     ).toBe(true);
-    const acceptedPending = captureResponse(state.page, "/v1/auth/verify");
+    const acceptedPending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(codeField, state.code);
     state.accepted = await acceptedPending;
     expect(state.accepted.response.status(), "delivered code accepted").toBe(
@@ -315,6 +336,7 @@ When(
         state.accepted.body,
         state,
         state.code,
+        world.hostBaseUrl,
       ),
     ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
   },
@@ -366,7 +388,11 @@ Then(
     expect(
       state.authPosts,
       "one registration, one refusal and one accepted code; no sign-in replay",
-    ).toEqual(["/v1/auth/register", "/v1/auth/verify", "/v1/auth/verify"]);
+    ).toEqual([
+      signInHostApiPath("/v1/auth/register"),
+      signInHostApiPath("/v1/auth/verify"),
+      signInHostApiPath("/v1/auth/verify"),
+    ]);
   },
 );
 

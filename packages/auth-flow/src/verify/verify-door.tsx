@@ -36,6 +36,7 @@ import {
   type CompletionTarget,
 } from "../client/signed-in-landing";
 import { consentRefusalMessage } from "../register/consent-refusal";
+import { hopHostDoor } from "../sign-in-host/host-history";
 import { withReturnTarget } from "@ds/schemas";
 import { VerifyGlyph } from "./verify-glyph";
 
@@ -45,8 +46,11 @@ import { VerifyGlyph } from "./verify-glyph";
  * design-system `<EmailConfirmCard>` around the SAME `<OtpFocusScreen>` the
  * sign-in card shows once a code was sent.
  *
- * Both storefronts reach it on their own `/verify` route (`VerifyRoute` →
- * `VerifyEntry`). What differs between them is data — the host config (its
+ * The registration door renders it IN PLACE on its own document right after
+ * an accepted registration (003 EARS-24 amended), handing it `onBack`; the
+ * host's `/verify` route (`VerifyRoute` → `VerifyEntry`) renders the same step
+ * for a reload or a later visit, where nothing is held. What differs between
+ * the storefronts is data — the host config (its
  * `api.verifyPath` and the `registration` its register command held) and the
  * targets below — never a branch. A new and an already-registered address get
  * the identical step (003 EARS-16; re-registration, 044 EARS-14).
@@ -87,6 +91,13 @@ export type VerifyDoorProps = {
   /** Rule S3 — the target «← Изменить почту» carries back to the form. */
   carriedTarget?: string | null;
   /**
+   * 003 EARS-24 amended — «← Изменить почту» of the IN-PLACE step: the
+   * registration door that rendered this step shows its form again from the
+   * values it still holds in memory. Absent (the `/verify` route) → the step
+   * navigates to the host's registration door, which opens empty.
+   */
+  onBack?: () => void;
+  /**
    * 021 EARS-2 — the mobile return-context plate above the card, the one the
    * registration door draws (`returnContextSlots(...).plate`). Absent → nothing.
    */
@@ -125,6 +136,7 @@ export function VerifyDoor({
   resolveCompletionTarget,
   returnTarget = null,
   carriedTarget = null,
+  onBack,
   returnContextPlate,
 }: VerifyDoorProps) {
   const router = useRouter();
@@ -245,11 +257,15 @@ export function VerifyDoor({
       onInvalid={() => setError(resolvedCopy.fields.code.invalid)}
       error={error}
       succeeded={succeeded}
-      // 003 EARS-24 amended — «← Изменить почту»: back to this host's form,
-      // which refills from the values still held in this tab, the arrival
-      // target carried onward (rule S3).
-      onBack={() =>
-        router.push(withReturnTarget(config.routes.register, carriedTarget))
+      // 003 EARS-24 amended — «← Изменить почту»: in place, the door that
+      // rendered this step shows its form again with every typed field; on
+      // the `/verify` route (nothing held) a door hop to this host's empty
+      // form (`hopHostDoor`, EARS-70), the arrival target carried onward
+      // (rule S3).
+      onBack={
+        onBack ??
+        (() =>
+          hopHostDoor(withReturnTarget(config.routes.register, carriedTarget)))
       }
       resend={{
         nonce: resendNonce,

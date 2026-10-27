@@ -1,3 +1,13 @@
+import { handoffCommandWithoutReference,
+  AUTH_REQUEST_PARAM,
+  isAuthCommandPath,
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { randomBytes } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { captureResponse } from "../lib/captured-response.js";
@@ -11,7 +21,7 @@ import {
 import { createOwnedCongressSignup } from "../lib/owned-congress-signup.js";
 import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 
-const ENDPOINT = "/v1/auth/login/otp/handoff";
+const ENDPOINT = signInHostApiPath("/v1/auth/login/otp/handoff");
 interface Journey {
   context: BrowserContext;
   email: string;
@@ -91,7 +101,7 @@ Given(
       const posts: string[] = [];
       guest.on("request", (request) => {
         const path = new URL(request.url()).pathname;
-        if (request.method() === "POST" && path.startsWith("/v1/auth/"))
+        if (request.method() === "POST" && isAuthCommandPath(path))
           posts.push(path);
       });
       const requested = await captureAddressedMailCheckpoint(
@@ -108,9 +118,10 @@ Given(
       try {
         const command = captured.response.request().postDataJSON();
         const answer = JSON.parse(captured.body);
+        // 003 EARS-44 (host): the body names no reference (the form state
+        // holds it); the answer still names the hand-off account.
         exact =
-          Object.keys(command).join() === "ref" &&
-          command.ref === state.reference &&
+          handoffCommandWithoutReference(command, state.reference) &&
           Object.keys(answer).length === 2 &&
           answer.status === "otp_sent" &&
           answer.identifier === state.email;
@@ -174,11 +185,12 @@ When(
       ["exhausted", state.reference],
     ] as const) {
       const guest = await state.context.newPage();
+      watchStorefrontEntries(guest, world.hostBaseUrl);
       state.fallbackPages.push(guest);
       const posts: string[] = [];
       guest.on("request", (request) => {
         const path = new URL(request.url()).pathname;
-        if (request.method() === "POST" && path.startsWith("/v1/auth/"))
+        if (request.method() === "POST" && isAuthCommandPath(path))
           posts.push(path);
       });
       const checkpoint = await captureAddressedMailCheckpoint(
@@ -196,8 +208,8 @@ When(
         let exactCommand = false;
         try {
           const command = captured.response.request().postDataJSON();
-          exactCommand =
-            Object.keys(command).join() === "ref" && command.ref === reference;
+          // 003 EARS-44 (host): the reference rides the form state only.
+          exactCommand = handoffCommandWithoutReference(command, reference);
         } catch {
           /* Do not retain reference-bearing parser diagnostics. */
         }
@@ -247,15 +259,21 @@ When(
         posts,
         "malformed input makes zero endpoint calls; each well-formed input makes one",
       ).toEqual(kind === "malformed" ? [] : [ENDPOINT]);
+      // #3172 — the fallback is the sign-in host's code door, whose URL
+      // carries only the IdP's auth request (no reference); the account return
+      // target rode the storefront entry into the transaction.
       const url = new URL(guest.url());
       expect(
-        url.origin === new URL(world.hostBaseUrl).origin &&
+        isSignInHostForm(url) &&
           url.pathname === "/login" &&
-          url.searchParams.size === 2 &&
-          url.searchParams.get("method") === "code" &&
-          url.searchParams.get("returnTo") === "/account",
-        "fallback retains the same-origin account return target and removes the reference",
+          [...url.searchParams.keys()].join() === AUTH_REQUEST_PARAM,
+        "fallback removes the reference",
       ).toBe(true);
+      expectEnteredThrough(guest, world.hostBaseUrl, {
+        pathname: "/login",
+        method: "code",
+        returnTo: "/account",
+      });
       const history = await state.context.newCDPSession(guest);
       try {
         const entries = await history.send("Page.getNavigationHistory");

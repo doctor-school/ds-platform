@@ -1,3 +1,12 @@
+import {
+  isAuthCommandPath,
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -119,7 +128,7 @@ Given(
     registrations.set(page, state);
     owned.on("request", (request) => {
       const pathname = new URL(request.url()).pathname;
-      if (request.method() === "POST" && pathname.startsWith("/v1/auth/"))
+      if (request.method() === "POST" && isAuthCommandPath(pathname))
         state.authPosts.push(pathname);
     });
     await prepareCaptchaForJourney(
@@ -128,7 +137,10 @@ Given(
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
     const first = { email: state.email, password: state.firstPassword };
-    const pending = captureResponse(owned, "/v1/auth/register");
+    const pending = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/register"),
+    );
     const { code } = await registerOwnedCredentials(
       owned,
       world.hostBaseUrl,
@@ -157,7 +169,7 @@ Given(
         .inputValue()) === "",
       "first code is never entered",
     ).toBe(true);
-    expect(state.authPosts).toEqual(["/v1/auth/register"]);
+    expect(state.authPosts).toEqual([signInHostApiPath("/v1/auth/register")]);
     await assertNoPrivateRegistrationAccess(
       owned,
       (await registered.response.headerValue("set-cookie")) ?? "",
@@ -174,6 +186,7 @@ When(
       state.password !== state.firstPassword,
       "replacement credentials differ",
     ).toBe(true);
+    watchStorefrontEntries(state.page, world.hostBaseUrl);
     await state.page.goto(registrationUrl(world.hostBaseUrl, "/account"), {
       waitUntil: "load",
     });
@@ -191,7 +204,10 @@ When(
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
     );
-    const pending = captureResponse(state.page, "/v1/auth/register");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/register"),
+    );
     await state.page.getByTestId("register-submit").click();
     state.repeated = await pending;
     expect(
@@ -209,19 +225,20 @@ When(
       consentMatches: true,
       acknowledgementMatches: true,
     });
+    // #3172 — the code step is the sign-in host's `/verify`; the account
+    // return path rode the storefront's registration entry.
     await state.page.waitForURL(
-      (url) =>
-        url.origin === new URL(world.hostBaseUrl).origin &&
-        url.pathname === "/verify",
+      (url) => isSignInHostForm(url) && url.pathname === "/verify",
     );
     await state.page.waitForLoadState("networkidle");
     expect(
       new URL(state.page.url()).searchParams.get("email") === state.email,
       "second code step belongs to the same owned address",
     ).toBe(true);
-    expect(new URL(state.page.url()).searchParams.get("returnTo")).toBe(
-      "/account",
-    );
+    expectEnteredThrough(state.page, world.hostBaseUrl, {
+      pathname: "/register",
+      returnTo: "/account",
+    });
     await assertNoPrivateRegistrationAccess(
       state.page,
       (await state.repeated.response.headerValue("set-cookie")) ?? "",
@@ -290,9 +307,12 @@ Then(
 
 When(
   "the abandoned registrant enters that delivered re-registration code once in the requesting Academy tab",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const state = registration(page);
-    const pending = captureResponse(state.page, "/v1/auth/verify");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       state.page.locator('input[autocomplete="one-time-code"]'),
       state.code!,
@@ -308,6 +328,7 @@ When(
         state.accepted.body,
         state,
         state.code!,
+        world.hostBaseUrl,
       ),
     ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
   },
@@ -331,7 +352,11 @@ Then(
     expect(
       state.authPosts,
       "two registrations and exactly one accepted code, with no sign-in replay",
-    ).toEqual(["/v1/auth/register", "/v1/auth/register", "/v1/auth/verify"]);
+    ).toEqual([
+      signInHostApiPath("/v1/auth/register"),
+      signInHostApiPath("/v1/auth/register"),
+      signInHostApiPath("/v1/auth/verify"),
+    ]);
   },
 );
 
@@ -371,11 +396,14 @@ Then(
       const posts: string[] = [];
       guest.on("request", (request) => {
         const pathname = new URL(request.url()).pathname;
-        if (request.method() === "POST" && pathname.startsWith("/v1/auth/"))
+        if (request.method() === "POST" && isAuthCommandPath(pathname))
           posts.push(pathname);
       });
       const submitted = await gatedPasswordLogin(guest, async () => {
-        const pending = captureResponse(guest, "/v1/auth/login");
+        const pending = captureResponse(
+          guest,
+          signInHostApiPath("/v1/auth/login"),
+        );
         await guest.getByTestId("password-login-submit").click();
         return pending;
       });
@@ -385,7 +413,7 @@ Then(
         "password probe targets the same owned account with the intended credential",
       ).toBe(true);
       expect(posts, "one independent password login probe").toEqual([
-        "/v1/auth/login",
+        signInHostApiPath("/v1/auth/login"),
       ]);
       if (isReplacement) {
         expect(

@@ -7,5 +7,10 @@
 export {
   ACADEMY_AUTH_FLOW,
   ACADEMY_AUTH_FLOW_API,
+  ACADEMY_STOREFRONT_OIDC,
 } from "./academy.host-config";
-export { DOCTOR_AUTH_FLOW, DOCTOR_AUTH_FLOW_API } from "./doctor.host-config";
+export {
+  DOCTOR_AUTH_FLOW,
+  DOCTOR_AUTH_FLOW_API,
+  DOCTOR_STOREFRONT_OIDC,
+} from "./doctor.host-config";

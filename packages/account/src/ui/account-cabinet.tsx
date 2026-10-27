@@ -212,9 +212,15 @@ export function AccountCabinet({
       passwordHref={passwordHref}
       eventsHref={eventsHref}
       congressHref={congressRegistered ? congressPath : null}
-      renderLink={({ href, children }) => (
-        <NextLink href={href}>{children}</NextLink>
-      )}
+      renderLink={({ href, children }) =>
+        // 003 EARS-61 — the reset entry acts only on a top-level document
+        // navigation: a plain link, never a router link that prefetches it.
+        href === passwordHref ? (
+          <a href={href}>{children}</a>
+        ) : (
+          <NextLink href={href}>{children}</NextLink>
+        )
+      }
       onSaveDisplayName={onSaveDisplayName}
       resolveSaveError={resolveSaveError}
       onSignOut={onSignOut}

@@ -1,9 +1,12 @@
-﻿import {
+import {
   expect,
   type Locator,
   type Page,
   type Response,
 } from "@playwright/test";
+import { captureResponse } from "./captured-response.js";
+import { signInHostApiPath } from "./sign-in-host-api.js";
+import { watchStorefrontEntries } from "./storefront-entry-watch.js";
 import {
   captureAddressedMailCheckpoint,
   fetchRecoveryCode,
@@ -122,65 +125,178 @@ export function registrationEvidence(
 ) {
   const request = parsedObject(requestText);
   const response = parsedObject(responseText);
-  const consent = request.consent;
-  const accepted =
-    Array.isArray(consent) && consent.length === 1 ? consent[0] : null;
   return {
     credentialsMatch:
       request.email === account.email && request.password === account.password,
-    // 003 EARS-20: apps/portal/lib/auth-flow.host-config.ts consents contract.
-    consentMatches:
-      accepted !== null &&
-      typeof accepted === "object" &&
-      Object.keys(accepted).length === 2 &&
-      accepted.purpose === "tos" &&
-      accepted.version === "2026-01",
+    consentMatches: academyConsentMatches(request.consent),
     acknowledgementMatches:
       Object.keys(response).length === 1 &&
       response.status === "pending_verification",
   };
 }
 
-/** Project secrets to booleans before assertions can include response diagnostics. */
+/*
+ * The evidence contract on the sign-in host (ADR-0015 §4, #3172; 003 EARS-5
+ * amended, EARS-39 host, EARS-24 host warm step). The credential step moved off
+ * the storefront, so each property the storefront-hosted evidence proved is now
+ * asserted where it is carried:
+ *
+ *   old (storefront command)              → now
+ *   code accepted, `{status:"verified"}`  → the host command answers exactly
+ *                                           `{status:"redirect", url}`, `url`
+ *                                           being the ORIGINATING storefront's
+ *                                           `/auth/callback` (its origin + path,
+ *                                           an authorization `code` + `state`,
+ *                                           no `error`) — the transaction's own
+ *                                           client, never «some redirect»
+ *                                           ({@link storefrontCallbackAcknowledgement})
+ *   account verified, signed in           → the journey lands on the storefront
+ *                                           with a fresh `__Host-ds_session`
+ *                                           (`lib/secure-session.ts`, at the
+ *                                           calling step's landing)
+ *   held password rides with the code     → unchanged on the WARM step (the
+ *                                           host renders the code step in place,
+ *                                           003 EARS-24): the code command
+ *                                           carries `registration` with exactly
+ *                                           the typed password and the ticked
+ *                                           consent (EARS-41/23). Only the COLD
+ *                                           step (after a reload, EARS-41) sends
+ *                                           the code alone, the password nowhere
+ *                                           in its body
+ *                                           ({@link coldVerificationEvidence})
+ *   refusal shape / no enumeration / copy → unchanged: the host command keeps
+ *                                           the storefront's exact 400 body
+ *                                           ({@link verificationRefusalEvidence})
+ *                                           and the form keeps its error copy
+ */
+
+/**
+ * The host's success answer for a credential step: exactly
+ * `{ status: "redirect", url }` whose `url` is the `/auth/callback` of the
+ * storefront `base` the transaction belongs to (one registered `redirect_uri`
+ * per storefront client, 003 EARS-61/62), carrying the IdP's `code` + `state`.
+ */
+export function storefrontCallbackAcknowledgement(
+  responseText: string,
+  base: string,
+): boolean {
+  const response = parsedObject(responseText);
+  if (
+    Object.keys(response).length !== 2 ||
+    response.status !== "redirect" ||
+    typeof response.url !== "string"
+  )
+    return false;
+  let url: URL;
+  try {
+    url = new URL(response.url);
+  } catch {
+    return false;
+  }
+  return (
+    url.origin === new URL(base).origin &&
+    url.pathname === "/auth/callback" &&
+    Boolean(url.searchParams.get("code")) &&
+    Boolean(url.searchParams.get("state")) &&
+    !url.searchParams.has("error")
+  );
+}
+
+/** 003 EARS-20: the Academy consent contract (apps/portal/lib/auth-flow.host-config.ts). */
+function academyConsentMatches(consent: unknown): boolean {
+  const accepted =
+    Array.isArray(consent) && consent.length === 1 ? consent[0] : null;
+  return (
+    accepted !== null &&
+    typeof accepted === "object" &&
+    Object.keys(accepted).length === 2 &&
+    accepted.purpose === "tos" &&
+    accepted.version === "2026-01"
+  );
+}
+
+/**
+ * Which code step sent the command: `warm` — the in-place step right after the
+ * accepted registration form, holding the typed values (003 EARS-24/41);
+ * `cold` — the step reached after a reload, holding nothing (003 EARS-41).
+ */
+type CodeStep = "warm" | "cold";
+
+/**
+ * The code command names the owned address and code on the host form state;
+ * the warm step carries exactly the typed password and ticked consent as
+ * `registration`, the cold step no registration value and no password.
+ */
+function codeCommandMatches(
+  requestText: string,
+  account: OwnedCredentials,
+  code: string,
+  step: CodeStep,
+): boolean {
+  const request = parsedObject(requestText);
+  const addressed =
+    request.email === account.email &&
+    request.code === code &&
+    typeof request.authRequest === "string" &&
+    request.authRequest.length > 0;
+  if (step === "cold")
+    return (
+      addressed &&
+      !Object.hasOwn(request, "registration") &&
+      !requestText.includes(account.password)
+    );
+  const registration = request.registration;
+  return (
+    addressed &&
+    registration !== null &&
+    typeof registration === "object" &&
+    !Array.isArray(registration) &&
+    Object.keys(registration).length === 2 &&
+    (registration as Record<string, unknown>).password === account.password &&
+    academyConsentMatches((registration as Record<string, unknown>).consent)
+  );
+}
+
+/**
+ * 003 EARS-3/41: the warm in-place code step's command and answer, secrets
+ * projected to booleans before assertions can include response diagnostics.
+ */
 export function verificationEvidence(
   requestText: string,
   responseText: string,
   account: OwnedCredentials,
   code: string,
+  base: string,
 ) {
-  const request = parsedObject(requestText);
-  const response = parsedObject(responseText);
-  const registration = request.registration;
   return {
-    credentialsMatch:
-      request.email === account.email &&
-      registration !== null &&
-      typeof registration === "object" &&
-      "password" in registration &&
-      registration.password === account.password &&
-      request.code === code,
-    acknowledgementMatches:
-      Object.keys(response).length === 1 && response.status === "verified",
+    credentialsMatch: codeCommandMatches(requestText, account, code, "warm"),
+    acknowledgementMatches: storefrontCallbackAcknowledgement(
+      responseText,
+      base,
+    ),
   };
 }
 
-/** 003 EARS-41: a cold confirmation submits no held registration password. */
+/** 003 EARS-41: a cold confirmation submits the code alone (plus the form-post fields). */
 export function coldVerificationEvidence(
   requestText: string,
   responseText: string,
   account: OwnedCredentials,
   code: string,
+  base: string,
 ) {
   const request = parsedObject(requestText);
-  const response = parsedObject(responseText);
   return {
-    credentialsMatch: request.email === account.email && request.code === code,
+    credentialsMatch: codeCommandMatches(requestText, account, code, "cold"),
     codeOnly:
-      Object.keys(request).length === 2 &&
-      Object.hasOwn(request, "email") &&
-      Object.hasOwn(request, "code"),
-    acknowledgementMatches:
-      Object.keys(response).length === 1 && response.status === "verified",
+      Object.keys(request).length === 4 &&
+      ["email", "code", "authRequest", "csrf"].every((key) =>
+        Object.hasOwn(request, key),
+      ),
+    acknowledgementMatches: storefrontCallbackAcknowledgement(
+      responseText,
+      base,
+    ),
   };
 }
 
@@ -207,12 +323,12 @@ export function verificationRefusalEvidence(
 ) {
   const response = parsedObject(responseText);
   return {
-    credentialsMatch: verificationEvidence(
+    credentialsMatch: codeCommandMatches(
       requestText,
-      responseText,
       account,
       submitted,
-    ).credentialsMatch,
+      "warm",
+    ),
     wrongCode:
       /^\d{6}$/.test(delivered) &&
       /^\d{6}$/.test(submitted) &&
@@ -231,7 +347,9 @@ export async function registerOwnedCredentials(
   base: string,
   account: OwnedCredentials,
   returnTo?: "/account",
-): Promise<{ response: Response; code: string }> {
+): Promise<{ response: Response; body: string; code: string }> {
+  // #3172 — the caller can prove the return path by the entry it rode.
+  watchStorefrontEntries(page, base);
   await page.goto(registrationUrl(base, returnTo), { waitUntil: "load" });
   await page.waitForLoadState("networkidle");
   await inputSecret(page.locator('input[autocomplete="email"]'), account.email);
@@ -245,13 +363,14 @@ export async function registerOwnedCredentials(
     mailbox,
     account.email,
   );
-  const registered = page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === "/v1/auth/register" &&
-      response.request().method() === "POST",
+  // The form navigates to the code step on success, so the body is kept at
+  // arrival (lib/captured-response.ts) for the caller's evidence.
+  const registered = captureResponse(
+    page,
+    signInHostApiPath("/v1/auth/register"),
   );
   await page.getByTestId("register-submit").click();
-  const response = await registered;
+  const { response, body } = await registered;
   expect(response.ok(), "owned account registration accepted").toBe(true);
   await page.waitForURL((url) => url.pathname === "/verify");
   await page.waitForLoadState("networkidle");
@@ -262,5 +381,5 @@ export async function registerOwnedCredentials(
     before,
     "register",
   );
-  return { response, code };
+  return { response, body, code };
 }

@@ -1,3 +1,8 @@
+import {
+  isAuthCommandPath,
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -259,7 +264,7 @@ Given(
     owned.on("request", (request) => {
       observe("url", request.url());
       const pathname = new URL(request.url()).pathname;
-      if (request.method() === "POST" && pathname.startsWith("/v1/auth/"))
+      if (request.method() === "POST" && isAuthCommandPath(pathname))
         state.authPosts.push(pathname);
     });
     owned.on("framenavigated", (frame) => observe("url", frame.url()));
@@ -302,7 +307,7 @@ When(
 
 When(
   "the observed registrant really reloads verification and abandons it through Change email without submitting a code",
-  async ({ page, world }) => {
+  async ({ page }) => {
     const state = memory(page);
     const response = await state.page.reload({ waitUntil: "load" });
     expect(response?.status(), "verification document reload accepted").toBe(
@@ -322,10 +327,10 @@ When(
     ).toBe(true);
     await snapshot(state, "reload");
     await state.page.getByTestId("verify-back").click();
+    // #3172 — «← Изменить почту» returns to the sign-in host's registration
+    // door in the same transaction.
     await state.page.waitForURL(
-      (url) =>
-        url.origin === new URL(world.hostBaseUrl).origin &&
-        url.pathname === "/register",
+      (url) => isSignInHostForm(url) && url.pathname === "/register",
     );
     await state.page.waitForLoadState("networkidle");
     await expect(
@@ -347,7 +352,7 @@ Then(
     expect(
       state.authPosts,
       "one registration, no replay, confirmation or other auth step",
-    ).toEqual(["/v1/auth/register"]);
+    ).toEqual([signInHostApiPath("/v1/auth/register")]);
     expect(
       state.exposed,
       "including transient writes and encoded representations",

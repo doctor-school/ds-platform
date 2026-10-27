@@ -1,3 +1,8 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import {
+  isAuthCommandPath,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { installCaptchaStub } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
@@ -57,7 +62,7 @@ Given(
     states.set(page, state);
     owned.on("request", (request) => {
       const path = new URL(request.url()).pathname;
-      if (request.method() === "POST" && path.startsWith("/v1/auth/"))
+      if (request.method() === "POST" && isAuthCommandPath(path))
         state.authPosts.push(path);
     });
     const signup = await createOwnedCongressSignup(
@@ -83,7 +88,10 @@ Given(
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
     );
-    const requested = captureResponse(owned, "/v1/auth/login/otp/request");
+    const requested = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/login/otp/request"),
+    );
     await owned.getByTestId("otp-send").click();
     const request = await requested;
     expect(request.response.status()).toBe(200);
@@ -98,7 +106,10 @@ Given(
       sentFrom,
       "login",
     );
-    const accepted = captureResponse(owned, "/v1/auth/login/otp");
+    const accepted = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/login/otp"),
+    );
     await inputSecret(
       owned.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -106,7 +117,7 @@ Given(
     const signedIn = await accepted;
     expect(signedIn.response.status()).toBe(200);
     expect(
-      signedIn.body === '{"status":"authenticated"}',
+      storefrontCallbackAcknowledgement(signedIn.body, world.hostBaseUrl),
       "delivered ordinary code authenticates",
     ).toBe(true);
     await owned.waitForURL((url) => url.pathname === "/account");
@@ -135,8 +146,8 @@ Given(
         (cookie) => cookie.name === "__Host-ds_session",
       )?.value ?? "";
     expect(state.authPosts).toEqual([
-      "/v1/auth/login/otp/request",
-      "/v1/auth/login/otp",
+      signInHostApiPath("/v1/auth/login/otp/request"),
+      signInHostApiPath("/v1/auth/login/otp"),
     ]);
     state.before = await captureAddressedMailCheckpoint(
       nativeRecoveryMail(),

@@ -1,8 +1,6 @@
 import {
-  MOSCOW_TIME_ZONE,
   PublicEventPageSchema,
   RETURN_TARGET_PREFIX,
-  formatEventTime,
   parseLandOnlyReturnTarget,
   parseReturnTarget,
   type PublicEventPage,
@@ -60,34 +58,21 @@ export {
  * be taken down by the decoration beside it.
  */
 
-/** What the return-context card needs - nothing more than the card renders. */
+/**
+ * What the return-context card needs - nothing more than the card renders.
+ * The time travels as the instant and the participation format; the card
+ * states it in the viewer's zone exactly as the event page does (004 EARS-12
+ * as amended, `ReturnEventCard`).
+ */
 export interface ReturnContextEvent {
-  /** Start time formatted in `Europe/Moscow`, e.g. `19:00`. */
-  time: string;
-  /** «day · weekday» sub-label in `Europe/Moscow`, e.g. `27 августа · чт`. */
-  dateLabel: string;
+  /** The canonical start instant (ISO UTC). */
+  startsAt: string;
+  /** Online / hybrid read in the viewer's zone, offline in МСК. */
+  format: PublicEventPage["format"];
   school: string;
   title: string;
   specialties: readonly string[];
   speakers: readonly { name: string; org?: string }[];
-}
-
-/**
- * Both helpers are projections of the one event-time formatter
- * (`formatEventTime`, `@ds/schemas`) pinned to `Europe/Moscow`: this render is
- * a fact about the event, not about where the reader sits (021 EARS-12).
- */
-export function formatMskTime(startsAt: string): string {
-  return formatEventTime({ startsAt, viewerZone: MOSCOW_TIME_ZONE }).time;
-}
-
-/** «27 августа · чт» — the card's day sub-label. */
-export function formatMskDateLabel(startsAt: string): string {
-  const { date, weekdayShort } = formatEventTime({
-    startsAt,
-    viewerZone: MOSCOW_TIME_ZONE,
-  });
-  return `${date} · ${weekdayShort}`;
 }
 
 /** The card projection of the public event read. */
@@ -95,8 +80,8 @@ export function toReturnContextEvent(
   page: PublicEventPage,
 ): ReturnContextEvent {
   return {
-    time: formatMskTime(page.startsAt),
-    dateLabel: formatMskDateLabel(page.startsAt),
+    startsAt: page.startsAt,
+    format: page.format,
     school: page.school,
     title: page.title,
     specialties: page.specialties,

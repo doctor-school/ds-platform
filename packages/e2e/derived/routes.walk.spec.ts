@@ -11,6 +11,12 @@ import {
 import { isDynamic, pageRoutesFrom } from "../lib/routes.js";
 import type { AppPathsManifest } from "../lib/routes.js";
 import { resolveRoute } from "../route-params.js";
+import { signInOnHostForm } from "../lib/sign-in.js";
+import { isSignInHostForm } from "../lib/sign-in-host-api.js";
+
+/** The golden pool account a gated address is signed in with (#3172), as in
+ *  the navigation walk. */
+const WALK_DOCTOR = "verified-cardiologist";
 
 /**
  * The DERIVED ROUTE WALK — staging/regression-contour tech spec §6.3, second
@@ -146,7 +152,7 @@ for (const hostId of HOST_IDS) {
         // surface, which must render its own `h1` AND keep the original address in
         // `returnTo`. Anything else is «200 on the wrong page» and stays red.
         const landed = new URL(page.url()).pathname;
-        if (landed === host.loginPath && address !== host.loginPath) {
+        if (isSignInHostForm(page.url()) && address !== host.loginPath) {
           await expect(
             page.getByRole("heading", {
               level: 1,
@@ -155,9 +161,18 @@ for (const hostId of HOST_IDS) {
             }),
             `the h1 of ${host.loginPath} after the ${address} redirect`,
           ).toBeVisible();
+          // #3172 — the original destination lives in the storefront's
+          // transaction now, not in the form URL: signing in on this form must
+          // land back on exactly address.
+          await signInOnHostForm(
+            page,
+            host,
+            WALK_DOCTOR,
+            new URL(baseUrlFor(host)).origin,
+          );
           expect(
-            new URL(page.url()).searchParams.get("returnTo"),
-            `returnTo after the ${address} (${pattern}) redirect`,
+            new URL(page.url()).pathname,
+            `the landing after signing in from the ${address} (${pattern}) redirect`,
           ).toBe(address);
           return;
         }

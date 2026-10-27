@@ -1,3 +1,5 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -89,7 +91,10 @@ async function requestThroughAcademy(
     process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(base),
     email,
   );
-  const pending = captureResponse(page, "/v1/auth/login/otp/request");
+  const pending = captureResponse(
+    page,
+    signInHostApiPath("/v1/auth/login/otp/request"),
+  );
   await page.getByTestId("otp-send").click();
   const captured = await pending;
   const requestEvidence = {
@@ -98,7 +103,7 @@ async function requestThroughAcademy(
     emailChannel: false,
   };
   try {
-    const submitted: unknown = captured.response.request().postDataJSON();
+    const submitted: unknown = hostCommand(captured.response.request().postDataJSON());
     if (
       submitted !== null &&
       typeof submitted === "object" &&
@@ -177,7 +182,10 @@ Given(
       baseURL ?? "",
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
-    const registered = captureResponse(owned, "/v1/auth/register");
+    const registered = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/register"),
+    );
     await registerOwnedCredentials(owned, world.hostBaseUrl, state);
     const registration = await registered;
     expect(
@@ -212,7 +220,10 @@ Given(
       unverified.before,
       "login",
     );
-    const accepted = captureResponse(owned, "/v1/auth/login/otp");
+    const accepted = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/login/otp"),
+    );
     await inputSecret(
       owned.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -220,7 +231,7 @@ Given(
     const login = await accepted;
     expect(login.response.status(), "owned mailbox code accepted").toBe(200);
     expect(
-      statusOnlyBody(login.body, "authenticated"),
+      storefrontCallbackAcknowledgement(login.body, world.hostBaseUrl),
       "accepted code has a token-free acknowledgement",
     ).toBe(true);
     await owned.waitForURL(

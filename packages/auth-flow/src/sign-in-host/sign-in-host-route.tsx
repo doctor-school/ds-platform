@@ -18,6 +18,7 @@ import {
   type SignInHostStorefronts,
 } from "../server/sign-in-host";
 import { VerifyRoute } from "../verify/verify-route";
+import { SettleDoorPath } from "./settle-door-path";
 
 /** The storefront route each door of the sign-in host mounts. */
 const DOOR_ROUTES: Record<SignInHostPageDoor, typeof LoginRoute> = {
@@ -36,7 +37,9 @@ const DOOR_ROUTES: Record<SignInHostPageDoor, typeof LoginRoute> = {
  * `SIGN_IN_HOST_ENTRY_HEADER`; this mount re-validates it and mounts the
  * ORIGINATING storefront's own door route — its config projected onto the
  * host transport (`signInHostConfig`), its params built from the entry intent
- * alone (`signInHostSearchParams`, EARS-71). No hand-over ⇒ no form.
+ * alone (`signInHostSearchParams`, EARS-71). No hand-over ⇒ no form. Beside
+ * the door, `SettleDoorPath` moves the address onto the door's own path, so a
+ * reload / Back / Forward re-enters the same door after the intent is spent.
  *
  * An entry the proxy could not read (the API's 429, or no answer) arrives as
  * `SIGN_IN_HOST_UNAVAILABLE_HEADER` instead: no storefront is known, so no
@@ -76,16 +79,19 @@ export async function SignInHostRoute({
   const storefront = storefronts[handOver.render.storefront];
   const Door = DOOR_ROUTES[handOver.door];
   return (
-    <Door
-      config={signInHostConfig(storefront, handOver.render)}
-      searchParams={Promise.resolve(
-        signInHostSearchParams(
-          storefront,
-          handOver.render,
-          await searchParams,
-          handOver.door,
-        ),
-      )}
-    />
+    <>
+      <SettleDoorPath door={handOver.door} />
+      <Door
+        config={signInHostConfig(storefront, handOver.render)}
+        searchParams={Promise.resolve(
+          signInHostSearchParams(
+            storefront,
+            handOver.render,
+            await searchParams,
+            handOver.door,
+          ),
+        )}
+      />
+    </>
   );
 }

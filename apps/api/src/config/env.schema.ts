@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { SMARTCAPTCHA_VALIDATE_URL } from "../bot-protection/smart-captcha.provider.js";
 import { parseAtRestKey } from "../common/crypto/at-rest.js";
+import { parseClientKey } from "../sign-in-host/storefront-oidc.jwt.js";
 
 /** An empty or whitespace-only env line is unset; surrounding whitespace is trimmed. */
 function blankIsUnset<T extends z.ZodType>(schema: T) {
@@ -101,6 +102,39 @@ export const ApiEnvSchema = z.looseObject({
       .string()
       .refine((v) => parseAtRestKey(v) !== null, {
         message: "SIGN_IN_RECORD_KEY must be base64 of exactly 32 bytes",
+      })
+      .optional(),
+  ),
+  // 003 EARS-62 / EARS-71, ADR-0015 §4 req. 2 — the storefront servers' internal
+  // credential: every `/v1/internal/*` route answers 404 unless the request
+  // carries `Authorization: Bearer <INTERNAL_API_TOKEN>` (≥32 bytes; never
+  // logged). Unset, the internal routes do not exist. The storefront clients'
+  // `private_key_jwt` keys are the Zitadel application key files
+  // (`{type:"application",keyId,key,appId,clientId}`), base64 of the JSON on
+  // one line; only the API holds them. A malformed value refuses to boot.
+  INTERNAL_API_TOKEN: blankIsUnset(
+    z
+      .string()
+      .refine((v) => Buffer.byteLength(v, "utf8") >= 32, {
+        message: "INTERNAL_API_TOKEN must be at least 32 bytes",
+      })
+      .optional(),
+  ),
+  IDP_ACADEMY_CLIENT_KEY: blankIsUnset(
+    z
+      .string()
+      .refine((v) => parseClientKey(v) !== null, {
+        message:
+          "IDP_ACADEMY_CLIENT_KEY must be base64 of a Zitadel application key file",
+      })
+      .optional(),
+  ),
+  IDP_DOCTOR_CLIENT_KEY: blankIsUnset(
+    z
+      .string()
+      .refine((v) => parseClientKey(v) !== null, {
+        message:
+          "IDP_DOCTOR_CLIENT_KEY must be base64 of a Zitadel application key file",
       })
       .optional(),
   ),

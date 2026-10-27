@@ -4,6 +4,7 @@ import {
 } from "@ds/schemas";
 
 import { consentStatementOf, resolveAuthFlowCopy } from "../copy";
+import type { StorefrontOidcHost } from "../server/storefront-oidc";
 import type {
   AuthFlowApiConfig,
   AuthFlowCopyOverride,
@@ -68,8 +69,10 @@ export const DOCTOR_AUTH_FLOW = {
   routes: {
     login: "/login",
     register: "/register",
-    // 003 EARS-24 — the confirmation route the registration door hops to, the
-    // same one the Academy serves (`app/(auth)/verify/page.tsx`).
+    // 003 EARS-24 / EARS-61 — the storefront's registration entry
+    // (`app/(auth)/verify/route.ts`); the code step itself renders in place on
+    // the sign-in host, whose `/verify` (`apps/login/app/verify/page.tsx`) is
+    // the address it settles on and the route a reload enters.
     verify: "/verify",
     reset: "/reset",
     account: "/account",
@@ -164,3 +167,14 @@ export const DOCTOR_AUTH_FLOW = {
     wordingVersion: "2026-09-22",
   },
 } satisfies AuthFlowHostConfig;
+
+/**
+ * 003 EARS-61 / EARS-62 — this storefront as an OIDC client of the sign-in
+ * host: the client key the API's per-environment map resolves to its Zitadel
+ * `client_id` and its one `redirect_uri` (`/auth/callback`,
+ * `STOREFRONT_CALLBACK_PATH`), and the config its landing rules come from.
+ */
+export const DOCTOR_STOREFRONT_OIDC = {
+  client: "doctor",
+  config: DOCTOR_AUTH_FLOW,
+} as const satisfies StorefrontOidcHost;

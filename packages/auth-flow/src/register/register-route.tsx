@@ -49,7 +49,7 @@ export async function RegisterRoute({
 
   // The #675 guard, the landing decision and the return-context read — the
   // same decision the `/verify` step takes from the same arrival.
-  const { landing, returnEvent } = await resolveRegistrationArrival({
+  const arrival = await resolveRegistrationArrival({
     config,
     returnTo,
     requestHeaders: await headers(),
@@ -58,7 +58,7 @@ export async function RegisterRoute({
 
   const { panel, plate } = returnContextSlots({
     config,
-    event: returnEvent,
+    event: arrival.returnEvent,
     variant: "register",
   });
 
@@ -66,7 +66,17 @@ export async function RegisterRoute({
     <AuthShell config={config} returnContext={panel}>
       <RegisterDoor
         config={config}
-        landing={landing}
+        landing={arrival.landing}
+        // 003 EARS-24 amended — the in-place code step's targets, the same
+        // ones the host's `/verify` route resolves from this arrival.
+        returnTarget={arrival.returnTarget}
+        carriedTarget={arrival.carriedTarget}
+        {...(arrival.resolveSignedInLanding
+          ? { resolveSignedInLanding: arrival.resolveSignedInLanding }
+          : {})}
+        {...(arrival.resolveCompletionTarget
+          ? { resolveCompletionTarget: arrival.resolveCompletionTarget }
+          : {})}
         // The RAW arrival value: the door's shared carry helper answers both the
         // эфир and the account shape and re-appends only what the guards
         // reconstructed, so a hostile param is dropped at the hop (#2258 / S3).

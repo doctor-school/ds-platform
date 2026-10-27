@@ -1435,5 +1435,10 @@ test("003 EARS-60: the converge reports each live slot's storefront client ids â
     academy: "client-academy-pr-9",
     doctor: "client-doctor-pr-9",
   });
+  // 3172: the app ids too â€” the client keys hang off the app, not the client id.
+  assert.deepEqual(result.appIds, {
+    "ds-storefront-academy-pr-9": "a9",
+    "ds-storefront-doctor-pr-9": "d9",
+  });
   assert.throws(() => slotStorefrontClientIds(result, "pr-4"), IdpError);
 });

@@ -12,6 +12,7 @@ import {
   prepareCaptchaForJourney,
 } from "./captcha-stub.js";
 import { standHttpCredentials } from "./stand-http-credentials.js";
+import { isSignInHostForm } from "./sign-in-host-api.js";
 import {
   captureAddressedMailCheckpoint,
   fetchRecoveryCode,
@@ -117,10 +118,32 @@ async function openSettled(page: Page, url: string): Promise<void> {
   await page.waitForLoadState("networkidle");
 }
 
-/** The pathname + returnTo the page currently shows. */
-function returnTarget(page: Page): { pathname: string; returnTo: string | null } {
-  const url = new URL(page.url());
-  return { pathname: url.pathname, returnTo: url.searchParams.get("returnTo") };
+/**
+ * The storefront entry the current page's navigation started from — the first
+ * request of its redirect chain — as pathname + `returnTo` (#3172: the form on
+ * the sign-in host carries neither).
+ */
+function storefrontEntryOf(page: Page): {
+  pathname: string;
+  returnTo: string | null;
+} {
+  return lastEntry.get(page) ?? { pathname: "", returnTo: null };
+}
+
+/** The last storefront-origin navigation a page made into a sign-in entry. */
+const lastEntry = new WeakMap<Page, { pathname: string; returnTo: string | null }>();
+
+function watchEntries(page: Page, base: string): void {
+  page.on("request", (req) => {
+    if (!req.isNavigationRequest()) return;
+    const url = new URL(req.url());
+    if (url.origin !== new URL(base).origin) return;
+    if (!/^\/(login|register|reset|verify)$/.test(url.pathname)) return;
+    lastEntry.set(page, {
+      pathname: url.pathname,
+      returnTo: url.searchParams.get("returnTo"),
+    });
+  });
 }
 
 export function defineAccountAuthPathTests(bound: AccountAuthPathsHost): void {
@@ -253,7 +276,8 @@ export function defineAccountAuthPathTests(bound: AccountAuthPathsHost): void {
     test.setTimeout(120_000);
     // The reset request is captcha-gated: the stub on a slot, nothing on a
     // local stand booted with bot protection off (`captcha-stub.ts`).
-    test.beforeEach(async ({ context }) => {
+    test.beforeEach(async ({ context, page }) => {
+      watchEntries(page, base);
       await prepareCaptchaForJourney(
         context,
         base,
@@ -270,11 +294,16 @@ export function defineAccountAuthPathTests(bound: AccountAuthPathsHost): void {
       await expireSessionServerSide(page);
 
       await page.goto(ACCOUNT);
-      await expect(page).toHaveURL((url) => url.pathname === host.loginPath);
-      expect(returnTarget(page)).toEqual({
-        pathname: host.loginPath,
-        returnTo: ACCOUNT,
-      });
+      // #3172 — the bounce goes through the storefront entry to the sign-in
+      // host's form; `returnTo=/account` rides the entry and lives in the
+      // transaction, so the landing after signing in below is its proof.
+      await expect(page).toHaveURL(
+        (url) => url.pathname === host.loginPath && isSignInHostForm(url),
+      );
+      expect(
+        storefrontEntryOf(page),
+        "the bounce entered through the storefront's own login entry",
+      ).toEqual({ pathname: host.loginPath, returnTo: ACCOUNT });
 
       await signInHere(page, account);
       await expect(page).toHaveURL(`${base}${ACCOUNT}`);
@@ -292,10 +321,20 @@ export function defineAccountAuthPathTests(bound: AccountAuthPathsHost): void {
         "href",
         `${bound.resetPath}?returnTo=%2Faccount`,
       );
-      await handoff.click();
-      await expect(page).toHaveURL(
-        `${base}${bound.resetPath}?returnTo=%2Faccount`,
+      const entry = page.waitForRequest(
+        (req) =>
+          req.isNavigationRequest() &&
+          req.url() === `${base}${bound.resetPath}?returnTo=%2Faccount`,
       );
+      await handoff.click();
+      await entry;
+      // #3172 — the reset door is the sign-in host's; the return path rides
+      // the transaction, and the completed reset landing on /account proves it.
+      // The IdP arrives on the host's `/login`, which renders the door the
+      // entry chose (`doorFor`, apps/login/lib/sign-in-entry.ts): the reset
+      // door is proven by what renders, not by the path.
+      await expect(page).toHaveURL((url) => isSignInHostForm(url));
+      await expect(page.getByTestId("reset-request-submit")).toBeVisible();
       await page.waitForLoadState("networkidle");
 
       const before = await captureAddressedMailCheckpoint(

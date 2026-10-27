@@ -1,3 +1,12 @@
+import {
+  AUTH_REQUEST_PARAM,
+  isAuthCommandPath,
+  isSignInHostForm,
+} from "../lib/sign-in-host-api.js";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { randomUUID } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
 
@@ -24,41 +33,45 @@ function switching(page: Page): MethodSwitch {
   return state;
 }
 
-Given(/^a guest on \/login with the «Пароль» method$/, async ({ page, world }) => {
-  expect(world.host.id).toBe("academy");
-  const id = randomUUID();
-  const state: MethodSwitch = {
-    email: `method-2713-${id}@example.test`,
-    editedEmail: `edited-2713-${id}@example.test`,
-    password: `Unsubmitted-${randomUUID()}-aA1!`,
-    authCommands: 0,
-  };
-  switches.set(page, state);
-  page.on("request", (request) => {
-    if (
-      request.method() === "POST" &&
-      new URL(request.url()).pathname.startsWith("/v1/auth/")
-    ) {
-      state.authCommands += 1;
-    }
-  });
-  const link = new URL(world.host.loginPath, world.hostBaseUrl);
-  link.searchParams.set("returnTo", RETURN_TO);
-  await page.goto(link.toString(), { waitUntil: "load" });
-  await page.waitForLoadState("networkidle");
-  await expect(page.getByTestId("login-method-password")).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  await expect(passwordIdentifier(page)).toHaveValue("");
-  await expect(passwordField(page)).toHaveValue("");
-  expect(
-    (await page.context().cookies()).some(
-      (cookie) => cookie.name === "__Host-ds_session",
-    ),
-    "method-switch visitor starts without a private session",
-  ).toBe(false);
-});
+Given(
+  /^a guest on \/login with the «Пароль» method$/,
+  async ({ page, world }) => {
+    expect(world.host.id).toBe("academy");
+    const id = randomUUID();
+    const state: MethodSwitch = {
+      email: `method-2713-${id}@example.test`,
+      editedEmail: `edited-2713-${id}@example.test`,
+      password: `Unsubmitted-${randomUUID()}-aA1!`,
+      authCommands: 0,
+    };
+    switches.set(page, state);
+    page.on("request", (request) => {
+      if (
+        request.method() === "POST" &&
+        isAuthCommandPath(new URL(request.url()).pathname)
+      ) {
+        state.authCommands += 1;
+      }
+    });
+    watchStorefrontEntries(page, world.hostBaseUrl);
+    const link = new URL(world.host.loginPath, world.hostBaseUrl);
+    link.searchParams.set("returnTo", RETURN_TO);
+    await page.goto(link.toString(), { waitUntil: "load" });
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByTestId("login-method-password")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(passwordIdentifier(page)).toHaveValue("");
+    await expect(passwordField(page)).toHaveValue("");
+    expect(
+      (await page.context().cookies()).some(
+        (cookie) => cookie.name === "__Host-ds_session",
+      ),
+      "method-switch visitor starts without a private session",
+    ).toBe(false);
+  },
+);
 
 When(
   "the guest types their email and a password, then switches to «По коду»",
@@ -142,16 +155,25 @@ Then(
 Then(
   "the method switches preserve the account return context without sending credentials or code requests",
   async ({ page, world }) => {
+    // #3172 — the form is the sign-in host's; the account return context rode
+    // the storefront entry into the transaction, and the sibling doors carry
+    // the SAME auth request, so the context survives a switch of door.
     const url = new URL(page.url());
-    expect(url.pathname).toBe(world.host.loginPath);
-    expect(url.searchParams.get("returnTo")).toBe(RETURN_TO);
+    expect(isSignInHostForm(url)).toBe(true);
+    expect(url.pathname).toBe("/login");
+    expectEnteredThrough(page, world.hostBaseUrl, {
+      pathname: world.host.loginPath,
+      returnTo: RETURN_TO,
+    });
+    const authRequest = url.searchParams.get(AUTH_REQUEST_PARAM);
     for (const path of ["/register", "/reset"]) {
       const link = page.locator(`a[href^="${path}"]`);
       await expect(link).toBeVisible();
       const href = await link.getAttribute("href");
-      const target = new URL(href ?? "", world.hostBaseUrl);
+      const target = new URL(href ?? "", url);
+      expect(target.origin).toBe(url.origin);
       expect(target.pathname).toBe(path);
-      expect(target.searchParams.get("returnTo")).toBe(RETURN_TO);
+      expect(target.searchParams.get(AUTH_REQUEST_PARAM)).toBe(authRequest);
     }
     expect(
       switching(page).authCommands,

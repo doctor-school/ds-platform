@@ -1,3 +1,4 @@
+import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -109,7 +110,10 @@ Given(
       { email: pending.email, password: state.password },
       "/account",
     );
-    const verifying = captureResponse(state.owner, "/v1/auth/verify");
+    const verifying = captureResponse(
+      state.owner,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       state.owner.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -211,12 +215,15 @@ When(
           target.email,
         );
       target.requestedAt = await captureSmsCheckpoint(state.sink, target.phone);
-      const requesting = captureResponse(guest, "/v1/auth/password/reset");
+      const requesting = captureResponse(
+        guest,
+        signInHostApiPath("/v1/auth/password/reset"),
+      );
       await guest.getByTestId("reset-request-submit").click();
       const captured = await requesting;
       let exactCommand = false;
       try {
-        const command = captured.response.request().postDataJSON();
+        const command = hostCommand(captured.response.request().postDataJSON());
         exactCommand =
           Object.keys(command).join() === "identifier" &&
           command.identifier === target.phone;

@@ -1,3 +1,4 @@
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -95,7 +96,10 @@ Given(
       state.base,
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
-    const registering = captureResponse(state.page, "/v1/auth/register");
+    const registering = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/register"),
+    );
     const { code } = await registerOwnedCredentials(
       state.page,
       state.base,
@@ -119,7 +123,10 @@ Given(
       (await registration.response.headerValue("set-cookie")) ?? "",
       state,
     );
-    const verifying = captureResponse(state.page, "/v1/auth/verify");
+    const verifying = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       state.page.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -132,6 +139,7 @@ Given(
         verified.body,
         state,
         code,
+        world.hostBaseUrl,
       ),
     ).toEqual({
       credentialsMatch: true,
@@ -234,7 +242,7 @@ After("@display-name-cancel", async ({ page, $testInfo }) => {
     ) {
       if (state.page.isClosed()) state.page = await state.context.newPage();
       if (!state.page.url().startsWith(`${state.base}/`))
-        await state.page.goto(`${state.base}/login`);
+        await state.page.goto(`${state.base}/`);
       const evidence = await state.page.evaluate(async () => {
         const logout = await fetch("/v1/auth/logout", {
           method: "POST",

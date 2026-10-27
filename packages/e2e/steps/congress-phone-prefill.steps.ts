@@ -1,3 +1,8 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import {
+  isAuthCommandPath,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
@@ -111,7 +116,7 @@ Given(
       const path = new URL(request.url()).pathname;
       if (request.method() !== "GET" && path.startsWith("/v1/me/phone"))
         state.phoneWrites.push(path);
-      if (request.method() === "POST" && path.startsWith("/v1/auth/"))
+      if (request.method() === "POST" && isAuthCommandPath(path))
         state.authPosts.push(path);
       if (
         state.observeEditing &&
@@ -155,7 +160,10 @@ Given(
       mailbox,
       state.email,
     );
-    const requested = captureResponse(owned, "/v1/auth/login/otp/request");
+    const requested = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/login/otp/request"),
+    );
     await owned.getByTestId("otp-send").click();
     const response = await requested;
     expect(
@@ -173,7 +181,10 @@ Given(
       requestedAt,
       "login",
     );
-    const accepted = captureResponse(owned, "/v1/auth/login/otp");
+    const accepted = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/login/otp"),
+    );
     await inputSecret(
       owned.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -183,7 +194,7 @@ Given(
       200,
     );
     expect(
-      signedIn.body === '{"status":"authenticated"}',
+      storefrontCallbackAcknowledgement(signedIn.body, world.hostBaseUrl),
       "code establishes authentication",
     ).toBe(true);
     await owned.waitForURL(
@@ -195,7 +206,10 @@ Given(
     expect(
       state.authPosts,
       "ordinary sign-in uses no handoff redemption",
-    ).toEqual(["/v1/auth/login/otp/request", "/v1/auth/login/otp"]);
+    ).toEqual([
+      signInHostApiPath("/v1/auth/login/otp/request"),
+      signInHostApiPath("/v1/auth/login/otp"),
+    ]);
   },
 );
 

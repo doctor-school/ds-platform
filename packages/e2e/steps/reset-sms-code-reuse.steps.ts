@@ -1,3 +1,5 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -66,7 +68,8 @@ async function privatePage(
   context.on("request", (request) => {
     if (
       request.method() === "POST" &&
-      new URL(request.url()).pathname === "/v1/auth/password/reset"
+      new URL(request.url()).pathname ===
+        signInHostApiPath("/v1/auth/password/reset")
     )
       state.resetRequests++;
   });
@@ -229,7 +232,10 @@ async function passwordLogin(
     },
     async () => {
       try {
-        const pending = captureResponse(page, "/v1/auth/login");
+        const pending = captureResponse(
+          page,
+          signInHostApiPath("/v1/auth/login"),
+        );
         await page.getByTestId("password-login-submit").click();
         return await pending;
       } catch (error) {
@@ -267,7 +273,10 @@ Given(
       state,
       "/account",
     );
-    const verifying = captureResponse(owner, "/v1/auth/verify");
+    const verifying = captureResponse(
+      owner,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       owner.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -303,7 +312,10 @@ Given(
       state.phone,
     );
     const before = await captureSmsCheckpoint(state.sink, state.phone);
-    const requested = captureResponse(reset, "/v1/auth/password/reset");
+    const requested = captureResponse(
+      reset,
+      signInHostApiPath("/v1/auth/password/reset"),
+    );
     await reset.getByTestId("reset-request-submit").click();
     expect((await requested).response.status(), "reset requested").toBe(200);
     state.code = await waitForSmsCode(
@@ -342,7 +354,7 @@ Given(
     );
     const completing = captureResponse(
       reset,
-      "/v1/auth/password/reset/complete",
+      signInHostApiPath("/v1/auth/password/reset/complete"),
     );
     await reset.locator('form button[type="submit"]').click();
     const completed = await completing;
@@ -361,7 +373,7 @@ Given(
       "first delivered SMS reset accepted for the exact owner and password",
     ).toEqual({ status: 200, exactCommand: true });
     expect(
-      completed.body === JSON.stringify({ status: "reset_completed" }),
+      storefrontCallbackAcknowledgement(completed.body, world.hostBaseUrl),
       "token-free reset acknowledgement",
     ).toBe(true);
     await reset.waitForURL(
@@ -393,7 +405,11 @@ When(
       "different policy-conforming replay proposal",
     ).toBe(true);
     const guest = await privatePage(browser, state, world.hostBaseUrl);
-    await guest.goto(`${world.hostBaseUrl}/reset`, { waitUntil: "load" });
+    // #3172 — the storefront `/reset` is now an entry to the sign-in host,
+    // whose origin has no storefront session or profile to observe. The replay
+    // targets the storefront's own reset BFF (still served) from a storefront
+    // page, where the same tab reads its session and profile.
+    await guest.goto(`${world.hostBaseUrl}/`, { waitUntil: "load" });
     await guest.waitForLoadState("networkidle");
     await noPrivateAccess(guest);
     // 003 EARS-12/53: the replay must exercise the consumed challenge.
@@ -479,7 +495,7 @@ Then(
       200,
     );
     expect(
-      success.body === JSON.stringify({ status: "authenticated" }),
+      storefrontCallbackAcknowledgement(success.body, world.hostBaseUrl),
       "token-free login acknowledgement",
     ).toBe(true);
     await accepted.waitForURL((url) => url.pathname === "/account");

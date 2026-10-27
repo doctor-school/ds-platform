@@ -1,13 +1,12 @@
 import type { ReactNode } from "react";
 
-import { WebinarCard } from "@ds/design-system/webinar-card";
-
 import type {
   AuthFlowHostConfig,
   AuthFlowReturnContextCopy,
 } from "../host-config";
 import { resolveAuthFlowCopy } from "../copy";
 import type { ReturnContextEvent } from "../server/return-context";
+import { ReturnEventCard } from "./return-event-card";
 
 /**
  * 021 EARS-2 (#1538) / wave-1 gate row 46 — the return context: what the visitor
@@ -43,23 +42,6 @@ import type { ReturnContextEvent } from "../server/return-context";
  * caller decides which door it is.
  */
 export type ReturnContextVariant = "register" | "login";
-
-function ReturnEventCard({ event }: { event: ReturnContextEvent }) {
-  return (
-    <WebinarCard
-      navigable={false}
-      data-testid="return-context-card"
-      // МСК is the event's own clock, never the reader's (EARS-12).
-      tzLabel="МСК"
-      time={event.time}
-      dateLabel={event.dateLabel}
-      school={event.school}
-      title={event.title}
-      specialties={event.specialties}
-      speakers={event.speakers}
-    />
-  );
-}
 
 function PanelBody({
   copy,

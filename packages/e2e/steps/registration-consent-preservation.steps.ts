@@ -1,3 +1,12 @@
+import {
+  isAuthCommandPath,
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -160,7 +169,7 @@ Given(
     registrations.set(page, state);
     owned.on("request", (request) => {
       const pathname = new URL(request.url()).pathname;
-      if (request.method() === "POST" && pathname.startsWith("/v1/auth/"))
+      if (request.method() === "POST" && isAuthCommandPath(pathname))
         state.authPosts.push(pathname);
     });
     await prepareCaptchaForJourney(
@@ -168,7 +177,10 @@ Given(
       baseURL ?? world.hostBaseUrl,
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
-    const initial = captureResponse(owned, "/v1/auth/register");
+    const initial = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/register"),
+    );
     const { code } = await registerOwnedCredentials(
       owned,
       world.hostBaseUrl,
@@ -192,7 +204,10 @@ Given(
       (await registered.response.headerValue("set-cookie")) ?? "",
       state,
     );
-    const pending = captureResponse(owned, "/v1/auth/verify");
+    const pending = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       owned.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -207,6 +222,7 @@ Given(
         accepted.body,
         state,
         code,
+        world.hostBaseUrl,
       ),
     ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
     await owned.waitForURL(
@@ -264,6 +280,7 @@ When(
   "that verified account re-registers through Academy with its mixed-case email, a different password and the read-only accepted terms",
   async ({ page, world }) => {
     const state = registration(page);
+    watchStorefrontEntries(state.page, world.hostBaseUrl);
     await state.page.goto(registrationUrl(world.hostBaseUrl, "/account"), {
       waitUntil: "load",
     });
@@ -287,7 +304,10 @@ When(
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
     );
-    const pending = captureResponse(state.page, "/v1/auth/register");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/register"),
+    );
     await state.page.getByTestId("register-submit").click();
     const registered = await pending;
     expect(
@@ -305,19 +325,20 @@ When(
       consentMatches: true,
       acknowledgementMatches: true,
     });
+    // #3172 — the code step is the sign-in host's `/verify`; the account
+    // return path rode the storefront's registration entry.
     await state.page.waitForURL(
-      (url) =>
-        url.origin === new URL(world.hostBaseUrl).origin &&
-        url.pathname === "/verify",
+      (url) => isSignInHostForm(url) && url.pathname === "/verify",
     );
     await state.page.waitForLoadState("networkidle");
     expect(
       new URL(state.page.url()).searchParams.get("email") === state.typedEmail,
       "code step preserves mixed-case submitted email",
     ).toBe(true);
-    expect(new URL(state.page.url()).searchParams.get("returnTo")).toBe(
-      "/account",
-    );
+    expectEnteredThrough(state.page, world.hostBaseUrl, {
+      pathname: "/register",
+      returnTo: "/account",
+    });
     await assertNoPrivateRegistrationAccess(
       state.page,
       (await registered.response.headerValue("set-cookie")) ?? "",
@@ -374,11 +395,14 @@ Then(
 
 When(
   "that registrant enters the delivered re-registration code once in the requesting Academy tab",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const state = registration(page);
     if (!state.code)
       throw new Error("Owned re-registration code was not delivered");
-    const pending = captureResponse(state.page, "/v1/auth/verify");
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       state.page.locator('input[autocomplete="one-time-code"]'),
       state.code,
@@ -394,6 +418,7 @@ When(
         accepted.body,
         { email: state.typedEmail, password: state.replacementPassword },
         state.code,
+        world.hostBaseUrl,
       ),
     ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
     state.accepted = accepted.response;
@@ -423,11 +448,11 @@ Then(
       state.authPosts,
       "exactly prerequisite registration/code/logout and re-registration/code, without sign-in replay",
     ).toEqual([
-      "/v1/auth/register",
-      "/v1/auth/verify",
+      signInHostApiPath("/v1/auth/register"),
+      signInHostApiPath("/v1/auth/verify"),
       "/v1/auth/logout",
-      "/v1/auth/register",
-      "/v1/auth/verify",
+      signInHostApiPath("/v1/auth/register"),
+      signInHostApiPath("/v1/auth/verify"),
     ]);
   },
 );

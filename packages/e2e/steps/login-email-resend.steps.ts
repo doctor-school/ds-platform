@@ -1,3 +1,5 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { hostCommand, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -115,7 +117,7 @@ Given(
       baseURL ?? "",
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
-    const { response, code } = await registerOwnedCredentials(
+    const { response, body, code } = await registerOwnedCredentials(
       owned,
       world.hostBaseUrl,
       state,
@@ -124,7 +126,7 @@ Given(
     expect(
       registrationEvidence(
         response.request().postData() ?? "",
-        await response.text(),
+        body,
         state,
       ),
     ).toEqual({
@@ -132,17 +134,19 @@ Given(
       consentMatches: true,
       acknowledgementMatches: true,
     });
-    const verified = captureResponse(owned, "/v1/auth/verify").then(
-      ({ response, body }) => ({
-        response,
-        evidence: verificationEvidence(
-          response.request().postData() ?? "",
-          body,
-          state,
-          code,
-        ),
-      }),
-    );
+    const verified = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/verify"),
+    ).then(({ response, body }) => ({
+      response,
+      evidence: verificationEvidence(
+        response.request().postData() ?? "",
+        body,
+        state,
+        code,
+        world.hostBaseUrl,
+      ),
+    }));
     await inputSecret(
       owned.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -203,11 +207,11 @@ function mailbox(state: ResentLogin, base: string) {
 async function requestResult(page: Page, state: ResentLogin) {
   const { response, body } = await captureResponse(
     page,
-    "/v1/auth/login/otp/request",
+    signInHostApiPath("/v1/auth/login/otp/request"),
   );
   let matches = false;
   try {
-    const request = response.request().postDataJSON();
+    const request = hostCommand(response.request().postDataJSON());
     matches =
       request.identifier === state.email &&
       request.channel === "email" &&
@@ -266,7 +270,8 @@ When(
     state.page.on("request", (request) => {
       if (
         request.method() === "POST" &&
-        new URL(request.url()).pathname === "/v1/auth/login/otp/request"
+        new URL(request.url()).pathname ===
+          signInHostApiPath("/v1/auth/login/otp/request")
       )
         state.requests += 1;
     });
@@ -334,23 +339,24 @@ Then(
   async ({ page, world }) => {
     const state = login(page);
     if (!state.code) throw new Error("Resent addressed login code missing");
-    const pending = captureResponse(state.page, "/v1/auth/login/otp").then(
-      ({ response, body }) => {
-        let matches = false;
-        try {
-          const request = response.request().postDataJSON();
-          matches =
-            request.identifier === state.email &&
-            request.channel === "email" &&
-            request.code === state.code &&
-            Object.keys(request).length === 3 &&
-            body === '{"status":"authenticated"}';
-        } catch {
-          // Discard code-bearing parser diagnostics.
-        }
-        return { response, matches };
-      },
-    );
+    const pending = captureResponse(
+      state.page,
+      signInHostApiPath("/v1/auth/login/otp"),
+    ).then(({ response, body }) => {
+      let matches = false;
+      try {
+        const request = hostCommand(response.request().postDataJSON());
+        matches =
+          request.identifier === state.email &&
+          request.channel === "email" &&
+          request.code === state.code &&
+          Object.keys(request).length === 3 &&
+          storefrontCallbackAcknowledgement(body, world.hostBaseUrl);
+      } catch {
+        // Discard code-bearing parser diagnostics.
+      }
+      return { response, matches };
+    });
     await inputSecret(
       state.page.locator('input[autocomplete="one-time-code"]'),
       state.code,
@@ -457,12 +463,10 @@ After("@login-email-resend", async ({ page }) => {
   if (cleanupFailed) {
     if (test.info().status === test.info().expectedStatus)
       throw new Error("Owned email-resend session cleanup failed");
-    test
-      .info()
-      .annotations.push({
-        type: "cleanup-failed",
-        description:
-          "Owned email-resend session cleanup failed; original failure preserved; lead must inspect scoped cleanup.",
-      });
+    test.info().annotations.push({
+      type: "cleanup-failed",
+      description:
+        "Owned email-resend session cleanup failed; original failure preserved; lead must inspect scoped cleanup.",
+    });
   }
 });

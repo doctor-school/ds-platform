@@ -1,5 +1,9 @@
 import { HOSTS } from "@ds/e2e/hosts";
 import { signInWithPassword } from "@ds/e2e/sign-in";
+import {
+  expectAtSignInHostFrom,
+  watchStorefrontEntries,
+} from "@ds/e2e/storefront-entry-watch";
 import { test, expect, type Browser, type Page } from "@playwright/test";
 import {
   ADMIN_ORIGIN,
@@ -58,8 +62,14 @@ async function registerFor(page: Page, slug: string): Promise<number> {
 test("EARS-10: a guest hitting «мои события» is redirected to login carrying the page", async ({
   page,
 }) => {
+  // #3172: the storefront `/login` is a 303 entry to the sign-in host; the page
+  // carried rides the entry (and the API transaction), not the form URL.
+  watchStorefrontEntries(page, BASE);
   await page.goto(`${BASE}/account/events`, { waitUntil: "domcontentloaded" });
-  await expect(page).toHaveURL(/\/login\?returnTo=%2Faccount%2Fevents$/);
+  await expectAtSignInHostFrom(page, BASE, {
+    pathname: "/login",
+    returnTo: "/account/events",
+  });
 });
 
 test("EARS-6: the Предстоящие list shows the registered event with its zone-labelled date/time, title, school, and a link to its page", async ({

@@ -2,6 +2,13 @@ import { test, expect, type Page } from "@playwright/test";
 
 import { fetchOtpCode } from "./support/mailpit";
 import { NOTIFICATION_SUBJECTS } from "./support/notification-subjects";
+import { isSignInHostForm } from "@ds/e2e/sign-in-host-api";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "@ds/e2e/storefront-entry-watch";
+
+const BASE = process.env.E2E_PORTAL_URL ?? "http://localhost:3001";
 
 /**
  * 014 EARS-6 — the platform-wide return-to-origin journey, driven in a real
@@ -107,6 +114,7 @@ async function registerThroughMail(
   const password = livePassword();
   const sentAt = new Date().toISOString();
 
+  watchStorefrontEntries(page, BASE);
   await page.goto(entry);
   await submitPastThrottle(
     page,
@@ -125,8 +133,15 @@ async function registerThroughMail(
   );
   expect(code, "registration code should reach Mailpit").toBeTruthy();
 
-  // The in-flow hop: register → verify carries the target on the URL.
-  expect(new URL(page.url()).searchParams.get("returnTo")).toBe(ORIGIN_PATH);
+  // The in-flow hop: register → verify stays on the sign-in host's form (#3172);
+  // the target rode the storefront entry into the API transaction, never a form URL.
+  expect(isSignInHostForm(page.url()), "verify is the sign-in host form").toBe(
+    true,
+  );
+  expectEnteredThrough(page, BASE, {
+    pathname: "/register",
+    returnTo: ORIGIN_PATH,
+  });
   await page.locator('input[autocomplete="one-time-code"]').fill(code!);
   // Auto-submit on completion carries the flow (#175).
   await page.waitForURL((url) => !url.pathname.startsWith("/verify"), {
@@ -224,11 +239,11 @@ test.describe("014 EARS-6 platform-wide return-to-origin", () => {
     // The confirmation either signs in with the credential still held in memory
     // and navigates straight to the target (021 amendment 2026-09-17), or falls
     // back to the sign-in door (005 EARS-2). That fallback is a hop INSIDE the
-    // flow, so it carries `returnTo` on the URL rather than relying on the
-    // parked cookie.
+    // flow — the sign-in host's door on the same auth request (#3172), whose
+    // transaction holds the target — so the landing below proves it.
     if (new URL(page.url()).pathname.startsWith("/login")) {
-      expect(new URL(page.url()).searchParams.get("returnTo")).toBe(
-        ORIGIN_PATH,
+      expect(isSignInHostForm(page.url()), "the in-flow sign-in door").toBe(
+        true,
       );
       await submitLogin(page, email, password);
     }

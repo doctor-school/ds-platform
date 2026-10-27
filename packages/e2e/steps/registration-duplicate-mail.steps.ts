@@ -1,3 +1,7 @@
+import {
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -63,7 +67,7 @@ async function submitDuplicate(
   );
   // Runner-local: compared only with other runner-local request instants.
   const requestedAt = new Date().toISOString();
-  const pending = captureResponse(page, "/v1/auth/register");
+  const pending = captureResponse(page, signInHostApiPath("/v1/auth/register"));
   await page.getByTestId("register-submit").click();
   const captured = await pending;
   const evidence = registrationEvidence(
@@ -77,8 +81,9 @@ async function submitDuplicate(
     acknowledgementMatches: true,
   });
   expect(captured.response.status(), "neutral registration accepted").toBe(200);
+  // #3172 — the code step is the sign-in host's `/verify`.
   await page.waitForURL(
-    (url) => url.origin === new URL(base).origin && url.pathname === "/verify",
+    (url) => isSignInHostForm(url) && url.pathname === "/verify",
   );
   await page.waitForLoadState("networkidle");
   expect(
@@ -125,7 +130,10 @@ Given(
       baseURL ?? world.hostBaseUrl,
       process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
     );
-    const captured = captureResponse(owned, "/v1/auth/register");
+    const captured = captureResponse(
+      owned,
+      signInHostApiPath("/v1/auth/register"),
+    );
     const { response, code } = await registerOwnedCredentials(
       owned,
       world.hostBaseUrl,

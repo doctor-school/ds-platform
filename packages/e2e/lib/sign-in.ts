@@ -1,8 +1,9 @@
 import { expect } from "@playwright/test";
-import type { Page } from "@playwright/test";
+import type { Page, Response } from "@playwright/test";
 
 import type { HostConfig } from "../hosts.js";
 import { goldenDoctorPassword } from "./golden.js";
+import { isSignInHostForm } from "./sign-in-host-api.js";
 import type { GoldenDoctor } from "./golden.js";
 import { resolveWorkerGoldenDoctor } from "./worker-golden.js";
 
@@ -49,6 +50,16 @@ export function isReactHydrated(node: object | null): boolean {
 }
 
 /**
+ * The URL the first request of a redirect chain asked for — the storefront
+ * entry the caller opened, whatever host the chain settled on.
+ */
+function entryRequestUrl(response: Response | null, fallback: string): string {
+  let request = response?.request() ?? null;
+  while (request?.redirectedFrom()) request = request.redirectedFrom();
+  return request?.url() ?? fallback;
+}
+
+/**
  * THE golden sign-in — the single login path of the C6 regression contract
  * (staging/regression-contour tech spec §6.1, Issue #2067).
  *
@@ -60,21 +71,22 @@ export function isReactHydrated(node: object | null): boolean {
  * disagree about what «signed in» means.
  *
  * It adds NO auth primitive: the sequence is the shipped 008 shell journey's
- * (`apps/portal/e2e/steps/shell.steps.ts`) — open the host's login route, fill
- * the identifier/password fields, submit. Selectors key off stable `autocomplete`
- * attributes rather than visible copy, because the two hosts render different
- * labels (#177): the academy card is `next-intl`, the doctor card is Russian
- * literals. The values are the ones `@ds/design-system`'s `LoginCard` renders:
- * its identifier box is an `IdentifierField` (`autocomplete="username"` — the
- * box is an email-or-phone union, never `email`) and its password box a
- * `PasswordField purpose="current"` (`autocomplete="current-password"`).
+ * (`apps/portal/e2e/steps/shell.steps.ts`) — open the storefront's login entry,
+ * fill the identifier/password fields on the form it leads to, submit. Selectors
+ * key off stable `autocomplete` attributes rather than visible copy, because the
+ * two hosts render different labels (#177): the academy card is `next-intl`, the
+ * doctor card is Russian literals. The values are the ones
+ * `@ds/design-system`'s `LoginCard` renders: its identifier box is an
+ * `IdentifierField` (`autocomplete="username"` — the box is an email-or-phone
+ * union, never `email`) and its password box a `PasswordField
+ * purpose="current"` (`autocomplete="current-password"`).
  *
  * The wait before the first interaction is load-bearing, not defensive polish.
  * `domcontentloaded` resolves while the Next client chunks are still in flight,
  * and the login card is server-rendered as a real `<form>`: clicking its submit
  * button before those chunks EXECUTE makes the browser submit the form natively
  * (a GET back to the login route with the credentials in the query string), so
- * `/v1/auth/login` is never called and the doctor is never signed in. Hence the
+ * the auth command is never sent and the doctor is never signed in. Hence the
  * walk waits until React has hydrated the login `<form>` itself
  * ({@link isReactHydrated}). `networkidle` is not that signal: a login page
  * carrying the real Yandex SmartCaptcha widget (every slot) keeps the widget
@@ -101,10 +113,16 @@ export async function signInGoldenDoctor(
  * The same 003 password sign-in for an account the CALLER names (a live spec's
  * `E2E_DOCTOR_EMAIL` / `E2E_DOCTOR_PASSWORD`, which a slot derives from the
  * golden verified doctor). One walk with {@link signInGoldenDoctor}, so the
- * hydration wait above covers every live spec: #3229 found
- * `webinar-archive.spec.ts` carrying its own `domcontentloaded` copy that
- * clicked «Войти» before hydration — a native `POST /login`, no
- * `/v1/auth/login`, the page left on `/login` until the test timed out.
+ * hydration wait covers every live spec: #3229 found `webinar-archive.spec.ts`
+ * carrying its own `domcontentloaded` copy that clicked «Войти» before
+ * hydration — a native `POST /login`, no auth command, the page left on
+ * `/login` until the test timed out.
+ *
+ * The storefront's `/login` is an ENTRY (ADR-0015 §4, #3172): it answers `303`
+ * to the IdP, which hands the visitor to the sign-in host's form. The `goto`
+ * follows that chain, so the page settles on the HOST's `/login` (carrying the
+ * IdP's `authRequest`), where the form is filled; the journey ends back on the
+ * storefront the entry was opened on.
  */
 export async function signInWithPassword(
   page: Page,
@@ -112,7 +130,53 @@ export async function signInWithPassword(
   credentials: { readonly email: string; readonly password: string },
   baseUrl?: string,
 ): Promise<void> {
-  await page.goto(`${baseUrl ?? ""}${host.loginPath}`, { waitUntil: "load" });
+  const landed = await page.goto(`${baseUrl ?? ""}${host.loginPath}`, {
+    waitUntil: "load",
+  });
+  const storefrontOrigin = new URL(entryRequestUrl(landed, page.url())).origin;
+  expect(
+    isSignInHostForm(page.url()),
+    `the storefront entry ${host.loginPath} leads to the sign-in host form`,
+  ).toBe(true);
+  await submitSignInHostForm(page, host, credentials, storefrontOrigin);
+}
+
+/**
+ * The second half of the golden sign-in, for a caller whose navigation already
+ * settled on the sign-in host's form (a gated storefront address bounced a
+ * guest there, #3172): fill the golden doctor's credentials, submit, and wait
+ * to be back on `storefrontOrigin` off the login route. The landing itself is
+ * the caller's assertion — it is where the transaction's stored return path
+ * leads (the return path lives in the API transaction, never in the form URL).
+ */
+export async function signInOnHostForm(
+  page: Page,
+  host: HostConfig,
+  seedName: string,
+  storefrontOrigin: string,
+): Promise<GoldenDoctor> {
+  const doctor = resolveWorkerGoldenDoctor(seedName);
+  await submitSignInHostForm(
+    page,
+    host,
+    { email: doctor.email, password: goldenDoctorPassword(doctor) },
+    storefrontOrigin,
+  );
+  return doctor;
+}
+
+/**
+ * Fill and submit the sign-in host's password form the page is ON once React has
+ * hydrated it (see {@link signInGoldenDoctor}), then wait to be back on
+ * `storefrontOrigin` off the login route. For a caller that names its own
+ * account and already reached the form (a gated address bounced a guest there).
+ */
+export async function submitSignInHostForm(
+  page: Page,
+  host: HostConfig,
+  credentials: { readonly email: string; readonly password: string },
+  storefrontOrigin: string,
+): Promise<void> {
   const form = page.locator("form", {
     has: page.locator('input[autocomplete="current-password"]'),
   });
@@ -124,17 +188,19 @@ export async function signInWithPassword(
     .fill(credentials.password);
   await page.getByRole("button", { name: /войти|продолжить/i }).click();
 
-  // The session cookie is set before the post-login redirect, so leaving the
-  // login surface IS the signal that the doctor is signed in. Asserting «not
-  // /login» rather than a specific landing keeps the helper reusable: the
-  // post-login destination is a product decision each host owns, and the caller
-  // asserts where it wanted to end up.
+  // The storefront's callback relays the session cookie before its final
+  // redirect, so arriving BACK on the storefront origin, off the login route,
+  // IS the signal that the doctor is signed in. Asserting «back on the
+  // storefront» rather than a specific landing keeps the helper reusable: the
+  // post-login destination is a product decision each host owns, and the
+  // caller asserts where it wanted to end up.
   await page.waitForURL(
     (url) =>
-      new URL(url).pathname !== host.loginPath ||
-      new URL(url).searchParams.has(NATIVE_SUBMIT_MARKER),
+      (url.origin === storefrontOrigin && url.pathname !== host.loginPath) ||
+      url.searchParams.has(NATIVE_SUBMIT_MARKER),
   );
   const nativeSubmit = preHydrationSubmitError(page.url(), host.loginPath);
   if (nativeSubmit) throw new Error(nativeSubmit);
+  expect(new URL(page.url()).origin).toBe(storefrontOrigin);
   expect(new URL(page.url()).pathname).not.toBe(host.loginPath);
 }

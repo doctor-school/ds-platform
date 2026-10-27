@@ -1,11 +1,11 @@
 "use client";
 
 import { createContext, useContext, useEffect, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
 
 import type { AuthFlowHostConfig } from "../host-config";
 import type { CompletionTarget } from "../client/signed-in-landing";
 import { withReturnTarget } from "@ds/schemas";
+import { hopHostDoor } from "../sign-in-host/host-history";
 import { VerifyDoor } from "./verify-door";
 
 /** The resolved address, handed from the gate to the step inside the shell. */
@@ -34,13 +34,14 @@ export function VerifyAddressGate({
   returnTo: string | null;
   children: ReactNode;
 }) {
-  const router = useRouter();
   const registerPath = config.routes.register;
   useEffect(() => {
     if (email) return;
-    // `replace`: an address-less `/verify` must not sit behind a back gesture.
-    router.replace(withReturnTarget(registerPath, returnTo));
-  }, [email, registerPath, returnTo, router]);
+    // A door hop that replaces (EARS-40, EARS-70): an address-less `/verify`
+    // must not sit behind a back gesture, and the host answers a door only
+    // for a top-level navigation.
+    hopHostDoor(withReturnTarget(registerPath, returnTo));
+  }, [email, registerPath, returnTo]);
 
   if (!email) return null;
   return (

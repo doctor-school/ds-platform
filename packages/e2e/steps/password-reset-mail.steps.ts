@@ -1,3 +1,12 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import {
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -108,7 +117,7 @@ async function passwordSignIn(
     password,
   );
   return gatedPasswordLogin(page, async () => {
-    const pending = captureResponse(page, "/v1/auth/login");
+    const pending = captureResponse(page, signInHostApiPath("/v1/auth/login"));
     await page.getByTestId("password-login-submit").click();
     return pending;
   });
@@ -138,7 +147,10 @@ Given(
       state,
       "/account",
     );
-    const pending = captureResponse(registered, "/v1/auth/verify");
+    const pending = captureResponse(
+      registered,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       registered.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -153,6 +165,7 @@ Given(
         verified.body,
         state,
         code,
+        world.hostBaseUrl,
       ),
     ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
     await registered.waitForURL((url) => url.pathname === "/account");
@@ -166,12 +179,13 @@ When(
   async ({ page, browser, world }) => {
     const state = resetMail(page);
     const reset = await privatePage(browser, state, world.hostBaseUrl);
+    watchStorefrontEntries(reset, world.hostBaseUrl);
     state.reset = reset;
     reset.on("request", (request) => {
       const pathname = new URL(request.url()).pathname;
       if (
         request.method() === "POST" &&
-        pathname.startsWith("/v1/auth/password/reset")
+        pathname.startsWith(signInHostApiPath("/v1/auth/password/reset"))
       )
         state.resetPosts.push(pathname);
     });
@@ -179,7 +193,13 @@ When(
       waitUntil: "load",
     });
     await reset.waitForLoadState("networkidle");
-    expect(new URL(reset.url()).searchParams.get("returnTo")).toBe("/account");
+    // #3172 — the reset form is the sign-in host's; the account return path
+    // rode the storefront's reset entry into the transaction.
+    expect(isSignInHostForm(reset.url())).toBe(true);
+    expectEnteredThrough(reset, world.hostBaseUrl, {
+      pathname: "/reset",
+      returnTo: "/account",
+    });
     await inputSecret(
       reset.locator('input[autocomplete="username"]'),
       state.email,
@@ -189,7 +209,10 @@ When(
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
     );
-    const pending = captureResponse(reset, "/v1/auth/password/reset");
+    const pending = captureResponse(
+      reset,
+      signInHostApiPath("/v1/auth/password/reset"),
+    );
     await reset.getByTestId("reset-request-submit").click();
     const requested = await pending;
     expect(
@@ -215,7 +238,13 @@ When(
     await expect(
       reset.locator('input[autocomplete="one-time-code"]'),
     ).toBeVisible();
-    expect(new URL(reset.url()).searchParams.get("returnTo")).toBe("/account");
+    // #3172 — the reset form is the sign-in host's; the account return path
+    // rode the storefront's reset entry into the transaction.
+    expect(isSignInHostForm(reset.url())).toBe(true);
+    expectEnteredThrough(reset, world.hostBaseUrl, {
+      pathname: "/reset",
+      returnTo: "/account",
+    });
     await assertNoPrivateRegistrationAccess(
       reset,
       (await requested.response.headerValue("set-cookie")) ?? "",
@@ -331,7 +360,10 @@ When(
       reset.locator('input[autocomplete="new-password"]'),
       state.newPassword,
     );
-    const pending = captureResponse(reset, "/v1/auth/password/reset/complete");
+    const pending = captureResponse(
+      reset,
+      signInHostApiPath("/v1/auth/password/reset/complete"),
+    );
     await reset.locator('form button[type="submit"]').click();
     const refused = await pending;
     expect(refused.response.status(), "wrong reset code refused").toBe(400);
@@ -368,8 +400,14 @@ When(
     await expect
       .poll(() => reset.getByTestId("reset-error").ariaSnapshot())
       .toBe("- alert: Код не подошёл или пароль отклонён.");
-    expect(new URL(reset.url()).pathname).toBe("/reset");
-    expect(new URL(reset.url()).searchParams.get("returnTo")).toBe("/account");
+    // #3172 — the reset form is the sign-in host's door (rendered on the
+    // host's `/login` behind the IdP, proven by the form above, not the path);
+    // the account return path rode the storefront's reset entry.
+    expect(isSignInHostForm(reset.url())).toBe(true);
+    expectEnteredThrough(reset, world.hostBaseUrl, {
+      pathname: "/reset",
+      returnTo: "/account",
+    });
     await assertNoPrivateRegistrationAccess(
       reset,
       (await refused.response.headerValue("set-cookie")) ?? "",
@@ -393,7 +431,7 @@ When(
 
 When(
   "the owned requester confirms the rejected reset digits are cleared and submits the delivered mail code once with a distinct valid new password",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const state = resetMail(page);
     if (!state.reset || !state.mail)
       throw new Error("Owned reset form and delivered artifact are missing");
@@ -422,7 +460,7 @@ When(
     );
     const pending = captureResponse(
       state.reset,
-      "/v1/auth/password/reset/complete",
+      signInHostApiPath("/v1/auth/password/reset/complete"),
     );
     await state.reset.locator('form button[type="submit"]').click();
     state.completion = await pending;
@@ -446,8 +484,7 @@ When(
       {
         exactOwnedReset,
         tokenFreeAcknowledgement:
-          state.completion.body ===
-          JSON.stringify({ status: "reset_completed" }),
+          storefrontCallbackAcknowledgement(state.completion.body, world.hostBaseUrl),
       },
       "delivered-code completion retains the owned command and safe acknowledgement",
     ).toEqual({ exactOwnedReset: true, tokenFreeAcknowledgement: true });
@@ -517,9 +554,9 @@ Then(
       state.resetPosts,
       "one request, one refusal and one delivered reset",
     ).toEqual([
-      "/v1/auth/password/reset",
-      "/v1/auth/password/reset/complete",
-      "/v1/auth/password/reset/complete",
+      signInHostApiPath("/v1/auth/password/reset"),
+      signInHostApiPath("/v1/auth/password/reset/complete"),
+      signInHostApiPath("/v1/auth/password/reset/complete"),
     ]);
   },
 );

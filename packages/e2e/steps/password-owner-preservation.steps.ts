@@ -1,3 +1,5 @@
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import {
   expect,
@@ -224,7 +226,10 @@ Given(
       state,
       "/account",
     );
-    const verifying = captureResponse(owner, "/v1/auth/verify");
+    const verifying = captureResponse(
+      owner,
+      signInHostApiPath("/v1/auth/verify"),
+    );
     await inputSecret(
       owner.locator('input[autocomplete="one-time-code"]'),
       code,
@@ -255,7 +260,10 @@ When(
     await preparePassword(guest, world.hostBaseUrl, state, wrong);
     await noPrivateAccess(guest);
     await gated(state, world.hostBaseUrl, async () => {
-      const pending = captureResponse(guest, "/v1/auth/login");
+      const pending = captureResponse(
+        guest,
+        signInHostApiPath("/v1/auth/login"),
+      );
       await guest.getByTestId("password-login-submit").click();
       const refused = await pending;
       expect(refused.response.status(), "wrong password refused").toBe(401);
@@ -307,7 +315,10 @@ Then(
     const guest = state.guest!;
     await preparePassword(guest, world.hostBaseUrl, state, state.password);
     const accepted = await gated(state, world.hostBaseUrl, async () => {
-      const pending = captureResponse(guest, "/v1/auth/login");
+      const pending = captureResponse(
+        guest,
+        signInHostApiPath("/v1/auth/login"),
+      );
       await guest.getByTestId("password-login-submit").click();
       const response = await pending;
       expect(
@@ -315,7 +326,7 @@ Then(
         "correct owned password accepted",
       ).toBe(200);
       expect(
-        response.body === JSON.stringify({ status: "authenticated" }),
+        storefrontCallbackAcknowledgement(response.body, world.hostBaseUrl),
         "token-free successful login acknowledgement",
       ).toBe(true);
       return response;

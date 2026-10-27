@@ -1,3 +1,11 @@
+import {
+  isSignInHostForm,
+  signInHostApiPath,
+} from "../lib/sign-in-host-api.js";
+import {
+  expectEnteredThrough,
+  watchStorefrontEntries,
+} from "../lib/storefront-entry-watch.js";
 import { randomUUID } from "node:crypto";
 import { expect, type ElementHandle, type Page } from "@playwright/test";
 
@@ -72,7 +80,8 @@ Given(
     page.on("request", (request) => {
       if (
         request.method() === "POST" &&
-        new URL(request.url()).pathname === "/v1/auth/register"
+        new URL(request.url()).pathname ===
+          signInHostApiPath("/v1/auth/register")
       ) {
         state.registrationRequests += 1;
       }
@@ -97,6 +106,7 @@ Given(
         );
       }
     });
+    watchStorefrontEntries(page, world.hostBaseUrl);
     await page.goto(registrationUrl(world.hostBaseUrl, "/account"), {
       waitUntil: "load",
     });
@@ -194,10 +204,17 @@ Then(
   "the message-slot refusal sends no registration POST and grants no private access",
   async ({ page, world }) => {
     const state = slot(page);
+    // #3172 — the form is the sign-in host's; the return path rode the
+    // storefront's registration entry into the transaction.
     const url = new URL(page.url());
-    expect(url.origin).toBe(new URL(world.hostBaseUrl).origin);
-    expect(url.pathname).toBe("/register");
-    expect(url.searchParams.get("returnTo")).toBe("/account");
+    expect(isSignInHostForm(url)).toBe(true);
+    // Behind the IdP the registration door renders on the host's `/login`
+    // (`doorFor`): the door is proven by what renders, not by the path.
+    await expect(page.getByTestId("register-email")).toBeVisible();
+    expectEnteredThrough(page, world.hostBaseUrl, {
+      pathname: "/register",
+      returnTo: "/account",
+    });
     expect(state.registrationRequests, "no registration command was sent").toBe(
       0,
     );

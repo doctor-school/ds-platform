@@ -1,10 +1,11 @@
+import { signInHostApiPath } from "../lib/sign-in-host-api.js";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import {
   captchaTestTokenFromEnv,
   installCaptchaStub,
 } from "../lib/captcha-stub.js";
-import { captureResponse } from "../lib/captured-response.js";
+import { sendHostCommandFromForm } from "../lib/captured-response.js";
 import { ownedMirrorCount } from "../lib/consent-refusal.js";
 import {
   assertNoPrivateRegistrationAccess,
@@ -66,38 +67,20 @@ When(
   "that browser sends a real Academy BFF registration request without any accepted consent version",
   async ({ page }) => {
     const state = refusal(page);
-    const captured = captureResponse(state.page, "/v1/auth/register");
-    // 003 EARS-20: this is a BFF omission probe, not the Academy form's consent projection.
-    await state.page.evaluate(
-      async ({ email, password, token }) => {
-        try {
-          await fetch("/v1/auth/register", {
-            method: "POST",
-            credentials: "include",
-            headers: {
-              "content-type": "application/json",
-              "x-smartcaptcha-token": token,
-            },
-            body: JSON.stringify({ email, password, consent: [] }),
-          });
-        } catch {
-          throw new Error("Consent-refusal registration request failed");
-        }
-      },
-      {
-        email: state.email,
-        password: state.password,
-        token: captchaTestTokenFromEnv(),
-      },
+    // 003 EARS-20: this is a BFF omission probe, not the Academy form's consent
+    // projection. #3172 — the registration BFF is the sign-in host's, which
+    // takes a command only as the door's own form post (authRequest + csrf),
+    // so the probe rides the door's real submit with its body replaced.
+    const { response, body, sent } = await sendHostCommandFromForm(
+      state.page,
+      signInHostApiPath("/v1/auth/register"),
+      { email: state.email, password: state.password, consent: [] },
+      () => state.page.getByTestId("register-submit").click(),
+      { "x-smartcaptcha-token": captchaTestTokenFromEnv() },
     );
-    const { response, body } = await captured;
     state.status = response.status();
     state.setCookie = (await response.headerValue("set-cookie")) ?? "";
-    state.evidence = consentRefusalEvidence(
-      response.request().postData() ?? "",
-      body,
-      state,
-    );
+    state.evidence = consentRefusalEvidence(sent, body, state);
   },
 );
 

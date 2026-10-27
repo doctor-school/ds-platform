@@ -1366,14 +1366,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
   @EARS-39 @EARS-41 @happy @cold-email-confirmation
   Scenario: A cold verification step still signs in by the code
     Given a uniquely registered Academy account awaits its fresh unconsumed confirmation code with the account return target
-    When the registrant hard reloads the Academy verification step before entering any code
+    When the registrant hard reloads the Academy verification step with the sign-in host's form state cleared before entering any code
     Then the reloaded step keeps the same address and account return target without private access
     When the registrant enters that same delivered six-digit code once on the cold step
     Then the cold verification submits only that address and code once and opens the verified owned account with a secure session
     And the verification journey never visits login, replays registration, or requests another code mail
     When a separate guest browser submits the original registration password for that account
     Then that password is refused generically and the guest has no private session or profile access
-    # Hard reload is the actual cold-state trigger; restored tabs and hold expiry
+    # On the sign-in host a plain reload stays warm (EARS-39 on the host: the
+    # creating browser's form state keeps the registration password); clearing
+    # that form-state cookie is the actual cold-state trigger. Restored tabs and hold expiry
     # remain in packages/auth-flow/src/verify/verify-door.test.tsx EARS-39/41.
     # Internal password invalidation: apps/api/src/auth/idp/zitadel.idp.spec.ts
     # EARS-41; retain both mocked contracts, which are not this live browser proof.
@@ -1613,9 +1615,11 @@ Feature: Net-new web authentication producing a doctor_guest identity
   Scenario: A hostile return path or redirect URI never leaves the storefront
     Given a signed-out browser on the Academy
     When the guest opens the Academy sign-in entry with a returnTo of "//evil.example", "https://evil.example" or "/\evil.example"
-    Then the stored return path is "/" and the sign-in ends on "/#"
-    When the guest opens it with a returnTo path longer than 2048 characters
-    Then the return path is cut to its path, or to "/" when the path alone is longer
+    Then no return path is stored and the sign-in ends on the Academy's landing "/webinars#"
+    When the guest opens it with a returnTo of an event page whose query makes it longer than 2048 characters
+    Then the stored return path is cut to the event page's path and the sign-in ends on it
+    When the guest opens it with a returnTo whose path alone is longer than 2048 characters
+    Then no return path is stored and the sign-in ends on the Academy's landing "/webinars#"
     When an authorize request names a look-alike redirect_uri for the Academy client
     Then no authorization code is issued to it
 
@@ -1794,6 +1798,48 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the authorize request carries only the entry-intent id, with no slug and no return path
     When the guest signs in
     Then the guest lands signed in on "/webinars/<slug>"
+
+  # Owner Stage-B finding 2026-10-27, PR #3265. App-local tests:
+  # apps/login/e2e/host-history.e2e.spec.ts EARS-71 (both storefronts, the hop,
+  # each reload; the code step's reload on /verify) and
+  # apps/api/test/auth/sign-in-host.e2e-spec.ts A001 (the form-state re-read).
+  @EARS-71 @happy @entry-intent-event-target-door-hop
+  Scenario Outline: A guest from an event page keeps that event's card while switching between the sign-in and registration forms
+    Given a guest on the page of a published эфир on the <storefront> storefront
+    When the guest follows the registration link from that page
+    Then the sign-in host shows the registration form with the registration variant of that эфир's return-context card
+    When the guest follows «Уже есть аккаунт? Войти»
+    Then the sign-in host shows the sign-in form with the login variant of that эфир's return-context card
+    When the guest reloads the page
+    Then the login variant of that эфир's return-context card is still shown
+    When the guest follows «Создать аккаунт»
+    Then the sign-in host shows the registration form with the registration variant of that эфир's return-context card
+    When the guest reloads the page
+    Then the registration variant of that эфир's return-context card is still shown
+
+    Examples:
+      | storefront |
+      | Academy    |
+      | doctor     |
+
+  # Owner directive 2026-10-27 (PR #3265). App-local tests:
+  # apps/login/e2e/host-history.e2e.spec.ts EARS-71 reset entry,
+  # packages/auth-flow/src/server/storefront-oidc.test.ts (the recorded intent) and
+  # apps/api/test/auth/sign-in-host.e2e-spec.ts (the kept target, the sign-in door).
+  @EARS-71 @happy @entry-intent-event-target-reset
+  Scenario Outline: A guest who opened password recovery from an event returns to the sign-in form with that event's card
+    Given a guest on the page of a published эфир on the <storefront> storefront
+    When the guest opens password recovery with that эфир as the return target
+    Then the sign-in host shows the reset form without a return-context card
+    When the guest follows «Вернуться ко входу»
+    Then the sign-in host shows the sign-in form with the login variant of that эфир's return-context card
+    When the guest reloads the page
+    Then the login variant of that эфир's return-context card is still shown
+
+    Examples:
+      | storefront |
+      | Academy    |
+      | doctor     |
 
   # Academy retained-baseline projection (#3180), not shared-sign-in-host acceptance.
   # Existing native login and SMS-budget contracts remain retained; no expiry proof.

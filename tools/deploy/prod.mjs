@@ -1241,6 +1241,103 @@ async function assertProdApiEnvHasRecordKey(services) {
   ok(`${API_PROD_ENV_FILE}: SIGN_IN_RECORD_KEY present`);
 }
 
+// --- #3172: the storefront redeem secrets, split by who may read them -----
+// provision.sh step 3.bis.2 keeps or mints the two storefront clients'
+// private_key_jwt keys and INTERNAL_API_TOKEN (003 EARS-62/71) during the pre-swap
+// IdP converge, into two root-only files:
+//   API_SIGN_IN_ENV_FILE — all three; mounted by the api ALONE.
+//   INTERNAL_ENV_FILE    — INTERNAL_API_TOKEN only, the same value; mounted by
+//                          the storefront servers (portal, doctor).
+// The client keys never go into api.env: portal and doctor still load the whole
+// api.env as env_file (pre-existing, tracked as #3258). The deploy then counts each
+// name per file on the box — never reading a value off it — checks the token is the
+// same in both files and the keys are absent from api.env, and refuses before the
+// swap when any of that does not hold.
+export const API_SIGN_IN_ENV_FILE = "/etc/ds-platform/api-sign-in.env";
+export const INTERNAL_ENV_FILE = "/etc/ds-platform/internal.env";
+export const STOREFRONT_SECRET_NAMES = Object.freeze([
+  "IDP_ACADEMY_CLIENT_KEY",
+  "IDP_DOCTOR_CLIENT_KEY",
+  "INTERNAL_API_TOKEN",
+]);
+const STOREFRONT_CLIENT_KEY_NAMES = STOREFRONT_SECRET_NAMES.filter((name) => name !== "INTERNAL_API_TOKEN");
+
+/** Whether a target's provision.sh text carries step 3.bis.2 with the token-only file. */
+export function provisionWritesStorefrontSecrets(provisionScript) {
+  const text = String(provisionScript ?? "");
+  return (
+    /^SECRET_ENV_FILE="\$\{IDP_SECRET_ENV_FILE:-\}"$/m.test(text) &&
+    /^INTERNAL_ENV_FILE="\$\{IDP_INTERNAL_ENV_FILE:-\}"$/m.test(text)
+  );
+}
+
+const assignment = (name) => `'^[[:space:]]*(export[[:space:]]+)?${name}='`;
+const countOf = (label, file, name) =>
+  `  echo "${label}:${name}=$(sudo grep -cE '^[[:space:]]*(export[[:space:]]+)?${name}=[^[:space:]]' '${file}' || true)"`;
+const tokenOf = (file) =>
+  `sudo grep -E ${assignment("INTERNAL_API_TOKEN")} '${file}' | tail -n 1 | sed -E 's/^[[:space:]]*(export[[:space:]]+)?//'`;
+
+/**
+ * The on-box probe: per file, readable + per-name assignment counts; for the
+ * internal file, the count of any OTHER assignment; whether the two tokens are
+ * equal (`token-match=yes|no`, compared inside the shell — no value is printed).
+ */
+export function storefrontSecretsProbeScript({
+  apiEnv = API_PROD_ENV_FILE,
+  signInEnv = API_SIGN_IN_ENV_FILE,
+  internalEnv = INTERNAL_ENV_FILE,
+} = {}) {
+  const block = (label, file, body) => `if sudo test -r '${file}'; then
+  echo ${label}=readable
+${body}
+else
+  echo ${label}=unreadable
+fi`;
+  return `${block("sign-in", signInEnv, STOREFRONT_SECRET_NAMES.map((n) => countOf("sign-in", signInEnv, n)).join("\n"))}
+${block(
+  "internal",
+  internalEnv,
+  `${countOf("internal", internalEnv, "INTERNAL_API_TOKEN")}
+  echo "internal:other=$(sudo grep -E ${assignment("[A-Za-z_][A-Za-z0-9_]*")} '${internalEnv}' | grep -cvE ${assignment("INTERNAL_API_TOKEN")} || true)"`,
+)}
+${block("api", apiEnv, STOREFRONT_CLIENT_KEY_NAMES.map((n) => countOf("api", apiEnv, n)).join("\n"))}
+if [ "$(${tokenOf(signInEnv)})" = "$(${tokenOf(internalEnv)})" ]; then echo token-match=yes; else echo token-match=no; fi
+`;
+}
+
+export function storefrontSecretsVerdict(output) {
+  const lines = String(output ?? "").split(/\r?\n/);
+  const countFor = (key) => {
+    const hit = lines.find((line) => line.startsWith(`${key}=`));
+    return hit && /^\d+$/.test(hit.slice(key.length + 1)) ? Number(hit.slice(key.length + 1)) : null;
+  };
+  const problems = [];
+  for (const [label, file] of [
+    ["sign-in", API_SIGN_IN_ENV_FILE],
+    ["internal", INTERNAL_ENV_FILE],
+    ["api", API_PROD_ENV_FILE],
+  ]) {
+    if (!lines.includes(`${label}=readable`)) problems.push(`${file} is unreadable`);
+  }
+  const missingSignIn = STOREFRONT_SECRET_NAMES.filter((name) => !(countFor(`sign-in:${name}`) >= 1));
+  if (missingSignIn.length) problems.push(`${API_SIGN_IN_ENV_FILE} has no ${missingSignIn.join(", ")}`);
+  if (!(countFor("internal:INTERNAL_API_TOKEN") >= 1)) problems.push(`${INTERNAL_ENV_FILE} has no INTERNAL_API_TOKEN`);
+  if (countFor("internal:other") !== 0) problems.push(`${INTERNAL_ENV_FILE} holds more than INTERNAL_API_TOKEN`);
+  const leaked = STOREFRONT_CLIENT_KEY_NAMES.filter((name) => countFor(`api:${name}`) !== 0);
+  if (leaked.length) {
+    problems.push(`${API_PROD_ENV_FILE} (loaded by portal and doctor) carries ${leaked.join(", ")}`);
+  }
+  if (!lines.includes("token-match=yes")) {
+    problems.push(`INTERNAL_API_TOKEN differs between ${API_SIGN_IN_ENV_FILE} and ${INTERNAL_ENV_FILE}`);
+  }
+  return problems.length === 0
+    ? { ok: true }
+    : {
+        ok: false,
+        reason: `storefront redeem secrets on api-prod after the IdP converge: ${problems.join("; ")}`,
+      };
+}
+
 // --- tiny console ---------------------------------------------------------
 
 const t0All = Date.now();
@@ -1910,7 +2007,7 @@ async function provisionIdp(sha, label = sha.slice(0, 12)) {
 cd ${IDP_PROVISION_DIR}
 ids=$(mktemp)
 trap 'rm -f "$ids"' EXIT
-sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; IDP_BASE_URL=${IDP_BASE_URL} IDP_REDIRECT_URIS=${IDP_REDIRECT_URIS} IDP_POST_LOGOUT_URIS=${IDP_POST_LOGOUT_URIS} ${IDP_STOREFRONT_CLIENT_ENV} EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real ./provision.sh --pat-file ${IDP_BOOTSTRAP_PAT_FILE}' | tee "$ids"
+sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; IDP_BASE_URL=${IDP_BASE_URL} IDP_REDIRECT_URIS=${IDP_REDIRECT_URIS} IDP_POST_LOGOUT_URIS=${IDP_POST_LOGOUT_URIS} ${IDP_STOREFRONT_CLIENT_ENV} IDP_SECRET_ENV_FILE=${API_SIGN_IN_ENV_FILE} IDP_INTERNAL_ENV_FILE=${INTERNAL_ENV_FILE} EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real ./provision.sh --pat-file ${IDP_BOOTSTRAP_PAT_FILE}' | tee "$ids"
 cd ${API_COMPOSE}
 ${storefrontClientIdsEnvScript("$ids")}
 `,
@@ -1923,6 +2020,21 @@ ${storefrontClientIdsEnvScript("$ids")}
         ` so a re-run is safe once the cause is fixed):\n  ${e.message}\n` +
         `  Manual recovery path: infra/deploy/README.md → step 9.`,
       { rollbackHint: true },
+    );
+  }
+
+  // #3172: the converge above wrote the storefront redeem secrets (provision.sh
+  // step 3.bis.2) into the api-only file and the token-only file; prove they are
+  // there, split as compose mounts them — counted, never printed — before the
+  // apps that read them are swapped in. A target whose
+  // provision.sh predates that step (a `--ref` hotfix below it) ships an api that
+  // does not read them, so it is not held to them.
+  if (provisionWritesStorefrontSecrets(targetFile(sha, IDP_PROVISION_SCRIPT_PATH))) {
+    const secrets = storefrontSecretsVerdict(await sshCapture(API_PROD, storefrontSecretsProbeScript()));
+    if (!secrets.ok) die(`${secrets.reason} — ${IDP_ROLLBACK_HINT}`, { rollbackHint: true });
+    ok(
+      `${API_SIGN_IN_ENV_FILE}: ${STOREFRONT_SECRET_NAMES.join(", ")} present; ` +
+        `${INTERNAL_ENV_FILE}: the same INTERNAL_API_TOKEN only; no client key in ${API_PROD_ENV_FILE}`,
     );
   }
 

@@ -1,3 +1,4 @@
+import { isSignInHostForm, signInHostApiPath } from "../lib/sign-in-host-api.js";
 import {
   expect,
   type APIRequestContext,
@@ -15,6 +16,8 @@ import {
   mailpitUrlFor,
   nativeRecoveryMail,
 } from "../lib/mailpit.js";
+import { storefrontCallbackAcknowledgement } from "../lib/owned-registration.js";
+import { assertSecureSession } from "../lib/secure-session.js";
 import { signInGoldenDoctor } from "../lib/sign-in.js";
 import { resolveWorkerGoldenDoctor } from "../lib/worker-golden.js";
 import { gatedPasswordLogin } from "../lib/gated-password-login.js";
@@ -51,13 +54,17 @@ async function submitDeliveredEmailCode(
   );
   const requestResponse = page.waitForResponse(
     (response) =>
-      new URL(response.url()).pathname === "/v1/auth/login/otp/request" &&
+      new URL(response.url()).pathname ===
+        signInHostApiPath("/v1/auth/login/otp/request") &&
       response.request().method() === "POST",
   );
   await page.getByTestId("otp-send").click();
   otpRequestResponses.set(page, await requestResponse);
   const code = await fetchLoginCode(request, mailbox, doctor.email, before);
-  const loginResponse = captureResponse(page, "/v1/auth/login/otp");
+  const loginResponse = captureResponse(
+    page,
+    signInHostApiPath("/v1/auth/login/otp"),
+  );
   // The sixth character auto-submits the shipped OTP form.
   await page.locator('input[autocomplete="one-time-code"]').fill(code);
   const login = await loginResponse;
@@ -167,7 +174,10 @@ When(
   "that doctor signs in through the Academy password form",
   async ({ page, world }) => {
     expect(world.host.id).toBe("academy");
-    const loginResponse = captureResponse(page, "/v1/auth/login");
+    const loginResponse = captureResponse(
+      page,
+      signInHostApiPath("/v1/auth/login"),
+    );
     const doctor = await signInGoldenDoctor(page, world.host, SEED);
     world.signedInAs = doctor.seedName;
     const login = await loginResponse;
@@ -206,35 +216,45 @@ Then(
 
 Then(
   "the browser holds a host-only __Host-ds_session cookie with HttpOnly, Secure, and SameSite=Lax",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const response = loginResponses.get(page) ?? otpLoginResponses.get(page);
     expect(response, "login response was captured").toBeDefined();
     expect(response!.ok(), "login succeeded").toBe(true);
-    const setCookie = await response!.headerValue("set-cookie");
-    expect(setCookie, "login sets the BFF session cookie").toContain(
-      `${SESSION_COOKIE}=`,
+    // #3172 — the login command is the sign-in host's and mints no storefront
+    // session; the storefront's `/auth/callback` relays `__Host-ds_session` on
+    // the way back. The cookie is proven once the page is back on the
+    // storefront: in its jar, host-only, Path=/, HttpOnly, Secure, Lax.
+    const storefront = new URL(world.hostBaseUrl).origin;
+    await page.waitForURL(
+      (url) => url.origin === storefront && url.pathname !== "/auth/callback",
     );
-    expect(setCookie).not.toMatch(/(?:^|;)\s*Domain=/i);
-    const cookies = await page.context().cookies();
-    const session = cookies.find((cookie) => cookie.name === SESSION_COOKIE);
-    expect(session, "private session cookie exists").toBeDefined();
+    await assertSecureSession(page, response!, world.hostBaseUrl);
+    const session = (await page.context().cookies()).find(
+      (cookie) => cookie.name === SESSION_COOKIE,
+    );
     expect(session!.domain).toBe(new URL(page.url()).hostname);
-    expect(session!).toMatchObject({
-      path: "/",
-      httpOnly: true,
-      secure: true,
-      sameSite: "Lax",
-    });
   },
 );
 
 Then(
   "neither the login response nor JavaScript-readable browser stores expose access or refresh tokens",
-  async ({ page }) => {
+  async ({ page, world }) => {
     const loginBody = loginBodies.get(page);
     expect(loginBody, "login response body was captured").toBeDefined();
-    expect(loginBody).not.toMatch(/access[_-]?token|refresh[_-]?token/i);
-    expect(loginBody).not.toMatch(/eyJ[\w-]+\.[\w-]+\.[\w-]+/);
+    // #3172 — the sign-in host answers the storefront callback URL, whose
+    // `code` is the IdP's single-use authorization code (an encrypted JWE the
+    // storefront redeems server-side), not a token. The answer must be exactly
+    // that acknowledgement; everything else in it is checked for tokens.
+    expect(
+      storefrontCallbackAcknowledgement(loginBody!, world.hostBaseUrl),
+      "the login answer is the storefront callback acknowledgement",
+    ).toBe(true);
+    const ack = JSON.parse(loginBody!) as { url: string };
+    const callback = new URL(ack.url);
+    callback.searchParams.delete("code");
+    const withoutCode = JSON.stringify({ ...ack, url: callback.toString() });
+    expect(withoutCode).not.toMatch(/access[_-]?token|refresh[_-]?token/i);
+    expect(withoutCode).not.toMatch(/eyJ[\w-]+\.[\w-]+\.[\w-]+/);
     const clientState = await page.evaluate(() => ({
       cookie: document.cookie,
       local: Object.entries(window.localStorage),
@@ -263,7 +283,8 @@ When(
     const refused = await gatedPasswordLogin(page, async () => {
       const loginResponse = page.waitForResponse(
         (response) =>
-          new URL(response.url()).pathname === "/v1/auth/login" &&
+          new URL(response.url()).pathname ===
+            signInHostApiPath("/v1/auth/login") &&
           response.request().method() === "POST",
       );
       await page.getByRole("button", { name: /Войти|Продолжить/i }).click();
@@ -285,6 +306,8 @@ Then(
     await expect(page).toHaveURL(
       new RegExp(`${world.host.loginPath}(?:\\?|$)`),
     );
+    // #3172 — the generic error shows on the sign-in host's form.
+    expect(isSignInHostForm(page.url())).toBe(true);
     await expect(
       page.getByRole("alert").filter({ hasText: GENERIC_PASSWORD_ERROR }),
     ).toBeVisible();

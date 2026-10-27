@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import {
@@ -36,6 +35,7 @@ import {
 import { makeResolver } from "../form-resolver";
 import type { AuthFlowHostConfig, AuthFlowResetCopy } from "../host-config";
 import { ResetGlyph } from "./reset-glyph";
+import { renderDoorLink } from "../sign-in-host/door-link";
 
 /**
  * The ONE password-recovery flow of the platform (#2027 PR 1.8, tech spec §2.7
@@ -237,7 +237,9 @@ export function ResetDoor({
       stage={stage}
       identifier={identifier}
       links={{ login: loginHref }}
-      renderLink={({ href, children }) => <Link href={href}>{children}</Link>}
+      // 003 EARS-70 — plain door links: the host answers a door only for a
+      // top-level navigation, so a router link's RSC prefetch is refused (403).
+      renderLink={renderDoorLink}
       request={{
         resolver: requestResolver,
         onSubmit: onRequest,

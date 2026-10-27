@@ -87,7 +87,28 @@ describe("003 EARS-71: the door's params come only from the resolved intent", ()
     ).toEqual({});
   });
 
-  it("003 EARS-71: the registration door shows the card from the intent; the verify door keeps only the address", () => {
+  it("003 EARS-71: a door hop's re-render keeps the event card on both doors from the answer's kept target, never from the hop link's returnTo", () => {
+    // The API re-renders the same auth request with the event target kept in
+    // the browser's form state; the door link the person followed carries a
+    // `returnTo` of its own (`withReturnTarget`), which the host never reads.
+    const rerender: SignInHostRender = {
+      ...RENDER,
+      storefront: "academy",
+      door: "register",
+      intent: { handoff: false, eventTarget: "kept-event" },
+    };
+    const hopLink = { returnTo: "/webinars/someone-elses" };
+    for (const door of ["login", "register"] as const)
+      expect(
+        signInHostSearchParams(ACADEMY_AUTH_FLOW, rerender, hopLink, door),
+      ).toEqual({ returnTo: "/webinars/kept-event" });
+    // The reset door draws no card on any host (its route reads no event).
+    expect(
+      signInHostSearchParams(ACADEMY_AUTH_FLOW, rerender, hopLink, "reset"),
+    ).toEqual({});
+  });
+
+  it("003 EARS-71: the registration door and its code step show the card from the intent; the code step keeps the address", () => {
     const render = {
       ...RENDER,
       intent: { handoff: false, eventTarget: "e1" },
@@ -100,6 +121,15 @@ describe("003 EARS-71: the door's params come only from the resolved intent", ()
         ACADEMY_AUTH_FLOW,
         render,
         { email: "a@b.ru", returnTo: "/x" },
+        "verify",
+      ),
+    ).toEqual({ email: "a@b.ru", returnTo: "/webinars/e1" });
+    // No event in the answer: the code step keeps only the address.
+    expect(
+      signInHostSearchParams(
+        ACADEMY_AUTH_FLOW,
+        RENDER,
+        { email: "a@b.ru", returnTo: "/webinars/x" },
         "verify",
       ),
     ).toEqual({ email: "a@b.ru" });

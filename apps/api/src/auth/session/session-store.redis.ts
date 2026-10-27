@@ -35,6 +35,8 @@ export interface RedisLike {
 const KEY_PREFIX = "ds:session:";
 /** Key namespace for the `sub → sids` index used by {@link RedisSessionStore.deleteBySub}. */
 const SUB_INDEX_PREFIX = "ds:session:sub:";
+/** Key namespace for the `zitadelSessionId → linked sids` index (003 EARS-10 / EARS-64). */
+const LINK_INDEX_PREFIX = "ds:session:zs:";
 
 /**
  * Redis-backed {@link SessionStore} — the production binding (ADR-0001 §6:
@@ -69,6 +71,13 @@ export class RedisSessionStore implements SessionStore {
     const indexKey = `${SUB_INDEX_PREFIX}${record.sub}`;
     await this.redis.sadd(indexKey, record.sid);
     await this.redis.expire(indexKey, ttlSeconds);
+    // 003 EARS-10 / EARS-64: a linked session is also indexed by its Zitadel
+    // session, the same way, so one sign-out revokes it on both storefronts.
+    if (record.oidcClient) {
+      const linkKey = `${LINK_INDEX_PREFIX}${record.zitadelSessionId}`;
+      await this.redis.sadd(linkKey, record.sid);
+      await this.redis.expire(linkKey, ttlSeconds);
+    }
   }
 
   async get(sid: string): Promise<SessionRecord | undefined> {
@@ -118,5 +127,20 @@ export class RedisSessionStore implements SessionStore {
       await this.redis.del(...sids.map((sid) => `${KEY_PREFIX}${sid}`));
     }
     await this.redis.del(indexKey);
+  }
+
+  async deleteLinked(zitadelSessionId: string): Promise<SessionRecord[]> {
+    const linkKey = `${LINK_INDEX_PREFIX}${zitadelSessionId}`;
+    const revoked: SessionRecord[] = [];
+    for (const sid of await this.redis.smembers(linkKey)) {
+      const record = await this.get(sid);
+      await this.redis.del(`${KEY_PREFIX}${sid}`);
+      if (record) {
+        await this.redis.srem(`${SUB_INDEX_PREFIX}${record.sub}`, sid);
+        revoked.push(record);
+      }
+    }
+    await this.redis.del(linkKey);
+    return revoked;
   }
 }

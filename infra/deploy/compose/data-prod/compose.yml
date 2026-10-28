@@ -2,6 +2,13 @@
   "name": "ds-data-prod",
   "services": {
     "postgres": {
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "50m",
+          "max-file": "3"
+        }
+      },
       "build": {
         "context": "./postgres",
         "dockerfile": "Dockerfile"
@@ -43,6 +50,13 @@
       }
     },
     "redis": {
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "50m",
+          "max-file": "3"
+        }
+      },
       "image": "redis:7-alpine",
       "restart": "unless-stopped",
       "command": [
@@ -68,6 +82,13 @@
       }
     },
     "pgbackrest": {
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "50m",
+          "max-file": "3"
+        }
+      },
       "build": {
         "context": "./pgbackrest",
         "dockerfile": "Dockerfile"

@@ -28,9 +28,18 @@
 
 name: ds-api-prod
 
+# #3386: a bound on every container's json log — the default json-file driver
+# keeps it forever (deploy README → Container log bound). Applies on recreate.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   # --- Caddy — TLS terminator + reverse proxy for the 3 public hostnames (§5.2) ---
   caddy:
+    logging: *default-logging
     image: caddy:2.11.4-alpine
     restart: unless-stopped
     ports:
@@ -68,6 +77,7 @@ services:
 
   # --- api — NestJS BFF/API (auth, sessions, /me/*, mailer, SMS-budget) ---
   api:
+    logging: *default-logging
     # SHA-tagged by `pnpm deploy:prod` (DSO-127): DEPLOY_SHA is set in the `.env`
     # beside this file so pull + up + rollback all reference `ds-api:<sha>`.
     image: ds-api:${DEPLOY_SHA:?}
@@ -116,6 +126,7 @@ services:
 
   # --- portal — Next.js standalone, user-facing auth screens (academy.doctor.school) ---
   portal:
+    logging: *default-logging
     # SHA-tagged in lockstep with the api (DSO-127) for retention + app-only
     # rollback. API_PROXY_TARGET is BUILD-time (DSO-100: Next freezes `rewrites()`
     # into .next/routes-manifest.json) and baked by runtime-images.yml as
@@ -183,6 +194,7 @@ services:
   # `platform_admin` role (provision.sh IDP_SEED_ROLE — README wave-1 step);
   # session posture is the shared cookie per ADR-0004 §3.2.1 (hardening: #718).
   admin:
+    logging: *default-logging
     # SHA-tagged in lockstep with api/portal (DSO-127); API_PROXY_TARGET baked by
     # runtime-images.yml as for the portal.
     image: ds-admin:${DEPLOY_SHA:?}
@@ -216,6 +228,7 @@ services:
   # step gated on data migration + retirement of the old site (owner decision on
   # #1430, 2026-08-26). Same standalone pattern as portal/admin.
   doctor:
+    logging: *default-logging
     # SHA-tagged in lockstep with api/portal/admin (DSO-127) for retention +
     # app-only rollback; API_PROXY_TARGET baked by runtime-images.yml as for the
     # portal (apps/doctor/next.config.ts).
@@ -262,6 +275,7 @@ services:
   # runtime-images.yml). /healthz is the probe: every page route asks the API's
   # entry first (003 EARS-70), so no page can be one.
   login:
+    logging: *default-logging
     image: ds-login:${DEPLOY_SHA:?}
     restart: unless-stopped
     env_file: [/etc/ds-platform/api.env]
@@ -304,6 +318,7 @@ services:
   # CENTRIFUGO_URL points at (one origin derives both the wss URL and the
   # HTTP-API base — apps/api/src/room/chat.gateway.ts).
   centrifugo:
+    logging: *default-logging
     image: centrifugo/centrifugo:v6
     restart: unless-stopped
     command: centrifugo --config=/centrifugo/config.json --health.enabled
@@ -333,6 +348,7 @@ services:
   # by the ZITADEL_FIRSTINSTANCE_* vars in zitadel.env (README init step); leave them
   # unset for normal boots. The masterkey (ZITADEL_MASTERKEY) MUST be exactly 32 chars.
   zitadel:
+    logging: *default-logging
     # Preparation #2165; release/recovery and real-SMS gates: #2166.
     # See zitadel-upgrade.md before any shared or production upgrade.
     image: ghcr.io/zitadel/zitadel:v4.17.3 # pinned in lockstep with zitadel-login
@@ -377,6 +393,7 @@ services:
 
   # --- zitadel-login — Login V2 UI (Next.js), pinned to core (dev-stand parity) -----
   zitadel-login:
+    logging: *default-logging
     image: ghcr.io/zitadel/zitadel-login:v4.17.3
     restart: unless-stopped
     environment:
@@ -423,6 +440,7 @@ services:
   # here once provision.sh activates the real provider (SMS_DELIVERY_MODE=real). The
   # SMSAERO_* creds live in api.env (spec §5.4) and are read ONLY from env.
   sms-aero-adapter:
+    logging: *default-logging
     image: node:24-alpine
     restart: unless-stopped
     command: ["node", "/srv/server.mjs"]
@@ -451,6 +469,7 @@ services:
   # as the app images, so a deploy migrates exactly the commit it swaps in.
   # profiles: keeps it out of `up`.
   migrate:
+    logging: *default-logging
     image: ds-api-migrate:${DEPLOY_SHA:?}
     profiles: ["migrate"]
     restart: "no"

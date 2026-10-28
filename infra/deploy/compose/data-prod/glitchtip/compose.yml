@@ -27,8 +27,17 @@
 
 name: ds-glitchtip
 
+# #3386: a bound on every container's json log — the default json-file driver
+# keeps it forever (deploy README → Container log bound). Applies on recreate.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   valkey:
+    logging: *default-logging
     # Dedicated broker/cache — isolated from the prod `redis`. Small AOF-less
     # instance: GlitchTip's queue is transient (events are persisted in Postgres).
     image: valkey/valkey:9
@@ -42,6 +51,7 @@ services:
       retries: 5
 
   web:
+    logging: *default-logging
     # Pin the major (v6) per GlitchTip's upgrade guidance; migrations run on start.
     image: glitchtip/glitchtip:6
     restart: unless-stopped

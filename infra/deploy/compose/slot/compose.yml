@@ -60,9 +60,18 @@
 
 name: slot
 
+# #3386: a bound on every container's json log — the default json-file driver
+# keeps it forever (deploy README → Container log bound). Applies on recreate.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   # --- api — NestJS BFF/API, the only service on the shared stg-infra network -----
   api:
+    logging: *default-logging
     image: ds-api:${DEPLOY_SHA:?}
     container_name: ${SLOT:?}-api
     restart: unless-stopped
@@ -127,6 +136,7 @@ services:
   # stage.env (env_file below), and the contour manifest is gated by the runtime
   # CONTOUR_MANIFEST flag in `environment:`.
   portal:
+    logging: *default-logging
     image: ds-portal:${DEPLOY_SHA:?}
     container_name: ${SLOT:?}-portal
     restart: unless-stopped
@@ -170,6 +180,7 @@ services:
 
   # --- doctor — Next.js standalone, the doctor storefront (doctor-<slot>.…) --------
   doctor:
+    logging: *default-logging
     image: ds-doctor:${DEPLOY_SHA:?}
     container_name: ${SLOT:?}-doctor
     restart: unless-stopped
@@ -204,6 +215,7 @@ services:
   # build-time). /healthz is the probe: every page route asks the API's entry
   # first (003 EARS-70), so no page can be one.
   login:
+    logging: *default-logging
     image: ds-login:${DEPLOY_SHA:?}
     container_name: ${SLOT:?}-login
     restart: unless-stopped
@@ -230,6 +242,7 @@ services:
 
   # --- admin — Next.js + Refine standalone, the operator app (admin-<slot>.…) ------
   admin:
+    logging: *default-logging
     image: ds-admin:${DEPLOY_SHA:?}
     container_name: ${SLOT:?}-admin
     restart: unless-stopped
@@ -270,6 +283,7 @@ services:
   # room-chat smoke — a wrong shape fail-closes the websocket, it does not widen
   # the origin check.
   centrifugo:
+    logging: *default-logging
     image: centrifugo/centrifugo:v6
     container_name: ${SLOT:?}-centrifugo
     restart: unless-stopped
@@ -305,6 +319,7 @@ services:
   # not the workspace (WORKDIR /migrate/apps/api); the same container runs the
   # branch seed as `pnpm --dir ../../packages/db run seed:golden` (GOLDEN_SEED_ARGV).
   migrate:
+    logging: *default-logging
     image: ds-api-migrate:${DEPLOY_SHA:?}
     container_name: ${SLOT:?}-migrate
     profiles: ["migrate"]

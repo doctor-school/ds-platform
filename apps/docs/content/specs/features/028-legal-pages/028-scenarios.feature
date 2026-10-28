@@ -31,12 +31,12 @@ Feature: 028 — Legal pages (documents and contacts)
     When they return to the registration form
     Then the previously entered form data is still present
 
-  @EARS-12 @failure
+  @EARS-12 @failure @028-unapproved-license-absent
   Scenario: A document with no approved content is absent
     Given "Лицензия на образовательную деятельность" has no approved content file in packages/legal-content
     When a visitor views either host's documents list
     Then no row for the licence document is rendered
-    And requesting its would-be URL directly returns the not-found dataState, not a placeholder page
+    And requesting "/documents/no-such-document" returns HTTP 404 showing the not-found document dataState, not a placeholder page
 
   @EARS-13 @failure
   Scenario: No link ever reaches the legacy site

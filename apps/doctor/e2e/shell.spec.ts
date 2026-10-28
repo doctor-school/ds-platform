@@ -1,6 +1,5 @@
 import { test, expect } from "@playwright/test";
 import { TOP_LEVEL_NAVIGATION_HEADERS } from "@ds/e2e/storefront-entry";
-import { readSiblingOrigin } from "@ds/storefront-shell/sibling-origin";
 
 /**
  * 017 EARS-1 / EARS-12 · 008 EARS-3 / EARS-11 / EARS-14 — the doctor
@@ -12,8 +11,8 @@ import { readSiblingOrigin } from "@ds/storefront-shell/sibling-origin";
  * package chrome, that exactly ONE action cluster reaches the DOM at every
  * width, that every configured target is a real route, that the theme control
  * flips and REMEMBERS the choice across a reload (the pre-paint FOUC guard, not
- * a post-hydration correction), and that the whole document carries exactly one
- * Academy crossing, in the footer (017 EARS-12).
+ * a post-hydration correction). The footer document links and exactly-one
+ * Academy crossing moved to the shared 017 journey in #3444.
  *
  * Backend-free tier (`playwright.ci.config.ts`): every assertion here holds
  * with no api behind the app. The SIGNED-IN half of the cluster is resolved on
@@ -151,29 +150,6 @@ test.describe("017 EARS-1: the doctor storefront mounts the shared chrome", () =
     ).toHaveCount(1);
     await expect(page.locator("header")).toHaveCount(1);
     await expect(page.locator("footer")).toHaveCount(1);
-  });
-
-  test("017 EARS-1.6: the footer carries the «Документы и контакты» links with real targets", async ({
-    page,
-  }) => {
-    await page.goto("/");
-
-    const docs = page.getByTestId("footer-documents");
-    await expect(docs).toBeVisible();
-    const links = docs.getByRole("link");
-    await expect(links).not.toHaveCount(0);
-    for (const href of await links.evaluateAll((nodes) =>
-      nodes.map((n) => n.getAttribute("href")),
-    )) {
-      // A `#` placeholder target is a dead affordance, not a link.
-      expect(href, "footer document link target").toBeTruthy();
-      expect(href).not.toBe("#");
-    }
-    // …and they RESOLVE: the legal surface answers, it is not a 404 (#1967).
-    const first = docs.getByRole("link").first();
-    const href = await first.getAttribute("href");
-    const response = await page.request.get(href!);
-    expect(response.status(), `${href} resolves`).toBeLessThan(400);
   });
 
   test("017 EARS-1.7: «Разделы» repeats the header nav from the same config value (008 EARS-14)", async ({
@@ -405,44 +381,5 @@ test.describe("017 EARS-1: the chrome is scoped to the storefront route group", 
         `no storefront chrome on ${route}`,
       ).not.toContain("storefront-header");
     }
-  });
-});
-
-test.describe("017 EARS-12: exactly one Academy crossing", () => {
-  test("017 EARS-12.1: exactly one Academy link exists and it lives in the footer", async ({
-    page,
-  }) => {
-    // The crossing targets the Academy origin the app is CONFIGURED with
-    // (#3147), read through the app's own reader — never a pinned production
-    // host. A runner that leaves the variable out fails on the reader's error.
-    const origin = readSiblingOrigin(process.env, "doctor");
-    await page.goto("/");
-
-    const academy = page.locator(`a[href^="${origin}"]`);
-    await expect(academy).toHaveCount(1);
-    await expect(academy).toHaveAttribute("href", `${origin}/`);
-    await expect(
-      page.getByTestId("storefront-footer").locator(`a[href^="${origin}"]`),
-    ).toHaveCount(1);
-    await expect(
-      page.getByTestId("storefront-header").locator(`a[href^="${origin}"]`),
-    ).toHaveCount(0);
-    // The crossing sits in its own footer column with its explanatory note.
-    await expect(page.getByTestId("footer-cross")).toContainText(
-      "Academy.Doctor.School",
-    );
-  });
-
-  test("017 EARS-12.2: the storefront carries no Academy navigation entry or content block", async ({
-    page,
-  }) => {
-    await page.goto("/");
-    // One mention only — the footer link itself. Any Academy nav entry or content
-    // block would add a second occurrence of the word on the surface.
-    const mentions = await page
-      .locator("body")
-      .innerText()
-      .then((text) => text.match(/Academy/gi) ?? []);
-    expect(mentions.length, "Academy mentions on the storefront").toBe(1);
   });
 });

@@ -38,6 +38,28 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
       And the typed query remains in the field and editable
       And «Другое» remains reachable
 
+  Rule: Public footer and deferred explore-content boundaries
+
+    Background:
+      Given a guest uses the configured Doctor specialty catalog
+
+    @EARS-1 @EARS-12 @happy @017-footer-academy-boundary
+    Scenario: The footer carries the documents links and the single Academy crossing
+      When a visitor opens the storefront home page
+      Then the footer shows the «Документы и контакты» links
+      And exactly one Academy link exists on the rendered page, in the footer
+      And it targets the Academy home page
+      And no project card, Academy podcast, partner news block or backstage navigation entry is present
+
+    @EARS-10 @happy @017-explore-not-stubbed
+    Scenario: «Что исследовать» is deferred until its content exists, not stubbed
+      When any visitor opens the storefront home page
+      Then no «Что исследовать» block renders on the page
+      And no format card, sample lesson count, duration or step figure from the canvas renders
+      And no «Все школы», «Все уроки» or «Все разборы» link renders
+      And no empty box, skeleton or «скоро» marker stands in for the block
+      And the home page reads as complete without it
+
   Rule: Remaining storefront and operator scenarios
 
     Background:
@@ -75,14 +97,6 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
       When the rendered header, navigation and footer of each route are compared
       Then every route renders the same shell layout module
       And no route declares a header, navigation or footer of its own
-
-    @EARS-1 @EARS-12 @happy
-    Scenario: The footer carries the documents links and the single Academy crossing
-      When a visitor opens the storefront home page
-      Then the footer shows the «Документы и контакты» links
-      And exactly one Academy link exists on the rendered page, in the footer
-      And it targets the Academy home page
-      And no project card, Academy podcast, partner news block or backstage navigation entry is present
 
     # -------------------------------------------------------------------- hero
 
@@ -248,15 +262,6 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
         | choice                  | form      |
         | not chosen a specialty  | general   |
         | chosen a specialty      | targeted  |
-
-    @EARS-10 @happy
-    Scenario: «Что исследовать» is deferred until its content exists, not stubbed
-      When any visitor opens the storefront home page
-      Then no «Что исследовать» block renders on the page
-      And no format card, sample lesson count, duration or step figure from the canvas renders
-      And no «Все школы», «Все уроки» or «Все разборы» link renders
-      And no empty box, skeleton or «скоро» marker stands in for the block
-      And the home page reads as complete without it
 
     @EARS-11 @happy
     Scenario: The leaderboard is its own section and lists only consenting doctors

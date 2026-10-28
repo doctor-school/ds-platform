@@ -10,6 +10,16 @@ export interface DrizzleHandle {
 export interface CreateDrizzleOptions {
   max?: number;
   statement_timeout?: number;
+  /**
+   * Bound (ms) on acquiring a connection — TCP connect plus the Postgres
+   * startup handshake. `pg`'s own default is 0 (wait forever), which turned a
+   * boot against an unresponsive data box into an indefinite hang (#3421).
+   * `statement_timeout` is enforced server-side and cannot bound this phase.
+   * pg-pool applies the same bound to waiting for a free pooled client: with
+   * all `max` clients busy, a checkout that waits longer than this fails
+   * («timeout exceeded when trying to connect») instead of queueing forever.
+   */
+  connectionTimeoutMillis?: number;
 }
 
 export function createDrizzle(
@@ -20,6 +30,7 @@ export function createDrizzle(
     connectionString,
     max: options.max ?? 10,
     statement_timeout: options.statement_timeout ?? 5_000,
+    connectionTimeoutMillis: options.connectionTimeoutMillis ?? 5_000,
   });
   // `pg` emits an 'error' event on the Pool when an *idle* pooled client errors
   // — e.g. the server terminates the connection ("terminating connection due to

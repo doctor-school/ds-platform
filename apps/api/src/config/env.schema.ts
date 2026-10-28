@@ -25,6 +25,17 @@ export const ApiEnvSchema = z.looseObject({
     .int()
     .positive()
     .default(5_000),
+  // Bound on opening a pool connection (TCP connect + Postgres startup). An
+  // unresponsive data box rejects the first query within this bound instead of
+  // hanging the boot forever, so the boot-failure exit path runs (#3421).
+  // pg-pool also applies it to waiting for a free pooled client: with all
+  // DATABASE_POOL_MAX clients busy, a request that waits longer fails (5xx)
+  // instead of queueing.
+  DATABASE_CONNECT_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(5_000),
 
   // Bot protection (Yandex SmartCaptcha — design §10.1, ADR-0001 open-q #7).
   // Disabled by default so the dev-stand runs without a Yandex account; the

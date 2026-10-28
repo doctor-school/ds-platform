@@ -1,9 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { readSiblingOrigin } from "@ds/storefront-shell/sibling-origin";
 
 /**
  * Residual doctor-host legal-surface checks after the shared 028 V-3 journey
- * moved to `packages/e2e` in #2255.
+ * and EARS-6 boundary moved to `packages/e2e` in #2255 and #3413.
  *
  * It rides the BACKEND-FREE tier (`playwright.ci.config.ts`) because that is
  * literally true of these routes: the documents come off the filesystem through
@@ -11,28 +10,11 @@ import { readSiblingOrigin } from "@ds/storefront-shell/sibling-origin";
  * an upstream double would be claiming a dependency this surface does not have.
  *
  * Only host-specific coverage not replaced by that journey stays here: the
- * no-Academy-exit rule, unknown-slug state and footer entry point. The footer
+ * unknown-slug state and footer entry point. The footer
  * geometry regressions below belong to the shared-shell fixes that introduced
  * them and likewise remain app-local.
  */
 test.describe("028 V-3: documents index and document page", () => {
-  test("028 EARS-6: the index carries no Academy caption and no Academy link", async ({
-    page,
-  }) => {
-    await page.goto("/documents");
-
-    await expect(page.getByTestId("documents-academy-caption")).toHaveCount(0);
-    // The shell footer link is the ONE Academy crossing REQ-24 allows, so the
-    // scope is the page body: `main` must contribute no second exit.
-    // The configured Academy origin (#3147), never a pinned production host.
-    const academy = readSiblingOrigin(process.env, "doctor");
-    await expect(page.locator(`main a[href^="${academy}"]`)).toHaveCount(0);
-    await expect(page.locator(`footer a[href^="${academy}"]`)).toHaveCount(1);
-    // The «Про согласия» explainer went with it (owner Stage-B, 2026-09-07):
-    // nothing on this surface describes or offers to withdraw a consent.
-    await expect(page.getByTestId("documents-consents-note")).toHaveCount(0);
-  });
-
   test("028 EARS-12: an unknown slug answers 404 and still renders inside the shell", async ({
     page,
   }) => {

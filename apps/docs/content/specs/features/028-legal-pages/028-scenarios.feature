@@ -8,7 +8,7 @@ Feature: 028 — Legal pages (documents and contacts)
     Given the documents list holds exactly one entry in slice 1: "Политика персональных данных и согласия"
     And the requisites line names "ООО «Ивекскон»" with ИНН, ОГРН and legal address, no licence number
 
-  @EARS-1 @EARS-2
+  @EARS-1 @EARS-2 @EARS-3 @EARS-5
   Scenario: Doctor storefront happy path — index to document and back
     Given a visitor opens the doctor storefront's "Документы и контакты" page
     When they open "Политика персональных данных и согласия"
@@ -45,16 +45,25 @@ Feature: 028 — Legal pages (documents and contacts)
     Then the link resolves to this platform's own "Политика персональных данных и согласия" document
     And no document, footer or consent line on either host references "doctor.school/index/*"
 
-  @EARS-6
+  @EARS-6 @doctor-documents-boundary
   Scenario: Doctor documents list carries no Academy exit
     Given a visitor is on the doctor storefront's documents list
     When they reach the end of the list
     Then no caption or link to the Academy is shown on the page
     And the only Academy crossing on the storefront stays the footer link
 
-  @EARS-11
+  # Contract maintenance for the existing republishing journey; this wave does
+  # not activate its unbound publishing, visual-matrix or axe steps.
+  @EARS-4 @EARS-7 @EARS-10 @EARS-11 @EARS-14 @EARS-15
   Scenario: A republished document shows the "обновлено" chip, never a version number
-    Given "Политика персональных данных и согласия" is republished with a new edition date
+    Given the published URL of "Политика персональных данных и согласия" is recorded before a text correction
+    And "Политика персональных данных и согласия" is republished with a new edition date
     When a visitor views the documents list
     Then the row for that document shows the "обновлено" chip
     And no numeric version number is shown anywhere on the row or the document page
+    And the contacts block has the host's support mailto and Telegram, ВКонтакте and RuTube chips with the exact captions and destinations approved on that host's canvas
+    When the visitor follows the recorded document URL after republication
+    Then the unchanged URL resolves to the corrected document showing its title, edition date, body, back link and remaining published documents
+    And the table of contents is sticky to the left at 1440px and collapsed above the body at 390px
+    And the index and document pages on both hosts remain legible at 390px and 1440px in light and dark themes using only design-system primitives and typography
+    And real axe scans of the index and document pages on both hosts report no violations, with a valid heading structure and links naming their destination

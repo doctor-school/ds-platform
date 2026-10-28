@@ -1,7 +1,7 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-import { formatLandOnlyReturnTarget } from "@ds/schemas";
+import { usePathname, useSearchParams } from "next/navigation";
+import { RETURN_TARGET_MODES, formatLandOnlyReturnTarget } from "@ds/schemas";
 import { Button } from "@ds/design-system/button";
 
 /**
@@ -17,15 +17,27 @@ import { Button } from "@ds/design-system/button";
  * bare-page return keeps meaning «register me». A page that is no event page —
  * home, a feed, the room, the auth doors themselves (`/login`, `/register`,
  * `/verify`, `/reset`) — carries nothing and the door lands on the surface
- * default, as it would with no target at all. No new validator and no host
+ * default, as it would with no target at all. The event page's hybrid tab
+ * (020 LD-4, `?mode=online|offline`) rides along — the codec admits exactly that
+ * one param (014 amendment 2026-10-19), so a visitor who signs in from the
+ * «онлайн» tab lands back on it (#3308). Only `mode`, only one of the two
+ * literals: any other query (`utm_*`, `?mode=ONLINE`) drops, and an unknown
+ * tab drops the tab alone, never the page. No new validator and no host
  * list: the rule is the one the landing codec already applies. (`@ds/schemas` is read directly because the §4 package graph allows
  * this package `@ds/schemas` and `@ds/design-system` only.)
  */
 export function guestLoginHref(
   loginHref: string,
   pathname: string | null | undefined,
+  mode?: string | null,
 ): string {
-  const landOnly = formatLandOnlyReturnTarget(pathname);
+  const tab =
+    mode && (RETURN_TARGET_MODES as readonly string[]).includes(mode)
+      ? `?mode=${mode}`
+      : "";
+  const landOnly = pathname
+    ? formatLandOnlyReturnTarget(`${pathname}${tab}`)
+    : null;
   if (!landOnly) return loginHref;
   const sep = loginHref.includes("?") ? "&" : "?";
   return `${loginHref}${sep}returnTo=${encodeURIComponent(landOnly)}`;
@@ -33,7 +45,8 @@ export function guestLoginHref(
 
 /**
  * The client half of the guest cluster: the chrome is mounted from a layout, so
- * only the client knows the page it is drawn on (`usePathname`).
+ * only the client knows the page it is drawn on (`usePathname`) and the tab it
+ * shows (`useSearchParams`, read for `mode` alone).
  *
  * 003 EARS-61 — a plain `<a>`, not a Next router link: the entry acts only on a
  * top-level document navigation, and a router link would prefetch it (one
@@ -47,9 +60,10 @@ export function GuestLoginLink({
   label: string;
 }) {
   const pathname = usePathname();
+  const mode = useSearchParams()?.get("mode");
   return (
     <Button asChild variant="on-primary" size="chip">
-      <a data-testid="shell-login" href={guestLoginHref(loginHref, pathname)}>
+      <a data-testid="shell-login" href={guestLoginHref(loginHref, pathname, mode)}>
         {label}
       </a>
     </Button>

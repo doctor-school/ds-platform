@@ -247,27 +247,30 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
 
   Rule: Amendment 2026-10-02 (#2537) — online and hybrid events read in the viewer's timezone; offline events keep МСК
 
-    @EARS-12 @happy
+    @EARS-12 @happy @public-event-timezones @004-online-viewer-zone
     Scenario: An online event reads in the viewer's zone after hydration
-      Given an online event starting at 19:00 МСК
-      And a viewer whose browser timezone is Asia/Yekaterinburg
-      When the viewer opens the event page
-      Then the server-rendered page shows the start as "19:00 МСК"
-      And after hydration the page shows the start as "21:00 GMT+5" without a layout shift
+      Given the published golden online event has a valid start instant
+      And the public event viewer's browser timezone is "Asia/Yekaterinburg"
+      When the viewer opens the real event page with hydration held
+      Then the server-rendered hero and signup show the independently expected Moscow date and time
+      And after real hydration the hero and signup show the independently expected viewer date and time without a layout shift
 
-    @EARS-12 @happy
+    @EARS-12 @happy @public-event-timezones @004-online-moscow-stable
     Scenario: A Moscow-time viewer sees МСК on an online event
-      Given an online event starting at 19:00 МСК
-      And a viewer whose browser timezone is Europe/Moscow
-      When the viewer opens the event page
-      Then the start reads "19:00 МСК" before and after hydration
+      Given the published golden online event has a valid start instant
+      And the public event viewer's browser timezone is "Europe/Moscow"
+      When the viewer opens the real event page with hydration held
+      Then the server-rendered hero and signup show the independently expected Moscow date and time
+      And after real hydration the hero and signup keep the independently expected Moscow date and time
 
-    @EARS-12 @happy
+    @EARS-12 @happy @public-event-timezones @004-offline-msk
     Scenario: An offline event keeps МСК for every viewer
-      Given an offline event starting at 19:00 МСК
-      And a viewer whose browser timezone is Asia/Yekaterinburg
-      When the viewer opens the event page and the listing
-      Then the start reads "19:00 МСК" on both surfaces
+      Given a real published golden offline event has a valid future start instant
+      And the public event viewer's browser timezone is "Asia/Yekaterinburg"
+      When the viewer opens the real event page with hydration held
+      Then the server-rendered hero and signup show the independently expected Moscow date and time
+      And after real hydration the hero and signup keep the independently expected Moscow date and time
+      And the same offline event's real listing card keeps the independently expected Moscow date and time
 
     @EARS-12 @happy
     Scenario: A mixed week list groups each event under the day it shows

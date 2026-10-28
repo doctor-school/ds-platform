@@ -118,7 +118,8 @@ const emptyArticles = () => Object.fromEntries(ARTICLES.map((a) => [a, 0]));
  * `grade:<role>` junior|middle|senior|mix (null = team grade), `expert:<grade>` expert hour,
  * `piece:<ID>` rub per pass, `fte:<role>`, `var:<name>`, `param:<product>:<name>`,
  * `external:<id>` rub, `plan:<product>` units per month, `scale:<article>` budget factor,
- * `market:<product>` [min, max], `price:<product>:<mode>` leading price of one product.
+ * `market:<product>` [min, max], `price:<product>:<mode>` leading price of one product,
+ * `placement:<id>:<field>` a field of the placement directory.
  */
 export function buildModel(inputs, overrides = {}) {
   // Parsed YAML is plain JSON data, so a JSON round-trip is a full deep copy.
@@ -195,6 +196,15 @@ export function buildModel(inputs, overrides = {}) {
       externals[id] = { ...e, rub, per: g?.per ?? null };
       continue;
     }
+    if (e.offline_of) {
+      const event = src.rates.offline_events?.[e.offline_of];
+      externals[id] = {
+        ...e,
+        rub: event ? middle(event.per_participant_rub) : null,
+        per: event ? "участник" : null,
+      };
+      continue;
+    }
     if (e.market_of) {
       const of = src.rates.external_costs?.[e.market_of];
       const band = of?.market_rub;
@@ -223,6 +233,8 @@ export function buildModel(inputs, overrides = {}) {
     params,
     externals,
     config: src.products,
+    placements: src.products.placements ?? {},
+    offline: src.rates.offline_events ?? null,
     hourlyCostOverride: {},
     grossOverride: {},
     hourlyOverride: {},
@@ -331,6 +343,12 @@ function applyOverride(model, key, value) {
       need(field in model.params[name] ? true : null, "parameter");
       model.params[name][field] = value;
       return;
+    case "placement": {
+      const placement = need(model.placements[name], "placement");
+      need(field in placement ? true : null, "placement field");
+      placement[field] = value;
+      return;
+    }
     case "external":
       need(model.externals[name], "external").rub = value;
       return;
@@ -1248,9 +1266,10 @@ export function unitCost(model, productName, ctx) {
         if (!applies(model, e)) continue;
         // Hours of the model leaf itself, so a rental keeps its hours when a contractor replaces
         // the leaf's own work in the product (products.yaml «Внешние затраты»).
-        const factor = e.hours_of
-          ? sum(e.hours_of.map((id) => leafLine(model, id, 1, [node.product, id], c).hours))
-          : 1;
+        const factor =
+          (e.hours_of
+            ? sum(e.hours_of.map((id) => leafLine(model, id, 1, [node.product, id], c).hours))
+            : 1) * product((e.per ?? []).map((k) => paramValue(model, node.product, k, c)));
         add(ext, e.id, node.qty * factor);
       }
     });
@@ -1390,22 +1409,6 @@ function pricePerContact(model, productName) {
   };
 }
 
-function capRevenue(model, raw) {
-  const cap = model.vars.budget_cap;
-  if (cap == null || raw <= cap) return raw;
-  if (model.vars.budget_cap_mode === "tiered")
-    return cap + (raw - cap) * (1 - model.vars.budget_tier_discount);
-  return cap;
-}
-
-/** Raw revenue whose capped value equals `target`; null when the cap keeps revenue below it. */
-function uncapRevenue(model, target) {
-  const cap = model.vars.budget_cap;
-  if (cap == null || target <= cap) return target;
-  const d = model.vars.budget_cap_mode === "tiered" ? model.vars.budget_tier_discount : 1;
-  return d < 1 ? cap + (target - cap) / (1 - d) : null;
-}
-
 function leadingPrice(mode, value, cost) {
   switch (mode) {
     case "multiplier":
@@ -1421,11 +1424,188 @@ function leadingPrice(mode, value, cost) {
   }
 }
 
+/** Cost articles the advance share applies to (cost-model-ru.md, «Рекламные места и аванс»). */
+export const MANDATORY_ARTICLES = ["payroll", "contractors", "experts", "externals"];
+/** Operation that performs a placement switch — its role prices the replacement hours. */
+const REPLACEMENT_LEAF = "A48";
+const LESSON = "урок";
+
+/** The placement directory (products.yaml placements, overrides applied) as a list. */
+export function placementDirectory(model) {
+  return Object.entries(model.placements).map(([id, p]) => ({
+    id,
+    name: p.name,
+    category: p.category,
+    examples: p.examples,
+    modes: p.modes,
+    tier: p.tier,
+    weight: p.weight,
+    creationShare: p.creation_share,
+    replacementHours: p.replacement_hours,
+    adLabel: p.ad_label,
+    basis: p.basis ?? null,
+  }));
+}
+
 /**
- * Price engine on the full unit cost (with idle): one leading mode (multiplier | markup | margin |
- * fixed), the others derived; price at plan = advance + plan contacts × price per contact; revenue,
- * margin and author share at low / plan / high contacts (budget cap applied); break-even contacts;
- * billing by month or quarter over the lead time.
+ * Offline event paid from the DS fund (rates.yaml offline_events, format = var offline_format):
+ * seats = min(max group, ⌊fund ÷ cost per participant⌋), held only at the minimum group;
+ * demand = online participants × conversion; queue = demand − seats.
+ */
+export function offlineEvent(model, fund, onlineParticipants, ctx) {
+  const c = normalizeCtx(ctx);
+  const events = model.offline;
+  const format = model.vars.offline_format;
+  const event = events?.[format];
+  if (!event) throw new Error(`offline format «${format}» is not in rates.yaml offline_events`);
+  const costPerParticipant = byCourse(event.per_participant_rub, c) * model.scale.externals;
+  const k = event.per_specimen ? event.specimens : 1;
+  const [groupMin, groupMax] = event.group.map((g) => g * k);
+  const affordable = costPerParticipant > 0 ? Math.floor(fund / costPerParticipant) : 0;
+  const held = Math.min(groupMax, affordable) >= groupMin;
+  const seats = held ? Math.min(groupMax, affordable) : 0;
+  const demand = onlineParticipants * events.conversion_online_to_offline;
+  const queue = Math.max(0, demand - seats);
+  return {
+    format,
+    label: event.label,
+    costPerParticipant,
+    groupMin,
+    groupMax,
+    fund,
+    affordable,
+    held,
+    seats,
+    spent: seats * costPerParticipant,
+    demand,
+    queue,
+    fundToClearQueue: queue * costPerParticipant,
+    fundForMinGroup: groupMin * costPerParticipant,
+  };
+}
+
+function offerLines(model, per, cost, factor, episodes, lessons, ctx) {
+  const offer = model.vars.placement_offer ?? [];
+  const hour = roleHourlyCost(model, model.leaves.get(REPLACEMENT_LEAF).role, ctx).value ?? 0;
+  const replacements = model.vars.replacements_per_term;
+  return offer.map(({ placement, mode }) => {
+    const p = model.placements[placement];
+    if (!p) throw new Error(`placement_offer: unknown placement «${placement}»`);
+    if (!p.modes.includes(mode))
+      throw new Error(`placement_offer: «${placement}» allows ${p.modes.join("|")}, not ${mode}`);
+    const creationCost = p.creation_share * cost;
+    const dynamic = mode === "dynamic";
+    const rubPerContact = dynamic && per != null ? per * p.weight : null;
+    const rubPerDoctor = rubPerContact == null ? null : rubPerContact * lessons;
+    const replacementCost = byCourse(p.replacement_hours, ctx) * hour;
+    const cap = model.vars.budget_cap;
+    return {
+      placement,
+      name: p.name,
+      category: p.category,
+      mode,
+      tier: p.tier,
+      weight: p.weight,
+      creationShare: p.creation_share,
+      creationCost,
+      fixedSum: dynamic ? null : creationCost * factor,
+      rubPerContact,
+      lessons,
+      rubPerDoctor,
+      replacementHours: byCourse(p.replacement_hours, ctx),
+      replacementCost,
+      episodes,
+      replacements: dynamic ? replacements * episodes : 0,
+      replacementTotal: dynamic ? replacements * episodes * replacementCost : 0,
+      replacementFlag: dynamic && episodes * replacementCost > creationCost,
+      switchContacts: cap != null && rubPerDoctor ? cap / rubPerDoctor : null,
+    };
+  });
+}
+
+/**
+ * Contact revenue of the dynamic placements at `contacts` doctors: per placement
+ * min(limit, doctors × lessons × ₽ per contact) — the limit holds on the summed billing of the term.
+ */
+function billing(model, lines, contacts) {
+  const cap = model.vars.budget_cap;
+  const billed = {};
+  const unbilledContacts = {};
+  for (const l of lines) {
+    if (l.rubPerDoctor == null) continue;
+    const raw = contacts * l.rubPerDoctor;
+    billed[l.placement] = cap == null ? raw : Math.min(cap, raw);
+    unbilledContacts[l.placement] =
+      l.switchContacts == null ? 0 : Math.max(0, contacts - l.switchContacts);
+  }
+  return { billed, unbilledContacts, gross: sum(Object.values(billed)) };
+}
+
+/** Doctors at which advance + net contact revenue covers `target`; null when the limits never get there. */
+function contactsFor(model, lines, target, keep) {
+  if (target <= 0) return 0;
+  const dyn = lines.filter((l) => l.rubPerDoctor);
+  if (!dyn.length) return null;
+  const cap = model.vars.budget_cap;
+  if (cap != null && keep * cap * dyn.length < target - 1e-9) return null;
+  // Piecewise linear: between switch points the slope is keep × Σ ₽ per contact of unswitched lines.
+  const points = [...new Set(dyn.map((l) => l.switchContacts ?? Infinity))].sort((a, b) => a - b);
+  let from = 0;
+  let reached = 0;
+  for (const to of points) {
+    const slope = keep * sum(dyn.filter((l) => (l.switchContacts ?? Infinity) > from).map((l) => l.rubPerDoctor));
+    if (slope > 0) {
+      if (reached + slope * (to - from) >= target - 1e-9) return from + (target - reached) / slope;
+      reached += slope * (to - from);
+    }
+    from = to;
+  }
+  return null;
+}
+
+/** Scenario A of the BBM canon: R = r·P, x = (P − R) ÷ W; investors a·x (return + BBM fund), author b·x + R. */
+function distribute(model, profit) {
+  const v = model.vars;
+  const W = v.share_investors + v.share_author + v.share_pool + v.share_bbm;
+  const royalty = v.royalty * profit;
+  const x = W ? (profit - royalty) / W : 0;
+  const investors = v.share_investors * x;
+  return {
+    royalty,
+    x,
+    shares: {
+      investors,
+      investorReturn: investors * v.investor_return_share,
+      bbmDevelopment: investors * (1 - v.investor_return_share),
+      author: v.share_author * x + royalty,
+      pool: v.share_pool * x,
+      bbm: v.share_bbm * x,
+    },
+  };
+}
+
+/**
+ * Markup, margin and multiplier of the plan outcome — the same one «Цена» and «Прибыль» show. The
+ * price splits into outlay (total cost with replacements + DS fund) and profit, so the ratios are
+ * taken against that outlay: multiplier = 1 + markup, and a loss gives a negative margin.
+ */
+export function planRatios(price, totalCost, plan) {
+  const outlay = totalCost + plan.dsFund;
+  return {
+    outlay,
+    markup: outlay ? plan.margin / outlay : null,
+    margin: price ? plan.margin / price : null,
+    multiplier: outlay ? price / outlay : null,
+  };
+}
+
+/**
+ * Price engine (cost-model-ru.md, «Цена, контакты и выручка»): the offer is a set of placements —
+ * fixed ones are one-off sums (creation share × unit cost × the leading price factor) paid in the
+ * advance; dynamic ones are paid per contact (contact price × weight) — doctors × lessons of the
+ * product, since the placement sits in every lesson — up to the hard partner limit and carry 2 replacements per term as our cost. Advance = Σ fixed + advance share × mandatory part;
+ * investor contribution = total cost − advance. Gross contact revenue → DS fund → lesson P&L →
+ * payback of the investor → profit-sharing 4/2/1 (+d) with royalty; an offline event from the fund.
  */
 export function priceProduct(model, productName, ctx) {
   const c = normalizeCtx(ctx);
@@ -1436,68 +1616,115 @@ export function priceProduct(model, productName, ctx) {
       mode: model.vars.price_mode,
       value: model.vars.price_value,
     };
-    const price = leadingPrice(lead.mode, lead.value, cost);
+    const leading = leadingPrice(lead.mode, lead.value, cost);
     const derived = {
-      multiplier: price / cost,
-      markup: price / cost - 1,
-      margin: (price - cost) / price,
-      fixed: price,
+      multiplier: leading / cost,
+      markup: leading / cost - 1,
+      margin: (leading - cost) / leading,
+      fixed: leading,
     };
-    const pc = pricePerContact(model, productName);
-    const per = pc.value ?? 0;
-    const [low, plan, high] = model.vars.contacts;
-    const advance = price - plan * per;
+    const lessonUnits = sum(u.units.filter((x) => x.product === LESSON).map((x) => x.qty));
+    // A switch re-generates every lesson episode that carries the placement; a non-lesson product is one episode.
+    const episodes = lessonUnits || 1;
+    // cost-model-ru.md, «Цена, контакты и выручка»: a compound product without its own contact type
+    // carries the dynamic placement in every lesson — a doctor gives it one lesson view per lesson.
+    const ownType = model.products[productName]?.contact_type != null;
+    const lessons = !ownType && lessonUnits ? lessonUnits : 1;
+    const pc = pricePerContact(model, ownType || !lessonUnits ? productName : LESSON);
+    const offer = offerLines(model, pc.value, cost, derived.multiplier, episodes, lessons, c);
     const flags = [];
-    if (advance < 0)
-      flags.push("аванс отрицательный: оплата за контакты по плану выше цены");
+    for (const l of offer)
+      if (l.replacementFlag)
+        flags.push(`смена места «${l.name}» (${l.placement}) дороже доли его создания`);
+    if (model.vars.placement_term_quarters < 1)
+      flags.push("срок динамического размещения меньше квартала");
+    const replacementCost = sum(offer.map((l) => l.replacementTotal));
+    const totalCost = cost + replacementCost;
+    const fixedSum = sum(offer.map((l) => l.fixedSum ?? 0));
+    const mandatoryBy = Object.fromEntries(MANDATORY_ARTICLES.map((a) => [a, u.articles[a]]));
+    const mandatory = { ...mandatoryBy, total: sum(Object.values(mandatoryBy)) };
+    const advanceShare = model.vars.advance_share;
+    const advance = fixedSum + advanceShare * mandatory.total;
+    const investorContribution = Math.max(0, totalCost - advance);
+    const keep = 1 - model.vars.ds_fund_share;
+    const [low, plan, high] = model.vars.contacts;
     const outcome = (contacts) => {
-      const revenue = capRevenue(model, advance + contacts * per);
-      const margin = revenue - cost;
+      const b = billing(model, offer, contacts);
+      const dsFund = b.gross * model.vars.ds_fund_share;
+      const net = b.gross - dsFund;
+      const revenue = advance + net;
+      const margin = revenue - totalCost;
+      const profit = Math.max(0, margin);
+      const online = model.vars.offline_online_participants ?? contacts;
       return {
         contacts,
+        billedContacts: contacts * lessons,
+        ...b,
+        dsFund,
+        net,
         revenue,
         margin,
-        marginShare: revenue ? margin / revenue : null,
-        authorShare: Math.max(0, margin) * model.vars.author_share,
+        // margin ÷ the price at these contacts — the same «маржа» as the plan KPI (planRatios)
+        marginShare: advance + b.gross ? margin / (advance + b.gross) : null,
+        payback: Math.min(investorContribution, net),
+        investorShortfall: Math.max(0, investorContribution - net),
+        profit,
+        ...distribute(model, profit),
+        offline: offlineEvent(model, dsFund, online, c),
       };
     };
-    const rawForCost = uncapRevenue(model, cost);
-    let breakEvenContacts;
-    if (rawForCost == null) breakEvenContacts = null;
-    else if (per > 0) breakEvenContacts = Math.max(0, (rawForCost - advance) / per);
-    else breakEvenContacts = capRevenue(model, advance) >= cost ? 0 : null;
+    const outcomes = { low: outcome(low), plan: outcome(plan), high: outcome(high) };
+    const breakEvenContacts = contactsFor(model, offer, totalCost - advance, keep);
+    const switches = offer.map((l) => l.switchContacts).filter((s) => s != null);
     const leadDays = leadTime(model, productName, c);
+    // Contacts are billed over the placement term after release, one invoice per billing period.
     const periodMonths = model.vars.billing_period === "quarter" ? 3 : 1;
-    const leadMonths = leadDays == null ? 0 : leadDays / model.vars.working_days_per_month;
-    const invoices = Math.max(1, Math.ceil(leadMonths / periodMonths));
-    const planOutcome = outcome(plan);
+    const termMonths = model.vars.placement_term_quarters * 3;
+    const invoices = Math.max(1, Math.ceil(termMonths / periodMonths));
+    const dynamicCount = offer.filter((l) => l.rubPerContact).length;
     return {
       product: productName,
       ctx: c,
       cost,
+      replacementCost,
+      episodes,
+      lessons,
+      totalCost,
       mode: lead.mode,
       value: lead.value,
-      price,
       derived,
-      advance,
-      resultAtPlan: plan * per,
-      advanceShare: price ? advance / price : null,
       pricePerContact: pc,
+      offer,
+      rubPerContact: sum(offer.map((l) => l.rubPerContact ?? 0)),
+      rubPerDoctor: sum(offer.map((l) => l.rubPerDoctor ?? 0)),
+      fixedSum,
+      mandatory,
+      advanceShare,
+      advance,
+      investorContribution,
+      investorRecoverContacts: breakEvenContacts,
+      price: advance + outcomes.plan.gross,
+      ratios: planRatios(advance + outcomes.plan.gross, totalCost, outcomes.plan),
       contacts: { low, plan, high },
-      outcomes: { low: outcome(low), plan: planOutcome, high: outcome(high) },
+      outcomes,
       breakEvenContacts,
       budgetCap: {
         value: model.vars.budget_cap,
-        mode: model.vars.budget_cap_mode,
-        discount: model.vars.budget_tier_discount,
+        switchContacts: switches.length ? Math.min(...switches) : null,
+        partnerTotal:
+          model.vars.budget_cap == null ? null : advance + dynamicCount * model.vars.budget_cap,
+      },
+      term: {
+        quarters: model.vars.placement_term_quarters,
+        replacements: model.vars.replacements_per_term,
       },
       leadDays,
       billing: {
         period: model.vars.billing_period,
         periodMonths,
-        leadMonths,
+        termMonths,
         invoices,
-        perInvoice: planOutcome.revenue / invoices,
+        perInvoice: outcomes.plan.gross / invoices,
       },
       flags,
     };
@@ -1585,18 +1812,18 @@ export function sensitivity(model, productName, ctx) {
   return { base, drivers };
 }
 
-/** Break-even series: contacts from 0 to past max(high, break-even) → revenue vs cost. */
+/**
+ * Break-even series: contacts from 0 to past max(high, break-even) → gross contact revenue (partner
+ * limit applied), lesson P&L revenue = advance + gross after the DS fund, and the total cost.
+ */
 export function breakEvenSeries(model, productName, ctx, points = 21) {
   const p = priceProduct(model, productName, ctx);
-  const per = p.pricePerContact.value ?? 0;
   const top = Math.max(p.contacts.high, (p.breakEvenContacts ?? 0) * 1.25) || 1;
+  const keep = 1 - model.vars.ds_fund_share;
   return Array.from({ length: points }, (_, i) => {
     const contacts = (top * i) / (points - 1);
-    return {
-      contacts,
-      revenue: capRevenue(model, p.advance + contacts * per),
-      cost: p.cost,
-    };
+    const { gross } = billing(model, p.offer, contacts);
+    return { contacts, gross, revenue: p.advance + gross * keep, cost: p.totalCost };
   });
 }
 
@@ -1669,15 +1896,20 @@ export function budgetFit(model, ctx) {
 }
 
 /**
- * «Золотая цена»: from the price floor (full unit cost — zero margin) to the ceiling (the lower of
- * the market reference max and the budget cap); null when the floor is above the ceiling.
+ * «Золотая цена»: from the price floor (zero margin: the DS fund comes off the contact billing
+ * first, the advance is outside the fund base, so P = (S′ − f·advance) ÷ (1 − f), never below the
+ * advance itself) to the ceiling
+ * (the lower of the market reference max and the most the partner pays under its limit: advance +
+ * limit × dynamic placements); null when the floor is above the ceiling.
  */
 export function goldenPrice(model, productName, ctx) {
   const c = normalizeCtx(ctx);
   const p = priceProduct(model, productName, c);
   const ref = model.market[productName] ?? model.marketRefs[productName]?.rub;
-  const ceilings = [ref?.[1], model.vars.budget_cap].filter((x) => x != null);
-  const min = p.cost;
+  const ceilings = [ref?.[1], p.budgetCap.partnerTotal].filter((x) => x != null);
+  const f = model.vars.ds_fund_share;
+  const zeroMargin = f < 1 ? (p.totalCost - f * p.advance) / (1 - f) : Infinity;
+  const min = p.advance >= p.totalCost ? p.advance : zeroMargin;
   const max = ceilings.length ? Math.min(...ceilings) : null;
   const band = max != null && min <= max ? [min, max] : null;
   return {

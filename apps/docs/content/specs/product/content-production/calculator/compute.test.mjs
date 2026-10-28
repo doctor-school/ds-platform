@@ -33,6 +33,8 @@ import {
   budgetFit,
   goldenPrice,
   computeProduct,
+  placementDirectory,
+  offlineEvent,
 } from "./compute.mjs";
 
 const pkg = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -71,15 +73,15 @@ test("loopRounds: script rounds derive from review and pharma stage 1 (rounds_fr
   assert.equal(loopRounds(model, null, U), 1);
 });
 
-test("productHours: lesson direct hours of line A31 = 77–152,5 per pass (effort-draft-ru.md)", () => {
+test("productHours: lesson direct hours of line A31 = 77,5–155,5 per pass (effort-draft-ru.md)", () => {
   const onePass = buildModel(inputs, allRoundsOne);
   const a31 = (m, c) =>
     productHours(m, "урок", c)
       .lines.filter((line) => line.class === "direct" && A31.test(line.leaf))
       .reduce((sum, line) => sum + line.hours, 0);
-  near(a31(onePass, at("smooth")), 77);
-  near(a31(onePass, at("usual")), 114.75);
-  near(a31(onePass, at("rework")), 152.5);
+  near(a31(onePass, at("smooth")), 77.5);
+  near(a31(onePass, at("usual")), 116.25);
+  near(a31(onePass, at("rework")), 155.5);
   for (const line of productHours(model, "урок", U).lines)
     near(line.hours, line.hoursPerPass * line.rounds * line.qty);
 });
@@ -87,7 +89,7 @@ test("productHours: lesson direct hours of line A31 = 77–152,5 per pass (effor
 test("productHours: Медредактор-сценарист on a lesson = 81,75 h at «обычно» (capacity-ru.md)", () => {
   const { directByRole } = productHours(model, "урок", U);
   near(directByRole["Медредактор-сценарист"], 81.75);
-  near(directByRole["Медиа-круг — монтажёр"], 28);
+  near(directByRole["Медиа-круг — монтажёр"], 29.5);
   near(directByRole["Аккаунт"], 5.875);
 });
 
@@ -130,14 +132,14 @@ test("requiredFte: one lesson a week needs ≈ 2,44 FTE Медредактор-�
   assert.equal(Math.round(fte * 100) / 100, 2.44);
 });
 
-test("leadTime: lesson 90,5, episode ≈ 19, webinar 34,5, course design 61 working days", () => {
-  near(leadTime(model, "урок", U), 90.5);
+test("leadTime: lesson 91,25, episode ≈ 19, webinar 34,5, course design 61 working days", () => {
+  near(leadTime(model, "урок", U), 91.25);
   near(leadTime(model, "эпизод подкаста", U), 19.25);
   near(leadTime(model, "вебинар", U), 34.5);
   near(leadTime(model, "проектирование курса", U), 61);
   const takt = 21 / teamCapacity(model, "урок", U).perMonth;
-  near(leadTime(model, "модуль", U), 90.5 + 5 * takt);
-  near(leadTime(model, "курс", U), 61 + 90.5 + 17 * takt);
+  near(leadTime(model, "модуль", U), 91.25 + 5 * takt);
+  near(leadTime(model, "курс", U), 61 + 91.25 + 17 * takt);
 });
 
 // ── 2661-1 Engagement per role ──
@@ -285,7 +287,7 @@ test("2661-4: experts are priced by grade × hours (rates.yaml experts), never a
   const g = inputs.rates.experts.grades;
   near(
     roleHourlyCost(model, "Пул экспертов — амбассадор", U).value,
-    mid(g["д.м.н."].per_hour_rub),
+    mid(g["лидер мнений"].per_hour_rub),
     1e-9,
   );
   near(
@@ -293,10 +295,10 @@ test("2661-4: experts are priced by grade × hours (rates.yaml experts), never a
     mid(g["к.м.н."].per_hour_rub),
     1e-9,
   );
-  const kol = buildModel(inputs, { "var:expert_grade_author": "лидер мнений" });
+  const kol = buildModel(inputs, { "var:expert_grade_author": "д.м.н." });
   near(
     roleHourlyCost(kol, "Пул экспертов — амбассадор", U).value,
-    mid(g["лидер мнений"].per_hour_rub),
+    mid(g["д.м.н."].per_hour_rub),
     1e-9,
   );
   assert.equal(roleHourlyCost(model, "Пул экспертов — спикер", U).article, "experts");
@@ -478,13 +480,24 @@ test("2661-2: «Продуктовая команда» hours are exposed per me
 });
 
 test("2661-5: a black box (decomposition: pending) is a «не задано: подпроцесс не раскрыт» line", () => {
-  const school = unitCost(model, "практическая школа", U);
-  const line = school.trail.find((l) => l.leaf === "A338");
+  const lesson = unitCost(buildModel(inputs, { "var:extended_campaign": true }), "урок", U);
+  const line = lesson.trail.find((l) => l.leaf === "A47");
   assert.equal(line.class, "pending");
   assert.equal(line.cost, null);
   assert.equal(line.name, PENDING_LINE);
-  assert.ok(school.flags.some((f) => f.startsWith(PENDING_LINE) && f.includes("A338")));
+  assert.ok(lesson.flags.some((f) => f.startsWith(PENDING_LINE) && f.includes("A47")));
   assert.ok(!unitCost(model, "вебинар", U).trail.some((l) => l.class === "pending"));
+});
+
+test("3068-5: A338 of the practical school is costed per participant (rates.yaml offline_events.school)", () => {
+  const school = unitCost(model, "практическая школа", U);
+  assert.ok(!school.trail.some((l) => l.class === "pending"));
+  assert.ok(!school.flags.some((f) => f.includes("A338")));
+  const line = school.externals.find((e) => e.id === "offline_school_participant");
+  near(line.rub, mid(inputs.rates.offline_events.school.per_participant_rub), 1e-9);
+  near(line.qty, mid(inputs.products.products["практическая школа"].parameters.участники.draft), 1e-9);
+  near(line.cost, line.rub * line.qty, 1e-6);
+  assert.equal(line.status, "задано");
 });
 
 // ── 2661-6 Tools and infrastructure pool ──
@@ -550,110 +563,335 @@ test("2661-7: extended campaign = cost per contact × planned contacts, its own 
   assert.ok(!base.externals.some((e) => e.id === "extended_campaign"));
 });
 
-// ── 2661-8 Price engine ──
+// ── 2661-8 / 3068 Price engine: placements, advance, distribution ──
 
-test("2661-8: one leading price mode, the other three derived", () => {
-  const p = priceProduct(model, "курс", U);
-  near(p.price, p.cost * 1.3, 1e-6);
+const pv = inputs.products.variables;
+const dir = inputs.products.placements;
+const rampHour = (m, c = U) =>
+  roleHourlyCost(m, "Медиа-круг — монтажёр", c).value;
+
+test("3068-7: placement directory — five categories, owner weights, modes, tier, replacement hours", () => {
+  const ids = placementDirectory(model).map((p) => p.id);
+  assert.deepEqual(ids, Object.keys(dir));
+  const categories = new Set(placementDirectory(model).map((p) => p.category));
+  assert.equal(categories.size, 5);
+  const w = Object.fromEntries(placementDirectory(model).map((p) => [p.id, p.weight]));
+  assert.deepEqual(
+    [w.background, w.close_up, w.plot_branch, w.science_inn, w.extra_star, w.extra_download, w.extra_webinar_block],
+    [0.3, 0.6, 1.0, 0.5, 0.8, 0.4, 1.0],
+  );
+  for (const p of placementDirectory(model)) {
+    for (const f of ["id", "name", "category", "examples", "modes", "tier", "weight", "creationShare", "replacementHours", "adLabel"])
+      assert.ok(p[f] != null, `${p.id}.${f}`);
+    assert.ok(p.modes.every((m) => m === "fixed" || m === "dynamic"));
+    assert.ok(["anchor", "niche", "both"].includes(p.tier));
+  }
+  assert.deepEqual(dir.science_inn.modes, ["fixed"]);
+  // the directory is editable through overrides like any other variable
+  const edited = buildModel(inputs, { "placement:close_up:weight": 0.9 });
+  assert.equal(placementDirectory(edited).find((p) => p.id === "close_up").weight, 0.9);
+  assert.throws(() => buildModel(inputs, { "placement:nope:weight": 1 }), /placement/);
+});
+
+test("3068-1: offer — fixed placement = its creation share × leading price factor; dynamic = contact price × weight", () => {
+  const p = priceProduct(model, "урок", U);
   near(p.derived.multiplier, 1.3, 1e-9);
   near(p.derived.markup, 0.3, 1e-9);
-  near(p.derived.margin, 0.3 / 1.3, 1e-9);
-  near(p.derived.fixed, p.price, 1e-9);
+  const offerIds = pv.placement_offer.draft.map((o) => o.placement);
+  assert.deepEqual(p.offer.map((l) => l.placement), offerIds);
+  const science = p.offer.find((l) => l.placement === "science_inn");
+  assert.equal(science.mode, "fixed");
+  near(science.creationCost, dir.science_inn.creation_share * p.cost, 1e-6);
+  near(science.fixedSum, science.creationCost * 1.3, 1e-6);
+  assert.equal(science.rubPerContact, null);
+  near(p.fixedSum, science.fixedSum, 1e-6);
+  const branch = p.offer.find((l) => l.placement === "plot_branch");
+  assert.equal(branch.fixedSum, null);
+  near(branch.rubPerContact, p.pricePerContact.value * 1.0, 1e-9);
+  const close = p.offer.find((l) => l.placement === "close_up");
+  near(close.rubPerContact, p.pricePerContact.value * 0.6, 1e-9);
+  near(p.rubPerContact, p.pricePerContact.value * 1.6, 1e-9);
+  // a margin leading mode changes the factor of fixed sums
   const margin = priceProduct(
     buildModel(inputs, { "var:price_mode": "margin", "var:price_value": 0.25 }),
-    "курс",
+    "урок",
     U,
   );
-  near(margin.price, margin.cost / 0.75, 1e-6);
-  const fixed = priceProduct(
-    buildModel(inputs, { "var:price_mode": "fixed", "var:price_value": 9e6 }),
-    "курс",
-    U,
-  );
-  assert.equal(fixed.price, 9e6);
-  near(fixed.derived.multiplier, 9e6 / fixed.cost, 1e-9);
-  const own = priceProduct(buildModel(inputs, { "price:курс:multiplier": 2 }), "курс", U);
-  near(own.price, own.cost * 2, 1e-6);
+  near(margin.offer.find((l) => l.placement === "science_inn").fixedSum, dir.science_inn.creation_share * margin.cost / 0.75, 1e-6);
+  const own = priceProduct(buildModel(inputs, { "price:урок:multiplier": 2 }), "урок", U);
   assert.equal(own.mode, "multiplier");
+  near(own.fixedSum, dir.science_inn.creation_share * own.cost * 2, 1e-6);
+  // a mode the directory does not allow, or an unknown placement, is refused
+  assert.throws(
+    () => priceProduct(buildModel(inputs, { "var:placement_offer": [{ placement: "science_inn", mode: "dynamic" }] }), "урок", U),
+    /science_inn/,
+  );
+  assert.throws(
+    () => priceProduct(buildModel(inputs, { "var:placement_offer": [{ placement: "nope", mode: "fixed" }] }), "урок", U),
+    /nope/,
+  );
 });
 
-test("2661-8: advance + result split, contacts low / plan / high, break-even, author share, billing", () => {
-  const p = priceProduct(model, "курс", U);
-  const band = inputs.rates.doctor_contacts.price_per_contact_by_audience_size[1];
-  const weight = mid(inputs.rates.doctor_contacts.contact_types.series_view.weight);
-  near(p.pricePerContact.value, mid(band.rub_per_contact) * weight, 1e-9);
-  assert.equal(p.pricePerContact.type, "series_view");
-  const [lo, plan, hi] = inputs.products.variables.contacts.draft;
-  near(p.advance, p.price - plan * p.pricePerContact.value, 1e-6);
-  near(p.outcomes.plan.revenue, p.price, 1e-6);
-  near(p.outcomes.low.revenue, p.advance + lo * p.pricePerContact.value, 1e-6);
-  near(p.outcomes.high.revenue, p.advance + hi * p.pricePerContact.value, 1e-6);
-  near(p.outcomes.plan.margin, p.price - p.cost, 1e-6);
-  near(p.outcomes.plan.authorShare, 0.1 * (p.price - p.cost), 1e-6);
-  // break-even never goes below zero contacts: an advance above the cost breaks even at 0
-  near(
-    p.breakEvenContacts,
-    Math.max(0, (p.cost - p.advance) / p.pricePerContact.value),
-    1e-6,
-  );
-  const thin = priceProduct(buildModel(inputs, { "var:price_value": 0.05 }), "курс", U);
-  assert.ok(thin.advance < thin.cost);
-  near(
-    thin.breakEvenContacts,
-    (thin.cost - thin.advance) / thin.pricePerContact.value,
-    1e-6,
-  );
-  assert.ok(thin.breakEvenContacts > 0);
-  // budget cap: hard by default, tiered discount as an option
-  const hard = priceProduct(buildModel(inputs, { "var:budget_cap": p.price }), "курс", U);
-  near(hard.outcomes.high.revenue, p.price, 1e-6);
-  const tiered = priceProduct(
-    buildModel(inputs, { "var:budget_cap": p.price, "var:budget_cap_mode": "tiered" }),
-    "курс",
+test("3068-2: advance = Σ fixed placements + advance share × mandatory part; investor contribution and contacts to recover it", () => {
+  const u = unitCost(model, "урок", U);
+  const p = priceProduct(model, "урок", U);
+  const a = u.articles;
+  near(p.mandatory.total, a.payroll + a.contractors + a.experts + a.externals, 1e-6);
+  assert.equal(p.advanceShare, pv.advance_share.draft);
+  near(p.advance, p.fixedSum, 1e-6);
+  near(p.investorContribution, Math.max(0, p.totalCost - p.advance), 1e-6);
+  near(p.investorRecoverContacts, p.breakEvenContacts, 1e-9);
+  const half = priceProduct(buildModel(inputs, { "var:advance_share": 0.5 }), "урок", U);
+  near(half.advance, half.fixedSum + 0.5 * half.mandatory.total, 1e-6);
+  assert.ok(half.investorContribution < p.investorContribution);
+  const full = priceProduct(
+    buildModel(inputs, { "var:advance_share": 1, "var:placement_offer": [{ placement: "plot_branch", mode: "fixed" }, { placement: "close_up", mode: "fixed" }] }),
+    "урок",
     U,
   );
-  near(
-    tiered.outcomes.high.revenue,
-    p.price + (p.outcomes.high.revenue - p.price) * 0.5,
-    1e-6,
-  );
-  // billing period
-  const months = p.leadDays / 21;
-  assert.equal(p.billing.invoices, Math.max(1, Math.ceil(months)));
-  const quarter = priceProduct(buildModel(inputs, { "var:billing_period": "quarter" }), "курс", U);
-  assert.equal(quarter.billing.invoices, Math.max(1, Math.ceil(months / 3)));
-  near(quarter.billing.perInvoice, p.price / quarter.billing.invoices, 1e-6);
-  // a product without a contact type is paid by advance only
+  // tools are not a mandatory part: the investor still funds them unless fixed sums cover them
+  near(full.investorContribution, Math.max(0, full.totalCost - full.advance), 1e-6);
+  // a product without a contact type is paid by the advance only
   const deal = priceProduct(model, "сделка", U);
   assert.equal(deal.pricePerContact.value, null);
-  near(deal.advance, deal.price, 1e-9);
+  assert.equal(deal.outcomes.plan.gross, 0);
 });
 
-test("2661-8: break-even above a tiered budget cap is solved on the discounted revenue", () => {
+test("3068-3: gross contact revenue → DS fund → lesson P&L → payback → 4/2/1 (+d) with 5 % royalty", () => {
   const p = priceProduct(model, "урок", U);
-  const per = p.pricePerContact.value;
-  const cap = p.advance + 0.5 * (p.cost - p.advance);
-  const tiered = priceProduct(
-    buildModel(inputs, { "var:budget_cap": cap, "var:budget_cap_mode": "tiered" }),
-    "урок",
+  const [lo, plan, hi] = pv.contacts.draft;
+  for (const [level, contacts] of [["low", lo], ["plan", plan], ["high", hi]]) {
+    const o = p.outcomes[level];
+    assert.equal(o.contacts, contacts);
+    near(o.gross, contacts * p.rubPerContact, 1e-6);
+    near(o.dsFund, o.gross * pv.ds_fund_share.draft, 1e-6);
+    near(o.net, o.gross - o.dsFund, 1e-6);
+    near(o.revenue, p.advance + o.net, 1e-6);
+    near(o.margin, o.revenue - p.totalCost, 1e-6);
+    near(o.payback, Math.min(p.investorContribution, o.net), 1e-6);
+    near(o.profit, Math.max(0, o.margin), 1e-6);
+    const P = o.profit;
+    const R = 0.05 * P;
+    const x = (P - R) / 7;
+    near(o.royalty, R, 1e-6);
+    near(o.x, x, 1e-9);
+    near(o.shares.investors, 4 * x, 1e-6);
+    near(o.shares.investorReturn, 4 * x * 0.25, 1e-6);
+    near(o.shares.bbmDevelopment, 4 * x * 0.75, 1e-6);
+    near(o.shares.author, 2 * x + R, 1e-6);
+    near(o.shares.pool, x, 1e-6);
+    near(o.shares.bbm, 0, 1e-9);
+    near(o.shares.investors + o.shares.author + o.shares.pool + o.shares.bbm, P, 1e-6);
+  }
+  // price at plan = what the partner pays at plan contacts
+  near(p.price, p.advance + p.outcomes.plan.gross, 1e-6);
+  // d = 1 takes a share for BBM
+  const d = priceProduct(buildModel(inputs, { "var:share_bbm": 1, "var:contacts": [1e5, 2e5, 3e5] }), "урок", U);
+  const o = d.outcomes.plan;
+  assert.ok(o.profit > 0);
+  near(o.shares.bbm, (o.profit * 0.95) / 8, 1e-6);
+  // break-even: advance + net ≥ total cost
+  const be = p.breakEvenContacts;
+  near(p.advance + be * p.rubPerContact * (1 - pv.ds_fund_share.draft), p.totalCost, 1e-3);
+});
+
+test("3068-4: placement replacement — media-circle hours × 2 per term inside the dynamic placement cost, never billed", () => {
+  const p = priceProduct(model, "урок", U);
+  const hour = rampHour(model);
+  let total = 0;
+  for (const l of p.offer) {
+    if (l.mode !== "dynamic") {
+      assert.equal(l.replacementTotal, 0);
+      continue;
+    }
+    const hours = mid(dir[l.placement].replacement_hours);
+    near(l.replacementCost, hours * hour, 1e-6);
+    assert.equal(l.replacements, 2);
+    near(l.replacementTotal, 2 * l.replacementCost, 1e-6);
+    assert.equal(l.replacementFlag, l.replacementCost > l.creationCost);
+    total += l.replacementTotal;
+  }
+  near(p.replacementCost, total, 1e-6);
+  near(p.totalCost, p.cost + total, 1e-6);
+  // a switch re-generates every lesson episode of the product: a course = 18 lessons
+  const course = priceProduct(model, "курс", U);
+  assert.equal(course.episodes, 18);
+  near(course.replacementCost, 18 * p.replacementCost, 1e-6);
+  const cb = course.offer.find((l) => l.placement === "plot_branch");
+  assert.equal(cb.replacementFlag, 18 * cb.replacementCost > cb.creationCost);
+  assert.equal(priceProduct(model, "вебинар", U).episodes, 1);
+  // not billed: the partner's price is unchanged by the replacement cost
+  const pricey = priceProduct(buildModel(inputs, { "placement:plot_branch:replacement_hours": [100, 100] }), "урок", U);
+  near(pricey.outcomes.plan.gross, p.outcomes.plan.gross, 1e-6);
+  const branch = pricey.offer.find((l) => l.placement === "plot_branch");
+  assert.equal(branch.replacementFlag, true);
+  assert.ok(pricey.flags.some((f) => f.includes("plot_branch") || f.includes(dir.plot_branch.name)));
+});
+
+test("3068-5: offline event from the DS fund — seats = min(group, fund ÷ cost), held at the minimum group, queue", () => {
+  const school = inputs.rates.offline_events.school;
+  const cost = mid(school.per_participant_rub);
+  const conv = inputs.rates.offline_events.conversion_online_to_offline;
+  const ev = offlineEvent(model, 1.3e6, 100, U);
+  assert.equal(ev.format, "school");
+  near(ev.costPerParticipant, cost, 1e-9);
+  assert.equal(ev.seats, Math.min(school.group[1], Math.floor(1.3e6 / cost)));
+  assert.equal(ev.held, true);
+  assert.equal(ev.held, ev.seats >= school.group[0]);
+  near(ev.demand, 100 * conv, 1e-9);
+  near(ev.queue, Math.max(0, ev.demand - ev.seats), 1e-9);
+  near(ev.fundToClearQueue, ev.queue * cost, 1e-6);
+  // below the minimum group the event is not held and has no seats
+  const small = offlineEvent(model, cost * (school.group[0] - 1), 100, U);
+  assert.equal(small.held, false);
+  assert.equal(small.seats, 0);
+  assert.equal(small.affordable, school.group[0] - 1);
+  near(small.fundForMinGroup, school.group[0] * cost, 1e-6);
+  // a large fund is capped by the group
+  assert.equal(offlineEvent(model, 1e9, 100, U).seats, school.group[1]);
+  // cadaver course — group per specimen × specimens
+  const cad = inputs.rates.offline_events.cadaver;
+  const c = offlineEvent(buildModel(inputs, { "var:offline_format": "cadaver" }), 1e9, 100, U);
+  assert.equal(c.seats, cad.group[1] * cad.specimens);
+  // course axis moves the per-participant cost to the range ends
+  near(offlineEvent(model, 1e6, 100, at("smooth")).costPerParticipant, school.per_participant_rub[0], 1e-9);
+  // the price outcome carries the event funded by its DS fund
+  const p = priceProduct(model, "урок", U);
+  const o = p.outcomes.plan;
+  near(o.offline.fund, o.dsFund, 1e-6);
+  near(o.offline.demand, o.contacts * conv, 1e-9);
+});
+
+test("3068-6: hard partner limit — contacts above it are not billed; the placement switches at a contact count", () => {
+  const p = priceProduct(model, "урок", U);
+  const branch = p.offer.find((l) => l.placement === "plot_branch");
+  const cap = branch.rubPerContact * 500;
+  const capped = priceProduct(buildModel(inputs, { "var:budget_cap": cap }), "урок", U);
+  const b = capped.offer.find((l) => l.placement === "plot_branch");
+  near(b.switchContacts, 500, 1e-9);
+  const o = capped.outcomes.plan; // 1 000 contacts
+  near(o.billed.plot_branch, cap, 1e-6);
+  near(o.unbilledContacts.plot_branch, pv.contacts.draft[1] - 500, 1e-9);
+  const close = capped.offer.find((l) => l.placement === "close_up");
+  near(o.billed.close_up, Math.min(cap, close.rubPerContact * pv.contacts.draft[1]), 1e-6);
+  near(o.gross, o.billed.plot_branch + o.billed.close_up, 1e-6);
+  assert.equal(capped.budgetCap.value, cap);
+  near(capped.budgetCap.switchContacts, Math.min(b.switchContacts, close.switchContacts), 1e-9);
+  // the cap is always hard: the old tier options are gone
+  for (const gone of ["budget_cap_mode", "budget_tier_discount", "author_share"]) {
+    assert.ok(!(gone in pv), gone);
+    assert.throws(() => buildModel(inputs, { [`var:${gone}`]: 1 }), /unknown variable/);
+  }
+  // break-even under a cap that never covers the cost is unreachable
+  const tiny = priceProduct(buildModel(inputs, { "var:budget_cap": 1 }), "урок", U);
+  assert.equal(tiny.breakEvenContacts, null);
+});
+
+test("3068-8: billing per quarter by default; author grade defaults to «лидер мнений»", () => {
+  const p = priceProduct(model, "курс", U);
+  assert.equal(p.billing.period, "quarter");
+  assert.equal(p.billing.invoices, 1); // one quarter term, billed after the quarter
+  near(p.billing.perInvoice, p.outcomes.plan.gross, 1e-6);
+  const monthly = priceProduct(
+    buildModel(inputs, { "var:billing_period": "month", "var:placement_term_quarters": 2 }),
+    "курс",
     U,
   );
-  const d = inputs.products.variables.budget_tier_discount.draft;
-  near(tiered.breakEvenContacts, (cap + (p.cost - cap) / (1 - d) - p.advance) / per, 1e-6);
-  // a hard cap below the cost never breaks even
-  const hard = priceProduct(buildModel(inputs, { "var:budget_cap": cap }), "урок", U);
-  assert.equal(hard.breakEvenContacts, null);
-  // a tier discount of 100 % freezes revenue at the cap
-  const frozen = priceProduct(
-    buildModel(inputs, {
-      "var:budget_cap": cap,
-      "var:budget_cap_mode": "tiered",
-      "var:budget_tier_discount": 1,
-    }),
-    "урок",
-    U,
-  );
-  assert.equal(frozen.breakEvenContacts, null);
+  assert.equal(monthly.billing.invoices, 6);
+  near(monthly.billing.perInvoice, monthly.outcomes.plan.gross / 6, 1e-6);
+  assert.equal(pv.expert_grade_author.draft, "лидер мнений");
+  assert.equal(roleHourlyCost(model, "Пул экспертов — амбассадор", U).expertGrade, "лидер мнений");
+});
+
+test("3068-9: markup, margin and multiplier of the plan come from the same outcome as price and profit", () => {
+  for (const product of ["урок", "курс"]) {
+    const p = priceProduct(model, product, U);
+    const o = p.outcomes.plan;
+    // price = total cost with replacements + DS fund + profit at the plan contacts
+    const outlay = p.totalCost + o.dsFund;
+    near(p.price, outlay + o.margin, 1e-6);
+    near(p.ratios.outlay, outlay, 1e-6);
+    near(p.ratios.markup, o.margin / outlay, 1e-12);
+    near(p.ratios.margin, o.margin / p.price, 1e-12);
+    near(p.ratios.multiplier, p.price / outlay, 1e-12);
+    near(p.ratios.multiplier, 1 + p.ratios.markup, 1e-12);
+    assert.equal(Math.sign(p.ratios.margin), Math.sign(o.margin), product);
+    near(o.marginShare, p.ratios.margin, 1e-12); // the scenario table's «маржа» is the same ratio
+    const lowO = p.outcomes.low;
+    near(lowO.marginShare, lowO.margin / (p.advance + lowO.gross), 1e-12);
+  }
+  // the leading mode still sets only the fixed-placement factor, not the plan ratios
+  const p = priceProduct(model, "урок", U);
+  near(p.derived.multiplier, 1.3, 1e-9);
+  assert.ok(Math.abs(p.ratios.markup - p.derived.markup) > 1e-3);
+});
+
+test("3068-10: golden floor = (S′ − f·advance) ÷ (1 − f) — the price at which the DS fund leaves zero margin", () => {
+  for (const product of ["урок", "курс"]) {
+    const p = priceProduct(model, product, U);
+    const g = goldenPrice(model, product, U);
+    const f = model.vars.ds_fund_share;
+    assert.ok(f > 0 && f < 1);
+    near(g.min, (p.totalCost - f * p.advance) / (1 - f), 1e-6);
+    // at the floor, revenue = advance + (floor − advance) after the fund = total cost
+    near(p.advance + (g.min - p.advance) * (1 - f), p.totalCost, 1e-6);
+    assert.ok(g.min > p.totalCost, product);
+  }
+  // an advance above the total cost: the floor is the advance (price never falls below it)
+  const rich = buildModel(inputs, {
+    "var:advance_share": 1,
+    "var:price_mode": "multiplier",
+    "var:price_value": 20,
+  });
+  const pr = priceProduct(rich, "урок", U);
+  assert.ok(pr.advance > pr.totalCost);
+  near(goldenPrice(rich, "урок", U).min, pr.advance, 1e-6);
+});
+
+test("3068-11: a dynamic placement sits in every lesson of a compound product — billed contacts = doctors × lessons", () => {
+  const lesson = priceProduct(model, "урок", U);
+  assert.equal(lesson.lessons, 1);
+  near(lesson.outcomes.plan.billedContacts, pv.contacts.draft[1], 1e-9);
+  for (const [product, lessons] of [["модуль", 6], ["курс", 18], ["специальность", 72]]) {
+    const p = priceProduct(model, product, U);
+    assert.equal(p.lessons, lessons, product);
+    // contact price by the lesson's contact type
+    assert.equal(p.pricePerContact.type, "single_lesson_view", product);
+    near(p.pricePerContact.value, lesson.pricePerContact.value, 1e-9);
+    for (const l of p.offer.filter((x) => x.mode === "dynamic")) {
+      const ll = lesson.offer.find((x) => x.placement === l.placement);
+      near(l.rubPerContact, ll.rubPerContact, 1e-9);
+      near(l.rubPerDoctor, lessons * l.rubPerContact, 1e-9);
+    }
+    near(p.rubPerDoctor, lessons * p.rubPerContact, 1e-9);
+    for (const level of ["low", "plan", "high"]) {
+      const o = p.outcomes[level];
+      near(o.billedContacts, o.contacts * lessons, 1e-9);
+      near(o.gross, lessons * lesson.outcomes[level].gross, 1e-6);
+    }
+    // fixed placements stay one-off sums per product
+    const sci = p.offer.find((l) => l.placement === "science_inn");
+    near(sci.fixedSum, dir.science_inn.creation_share * p.cost * p.derived.multiplier, 1e-6);
+    assert.equal(sci.rubPerDoctor, null);
+    // break-even in doctors: advance + net billing of doctors × lessons covers the total cost
+    near(p.advance + p.breakEvenContacts * p.rubPerDoctor * (1 - pv.ds_fund_share.draft), p.totalCost, 1e-3);
+  }
+  const course = priceProduct(model, "курс", U);
+  // podcast episodes, webinars and clubs keep their own contact type, one contact per participant
+  for (const [product, type] of [["эпизод подкаста", "podcast_live"], ["вебинар", "webinar_live"], ["клуб", "webinar_live"]]) {
+    const p = priceProduct(model, product, U);
+    assert.equal(p.lessons, 1, product);
+    assert.equal(p.pricePerContact.type, type, product);
+    near(p.outcomes.plan.gross, pv.contacts.draft[1] * p.rubPerContact, 1e-6);
+  }
+  // the partner limit per placement per term applies to the summed billing of all lessons
+  const branch = course.offer.find((l) => l.placement === "plot_branch");
+  const cap = branch.rubPerDoctor * 500;
+  const capped = priceProduct(buildModel(inputs, { "var:budget_cap": cap }), "курс", U);
+  const b = capped.offer.find((l) => l.placement === "plot_branch");
+  near(b.switchContacts, 500, 1e-9);
+  near(capped.outcomes.plan.billed.plot_branch, cap, 1e-6);
+  near(capped.outcomes.plan.unbilledContacts.plot_branch, pv.contacts.draft[1] - 500, 1e-9);
 });
 
 // ── 2661-9 Market reference ──
@@ -693,16 +931,19 @@ test("2661-10: sensitivity — per driver low/high cost and price, sorted by swi
   near(market.low.cost, s.base.cost, 1e-9);
 });
 
-test("2661-10: break-even series — contacts → revenue vs cost", () => {
+test("2661-10: break-even series — contacts → gross, lesson P&L revenue (after the DS fund) vs total cost", () => {
   const p = priceProduct(model, "курс", U);
   const series = breakEvenSeries(model, "курс", U, 11);
   assert.equal(series.length, 11);
   assert.equal(series[0].contacts, 0);
   near(series[0].revenue, p.advance, 1e-6);
   for (const pt of series) {
-    near(pt.cost, p.cost, 1e-9);
-    near(pt.revenue, p.advance + pt.contacts * p.pricePerContact.value, 1e-6);
+    near(pt.cost, p.totalCost, 1e-9);
+    // doctors × 18 lessons × ₽ per contact
+    near(pt.gross, pt.contacts * p.rubPerDoctor, 1e-6);
+    near(pt.revenue, p.advance + pt.gross * (1 - pv.ds_fund_share.draft), 1e-6);
   }
+  near(p.rubPerDoctor, 18 * p.rubPerContact, 1e-9);
   assert.ok(series.at(-1).contacts >= p.breakEvenContacts);
 });
 
@@ -738,10 +979,14 @@ test("2661-11: a scale per cost article; below-market roles listed; golden price
   );
   near(sumArticles, unitCost(model, "урок", U).total.fullPayroll, 1e-3);
   const g = goldenPrice(model, "курс", U);
-  near(g.min, unitCost(model, "курс", U).total.fullPayroll, 1e-6);
+  const course = priceProduct(model, "курс", U);
+  const f = model.vars.ds_fund_share;
+  near(g.min, (course.totalCost - f * course.advance) / (1 - f), 1e-6);
   assert.equal(g.max, inputs.rates.market_references["курс"].rub[1]);
-  const capped = goldenPrice(buildModel(inputs, { "var:budget_cap": g.min * 2 }), "курс", U);
-  assert.equal(capped.max, Math.min(g.min * 2, g.max));
+  const cap = g.min * 2;
+  const capped = goldenPrice(buildModel(inputs, { "var:budget_cap": cap }), "курс", U);
+  const pc = priceProduct(buildModel(inputs, { "var:budget_cap": cap }), "курс", U);
+  near(capped.max, Math.min(pc.advance + 2 * cap, g.max), 1e-6);
 });
 
 // ── 2661-12 Products ──
@@ -895,7 +1140,8 @@ test("computeProduct: smooth ≤ usual ≤ rework, junior ≤ senior, a trail fr
   assert.equal(line.qty, 18);
   assert.ok(out.capacity.perMonth > 0);
   assert.ok(out.leadDays > 0);
-  assert.ok(out.price.price > out.total.fullPayroll);
+  assert.ok(out.price.totalCost >= out.total.fullPayroll);
+  assert.ok(out.price.price > 0);
   assert.ok(out.market.mid > 0);
 });
 

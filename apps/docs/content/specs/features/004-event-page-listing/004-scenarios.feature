@@ -46,6 +46,31 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       And no participation CTA is shown
       And the response is neither a 404 nor a redirect to the listing
 
+  Rule: Public visibility excludes drafts and preserves publish-safe projections
+
+    Background:
+      Given the golden public-visibility fixtures are available
+
+    @EARS-6 @failure @public-event-visibility
+    Scenario: A draft event is not publicly reachable
+      When the visitor requests the draft and an unknown public event URL
+      Then both event pages render the same not-found response without draft content
+      And the draft is absent from the public upcoming listing
+
+    # 007 Amendment - 2026-09-02 renames archived to hidden.
+    @EARS-15 @failure @public-event-visibility
+    Scenario: Draft and hidden events never appear in the month view
+      When the visitor reads the golden fixtures' calendar months
+      Then those month projections contain only publicly listed lifecycle states
+      And their counts equal the visible month entries without drafts or hidden events
+      And the rendered month grids show the published control without the draft or hidden event
+
+    @EARS-10 @failure @public-event-visibility
+    Scenario: The public endpoints never expose non-public events or PII
+      When the visitor reads the public event, upcoming and month projections
+      Then the draft has no public body and the hidden event is never listed as active
+      And the projections contain only publish-safe fields and source-free recording facts
+
   Rule: Remaining public event and calendar scenarios
 
     Background:
@@ -107,13 +132,6 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
     # meaning and every assertion here are unchanged. See 007-requirements-en.md ->
     # Amendment - 2026-09-02.
 
-    @EARS-6 @failure
-    Scenario: A draft event is not publicly reachable
-      Given a draft event
-      When a visitor requests its public URL
-      Then the response is not-found, indistinguishable from a non-existent event
-      And the draft never appears on any public listing
-
     # --- Upcoming-broadcasts listing (US-4) ---
 
     @EARS-7 @EARS-8 @happy
@@ -164,13 +182,6 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       And the month's past events render as muted notes without a participation affordance
       And today is visibly marked and a legend explains the states
 
-    @EARS-15 @failure
-    Scenario: Draft and archived events never appear in the month view
-      Given a month containing draft and archived events alongside published ones
-      When a visitor reads the month projection
-      Then only published, live, and ended events of that month are returned
-      And no draft or archived event appears in the grid or in the per-month counts
-
     @EARS-15 @EARS-19 @edge
     Scenario: A month with only past events renders muted notes, not pills
       Given a month all of whose events have already ended
@@ -200,13 +211,6 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       When a visitor reads the event page, listing, month calendar and their empty states
       Then labels, status badges, participation text, notices and calendar copy are rendered in Russian
       And that interface copy comes from the typed message catalogue without hardcoded component strings
-
-    @EARS-10 @failure
-    Scenario: The public endpoints never expose non-public events or PII
-      Given the public event read endpoints
-      When any caller requests a draft or archived event as an active event, or inspects the projection
-      Then no draft/archived-as-active body is returned
-      And the projection carries no operator, commercial, or registrant-PII field
 
     # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02».
     @EARS-12 @happy

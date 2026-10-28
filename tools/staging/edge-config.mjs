@@ -1,13 +1,16 @@
 // The stg-infra edge config, owned by the stage `main` converge (#2920).
 //
 // The shared stg-infra compose on the stage box runs from /srv/ds-platform, a checkout
-// nothing refreshes; its containers bind-mount files from that compose dir (the
-// Caddyfile, postgresql.conf). Every `main` converge installs those files from the
-// converged SHA's shipped tree and swaps the running containers onto them through the
-// runtime-config mechanism prod uses (tools/deploy/lib/runtime-config.mjs): backup of
-// what runs, install, `caddy validate` in the running caddy container (its real env),
-// restart of only the stale services, the previous files put back on any failure.
-// A PR slot never calls this: only `main` owns the shared edge.
+// nothing refreshes; its containers bind-mount files from that compose dir. Every `main`
+// converge of a SHA on `main` installs the EDGE's file (the Caddyfile → caddy) from the
+// converged SHA's shipped tree and swaps caddy onto it through the runtime-config
+// mechanism prod uses (tools/deploy/lib/runtime-config.mjs): backup of what runs,
+// install, `caddy validate` in the running caddy container on stand-in values for every
+// variable the Caddyfile reads (only the verdict and the validator's error lines are
+// printed), a restart only if caddy is stale, the previous file put back on any failure
+// (caddy restarted onto it only if this run restarted it). postgres and its
+// postgresql.conf mount are not the edge and are never touched here. A PR slot never
+// calls this: only `main` owns the shared edge.
 
 import {
   applyRuntimeConfigsOrRestore,
@@ -27,7 +30,9 @@ export const STG_INFRA_PROJECT = "stg-infra";
 export const STG_INFRA_PREVIOUS_CONFIG_DIR =
   "/var/lib/ds-platform/stg-infra-edge-config/previous";
 export const EDGE_CONFIG_MARKER = ".ds-edge-config";
-const RESTART_HEALTH_POLLS = 90; // × 2 s: postgres' healthcheck start_period + retries
+const RESTART_HEALTH_POLLS = 90; // × 2 s
+/** The services the converge owns: the edge. postgres' config is not managed here. */
+const EDGE_SERVICES = ["caddy"];
 
 const SAFE_PATH_RE = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/;
 
@@ -74,6 +79,19 @@ export function composeDirBindMounts(composeText) {
   return mounts;
 }
 
+/**
+ * The edge inventory: the compose dir's bind mounts of the edge services only. Fails
+ * closed when the compose no longer mounts the Caddyfile into caddy.
+ */
+export function stgInfraEdgeMounts(composeText) {
+  const mounts = composeDirBindMounts(composeText).filter((m) =>
+    EDGE_SERVICES.includes(m.service),
+  );
+  if (!mounts.some((m) => m.service === "caddy" && m.file === "Caddyfile"))
+    throw new Error("the stg-infra compose has no Caddyfile mount for caddy");
+  return mounts;
+}
+
 const CONTAINER_LOOKUP =
   `sudo docker ps -q --filter label=com.docker.compose.project=${STG_INFRA_PROJECT} ` +
   '--filter "label=com.docker.compose.service=$service"';
@@ -93,6 +111,8 @@ export function stgInfraRuntimeConfigTarget(
     mounts,
     backupDir: STG_INFRA_PREVIOUS_CONFIG_DIR,
     containerLookup: CONTAINER_LOOKUP,
+    // Every slot is served through this edge: a failed apply restarts only what it restarted.
+    restoreRestarts: "restarted",
     restartScript: (services) => `set -u
 for service in ${services.join(" ")}; do
   container_id=$(${CONTAINER_LOOKUP})
@@ -214,7 +234,7 @@ export async function applyStageEdgeConfig({
   log = (message) => console.log(message),
   now = () => new Date(),
 }) {
-  const mounts = composeDirBindMounts(
+  const mounts = stgInfraEdgeMounts(
     await capture(`cat "${sourceDir}/compose.yml"\n`),
   );
   const target = stgInfraRuntimeConfigTarget(mounts);

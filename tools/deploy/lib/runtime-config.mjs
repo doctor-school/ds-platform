@@ -24,6 +24,7 @@
  *   backupDir: string,
  *   containerLookup: string,
  *   restartScript: (services: string[]) => string,
+ *   restoreRestarts?: "all" | "restarted",
  * }} RuntimeConfigTarget
  * `containerLookup` is a shell command printing the container id of the service named
  * by the shell variable `$service`; `restartScript` the body that restarts `services`.
@@ -252,11 +253,13 @@ export async function applyRuntimeConfigs({
   compare,
   restart,
   log = (message) => console.log(message),
+  onRestart = () => {},
 }) {
   const beforeApply = await compare();
   const servicesToRestart = runtimeConfigServicesToRestart(beforeApply, target);
   if (servicesToRestart.length > 0) {
     log(`      stale bind mount(s): ${servicesToRestart.join(", ")}`);
+    onRestart(servicesToRestart);
     await restart(runtimeConfigRestartScript(servicesToRestart, target));
   } else {
     log(
@@ -277,8 +280,14 @@ export async function applyRuntimeConfigs({
 }
 
 /**
- * `applyRuntimeConfigs`, and on its failure the previous configs back on disk, every
- * service restarted onto them and re-compared. Throws with the restore's result.
+ * `applyRuntimeConfigs`, and on its failure the previous configs back on disk, the
+ * services restarted onto them and re-compared. Throws with the restore's result.
+ *
+ * Which services the restore restarts is the target's `restoreRestarts`: `"all"` (the
+ * default, prod's #3274 behaviour) restarts every service; `"restarted"` only those this
+ * run restarted (or tried to) — a container never restarted still holds the inode of the
+ * file it was started on, i.e. the previous bytes, so restarting it gains nothing and
+ * interrupts a service this run did not change.
  */
 export async function applyRuntimeConfigsOrRestore({
   target,
@@ -287,8 +296,15 @@ export async function applyRuntimeConfigsOrRestore({
   restore,
   log,
 }) {
+  let restartedThisRun = [];
   try {
-    return await applyRuntimeConfigs({ target, compare, restart, log });
+    return await applyRuntimeConfigs({
+      target,
+      compare,
+      restart,
+      log,
+      onRestart: (services) => (restartedThisRun = services),
+    });
   } catch (err) {
     const restored = runtimeConfigStepVerdict(
       await restore().catch(
@@ -296,10 +312,15 @@ export async function applyRuntimeConfigsOrRestore({
       ),
       "restore",
     );
-    const services = runtimeConfigServices(target);
+    const services =
+      target.restoreRestarts === "restarted"
+        ? restartedThisRun
+        : runtimeConfigServices(target);
     let result;
     if (!restored.ok) {
       result = `the previous configs were NOT restored (${restored.detail})`;
+    } else if (services.length === 0) {
+      result = `the previous configs were restored on disk; no service had been restarted, so every running one still serves them — ${restored.detail}`;
     } else {
       try {
         await restart(runtimeConfigRestartScript(services, target));

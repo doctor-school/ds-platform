@@ -27,6 +27,7 @@ import {
   composeDirBindMounts,
   edgeConfigCopyScript,
   edgeConfigMarkerScript,
+  stgInfraEdgeMounts,
   stgInfraRuntimeConfigTarget,
 } from "./edge-config.mjs";
 
@@ -44,18 +45,24 @@ const COMPOSE = readFileSync(
   ),
   "utf8",
 );
-const MOUNTS = composeDirBindMounts(COMPOSE);
+const MOUNTS = stgInfraEdgeMounts(COMPOSE);
 const TARGET = stgInfraRuntimeConfigTarget(MOUNTS);
 
-test("2920: the inventory is every bind mount the stg-infra compose takes from its own dir", () => {
+test("2920: the inventory is the edge only — the Caddyfile → caddy; postgres and its config are never in it", () => {
+  // The compose dir mounts postgresql.conf too; the converge owns only the edge.
+  assert.ok(
+    composeDirBindMounts(COMPOSE).some((m) => m.service === "postgres"),
+  );
   assert.deepEqual(MOUNTS, [
-    {
-      service: "postgres",
-      file: "postgres/postgresql.conf",
-      mounted: "/etc/postgresql/postgresql.conf",
-    },
     { service: "caddy", file: "Caddyfile", mounted: "/etc/caddy/Caddyfile" },
   ]);
+  assert.throws(
+    () =>
+      stgInfraEdgeMounts(
+        "services:\n  postgres:\n    volumes:\n      - ./p.conf:/etc/p.conf\n",
+      ),
+    /no Caddyfile mount for caddy/,
+  );
 });
 
 test("2920: the inventory skips mounts outside the compose dir, named volumes and other top-level keys", () => {
@@ -166,6 +173,7 @@ test("2920: the copy installs each mounted file byte-exact from the converged tr
     writeFileSync(join(src, "Caddyfile"), "new caddy\n");
     writeFileSync(join(src, "postgres", "postgresql.conf"), "new pg\n");
     writeFileSync(join(dst, "Caddyfile"), "old caddy\n");
+    writeFileSync(join(dst, "postgres", "postgresql.conf"), "hand pg\n");
     const env = fakeBox(dir);
     const target = { ...TARGET, composeDir: dst.replaceAll("\\", "/") };
     const ok = bash(
@@ -175,9 +183,10 @@ test("2920: the copy installs each mounted file byte-exact from the converged tr
     assert.equal(ok.status, 0, ok.stderr);
     assert.match(ok.stdout, /runtime-config-install=done/);
     assert.equal(readFileSync(join(dst, "Caddyfile"), "utf8"), "new caddy\n");
+    // postgres' config is not the edge: the box's file stays as it was.
     assert.equal(
       readFileSync(join(dst, "postgres", "postgresql.conf"), "utf8"),
-      "new pg\n",
+      "hand pg\n",
     );
 
     rmSync(join(src, "Caddyfile"));
@@ -355,10 +364,7 @@ test("2920: the converge inventories, backs up, installs, validates, restarts on
   const box = recorder([
     [
       "mounted_file_matches",
-      () =>
-        ++compares === 1
-          ? "postgres=match\ncaddy=mismatch\n"
-          : "postgres=match\ncaddy=match\n",
+      () => (++compares === 1 ? "caddy=mismatch\n" : "caddy=match\n"),
     ],
     ...HAPPY,
   ]);
@@ -442,27 +448,72 @@ test("2920: a failed install or a mount still stale after the restart restores t
     "install",
     "restore",
   ]);
+});
 
-  const stale = recorder([
-    ["mounted_file_matches", "postgres=match\ncaddy=mismatch\n"],
-    ...HAPPY,
-  ]);
-  await assert.rejects(
-    applyStageEdgeConfig({
+test("2920: postgres is never touched — not on success, a failed compare, an unhealthy caddy or a caddy still stale", async () => {
+  const run = async (answers) => {
+    const box = recorder([...answers, ...HAPPY]);
+    let error;
+    await applyStageEdgeConfig({
       sha: SHA,
       sourceDir: "/t",
-      capture: stale.capture,
+      capture: box.capture,
       log: () => {},
-    }),
+    }).catch((e) => (error = e));
+    for (const script of box.calls.slice(1))
+      assert.doesNotMatch(script, /postgres/, `touched postgres: ${script}`);
+    return { calls: kinds(box.calls), error };
+  };
+  let compares = 0;
+  const ok = await run([
+    [
+      "mounted_file_matches",
+      () => (++compares === 1 ? "caddy=mismatch\n" : "caddy=match\n"),
+    ],
+  ]);
+  assert.equal(ok.error, undefined);
+  assert.ok(ok.calls.includes("marker"));
+
+  // The compare fails before anything restarted: the files go back on disk, and the
+  // running caddy — never restarted — needs no restart onto them.
+  const noCompare = await run([
+    ["mounted_file_matches", new Error("ssh lost")],
+  ]);
+  assert.match(noCompare.error.message, /ssh lost/);
+  assert.deepEqual(noCompare.calls.slice(-2), ["compare", "restore"]);
+
+  compares = 0;
+  const unhealthy = await run([
+    [
+      "docker restart",
+      () =>
+        ++compares === 1
+          ? new Error("caddy is unhealthy after its restart")
+          : "caddy restarted (running)",
+    ],
+    ["mounted_file_matches", "caddy=mismatch\n"],
+  ]);
+  assert.match(unhealthy.error.message, /caddy is unhealthy.*restored/);
+  assert.deepEqual(unhealthy.calls.slice(-5), [
+    "compare",
+    "restart",
+    "restore",
+    "restart",
+    "compare",
+  ]);
+
+  const stale = await run([["mounted_file_matches", "caddy=mismatch\n"]]);
+  assert.match(
+    stale.error.message,
     /did not mount the shipped file\(s\): caddy/,
   );
-  assert.deepEqual(kinds(stale.calls).slice(-4), [
+  assert.deepEqual(stale.calls.slice(-4), [
     "compare",
     "restore",
     "restart",
     "compare",
   ]);
-  assert.ok(!kinds(stale.calls).includes("marker"));
+  assert.ok(!stale.calls.includes("marker"));
 });
 
 test("2920: nothing here touches a slot network, a volume or a database", () => {

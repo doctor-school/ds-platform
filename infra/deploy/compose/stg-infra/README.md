@@ -44,10 +44,10 @@ Everything here is Phase B: nothing in this file runs on a developer machine.
    stg-infra project from its compose dir, `/srv/ds-platform/infra/deploy/compose/stg-infra`,
    and nothing refreshes that checkout as a whole — slots run from their own shipped
    trees (`$HOME/ds-platform.slots/<slot>`), and the `infra/dev-stand/*` files the
-   compose mounts by `../` paths stay as they were checked out. The files the compose
-   mounts from its OWN dir (`./Caddyfile`, `./postgres/postgresql.conf` — the
-   inventory is read from the converged `compose.yml`) are owned by the stage `main`
-   converge: see [Edge config apply](#edge-config-apply). The SHA it last installed is
+   compose mounts by `../` paths stay as they were checked out. The edge's file the
+   compose mounts from its OWN dir (`./Caddyfile` → caddy) is owned by the stage `main`
+   converge: see [Edge config apply](#edge-config-apply); `./postgres/postgresql.conf`
+   is not (still the hand copy). The SHA it last installed is
    in `/srv/ds-platform/infra/deploy/compose/stg-infra/.ds-edge-config`.
 4. `/etc/ds-platform/stage.env` written from `infra/deploy/stage.env.example`, mode
    `0600`, owner `root:root`. Any value containing `$` — above all
@@ -305,25 +305,31 @@ adapter: `apps/api/test/taxonomy/media-real-storage.e2e-spec.ts` with
 
 ## Edge config apply
 
-Every stage `main` converge (`slot.mjs up main` / `reset main` — the stage release
-driver's run on a push to `main`, or the operator's) runs the step «install the
-stg-infra edge config» right after it ships the tree (`tools/staging/edge-config.mjs`,
-the runtime-config mechanism prod uses, `tools/deploy/lib/runtime-config.mjs`):
+Every stage `main` converge of a SHA on `main` (`slot.mjs up main` / `reset main` — the
+stage release driver's run on a push to `main`, or the operator's) runs the step
+«install the stg-infra edge config» right after it ships the tree
+(`tools/staging/edge-config.mjs`, the runtime-config mechanism prod uses,
+`tools/deploy/lib/runtime-config.mjs`):
 
-1. the inventory: every `./<file>:<path>` bind mount of the shipped `compose.yml`;
-2. a backup of the bytes the running containers serve, root-only in
+1. the inventory: the edge's bind mount of the shipped `compose.yml` — `./Caddyfile` →
+   caddy, and nothing else;
+2. a backup of the bytes the running caddy serves, root-only in
    `/var/lib/ds-platform/stg-infra-edge-config/previous` (kept on a re-run of the same SHA);
-3. the files copied from the shipped tree into this compose dir;
-4. `caddy validate` of the new Caddyfile inside the running `stg-infra-caddy-1` (its
-   real stage.env values for the `{$VAR}` placeholders);
-5. a `docker exec cat` comparison per service, a `docker restart` of only the stale
-   ones (waited until healthy) and the comparison again;
+3. the Caddyfile copied from the shipped tree into this compose dir;
+4. `caddy validate` of the new Caddyfile inside the running `stg-infra-caddy-1`, on
+   stand-in values for every `{$VAR}` / `{env.VAR}` it reads (never the real stage.env
+   values); the log gets the verdict and the validator's error lines only;
+5. a `docker exec cat` comparison, a `docker restart` of caddy only if it is stale
+   (waited until healthy) and the comparison again;
 6. the marker `.ds-edge-config` (`sha=` / `installed=`) and its converge-log line
    `stage-edge-config=installed <sha> at <time> (<marker path>)`.
 
-Any failure puts the previous files back (and, past a restart, restarts onto them) and
-fails the converge — a red stage-suite. A PR slot never runs the step. A restart is
-not a recreate: the container keeps every slot network `slot up` connected it to.
+Any failure puts the previous Caddyfile back (and restarts caddy onto it only if this run
+restarted it) and fails the converge — a red stage-suite. A PR slot, or a `main`
+converge of a hotfix ref not on `main`, never runs the step. A restart is not a
+recreate: the container keeps every slot network `slot up` connected it to.
+`postgres/postgresql.conf` on the box is NOT managed by the converge: it is still the
+hand-copied file in `/srv/ds-platform`, and postgres is never restarted by it.
 
 Why a restart and not `caddy reload`: a single-file bind mount does not survive the
 replacement of the host file — the running container keeps the old inode and

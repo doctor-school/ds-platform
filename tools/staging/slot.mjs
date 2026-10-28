@@ -1723,8 +1723,9 @@ export function planSlotUp({
       installEntrypoints: slot === "main" && shaInMain === true,
     },
     // #2920: the shared stg-infra edge config follows the `main` converge, from the tree
-    // just shipped; a PR slot never writes what every slot is served through.
-    ...(slot === "main"
+    // just shipped; a PR slot never writes what every slot is served through, and, as for
+    // the entrypoints, only a verified `main` tree may write it.
+    ...(slot === "main" && shaInMain === true
       ? [
           {
             kind: "edge-config",

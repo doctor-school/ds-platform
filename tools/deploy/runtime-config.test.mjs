@@ -665,4 +665,50 @@ test("2920: a three-service target says «every», and the restore names its own
   );
 });
 
+test("2920: a target with `restoreRestarts: \"restarted\"` restarts on restore only what this run restarted", async () => {
+  const lib = await import("./lib/runtime-config.mjs");
+  const target = {
+    composeDir: "/c",
+    mounts: [
+      { service: "caddy", file: "Caddyfile", mounted: "/etc/caddy/Caddyfile" },
+      { service: "centrifugo", file: "config.json", mounted: "/c.json" },
+    ],
+    backupDir: "/b",
+    containerLookup: "true",
+    restartScript: (services) => `restart ${services.join(" ")}\n`,
+    restoreRestarts: "restarted",
+  };
+  const trace = async (compare, restart) => {
+    const calls = [];
+    const err = await lib
+      .applyRuntimeConfigsOrRestore({
+        target,
+        compare: async () => (calls.push("compare"), compare()),
+        restart: async (script) => (calls.push(script.trim()), restart(script)),
+        restore: async () => (calls.push("restore"), "runtime-config-restore=restored (backup taken for x)"),
+        log: () => {},
+      })
+      .catch((e) => e);
+    return { calls, message: err.message };
+  };
+  let restarts = 0;
+  const failedRestart = await trace(
+    () => (restarts === 0 ? "caddy=mismatch\ncentrifugo=match\n" : "caddy=match\ncentrifugo=match\n"),
+    () => {
+      if (++restarts === 1) throw new Error("caddy exited 1");
+    },
+  );
+  assert.deepEqual(failedRestart.calls, ["compare", "restart caddy", "restore", "restart caddy", "compare"]);
+  assert.match(failedRestart.message, /restored and caddy restarted onto them/);
+
+  const noCompare = await trace(
+    () => {
+      throw new Error("ssh lost");
+    },
+    () => assert.fail("nothing ran, nothing restarts"),
+  );
+  assert.deepEqual(noCompare.calls, ["compare", "restore"]);
+  assert.match(noCompare.message, /^ssh lost; the previous configs were restored on disk; no service had been restarted/);
+});
+
 const SHA_2920 = "0123456789abcdef0123456789abcdef01234567";

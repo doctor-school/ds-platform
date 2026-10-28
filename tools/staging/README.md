@@ -470,9 +470,9 @@ release pre-flight converges it to; `pr-<N>` accepts its own `pr/<N>` build or a
 one for the same SHA. No run, a run still in progress, a failed run or an expired
 artifact stops the converge **before the box is touched** — there is no build fallback
 («the PR head changes no image input, so runtime-images did not run — nothing to stage»).
-Then they ship the tree (a `main` converge then installs the stg-infra edge config from
-it — the files the stg-infra compose mounts from its own dir, validated and swapped
-onto with a restart of only the stale services, the SHA recorded in
+Then they ship the tree (a `main` converge of a SHA on `main` then installs the stg-infra
+edge config from it — the Caddyfile the stg-infra compose mounts into caddy, validated
+and swapped onto with a restart of caddy only if it is stale, the SHA recorded in
 `.ds-edge-config`: [stg-infra README → Edge config apply](../../infra/deploy/compose/stg-infra/README.md#edge-config-apply)),
 log the box into the registry with the root-only
 `/etc/ds-platform/registry-pull-token` (read by the box's own shell; the token is in no

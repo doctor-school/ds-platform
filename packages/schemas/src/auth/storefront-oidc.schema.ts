@@ -26,18 +26,30 @@ export const STOREFRONT_RETURN_PATH_MAX = 2048;
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f]/;
 
+// A dot segment (`.` / `..`, plain or percent-encoded) in the path part: URL
+// normalisation removes it, so `/..//host` would resolve to `//host`.
+const DOT_SEGMENT = /(?:^|\/)(?:\.|%2e){1,2}(?:\/|$)/i;
+// A backslash, plain or percent-encoded: special-scheme parsers read it as `/`.
+const BACKSLASH = /\\|%5c/i;
+
 /**
  * 003 EARS-61, ADR-0015 §4 req. 1 — whether `value` is an acceptable return
  * path: same-origin path and query only — starts with `/`, not `//` or `/\`,
- * no control character, within {@link STOREFRONT_RETURN_PATH_MAX}.
+ * no control character, within {@link STOREFRONT_RETURN_PATH_MAX}; its path
+ * part carries no dot segment and no backslash (plain or percent-encoded), so
+ * no URL normalisation of the path can turn it into another origin.
  */
 export function isStorefrontReturnPath(value: string): boolean {
+  const query = value.indexOf("?");
+  const path = query === -1 ? value : value.slice(0, query);
   return (
     value.length <= STOREFRONT_RETURN_PATH_MAX &&
     value.startsWith("/") &&
     !value.startsWith("//") &&
     !value.startsWith("/\\") &&
-    !CONTROL.test(value)
+    !CONTROL.test(value) &&
+    !DOT_SEGMENT.test(path) &&
+    !BACKSLASH.test(path)
   );
 }
 

@@ -7,6 +7,7 @@ import {
   forwardedSessionFrom,
   STOREFRONT_RETURN_PATH_MAX,
   parseReturnTarget,
+  isStorefrontReturnPath,
   toStorefrontReturnPath,
   type SignInHostDoor,
   type SignInHostStorefront,
@@ -316,9 +317,12 @@ export async function storefrontEntry(
 
 /** EARS-63 (b) — the return path with the one-shot `ds_guest=1` flag. */
 function withGuestFlag(path: string): string {
-  const url = new URL(path, "https://storefront.invalid");
-  url.searchParams.set(GUEST_QUERY_FLAG, "1");
-  return `${url.pathname}${url.search}`;
+  // ADR-0015 §4 req. 1 — the flag is appended to the validated path as a
+  // string, never by re-parsing it (a URL parse normalises the path and would
+  // differ from what the validator saw); the result is validated again, and a
+  // flagged path past the cap lands on `/` — still flagged, so never checked.
+  const flagged = `${path}${path.includes("?") ? "&" : "?"}${GUEST_QUERY_FLAG}=1`;
+  return isStorefrontReturnPath(flagged) ? flagged : `/?${GUEST_QUERY_FLAG}=1`;
 }
 
 /**

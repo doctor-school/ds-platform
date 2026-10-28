@@ -460,6 +460,38 @@ describe("003 EARS-62 / 63: the silent outcomes of the callback", () => {
     ).toEqual([]);
     expect(api.starts()).toHaveLength(1);
   });
+  it("EARS-63: (b / req. 1) a cookieless silent callback whose kept return path is hostile lands on a same-origin path with ds_guest=1", async () => {
+    for (const hostile of [
+      "/..//evil.example",
+      "/\\evil.example",
+      "/%2F%2Fevil.example",
+      "/%2e%2e//evil.example",
+    ]) {
+      const api = fakeApi({
+        redeem: () =>
+          Response.json(
+            {
+              message: "redeem refused",
+              returnPath: hostile,
+              door: "login",
+              kind: "silent",
+            },
+            { status: 401 },
+          ),
+      });
+      const res = await callback(
+        "/auth/callback?error=login_required&state=st",
+        undefined,
+        api,
+      );
+      const location = res.headers.get("location") ?? "";
+      expect(location, hostile).toMatch(/^\/(?![/\\])/);
+      const landed = new URL(location, "https://academy.example");
+      expect(landed.origin, hostile).toBe("https://academy.example");
+      expect(landed.pathname.startsWith("//"), hostile).toBe(false);
+      expect(landed.searchParams.get("ds_guest"), hostile).toBe("1");
+    }
+  });
 });
 
 describe("003 EARS-63 / ADR-0015 §4 req. 12: whole navigations", () => {

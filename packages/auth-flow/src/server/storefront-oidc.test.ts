@@ -258,6 +258,27 @@ describe("storefront entry", () => {
     expect(toStorefrontReturnPath(`/${"a".repeat(2100)}`)).toBe("/");
   });
 
+  it("003 EARS-61: (req. 1) a return path whose path part carries a dot segment (plain or percent-encoded) or a backslash anywhere is /, so no URL normalisation can turn it into another origin", () => {
+    for (const hostile of [
+      "/..//evil.example",
+      "/./..//evil.example",
+      "/a/../..//evil.example",
+      "/%2e%2e//evil.example",
+      "/%2E./evil",
+      "/x/..",
+      "/x/.",
+      "/a\\evil.example",
+      "/%5c%5cevil.example",
+    ]) {
+      expect(toStorefrontReturnPath(hostile), hostile).toBe("/");
+    }
+    // Dots inside a name and in the query stay accepted.
+    expect(toStorefrontReturnPath("/files/v1.2/a..b")).toBe("/files/v1.2/a..b");
+    expect(toStorefrontReturnPath("/events/x?next=../y")).toBe(
+      "/events/x?next=../y",
+    );
+  });
+
   it("003 EARS-61 (req. 1): S1615 an entry whose return target's query passes 2048 characters stores the target cut to its path; a path alone longer stores none", async () => {
     for (const [host, stored] of [
       [ACADEMY, "/webinars/live-1"],

@@ -81,7 +81,9 @@ export function postgresSourceHash(files) {
         .sort()
         .map((p) => [
           p,
-          sha256(p === "compose.yml" ? imageClusterCompose(files[p]) : files[p]),
+          sha256(
+            p === "compose.yml" ? imageClusterCompose(files[p]) : files[p],
+          ),
         ]),
     ),
   );
@@ -112,7 +114,9 @@ export function migratedRecordHash(live, sourceHash) {
 /** The box record as a v2 hash: a v2 record itself, a table v1 its entry's v2, else null. */
 function recordedSourceHash(live) {
   if (live?.hashVersion === 2) return live.sourceHash;
-  return POSTGRES_HASH_MIGRATIONS.find((e) => e.v1 === live?.sourceHash)?.v2 ?? null;
+  return (
+    POSTGRES_HASH_MIGRATIONS.find((e) => e.v1 === live?.sourceHash)?.v2 ?? null
+  );
 }
 
 export function postgresContract(files) {

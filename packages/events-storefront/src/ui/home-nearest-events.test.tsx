@@ -1,20 +1,28 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import type { MyEventItem } from "@ds/schemas";
+
 import type { EventsStorefrontHostConfig } from "../host-config";
 import type { BlockRead, EventsFeedCard, EventsFeedPage } from "../model/feed";
 
-const { fetchNearestEvents } = vi.hoisted(() => ({
+const { fetchNearestEvents, readMyEvents } = vi.hoisted(() => ({
   fetchNearestEvents: vi.fn(() => new Promise(() => {})),
+  readMyEvents: vi.fn(() => new Promise(() => {})),
 }));
 
 vi.mock("next/navigation", () => ({ permanentRedirect: vi.fn(), useRouter: vi.fn() }));
 vi.mock("next/headers", () => ({
-  headers: async () => new Headers({ cookie: "__Host-ds_specialty=kardiologiya" }),
+  headers: async () =>
+    new Headers({ cookie: "__Host-ds_specialty=kardiologiya; __Host-ds_session=s1" }),
 }));
 vi.mock("../server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../server")>()),
   fetchNearestEvents,
+}));
+vi.mock("./feed-sections", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./feed-sections")>()),
+  readMyEvents,
 }));
 
 import { BlockError } from "./block-error";
@@ -66,11 +74,18 @@ function page(cards: EventsFeedCard[], targeting?: EventsFeedPage["targeting"]):
   };
 }
 
-async function body(nearest: BlockRead<EventsFeedPage>, window = nearest) {
+type Mine = BlockRead<readonly MyEventItem[] | null>;
+
+async function body(
+  nearest: BlockRead<EventsFeedPage>,
+  window = nearest,
+  mine: Mine = { ok: true, value: null },
+) {
   return elementsOf(
     (await NearestEventsBody({
       config: CONFIG,
       read: Promise.resolve({ window, nearest }),
+      mine: Promise.resolve(mine),
       request: { cookie: "", forwardedFor: "" },
     })) as ReactNode,
   );
@@ -84,7 +99,7 @@ describe("HomeNearestEvents", () => {
     const els = elementsOf((await HomeNearestEvents({ config: CONFIG })) as ReactNode);
     const [config, request] = fetchNearestEvents.mock.calls[0] as unknown as [unknown, { cookie: string }];
     expect(config).toBe(CONFIG);
-    expect(request.cookie).toBe("__Host-ds_specialty=kardiologiya");
+    expect(request.cookie).toContain("__Host-ds_specialty=kardiologiya");
     expect(textOf(els)).toContain("Ближайшие события");
     const all = els.find((el) => el.props["data-testid"] === "home-events-all");
     expect(all?.props.href).toBe("/events");
@@ -126,5 +141,26 @@ describe("HomeNearestEvents", () => {
     expect(error?.props.retryLabel).toBe("Обновить");
     // No own `onRetry`: the retry re-runs the server render (router.refresh).
     expect(error?.props.onRetry).toBeUndefined();
+  });
+
+  it("017 EARS-9: the block reads the viewer's registrations with the forwarded session — the feed's own «Вы записаны» read", async () => {
+    await HomeNearestEvents({ config: CONFIG });
+    const [path, session] = readMyEvents.mock.calls[0] as unknown as [string, { cookie: string }];
+    expect(path).toBe(CONFIG.contentSet.myEventsPath);
+    expect(session.cookie).toContain("__Host-ds_session=s1");
+  });
+
+  it("017 EARS-9: a signed-in doctor's registered events carry «Вы записаны» on the home cards; a failed or guest read marks none", async () => {
+    const mine = { ok: true, value: [{ slug: "b" }] } as unknown as Mine;
+    const marked = (await body(page(["a", "b"].map(card)), undefined, mine)).find(
+      (el) => el.type === NearestEventCards,
+    );
+    expect(marked?.props.registeredSlugs).toEqual(["b"]);
+    for (const none of [{ ok: false }, { ok: true, value: null }] as Mine[]) {
+      const cards = (await body(page([card("a")]), undefined, none)).find(
+        (el) => el.type === NearestEventCards,
+      );
+      expect(cards?.props.registeredSlugs).toEqual([]);
+    }
   });
 });

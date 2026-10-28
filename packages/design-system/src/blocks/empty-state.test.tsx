@@ -106,6 +106,24 @@ describe("<EmptyState> — 028 document states", () => {
     ).toBeInTheDocument();
   });
 
+  it("017 EARS-9: the error variant leads with the canvas ⚠ glyph in the danger colour, hidden from assistive tech", () => {
+    render(
+      <EmptyState
+        variant="error"
+        title="Не удалось загрузить события."
+        action={<button type="button">Обновить</button>}
+      />,
+    );
+
+    const glyph = screen.getByText("⚠");
+    expect(glyph).toHaveAttribute("aria-hidden", "true");
+    expect(glyph).toHaveClass("text-destructive");
+    expect(screen.getByRole("alert")).toHaveAccessibleName("");
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Не удалось загрузить события.",
+    );
+  });
+
   it("028 EARS-7: the not-found variant offers the way out and never a retry", () => {
     render(
       <EmptyState

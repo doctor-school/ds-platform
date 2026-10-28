@@ -3,21 +3,28 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { EmptyState } from "@ds/design-system/blocks";
 import { Link as DsLink } from "@ds/design-system/link";
+import type { MyEventItem } from "@ds/schemas";
 
 import { HOME_EVENTS_COPY } from "../copy/home-copy";
 import type { EventsStorefrontHostConfig } from "../host-config";
 import type { BlockRead, EventsFeedPage } from "../model/feed";
 import { nearestEventsState } from "../model/nearest-events";
-import { type ReadRequest, fetchNearestEvents } from "../server";
+import {
+  type ReadRequest,
+  fetchNearestEvents,
+  forwardedSessionFrom,
+} from "../server";
 import { BlockError } from "./block-error";
 import { CompactMonthSection } from "./events-listing-page";
-import { FeedSkeletonCard, SkeletonSlot } from "./feed-sections";
+import { FeedSkeletonCard, SkeletonSlot, readMyEvents } from "./feed-sections";
 import { NearestEventCards } from "./nearest-event-cards";
 
 type NearestRead = Promise<{
   readonly window: BlockRead<EventsFeedPage>;
   readonly nearest: BlockRead<EventsFeedPage>;
 }>;
+
+type MineRead = Promise<BlockRead<readonly MyEventItem[] | null>>;
 
 const T = HOME_EVENTS_COPY;
 
@@ -53,18 +60,23 @@ async function NearestEventsKicker({ read }: { read: NearestRead }) {
 /**
  * The block's one render per read (017 design §6 «Nearest events»): cards +
  * the compact month, the honest `пусто`, or the cause with «Обновить» — whose
- * retry re-runs the server render and so re-issues the read.
+ * retry re-runs the server render and so re-issues the read. A signed-in
+ * doctor's registered events carry «Вы записаны» from the same registrations
+ * read the events feed marks its cards with; a guest or a failed read marks
+ * none.
  */
 export async function NearestEventsBody({
   config,
   read,
+  mine,
   request,
 }: {
   config: EventsStorefrontHostConfig;
   read: NearestRead;
+  mine: MineRead;
   request: ReadRequest;
 }) {
-  const { window, nearest } = await read;
+  const [{ window, nearest }, registered] = await Promise.all([read, mine]);
   const state = nearestEventsState(nearest);
   const statement = state.kind !== "error" && state.generalFallback ? (
     <p className="mb-5 text-sm text-muted-foreground" data-testid="home-events-general">
@@ -119,7 +131,15 @@ export async function NearestEventsBody({
       {statement}
       <div className="flex flex-col gap-10 lg:flex-row lg:items-start">
         <div className="min-w-0 flex-1" data-testid="home-events-cards">
-          <NearestEventCards cards={state.cards} routes={config.routes} />
+          <NearestEventCards
+            cards={state.cards}
+            registeredSlugs={
+              registered.ok && registered.value
+                ? registered.value.map((event) => event.slug)
+                : []
+            }
+            routes={config.routes}
+          />
         </div>
         <aside className="lg:w-75 lg:flex-none" data-testid="home-events-month">
           <Suspense fallback={<SkeletonSlot className="h-85 w-full" />}>
@@ -161,6 +181,10 @@ export async function HomeNearestEvents({
     forwardedFor: requestHeaders.get("x-forwarded-for") ?? "",
   };
   const read = fetchNearestEvents(config, request);
+  const mine = readMyEvents(
+    config.contentSet.myEventsPath,
+    forwardedSessionFrom(requestHeaders),
+  );
   return (
     <section
       aria-labelledby="home-events-title"
@@ -187,7 +211,12 @@ export async function HomeNearestEvents({
           </DsLink>
         </div>
         <Suspense fallback={<NearestEventsSkeleton />}>
-          <NearestEventsBody config={config} read={read} request={request} />
+          <NearestEventsBody
+            config={config}
+            read={read}
+            mine={mine}
+            request={request}
+          />
         </Suspense>
       </div>
     </section>

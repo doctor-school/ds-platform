@@ -207,6 +207,8 @@ for (const { name: vp, viewport } of VIEWPORTS) {
         await open(page);
         const error = block(page).getByTestId("home-events-error");
         await expect(error).toContainText("Не удалось загрузить события.");
+        // The canvas error box: the ⚠ glyph, the cause, «Обновить».
+        await expect(error.getByText("⚠", { exact: true })).toBeVisible();
         await expectRestUsable(page, false);
         await capture(page, `home-error-${vp}-${theme}`);
 
@@ -215,6 +217,32 @@ for (const { name: vp, viewport } of VIEWPORTS) {
         await expect(block(page).getByTestId("home-events-cards")).toBeVisible();
         await expect(block(page).getByTestId("home-events-error")).toHaveCount(0);
         await expectRestUsable(page, false);
+      });
+
+      test("NEW: doctor home — a signed-in doctor's registered events carry «Вы записаны» on the home cards (row 62)", async ({
+        page,
+      }) => {
+        // The fake's `e2e-doctor` holds registrations for evt-1 … evt-3 — the
+        // same registrations read the /events feed marks its cards with.
+        await page.setExtraHTTPHeaders({ cookie: "__Host-ds_session=e2e-doctor" });
+        await open(page);
+        const cards = block(page).getByTestId("home-events-cards");
+        await expect(
+          cards
+            .locator("[data-webinar-card]")
+            .filter({ hasText: "Событие evt-1" })
+            .locator("[data-registered-marker]"),
+        ).toHaveText(/Вы записаны/);
+        await capture(page, `home-registered-${vp}-${theme}`);
+      });
+
+      test("NEW: doctor home — a guest's home cards carry no «Вы записаны» (row 62)", async ({
+        page,
+      }) => {
+        await open(page);
+        const cards = block(page).getByTestId("home-events-cards");
+        await expect(cards.locator("[data-webinar-card]").first()).toBeVisible();
+        await expect(cards.locator("[data-registered-marker]")).toHaveCount(0);
       });
     });
   }

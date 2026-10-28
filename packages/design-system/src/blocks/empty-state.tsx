@@ -123,6 +123,15 @@ export function EmptyState({
         )}
         {...rest}
       >
+        {/* The canvases' error box leads with the ⚠ glyph in the danger
+            colour (doctor-home, doctor-feed, doctor-docs, academy-docs);
+            decorative — the title carries the state. */}
+        <span
+          aria-hidden="true"
+          className="flex-none text-lg leading-none text-destructive"
+        >
+          ⚠
+        </span>
         <div className="min-w-50 flex-1">
           <p className="text-sm font-bold text-foreground">{title}</p>
           {description ? (

@@ -96,6 +96,9 @@ Given(
         .getByTestId("events-tense-tabs")
         .getByRole("tab", { name: "Будущие", exact: true }),
     ).toHaveAttribute("aria-selected", "true");
+    await expect(
+      page.getByTestId("events-feed").locator("[data-webinar-card]").first(),
+    ).toBeVisible();
     world.publicCalendarFeed = await feedSnapshot(page);
     expect(
       world.publicCalendarFeed.cards.length,
@@ -134,7 +137,9 @@ Then(
   "the current month renders and the same day-grouped feed returns with nothing lost",
   async ({ page, world }) => {
     expect(world.publicCalendarFeed).toBeDefined();
-    expect(await feedSnapshot(page)).toEqual(world.publicCalendarFeed);
+    await expect
+      .poll(() => feedSnapshot(page))
+      .toEqual(world.publicCalendarFeed);
     await expect(
       page
         .getByTestId("events-tense-tabs")
@@ -267,6 +272,9 @@ Then(
     expect(past, "muted past linked pills actually rendered").toBeGreaterThan(
       0,
     );
+    let overflow:
+      | { day: string; href: string; count: number; entries: Entry[] }
+      | undefined;
     for (const [day, entries] of groups) {
       const dayNumber = Number(day.slice(8));
       const cell = cells.filter({
@@ -284,7 +292,15 @@ Then(
         });
         await expect(more).toBeVisible();
         const href = await more.getAttribute("href");
-        expect(new URL(href!, page.url()).hash).toBe(`#day-${day}`);
+        const target = new URL(href!, page.url());
+        expect(target.pathname).toBe(host.eventsPath);
+        expect(target.searchParams.get("day")).toBe(day);
+        expect(target.searchParams.get("month")).toBe(day.slice(0, 7));
+        expect(target.searchParams.has("view")).toBe(false);
+        expect(target.searchParams.get("tense") ?? "upcoming").toBe(
+          day < state.today ? "past" : "upcoming",
+        );
+        overflow ??= { day, href: href!, count: entries.length - 3, entries };
       }
     }
     await expect(
@@ -292,6 +308,43 @@ Then(
         `a[href="${host.eventsPath}/${golden.events.academyLive.slug}"]`,
       ),
     ).toHaveClass(/(?:^|\s)bg-live(?:\s|$)/u);
+    expect(
+      overflow,
+      "golden month contains a real overflow-day control",
+    ).toBeDefined();
+    const original = page.url();
+    const selectedOverflow = overflow!;
+    await grid
+      .getByRole("link", {
+        name: `+${selectedOverflow.count} ещё`,
+        exact: true,
+      })
+      .and(grid.locator(`a[href="${selectedOverflow.href}"]`))
+      .click();
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === host.eventsPath &&
+        url.searchParams.get("day") === selectedOverflow.day &&
+        url.searchParams.get("month") === selectedOverflow.day.slice(0, 7) &&
+        !url.searchParams.has("view"),
+    );
+    const groupId =
+      selectedOverflow.day < state.today
+        ? selectedOverflow.day.slice(0, 7)
+        : selectedOverflow.day;
+    const group = page
+      .getByTestId("events-feed")
+      .locator(`section[id="day-${groupId}"]`);
+    await expect(group).toBeVisible();
+    for (const entry of selectedOverflow.entries) {
+      await expect(
+        group
+          .getByRole("link", { name: entry.title, exact: true })
+          .and(group.locator(`a[href="${host.eventsPath}/${entry.slug}"]`)),
+      ).toBeVisible();
+    }
+    await open(page, original);
+    await expect(grid).toBeVisible();
   },
 );
 

@@ -45,7 +45,7 @@ Feature: 028 — Legal pages (documents and contacts)
     Then the link resolves to this platform's own "Политика персональных данных и согласия" document
     And no document, footer or consent line on either host references "doctor.school/index/*"
 
-  @EARS-6
+  @EARS-6 @doctor-documents-boundary
   Scenario: Doctor documents list carries no Academy exit
     Given a visitor is on the doctor storefront's documents list
     When they reach the end of the list

@@ -10,96 +10,101 @@
 @host:academy
 Feature: Persistent portal app-shell header and public discovery front-door
 
-  Background:
-    Given the portal mounts the shared storefront-shell package on every route from its configured origin, with a host: academy config object
-    And the header and footer are built from design-source/ds-shell.dc.html (host=academy) via @ds/design-system
-    And the feature-004 discovery listing surface is available at /
-    And the feature-005 «Мои события» surface is available at /account/events
-    And the feature-009 profile surface is available at /account
+  Rule: Existing shell journeys
 
-  # Amended 2026-08-17 (source: feature 013 EARS-15, see 008-requirements-en.md → Amendment):
-  # the post-login landing is the visitor's return target, defaulting to /webinars, and the
-  # discovery listing lives at /webinars while / is the Academy landing. The example below was
-  # re-pointed from "/" to "/webinars" by the feature-013 EARS-15 Issue, which owns that edit
-  # as a named deliverable together with apps/portal/app/login/page.test.tsx and the browser
-  # journey. A silent change here would decouple the spec from production.
-  @EARS-1 @EARS-2 @EARS-6 @EARS-7 @happy
-  Scenario: A doctor logs in, lands on the discovery front-door, and navigates the shell
-    Given a registered doctor who is not yet signed in
-    When the doctor completes login via the feature-003 auth flow
-    Then the doctor lands on "/webinars" showing the discovery listing of upcoming broadcasts
-    And the persistent header shows the logo, the top-nav [Эфиры], a theme toggle, and the signed-in auth cluster («Мои события» plus an avatar icon with the doctor's initials)
-    When the doctor activates «Мои события» in the auth cluster
-    Then the portal navigates to "/account/events"
-    When the doctor activates the avatar icon
-    Then the portal navigates to the profile "/account"
+    Background:
+      Given the portal mounts the shared storefront-shell package on every route from its configured origin, with a host: academy config object
+      And the header and footer are built from design-source/ds-shell.dc.html (host=academy) via @ds/design-system
+      And the feature-004 discovery listing surface is available at /
+      And the feature-005 «Мои события» surface is available at /account/events
+      And the feature-009 profile surface is available at /account
 
-  # Amended 2026-09-14 (source: canvas ds-shell.dc.html line 220 guestCluster.primary,
-  # owner Stage-B round 1 on PR #2198; see 008-requirements-en.md → Amendment — 2026-09-14):
-  # the guest control is ONE «Войти / Регистрация» button routing to /login. The examples
-  # below carry the new label because PR #2198 ships the label and this spec edit together
-  # — guest-header.spec.ts and shell.test.tsx are named deliverables of that same PR, so the
-  # spec and production stay coupled.
-  @EARS-4 @EARS-8 @happy
-  Scenario: A guest sees «Войти / Регистрация» and the same public discovery front-door
-    Given a visitor with no authenticated session
-    When the visitor opens "/"
-    Then "/" shows the same discovery listing of upcoming broadcasts a doctor sees
-    And the header shows a «Войти / Регистрация» button instead of an avatar icon
-    And the header shows no avatar and no «Выйти»
-    When the visitor activates «Войти / Регистрация»
-    Then the portal navigates to the login surface
+    # Amended 2026-08-17 (source: feature 013 EARS-15, see 008-requirements-en.md → Amendment):
+    # the post-login landing is the visitor's return target, defaulting to /webinars, and the
+    # discovery listing lives at /webinars while / is the Academy landing. The example below was
+    # re-pointed from "/" to "/webinars" by the feature-013 EARS-15 Issue, which owns that edit
+    # as a named deliverable together with apps/portal/app/login/page.test.tsx and the browser
+    # journey. A silent change here would decouple the spec from production.
+    @EARS-1 @EARS-2 @EARS-6 @EARS-7 @happy
+    Scenario: A doctor logs in, lands on the discovery front-door, and navigates the shell
+      Given a registered doctor who is not yet signed in
+      When the doctor completes login via the feature-003 auth flow
+      Then the doctor lands on "/webinars" showing the discovery listing of upcoming broadcasts
+      And the persistent header shows the logo, the top-nav [Эфиры], a theme toggle, and the signed-in auth cluster («Мои события» plus an avatar icon with the doctor's initials)
+      When the doctor activates «Мои события» in the auth cluster
+      Then the portal navigates to "/account/events"
+      When the doctor activates the avatar icon
+      Then the portal navigates to the profile "/account"
 
-  @EARS-8 @happy
-  Scenario: The discovery front-door does not branch on auth state
-    Given the feature-004 listing renders a set of upcoming broadcasts
-    When a guest opens "/" and then the same doctor opens "/"
-    Then both are shown the identical discovery listing content
-    And the only difference between the two renders is the header's account affordance (avatar icon vs «Войти / Регистрация»)
+    # Amended 2026-09-14 (source: canvas ds-shell.dc.html line 220 guestCluster.primary,
+    # owner Stage-B round 1 on PR #2198; see 008-requirements-en.md → Amendment — 2026-09-14):
+    # the guest control is ONE «Войти / Регистрация» button routing to /login. The examples
+    # below carry the new label because PR #2198 ships the label and this spec edit together
+    # — guest-header.spec.ts and shell.test.tsx are named deliverables of that same PR, so the
+    # spec and production stay coupled.
+    @EARS-4 @EARS-8 @happy
+    Scenario: A guest sees «Войти / Регистрация» and the same public discovery front-door
+      Given a visitor with no authenticated session
+      When the visitor opens "/"
+      Then "/" shows the same discovery listing of upcoming broadcasts a doctor sees
+      And the header shows a «Войти / Регистрация» button instead of an avatar icon
+      And the header shows no avatar and no «Выйти»
+      When the visitor activates «Войти / Регистрация»
+      Then the portal navigates to the login surface
 
-  @EARS-5 @happy
-  Scenario: The account affordance is an icon, not a dropdown, and carries no sign-out
-    Given a signed-in doctor on any portal page
-    When the doctor inspects the header account affordance
-    Then it is an avatar icon showing the doctor's initials
-    And it is not a dropdown menu
-    And no «Выйти» action appears anywhere in the header
+    @EARS-8 @happy
+    Scenario: The discovery front-door does not branch on auth state
+      Given the feature-004 listing renders a set of upcoming broadcasts
+      When a guest opens "/" and then the same doctor opens "/"
+      Then both are shown the identical discovery listing content
+      And the only difference between the two renders is the header's account affordance (avatar icon vs «Войти / Регистрация»)
 
-  @EARS-9 @happy
-  Scenario: The «Каркас приложения» scaffold is retired
-    Given the portal previously served a «Каркас приложения» placeholder card at "/"
-    When any user opens "/"
-    Then the discovery listing is served
-    And the «Каркас приложения» placeholder card is not reachable anywhere in the portal
+    @EARS-5 @happy
+    Scenario: The account affordance is an icon, not a dropdown, and carries no sign-out
+      Given a signed-in doctor on any portal page
+      When the doctor inspects the header account affordance
+      Then it is an avatar icon showing the doctor's initials
+      And it is not a dropdown menu
+      And no «Выйти» action appears anywhere in the header
 
-  @EARS-3 @happy
-  Scenario: The theme toggle switches and persists the preference
-    Given a user on any portal page in the light theme
-    When the user activates the theme toggle
-    Then the portal switches to the dark theme
-    And the preference is persisted in localStorage under "ds-theme"
-    And the preference survives a page reload and navigation
+    @EARS-11 @EARS-2 @branch
+    Scenario: On mobile the nav collapses into a ≡ dropdown
+      Given a user on a viewport at or below the mobile breakpoint (≤900px)
+      When the user opens the header navigation
+      Then the top-nav is collapsed into a ≡ dropdown
+      And the dropdown carries the same items [Эфиры] plus the signed-in auth cluster («Мои события», the avatar target)
+      And selecting «Мои события» navigates to "/account/events"
 
-  @EARS-11 @EARS-2 @branch
-  Scenario: On mobile the nav collapses into a ≡ dropdown
-    Given a user on a viewport at or below the mobile breakpoint (≤900px)
-    When the user opens the header navigation
-    Then the top-nav is collapsed into a ≡ dropdown
-    And the dropdown carries the same items [Эфиры] plus the signed-in auth cluster («Мои события», the avatar target)
-    And selecting «Мои события» navigates to "/account/events"
+    @EARS-12 @stage-b
+    Scenario: The rendered shell matches the vendored canvas across breakpoints and themes
+      Given the persistent header and "/" are built from the vendored canvas via @ds/design-system tokens
+      When the product owner reviews the running stand at Stage-B
+      Then the rendered result matches the canvas element-by-element at both breakpoints and in both themes
+      And no arbitrary Tailwind values are used (tokens only)
 
-  @EARS-12 @stage-b
-  Scenario: The rendered shell matches the vendored canvas across breakpoints and themes
-    Given the persistent header and "/" are built from the vendored canvas via @ds/design-system tokens
-    When the product owner reviews the running stand at Stage-B
-    Then the rendered result matches the canvas element-by-element at both breakpoints and in both themes
-    And no arbitrary Tailwind values are used (tokens only)
+    @EARS-14 @happy
+    Scenario: The Academy footer renders per the shared shell on every route
+      Given a user on any portal page
+      Then the footer shows the logo and the host foot-note «BBM: Академия смыслов» plus «© Doctor.School, 2026»
+      And the footer shows the «Разделы» column built from the nav
+      And the footer shows the «Документы и контакты» column with «Пользовательское соглашение», «Политика обработки персональных данных» and «Контакты»
+      And the footer shows the «Врачам» cross-link to «Doctor.School ↗»
+      And the footer shows the giant «Academy.Doctor.School» wordmark
 
-  @EARS-14 @happy
-  Scenario: The Academy footer renders per the shared shell on every route
-    Given a user on any portal page
-    Then the footer shows the logo and the host foot-note «BBM: Академия смыслов» plus «© Doctor.School, 2026»
-    And the footer shows the «Разделы» column built from the nav
-    And the footer shows the «Документы и контакты» column with «Пользовательское соглашение», «Политика обработки персональных данных» and «Контакты»
-    And the footer shows the «Врачам» cross-link to «Doctor.School ↗»
-    And the footer shows the giant «Academy.Doctor.School» wordmark
+  Rule: Public guest shell reader contracts
+
+    Background:
+      Given a guest opens the configured Academy landing with the shared shell
+
+    @EARS-9 @happy @public-guest-shell
+    Scenario: The «Каркас приложения» scaffold is retired
+      When the guest opens the Academy landing and discovery listing
+      Then both public surfaces replace the retired «Каркас приложения» scaffold
+
+    @EARS-3 @happy @public-guest-shell
+    Scenario: The theme toggle switches and persists the preference
+      Given a user on any portal page in the light theme
+      When the user activates the theme toggle
+      Then the portal switches to the dark theme
+      And the preference is persisted in localStorage under "ds-theme"
+      And the preference survives a page reload and navigation

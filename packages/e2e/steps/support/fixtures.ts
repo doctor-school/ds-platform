@@ -33,6 +33,15 @@ export interface StepWorld {
   recordedStartsAt?: string;
   /** The public event selected by one 004 lifecycle scenario. */
   publicEvent?: { slug: string; title: string };
+  /** Public 004 controls and seed-relative dates for one visibility scenario. */
+  publicVisibility?: {
+    upcoming: Record<string, unknown>;
+    hidden: Record<string, unknown>;
+    draftStartsAt: string;
+    months: string[];
+    projections?: Record<string, unknown>[][];
+    upcomingCards?: Record<string, unknown>[];
+  };
   /** State the 019 events-feed journey carries from one step to the next. */
   eventsFeed?: EventsFeedWorld;
 }

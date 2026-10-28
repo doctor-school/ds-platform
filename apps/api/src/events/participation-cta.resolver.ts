@@ -75,9 +75,25 @@ const LABELS: Record<ParticipationCta["action"], string> = {
  * there is a room with chairs: an `online` event has no offline half, so a
  * stray `seats_left = 0` on one can never invent a sold-out webinar.
  */
-function offlineSeatsExhausted(facts: ParticipationFacts): boolean {
+function offlineSeatsExhausted(
+  facts: Pick<ParticipationFacts, "format" | "seatsLeft">,
+): boolean {
   if (facts.format === "online") return false;
   return facts.seatsLeft === 0;
+}
+
+/**
+ * 020 EARS-9 / LD-5 — `true` when participation is impossible because the
+ * event's only half is full: a pure offline event with no seats left. A hybrid
+ * event with its offline half full is NOT sold out (the doctor switches to
+ * online). This is the predicate the policy's `sold-out` branch below decides
+ * by, exported so the `RegisterForEvent` command refuses exactly what the CTA
+ * refuses to offer — never a second hand-written seat rule (#2467).
+ */
+export function participationSoldOut(
+  facts: Pick<ParticipationFacts, "format" | "seatsLeft">,
+): boolean {
+  return facts.format !== "hybrid" && offlineSeatsExhausted(facts);
 }
 
 /**
@@ -123,7 +139,7 @@ export function resolveParticipationCta(
   facts: ParticipationFacts,
   routes: ParticipationRoutes,
 ): ParticipationCta {
-  const { slug, state, format, registered } = facts;
+  const { slug, state, registered } = facts;
 
   if (!isRegistrable(state)) {
     return {
@@ -164,7 +180,7 @@ export function resolveParticipationCta(
   }
 
   if (offlineSeatsExhausted(facts)) {
-    if (format === "hybrid") {
+    if (!participationSoldOut(facts)) {
       return {
         action: "switch-to-online",
         label: LABELS["switch-to-online"],

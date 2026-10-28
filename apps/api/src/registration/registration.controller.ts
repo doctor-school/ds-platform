@@ -14,6 +14,7 @@ import type { EventRegistrationState } from "@ds/schemas";
 import { Authz } from "../authz/index.js";
 import {
   EventNotRegistrableError,
+  EventSoldOutError,
   RegistrationEventNotFoundError,
   RegistrationService,
   UnknownSubjectError,
@@ -108,6 +109,13 @@ export class RegistrationController {
         throw new ConflictException({
           message: "registration is not offered in the event's current state",
           state: err.state,
+        });
+      }
+      if (err instanceof EventSoldOutError) {
+        throw new ConflictException({
+          message: "registration is not offered: the event has no seats left",
+          state: err.state,
+          reason: "sold-out",
         });
       }
       if (err instanceof UnknownSubjectError) {

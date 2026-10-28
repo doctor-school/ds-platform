@@ -12,11 +12,13 @@ import {
 } from "@ds/schemas";
 import { AIR_WINDOW_MS } from "../events/events.service.js";
 import {
+  participationSoldOut,
   type ParticipationRoutes,
   resolveParticipationCta,
 } from "../events/participation-cta.resolver.js";
 import { RecordingsProjectionService } from "../recordings/index.js";
 import {
+  type EventForRegistration,
   type MyEventRow,
   RegistrationRepository,
 } from "./registration.repository.js";
@@ -60,6 +62,20 @@ export class EventNotRegistrableError extends Error {
   constructor(readonly state: EventLifecycleState) {
     super(`registration is not offered while the event is ${state}`);
     this.name = "EventNotRegistrableError";
+  }
+}
+
+/**
+ * 020 EARS-9 (#2467) — a registrable event that offers no participation: a pure
+ * offline event whose offline seats are exhausted, decided by the participation
+ * policy's {@link participationSoldOut}. No waiting list exists, so the refusal
+ * is final. HTTP-agnostic; the controller maps it to a 409 state conflict with
+ * the `sold-out` reason. No registration is recorded.
+ */
+export class EventSoldOutError extends Error {
+  constructor(readonly state: EventLifecycleState) {
+    super("offline seats are exhausted and the event has no online half");
+    this.name = "EventSoldOutError";
   }
 }
 
@@ -125,6 +141,18 @@ export class RegistrationService {
     const event = await this.resolveEvent(idOrSlug);
     if (!isRegistrable(event.state)) {
       throw new EventNotRegistrableError(event.state);
+    }
+    // 020 EARS-9 (#2467) — the ONE participation policy's «мест нет»: a pure
+    // offline event with no seats left is refused, so the automatic
+    // guest-through-auth POST never registers what the CTA would not offer.
+    // As in the policy, a held registration outranks the seat facts: the
+    // caller's repeat stays the idempotent registered answer.
+    if (participationSoldOut(event)) {
+      const heldAt = await this.repo.findRegisteredAt(userId, event.id);
+      if (heldAt) {
+        return { registered: true, registeredAt: heldAt.toISOString() };
+      }
+      throw new EventSoldOutError(event.state);
     }
     const { registeredAt } = await this.repo.upsertRegistration(
       userId,
@@ -308,9 +336,7 @@ export class RegistrationService {
     return userId;
   }
 
-  private async resolveEvent(
-    idOrSlug: string,
-  ): Promise<{ id: string; state: EventLifecycleState }> {
+  private async resolveEvent(idOrSlug: string): Promise<EventForRegistration> {
     const event = await this.repo.findEventForRegistration(idOrSlug);
     if (!event) throw new RegistrationEventNotFoundError(idOrSlug);
     return event;

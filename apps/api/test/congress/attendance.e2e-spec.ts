@@ -590,5 +590,46 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await attendanceRows(petrov)).toEqual(before);
       expect(await ledgerRows(petrov)).toEqual(ledgerBefore);
     });
+
+    // #2466 — a retired event is absent from every write path, the registrar's
+    // desk included: neither its attendance nor a new desk registration can be
+    // written to it. Runs LAST — it retires event B for the rest of the file.
+    it("044 EARS-34.5: a retired event's attendance mark and desk registration are both the 404, and nothing is written", async () => {
+      await pool.query(
+        `UPDATE events SET record_status = 'retired', deleted_at = now() WHERE id = $1`,
+        [eventB],
+      );
+
+      const markRes = await mark(admin.headers, slugB, otherEvent, DAY_1, true);
+      expect(markRes.statusCode, markRes.body).toBe(404);
+      expect(await attendanceRows(otherEvent)).toEqual([]);
+
+      const { rows: before } = await pool.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM registrations WHERE event_id = $1",
+        [eventB],
+      );
+      const desk = await app.inject({
+        method: "POST",
+        url: `/v1/admin/events/${slugB}/registrations`,
+        headers: admin.headers,
+        payload: {
+          surname: "Кузнецова",
+          firstName: "Анна",
+          email: uniqueEmail("att-retired"),
+          specialtyId: randomUUID(),
+          workplace: "ГКБ №1",
+          city: "Москва",
+          region: "Москва",
+          contactPhone: "+7 (900) 765-43-21",
+          paperConsent: true,
+        },
+      });
+      expect(desk.statusCode, desk.body).toBe(404);
+      const { rows: after } = await pool.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM registrations WHERE event_id = $1",
+        [eventB],
+      );
+      expect(after[0]?.n).toBe(before[0]?.n);
+    });
   },
 );

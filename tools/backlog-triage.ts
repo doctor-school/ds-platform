@@ -113,6 +113,7 @@ import {
 import {
   TRACK_MILESTONE_PREFIXES,
   formatRoadmapHygiene,
+  isEpicTitle,
   parseIssueBoardNode,
   roadmapHygiene,
 } from "./gh/lib/roadmap-taxonomy.mjs";
@@ -220,6 +221,8 @@ const ALL_KIND_LABELS = new Set([
 /** Plain-data input to `missingFields` — probes pre-resolved by the caller. */
 export interface FieldHygieneInput {
   number: number;
+  /** Issue title — an `epic: …` container is exempt from the milestone. */
+  title: string;
   labels: string[];
   /** An org Issue Type is set. */
   hasType: boolean;
@@ -230,7 +233,8 @@ export interface FieldHygieneInput {
 }
 
 /**
- * The required fields an open Issue is missing (#1137): Type, milestone,
+ * The required fields an open Issue is missing (#1137): Type, milestone (an
+ * `epic:` container excepted, #3408),
  * assignee, exactly one kind label, exactly one `source:*` label. Returns the
  * missing-field names (empty = compliant). `pnpm issue:create` enforces these
  * at creation; this surfaces pre-gate Issues.
@@ -238,7 +242,9 @@ export interface FieldHygieneInput {
 export function missingFields(i: FieldHygieneInput): string[] {
   const missing: string[] = [];
   if (!i.hasType) missing.push("Type");
-  if (!i.hasMilestone) missing.push("milestone");
+  // An epic spans releases and carries no milestone (repo-conventions → Track ≠
+  // milestone ≠ epic); same predicate `pnpm issue:create` gates on.
+  if (!i.hasMilestone && !isEpicTitle(i.title)) missing.push("milestone");
   if (!i.hasAssignee) missing.push("assignee");
   const kinds = i.labels.filter((l) => ALL_KIND_LABELS.has(l));
   if (kinds.length !== 1)
@@ -820,28 +826,39 @@ export interface ClaimSignal {
  * the first non-empty line only — a mid-comment "starting with" never claims.
  */
 export function isStartClaimComment(body: string): boolean {
-  const first = body
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .find((l) => l.trim() !== "");
+  const first = firstNonEmptyLine(body);
   if (!first) return false;
+  // `Claim released …` opens with `claim` — a release must never read as a claim.
+  if (STOP_STATE_OPENER.test(first)) return false;
   return /^\s*(?:\*\*)?\s*(?:claim(?:ed|ing)?\b|start(?:ed|ing)?\b|taking\b|in[- ]progress\b)/i.test(
     first,
   );
 }
 
 /**
- * Is this comment a STOP-STATE comment (board-design §6 four-field shape)? The
- * canonical form opens with `**Where I stopped:**` — that opener is the
- * deterministic marker.
+ * Openers that release a claim: the canonical `**Where I stopped:**`
+ * (board-design §6 four-field shape) plus the release openers sessions actually
+ * post — `Stop-state: …` / `stop state …` / `Claim released …` (#3408: the
+ * #1611 and #2020 releases were missed), as tolerant as the claim openers.
  */
-export function isStopStateComment(body: string): boolean {
-  const first = body
+const STOP_STATE_OPENER =
+  /^\s*(?:\*\*)?\s*(?:where i stopped|stop[- ]state|claim released)\b/i;
+
+function firstNonEmptyLine(body: string): string | undefined {
+  return body
     .replace(/\r\n/g, "\n")
     .split("\n")
     .find((l) => l.trim() !== "");
-  if (!first) return false;
-  return /^\s*(?:\*\*)?\s*where i stopped\b/i.test(first);
+}
+
+/**
+ * Is this comment a STOP-STATE / CLAIM-RELEASE comment (`STOP_STATE_OPENER`)?
+ * First non-empty line only — a mention of "stop-state" elsewhere never
+ * releases.
+ */
+export function isStopStateComment(body: string): boolean {
+  const first = firstNonEmptyLine(body);
+  return !!first && STOP_STATE_OPENER.test(first);
 }
 
 /** Compact claim age: `<1m`, `34m`, `2h`, `3d`. */
@@ -2584,6 +2601,7 @@ async function main(): Promise<void> {
       number: raw.number,
       missing: missingFields({
         number: raw.number,
+        title: raw.title ?? "",
         labels: (raw.labels ?? []).map((l) => l.name),
         hasType: !!raw.issueType?.name,
         hasMilestone: !!raw.milestone?.title,

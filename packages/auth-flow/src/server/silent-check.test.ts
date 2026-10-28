@@ -4,6 +4,7 @@ import { ACADEMY_AUTH_FLOW, DOCTOR_AUTH_FLOW } from "../hosts";
 import {
   CHECK_GUARD_COOKIE,
   GUEST_MARKER_COOKIE,
+  checkGuardCookie,
   guestMarkerCookie,
   silentTransactionCookieValue,
   storefrontSilentCheck,
@@ -220,12 +221,47 @@ describe("003 EARS-63: the silent check starts only on a checkable request", () 
     ["the verify step", nav("/verify")],
     ["the callback", nav("/auth/callback?code=c&state=s")],
     ["the health route", nav("/healthz")],
+    [
+      "a YandexBot crawler",
+      nav("/", {
+        "user-agent":
+          "Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)",
+      }),
+    ],
+    [
+      "a YandexMobileBot crawler",
+      nav("/", {
+        "user-agent":
+          "Mozilla/5.0 (iPhone; CPU iPhone OS 15_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.4 Mobile/15E148 Safari/604.1 (compatible; YandexMobileBot/3.0; +http://yandex.com/bots)",
+      }),
+    ],
     ["the one-shot ds_guest=1 return", nav("/webinars?ds_guest=1")],
   ])("EARS-63: (req. 12) %s is never redirected", async (_name, request) => {
     const api = fakeApi();
     expect(rendered(await check(request, api))).toEqual([]);
     expect(api.calls).toEqual([]);
   });
+
+  it.each([
+    [
+      "the Yandex app (Android)",
+      "Mozilla/5.0 (Linux; Android 13; SM-A536B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 YandexSearch/24.10.1 YaApp_Android/24.101 YaSearchBrowser/24.101 BroPP/1.0 SA/3 Mobile Safari/537.36",
+    ],
+    [
+      "Yandex Browser (desktop)",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 YaBrowser/24.4.0.0 Yowser/2.5 Safari/537.36",
+    ],
+  ])(
+    "EARS-63: (e) %s is a person, not a crawler — its signed-out navigation is checked",
+    async (_name, userAgent) => {
+      const api = fakeApi();
+      expect(
+        redirected(await check(nav("/", { "user-agent": userAgent }), api))
+          .status,
+      ).toBe(303);
+      expect(api.starts()).toHaveLength(1);
+    },
+  );
 
   it("EARS-63: (req. 1) the check's return path is held to requirement 1 — a look-alike path lands on /, an overlong one on its path", async () => {
     const api = fakeApi();
@@ -492,6 +528,78 @@ describe("003 EARS-62 / 63: the silent outcomes of the callback", () => {
       expect(landed.searchParams.get("ds_guest"), hostile).toBe("1");
     }
   });
+
+  it.each([
+    ["its own redeem limit (429)", () => new Response(null, { status: 429 })],
+    ["an API failure (5xx)", () => new Response(null, { status: 503 })],
+    [
+      "a network failure",
+      (): Response => {
+        throw new TypeError("fetch failed");
+      },
+    ],
+    [
+      "a 200 with no session cookie",
+      () => Response.json({ sub: "u1" }, { status: 200 }),
+    ],
+    [
+      "a 200 with an unparsable body",
+      () =>
+        new Response("not json", {
+          status: 200,
+          headers: { "set-cookie": "__Host-ds_session=x; Path=/" },
+        }),
+    ],
+  ])(
+    "EARS-63: (b / req. 9, 12) a callback without its transaction cookie whose redeem fails on %s lands on a ds_guest=1 path, never a checkable page",
+    async (_name, redeem) => {
+      const api = fakeApi({ redeem });
+      const res = await callback(
+        "/auth/callback?error=login_required&state=st",
+        undefined,
+        api,
+      );
+      expect(res.status).toBe(303);
+      const location = res.headers.get("location") ?? "";
+      const landed = new URL(location, "https://academy.example");
+      expect(landed.origin).toBe("https://academy.example");
+      expect(landed.searchParams.get("ds_guest")).toBe("1");
+      // The landing is never checked: one round trip, no loop.
+      expect(
+        rendered(await check(nav(`${landed.pathname}${landed.search}`), api)),
+      ).toEqual([]);
+      expect(api.starts()).toHaveLength(0);
+    },
+  );
+
+  it.each([
+    [
+      "a 200 with no session cookie",
+      () => Response.json({ sub: "u1" }, { status: 200 }),
+    ],
+    [
+      "a 200 with an unparsable body",
+      () =>
+        new Response("not json", {
+          status: 200,
+          headers: { "set-cookie": "__Host-ds_session=x; Path=/" },
+        }),
+    ],
+  ])(
+    "EARS-63: (b) a silent callback whose mint is malformed (%s) ends as a guest with the marker and the guard",
+    async (_name, redeem) => {
+      const api = fakeApi({ redeem });
+      const res = await callback(
+        "/auth/callback?code=c&state=st",
+        await silentTx(),
+        api,
+      );
+      expect(res.status).toBe(303);
+      const set = res.headers.getSetCookie();
+      expect(set).toContain(await guestMarkerCookie(TOKEN, NOW));
+      expect(set).toContain(checkGuardCookie());
+    },
+  );
 });
 
 describe("003 EARS-63 / ADR-0015 §4 req. 12: whole navigations", () => {

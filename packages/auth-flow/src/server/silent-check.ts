@@ -170,7 +170,7 @@ export async function readTransactionCookie(
 
 /** ADR-0015 §4 step 4 «Crawlers» — the maintained search-crawler list. */
 const SEARCH_CRAWLER =
-  /yandex(?:bot|images|metrika|mobilebot|direct|accessibilitybot|renderresourcesbot)?|googlebot|google-inspectiontool|googleother|adsbot-google|mediapartners-google|bingbot|bingpreview|msnbot|duckduckbot|baiduspider|slurp|applebot|petalbot|seznambot|sogou|mail\.ru_bot|exabot|qwantify/i;
+  /yandex(?:bot|images|metrika|mobilebot|direct|accessibilitybot|renderresourcesbot)|googlebot|google-inspectiontool|googleother|adsbot-google|mediapartners-google|bingbot|bingpreview|msnbot|duckduckbot|baiduspider|slurp|applebot|petalbot|seznambot|sogou|mail\.ru_bot|exabot|qwantify/i;
 
 /**
  * EARS-63 (d) / (e) — whether the request may start a check at all. Exempt: a

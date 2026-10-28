@@ -426,12 +426,14 @@ export async function storefrontCallback(
       cache: "no-store",
     });
   } catch {
-    return silent ? asGuest(null) : land(null);
+    return failed();
   }
   if (res.ok) {
-    const minted = StorefrontRedeemResponseSchema.safeParse(await res.json());
+    const minted = StorefrontRedeemResponseSchema.safeParse(
+      await res.json().catch(() => null),
+    );
     const cookies = res.headers.getSetCookie();
-    if (!minted.success || cookies.length === 0) return land(null);
+    if (!minted.success || cookies.length === 0) return failed();
     // The API's session cookie, byte for byte (a fresh sid, ADR-0015 §4 req. 5).
     for (const c of cookies) headers.append("set-cookie", c);
     // EARS-63 (a) / (b) — a minted session deletes the marker; a silent
@@ -476,7 +478,20 @@ export async function storefrontCallback(
     return land(kept);
   }
   // 429 (the callback's own limit, req. 9) and every other failure.
-  return silent ? asGuest(null) : land(null);
+  return failed();
+
+  /**
+   * A redeem that minted nothing and named no outcome (its own limit, an API
+   * or network failure, a malformed mint). The browser's silent transaction
+   * ends as a guest; a callback without its transaction cookie (a client that
+   * keeps no cookies, EARS-63 (b)) lands on `/?ds_guest=1`, never checked, so
+   * it can never loop through the check (req. 9, 12).
+   */
+  function failed(): Promise<Response> | Response {
+    if (silent) return asGuest(null);
+    if (!txId) return seeOther(`${withGuestFlag("/")}#`, headers);
+    return land(null);
+  }
 
   /**
    * 003 EARS-62 — no live transaction (an interactive one past its 60

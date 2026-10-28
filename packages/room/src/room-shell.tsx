@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { createBrowserRoomApi } from "./client/room-api";
 import type { RoomShellProps } from "./types";
 import { PresenceHeartbeat } from "./ui/presence-heartbeat";
@@ -51,6 +51,13 @@ export function RoomShell({
   // the broadcast ended does not re-open itself (a new broadcast is a new grant).
   const [ended, setEnded] = useState(false);
   const onRoomClosed = useCallback(() => setEnded(true), []);
+  // 006 EARS-7 (#1974) — closing the event stops the stream at once, but the room
+  // hears of the close only on its next beat. A player failure is therefore the
+  // moment to ask again: the heartbeat loop publishes its beat into this ref and
+  // the player calls it on failure, so a closed room shows the end card instead of
+  // «Трансляция не загружается» for up to a whole heartbeat interval.
+  const statusProbe = useRef<(() => void) | null>(null);
+  const probeRoomStatus = useCallback(() => statusProbe.current?.(), []);
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
@@ -67,6 +74,7 @@ export function RoomShell({
           api={api}
           intervalSeconds={config.heartbeatIntervalSeconds}
           onRoomClosed={onRoomClosed}
+          probeRef={statusProbe}
         />
         <RoomView
           api={api}
@@ -74,6 +82,7 @@ export function RoomShell({
           context={context}
           copy={copy}
           ended={ended}
+          onPlayerFailure={probeRoomStatus}
         />
       </RoomPresenceProvider>
     </main>

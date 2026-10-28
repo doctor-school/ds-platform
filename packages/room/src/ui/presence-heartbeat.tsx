@@ -72,6 +72,7 @@ export function PresenceHeartbeat({
   api,
   intervalSeconds,
   onRoomClosed,
+  probeRef,
 }: {
   /** The room's ONE browser transport — `createBrowserRoomApi({ slug })`. */
   api: BrowserRoomApi;
@@ -83,6 +84,13 @@ export function PresenceHeartbeat({
    * ended phase; the component itself still renders nothing.
    */
   onRoomClosed?: (() => void) | undefined;
+  /**
+   * 006 EARS-7 (#1974) — the loop publishes its own beat here so the room can
+   * re-probe its status out of cadence (on a player failure) through the SAME
+   * gated call: no second endpoint, no second refusal reading. The probe obeys the
+   * loop's own gates — nothing while hidden, nothing once the close is latched.
+   */
+  probeRef?: { current: (() => void) | null } | undefined;
 }) {
   const setPresenceCount = usePresenceCountSetter();
   // Held in a ref so a host passing an inline callback cannot re-run the effect —
@@ -155,12 +163,14 @@ export function PresenceHeartbeat({
 
     if (!document.hidden) start();
     document.addEventListener("visibilitychange", onVisibilityChange);
+    if (probeRef) probeRef.current = beat;
 
     return () => {
+      if (probeRef?.current === beat) probeRef.current = null;
       stop();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [api, intervalSeconds, setPresenceCount]);
+  }, [api, intervalSeconds, setPresenceCount, probeRef]);
 
   return null;
 }

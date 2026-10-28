@@ -354,3 +354,154 @@ describe("006 EARS-19 the withheld count is absent from the room", () => {
     }
   });
 });
+
+/**
+ * 006 EARS-7 (#1974) — a close the room has not yet been TOLD about must never read
+ * as a broken broadcast. Closing the event stops the stream at once, but the room
+ * only learns of the close from its next heartbeat (every `heartbeatIntervalSeconds`,
+ * 60 s by default). In between, the player's own failure machine reports the stopped
+ * stream as «Трансляция не загружается / Переподключаемся…». So the moment the player
+ * reports a failure, the room re-probes its status through the SAME heartbeat call,
+ * and a refusal proving the event left `live` replaces the overlay with the end card.
+ */
+describe("006 EARS-7 a player failure re-probes the room status", () => {
+  const youtubeConfig = {
+    ...config,
+    stream: { provider: "youtube", embedRef: "dQw4w9WgXcQ" },
+  } as unknown as RoomConfig;
+
+  let beats: number;
+  let closed: boolean;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    sdkHandlers.clear();
+    beats = 0;
+    closed = false;
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({
+        matches: true,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown) => {
+        const url =
+          typeof input === "string" ? input : String((input as { url?: string })?.url ?? "");
+        if (url.includes("/heartbeat")) {
+          beats += 1;
+          if (closed) {
+            return {
+              ok: false,
+              status: 409,
+              json: async () => ({ message: "event is not live", state: "ended" }),
+            } as unknown as Response;
+          }
+          return {
+            ok: true,
+            json: async () => ({ eventId: "e", beatAt: new Date().toISOString(), presenceCount: 3 }),
+          } as unknown as Response;
+        }
+        return { ok: true, json: async () => ({}) } as unknown as Response;
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  async function settle(): Promise<void> {
+    await act(async () => {
+      for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    });
+  }
+
+  function fireYouTube(data: string): void {
+    act(() => {
+      window.dispatchEvent(new MessageEvent("message", { origin: "https://www.youtube.com", data }));
+    });
+  }
+
+  function renderShell(): ReturnType<typeof render> {
+    return render(
+      <RoomShell
+        slug="hsn-therapy"
+        config={youtubeConfig}
+        context={context}
+        displayName="Иван Петров"
+        copy={copy}
+        routes={routes}
+      />,
+    );
+  }
+
+  it("EARS-7.11: a player failure after an unannounced close shows the end card, not the failure overlay, before the next scheduled beat", async () => {
+    renderShell();
+    await settle();
+    expect(beats).toBe(1); // the entry beat — the room is live.
+
+    // The admin closes the эфир; the stream stops and the provider reports an error.
+    closed = true;
+    fireYouTube('{"event":"onReady"}');
+    fireYouTube('{"event":"onError","info":100}');
+    await settle();
+
+    // No timer advanced: the end card came from the failure-triggered probe, not
+    // from the 30 s grid.
+    expect(beats).toBe(2);
+    expect(screen.getByTestId("room-player-ended")).toBeInTheDocument();
+    expect(screen.queryByTestId("room-player-failure")).toBeNull();
+    expect(screen.queryByText(copy.playerFailedTitle)).toBeNull();
+    expect(screen.getByTestId("room-chat-ended")).toBeInTheDocument();
+  });
+
+  it("EARS-7.11: a player failure in a room that is still live keeps the failure overlay", async () => {
+    renderShell();
+    await settle();
+
+    fireYouTube('{"event":"onReady"}');
+    fireYouTube('{"event":"onError","info":100}');
+    await settle();
+
+    expect(beats).toBe(2); // the probe ran, and the server said live.
+    expect(screen.queryByTestId("room-player-ended")).toBeNull();
+    expect(screen.getByTestId("room-player-failure")).toBeInTheDocument();
+  });
+
+  it("EARS-7.11: a tab hidden through the close shows the end card as soon as it is visible again", async () => {
+    let hidden = false;
+    vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden);
+    renderShell();
+    await settle();
+    expect(beats).toBe(1);
+
+    act(() => {
+      hidden = true;
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    closed = true;
+    // Backgrounded through several grid ticks and a player failure: nothing is sent.
+    act(() => {
+      vi.advanceTimersByTime(config.heartbeatIntervalSeconds * 1000 * 3);
+    });
+    await settle();
+    expect(beats).toBe(1);
+    expect(screen.queryByTestId("room-player-ended")).toBeNull();
+
+    act(() => {
+      hidden = false;
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await settle();
+    expect(beats).toBe(2);
+    expect(screen.getByTestId("room-player-ended")).toBeInTheDocument();
+    expect(screen.queryByTestId("room-player-failure")).toBeNull();
+  });
+});

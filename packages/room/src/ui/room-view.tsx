@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@ds/design-system/badge";
 import { WebinarRoomLayout } from "@ds/design-system/webinar-room";
 import type { RoomConfig } from "@ds/schemas";
@@ -203,11 +203,18 @@ export function PlayerFrame({
   config,
   copy,
   ended = false,
+  onPlayerFailure,
 }: {
   config: RoomConfig;
   copy: PlayerCopy;
   /** 006 EARS-7 — the broadcast is over (server-proven); render the end card. */
   ended?: boolean;
+  /**
+   * 006 EARS-7 (#1974) — called each time the player enters a failure state
+   * (`failed` / `retrying`). A closed event stops the stream, so a failure is when
+   * the room re-probes its status; the end card then replaces the overlay.
+   */
+  onPlayerFailure?: (() => void) | undefined;
 }) {
   const embed = resolveEmbed(config.stream);
   // 006 EARS-18 — the runtime player-failure state machine. Hooks run unconditionally
@@ -219,6 +226,14 @@ export function PlayerFrame({
   // state").
   const provider = embed.kind === "unavailable" ? "cdnvideo" : embed.kind;
   const { status, grade, failure, embedKey, restart } = usePlayerFailureState(provider);
+  const onPlayerFailureRef = useRef(onPlayerFailure);
+  useEffect(() => {
+    onPlayerFailureRef.current = onPlayerFailure;
+  }, [onPlayerFailure]);
+  useEffect(() => {
+    if (ended) return;
+    if (status === "failed" || status === "retrying") onPlayerFailureRef.current?.();
+  }, [status, ended]);
   // The `origin` param YouTube's IFrame API wants is resolved AFTER mount so the
   // first client render matches SSR (both `?enablejsapi=1`), avoiding a hydration
   // mismatch; the extra param arrives on the post-mount re-render.
@@ -403,6 +418,7 @@ export function RoomView({
   context,
   copy,
   ended = false,
+  onPlayerFailure,
 }: {
   /** The room's ONE browser transport — `createBrowserRoomApi({ slug })`. */
   api: BrowserRoomApi;
@@ -415,6 +431,8 @@ export function RoomView({
    * mobile eyebrow and the chat composer.
    */
   ended?: boolean;
+  /** 006 EARS-7 (#1974) — handed to {@link PlayerFrame}; the shell re-probes the room status. */
+  onPlayerFailure?: (() => void) | undefined;
 }) {
   const presenceCount = usePresenceCount();
   // Desktop chat collapse + the unread counter (messages missed while folded).
@@ -442,7 +460,14 @@ export function RoomView({
         setCollapsed(next);
         setUnread(0);
       }}
-      player={<PlayerFrame config={config} copy={copy} ended={ended} />}
+      player={
+        <PlayerFrame
+          config={config}
+          copy={copy}
+          ended={ended}
+          onPlayerFailure={onPlayerFailure}
+        />
+      }
       contextStrip={<ContextStrip context={context} />}
       context={<EventContext context={context} copy={copy} />}
       chat={

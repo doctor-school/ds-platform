@@ -79,7 +79,7 @@ volumes:
   assert.throws(
     () =>
       composeDirBindMounts(
-        "services:\n  a:\n    volumes:\n      - ./a/../b.conf:/x\n",
+        "services:\n  svc:\n    volumes:\n      - ./dir/../b.conf:/x\n",
       ),
     /bind mount/,
   );

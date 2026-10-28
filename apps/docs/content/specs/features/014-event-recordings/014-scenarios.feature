@@ -19,6 +19,32 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       When the visitor activates the golden recorded card's recording link
       Then the visitor lands on the recorded event page showing its matching title
 
+  Rule: Guests read complete public recording pages on the canonical event route
+
+    Background:
+      Given the public recording page is read without a visitor account
+
+    @EARS-4 @core @happy @public-recording-page
+    Scenario: A guest reads the whole archived page on the single event route
+      Given the golden ended event has a published edited recording
+      When the guest opens that public recording event page
+      Then the complete public event projection and recording signal are server-rendered
+      And the page has no participation action or archive-only mirror route
+
+    @EARS-7 @core @happy @public-recording-page
+    Scenario: The plaque states the readiness date the operator set
+      Given a real golden ended event has an operator-set readiness day and no published recording
+      When the guest opens that public recording event page
+      Then the preparing plaque occupies the player position with that exact readiness day
+      And no empty player, reminder action or invented readiness estimate is rendered
+
+    @EARS-21 @facets @happy @public-recording-page
+    Scenario: Archived speakers use the canonical relation
+      Given a real golden ended event has at least two distinct canonical speakers
+      When the guest opens that public recording event page
+      Then the public event speakers match the independent canonical projection in relation order
+      And the rendered speaker cards preserve that exact count, order and credentials
+
   Rule: Recording lifecycle, playback and remaining archive contracts
 
     Background:
@@ -229,14 +255,6 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
     # ---------------------------------------------------------------- public read + gate
 
     @EARS-4 @core @happy
-    Scenario: A guest reads the whole archived page on the single event route
-      Given a finished event with a published edited recording
-      When a visitor with no account opens /webinars/<slug>
-      Then every field of the feature 004 PublicEventPage projection renders - title, school, start, duration, description, speakers, specialties, partners and the program PDF when present
-      And the page is the same /webinars/<slug> route as before the broadcast
-      And no archive-only mirror route exists
-
-    @EARS-4 @core @happy
     Scenario: A hidden event keeps its feature 004 render
       Given a hidden event with a published edited recording attached before it was hidden
       When any visitor opens its page
@@ -304,14 +322,6 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
         | \\example.invalid\          |
 
     # ---------------------------------------------------------------- preparing plaque
-
-    @EARS-7 @core @happy
-    Scenario: The plaque states the readiness date the operator set
-      Given a finished event with no published recording
-      And the operator set a readiness date on that event
-      When any visitor opens the event page
-      Then the «запись готовится» plaque renders in the player's position with that date
-      And no empty or broken player is rendered
 
     @EARS-7 @core @happy
     Scenario: The plaque is honest without a date too
@@ -552,13 +562,6 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       And the existing Event program PDF may be uploaded replaced and explicitly removed
       And each replace or remove enqueues retained cleanup
       And duration is read from validated video metadata
-
-    @EARS-21 @facets @happy
-    Scenario: Archived speakers use the canonical relation
-      Given the 012 speaker migration has cut over
-      When the archived event page is read
-      Then speakers are eligible event_experts in relation order
-      And no event_speakers fallback or name matching occurs
 
     @EARS-22 @core @happy
     Scenario: Recording filters share the instant list contract

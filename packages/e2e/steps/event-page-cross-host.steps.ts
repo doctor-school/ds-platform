@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 
 import { golden } from "@ds/db/seed/golden";
-import { expect, type Page, type Response } from "@playwright/test";
+import {
+  expect,
+  type APIResponse,
+  type Page,
+  type Response,
+} from "@playwright/test";
 
 import { HOSTS, baseUrlFor, type HostId } from "../hosts.js";
 import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
@@ -11,6 +16,11 @@ import {
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
 import { signInGoldenDoctor } from "../lib/sign-in.js";
+import { isSignInHostForm } from "../lib/sign-in-host-api.js";
+import {
+  OIDC_TX_COOKIE,
+  TOP_LEVEL_NAVIGATION_HEADERS,
+} from "../lib/storefront-entry.js";
 import { Given, Then, When } from "./support/fixtures.js";
 
 /**
@@ -89,6 +99,25 @@ async function hasSession(page: Page, id: HostId): Promise<boolean> {
   return cookies.some((c) => c.name === SESSION_COOKIE);
 }
 
+/**
+ * The storefront session as the page itself reads it — an in-page `fetch`, as
+ * every other step of the suite reads `/v1/auth/session`. The session is
+ * device-bound (003 EARS-64 fingerprint: UA + IP /24 + accept-language), so a
+ * `page.request` read, which carries neither the browser's `accept-language`
+ * nor its `origin`, is answered 401 while the browser is signed in.
+ */
+async function sessionStatus(page: Page): Promise<number> {
+  return page.evaluate(
+    async () =>
+      (
+        await fetch("/v1/auth/session", {
+          credentials: "include",
+          cache: "no-store",
+        })
+      ).status,
+  );
+}
+
 async function openAsDocument(page: Page, id: HostId): Promise<void> {
   recordDocuments(page);
   const response = await page.goto(`${base(id)}${eventPath(id)}`, {
@@ -146,8 +175,9 @@ Then(
   async ({ page }, hostName: string) => {
     const id = hostNamed(hostName);
     expect(await hasSession(page, id), `signed in on ${hostName}`).toBe(true);
-    const session = await page.request.get(`${base(id)}/v1/auth/session`);
-    expect(session.status(), "the storefront session is live").toBe(200);
+    expect(await sessionStatus(page), "the storefront session is live").toBe(
+      200,
+    );
     // No credential step ran: nothing was typed, and no sign-in-host page
     // stopped the chain — the last document is the event page itself.
     const last = recorded(page).at(-1);
@@ -334,10 +364,7 @@ Then(
     const location = new URL(first!.headers()["location"] ?? "", first!.url());
     expect(location.searchParams.get("prompt")).toBe("none");
     expect(await hasSession(page, "academy")).toBe(true);
-    const session = await page.request.get(
-      `${base("academy")}/v1/auth/session`,
-    );
-    expect(session.status(), "the Academy session is live").toBe(200);
+    expect(await sessionStatus(page), "the Academy session is live").toBe(200);
   },
 );
 
@@ -496,3 +523,346 @@ Then(
     noSignInHostPageRendered(page);
   },
 );
+
+// --- 003 EARS-63: the silent check, as the 003 scenarios state it -------------
+
+const CHECK_GUARD_COOKIE = "__Host-ds_check";
+const CALLBACK_PATH = "/auth/callback";
+
+/** The Academy document responses whose path is the storefront callback. */
+function academyCallbacks(page: Page): Response[] {
+  return recorded(page).filter((r) => {
+    const url = new URL(r.url());
+    return url.origin === origin("academy") && url.pathname === CALLBACK_PATH;
+  });
+}
+
+/** The cookie names one response sets (`Set-Cookie`, every header line). */
+async function cookiesSetBy(response: Response): Promise<string[]> {
+  return (await response.headersArray())
+    .filter((h) => h.name.toLowerCase() === "set-cookie")
+    .flatMap((h) => h.value.split("\n"))
+    .map((line) => line.split("=")[0]!.trim());
+}
+
+/** The first Academy answer is the check's `303` into a `prompt=none` authorize. */
+function expectSilentCheckFirst(page: Page): Response {
+  const first = recorded(page).find(
+    (r) => new URL(r.url()).origin === origin("academy"),
+  );
+  expect(first, "a document response from the Academy").toBeDefined();
+  expect(first!.status(), "the check redirect").toBe(303);
+  expect(first!.headers()["cache-control"]).toBe("no-store");
+  const location = new URL(first!.headers()["location"] ?? "", first!.url());
+  expect(location.searchParams.get("prompt"), "a silent authorize").toBe(
+    "none",
+  );
+  return first!;
+}
+
+Given(
+  "a doctor signed in on the doctor storefront in this browser",
+  async ({ page }) => {
+    await page.context().clearCookies();
+    await signInGoldenDoctor(page, HOSTS.doctor, SEED, base("doctor"));
+    expect(await hasSession(page, "doctor"), "signed in on doctor.school").toBe(
+      true,
+    );
+  },
+);
+
+When(
+  "the doctor's browser requests an Academy event page as a document",
+  async ({ page }) => {
+    expect(
+      await hasSession(page, "academy"),
+      "no Academy session before the navigation",
+    ).toBe(false);
+    requested.set(page, "academy");
+    await openAsDocument(page, "academy");
+  },
+);
+
+Then(
+  "the first Academy response is a redirect into a silent transaction with prompt=none",
+  async ({ page }) => {
+    expectSilentCheckFirst(page);
+  },
+);
+
+Then(
+  "the sign-in host finalises it with the shared session and shows no form",
+  async ({ page }) => {
+    noSignInHostPageRendered(page);
+    await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  },
+);
+
+Then(
+  "the Academy callback mints a session and the event page renders signed in",
+  async ({ page }) => {
+    const callbacks = academyCallbacks(page);
+    expect(callbacks, "one Academy callback").toHaveLength(1);
+    expect(callbacks[0]!.status()).toBe(303);
+    expect(new URL(callbacks[0]!.url()).searchParams.has("code")).toBe(true);
+    expect(await cookiesSetBy(callbacks[0]!)).toContain(SESSION_COOKIE);
+    expect(await hasSession(page, "academy")).toBe(true);
+    expect(await sessionStatus(page), "the Academy session is live").toBe(200);
+    const last = recorded(page).at(-1)!;
+    expect(new URL(last.url()).pathname).toBe(eventPath("academy"));
+  },
+);
+
+Then(
+  "no guest render of the page reaches the browser before the signed-in one",
+  async ({ page }) => {
+    const rendered = eventResponses(page, "academy").filter(
+      (r) => r.status() === 200,
+    );
+    expect(rendered, "exactly one render of the event page").toHaveLength(1);
+    expect(rendered[0]).toBe(recorded(page).at(-1));
+  },
+);
+
+When("the browser requests an Academy page as a document", async ({ page }) => {
+  await openAsDocument(page, "academy");
+});
+
+Then(
+  "the silent check ends in login_required and the page renders as a guest",
+  async ({ page }) => {
+    expectSilentCheckFirst(page);
+    const callbacks = academyCallbacks(page);
+    expect(callbacks, "one Academy callback").toHaveLength(1);
+    expect(
+      new URL(callbacks[0]!.url()).searchParams.get("error"),
+      "the sign-in host found no shared session",
+    ).toBe("login_required");
+    expect(await hasSession(page, "academy")).toBe(false);
+    expect(await sessionStatus(page), "a guest").toBe(401);
+    await expect(page.getByTestId("shell-login")).toBeVisible();
+    await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  },
+);
+
+Then(
+  "the signed __Host-ds_guest marker and the one-shot __Host-ds_check guard are set",
+  async ({ page }) => {
+    const [callback] = academyCallbacks(page);
+    const set = await cookiesSetBy(callback!);
+    expect(set, "the callback sets the marker").toContain(GUEST_MARKER_COOKIE);
+    expect(set, "the callback sets the loop guard").toContain(
+      CHECK_GUARD_COOKIE,
+    );
+    const cookies = await page.context().cookies(base("academy"));
+    const marker = cookies.find((c) => c.name === GUEST_MARKER_COOKIE);
+    expect(marker, "the marker is held").toBeDefined();
+    expect(marker!.value, "issue time and HMAC").not.toBe("");
+    expect(marker).toMatchObject({
+      httpOnly: true,
+      secure: true,
+      sameSite: "Lax",
+      path: "/",
+    });
+    // One-shot: the page request that followed the callback consumed it.
+    expect(
+      cookies.some((c) => c.name === CHECK_GUARD_COOKIE),
+      "the guard is consumed by the first document request carrying it",
+    ).toBe(false);
+  },
+);
+
+When(
+  "the browser requests another Academy page as a document",
+  async ({ page }) => {
+    recordDocuments(page);
+    const response = await page.goto(
+      `${base("academy")}${HOSTS.academy.eventsPath}`,
+      { waitUntil: "load" },
+    );
+    expect(response?.status()).toBe(200);
+  },
+);
+
+Then(
+  "no silent check starts and the page renders as a guest",
+  async ({ page }) => {
+    expect(
+      recorded(page).map((r) => [new URL(r.url()).origin, r.status()]),
+      "the page is served directly, no check redirect",
+    ).toEqual([[origin("academy"), 200]]);
+    expect(await hasSession(page, "academy")).toBe(false);
+    await expect(page.getByTestId("shell-login")).toBeVisible();
+  },
+);
+
+/** The answers the exempt-request step collected, by label. */
+const exemptAnswers = new WeakMap<Page, Map<string, number>>();
+/** The Academy's answer to the document request after the bucket ran out. */
+const limitedAnswer = new WeakMap<
+  Page,
+  { status: number; location: string | undefined; body: string }
+>();
+
+Given("a browser with no Academy session", async ({ page }) => {
+  await page.context().clearCookies();
+  expect(await hasSession(page, "academy")).toBe(false);
+});
+
+When(
+  /^the Academy receives a crawler request, a request without fetch metadata, a prefetch, a POST, a "\/v1" call, a static asset, a "\.well-known" file and the health route$/,
+  async ({ page }) => {
+    const academy = base("academy");
+    const nav = TOP_LEVEL_NAVIGATION_HEADERS;
+    const get = (path: string, headers: Record<string, string> = {}) =>
+      page.request.get(`${academy}${path}`, { maxRedirects: 0, headers });
+    const probes: readonly [string, () => Promise<APIResponse>][] = [
+      [
+        "crawler",
+        () =>
+          get("/", {
+            ...nav,
+            "user-agent":
+              "Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)",
+          }),
+      ],
+      ["no fetch metadata", () => get("/")],
+      ["prefetch", () => get("/", { ...nav, "sec-purpose": "prefetch" })],
+      [
+        "POST",
+        () =>
+          page.request.post(`${academy}/`, { maxRedirects: 0, headers: nav }),
+      ],
+      ["/v1 call", () => get("/v1/public/events?limit=1", nav)],
+      ["static asset", () => get("/favicon.ico", nav)],
+      [".well-known file", () => get("/.well-known/security.txt", nav)],
+      ["health route", () => get("/healthz", nav)],
+    ];
+    const answers = new Map<string, number>();
+    for (const [label, probe] of probes) {
+      // Each probe is its own first visit: no marker, guard or transaction.
+      await page.context().clearCookies();
+      answers.set(label, (await probe()).status());
+    }
+    exemptAnswers.set(page, answers);
+  },
+);
+
+Then("none of them is answered with a redirect", async ({ page }) => {
+  const answers = exemptAnswers.get(page);
+  if (!answers) throw new Error("003 EARS-63: no exempt request was made");
+  for (const [label, status] of answers) {
+    expect(status >= 300 && status < 400, `${label} answered ${status}`).toBe(
+      false,
+    );
+  }
+});
+
+When(
+  "the silent-check bucket for the client address is exhausted and a document request arrives",
+  async ({ page }) => {
+    // 1200 starts per 15 minutes per IP (EARS-63 (f)). Every request is a
+    // first visit — a held silent transaction suppresses the check and counts
+    // nothing — so the jar is cleared before each one; the first answer that
+    // is not the check's redirect is the limited start.
+    const SILENT_CHECK_LIMIT = 1200;
+    for (let start = 0; start <= SILENT_CHECK_LIMIT; start++) {
+      await page.context().clearCookies();
+      const res = await page.request.get(`${base("academy")}/`, {
+        maxRedirects: 0,
+        headers: TOP_LEVEL_NAVIGATION_HEADERS,
+      });
+      if (res.status() === 303) continue;
+      limitedAnswer.set(page, {
+        status: res.status(),
+        location: res.headers()["location"],
+        body: await res.text(),
+      });
+      return;
+    }
+    throw new Error(
+      `003 EARS-63: ${SILENT_CHECK_LIMIT + 1} silent-check starts were all redirected`,
+    );
+  },
+);
+
+Then(
+  "the Academy answers HTTP 200 with the guest render and no redirect",
+  async ({ page }) => {
+    const answer = limitedAnswer.get(page);
+    if (!answer) throw new Error("003 EARS-63: the bucket was not exhausted");
+    expect(answer.status, "the limited start renders the page").toBe(200);
+    expect(answer.location, "no redirect").toBeUndefined();
+    expect(answer.body, "the guest shell").toContain(
+      'data-testid="shell-login"',
+    );
+  },
+);
+
+/** The interactive transaction id the abandoned form left in the Academy jar. */
+const abandonedTx = new WeakMap<Page, string>();
+
+async function academyTx(page: Page): Promise<string | undefined> {
+  const cookies = await page.context().cookies(base("academy"));
+  return cookies.find((c) => c.name === OIDC_TX_COOKIE)?.value;
+}
+
+Given(
+  "a guest started the Academy sign-in entry and left the sign-in host form unfinished",
+  async ({ page }) => {
+    await page.context().clearCookies();
+    await page.goto(`${base("academy")}/login`, { waitUntil: "load" });
+    await page.waitForURL((url) => isSignInHostForm(url));
+    const tx = await academyTx(page);
+    expect(tx, "the entry minted an interactive transaction").toBeDefined();
+    abandonedTx.set(page, tx!);
+  },
+);
+
+Given(
+  "the same person then signed in on the doctor storefront in another tab",
+  async ({ page }) => {
+    const tab = await page.context().newPage();
+    await signInGoldenDoctor(tab, HOSTS.doctor, SEED, base("doctor"));
+    expect(await hasSession(tab, "doctor"), "signed in on doctor.school").toBe(
+      true,
+    );
+    await tab.close();
+    expect(
+      await academyTx(page),
+      "the abandoned Academy transaction is still held",
+    ).toBe(abandonedTx.get(page));
+  },
+);
+
+When("the guest requests an Academy page as a document", async ({ page }) => {
+  await openAsDocument(page, "academy");
+});
+
+Then(
+  "the silent check starts and replaces the abandoned interactive transaction",
+  async ({ page }) => {
+    // The abandoned interactive transaction did not hold the check back: the
+    // check answered first and its cookie names a NEW (silent) transaction.
+    const check = expectSilentCheckFirst(page);
+    const silentTx = (await check.headersArray())
+      .filter((h) => h.name.toLowerCase() === "set-cookie")
+      .flatMap((h) => h.value.split("\n"))
+      .find((line) => line.startsWith(`${OIDC_TX_COOKIE}=`))
+      ?.split(";")[0]!
+      .slice(OIDC_TX_COOKIE.length + 1);
+    expect(silentTx, "the check names its own silent transaction").toBeTruthy();
+    expect(silentTx, "a fresh transaction, not the abandoned one").not.toBe(
+      abandonedTx.get(page),
+    );
+  },
+);
+
+Then("the Academy page renders signed in", async ({ page }) => {
+  expect(await hasSession(page, "academy")).toBe(true);
+  expect(await sessionStatus(page), "the Academy session is live").toBe(200);
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  const last = recorded(page).at(-1)!;
+  expect(last.status()).toBe(200);
+  expect(new URL(last.url()).pathname).toBe(eventPath("academy"));
+});

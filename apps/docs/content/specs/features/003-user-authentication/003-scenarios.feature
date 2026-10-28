@@ -1650,10 +1650,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then no silent check starts and the page renders as a guest
 
   @EARS-63 @failure @silent-check-exempt
-  Scenario: Exempt requests, crawlers and a tripped silent limit never redirect
+  Scenario: Exempt requests and crawlers never redirect
     Given a browser with no Academy session
     When the Academy receives a crawler request, a request without fetch metadata, a prefetch, a POST, a "/v1" call, a static asset, a ".well-known" file and the health route
     Then none of them is answered with a redirect
+
+  # Exhausting the per-IP bucket starves every check of that address for 15
+  # minutes, so it runs only in the isolated default-limits contour.
+  @EARS-63 @failure @silent-check-limit @default-auth-limits
+  Scenario: A tripped silent-check limit answers the guest page without a redirect
+    Given a browser with no Academy session
     When the silent-check bucket for the client address is exhausted and a document request arrives
     Then the Academy answers HTTP 200 with the guest render and no redirect
 

@@ -220,13 +220,12 @@ When(
             if (
               shift.sources?.some(
                 ({ node }) =>
-                  node instanceof Element &&
-                  (node.closest(
-                    '[data-testid="event-page-hero"], [data-testid="event-signup-box"]',
-                  ) !== null ||
-                    node.querySelector(
+                  node !== undefined &&
+                  Array.from(
+                    document.querySelectorAll(
                       '[data-testid="event-page-hero"], [data-testid="event-signup-box"]',
-                    ) !== null),
+                    ),
+                  ).some((root) => root.contains(node) || node.contains(root)),
               )
             ) {
               observation.shifts.push(shift.value);

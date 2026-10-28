@@ -8,6 +8,7 @@ import { resolveEmbed } from "../model/room-player";
 import { usePlayerFailureState } from "../client/use-player-failure-state";
 import { ROOM_STATUS_PROBE_WAIT_MS } from "../model/room-player-state";
 import type { BrowserRoomApi } from "../client/room-api";
+import type { RoomStatusProbeAnswer } from "./presence-heartbeat";
 import type { RoomCopyStrings } from "../copy/room-copy";
 import type { RoomContext } from "../types";
 import { RoomChat, type RoomChatCopy } from "./room-chat";
@@ -215,11 +216,13 @@ export function PlayerFrame({
    * enters a failure state (`failed` / `retrying`) and on a visible resume while
    * failed. A closed event stops the stream, so a failure may be the close itself:
    * the failure UI is HELD until the probe answers (bounded by
-   * `ROOM_STATUS_PROBE_WAIT_MS`). `true` (the close is proven — the shell flips
-   * `ended`) keeps it held into the end card; anything else releases it.
+   * `ROOM_STATUS_PROBE_WAIT_MS`). `closed` (the shell flips `ended`) keeps it
+   * held into the end card; `not-closed` releases it. While the tab is hidden the
+   * status cannot be asked (`unknown`): the failure stays held with no bounded
+   * wait running, and the visible resume beat is the probe.
    * Absent, the failure UI renders at once (no room to ask).
    */
-  probeRoomClosed?: (() => Promise<boolean>) | undefined;
+  probeRoomClosed?: (() => Promise<RoomStatusProbeAnswer>) | undefined;
 }) {
   const embed = resolveEmbed(config.stream);
   // 006 EARS-18 — the runtime player-failure state machine. Hooks run unconditionally
@@ -240,8 +243,11 @@ export function PlayerFrame({
   }, [probeRoomClosed]);
   const holdsForProbe = probeRoomClosed !== undefined;
   const inFailure = status === "failed" || status === "retrying";
-  // `true` once this failure episode's probe answered «not proven closed» (or its
-  // bounded wait lapsed); reset when the episode ends and on a visible resume.
+  // `true` once this failure episode's probe answered `not-closed` (or its bounded
+  // wait lapsed on a visible tab); reset when the episode ends and on a visible
+  // resume. A hidden tab never releases it: there is nobody to show the overlay
+  // to and no beat to ask with, so the resume beat decides.
+
   const [probeReleased, setProbeReleased] = useState(false);
   const [resumes, setResumes] = useState(0);
   useEffect(() => {
@@ -263,14 +269,19 @@ export function PlayerFrame({
     }
     const probe = probeRef.current;
     if (!probe) return;
+    // Hidden: nothing can be asked (EARS-4) — stay held until the visible resume
+    // re-runs this effect, and run no bounded wait that would release it unseen.
+    if (document.hidden) return;
     let cancelled = false;
     const release = (): void => {
-      if (!cancelled) setProbeReleased(true);
+      if (!cancelled && !document.hidden) setProbeReleased(true);
     };
     const timer = setTimeout(release, ROOM_STATUS_PROBE_WAIT_MS);
-    void probe().then((closed) => {
-      // Proven closed: stay held — the shell's `ended` swaps in the end card.
-      if (!closed) release();
+    void probe().then((answer) => {
+      // `closed`: stay held — the shell's `ended` swaps in the end card.
+      // `unknown`: the tab went hidden meanwhile — stay held for the resume beat.
+      if (answer === "not-closed") release();
+      else if (answer === "unknown") clearTimeout(timer);
     }, release);
     return () => {
       cancelled = true;
@@ -477,7 +488,7 @@ export function RoomView({
    */
   ended?: boolean;
   /** 006 EARS-7 (#1974) — handed to {@link PlayerFrame}; the shell's room-status probe. */
-  probeRoomClosed?: (() => Promise<boolean>) | undefined;
+  probeRoomClosed?: (() => Promise<RoomStatusProbeAnswer>) | undefined;
 }) {
   const presenceCount = usePresenceCount();
   // Desktop chat collapse + the unread counter (messages missed while folded).

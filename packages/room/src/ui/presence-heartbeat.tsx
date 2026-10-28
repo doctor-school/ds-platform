@@ -27,6 +27,18 @@ function provesRoomClosed(error: unknown): boolean {
 }
 
 /**
+ * 006 EARS-7 (#1974) — what an out-of-cadence status probe learned:
+ * - `closed` — the answer PROVED the event left `live` (already reported through
+ *   `onRoomClosed`);
+ * - `not-closed` — a beat was sent and its outcome proves nothing about a close
+ *   (accepted, refused otherwise, network/transport failure);
+ * - `unknown` — nothing was sent: the tab is hidden (EARS-4 sends no beat while
+ *   backgrounded), so the room's status is simply not known yet. The visible
+ *   resume beat is the next probe.
+ */
+export type RoomStatusProbeAnswer = "closed" | "not-closed" | "unknown";
+
+/**
  * Leave a diagnostic breadcrumb for a swallowed beat. The loop is best-effort by
  * design (EARS-4: a failed beat never surfaces an error to the doctor and never
  * clears the last known count), but a beat that fails with ZERO signal makes a
@@ -87,14 +99,12 @@ export function PresenceHeartbeat({
   /**
    * 006 EARS-7 (#1974) — the loop publishes a status probe here so the room can
    * re-probe its status out of cadence (on a player failure) through the SAME
-   * gated call: no second endpoint, no second refusal reading. The probe resolves
-   * `true` only when the answer PROVED the event left `live` (the close is then
-   * already reported through `onRoomClosed`), `false` for every other outcome. It
-   * obeys the loop's own gates — nothing is sent while hidden (resolves `false`),
-   * a latched close resolves `true` — and it JOINS a beat already in flight
-   * instead of sending a second one.
+   * gated call: no second endpoint, no second refusal reading. It resolves a
+   * {@link RoomStatusProbeAnswer} and obeys the loop's own gates — nothing is sent
+   * while hidden (`unknown`), a latched close resolves `closed` — and it JOINS a
+   * beat already in flight instead of sending a second one.
    */
-  probeRef?: { current: (() => Promise<boolean>) | null } | undefined;
+  probeRef?: { current: (() => Promise<RoomStatusProbeAnswer>) | null } | undefined;
 }) {
   const setPresenceCount = usePresenceCountSetter();
   // Held in a ref so a host passing an inline callback cannot re-run the effect —
@@ -163,10 +173,10 @@ export function PresenceHeartbeat({
     };
 
     // 006 EARS-7 (#1974) — the out-of-cadence status probe (see `probeRef`).
-    const probe = (): Promise<boolean> => {
-      if (closed) return Promise.resolve(true);
-      if (document.hidden) return Promise.resolve(false);
-      return inflight ?? send();
+    const probe = (): Promise<RoomStatusProbeAnswer> => {
+      if (closed) return Promise.resolve("closed");
+      if (document.hidden) return Promise.resolve("unknown");
+      return (inflight ?? send()).then((proven) => (proven ? "closed" : "not-closed"));
     };
 
     const start = (): void => {

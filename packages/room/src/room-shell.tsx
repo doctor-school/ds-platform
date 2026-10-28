@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { createBrowserRoomApi } from "./client/room-api";
 import type { RoomShellProps } from "./types";
-import { PresenceHeartbeat } from "./ui/presence-heartbeat";
+import { PresenceHeartbeat, type RoomStatusProbeAnswer } from "./ui/presence-heartbeat";
 import { RoomHeaderBar } from "./ui/room-header-bar";
 import { RoomPresenceProvider } from "./ui/room-presence";
 import { RoomView } from "./ui/room-view";
@@ -56,9 +56,10 @@ export function RoomShell({
   // moment to ask again: the heartbeat loop publishes its probe into this ref and
   // the player awaits it on failure — holding its failure overlay meanwhile — so a
   // closed room shows the end card instead of «Трансляция не загружается».
-  const statusProbe = useRef<(() => Promise<boolean>) | null>(null);
+  const statusProbe = useRef<(() => Promise<RoomStatusProbeAnswer>) | null>(null);
   const probeRoomClosed = useCallback(
-    () => statusProbe.current?.() ?? Promise.resolve(false),
+    (): Promise<RoomStatusProbeAnswer> =>
+      statusProbe.current?.() ?? Promise.resolve<RoomStatusProbeAnswer>("not-closed"),
     [],
   );
 

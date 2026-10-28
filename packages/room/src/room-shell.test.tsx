@@ -1,7 +1,11 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import type { RoomChatCredential, RoomConfig } from "@ds/schemas";
-import { ROOM_STATUS_PROBE_WAIT_MS } from "./model/room-player-state";
+import {
+  PLAYER_MAX_AUTO_RETRIES,
+  PLAYER_RETRY_DELAY_MS,
+  ROOM_STATUS_PROBE_WAIT_MS,
+} from "./model/room-player-state";
 import { RoomShell } from "./room-shell";
 import type { RoomContext, RoomCopy, RoomRoutes } from "./types";
 
@@ -507,7 +511,7 @@ describe("006 EARS-7 a player failure re-probes the room status", () => {
     await settle();
 
     // No timer advanced: the end card came from the failure-triggered probe, not
-    // from the 30 s grid.
+    // from the scheduled heartbeat.
     expect(beats).toBe(2);
     expect(screen.getByTestId("room-player-ended")).toBeInTheDocument();
     expect(screen.queryByTestId("room-player-failure")).toBeNull();
@@ -601,35 +605,44 @@ describe("006 EARS-7 a player failure re-probes the room status", () => {
     expect(screen.queryByTestId("room-player-failure")).toBeNull();
   });
 
-  it("EARS-7.12: a tab returning to visible with a failed player holds the overlay on the resume beat and goes straight to the end card", async () => {
-    let hidden = false;
-    vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden);
+  /** Background the tab (the loop and the hold both hear it). */
+  function setHidden(next: boolean, state: { hidden: boolean }): void {
+    act(() => {
+      state.hidden = next;
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+  }
+
+  it("EARS-7.12: a player failing while the tab is hidden, then the room closing, never shows the overlay — the visible resume beat goes straight to the end card", async () => {
+    const tab = { hidden: false };
+    vi.spyOn(document, "hidden", "get").mockImplementation(() => tab.hidden);
     renderShell();
     await settle();
 
-    act(() => {
-      hidden = true;
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
-    // The close lands while the tab is away; the player fails in the background.
-    // A hidden tab sends nothing, so the hold lapses at its bound.
+    setHidden(true, tab);
+    // The stream fails in the background; nothing can be asked while hidden, so
+    // the failure stays HELD — through the bounded wait and the auto-retry steps.
     failPlayer();
     await settle();
     act(() => {
-      vi.advanceTimersByTime(ROOM_STATUS_PROBE_WAIT_MS);
+      vi.advanceTimersByTime(PLAYER_RETRY_DELAY_MS * (PLAYER_MAX_AUTO_RETRIES + 2));
+    });
+    await settle();
+    expect(beats).toBe(1);
+    expect(screen.queryByTestId("room-player-failure")).toBeNull();
+
+    // The admin closes the эфир while the tab is still away.
+    mode = "deferred";
+    act(() => {
+      vi.advanceTimersByTime(config.heartbeatIntervalSeconds * 1000);
     });
     await settle();
     expect(beats).toBe(1);
 
-    mode = "deferred";
-    overlaySeen = false;
-    act(() => {
-      hidden = false;
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
+    setHidden(false, tab);
     await settle();
 
-    // ONE resume beat serves as the probe; the overlay waits on its answer.
+    // ONE resume beat serves as the probe; the failure UI waits on its answer.
     expect(beats).toBe(2);
     expect(screen.queryByTestId("room-player-failure")).toBeNull();
 
@@ -638,5 +651,30 @@ describe("006 EARS-7 a player failure re-probes the room status", () => {
     expect(screen.getByTestId("room-player-ended")).toBeInTheDocument();
     expect(screen.queryByTestId("room-player-failure")).toBeNull();
     expect(overlaySeen).toBe(false);
+  });
+
+  it("EARS-7.12: a player failing while the tab is hidden on a live room shows the overlay once the visible resume beat answers live", async () => {
+    const tab = { hidden: false };
+    vi.spyOn(document, "hidden", "get").mockImplementation(() => tab.hidden);
+    renderShell();
+    await settle();
+
+    setHidden(true, tab);
+    failPlayer();
+    await settle();
+    act(() => {
+      vi.advanceTimersByTime(ROOM_STATUS_PROBE_WAIT_MS);
+    });
+    await settle();
+    expect(beats).toBe(1);
+    expect(overlaySeen).toBe(false);
+
+    mode = "live";
+    setHidden(false, tab);
+    await settle();
+
+    expect(beats).toBe(2);
+    expect(screen.queryByTestId("room-player-ended")).toBeNull();
+    expect(screen.getByTestId("room-player-failure")).toBeInTheDocument();
   });
 });

@@ -71,6 +71,34 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       Then the draft has no public body and the hidden event is never listed as active
       And the projections contain only publish-safe fields and source-free recording facts
 
+  Rule: Public calendar states remain readable and navigable
+
+    Background:
+      Given the public calendar uses the supported horizon clock
+
+    @EARS-15 @EARS-19 @edge @public-calendar-states
+    Scenario: A month with only past events renders muted linked pills
+      Given a golden historical month whose events have already ended
+      When the visitor opens that public calendar month
+      Then the historical grid renders muted linked past pills without participation states
+
+    @EARS-19 @edge @public-calendar-states
+    Scenario: An empty month renders a readable calendar, not a broken surface
+      Given a far calendar month with no events and a zero year count
+      When the visitor opens that public calendar month
+      Then the empty desktop calendar is readable without event pills or notes
+      And the mobile dot grid and selected-day agenda show no broadcasts
+
+    @EARS-16 @EARS-17 @happy @public-calendar-states
+    Scenario: The doctor navigates months by paging and by the picker with counts
+      Given the public calendar month containing the horizon day
+      When the visitor pages next and previous twice in the calendar
+      Then every selection retains the month URL, heading and grid
+      And the month picker shows all twelve API counts and a noninteractive selected marker
+      And the picker distinguishes populated months, empty future months and empty archived months
+      When the visitor selects another month from the calendar picker
+      Then every selection retains the month URL, heading and grid
+
   Rule: Remaining public event and calendar scenarios
 
     Background:
@@ -181,27 +209,6 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       And the live event renders as a red "live now" pill derived from the single state machine
       And the month's past events render as muted notes without a participation affordance
       And today is visibly marked and a legend explains the states
-
-    @EARS-15 @EARS-19 @edge
-    Scenario: A month with only past events renders muted notes, not pills
-      Given a month all of whose events have already ended
-      When a visitor opens the month view for that month
-      Then its days render muted past-event notes
-      And no pill offers a participation affordance
-
-    @EARS-19 @edge
-    Scenario: An empty month renders a readable calendar, not a broken surface
-      Given a month with no events at all
-      When a visitor opens the month view for that month
-      Then the calendar grid renders with no pills and no notes
-      And the selected-day agenda on mobile shows the "no broadcasts this day" note
-
-    @EARS-16 @EARS-17 @happy
-    Scenario: The doctor navigates months by paging and by the picker with counts
-      Given the month view for the current month
-      When the visitor pages › to the next month and then picks another month in the month picker
-      Then the grid and the month heading re-render for each selected month without leaving the month view
-      And the picker shows a per-month event count for the displayed year with past months muted
 
     # --- Cross-cutting (US-1, US-2) ---
 

@@ -250,7 +250,13 @@ When(
     const response = await page.goto(path, { waitUntil: "commit" });
     expect(response?.status()).toBe(200);
     expect(response?.request().redirectedFrom()).toBeNull();
-    await expect(page).toHaveURL((url) => url.pathname === path);
+    // The predicate URL matcher waits for load, which the held scripts prevent.
+    // Assert the committed document and actual browser address before hydration.
+    const origin = new URL(baseUrlFor(host)).origin;
+    expect(new URL(response!.url()).origin).toBe(origin);
+    expect(new URL(response!.url()).pathname).toBe(path);
+    expect(new URL(page.url()).origin).toBe(origin);
+    expect(new URL(page.url()).pathname).toBe(path);
     await expect(
       page.getByRole("heading", { level: 1, name: s.event.title, exact: true }),
     ).toBeVisible();

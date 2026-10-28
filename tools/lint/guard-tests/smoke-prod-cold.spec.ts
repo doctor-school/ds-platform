@@ -5,6 +5,8 @@ import {
   checkApiReady,
   checkColdPage,
   checkRegisterClosed,
+  checkStorefrontEntry,
+  checkStorefrontPrefetch,
   findColdErrorMarker,
   isDoctorProbeSkipped,
 } from "../../deploy/smoke-prod.mjs";
@@ -33,10 +35,10 @@ const HEALTHY_LOGIN_BODY = `<!DOCTYPE html><html><head><title>Login</title></hea
 <input type="text" id="loginName" name="loginName" autocomplete="username" />
 <button type="submit">Continue</button></form></body></html>`;
 
-// A trimmed portal /login COLD body (#885): the portal login form is
+// A trimmed COLD body of a client-rendered Next page (#885): its form is
 // CLIENT-rendered, so the raw server HTML carries NO <input> — only the Next
 // App-Router shell and its RSC flight stream (`self.__next_f`). This is what a
-// HEALTHY cold portal /login looks like; asserting "<input" here (the pre-#885
+// HEALTHY cold client-rendered page looks like; asserting "<input" here (the pre-#885
 // probe) would false-positive on a working page.
 const CLIENT_RENDERED_PORTAL_LOGIN_BODY = `<!DOCTYPE html><html><head><title>Doctor.School</title></head>
 <body><script>self.__next_f=self.__next_f||[];self.__next_f.push([1,"login shell"])</script>
@@ -124,12 +126,12 @@ describe("smoke-prod checkColdPage()", () => {
   });
 });
 
-describe("smoke-prod checkColdPage() — client-rendered portal /login (#885)", () => {
-  // The portal /login form hydrates client-side, so the probe asserts the
+describe("smoke-prod checkColdPage() — client-rendered Next page (#885)", () => {
+  // A client-rendered form hydrates client-side, so the check asserts the
   // server-streamed app-shell signal instead of the (absent-cold) <input>.
   const clientRendered = { requireMarkup: "self.__next_f" };
 
-  it("PASSES a healthy cold portal /login whose form hydrates client-side (no <input> in raw HTML)", () => {
+  it("PASSES a healthy cold client-rendered page whose form hydrates client-side (no <input> in raw HTML)", () => {
     expect(() =>
       checkColdPage(
         {
@@ -343,5 +345,112 @@ describe("api /v1/ready classification (002 EARS-3, #2821)", () => {
     expect(() =>
       checkApiReady({ status: 502, body: "<html>Bad Gateway</html>" }),
     ).toThrow("/v1/ready → 502 (body is not JSON: <html>Bad Gateway</html>)");
+  });
+});
+
+describe("storefront sign-in entry /login, /verify (003 EARS-61/62/71, #3435)", () => {
+  // Since #3265 the Academy entries render no form: a top-level navigation is
+  // answered `303` to the IdP authorize URL with the storefront's one
+  // redirect_uri, and any other GET (prefetch, fetch) a bodyless `204`.
+  const hosts = { portalHost: "academy.example", idHost: "id.example" };
+  const authorize = (
+    redirectUri: string,
+    host = "id.example",
+    path = "/oauth/v2/authorize",
+  ) =>
+    `https://${host}${path}?client_id=123&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&code_challenge_method=S256`;
+  const entry = (status: number, location?: string) => ({
+    status,
+    headers: location === undefined ? {} : { location },
+    body: "",
+  });
+
+  it("PASSES a 303 to the IdP authorize URL carrying the storefront callback", () => {
+    expect(
+      checkStorefrontEntry(
+        entry(303, authorize("https://academy.example/auth/callback")),
+        hosts,
+      ),
+    ).toContain("303");
+  });
+
+  it("REJECTS the retired 200 app-shell page", () => {
+    expect(() =>
+      checkStorefrontEntry(
+        { status: 200, headers: {}, body: "<script>self.__next_f=[]</script>" },
+        hosts,
+      ),
+    ).toThrow("→ 200");
+  });
+
+  it("REJECTS a 204 to a navigation (the navigation headers did not reach the route)", () => {
+    expect(() => checkStorefrontEntry(entry(204), hosts)).toThrow("→ 204");
+  });
+
+  it("REJECTS a 5xx", () => {
+    expect(() => checkStorefrontEntry(entry(502), hosts)).toThrow("→ 502");
+  });
+
+  it("REJECTS a 303 with no Location", () => {
+    expect(() => checkStorefrontEntry(entry(303), hosts)).toThrow("Location");
+  });
+
+  it("REJECTS a 303 to another host", () => {
+    expect(() =>
+      checkStorefrontEntry(
+        entry(
+          303,
+          authorize("https://academy.example/auth/callback", "evil.example"),
+        ),
+        hosts,
+      ),
+    ).toThrow("evil.example");
+  });
+
+  it("REJECTS a 303 to another path on the IdP host", () => {
+    expect(() =>
+      checkStorefrontEntry(
+        entry(
+          303,
+          authorize(
+            "https://academy.example/auth/callback",
+            "id.example",
+            "/ui/v2/login/loginname",
+          ),
+        ),
+        hosts,
+      ),
+    ).toThrow("/ui/v2/login/loginname");
+  });
+
+  it("REJECTS a 303 whose redirect_uri is not the storefront callback", () => {
+    expect(() =>
+      checkStorefrontEntry(
+        entry(303, authorize("https://api.example/auth/callback")),
+        hosts,
+      ),
+    ).toThrow("redirect_uri");
+  });
+
+  it("REJECTS a 303 back to the storefront itself (a signed-in landing, not a cold entry)", () => {
+    expect(() =>
+      checkStorefrontEntry(
+        entry(303, "https://academy.example/account"),
+        hosts,
+      ),
+    ).toThrow("academy.example");
+  });
+
+  it("PASSES the bodyless 204 answer to a non-navigation GET", () => {
+    expect(checkStorefrontPrefetch(entry(204))).toContain("204");
+  });
+
+  it("REJECTS a non-navigation GET that started a sign-in (303) or failed (5xx)", () => {
+    expect(() =>
+      checkStorefrontPrefetch(
+        entry(303, authorize("https://academy.example/auth/callback")),
+      ),
+    ).toThrow("→ 303");
+    expect(() => checkStorefrontPrefetch(entry(500))).toThrow("→ 500");
   });
 });

@@ -1782,6 +1782,7 @@ async function shippedStep(options, shaInMain) {
     health: async () => {},
     prune: async () => {},
     diskFloor: async () => {},
+    edgeConfig: async () => {},
   };
   await runSlotCommand({
     options: { actor: "tech-lead", ...options },
@@ -2671,4 +2672,50 @@ test("3248: `gc` holds the floor without refusing", () => {
   const step = planFreeSpaceFloor({ refuse: false });
   assert.equal(step.kind, "disk-floor");
   assert.equal(step.refuse, false);
+});
+
+// #2920: the stage `main` converge owns the shared stg-infra edge config; a PR slot never
+// installs it.
+test("2920: a `main` up installs the stg-infra edge config from the shipped tree, right after the ship", () => {
+  const plan = upPlan({ slot: "main", liveSlots: live({ main: [] }), databaseExists: true, shaInMain: true });
+  const names = labels(plan);
+  assert.equal(names[names.indexOf("ship the tree") + 1], "install the stg-infra edge config");
+  const step = stepOf(plan, "install the stg-infra edge config");
+  assert.equal(step.kind, "edge-config");
+  assert.equal(step.sha, SHA);
+  assert.equal(step.sourceDir, `${slotTreeDir("main")}/infra/deploy/compose/stg-infra`);
+});
+
+test("2920: a PR slot's up never installs the edge config; `reset main` does", () => {
+  assert.ok(!labels(upPlan({ shaInMain: true })).includes("install the stg-infra edge config"));
+  const reset = planSlotReset({
+    sha: SHA,
+    images: IMAGES,
+    liveSlots: live({ main: [] }),
+    baseDomain: BASE,
+    actor: "tech-lead",
+    subjects: SUBJECTS,
+    shaInMain: true,
+  });
+  assert.ok(labels(reset).includes("install the stg-infra edge config"));
+});
+
+test("2920: a `main` converge on a SHA not on `main` (a hotfix ref) keeps the box's edge config", () => {
+  const notOnMain = upPlan({ slot: "main", liveSlots: live({ main: [] }), databaseExists: true });
+  assert.ok(!labels(notOnMain).includes("install the stg-infra edge config"));
+  const reset = planSlotReset({
+    sha: SHA,
+    images: IMAGES,
+    liveSlots: live({ main: [] }),
+    baseDomain: BASE,
+    actor: "tech-lead",
+    subjects: SUBJECTS,
+    shaInMain: false,
+  });
+  assert.ok(!labels(reset).includes("install the stg-infra edge config"));
+});
+
+test("2920: the edge-config step needs its box effect, with no offline fallback", async () => {
+  const plan = { slot: "main", sha: SHA, steps: [{ kind: "edge-config", label: "install the stg-infra edge config" }] };
+  await assert.rejects(runSlotPlan(plan, { sh: async () => {} }), /needs a `edgeConfig` effect/);
 });

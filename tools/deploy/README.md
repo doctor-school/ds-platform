@@ -297,6 +297,9 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    files visible through the running containers and **restart only consumers
    whose bind mount is stale**. Both mounts are compared again after apply, so
    a mismatch fails the deploy instead of requiring a manual SSH step (#1175).
+   The mechanism is `lib/runtime-config.mjs`, parameterized by its target; the
+   stage `main` converge drives the same one for the stg-infra edge (#2920,
+   `infra/deploy/compose/stg-infra/README.md` → Edge config apply).
    A failed apply (restart or post-restart compare) puts the backed-up configs
    back, restarts caddy + centrifugo onto them, compares again and fails the
    release with that restore result (#3274).

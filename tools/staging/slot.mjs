@@ -107,6 +107,7 @@ import {
   renderGoldenSubjectsEnv,
   unionUris,
 } from "./idp.mjs";
+import { STG_INFRA_COMPOSE_PATH, applyStageEdgeConfig } from "./edge-config.mjs";
 
 /** Raised for an unusable input or plan — the caller must fail closed. */
 export class SlotError extends Error {
@@ -1721,6 +1722,19 @@ export function planSlotUp({
       // `main` tree may write them. A PR slot or a hotfix-ref `main` uses the box's own.
       installEntrypoints: slot === "main" && shaInMain === true,
     },
+    // #2920: the shared stg-infra edge config follows the `main` converge, from the tree
+    // just shipped; a PR slot never writes what every slot is served through, and, as for
+    // the entrypoints, only a verified `main` tree may write it.
+    ...(slot === "main" && shaInMain === true
+      ? [
+          {
+            kind: "edge-config",
+            label: "install the stg-infra edge config",
+            sha,
+            sourceDir: `${slotTreeDir(slot)}/${STG_INFRA_COMPOSE_PATH}`,
+          },
+        ]
+      : []),
     {
       kind: "write",
       label: "write slot env",
@@ -1995,6 +2009,7 @@ const REMOTE_ONLY_KINDS = Object.freeze({
   prune: "prune",
   "disk-floor": "diskFloor",
   "registry-records": "registryRecords",
+  "edge-config": "edgeConfig",
 });
 
 /**
@@ -2034,6 +2049,7 @@ export async function runSlotPlan(
     prune,
     diskFloor,
     registryRecords,
+    edgeConfig,
     log = () => {},
   },
 ) {
@@ -2045,6 +2061,7 @@ export async function runSlotPlan(
     prune,
     diskFloor,
     registryRecords,
+    edgeConfig,
   };
 
   const present = async (item, step) => {
@@ -3255,6 +3272,12 @@ function realEffects(
     diskFloor: (step) =>
       streamed(freeSpaceFloorScript({ refuse: step.refuse }), { ...step, stallBudget: "reclaim" }),
     registryRecords: (step) => streamed(registryRecordsScript(), { ...step, stallBudget: "reclaim" }),
+    edgeConfig: (step) =>
+      applyStageEdgeConfig({
+        sha: step.sha,
+        sourceDir: step.sourceDir,
+        capture: (script) => sshCapture(STAGE_1, script),
+      }),
     idp: async (step) => {
       const client = createIdpClient({
         fetch: globalThis.fetch,

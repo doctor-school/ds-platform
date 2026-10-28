@@ -69,7 +69,7 @@ async function plannedCalls(options, shaInMain = () => true) {
     return undefined;
   };
   const effects = Object.fromEntries(
-    ["sql", "sh", "write", "append", "idp", "ship", "verifyImages", "verifyRunning", "health", "prune", "diskFloor"].map(
+    ["sql", "sh", "write", "append", "idp", "ship", "verifyImages", "verifyRunning", "health", "prune", "diskFloor", "edgeConfig"].map(
       (kind) => [kind, record(kind)],
     ),
   );
@@ -115,6 +115,15 @@ test("3125: the local converge installs the entrypoints without re-checking main
   );
   const ship = local.calls.find(([kind]) => kind === "ship");
   assert.equal(ship[1][0].installEntrypoints, true);
+});
+
+test("2920: the local converge installs the stg-infra edge config right after the ship", async () => {
+  const local = await plannedCalls(parseArgs(["up", "main", "--ref", SHA, "--local", "--images-file", "-"]));
+  const kinds = local.calls.map(([kind]) => kind);
+  assert.equal(kinds[kinds.indexOf("ship") + 1], "edgeConfig");
+  const step = local.calls[kinds.indexOf("edgeConfig")][1][0];
+  assert.equal(step.sha, SHA);
+  assert.equal(step.sourceDir, "$HOME/ds-platform.slots/main/infra/deploy/compose/stg-infra");
 });
 
 const manifest = (over = {}) => JSON.stringify({ sha: SHA, ref: "main", images: { ...IMAGES }, ...over });

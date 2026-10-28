@@ -75,7 +75,7 @@
               <div style="margin-top:22px;border:2px solid {{ hairline }};padding:16px;display:flex;flex-direction:column;gap:10px">
                 <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Пока ждёте — посмотрите</div>
                 <a href="academy-projects.dc.html" style="font-size:13.5px;font-weight:800;text-underline-offset:4px">Проекты Академии →</a>
-                <a href="academy-experts.dc.html" style="font-size:13.5px;font-weight:800;text-underline-offset:4px">Эксперты, которые их делают →</a>
+                <sc-if value="{{ full }}" hint-placeholder-val="{{ false }}"><a href="academy-experts.dc.html" style="font-size:13.5px;font-weight:800;text-underline-offset:4px">Эксперты, которые их делают →</a></sc-if>
               </div>
               <button onClick="{{ sentAgain }}" style="font:inherit;margin-top:20px;font-size:13px;font-weight:700;color:{{ inkMuted }};background:transparent;border:0;padding:0;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Отправить ещё одну заявку — про другой проект</button>
             </div>
@@ -268,16 +268,18 @@
     <section data-screen-label="a-apply · выход из тупика" style="order:{{ exitOrd }};padding:0 clamp(16px,4vw,48px);margin-top:clamp(44px,6vw,72px)">
       <div style="max-width:1104px;margin:0 auto">
         <h2 style="margin:0;font-size:clamp(22px,3vw,30px);line-height:1.1;font-weight:800;letter-spacing:-.025em;color:{{ ink }}">Пока не готовы?</h2>
-        <p style="margin:10px 0 clamp(20px,4vw,28px);max-width:560px;font-size:14px;line-height:1.6;color:{{ inkMuted }}">Посмотрите проекты Академии и экспертов, которые их делают, — заявку можно подать в любой момент.</p>
+        <p style="margin:10px 0 clamp(20px,4vw,28px);max-width:560px;font-size:14px;line-height:1.6;color:{{ inkMuted }}">{{ exitText }}</p>
         <div style="{{ exitGrid }}">
           <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
             <a href="academy-projects.dc.html" style="font-size:14px;font-weight:800;text-underline-offset:5px;text-decoration-thickness:2px">Посмотреть проекты →</a>
             <dc-import name="unit-project-card" dark="{{ dark }}" kind="Проект" title="Ортобиология" emblem="Ор" description="Направление регенеративной медицины: PRP, клеточные технологии и доказательная практика." count="школа · конгресс · клуб" href="academy-project.dc.html" hint-size="100%,380px"></dc-import>
           </div>
+          <sc-if value="{{ full }}" hint-placeholder-val="{{ false }}">
           <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
             <a href="academy-experts.dc.html" style="font-size:14px;font-weight:800;text-underline-offset:5px;text-decoration-thickness:2px">Посмотреть экспертов →</a>
             <dc-import name="unit-expert-card" dark="{{ dark }}" full-name="Страхов М. А." role="Автор проекта" credentials="к.м.н., травматолог-ортопед" org="РНИМУ им. Пирогова" meta="куратор проекта «Ортобиология»" href="academy-expert.dc.html" hint-size="100%,380px"></dc-import>
           </div>
+          </sc-if>
         </div>
       </div>
     </section>
@@ -443,7 +445,7 @@ class Component extends DCLogic {
     const varBtn = (active, wide) => 'font:inherit;font-size:11px;font-weight:800;' + (wide ? 'padding:0 9px;height:30px' : 'width:30px;height:30px') + ';cursor:pointer;border:2px solid ' + (active ? btnBg : border) + ';color:' + (active ? btnFg : ink) + ';background:' + (active ? btnBg : 'transparent');
     const B = (label, title, active, patch, wide) => ({ label, title, onClick: () => this.setState(Object.assign({ attempted: false, serverHidden: false }, patch)), style: varBtn(active, wide !== false) });
     const panelRows = [
-      { label: 'Объём', btns: [B('срез 1', 'Срез 1: без клинического случая, пути роста и черновика', !full, { scopeV: 'срез 1' }), B('целиком', 'Целевая страница целиком', full, { scopeV: 'целиком' })] },
+      { label: 'Объём', btns: [B('срез 1', 'Срез 1: без клинического случая, пути роста, черновика и экспертов', !full, { scopeV: 'срез 1' }), B('целиком', 'Целевая страница целиком', full, { scopeV: 'целиком' })] },
       { label: 'Экран', btns: [B('форма', 'Форма заявки', scr === 'form', { scr: 'form', formV: s.formV }), B('гейт', 'Гейт учётки', scr === 'gate', { scr: 'gate', formV: 'заполнено', authV: 'out' }), B('чернов.', 'Возврат с сохранённым черновиком', scr === 'draft', { scr: 'draft', formV: 'черновик', authV: 'in' }), B('отпр.', 'Заявка отправлена', scr === 'sent', { scr: 'sent' })] },
       { label: 'Форма', btns: [B('пусто', 'Пустая форма', fs === 'пусто', { formV: 'пусто', scr: 'form', values: {}, touched: {}, format: null }), B('запол.', 'Заполнено', fs === 'заполнено', { formV: 'заполнено', scr: 'form', values: {}, touched: {} }), B('ошибки', 'Ошибки валидации', fs === 'ошибки', { formV: 'ошибки', scr: 'form', values: {}, touched: {}, format: null }), B('сбой', 'Ошибка отправки', fs === 'сбой сети', { formV: 'сбой сети', scr: 'form' })] },
       { label: 'Вход', btns: [B('гость', 'Гость', !logged, { authV: 'out' }), B('вошёл', 'Вошедший', logged, { authV: 'in' })] },
@@ -465,6 +467,7 @@ class Component extends DCLogic {
       repeatBanner: repeatBanner && scr !== 'sent',
       fTopic, fAbout, fCase,
       full, slice1: !full,
+      exitText: full ? 'Посмотрите проекты Академии и экспертов, которые их делают, — заявку можно подать в любой момент.' : 'Посмотрите проекты Академии — заявку можно подать в любой момент.',
       heroText: full ? 'Расскажите, чему вы хотите научить врачей. Дальше с вами будет работать команда Академии — общаться вы будете с одним человеком, продюсером.' : 'Расскажите, чему вы хотите научить врачей. Заявку разберёт администратор Академии и свяжется с вами.',
       gateText: full ? 'Заявка отправляется под той же учётной записью, что у врача — отдельной «регистрации эксперта» нет. Черновик сохранён: после входа вы вернётесь сюда, поля будут заполнены.' : 'Заявка отправляется под той же учётной записью, что у врача — отдельной «регистрации эксперта» нет. После входа или регистрации вы вернётесь сюда, к форме заявки.',
       sentText: full ? 'Администратор Академии разберёт её и назначит продюсера — он свяжется с вами. Дальше вы общаетесь с одним человеком: остальная команда работает за кулисами.' : 'Администратор Академии разберёт её и свяжется с вами. Письмо «Заявка получена» придёт на почту вашей учётной записи.',

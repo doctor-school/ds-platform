@@ -26,7 +26,7 @@
       </div>
       <h1 style="margin:10px 0 0;font-size:clamp(32px,5.5vw,56px);line-height:1.02;font-weight:800;letter-spacing:-.035em;color:#fff;text-wrap:balance">Ортобиология</h1>
       <p style="margin:20px 0 0;max-width:640px;font-size:clamp(14.5px,2vw,16px);line-height:1.65;font-weight:500;color:#D3E8FD">Направление регенеративной медицины в травматологии: школа, конгресс и клуб вокруг одной темы.</p>
-      <div style="font-size:14px;font-weight:600;color:#D3E8FD;margin-top:18px">Куратор проекта — <a href="academy-expert.dc.html" style="color:#fff;font-weight:800;text-underline-offset:4px">Страхов М. А.</a>, к.м.н. · РНИМУ им. Пирогова</div>
+      <div style="font-size:14px;font-weight:600;color:#D3E8FD;margin-top:18px">Куратор проекта — <sc-if value="{{ full }}" hint-placeholder-val="{{ false }}"><a href="academy-expert.dc.html" style="color:#fff;font-weight:800;text-underline-offset:4px">Страхов М. А.</a></sc-if><sc-if value="{{ slice1 }}" hint-placeholder-val="{{ true }}"><span style="color:#fff;font-weight:800">Страхов М. А.</span></sc-if>, к.м.н. · РНИМУ им. Пирогова</div>
       <div style="display:flex;gap:clamp(20px,4vw,44px);flex-wrap:wrap;margin-top:32px;font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#D3E8FD">
         <span><span style="color:#fff;font-size:15px">4</span> результата</span>
         <span><span style="color:#fff;font-size:15px">5</span> экспертов</span>
@@ -144,6 +144,7 @@
       </div>
     </section>
 
+    <sc-if value="{{ full }}" hint-placeholder-val="{{ false }}">
     <!-- Команда -->
     <section data-screen-label="Команда проекта" style="order:{{ teamOrd }};padding:0 clamp(16px,4vw,48px);margin-top:clamp(48px,7vw,80px)">
       <div style="max-width:1104px;margin:0 auto">
@@ -167,6 +168,7 @@
         </div>
       </div>
     </section>
+    </sc-if>
 
     <!-- Организации в проекте -->
     <section data-screen-label="Организации в проекте" style="order:{{ invOrd }};padding:0 clamp(16px,4vw,48px);margin-top:clamp(48px,7vw,80px)">
@@ -410,7 +412,7 @@ class Component extends DCLogic {
     const B = (label, title, active, onClick, wide) => ({ label, title, onClick, style: varBtn(active, wide !== false) });
     const set = (k, v) => () => this.setState({ [k]: v, dashOpen: false });
     const ctrlGroups = [
-      G('Объём', [B('срез 1', 'Срез 1: без ID проекта, закулисья и дашборда', !full, set('scopeV', 'срез 1')), B('целиком', 'Целевая страница целиком', full, set('scopeV', 'целиком'))]),
+      G('Объём', [B('срез 1', 'Срез 1: без ID проекта, команды, закулисья и дашборда', !full, set('scopeV', 'срез 1')), B('целиком', 'Целевая страница целиком', full, set('scopeV', 'целиком'))]),
       G('Результаты', [B('А', 'Сетка равных карточек с бейджем типа', rv === 'a', set('resV', 'a'), false), B('Б', 'Группировка по типам', rv === 'b', set('resV', 'b'), false), B('В', 'Главный результат крупно + строки', rv === 'v', set('resV', 'v'), false)]),
       G('Дашборд', [B('А', 'Весь дашборд публично', dv === 'a', set('dashV', 'a'), false), B('Б', 'Деньги — после входа', dv === 'b', set('dashV', 'b'), false), B('В', 'Главные цифры + раскрытие', dv === 'v', set('dashV', 'v'), false)]),
       G('Статус', [B('идёт', 'Проект идёт', st === 'active', set('statusV', 'active')), B('набор', 'Набор экспертов', st === 'recruiting', set('statusV', 'recruiting')), B('план', 'Проект в плане', st === 'plan', set('statusV', 'plan'))]),
@@ -428,7 +430,7 @@ class Component extends DCLogic {
       authHref: logged ? 'account-profile.dc.html' : 'auth.dc.html',
       authLabel: logged ? 'Кабинет' : 'Войти',
       statusBadge, recruiting,
-      full,
+      full, slice1: !full,
       applyHref: full ? '#a-apply' : 'academy-apply.dc.html',
       investHref: full ? '#a-invest' : 'academy-invest.dc.html',
       expertText: full ? 'Проект ищет эксперта по регенеративной медицине. Заявка уже знает, о каком проекте вы пишете.' : 'Проект ищет эксперта по регенеративной медицине. Расскажите, чему вы хотите научить врачей, — заявку разберёт администратор Академии.',

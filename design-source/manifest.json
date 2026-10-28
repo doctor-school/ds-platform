@@ -3,9 +3,9 @@
   "designSyncProject": "8cc2f39a-d58e-4491-b539-4337881ced4f",
   "files": {
     "academy-apply.dc.html": {
-      "sha256": "335b1f38a9ad024d089c1a24a6fb5218d186ea91f3e04b3917a4836f4edffa5a",
-      "pulledSha256": "3c7988e8b3cb90d3a49ed0a62f71829d3ca97cfe21f46b1fbd2c353b6ccc700a",
-      "pulledAt": "2026-10-28T12:09:58.795Z",
+      "sha256": "c2711e5005a4d11d134a73b2e496d7fffb1aef2604e6813451008daac16e1559",
+      "pulledSha256": "fd0f648b28166a10153ba7d1effead83aa2058466a9b50ea7c8cd86796e3b915",
+      "pulledAt": "2026-10-28T12:21:57.404Z",
       "remotePath": null
     },
     "academy-docs.dc.html": {
@@ -70,9 +70,9 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "academy-project.dc.html": {
-      "sha256": "1e858af6f056bf113250490419969a8b18ff24cf7ea038994bbc5edd1a3ba39c",
-      "pulledSha256": "e805bbbbc0845696efe18b6285bf3f4e283567cc271970508c57127e1146920e",
-      "pulledAt": "2026-10-28T09:48:47.012Z",
+      "sha256": "f08bb82ac703bc4a9921be8c03d2e554cd86a73e28ad17ca6b440fefb866e13c",
+      "pulledSha256": "a4b0b2424838b235bc8701db1201aedcc772e1a1b88b1f21f7c692c4c2f7f7e0",
+      "pulledAt": "2026-10-28T12:21:57.404Z",
       "remotePath": null
     },
     "academy-projects.dc.html": {

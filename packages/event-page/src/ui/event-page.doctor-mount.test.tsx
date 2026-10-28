@@ -222,6 +222,26 @@ describe("005 EARS-1 #2005: one-tap registration on the doctor event page", () =
     expect(html).not.toContain('data-testid="event-register-one-tap"');
   });
 
+  it("020 EARS-5: a signed-in unregistered doctor reads the event's Pul cost under «Участвовать», never the guest return note (#3307)", async () => {
+    fetchPublicEventPage.mockResolvedValue({ ...EVENT, pulCost: 50 });
+    fetchEventRegistrationState.mockResolvedValue({ registered: false });
+
+    const html = await render();
+
+    expect(html).toContain("Спишем 50 Pul при записи.");
+    expect(html).not.toContain("вернём вас на эту страницу");
+  });
+
+  it("020 EARS-5: a guest keeps the return note under «Участвовать» (#3307)", async () => {
+    headers.mockResolvedValue(GUEST);
+    fetchPublicEventPage.mockResolvedValue({ ...EVENT, pulCost: 50 });
+
+    const html = await render();
+
+    expect(html).toContain("Нужна регистрация — вернём вас на эту страницу.");
+    expect(html).not.toContain("Спишем");
+  });
+
   it("005 EARS-4: a registered doctor gets the «Вы записаны» card and no control", async () => {
     fetchParticipationCta.mockResolvedValue(REGISTERED_CTA);
     fetchEventRegistrationState.mockResolvedValue({ registered: true });

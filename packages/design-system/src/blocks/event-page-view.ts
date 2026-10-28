@@ -84,8 +84,20 @@ export interface EventPageCopy {
    * «Школа · Онлайн · комната эфира».
    */
   formatDetail: Record<EventParticipationFormat, string>;
-  /** Sign-up card footnote, rendered under the CTA in the register state only. */
+  /**
+   * 020 EARS-5 — the GUEST's sign-up footnote under «Участвовать»
+   * (`event-page.dc.html` `ctaGuest`): the press routes them through 021 and
+   * back to this page, which is what the sentence promises.
+   */
   signupNote: string;
+  /**
+   * 020 EARS-5 — the SIGNED-IN, not-registered doctor's footnote
+   * (`event-page.dc.html` `ctaJoin` sub-line), `{cost}` filled with the
+   * event's own «N Pul». Only the cost sentence ships: the canvas's «Напомним
+   * за час до начала, ссылка придёт на почту» returns with the pre-start
+   * reminder of #2040 — the platform sends neither mail today.
+   */
+  signupCostNote: string;
   /**
    * 020 EARS-2 (#1765) — what the «Программа» section says when the operator
    * attached NO programme PDF. The section is never omitted and never left as
@@ -155,6 +167,7 @@ export const EVENT_PAGE_COPY: EventPageCopy = {
     hybrid: "Очно и онлайн",
   },
   signupNote: "Нужна регистрация — вернём вас на эту страницу.",
+  signupCostNote: "Спишем {cost} при записи.",
   programmePending: "Программу опубликуем ближе к дате события.",
   programmeNeverPublished: "Программа этого события не публиковалась.",
   inPrefix: "через",
@@ -419,12 +432,26 @@ function mskCalendarDaysBetween(from: Date, to: Date): number {
 }
 
 /**
+ * Who is reading the sign-up card — the one viewer fact the card's footnote
+ * depends on (#3307). It is the page's existing session read (a per-user
+ * registration state came back), never a second participation decision: the
+ * CTA's action stays the server's.
+ *
+ * Required, not defaulted: a host that forgot to say who is reading would
+ * otherwise silently show a signed-in doctor the guest's return promise.
+ */
+export interface EventSignupViewer {
+  signedIn: boolean;
+}
+
+/**
  * The sign-up card props for one viewer on one event. `cta` is passed straight
- * through from the server policy read — this function never inspects it.
+ * through from the server policy read — this function never re-resolves it.
  */
 export function eventSignupCardProps(
   view: EventPageView,
   cta: ParticipationCta,
+  viewer: EventSignupViewer,
   copy: EventPageCopy = EVENT_PAGE_COPY,
 ): EventSignupCardProps {
   const { time, date, weekday, zoneLabel } = eventPageTimeParts(view);
@@ -470,11 +497,37 @@ export function eventSignupCardProps(
     weekdayLabel: `${weekday} · ${zoneLabel}`,
     conditions,
     cta,
-    // Canvas:201 carries the footnote under the register control alone. In
-    // every other state it would contradict the words above it — «Мест нет»,
-    // «Участие недоступно», «Вы записаны» — so it is absent, not restyled.
-    note: cta.action === "register" ? copy.signupNote : undefined,
+    note: signupNote(view, cta, viewer, copy),
   };
+}
+
+/**
+ * 020 EARS-5 (#3307) — the footnote under «Участвовать», per
+ * `event-page.dc.html`'s `auth` switch. It exists in the `register` state
+ * alone: in every other state it would contradict the words above it — «Мест
+ * нет», «Участие недоступно», «Вы записаны» — so it is absent, not restyled.
+ *
+ * - **guest** (`ctaGuest`) — the return promise: the press routes through 021
+ *   and back to this page.
+ * - **signed in, not registered** (`ctaJoin`) — no detour is coming, so the
+ *   return promise would be untrue; the doctor reads what the press costs, in
+ *   the event's own Pul. A zero-cost event debits nothing and says nothing —
+ *   never «бесплатно» under the control (the conditions row already states
+ *   the free reading).
+ */
+function signupNote(
+  view: EventPageView,
+  cta: ParticipationCta,
+  viewer: EventSignupViewer,
+  copy: EventPageCopy,
+): string | undefined {
+  if (cta.action !== "register") return undefined;
+  if (!viewer.signedIn) return copy.signupNote;
+  if (view.pulCost === 0) return undefined;
+  return copy.signupCostNote.replace(
+    "{cost}",
+    `${view.pulCost} ${copy.pulUnit}`,
+  );
 }
 
 /**

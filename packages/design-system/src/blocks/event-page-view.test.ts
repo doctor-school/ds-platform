@@ -17,6 +17,7 @@ import {
   eventSpeakerCards,
   eventViewersMeta,
   eventAiredMeta,
+  type EventSignupViewer,
 } from "./event-page-view";
 
 /**
@@ -78,6 +79,10 @@ const VIEW: EventPageView = {
   links: { speakerPages: [] },
 };
 
+/** The two viewers the sign-up footnote distinguishes (#3307). */
+const GUEST: EventSignupViewer = { signedIn: false };
+const SIGNED_IN: EventSignupViewer = { signedIn: true };
+
 const REGISTER_CTA: ParticipationCta = {
   action: "register",
   label: "Участвовать",
@@ -127,7 +132,8 @@ describe("020 EARS-1 — shared event-page view projection", () => {
     expect(eventPageChips(VIEW).some((chip) => chip.includes("НМО"))).toBe(
       false,
     );
-    const rows = eventSignupCardProps(VIEW, REGISTER_CTA).conditions ?? [];
+    const rows =
+      eventSignupCardProps(VIEW, REGISTER_CTA, GUEST).conditions ?? [];
     expect(rows.some((row) => row.label === "НМО")).toBe(false);
     expect(rows[0]).toEqual({
       label: "Участие",
@@ -147,7 +153,7 @@ describe("020 EARS-1 — shared event-page view projection", () => {
   });
 
   it("020 EARS-1: the sign-up card renders the server CTA verbatim and never re-resolves it", () => {
-    const props = eventSignupCardProps(VIEW, REGISTER_CTA);
+    const props = eventSignupCardProps(VIEW, REGISTER_CTA, GUEST);
     expect(props.cta).toBe(REGISTER_CTA);
     expect(props.timeLabel).toBe("19:00");
     expect(props.dateLabel).toBe("28 августа");
@@ -162,14 +168,53 @@ describe("020 EARS-1 — shared event-page view projection", () => {
       reason: "Офлайн-места закончились",
       presenceCount: null,
     };
-    expect(eventSignupCardProps(VIEW, soldOut).cta).toEqual(soldOut);
+    expect(eventSignupCardProps(VIEW, soldOut, GUEST).cta).toEqual(soldOut);
   });
 
-  it("020 EARS-1: the sign-up footnote shall render in the register state only (#1764)", () => {
-    // Canvas:201 puts «Нужна регистрация …» under the register control alone.
-    expect(eventSignupCardProps(VIEW, REGISTER_CTA).note).toBe(
+  it("020 EARS-5: a guest on the register state reads the return footnote under «Участвовать» (#3307)", () => {
+    // event-page.dc.html `ctaGuest` — the guest is the one viewer the footnote
+    // speaks to: the press sends them through 021 and back to this page.
+    expect(eventSignupCardProps(VIEW, REGISTER_CTA, GUEST).note).toBe(
       EVENT_PAGE_COPY.signupNote,
     );
+    expect(
+      eventSignupCardProps({ ...VIEW, pulCost: 50 }, REGISTER_CTA, GUEST).note,
+    ).toBe(EVENT_PAGE_COPY.signupNote);
+  });
+
+  it("020 EARS-5: a signed-in, not-registered doctor reads the event's own Pul cost instead of the guest footnote (#3307)", () => {
+    // event-page.dc.html `ctaJoin` — no registration detour is coming, so the
+    // guest's «вернём вас на эту страницу» would be untrue. The cost is the
+    // event's real `pulCost`, never the canvas's sample 50.
+    expect(
+      eventSignupCardProps({ ...VIEW, pulCost: 250 }, REGISTER_CTA, SIGNED_IN)
+        .note,
+    ).toBe("Спишем 250 Pul при записи.");
+    expect(
+      eventSignupCardProps({ ...VIEW, pulCost: 50 }, REGISTER_CTA, SIGNED_IN)
+        .note,
+    ).toBe("Спишем 50 Pul при записи.");
+  });
+
+  it("020 EARS-5: a signed-in doctor on a zero-cost event gets no footnote at all (#3307)", () => {
+    // Nothing is debited, so there is no sentence to say — and the zero cost is
+    // never restated as money wording under the control.
+    const card = eventSignupCardProps(
+      { ...VIEW, pulCost: 0 },
+      REGISTER_CTA,
+      SIGNED_IN,
+    );
+    expect(card.note).toBeUndefined();
+  });
+
+  it("020 EARS-5: no pre-start reminder or e-mail promise is made to a signed-in doctor (#3307, wave 2 #2040)", () => {
+    const note =
+      eventSignupCardProps({ ...VIEW, pulCost: 50 }, REGISTER_CTA, SIGNED_IN)
+        .note ?? "";
+    expect(note).not.toMatch(/напомн|почт|ссылк/iu);
+  });
+
+  it("020 EARS-5: registered, sold-out, closed and room states carry no footnote for any viewer (#1764, #3307)", () => {
     for (const cta of [
       {
         action: "registered",
@@ -201,7 +246,11 @@ describe("020 EARS-1 — shared event-page view projection", () => {
       },
     ] satisfies ParticipationCta[]) {
       // A footnote about registering would contradict the words above it.
-      expect(eventSignupCardProps(VIEW, cta).note).toBeUndefined();
+      for (const viewer of [GUEST, SIGNED_IN]) {
+        expect(
+          eventSignupCardProps({ ...VIEW, pulCost: 50 }, cta, viewer).note,
+        ).toBeUndefined();
+      }
     }
   });
 
@@ -225,7 +274,7 @@ describe("020 EARS-1 — shared event-page view projection", () => {
     // says WHERE the doctor goes («Онлайн · комната эфира»), not just the
     // one-word format the hero kicker carries. The owner's Stage-B round-1
     // rejection was this exact row set.
-    expect(eventSignupCardProps(VIEW, REGISTER_CTA).conditions).toEqual([
+    expect(eventSignupCardProps(VIEW, REGISTER_CTA, GUEST).conditions).toEqual([
       { label: "Участие", value: "Бесплатно для врача", tone: "success" },
       { label: "Формат", value: "Онлайн · комната эфира" },
       { label: "Длительность", value: "90 минут" },
@@ -236,7 +285,7 @@ describe("020 EARS-1 — shared event-page view projection", () => {
     // Pul are attention points, never roubles, and a cost is a neutral fact
     // rather than good news — only the FREE reading earns the success accent.
     const rows =
-      eventSignupCardProps({ ...VIEW, pulCost: 250 }, REGISTER_CTA)
+      eventSignupCardProps({ ...VIEW, pulCost: 250 }, REGISTER_CTA, GUEST)
         .conditions ?? [];
     expect(rows[0]).toEqual({ label: "Участие", value: "250 Pul" });
     expect(rows.filter((row) => row.tone === "success")).toHaveLength(0);
@@ -249,7 +298,8 @@ describe("020 EARS-1 — shared event-page view projection", () => {
 
   it("020 EARS-4.5: the НМО row is the FOURTH condition, right after Длительность", () => {
     expect(
-      eventSignupCardProps({ ...VIEW, nmo: true }, REGISTER_CTA).conditions,
+      eventSignupCardProps({ ...VIEW, nmo: true }, REGISTER_CTA, GUEST)
+        .conditions,
     ).toEqual([
       { label: "Участие", value: "Бесплатно для врача", tone: "success" },
       { label: "Формат", value: "Онлайн · комната эфира" },
@@ -262,7 +312,7 @@ describe("020 EARS-1 — shared event-page view projection", () => {
     // Canvas:181-198 is the closed set. A row the canvas does not carry would
     // be a new product statement made in a mapper.
     const labels = (view: EventPageView) =>
-      (eventSignupCardProps(view, REGISTER_CTA).conditions ?? []).map(
+      (eventSignupCardProps(view, REGISTER_CTA, GUEST).conditions ?? []).map(
         (row) => row.label,
       );
     expect(labels(VIEW)).toEqual(["Участие", "Формат", "Длительность"]);
@@ -275,14 +325,15 @@ describe("020 EARS-1 — shared event-page view projection", () => {
   });
 
   it("020 EARS-1: only the price row carries the success accent (#1779)", () => {
-    const rows = eventSignupCardProps(VIEW, REGISTER_CTA).conditions ?? [];
+    const rows =
+      eventSignupCardProps(VIEW, REGISTER_CTA, GUEST).conditions ?? [];
     expect(rows.filter((row) => row.tone === "success")).toHaveLength(1);
     expect(rows[0]?.tone).toBe("success");
   });
 
   it("020 EARS-1: an offline event's format row names the format without a room (#1779)", () => {
     const rows =
-      eventSignupCardProps({ ...VIEW, format: "offline" }, REGISTER_CTA)
+      eventSignupCardProps({ ...VIEW, format: "offline" }, REGISTER_CTA, GUEST)
         .conditions ?? [];
     expect(rows[1]).toEqual({ label: "Формат", value: "Очно" });
   });
@@ -364,8 +415,8 @@ describe("020 EARS-1 — shared event-page view projection", () => {
 
   it("020 EARS-18: a host copy override changes words, never the mapping shape", () => {
     const doctorCopy = { ...EVENT_PAGE_COPY, priceFree: "бесплатно" };
-    const shared = eventSignupCardProps(VIEW, REGISTER_CTA);
-    const doctor = eventSignupCardProps(VIEW, REGISTER_CTA, doctorCopy);
+    const shared = eventSignupCardProps(VIEW, REGISTER_CTA, GUEST);
+    const doctor = eventSignupCardProps(VIEW, REGISTER_CTA, GUEST, doctorCopy);
     expect(doctor.conditions?.map((row) => row.label)).toEqual(
       shared.conditions?.map((row) => row.label),
     );
@@ -623,6 +674,7 @@ describe("020 wave-3 PR 3.3 — format, seats, social proof, viewers", () => {
       const card = eventSignupCardProps(
         { ...VIEW, state: "ended", pulCost },
         UNAVAILABLE,
+        GUEST,
       );
       expect(card.conditions?.map((row) => row.label)).not.toContain(
         EVENT_PAGE_COPY.conditionPrice,

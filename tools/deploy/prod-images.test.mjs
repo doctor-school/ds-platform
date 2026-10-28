@@ -8,7 +8,9 @@
 // `${VAR:?}` the api-prod compose requires is rendered by the prod paths.
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -223,6 +225,62 @@ test("2981: retention keeps the last N tags of every pulled repo, ds-api-migrate
   for (const repo of RETAINED_IMAGE_REPOS) assert.match(script, new RegExp(`^prune_repo ${repo} 3$`, "m"));
   // The registry digest records a pull leaves behind are reclaimed with their tags.
   assert.ok(script.includes(`reference=${IMAGE_REGISTRY}/*`));
+});
+
+const BASH = process.platform === "win32" ? join(process.env.ProgramFiles, "Git", "bin", "bash.exe") : "bash";
+
+/**
+ * api-prod's `docker` answered from `<repo> <tag> <id>` lines (newest first) and
+ * `<ref> <id>` digest lines; every `rmi` that removes something is logged.
+ */
+function runRetentionOnFakeBox(script, { images, digests }) {
+  const dir = mkdtempSync(join(tmpdir(), "prod-retention-"));
+  const p = (name) => join(dir, name).replaceAll("\\", "/");
+  writeFileSync(p("images"), images.join("\n") + "\n");
+  writeFileSync(p("digests"), digests.join("\n") + "\n");
+  writeFileSync(p("log"), "");
+  try {
+    const result = spawnSync(BASH, ["--noprofile", "--norc", "-s"], {
+      encoding: "utf8",
+      timeout: 60_000,
+      input: `
+set -euo pipefail
+D='${p("")}'
+sudo() {
+  shift
+  case "$1 $2" in
+    "images --format") awk '{print $1, $3}' "$D/images" ;;
+    "images --digests") cat "$D/digests" ;;
+    "images ds-"*) awk -v r="$2" '$1==r {print "2026-10-" (30 - NR) "\t" $2}' "$D/images" ;;
+    "rmi "*) echo "rmi $2" >> "$D/log" ;;
+    *) echo "unexpected docker command: $*" >&2; return 1 ;;
+  esac
+}
+${script}`,
+    });
+    return { ...result, log: readFileSync(p("log"), "utf8").trim().split("\n").filter(Boolean) };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test("3456: retention drops the registry records no kept local tag shares — the registry repos are not kept", () => {
+  const REG = IMAGE_REGISTRY;
+  const box = runRetentionOnFakeBox(retentionScript(1), {
+    images: [
+      `ds-api ${SHA} id1`,
+      `ds-api ${SHA2} id2`,
+      `${REG}/api <none> id1`,
+      `${REG}/api <none> id2`,
+      `${REG}/api <none> id3`,
+    ],
+    digests: [`${REG}/api@sha256:kept id1`, `${REG}/api@sha256:pruned id2`, `${REG}/api@sha256:orphan id3`],
+  });
+  assert.equal(box.status, 0, box.stderr);
+  // `ds-api:SHA2` is pruned by retention; the fake keeps listing it, so its record's
+  // ID still reads as kept — the orphan is what the kept set must no longer cover.
+  assert.ok(box.log.includes(`rmi ${REG}/api@sha256:orphan`), box.log.join("\n"));
+  assert.ok(!box.log.includes(`rmi ${REG}/api@sha256:kept`), box.log.join("\n"));
 });
 
 // --- the api-prod compose -----------------------------------------------------

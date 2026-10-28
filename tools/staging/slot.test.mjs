@@ -2557,6 +2557,35 @@ test("3042: retention drops registry digest records no kept `ds-*` tag shares �
   assert.ok(registryRecordsScript().includes(`reference=${REG}/*/*`));
 });
 
+test("3456: the registry repos never join the kept set — their host `ds-platform.…` starts with `ds-` too", () => {
+  // `docker images` lists every registry record as a repository of its own, beside the
+  // local tags: a kept set that took every `ds-*` repository kept every record's ID.
+  const box = runOnFakeBox(registryRecordsScript(), {
+    images: [
+      `ds-api ${SHA} id1`,
+      `${REG}/api <none> id1`,
+      `${REG}/api <none> id3`,
+      `${REG}/pr/api <none> id4`,
+    ],
+    digests: [`${REG}/api@sha256:kept id1`, `${REG}/api@sha256:orphan id3`, `${REG}/pr/api@sha256:prorphan id4`],
+    avail: FLOOR * 2,
+  });
+  assert.equal(box.status, 0, box.stderr);
+  // The record sharing the kept local tag's ID stays; the two orphans go.
+  assert.deepEqual(box.log, [`rmi ${REG}/api@sha256:orphan`, `rmi ${REG}/pr/api@sha256:prorphan`]);
+});
+
+test("3456: a container on a registry reference protects no `ds-*` SHA tag — only a local tag names a bundle", () => {
+  const box = runOnFakeBox(pruneScript({ retention: 1, reservedSpace: BUILD_CACHE_RESERVED_SPACE }), {
+    images: [`ds-api ${SHA2} id2`, `ds-api ${SHA} id1`],
+    digests: [],
+    running: [`${REG}/pr/api:${SHA2}`],
+    avail: FLOOR * 2,
+  });
+  assert.equal(box.status, 0, box.stderr);
+  assert.ok(box.log.includes(`rmi ds-api:${SHA2}`), box.log.join("\n"));
+});
+
 test("3042: `gc` drops the registry digest records too, even with no slot image to remove", () => {
   const plan = planUnreferencedImageGc({ images: ["caddy:2"], liveSlots: live({}) });
   assert.deepEqual(plan.remove, []);

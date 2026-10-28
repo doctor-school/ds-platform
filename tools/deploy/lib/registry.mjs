@@ -48,6 +48,21 @@ const DIGEST_REF_RE = /^ds-platform\.registry\.twcstorage\.ru\/(pr\/)?([a-z0-9][
 
 export const imagesArtifactName = (sha) => `images-${sha}`;
 
+/**
+ * A local repository the boxes keep, as an ERE for `grep -E` and awk: `ds-<image>`,
+ * no `/` and no `.`. A bare `^ds-` also matches the registry host
+ * `ds-platform.registry…`, which put every registry record in the kept set (#3456).
+ */
+export const LOCAL_IMAGE_REPO_ERE = "^ds-[a-z0-9][a-z0-9-]*$";
+
+/**
+ * Shell: `kept_ids` — the image IDs every local `ds-<image>` tag carries. A registry
+ * digest record sharing one of them is the same image and stays; stage and production
+ * reclaim from this one line.
+ */
+export const keptLocalIdsShell = () =>
+  `kept_ids=$(sudo docker images --format '{{.Repository}} {{.ID}}' | awk '$1 ~ /${LOCAL_IMAGE_REPO_ERE}/ {print $2}' | sort -u)`;
+
 /** `ds-<key>:<sha>` — the local tag compose, inventory, retention and prune all read. */
 export const localImageTag = (name, sha) => `ds-${name}:${sha}`;
 

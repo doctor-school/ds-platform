@@ -737,19 +737,36 @@ install_entrypoints() {
   printf '%s: box entrypoints of %s installed\n' "$TAG" "$sha"
 }
 
-# #3395: one line per container of both data-prod compose projects (persistence
-# plane + ds-glitchtip): its name and json-log bound, never its env. Printed by
-# postgres-checkpoint, the verb that closes the release's data-prod-up phase on every
-# run — the durable `up` unit's own output stays in its journal.
+# #3395: one `log bound:` line per container of both data-prod compose projects
+# (ds-data-prod + ds-glitchtip): its name and json-log bound, never its env. Printed
+# by postgres-checkpoint, the verb that closes the release's data-prod-up phase on
+# every run — the durable `up` unit's own output stays in its journal. Evidence only:
+# it lists by the compose project label (no compose file, no .env — the pre-ship
+# checkpoint runs on whatever tree is live) and never fails the verb; any error is
+# one `log bounds: unavailable — <reason>` line.
+DATA_PROJECTS='ds-data-prod ds-glitchtip'
 data_log_bounds() {
-  local ids
-  cd "$DATA_COMPOSE"
-  ids=$(sudo docker compose ps -aq && sudo docker compose -f glitchtip/compose.yml --env-file .env ps -aq)
-  [[ -n $ids ]] || refuse "no data-prod containers to report"
+  local project ids='' out
+  for project in $DATA_PROJECTS; do
+    if ! out=$(sudo docker ps -aq --filter "label=com.docker.compose.project=$project" 2>&1); then
+      bounds_unavailable "$out"; return 0
+    fi
+    ids+="$out"$'\n'
+  done
+  [[ -n ${ids//[[:space:]]/} ]] || { bounds_unavailable "no data-prod containers"; return 0; }
   # shellcheck disable=SC2086 # one id per word
-  sudo docker inspect --format \
+  if ! out=$(sudo docker inspect --format \
     '{{.Name}} log={{.HostConfig.LogConfig.Type}} max-size={{index .HostConfig.LogConfig.Config "max-size"}} max-file={{index .HostConfig.LogConfig.Config "max-file"}}' \
-    $ids
+    $ids 2>&1); then
+    bounds_unavailable "$out"; return 0
+  fi
+  printf '%s\n' "$out" | sed 's/^/log bound: /'
+}
+# The first line of the error, printable and capped.
+bounds_unavailable() {
+  local reason=${1%%$'\n'*}
+  reason=${reason//[^[:print:]]/}
+  printf 'log bounds: unavailable — %s\n' "${reason:0:200}"
 }
 
 # The durable step units of data-prod: the step script is fixed here; ds-release

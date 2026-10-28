@@ -1667,8 +1667,9 @@ takes effect when Compose **recreates** the container: on `api-prod` the release
 swap's `up -d`, on `data-prod` the `data-up` step (persistence plane and GlitchTip),
 on stage every slot `up -d`; `stg-infra` is recreated by its own `up -d` (stg-infra
 README). The release output proves it on data-prod: after `data-up`, one
-`↳ ds-data-prod: /<container> log=json-file max-size=50m max-file=3` line per
-container of both compose projects. `tools/deploy/compose-logging.test.mjs` fails on
+`↳ ds-data-prod: log bound: /<container> log=json-file max-size=50m max-file=3` line
+per container of both compose projects (evidence only: a docker error prints
+`log bounds: unavailable — <reason>` and the release goes on). `tools/deploy/compose-logging.test.mjs` fails on
 a service without the bound.
 
 ## Key gotchas

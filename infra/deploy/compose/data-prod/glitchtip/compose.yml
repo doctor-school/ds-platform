@@ -15,8 +15,9 @@
 #
 # PRIVATE host: the web port binds to the VPC interface ONLY (never 0.0.0.0) — set
 # VPC_IP to data-prod's private address (var.data_prod_private_ip, default
-# 192.168.0.10): the release's data-up raises it after the core plane with
-# `--env-file ../.env`, the file the release's data-env writes (#3395). The UI is NOT
+# 192.168.0.10): the release's data-up raises it after the core plane, from
+# compose/data-prod/, with `-f glitchtip/compose.yml --env-file .env` — the `.env`
+# there, which the release's data-env writes (#3395). The UI is NOT
 # published to the internet; the owner reaches it over an SSH tunnel (README).
 # api-prod ships events to http://192.168.0.10:8000 over the VPC (firewall rule
 # `glitchtip_ingest`, network.tf).

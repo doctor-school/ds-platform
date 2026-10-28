@@ -748,6 +748,24 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     );
     chmodSync(join(stubs, "docker"), 0o755);
   };
+  // #3395: docker for the checkpoint's log-bound report; `fail` = the subcommand that errors.
+  const boundsDockerStub = (fail = "") => {
+    writeFileSync(
+      join(stubs, "docker"),
+      [
+        "#!/usr/bin/env bash",
+        'echo "$*" >> "$STUB_DIR/docker.log"',
+        `[[ $1 == "${fail}" ]] && { echo "Error: $1 broke" >&2; echo "second line" >&2; exit 1; }`,
+        'case "$*" in',
+        '  "ps -aq --filter label=com.docker.compose.project=ds-data-prod") echo pg; echo redis ;;',
+        '  "ps -aq --filter label=com.docker.compose.project=ds-glitchtip") echo web ;;',
+        '  inspect*) for id in "${@: -3}"; do echo "/$id log=json-file max-size=50m max-file=3"; done ;;',
+        "esac",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(join(stubs, "docker"), 0o755);
+  };
   const shipped = (entries) =>
     gzipSync(tarArchive([{ name: "ds-platform/", type: "5" }, ...entries]));
 
@@ -803,22 +821,8 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       systemId: "7544271560000000001",
       images: { postgres: IMG("b"), pgbackrest: IMG("c") },
     };
-    // #3395: docker answers the ids of both compose projects, then their log bounds.
-    mkdirSync(join(tree(), "infra/deploy/compose/data-prod"), { recursive: true });
-    writeFileSync(
-      join(stubs, "docker"),
-      [
-        "#!/usr/bin/env bash",
-        'echo "$PWD $*" >> "$STUB_DIR/docker.log"',
-        'case "$*" in',
-        '  "compose ps -aq") echo pg; echo redis ;;',
-        '  "compose -f glitchtip/compose.yml --env-file .env ps -aq") echo web ;;',
-        '  inspect*) for id in "${@: -3}"; do echo "/$id log=json-file max-size=50m max-file=3"; done ;;',
-        "esac",
-        "",
-      ].join("\n"),
-    );
-    chmodSync(join(stubs, "docker"), 0o755);
+    // #3395: docker lists both compose projects by label, then their log bounds.
+    boundsDockerStub();
     const r = run("postgres-checkpoint", { input: JSON.stringify(record) });
     assert.equal(r.status, 0, String(r.stderr));
     const file = join(root, "home/deploy/ds-platform-postgres-state.json");
@@ -826,14 +830,44 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(
       r.stdout,
       "PostgreSQL checkpoint written\n" +
-        "/pg log=json-file max-size=50m max-file=3\n/redis log=json-file max-size=50m max-file=3\n" +
-        "/web log=json-file max-size=50m max-file=3\n",
+        "log bound: /pg log=json-file max-size=50m max-file=3\n" +
+        "log bound: /redis log=json-file max-size=50m max-file=3\n" +
+        "log bound: /web log=json-file max-size=50m max-file=3\n",
     );
-    const compose = join(tree(), "infra/deploy/compose/data-prod");
-    const inspect = log("docker").split("\n").find((l) => l.includes(" inspect "));
-    assert.ok(inspect?.startsWith(`${compose} inspect --format `), inspect);
-    assert.ok(inspect.includes("{{.HostConfig.LogConfig.Type}}") && inspect.endsWith(" pg redis web"), inspect);
+    const calls = log("docker").split("\n");
+    assert.ok(calls.includes("ps -aq --filter label=com.docker.compose.project=ds-data-prod"), log("docker"));
+    assert.ok(calls.includes("ps -aq --filter label=com.docker.compose.project=ds-glitchtip"), log("docker"));
+    const inspect = calls.find((l) => l.startsWith("inspect "));
+    assert.ok(inspect?.includes("{{.HostConfig.LogConfig.Type}}") && inspect.endsWith(" pg redis web"), inspect);
   });
+
+  // #3395: the log-bound report is evidence only — it never fails the checkpoint, and
+  // it reads no compose file or .env (the pre-ship checkpoint runs on any tree).
+  for (const [label, fail] of [
+    ["docker inspect fails", "inspect"],
+    ["docker ps fails", "ps"],
+  ]) {
+    it(`3395: postgres-checkpoint still exits 0 with no .env when ${label}, naming the report unavailable`, () => {
+      setRole("data");
+      mkdirSync(join(root, "home/deploy"), { recursive: true });
+      const record = {
+        schema: 1,
+        sourceHash: "a".repeat(64),
+        systemId: "7544271560000000001",
+        images: { postgres: IMG("b"), pgbackrest: IMG("c") },
+      };
+      boundsDockerStub(fail);
+      const r = run("postgres-checkpoint", { input: JSON.stringify(record) });
+      assert.equal(r.status, 0, String(r.stderr));
+      assert.equal(existsSync(join(tree(), "infra/deploy/compose/data-prod/.env")), false);
+      assert.equal(
+        r.stdout,
+        `PostgreSQL checkpoint written\nlog bounds: unavailable — Error: ${fail} broke\n`,
+      );
+      assert.ok(!log("docker").includes("compose"), log("docker"));
+      assert.ok(existsSync(join(root, "home/deploy/ds-platform-postgres-state.json")));
+    });
+  }
 
   for (const [label, patch] of [
     ["an extra field", { extra: "x" }],

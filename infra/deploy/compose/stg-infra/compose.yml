@@ -35,6 +35,14 @@
 
 name: stg-infra
 
+# #3386: a bound on every container's json log — the default json-file driver
+# keeps it forever (deploy README → Container log bound). Applies on recreate.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   # --- Postgres 17 + pgvector + pg_partman — the stand's ONLY database server ---
   # Same image source as the dev stand (infra/dev-stand/postgres/Dockerfile:
@@ -48,6 +56,7 @@ services:
   # cloned from `ds_golden` by `slot up` (step 4). Sized for that in
   # postgres/postgresql.conf.
   postgres:
+    logging: *default-logging
     build:
       context: ../../../dev-stand/postgres
       dockerfile: Dockerfile
@@ -89,6 +98,7 @@ services:
   # AOF is on for dev-stand/data-prod parity, not for durability: losing this
   # dataset costs a re-login, and `slot reset` flushes a slot's database anyway.
   redis:
+    logging: *default-logging
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--databases", "64"]
@@ -107,6 +117,7 @@ services:
   # configured with S3_ENDPOINT pointing here (spec §3 «Secrets and side effects»).
   # Bucket creation per slot is the slot script's job (step 4).
   minio:
+    logging: *default-logging
     image: minio/minio:latest
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -130,6 +141,7 @@ services:
   # remedy — such a PR is serialized and its preview converges the shared instance
   # (the slot script re-points this mount at the slot tree; step 4 owns it).
   cerbos:
+    logging: *default-logging
     image: ghcr.io/cerbos/cerbos:latest
     restart: unless-stopped
     command: ["server", "--config=/config/config.yaml"]
@@ -156,6 +168,7 @@ services:
   # UI: https://mailpit.stage.doctor.school through Caddy's shared stage gate;
   # no host port is published, and slots reach SMTP in-network as `mailpit:1025`.
   mailpit:
+    logging: *default-logging
     image: axllent/mailpit:latest
     restart: unless-stopped
     volumes:
@@ -179,6 +192,7 @@ services:
   # the live SMS-OTP e2e uses on the dev stand. Dependency-free: the stock node
   # image runs the bind-mounted script, no bespoke image to build.
   sms-sink:
+    logging: *default-logging
     image: node:22-alpine
     restart: unless-stopped
     command: ["node", "/srv/server.mjs"]
@@ -206,6 +220,7 @@ services:
   # real SMS from the staging box would be spending money from a stand that runs
   # arbitrary PR code, which is exactly what the empty credential prevents.
   sms-aero-adapter:
+    logging: *default-logging
     image: node:22-alpine
     restart: unless-stopped
     command: ["node", "/srv/server.mjs"]
@@ -241,6 +256,7 @@ services:
   # Caddy vhost `id.stage.doctor.school` (#2062) over TLS; both come from stage.env,
   # so the edge reads values, not this file.
   idp:
+    logging: *default-logging
     image: ghcr.io/zitadel/zitadel:v4.17.3
     restart: unless-stopped
     command:
@@ -312,6 +328,7 @@ services:
   # baseUri wired into its auth path) — this serves the operator and the suite's
   # browser login. Tag PINNED to the running core version so UI and core never skew.
   idp-login:
+    logging: *default-logging
     image: ${IDP_LOGIN_IMAGE:-ghcr.io/zitadel/zitadel-login:v4.17.3}
     restart: unless-stopped
     environment:
@@ -360,6 +377,7 @@ services:
   # Volumes: the certificate/ACME state must survive a container replacement, or
   # every `up` re-issues and burns Let's Encrypt rate limit.
   caddy:
+    logging: *default-logging
     image: caddy:2.11.4-alpine
     restart: unless-stopped
     # The one basic-auth pair (Caddyfile → staging_basic_auth). Compose interpolates

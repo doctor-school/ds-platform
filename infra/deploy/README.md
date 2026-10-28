@@ -1653,6 +1653,22 @@ docker 29.6.1), which is what `prod.mjs` runs.
 
 Scope: `api-prod` only. `data-prod` builds nothing and needs no build-cache GC.
 
+## Container log bound (#3386)
+
+Every service in every compose file under `compose/` logs through `json-file` with
+`max-size: 50m` × `max-file: 3` — at most 150 MB of log per container (a YAML
+`x-logging` anchor per file; `data-prod/compose.yml` is JSON and carries the block
+inline per service). The default driver keeps a log forever: on 2026-10-27 the stage
+Zitadel and Postgres logs reached 17.6 GB and 10.7 GB and pushed `ds-stage-1` under
+the release driver's 10 GB free-disk floor. The bound is compose-level, not a
+`daemon.json` `log-opts` default, because `daemon.json` is written only at box
+(re-)creation and a daemon default needs a dockerd restart. A logging change only
+takes effect when Compose **recreates** the container: on `api-prod` the release
+swap's `up -d`, on `data-prod` the `data-up` step, on stage every slot `up -d`;
+`stg-infra` and GlitchTip are recreated by their own `up -d` (stg-infra README,
+§GlitchTip below). `tools/deploy/compose-logging.test.mjs` fails on a service
+without the bound.
+
 ## Key gotchas
 
 - **152-ФЗ region/zone:** keep both VPSes + the VPC in the same **RF** region. A

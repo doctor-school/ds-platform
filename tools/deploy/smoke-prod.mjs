@@ -12,10 +12,13 @@
 //          failing check, so a storage outage reads apart from a DB outage
 //   portal GET https://academy.doctor.school/         → follows redirects; final
 //          page < 500 AND no Next error-boundary markup (#866)
-//          GET https://academy.doctor.school/login    → COLD (cookie-less) 200 +
-//          Next app-shell RSC stream, no error boundary (#866/#885: the portal
-//          login form is CLIENT-rendered, so assert the server-streamed shell —
-//          not <input>, which only exists post-hydration)
+//          GET https://academy.doctor.school/login, /verify as a COLD
+//          (cookie-less) top-level navigation → 303 to
+//          https://id.doctor.school/oauth/v2/authorize with
+//          redirect_uri=https://academy.doctor.school/auth/callback; the same
+//          GET without the navigation headers → bodyless 204 (003 EARS-61/62/71:
+//          the storefront entries render no form; #3435). Not followed: the
+//          303 mints only a sign-in transaction cookie and an IdP auth request
 //   admin  GET https://admin.doctor.school/           → < 500 (Next renders; #729)
 //   doctor GET https://new.doctor.school/             → < 500 (the doctor
 //          storefront renders; #1723. TEMPORARY host until the doctor.school
@@ -138,11 +141,14 @@ function parseExpectSha() {
 }
 const EXPECT_SHA = parseExpectSha();
 
-function httpsGet(url) {
+function httpsGet(url, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const req = https.request(
       url,
-      { method: "GET", headers: { "User-Agent": "ds-smoke-prod" } },
+      {
+        method: "GET",
+        headers: { "User-Agent": "ds-smoke-prod", ...extraHeaders },
+      },
       (res) => {
         const chunks = [];
         res.on("data", (c) => chunks.push(c));
@@ -211,8 +217,9 @@ export function findColdErrorMarker(body) {
 //
 // `requireMarkup` is a single token OR a list of tokens that must ALL be present
 // in the body. A server-rendered surface (the Zitadel-hosted login) asserts the
-// literal form field "<input"; a CLIENT-rendered Next surface (the portal /login,
-// #885) asserts a server-streamed app-shell signal instead — its <input> fields
+// literal form field "<input"; a CLIENT-rendered Next surface (any App-Router
+// page whose form hydrates, #885) asserts a server-streamed app-shell signal
+// instead — its <input> fields
 // are drawn only after hydration, so requiring "<input" false-positives on a
 // perfectly healthy cold page. The error-boundary markers above keep the #866
 // teeth either way: a blank/degraded/proxy-error body carries none of the
@@ -247,6 +254,53 @@ export function checkColdPage(
         `200${where} but expected markup ${JSON.stringify(token)} missing (${res.body.length} bytes) — blank/degraded render`,
       );
   }
+}
+
+// --- storefront sign-in entry (003 EARS-61/62/71, #3435; exported for tests)
+//
+// The storefront `/login` and `/verify` render no form: a top-level
+// navigation (`Sec-Fetch-Mode: navigate` + `Sec-Fetch-Dest: document`, the
+// pair `isTopLevelNavigation` reads) is answered `303` to the IdP authorize
+// URL the API built for this storefront; any other GET (a prefetch, a fetch)
+// is a bodyless `204` that mints nothing.
+
+export const TOP_LEVEL_NAVIGATION_HEADERS = Object.freeze({
+  "Sec-Fetch-Mode": "navigate",
+  "Sec-Fetch-Dest": "document",
+  "Sec-Fetch-Site": "none",
+});
+
+// Throws unless `res` is the cold entry's 303 to
+// https://<idHost>/oauth/v2/authorize with
+// redirect_uri=https://<portalHost>/auth/callback.
+export function checkStorefrontEntry(res, { portalHost, idHost }) {
+  if (res.status !== 303)
+    throw new Error(`→ ${res.status} (expected 303 to the IdP authorize URL)`);
+  const location = res.headers?.location;
+  if (!location) throw new Error("→ 303 without a Location header");
+  const target = new URL(location, `https://${portalHost}/`);
+  if (target.protocol !== "https:" || target.host !== idHost)
+    throw new Error(
+      `→ 303 to ${target.host}${target.pathname} (expected https://${idHost}/oauth/v2/authorize)`,
+    );
+  if (target.pathname !== "/oauth/v2/authorize")
+    throw new Error(
+      `→ 303 to ${target.pathname} on ${idHost} (expected /oauth/v2/authorize)`,
+    );
+  const expectedRedirect = `https://${portalHost}/auth/callback`;
+  const redirectUri = target.searchParams.get("redirect_uri");
+  if (redirectUri !== expectedRedirect)
+    throw new Error(
+      `→ 303 authorize with redirect_uri=${JSON.stringify(redirectUri)} (expected ${expectedRedirect})`,
+    );
+  return `303 → ${idHost}/oauth/v2/authorize (redirect_uri ${expectedRedirect})`;
+}
+
+// Throws unless `res` is the bodyless 204 a non-navigation GET draws.
+export function checkStorefrontPrefetch(res) {
+  if (res.status !== 204)
+    throw new Error(`→ ${res.status} to a non-navigation GET (expected 204)`);
+  return "204 to a non-navigation GET";
 }
 
 // --- #877: hosted self-registration stays CLOSED (exported for unit tests) --
@@ -372,30 +426,19 @@ async function probePortal() {
   return `${res.status} after ${res.hops} redirect(s) (real render, no error boundary)`;
 }
 
-async function probePortalLoginCold() {
-  // The portal's own cold login entry (#866): cookie-less GET /login must be
-  // a REAL render — exact 200, no error boundary. UNLIKE the Zitadel-hosted
-  // login (server-rendered, <input> in the raw HTML), the portal /login form is
-  // CLIENT-rendered: Next.js streams the App-Router shell and the fields hydrate
-  // client-side, so the raw cold HTML carries no <input> (#885 — asserting it
-  // false-positived on a healthy page). Assert the server-present signal that
-  // IS in the cold body: the RSC flight stream (`self.__next_f`), proof the
-  // portal app server-rendered a real page. A blank/degraded/proxy-error render
-  // carries no __next_f (and an error boundary trips the markers) — #866 holds.
-  const res = await httpsGetFollow(`https://${PORTAL_HOST}/login`);
-  checkColdPage(res, { requireMarkup: "self.__next_f", expectPath: "/login" });
-  return `200 · Next app-shell RSC stream · no error boundary (cookie-less, client-rendered)`;
-}
-
-async function probeVerifyCold() {
-  // A COLD (cookie-less, new-tab) bare GET /verify: the server renders the
-  // client gate, which replaces an address-less arrival onto /register (003
-  // EARS-40). Assert a REAL render: exact 200, the Next App-Router RSC shell
-  // present (client-rendered like /login, #885), no error boundary — a regression
-  // where the confirmation route 500s or degrades is caught here.
-  const res = await httpsGetFollow(`https://${PORTAL_HOST}/verify`);
-  checkColdPage(res, { requireMarkup: "self.__next_f", expectPath: "/verify" });
-  return `200 · Next app-shell RSC stream · no error boundary (cookie-less bare /verify)`;
+// The storefront sign-in entries (#3435): a cookie-less top-level navigation
+// must start the sign-in (303 → authorize, NOT followed), and a prefetch-shaped
+// GET must not (204). Both answers come from the portal route handler itself,
+// so a 5xx, a stray app-shell 200 or a misrouted redirect all fail here.
+async function probeStorefrontEntry(path) {
+  const url = `https://${PORTAL_HOST}${path}`;
+  const nav = await httpsGet(url, TOP_LEVEL_NAVIGATION_HEADERS);
+  const navDetail = checkStorefrontEntry(nav, {
+    portalHost: PORTAL_HOST,
+    idHost: ID_HOST,
+  });
+  const prefetchDetail = checkStorefrontPrefetch(await httpsGet(url));
+  return `${navDetail} · ${prefetchDetail}`;
 }
 
 async function probeLoginCold() {
@@ -540,8 +583,8 @@ const PROBES = [
   ["api /v1/health", probeApiHealth],
   ["api /v1/ready", probeApiReady],
   ["portal /", probePortal],
-  ["portal /login cold", probePortalLoginCold],
-  ["portal /verify cold", probeVerifyCold],
+  ["portal /login entry", () => probeStorefrontEntry("/login")],
+  ["portal /verify entry", () => probeStorefrontEntry("/verify")],
   ["admin /", probeAdmin],
   ["doctor /", probeDoctor],
   ["sign-in host /healthz", probeSignInHost],

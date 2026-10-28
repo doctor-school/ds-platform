@@ -149,6 +149,7 @@ import { bootProbeScript, verifyRunningShaScript } from "./verify-scripts.mjs";
 import {
   IMAGE_REGISTRY,
   IMAGES_FILE_STDIN,
+  KEPT_LOCAL_IMAGE_IDS_SHELL,
   PROD_MANIFEST_POLICY,
   RECORDED_IMAGE_NAMES,
   assertImageDigests,
@@ -672,9 +673,9 @@ ${RETAINED_IMAGE_REPOS.map((repo) => `prune_repo ${repo} ${keep}`).join("\n")}
 # A pull leaves the registry digest reference (\`<registry>/<image>@sha256:…\`)
 # beside the local tag; on this box's containerd image store it is a record of
 # its own and keeps the content alive after the tag is pruned. Drop every one
-# that no kept \`ds-*\` tag shares an image ID with (a running container's image
+# that no local \`ds-<image>\` tag shares an image ID with (a running container's image
 # is refused by \`docker rmi\` and kept).
-kept_ids=$(sudo docker images --format '{{.Repository}} {{.ID}}' | awk '$1 ~ /^ds-/ {print $2}' | sort -u)
+${KEPT_LOCAL_IMAGE_IDS_SHELL}
 sudo docker images --digests --filter 'reference=${IMAGE_REGISTRY}/*' --format '{{.Repository}}@{{.Digest}} {{.ID}}' \\
   | while read -r ref id; do
       if printf '%s\\n' "$kept_ids" | grep -Fxq "$id"; then continue; fi

@@ -26,6 +26,13 @@ export class RegistryError extends Error {
 }
 
 export const IMAGE_REGISTRY = "ds-platform.registry.twcstorage.ru";
+/**
+ * The image IDs a local `ds-<image>` tag holds — the registry records retention keeps
+ * (stage `registryRecordsScript`, prod `retentionScript`). The unfiltered listing also
+ * names the pulled records themselves, whose repository `ds-platform.registry…/<image>`
+ * starts with `ds-` too: a local tag's repository carries no `.` and no `/` (#3455).
+ */
+export const KEPT_LOCAL_IMAGE_IDS_SHELL = `kept_ids=$(sudo docker images --format '{{.Repository}} {{.ID}}' | awk '$1 ~ /^ds-[^./]+$/ {print $2}' | sort -u)`;
 /** Root-only on every consuming box; read by the box's own shell, never by this tool. */
 export const REGISTRY_PULL_TOKEN_FILE = "/etc/ds-platform/registry-pull-token";
 export const IMAGES_WORKFLOW = "runtime-images.yml";

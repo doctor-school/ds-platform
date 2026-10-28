@@ -8,7 +8,9 @@
 // `${VAR:?}` the api-prod compose requires is rendered by the prod paths.
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -34,6 +36,7 @@ import {
 } from "./prod.mjs";
 import { API_PROD_COMPOSE_PATH, deployServiceSet } from "./service-set.mjs";
 
+const BASH = process.platform === "win32" ? join(process.env.ProgramFiles, "Git", "bin", "bash.exe") : "bash";
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
 const PROD_SOURCE = readFileSync(join(REPO_ROOT, "tools", "deploy", "prod.mjs"), "utf8");
 const API_PROD_COMPOSE = readFileSync(join(REPO_ROOT, ...API_PROD_COMPOSE_PATH.split("/")), "utf8");
@@ -223,6 +226,40 @@ test("2981: retention keeps the last N tags of every pulled repo, ds-api-migrate
   for (const repo of RETAINED_IMAGE_REPOS) assert.match(script, new RegExp(`^prune_repo ${repo} 3$`, "m"));
   // The registry digest records a pull leaves behind are reclaimed with their tags.
   assert.ok(script.includes(`reference=${IMAGE_REGISTRY}/*`));
+});
+
+test("3455: retention drops a registry record no local `ds-*` tag shares — the record's own repository is never a kept tag", () => {
+  const dir = mkdtempSync(join(tmpdir(), "prod-retention-"));
+  const p = (name) => join(dir, name).replaceAll("\\", "/");
+  // The box after a pull: the local tag `ds-api:<sha>` (id1) and the registry records
+  // beside it — id1's own record (kept) and id2's, whose local tag was pruned earlier.
+  writeFileSync(p("images"), `ds-api id1\n${IMAGE_REGISTRY}/api id1\n${IMAGE_REGISTRY}/api id2\n`);
+  writeFileSync(p("digests"), `${IMAGE_REGISTRY}/api@sha256:kept id1\n${IMAGE_REGISTRY}/api@sha256:orphan id2\n`);
+  writeFileSync(p("log"), "");
+  try {
+    const result = spawnSync(BASH, ["--noprofile", "--norc", "-s"], {
+      encoding: "utf8",
+      timeout: 60_000,
+      input: `
+set -euo pipefail
+D='${p("")}'
+sudo() {
+  shift
+  case "$1 $2" in
+    "images --format") cat "$D/images" ;;
+    "images --digests") cat "$D/digests" ;;
+    "images ds-"*) : ;;
+    "rmi "*) echo "rmi $2" >> "$D/log" ;;
+    *) echo "unexpected docker command: $*" >&2; return 1 ;;
+  esac
+}
+${retentionScript(3)}`,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(readFileSync(p("log"), "utf8").trim().split("\n"), [`rmi ${IMAGE_REGISTRY}/api@sha256:orphan`]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 // --- the api-prod compose -----------------------------------------------------

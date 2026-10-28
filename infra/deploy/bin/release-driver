@@ -664,6 +664,16 @@ write_rollback_record() {
     "$(rollback_unit_name "$sha")" "$state" "$origin"
 }
 
+# The `state` of the SHA's rollback record; nothing when it is absent or unreadable.
+rollback_record_state() {
+  sudo cat "$ROLLBACK_DIR/$1.json" 2>/dev/null |
+    python3 -I -c 'import json,sys
+try: r = json.load(sys.stdin)
+except ValueError: r = None
+print(r.get("state", "") if isinstance(r, dict) and r.get("sha") == sys.argv[1] else "")' "$1" ||
+    true
+}
+
 cmd_rollback() {
   check_args "$@"
   local env=$1 sha=$2 unit manifest state rc out user
@@ -677,6 +687,14 @@ cmd_rollback() {
   read -r state rc < <(unit_state "$unit")
   if [[ $state == active || $state == activating ]]; then
     say "attached $unit"
+    return 0
+  fi
+  # A re-run after the runner lost contact (#3219): the target is live because this
+  # SHA's own rollback finished rc 0 and recorded `succeeded` — answered from the box
+  # without the lock, the record or the unit, as release_unit answers a release.
+  if [[ ($state == inactive || $state == failed) && $rc == 0 ]] &&
+    [[ $(live_prod_sha) == "$sha" && $(rollback_record_state "$sha") == succeeded ]]; then
+    say "already-succeeded"
     return 0
   fi
   command -v curl >/dev/null || fail "curl is not installed"

@@ -346,6 +346,9 @@ jobs:
         id: rollback
         if: inputs.mode == 'rollback'
         run: |
+          # The poll reads `since` only after a lost start call: a finished record
+          # older than this call is an earlier attempt, not this run's (#3219).
+          echo "since=$(date -u +%s)" >> "$GITHUB_OUTPUT"
           set +e
           line=$(ssh -i "$RUNNER_TEMP/prod-ssh/key" \
             -o UserKnownHostsFile="$RUNNER_TEMP/prod-ssh/known_hosts" \
@@ -354,28 +357,58 @@ jobs:
             < "manifest/images-$SHA.json" 2>&1)
           rc=$?
           set -e
-          # One status line, as the release driver's: `started` / `attached`.
+          # One status line, as the release driver's: `started` / `attached` /
+          # `already-succeeded` (a re-run after lost contact, #3219).
           first=$(printf '%s\n' "$line" | head -n 1)
           echo "rollback: rc=$rc $first"
           case "$rc" in
-            0) ;;
-            3) echo "::error::rollback refused: $first"; exit 1 ;;
+            0)
+              case "$first" in
+                *already-succeeded*) outcome=already-succeeded ;;
+                *attached*) outcome=attached ;;
+                *) outcome=started ;;
+              esac
+              echo "outcome=$outcome" >> "$GITHUB_OUTPUT" ;;
+            3)
+              echo "outcome=refused" >> "$GITHUB_OUTPUT"
+              echo "::error::rollback refused: $first"; exit 1 ;;
+            255)
+              # ssh dropped: the call may or may not have reached the box, so the
+              # poll decides from the box what happened (#3219).
+              echo "outcome=ssh-lost" >> "$GITHUB_OUTPUT"
+              echo "::warning::ssh dropped during rollback prod; polling the box for the rollback" ;;
             *) echo "::error::rollback failed (rc=$rc)"; exit 1 ;;
           esac
 
       - name: Poll the rollback until it is terminal
         id: rollback-poll
         if: inputs.mode == 'rollback'
+        env:
+          START: ${{ steps.rollback.outputs.outcome }}
+          SINCE: ${{ steps.rollback.outputs.since }}
         run: |
           # 30 min = 120 polls x 15 s: an app-only `up -d` of recorded digests, the
           # running-SHA verify and the smoke; no build, no migrate.
           deadline=$((SECONDS + 30 * 60))
           ssh_failures=0
           from=-
-          # `unknown` = lost contact (ssh down, or the time-out): the record step
-          # writes the `error` Deployment record before the job fails.
+          # A lost start call (#3219): the box's record must be this run's (`--since`),
+          # and no record with no running unit is a start still in flight for 8 polls
+          # (2 min: the driver's GitHub and registry checks precede the record), then a
+          # rollback that never started.
+          since_args=()
+          absent_grace=0
+          if [ "$START" = "ssh-lost" ]; then
+            since_args=(--since "$SINCE")
+            absent_grace=8
+          fi
+          absent_polls=0
+          # `unknown` has no verdict; its reason tells the record step and the notice
+          # why: `lost-contact` (ssh down), `timeout` (the unit keeps running) or
+          # `not-started` (the start call was lost and the box never started it).
           terminal() {
             echo "terminal=$1" >> "$GITHUB_OUTPUT"
+            echo "reason=${2:-}" >> "$GITHUB_OUTPUT"
             [[ "$from" =~ ^[0-9a-f]{40}$ ]] || from=""
             echo "from-sha=$from" >> "$GITHUB_OUTPUT"
           }
@@ -393,7 +426,7 @@ jobs:
               echo "status: ssh failed ($(head -n 1 "$RUNNER_TEMP/ssh.err"))"
               if [ "$ssh_failures" -ge 4 ]; then
                 echo "::error::ssh to ds-api-prod failed $ssh_failures times in a row"
-                terminal unknown
+                terminal unknown lost-contact
                 exit 1
               fi
               sleep 15
@@ -403,10 +436,20 @@ jobs:
             # The verdict reads the unit state as well as the record: a dead unit
             # whose record still says `running` is a failure (release-runner.mjs).
             read -r verdict rb_from line < <(printf '%s' "$json" |
-              node tools/deploy/release-runner.mjs rollback-verdict --sha "$SHA") ||
+              node tools/deploy/release-runner.mjs rollback-verdict --sha "$SHA" "${since_args[@]}") ||
               verdict=unreadable
             echo "status: ${line:-unreadable reply}"
             [ "${rb_from:--}" = "-" ] || from=$rb_from
+            if [ "$verdict" = absent ]; then
+              absent_polls=$((absent_polls + 1))
+              if [ "$absent_grace" -eq 0 ]; then
+                verdict=failed
+              elif [ "$absent_polls" -gt "$absent_grace" ]; then
+                echo "::error::the start call was lost and the box shows no rollback of this run"
+                terminal unknown not-started
+                exit 1
+              fi
+            fi
             case "$verdict" in
               succeeded)
                 terminal succeeded; echo "rollback: succeeded"; exit 0 ;;
@@ -417,7 +460,7 @@ jobs:
             esac
             if [ "$SECONDS" -ge "$deadline" ]; then
               echo "::error::the rollback did not finish within 30 min (the rollback unit keeps running on the box)"
-              terminal unknown
+              terminal unknown timeout
               exit 1
             fi
             sleep 15
@@ -462,10 +505,12 @@ jobs:
           GH_REPO: ${{ github.repository }}
           REASON: ${{ inputs.reason }}
           TERMINAL: ${{ steps.rollback-poll.outputs.terminal }}
+          WHY: ${{ steps.rollback-poll.outputs.reason }}
+          START: ${{ steps.rollback.outputs.outcome }}
           FROM_SHA: ${{ steps.rollback-poll.outputs.from-sha }}
         run: |
           node tools/deploy/release-runner.mjs rollback-record --sha "$SHA" \
-            --state "$TERMINAL" --from-sha "$FROM_SHA"
+            --state "$TERMINAL" --from-sha "$FROM_SHA" --why "$WHY" --start "$START"
 
       # Not a release digest (release-digest.yml owns that): the team's notice.
       - name: The rollback notice to Mattermost
@@ -474,7 +519,10 @@ jobs:
           MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_WEBHOOK_URL }}
           REASON: ${{ inputs.reason }}
           TERMINAL: ${{ steps.rollback-poll.outputs.terminal }}
-        run: node tools/deploy/release-runner.mjs rollback-notice --sha "$SHA" --state "$TERMINAL"
+          WHY: ${{ steps.rollback-poll.outputs.reason }}
+        run: |
+          node tools/deploy/release-runner.mjs rollback-notice --sha "$SHA" \
+            --state "$TERMINAL" --why "$WHY"
 
   digest:
     needs: deploy

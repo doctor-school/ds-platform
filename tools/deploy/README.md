@@ -152,12 +152,27 @@ gh workflow run deploy-prod.yml --ref main -f mode=rollback -f sha=<target sha> 
   (`release-runner.mjs rollback-verdict`) reads the `-rollback` unit state as well
   as the record: a dead, failed or absent unit is succeeded only with rc 0 and a
   `succeeded` record, so a unit that died with its record still `running` is a
-  failure. Lost contact or the time-out is `unknown` → an `error` record.
+  failure. Lost contact (ssh down four times in a row) or the time-out (the unit
+  keeps running on the box) is `unknown` → an `error` record that names which of
+  the two it was (#3219).
+- **A dropped start call.** An ssh drop (rc 255) during `rollback prod <sha>`
+  continues into the poll: the call may or may not have reached the box. The poll
+  then counts only a record that ended after this run's start call
+  (`rollback-verdict --since`); no such record with no running unit is a start
+  still in flight for 8 polls (2 min), then `unknown` `not-started` — the start
+  call was lost and the box never started the rollback.
+- **Re-run after lost contact.** Re-dispatch the same SHA and reason. When the
+  first run's rollback succeeded, the target is live and the driver answers
+  `already-succeeded` (its `-rollback` unit finished rc 0 and its record says
+  `succeeded`) without the lock, a new record or a unit run; the poll reads that
+  record and writes the `success` record once, its status saying the verdict was
+  recovered by a re-run. Any other state of a live target stays refused.
 - **After a terminal status.** No release cut, no digest. `rollback-record` writes
   the ONE Deployment record (`success` / `failure` / `error`) described
   `rollback to <sha12> — <reason>`, with the reason and the rolled-off SHA in its
   payload; `rollback-notice` posts «откат прода на <sha12>: <reason>» and the
-  outcome to Mattermost through `release-notes.mjs` `postToMattermost`.
+  outcome to Mattermost through `release-notes.mjs` `postToMattermost` (lost
+  contact, the time-out and a start that never ran read differently).
 - **Runtime configs (#3274).** The rollback puts the target's `Caddyfile` and
   `centrifugo/config.json` (from the fetched target tree; the break-glass
   `--rollback` reads them with `git show <sha>:<path>`) into the live compose

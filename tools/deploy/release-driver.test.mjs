@@ -1497,6 +1497,61 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       assert.equal(r.stdout, `ds-release-driver: started ${RB_UNIT}\n`);
     });
 
+    describe("3219: a re-run after lost contact", () => {
+      const writeRecord = (state) => {
+        mkdirSync(join(recordFile(), ".."), { recursive: true });
+        writeFileSync(
+          recordFile(),
+          JSON.stringify({ kind: "rollback", sha: SHA, state, from: LIVE }),
+        );
+      };
+      const setLiveTarget = () =>
+        writeFileSync(join(dir, "live-image"), `ds-api:${SHA}\n`);
+
+      it("answers already-succeeded for the live target whose rc-0 rollback recorded succeeded — no lock, no record write, no unit touch", () => {
+        setLiveTarget();
+        setUnit(exited(0), RB_UNIT);
+        writeRecord("succeeded");
+        const before = readFileSync(recordFile(), "utf8");
+        rmSync(join(dir, "compare.json"));
+        const r = run(["rollback", "prod", SHA]);
+        assert.equal(r.status, 0, r.stderr);
+        assert.equal(r.stdout, "ds-release-driver: already-succeeded\n");
+        assert.equal(readFileSync(recordFile(), "utf8"), before);
+        assert.doesNotMatch(log("systemctl.log"), /^(stop|reset-failed) /m);
+        assert.equal(log("ds-release.log"), "", "no release check, no lease");
+        assert.equal(log("curl.log"), "", "no GitHub, no registry");
+        notStarted();
+      });
+
+      for (const [label, unit, state] of [
+        ["a failed record", exited(0), "failed"],
+        ["a record still running", exited(0), "running"],
+        ["a non-zero unit", exited(1), "succeeded"],
+      ]) {
+        it(`keeps refusing a live target with ${label}`, () => {
+          setLiveTarget();
+          setUnit(unit, RB_UNIT);
+          writeRecord(state);
+          setLive("identical");
+          writeFileSync(join(dir, "live-image"), `ds-api:${SHA}\n`);
+          const r = run(["rollback", "prod", SHA]);
+          assert.equal(r.status, 3);
+          assert.match(r.stderr, /is not behind the live prod SHA/);
+          notStarted();
+        });
+      }
+
+      it("keeps refusing a live target without any rollback record", () => {
+        setLive("identical");
+        setLiveTarget();
+        const r = run(["rollback", "prod", SHA]);
+        assert.equal(r.status, 3);
+        assert.match(r.stderr, /is not behind the live prod SHA/);
+        notStarted();
+      });
+    });
+
     it("a release of the SHA waits while its rollback runs", () => {
       setLive("identical");
       setUnit(running, RB_UNIT);

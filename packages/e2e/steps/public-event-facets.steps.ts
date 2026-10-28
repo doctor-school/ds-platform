@@ -274,9 +274,12 @@ Given("a project facet selection is active", async ({ page, world }) => {
   await active(page, s, false);
 });
 
-When("the visitor reopens the project facet", async ({ page, world }) => {
-  state(world).panel = await openProject(page);
-});
+When(
+  "the visitor reopens the project facet and clears the local option search",
+  async ({ page, world }) => {
+    state(world).panel = await openProject(page);
+  },
+);
 
 Then(
   "the active project chip and every other eligible project option preserve the full project set",

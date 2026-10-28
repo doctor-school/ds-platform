@@ -60,7 +60,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
     @EARS-13 @facets @happy @public-event-facets @014-facet-counts-self-excluding
     Scenario: Counts reflect the other facets, not the facet's own selection
       Given a project facet selection is active
-      When the visitor reopens the project facet
+      When the visitor reopens the project facet and clears the local option search
       Then the active project chip and every other eligible project option preserve the full project set
       And the expert and topic counts reflect the active project selection
 

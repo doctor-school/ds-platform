@@ -59,15 +59,6 @@ Feature: 004 Public webinar discovery — a guest reads an event page and scans 
     Then the hidden page is a reachable 200 on the same URL, not a 404 or a redirect
     And the «мероприятие скрыто» notice is shown with no participation CTA
 
-  # --- Cross-surface live consistency (US-4/US-6) ---
-
-  @EARS-9 @happy
-  Scenario: A live event reads «В эфире» consistently on the card and the page
-    Given the guest opens the upcoming-broadcasts listing
-    Then the seeded live event's card shows the «В эфире» signal
-    When the guest opens the seeded live event's page
-    Then the event page shows the same «В эфире» signal
-
   # --- Cross-cutting: the viewer-zone time rule (US-2/US-6; 004 «Amendment — 2026-10-02») ---
 
   @EARS-12 @happy

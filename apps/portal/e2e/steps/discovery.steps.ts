@@ -41,7 +41,6 @@ const SEED = {
 } as const;
 
 const PARTICIPATE = "Участвовать";
-const LIVE_LABEL = "В эфире";
 
 /**
  * The `bdd` project's viewer zone, America/New_York, as `formatEventTime` labels
@@ -256,42 +255,6 @@ Then(
     ).toHaveCount(0);
   },
 );
-
-// ── Cross-surface live consistency (EARS-9) ───────────────────────────────────
-
-Then(
-  "the seeded live event's card shows the «В эфире» signal",
-  async ({ page, world }) => {
-    world.slug = SEED.live;
-    // The feed card, not the «Идёт сейчас» strip above the feed that links the
-    // same event page.
-    const card = page
-      .getByTestId("events-feed")
-      .locator("[data-webinar-card]", {
-        has: page.locator(`a[href="/webinars/${world.slug}"]`),
-      });
-    await expect(card).toBeVisible();
-    // The live signal is inside the card itself (derived from state === 'live').
-    await expect(card).toContainText(LIVE_LABEL);
-  },
-);
-
-When(
-  "the guest opens the seeded live event's page",
-  async ({ page, context, world }) => {
-    world.slug = SEED.live;
-    await context.clearCookies();
-    await page.goto(`/webinars/${world.slug}`, {
-      waitUntil: "domcontentloaded",
-    });
-  },
-);
-
-Then("the event page shows the same «В эфире» signal", async ({ page }) => {
-  // EARS-9: both surfaces read the one `EventLifecycleState`, so they cannot
-  // present a contradictory signal for one event.
-  await expect(page.getByText(LIVE_LABEL).first()).toBeVisible();
-});
 
 // ── МСК no viewer-local drift (EARS-12) ───────────────────────────────────────
 

@@ -222,12 +222,16 @@ Then("no row for the licence document is rendered", async ({ page }) => {
 
 Then(
   "requesting {string} returns HTTP 404 showing the not-found document dataState, not a placeholder page",
-  async ({ page }, path: string) => {
+  async ({ page, host }, path: string) => {
     expect(path).toBe("/documents/no-such-document");
     const response = await page.goto(path);
     expect(response?.status()).toBe(404);
     await expect(page).toHaveURL((url) => url.pathname === path);
-    await expect(page.getByTestId("storefront-shell")).toBeVisible();
+    await expect(page.getByTestId("storefront-header")).toBeVisible();
+    await expect(page.getByTestId("storefront-footer")).toBeVisible();
+    await expect(page.getByTestId("footer-giant")).toHaveText(
+      host.legalDocuments.shellWordmark,
+    );
     await expect(page.getByTestId("legal-document")).toHaveAttribute(
       "data-state",
       "not-found",

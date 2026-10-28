@@ -109,6 +109,42 @@ export type StorefrontTransactionRequest = z.infer<
 >;
 
 /**
+ * `POST /v1/internal/oidc/silent-check` — 003 EARS-63, ADR-0015 §4 step 4:
+ * the storefront middleware / proxy starts a **silent** transaction
+ * (`prompt=none`, ≈60 s, single-use) for a checkable signed-out document
+ * request, with the request's path and query as the return path (requirement
+ * 1; absent for the EARS-62 recovery, which lands by the landing rules). It is
+ * its own route so the start counts in the silent path's own per-IP bucket
+ * (`oidc:silent-check`, req. 9), never in the interactive entry's. A silent
+ * check carries no door choice and no intent: the door is the sign-in.
+ * `replaces` names the browser's live **interactive** transaction (EARS-63
+ * (c)): the API deletes it, so an abandoned form never outlives the check.
+ */
+export const StorefrontSilentCheckRequestSchema = z.strictObject({
+  client: SignInHostStorefrontSchema,
+  returnPath: z
+    .string()
+    .refine(isStorefrontReturnPath, "not a same-origin return path")
+    .optional(),
+  replaces: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{43}$/)
+    .optional(),
+});
+export type StorefrontSilentCheckRequest = z.infer<
+  typeof StorefrontSilentCheckRequestSchema
+>;
+
+/** A transaction's kind (ADR-0015 §4 step 1): its lifetime and whether a callback ends in the guest marker. */
+export const StorefrontTransactionKindSchema = z.enum([
+  "interactive",
+  "silent",
+]);
+export type StorefrontTransactionKind = z.infer<
+  typeof StorefrontTransactionKindSchema
+>;
+
+/**
  * The opaque transaction id (32 random bytes, base64url — the
  * `__Host-ds_oidc_tx` value) and the complete authorize URL the entry
  * redirects to: the API holds the per-environment client map, the issuer and
@@ -150,14 +186,18 @@ export type StorefrontRedeemRequest = z.infer<
 >;
 
 /**
- * Every redeem refusal is one `401` with this body: the stored return path
- * and door of the browser's own transaction when it named a live one (so the
- * callback lands on it, EARS-62), `null` otherwise. Nothing tells which check
- * failed.
+ * Every redeem refusal is one `401` with this body: the stored return path,
+ * door and kind of the browser's own transaction when it named a live one (so
+ * the callback lands on it, EARS-62, and a silent one ends in the guest marker,
+ * EARS-63), `null` otherwise. A callback with no transaction cookie whose
+ * `state` names a live **silent** transaction (a client that keeps no cookies,
+ * EARS-63 (b)) gets that transaction's path and kind too, so it lands on the
+ * return path with `ds_guest=1`. Nothing tells which check failed.
  */
 export const StorefrontRedeemRefusalSchema = z.object({
   returnPath: z.string().nullable(),
   door: SignInHostDoorSchema.nullable(),
+  kind: StorefrontTransactionKindSchema.nullable().default(null),
 });
 export type StorefrontRedeemRefusal = z.infer<
   typeof StorefrontRedeemRefusalSchema
@@ -178,6 +218,8 @@ export const StorefrontRedeemResponseSchema = z.strictObject({
   /** The transaction's stored return path (`null`: the storefront's landing rules). */
   returnPath: z.string().nullable(),
   door: SignInHostDoorSchema,
+  /** EARS-63 (b) — a silent transaction's callback also sets the check guard. */
+  kind: StorefrontTransactionKindSchema,
   /** 005 EARS-2 — the эфир slug whose registration the callback completes (`null`: none). */
   completeRegistration: z.string().nullable(),
 });

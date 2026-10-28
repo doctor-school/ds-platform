@@ -2,6 +2,7 @@ import { golden } from "@ds/db/seed/golden";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 import type { HostConfig } from "../hosts.js";
+import { redirectsBesidesSilentCheck } from "../lib/silent-check.js";
 import { Given, Then, When, type StepWorld } from "./support/fixtures.js";
 
 async function readPublicEvent(
@@ -76,9 +77,9 @@ async function openPublicEvent({
   const response = await page.goto(path, { waitUntil: "domcontentloaded" });
   expect(response?.status(), "public event document response").toBe(200);
   expect(
-    response?.request().redirectedFrom(),
+    redirectsBesidesSilentCheck(response),
     "no document redirect",
-  ).toBeNull();
+  ).toEqual([]);
   await expect(page).toHaveURL((url) => url.pathname === path);
   await expect(
     page.getByRole("heading", {

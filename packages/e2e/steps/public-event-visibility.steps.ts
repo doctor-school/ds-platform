@@ -2,6 +2,7 @@ import { golden } from "@ds/db/seed/golden";
 import { expect, type APIRequestContext } from "@playwright/test";
 
 import { reachFeedCard } from "../lib/feed-card.js";
+import { redirectsBesidesSilentCheck } from "../lib/silent-check.js";
 import { Given, Then, When, type StepWorld } from "./support/fixtures.js";
 
 type PublicRow = Record<string, unknown>;
@@ -158,9 +159,9 @@ When(
           documentStatus,
         );
       expect(
-        response?.request().redirectedFrom(),
+        redirectsBesidesSilentCheck(response),
         "not-found stays in place",
-      ).toBeNull();
+      ).toEqual([]);
       await expect(page).toHaveURL((url) => url.pathname === path);
       await expect(
         page.getByRole("heading", { name: "404", exact: true }),

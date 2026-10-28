@@ -2,6 +2,7 @@ import { golden, isGoldenUuid } from "@ds/db/seed/golden";
 import { expect, type Page } from "@playwright/test";
 
 import { reachFeedCard } from "../lib/feed-card.js";
+import { redirectsBesidesSilentCheck } from "../lib/silent-check.js";
 import { Given, Then, When, type StepWorld } from "./support/fixtures.js";
 
 type Entry = NonNullable<StepWorld["publicCalendar"]>["entries"][number];
@@ -34,9 +35,9 @@ async function open(page: Page, path: string) {
   const response = await page.goto(path, { waitUntil: "domcontentloaded" });
   expect(response?.status(), "cookie-free public document").toBe(200);
   expect(
-    response?.request().redirectedFrom(),
+    redirectsBesidesSilentCheck(response),
     "public view stays in place",
-  ).toBeNull();
+  ).toEqual([]);
   await settled(page);
   await expect(
     page.getByRole("heading", {

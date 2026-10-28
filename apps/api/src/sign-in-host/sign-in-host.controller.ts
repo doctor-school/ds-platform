@@ -542,6 +542,7 @@ function hostRequest(
 ): HostRequest {
   return {
     cookies: parseCookies(h.cookie),
+    ip,
     fingerprint: computeFingerprint({
       userAgent: h.userAgent,
       ip,

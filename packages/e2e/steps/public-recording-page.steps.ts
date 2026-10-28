@@ -1,6 +1,7 @@
 ﻿import { golden, isGoldenUuid } from "@ds/db/seed/golden";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
+import { redirectsBesidesSilentCheck } from "../lib/silent-check.js";
 import { Given, Then, When, type StepWorld } from "./support/fixtures.js";
 
 type Speaker = {
@@ -193,9 +194,9 @@ When(
     const response = await page.goto(path, { waitUntil: "domcontentloaded" });
     expect(response?.status()).toBe(200);
     expect(
-      response?.request().redirectedFrom(),
+      redirectsBesidesSilentCheck(response),
       "canonical public route stays in place",
-    ).toBeNull();
+    ).toEqual([]);
     await expect(page).toHaveURL((url) => url.pathname === path);
     await expect(
       page.getByRole("heading", { level: 1, name: event.title, exact: true }),

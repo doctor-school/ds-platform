@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Headers,
@@ -18,10 +19,12 @@ import { RateLimited } from "../auth/rate-limit/index.js";
 import {
   STOREFRONT_ENTRY_RATE_LIMIT_SCOPE,
   STOREFRONT_REDEEM_RATE_LIMIT_SCOPE,
+  STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE,
 } from "../auth/rate-limit/rate-limit.types.js";
 import { computeFingerprint } from "../auth/session/session.cookie.js";
 import {
   StorefrontRedeemRequestDto,
+  StorefrontSilentCheckRequestDto,
   StorefrontTransactionRequestDto,
 } from "./storefront-oidc.dto.js";
 import { StorefrontOidcService } from "./storefront-oidc.service.js";
@@ -29,6 +32,7 @@ import { StorefrontOidcService } from "./storefront-oidc.service.js";
 export {
   STOREFRONT_ENTRY_RATE_LIMIT_SCOPE,
   STOREFRONT_REDEEM_RATE_LIMIT_SCOPE,
+  STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE,
 };
 
 /**
@@ -65,7 +69,27 @@ export class StorefrontOidcController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<StorefrontTransactionResponse> {
     reply.header("cache-control", "no-store");
+    // A silent transaction starts only through `silent-check`, so every start
+    // counts in the silent path's own bucket (003 EARS-63 (f), req. 9).
+    if (dto.kind === "silent") throw new BadRequestException();
     return this.oidc.createTransaction(dto);
+  }
+
+  @Post("silent-check")
+  @RateLimited(STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE)
+  @HttpCode(200)
+  @Authz({
+    access: "internal",
+    check: "none",
+    audit: "none",
+    tests: ["EARS-63"],
+  })
+  silentCheck(
+    @Body() dto: StorefrontSilentCheckRequestDto,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<StorefrontTransactionResponse> {
+    reply.header("cache-control", "no-store");
+    return this.oidc.createSilentCheck(dto);
   }
 
   @Post("redeem")
@@ -84,13 +108,14 @@ export class StorefrontOidcController {
     @Ip() ip: string,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<StorefrontRedeemResponse> {
-    const { cookie, claims, returnPath, door, completeRegistration } =
+    const { cookie, claims, returnPath, door, kind, completeRegistration } =
       await this.oidc.redeem(
         dto,
         computeFingerprint({ userAgent, ip, acceptLanguage }),
+        ip,
       );
     reply.header("set-cookie", cookie);
     reply.header("cache-control", "no-store");
-    return { ...claims, returnPath, door, completeRegistration };
+    return { ...claims, returnPath, door, kind, completeRegistration };
   }
 }

@@ -26,7 +26,24 @@ import {
   readReturnEvent,
   resolveReturnLandingPath,
 } from "./return-context";
+import {
+  OIDC_TX_COOKIE,
+  internalApi,
+  internalHeaders,
+  readCookie,
+  type InternalApi,
+} from "./oidc-internal";
 import { resolveServerAuth } from "./session";
+import {
+  CHECK_GUARD_COOKIE,
+  GUEST_QUERY_FLAG,
+  checkGuardCookie,
+  clearedGuestMarkerCookie,
+  guestMarkerCookie,
+  readTransactionCookie,
+  silentTransactionCookie,
+  startSilentTransaction,
+} from "./silent-check";
 import { isTopLevelNavigation } from "./top-level-navigation";
 
 /**
@@ -55,8 +72,7 @@ import { isTopLevelNavigation } from "./top-level-navigation";
  * `user-agent`, `accept-language` and `x-forwarded-for` as the BFF does.
  */
 
-/** ADR-0015 §4 step 1 — the host-only transaction cookie. */
-export const OIDC_TX_COOKIE = "__Host-ds_oidc_tx";
+export { OIDC_TX_COOKIE };
 /** The storefront's one registered `redirect_uri` path (both storefronts). */
 export const STOREFRONT_CALLBACK_PATH = "/auth/callback";
 /** The interactive transaction's lifetime, mirrored on its cookie. */
@@ -74,43 +90,7 @@ export type StorefrontEntry = "login" | "register" | "reset" | "verify";
 export interface StorefrontOidcDeps {
   readonly fetchImpl?: typeof fetch;
   readonly env?: Readonly<Record<string, string | undefined>>;
-}
-
-interface InternalApi {
-  readonly base: string;
-  readonly token: string;
-}
-
-function internalApi(
-  env: Readonly<Record<string, string | undefined>>,
-): InternalApi | null {
-  const base = env.INTERNAL_API_URL?.trim();
-  const token = env.INTERNAL_API_TOKEN?.trim();
-  if (!base || !token) return null;
-  return { base: base.replace(/\/$/, ""), token };
-}
-
-/** The browser's fingerprint surface and client chain, as the BFF rewrites forward them. */
-function internalHeaders(api: InternalApi, request: Headers): HeadersInit {
-  const s = forwardedSessionFrom(request);
-  return {
-    accept: "application/json",
-    "content-type": "application/json",
-    authorization: `Bearer ${api.token}`,
-    ...(s.userAgent ? { "user-agent": s.userAgent } : {}),
-    ...(s.acceptLanguage ? { "accept-language": s.acceptLanguage } : {}),
-    ...(s.forwardedFor ? { "x-forwarded-for": s.forwardedFor } : {}),
-  };
-}
-
-function readCookie(header: string | null, name: string): string | null {
-  if (!header) return null;
-  for (const part of header.split(";")) {
-    const at = part.indexOf("=");
-    if (at === -1) continue;
-    if (part.slice(0, at).trim() === name) return part.slice(at + 1).trim();
-  }
-  return null;
+  readonly now?: () => number;
 }
 
 function txCookie(value: string, maxAge: number): string {
@@ -334,9 +314,19 @@ export async function storefrontEntry(
   return seeOther(tx.authorizeUrl, headers);
 }
 
+/** EARS-63 (b) — the return path with the one-shot `ds_guest=1` flag. */
+function withGuestFlag(path: string): string {
+  const url = new URL(path, "https://storefront.invalid");
+  url.searchParams.set(GUEST_QUERY_FLAG, "1");
+  return `${url.pathname}${url.search}`;
+}
+
 /**
- * 003 EARS-62 — the storefront callback. Every answer is `303 <path>#` with
- * `Cache-Control: no-store`, and `__Host-ds_oidc_tx` is cleared.
+ * 003 EARS-62 / EARS-63 — the storefront callback. Every answer is `303
+ * <path>#` with `Cache-Control: no-store`, and `__Host-ds_oidc_tx` is cleared
+ * (or, for the EARS-62 recovery, names the fresh silent transaction). A
+ * silent transaction's callback also sets the check guard, and ends without a
+ * session in the guest marker; every callback that mints deletes the marker.
  */
 export async function storefrontCallback(
   request: Request,
@@ -345,9 +335,23 @@ export async function storefrontCallback(
 ): Promise<Response> {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const env = deps.env ?? process.env;
+  const now = (deps.now ?? Date.now)();
   const { config } = host;
   const headers = new Headers();
   headers.append("set-cookie", txCookie("", 0));
+  const cookieHeader = request.headers.get("cookie");
+  const api = internalApi(env);
+  /**
+   * EARS-63 — a silent transaction that ended without a session: the marker
+   * and the guard, then the return path (or the landing rules) as a guest.
+   */
+  const asGuest = async (path: string | null) => {
+    if (api) {
+      headers.append("set-cookie", await guestMarkerCookie(api.token, now));
+    }
+    headers.append("set-cookie", checkGuardCookie());
+    return land(path);
+  };
   const land = async (
     path: string | null,
     door?: SignInHostDoor | null,
@@ -386,8 +390,13 @@ export async function storefrontCallback(
   // A `form_post` callback is refused, its body unread (EARS-62).
   if (request.method !== "GET") return land(null);
 
-  const txId = readCookie(request.headers.get("cookie"), OIDC_TX_COOKIE);
-  const api = internalApi(env);
+  const tx = await readTransactionCookie(
+    cookieHeader,
+    OIDC_TX_COOKIE,
+    api?.token ?? null,
+  );
+  const txId = tx?.txId ?? null;
+  const silent = tx?.silent === true;
   const params = new URL(request.url).searchParams;
   const state = (params.get("state") ?? "").slice(0, 512);
   // Neither a transaction cookie nor a `state`: nothing names a transaction.
@@ -413,7 +422,7 @@ export async function storefrontCallback(
       cache: "no-store",
     });
   } catch {
-    return land(null);
+    return silent ? asGuest(null) : land(null);
   }
   if (res.ok) {
     const minted = StorefrontRedeemResponseSchema.safeParse(await res.json());
@@ -421,6 +430,12 @@ export async function storefrontCallback(
     if (!minted.success || cookies.length === 0) return land(null);
     // The API's session cookie, byte for byte (a fresh sid, ADR-0015 §4 req. 5).
     for (const c of cookies) headers.append("set-cookie", c);
+    // EARS-63 (a) / (b) — a minted session deletes the marker; a silent
+    // callback's outcome also sets the guard.
+    headers.append("set-cookie", clearedGuestMarkerCookie());
+    if (minted.data.kind === "silent") {
+      headers.append("set-cookie", checkGuardCookie());
+    }
     const returnPath = minted.data.returnPath
       ? toStorefrontReturnPath(minted.data.returnPath)
       : null;
@@ -437,15 +452,54 @@ export async function storefrontCallback(
     const refusal = StorefrontRedeemRefusalSchema.safeParse(
       await res.json().catch(() => null),
     );
-    if (!refusal.success || refusal.data.door === null) {
-      // No live transaction (past its 60 minutes, or already used): nothing
-      // is minted and the landing rules decide, as a guest.
-      // 003 EARS-62 silent recovery: S5 #3173
-      return land(null);
+    const kept =
+      refusal.success && refusal.data.returnPath
+        ? toStorefrontReturnPath(refusal.data.returnPath)
+        : null;
+    if (refusal.success && refusal.data.kind === "silent") {
+      // EARS-63 (b) — a client that keeps no cookies: the transaction is
+      // burnt; the return path with `ds_guest=1` is never checked again.
+      if (!txId) return seeOther(`${withGuestFlag(kept ?? "/")}#`, headers);
+      // EARS-63 — `login_required` (or any other OIDC error, or the silent
+      // limit) of a silent transaction ends as a guest on its return path.
+      return asGuest(kept);
     }
-    const path = refusal.data.returnPath;
-    return land(path ? toStorefrontReturnPath(path) : null);
+    if (!refusal.success || refusal.data.door === null) {
+      // The browser's own silent transaction, no longer live: a guest.
+      if (silent) return asGuest(null);
+      return recoverWithoutTransaction();
+    }
+    return land(kept);
   }
   // 429 (the callback's own limit, req. 9) and every other failure.
-  return land(null);
+  return silent ? asGuest(null) : land(null);
+
+  /**
+   * 003 EARS-62 — no live transaction (an interactive one past its 60
+   * minutes, or one already used): nothing is minted from it. Without the
+   * check guard the callback answers into a fresh silent transaction with no
+   * return path, so a live shared session still signs the person in by the
+   * landing rules; with the guard, `/` as a guest with the marker.
+   */
+  async function recoverWithoutTransaction(): Promise<Response> {
+    const guarded = readCookie(cookieHeader, CHECK_GUARD_COOKIE) !== null;
+    const started =
+      api && !guarded
+        ? await startSilentTransaction(
+            api,
+            host.client,
+            request.headers,
+            undefined,
+            fetchImpl,
+          )
+        : null;
+    if (!started) return asGuest("/");
+    const recovery = new Headers();
+    recovery.append(
+      "set-cookie",
+      silentTransactionCookie(OIDC_TX_COOKIE, started.cookieValue),
+    );
+    recovery.append("set-cookie", checkGuardCookie());
+    return seeOther(`${started.authorizeUrl}#`, recovery);
+  }
 }

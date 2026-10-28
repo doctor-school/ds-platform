@@ -33,6 +33,9 @@ const BROWSER = {
   "x-forwarded-for": "203.0.113.5",
 };
 const HANDOFF = "H".repeat(43);
+const SILENT_TX_ID = "S".repeat(43);
+const SILENT_AUTHORIZE =
+  "https://id.example/oauth/v2/authorize?client_id=c&state=silent&prompt=none";
 
 interface Call {
   url: string;
@@ -47,6 +50,8 @@ function fakeApi(
     ownHandoff?: boolean;
     redeem?: () => Response;
     event?: number;
+    /** 003 EARS-63 — the silent-check start's status (200 by default; 429 = limited). */
+    silentCheck?: number;
     /** 005 EARS-2 — the `RegisterForEvent` answer; `"throw"` = a network failure. */
     registration?: number | "throw";
   } = {},
@@ -67,6 +72,11 @@ function fakeApi(
     if (url.includes("/handoff/own")) {
       return Response.json({ own: opts.ownHandoff ?? false });
     }
+    if (url === "http://api:3000/v1/internal/oidc/silent-check") {
+      return opts.silentCheck && opts.silentCheck !== 200
+        ? new Response(null, { status: opts.silentCheck })
+        : Response.json({ txId: SILENT_TX_ID, authorizeUrl: SILENT_AUTHORIZE });
+    }
     if (url === "http://api:3000/v1/internal/oidc/transaction") {
       return Response.json({ txId: TX_ID, authorizeUrl: AUTHORIZE });
     }
@@ -80,6 +90,7 @@ function fakeApi(
               mfa: false,
               returnPath: "/webinars/live-1",
               door: "login",
+              kind: "interactive",
               completeRegistration: null,
             }),
             {
@@ -526,7 +537,9 @@ describe("storefront callback", () => {
       { fetchImpl: api.fetchImpl, env: ENV },
     );
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe("/webinars#");
+    // No live transaction of its own: the EARS-62 recovery (a fresh silent
+    // transaction with no return path), so a live shared session still signs in.
+    expect(res.headers.get("location")).toBe(`${SILENT_AUTHORIZE}#`);
     expect(api.internal("redeem").map((c) => c.body)).toEqual([
       { client: "academy", state: "s", code: "c" },
     ]);
@@ -629,6 +642,7 @@ describe("storefront callback", () => {
               mfa: false,
               returnPath: "/webinars/gone-1",
               door: "register",
+              kind: "interactive",
               completeRegistration: null,
             }),
             {
@@ -659,7 +673,12 @@ describe("storefront callback", () => {
         { fetchImpl: fakeApi().fetchImpl, env: ENV },
       ),
       await storefrontCallback(
-        withTx("/auth/callback?code=c&state=s"),
+        // With the guard: the EARS-62 recovery lands on `/` (without it, it
+        // answers into a fresh silent transaction, pinned separately).
+        withTx(
+          "/auth/callback?code=c&state=s",
+          `${OIDC_TX_COOKIE}=${TX_ID}; __Host-ds_check=1`,
+        ),
         ACADEMY,
         {
           fetchImpl: fakeApi({
@@ -702,7 +721,7 @@ describe("storefront callback", () => {
     }
   });
 
-  it("003 EARS-62: a redeem refusal without a live transaction (expired or used) mints nothing and lands by the landing rules as a guest", async () => {
+  it("003 EARS-62: a redeem refusal without a live transaction (expired or used) mints nothing and, with no check guard, answers into a fresh silent transaction with no return path and sets the guard", async () => {
     const api = fakeApi({
       redeem: () =>
         Response.json(
@@ -715,8 +734,49 @@ describe("storefront callback", () => {
       ACADEMY,
       { fetchImpl: api.fetchImpl, env: ENV },
     );
-    expect(res.headers.get("location")).toBe("/webinars#");
-    expect(setCookies(res).join()).not.toContain("__Host-ds_session");
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(`${SILENT_AUTHORIZE}#`);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(api.internal("silent-check").map((c) => c.body)).toEqual([
+      { client: "academy" },
+    ]);
+    const set = setCookies(res);
+    expect(set.join()).not.toContain("__Host-ds_session");
+    expect(set.some((c) => c.startsWith("__Host-ds_check=1;"))).toBe(true);
+    const tx = set.filter((c) => c.startsWith(`${OIDC_TX_COOKIE}=`));
+    expect(tx).toHaveLength(1);
+    expect(tx[0]).toMatch(
+      new RegExp(
+        `^${OIDC_TX_COOKIE}=${SILENT_TX_ID}\\.[A-Za-z0-9_-]+; Path=/; Max-Age=60; HttpOnly; Secure; SameSite=Lax$`,
+      ),
+    );
+  });
+
+  it("003 EARS-62: a redeem refusal without a live transaction, with the check guard present, answers 303 / as a guest with the marker set", async () => {
+    const api = fakeApi({
+      redeem: () =>
+        Response.json(
+          { message: "redeem refused", returnPath: null, door: null },
+          { status: 401 },
+        ),
+    });
+    const res = await storefrontCallback(
+      withTx(
+        "/auth/callback?code=c&state=s",
+        `${OIDC_TX_COOKIE}=${TX_ID}; __Host-ds_check=1`,
+      ),
+      ACADEMY,
+      { fetchImpl: api.fetchImpl, env: ENV },
+    );
+    expect(res.headers.get("location")).toBe("/#");
+    expect(api.internal("silent-check")).toEqual([]);
+    expect(
+      setCookies(res).some((c) =>
+        /^__Host-ds_guest=\d+\.[A-Za-z0-9_-]+; Path=\/; Max-Age=600; HttpOnly; Secure; SameSite=Lax$/.test(
+          c,
+        ),
+      ),
+    ).toBe(true);
   });
 
   const carrying = (
@@ -732,6 +792,7 @@ describe("storefront callback", () => {
             mfa: false,
             returnPath: "/events/live-1",
             door: "login",
+            kind: "interactive",
             completeRegistration: "live-1",
           }),
           {

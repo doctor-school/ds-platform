@@ -143,8 +143,8 @@ import {
   formatServiceImages,
   formatServiceNames,
   rollbackBoundaryVerdict,
-  shellVarName,
 } from "./service-set.mjs";
+import { bootProbeScript, verifyRunningShaScript } from "./verify-scripts.mjs";
 import {
   IMAGE_REGISTRY,
   IMAGES_FILE_STDIN,
@@ -1800,10 +1800,6 @@ function assertGreenCi(sha) {
   ok(`CI green — ${verdict.count} check(s) passed for ${sha.slice(0, 12)}`);
 }
 
-// Container-name prefix compose derives from the project name (`name:
-// ds-api-prod` in the api-prod compose file): `<project>-<service>-1`.
-const CONTAINER_PREFIX = "ds-api-prod-";
-
 // --- #1997: pipeline-owned IdP provisioning converge ----------------------
 //
 // `infra/dev-stand/idp/provision.sh` is the managed owner of the prod Zitadel
@@ -2073,40 +2069,7 @@ function resolveTargetServiceSet(sha, label = sha.slice(0, 12)) {
 // from the local checkout: a `--ref` hotfix based on a SHA that predates a
 // service must not be asserted against that service (it cannot exist there).
 async function verifyRunningSha(sha, services) {
-  const reads = services
-    .map(
-      (s) =>
-        `  ${shellVarName(s.name)}_img=$(sudo docker inspect ${CONTAINER_PREFIX}${s.name}-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent)\n` +
-        `  ${shellVarName(s.name)}_h=$(sudo docker inspect ${CONTAINER_PREFIX}${s.name}-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)`,
-    )
-    .join("\n");
-  const state = services
-    .map(
-      (s) =>
-        `${s.name}=$${shellVarName(s.name)}_img($${shellVarName(s.name)}_h)`,
-    )
-    .join(" ");
-  const condition = services
-    .map(
-      (s) =>
-        `[ "$${shellVarName(s.name)}_img" = "${s.image}:${sha}" ] && [ "$${shellVarName(s.name)}_h" = healthy ]`,
-    )
-    .join(" \\\n     && ");
-  const out = await sshCapture(
-    API_PROD,
-    `deadline=$(( $(date +%s) + 240 ))
-while true; do
-${reads}
-  state="${state}"
-  if ${condition}; then
-    echo "OK $state"; break
-  fi
-  if [ "$(date +%s)" -ge "$deadline" ]; then
-    echo "TIMEOUT $state"; break
-  fi
-  sleep 5
-done`,
-  );
+  const out = await sshCapture(API_PROD, verifyRunningShaScript(sha, services));
   console.log(`      ${out}`);
   if (!out.startsWith("OK ")) {
     die(
@@ -2151,41 +2114,7 @@ done`,
 // — the probe cannot collide with or disturb the live stack.
 async function verifyImagesBoot(sha, services) {
   const probed = bootProbeSet(services);
-  const out = await sshCapture(
-    API_PROD,
-    `probe() {
-  svc="$1"; repo="$2"; port="$3"
-  name="ds-bootcheck-$svc"
-  sudo docker rm -f "$name" >/dev/null 2>&1 || true
-  # -e PORT after --env-file on purpose: an explicit -e outranks the env-file, the
-  # same precedence compose \`environment:\` has over \`env_file:\` (DSO-100).
-  if ! sudo docker run -d --name "$name" --env-file /etc/ds-platform/api.env \\
-        -e PORT="$port" -e HOSTNAME=0.0.0.0 "$repo:${sha}" >/dev/null 2>&1; then
-    echo "$svc=NOSTART"; return
-  fi
-  deadline=$(( $(date +%s) + 120 ))
-  status=PENDING
-  while [ "$status" = PENDING ]; do
-    running=$(sudo docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null || echo false)
-    if sudo docker exec "$name" node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
-      status=OK
-    elif [ "$running" != true ]; then
-      status=EXITED
-    elif [ "$(date +%s)" -ge "$deadline" ]; then
-      status=TIMEOUT
-    else
-      sleep 3
-    fi
-  done
-  echo "$svc=$status"
-  if [ "$status" != OK ]; then
-    echo "---- $svc boot log (last 60) ----"
-    sudo docker logs --tail 60 "$name" 2>&1 || true
-  fi
-  sudo docker rm -f "$name" >/dev/null 2>&1 || true
-}
-${probed.map((s) => `probe ${s.name} ${s.image} ${s.port}`).join("\n")}`,
-  );
+  const out = await sshCapture(API_PROD, bootProbeScript(sha, probed));
   console.log(
     out
       .split(/\r?\n/)

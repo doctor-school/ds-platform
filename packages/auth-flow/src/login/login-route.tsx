@@ -2,9 +2,13 @@ import type { LoginCardMethod } from "@ds/design-system/blocks";
 import { headers } from "next/headers";
 
 import { withRuntimeBotProtection } from "../bot-protection/server";
+import {
+  DOOR_INPUTS,
+  readDoorInputs,
+  type DoorSearchParams,
+} from "../door-inputs";
 import type { AuthFlowHostConfig } from "../host-config";
 import {
-  RETURN_CONTEXT_PARAM,
   guardAuthRoute,
   isAccountReturnTarget,
   isLandOnlyReturnTarget,
@@ -23,11 +27,11 @@ import { signedInLandingAction } from "../server/signed-in-landing";
 import { completionTargetAction } from "../server/completion-target";
 import { AuthShell } from "../shell";
 import { LoginDoor } from "./login-door";
-import { LOGIN_HANDOFF_PARAM, resolveHandoffRef } from "./login-handoff";
+import { resolveHandoffRef } from "./login-handoff";
 import { returnContextSlots } from "./return-context-card";
 
 /** 003 EARS-43 — the search param that preselects the sign-in method. */
-export const LOGIN_METHOD_PARAM = "method";
+export const LOGIN_METHOD_PARAM = DOOR_INPUTS.login.method.param;
 
 /**
  * 003 EARS-43 — `?method=` read through a CLOSED allow-list: only `code` opens
@@ -68,25 +72,23 @@ export async function LoginRoute({
   searchParams,
 }: {
   config: AuthFlowHostConfig;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
+  searchParams: Promise<DoorSearchParams>;
 }) {
   // #2981 — the site key is runtime env, read per request (bot-protection/server).
   const config = withRuntimeBotProtection(hostConfig);
-  const params = await searchParams;
-  const raw = params[RETURN_CONTEXT_PARAM];
-  // A repeated param arrives as an array; the FIRST value wins rather than the
-  // request being rejected — a malformed return context degrades to no context,
-  // it never breaks the door.
-  const returnTo = Array.isArray(raw) ? raw[0] : raw;
+  // #3345 — the door's inputs, read only through the door-input contract (the
+  // first value of a repeated param wins; a malformed one degrades to none).
+  const inputs = readDoorInputs("login", await searchParams);
+  const returnTo = inputs.returnTo;
   // 003 EARS-43 — independent of the return context: it decides only which tab
   // the card opens on, never where sign-in leads.
-  const defaultMethod = resolveLoginMethod(params[LOGIN_METHOD_PARAM]);
+  const defaultMethod = resolveLoginMethod(inputs.method);
   // 003 EARS-44 — the Congress hand-off reference, redeemed only on the code
   // entry and only when it has the reference's shape; anything else is never
   // sent and the door falls back to the EARS-43 state.
   const handoffRef =
     defaultMethod === "otp"
-      ? resolveHandoffRef(params[LOGIN_HANDOFF_PARAM])
+      ? resolveHandoffRef(inputs.handoff)
       : null;
   // The guard reconstruction of the эфир arrival target — the ONE vocabulary,
   // resolved before any read, and the raw param never stands in for it.

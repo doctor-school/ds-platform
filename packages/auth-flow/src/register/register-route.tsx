@@ -1,9 +1,9 @@
 import { headers } from "next/headers";
 
 import { withRuntimeBotProtection } from "../bot-protection/server";
+import { readDoorInputs, type DoorSearchParams } from "../door-inputs";
 import type { AuthFlowHostConfig } from "../host-config";
 import { returnContextSlots } from "../login/return-context-card";
-import { RETURN_CONTEXT_PARAM } from "../server";
 import { AuthShell } from "../shell";
 import { RegisterDoor } from "./register-door";
 import { resolveRegistrationArrival } from "./registration-arrival";
@@ -36,16 +36,13 @@ export async function RegisterRoute({
   searchParams,
 }: {
   config: AuthFlowHostConfig;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
+  searchParams: Promise<DoorSearchParams>;
 }) {
   // #2981 — the site key is runtime env, read per request (bot-protection/server).
   const config = withRuntimeBotProtection(hostConfig);
-  const params = await searchParams;
-  const raw = params[RETURN_CONTEXT_PARAM];
-  // A repeated param arrives as an array; the FIRST value wins rather than the
-  // request being rejected — a malformed return context degrades to no context,
-  // it never breaks the door.
-  const returnTo = Array.isArray(raw) ? raw[0] : raw;
+  // #3345 — read only through the door-input contract (the first value of a
+  // repeated param wins; a malformed return context degrades to no context).
+  const { returnTo } = readDoorInputs("register", await searchParams);
 
   // The #675 guard, the landing decision and the return-context read — the
   // same decision the `/verify` step takes from the same arrival.

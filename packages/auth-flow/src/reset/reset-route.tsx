@@ -1,10 +1,10 @@
 import { headers } from "next/headers";
 
 import { withRuntimeBotProtection } from "../bot-protection/server";
+import { readDoorInputs, type DoorSearchParams } from "../door-inputs";
 import type { AuthFlowHostConfig } from "../host-config";
 import { withReturnTarget } from "@ds/schemas";
 import {
-  RETURN_CONTEXT_PARAM,
   guardAuthRoute,
   resolveReturnLandingPath,
   resolveServerAuth,
@@ -38,15 +38,13 @@ export async function ResetRoute({
   searchParams,
 }: {
   config: AuthFlowHostConfig;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
+  searchParams: Promise<DoorSearchParams>;
 }) {
   // #2981 — the site key is runtime env, read per request (bot-protection/server).
   const config = withRuntimeBotProtection(hostConfig);
-  const params = await searchParams;
-  const raw = params[RETURN_CONTEXT_PARAM];
-  // A repeated param arrives as an array; the FIRST value wins rather than the
-  // request being rejected — the degradation rule every auth mount applies.
-  const returnTo = Array.isArray(raw) ? raw[0] : raw;
+  // #3345 — read only through the door-input contract (the first value of a
+  // repeated param wins — the degradation rule every auth mount applies).
+  const { returnTo } = readDoorInputs("reset", await searchParams);
 
   const auth = await resolveServerAuth(await headers());
   guardAuthRoute({

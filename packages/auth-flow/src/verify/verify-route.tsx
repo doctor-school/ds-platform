@@ -1,10 +1,10 @@
 import { headers } from "next/headers";
 
 import { withRuntimeBotProtection } from "../bot-protection/server";
+import { readDoorInputs, type DoorSearchParams } from "../door-inputs";
 import type { AuthFlowHostConfig } from "../host-config";
 import { returnContextSlots } from "../login/return-context-card";
 import { resolveRegistrationArrival } from "../register/registration-arrival";
-import { RETURN_CONTEXT_PARAM } from "../server";
 import { AuthShell } from "../shell";
 import { VerifyAddressGate, VerifyStep } from "./verify-entry";
 
@@ -32,15 +32,15 @@ export async function VerifyRoute({
   searchParams,
 }: {
   config: AuthFlowHostConfig;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
+  searchParams: Promise<DoorSearchParams>;
 }) {
   // #2981 — the site key is runtime env, read per request (bot-protection/server).
   const config = withRuntimeBotProtection(hostConfig);
-  const params = await searchParams;
-  // A repeated param arrives as an array; the FIRST value wins, the way the
-  // other auth mounts read theirs.
-  const returnTo = firstOf(params[RETURN_CONTEXT_PARAM]) ?? null;
-  const email = firstOf(params.email);
+  // #3345 — read only through the door-input contract (the first value of a
+  // repeated param wins, the way the other auth mounts read theirs).
+  const inputs = readDoorInputs("verify", await searchParams);
+  const returnTo = inputs.returnTo ?? null;
+  const email = inputs.email;
 
   const arrival = await resolveRegistrationArrival({
     config,
@@ -81,8 +81,4 @@ export async function VerifyRoute({
       </AuthShell>
     </VerifyAddressGate>
   );
-}
-
-function firstOf(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
 }

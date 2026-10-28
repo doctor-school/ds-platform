@@ -26,7 +26,7 @@
       </div>
       <h1 style="margin:10px 0 0;font-size:clamp(32px,5.5vw,56px);line-height:1.02;font-weight:800;letter-spacing:-.035em;color:#fff;text-wrap:balance">Ортобиология</h1>
       <p style="margin:20px 0 0;max-width:640px;font-size:clamp(14.5px,2vw,16px);line-height:1.65;font-weight:500;color:#D3E8FD">Направление регенеративной медицины в травматологии: школа, конгресс и клуб вокруг одной темы.</p>
-      <div style="font-size:14px;font-weight:600;color:#D3E8FD;margin-top:18px">Куратор проекта — <a href="academy-expert.dc.html" style="color:#fff;font-weight:800;text-underline-offset:4px">Страхов М. А.</a>, к.м.н. · РНИМУ им. Пирогова</div>
+      <div style="font-size:14px;font-weight:600;color:#D3E8FD;margin-top:18px">Куратор проекта — <sc-if value="{{ full }}" hint-placeholder-val="{{ false }}"><a href="academy-expert.dc.html" style="color:#fff;font-weight:800;text-underline-offset:4px">Страхов М. А.</a></sc-if><sc-if value="{{ slice1 }}" hint-placeholder-val="{{ true }}"><span style="color:#fff;font-weight:800">Страхов М. А.</span></sc-if>, к.м.н. · РНИМУ им. Пирогова</div>
       <div style="display:flex;gap:clamp(20px,4vw,44px);flex-wrap:wrap;margin-top:32px;font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#D3E8FD">
         <span><span style="color:#fff;font-size:15px">4</span> результата</span>
         <span><span style="color:#fff;font-size:15px">5</span> экспертов</span>
@@ -41,13 +41,15 @@
     </div>
   </div>
 
-  <!-- Сквозной ID проекта (REQ-89) -->
+  <!-- Сквозной ID проекта (REQ-89) · только «целиком» -->
+  <sc-if value="{{ full }}" hint-placeholder-val="{{ false }}">
   <div style="padding:0 clamp(16px,4vw,48px)">
     <div style="max-width:1104px;margin:0 auto;padding:16px 0;border-bottom:2px solid {{ ruleFaint }};display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <span style="font-size:12px;font-weight:800;letter-spacing:.06em;color:{{ ink }};border:2px solid {{ border }};padding:5px 10px">№ ORT-2026</span>
       <span style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Сквозной идентификатор проекта — связывает контент, роли, начисления и платежи</span>
     </div>
   </div>
+  </sc-if>
 
   <main style="display:flex;flex-direction:column">
 
@@ -142,6 +144,7 @@
       </div>
     </section>
 
+    <sc-if value="{{ full }}" hint-placeholder-val="{{ false }}">
     <!-- Команда -->
     <section data-screen-label="Команда проекта" style="order:{{ teamOrd }};padding:0 clamp(16px,4vw,48px);margin-top:clamp(48px,7vw,80px)">
       <div style="max-width:1104px;margin:0 auto">
@@ -157,7 +160,7 @@
           <dc-import name="unit-expert-card" dark="{{ dark }}" full-name="Гаев Т." role="Соавтор" credentials="травматолог-ортопед" org="ГКБ им. Юдина" meta="Соавтор школы" href="academy-expert.dc.html" hint-size="100%,420px"></dc-import>
           <dc-import name="unit-expert-card" dark="{{ dark }}" full-name="Игорь Савченко" role="Эксперт школы" credentials="врач высшей категории" org="ЦИТО им. Приорова" meta="3 эфира школы" href="academy-expert.dc.html" hint-size="100%,420px"></dc-import>
           <dc-import name="unit-expert-card" dark="{{ dark }}" full-name="Елена Дроздова" role="Эксперт подкаста" org="ФНКЦ ФМБА России" meta="2 выпуска" href="academy-expert.dc.html" hint-size="100%,420px"></dc-import>
-          <a href="#a-apply" style="display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:10px;border:2px dashed {{ dashedBorder }};padding:24px;text-decoration:none;min-height:220px;box-sizing:border-box" style-hover="border-color:{{ accent }}">
+          <a href="{{ applyHref }}" style="display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:10px;border:2px dashed {{ dashedBorder }};padding:24px;text-decoration:none;min-height:220px;box-sizing:border-box" style-hover="border-color:{{ accent }}">
             <span style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }}">Место открыто</span>
             <span style="font-size:17px;font-weight:800;letter-spacing:-.02em;line-height:1.3;color:{{ ink }}">Эксперт по регенеративной медицине</span>
             <span style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Откликнуться →</span>
@@ -165,6 +168,7 @@
         </div>
       </div>
     </section>
+    </sc-if>
 
     <!-- Организации в проекте -->
     <section data-screen-label="Организации в проекте" style="order:{{ invOrd }};padding:0 clamp(16px,4vw,48px);margin-top:clamp(48px,7vw,80px)">
@@ -201,7 +205,7 @@
                 <span style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }}">Место свободно</span>
                 <span style="font-size:17px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Стать инвестором проекта</span>
                 <p style="margin:0;font-size:13px;line-height:1.6;color:{{ inkMuted }}">Годовой эксклюзивный контракт на направление — для одной организации.</p>
-                <a href="#a-invest" style="font-size:13px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;margin-top:6px">Инвесторам →</a>
+                <a href="{{ investHref }}" style="font-size:13px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;margin-top:6px">Инвесторам →</a>
               </div>
             </sc-if>
           </sc-if>
@@ -215,7 +219,8 @@
       </div>
     </section>
 
-    <!-- Закулисье -->
+    <!-- Закулисье · только «целиком» -->
+    <sc-if value="{{ full }}" hint-placeholder-val="{{ false }}">
     <section data-screen-label="Закулисье проекта" style="order:{{ bsOrd }};padding:0 clamp(16px,4vw,48px);margin-top:clamp(48px,7vw,80px)">
       <div style="max-width:1104px;margin:0 auto">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
@@ -244,8 +249,10 @@
         </div>
       </div>
     </section>
+    </sc-if>
 
-    <!-- Дашборд проекта -->
+    <!-- Дашборд проекта · только «целиком» -->
+    <sc-if value="{{ full }}" hint-placeholder-val="{{ false }}">
     <section data-screen-label="Дашборд проекта" style="order:5;padding:0 clamp(16px,4vw,48px);margin-top:clamp(48px,7vw,80px)">
       <div style="max-width:1104px;margin:0 auto">
         <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:10px">Дашборд проекта</div>
@@ -275,6 +282,7 @@
         </sc-if>
       </div>
     </section>
+    </sc-if>
 
     <!-- Войти в проект -->
     <section data-screen-label="Войти в проект" style="order:6;margin-top:clamp(56px,8vw,96px);background:#114D9E;padding:clamp(40px,6vw,72px) clamp(16px,4vw,48px)">
@@ -284,14 +292,14 @@
           <div style="background:#fff;box-shadow:6px 6px 0 {{ headerShadow }};padding:clamp(24px,4vw,36px);display:flex;flex-direction:column">
             <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#2D84F2;margin-bottom:14px">Экспертам</div>
             <h3 style="margin:0;font-size:clamp(22px,3vw,30px);line-height:1.1;font-weight:800;letter-spacing:-.03em;color:oklch(.21 .02 250)">Место в команде открыто</h3>
-            <p style="margin:14px 0 0;font-size:14.5px;line-height:1.6;color:oklch(.45 .014 250)">Проект ищет эксперта по регенеративной медицине. Заявка уже знает, о каком проекте вы пишете.</p>
-            <a href="#a-apply" style="display:inline-block;align-self:flex-start;margin-top:auto;padding-top:22px;font-size:14.5px;font-weight:800;color:#fff;text-decoration:none"><span style="display:inline-block;background:#114D9E;padding:15px 26px;box-shadow:4px 4px 0 #AED4FB">Зайти как эксперт — подать заявку</span></a>
+            <p style="margin:14px 0 0;font-size:14.5px;line-height:1.6;color:oklch(.45 .014 250)">{{ expertText }}</p>
+            <a href="{{ applyHref }}" style="display:inline-block;align-self:flex-start;margin-top:auto;padding-top:22px;font-size:14.5px;font-weight:800;color:#fff;text-decoration:none"><span style="display:inline-block;background:#114D9E;padding:15px 26px;box-shadow:4px 4px 0 #AED4FB">Зайти как эксперт — подать заявку</span></a>
           </div>
           <div style="border:2px solid rgba(255,255,255,.7);padding:clamp(24px,4vw,36px);display:flex;flex-direction:column">
             <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD;margin-bottom:14px">Инвесторам</div>
-            <h3 style="margin:0;font-size:clamp(22px,3vw,30px);line-height:1.1;font-weight:800;letter-spacing:-.03em;color:#fff">Роль первоинвестора свободна</h3>
-            <p style="margin:14px 0 0;font-size:14.5px;line-height:1.6;color:#D3E8FD">Первоинвестор — роль в смарт-контракте проекта. Условия и показатели — в разделе «Инвесторам».</p>
-            <a href="#a-invest" style="display:inline-block;align-self:flex-start;margin-top:auto;padding-top:22px;font-size:14.5px;font-weight:800;color:#114D9E;text-decoration:none"><span style="display:inline-block;background:#fff;padding:15px 26px;box-shadow:4px 4px 0 {{ headerShadow }}">Хочу стать первоинвестором</span></a>
+            <h3 style="margin:0;font-size:clamp(22px,3vw,30px);line-height:1.1;font-weight:800;letter-spacing:-.03em;color:#fff">{{ investTitle }}</h3>
+            <p style="margin:14px 0 0;font-size:14.5px;line-height:1.6;color:#D3E8FD">{{ investText }}</p>
+            <a href="{{ investHref }}" style="display:inline-block;align-self:flex-start;margin-top:auto;padding-top:22px;font-size:14.5px;font-weight:800;color:#114D9E;text-decoration:none"><span style="display:inline-block;background:#fff;padding:15px 26px;box-shadow:4px 4px 0 {{ headerShadow }}">{{ investBtn }}</span></a>
           </div>
         </div>
       </div>
@@ -303,7 +311,7 @@
   <details open="{{ panelOpen }}" style="position:fixed;bottom:16px;left:16px;z-index:50;background:{{ surface }};border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadow }}">
     <summary style="list-style:none;cursor:pointer;padding:10px 14px;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ ink }}">Варианты и состояния</summary>
     <div style="padding:2px 12px 12px;display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;max-width:360px">
-      <sc-for list="{{ ctrlGroups }}" as="g" hint-placeholder-count="8">
+      <sc-for list="{{ ctrlGroups }}" as="g" hint-placeholder-count="9">
         <div>
           <div style="font-size:9.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:6px">{{ g.label }}</div>
           <div style="display:flex;gap:5px;flex-wrap:wrap">
@@ -315,11 +323,11 @@
   </details>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;partner&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;a&quot;,&quot;b&quot;],&quot;default&quot;:&quot;b&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Композиция&quot;},&quot;team&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;before&quot;,&quot;after&quot;],&quot;default&quot;:&quot;before&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Композиция&quot;},&quot;results&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;a&quot;,&quot;b&quot;,&quot;v&quot;],&quot;default&quot;:&quot;a&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Композиция&quot;},&quot;dashboard&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;a&quot;,&quot;b&quot;,&quot;v&quot;],&quot;default&quot;:&quot;a&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Композиция&quot;},&quot;status&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;active&quot;,&quot;recruiting&quot;,&quot;plan&quot;],&quot;default&quot;:&quot;active&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;investor&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;wide&quot;,&quot;square&quot;,&quot;name&quot;,&quot;empty&quot;],&quot;default&quot;:&quot;wide&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;screen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;norm&quot;,&quot;loading&quot;,&quot;error&quot;],&quot;default&quot;:&quot;norm&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;loggedIn&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;partner&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;a&quot;,&quot;b&quot;],&quot;default&quot;:&quot;b&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Композиция&quot;},&quot;team&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;before&quot;,&quot;after&quot;],&quot;default&quot;:&quot;before&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Композиция&quot;},&quot;results&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;a&quot;,&quot;b&quot;,&quot;v&quot;],&quot;default&quot;:&quot;a&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Композиция&quot;},&quot;dashboard&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;a&quot;,&quot;b&quot;,&quot;v&quot;],&quot;default&quot;:&quot;a&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Композиция&quot;},&quot;status&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;active&quot;,&quot;recruiting&quot;,&quot;plan&quot;],&quot;default&quot;:&quot;active&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;investor&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;wide&quot;,&quot;square&quot;,&quot;name&quot;,&quot;empty&quot;],&quot;default&quot;:&quot;wide&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;screen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;norm&quot;,&quot;loading&quot;,&quot;error&quot;],&quot;default&quot;:&quot;norm&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;loggedIn&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;scope&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;срез 1&quot;,&quot;целиком&quot;],&quot;default&quot;:&quot;срез 1&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Объём&quot;}}">
 class Component extends DCLogic {
   state = {
     dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
-    isMobile: false, partnerV: null, teamV: null, resV: null, dashV: null, statusV: null, invV: null, scrV: null, authV: null, dashOpen: false
+    isMobile: false, partnerV: null, teamV: null, resV: null, dashV: null, statusV: null, invV: null, scrV: null, authV: null, scopeV: null, dashOpen: false
   };
   componentDidMount() {
     this.mq = window.matchMedia('(max-width: 900px)');
@@ -351,6 +359,7 @@ class Component extends DCLogic {
     const iv = s.invV || p.investor || 'wide';
     const scr = s.scrV || p.screen || 'norm';
     const logged = s.authV != null ? s.authV === 'in' : !!p.loggedIn;
+    const full = (s.scopeV || p.scope || 'срез 1') === 'целиком';
 
     const recruiting = st === 'recruiting';
     const statusBadge = { active: 'проект идёт', recruiting: 'набор экспертов', plan: 'в плане' }[st];
@@ -403,6 +412,7 @@ class Component extends DCLogic {
     const B = (label, title, active, onClick, wide) => ({ label, title, onClick, style: varBtn(active, wide !== false) });
     const set = (k, v) => () => this.setState({ [k]: v, dashOpen: false });
     const ctrlGroups = [
+      G('Объём', [B('срез 1', 'Срез 1: без ID проекта, команды, закулисья и дашборда', !full, set('scopeV', 'срез 1')), B('целиком', 'Целевая страница целиком', full, set('scopeV', 'целиком'))]),
       G('Результаты', [B('А', 'Сетка равных карточек с бейджем типа', rv === 'a', set('resV', 'a'), false), B('Б', 'Группировка по типам', rv === 'b', set('resV', 'b'), false), B('В', 'Главный результат крупно + строки', rv === 'v', set('resV', 'v'), false)]),
       G('Дашборд', [B('А', 'Весь дашборд публично', dv === 'a', set('dashV', 'a'), false), B('Б', 'Деньги — после входа', dv === 'b', set('dashV', 'b'), false), B('В', 'Главные цифры + раскрытие', dv === 'v', set('dashV', 'v'), false)]),
       G('Статус', [B('идёт', 'Проект идёт', st === 'active', set('statusV', 'active')), B('набор', 'Набор экспертов', st === 'recruiting', set('statusV', 'recruiting')), B('план', 'Проект в плане', st === 'plan', set('statusV', 'plan'))]),
@@ -420,6 +430,13 @@ class Component extends DCLogic {
       authHref: logged ? 'account-profile.dc.html' : 'auth.dc.html',
       authLabel: logged ? 'Кабинет' : 'Войти',
       statusBadge, recruiting,
+      full, slice1: !full,
+      applyHref: full ? '#a-apply' : 'academy-apply.dc.html',
+      investHref: full ? '#a-invest' : 'academy-invest.dc.html',
+      expertText: full ? 'Проект ищет эксперта по регенеративной медицине. Заявка уже знает, о каком проекте вы пишете.' : 'Проект ищет эксперта по регенеративной медицине. Расскажите, чему вы хотите научить врачей, — заявку разберёт администратор Академии.',
+      investTitle: full ? 'Роль первоинвестора свободна' : 'Обсудить участие в проекте',
+      investText: full ? 'Первоинвестор — роль в смарт-контракте проекта. Условия и показатели — в разделе «Инвесторам».' : 'Как устроено участие и что получает инвестор — в разделе «Инвесторам».',
+      investBtn: full ? 'Хочу стать первоинвестором' : 'Обсудить проект',
       partnerInHero: pv === 'a' && iv !== 'empty',
       partnerBlock: pv === 'b' || iv === 'empty',
       resOrd: rowFirst ? 4 : 1,

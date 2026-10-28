@@ -28,7 +28,7 @@
     <div style="max-width:1104px;margin:clamp(36px,6vw,56px) auto 0">
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:clamp(16px,3vw,26px)">
         <sc-for list="{{ projects }}" as="pr" hint-placeholder-count="6">
-          <dc-import name="unit-project-card" dark="{{ dark }}" kind="{{ pr.kind }}" title="{{ pr.title }}" description="{{ pr.description }}" count="{{ pr.count }}" partner-name="{{ pr.partner }}" emblem="{{ pr.emblem }}" href="{{ pr.href }}" hint-size="100%,440px"></dc-import>
+          <dc-import name="unit-project-card" dark="{{ dark }}" kind="{{ pr.kind }}" title="{{ pr.title }}" description="{{ pr.description }}" count="{{ pr.count }}" partner-name="{{ pr.partner }}" stage="{{ pr.stage }}" emblem="{{ pr.emblem }}" href="{{ pr.href }}" hint-size="100%,440px"></dc-import>
         </sc-for>
       </div>
 
@@ -67,8 +67,8 @@ class Component extends DCLogic {
       { kind: 'Школа', title: 'Школа гастроэнтерологии', description: 'СИБР, СРК, ВЗК: практические алгоритмы, которые можно применить на следующем приёме.', count: '18 эфиров', partner: 'Гастролаб', emblem: 'Га', href: 'academy-project.dc.html' },
       { kind: 'Школа', title: 'Школа кардиологии', description: 'ХСН, аритмии, липидология — амбулаторная кардиология без воды и рекламы.', count: '21 эфир', partner: 'Кардиомед', emblem: 'Ка', href: 'academy-project.dc.html' },
       { kind: 'Школа', title: 'Школа педиатрии', description: 'Типичные ошибки и сложные случаи амбулаторного приёма — от практиков детских стационаров.', count: '15 эфиров', partner: '', emblem: 'Пе', href: 'academy-project.dc.html' },
-      { kind: 'Медиа', title: 'Подкаст «Кто стоит за брендом»', description: 'Разговоры с врачами и людьми индустрии о том, как устроено медицинское образование.', count: '14 выпусков', partner: '', emblem: 'По', href: 'academy-project.dc.html' },
-      { kind: 'Программа', title: 'Клиническое мышление', description: 'Шестимесячный трек с куратором: от жалобы к диагнозу через разбор реальных историй болезни.', count: '6 модулей', partner: 'Санофарм', emblem: 'Кл', href: 'academy-project.dc.html' }
+      { kind: 'Программа', title: 'Клиническое мышление', description: 'Шестимесячный трек с куратором: от жалобы к диагнозу через разбор реальных историй болезни.', count: '6 модулей', partner: 'Санофарм', emblem: 'Кл', href: 'academy-project.dc.html' },
+      { kind: 'Медиа', title: 'Подкаст «Кто стоит за брендом»', description: 'Разговоры с врачами и людьми индустрии о том, как устроено медицинское образование.', count: '14 выпусков', partner: '', emblem: 'По', href: 'academy-project.dc.html', stage: 'Завершён' }
     ];
     return {
       dark: d, isMobile: m, isDesktop: !m,

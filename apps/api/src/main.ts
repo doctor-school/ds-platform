@@ -22,4 +22,6 @@ void runBootstrap(bootstrap, {
   exit: (code) => process.exit(code),
   flush: (timeoutMs) => Sentry.flush(timeoutMs),
   log: (message, error) => console.error(message, error),
+  // No-op when SENTRY_DSN is unset (the SDK was never initialised).
+  capture: (error) => Sentry.captureException(error),
 });

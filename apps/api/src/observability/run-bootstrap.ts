@@ -4,6 +4,8 @@ export interface RunBootstrapDeps {
   /** Drains queued error events; `Sentry.flush` in production. */
   flush: (timeoutMs: number) => Promise<unknown>;
   log: (message: string, error: unknown) => void;
+  /** Records the failure in error monitoring; `Sentry.captureException` in production. */
+  capture: (error: unknown) => void;
   /** Upper bound on the flush wait, so a dead transport never blocks the exit. */
   flushTimeoutMs?: number;
 }
@@ -18,7 +20,8 @@ const DEFAULT_FLUSH_TIMEOUT_MS = 2000;
  * listener. Node only exits on an unhandled rejection when no one else handles
  * it, and the Sentry SDK's OnUnhandledRejection integration (mode `warn`, active
  * whenever SENTRY_DSN is set) logs and keeps the process running. So the failure
- * is handled here: log it, flush error monitoring within a bound, exit non-zero —
+ * is handled here: log it, capture it for GlitchTip (catching it means the SDK's
+handler no longer sees it), flush within a bound, exit non-zero —
  * the container restart policy then retries the boot.
  */
 export async function runBootstrap(
@@ -29,6 +32,7 @@ export async function runBootstrap(
     await boot();
   } catch (error) {
     deps.log("api boot failed; exiting so the restart policy retries", error);
+    deps.capture(error);
     const timeoutMs = deps.flushTimeoutMs ?? DEFAULT_FLUSH_TIMEOUT_MS;
     let timer: NodeJS.Timeout | undefined;
     const bound = new Promise<void>((resolve) => {

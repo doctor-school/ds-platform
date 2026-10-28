@@ -396,13 +396,15 @@ When(
     await open(page, host.eventsPath);
     const path = `${host.eventsPath}/${world.publicEvent.slug}`;
     const link = page
-      .getByTestId("events-feed")
       .getByRole("link", { name: world.publicEvent.title, exact: true })
       .and(page.locator(`a[href="${path}"]`));
     const card = await reachFeedCard(page, link);
     await expect(card).toContainText("В эфире");
     await expect(card).not.toContainText(/Эфир завершён|^Скоро$/u);
-    await link.click();
+    await card
+      .getByRole("link", { name: world.publicEvent.title, exact: true })
+      .and(card.locator(`a[href="${path}"]`))
+      .click();
     await expect(page).toHaveURL((url) => url.pathname === path);
     await expect(
       page.getByRole("heading", {

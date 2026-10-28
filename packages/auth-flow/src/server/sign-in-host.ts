@@ -5,6 +5,11 @@ import {
   type SignInHostStorefront,
 } from "@ds/schemas";
 
+import {
+  DOOR_INPUTS,
+  type DoorSearchParams,
+  type SignInHostDoorParams,
+} from "../door-inputs";
 import type {
   AuthFlowApiConfig,
   AuthFlowHostConfig,
@@ -87,29 +92,50 @@ export function signInHostConfig(
  * no intent and renders the plain form, with no card. The verify door keeps
  * the address it was hopped to with (`email`), the one value a door hands the
  * next.
+ *
+ * #3345 — the result is the door-input contract's host shape for the door
+ * (`SignInHostDoorParams`): only the door's `both` / `host-intent` inputs, so
+ * a `storefront-only` one (the reset door's return, the login hand-off
+ * reference) cannot be fed here.
  */
-export function signInHostSearchParams(
+export function signInHostSearchParams<D extends SignInHostPageDoor>(
   storefront: AuthFlowHostConfig,
   render: SignInHostRender,
-  browser: Record<string, string | string[] | undefined>,
-  door: SignInHostDoor | "verify",
-): Record<string, string> {
-  const params: Record<string, string> = {};
+  browser: DoorSearchParams,
+  door: D,
+): SignInHostDoorParams<D> {
   const intent = render.intent;
-  if (door === "login" && intent?.method === "code") params.method = "code";
-  if (intent?.eventTarget && door !== "reset") {
-    params.returnTo = storefront.routes.eventPathTemplate.replace(
-      ":slug",
-      encodeURIComponent(intent.eventTarget),
-    );
-  }
-  if (door === "verify") {
-    const email = Array.isArray(browser.email)
-      ? browser.email[0]
-      : browser.email;
-    if (email) params.email = email;
-  }
-  return params;
+  const returnTo = intent?.eventTarget
+    ? storefront.routes.eventPathTemplate.replace(
+        ":slug",
+        encodeURIComponent(intent.eventTarget),
+      )
+    : undefined;
+  const params: HostParamsByDoor = {
+    login: {
+      ...(intent?.method === "code" ? { method: "code" } : {}),
+      ...(returnTo ? { returnTo } : {}),
+    },
+    register: returnTo ? { returnTo } : {},
+    reset: {},
+    verify: {
+      ...(returnTo ? { returnTo } : {}),
+      ...verifyEmail(browser),
+    },
+  };
+  return params[door];
+}
+
+/** Every door's host params — one key per door, so a door added to the page set is a type error here. */
+type HostParamsByDoor = {
+  [D in SignInHostPageDoor]: SignInHostDoorParams<D>;
+};
+
+/** The verify door keeps the address it was hopped to with (`both`). */
+function verifyEmail(browser: DoorSearchParams): { email?: string } {
+  const raw = browser[DOOR_INPUTS.verify.email.param];
+  const email = Array.isArray(raw) ? raw[0] : raw;
+  return email ? { email } : {};
 }
 
 /** A door page of the sign-in host: the entry's three doors plus the code step. */

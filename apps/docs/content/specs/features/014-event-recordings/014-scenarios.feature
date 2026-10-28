@@ -45,6 +45,32 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       Then the public event speakers match the independent canonical projection in relation order
       And the rendered speaker cards preserve that exact count, order and credentials
 
+  Rule: Public upcoming facets retain eligible options and honest empty results
+
+    Background:
+      Given the real Academy upcoming facet fixtures are available
+
+    @EARS-12 @facets @happy @public-event-facets @014-zero-option-selectable
+    Scenario: A zero-yield option stays visible and selectable
+      Given a facet option that yields no events under the current selection
+      When the visitor opens that facet
+      Then the option is listed with no count
+      And it is selectable rather than disabled or hidden
+
+    @EARS-13 @facets @happy @public-event-facets @014-facet-counts-self-excluding
+    Scenario: Counts reflect the other facets, not the facet's own selection
+      Given a project facet selection is active
+      When the visitor reopens the project facet and clears the local option search
+      Then the active project chip and every other eligible project option preserve the full project set
+      And the expert and topic counts reflect the active project selection
+
+    @EARS-13 @facets @failure @public-event-facets @014-empty-combination
+    Scenario: An empty combination is a successful empty page
+      Given a facet combination that matches no event
+      When the listing is read
+      Then the response is 200 with empty data and terminal pagination
+      And no error is rendered
+
   Rule: Recording lifecycle, playback and remaining archive contracts
 
     Background:
@@ -444,33 +470,12 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       And selecting one adds an active-filter badge with its own clear control
       And a «Сбросить всё» control clears every facet
 
-    @EARS-12 @facets @happy
-    Scenario: A zero-yield option stays visible and selectable
-      Given a facet option that yields no events under the current selection
-      When the visitor opens that facet
-      Then the option is listed with no count
-      And it is selectable rather than disabled or hidden
-
     @EARS-13 @facets @happy
     Scenario: Facets compose with AND
       Given events tagged with several projects, experts and topics
       When the visitor selects one project, one expert and one topic
       Then only events matching all three are listed
       And the page is served by one bounded paginated query plus one facet-option query
-
-    @EARS-13 @facets @happy
-    Scenario: Counts reflect the other facets, not the facet's own selection
-      Given a project facet selection is active
-      When the visitor reopens the project facet
-      Then its option list still shows every eligible project
-      And the expert and topic counts reflect the active project selection
-
-    @EARS-13 @facets @failure
-    Scenario: An empty combination is a successful empty page
-      Given a facet combination that matches no event
-      When the listing is read
-      Then the response is 200 with empty data and terminal pagination
-      And no error is rendered
 
     @EARS-13 @facets @failure
     Scenario Outline: An ineligible facet id is indistinguishable from an unknown one

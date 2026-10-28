@@ -99,6 +99,34 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       When the visitor selects another month from the calendar picker
       Then every selection retains the month URL, heading and grid
 
+  Rule: The public feed and populated calendar share event state
+
+    Background:
+      Given the public calendar uses the supported horizon clock
+
+    # 004 amendment 2026-10-05 replaces the week tabs with loss-free feed/month links.
+    @EARS-18 @happy @public-calendar-content
+    Scenario: The doctor switches the listing between feed and month views and back
+      Given the guest reads the default public day-grouped feed
+      When the visitor follows the calendar and feed links in both directions
+      Then the current month renders and the same day-grouped feed returns with nothing lost
+      And carried month, tense and facet state survive the public view round-trip
+
+    # 004 amendment 2026-10-05 keeps past events as muted linked pills.
+    @EARS-15 @EARS-19 @happy @public-calendar-content
+    Scenario: The month view shows the whole month at a glance with the live event in red
+      Given the current golden month contains published, live and past events
+      When the visitor opens that public calendar month
+      Then the desktop seven-column calendar matches the published, live and past events
+      And today is outlined and the three-state calendar legend is readable
+      And the mobile dots and selected-day agenda match those same events
+
+    @EARS-9 @happy @public-calendar-content
+    Scenario: A live event reads "live now" consistently on card and page
+      Given the golden Academy live event is publicly readable
+      When the visitor opens that live event from its listing card
+      Then the live event page shows the same live signal without contradictory lifecycle copy
+
   Rule: Remaining public event and calendar scenarios
 
     Background:
@@ -171,13 +199,6 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       And each card shows date and time (МСК), title, school/series, specialties, and speakers
       And past, draft, and archived events are absent
 
-    @EARS-9 @happy
-    Scenario: A live event reads "live now" consistently on card and page
-      Given a live event that appears on the listing
-      When a visitor views its card and then its page
-      Then both surfaces show the "live now" signal derived from the same state
-      And neither surface contradicts the other
-
     @EARS-9 @edge
     Scenario: An ended event drops from the listing
       Given an event that transitions from live to ended
@@ -192,23 +213,6 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       And the surface is neither blank nor broken
 
     # --- Month view & «Неделя / Месяц» switcher (US-7, US-8, US-9) ---
-
-    @EARS-18 @happy
-    Scenario: The doctor switches the listing between week and month views and back
-      Given the upcoming-broadcasts listing in its default «Неделя» view
-      When the visitor activates «Месяц» and then «Неделя»
-      Then the month calendar renders for the current month
-      And the round-trip returns the same day-grouped week list with nothing lost
-      And both views are publicly readable without authentication
-
-    @EARS-15 @EARS-19 @happy
-    Scenario: The month view shows the whole month at a glance with the live event in red
-      Given a month with upcoming published events, one live event, and already-past events
-      When a visitor opens the month view for that month
-      Then upcoming events render as pills on the 7-column grid (dots on the mobile grid)
-      And the live event renders as a red "live now" pill derived from the single state machine
-      And the month's past events render as muted notes without a participation affordance
-      And today is visibly marked and a legend explains the states
 
     # --- Cross-cutting (US-1, US-2) ---
 

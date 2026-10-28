@@ -18,8 +18,10 @@ connection. The Drizzle TS schemas themselves are the SSOT in `packages/db`
 - **`DatabaseModule`** (`database.module.ts`) — a `@Global()` module so any
   feature module injects the handle without re-importing. Its factory calls
   `createDrizzle(env.DATABASE_URL, …)` from `@ds/db` once (bounded by
-  `DATABASE_POOL_MAX` and `DATABASE_STATEMENT_TIMEOUT_MS` from the env schema),
-  then re-exposes the two halves of the returned `DrizzleHandle` as separate
+  `DATABASE_POOL_MAX`, `DATABASE_STATEMENT_TIMEOUT_MS` and
+  `DATABASE_CONNECT_TIMEOUT_MS` from the env schema; the last bounds TCP connect
+  plus the Postgres startup handshake, default 5000 ms, so a boot against an
+  unresponsive data box rejects instead of hanging — #3421), then re-exposes the two halves of the returned `DrizzleHandle` as separate
   providers. It implements `OnModuleDestroy` and calls `pool.end()` on teardown
   (design §9 pattern (a)), so neither the process nor the e2e suite leaks
   connections. Shutdown hooks are enabled in `main.ts`.

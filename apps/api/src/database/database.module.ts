@@ -14,6 +14,7 @@ import { DRIZZLE_DB, DRIZZLE_POOL } from "./database.tokens.js";
         return createDrizzle(env.DATABASE_URL, {
           max: env.DATABASE_POOL_MAX,
           statement_timeout: env.DATABASE_STATEMENT_TIMEOUT_MS,
+          connectionTimeoutMillis: env.DATABASE_CONNECT_TIMEOUT_MS,
         });
       },
     },

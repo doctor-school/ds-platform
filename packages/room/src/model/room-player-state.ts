@@ -50,6 +50,18 @@ export const PLAYER_MAX_AUTO_RETRIES = 2;
 export const PLAYER_RETRY_DELAY_MS = 4_000;
 
 /**
+ * 006 EARS-7 (#1974) — the longest the room holds a player-failure overlay while it
+ * re-probes its status (one heartbeat round trip). A closed event stops the stream,
+ * so a failure may be the close itself: the end card, never the failure overlay, is
+ * what a closed room shows. The hold is bounded at HALF the auto-retry delay: a
+ * `retrying` step lasts `PLAYER_RETRY_DELAY_MS` before the embed is re-created, so a
+ * slow or hung probe still leaves the truthful «Переподключаемся…» status (EARS-18)
+ * visible for the second half of that step — a hold equal to the delay would let
+ * the retry swallow the overlay entirely.
+ */
+export const ROOM_STATUS_PROBE_WAIT_MS = PLAYER_RETRY_DELAY_MS / 2;
+
+/**
  * The runtime player state (design §3.1 state machine). `loading` covers the mount
  * window before the first playing signal (the provider renders its own spinner);
  * `retrying`/`failed` carry a {@link PlayerGrade} that decides covering-overlay

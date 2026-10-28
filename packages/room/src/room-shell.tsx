@@ -53,11 +53,14 @@ export function RoomShell({
   const onRoomClosed = useCallback(() => setEnded(true), []);
   // 006 EARS-7 (#1974) — closing the event stops the stream at once, but the room
   // hears of the close only on its next beat. A player failure is therefore the
-  // moment to ask again: the heartbeat loop publishes its beat into this ref and
-  // the player calls it on failure, so a closed room shows the end card instead of
-  // «Трансляция не загружается» for up to a whole heartbeat interval.
-  const statusProbe = useRef<(() => void) | null>(null);
-  const probeRoomStatus = useCallback(() => statusProbe.current?.(), []);
+  // moment to ask again: the heartbeat loop publishes its probe into this ref and
+  // the player awaits it on failure — holding its failure overlay meanwhile — so a
+  // closed room shows the end card instead of «Трансляция не загружается».
+  const statusProbe = useRef<(() => Promise<boolean>) | null>(null);
+  const probeRoomClosed = useCallback(
+    () => statusProbe.current?.() ?? Promise.resolve(false),
+    [],
+  );
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
@@ -82,7 +85,7 @@ export function RoomShell({
           context={context}
           copy={copy}
           ended={ended}
-          onPlayerFailure={probeRoomStatus}
+          probeRoomClosed={probeRoomClosed}
         />
       </RoomPresenceProvider>
     </main>

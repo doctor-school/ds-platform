@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import type { RoomChatCredential, RoomConfig } from "@ds/schemas";
+import { ROOM_STATUS_PROBE_WAIT_MS } from "./model/room-player-state";
 import { RoomShell } from "./room-shell";
 import type { RoomContext, RoomCopy, RoomRoutes } from "./types";
 
@@ -361,8 +362,10 @@ describe("006 EARS-19 the withheld count is absent from the room", () => {
  * only learns of the close from its next heartbeat (every `heartbeatIntervalSeconds`,
  * 60 s by default). In between, the player's own failure machine reports the stopped
  * stream as «Трансляция не загружается / Переподключаемся…». So the moment the player
- * reports a failure, the room re-probes its status through the SAME heartbeat call,
- * and a refusal proving the event left `live` replaces the overlay with the end card.
+ * reports a failure, the room re-probes its status through the SAME heartbeat call
+ * and HOLDS the failure overlay until that probe answers (bounded by
+ * `ROOM_STATUS_PROBE_WAIT_MS`): a refusal proving the event left `live` goes
+ * straight to the end card — the overlay never renders, not even for one frame.
  */
 describe("006 EARS-7 a player failure re-probes the room status", () => {
   const youtubeConfig = {
@@ -370,14 +373,55 @@ describe("006 EARS-7 a player failure re-probes the room status", () => {
     stream: { provider: "youtube", embedRef: "dQw4w9WgXcQ" },
   } as unknown as RoomConfig;
 
+  /** How the server answers the NEXT heartbeat. `deferred` parks it until `answer()`. */
+  type Answer = "live" | "closed" | "network" | "hang" | "deferred";
+
   let beats: number;
-  let closed: boolean;
+  let mode: Answer;
+  let pending: Array<() => void>;
+  /** Every overlay node that was ever attached — catches a single transient frame. */
+  let overlaySeen: boolean;
+  let observer: MutationObserver;
+
+  const closedResponse = (): Response =>
+    ({
+      ok: false,
+      status: 409,
+      json: async () => ({ message: "event is not live", state: "ended" }),
+    }) as unknown as Response;
+  const liveResponse = (): Response =>
+    ({
+      ok: true,
+      json: async () => ({ eventId: "e", beatAt: new Date().toISOString(), presenceCount: 3 }),
+    }) as unknown as Response;
+
+  function answer(): void {
+    const queued = pending;
+    pending = [];
+    for (const resolve of queued) resolve();
+  }
 
   beforeEach(() => {
     vi.useFakeTimers();
     sdkHandlers.clear();
     beats = 0;
-    closed = false;
+    mode = "live";
+    pending = [];
+    overlaySeen = false;
+    observer = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of Array.from(record.addedNodes)) {
+          if (!(node instanceof Element)) continue;
+          if (
+            node.matches('[data-testid="room-player-failure"]') ||
+            node.querySelector('[data-testid="room-player-failure"]')
+          ) {
+            overlaySeen = true;
+          }
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
     vi.stubGlobal(
       "matchMedia",
       vi.fn(() => ({
@@ -391,26 +435,30 @@ describe("006 EARS-7 a player failure re-probes the room status", () => {
       vi.fn(async (input: unknown) => {
         const url =
           typeof input === "string" ? input : String((input as { url?: string })?.url ?? "");
-        if (url.includes("/heartbeat")) {
-          beats += 1;
-          if (closed) {
-            return {
-              ok: false,
-              status: 409,
-              json: async () => ({ message: "event is not live", state: "ended" }),
-            } as unknown as Response;
-          }
-          return {
-            ok: true,
-            json: async () => ({ eventId: "e", beatAt: new Date().toISOString(), presenceCount: 3 }),
-          } as unknown as Response;
+        if (!url.includes("/heartbeat")) {
+          return { ok: true, json: async () => ({}) } as unknown as Response;
         }
-        return { ok: true, json: async () => ({}) } as unknown as Response;
+        beats += 1;
+        switch (mode) {
+          case "closed":
+            return closedResponse();
+          case "network":
+            throw new TypeError("Failed to fetch");
+          case "hang":
+            return new Promise<Response>(() => {});
+          case "deferred":
+            return new Promise<Response>((resolve) => {
+              pending.push(() => resolve(closedResponse()));
+            });
+          default:
+            return liveResponse();
+        }
       }),
     );
   });
 
   afterEach(() => {
+    observer.disconnect();
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
     vi.unstubAllGlobals();
@@ -427,6 +475,12 @@ describe("006 EARS-7 a player failure re-probes the room status", () => {
     act(() => {
       window.dispatchEvent(new MessageEvent("message", { origin: "https://www.youtube.com", data }));
     });
+  }
+
+  /** A provider error after the handshake — a CONFIRMED failure (covering overlay). */
+  function failPlayer(): void {
+    fireYouTube('{"event":"onReady"}');
+    fireYouTube('{"event":"onError","info":100}');
   }
 
   function renderShell(): ReturnType<typeof render> {
@@ -448,9 +502,8 @@ describe("006 EARS-7 a player failure re-probes the room status", () => {
     expect(beats).toBe(1); // the entry beat — the room is live.
 
     // The admin closes the эфир; the stream stops and the provider reports an error.
-    closed = true;
-    fireYouTube('{"event":"onReady"}');
-    fireYouTube('{"event":"onError","info":100}');
+    mode = "closed";
+    failPlayer();
     await settle();
 
     // No timer advanced: the end card came from the failure-triggered probe, not
@@ -462,15 +515,58 @@ describe("006 EARS-7 a player failure re-probes the room status", () => {
     expect(screen.getByTestId("room-chat-ended")).toBeInTheDocument();
   });
 
-  it("EARS-7.11: a player failure in a room that is still live keeps the failure overlay", async () => {
+  it("EARS-7.12: while the status probe is in flight the failure overlay is held, and an ended answer goes straight to the end card — the overlay never renders", async () => {
     renderShell();
     await settle();
 
-    fireYouTube('{"event":"onReady"}');
-    fireYouTube('{"event":"onError","info":100}');
+    mode = "deferred";
+    failPlayer();
     await settle();
 
-    expect(beats).toBe(2); // the probe ran, and the server said live.
+    // The probe is out, the server has not answered: nothing of the failure UI.
+    expect(beats).toBe(2);
+    expect(screen.queryByTestId("room-player-failure")).toBeNull();
+    expect(screen.queryByTestId("room-player-ended")).toBeNull();
+
+    answer();
+    await settle();
+
+    expect(screen.getByTestId("room-player-ended")).toBeInTheDocument();
+    expect(screen.queryByTestId("room-player-failure")).toBeNull();
+    expect(overlaySeen).toBe(false);
+  });
+
+  it.each([
+    ["the probe answers live", "live" as const],
+    ["the probe fails on the network", "network" as const],
+  ])("EARS-7.12: the failure overlay still appears when %s", async (_label, next) => {
+    renderShell();
+    await settle();
+
+    mode = next;
+    failPlayer();
+    await settle();
+
+    expect(beats).toBe(2); // the probe ran.
+    expect(screen.queryByTestId("room-player-ended")).toBeNull();
+    expect(screen.getByTestId("room-player-failure")).toBeInTheDocument();
+  });
+
+  it("EARS-7.12: the failure overlay still appears when the probe exceeds its bounded wait", async () => {
+    renderShell();
+    await settle();
+
+    mode = "hang";
+    failPlayer();
+    await settle();
+    expect(beats).toBe(2);
+    expect(screen.queryByTestId("room-player-failure")).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(ROOM_STATUS_PROBE_WAIT_MS);
+    });
+    await settle();
+
     expect(screen.queryByTestId("room-player-ended")).toBeNull();
     expect(screen.getByTestId("room-player-failure")).toBeInTheDocument();
   });
@@ -486,8 +582,8 @@ describe("006 EARS-7 a player failure re-probes the room status", () => {
       hidden = true;
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    closed = true;
-    // Backgrounded through several grid ticks and a player failure: nothing is sent.
+    mode = "closed";
+    // Backgrounded through several grid ticks: nothing is sent.
     act(() => {
       vi.advanceTimersByTime(config.heartbeatIntervalSeconds * 1000 * 3);
     });
@@ -503,5 +599,44 @@ describe("006 EARS-7 a player failure re-probes the room status", () => {
     expect(beats).toBe(2);
     expect(screen.getByTestId("room-player-ended")).toBeInTheDocument();
     expect(screen.queryByTestId("room-player-failure")).toBeNull();
+  });
+
+  it("EARS-7.12: a tab returning to visible with a failed player holds the overlay on the resume beat and goes straight to the end card", async () => {
+    let hidden = false;
+    vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden);
+    renderShell();
+    await settle();
+
+    act(() => {
+      hidden = true;
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    // The close lands while the tab is away; the player fails in the background.
+    // A hidden tab sends nothing, so the hold lapses at its bound.
+    failPlayer();
+    await settle();
+    act(() => {
+      vi.advanceTimersByTime(ROOM_STATUS_PROBE_WAIT_MS);
+    });
+    await settle();
+    expect(beats).toBe(1);
+
+    mode = "deferred";
+    overlaySeen = false;
+    act(() => {
+      hidden = false;
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await settle();
+
+    // ONE resume beat serves as the probe; the overlay waits on its answer.
+    expect(beats).toBe(2);
+    expect(screen.queryByTestId("room-player-failure")).toBeNull();
+
+    answer();
+    await settle();
+    expect(screen.getByTestId("room-player-ended")).toBeInTheDocument();
+    expect(screen.queryByTestId("room-player-failure")).toBeNull();
+    expect(overlaySeen).toBe(false);
   });
 });

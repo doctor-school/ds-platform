@@ -6,6 +6,7 @@ import { WebinarRoomLayout } from "@ds/design-system/webinar-room";
 import type { RoomConfig } from "@ds/schemas";
 import { resolveEmbed } from "../model/room-player";
 import { usePlayerFailureState } from "../client/use-player-failure-state";
+import { ROOM_STATUS_PROBE_WAIT_MS } from "../model/room-player-state";
 import type { BrowserRoomApi } from "../client/room-api";
 import type { RoomCopyStrings } from "../copy/room-copy";
 import type { RoomContext } from "../types";
@@ -203,18 +204,22 @@ export function PlayerFrame({
   config,
   copy,
   ended = false,
-  onPlayerFailure,
+  probeRoomClosed,
 }: {
   config: RoomConfig;
   copy: PlayerCopy;
   /** 006 EARS-7 — the broadcast is over (server-proven); render the end card. */
   ended?: boolean;
   /**
-   * 006 EARS-7 (#1974) — called each time the player enters a failure state
-   * (`failed` / `retrying`). A closed event stops the stream, so a failure is when
-   * the room re-probes its status; the end card then replaces the overlay.
+   * 006 EARS-7 (#1974) — the room's status probe, awaited each time the player
+   * enters a failure state (`failed` / `retrying`) and on a visible resume while
+   * failed. A closed event stops the stream, so a failure may be the close itself:
+   * the failure UI is HELD until the probe answers (bounded by
+   * `ROOM_STATUS_PROBE_WAIT_MS`). `true` (the close is proven — the shell flips
+   * `ended`) keeps it held into the end card; anything else releases it.
+   * Absent, the failure UI renders at once (no room to ask).
    */
-  onPlayerFailure?: (() => void) | undefined;
+  probeRoomClosed?: (() => Promise<boolean>) | undefined;
 }) {
   const embed = resolveEmbed(config.stream);
   // 006 EARS-18 — the runtime player-failure state machine. Hooks run unconditionally
@@ -226,14 +231,53 @@ export function PlayerFrame({
   // state").
   const provider = embed.kind === "unavailable" ? "cdnvideo" : embed.kind;
   const { status, grade, failure, embedKey, restart } = usePlayerFailureState(provider);
-  const onPlayerFailureRef = useRef(onPlayerFailure);
+  // 006 EARS-7 (#1974) — the failure-overlay hold. Derived during render (never
+  // set from an effect) so the FIRST frame of a failure is already held: the
+  // overlay cannot flash for one probe round trip before the end card.
+  const probeRef = useRef(probeRoomClosed);
   useEffect(() => {
-    onPlayerFailureRef.current = onPlayerFailure;
-  }, [onPlayerFailure]);
+    probeRef.current = probeRoomClosed;
+  }, [probeRoomClosed]);
+  const holdsForProbe = probeRoomClosed !== undefined;
+  const inFailure = status === "failed" || status === "retrying";
+  // `true` once this failure episode's probe answered «not proven closed» (or its
+  // bounded wait lapsed); reset when the episode ends and on a visible resume.
+  const [probeReleased, setProbeReleased] = useState(false);
+  const [resumes, setResumes] = useState(0);
+  useEffect(() => {
+    if (!holdsForProbe) return;
+    // The tab-return path: a visible resume re-asks before showing a stale failure.
+    const onVisibilityChange = (): void => {
+      if (document.hidden) return;
+      setProbeReleased(false);
+      setResumes((n) => n + 1);
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [holdsForProbe]);
   useEffect(() => {
     if (ended) return;
-    if (status === "failed" || status === "retrying") onPlayerFailureRef.current?.();
-  }, [status, ended]);
+    if (!inFailure) {
+      setProbeReleased(false);
+      return;
+    }
+    const probe = probeRef.current;
+    if (!probe) return;
+    let cancelled = false;
+    const release = (): void => {
+      if (!cancelled) setProbeReleased(true);
+    };
+    const timer = setTimeout(release, ROOM_STATUS_PROBE_WAIT_MS);
+    void probe().then((closed) => {
+      // Proven closed: stay held — the shell's `ended` swaps in the end card.
+      if (!closed) release();
+    }, release);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [status, inFailure, ended, resumes]);
+  const failureHeld = holdsForProbe && inFailure && !probeReleased;
   // The `origin` param YouTube's IFrame API wants is resolved AFTER mount so the
   // first client render matches SSR (both `?enablejsapi=1`), avoiding a hydration
   // mismatch; the extra param arrives on the post-mount re-render.
@@ -328,7 +372,8 @@ export function PlayerFrame({
         className="absolute inset-0 h-full w-full"
       />
       {/* CONFIRMED grade — covering overlay + (auto-retry) manual restart. */}
-      {(status === "retrying" || (status === "failed" && grade === "confirmed")) && (
+      {!failureHeld &&
+        (status === "retrying" || (status === "failed" && grade === "confirmed")) && (
         <PlayerFailureOverlay
           status={status}
           failure={failure}
@@ -337,7 +382,7 @@ export function PlayerFrame({
         />
       )}
       {/* SUSPECTED grade — non-covering advisory banner, embed stays visible. */}
-      {status === "failed" && grade === "suspected" && (
+      {!failureHeld && status === "failed" && grade === "suspected" && (
         <PlayerSuspectedBanner copy={copy} onRestart={restart} />
       )}
       {/* UNVERIFIED (cdnvideo, from mount) renders NOTHING of its own: the room has
@@ -418,7 +463,7 @@ export function RoomView({
   context,
   copy,
   ended = false,
-  onPlayerFailure,
+  probeRoomClosed,
 }: {
   /** The room's ONE browser transport — `createBrowserRoomApi({ slug })`. */
   api: BrowserRoomApi;
@@ -431,8 +476,8 @@ export function RoomView({
    * mobile eyebrow and the chat composer.
    */
   ended?: boolean;
-  /** 006 EARS-7 (#1974) — handed to {@link PlayerFrame}; the shell re-probes the room status. */
-  onPlayerFailure?: (() => void) | undefined;
+  /** 006 EARS-7 (#1974) — handed to {@link PlayerFrame}; the shell's room-status probe. */
+  probeRoomClosed?: (() => Promise<boolean>) | undefined;
 }) {
   const presenceCount = usePresenceCount();
   // Desktop chat collapse + the unread counter (messages missed while folded).
@@ -465,7 +510,7 @@ export function RoomView({
           config={config}
           copy={copy}
           ended={ended}
-          onPlayerFailure={onPlayerFailure}
+          probeRoomClosed={probeRoomClosed}
         />
       }
       contextStrip={<ContextStrip context={context} />}

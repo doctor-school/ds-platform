@@ -145,7 +145,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
 
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-  const run = (command, { input, env: extra = {} } = {}) => {
+  const run = (command, { input, env: extra = {}, entrypoint = ENTRYPOINT } = {}) => {
     const env = {
       ...process.env,
       PATH: `${stubs}${delimiter}${process.env.PATH}`,
@@ -155,7 +155,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     };
     if (command === undefined) delete env.SSH_ORIGINAL_COMMAND;
     else env.SSH_ORIGINAL_COMMAND = command;
-    const r = spawnSync("bash", [ENTRYPOINT], { env, input, encoding: input ? undefined : "utf8" });
+    const r = spawnSync("bash", [entrypoint], { env, input, encoding: input ? undefined : "utf8" });
     return { status: r.status, stdout: String(r.stdout), stderr: String(r.stderr) };
   };
   const log = (name) => {
@@ -875,6 +875,8 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     ["a string schema", { schema: "1" }],
     ["a mutable image tag", { images: { postgres: "ds-postgres:latest", pgbackrest: IMG("c") } }],
     ["a short system id", { systemId: "123" }],
+    ["hashVersion 3", { hashVersion: 3 }],
+    ["a string hashVersion", { hashVersion: "2" }],
   ]) {
     it(`3313: postgres-checkpoint rejects ${label} (exit 2) and writes nothing`, () => {
       setRole("data");
@@ -891,6 +893,61 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       assert.equal(existsSync(join(root, "home/deploy/ds-platform-postgres-state.json")), false);
     });
   }
+
+  it("3419: postgres-checkpoint writes a v2 record with its hashVersion", () => {
+    setRole("data");
+    mkdirSync(join(root, "home/deploy"), { recursive: true });
+    const record = {
+      schema: 1,
+      hashVersion: 2,
+      sourceHash: "a".repeat(64),
+      systemId: "7544271560000000001",
+      images: { postgres: IMG("b"), pgbackrest: IMG("c") },
+    };
+    boundsDockerStub();
+    const r = run("postgres-checkpoint", { input: JSON.stringify(record) });
+    assert.equal(r.status, 0, String(r.stderr));
+    const file = join(root, "home/deploy/ds-platform-postgres-state.json");
+    assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), record);
+  });
+
+  // #3419: the first release after the v2 guard reaches the box's PREVIOUSLY installed
+  // entrypoint at postgres-verify and the pre-ship checkpoint (install runs after ship).
+  // The live release runs 09c152b26: the new guard's payloads must pass that verb.
+  it("3419: the live (09c152b26) entrypoint accepts the new guard's probe request and v1 checkpoint", async () => {
+    const { postgresProbeRequest, postgresStateRecord, readPostgresTargetFromTree } = await import(
+      "./postgres-guard.mjs"
+    );
+    const old = join(dir, "ds-deploy-entrypoint.09c152b");
+    const shown = spawnSync("git", ["show", "09c152b26:infra/deploy/bin/ds-deploy-entrypoint"], {
+      cwd: here,
+      encoding: "utf8",
+    });
+    assert.equal(shown.status, 0, shown.stderr);
+    writeFileSync(old, shown.stdout);
+    setRole("data");
+    mkdirSync(join(root, "home/deploy"), { recursive: true });
+    const head = readPostgresTargetFromTree("HEAD", resolve(here, "../.."));
+    const probe = join(root, "usr/local/lib/ds-platform/postgres-artifact-probe.py");
+    mkdirSync(dirname(probe), { recursive: true });
+    writeFileSync(probe, "print('{}')\n");
+    for (const sourceHash of [head.sourceHash, "e".repeat(64)]) {
+      const request = postgresProbeRequest({ ...head, sourceHash, preferRecordedImages: true });
+      const r = run("postgres-probe", { input: JSON.stringify(request), entrypoint: old });
+      assert.equal(r.status, 0, String(r.stderr));
+    }
+    const live = {
+      sourceHash: "e".repeat(64),
+      source: { systemId: "7544271560000000001" },
+      images: { postgres: { id: IMG("b") }, pgbackrest: { id: IMG("c") } },
+    };
+    boundsDockerStub();
+    const v1 = run("postgres-checkpoint", { input: postgresStateRecord(live), entrypoint: old });
+    assert.equal(v1.status, 0, String(v1.stderr));
+    // Why the pre-ship checkpoint keeps a v1 record v1: the live verb refuses hashVersion.
+    const v2 = run("postgres-checkpoint", { input: postgresStateRecord(live, "f".repeat(64)), entrypoint: old });
+    assert.equal(v2.status, 2, String(v2.stderr));
+  });
 
   it("3313: data-env writes VPC_IP and the image override from checked fields only", () => {
     setRole("data");

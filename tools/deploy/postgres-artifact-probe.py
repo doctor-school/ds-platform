@@ -7,7 +7,39 @@ import re
 import subprocess
 import sys
 
-request = json.loads(base64.b64decode(sys.argv[1]))
+# The service keys removed before the compose is hashed (v2, #3419) — the same list
+# as RUNTIME_ONLY_SERVICE_KEYS in tools/deploy/postgres-guard.mjs, which says why.
+RUNTIME_ONLY = ("logging", "restart", "healthcheck", "depends_on", "ports")
+
+
+def canonical_compose(value):
+    # postgres-guard.mjs canonicalJson: sorted keys, no whitespace, integers only.
+    def check(v):
+        if isinstance(v, float):
+            raise RuntimeError("compose carries a non-integer number")
+        for item in v.values() if isinstance(v, dict) else v if isinstance(v, list) else []:
+            check(item)
+    check(value)
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def source_hash_v2(root, paths):
+    """postgresSourceHash (v2) of the tree at `root`; a missing file hashes as null."""
+    def digest(p):
+        path = root / p
+        if not path.is_file():
+            return None
+        data = path.read_bytes()
+        if p == "compose.yml":
+            compose = json.loads(data)
+            for service in (compose.get("services") or {}).values():
+                if isinstance(service, dict):
+                    for key in RUNTIME_ONLY:
+                        service.pop(key, None)
+            data = canonical_compose(compose).encode()
+        return hashlib.sha256(data).hexdigest()
+    hashes = [[p, digest(p)] for p in paths]
+    return hashlib.sha256(json.dumps(hashes, separators=(",", ":")).encode()).hexdigest()
 
 
 def run(*args, stdin=None):
@@ -60,7 +92,8 @@ def container_evidence(name, target):
                        "mount": {"name": mount["Name"], "target": mount["Destination"], "rw": mount["RW"]}}
 
 
-try:
+def main():
+    request = json.loads(base64.b64decode(sys.argv[1]))
     target = request["target"]
     server_name = "ds-data-prod-postgres-1"
     backup_name = "ds-data-prod-pgbackrest-1"
@@ -98,16 +131,20 @@ try:
         raise RuntimeError("backup stanza is not healthy")
     db = max(info[0]["db"], key=lambda item: item["id"])
     root = pathlib.Path.home() / "ds-platform/infra/deploy/compose/data-prod"
-    hashes = [[p, hashlib.sha256((root / p).read_bytes()).hexdigest() if (root / p).is_file() else None] for p in request["paths"]]
-    source_hash = hashlib.sha256(json.dumps(hashes, separators=(",", ":")).encode()).hexdigest()
     state_path = pathlib.Path.home() / "ds-platform-postgres-state.json"
-    record = {}
     requested_images = target["images"]
-    if state_path.exists():
+    if not state_path.exists():
+        # No record yet (first adoption): the live tree's own v2 hash (#3419).
+        source_hash = source_hash_v2(root, request["paths"])
+        record = {"hashVersion": 2}
+    else:
         state = json.loads(state_path.read_text())
-        if state["schema"] != 1 or not re.fullmatch(r"[a-f0-9]{64}", state["sourceHash"]):
+        if (state["schema"] != 1 or state.get("hashVersion", 1) not in (1, 2)
+                or not re.fullmatch(r"[a-f0-9]{64}", state["sourceHash"])):
             raise RuntimeError("invalid durable artifact state")
         source_hash = state["sourceHash"]
+        # An absent hashVersion is a v1 record (#3419: postgres-guard.mjs migrates it).
+        record = {"hashVersion": 2} if state.get("hashVersion") == 2 else {}
         record["recordedSystemId"] = state["systemId"]
         if request.get("preferRecordedImages") and source_hash == request.get("sourceHash"):
             requested_images = state["images"]
@@ -128,6 +165,11 @@ try:
                       "activationPgdata": activation["postgres"][0], "activationMajor": activation["postgres"][1],
                       "images": {"postgres": image_evidence(server["Image"]), "pgbackrest": image_evidence(backup["Image"])},
                       "targetImages": {role: image_evidence(ref) for role, ref in requested_images.items()}}))
+
+
+try:
+    if __name__ == "__main__":
+        main()
 except Exception as error:
     print("PostgreSQL evidence unavailable: " + str(error), file=sys.stderr)
     sys.exit(1)

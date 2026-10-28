@@ -14,16 +14,105 @@ const requireFact = (condition, message) => {
   if (!condition) fail(message);
 };
 
+const sha256 = (text) => createHash("sha256").update(text).digest("hex");
+
+/** v1 (#2101): the raw bytes of every input — what box records written before #3419 hold. */
+export function postgresSourceHashV1(files) {
+  return sha256(
+    JSON.stringify(
+      Object.keys(files)
+        .sort()
+        .map((p) => [p, sha256(files[p])]),
+    ),
+  );
+}
+
+/**
+ * #3419: the data-prod service keys that configure how Docker runs a container, never
+ * which image or cluster it runs — removed before the compose is hashed (v2). Anything
+ * absent from this list stays hashed, so an unknown key fails safe (certificate required).
+ * - logging: the json-file log bound (#3386) — container log rotation only.
+ * - restart: the restart policy — when Docker restarts the same container.
+ * - healthcheck: a readiness probe — reads the server, changes neither image nor data.
+ * - depends_on: start ordering between the services of the project.
+ * - ports: host publishing on the private VPC address — network exposure, not the cluster.
+ * The box probe (postgres-artifact-probe.py RUNTIME_ONLY) holds the same list.
+ */
+export const RUNTIME_ONLY_SERVICE_KEYS = Object.freeze([
+  "logging",
+  "restart",
+  "healthcheck",
+  "depends_on",
+  "ports",
+]);
+
+// One canonical form, computed identically by the box probe (`canonical_compose`):
+// sorted keys, no whitespace, integers only (a float prints differently in Python).
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object")
+    return `{${Object.keys(value)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`)
+      .join(",")}}`;
+  if (typeof value === "number" && !Number.isInteger(value))
+    fail("compose carries a non-integer number");
+  return JSON.stringify(value);
+}
+
+function imageClusterCompose(text) {
+  let compose;
+  try {
+    compose = JSON.parse(text);
+  } catch {
+    fail("compose contract is not JSON");
+  }
+  for (const service of Object.values(compose?.services ?? {}))
+    if (service && typeof service === "object" && !Array.isArray(service))
+      for (const key of RUNTIME_ONLY_SERVICE_KEYS) delete service[key];
+  return canonicalJson(compose);
+}
+
+/** v2 (#3419): the image/cluster inputs — the compose without its runtime-only keys. */
 export function postgresSourceHash(files) {
-  return createHash("sha256")
-    .update(
-      JSON.stringify(
-        Object.keys(files)
-          .sort()
-          .map((p) => [p, createHash("sha256").update(files[p]).digest("hex")]),
-      ),
-    )
-    .digest("hex");
+  return sha256(
+    JSON.stringify(
+      Object.keys(files)
+        .sort()
+        .map((p) => [
+          p,
+          sha256(p === "compose.yml" ? imageClusterCompose(files[p]) : files[p]),
+        ]),
+    ),
+  );
+}
+
+/**
+ * #3419: box records written before v2. An entry says «a v1 record `v1` is the certified
+ * tree of `commit`, whose v2 is `v2`» (both recomputed from git in
+ * postgres-hash-migration.test.mjs); such a box migrates without a certificate when the
+ * target's v2 is `v2`. Its post-`data-up` checkpoint rewrites the record as v2, so an
+ * entry can go once no box holds a v1 record.
+ */
+export const POSTGRES_HASH_MIGRATIONS = Object.freeze([
+  Object.freeze({
+    commit: "09c152b26ae7d67f9715ee5e7cbebc1015430c08", // release-2026.10.27-2
+    v1: "e8656c8b6259847701dfae069a011ab878329bfc5b8adaa7724cd477318c0da4",
+    v2: "afdc275470cba5a66e87f6082763b4ab0b104468f2c3c4e7d14edf8ca313d835",
+  }),
+]);
+
+/** The v1 record a live box holds that the table maps onto `sourceHash` (v2), else null. */
+export function migratedRecordHash(live, sourceHash) {
+  if (live?.hashVersion === 2) return null;
+  const entry = POSTGRES_HASH_MIGRATIONS.find((e) => e.v1 === live?.sourceHash);
+  return entry && entry.v2 === sourceHash ? entry.v1 : null;
+}
+
+/** The box record as a v2 hash: a v2 record itself, a table v1 its entry's v2, else null. */
+function recordedSourceHash(live) {
+  if (live?.hashVersion === 2) return live.sourceHash;
+  return POSTGRES_HASH_MIGRATIONS.find((e) => e.v1 === live?.sourceHash)?.v2 ?? null;
 }
 
 export function postgresContract(files) {
@@ -400,7 +489,7 @@ export function assertPostgresEvidence({
       "source identity changed since preflight",
     );
   const changed =
-    sourceHash !== live.sourceHash ||
+    recordedSourceHash(live) !== sourceHash ||
     ["postgres", "pgbackrest"].some(
       (k) => live.targetImages?.[k]?.id !== live.images?.[k]?.id,
     );
@@ -489,8 +578,16 @@ export function postgresImageOverride(live) {
   return JSON.stringify({ services });
 }
 
-/** The checkpoint record (#3313: the stdin of ds-data-prod's `postgres-checkpoint`). */
-export function postgresStateRecord(live, sourceHash = live.sourceHash) {
+/**
+ * The checkpoint record (#3313: the stdin of ds-data-prod's `postgres-checkpoint`).
+ * With no `sourceHash` it rewrites the box's own record in its own version — the
+ * pre-ship checkpoint, which runs the entrypoint the PREVIOUS release installed: a v1
+ * record stays v1 there, in the only shape that verb accepts (#3419). An explicit
+ * `sourceHash` is the target's v2, written after `install` put the v2-aware verb in place.
+ */
+export function postgresStateRecord(live, sourceHash) {
+  const v2 = sourceHash !== undefined || live.hashVersion === 2;
+  sourceHash ??= live.sourceHash;
   requireFact(
     /^[a-f0-9]{64}$/.test(sourceHash) &&
       /^\d{15,20}$/.test(live.source.systemId),
@@ -498,6 +595,7 @@ export function postgresStateRecord(live, sourceHash = live.sourceHash) {
   );
   return JSON.stringify({
     schema: 1,
+    ...(v2 ? { hashVersion: 2 } : {}),
     sourceHash,
     systemId: live.source.systemId,
     images: Object.fromEntries(

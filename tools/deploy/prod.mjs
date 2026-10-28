@@ -123,6 +123,7 @@ import {
   assertPostgresEvidence,
   certifiedTarget,
   guardedPostgresStep,
+  migratedRecordHash,
   postgresImageOverride,
   postgresProbeRequest,
   postgresStateRecord,
@@ -2162,12 +2163,20 @@ export async function preparePostgresDeployment(
   };
   // #3313: ds-data-prod's `postgres-probe` verb. `client` is the read-only operator
   // check's own audited data-prod client (postgres-artifact-check.mjs) — same verb.
-  const read = async () =>
+  const probe = async (sourceHash) =>
     JSON.parse(
       await (client ?? dataProd()).call(["postgres-probe"], {
-        input: JSON.stringify(postgresProbeRequest(probePlan)),
+        input: JSON.stringify(postgresProbeRequest({ ...probePlan, sourceHash })),
       }),
     );
+  // #3419: the box prefers its recorded images only for a request hash equal to its
+  // record, so a v1 record the migration table maps onto the target is read again
+  // with that v1 — the only request shape the previously installed verb accepts.
+  const read = async () => {
+    const live = await probe(plan.sourceHash);
+    const v1 = probePlan.preferRecordedImages && migratedRecordHash(live, plan.sourceHash);
+    return v1 ? probe(v1) : live;
+  };
   let live = await read();
   const expected = assertPostgresEvidence({ ...plan, live, certificate });
   return {

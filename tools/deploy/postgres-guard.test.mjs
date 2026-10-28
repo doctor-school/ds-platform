@@ -56,6 +56,7 @@ function fixture() {
       activationPgdata: source.pgdata,
       activationMajor: source.major,
       images: { postgres: image, pgbackrest: { ...image } },
+      hashVersion: 2,
       sourceHash: "b".repeat(64),
       targetImages: { postgres: image, pgbackrest: { ...image } },
     },

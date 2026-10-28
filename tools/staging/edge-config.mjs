@@ -135,9 +135,16 @@ echo 'runtime-config-install=done ${files.join(" + ")}'
 }
 
 /**
- * `caddy validate` of the compose dir's Caddyfile inside the RUNNING caddy container:
- * its environment carries the stage.env values the Caddyfile's `{$VAR}` placeholders
- * read. The candidate goes in on stdin to a temp path; the live config is untouched.
+ * `caddy validate` of the compose dir's Caddyfile inside the RUNNING caddy container
+ * (the exact binary and modules that will serve it). The candidate goes in on stdin to
+ * a temp path; the live config is untouched.
+ *
+ * The converge log is public, and a validator error can echo the adapted config, so the
+ * container's real stage.env values never reach the validator: every variable the
+ * Caddyfile reads (`{$X}` / `{env.X}`, derived from the file itself) is overridden with
+ * a syntactically valid stand-in — a bcrypt hash of a throwaway password for a `*HASH*`
+ * variable, a reserved test domain for a `*DOMAIN*` one — as tools/ci/validate-caddyfiles.sh
+ * does. Only the verdict and the validator's error lines are printed, never its raw output.
  */
 export function caddyValidateInContainerScript(target) {
   return `set -u
@@ -149,14 +156,26 @@ if [ -z "$container_id" ]; then
   exit 0
 fi
 image=$(sudo docker inspect -f '{{.Config.Image}}' "$container_id" 2>/dev/null || true)
+names=$(grep -oE '[{]([$]|env[.])[A-Za-z_][A-Za-z0-9_]*' Caddyfile | sed -E 's/^[{]([$]|env[.])//' | sort -u)
+stand_ins=()
+for name in $names; do
+  case "$name" in
+    *HASH*)
+      hash=$(sudo docker exec "$container_id" caddy hash-password --plaintext ds-validate 2>/dev/null || true)
+      [ -n "$hash" ] || { echo 'caddy-validate=NO-STAND-IN-HASH'; exit 0; }
+      stand_ins+=(-e "$name=$hash") ;;
+    *DOMAIN*) stand_ins+=(-e "$name=stage.example.test") ;;
+    *) stand_ins+=(-e "$name=ds-validate-stand-in") ;;
+  esac
+done
 log=$(mktemp)
-if sudo docker exec -i "$container_id" sh -c 'f=/tmp/Caddyfile.ds-validate; cat >"$f" && caddy validate --adapter caddyfile --config "$f"; rc=$?; rm -f "$f"; exit $rc' \\
+if sudo docker exec -i \${stand_ins[@]+"\${stand_ins[@]}"} "$container_id" sh -c 'f=/tmp/Caddyfile.ds-validate; cat >"$f" && caddy validate --adapter caddyfile --config "$f"; rc=$?; rm -f "$f"; exit $rc' \\
      <Caddyfile >"$log" 2>&1; then
   echo "caddy-validate=VALID \${image:-unknown}"
 else
   echo "caddy-validate=INVALID \${image:-unknown}"
-  echo '---- caddy validate (last 40) ----'
-  tail -n 40 "$log"
+  echo '---- caddy validate (error lines only) ----'
+  grep -iE '(^|[^a-z])error' "$log" | tail -n 5 | cut -c1-400
 fi
 rm -f "$log"
 `;

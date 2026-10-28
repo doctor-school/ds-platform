@@ -108,9 +108,17 @@ test("2920: the stg-infra target finds containers by compose labels and restarts
   assert.match(restart, /State\.Health/);
 });
 
-/** A fake `sudo` + `docker` on PATH; `docker` answers from `view/<container>`. */
+const REAL_SECRET = "REAL-STAGE-SECRET-2920";
+
+/**
+ * A fake `sudo` + `docker` on PATH. `docker exec` models the running caddy: its env
+ * holds the real stage.env values (REAL_SECRET) unless an `-e NAME=VALUE` overrides
+ * them, and an invalid run dumps every env value it sees plus one error line, as an
+ * adapted-config error can.
+ */
 function fakeBox(dir, { validates = true } = {}) {
   const bin = join(dir, "bin");
+  const d = dir.replaceAll("\\", "/");
   mkdirSync(bin, { recursive: true });
   writeFileSync(join(bin, "sudo"), '#!/usr/bin/env bash\nexec "$@"\n');
   writeFileSync(
@@ -119,7 +127,22 @@ function fakeBox(dir, { validates = true } = {}) {
 case "$1" in
   ps) echo "id-caddy" ;;
   inspect) echo "caddy:2.11.4-alpine" ;;
-  exec) cat > "${dir.replaceAll("\\", "/")}/validated"; ${validates ? "echo 'Valid configuration'" : "echo 'Error: bad'; exit 1"} ;;
+  exec)
+    shift
+    declare -A env=([STAGE_GATE_TOKEN]=${REAL_SECRET} [STAGE_BASIC_AUTH_HASH]=${REAL_SECRET} [STAGE_BASE_DOMAIN]=${REAL_SECRET})
+    stdin=0
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        -i) stdin=1; shift ;;
+        -e) env[\${2%%=*}]=\${2#*=}; shift 2 ;;
+        *) break ;;
+      esac
+    done
+    shift # container id
+    if [ "$1" = caddy ] && [ "$2" = hash-password ]; then echo '$2a$14$standinhash'; exit 0; fi
+    [ "$stdin" = 1 ] && cat > "${d}/validated"
+    for k in "\${!env[@]}"; do echo "$k=\${env[$k]}" >> "${d}/seen-env"; done
+    ${validates ? "echo 'Valid configuration'" : `echo "adapted: {\\"token\\":\\"\${env[STAGE_GATE_TOKEN]}\\"}"; echo "Error: adapting config: bad directive near \${env[STAGE_GATE_TOKEN]}"; exit 1`} ;;
   *) exit 1 ;;
 esac
 `,
@@ -170,23 +193,44 @@ test("2920: the copy installs each mounted file byte-exact from the converged tr
   }
 });
 
-test("2920: the Caddyfile is validated inside the running caddy container, with its real env", () => {
+test("2920: the Caddyfile is validated inside the running caddy container, on stand-ins for every variable it reads", () => {
   const script = caddyValidateInContainerScript(TARGET);
-  assert.match(script, /sudo docker exec -i "\$container_id"/);
+  assert.match(script, /sudo docker exec -i \$\{stand_ins/);
   assert.match(script, /caddy validate --adapter caddyfile/);
-  assert.doesNotMatch(script, /docker run/);
+  assert.doesNotMatch(script, /docker run|tail -n 40/);
+  const caddyfile = readFileSync(
+    join(
+      import.meta.dirname,
+      "..",
+      "..",
+      "infra",
+      "deploy",
+      "compose",
+      "stg-infra",
+      "Caddyfile",
+    ),
+    "utf8",
+  );
   for (const validates of [true, false]) {
     const dir = mkdtempSync(join(tmpdir(), "ds-2920-"));
     try {
-      writeFileSync(join(dir, "Caddyfile"), "candidate\n");
+      writeFileSync(join(dir, "Caddyfile"), caddyfile);
       const target = { ...TARGET, composeDir: dir.replaceAll("\\", "/") };
-      const out = bash(
+      const run = bash(
         caddyValidateInContainerScript(target),
         fakeBox(dir, { validates }),
-      ).stdout;
-      assert.equal(readFileSync(join(dir, "validated"), "utf8"), "candidate\n");
+      );
+      assert.equal(run.status, 0, run.stderr);
+      assert.equal(readFileSync(join(dir, "validated"), "utf8"), caddyfile);
+      // Every variable the real Caddyfile reads reached the validator as a stand-in.
+      const seen = readFileSync(join(dir, "seen-env"), "utf8");
+      assert.match(seen, /STAGE_BASIC_AUTH_HASH=\$2a\$14\$standinhash/);
+      assert.match(seen, /STAGE_BASE_DOMAIN=stage\.example\.test/);
+      assert.match(seen, /STAGE_GATE_TOKEN=ds-validate-stand-in/);
+      assert.match(seen, /STAGE_BASIC_AUTH_USER=ds-validate-stand-in/);
+      assert.doesNotMatch(seen, new RegExp(REAL_SECRET));
       assert.match(
-        out,
+        run.stdout,
         validates
           ? /caddy-validate=VALID caddy:2\.11\.4-alpine/
           : /caddy-validate=INVALID/,
@@ -194,6 +238,31 @@ test("2920: the Caddyfile is validated inside the running caddy container, with 
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  }
+});
+
+test("2920: a validator output that would echo a secret never reaches the printed log", () => {
+  const dir = mkdtempSync(join(tmpdir(), "ds-2920-"));
+  try {
+    writeFileSync(
+      join(dir, "Caddyfile"),
+      "x {\n\tbasic_auth { {$STAGE_BASIC_AUTH_USER} {$STAGE_BASIC_AUTH_HASH} }\n\theader X {env.STAGE_GATE_TOKEN}\n}\n",
+    );
+    const target = { ...TARGET, composeDir: dir.replaceAll("\\", "/") };
+    const run = bash(
+      caddyValidateInContainerScript(target),
+      fakeBox(dir, { validates: false }),
+    );
+    assert.match(run.stdout, /caddy-validate=INVALID/);
+    // Only the error line is printed, and it carries the stand-in, never the real value.
+    assert.match(
+      run.stdout,
+      /Error: adapting config: bad directive near ds-validate-stand-in/,
+    );
+    assert.doesNotMatch(run.stdout, /adapted:/);
+    assert.doesNotMatch(run.stdout + run.stderr, new RegExp(REAL_SECRET));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 

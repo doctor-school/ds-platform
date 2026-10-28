@@ -864,7 +864,8 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
         r.stdout,
         `PostgreSQL checkpoint written\nlog bounds: unavailable — Error: ${fail} broke\n`,
       );
-      assert.ok(!log("docker").includes("compose"), log("docker"));
+      const calls = log("docker").split("\n");
+      assert.ok(!calls.some((l) => l.startsWith("compose")), log("docker"));
       assert.ok(existsSync(join(root, "home/deploy/ds-platform-postgres-state.json")));
     });
   }

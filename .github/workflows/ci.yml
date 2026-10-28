@@ -942,6 +942,10 @@ jobs:
             --remap '^https://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/([^#]+)(#.*)?$ https://raw.githubusercontent.com/$1/$2/$3/$4'
             ${{ steps.md-changed.outputs.files }}
           fail: true
+          # A changed file that carries no links has nothing to verify — that is
+          # not a failure (lychee-action's `failIfEmpty` defaults to true and
+          # would red a PR whose changed .md files simply contain no links).
+          failIfEmpty: false
 
   # ─── WARN light guards ────────────────────────────────────────────────
   # Batch of every light-profile guard whose finding must NOT block a merge.

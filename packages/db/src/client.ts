@@ -15,6 +15,9 @@ export interface CreateDrizzleOptions {
    * startup handshake. `pg`'s own default is 0 (wait forever), which turned a
    * boot against an unresponsive data box into an indefinite hang (#3421).
    * `statement_timeout` is enforced server-side and cannot bound this phase.
+   * pg-pool applies the same bound to waiting for a free pooled client: with
+   * all `max` clients busy, a checkout that waits longer than this fails
+   * («timeout exceeded when trying to connect») instead of queueing forever.
    */
   connectionTimeoutMillis?: number;
 }

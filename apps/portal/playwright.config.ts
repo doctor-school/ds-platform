@@ -93,6 +93,7 @@ const GOLDEN_ACCOUNT_SPECS = [
   /[\\/]return-to-origin\.spec\.ts$/,
   /[\\/]room-chat\.spec\.ts$/,
   /[\\/]room-presence-count\.spec\.ts$/,
+  /[\\/]room-presence-visibility\.spec\.ts$/,
   /[\\/]room\.spec\.ts$/,
   /[\\/]theme\.e2e\.spec\.ts$/,
 ];

@@ -209,6 +209,18 @@ export const LIVE_TIERS = Object.freeze([
           "E2E_ROOM_HEARTBEAT_SECONDS",
         ],
       },
+      {
+        // #2911: 006 EARS-19 — a doctor and a staff session in one live room
+        // whose presence-count setting is off.
+        file: "e2e/room-presence-visibility.spec.ts",
+        requires: [
+          URL_ACADEMY,
+          ...ACCOUNT,
+          "E2E_STAFF_EMAIL",
+          "E2E_STAFF_PASSWORD",
+          "E2E_ROOM_HIDDEN_SLUG",
+        ],
+      },
     ],
   },
   {

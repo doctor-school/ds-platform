@@ -60,7 +60,7 @@
               <p style="margin:12px 0 0;font-size:14px;line-height:1.6;color:{{ inkMuted }}">{{ gateText }}</p>
               <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:24px">
                 <a href="auth.dc.html" style="font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 24px;text-decoration:none;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Войти / Регистрация</a>
-                <sc-if value="{{ full }}" hint-placeholder-val="{{ false }}"><button onClick="{{ gateReturn }}" style="font:inherit;font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:14px 24px;cursor:pointer;box-shadow:4px 4px 0 {{ shadowSm }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ shadowSm }}">Я вошёл — вернуться к заявке</button></sc-if>
+                <sc-if value="{{ full }}" hint-placeholder-val="{{ false }}"><button data-btn="secondary" onClick="{{ gateReturn }}" style="font:inherit;font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:14px 24px;cursor:pointer;box-shadow:4px 4px 0 {{ shadowSm }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ shadowSm }}">Я вошёл — вернуться к заявке</button></sc-if>
               </div>
               <sc-if value="{{ full }}" hint-placeholder-val="{{ false }}"><div style="margin-top:20px;padding-top:16px;border-top:2px solid {{ hairline }};font-size:12.5px;font-weight:700;color:{{ inkFaint }}">✓ Черновик заявки сохранён · тема «{{ draftTopic }}»</div></sc-if>
             </div>
@@ -133,7 +133,7 @@
                     <button onClick="{{ cbPd.onClick }}" aria-pressed="{{ cbPd.on }}" data-check style="{{ cbPd.boxStyle }}">{{ cbPd.mark }}</button>
                     <div style="flex:1;min-width:0">
                       <div style="font-size:13.5px;font-weight:700;color:{{ ink }};line-height:1.4">Согласие на обработку персональных данных из заявки</div>
-                      <div style="font-size:12px;line-height:1.5;color:{{ inkFaint }};margin-top:4px">Данные нужны, чтобы разобрать заявку и связаться с вами. <a href="academy-docs.dc.html" style="color:{{ accent }}">Политика персональных данных и согласия</a></div>
+                      <div style="font-size:12px;line-height:1.5;color:{{ inkFaint }};margin-top:4px">Данные нужны, чтобы разобрать заявку и связаться с вами. <a data-link href="academy-docs.dc.html" style="color:{{ accent }}">Политика персональных данных и согласия</a></div>
                       <div style="{{ cbPd.errStyle }}">⚠ Отметьте согласие — без него заявку не отправить.</div>
                     </div>
                   </div>

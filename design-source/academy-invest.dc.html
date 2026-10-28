@@ -220,8 +220,8 @@
             <div style="min-width:240px;flex:1">
               <div style="font-size:22px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Обсудить проект — оставить заявку</div>
               <p style="margin:10px 0 0;max-width:420px;font-size:14px;line-height:1.65;color:{{ inkMuted }}">Команда Академии ответит и соберёт коммерческое предложение.</p>
-              <sc-if value="{{ full }}" hint-placeholder-val="{{ false }}"><div style="margin-top:18px;font-size:13px;font-weight:700;color:{{ inkFaint }}">Кто уже инвестирует — <a href="academy-partners.dc.html" style="color:{{ accent }}">Партнёры</a> · во что — <a href="academy-projects.dc.html" style="color:{{ accent }}">Проекты</a> · <a href="#" title="#a-docs — рисуется отдельным экраном" style="color:{{ accent }}">Документы и лицензия</a></div></sc-if>
-              <sc-if value="{{ slice1 }}" hint-placeholder-val="{{ true }}"><div style="margin-top:18px;font-size:13px;font-weight:700;color:{{ inkFaint }}">Во что инвестировать — <a href="academy-projects.dc.html" style="color:{{ accent }}">Проекты</a></div></sc-if>
+              <sc-if value="{{ full }}" hint-placeholder-val="{{ false }}"><div style="margin-top:18px;font-size:13px;font-weight:700;color:{{ inkFaint }}">Кто уже инвестирует — <a data-link href="academy-partners.dc.html" style="color:{{ accent }}">Партнёры</a> · во что — <a data-link href="academy-projects.dc.html" style="color:{{ accent }}">Проекты</a> · <a data-link href="#" title="#a-docs — рисуется отдельным экраном" style="color:{{ accent }}">Документы и лицензия</a></div></sc-if>
+              <sc-if value="{{ slice1 }}" hint-placeholder-val="{{ true }}"><div style="margin-top:18px;font-size:13px;font-weight:700;color:{{ inkFaint }}">Во что инвестировать — <a data-link href="academy-projects.dc.html" style="color:{{ accent }}">Проекты</a></div></sc-if>
             </div>
             <div style="flex:1.4;min-width:280px">
               <sc-if value="{{ formNotSent }}" hint-placeholder-val="{{ true }}">
@@ -251,7 +251,7 @@
                       <button onClick="{{ cbPd.onClick }}" aria-pressed="{{ cbPd.on }}" data-check style="{{ cbPd.boxStyle }}">{{ cbPd.mark }}</button>
                       <div style="flex:1;min-width:0">
                         <div style="font-size:13.5px;font-weight:700;color:{{ ink }};line-height:1.4">Согласие на обработку персональных данных из заявки</div>
-                        <div style="font-size:12px;line-height:1.5;color:{{ inkFaint }};margin-top:4px">Данные нужны, чтобы команда Академии связалась с вами по заявке. <a href="academy-docs.dc.html" style="color:{{ accent }}">Политика персональных данных и согласия</a></div>
+                        <div style="font-size:12px;line-height:1.5;color:{{ inkFaint }};margin-top:4px">Данные нужны, чтобы команда Академии связалась с вами по заявке. <a data-link href="academy-docs.dc.html" style="color:{{ accent }}">Политика персональных данных и согласия</a></div>
                         <div style="{{ cbPd.errStyle }}">⚠ Отметьте согласие — без него заявку не отправить.</div>
                       </div>
                     </div>

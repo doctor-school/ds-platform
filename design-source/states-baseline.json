@@ -2,7 +2,7 @@
   "version": 1,
   "canvases": {
     "academy-apply.dc.html": {
-      "untagged": 12,
+      "untagged": 11,
       "offToken": 6
     },
     "academy-docs.dc.html": {
@@ -26,7 +26,7 @@
       "offToken": 6
     },
     "academy-invest.dc.html": {
-      "untagged": 22,
+      "untagged": 19,
       "offToken": 17
     },
     "academy-investor-cabinet.dc.html": {

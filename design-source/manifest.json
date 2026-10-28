@@ -3,9 +3,9 @@
   "designSyncProject": "8cc2f39a-d58e-4491-b539-4337881ced4f",
   "files": {
     "academy-apply.dc.html": {
-      "sha256": "6fd1e1b2c875ed7715e8a27c912412520ac5b9076e6b8c13f7f3217d9d72c1ba",
-      "pulledSha256": "e8c65c12edbb1157fdad8c2faf55436af6cbb1d8b22b51d835e0b08c2b64bfb6",
-      "pulledAt": "2026-10-28T09:48:47.012Z",
+      "sha256": "335b1f38a9ad024d089c1a24a6fb5218d186ea91f3e04b3917a4836f4edffa5a",
+      "pulledSha256": "3c7988e8b3cb90d3a49ed0a62f71829d3ca97cfe21f46b1fbd2c353b6ccc700a",
+      "pulledAt": "2026-10-28T12:09:58.795Z",
       "remotePath": null
     },
     "academy-docs.dc.html": {
@@ -43,9 +43,9 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "academy-invest.dc.html": {
-      "sha256": "7e8b8ccf9eb67b4b13be9e8f2c037b386d28df5239cd807594b3ed80a0100649",
-      "pulledSha256": "ed30059256dd20ffef37006fd0e0e5e3136d15247605179708172f915be1caea",
-      "pulledAt": "2026-10-28T09:48:47.012Z",
+      "sha256": "538470cfea7e0aca3ee8b81827a676bf8a7e54f3857271561c4dd5181f9ecfad",
+      "pulledSha256": "7b2a19fa1891df57d90082cc4d1a714e82e92e55ff9a8dcdda0ea0c9fd7038ca",
+      "pulledAt": "2026-10-28T12:09:58.795Z",
       "remotePath": null
     },
     "academy-investor-cabinet.dc.html": {

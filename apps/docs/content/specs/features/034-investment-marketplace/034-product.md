@@ -36,7 +36,7 @@ Storefront affiliation (ADR-0016 §8): the page — `академия`; requests
 
 **Representative leaves a request (US-1…US-7):**
 
-1. Visitor taps «Как это работает» on the home → lands on the investor page: «Как это работает» (three steps), «Что получает инвестор», «Организация, не персона», «Как оформляются отношения», «Следующий шаг».
+1. Visitor taps «Как это работает» on the home → lands on the investor page: «Как это работает» (three steps), «Что получает инвестор», «Как оформляются отношения», «Следующий шаг». «Организация, не персона» belongs to the investor cabinet and is not on the slice-1 page. _(lead decision 2026-10-28; owner sees it at Stage A)_
 2. Visitor taps «Обсудить проект — оставить заявку» → the form in «Следующий шаг» (canvas default: request channel variant А, form on the page; no messenger contact on the page). _(lead decision 2026-10-28; owner sees it at Stage A)_
 3. Visitor fills organisation, full name, work email (and optionally role, phone), describes the task, ticks the consent, taps «Отправить заявку».
 4. The request is stored in the 033 queue, the team is notified and the representative receives the «заявка получена» email; the form is replaced by «Запрос отправлен» with «Отправить ещё одну заявку».
@@ -48,7 +48,7 @@ Storefront affiliation (ADR-0016 §8): the page — `академия`; requests
 ## Product acceptance criteria
 
 - `academy.doctor.school` serves a real investor page; the home «Инвесторам / Партнёрам → Как это работает» entries lead to it.
-- The page presents the model, what the investor gets, the organisation-not-person principle and how the relationship is formalised; it promises no on-platform payment.
+- The page presents the model, what the investor gets and how the relationship is formalised; it promises no on-platform payment.
 - The «Обсудить проект» form needs no account; organisation, full name and work email are required; validation messages say what to fix and keep other input; a server failure keeps input and offers retry.
 - The public no-account form is protected against bots and floods with the platform's existing bot-protection posture, as other public forms are.
 - The request cannot be sent without the explicit personal-data consent; the consent is recorded with the request.
@@ -65,7 +65,7 @@ Later slices of 034, each with its technical dependency:
 - **Marketplace of investment products** — cards (school / course / expert application / expert) with potential audience, market capacity and remaining places; «хочу инвестировать в X» pre-filling the request — `blocked_by` **032** (cards read after the partner catalog, and both pages share the organisation model) and **036** (audience, capacity and remaining places are ledger figures).
 - **Automatic commercial offer** («Скачать КП», canvas button variant Б) — later slice, after the marketplace.
 - Linking a request to an organisation in the 032 registry, and «Кто уже инвестирует — Партнёры» — after the 032 partner catalog is public. _(agent-proposed — UNCONFIRMED.)_
-- The investor organisation cabinet («Вы вошли как сотрудник организации-инвестора») — feature 035.
+- The investor organisation cabinet («Вы вошли как сотрудник организации-инвестора») and the page block «Организация, не персона» that leads to it — feature 035.
 - Any payment on the platform (CON-16, OWD-3).
 - The queue itself — feature 033 slice 1; this slice is `blocked_by` it (requests go into the shared application queue that 033 owns).
 
@@ -75,7 +75,7 @@ _None for slice 1._ The entry naming, the contact channel, the confirmation emai
 
 ## Approved-mockup reference
 
-Empty — filled at Stage A (`author-design-mockup`). Input: [`design-source/academy-invest.dc.html`](../../../../../../design-source/academy-invest.dc.html) (R4 canvas: how it works, what the investor gets, organisation, relationship, next-step form with sent state; marketplace states belong to the later slice) and the «Инвесторам» / «Партнёрам» entries of [`design-source/academy-home.dc.html`](../../../../../../design-source/academy-home.dc.html).
+Empty — filled at Stage A (`author-design-mockup`). Input: [`design-source/academy-invest.dc.html`](../../../../../../design-source/academy-invest.dc.html) (R4 canvas: how it works, what the investor gets, organisation, relationship, next-step form with sent state; marketplace states belong to the later slice; the switch «Объём» = «срез 1», the default, shows this slice — no marketplace, no «Организация, не персона», the consent row in the form, links only to «Проекты») and the «Инвесторам» / «Партнёрам» entries of [`design-source/academy-home.dc.html`](../../../../../../design-source/academy-home.dc.html).
 
 ## Prior art
 

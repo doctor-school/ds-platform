@@ -49,7 +49,7 @@ This PRD owns the queue as a capability; 034 adds its own kind of request to it.
 
 **Expert applies (US-1…US-8):**
 
-1. Visitor taps «Подать заявку» on the home → lands on the «Подать заявку» page: what you can do, the path of the application, the form.
+1. Visitor taps «Подать заявку» on the home → lands on the «Подать заявку» page: the form, the path of the application («Что будет дальше»: an Academy administrator reviews the application and contacts the expert, then programme, production, medical expertise, publication), the author terms as text, and «Пока не готовы?» with links to projects and experts. The slice-1 page names no producer and shows no growth path. _(lead decision 2026-10-28; owner sees it at Stage A)_
 2. Not signed in → the form area shows the account gate («Заявка отправляется под той же учётной записью, что у врача») with «Войти / Регистрация»; after sign-in or registration (003 / 021) the visitor returns to this page with the form open.
 3. Signed in → the form shows «Отправите как <name · email>»; the expert fills topic, specialty, format, about, ticks the consent and taps «Отправить заявку».
 4. The application is stored in the queue, the team is notified and the applicant receives the «заявка получена» email; the page shows the confirmation state with links to projects and experts and «Отправить ещё одну заявку — про другой проект».
@@ -83,7 +83,8 @@ Later slices of 033, each with its technical dependency:
 - **Producer routing** — the administrator assigns a producer, the producer decides — `blocked_by` **040** (production route: nobody to assign without it).
 - **Draft that survives sign-in** and the guest filling the form first — later slice (functional map row 033); also `blocked_by` **031** (the application leans on the catalogues as social proof and on the expert ↔ account link).
 - **Clinical case field** (REQ-141) — later slice, together with the methodologist route of **040**.
-- **Growth path of the expert on the page** (REQ-131) and **author terms** (smart-contract accruals) as live data — `blocked_by` **031** (growth path) and **036** (accruals); in slice 1 the page may describe them only as text content. _(agent-proposed — UNCONFIRMED.)_
+- **Growth path of the expert on the page** (REQ-131, canvas variants А/Б/В) — later slice, `blocked_by` **031**; the slice-1 page does not show it. **Author terms** (smart-contract accruals) as live data — `blocked_by` **036**; in slice 1 the page shows them only as the text block «Условия автора». _(lead decision 2026-10-28; owner sees it at Stage A)_
+- **The producer as the expert's single contact** (REQ-142, the canvas «Общаться вы будете с одним человеком — продюсером») — with producer routing, `blocked_by` **040**.
 - The applicant's own «my applications» status view in the cabinet, and emails to the applicant beyond the «заявка получена» email (for example on a status change). _(agent-proposed — UNCONFIRMED.)_
 - Roles narrower than `platform_admin` for working the queue — feature 039.
 - The investor page and its form — feature 034 (it only adds its request kind to this queue).
@@ -94,7 +95,7 @@ _None for slice 1._ Retention, the confirmation email, the slice-1 field set and
 
 ## Approved-mockup reference
 
-Empty — filled at Stage A (`author-design-mockup`). Input: [`design-source/academy-apply.dc.html`](../../../../../../design-source/academy-apply.dc.html) (R4 canvas: form, account gate, sent confirmation, path of application, growth path variants, clinical-case switch) and the «Экспертам» entries of [`design-source/academy-home.dc.html`](../../../../../../design-source/academy-home.dc.html). The admin queue screens have no canvas yet.
+Empty — filled at Stage A (`author-design-mockup`). Input: [`design-source/academy-apply.dc.html`](../../../../../../design-source/academy-apply.dc.html) (R4 canvas: form, account gate, sent confirmation, path of application, growth path variants, clinical-case switch; the switch «Объём» = «срез 1», the default, shows this slice — no clinical case, no growth path, no draft, the consent row, the guest sees the account gate in place of the form) and the «Экспертам» entries of [`design-source/academy-home.dc.html`](../../../../../../design-source/academy-home.dc.html). The admin queue screens have no canvas yet.
 
 ## Prior art
 

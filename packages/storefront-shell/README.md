@@ -73,9 +73,11 @@ out 4px taller on one of them.
 
 On an event page the guest link carries that page as a LAND-ONLY return (#2487,
 017 / 014 amendments 2026-09-30): a small client half (`GuestLoginLink`) reads
-`usePathname` and asks `@ds/schemas` `formatLandOnlyReturnTarget` for the value —
-the event page (`/events/<slug>`, `/webinars/<slug>`) as the return whitelist
-reconstructs it, plus the fixed `?intent=land` marker. After sign-in the visitor
+`usePathname` plus the page's `mode` search param and asks `@ds/schemas`
+`formatLandOnlyReturnTarget` for the value — the event page (`/events/<slug>`,
+`/webinars/<slug>`) as the return whitelist reconstructs it, its hybrid tab
+(`?mode=online|offline`, 020 LD-4; any other value or param is dropped, #3308),
+plus the fixed `?intent=land` marker. After sign-in the visitor
 is back on the page and is NOT registered; registration stays the page's own
 button, whose bare-page return still means «register me». Home, feeds, the room
 and the auth doors are no event page and keep the bare route, so the door lands

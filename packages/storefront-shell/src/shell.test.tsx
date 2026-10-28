@@ -29,6 +29,7 @@ let pathname = "/";
 const usePathnameSpy = vi.fn(() => pathname);
 vi.mock("next/navigation", () => ({
   usePathname: () => usePathnameSpy(),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 import {

@@ -33,17 +33,26 @@ export function postgresSourceHashV1(files) {
  * absent from this list stays hashed, so an unknown key fails safe (certificate required).
  * - logging: the json-file log bound (#3386) — container log rotation only.
  * - restart: the restart policy — when Docker restarts the same container.
- * - healthcheck: a readiness probe — reads the server, changes neither image nor data.
  * - depends_on: start ordering between the services of the project.
- * - ports: host publishing on the private VPC address — network exposure, not the cluster.
- * The box probe (postgres-artifact-probe.py RUNTIME_ONLY) holds the same list.
+ * - ports: host publishing on the private VPC address. Network exposure is a runtime
+ *   option of how the container is reached, not image or cluster identity (#3419).
+ * `healthcheck` stays hashed except its timing (RUNTIME_ONLY_HEALTHCHECK_KEYS): its
+ * `test` command runs inside the container with the data volume mounted.
+ * The box probe (postgres-artifact-probe.py RUNTIME_ONLY*) holds the same lists.
  */
 export const RUNTIME_ONLY_SERVICE_KEYS = Object.freeze([
   "logging",
   "restart",
-  "healthcheck",
   "depends_on",
   "ports",
+]);
+/** #3419: the healthcheck timing fields — when the probe runs, never what it runs. */
+export const RUNTIME_ONLY_HEALTHCHECK_KEYS = Object.freeze([
+  "interval",
+  "timeout",
+  "retries",
+  "start_period",
+  "start_interval",
 ]);
 
 // One canonical form, computed identically by the box probe (`canonical_compose`):
@@ -68,8 +77,12 @@ function imageClusterCompose(text) {
     fail("compose contract is not JSON");
   }
   for (const service of Object.values(compose?.services ?? {}))
-    if (service && typeof service === "object" && !Array.isArray(service))
+    if (service && typeof service === "object" && !Array.isArray(service)) {
       for (const key of RUNTIME_ONLY_SERVICE_KEYS) delete service[key];
+      const check = service.healthcheck;
+      if (check && typeof check === "object" && !Array.isArray(check))
+        for (const key of RUNTIME_ONLY_HEALTHCHECK_KEYS) delete check[key];
+    }
   return canonicalJson(compose);
 }
 
@@ -100,7 +113,7 @@ export const POSTGRES_HASH_MIGRATIONS = Object.freeze([
   Object.freeze({
     commit: "09c152b26ae7d67f9715ee5e7cbebc1015430c08", // release-2026.10.27-2
     v1: "e8656c8b6259847701dfae069a011ab878329bfc5b8adaa7724cd477318c0da4",
-    v2: "afdc275470cba5a66e87f6082763b4ab0b104468f2c3c4e7d14edf8ca313d835",
+    v2: "537a33d8de0890dcfd724ebd90184d52d3ee69f9588bb824bd71fee9d42dd271",
   }),
 ]);
 

@@ -674,8 +674,9 @@ delete or hand-edit the record to clear a refusal.
 Changed data build/configuration requires a generated same-major artifact
 certificate. The source hash (v2, #3419) covers the image/cluster inputs only: the
 committed data compose with the runtime-only service keys `logging`, `restart`,
-`healthcheck`, `depends_on` and `ports` removed (`RUNTIME_ONLY_SERVICE_KEYS`, each
-justified there; any other key stays hashed, so an unknown one fails safe), in one
+`depends_on` and `ports` and the healthcheck timing fields removed
+(`RUNTIME_ONLY_SERVICE_KEYS` / `RUNTIME_ONLY_HEALTHCHECK_KEYS`, each justified there;
+the healthcheck `test` command and any other key stay hashed, so an unknown one fails safe), in one
 canonical JSON form, plus the bytes of every file in its postgres/pgbackrest build
 contexts. A log bound or restart policy therefore moves no hash; an image, command,
 volume, environment or build-context change does. The box probe computes the same v2

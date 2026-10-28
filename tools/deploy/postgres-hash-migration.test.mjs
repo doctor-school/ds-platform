@@ -92,19 +92,44 @@ test("3419: each migration entry is the certified tree of its commit (v1 and v2 
 
 test("3419: v2 ignores the runtime-only service keys and nothing else", () => {
   const base = postgresSourceHash(head.files);
-  for (const key of [
-    "logging",
-    "restart",
-    "healthcheck",
-    "depends_on",
-    "ports",
-  ]) {
+  for (const key of ["logging", "restart", "depends_on", "ports"]) {
     for (const service of ["postgres", "redis", "pgbackrest"]) {
       const moved = editCompose(head.files, (c) => {
         c.services[service][key] = { changed: true };
       });
       assert.equal(postgresSourceHash(moved), base, `${service}.${key}`);
     }
+  }
+  // healthcheck: only its timing is runtime; its command runs inside the container
+  // with the data volume mounted, so `test` stays an input.
+  for (const key of [
+    "interval",
+    "timeout",
+    "retries",
+    "start_period",
+    "start_interval",
+  ]) {
+    for (const service of ["postgres", "redis"]) {
+      const moved = editCompose(head.files, (c) => {
+        c.services[service].healthcheck[key] = key === "retries" ? 99 : "99s";
+      });
+      assert.equal(
+        postgresSourceHash(moved),
+        base,
+        `${service}.healthcheck.${key}`,
+      );
+    }
+  }
+  for (const service of ["postgres", "redis"]) {
+    assert.notEqual(
+      postgresSourceHash(
+        editCompose(head.files, (c) => {
+          c.services[service].healthcheck.test = ["CMD", "true"];
+        }),
+      ),
+      base,
+      `${service}.healthcheck.test`,
+    );
   }
   for (const edit of [
     (c) => (c.services.postgres.image = "ds-postgres:other"),
@@ -351,6 +376,7 @@ test(
           c.services.postgres.environment.NOTE =
             'é "quoted" \\ tab\t line\n \u0001 ✓';
           c.services.postgres.healthcheck.retries = 9;
+          c.services.redis.healthcheck.test = ["CMD", "true"];
         }),
       ];
       for (const files of variants) {

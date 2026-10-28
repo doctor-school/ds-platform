@@ -7,9 +7,11 @@ import re
 import subprocess
 import sys
 
-# The service keys removed before the compose is hashed (v2, #3419) — the same list
-# as RUNTIME_ONLY_SERVICE_KEYS in tools/deploy/postgres-guard.mjs, which says why.
-RUNTIME_ONLY = ("logging", "restart", "healthcheck", "depends_on", "ports")
+# The service keys removed before the compose is hashed (v2, #3419) — the same lists
+# as RUNTIME_ONLY_SERVICE_KEYS / RUNTIME_ONLY_HEALTHCHECK_KEYS in
+# tools/deploy/postgres-guard.mjs, which says why.
+RUNTIME_ONLY = ("logging", "restart", "depends_on", "ports")
+RUNTIME_ONLY_HEALTHCHECK = ("interval", "timeout", "retries", "start_period", "start_interval")
 
 
 def canonical_compose(value):
@@ -36,6 +38,10 @@ def source_hash_v2(root, paths):
                 if isinstance(service, dict):
                     for key in RUNTIME_ONLY:
                         service.pop(key, None)
+                    check = service.get("healthcheck")
+                    if isinstance(check, dict):
+                        for key in RUNTIME_ONLY_HEALTHCHECK:
+                            check.pop(key, None)
             data = canonical_compose(compose).encode()
         return hashlib.sha256(data).hexdigest()
     hashes = [[p, digest(p)] for p in paths]

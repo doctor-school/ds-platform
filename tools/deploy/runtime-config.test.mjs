@@ -611,3 +611,58 @@ test("3274: both rollback paths read the target's configs from the target commit
   assert.match(helper, /if \(LOCAL_TREE\) return \[file, readFileSync\(join\(LOCAL_TREE/);
   assert.match(helper, /spawnSync\("git", \["show", `\$\{sha\}:\$\{path\}`\]/);
 });
+
+// #2920: the mechanism is one module, parameterized by its target; the stage `main`
+// converge drives it for the stg-infra compose (postgres + caddy), prod for api-prod.
+test("2920: a target's own mounts and container lookup drive every generated script", async () => {
+  const lib = await import("./lib/runtime-config.mjs");
+  const target = {
+    composeDir: "/srv/x/stg-infra",
+    mounts: [
+      { service: "postgres", file: "postgres/postgresql.conf", mounted: "/etc/postgresql/postgresql.conf" },
+      { service: "caddy", file: "Caddyfile", mounted: "/etc/caddy/Caddyfile" },
+    ],
+    backupDir: "/var/lib/x/previous",
+    containerLookup: 'lookup "$service"',
+    restartScript: (services) => `restart ${services.join(" ")}\n`,
+  };
+  const compare = lib.runtimeConfigComparisonScript(target);
+  assert.match(compare, /container_id=\$\(lookup "\$service"\)/);
+  assert.match(compare, /mounted_file_matches postgres postgres\/postgresql\.conf \/etc\/postgresql\/postgresql\.conf/);
+  assert.doesNotMatch(compare, /centrifugo|docker compose/);
+  assert.deepEqual(lib.runtimeConfigServicesToRestart("postgres=match\ncaddy=mismatch\n", target), ["caddy"]);
+  assert.equal(lib.runtimeConfigRestartScript(["caddy"], target), "restart caddy\n");
+  assert.throws(() => lib.runtimeConfigRestartScript(["centrifugo"], target), /known service names/);
+  const backup = lib.runtimeConfigBackupScript(SHA_2920, target);
+  assert.match(backup, /sudo mkdir -p "\$dir\/postgres" \|\| exit 1/);
+  assert.match(backup, /dir='\/var\/lib\/x\/previous'/);
+  assert.match(backup, /save caddy Caddyfile \/etc\/caddy\/Caddyfile/);
+  assert.match(lib.runtimeConfigRestoreScript(target), /'postgres\/postgresql\.conf\.ds-restore'/);
+});
+
+test("2920: a three-service target says «every», and the restore names its own services", async () => {
+  const lib = await import("./lib/runtime-config.mjs");
+  const target = {
+    composeDir: "/c",
+    mounts: [{ service: "caddy", file: "Caddyfile", mounted: "/etc/caddy/Caddyfile" }],
+    backupDir: "/b",
+    containerLookup: "true",
+    restartScript: (services) => `restart ${services.join(" ")}\n`,
+  };
+  const logs = [];
+  await lib.applyRuntimeConfigs({ target, compare: async () => "caddy=match\n", restart: async () => {}, log: (m) => logs.push(m) });
+  assert.deepEqual(logs, ["      every running mount already matches — no restart"]);
+  let compares = 0;
+  await assert.rejects(
+    lib.applyRuntimeConfigsOrRestore({
+      target,
+      compare: async () => (++compares <= 2 ? "caddy=mismatch\n" : "caddy=match\n"),
+      restart: async () => {},
+      restore: async () => "runtime-config-restore=restored (backup taken for x)",
+      log: () => {},
+    }),
+    /restored and caddy restarted onto them/,
+  );
+});
+
+const SHA_2920 = "0123456789abcdef0123456789abcdef01234567";

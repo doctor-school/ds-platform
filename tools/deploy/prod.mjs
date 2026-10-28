@@ -86,6 +86,7 @@ import {
   fetchDeployCiBoard,
 } from "./ci-gate.mjs";
 import { recordDeployment as recordDeploymentRecord } from "./deployment-record.mjs";
+import * as runtimeConfig from "./lib/runtime-config.mjs";
 import {
   REF_FLAG,
   hotfixPreflightVerdict,
@@ -715,66 +716,11 @@ sudo docker compose up -d --force-recreate
 }
 
 // `shipTree` replaces the remote tree, so single-file bind mounts stay pinned
-// to the pre-deploy inodes until their containers restart. Compare the shipped
-// host files with copies read through the RUNNING containers via `docker exec
-// cat` — `docker cp` on a single-file bind mount resolves to the HOST source
-// path and so always reads the shipped file (#2801). Both images ship `cat`.
-// A missing/unreadable comparison is conservatively stale. The post-restart
-// comparison is the fail-closed proof that the shipped bytes are really mounted.
-const RUNTIME_CONFIG_SERVICES = ["caddy", "centrifugo"];
-
-export function runtimeConfigComparisonScript() {
-  return `cd ${API_COMPOSE}
-mounted_file_matches() {
-  local service="$1" shipped_path="$2" mounted_path="$3"
-  local container_id mounted_copy result
-  container_id=$(sudo docker compose ps -q "$service")
-  [ -n "$container_id" ] || return 1
-  mounted_copy=$(mktemp)
-  if sudo docker exec "$container_id" cat "$mounted_path" >"$mounted_copy" 2>/dev/null \\
-     && sudo cmp -s "$shipped_path" "$mounted_copy"; then
-    result=0
-  else
-    result=1
-  fi
-  sudo rm -f "$mounted_copy"
-  return "$result"
-}
-if mounted_file_matches caddy Caddyfile /etc/caddy/Caddyfile; then
-  echo 'caddy=match'
-else
-  echo 'caddy=mismatch'
-fi
-if mounted_file_matches centrifugo centrifugo/config.json /centrifugo/config.json; then
-  echo 'centrifugo=match'
-else
-  echo 'centrifugo=mismatch'
-fi
-`;
-}
-
-export function runtimeConfigServicesToRestart(comparisonOutput) {
-  const matches = new Set(
-    comparisonOutput
-      .split(/\r?\n/)
-      .filter((line) => line.endsWith("=match"))
-      .map((line) => line.slice(0, -"=match".length)),
-  );
-  return RUNTIME_CONFIG_SERVICES.filter((service) => !matches.has(service));
-}
-
-export function runtimeConfigRestartScript(services) {
-  if (
-    services.length === 0 ||
-    services.some((service) => !RUNTIME_CONFIG_SERVICES.includes(service))
-  ) {
-    throw new Error("runtime config restart needs known service names");
-  }
-  return `cd ${API_COMPOSE}
-sudo docker compose restart ${services.join(" ")}
-`;
-}
-
+// to the pre-deploy inodes until their containers restart; the mechanism (compare
+// through the running containers, backup, restart only the stale, restore) is
+// lib/runtime-config.mjs, shared with the stage `main` converge (#2920). Both images
+// ship `cat`.
+//
 // #3274: a shipped Caddyfile that does not parse took the prod edge down (#3273).
 // The previous configs are kept outside the shipped tree (every ship replaces it),
 // the shipped Caddyfile is validated on its pinned image before any swap, and a
@@ -784,95 +730,48 @@ const RUNTIME_CONFIG_MOUNTS = [
   { service: "caddy", file: "Caddyfile", mounted: "/etc/caddy/Caddyfile" },
   { service: "centrifugo", file: "centrifugo/config.json", mounted: "/centrifugo/config.json" },
 ];
+const RUNTIME_CONFIG_SERVICES = RUNTIME_CONFIG_MOUNTS.map((m) => m.service);
 const API_COMPOSE_PATH = "infra/deploy/compose/api-prod";
 
-function assertFullSha(sha) {
-  if (!/^[0-9a-f]{40}$/.test(String(sha))) throw new Error(`runtime config backup needs a full SHA, got: ${sha}`);
+/** The api compose as a runtime-config target; `composeDir`/`backupDir` overridable. */
+function prodRuntimeConfigTarget({ composeDir = API_COMPOSE, backupDir = PREVIOUS_RUNTIME_CONFIG_DIR } = {}) {
+  return {
+    composeDir,
+    mounts: RUNTIME_CONFIG_MOUNTS,
+    backupDir,
+    containerLookup: 'sudo docker compose ps -q "$service"',
+    restartScript: (services) => `cd ${composeDir}
+sudo docker compose restart ${services.join(" ")}
+`,
+  };
+}
+const PROD_RUNTIME_CONFIG = prodRuntimeConfigTarget();
+
+export function runtimeConfigComparisonScript() {
+  return runtimeConfig.runtimeConfigComparisonScript(PROD_RUNTIME_CONFIG);
 }
 
-/**
- * The backup of the configs the running containers serve, taken for the release
- * (or rollback) of `target`. A re-entered run of the same target keeps the backup
- * its first entry took — by then the tree, or even the mounts, may already carry
- * the target's bytes. A new target retakes it through the running containers (the
- * bytes actually served, whatever tree an earlier failed run left on disk); only a
- * service whose container cannot be read falls back to the file on disk. A
- * rollback records its own key (`rollback-<sha>`): the backup a forward release of
- * that same SHA once took holds the configs from before it, not the running ones.
- */
-export function runtimeConfigBackupScript(
-  target,
-  { composeDir = API_COMPOSE, backupDir = PREVIOUS_RUNTIME_CONFIG_DIR, rollback = false } = {},
-) {
-  assertFullSha(target);
-  const key = rollback ? `rollback-${target}` : target;
-  return `set -u
-cd '${composeDir}' || exit 1
-dir='${backupDir}'
-recorded=$(sudo cat "$dir/for" 2>/dev/null || true)
-if [ "$recorded" = '${key}' ]; then
-  echo 'runtime-config-backup=kept ${key}'
-  exit 0
-fi
-# umask 077: the backup dir and its files are root 0700/0600 as they are created.
-umask 077
-sudo mkdir -p "$dir/centrifugo" || exit 1
-sudo rm -f "$dir/for"
-copy=$(mktemp)
-save() {
-  local service="$1" shipped_path="$2" mounted_path="$3" container_id source
-  container_id=$(sudo docker compose ps -q "$service" 2>/dev/null || true)
-  if [ -n "$container_id" ] && sudo docker exec "$container_id" cat "$mounted_path" >"$copy" 2>/dev/null; then
-    source=running
-  elif sudo cat "$shipped_path" >"$copy" 2>/dev/null; then
-    source=disk
-  else
-    echo "runtime-config-backup=FAILED $service"
-    sudo rm -f "$copy"
-    exit 1
-  fi
-  sudo cp "$copy" "$dir/$shipped_path" || exit 1
-  echo "$service=$source"
+export function runtimeConfigServicesToRestart(comparisonOutput) {
+  return runtimeConfig.runtimeConfigServicesToRestart(comparisonOutput, PROD_RUNTIME_CONFIG);
 }
-${RUNTIME_CONFIG_MOUNTS.map((m) => `save ${m.service} ${m.file} ${m.mounted}`).join("\n")}
-sudo rm -f "$copy"
-printf '%s\\n' '${key}' | sudo tee "$dir/for" >/dev/null || exit 1
-echo 'runtime-config-backup=taken ${key}'
-`;
+
+export function runtimeConfigRestartScript(services) {
+  return runtimeConfig.runtimeConfigRestartScript(services, PROD_RUNTIME_CONFIG);
+}
+
+/** The backup for the release (or rollback) of `target` — lib/runtime-config.mjs. */
+export function runtimeConfigBackupScript(target, { composeDir, backupDir, rollback = false } = {}) {
+  return runtimeConfig.runtimeConfigBackupScript(target, prodRuntimeConfigTarget({ composeDir, backupDir }), {
+    rollback,
+  });
 }
 
 /** Puts the backed-up configs back into the compose dir; prints its verdict line. */
-export function runtimeConfigRestoreScript({
-  composeDir = API_COMPOSE,
-  backupDir = PREVIOUS_RUNTIME_CONFIG_DIR,
-} = {}) {
-  return `set -u
-cd '${composeDir}' || exit 1
-dir='${backupDir}'
-recorded=$(sudo cat "$dir/for" 2>/dev/null || true)
-if [ -z "$recorded" ]; then
-  echo 'runtime-config-restore=NO-BACKUP'
-  exit 0
-fi
-${RUNTIME_CONFIG_MOUNTS.map(
-  (m) =>
-    `{ sudo cp "$dir/${m.file}" '${m.file}.ds-restore' && sudo chmod 0644 '${m.file}.ds-restore' && sudo mv -f '${m.file}.ds-restore' '${m.file}'; } || { echo 'runtime-config-restore=FAILED ${m.file}'; exit 0; }`,
-).join("\n")}
-echo "runtime-config-restore=restored (backup taken for $recorded)"
-`;
+export function runtimeConfigRestoreScript({ composeDir, backupDir } = {}) {
+  return runtimeConfig.runtimeConfigRestoreScript(prodRuntimeConfigTarget({ composeDir, backupDir }));
 }
 
-/** The verdict line of a backup or restore script: `{ ok, detail }`, fail-closed. */
-export function runtimeConfigStepVerdict(output, kind) {
-  const line = String(output ?? "")
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .find((l) => l.startsWith(`runtime-config-${kind}=`));
-  if (!line) return { ok: false, detail: `no runtime-config-${kind} verdict` };
-  const detail = line.slice(`runtime-config-${kind}=`.length);
-  const ok = kind === "backup" ? /^(kept|taken) /.test(detail) : detail.startsWith("restored ");
-  return { ok, detail };
-}
+export const { runtimeConfigStepVerdict, caddyValidateVerdict } = runtimeConfig;
 
 /**
  * `caddy validate` of the Caddyfile in the compose dir on the caddy image that
@@ -898,18 +797,6 @@ else
 fi
 rm -f "$log"
 `;
-}
-
-/** The verdict of `caddyValidateScript`: only an explicit VALID passes. */
-export function caddyValidateVerdict(output) {
-  const line = String(output ?? "")
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .find((l) => l.startsWith("caddy-validate="));
-  if (!line) return { ok: false, reason: "no caddy-validate verdict" };
-  const verdict = line.slice("caddy-validate=".length);
-  if (/^VALID \S+$/.test(verdict)) return { ok: true, image: verdict.slice("VALID ".length) };
-  return { ok: false, reason: `Caddyfile ${verdict}` };
 }
 
 /**
@@ -963,24 +850,8 @@ export async function validateRuntimeConfigs({
  * Writes the given runtime config files into the compose dir (the rollback's
  * target configs). Base64 keeps the bytes exact through the script transport.
  */
-export function runtimeConfigInstallScript(files, { composeDir = API_COMPOSE } = {}) {
-  const known = RUNTIME_CONFIG_MOUNTS.map((m) => m.file);
-  const names = Object.keys(files);
-  if (names.length !== known.length || names.some((name) => !known.includes(name))) {
-    throw new Error(`runtime config install needs exactly ${known.join(" + ")}`);
-  }
-  return `set -eu
-cd '${composeDir}'
-${known
-  .map(
-    (name) =>
-      `printf '%s' '${Buffer.from(files[name], "utf8").toString("base64")}' | base64 -d | sudo tee '${name}.ds-new' >/dev/null
-sudo chmod 0644 '${name}.ds-new'
-sudo mv -f '${name}.ds-new' '${name}'`,
-  )
-  .join("\n")}
-echo 'runtime-config-install=done'
-`;
+export function runtimeConfigInstallScript(files, { composeDir } = {}) {
+  return runtimeConfig.runtimeConfigInstallScript(files, prodRuntimeConfigTarget({ composeDir }));
 }
 
 /**
@@ -993,30 +864,7 @@ export async function applyRuntimeConfigsOrRestore({
   restore = () => sshCapture(API_PROD, runtimeConfigRestoreScript()),
   log = (message) => console.log(message),
 } = {}) {
-  try {
-    return await applyRuntimeConfigs({ compare, restart, log });
-  } catch (err) {
-    const restored = runtimeConfigStepVerdict(
-      await restore().catch((e) => `runtime-config-restore=FAILED ${e.message}`),
-      "restore",
-    );
-    let result;
-    if (!restored.ok) {
-      result = `the previous configs were NOT restored (${restored.detail})`;
-    } else {
-      try {
-        await restart(runtimeConfigRestartScript(RUNTIME_CONFIG_SERVICES));
-        const stale = runtimeConfigServicesToRestart(await compare());
-        result =
-          stale.length === 0
-            ? `the previous configs were restored and caddy + centrifugo restarted onto them — ${restored.detail}`
-            : `the previous configs were restored on disk but ${stale.join(", ")} still do(es) not mount them — ${restored.detail}`;
-      } catch (e) {
-        result = `the previous configs were restored on disk, but the restart onto them failed (${e.message}) — ${restored.detail}`;
-      }
-    }
-    throw new Error(`${err.message}; ${result}`, { cause: err });
-  }
+  return runtimeConfig.applyRuntimeConfigsOrRestore({ target: PROD_RUNTIME_CONFIG, compare, restart, restore, log });
 }
 
 /** Takes (or, on a re-entered run of `target`, keeps) the runtime config backup. */
@@ -1130,23 +978,7 @@ export async function applyRuntimeConfigs({
     sshScript(API_PROD, script, { label: "runtime config restart" }),
   log = (message) => console.log(message),
 } = {}) {
-  const beforeApply = await compare();
-  const servicesToRestart = runtimeConfigServicesToRestart(beforeApply);
-  if (servicesToRestart.length > 0) {
-    log(`      stale bind mount(s): ${servicesToRestart.join(", ")}`);
-    await restart(runtimeConfigRestartScript(servicesToRestart));
-  } else {
-    log("      both running mounts already match — no restart");
-  }
-
-  const afterApply = await compare();
-  const staleAfterApply = runtimeConfigServicesToRestart(afterApply);
-  if (staleAfterApply.length > 0) {
-    throw new Error(
-      `runtime config apply did not mount the shipped file(s): ${staleAfterApply.join(", ")}`,
-    );
-  }
-  return { restarted: servicesToRestart };
+  return runtimeConfig.applyRuntimeConfigs({ target: PROD_RUNTIME_CONFIG, compare, restart, log });
 }
 
 // --- #2605: the bot-protection test token never reaches production ---------

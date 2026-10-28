@@ -40,8 +40,15 @@ Everything here is Phase B: nothing in this file runs on a developer machine.
    systemctl is-active docker        # expected: active
    ```
 
-3. The repo is checked out on the box at `/srv/ds-platform` (the `main` tree the
-   slot script clones from).
+3. The repo is checked out on the box at `/srv/ds-platform`. The box runs the
+   stg-infra project from its compose dir, `/srv/ds-platform/infra/deploy/compose/stg-infra`,
+   and nothing refreshes that checkout as a whole — slots run from their own shipped
+   trees (`$HOME/ds-platform.slots/<slot>`), and the `infra/dev-stand/*` files the
+   compose mounts by `../` paths stay as they were checked out. The files the compose
+   mounts from its OWN dir (`./Caddyfile`, `./postgres/postgresql.conf` — the
+   inventory is read from the converged `compose.yml`) are owned by the stage `main`
+   converge: see [Edge config apply](#edge-config-apply). The SHA it last installed is
+   in `/srv/ds-platform/infra/deploy/compose/stg-infra/.ds-edge-config`.
 4. `/etc/ds-platform/stage.env` written from `infra/deploy/stage.env.example`, mode
    `0600`, owner `root:root`. Any value containing `$` — above all
    `STAGE_BASIC_AUTH_HASH` — MUST be single-quoted: the box sources the file with
@@ -296,25 +303,33 @@ adapter: `apps/api/test/taxonomy/media-real-storage.e2e-spec.ts` with
 - recovery cases); a presigned GET produced by `S3ObjectStorage.urlFor` → `200`,
   `server: MinIO`, body intact, while the same object unsigned → `403`.
 
-A single-file bind mount does not survive an in-place rewrite of the host file: writing
-a new `Caddyfile` replaces the inode, the running container keeps the old one and
-`caddy reload` re-reads the stale content (seen 2026-09-15 — the reload reported success
-while `docker exec stg-infra-caddy-1 grep stage_ask /etc/caddy/Caddyfile` still printed
-the previous regexp). Recreate the container instead:
+## Edge config apply
 
-```bash
-cd /srv/ds-platform/infra/deploy/compose/stg-infra
-sudo bash -c 'set -a; . /etc/ds-platform/stage.env; set +a; \
-  docker compose -p stg-infra up -d --force-recreate --no-deps caddy'
-for n in $(docker network ls --format '{{.Name}}' | grep '^slot-'); do
-  sudo docker network connect "$n" stg-infra-caddy-1
-done
-```
+Every stage `main` converge (`slot.mjs up main` / `reset main` — the stage release
+driver's run on a push to `main`, or the operator's) runs the step «install the
+stg-infra edge config» right after it ships the tree (`tools/staging/edge-config.mjs`,
+the runtime-config mechanism prod uses, `tools/deploy/lib/runtime-config.mjs`):
 
-The recreate DROPS every slot-network attachment, so the re-attach loop is part of the
-step, not an afterthought — `slot up` would repair only the slot it converges. Observed
-after doing both: `/v1/health` → 200 on `academy-main` (`5130f8a3`), `academy-pr-2216`
-(`a824744f`, before the re-converge) and `academy-pr-2205` (`c35253e9`).
+1. the inventory: every `./<file>:<path>` bind mount of the shipped `compose.yml`;
+2. a backup of the bytes the running containers serve, root-only in
+   `/var/lib/ds-platform/stg-infra-edge-config/previous` (kept on a re-run of the same SHA);
+3. the files copied from the shipped tree into this compose dir;
+4. `caddy validate` of the new Caddyfile inside the running `stg-infra-caddy-1` (its
+   real stage.env values for the `{$VAR}` placeholders);
+5. a `docker exec cat` comparison per service, a `docker restart` of only the stale
+   ones (waited until healthy) and the comparison again;
+6. the marker `.ds-edge-config` (`sha=` / `installed=`) and its converge-log line
+   `stage-edge-config=installed <sha> at <time> (<marker path>)`.
+
+Any failure puts the previous files back (and, past a restart, restarts onto them) and
+fails the converge — a red stage-suite. A PR slot never runs the step. A restart is
+not a recreate: the container keeps every slot network `slot up` connected it to.
+
+Why a restart and not `caddy reload`: a single-file bind mount does not survive the
+replacement of the host file — the running container keeps the old inode and
+`caddy reload` re-reads the stale content (seen 2026-09-15). Break-glass only, when no
+`main` converge can run: re-run `ds-slot up main --ref <sha>` from an operator machine;
+never edit the files on the box by hand (the next converge replaces them).
 
 ## Zitadel converge
 
@@ -670,7 +685,7 @@ srv() { sudo bash -c "set -a; . /etc/ds-platform/stage.env; set +a; docker compo
 
 srv ps                       # health of the shared set
 srv logs -f idp              # the usual suspect
-srv restart caddy            # after a Caddyfile edit (a slot reload uses the admin API)
+srv restart caddy            # a wedged edge; a Caddyfile change arrives with the `main` converge (Edge config apply)
 srv up -d --no-deps caddy    # after a stage.env change Caddy reads (STAGE_GATE_TOKEN rotation);
                              # the recreate drops the slot networks — put them back:
 for n in $(sudo docker network ls --format '{{.Name}}' | grep '^slot-'); do

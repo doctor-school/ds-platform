@@ -15,7 +15,7 @@ import {
 // 020 EARS-9 (+ LD-5, F-020-3 Б) — `RegisterForEvent` decides «мест нет» through
 // the ONE participation policy the event page's CTA reads, so the automatic
 // guest-through-auth POST can never register a doctor on a pure offline event
-// whose seats are gone (#2467). 005 EARS-9 — a retired event resolves to no
+// whose seats are gone (#2467). ADR-0003 design §3.6 rule 3 — a retired event resolves to no
 // event at all (#2466): the repository read is the active projection, and the
 // service maps its absence to the not-found refusal.
 //
@@ -107,8 +107,8 @@ describe("020 EARS-9 RegisterForEvent applies the participation seat policy", ()
   });
 });
 
-describe("005 EARS-9 RegisterForEvent on a retired event", () => {
-  it("005 EARS-9: an event absent from the active projection is the not-found refusal and writes no row", async () => {
+describe("ADR-0003 §3.6 rule 3 RegisterForEvent on a retired event", () => {
+  it("ADR-0003 §3.6 rule 3: an event absent from the active projection is the not-found refusal and writes no row", async () => {
     const { svc, repo } = service(null);
     await expect(svc.register("retired", "sub")).rejects.toBeInstanceOf(
       RegistrationEventNotFoundError,

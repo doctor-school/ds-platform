@@ -27,7 +27,7 @@ import { eventClassificationSql } from "../setup/event-classification.js";
 // #2466 / #2467 — the `RegisterForEvent` command refuses the two events the
 // public event page already refuses to offer:
 //
-// - 005 EARS-9 (#2466): a RETIRED event (`record_status = 'retired'`,
+// - ADR-0003 design §3.6 rule 3 (#2466): a RETIRED event (`record_status = 'retired'`,
 //   `deleted_at` set) is absent from every product read, so the command answers
 //   the same not-found it answers for an unknown slug and writes no row — it
 //   used to resolve the retired row and record a registration (200).
@@ -41,7 +41,7 @@ import { eventClassificationSql } from "../setup/event-classification.js";
 // Runs against the dev-stand Postgres + the fake IdP for the session; skips when
 // DATABASE_URL or IDP_ISSUER is absent so the shared CI unit job stays green.
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
-  "005 EARS-9 / 020 EARS-9 registration of a retired or sold-out event (e2e)",
+  "020 EARS-9 / ADR-0003 §3.6 rule 3 registration of a sold-out or retired event (e2e)",
   () => {
     let app: NestFastifyApplication;
     let pool: pg.Pool;
@@ -175,7 +175,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await app.close();
     });
 
-    it("005 EARS-9: a retired event is the not-found answer by slug and by id, and no registration is recorded", async () => {
+    it("ADR-0003 §3.6 rule 3: a retired event is the not-found answer by slug and by id, and no registration is recorded", async () => {
       const { id, slug } = await seedEvent("online", null);
       await retire(id);
       const cookie = await doctorSession(uniqueEmail("doc"));
@@ -187,7 +187,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await eventRegistrationCount(id)).toBe(0);
     });
 
-    it("005 EARS-9: the registration-state read of a retired event is the not-found answer too, never registered:false", async () => {
+    it("ADR-0003 §3.6 rule 3: the registration-state read of a retired event is the not-found answer too, never registered:false", async () => {
       const { id, slug } = await seedEvent("online", null);
       await retire(id);
       const cookie = await doctorSession(uniqueEmail("doc"));

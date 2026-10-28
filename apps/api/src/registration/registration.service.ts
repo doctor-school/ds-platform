@@ -130,8 +130,11 @@ export class RegistrationService {
    * only. Both the first insert and an idempotent repeat return
    * `{ registered: true, registeredAt }` (design §5). Gating: the event must be
    * `published`/`live` (else {@link EventNotRegistrableError}); the event must
-   * exist (else {@link RegistrationEventNotFoundError}); the subject must resolve
-   * to a mirror row (else {@link UnknownSubjectError}).
+   * exist in the active projection — a retired event included (else
+   * {@link RegistrationEventNotFoundError}, ADR-0003 design §3.6 rule 3); a
+   * caller not yet registered must not meet a sold-out event (020 EARS-9, else
+   * the sold-out refusal); the subject must resolve to a mirror row (else
+   * {@link UnknownSubjectError}).
    */
   async register(
     idOrSlug: string,
@@ -327,7 +330,11 @@ export class RegistrationService {
   ): Promise<CongressParticipantCard | undefined> {
     const event = await this.repo.findEventHeader(idOrSlug);
     if (!event) throw new RegistrationEventNotFoundError(idOrSlug);
-    return this.repo.findParticipantCard(event.id, registrationId, congressDays);
+    return this.repo.findParticipantCard(
+      event.id,
+      registrationId,
+      congressDays,
+    );
   }
 
   private async resolveUser(sub: string): Promise<string> {

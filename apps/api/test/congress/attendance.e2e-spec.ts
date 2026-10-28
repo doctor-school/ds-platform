@@ -593,16 +593,24 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     // #2466 — a retired event is absent from every write path, the registrar's
     // desk included: neither its attendance nor a new desk registration can be
-    // written to it. Runs LAST — it retires event B for the rest of the file.
-    it("044 EARS-34.5: a retired event's attendance mark and desk registration are both the 404, and nothing is written", async () => {
-      await pool.query(
+    // written to it (ADR-0003 design §3.6 rule 3). These two run LAST — each
+    // retires event B (idempotently) for the rest of the file.
+    const retireEventB = () =>
+      pool.query(
         `UPDATE events SET record_status = 'retired', deleted_at = now() WHERE id = $1`,
         [eventB],
       );
 
+    it("044 EARS-34.11: a retired event's attendance mark is the 404, and nothing is written", async () => {
+      await retireEventB();
+
       const markRes = await mark(admin.headers, slugB, otherEvent, DAY_1, true);
       expect(markRes.statusCode, markRes.body).toBe(404);
       expect(await attendanceRows(otherEvent)).toEqual([]);
+    });
+
+    it("044 EARS-35.7: a desk registration for a retired event is the 404, and no registration is written", async () => {
+      await retireEventB();
 
       const { rows: before } = await pool.query<{ n: number }>(
         "SELECT count(*)::int AS n FROM registrations WHERE event_id = $1",

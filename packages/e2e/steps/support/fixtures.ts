@@ -54,6 +54,11 @@ export interface StepWorld {
       state: string;
     }[];
   };
+  /** The guest feed before the 004 view-switch round-trip. */
+  publicCalendarFeed?: {
+    cards: { href: string | null; title: string | null }[];
+    groups: { id: string; text: string }[];
+  };
   /** State the 019 events-feed journey carries from one step to the next. */
   eventsFeed?: EventsFeedWorld;
 }

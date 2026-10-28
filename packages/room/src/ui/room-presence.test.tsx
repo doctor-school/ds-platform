@@ -23,13 +23,13 @@ import {
 /** The host-injected ICU callback (`RoomCopy.presenceCount`) — no catalogue here. */
 const presenceLabel = (n: number) => `presenceCount:${n}`;
 
-let setCount: (n: number) => void = () => {};
+let setCount: (n: number | null) => void = () => {};
 function Capture(): null {
   setCount = usePresenceCountSetter();
   return null;
 }
 
-function renderHeader(initialCount = 1): void {
+function renderHeader(initialCount: number | null = 1): void {
   render(
     <RoomPresenceProvider initialCount={initialCount}>
       <PresenceCount format={presenceLabel} />
@@ -108,5 +108,33 @@ describe("006 EARS-5 realtime presence-count client push", () => {
     // keeps refreshing the SAME provider, so the count never freezes on 5.
     act(() => setCount(3));
     expect(count()).toBe("presenceCount:3");
+  });
+});
+
+/**
+ * 006 EARS-19 (#2911) — with «Показывать зрителям число участников» off, a viewer
+ * is served `presenceCount: null`: the count element is ABSENT from the tree (no
+ * slot, no placeholder, no zero), and it appears the moment a count does arrive
+ * (the setting turned on mid-эфир, or a staff session's staff-channel push).
+ */
+describe("006 EARS-19 the withheld presence count renders nothing", () => {
+  it("006 EARS-19: a null seed renders no count element at all", () => {
+    renderHeader(null);
+    expect(screen.queryByTestId("room-presence-count")).toBeNull();
+  });
+
+  it("006 EARS-19: a count arriving after a null seed appears live", () => {
+    renderHeader(null);
+    act(() => {
+      applyPresenceCountPublication(presence(3), setCount);
+    });
+    expect(count()).toBe("presenceCount:3");
+  });
+
+  it("006 EARS-19: a null from the ack path drops the shown count from the tree", () => {
+    renderHeader(4);
+    expect(count()).toBe("presenceCount:4");
+    act(() => setCount(null));
+    expect(screen.queryByTestId("room-presence-count")).toBeNull();
   });
 });

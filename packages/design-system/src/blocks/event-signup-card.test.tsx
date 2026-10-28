@@ -325,6 +325,26 @@ describe("<EventSignupCard>", () => {
     render(<EventSignupCard {...base} cta={cta()} />);
     expect(screen.queryByTestId("event-signup-presence")).toBeNull();
   });
+
+  it("020 EARS-24: a withheld count (enter-room with presenceCount null) renders no presence line, while the room entry itself stays", () => {
+    render(
+      <EventSignupCard
+        {...base}
+        cta={cta({
+          action: "enter-room",
+          label: "Войти в эфир",
+          href: "/events/cardio-live/room",
+          presenceCount: null,
+        })}
+      />,
+    );
+    expect(screen.queryByTestId("event-signup-presence")).toBeNull();
+    expect(screen.queryByText(/коллег/)).toBeNull();
+    expect(screen.getByRole("link", { name: /Войти в эфир/ })).toHaveAttribute(
+      "href",
+      "/events/cardio-live/room",
+    );
+  });
   /**
    * 020 EARS-4 (#1766) — the ONE-CTA invariant of 020-requirements L122-126,
    * proven across the WHOLE action vocabulary rather than the two dead-end

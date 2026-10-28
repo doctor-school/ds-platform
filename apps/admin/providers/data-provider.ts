@@ -97,10 +97,14 @@ const ADMIN_BASE = "/v1/admin";
 /**
  * Variables the create form hands the provider — the authored aggregate + an
  * optional PDF. `hideSignUpCount` (007 EARS-12) is optional on the wire: the
- * server defaults it to off, so a create that omits it is a valid request.
+ * server defaults it to off, so a create that omits it is a valid request. The
+ * same holds for `showPresenceCount` (007 EARS-13).
  */
-export type CreateEventVars = Omit<CreateEventRequest, "hideSignUpCount"> &
-  Partial<Pick<CreateEventRequest, "hideSignUpCount">> & {
+export type CreateEventVars = Omit<
+  CreateEventRequest,
+  "hideSignUpCount" | "showPresenceCount"
+> &
+  Partial<Pick<CreateEventRequest, "hideSignUpCount" | "showPresenceCount">> & {
     programPdf?: File | null;
   };
 /** Variables the legacy-эфир create form hands the provider — the 014 EARS-24 JSON body, no file part. */

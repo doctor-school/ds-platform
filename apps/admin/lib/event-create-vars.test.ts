@@ -24,6 +24,7 @@ const base: EventFormValues = {
   audience: "doctors",
   projectId: null,
   hideSignUpCount: false,
+  showPresenceCount: false,
 };
 
 describe("eventCreateVars", () => {
@@ -34,6 +35,16 @@ describe("eventCreateVars", () => {
   it("007 EARS-12: a create with the option ticked sends it on", () => {
     expect(
       eventCreateVars({ ...base, hideSignUpCount: true }).hideSignUpCount,
+    ).toBe(true);
+  });
+
+  it("007 EARS-13: an untouched create sends «Показывать зрителям число участников» off", () => {
+    expect(eventCreateVars(base).showPresenceCount).toBe(false);
+  });
+
+  it("007 EARS-13: a create with «Показывать зрителям число участников» ticked sends it on", () => {
+    expect(
+      eventCreateVars({ ...base, showPresenceCount: true }).showPresenceCount,
     ).toBe(true);
   });
 
@@ -53,6 +64,7 @@ describe("eventCreateVars", () => {
       participationFormat: "online",
       audience: "doctors",
       hideSignUpCount: false,
+      showPresenceCount: false,
     });
     expect("projectId" in vars).toBe(false);
   });

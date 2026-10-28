@@ -24,6 +24,7 @@ const GRANT = {
     url: "ws://stand.example/connection/websocket",
     token: "fresh-token-from-the-gate",
     channel: "room:event:3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+    staffChannel: null,
     selfTag: "A1B2C3D4",
   },
 };

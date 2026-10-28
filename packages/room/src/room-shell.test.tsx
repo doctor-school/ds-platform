@@ -54,6 +54,7 @@ const chat: RoomChatCredential = {
   url: "wss://rt.example/connection/websocket",
   token: "token",
   channel: "room:evt-1",
+  staffChannel: null,
   selfTag: "A1",
 };
 
@@ -304,5 +305,52 @@ describe("006 EARS-7 the close reaches every region of the mounted shell", () =>
     expect(container.querySelector("iframe")).not.toBeNull();
     expect(header.getByText(copy.liveBadge)).toBeInTheDocument();
     expect(screen.getByLabelText(copy.composerPlaceholder)).toBeInTheDocument();
+  });
+});
+
+/**
+ * 006 EARS-19 (#2911) — a viewer served `presenceCount: null` (the event's
+ * «Показывать зрителям число участников» is off) sees no count anywhere in the
+ * room: neither the header «N врачей в комнате» nor the chat heading's « · N».
+ */
+describe("006 EARS-19 the withheld count is absent from the room", () => {
+  beforeEach(() => {
+    sdkHandlers.clear();
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({
+        matches: true,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => ({}) }) as unknown as Response),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("006 EARS-19: a null presenceCount renders no header count and no chat-heading count", () => {
+    render(
+      <RoomShell
+        slug="hsn-therapy"
+        config={{ ...config, presenceCount: null } as unknown as RoomConfig}
+        context={context}
+        displayName="Иван Петров"
+        copy={copy}
+        routes={routes}
+      />,
+    );
+    expect(screen.queryByTestId("room-presence-count")).toBeNull();
+    for (const heading of screen.getAllByText(copy.chatHeading, {
+      exact: false,
+    })) {
+      expect(heading.textContent).toBe(copy.chatHeading);
+    }
   });
 });

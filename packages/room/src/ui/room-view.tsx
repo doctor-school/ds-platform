@@ -432,7 +432,8 @@ export function RoomView({
       chatTabLabel={copy.chatTab}
       infoTabLabel={copy.infoTab}
       chatHeading={copy.chatHeading}
-      chatCount={presenceCount}
+      // 006 EARS-19 — a withheld count (null) renders no « · N» at all.
+      {...(presenceCount === null ? {} : { chatCount: presenceCount })}
       chatUnread={unread}
       chatUnreadLabel={copy.chatUnread(unread)}
       collapseLabel={copy.chatCollapse}

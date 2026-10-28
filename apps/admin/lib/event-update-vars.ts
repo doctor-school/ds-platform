@@ -58,5 +58,7 @@ export function eventUpdateVars(
     // 007 EARS-12 (#2913) — always sent: the editor shows the option's state, so
     // a save writes exactly what the operator sees.
     hideSignUpCount: values.hideSignUpCount,
+    // 007 EARS-13 (#2911) — always sent, for the same reason.
+    showPresenceCount: values.showPresenceCount,
   };
 }

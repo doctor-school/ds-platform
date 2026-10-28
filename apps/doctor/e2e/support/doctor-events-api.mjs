@@ -285,6 +285,9 @@ function monthDays() {
  *   unregistered — the same эфир, guest/unregistered entry (the event page)
  *   three        — three эфиры at once, earliest first (gate row 44: two strips
  *                  and «Ещё 1 в эфире →»)
+ *   withheld     — the `registered` эфир with its «Показывать зрителям число
+ *                  участников» off: the server sends `presenceCount: null`
+ *                  (019 EARS-30) and the strip must carry no count at all
  *   failing      — the live read answers 500 (gate row 44: the block's own
  *                  error line + retry while the feed keeps working)
  *   none         — nothing targeted is live: the body is `[]` and the block
@@ -324,15 +327,17 @@ function liveBody(cookie) {
     }));
   }
   const signedIn = (cookie ?? "").includes("__Host-ds_session=");
-  const registered = liveScenario === "registered" && signedIn;
+  const registered =
+    (liveScenario === "registered" || liveScenario === "withheld") && signedIn;
+  const strip = registered
+    ? {
+        ...LIVE_STRIP,
+        href: `/events/${LIVE_SLUG}/room`,
+        viewerIsRegistered: true,
+      }
+    : LIVE_STRIP;
   return [
-    registered
-      ? {
-          ...LIVE_STRIP,
-          href: `/events/${LIVE_SLUG}/room`,
-          viewerIsRegistered: true,
-        }
-      : LIVE_STRIP,
+    liveScenario === "withheld" ? { ...strip, presenceCount: null } : strip,
   ];
 }
 

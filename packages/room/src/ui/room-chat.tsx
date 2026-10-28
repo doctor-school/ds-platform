@@ -166,6 +166,13 @@ export function RoomChat({
       getToken: () => api.refreshChatToken(),
     });
     const onPublication = (ctx: PublicationContext): void => {
+      // 006 EARS-19 (#2911) — while the event's «Показывать зрителям число
+      // участников» is off, the count rides only the staff channel a staff
+      // caller's token lists; nothing else on it is ever a chat message.
+      if (chat.staffChannel !== null && ctx.channel === chat.staffChannel) {
+        applyPresenceCountPublication(ctx.data, setPresenceCount);
+        return;
+      }
       if (ctx.channel !== chat.channel) return;
       // EARS-5: the same channel also carries the server-published live presence
       // count. Route it to the header (discriminated by its `type` literal) and
@@ -222,7 +229,14 @@ export function RoomChat({
       centrifuge.removeListener("disconnected", onDisconnected);
       centrifuge.disconnect();
     };
-  }, [api, chat.url, chat.token, chat.channel, setPresenceCount]);
+  }, [
+    api,
+    chat.url,
+    chat.token,
+    chat.channel,
+    chat.staffChannel,
+    setPresenceCount,
+  ]);
 
   // React to the log growing: stuck → autoscroll to newest (scrollTop 0 in the
   // reversed ledger); scrolled-up → raise the «Новые сообщения ↓» chip; collapsed

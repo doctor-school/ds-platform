@@ -299,7 +299,12 @@ export function liveStripView(
       title: strip.title,
       titleHref: eventPageHref({ routes }, strip.slug),
       meta: [
-        `${strip.presenceCount} ${copy.live.inRoom}`,
+        // 019 EARS-30 (#2911) — a withheld count (`null`: the event's «Показывать
+        // зрителям число участников» is off and the reader is not staff) drops
+        // the segment entirely, so the line carries no «0» and no empty slot.
+        strip.presenceCount === null
+          ? ""
+          : `${strip.presenceCount} ${copy.live.inRoom}`,
         strip.school,
         `${copy.live.until} ${end.time} ${end.zoneLabel}`,
       ]

@@ -1,6 +1,6 @@
 ---
 title: "Doctor.School relaunch — two-site IA — product brief"
-description: "Thin product brief for the two-storefront relaunch epic: doctor.school as the doctor storefront and academy.doctor.school as the Academy backstage for experts and investors. JTBD, cross-cutting information architecture, the provisional 017…044 feature decomposition across seven build waves, success metrics, and prior art. Source layer for the per-feature PRDs and their EARS triplets (ADR-0014)."
+description: "Thin product brief for the two-storefront relaunch epic: doctor.school as the doctor storefront and academy.doctor.school as the Academy backstage for experts and investors. JTBD, cross-cutting information architecture, the provisional 017…044 + 048 feature decomposition across seven build waves, success metrics, and prior art. Source layer for the per-feature PRDs and their EARS triplets (ADR-0014)."
 slug: two-site-ia-brief
 milestone: https://github.com/doctor-school/ds-platform/milestone/13
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1430
@@ -34,6 +34,7 @@ features:
   - 042-marketing-integration
   - 043-migration-getcourse-and-congress
   - 044-congress-signup
+  - 048-materials-feed
 lang: en
 ---
 
@@ -41,7 +42,7 @@ lang: en
 
 > **Scope (owner decision, 2026-08-22).** The platform relaunches as **two storefronts on one platform**: `doctor.school` — the doctor storefront; `academy.doctor.school` — the Academy backstage for experts and investors. Discovery package, requirements register (REQ-1…142) and the owner-approved R4 wireframe: [`README-ru.md`](./README-ru.md). Topology: [ADR-0015](../../../adr/0015-two-storefront-topology-ru.md); core domain model: [ADR-0016](../../../adr/0016-core-domain-model-ru.md); screen → REQ → feature decomposition: [`functional-map-ru.md`](./functional-map-ru.md).
 
-> **Feature numbers 017…044 are provisional.** They are the working labels of the functional map, assigned in wave order; a number becomes final the moment that feature's `NNN-product.md` PRD is created. Until then it identifies a row of the map, not an artifact.
+> **Feature numbers 017…044 and 048 are provisional.** (045…047 belong to features outside this epic.) They are the working labels of the functional map, assigned in wave order; a number becomes final the moment that feature's `NNN-product.md` PRD is created. Until then it identifies a row of the map, not an artifact.
 
 > **Owner decision — design-complete first.** All 24 R4 screens are drawn as canvases and Stage-A approved **before** any of them is built; the waves below are build order inside the delivery stage only, never a licence to start building a screen whose design is still open.
 
@@ -77,17 +78,19 @@ lang: en
 
 ## Feature decomposition
 
-28 provisional features across seven build waves. Row detail — screens, REQ coverage, `blocked_by` rationale and engine reuse — lives in [`functional-map-ru.md`](./functional-map-ru.md) §B–§C; this table is the epic-level view only.
+29 provisional features across seven build waves. Row detail — screens, REQ coverage, `blocked_by` rationale and engine reuse — lives in [`functional-map-ru.md`](./functional-map-ru.md) §B–§C; this table is the epic-level view only.
 
-| Wave  | Features                | Surfaces                 | What becomes demonstrable                                                                                                                                                                     |
-| ----- | ----------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **1** | 017, 018, 019, 020, 021 | doctor (+ event on both) | The whole doctor funnel: entry → specialty → feed → event → «Участвовать» → registration → return to the point of interest; `apps/promo` retired                                              |
-| **2** | 022, 023, 024, 025, 044 | doctor · backend         | The doctor learns and accrues attention points, sees them in the account, reaches a school as a product; congress-2027 sign-ups land in our DB                                                |
-| **3** | 028, 037, 038           | both · backend           | The doctor passes verification, receives a document and an NMO code; the platform is legally public (028 ships in two slices — its thin slice 1 lands in R1 without 037, the rest stays here) |
-| **4** | 029, 030, 031, 033      | academy                  | The whole expert funnel: heard of it → read the backstage → «Это я» / application                                                                                                             |
-| **5** | 032, 034, 035, 036      | academy · backend        | The whole investor funnel: understood the model → checked the leaderboard → cabinet with the accrual report                                                                                   |
-| **6** | 039, 040, 042, 043      | admin · backend          | The team runs people, content and mailings in the system; the existing audience has migrated                                                                                                  |
-| **7** | 026, 027, 041           | doctor · admin           | The congress lives on the platform; communities work                                                                                                                                          |
+| Wave  | Features                              | Surfaces                 | What becomes demonstrable                                                                                                                                                                      |
+| ----- | ------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1** | 017, 018, 019, 020, 021               | doctor (+ event on both) | The whole doctor funnel: entry → specialty → feed → event → «Участвовать» → registration → return to the point of interest; `apps/promo` retired                                               |
+| **2** | 022, 023, 024, 025, 044               | doctor · backend         | The doctor learns and accrues attention points, sees them in the account, reaches a school as a product; congress-2027 sign-ups land in our DB                                                 |
+| **3** | 028, 037, 038                         | both · backend           | The doctor passes verification, receives a document and an NMO code; the platform is legally public (028 ships in two slices — its thin slice 1 lands in R1 without 037, the rest stays here)  |
+| **4** | 029, 030¹, 031, 032¹, 033¹, 034¹, 048 | academy · admin          | The whole expert funnel: heard of it → read the backstage → «Это я» / application; the 029 home reads the organization registry, projects, the materials feed and the shared application queue |
+| **5** | 032, 034, 035, 036                    | academy · backend        | The whole investor funnel: understood the model → checked the leaderboard → cabinet with the accrual report                                                                                    |
+| **6** | 039, 040, 042, 043                    | admin · backend          | The team runs people, content and mailings in the system; the existing audience has migrated                                                                                                   |
+| **7** | 026, 027, 041                         | doctor · admin           | The congress lives on the platform; communities work                                                                                                                                           |
+
+¹ Slice 1 (owner decision 2026-10-28, [#1799](https://github.com/doctor-school/ds-platform/issues/1799)): 032 — the organization registry and its admin; 030 — the project entity, its admin and the «Все проекты» catalog; 033 and 034 — real pages whose forms feed one shared application queue reviewed in admin. Later slices keep their `blocked_by`: the 030 dashboard, 032 leaderboard and 034 cards in wave 5 (wait for 036); 033 producer routing, draft and clinical case in wave 6 (wait for 040). 048 — the mixed materials feed: platform-authored news plus pluggable external sources from official accounts.
 
 **Wave 1 also carries one engineering deliverable, not a pipeline feature:** retiring `apps/promo` once its marketing routes are served from `apps/doctor`. It has no PRD; its acceptance is «the routes answer from `doctor.school`, the old app is undeployed and removed from the repository».
 

@@ -42,7 +42,12 @@ name: Deploy prod
 # Redeploy mode (#3354; spec §3 item 3 «Redeploy mode», §5 «Prod release driver.»,
 # §9 «An env file changed on the box»):
 #
-#   gh workflow run deploy-prod.yml --ref main -f mode=redeploy -f sha=<live sha> -f owner_quote="<the owner's words>"
+#   gh workflow run deploy-prod.yml --ref main -f mode=redeploy -f sha=<live sha> -f owner_quote="<authorization>"
+#
+#   The authorization is the owner's word in chat for an env-change redeploy, or the
+#   standing incident-redeploy authorization for an incident redeploy of the live SHA,
+#   in the exact form of spec §10 «Incident redeploy of the live SHA needs no fresh
+#   owner word».
 #
 #   preflight — refuses a blank owner_quote exactly as a release does, then
 #               `release-runner.mjs redeploy-preflight`: the SHA has a success
@@ -76,7 +81,7 @@ on:
           - rollback
           - redeploy
       owner_quote:
-        description: "Release and redeploy mode: the owner's word in chat that authorises this run, verbatim."
+        description: "Release and redeploy mode, verbatim: the owner's word in chat for a release or an env-change redeploy; for an incident redeploy of the live SHA, the standing authorization in the form of spec §10 «Incident redeploy of the live SHA needs no fresh owner word»."
         required: false
         type: string
       reason:
@@ -127,7 +132,7 @@ jobs:
           case "$MODE" in
             release | redeploy)
               if [ -z "${OWNER_QUOTE//[[:space:]]/}" ]; then
-                echo "::error::owner_quote is empty — every production release and redeploy needs the owner's word in chat"
+                echo "::error::owner_quote is empty — a production release or redeploy needs the owner's word in chat, or for an incident redeploy of the live SHA the standing authorization (spec §10)"
                 exit 1
               fi
               echo "owner quote: present (${#OWNER_QUOTE} chars)" ;;

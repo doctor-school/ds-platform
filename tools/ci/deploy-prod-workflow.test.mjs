@@ -147,7 +147,8 @@ describe("deploy-prod.yml", () => {
   it("3354: redeploy mode re-runs the live SHA through the release driver — own pre-flight and record, no release cut, no digest", () => {
     const byId = (steps, id) => steps.find((s) => s.id === id);
     const first = wf.jobs.preflight.steps[0];
-    // The owner's word is required exactly as for a release.
+    // owner_quote is required exactly as for a release (the owner's word, or the
+    // standing incident-redeploy authorization — spec §10).
     assert.match(
       first.run,
       /release \| redeploy\)[\s\S]*\$\{OWNER_QUOTE\/\/\[\[:space:\]\]\/\}[\s\S]*exit 1[\s\S]*rollback\)/,

@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -400,5 +409,164 @@ describe("release-digest.yml", () => {
       s.name?.startsWith("Resolve target SHA"),
     );
     assert.equal(resolve.if, "github.event_name != 'deployment_status'");
+  });
+});
+
+describe("3219: deploy-prod.yml — the rollback's real outcome after lost contact", () => {
+  const steps = wf.jobs.deploy.steps;
+  const byId = (id) => steps.find((s) => s.id === id);
+
+  it("the start step names its outcome and continues into the poll after an ssh drop", () => {
+    const start = byId("rollback");
+    for (const outcome of ["started", "attached", "already-succeeded", "refused", "ssh-lost"]) {
+      assert.match(start.run, new RegExp(`outcome=${outcome}`), outcome);
+    }
+    assert.match(start.run, /since=\$\(date -u \+%s\)/);
+    const lost = start.run.slice(start.run.indexOf("255)"));
+    assert.ok(lost.indexOf("outcome=ssh-lost") < lost.indexOf(";;"));
+    assert.doesNotMatch(lost.slice(0, lost.indexOf(";;")), /exit 1/);
+  });
+
+  it("the poll reads the start outcome, bounds the wait for a lost start and names each unknown", () => {
+    const poll = byId("rollback-poll");
+    assert.equal(poll.env.START, "${{ steps.rollback.outputs.outcome }}");
+    assert.equal(poll.env.SINCE, "${{ steps.rollback.outputs.since }}");
+    assert.match(poll.run, /since_args=\(--since "\$SINCE"\)/);
+    assert.match(poll.run, /absent_grace=8/);
+    for (const why of ["lost-contact", "timeout", "not-started"]) {
+      assert.match(poll.run, new RegExp(`terminal unknown ${why}\n`), why);
+    }
+    assert.match(poll.run, /echo "reason=\$\{2:-\}" >> "\$GITHUB_OUTPUT"/);
+  });
+
+  it("the record and the notice take the reason; the record also takes the start outcome", () => {
+    const record = byId("rollback-record");
+    assert.equal(record.env.WHY, "${{ steps.rollback-poll.outputs.reason }}");
+    // The start outcome as the poll resolved it (a recovered success reads as
+    // `already-succeeded`).
+    assert.equal(record.env.START, "${{ steps.rollback-poll.outputs.start }}");
+    assert.match(record.run, /--why "\$WHY" --start "\$START"/);
+    const notice = steps.find((s) => /rollback-notice/.test(s.run ?? ""));
+    assert.equal(notice.env.WHY, "${{ steps.rollback-poll.outputs.reason }}");
+    assert.match(notice.run, /--why "\$WHY"/);
+  });
+});
+
+describe("3219: the rollback poll, run against a stubbed box", () => {
+  const SHA = "0123456789abcdef0123456789abcdef01234567";
+  const poll = wf.jobs.deploy.steps.find((s) => s.id === "rollback-poll");
+  const REPO = fileURLToPath(new URL("../../", import.meta.url));
+
+  // `ssh` prints the next canned `rollback-status` reply (the last one repeats);
+  // `sleep` is instant. Returns the step's exit status and its outputs.
+  const runPoll = ({ start, replies }) => {
+    const dir = mkdtempSync(path.join(tmpdir(), "rb-poll-"));
+    const stubs = path.join(dir, "stubs");
+    mkdirSync(stubs);
+    replies.forEach((r, i) => writeFileSync(path.join(dir, `reply-${i}`), r));
+    const stub = (name, body) => {
+      writeFileSync(path.join(stubs, name), `#!/usr/bin/env bash\n${body}\n`);
+      chmodSync(path.join(stubs, name), 0o755);
+    };
+    stub(
+      "ssh",
+      [
+        `n=$(cat "${dir}/n" 2>/dev/null || echo 0)`,
+        `f="${dir}/reply-$n"; [ -f "$f" ] || f="${dir}/reply-${replies.length - 1}"`,
+        `echo $((n + 1)) > "${dir}/n"`,
+        'cat "$f"',
+      ].join("\n"),
+    );
+    stub("sleep", "true");
+    const out = path.join(dir, "out");
+    writeFileSync(out, "");
+    const r = spawnSync("bash", ["-e", "-c", poll.run], {
+      timeout: 60_000,
+      cwd: REPO,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${stubs}${path.delimiter}${process.env.PATH}`,
+        SHA,
+        START: start,
+        SINCE: String(Date.parse("2026-10-28T10:00:00Z") / 1000),
+        RUNNER_TEMP: dir,
+        GITHUB_OUTPUT: out,
+      },
+    });
+    const outputs = Object.fromEntries(
+      readFileSync(out, "utf8").trim().split("\n").filter(Boolean).map((l) => l.split(/=(.*)/s).slice(0, 2)),
+    );
+    return { status: r.status, outputs, polls: Number(readFileSync(path.join(dir, "n"), "utf8")) };
+  };
+  const reply = (active, rc, record, live = "d".repeat(40)) =>
+    JSON.stringify({
+      rollback: record && { kind: "rollback", sha: SHA, from: null, ...record },
+      driver: { unit: "u", active, rc, previousSha: null },
+      live,
+    });
+  const none = reply("absent", null, null);
+
+  it("a re-run answered already-succeeded records the box's succeeded verdict", () => {
+    const r = runPoll({
+      start: "already-succeeded",
+      replies: [reply("inactive", 0, { state: "succeeded", endedAt: "2026-10-28T09:00:00Z" })],
+    });
+    assert.equal(r.status, 0);
+    assert.equal(r.outputs.terminal, "succeeded");
+  });
+
+  it("a lost start whose rollback the box never started ends not-started after the grace, not the 30-min wait", () => {
+    const r = runPoll({ start: "ssh-lost", replies: [none] });
+    assert.equal(r.status, 1);
+    assert.equal(r.outputs.terminal, "unknown");
+    assert.equal(r.outputs.reason, "not-started");
+    assert.equal(r.polls, 9);
+  });
+
+  it("a lost start whose rollback did start is polled to its verdict", () => {
+    const r = runPoll({
+      start: "ssh-lost",
+      replies: [
+        none,
+        reply("active", null, { state: "running", startedAt: "2026-10-28T10:00:30Z", endedAt: null }),
+        reply("inactive", 0, { state: "succeeded", startedAt: "2026-10-28T10:00:30Z", endedAt: "2026-10-28T10:04:00Z" }),
+      ],
+    });
+    assert.equal(r.status, 0);
+    assert.equal(r.outputs.terminal, "succeeded");
+  });
+
+  it("a lost start reads an earlier attempt's failed record as no rollback of this run", () => {
+    const r = runPoll({
+      start: "ssh-lost",
+      replies: [reply("inactive", 1, { state: "failed", startedAt: "2026-10-28T08:00:00Z", endedAt: "2026-10-28T08:05:00Z" })],
+    });
+    assert.equal(r.outputs.reason, "not-started");
+  });
+
+  it("two lost calls in a row: an earlier attempt's success with the target live is recorded as recovered", () => {
+    const r = runPoll({
+      start: "ssh-lost",
+      replies: [
+        reply(
+          "inactive",
+          0,
+          { state: "succeeded", startedAt: "2026-10-28T08:00:00Z", endedAt: "2026-10-28T08:05:00Z" },
+          SHA,
+        ),
+      ],
+    });
+    assert.equal(r.status, 0);
+    assert.equal(r.outputs.terminal, "succeeded");
+    assert.equal(r.outputs.start, "already-succeeded");
+    assert.equal(r.polls, 1);
+  });
+
+  it("after a normal start, no record and no unit stays a failure", () => {
+    const r = runPoll({ start: "started", replies: [none] });
+    assert.equal(r.status, 1);
+    assert.equal(r.outputs.terminal, "failed");
+    assert.equal(r.polls, 1);
   });
 });

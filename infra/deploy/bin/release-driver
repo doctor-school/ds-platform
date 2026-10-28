@@ -45,14 +45,18 @@
 #       `-` reads the inherited fd 0: the manifest is root-only and the unit runs as
 #       deploy, so re-opening it as /dev/stdin (via /proc/self/fd/0) is EACCES.
 #   release-driver rollback prod <sha>        < images-<sha>.json   (#2987)
-#       The box-side app-only rollback (prod box only). Refuses unless the manifest
-#       is <sha>'s, <sha> is on main, strictly behind the live prod SHA and the target
-#       of one of the latest 3 release-* Releases, its digests are the registry's, a
-#       tooling tree is recorded and no release step runs; then starts
+#       The box-side app-only rollback (prod box only). Answers `attached <unit>`
+#       while its unit runs, and `already-succeeded` when <sha> is already the live
+#       prod SHA because its own finished rc-0 unit recorded `succeeded` (a re-run
+#       after lost contact, #3219). Otherwise refuses unless the manifest is <sha>'s,
+#       <sha> is on main, strictly behind the live prod SHA and the target of one of
+#       the latest 3 release-* Releases, its digests are the registry's, a tooling
+#       tree is recorded and no release step runs; then starts
 #       ds-prod-<sha12>-rollback (its own record, kind `rollback`) and answers
-#       `started <unit>` / `attached <unit>`.
+#       `started <unit>`.
 #   release-driver rollback-status prod <sha>
-#       {"rollback": <record|null>, "driver": {"unit", "active", "rc", "previousSha"}}.
+#       {"rollback": <record|null>, "driver": {"unit", "active", "rc", "previousSha"},
+#        "live": <live prod SHA|null>}.
 #   release-driver _rollback prod <sha>   (the rollback unit's process)
 #       node <tooling tree>/tools/deploy/prod.mjs --local --rollback <sha> --images-file -
 #
@@ -664,6 +668,16 @@ write_rollback_record() {
     "$(rollback_unit_name "$sha")" "$state" "$origin"
 }
 
+# The `state` of the SHA's rollback record; nothing when it is absent or unreadable.
+rollback_record_state() {
+  sudo cat "$ROLLBACK_DIR/$1.json" 2>/dev/null |
+    python3 -I -c 'import json,sys
+try: r = json.load(sys.stdin)
+except ValueError: r = None
+print(r.get("state", "") if isinstance(r, dict) and r.get("sha") == sys.argv[1] else "")' "$1" ||
+    true
+}
+
 cmd_rollback() {
   check_args "$@"
   local env=$1 sha=$2 unit manifest state rc out user
@@ -677,6 +691,14 @@ cmd_rollback() {
   read -r state rc < <(unit_state "$unit")
   if [[ $state == active || $state == activating ]]; then
     say "attached $unit"
+    return 0
+  fi
+  # A re-run after the runner lost contact (#3219): the target is live because this
+  # SHA's own rollback finished rc 0 and recorded `succeeded` — answered from the box
+  # without the lock, the record or the unit, as release_unit answers a release.
+  if [[ ($state == inactive || $state == failed) && $rc == 0 ]] &&
+    [[ $(live_prod_sha) == "$sha" && $(rollback_record_state "$sha") == succeeded ]]; then
+    say "already-succeeded"
     return 0
   fi
   command -v curl >/dev/null || fail "curl is not installed"
@@ -721,11 +743,12 @@ cmd_rollback() {
 }
 
 # rollback-status: {"rollback": <record or null>, "driver": {"unit", "active", "rc",
-# "previousSha": null}} — the `driver` object of a release's `status`, for the
-# -rollback unit.
+# "previousSha": null}, "live": <live prod SHA or null>} — the `driver` object of a
+# release's `status`, for the -rollback unit; `live` lets the runner recover a
+# success whose start and re-run calls were both lost (#3219).
 read -r -d '' ROLLBACK_STATUS_PY <<'PY' || true
 import json, sys
-text, unit, active, rc = sys.argv[1:5]
+text, unit, active, rc, live = sys.argv[1:6]
 record = None
 if text.strip():
     try:
@@ -734,7 +757,7 @@ if text.strip():
         print("corrupt")
         sys.exit(0)
 driver = {"unit": unit, "active": active, "rc": None if rc == "null" else int(rc), "previousSha": None}
-print(json.dumps({"rollback": record, "driver": driver}, sort_keys=False, separators=(",", ":")))
+print(json.dumps({"rollback": record, "driver": driver, "live": live or None}, sort_keys=False, separators=(",", ":")))
 PY
 
 cmd_rollback_status() {
@@ -744,7 +767,7 @@ cmd_rollback_status() {
   unit=$(rollback_unit_name "$sha")
   read -r state rc < <(unit_state "$unit")
   text=$(sudo cat "$ROLLBACK_DIR/$sha.json" 2>/dev/null || true)
-  line=$(python3 -I -c "$ROLLBACK_STATUS_PY" "$text" "$unit" "$state" "$rc")
+  line=$(python3 -I -c "$ROLLBACK_STATUS_PY" "$text" "$unit" "$state" "$rc" "$(live_prod_sha)")
   [[ $line != corrupt ]] || fail "corrupt rollback record of ${sha:0:12}"
   printf '%s\n' "$line"
 }

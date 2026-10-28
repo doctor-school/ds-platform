@@ -85,7 +85,8 @@ function firstNonEmptyLine(text) {
  *   lost contact with the driver and the verdict is unknown).
  * @param {string|null} [args.ownerQuote] the owner's word that authorised the
  *   release (#3158), in the description and the payload.
- * @param {{reason: string, from?: string|null}|null} [args.rollback] a rollback
+ * @param {{reason: string, from?: string|null, unknownReason?: string|null,
+ *   recovered?: boolean}|null} [args.rollback] a rollback
  *   record (#2987, spec 2026-10-16-release-pipeline-off-workstation §3 item 3
  *   «Rollback mode»): described `rollback to <sha12> — <reason>`, its payload
  *   carries the reason and the rolled-off SHA instead of release notes.
@@ -154,14 +155,28 @@ export function buildDeploymentPayload({
   };
 }
 
+// Why an `error` rollback record has no verdict (#3219): the runner lost contact, the
+// poll timed out while the unit kept running, or the start call was lost and the
+// box showed no rollback of this run within the poll's 2-min grace.
+const ROLLBACK_UNKNOWN = Object.freeze({
+  "lost-contact": (s) => `rollback verdict unknown @ ${s}: lost contact with the driver`,
+  timeout: (s) =>
+    `rollback verdict unknown @ ${s}: not finished within 30 min, the unit keeps running on the box`,
+  "not-started": (s) =>
+    `rollback verdict unknown @ ${s}: the start call was lost and no rollback of this run appeared within 2 min`,
+});
+
 function buildRollbackPayload({ sha, shortSha, healthUrl, nowIso, state, rollback }) {
   const reason = String(rollback.reason ?? "");
+  const unknown = ROLLBACK_UNKNOWN[rollback.unknownReason] ?? ROLLBACK_UNKNOWN["lost-contact"];
   const statusSummary =
     state === "failure"
       ? `rollback failed @ ${shortSha}`
       : state === "error"
-        ? `rollback verdict unknown @ ${shortSha}: lost contact with the driver`
-        : `rollback to ${shortSha}`;
+        ? unknown(shortSha)
+        : rollback.recovered
+          ? `rollback to ${shortSha} (verdict recovered by a re-run)`
+          : `rollback to ${shortSha}`;
   return {
     deployment: {
       ref: sha,

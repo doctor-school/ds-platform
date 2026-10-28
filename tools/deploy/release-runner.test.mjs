@@ -465,15 +465,23 @@ describe("parseRunnerArgs — rollback commands", () => {
         "--from-sha",
         PREV,
       ]),
-      { command: "rollback-record", sha: SHA, state: "failed", fromSha: PREV },
+      {
+        command: "rollback-record",
+        sha: SHA,
+        state: "failed",
+        fromSha: PREV,
+        why: null,
+        start: null,
+      },
     );
     assert.deepEqual(
       parseRunnerArgs(["rollback-notice", "--sha", SHA, "--state", "unknown"]),
-      { command: "rollback-notice", sha: SHA, state: "unknown" },
+      { command: "rollback-notice", sha: SHA, state: "unknown", why: null },
     );
     assert.deepEqual(parseRunnerArgs(["rollback-verdict", "--sha", SHA]), {
       command: "rollback-verdict",
       sha: SHA,
+      since: null,
     });
   });
 
@@ -494,6 +502,185 @@ describe("parseRunnerArgs — rollback commands", () => {
         flag,
       );
     }
+  });
+});
+
+describe("3219: the rollback's real outcome after lost contact", () => {
+  const LIVE = "d".repeat(40);
+  const reply = (active, rc, record) =>
+    JSON.stringify({
+      rollback: record && { kind: "rollback", sha: SHA, from: LIVE, ...record },
+      driver: { unit: "u", active, rc, previousSha: null },
+    });
+
+  it("reads --why on rollback-record / rollback-notice, --start on rollback-record, --since on rollback-verdict", () => {
+    const rec = parseRunnerArgs([
+      "rollback-record", "--sha", SHA, "--state", "unknown",
+      "--why", "timeout", "--start", "ssh-lost",
+    ]);
+    assert.equal(rec.why, "timeout");
+    assert.equal(rec.start, "ssh-lost");
+    for (const why of ["lost-contact", "timeout", "not-started"]) {
+      assert.equal(
+        parseRunnerArgs(["rollback-notice", "--sha", SHA, "--state", "unknown", "--why", why]).why,
+        why,
+      );
+    }
+    assert.equal(
+      parseRunnerArgs(["rollback-notice", "--sha", SHA, "--state", "unknown", "--why", ""]).why,
+      null,
+    );
+    assert.match(
+      parseRunnerArgs(["rollback-notice", "--sha", SHA, "--state", "unknown", "--why", "nope"]).error,
+      /--why must be/,
+    );
+    assert.match(
+      parseRunnerArgs(["rollback-record", "--sha", SHA, "--state", "succeeded", "--start", "nope"]).error,
+      /--start must be/,
+    );
+    assert.equal(
+      parseRunnerArgs(["rollback-verdict", "--sha", SHA, "--since", "1761600000"]).since,
+      1761600000,
+    );
+    assert.match(
+      parseRunnerArgs(["rollback-verdict", "--sha", SHA, "--since", "soon"]).error,
+      /--since must be/,
+    );
+  });
+
+  it("no record and a finished or absent unit is `absent`, still a failure verdict", () => {
+    for (const active of ["absent", "inactive"]) {
+      const v = rollbackVerdict(reply(active, null, null), SHA);
+      assert.equal(v.absent, true, active);
+      assert.equal(v.terminal, "failed", active);
+    }
+    assert.equal(rollbackVerdict(reply("active", null, null), SHA).absent, false);
+    const ran = rollbackVerdict(reply("inactive", 0, { state: "succeeded" }), SHA);
+    assert.equal(ran.absent, false);
+  });
+
+  it("--since: a record that ended before this run's start call is an earlier attempt, read as absent", () => {
+    const since = Date.parse("2026-10-28T10:00:00Z") / 1000;
+    const stale = reply("inactive", 1, {
+      state: "failed",
+      startedAt: "2026-10-28T08:00:00Z",
+      endedAt: "2026-10-28T08:05:00Z",
+    });
+    const v = rollbackVerdict(stale, SHA, { since });
+    assert.equal(v.absent, true);
+    assert.equal(v.terminal, "failed");
+    // An attempt ending after the call (or within the 120-s clock margin) is this run's.
+    const fresh = reply("inactive", 0, {
+      state: "succeeded",
+      startedAt: "2026-10-28T09:59:00Z",
+      endedAt: "2026-10-28T10:03:00Z",
+    });
+    assert.equal(rollbackVerdict(fresh, SHA, { since }).terminal, "succeeded");
+    assert.equal(rollbackVerdict(fresh, SHA, { since }).absent, false);
+    // A running unit is polled whatever its record's age.
+    const attached = reply("active", null, {
+      state: "running",
+      startedAt: "2026-10-28T08:00:00Z",
+      endedAt: null,
+    });
+    assert.equal(rollbackVerdict(attached, SHA, { since }).terminal, null);
+  });
+
+  it("--since: an earlier attempt's `succeeded` record while the target is live is a recovered success, not absent", () => {
+    const since = Date.parse("2026-10-28T10:00:00Z") / 1000;
+    const doc = (live) =>
+      JSON.stringify({
+        rollback: {
+          kind: "rollback",
+          sha: SHA,
+          from: LIVE,
+          state: "succeeded",
+          startedAt: "2026-10-28T08:00:00Z",
+          endedAt: "2026-10-28T08:05:00Z",
+        },
+        driver: { unit: "u", active: "inactive", rc: 0, previousSha: null },
+        live,
+      });
+    const v = rollbackVerdict(doc(SHA), SHA, { since });
+    assert.equal(v.terminal, "succeeded");
+    assert.equal(v.recovered, true);
+    assert.equal(v.absent, false);
+    assert.equal(v.from, LIVE);
+    // Another live SHA, or an old driver that names none: still absent.
+    for (const live of [PREV, undefined]) {
+      const other = rollbackVerdict(doc(live), SHA, { since });
+      assert.equal(other.absent, true, String(live));
+      assert.equal(other.recovered, false, String(live));
+    }
+    // A fresh success is this run's own, never `recovered`.
+    assert.equal(rollbackVerdict(doc(SHA), SHA).recovered, false);
+  });
+
+  it("the record and the notice tell lost contact, the time-out and a start that never ran apart", () => {
+    const descriptions = new Set();
+    const notices = new Set();
+    for (const why of ["lost-contact", "timeout", "not-started"]) {
+      const { status } = buildDeploymentPayload({
+        sha: SHA,
+        notesText: "",
+        healthUrl: "https://api.example/v1/health",
+        state: "error",
+        rollback: { reason: "x", unknownReason: why },
+      });
+      descriptions.add(status.description);
+      notices.add(buildRollbackNotice({ sha: SHA, state: "unknown", reason: "x", why }));
+    }
+    assert.equal(descriptions.size, 3);
+    assert.equal(notices.size, 3);
+    const lost = buildDeploymentPayload({
+      sha: SHA,
+      notesText: "",
+      healthUrl: "https://api.example/v1/health",
+      state: "error",
+      rollback: { reason: "x" },
+    });
+    assert.match(lost.status.description, /lost contact with the driver/);
+    const unseen = buildDeploymentPayload({
+      sha: SHA,
+      notesText: "",
+      healthUrl: "https://api.example/v1/health",
+      state: "error",
+      rollback: { reason: "x", unknownReason: "not-started" },
+    });
+    assert.match(
+      unseen.status.description,
+      /no rollback of this run appeared within 2 min$/,
+    );
+    assert.match(
+      buildRollbackNotice({ sha: SHA, state: "unknown", reason: "x", why: "timeout" }),
+      /30 минут/,
+    );
+    assert.match(
+      buildRollbackNotice({ sha: SHA, state: "unknown", reason: "x", why: "not-started" }),
+      /за 2 минуты откат на прод-сервере не появился/,
+    );
+  });
+
+  it("a success read after a re-run says it was recovered", async () => {
+    const calls = [];
+    await runRollbackRecord({
+      sha: SHA,
+      state: "succeeded",
+      fromSha: LIVE,
+      reason: "x",
+      start: "already-succeeded",
+      create: (a) => (calls.push(a), { ok: true, deploymentId: 1 }),
+      log: () => {},
+    });
+    assert.deepEqual(calls[0].rollback, { reason: "x", from: LIVE, unknownReason: null, recovered: true });
+    const { status } = buildDeploymentPayload({
+      sha: SHA,
+      notesText: "",
+      healthUrl: "https://api.example/v1/health",
+      state: "success",
+      rollback: calls[0].rollback,
+    });
+    assert.match(status.description, /recovered by a re-run/);
   });
 });
 
@@ -757,7 +944,12 @@ describe("runRollbackRecord", () => {
       assert.equal(args.state, deploymentState);
       assert.equal(args.releaseTag, null);
       assert.equal(args.notesText, "");
-      assert.deepEqual(args.rollback, { reason: "login down", from: PREV });
+      assert.deepEqual(args.rollback, {
+        reason: "login down",
+        from: PREV,
+        unknownReason: null,
+        recovered: false,
+      });
     });
   }
 

@@ -26,13 +26,18 @@
 //       compare `<live>...<sha>` = `behind`), and its `images-<sha>.json` is
 //       recorded. No stage-suite, release-gate or live-broadcast check: the target
 //       passed them when it shipped. Writes `images-run-id=<id>` to $GITHUB_OUTPUT.
-//   rollback-verdict --sha <sha>
+//   rollback-verdict --sha <sha> [--since <epoch-s>]
 //       Reads one `rollback-status prod <sha>` reply on stdin and prints one line:
-//       `<running|succeeded|failed|unreadable> <from-sha|-> <status line>`.
+//       `<running|succeeded|recovered|failed|absent|unreadable> <from-sha|-> <line>`;
+//       `absent` = no record of this run and no running unit; `recovered` = an
+//       earlier attempt's success with the target live (#3219).
 //   rollback-record --sha <sha> --state succeeded|failed|unknown [--from-sha <sha>]
+//                   [--why lost-contact|timeout|not-started] [--start <outcome>]
 //       The ONE Deployment record of the rollback, `rollback to <sha12> — <reason>`;
-//       no release cut. Exits 1 when it could not be written.
-//   rollback-notice --sha <sha> --state succeeded|failed|unknown
+//       no release cut; its status names why an `unknown` has no verdict and a
+//       success read after an `already-succeeded` re-run. Exits 1 when it could not
+//       be written.
+//   rollback-notice --sha <sha> --state succeeded|failed|unknown [--why <cause>]
 //       The Mattermost notice «откат прода на <sha12>: <reason>» with the outcome,
 //       through the digest's poster ($MATTERMOST_WEBHOOK_URL; unset skips green).
 //
@@ -105,14 +110,29 @@ const RECORD_STATES = Object.freeze({
   unknown: "error",
 });
 
+/**
+ * Why a rollback ended `unknown` (#3219): the runner lost contact with the box, the
+ * 30-min poll timed out while the unit kept running, or the start call was lost and
+ * the box shows no rollback of this run.
+ */
+const ROLLBACK_UNKNOWN_REASONS = Object.freeze(["lost-contact", "timeout", "not-started"]);
+
+/** What the workflow's `rollback prod <sha>` call answered (#3219). */
+const ROLLBACK_START_OUTCOMES = Object.freeze([
+  "started",
+  "attached",
+  "already-succeeded",
+  "ssh-lost",
+]);
+
 /** The flags each command admits; anything else is refused. */
 const COMMAND_FLAGS = Object.freeze({
   preflight: ["--sha"],
   record: ["--sha", "--state", "--previous-sha"],
   "rollback-preflight": ["--sha"],
-  "rollback-verdict": ["--sha"],
-  "rollback-record": ["--sha", "--state", "--from-sha"],
-  "rollback-notice": ["--sha", "--state"],
+  "rollback-verdict": ["--sha", "--since"],
+  "rollback-record": ["--sha", "--state", "--from-sha", "--why", "--start"],
+  "rollback-notice": ["--sha", "--state", "--why"],
   "redeploy-preflight": ["--sha"],
   "redeploy-record": ["--sha", "--state"],
 });
@@ -140,6 +160,13 @@ export function parseRunnerArgs(argv) {
       error: `--sha must be a full 40-hex commit sha, got: ${sha ?? "(none)"}`,
     };
   }
+  if (command === "rollback-verdict") {
+    const since = values["--since"] || null;
+    if (since !== null && !/^[1-9]\d{0,11}$/.test(since)) {
+      return { error: `--since must be epoch seconds, got: ${since}` };
+    }
+    return { command, sha, since: since === null ? null : Number(since) };
+  }
   if (!allowed.includes("--state")) return { command, sha };
 
   const state = values["--state"];
@@ -148,9 +175,20 @@ export function parseRunnerArgs(argv) {
       error: `--state must be succeeded|failed|unknown, got: ${state ?? "(none)"}`,
     };
   }
-  if (command === "rollback-notice" || command === "redeploy-record") {
-    return { command, sha, state };
+  const why = values["--why"] || null;
+  if (why !== null && !ROLLBACK_UNKNOWN_REASONS.includes(why)) {
+    return {
+      error: `--why must be ${ROLLBACK_UNKNOWN_REASONS.join("|")}, got: ${why}`,
+    };
   }
+  const start = values["--start"] || null;
+  if (start !== null && !ROLLBACK_START_OUTCOMES.includes(start)) {
+    return {
+      error: `--start must be ${ROLLBACK_START_OUTCOMES.join("|")}, got: ${start}`,
+    };
+  }
+  if (command === "rollback-notice") return { command, sha, state, why };
+  if (command === "redeploy-record") return { command, sha, state };
   const shaFlag = command === "record" ? "--previous-sha" : "--from-sha";
   const other = values[shaFlag] || null;
   if (other !== null && !FULL_SHA.test(other)) {
@@ -160,7 +198,7 @@ export function parseRunnerArgs(argv) {
   }
   return command === "record"
     ? { command, sha, state, previousSha: other }
-    : { command, sha, state, fromSha: other };
+    : { command, sha, state, fromSha: other, why, start };
 }
 
 /**
@@ -561,15 +599,25 @@ export function rollbackPreflightChecks({
 
 const TERMINAL_UNIT = new Set(["inactive", "failed", "absent"]);
 
+/** The box and the runner clocks may differ (both NTP); 2 min absorbs it. */
+const CLOCK_MARGIN_S = 120;
+
 /**
  * The verdict of one `rollback-status prod <sha>` reply. The unit state decides
  * as well as the record: a finished, dead or absent `-rollback` unit is succeeded
  * only with rc 0 AND a `succeeded` record — a unit that died before writing its
  * verdict leaves the record `running`, and that is a failure.
  *
- * @returns {{terminal: null|"succeeded"|"failed", line: string, from: string|null}}
+ * `absent` (#3219): no record of this run and the unit is not running — the
+ * caller tells a lost start call from a dead rollback. With `since` (the epoch
+ * seconds of the run's start call, when that call's answer was lost), a finished
+ * record that ended more than CLOCK_MARGIN_S before it is an earlier attempt;
+ * that attempt's `succeeded` record while the box names the target as the live
+ * SHA (`live`) is a `recovered` success — an earlier run lost contact, and this re-run lost its start call.
+ *
+ * @returns {{terminal: null|"succeeded"|"failed", line: string, from: string|null, absent: boolean, recovered: boolean}}
  */
-export function rollbackVerdict(text, sha) {
+export function rollbackVerdict(text, sha, { since = null } = {}) {
   let doc;
   try {
     doc = JSON.parse(text);
@@ -577,23 +625,45 @@ export function rollbackVerdict(text, sha) {
     doc = null;
   }
   const driver = doc?.driver;
-  const record = doc?.rollback ?? null;
+  let record = doc?.rollback ?? null;
   if (
     !doc ||
     typeof driver !== "object" ||
     driver === null ||
     (record !== null && record.sha !== sha)
   ) {
-    return { terminal: null, line: "unreadable reply", from: null };
+    return {
+      terminal: null,
+      line: "unreadable reply",
+      from: null,
+      absent: false,
+      recovered: false,
+    };
   }
   const active = String(driver.active ?? "?");
+  const fromOf = (r) => (FULL_SHA.test(r?.from ?? "") ? r.from : null);
+  if (record !== null && since !== null && TERMINAL_UNIT.has(active)) {
+    const ended = Date.parse(record.endedAt ?? record.startedAt ?? "") / 1000;
+    if (!(ended >= since - CLOCK_MARGIN_S)) {
+      // An earlier run's success that left the target live, seen by a re-run whose
+      // own start call was lost too: the rollback has nothing left to do.
+      if (record.state === "succeeded" && doc.live === sha) {
+        const line = `driver=${active} rc=${driver.rc ?? "-"} state=succeeded live=target (earlier attempt)`;
+        return { terminal: "succeeded", line, from: fromOf(record), absent: false, recovered: true };
+      }
+      record = null;
+    }
+  }
+  const absent = record === null && TERMINAL_UNIT.has(active);
   const rc = driver.rc ?? null;
   const state = record?.state ?? null;
-  const from = FULL_SHA.test(record?.from ?? "") ? record.from : null;
+  const from = fromOf(record);
   const line = `driver=${active} rc=${rc ?? "-"} state=${state ?? "-"}`;
-  if (!TERMINAL_UNIT.has(active)) return { terminal: null, line, from };
+  if (!TERMINAL_UNIT.has(active)) {
+    return { terminal: null, line, from, absent, recovered: false };
+  }
   const terminal = rc === 0 && state === "succeeded" ? "succeeded" : "failed";
-  return { terminal, line, from };
+  return { terminal, line, from, absent, recovered: false };
 }
 
 /**
@@ -606,6 +676,8 @@ export async function runRollbackRecord({
   state,
   fromSha = null,
   reason,
+  why = null,
+  start = null,
   create = (args) => createDeploymentRecord(args),
   log = (l) => console.log(l),
 }) {
@@ -619,7 +691,12 @@ export async function runRollbackRecord({
     notesText: "",
     healthUrl: PROD_HEALTH_URL,
     state: deploymentState,
-    rollback: { reason, from: fromSha },
+    rollback: {
+      reason,
+      from: fromSha,
+      unknownReason: state === "unknown" ? why : null,
+      recovered: state === "succeeded" && start === "already-succeeded",
+    },
   });
   if (res.ok) {
     log(
@@ -635,9 +712,19 @@ const NOTICE_OUTCOME = Object.freeze({
   unknown: "итог неизвестен: связь с прод-сервером потеряна",
 });
 
+/** The `unknown` outcome by its cause (#3219); lost contact keeps the line above. */
+const NOTICE_UNKNOWN = Object.freeze({
+  "lost-contact": NOTICE_OUTCOME.unknown,
+  timeout: "итог неизвестен: откат не завершился за 30 минут и продолжается на прод-сервере",
+  "not-started":
+    "итог неизвестен: связь оборвалась при запуске, и за 2 минуты откат на прод-сервере не появился",
+});
+
 /** The Mattermost notice of a rollback: the spec's line first, the outcome below. */
-export function buildRollbackNotice({ sha, state, reason }) {
-  return `откат прода на ${sha.slice(0, 12)}: ${String(reason ?? "").trim()}\n${NOTICE_OUTCOME[state]}`;
+export function buildRollbackNotice({ sha, state, reason, why = null }) {
+  const outcome =
+    state === "unknown" ? (NOTICE_UNKNOWN[why] ?? NOTICE_OUTCOME.unknown) : NOTICE_OUTCOME[state];
+  return `откат прода на ${sha.slice(0, 12)}: ${String(reason ?? "").trim()}\n${outcome}`;
 }
 
 /** Post the rollback notice; no webhook configured skips green, as the digest does. */
@@ -645,6 +732,7 @@ export async function runRollbackNotice({
   sha,
   state,
   reason,
+  why = null,
   webhook,
   post = (args) => postToMattermost(args),
   log = (l) => console.log(l),
@@ -655,7 +743,7 @@ export async function runRollbackNotice({
     );
     return;
   }
-  await post({ webhook, text: buildRollbackNotice({ sha, state, reason }) });
+  await post({ webhook, text: buildRollbackNotice({ sha, state, reason, why }) });
   log("✓ rollback notice posted to Mattermost");
 }
 
@@ -774,9 +862,12 @@ async function main() {
     process.exit(2);
   }
   if (args.command === "rollback-verdict") {
-    const v = rollbackVerdict(await readStdin(), args.sha);
-    const word =
-      v.terminal ?? (v.line === "unreadable reply" ? "unreadable" : "running");
+    const v = rollbackVerdict(await readStdin(), args.sha, { since: args.since });
+    const word = v.recovered
+      ? "recovered"
+      : v.absent
+        ? "absent"
+        : (v.terminal ?? (v.line === "unreadable reply" ? "unreadable" : "running"));
     console.log(`${word} ${v.from ?? "-"} ${v.line}`);
     return;
   }
@@ -787,6 +878,8 @@ async function main() {
         state: args.state,
         fromSha: args.fromSha,
         reason: process.env.REASON,
+        why: args.why,
+        start: args.start,
       }),
     );
     if (verdict.message) console.error(verdict.message);
@@ -810,6 +903,7 @@ async function main() {
       sha: args.sha,
       state: args.state,
       reason: process.env.REASON,
+      why: args.why,
       webhook: process.env.MATTERMOST_WEBHOOK_URL,
     });
     return;

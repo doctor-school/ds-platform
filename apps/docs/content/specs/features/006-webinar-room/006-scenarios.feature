@@ -379,3 +379,33 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
     Then the payload authorName is null
     And the portal renders the non-PII «Участник <tag>» participant label instead of a fabricated name
     And a legacy message minted before the authorName field existed renders the same tag fallback
+
+  # --- Amendment 2026-10-28 (#2911): the live presence count is hidden from viewers by default ---
+
+  @EARS-19 @happy
+  Scenario: A viewer sees no participant count while the event's setting is off
+    Given a live event whose «Показывать зрителям число участников» setting is off and three doctors are present
+    When a registered doctor enters the room
+    Then the room config and every heartbeat ack served to the doctor carry no presence count
+    And no presence-count realtime message reaches the doctor's connection
+    And the room renders no participant count, no zero and no empty slot
+
+  @EARS-19 @happy
+  Scenario: A viewer sees the live count while the event's setting is on
+    Given a live event whose «Показывать зрителям число участников» setting is on
+    When a registered doctor is in the room and another doctor enters
+    Then the room shows the participant count and it rises within about one second
+
+  @EARS-19 @happy
+  Scenario: A staff account sees the count whatever the setting
+    Given a live event whose «Показывать зрителям число участников» setting is off and doctors are present
+    When a staff account enters the room
+    Then the room shows the live participant count, updating as doctors enter and leave
+    And the staff account itself is not counted
+
+  @EARS-19 @edge
+  Scenario: Turning the setting off during the broadcast removes the count from an open room
+    Given a registered doctor in a live room that shows the participant count
+    When an operator turns «Показывать зрителям число участников» off
+    Then the count disappears from the doctor's room no later than the doctor's next accepted heartbeat
+    And presence capture and the doctor's minutes continue unchanged

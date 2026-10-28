@@ -625,3 +625,18 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       Given an event whose «Скрыть число записавшихся» option is on
       When any public read returns that event
       Then the response carries no registrant number for it
+
+  # --- Amendment 2026-10-28 (#2911): the «Идёт сейчас» block carries the presence count only where the event shows it ---
+
+  @EARS-30 @EARS-6 @happy
+  Scenario: The live block shows no participant count while the event's setting is off
+    Given a live targeted event whose «Показывать зрителям число участников» setting is off and doctors are in the room
+    When a doctor opens the events feed
+    Then the live read carries no presence count
+    And the «Идёт сейчас» block renders with its LIVE marker and title and no participant count, no zero and no empty slot
+
+  @EARS-30 @EARS-6 @happy
+  Scenario: The live block shows the participant count while the event's setting is on
+    Given a live targeted event whose «Показывать зрителям число участников» setting is on and doctors are in the room
+    When a doctor opens the events feed
+    Then the «Идёт сейчас» block shows the number of doctors in the room

@@ -171,7 +171,7 @@ Then("the home page reads as complete without it", async ({ page }) => {
 });
 
 Given(
-  "{string} has no approved content file in packages/legal-content",
+  /^"([^"]+)" has no approved content file in packages\/legal-content$/u,
   async ({ host }, title: string) => {
     expect(["doctor", "academy"]).toContain(host.id);
     expect(title).toBe("Лицензия на образовательную деятельность");

@@ -10,7 +10,7 @@ lang: en
 
 > **EN (this)** · **RU:** [`048-product-ru.md`](./048-product-ru.md)
 
-> Epic: [Two-site IA — product brief](../../product/two-site-ia/brief.md) · Functional-map registry row 048 (`apps/docs/content/specs/product/two-site-ia/functional-map-ru.md` §B). Owner decisions of 2026-10-28 are recorded on [#1799](https://github.com/doctor-school/ds-platform/issues/1799) «Discovery decisions». Anything this PRD adds beyond those decisions is marked `agent-proposed — UNCONFIRMED`.
+> Epic: [Two-site IA — product brief](../../product/two-site-ia/brief.md) · Functional-map registry row 048 (`apps/docs/content/specs/product/two-site-ia/functional-map-ru.md` §B). Owner decisions of 2026-10-28 are recorded on [#1799](https://github.com/doctor-school/ds-platform/issues/1799) «Discovery decisions». Lead decisions are marked _(lead decision 2026-10-28; owner sees it at Stage A)_; anything else this PRD adds beyond those decisions is marked `agent-proposed — UNCONFIRMED`.
 
 ## Feature summary
 
@@ -22,14 +22,14 @@ The feed is a shared capability: the 029 home blocks only read it. Its capabilit
 
 ## User stories
 
-- **US-1** — As a **platform administrator**, I write a news item or an expert column in the admin, preview it and publish it, so the Academy can say something on its own site without posting it elsewhere first.
+- **US-1** — As a **platform administrator**, I write a news item or an expert column in the admin — columns in this feature are written by the team on the expert's behalf _(lead decision 2026-10-28; owner sees it at Stage A)_ — preview it and publish it, so the Academy can say something on its own site without posting it elsewhere first.
 - **US-2** — As a **platform administrator**, I edit or unpublish a platform material I published, and the change shows on the site without a release.
 - **US-3** — As a **platform administrator**, I keep the list of official accounts the feed reads: for each account I set its platform, its address and which feeds it supplies (news, video or both), and I can switch an account off without deleting what it already brought in. _(Per-account feed choice — agent-proposed — UNCONFIRMED.)_
 - **US-4** — As a **platform administrator**, materials published on the connected accounts appear in the feed by themselves; nobody copies posts into the admin by hand.
-- **US-5** — As a **platform administrator**, I can hide one specific external material from the feed (an off-topic or outdated post) without switching off the whole account. _(agent-proposed — UNCONFIRMED.)_
+- **US-5** — As a **platform administrator**, I can hide one specific external material from the feed (an off-topic or outdated post) without switching off the whole account. _(lead decision 2026-10-28; owner sees it at Stage A)_
 - **US-6** — As an **Academy visitor**, the «Новости и блог» block shows the latest materials of all kinds mixed together, newest first; each entry tells me its type (news, expert column, social post), its title and who published it and when, and opens the material.
 - **US-7** — As an **Academy visitor**, the «Рилсы и видео» block shows the latest short videos from the official video accounts as preview tiles with duration, title and platform; a tile takes me to the video on its platform (canvas default, variant Б).
-- **US-8** — As an **Academy visitor**, I open a platform-authored news item or column and read it on the Academy itself. _(agent-proposed — UNCONFIRMED: a platform material otherwise has nowhere to link; see Open questions.)_
+- **US-8** — As an **Academy visitor**, I open a platform-authored news item or column and read it on its own reading page on the Academy itself — a platform material otherwise has nowhere to link. _(lead decision 2026-10-28; owner sees it at Stage A)_
 - **US-9** — As an **Academy visitor**, while the feed is loading, when there is nothing in it yet, or when it could not be loaded, the blocks tell me so honestly and let me retry — never a fake entry, never a blank hole.
 - **US-10** — As a **product owner**, when marketing names a new platform, it joins the feed as a new source kind next to the existing ones, without redesigning the home blocks or migrating materials already in the feed.
 
@@ -58,6 +58,7 @@ The feed is a shared capability: the 029 home blocks only read it. Its capabilit
 
 ## Product acceptance criteria
 
+- Per-platform access — API keys and the terms of use for reading public posts — is checked at design time as a lead obligation; a platform that cannot be read lawfully is reported back before it is designed.
 - One feed holds platform-authored materials and materials from external official accounts; the 029 blocks read it and hold no materials of their own.
 - An administrator with the 047 `platform_admin` role creates, edits, publishes and unpublishes platform materials in the admin, and nobody without that role can.
 - The source list is kept in the admin; only accounts listed there feed the site, each with a platform kind from an open set; the starting kinds are Telegram, VK, Dzen, RuTube and YouTube.
@@ -73,7 +74,7 @@ The feed is a shared capability: the 029 home blocks only read it. Its capabilit
 ## Out of scope
 
 - The 029 home page itself and the placement of the blocks — feature 029.
-- Experts writing their own columns in a cabinet (REQ-124 in full) — later; in this feature the team enters columns in the admin. _(agent-proposed — UNCONFIRMED.)_ Linking a column author to the expert's personal page — `blocked_by` **031** (expert page).
+- Experts writing their own columns in a cabinet (REQ-124 in full) — a later 048 slice; in this feature the team enters columns in the admin on the expert's behalf. Linking a column author to the expert's personal page — `blocked_by` **031** (expert page).
 - Publishing from the platform to the social networks (cross-posting) — the feed only reads.
 - Comments, likes, view counters, subscriptions to the feed.
 - A feed on the doctor storefront `doctor.school`; a full «all news» archive page. _(agent-proposed — UNCONFIRMED.)_
@@ -82,11 +83,7 @@ The feed is a shared capability: the 029 home blocks only read it. Its capabilit
 
 ## Open questions
 
-- **Final platform list** — the owner is checking with marketing (#1799). The starting set is Telegram, VK, Dzen, RuTube, YouTube; the canvas reels caption also names «VK Видео».
-- **Platform material page** — does a news item or column written on the platform get its own reading page on the Academy (US-8), or is every platform material also published on a social account and the entry links there? _(owner — product.)_
-- **Who writes expert columns** — the team on the expert's behalf (this PRD's proposal) or the expert themself later? _(owner — product.)_
-- **Moderation** — is hiding single external posts (US-5) needed, given only official accounts are read? _(owner — product.)_
-- Per-platform access (API keys, terms of use for reading public posts) is checked at design time; a platform that cannot be read lawfully is reported back before it is designed.
+- **Final platform list** — the owner is checking with marketing (#1799). The starting set is Telegram, VK, Dzen, RuTube, YouTube; the canvas reels caption also names «VK Видео». The source list is extensible (US-10), so this item does not block the feature. _(owner — product.)_
 
 ## Approved-mockup reference
 

@@ -10,13 +10,13 @@ lang: en
 
 > **EN (this)** · **RU:** [`034-product-ru.md`](./034-product-ru.md)
 
-> Epic: [Two-site IA — product brief](../../product/two-site-ia/brief.md) · Functional-map registry row 034 and §E (`apps/docs/content/specs/product/two-site-ia/functional-map-ru.md`). Owner decisions of 2026-10-28 on [#1799](https://github.com/doctor-school/ds-platform/issues/1799) «Discovery decisions», cascade item 4. Anything beyond recorded decisions is marked `agent-proposed — UNCONFIRMED`.
+> Epic: [Two-site IA — product brief](../../product/two-site-ia/brief.md) · Functional-map registry row 034 and §E (`apps/docs/content/specs/product/two-site-ia/functional-map-ru.md`). Owner decisions of 2026-10-28 on [#1799](https://github.com/doctor-school/ds-platform/issues/1799) «Discovery decisions», cascade item 4. Lead decisions are marked _(lead decision 2026-10-28; owner sees it at Stage A)_; anything else beyond recorded decisions is marked `agent-proposed — UNCONFIRMED`.
 
 ## Feature summary
 
-The Academy home (029) sends organisations to **«Как это работает»** (the «Инвесторам» persona entry; the hero card is labelled «Партнёрам»). Today there is no page behind it. Slice 1 makes it real: an Academy page that explains the model — the organisation invests in a project, experts produce education, doctors learn, the investor sees the result — what the investor gets, and that the relationship is a contract outside the platform with transparent accounting on it (CON-16, OWD-3: no payments on the platform). The page ends with **«Обсудить проект — оставить заявку»**: a short request form for an organisation's representative.
+The Academy home (029) sends organisations to **«Как это работает»** (the «Инвесторам» persona entry; the hero card is labelled «Партнёрам»). Naming follows the canvas: the hero card says «Партнёрам», the persona block and the page say «Инвесторам»; REQ-134 (investor terminology) stays open in ADR-0016 §6 beyond this surface. _(lead decision 2026-10-28; owner sees it at Stage A)_ Today there is no page behind it. Slice 1 makes it real: an Academy page that explains the model — the organisation invests in a project, experts produce education, doctors learn, the investor sees the result — what the investor gets, and that the relationship is a contract outside the platform with transparent accounting on it (CON-16, OWD-3: no payments on the platform). The page ends with **«Обсудить проект — оставить заявку»**: a short request form for an organisation's representative.
 
-Every request lands in the **shared application queue** owned by feature 033, next to author applications; it is reviewed by a platform administrator under 047 access (role `platform_admin`), and the team is notified of each new request (a queue behaviour). This replaces the partner lead capture of the frozen 013 PRD (US-5…US-9, functional map §E): after the Academy narrowed to the backstage, the investor's way in is this page, not a landing form.
+Every request lands in the **shared application queue** owned by feature 033, next to author applications; it is reviewed by a platform administrator under 047 access (role `platform_admin`), and the team is notified of each new request (a queue behaviour). This replaces the partner lead capture of the frozen 013 PRD (US-5…US-9, functional map §E): after the Academy narrowed to the backstage, the investor's way in is this page, not a landing form. Slice 1 is therefore `blocked_by` **033 slice 1**: requests go into the shared application queue that 033 owns (its storage, admin list, statuses and notification), so this slice cannot be finished before that queue exists.
 
 Storefront affiliation (ADR-0016 §8): the page — `академия`; requests — `только админка` (via the 033 queue).
 
@@ -28,7 +28,7 @@ Storefront affiliation (ADR-0016 §8): the page — `академия`; requests
 - **US-4** — As a **representative**, I send the request without creating an account — the investor cabinet is for organisations already working with the Academy. _(agent-proposed — UNCONFIRMED.)_
 - **US-5** — As a **representative**, I give explicit consent to the processing of the personal data in my request, with a link to the policy, before I can send it (152-ФЗ; ADR-0016 §7). _(Lead-asserted legal constraint, as in 013 — UNCONFIRMED by the owner.)_
 - **US-6** — As a **representative**, invalid or missing fields are explained next to the field without losing the rest of my input; a server failure keeps my input and lets me retry.
-- **US-7** — As a **representative**, after sending I see an unambiguous confirmation that the request is received and the Academy team will contact me and prepare a commercial offer; I can send another request.
+- **US-7** — As a **representative**, after sending I see an unambiguous confirmation that the request is received and the Academy team will contact me and prepare a commercial offer; I can send another request. I also receive a «заявка получена» email, as in 033, whose text is shown at Stage A. _(lead decision 2026-10-28; owner sees it at Stage A)_
 - **US-8** — As a **platform administrator**, investor requests appear in the shared queue as their own kind, with the organisation and contact of the representative and their task, and I work them with the same statuses and notes as author applications (033 US-9…US-11).
 - **US-9** — As a **representative**, I can move on from the page to what already exists on the Academy — the «Все проекты» catalog (030) — and never land on a dead link or an empty marketplace.
 
@@ -37,9 +37,9 @@ Storefront affiliation (ADR-0016 §8): the page — `академия`; requests
 **Representative leaves a request (US-1…US-7):**
 
 1. Visitor taps «Как это работает» on the home → lands on the investor page: «Как это работает» (three steps), «Что получает инвестор», «Организация, не персона», «Как оформляются отношения», «Следующий шаг».
-2. Visitor taps «Обсудить проект — оставить заявку» → the form in «Следующий шаг» (canvas default: request channel variant А, form on the page).
+2. Visitor taps «Обсудить проект — оставить заявку» → the form in «Следующий шаг» (canvas default: request channel variant А, form on the page; no messenger contact on the page). _(lead decision 2026-10-28; owner sees it at Stage A)_
 3. Visitor fills organisation, full name, work email (and optionally role, phone), describes the task, ticks the consent, taps «Отправить заявку».
-4. The request is stored in the 033 queue and the team is notified; the form is replaced by «Запрос отправлен» with «Отправить ещё одну заявку».
+4. The request is stored in the 033 queue, the team is notified and the representative receives the «заявка получена» email; the form is replaced by «Запрос отправлен» with «Отправить ещё одну заявку».
 
 **Branches:** missing required field → inline message, nothing sent; server failure → plain message, input kept, retry; double submission → one request. _(agent-proposed — UNCONFIRMED.)_
 
@@ -50,11 +50,12 @@ Storefront affiliation (ADR-0016 §8): the page — `академия`; requests
 - `academy.doctor.school` serves a real investor page; the home «Инвесторам / Партнёрам → Как это работает» entries lead to it.
 - The page presents the model, what the investor gets, the organisation-not-person principle and how the relationship is formalised; it promises no on-platform payment.
 - The «Обсудить проект» form needs no account; organisation, full name and work email are required; validation messages say what to fix and keep other input; a server failure keeps input and offers retry.
+- The public no-account form is protected against bots and floods with the platform's existing bot-protection posture, as other public forms are.
 - The request cannot be sent without the explicit personal-data consent; the consent is recorded with the request.
-- Every request appears in the shared 033 queue as an investor request with organisation, contact and task; a double submission creates one request; the team is notified as for every queue entry.
+- Every request appears in the shared 033 queue as an investor request with organisation, contact and task; a double submission creates one request; the team is notified as for every queue entry, and the representative receives the «заявка получена» email.
 - The confirmation is shown in place of the form and promises only what the team does by hand (contact and a commercial offer), not an automatic offer.
 - The page shows no marketplace block, no cards and no figures until the later slice brings real data; links go only to pages that exist.
-- Investor requests follow the retention schedule decided for the queue (033 US-14).
+- Investor requests follow the retention schedule recorded for the shared queue in the platform's retention registry (033 US-14).
 - The page and form are usable on a phone and pass the platform accessibility bar (`playwright-axe`).
 
 ## Out of scope
@@ -66,14 +67,11 @@ Later slices of 034, each with its technical dependency:
 - Linking a request to an organisation in the 032 registry, and «Кто уже инвестирует — Партнёры» — after the 032 partner catalog is public. _(agent-proposed — UNCONFIRMED.)_
 - The investor organisation cabinet («Вы вошли как сотрудник организации-инвестора») — feature 035.
 - Any payment on the platform (CON-16, OWD-3).
-- The queue itself — feature 033.
+- The queue itself — feature 033 slice 1; this slice is `blocked_by` it (requests go into the shared application queue that 033 owns).
 
 ## Open questions
 
-- **Name of the entry** — the home canvas says «Партнёрам» on the hero card and «Инвесторам» on the persona block, the page says «Инвесторам»; REQ-134 (investor terminology) is deliberately open in ADR-0016 §6. Which word does the visitor see? _(owner — product.)_
-- **Messenger contact** — the canvas variant Б shows a team contact «Мессенджер — по номеру телефона · будни 10:00–19:00 мск» instead of a form; the canvas default is the form (variant А). Should the page also show a direct contact next to the form? _(owner — product, at Stage A.)_
-- **Confirmation email** to the representative — as in 033. _(owner — product.)_
-- **Retention period** — shared with 033 open question.
+_None for slice 1._ The entry naming, the contact channel, the confirmation email and retention are recorded lead decisions above; the owner sees them at Stage A.
 
 ## Approved-mockup reference
 

@@ -18,17 +18,17 @@ Doctor.School works with organizations, not just people: pharma companies and me
 
 Feature 032 is delivered in two slices. **Slice 1 (this PRD)** builds the **organization registry and its admin**: an operator registers an organization once, gives it one or several **roles** from an open, extensible set (starting with _investor_, _clinical base_, _educational licensee_ — Q-40), records what of it may be shown publicly, and publishes or retires it. The partner records that already exist on the platform become organizations of this registry rather than a second list next to it. Two consumers read the registry in this wave: the **project admin and project cards** of feature 030 slice 1 (which organization stands behind a project) and the **Academy home** of feature 029 (the partner count in the first screen is computed from the registry, never typed in by hand — the owner's no-temporary-crutches principle, #1799).
 
-The public **investor leaderboard and the investor page** are the late slice, because the leaderboard ranks by attention share and investment volume, which only the accruals ledger (036) can supply.
+The public **investor leaderboard and the investor page** are the late slice, because the leaderboard ranks by attention share and investment volume, which only the accruals ledger (036) can supply. The folder slug `032-investors-leaderboard` predates this slicing: slice 1 is the organization registry, and the leaderboard is the late slice.
 
 ## User stories
 
 - **US-1** — As an **operator**, I register an organization once — its name, logo, website and a short description — and every surface of the platform that names it uses that one record.
 - **US-2** — As an **operator**, I give one organization **several roles at once** (for example a clinic that is both a clinical base and an educational licensee), so the registry describes how we actually work with it instead of forcing a single label.
-- **US-3** — As an **operator**, I maintain the **list of organization roles** myself — add a new role when a new kind of cooperation appears, retire one nobody uses — without waiting for a development cycle. _(agent-proposed — UNCONFIRMED: Q-40 fixes that the role set is open and extensible; that staff edit it from the admin is the lead's reading of the owner's «админку для ведения справочников» principle.)_
+- **US-3** — As an **operator**, I maintain the **list of organization roles** myself — add a new role when a new kind of cooperation appears, retire one nobody uses — without waiting for a development cycle. Q-40 fixes that the role set is open and extensible; platform administrators edit it from the admin, per the owner's «админку для ведения справочников» principle. _(lead decision 2026-10-28; owner sees it at Stage A)_
 - **US-4** — As an **operator**, I record per organization **what may be shown publicly** — its name, its logo — because each partner's compliance rules differ (REQ-70), and the site must follow them without anyone re-checking every page.
 - **US-5** — As an **operator**, I keep an organization in **draft** until its record is complete, **publish** it, and **retire** it when cooperation ends; a retired organization disappears from everything public and from every count, and I can restore it later without re-entering it.
 - **US-6** — As an **operator**, I find an organization in the registry by name and narrow the list by role, so a growing registry stays manageable.
-- **US-7** — As an **operator**, the sponsor partners already entered on the platform appear in the registry as organizations with the _investor_ role, with their projects still attached — nothing is re-typed and no project loses its partner. _(agent-proposed — UNCONFIRMED: Q-40 reduces «partner» as the holder of money to «investor»; the role assigned to the existing records is the lead's reading.)_
+- **US-7** — As an **operator**, the sponsor partners already entered on the platform appear in the registry as organizations with the _investor_ role, with their projects still attached — nothing is re-typed and no project loses its partner. Q-40 reduces «partner» as the holder of money to «investor», so every existing record moves with that role; where one is in fact a clinic or an institute, I correct its roles after the move. _(lead decision 2026-10-28; owner sees it at Stage A)_
 - **US-8** — As an **operator**, I am warned when I start registering an organization that looks like one already in the registry (same name or same website), so the registry does not split one company into two. _(agent-proposed — UNCONFIRMED.)_
 - **US-9** — As a **visitor of the Academy home**, the number of partners I see in the first screen is the real number of organizations Doctor.School works with today, so the first claim the Academy makes about itself is true.
 - **US-10** — As the **product owner**, I know that only platform administrators, signed in to the admin with their second factor, can create or change organizations, and that every change is kept in the edit history, so the registry that feeds public numbers and, later, money reports is trustworthy.
@@ -59,13 +59,13 @@ The public **investor leaderboard and the investor page** are the late slice, be
 **Partner count on the Academy home (US-9):**
 
 1. A visitor opens `academy.doctor.school`.
-2. The first-screen line «N партнёров» shows the count the registry gives at that moment — published organizations within the counting rule (see Open questions).
+2. The first-screen line «N партнёров» shows the count the registry gives at that moment — all published organizations, whatever their roles, including those whose compliance forbids public display (the number identifies no one). _(lead decision 2026-10-28; owner sees it at Stage A)_
 3. When an operator publishes or retires an organization, the number on the home follows without anyone editing the home.
 
 **Branches:**
 
 - **An organization without a logo** → it is still a complete record; surfaces that show it fall back to its name.
-- **An organization whose compliance forbids showing its name or logo** → it is still in the registry and can be attached to projects; public surfaces do not display what is not permitted (see Open questions for whether it is counted).
+- **An organization whose compliance forbids showing its name or logo** → it is still in the registry and can be attached to projects; it is counted in the home partner figure, while public surfaces do not display its name or logo. _(lead decision 2026-10-28; owner sees it at Stage A)_
 - **An organization with no role ticked** → cannot be published: an organization Doctor.School works with always works with it in some capacity. _(agent-proposed — UNCONFIRMED.)_
 
 ## Product acceptance criteria
@@ -74,7 +74,7 @@ The public **investor leaderboard and the investor page** are the late slice, be
 - An organization carries a **set of roles**, not one type: one organization may hold any combination of the roles in the list, and the list of roles is **open** — adding or retiring a role changes no page and no other organization. The starting roles are exactly _investor_, _clinical base_, _educational licensee_; «employer» is not a role (Q-38), and the words «спонсор» / «рекламодатель» are never used for the investor role (Q-40).
 - An organization has a **draft → published → retired** life, with restore back to draft. Only published organizations appear on any public surface or in any public count.
 - **What may be shown publicly** is recorded per organization and is respected by every public surface that shows organizations, starting with project cards (030).
-- The **Academy home partner count is computed from the registry** at request time; no one types or edits that number, and publishing or retiring an organization changes it.
+- The **Academy home partner count is computed from the registry** at request time as the number of all published organizations of any role, including those whose public display is forbidden; no one types or edits that number, and publishing or retiring an organization changes it.
 - Only **platform administrators** in an admin session with the second factor (existing staff access 047, admin 2FA 011) can create, edit, publish, retire or restore organizations and roles; every such change is recorded in the platform's edit history (010).
 - Organizations belong to the **Academy** storefront and the admin; the doctor storefront shows none of this (ADR-0016 §8; the doctor sees results, not the backstage — REQ-51).
 - The registry list and the form work on a narrow screen and pass the platform's accessibility gate.
@@ -89,13 +89,11 @@ The public **investor leaderboard and the investor page** are the late slice, be
 - **Event-level partners and sponsorship levels** (REQ-140) — a relation of an event to an organization, owned by 030's later slice / the event features, not by the registry.
 - **The project ↔ organization link itself** — managed in the project admin of 030 slice 1; 032 supplies the organizations it picks from.
 - **A clinic or partner cabinet** — NG-6.
+- **Removing the 045 education-index demo** ([#2367](https://github.com/doctor-school/ds-platform/issues/2367)) — belongs to the late (leaderboard) slice of 032, which replaces it; slice 1 leaves it in place.
 
 ## Open questions
 
-- **Who counts as a «партнёр» in the home figure? (owner)** The canvas says «14 партнёров». Options: every published organization whatever its roles; only organizations with the _investor_ role; investors and clinical bases. The answer fixes what the first public number of the Academy means.
-- **Is an organization that forbids public display still counted? (owner)** A partner whose compliance does not allow its name on the site still works with Doctor.School. Counting it keeps the number true; not counting it keeps the number checkable against the logos a visitor can see later.
-- **Who may extend the role list? (owner)** The lead proposes that platform administrators add and retire roles in the admin (US-3). Confirm, or keep role changes as a deliberate product decision made through development.
-- **The existing partner records' role.** The lead proposes they all become _investor_ (US-7); if some of them are in fact clinics or institutes, the operator corrects that after the move — confirm no other default is wanted.
+_None for slice 1._ The partner-count rule, counting organizations that forbid public display, who extends the role list and the existing records' role are recorded lead decisions above; the owner sees them at Stage A.
 
 ## Approved mockup
 

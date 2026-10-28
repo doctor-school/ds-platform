@@ -352,6 +352,21 @@ export async function registerOwnedCredentials(
   watchStorefrontEntries(page, base);
   await page.goto(registrationUrl(base, returnTo), { waitUntil: "load" });
   await page.waitForLoadState("networkidle");
+  return submitOwnedRegistration(page, base, account);
+}
+
+/**
+ * The sign-in host's registration form, already open on `page` (reached from
+ * {@link registerOwnedCredentials}' storefront entry, or from a page CTA such
+ * as the event page's «Участвовать»): fills it, submits, waits for the code
+ * step and returns the delivered code. `base` is the storefront the journey
+ * started on (its mailbox and its callback).
+ */
+export async function submitOwnedRegistration(
+  page: Page,
+  base: string,
+  account: OwnedCredentials,
+): Promise<{ response: Response; body: string; code: string }> {
   await inputSecret(page.locator('input[autocomplete="email"]'), account.email);
   await inputSecret(
     page.locator('input[autocomplete="new-password"]'),

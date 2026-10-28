@@ -1,7 +1,15 @@
+import { randomUUID } from "node:crypto";
+
 import { golden } from "@ds/db/seed/golden";
 import { expect, type Page, type Response } from "@playwright/test";
 
 import { HOSTS, baseUrlFor, type HostId } from "../hosts.js";
+import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
+import {
+  inputSecret,
+  submitOwnedRegistration,
+  type OwnedCredentials,
+} from "../lib/owned-registration.js";
 import { signInGoldenDoctor } from "../lib/sign-in.js";
 import { Given, Then, When } from "./support/fixtures.js";
 
@@ -40,6 +48,9 @@ const origin = (id: HostId) => new URL(base(id)).origin;
 /** The one golden published event both storefronts serve (020 EARS-1). */
 const eventPath = (id: HostId) =>
   `${HOSTS[id].eventsPath}/${golden.events.upcoming.slug}`;
+
+/** The storefront the outline's document request went to. */
+const requested = new WeakMap<Page, HostId>();
 
 /** The main-frame document responses of the page, in arrival order. */
 const documents = new WeakMap<Page, Response[]>();
@@ -107,6 +118,7 @@ When(
       await hasSession(page, id),
       `no ${hostName} session before the navigation`,
     ).toBe(false);
+    requested.set(page, id);
     await openAsDocument(page, id);
   },
 );
@@ -146,8 +158,9 @@ Then(
 
 Then(
   "no guest render of the event page reached the browser before the signed-in one",
-  async ({ page }, hostName: string) => {
-    const id = hostNamed(hostName);
+  async ({ page }) => {
+    const id = requested.get(page);
+    if (!id) throw new Error("020 EARS-22: no cross-host request was made");
     const rendered = eventResponses(page, id).filter((r) => r.status() === 200);
     expect(rendered, "exactly one render of the event page").toHaveLength(1);
     expect(rendered[0]).toBe(recorded(page).at(-1));
@@ -199,5 +212,287 @@ Then(
     });
     expect(again?.status()).toBe(200);
     expect(again?.request().redirectedFrom(), "no second check").toBeNull();
+  },
+);
+
+// --- 020 EARS-18: the one-account journeys across the two storefronts ---------
+
+/** The event a cross-host journey chose (its slug is the same on both hosts). */
+const journeys = new WeakMap<Page, { slug: string }>();
+
+function journeySlug(page: Page): string {
+  const journey = journeys.get(page);
+  if (!journey) throw new Error("020 EARS-18: no event was chosen");
+  return journey.slug;
+}
+
+const pathOf = (id: HostId, slug: string) => `${HOSTS[id].eventsPath}/${slug}`;
+/** Each storefront's public event read (its BFF `pagePath`). */
+const READ_PATH: Readonly<Record<HostId, string>> = {
+  academy: "/v1/public/events",
+  doctor: "/v1/storefront/doctor/events",
+};
+
+/**
+ * An upcoming published event both storefronts serve — hybrid when asked —
+ * whose server-resolved CTA is still `register` for the browser's viewer on
+ * `ctaHost` (a guest, or the doctor signed in there), so the journey can start
+ * a registration whatever earlier runs left on the stand.
+ */
+async function chooseEvent(
+  page: Page,
+  hybrid: boolean,
+  ctaHost: HostId,
+): Promise<string> {
+  const list = await page.request.get(
+    `${base("academy")}${READ_PATH.academy}?timeframe=upcoming&limit=50`,
+  );
+  expect(list.status(), "the upcoming events read").toBe(200);
+  const { data } = (await list.json()) as { data: { slug: string }[] };
+  for (const { slug } of data) {
+    const academy = await page.request.get(
+      `${base("academy")}${READ_PATH.academy}/${slug}`,
+    );
+    if (academy.status() !== 200) continue;
+    const event = (await academy.json()) as { state: string; format: string };
+    if (event.state !== "published") continue;
+    if (hybrid && event.format !== "hybrid") continue;
+    const doctor = await page.request.get(
+      `${base("doctor")}${READ_PATH.doctor}/${slug}`,
+    );
+    if (doctor.status() !== 200) continue;
+    const participation = await page.request.get(
+      `${base(ctaHost)}${READ_PATH[ctaHost]}/${slug}/participation`,
+    );
+    if (participation.status() !== 200) continue;
+    const cta = (await participation.json()) as { action: string };
+    if (cta.action === "register") return slug;
+  }
+  throw new Error(
+    `020 EARS-18: no upcoming ${hybrid ? "hybrid " : ""}event served by both storefronts with a register CTA`,
+  );
+}
+
+async function openEventAsDocument(
+  page: Page,
+  id: HostId,
+  query = "",
+): Promise<void> {
+  recordDocuments(page);
+  const path = pathOf(id, journeySlug(page));
+  const response = await page.goto(`${base(id)}${path}${query}`, {
+    waitUntil: "load",
+  });
+  expect(response?.status(), `the ${id} event page document`).toBe(200);
+  await expect(page).toHaveURL(
+    (url) => url.origin === origin(id) && url.pathname === path,
+  );
+}
+
+/** Every document the browser received off the two storefronts was a redirect. */
+function noSignInHostPageRendered(page: Page): void {
+  const offStorefront = recorded(page).filter((r) => {
+    const from = new URL(r.url()).origin;
+    return from !== origin("academy") && from !== origin("doctor");
+  });
+  for (const response of offStorefront) {
+    const status = response.status();
+    expect(
+      status >= 300 && status < 400,
+      `${new URL(response.url()).origin} only redirected (no page, no form)`,
+    ).toBe(true);
+  }
+}
+
+Given("a doctor signed in on doctor.school", async ({ page }) => {
+  await page.context().clearCookies();
+  await signInGoldenDoctor(page, HOSTS.doctor, SEED, base("doctor"));
+  expect(await hasSession(page, "doctor"), "signed in on doctor.school").toBe(
+    true,
+  );
+  journeys.set(page, { slug: await chooseEvent(page, false, "doctor") });
+});
+
+When(
+  "the doctor opens the same event on academy.doctor.school",
+  async ({ page }) => {
+    expect(
+      await hasSession(page, "academy"),
+      "no academy.doctor.school session before the navigation",
+    ).toBe(false);
+    await openEventAsDocument(page, "academy");
+  },
+);
+
+Then(
+  "the doctor is already signed in through the one-account cross-host sign-in",
+  async ({ page }) => {
+    const first = recorded(page).find(
+      (r) => new URL(r.url()).origin === origin("academy"),
+    );
+    expect(first?.status(), "the silent check answered first").toBe(303);
+    const location = new URL(first!.headers()["location"] ?? "", first!.url());
+    expect(location.searchParams.get("prompt")).toBe("none");
+    expect(await hasSession(page, "academy")).toBe(true);
+    const session = await page.request.get(
+      `${base("academy")}/v1/auth/session`,
+    );
+    expect(session.status(), "the Academy session is live").toBe(200);
+  },
+);
+
+Then("the doctor is never asked for a second sign-in", async ({ page }) => {
+  noSignInHostPageRendered(page);
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  const path = pathOf("academy", journeySlug(page));
+  const rendered = recorded(page).filter((r) => {
+    const url = new URL(r.url());
+    return (
+      url.origin === origin("academy") &&
+      url.pathname === path &&
+      r.status() === 200
+    );
+  });
+  expect(rendered, "one render of the page, signed in").toHaveLength(1);
+});
+
+When(
+  "the doctor starts a registration from academy.doctor.school",
+  async ({ page }) => {
+    // 005 EARS-4 — the signed-in doctor's one-tap command; the page swaps to
+    // the registered state in place.
+    await page.getByTestId("event-register-one-tap").click();
+    await expect(page.getByText("Вы записаны").first()).toBeVisible();
+  },
+);
+
+Then(
+  "the return after registration lands on the academy.doctor.school page it started on",
+  async ({ page }) => {
+    const path = pathOf("academy", journeySlug(page));
+    await expect(page).toHaveURL(
+      (url) => url.origin === origin("academy") && url.pathname === path,
+    );
+    expect(await hasSession(page, "academy")).toBe(true);
+    await page.reload({ waitUntil: "load" });
+    await expect(page.getByText("Вы записаны").first()).toBeVisible();
+  },
+);
+
+Then(
+  "no link, string or navigation element on «#d-event» leads into the Academy backstage",
+  async ({ page }) => {
+    await openEventAsDocument(page, "doctor");
+    // ADR-0015 §4: the shell's one recorded «Academy.Doctor.School ↗» entry
+    // is the only Academy trace; the event page body leads nowhere into it.
+    const main = page.getByRole("main");
+    const hrefs = await main
+      .locator("a[href]")
+      .evaluateAll((links) =>
+        links.map((link) => (link as HTMLAnchorElement).href),
+      );
+    expect(
+      hrefs.filter((href) => new URL(href).origin === origin("academy")),
+    ).toEqual([]);
+    await expect(main.getByText(/academy\.doctor\.school/iu)).toHaveCount(0);
+  },
+);
+
+Given(
+  "a guest on the Academy event page of an upcoming hybrid event with the «онлайн» tab selected",
+  async ({ page }) => {
+    await page.context().clearCookies();
+    await prepareCaptchaForJourney(
+      page.context(),
+      base("academy"),
+      process.env.BOT_PROTECTION_ENABLED === "false" ? false : undefined,
+    );
+    journeys.set(page, { slug: await chooseEvent(page, true, "academy") });
+    await openEventAsDocument(page, "academy", "?mode=online");
+    await expect(page.getByTestId("event-format-tabs")).toHaveAttribute(
+      "data-mode",
+      "online",
+    );
+    expect(await hasSession(page, "academy"), "a guest").toBe(false);
+  },
+);
+
+When("the guest activates «Участвовать»", async ({ page }) => {
+  recordDocuments(page);
+  await page
+    .getByRole("main")
+    .getByRole("link", { name: "Участвовать", exact: true })
+    .first()
+    .click();
+});
+
+Then(
+  "the Academy renders no form and the browser reaches the sign-in host's registration form",
+  async ({ page }) => {
+    await page.waitForURL(
+      (url) =>
+        url.origin !== origin("academy") && url.origin !== origin("doctor"),
+    );
+    await expect(page.getByTestId("register-submit")).toBeVisible();
+    // The storefront's door only redirected: no Academy page rendered a form.
+    for (const response of recorded(page).filter(
+      (r) => new URL(r.url()).origin === origin("academy"),
+    )) {
+      expect(response.status(), response.url()).toBe(303);
+    }
+  },
+);
+
+When(
+  "the guest completes the registration and its code step there",
+  async ({ page }) => {
+    const account: OwnedCredentials = {
+      email: `cross-host-3173-${randomUUID()}@example.test`,
+      password: `Cross-${randomUUID()}-aA1!`,
+    };
+    const { code } = await submitOwnedRegistration(
+      page,
+      base("academy"),
+      account,
+    );
+    await inputSecret(
+      page.locator('input[autocomplete="one-time-code"]'),
+      code,
+    );
+  },
+);
+
+Then(
+  "the browser lands on the same Academy event page with the «онлайн» tab, signed in",
+  async ({ page }) => {
+    const path = pathOf("academy", journeySlug(page));
+    await page.waitForURL(
+      (url) =>
+        url.origin === origin("academy") &&
+        url.pathname === path &&
+        url.searchParams.get("mode") === "online",
+    );
+    expect(await hasSession(page, "academy")).toBe(true);
+    await expect(page.getByTestId("event-format-tabs")).toHaveAttribute(
+      "data-mode",
+      "online",
+    );
+  },
+);
+
+Then(
+  "the doctor storefront's event page for the same event also renders signed in on its next document request",
+  async ({ page }) => {
+    expect(
+      await hasSession(page, "doctor"),
+      "no doctor.school session before the request",
+    ).toBe(false);
+    await openEventAsDocument(page, "doctor");
+    const first = recorded(page).find(
+      (r) => new URL(r.url()).origin === origin("doctor"),
+    );
+    expect(first?.status(), "the doctor storefront's silent check").toBe(303);
+    expect(await hasSession(page, "doctor")).toBe(true);
+    noSignInHostPageRendered(page);
   },
 );

@@ -1,6 +1,6 @@
 ---
 title: "Feature 030 — Projects: the entity, its admin, the «Все проекты» catalog and the project page (PRD, slice 1)"
-description: "Product requirements for slice 1 of feature 030: the project as the single container of Academy work (ADR-0016 §4) — a project is not typed as a school or a podcast, it produces them — managed in the admin; the public «Все проекты» catalog on academy.doctor.school whose cards and scale line read real data; and the project page without its dashboard — hero, results, team, organizations and the «Войти в проект» entries to the application pages 033/034. Feeds the «Что мы делаем» block of the Academy home 029. Re-specifies the catalog and project-page parts of PRD 015. Feature 030 of the two-site IA epic; source of the 030 slice-1 EARS triplet (ADR-0014)."
+description: "Product requirements for slice 1 of feature 030: the project as the single container of Academy work (ADR-0016 §4) — a project is not typed as a school or a podcast, it produces them — managed in the admin; the public «Все проекты» catalog on academy.doctor.school whose cards and scale line read real data; and the project page without its dashboard and its team — hero, results, organizations and the «Войти в проект» entries to the application pages 033/034. Feeds the «Что мы делаем» block of the Academy home 029. Re-specifies the catalog and project-page parts of PRD 015. Feature 030 of the two-site IA epic; source of the 030 slice-1 EARS triplet (ADR-0014)."
 slug: two-site-ia-030-projects-catalog-product
 epic: ../../product/two-site-ia/brief.md
 status: Draft
@@ -18,7 +18,7 @@ A project is how the Academy works: a direction such as «Ортобиологи
 
 The platform already keeps project records from feature 012, but they are typed as _school / media / programme_, which contradicts that rule, they cannot say that a project is still being prepared, and the Academy has no public place that lists them. The Academy home 029 needs a «Что мы делаем» block with three project cards and a «Все проекты →» link — and by the owner's principle (#1799) those cards must read real, admin-managed projects, not hand-written copy.
 
-Feature 030 ships in two slices. **Slice 1 (this PRD)** delivers: the **project as a container** that states which outputs it produces and at what stage it is (running, «Скоро» — in preparation, or «Завершён»); its **management in the admin**; the public **«Все проекты» catalog** on `academy.doctor.school` — a scale line computed from data and a grid of project cards, the same card feeding the home block; and the **project page without its dashboard** — hero, results, team, organizations and the «Войти в проект» entries to the application pages 033 and 034. Every card links to its project page. _(lead decision 2026-10-28; owner sees it at Stage A: the canvas draws the card as a link and the page exists in the canvas, so delivering the page in slice 1 avoids a temporary non-clickable card — «без временных костылей».)_ The **dashboard** — market size, audience, investment, potential (REQ-125) — and the project's cross-cutting number on the page (REQ-89) are the late slice, `blocked_by` **036**. Slice 1 itself is `blocked_by` **032 slice 1**: investor attribution and the choice of a project's organizations read only the 032 organization registry, so slice 1 cannot be finished before that registry exists.
+Feature 030 ships in slices. **Slice 1 (this PRD)** delivers: the **project as a container** that states which outputs it produces and at what stage it is (running, «Скоро» — in preparation, or «Завершён»); its **management in the admin**; the public **«Все проекты» catalog** on `academy.doctor.school` — a scale line computed from data and a grid of project cards, the same card feeding the home block; and the **project page without its dashboard and its team** — hero, results, organizations and the «Войти в проект» entries to the application pages 033 and 034. Every card links to its project page. _(lead decision 2026-10-28; owner sees it at Stage A: the canvas draws the card as a link and the page exists in the canvas, so delivering the page in slice 1 avoids a temporary non-clickable card — «без временных костылей».)_ The project's **team block** — the experts with their role in the project and the «Место открыто» card — and every link from the page to an expert's page are a later slice of 030 that ships after the expert pages of 031: slice 1 links to no page that does not exist yet, and the curator is named as plain text. _(lead decision 2026-10-28; owner sees it at Stage A: the canvas «срез 1» hides the team and shows the curator without a link.)_ The **dashboard** — market size, audience, investment, potential (REQ-125) — and the project's cross-cutting number on the page (REQ-89) are the late slice, `blocked_by` **036**. Slice 1 itself is `blocked_by` **032 slice 1**: investor attribution and the choice of a project's organizations read only the 032 organization registry, so slice 1 cannot be finished before that registry exists.
 
 From PRD 015 this slice carries the catalog stories (015 US-1, US-2, US-14, US-15) and the project-page stories without the dashboard, re-stated for the Academy backstage audience; 015's dashboard-related stories go to the late slice.
 
@@ -37,19 +37,18 @@ From PRD 015 this slice carries the catalog stories (015 US-1, US-2, US-14, US-1
 
 - **US-7** — As a **visitor**, I tap a card and open the **project page**: what the project is, its stage, its curator, how many results and experts it has and since when it runs.
 - **US-8** — As a **visitor**, the page lists the project's **results** — school, congress, podcast, club — each leading to where it lives on doctor.school, so I see what the project has actually produced; a project in preparation shows its results honestly as planned.
-- **US-9** — As a **visitor**, the page shows the project's **team** — the experts linked to the project with their role in it — and an open place when the project is looking for an expert.
-- **US-10** — As a **visitor**, the page shows the **organizations in the project** — the investor organization when it allows being named, and other organizations by their role (for example a clinical base); a project without an investor shows the free place instead.
-- **US-11** — As an **expert** or **investor**, the «Войти в проект» block gives me my way in: «Зайти как эксперт — подать заявку» leads to the application page 033, «Обсудить проект» leads to the investor page 034 — never to a dead end.
+- **US-9** — As a **visitor**, the page shows the **organizations in the project** — the investor organization when it allows being named, and other organizations by their role (for example a clinical base); a project without an investor shows the free place instead.
+- **US-10** — As an **expert** or **investor**, the «Войти в проект» block gives me my way in: «Зайти как эксперт — подать заявку» leads to the application page 033, «Обсудить проект» leads to the investor page 034 — never to a dead end.
 
 **Operator and owner:**
 
-- **US-12** — As an **operator**, I describe a project once — title, short description, cover, the outputs it produces, its stage, its curator, the experts in its team with their role, the investor and other organizations — and the catalog card, the home block and the project page reflect it with no page editing.
-- **US-13** — As an **operator**, I set **the order** in which projects appear, so the strongest directions lead both the catalog and the home block; the home shows the first three projects of this order, with no separate «show on the home» mark. _(lead decision 2026-10-28; owner sees it at Stage A)_
-- **US-14** — As an **operator**, I keep a project in **draft** until it is ready, **publish** it, and **retire** it; a draft or retired project is absent from the catalog, the home, every count, and its page is not served; a restored project returns as a draft.
-- **US-15** — As an **operator**, a project cannot be published while its card would be incomplete (no title, no description, no stated output or stage), so the public catalog never shows a half-filled card. _(agent-proposed — UNCONFIRMED: the exact required set.)_
-- **US-16** — As the **product owner**, I know that only platform administrators, signed in to the admin with their second factor, can change projects, and that every change is in the edit history.
-- **US-17** — As a **doctor on doctor.school**, I never meet the project as such — I see its results (a school, an event) on my storefront; the project catalog and pages live on the Academy (REQ-51).
-- **US-18** — As a **visitor on a phone**, the catalog, the cards and the project page work as well as on desktop.
+- **US-11** — As an **operator**, I describe a project once — title, short description, cover, the outputs it produces, its stage, its curator, the investor and other organizations — and the catalog card, the home block and the project page reflect it with no page editing.
+- **US-12** — As an **operator**, I set **the order** in which projects appear, so the strongest directions lead both the catalog and the home block; the home shows the first three projects of this order, with no separate «show on the home» mark. _(lead decision 2026-10-28; owner sees it at Stage A)_
+- **US-13** — As an **operator**, I keep a project in **draft** until it is ready, **publish** it, and **retire** it; a draft or retired project is absent from the catalog, the home, every count, and its page is not served; a restored project returns as a draft.
+- **US-14** — As an **operator**, a project cannot be published while its card would be incomplete (no title, no description, no stated output or stage), so the public catalog never shows a half-filled card. _(agent-proposed — UNCONFIRMED: the exact required set.)_
+- **US-15** — As the **product owner**, I know that only platform administrators, signed in to the admin with their second factor, can change projects, and that every change is in the edit history.
+- **US-16** — As a **doctor on doctor.school**, I never meet the project as such — I see its results (a school, an event) on my storefront; the project catalog and pages live on the Academy (REQ-51).
+- **US-17** — As a **visitor on a phone**, the catalog, the cards and the project page work as well as on desktop.
 
 ## Flows
 
@@ -61,23 +60,22 @@ From PRD 015 this slice carries the catalog stories (015 US-1, US-2, US-14, US-1
 4. The whole card is a link to the project page.
 5. A closing invitation for someone whose direction is missing leads to the real application page (033 slice 1), not to a dead end. _(agent-proposed — UNCONFIRMED: the canvas plate «Предложить школу / Стать партнёром» re-pointed at 033/034 instead of 013's lead form, which the map moves into the shared application queue.)_
 
-**Project page (US-7…US-11):**
+**Project page (US-7…US-10):**
 
 1. The visitor opens a project from a card (catalog, home) or by its address; the breadcrumb «Проекты / <project>» returns to the catalog.
-2. **Hero**: the kicker «Проект», the stage badge (canvas: «проект идёт», «набор экспертов», «в плане»), title, description, «Куратор проекта — <expert>», and the counts «N результатов · M экспертов · с <год> года» computed from the project's data.
-3. **Results**: one card per result the project declares — its kind, title, short description and «на doctor.school ↗» to its storefront page where the result is live; a project in preparation shows its results as planned; loading and load-error states as drawn.
-4. **Team**: the experts linked to the project, each with their role in it (author, co-author, school expert, podcast expert), and the «Место открыто» card leading to 033 when the project looks for an expert. Each expert card leads to the expert's Academy page (031). _(agent-proposed — UNCONFIRMED: the ordering against 031, whose expert page ships in the same wave 4; settled at EARS time.)_
-5. **Organizations**: the investor organization with its logo or, where compliance does not allow a logo, its name as text (032, REQ-70), and other organizations by their role; with no investor, the free place «Стать инвестором проекта» leads to 034.
-6. **«Войти в проект»**: the expert card «Место в команде открыто» with «Зайти как эксперт — подать заявку» → 033; the investor card «Обсудить участие в проекте» with one sentence pointing to «Инвесторам» and the button «Обсудить проект» → 034.
+2. **Hero**: the kicker «Проект», the stage badge, title, description, «Куратор проекта — <expert>» as plain text with no link, and the counts «N результатов · M экспертов · с <год> года» computed from the project's data. The badge shows the project's public stage: a running project reads «проект идёт»; a project in preparation reads «Скоро» with what is happening now («идёт набор экспертов», «в плане»; US-3) — the canvas badges «набор экспертов» and «в плане» are two such texts of the one «Скоро» stage; a completed project reads «Завершён», which the canvas does not draw. _(lead decision 2026-10-28; owner sees it at Stage A)_
+3. **Results**: one card per result the project declares — its kind, title, short description and «на doctor.school ↗» to its storefront page where the result is live — a link to that result's own page, part of the result's content, not site navigation; the owner's rule of one footer link between the sites (#1430) governs navigation and is untouched _(lead decision 2026-10-28; owner sees it at Stage A)_; a project in preparation shows its results as planned; loading and load-error states as drawn.
+4. **Organizations**: the investor organization with its logo or, where compliance does not allow a logo, its name as text (032, REQ-70), and other organizations by their role; with no investor, the free place «Стать инвестором проекта» leads to 034.
+5. **«Войти в проект»**: the expert card «Место в команде открыто» with «Зайти как эксперт — подать заявку» → 033; the investor card «Обсудить участие в проекте» with one sentence pointing to «Инвесторам» and the button «Обсудить проект» → 034.
 
 **Home block (US-6):**
 
-1. The Academy home 029 shows the first three projects of the same ordered, published set (US-13) as cards of the same design, and «Все проекты →» opens the catalog.
+1. The Academy home 029 shows the first three projects of the same ordered, published set (US-12) as cards of the same design, and «Все проекты →» opens the catalog.
 2. Publishing, retiring or reordering a project in the admin changes the home, the catalog and the project page together.
 
-**Operator flow (US-12…US-15):**
+**Operator flow (US-11…US-14):**
 
-1. A platform administrator opens projects in the admin and creates or edits one: title, short description, cover, stage, the outputs it produces (from the platform's list of output kinds — school, course, podcast, event, congress, club …) with each result's title, description and storefront link where it is live, the curator and the team experts with their role, the linked investor and other organizations with their role from the organization registry (032).
+1. A platform administrator opens projects in the admin and creates or edits one: title, short description, cover, stage, the outputs it produces (from the platform's list of output kinds — school, course, podcast, event, congress, club …) with each result's title, description and storefront link where it is live, the curator, the linked investor and other organizations with their role from the organization registry (032).
 2. They place it in the display order.
 3. They publish: the card appears in the catalog and, by its position, on the home; the project page is served.
 4. Retiring removes it everywhere at once; restoring returns it as a draft.
@@ -99,7 +97,7 @@ From PRD 015 this slice carries the catalog stories (015 US-1, US-2, US-14, US-1
 - The catalog's **scale line is computed** — projects and partners from the published projects and the organization registry, broadcasts and their first year from the published projects' events; nobody types those numbers.
 - The **home block «Что мы делаем»** (029) uses the same card and the same ordered set; there is one card design and one source of projects across the Academy.
 - **Every card is a link to its project page**, and every published project has a page; no link on the card or the page leads to a missing page.
-- The **project page** shows the hero, the results, the team, the organizations and the «Войти в проект» entries to 033 and 034; it shows no dashboard, no project number row and no backstage block.
+- The **project page** shows the hero, the results, the organizations and the «Войти в проект» entries to 033 and 034; it shows no dashboard, no project number row, no team block and no backstage block, and no link leads to an expert page.
 - Investor and organization attribution comes **only from the organization registry** (032) and respects each organization's public-display permission (REQ-70).
 - Only **platform administrators** in an admin session with the second factor (047, 011) manage projects and the output-kinds list; every change is in the edit history (010).
 - Projects are an **Academy** surface; the doctor storefront has no projects catalog or project page (REQ-51, ADR-0016 §8).
@@ -109,6 +107,7 @@ From PRD 015 this slice carries the catalog stories (015 US-1, US-2, US-14, US-1
 ## Out of scope
 
 - **The project dashboard** — market size / patients / audience / investment / potential and their manual entry in the admin (REQ-125, owner decision §F-3) — late slice of 030, `blocked_by` **036** (without the ledger the investment figures would be fictitious). The canvas «первоинвестор» smart-contract wording of the investor entry goes with it.
+- **The project team block and the expert's role in the project** (REQ-128) — the experts with their role, the «Место открыто» card and the links to expert pages — later slice of 030, after 031 (the expert page and the role as an attribute of the link are 031's).
 - **The cross-cutting project number** on the page and through all accounting (REQ-89, OWD-9 accounting side) — 036.
 - **The project backstage block «Закулисье»** — expert search, team publications and podcasts of the project — later slice of 030. _(agent-proposed — UNCONFIRMED: after the materials feed 048 can attribute materials to a project.)_
 - **Outputs as content** — the school → course → module → lesson hierarchy (023/024), podcasts and clubs as playable content; slice 1 records which outputs a project produces and links to where they already live, it does not deliver them.
@@ -120,8 +119,8 @@ From PRD 015 this slice carries the catalog stories (015 US-1, US-2, US-14, US-1
 
 ## Open questions
 
-_None for slice 1._ The project page in slice 1, the card design, the scale line, the outputs line, the home selection and completed projects are recorded lead decisions above; the owner sees them at Stage A.
+_None blocking slice 1._ The project page in slice 1 without its team, the card design, the scale line, the outputs line, the stage badge, the results' storefront links, the home selection and completed projects are recorded lead decisions above; the owner sees them at Stage A. The items marked _agent-proposed — UNCONFIRMED_ above (the publish-required set, the closing invitation, the empty catalog, the 012 records, the output-kinds list, «Закулисье» after 048) settle at EARS time.
 
 ## Approved mockup
 
-_Empty — Stage A pending._ Reference canvases (not yet an approval for this slice): `design-source/academy-projects.dc.html` (the catalog: header with the scale line, `unit-project-card` grid with the stage badge, «Завершён» card after the active ones), `design-source/unit-project-card.dc.html` (the card, optional `stage` badge), `design-source/academy-project.dc.html` (the project page; switch «Объём» = «срез 1» hides the project number, «Закулисье» and the dashboard) and `design-source/academy-home.dc.html` «Что мы делаем» (three `unit-project-card` cards, outputs line).
+_Empty — Stage A pending._ Reference canvases (not yet an approval for this slice): `design-source/academy-projects.dc.html` (the catalog: header with the scale line, `unit-project-card` grid with the stage badge, «Завершён» card after the active ones), `design-source/unit-project-card.dc.html` (the card, optional `stage` badge), `design-source/academy-project.dc.html` (the project page; switch «Объём» = «срез 1» hides the project number, the team, «Закулисье» and the dashboard, and shows the curator without a link) and `design-source/academy-home.dc.html` «Что мы делаем» (three `unit-project-card` cards, outputs line).

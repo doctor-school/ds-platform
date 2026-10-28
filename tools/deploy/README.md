@@ -693,8 +693,12 @@ from git by `postgres-hash-migration.test.mjs`). A v1 record counts as unchanged
 only when it is a table entry whose v2 is the target's v2 and the image IDs are
 unchanged; any other v1 record keeps the certificate requirement. The first release
 after v2 reaches the box's previously installed probe and checkpoint verb (`install`
-runs after `ship`): the guard reads the probe a second time with the entry's v1 so
-the box prefers its recorded images, the pre-ship checkpoint rewrites the v1 record
+runs after `ship`): when an entry's v2 is the target's v2, the guard's first probe
+request carries that entry's v1, so a v1 box answers from its recorded image IDs and
+never inspects the mutable compose tags (`ds-postgres:pg17-partman-pgbackrest`,
+`ds-pgbackrest:local`); a box answering with a v2 record, or a failed first read, is
+read once more with the target's v2, and a failure names each hash asked
+(`postgres-probe asked with … <hash>…: PostgreSQL evidence unavailable: …`). The pre-ship checkpoint rewrites the v1 record
 unchanged (the shape that verb accepts), and the checkpoint after `data-up` — the
 newly installed verb — writes the target's v2 with `hashVersion: 2`. An entry can go
 once no box holds a v1 record.

@@ -123,7 +123,7 @@ import {
   assertPostgresEvidence,
   certifiedTarget,
   guardedPostgresStep,
-  migratedRecordHash,
+  migrationProbeHash,
   postgresImageOverride,
   postgresProbeRequest,
   postgresStateRecord,
@@ -2163,19 +2163,39 @@ export async function preparePostgresDeployment(
   };
   // #3313: ds-data-prod's `postgres-probe` verb. `client` is the read-only operator
   // check's own audited data-prod client (postgres-artifact-check.mjs) — same verb.
-  const probe = async (sourceHash) =>
-    JSON.parse(
-      await (client ?? dataProd()).call(["postgres-probe"], {
-        input: JSON.stringify(postgresProbeRequest({ ...probePlan, sourceHash })),
-      }),
-    );
+  const probe = async (sourceHash, asked) => {
+    try {
+      return JSON.parse(
+        await (client ?? dataProd()).call(["postgres-probe"], {
+          input: JSON.stringify(postgresProbeRequest({ ...probePlan, sourceHash })),
+        }),
+      );
+    } catch (error) {
+      throw new Error(`postgres-probe asked with ${asked} ${sourceHash.slice(0, 12)}…: ${error.message}`, {
+        cause: error,
+      });
+    }
+  };
   // #3419: the box prefers its recorded images only for a request hash equal to its
-  // record, so a v1 record the migration table maps onto the target is read again
-  // with that v1 — the only request shape the previously installed verb accepts.
+  // record; any other hash makes it inspect the mutable compose tags. When the migration
+  // table maps a v1 onto the target, the first read asks with that v1, so a v1 box answers
+  // from its record. A v2 record (or a failed first read) is read again with the target
+  // v2 — at most two reads, each failure naming the hash it asked with.
   const read = async () => {
-    const live = await probe(plan.sourceHash);
-    const v1 = probePlan.preferRecordedImages && migratedRecordHash(live, plan.sourceHash);
-    return v1 ? probe(v1) : live;
+    const v1 = probePlan.preferRecordedImages && migrationProbeHash(plan.sourceHash);
+    if (!v1) return probe(plan.sourceHash, "the target v2");
+    let first;
+    try {
+      const live = await probe(v1, "the table's v1 record");
+      if (live?.hashVersion !== 2) return live;
+    } catch (error) {
+      first = error;
+    }
+    try {
+      return await probe(plan.sourceHash, "the target v2");
+    } catch (error) {
+      throw first ? new Error(`${first.message}; then ${error.message}`, { cause: error }) : error;
+    }
   };
   let live = await read();
   const expected = assertPostgresEvidence({ ...plan, live, certificate });

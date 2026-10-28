@@ -302,60 +302,91 @@ test("3419: the checkpoint record keeps a v1 record v1 (the live verb's shape) a
   assert.deepEqual(JSON.parse(postgresStateRecord(v2)), after);
 });
 
-test("3419: the probe is read again with the table's v1 so the box prefers the recorded images", async () => {
+// #3419: the box prefers its recorded images only for a request hash equal to its
+// record; any other request makes it inspect the mutable compose tags, which can be gone.
+const TAG_FAILURE =
+  "PostgreSQL evidence unavailable: PostgreSQL evidence command failed: sudo";
+const box = (record, { tags = true } = {}) => {
   const requests = [];
-  const answer = (record) => ({
+  return {
+    requests,
     call: async (words, { input }) => {
       assert.deepEqual(words, ["postgres-probe"]);
       const request = JSON.parse(input);
       requests.push(request);
-      // The live box prefers its recorded images only for a request hash equal to its record.
       const live = evidence(head.target, record);
-      if (request.sourceHash !== record.sourceHash)
+      if (request.sourceHash !== record.sourceHash) {
+        if (!tags) throw new Error(TAG_FAILURE);
         live.targetImages.postgres.id = "sha256:" + "c".repeat(64);
+      }
       return JSON.stringify(live);
     },
-  });
-  await preparePostgresDeployment("HEAD", {
-    client: answer({ sourceHash: entry.v1 }),
+  };
+};
+const prepare = (client, extra = {}) =>
+  preparePostgresDeployment("HEAD", {
+    client,
     readTarget: () => head,
+    ...extra,
   });
-  assert.deepEqual(
-    requests.map((r) => r.sourceHash),
-    [head.sourceHash, entry.v1],
-  );
+const asked = (client) => client.requests.map((r) => r.sourceHash);
+
+test("3419: a v1 box is asked first with the table's v1, so it never reads the compose tags", async () => {
+  const client = box({ sourceHash: entry.v1 }, { tags: false });
+  await prepare(client);
+  assert.deepEqual(asked(client), [entry.v1]);
   // Only the fields the live (09c152b) entrypoint accepts are sent.
-  assert.deepEqual(Object.keys(requests[0]).sort(), [
+  assert.deepEqual(Object.keys(client.requests[0]).sort(), [
     "paths",
     "preferRecordedImages",
     "sourceHash",
     "target",
   ]);
-  requests.length = 0;
-  await preparePostgresDeployment("HEAD", {
-    client: answer({ sourceHash: head.sourceHash, hashVersion: 2 }),
-    readTarget: () => head,
+});
+
+test("3419: a v2 box is re-read with the target v2 (tags present or gone)", async () => {
+  for (const tags of [true, false]) {
+    const client = box(
+      { sourceHash: head.sourceHash, hashVersion: 2 },
+      { tags },
+    );
+    await prepare(client);
+    assert.deepEqual(
+      asked(client),
+      [entry.v1, head.sourceHash],
+      `tags ${tags}`,
+    );
+  }
+});
+
+test("3419: a v1 record not in the table is still refused, read once", async () => {
+  const client = box({ sourceHash: "f".repeat(64) });
+  await assert.rejects(prepare(client), /certification/);
+  assert.deepEqual(asked(client), [entry.v1]);
+});
+
+test("3419: a failed probe names every hash it was asked with", async () => {
+  const client = box({ sourceHash: "f".repeat(64) }, { tags: false });
+  await assert.rejects(prepare(client), (error) => {
+    for (const hash of [entry.v1, head.sourceHash])
+      assert.match(error.message, new RegExp(hash.slice(0, 12)));
+    assert.match(error.message, /command failed: sudo/);
+    return true;
   });
-  assert.deepEqual(
-    requests.map((r) => r.sourceHash),
-    [head.sourceHash],
-  );
-  // A certificate run never prefers the recorded images, so it reads once.
-  requests.length = 0;
+  assert.deepEqual(asked(client), [entry.v1, head.sourceHash]);
+});
+
+test("3419: a certificate run never prefers the recorded images, so it reads once with the target v2", async () => {
+  const client = box({ sourceHash: entry.v1 });
   const id = { id: "sha256:" + "d".repeat(64) };
-  await preparePostgresDeployment("HEAD", {
-    client: answer({ sourceHash: entry.v1 }),
-    readTarget: () => head,
+  await prepare(client, {
     certificate: {
       schema: 1,
       sourceHash: head.sourceHash,
       images: { postgres: id, pgbackrest: id },
     },
   }).catch(() => {}); // the stub's images are not the certified ones; only the reads count
-  assert.deepEqual(
-    requests.map((r) => r.sourceHash),
-    [head.sourceHash],
-  );
+  assert.deepEqual(asked(client), [head.sourceHash]);
 });
 
 const python = ["python3", "python"].find(

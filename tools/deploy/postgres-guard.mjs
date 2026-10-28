@@ -117,11 +117,13 @@ export const POSTGRES_HASH_MIGRATIONS = Object.freeze([
   }),
 ]);
 
-/** The v1 record a live box holds that the table maps onto `sourceHash` (v2), else null. */
-export function migratedRecordHash(live, sourceHash) {
-  if (live?.hashVersion === 2) return null;
-  const entry = POSTGRES_HASH_MIGRATIONS.find((e) => e.v1 === live?.sourceHash);
-  return entry && entry.v2 === sourceHash ? entry.v1 : null;
+/**
+ * The v1 hash a probe asks with first when the table maps it onto the target's v2
+ * `sourceHash`, else null: a box holding that v1 record then answers from its recorded
+ * image IDs and never inspects the mutable compose tags (#3419).
+ */
+export function migrationProbeHash(sourceHash) {
+  return POSTGRES_HASH_MIGRATIONS.find((e) => e.v2 === sourceHash)?.v1 ?? null;
 }
 
 /** The box record as a v2 hash: a v2 record itself, a table v1 its entry's v2, else null. */

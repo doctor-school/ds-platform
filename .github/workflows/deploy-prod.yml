@@ -395,7 +395,7 @@ jobs:
           # A lost start call (#3219): the box's record must be this run's (`--since`),
           # and no record with no running unit is a start still in flight for 8 polls
           # (2 min: the driver's GitHub and registry checks precede the record), then a
-          # rollback that never started.
+          # `not-started`: no rollback of this run was seen.
           since_args=()
           absent_grace=0
           if [ "$START" = "ssh-lost" ]; then
@@ -403,12 +403,15 @@ jobs:
             absent_grace=8
           fi
           absent_polls=0
+          start=$START
           # `unknown` has no verdict; its reason tells the record step and the notice
           # why: `lost-contact` (ssh down), `timeout` (the unit keeps running) or
-          # `not-started` (the start call was lost and the box never started it).
+          # `not-started` (the start call was lost and no rollback of this run was
+          # seen within the grace).
           terminal() {
             echo "terminal=$1" >> "$GITHUB_OUTPUT"
             echo "reason=${2:-}" >> "$GITHUB_OUTPUT"
+            echo "start=$start" >> "$GITHUB_OUTPUT"
             [[ "$from" =~ ^[0-9a-f]{40}$ ]] || from=""
             echo "from-sha=$from" >> "$GITHUB_OUTPUT"
           }
@@ -451,6 +454,11 @@ jobs:
               fi
             fi
             case "$verdict" in
+              recovered)
+                # An earlier run's rollback succeeded and the target is live, but this
+                # re-run's start call was lost too: recorded as already-succeeded.
+                start=already-succeeded
+                terminal succeeded; echo "rollback: succeeded (recovered)"; exit 0 ;;
               succeeded)
                 terminal succeeded; echo "rollback: succeeded"; exit 0 ;;
               failed)
@@ -506,7 +514,7 @@ jobs:
           REASON: ${{ inputs.reason }}
           TERMINAL: ${{ steps.rollback-poll.outputs.terminal }}
           WHY: ${{ steps.rollback-poll.outputs.reason }}
-          START: ${{ steps.rollback.outputs.outcome }}
+          START: ${{ steps.rollback-poll.outputs.start }}
           FROM_SHA: ${{ steps.rollback-poll.outputs.from-sha }}
         run: |
           node tools/deploy/release-runner.mjs rollback-record --sha "$SHA" \

@@ -157,12 +157,13 @@ export function buildDeploymentPayload({
 
 // Why an `error` rollback record has no verdict (#3219): the runner lost contact, the
 // poll timed out while the unit kept running, or the start call was lost and the
-// box never started the rollback.
+// box showed no rollback of this run within the poll's 2-min grace.
 const ROLLBACK_UNKNOWN = Object.freeze({
   "lost-contact": (s) => `rollback verdict unknown @ ${s}: lost contact with the driver`,
   timeout: (s) =>
     `rollback verdict unknown @ ${s}: not finished within 30 min, the unit keeps running on the box`,
-  "not-started": (s) => `rollback not started @ ${s}: the start call to the box was lost`,
+  "not-started": (s) =>
+    `rollback verdict unknown @ ${s}: the start call was lost and no rollback of this run appeared within 2 min`,
 });
 
 function buildRollbackPayload({ sha, shortSha, healthUrl, nowIso, state, rollback }) {

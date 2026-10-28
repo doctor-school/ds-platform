@@ -160,7 +160,11 @@ gh workflow run deploy-prod.yml --ref main -f mode=rollback -f sha=<target sha> 
   then counts only a record that ended after this run's start call
   (`rollback-verdict --since`); no such record with no running unit is a start
   still in flight for 8 polls (2 min), then `unknown` `not-started` — the start
-  call was lost and the box never started the rollback.
+  call was lost and no rollback of this run was seen within the grace (the box
+  may still have refused it, or never received it). An earlier attempt's
+  `succeeded` record while `rollback-status` names the target as the live SHA
+  is not `not-started` but a recovered success (an earlier run lost contact and
+  this re-run lost its start call too).
 - **Re-run after lost contact.** Re-dispatch the same SHA and reason. When the
   first run's rollback succeeded, the target is live and the driver answers
   `already-succeeded` (its `-rollback` unit finished rc 0 and its record says
@@ -172,7 +176,7 @@ gh workflow run deploy-prod.yml --ref main -f mode=rollback -f sha=<target sha> 
   `rollback to <sha12> — <reason>`, with the reason and the rolled-off SHA in its
   payload; `rollback-notice` posts «откат прода на <sha12>: <reason>» and the
   outcome to Mattermost through `release-notes.mjs` `postToMattermost` (lost
-  contact, the time-out and a start that never ran read differently).
+  contact, the time-out and a lost start with no rollback seen read differently).
 - **Runtime configs (#3274).** The rollback puts the target's `Caddyfile` and
   `centrifugo/config.json` (from the fetched target tree; the break-glass
   `--rollback` reads them with `git show <sha>:<path>`) into the live compose

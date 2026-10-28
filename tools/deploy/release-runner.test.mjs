@@ -586,6 +586,36 @@ describe("3219: the rollback's real outcome after lost contact", () => {
     assert.equal(rollbackVerdict(attached, SHA, { since }).terminal, null);
   });
 
+  it("--since: an earlier attempt's `succeeded` record while the target is live is a recovered success, not absent", () => {
+    const since = Date.parse("2026-10-28T10:00:00Z") / 1000;
+    const doc = (live) =>
+      JSON.stringify({
+        rollback: {
+          kind: "rollback",
+          sha: SHA,
+          from: LIVE,
+          state: "succeeded",
+          startedAt: "2026-10-28T08:00:00Z",
+          endedAt: "2026-10-28T08:05:00Z",
+        },
+        driver: { unit: "u", active: "inactive", rc: 0, previousSha: null },
+        live,
+      });
+    const v = rollbackVerdict(doc(SHA), SHA, { since });
+    assert.equal(v.terminal, "succeeded");
+    assert.equal(v.recovered, true);
+    assert.equal(v.absent, false);
+    assert.equal(v.from, LIVE);
+    // Another live SHA, or an old driver that names none: still absent.
+    for (const live of [PREV, undefined]) {
+      const other = rollbackVerdict(doc(live), SHA, { since });
+      assert.equal(other.absent, true, String(live));
+      assert.equal(other.recovered, false, String(live));
+    }
+    // A fresh success is this run's own, never `recovered`.
+    assert.equal(rollbackVerdict(doc(SHA), SHA).recovered, false);
+  });
+
   it("the record and the notice tell lost contact, the time-out and a start that never ran apart", () => {
     const descriptions = new Set();
     const notices = new Set();
@@ -610,13 +640,24 @@ describe("3219: the rollback's real outcome after lost contact", () => {
       rollback: { reason: "x" },
     });
     assert.match(lost.status.description, /lost contact with the driver/);
+    const unseen = buildDeploymentPayload({
+      sha: SHA,
+      notesText: "",
+      healthUrl: "https://api.example/v1/health",
+      state: "error",
+      rollback: { reason: "x", unknownReason: "not-started" },
+    });
+    assert.match(
+      unseen.status.description,
+      /no rollback of this run appeared within 2 min$/,
+    );
     assert.match(
       buildRollbackNotice({ sha: SHA, state: "unknown", reason: "x", why: "timeout" }),
       /30 минут/,
     );
     assert.match(
       buildRollbackNotice({ sha: SHA, state: "unknown", reason: "x", why: "not-started" }),
-      /не начался/,
+      /за 2 минуты откат на прод-сервере не появился/,
     );
   });
 

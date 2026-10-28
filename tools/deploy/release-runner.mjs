@@ -28,8 +28,9 @@
 //       passed them when it shipped. Writes `images-run-id=<id>` to $GITHUB_OUTPUT.
 //   rollback-verdict --sha <sha> [--since <epoch-s>]
 //       Reads one `rollback-status prod <sha>` reply on stdin and prints one line:
-//       `<running|succeeded|failed|absent|unreadable> <from-sha|-> <status line>`;
-//       `absent` = no record of this run and no running unit (#3219).
+//       `<running|succeeded|recovered|failed|absent|unreadable> <from-sha|-> <line>`;
+//       `absent` = no record of this run and no running unit; `recovered` = an
+//       earlier attempt's success with the target live (#3219).
 //   rollback-record --sha <sha> --state succeeded|failed|unknown [--from-sha <sha>]
 //                   [--why lost-contact|timeout|not-started] [--start <outcome>]
 //       The ONE Deployment record of the rollback, `rollback to <sha12> — <reason>`;
@@ -610,9 +611,11 @@ const CLOCK_MARGIN_S = 120;
  * `absent` (#3219): no record of this run and the unit is not running — the
  * caller tells a lost start call from a dead rollback. With `since` (the epoch
  * seconds of the run's start call, when that call's answer was lost), a finished
- * record that ended more than CLOCK_MARGIN_S before it is an earlier attempt.
+ * record that ended more than CLOCK_MARGIN_S before it is an earlier attempt;
+ * that attempt's `succeeded` record while the box names the target as the live
+ * SHA (`live`) is a `recovered` success — an earlier run lost contact, and this re-run lost its start call.
  *
- * @returns {{terminal: null|"succeeded"|"failed", line: string, from: string|null, absent: boolean}}
+ * @returns {{terminal: null|"succeeded"|"failed", line: string, from: string|null, absent: boolean, recovered: boolean}}
  */
 export function rollbackVerdict(text, sha, { since = null } = {}) {
   let doc;
@@ -629,21 +632,38 @@ export function rollbackVerdict(text, sha, { since = null } = {}) {
     driver === null ||
     (record !== null && record.sha !== sha)
   ) {
-    return { terminal: null, line: "unreadable reply", from: null, absent: false };
+    return {
+      terminal: null,
+      line: "unreadable reply",
+      from: null,
+      absent: false,
+      recovered: false,
+    };
   }
   const active = String(driver.active ?? "?");
+  const fromOf = (r) => (FULL_SHA.test(r?.from ?? "") ? r.from : null);
   if (record !== null && since !== null && TERMINAL_UNIT.has(active)) {
     const ended = Date.parse(record.endedAt ?? record.startedAt ?? "") / 1000;
-    if (!(ended >= since - CLOCK_MARGIN_S)) record = null;
+    if (!(ended >= since - CLOCK_MARGIN_S)) {
+      // An earlier run's success that left the target live, seen by a re-run whose
+      // own start call was lost too: the rollback has nothing left to do.
+      if (record.state === "succeeded" && doc.live === sha) {
+        const line = `driver=${active} rc=${driver.rc ?? "-"} state=succeeded live=target (earlier attempt)`;
+        return { terminal: "succeeded", line, from: fromOf(record), absent: false, recovered: true };
+      }
+      record = null;
+    }
   }
   const absent = record === null && TERMINAL_UNIT.has(active);
   const rc = driver.rc ?? null;
   const state = record?.state ?? null;
-  const from = FULL_SHA.test(record?.from ?? "") ? record.from : null;
+  const from = fromOf(record);
   const line = `driver=${active} rc=${rc ?? "-"} state=${state ?? "-"}`;
-  if (!TERMINAL_UNIT.has(active)) return { terminal: null, line, from, absent };
+  if (!TERMINAL_UNIT.has(active)) {
+    return { terminal: null, line, from, absent, recovered: false };
+  }
   const terminal = rc === 0 && state === "succeeded" ? "succeeded" : "failed";
-  return { terminal, line, from, absent };
+  return { terminal, line, from, absent, recovered: false };
 }
 
 /**
@@ -696,7 +716,8 @@ const NOTICE_OUTCOME = Object.freeze({
 const NOTICE_UNKNOWN = Object.freeze({
   "lost-contact": NOTICE_OUTCOME.unknown,
   timeout: "итог неизвестен: откат не завершился за 30 минут и продолжается на прод-сервере",
-  "not-started": "откат не начался: связь с прод-сервером оборвалась при запуске",
+  "not-started":
+    "итог неизвестен: связь оборвалась при запуске, и за 2 минуты откат на прод-сервере не появился",
 });
 
 /** The Mattermost notice of a rollback: the spec's line first, the outcome below. */
@@ -842,9 +863,11 @@ async function main() {
   }
   if (args.command === "rollback-verdict") {
     const v = rollbackVerdict(await readStdin(), args.sha, { since: args.since });
-    const word = v.absent
-      ? "absent"
-      : (v.terminal ?? (v.line === "unreadable reply" ? "unreadable" : "running"));
+    const word = v.recovered
+      ? "recovered"
+      : v.absent
+        ? "absent"
+        : (v.terminal ?? (v.line === "unreadable reply" ? "unreadable" : "running"));
     console.log(`${word} ${v.from ?? "-"} ${v.line}`);
     return;
   }

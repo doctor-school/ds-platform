@@ -1598,8 +1598,16 @@ describe("2985: release-driver", { skip: SKIP }, () => {
             rc: null,
             previousSha: null,
           },
+          live: LIVE,
         });
         assert.equal(log("ds-release.log"), "", "never the release record");
+      });
+
+      it("3219: names the live prod SHA, or null when it is unknown", () => {
+        writeFileSync(join(dir, "live-image"), `ds-api:${SHA}\n`);
+        assert.equal(JSON.parse(run(["rollback-status", "prod", SHA]).stdout).live, SHA);
+        writeFileSync(join(dir, "live-image"), "\n");
+        assert.equal(JSON.parse(run(["rollback-status", "prod", SHA]).stdout).live, null);
       });
 
       it("returns the rollback record and the -rollback unit's state", () => {

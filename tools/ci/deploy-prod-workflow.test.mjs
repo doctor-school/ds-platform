@@ -442,7 +442,9 @@ describe("3219: deploy-prod.yml — the rollback's real outcome after lost conta
   it("the record and the notice take the reason; the record also takes the start outcome", () => {
     const record = byId("rollback-record");
     assert.equal(record.env.WHY, "${{ steps.rollback-poll.outputs.reason }}");
-    assert.equal(record.env.START, "${{ steps.rollback.outputs.outcome }}");
+    // The start outcome as the poll resolved it (a recovered success reads as
+    // `already-succeeded`).
+    assert.equal(record.env.START, "${{ steps.rollback-poll.outputs.start }}");
     assert.match(record.run, /--why "\$WHY" --start "\$START"/);
     const notice = steps.find((s) => /rollback-notice/.test(s.run ?? ""));
     assert.equal(notice.env.WHY, "${{ steps.rollback-poll.outputs.reason }}");
@@ -479,6 +481,7 @@ describe("3219: the rollback poll, run against a stubbed box", () => {
     const out = path.join(dir, "out");
     writeFileSync(out, "");
     const r = spawnSync("bash", ["-e", "-c", poll.run], {
+      timeout: 60_000,
       cwd: REPO,
       encoding: "utf8",
       env: {
@@ -496,10 +499,11 @@ describe("3219: the rollback poll, run against a stubbed box", () => {
     );
     return { status: r.status, outputs, polls: Number(readFileSync(path.join(dir, "n"), "utf8")) };
   };
-  const reply = (active, rc, record) =>
+  const reply = (active, rc, record, live = "d".repeat(40)) =>
     JSON.stringify({
       rollback: record && { kind: "rollback", sha: SHA, from: null, ...record },
       driver: { unit: "u", active, rc, previousSha: null },
+      live,
     });
   const none = reply("absent", null, null);
 
@@ -539,6 +543,24 @@ describe("3219: the rollback poll, run against a stubbed box", () => {
       replies: [reply("inactive", 1, { state: "failed", startedAt: "2026-10-28T08:00:00Z", endedAt: "2026-10-28T08:05:00Z" })],
     });
     assert.equal(r.outputs.reason, "not-started");
+  });
+
+  it("two lost calls in a row: an earlier attempt's success with the target live is recorded as recovered", () => {
+    const r = runPoll({
+      start: "ssh-lost",
+      replies: [
+        reply(
+          "inactive",
+          0,
+          { state: "succeeded", startedAt: "2026-10-28T08:00:00Z", endedAt: "2026-10-28T08:05:00Z" },
+          SHA,
+        ),
+      ],
+    });
+    assert.equal(r.status, 0);
+    assert.equal(r.outputs.terminal, "succeeded");
+    assert.equal(r.outputs.start, "already-succeeded");
+    assert.equal(r.polls, 1);
   });
 
   it("after a normal start, no record and no unit stays a failure", () => {

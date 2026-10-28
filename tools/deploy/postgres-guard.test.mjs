@@ -135,6 +135,22 @@ test("EARS-6: canonical deployment seam rechecks before executing a mutation", a
   assert.equal(reads, 3);
 });
 
+test("3447: the deployment seam returns the mutation's output — the checkpoint's log bound lines reach the driver", async () => {
+  const f = fixture();
+  const guard = await preparePostgresDeployment("test", {
+    readTarget: () => ({ ...f, files }),
+    client: { call: async () => JSON.stringify(f.live) },
+  });
+  const checkpoint =
+    "log bound: ds-data-prod-postgres-1 log=json-file max-size=10m max-file=3\n";
+  assert.equal(await guard.run(async () => checkpoint), checkpoint);
+  const expected = assertPostgresEvidence(f);
+  assert.equal(
+    await guardedPostgresStep({ ...f, expected, mutate: () => checkpoint }),
+    checkpoint,
+  );
+});
+
 test("EARS-7: preparation certifies real inspected binary, provenance and UID", () => {
   const f = fixture();
   const plan = artifactBuildPlan(f)[0];

@@ -550,9 +550,9 @@ export function assertPostgresEvidence({
 }
 
 export async function guardedPostgresStep(options) {
-  const identity = assertPostgresEvidence(options);
-  await options.mutate();
-  return identity;
+  assertPostgresEvidence(options);
+  // #3447: the caller reads the guarded verb's output (the checkpoint's log bound lines).
+  return options.mutate();
 }
 
 /** The probe's request (#3313: the stdin of ds-data-prod's `postgres-probe` verb). */

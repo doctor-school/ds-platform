@@ -40,6 +40,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   IMAGE_REGISTRY,
   IMAGES_WORKFLOW,
+  KEPT_LOCAL_IMAGE_IDS_SHELL,
   RECORDED_IMAGE_NAMES,
   REGISTRY_PULL_TOKEN_FILE,
   RegistryError,
@@ -2722,7 +2723,7 @@ in_use_shas=$(printf '%s\\n' "$in_use" | awk -F: '/^ds-/ && $2 ~ /^[0-9a-f]+$/ &
 `;
 
 /**
- * #3042: the registry digest records no kept `ds-*` tag shares an image ID with —
+ * #3042: the registry digest records no local `ds-<image>` tag shares an image ID with —
  * production's retention block (`tools/deploy/prod.mjs` `retentionScript`).
  *
  * A pull leaves `<registry>/<image>@sha256:…` beside the local `ds-<image>:<sha>` tag;
@@ -2733,7 +2734,7 @@ in_use_shas=$(printf '%s\\n' "$in_use" | awk -F: '/^ds-/ && $2 ~ /^[0-9a-f]+$/ &
  * refused and kept. Each removal prints a line — the progress a full-disk run shows.
  */
 export function registryRecordsScript() {
-  return `kept_ids=$(sudo docker images --format '{{.Repository}} {{.ID}}' | awk '$1 ~ /^ds-/ {print $2}' | sort -u)
+  return `${KEPT_LOCAL_IMAGE_IDS_SHELL}
 sudo docker images --digests --filter 'reference=${IMAGE_REGISTRY}/*' --filter 'reference=${IMAGE_REGISTRY}/*/*' --format '{{.Repository}}@{{.Digest}} {{.ID}}' \\
   | while read -r ref id; do
       if printf '%s\\n' "$kept_ids" | grep -Fxq "$id"; then continue; fi

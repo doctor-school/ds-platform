@@ -2495,7 +2495,9 @@ sudo() {
     "inspect --format") cat "$D/running" ;;
     "images --format")
       case "$3" in
-        *Repository*ID*) awk '{print $1, $3}' "$D/images" ;;
+        # The unfiltered listing carries the pulled registry records as well (their
+        # repository is \`<registry>/<image>\`), exactly as on the box (#3455).
+        *Repository*ID*) awk '{print $1, $3}' "$D/images"; awk '{split($1, r, "@"); print r[1], $2}' "$D/digests" ;;
         *Repository*Tag*) awk '{print $1 ":" $2}' "$D/images" ;;
         *) awk '{print $1}' "$D/images" ;;
       esac ;;
@@ -2532,7 +2534,7 @@ ${script}`,
 const REG = IMAGE_REGISTRY;
 const FLOOR = GC_FREE_SPACE_FLOOR_BYTES;
 
-test("3042: retention drops registry digest records no kept `ds-*` tag shares — the orphan and the `pr/` one too", () => {
+test("3042: retention drops registry digest records no local `ds-<image>` tag shares — the orphan and the `pr/` one too", () => {
   const box = runOnFakeBox(pruneScript({ retention: 1, reservedSpace: BUILD_CACHE_RESERVED_SPACE }), {
     // `ds-api` keeps its newest tag (id1); the older SHA2 tag (id2) is pruned.
     images: [`ds-api ${SHA2} id2`, `ds-api ${SHA} id1`],

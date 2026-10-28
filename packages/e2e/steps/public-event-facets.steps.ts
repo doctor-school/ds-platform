@@ -94,9 +94,10 @@ async function openProject(page: Page): Promise<Locator> {
   expect(panelId).toBeTruthy();
   const panel = page.locator(`[id=${JSON.stringify(panelId)}]`);
   await expect(panel).toBeVisible();
-  await expect(
-    panel.getByRole("combobox", { name: "Найти", exact: true }),
-  ).toBeEditable();
+  const search = panel.getByRole("combobox", { name: "Найти", exact: true });
+  await expect(search).toBeEditable();
+  await search.fill("");
+  await expect(search).toHaveValue("");
   return panel;
 }
 async function findOption(panel: Locator, option: Option) {
@@ -166,7 +167,11 @@ async function emptyPage(page: Page) {
   expect(target.searchParams.has("expert")).toBe(false);
   await expect(page.locator("[data-webinar-card]")).toHaveCount(0);
   await expect(page.getByTestId("events-feed-show-more")).toHaveCount(0);
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  // Next's clipped route-announcer is an accessibility landmark, not a feed error.
+  await expect(
+    page.locator('[role="alert"]:not(#__next-route-announcer__)'),
+  ).toHaveCount(0);
+  await expect(page.getByTestId("events-feed-error")).toHaveCount(0);
   await expect(
     page.locator("main").getByText(/Не удалось|Ошибка загрузки/iu),
   ).toHaveCount(0);

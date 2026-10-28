@@ -82,7 +82,7 @@ gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_
 
 Run it as **its own statement** — never piped (`| tee` returns the pipe's exit code and masks a failure). An empty or whitespace-only `owner_quote` is refused first. `concurrency: deploy-prod` runs one release at a time, never cancelled.
 
-**Incident recovery is not a release.** When a prod health probe is red, diagnose read-only from the monitoring box and recover with `-f mode=redeploy -f sha=<live sha>` under the owner's standing authorization (no fresh word; `owner_quote` cites that authorization and the incident, and the owner is told the cause afterwards) — procedure and query catalogue: runbook [`operations/prod-incident-response.md`](../../operations/prod-incident-response.md).
+**Incident recovery is not a release.** When a prod health probe is red, diagnose read-only from the monitoring box and recover with `-f mode=redeploy -f sha=<live sha>` under the owner's standing authorization (chat 2026-10-28: «redeploy разрешаю»; no fresh word; the owner is told the cause afterwards), with exactly `-f owner_quote="redeploy разрешаю (standing authorization 2026-10-28) — incident: <probe> red since <UTC>"` — procedure and query catalogue: runbook [`operations/prod-incident-response.md`](../../operations/prod-incident-response.md).
 
 ### 3. Poll the run, then verify
 

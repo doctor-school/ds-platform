@@ -89,6 +89,13 @@ recreated at the SHA production already runs. On the owner's word:
 gh workflow run deploy-prod.yml --ref main -f mode=redeploy -f sha=<live sha> -f owner_quote="<owner word>"
 ```
 
+Incident recovery uses the same mode: when a prod health probe is red, the
+agent redeploys the live SHA without a fresh word, under the owner's standing
+authorization (2026-10-28, «redeploy разрешаю»), with
+`owner_quote="redeploy разрешаю (standing authorization 2026-10-28) — incident: <probe> red since <UTC>"`,
+and reports the cause afterwards — runbook
+`apps/docs/content/operations/prod-incident-response.md`.
+
 - **Pre-flight** (`release-runner.mjs redeploy-preflight`): the `owner_quote` is
   not blank (env only, as in a release); the SHA has a production Deployment with
   a `success` status (it really was released); its `images-<sha>.json` is

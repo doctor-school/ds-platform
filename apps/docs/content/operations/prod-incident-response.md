@@ -17,8 +17,9 @@ and the [`run-prod-deploy` skill](../skills/run-prod-deploy/SKILL.md).
 
 - **No standing operator ssh to the prod boxes** (release pipeline spec §4).
   The CI key's forced-command entrypoint (`infra/deploy/bin/ds-deploy-entrypoint`)
-  serves only `status` / `release` / `rollback` / `rollback-status` /
-  `upload-report` — no logs, no shell.
+  serves only the release-driver verbs `status` / `release` / `rollback` /
+  `rollback-status` / `redeploy` (prod box), `upload-report` / `observe` (stage
+  box) and the data-box hop verbs — no logs, no shell.
 - **Break-glass keys** (user `breakglass`) are held offline by the owner. A
   break-glass session is the owner's action, never the lead agent's.
 - **The read path is the monitoring box `mon-prod-tw`** (operator ssh alias
@@ -32,10 +33,12 @@ Alerts are **Grafana-managed** rules; Prometheus `rule_files` is empty, so read
 alert state from Grafana, not Prometheus:
 
 ```bash
-curl -s -u "<admin>:<password>" http://localhost:3000/api/alertmanager/grafana/api/v2/alerts
+curl -s --netrc-file <netrc built from the deploy .env> http://localhost:3000/api/alertmanager/grafana/api/v2/alerts
 ```
 
-(admin credentials are in the monitoring box's deploy `.env`; never print them).
+(admin credentials are in the monitoring box's deploy `.env`; never print them
+or pass them as `-u` on the command line, where shell history and the process
+list keep them).
 
 | Rule                                 | Severity | Probe / target                                                 | `for` |
 | ------------------------------------ | -------- | -------------------------------------------------------------- | ----- |
@@ -142,14 +145,14 @@ In order of preference:
 
    ```bash
    gh api "repos/{owner}/{repo}/deployments?environment=production&per_page=1" --jq '.[0].sha'
-   gh workflow run deploy-prod.yml --ref main -f mode=redeploy -f sha=<live sha> -f owner_quote="<quote>"
+   gh workflow run deploy-prod.yml --ref main -f mode=redeploy -f sha=<live sha> -f owner_quote="redeploy разрешаю (standing authorization 2026-10-28) — incident: <probe> red since <UTC>"
    ```
 
-   **Authorization:** the owner's standing authorization (chat 2026-10-28,
-   Issue #3428) covers a redeploy of the live SHA when a prod health probe is
-   red — no fresh owner word is needed. `owner_quote` is still required; it
-   carries that standing authorization and the incident reference, and the
-   owner is told afterwards with the cause. A redeploy for any other reason (an
+   **Authorization:** the owner's standing authorization (chat 2026-10-28:
+   «redeploy разрешаю», Issue #3428) covers a redeploy of the live SHA when a
+   prod health probe is red — no fresh owner word is needed. `owner_quote` is
+   still required and takes exactly the text above, with only `<probe>` and
+   `<UTC>` filled in; the owner is told afterwards with the cause. A redeploy for any other reason (an
    env change on the box) still needs the owner's word.
 
 2. **Rollback** — `mode=rollback` with a required `reason`, under the existing

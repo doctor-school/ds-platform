@@ -148,6 +148,79 @@ function jar(lines: readonly string[], prior = ""): string {
 const marker = async (now = NOW) =>
   (await guestMarkerCookie(TOKEN, now)).split(";")[0]!;
 
+/**
+ * Yandex's published robot User-Agents (yandex.ru/support/webmaster →
+ * «Проверить, что робот принадлежит Яндексу»), as `<token>/<version>` or a
+ * bare token; YandexMobileBot / YandexScreenshotBot carry a browser prefix.
+ */
+const YANDEX_ROBOTS = [
+  "YandexAccessibilityBot/3.0",
+  "YandexAdNet/1.0",
+  "YandexBlogs/0.99; robot",
+  "YandexBot/3.0",
+  "YandexBot/3.0; MirrorDetector",
+  "YandexCalendar/1.0",
+  "YandexCheckBot/3.0",
+  "YandexDialogs/1.0",
+  "YandexDirect/3.0",
+  "YandexDirectDyn/1.0",
+  "YandexFavicons/1.0",
+  "YandexFeed/1.0",
+  "YaDirectFetcher/1.0; Dyatel",
+  "YandexImages/3.0",
+  "YandexImageResizer/2.0",
+  "YandexMarket/1.0",
+  "YandexMarket/2.0",
+  "YandexMedia/3.0",
+  "YandexMetrika/2.0",
+  "YandexMetrika/3.0",
+  "YandexMetrika/4.0",
+  "YandexMobileScreenShotBot/1.0",
+  "YandexOntoDB/1.0",
+  "YandexOntoDBAPI/1.0",
+  "YandexPagechecker/1.0",
+  "YandexPartner/3.0",
+  "YandexRCA/1.0",
+  "YandexRenderResourcesBot/1.0",
+  "YandexSearchShop/1.0",
+  "YandexSitelinks; Dyatel",
+  "YandexSpravBot/1.0",
+  "YandexTracker/1.0",
+  "YandexUserproxy; robot",
+  "YandexVertis/3.0",
+  "YandexVerticals/1.0",
+  "YandexVideo/3.0",
+  "YandexVideoParser/1.0",
+  "YandexWebmaster/2.0",
+  "YandexAdditionalBot/1.0",
+  "YandexAdditional/1.0",
+].map((token): [string, string] => [
+  token,
+  `Mozilla/5.0 (compatible; ${token}; +http://yandex.com/bots)`,
+]);
+YANDEX_ROBOTS.push(
+  [
+    "YandexMetrika/2.0 (yabs01)",
+    "Mozilla/5.0 (compatible; YandexMetrika/2.0; +http://yandex.com/bots yabs01)",
+  ],
+  [
+    "YandexMobileBot/3.0",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 8_1 like Mac OS X) AppleWebKit/600.1.4 (KHTML, like Gecko) Version/8.0 Mobile/12B411 Safari/600.1.4 (compatible; YandexMobileBot/3.0; +http://yandex.com/bots)",
+  ],
+  [
+    "YandexScreenshotBot/3.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 (compatible; YandexScreenshotBot/3.0; +http://yandex.com/bots)",
+  ],
+  [
+    "YandexComBot/3.0",
+    "Mozilla/5.0 (compatible; YandexComBot/3.0; +http://ya.cc/bots)",
+  ],
+  [
+    "YaComBot/3.0",
+    "Mozilla/5.0 (compatible; YaComBot/3.0; +http://ya.cc/bots)",
+  ],
+);
+
 describe("003 EARS-63: the silent check starts only on a checkable request", () => {
   it("EARS-63: a signed-out top-level document GET is answered, before any render, with a 303 into a silent transaction carrying its path and query", async () => {
     const api = fakeApi();
@@ -242,6 +315,17 @@ describe("003 EARS-63: the silent check starts only on a checkable request", () 
     expect(api.calls).toEqual([]);
   });
 
+  it.each(YANDEX_ROBOTS)(
+    "EARS-63: (e) the Yandex robot %s is a crawler — never redirected",
+    async (_name, userAgent) => {
+      const api = fakeApi();
+      expect(
+        rendered(await check(nav("/", { "user-agent": userAgent }), api)),
+      ).toEqual([]);
+      expect(api.calls).toEqual([]);
+    },
+  );
+
   it.each([
     [
       "the Yandex app (Android)",
@@ -250,6 +334,10 @@ describe("003 EARS-63: the silent check starts only on a checkable request", () 
     [
       "Yandex Browser (desktop)",
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 YaBrowser/24.4.0.0 Yowser/2.5 Safari/537.36",
+    ],
+    [
+      "Yandex Browser (iPhone)",
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 YaBrowser/24.4.5.473.10 SA/3 Mobile/15E148 Safari/604.1",
     ],
   ])(
     "EARS-63: (e) %s is a person, not a crawler — its signed-out navigation is checked",

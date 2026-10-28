@@ -168,9 +168,15 @@ export async function readTransactionCookie(
   return { txId, silent };
 }
 
-/** ADR-0015 §4 step 4 «Crawlers» — the maintained search-crawler list. */
+/**
+ * ADR-0015 §4 step 4 «Crawlers» — the maintained search-crawler list. Every
+ * Yandex robot announces itself as `compatible; Yandex<Name>` or
+ * `compatible; Ya<Name>` (Yandex Webmaster, «robots' User-Agents»); the Yandex
+ * app (`YandexSearch/…`) and Yandex Browser (`YaBrowser/…`) never carry the
+ * `compatible;` token, so they stay visitors.
+ */
 const SEARCH_CRAWLER =
-  /yandex(?:bot|images|metrika|mobilebot|direct|accessibilitybot|renderresourcesbot)|googlebot|google-inspectiontool|googleother|adsbot-google|mediapartners-google|bingbot|bingpreview|msnbot|duckduckbot|baiduspider|slurp|applebot|petalbot|seznambot|sogou|mail\.ru_bot|exabot|qwantify/i;
+  /compatible; ?ya(?:ndex)?[a-z]+|googlebot|google-inspectiontool|googleother|adsbot-google|mediapartners-google|bingbot|bingpreview|msnbot|duckduckbot|baiduspider|slurp|applebot|petalbot|seznambot|sogou|mail\.ru_bot|exabot|qwantify/i;
 
 /**
  * EARS-63 (d) / (e) — whether the request may start a check at all. Exempt: a

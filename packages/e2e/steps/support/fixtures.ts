@@ -42,6 +42,18 @@ export interface StepWorld {
     projections?: Record<string, unknown>[][];
     upcomingCards?: Record<string, unknown>[];
   };
+  /** Real public horizon and selected month for one 004 calendar journey. */
+  publicCalendar?: {
+    today: string;
+    month: string;
+    entries: {
+      id: string;
+      slug: string;
+      title: string;
+      startsAt: string;
+      state: string;
+    }[];
+  };
   /** State the 019 events-feed journey carries from one step to the next. */
   eventsFeed?: EventsFeedWorld;
 }

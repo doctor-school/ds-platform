@@ -6,6 +6,7 @@ import type {
   EventsLiveRead,
 } from "@ds/schemas";
 import { PresenceRepository } from "../room/presence.repository.js";
+import { presenceVisibleTo } from "../room/presence-visibility.js";
 import {
   ROOM_HEARTBEAT_INTERVAL_SECONDS,
   presenceWindowSeconds,
@@ -75,6 +76,8 @@ export class EventsLiveService {
     routes: ParticipationRoutes;
     /** The authenticated subject, absent for a guest. */
     sub?: string | undefined;
+    /** 019 EARS-30 — the caller's session carries a staff role. */
+    staff?: boolean | undefined;
     /**
      * The doctor storefront's applied facets, as the ids of the live events
      * its feed predicate keeps (019 EARS-6, #2907); absent = no facet narrows.
@@ -100,9 +103,19 @@ export class EventsLiveService {
 
   private async toStrip(
     row: LiveEventRow,
-    input: { routes: ParticipationRoutes; sub?: string | undefined },
+    input: {
+      routes: ParticipationRoutes;
+      sub?: string | undefined;
+      staff?: boolean | undefined;
+    },
   ): Promise<EventLiveStrip> {
-    const cta = await this.participation.cta(row.slug, input.routes, input.sub);
+    const staff = input.staff === true;
+    const cta = await this.participation.cta(
+      row.slug,
+      input.routes,
+      input.sub,
+      staff,
+    );
     const viewerIsRegistered = cta?.action === "enter-room";
     const href =
       viewerIsRegistered && cta.href !== null
@@ -119,12 +132,16 @@ export class EventsLiveService {
       endsAt: new Date(
         row.startsAt.getTime() + row.durationMin * 60_000,
       ).toISOString(),
+      // 019 EARS-30 / 006 EARS-19 — `null` where the event hides the count from
+      // this reader; the registered branch inherits the CTA's own decision.
       presenceCount: viewerIsRegistered
-        ? (cta.presenceCount ?? 0)
-        : await this.presence.countLivePresence(
-            row.id,
-            presenceWindowSeconds(this.heartbeatIntervalSeconds),
-          ),
+        ? cta.presenceCount
+        : presenceVisibleTo(row, staff)
+          ? await this.presence.countLivePresence(
+              row.id,
+              presenceWindowSeconds(this.heartbeatIntervalSeconds),
+            )
+          : null,
       viewerIsRegistered,
     };
   }

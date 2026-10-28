@@ -35,6 +35,7 @@ import {
 } from "@ds/schemas";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/index.js";
 import { RecordingsProjectionService } from "../recordings/recordings.projection.js";
+import { PresencePublisher } from "../room/presence-publisher.service.js";
 import { SpeakerProjectionService } from "../taxonomy/speaker-projection.service.js";
 import {
   type EventAggregate,
@@ -536,6 +537,9 @@ export class EventsService {
     private readonly speakerProjection: SpeakerProjectionService,
     @Inject(RecordingsProjectionService)
     private readonly recordingsProjection: RecordingsProjectionService,
+    // 006 EARS-19 (#2911) — re-publishes the live count when the setting flips.
+    @Inject(PresencePublisher)
+    private readonly presencePublisher: PresencePublisher,
   ) {}
 
   /**
@@ -574,6 +578,8 @@ export class EventsService {
       audience: input.audience,
       // 007 EARS-12 (#2913) — «Скрыть число записавшихся», default off.
       hideSignUpCount: input.hideSignUpCount,
+      // 007 EARS-13 (#2911) — «Показывать зрителям число участников», default off.
+      showPresenceCount: input.showPresenceCount,
     });
 
     return this.toDetail(aggregate);
@@ -657,6 +663,7 @@ export class EventsService {
         | "participationFormat"
         | "audience"
         | "hideSignUpCount"
+        | "showPresenceCount"
       >
     > = {};
     // 012 EARS-26 / EARS-29 — the repository re-checks the EFFECTIVE pair.
@@ -667,6 +674,9 @@ export class EventsService {
     // 007 EARS-12 (#2913) — an omitted key leaves the option as it is.
     if (input.hideSignUpCount !== undefined)
       patch.hideSignUpCount = input.hideSignUpCount;
+    // 007 EARS-13 (#2911) — the same: an omitted key leaves the setting.
+    if (input.showPresenceCount !== undefined)
+      patch.showPresenceCount = input.showPresenceCount;
     if (input.title !== undefined) patch.title = input.title;
     if (input.school !== undefined) patch.school = input.school;
     if (input.startsAtMsk !== undefined)
@@ -690,6 +700,20 @@ export class EventsService {
     const updated = await this.repo.updateEvent(id, patch);
     // The row existed a moment ago; a concurrent delete is the only null path.
     if (!updated) return null;
+
+    // 006 EARS-19 (#2911) — a change of «Показывать зрителям число участников»
+    // on a live event re-publishes the live count to the audience the new value
+    // names, so turning it on reaches every open room at once rather than at a
+    // viewer's next beat (turning it off: viewers drop the count at their next
+    // heartbeat ack). Best-effort and fire-and-forget — the edit never waits on
+    // or fails because of the realtime transport.
+    if (
+      input.showPresenceCount !== undefined &&
+      input.showPresenceCount !== current.event.showPresenceCount &&
+      updated.event.state === "live"
+    ) {
+      void this.presencePublisher.refresh(updated.event.id);
+    }
 
     // GC-on-supersede (#627): the swap is durably committed above, so the
     // superseded object is now unreferenced — delete it so the bucket's steady
@@ -1645,6 +1669,8 @@ export class EventsService {
       ...kindFields(e, (await this.repo.findKinds([e.kindId])).get(e.kindId)),
       // 007 EARS-12 (#2913) — the option's own state; never the count itself.
       hideSignUpCount: e.hideSignUpCount,
+      // 007 EARS-13 (#2911) — the setting's own state; never the count itself.
+      showPresenceCount: e.showPresenceCount,
       // #1593 — the validator the `ETag` carries, on the body too so a client
       // holding a parsed detail can re-derive it without retaining a header.
       version: e.version,

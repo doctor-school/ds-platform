@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CentrifugoChatGateway } from "./chat.gateway.js";
 import type { PresenceRepository } from "./presence.repository.js";
+import type { RoomRepository } from "./room.repository.js";
 import { PresencePublisher } from "./presence-publisher.service.js";
 
 /**
@@ -34,13 +35,24 @@ function makeRepo() {
   };
 }
 
+/** The event's «Показывать зрителям число участников» setting (006 EARS-19). */
+function makeRooms(showPresenceCount = true) {
+  return {
+    showsPresenceCount: vi.fn<RoomRepository["showsPresenceCount"]>(() =>
+      Promise.resolve(showPresenceCount),
+    ),
+  };
+}
+
 function makePublisher(
   gateway: ReturnType<typeof makeGateway>,
   repo: ReturnType<typeof makeRepo>,
+  rooms: ReturnType<typeof makeRooms> = makeRooms(),
 ): PresencePublisher {
   return new PresencePublisher(
     gateway as unknown as CentrifugoChatGateway,
     repo as unknown as PresenceRepository,
+    rooms as unknown as RoomRepository,
     N,
   );
 }
@@ -58,7 +70,11 @@ describe("006 EARS-5 realtime presence-count publisher", () => {
     await publisher.onBeat(EVENT, 2);
 
     expect(gateway.publishPresenceCount).toHaveBeenCalledTimes(1);
-    expect(gateway.publishPresenceCount).toHaveBeenCalledWith(EVENT, 2);
+    expect(gateway.publishPresenceCount).toHaveBeenCalledWith(
+      EVENT,
+      2,
+      "everyone",
+    );
     publisher.onModuleDestroy();
   });
 
@@ -82,8 +98,18 @@ describe("006 EARS-5 realtime presence-count publisher", () => {
     await publisher.onBeat(EVENT, 3);
 
     expect(gateway.publishPresenceCount).toHaveBeenCalledTimes(2);
-    expect(gateway.publishPresenceCount).toHaveBeenNthCalledWith(1, EVENT, 2);
-    expect(gateway.publishPresenceCount).toHaveBeenNthCalledWith(2, EVENT, 3);
+    expect(gateway.publishPresenceCount).toHaveBeenNthCalledWith(
+      1,
+      EVENT,
+      2,
+      "everyone",
+    );
+    expect(gateway.publishPresenceCount).toHaveBeenNthCalledWith(
+      2,
+      EVENT,
+      3,
+      "everyone",
+    );
     publisher.onModuleDestroy();
   });
 
@@ -101,13 +127,21 @@ describe("006 EARS-5 realtime presence-count publisher", () => {
     const publisher = makePublisher(gateway, repo);
 
     await publisher.onBeat(EVENT, 2);
-    expect(gateway.publishPresenceCount).toHaveBeenCalledWith(EVENT, 2);
+    expect(gateway.publishPresenceCount).toHaveBeenCalledWith(
+      EVENT,
+      2,
+      "everyone",
+    );
 
     // No further beat — only time passing past the window expiry.
     await vi.advanceTimersByTimeAsync(600);
 
     expect(repo.countLivePresence).toHaveBeenCalledWith(EVENT, 120);
-    expect(gateway.publishPresenceCount).toHaveBeenLastCalledWith(EVENT, 1);
+    expect(gateway.publishPresenceCount).toHaveBeenLastCalledWith(
+      EVENT,
+      1,
+      "everyone",
+    );
     expect(gateway.publishPresenceCount).toHaveBeenCalledTimes(2);
     publisher.onModuleDestroy();
   });
@@ -137,6 +171,97 @@ describe("006 EARS-5 realtime presence-count publisher", () => {
     await publisher.onBeat(EVENT, 2);
 
     expect(gateway.publishPresenceCount).toHaveBeenCalledTimes(2);
+    publisher.onModuleDestroy();
+  });
+
+  it("006 EARS-19: while the event's setting is off the count is published to the staff-only channel, never the shared room channel", async () => {
+    const gateway = makeGateway();
+    const publisher = makePublisher(gateway, makeRepo(), makeRooms(false));
+
+    await publisher.onBeat(EVENT, 2);
+
+    expect(gateway.publishPresenceCount).toHaveBeenCalledTimes(1);
+    expect(gateway.publishPresenceCount).toHaveBeenCalledWith(
+      EVENT,
+      2,
+      "staff",
+    );
+    publisher.onModuleDestroy();
+  });
+
+  it("006 EARS-19: the setting is read at each publication — a change between beats moves the next publication to the other channel", async () => {
+    const gateway = makeGateway();
+    const rooms = makeRooms(false);
+    const publisher = makePublisher(gateway, makeRepo(), rooms);
+
+    await publisher.onBeat(EVENT, 2);
+    rooms.showsPresenceCount.mockResolvedValue(true);
+    await publisher.onBeat(EVENT, 3);
+
+    expect(gateway.publishPresenceCount).toHaveBeenNthCalledWith(
+      1,
+      EVENT,
+      2,
+      "staff",
+    );
+    expect(gateway.publishPresenceCount).toHaveBeenNthCalledWith(
+      2,
+      EVENT,
+      3,
+      "everyone",
+    );
+    publisher.onModuleDestroy();
+  });
+
+  it("006 EARS-19: turning the setting on while live re-publishes the UNCHANGED count to every connection at once — viewers do not wait for a count change or their next beat", async () => {
+    const gateway = makeGateway();
+    const repo = makeRepo();
+    repo.countLivePresence.mockResolvedValue(2);
+    const rooms = makeRooms(false);
+    const publisher = makePublisher(gateway, repo, rooms);
+
+    await publisher.onBeat(EVENT, 2);
+    rooms.showsPresenceCount.mockResolvedValue(true);
+    await publisher.refresh(EVENT);
+
+    expect(gateway.publishPresenceCount).toHaveBeenCalledTimes(2);
+    expect(gateway.publishPresenceCount).toHaveBeenLastCalledWith(
+      EVENT,
+      2,
+      "everyone",
+    );
+    publisher.onModuleDestroy();
+  });
+
+  it("006 EARS-19: turning the setting off while live moves the count to the staff-only channel and publishes nothing more to viewers", async () => {
+    const gateway = makeGateway();
+    const repo = makeRepo();
+    repo.countLivePresence.mockResolvedValue(2);
+    const rooms = makeRooms(true);
+    const publisher = makePublisher(gateway, repo, rooms);
+
+    await publisher.onBeat(EVENT, 2);
+    rooms.showsPresenceCount.mockResolvedValue(false);
+    await publisher.refresh(EVENT);
+    await publisher.onBeat(EVENT, 3);
+
+    expect(gateway.publishPresenceCount.mock.calls).toEqual([
+      [EVENT, 2, "everyone"],
+      [EVENT, 2, "staff"],
+      [EVENT, 3, "staff"],
+    ]);
+    publisher.onModuleDestroy();
+  });
+
+  it("006 EARS-19: a refresh with Centrifugo unconfigured is inert", async () => {
+    const gateway = makeGateway(false);
+    const repo = makeRepo();
+    const publisher = makePublisher(gateway, repo);
+
+    await expect(publisher.refresh(EVENT)).resolves.toBeUndefined();
+
+    expect(gateway.publishPresenceCount).not.toHaveBeenCalled();
+    expect(repo.countLivePresence).not.toHaveBeenCalled();
     publisher.onModuleDestroy();
   });
 });

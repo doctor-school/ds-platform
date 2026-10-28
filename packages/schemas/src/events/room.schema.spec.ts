@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  PresenceHeartbeatAckSchema,
   RoomChatMessageSchema,
+  RoomConfigSchema,
   RoomPresenceCountMessageSchema,
 } from "./room.schema.js";
 
@@ -81,5 +83,58 @@ describe("006 EARS-5 RoomPresenceCountMessage discrimination", () => {
       RoomPresenceCountMessageSchema.safeParse({ ...presence, count: -1 })
         .success,
     ).toBe(false);
+  });
+});
+
+// 006 EARS-19 (#2911) — the count is withheld at the source: a viewer of an event
+// that hides it reads `null` from the grant and every ack, never `0`; a staff
+// caller's chat credential names the staff-only presence channel, a viewer's none.
+describe("006 EARS-19 presence-count visibility in the room contract", () => {
+  const config = {
+    eventId: "6f9b2f1e-8f1a-4b7e-9c3d-2a1b3c4d5e6f",
+    heartbeatIntervalSeconds: 60,
+    liveAt: null,
+    presenceCount: null,
+    stream: null,
+    chat: {
+      url: "ws://centrifugo.test/connection/websocket",
+      token: "t",
+      channel: "room:event:6f9b2f1e-8f1a-4b7e-9c3d-2a1b3c4d5e6f",
+      staffChannel: null,
+      selfTag: "AB12CD34",
+    },
+  };
+
+  it("EARS-19: a RoomConfig may carry no presence count (`null`) and a viewer credential no staff channel", () => {
+    expect(RoomConfigSchema.safeParse(config).success).toBe(true);
+  });
+
+  it("EARS-19: a staff credential names the staff-only presence channel", () => {
+    const staff = {
+      ...config,
+      presenceCount: 3,
+      chat: {
+        ...config.chat,
+        staffChannel: "room:staff:6f9b2f1e-8f1a-4b7e-9c3d-2a1b3c4d5e6f",
+      },
+    };
+    expect(RoomConfigSchema.parse(staff).chat?.staffChannel).toBe(
+      "room:staff:6f9b2f1e-8f1a-4b7e-9c3d-2a1b3c4d5e6f",
+    );
+  });
+
+  it("EARS-19: the credential must state its staff channel — absent is not «none»", () => {
+    const { staffChannel: _omit, ...chat } = config.chat;
+    expect(RoomConfigSchema.safeParse({ ...config, chat }).success).toBe(false);
+  });
+
+  it("EARS-19: a heartbeat ack may carry no presence count (`null`)", () => {
+    expect(
+      PresenceHeartbeatAckSchema.safeParse({
+        eventId: config.eventId,
+        beatAt: "2026-07-13T10:00:00.000Z",
+        presenceCount: null,
+      }).success,
+    ).toBe(true);
   });
 });

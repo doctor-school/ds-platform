@@ -80,6 +80,16 @@ describe("019 EARS-6 events live contract (both hosts)", () => {
     ).toBe(true);
   });
 
+  it("019 EARS-30: a strip may carry no presence count (`null`) where the event hides it from the reader", () => {
+    expect(
+      EventLiveStripSchema.safeParse(strip({ presenceCount: null })).success,
+    ).toBe(true);
+    expect(
+      EventLiveStripSchema.safeParse(strip({ presenceCount: undefined }))
+        .success,
+    ).toBe(false);
+  });
+
   it("EARS-6.6: refuses an end instant that is not a real ISO datetime", () => {
     expect(
       EventLiveStripSchema.safeParse(strip({ endsAt: "20:30" })).success,

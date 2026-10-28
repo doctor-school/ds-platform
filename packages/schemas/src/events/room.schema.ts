@@ -38,6 +38,14 @@ export const RoomChatCredentialSchema = z.object({
   url: z.string().min(1),
   token: z.string().min(1),
   channel: z.string().min(1),
+  /**
+   * 006 EARS-19 (#2911) — the staff-only presence channel this connection is
+   * ALSO subscribed to server-side (the token's `channels` claim), carrying the
+   * typed `presence-count` message while the event hides the count from viewers.
+   * Present only in a staff caller's credential; `null` for a viewer, whose
+   * connection never receives it.
+   */
+  staffChannel: z.string().min(1).nullable(),
   selfTag: z.string().min(1),
 });
 export type RoomChatCredential = z.infer<typeof RoomChatCredentialSchema>;
@@ -102,7 +110,12 @@ export const RoomConfigSchema = z.object({
   eventId: z.uuid(),
   heartbeatIntervalSeconds: z.number().int().positive(),
   liveAt: z.iso.datetime({ offset: true }).nullable(),
-  presenceCount: z.number().int().nonnegative(),
+  /**
+   * 006 EARS-19 (#2911) — `null` when the event's «Показывать зрителям число
+   * участников» setting is off and the caller's session carries no staff role:
+   * the room renders no count, no «0» and no slot.
+   */
+  presenceCount: z.number().int().nonnegative().nullable(),
   stream: StreamConfigSchema.nullable(),
   chat: RoomChatCredentialSchema.nullable(),
 });
@@ -233,8 +246,11 @@ export const PresenceHeartbeatAckSchema = z.object({
    * The client uses the ack as fallback when realtime fan-out is unavailable. An
    * aggregate integer only — never per-doctor presence detail or the roster
    * (EARS-8). It is ≥ 1 here because this caller's just-appended beat is fresh.
+   * `null` when the event hides the count from this caller (006 EARS-19) — read
+   * fresh on every beat, so a mid-live setting change reaches an open room by
+   * its next accepted beat; a `null` ack means «drop any count shown».
    */
-  presenceCount: z.number().int().nonnegative(),
+  presenceCount: z.number().int().nonnegative().nullable(),
 });
 export type PresenceHeartbeatAck = z.infer<typeof PresenceHeartbeatAckSchema>;
 

@@ -8,6 +8,7 @@ import {
   Query,
   Req,
 } from "@nestjs/common";
+import { callerIsStaff } from "../auth/staff-role.js";
 import type { FastifyRequest } from "fastify";
 import {
   ApiExtraModels,
@@ -296,6 +297,7 @@ export class EventsPublicController {
       directionIds: null,
       routes: ACADEMY_ROUTES,
       sub,
+      staff: callerIsStaff(req),
       academyFacets,
     });
   }
@@ -362,7 +364,12 @@ export class EventsPublicController {
     @Req() req: FastifyRequest,
   ): Promise<ParticipationCta> {
     const sub = (req as { user?: { sub?: string } }).user?.sub;
-    const cta = await this.participation.cta(idOrSlug, ACADEMY_ROUTES, sub);
+    const cta = await this.participation.cta(
+      idOrSlug,
+      ACADEMY_ROUTES,
+      sub,
+      callerIsStaff(req),
+    );
     // A draft/unknown event is not-found here for the same reason it is on the
     // page read — this route must not become the «exists but private» oracle
     // that read refuses to be (004 EARS-6).

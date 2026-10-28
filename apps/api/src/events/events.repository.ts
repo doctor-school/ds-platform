@@ -158,6 +158,8 @@ export interface LiveEventRow {
   school: string;
   startsAt: Date;
   durationMin: number;
+  /** 019 EARS-30 / 006 EARS-19 — «Показывать зрителям число участников». */
+  showPresenceCount: boolean;
 }
 
 /**
@@ -356,6 +358,7 @@ export class EventsRepository {
         | "participationFormat"
         | "audience"
         | "hideSignUpCount"
+        | "showPresenceCount"
       >
     >,
   ): Promise<EventAggregate | null> {
@@ -676,6 +679,7 @@ export class EventsRepository {
         school: events.school,
         startsAt: events.startsAt,
         durationMin: events.durationMin,
+        showPresenceCount: events.showPresenceCount,
       })
       .from(events)
       .where(and(...where))

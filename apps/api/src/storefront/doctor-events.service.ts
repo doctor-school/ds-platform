@@ -402,6 +402,8 @@ export class DoctorEventsService {
     routes: ParticipationRoutes;
     /** The authenticated subject, absent for a guest. */
     sub?: string | undefined;
+    /** 019 EARS-30 — the caller's session carries a staff role. */
+    staff?: boolean | undefined;
     now?: Date;
   }): Promise<EventsLiveRead> {
     // The strip follows the scope the feed below EFFECTIVELY reads — the
@@ -438,6 +440,7 @@ export class DoctorEventsService {
       directionIds,
       routes: input.routes,
       sub: input.sub,
+      staff: input.staff,
       onlyEventIds,
     });
   }

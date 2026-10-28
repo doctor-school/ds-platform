@@ -31,6 +31,10 @@ import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 006 EARS-5 — the LIVE room-presence count («N врачей в комнате»).
 //
+// Every fixture event here shows the count to viewers (`show_presence_count`
+// true): EARS-5 is the behaviour where that setting is on. The hidden default
+// and the staff rule are 006 EARS-19, `presence-count-visibility.e2e-spec.ts`.
+//
 // The canvas header shows distinct doctors whose latest accepted beat is fresh.
 // One durable append-only source feeds two separate derivations: this count uses a
 // `2 × N` latest-beat freshness window; sponsor minutes use accepted-beat N-buckets
@@ -71,8 +75,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await pool.query(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
-            specialties, partner_ref, program_pdf_ref, state, kind_id, audience)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, ${eventClassificationSql()})`,
+            specialties, partner_ref, program_pdf_ref, state,
+            show_presence_count, kind_id, audience)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, true, ${eventClassificationSql()})`,
         [
           id,
           slug,

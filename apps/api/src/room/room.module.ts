@@ -75,7 +75,13 @@ import {
   // 020 EARS-7 (#1770): the participation CTA reads the live presence aggregate
   // through the SAME repository and the SAME configured cadence the room grant
   // uses, so both surfaces can never disagree about how many colleagues are in
-  // the room. Nothing else of the room's internals is exported.
-  exports: [PresenceRepository, ROOM_HEARTBEAT_INTERVAL_SECONDS],
+  // the room. 006 EARS-19 (#2911): `PresencePublisher` too, so an edit of the
+  // event's «Показывать зрителям число участников» setting re-publishes the live
+  // count to the audience the new value names. Nothing else is exported.
+  exports: [
+    PresenceRepository,
+    PresencePublisher,
+    ROOM_HEARTBEAT_INTERVAL_SECONDS,
+  ],
 })
 export class RoomModule {}

@@ -3262,9 +3262,16 @@
             "type": "string"
           },
           "presenceCount": {
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "school": {
             "type": "string"

@@ -61,6 +61,15 @@ function base64url(input: string): string {
 }
 
 /**
+ * 006 EARS-19 — who a `presence-count` publication is for. `everyone` rides the
+ * shared room channel every admitted connection holds (the event shows the count
+ * to viewers); `staff` rides the staff-only channel granted only in a staff
+ * caller's credential (the event hides it). Delivery is server-enforced: a
+ * viewer's connection is never subscribed to the staff channel.
+ */
+export type PresenceAudience = "everyone" | "staff";
+
+/**
  * Chat is momentarily unreachable (Centrifugo not configured, or a publish call
  * failed). HTTP-agnostic so the gate stays a pure domain layer; the controller
  * maps it to a `503`. A post is NEVER silently dropped — the doctor learns the
@@ -114,6 +123,17 @@ export class CentrifugoChatGateway {
   }
 
   /**
+   * 006 EARS-19 — the per-event staff-only channel. It carries the live
+   * `presence-count` while the event's «Показывать зрителям число участников»
+   * setting is off, and nothing else. It sits in the same `room` namespace (same
+   * Centrifugo config: no client publish), and only a staff caller's connection
+   * token lists it, so a viewer's connection can never receive its messages.
+   */
+  staffChannelForEvent(eventId: string): string {
+    return `room:staff:${eventId}`;
+  }
+
+  /**
    * A stable, **non-reversible, PII-free** author tag for a doctor, derived from
    * their opaque domain user id (never their email / phone / roster identity —
    * EARS-8). Stable across a doctor's messages (a SHA-256 prefix of the id), so
@@ -137,23 +157,38 @@ export class CentrifugoChatGateway {
    * `null` when Centrifugo is not configured. Called ONLY after the gate admitted
    * the caller (design §4).
    */
-  credential(userId: string, eventId: string): RoomChatCredential | null {
+  credential(
+    userId: string,
+    eventId: string,
+    staff = false,
+  ): RoomChatCredential | null {
     if (!this.config) return null;
     const channel = this.channelForEvent(eventId);
+    // 006 EARS-19 — a staff caller's token also subscribes the connection to the
+    // staff-only presence channel, so staff receive the live count whatever the
+    // event's setting. A viewer's token never lists it.
+    const staffChannel = staff ? this.staffChannelForEvent(eventId) : null;
     return {
       url: this.config.wsUrl,
-      token: this.mintConnectionToken(userId, channel),
+      token: this.mintConnectionToken(
+        userId,
+        staffChannel ? [channel, staffChannel] : [channel],
+      ),
       channel,
+      staffChannel,
       selfTag: this.authorTag(userId),
     };
   }
 
   /**
    * A Centrifugo connection JWT (HS256) subscribing the connection SERVER-SIDE to
-   * exactly `channel` via the `channels` claim, expiring after the configured TTL.
+   * exactly `channels` (the room, plus the staff channel for staff) via the `channels` claim, expiring after the configured TTL.
    * No publish claim is present — the token is read-only for this one room.
    */
-  private mintConnectionToken(userId: string, channel: string): string {
+  private mintConnectionToken(
+    userId: string,
+    channels: readonly string[],
+  ): string {
     const config = this.config;
     if (!config) throw new ChatUnavailableError();
     const now = Math.floor(Date.now() / 1000);
@@ -161,7 +196,7 @@ export class CentrifugoChatGateway {
     const payload = base64url(
       JSON.stringify({
         sub: userId,
-        channels: [channel],
+        channels,
         iat: now,
         exp: now + config.tokenTtlSeconds,
       }),
@@ -198,13 +233,27 @@ export class CentrifugoChatGateway {
    * ({@link PresencePublisher}) swallows the failure and lets the portal degrade to
    * the heartbeat-ack refresh (#1136), so a Centrifugo blip never breaks a beat.
    */
-  async publishPresenceCount(eventId: string, count: number): Promise<void> {
+  async publishPresenceCount(
+    eventId: string,
+    count: number,
+    audience: PresenceAudience,
+  ): Promise<void> {
     const message: RoomPresenceCountMessage = {
       type: "presence-count",
       count,
       at: new Date().toISOString(),
     };
-    await this.publishToChannel(this.channelForEvent(eventId), message);
+    // 006 EARS-19 — the audience picks the channel; see {@link PresenceAudience}.
+    // `skipHistory`: a count is a live value, never hydrated, and the `room`
+    // namespace allows client history reads — so no count is ever stored where a
+    // connection not subscribed to the staff channel could read it back.
+    await this.publishToChannel(
+      audience === "everyone"
+        ? this.channelForEvent(eventId)
+        : this.staffChannelForEvent(eventId),
+      message,
+      { skipHistory: true },
+    );
   }
 
   /**
@@ -216,6 +265,7 @@ export class CentrifugoChatGateway {
   private async publishToChannel(
     channel: string,
     data: RoomChatMessage | RoomPresenceCountMessage,
+    options: { skipHistory?: boolean } = {},
   ): Promise<void> {
     const config = this.config;
     if (!config) throw new ChatUnavailableError();
@@ -227,7 +277,11 @@ export class CentrifugoChatGateway {
           "content-type": "application/json",
           "X-API-Key": config.apiKey,
         },
-        body: JSON.stringify({ channel, data }),
+        body: JSON.stringify(
+          options.skipHistory
+            ? { channel, data, skip_history: true }
+            : { channel, data },
+        ),
       });
     } catch (cause) {
       throw new ChatUnavailableError(

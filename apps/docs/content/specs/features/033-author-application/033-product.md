@@ -43,7 +43,7 @@ This PRD owns the queue as a capability; 034 adds its own kind of request to it.
 
 **Owner:**
 
-- **US-14** — As a **product owner**, applications holding personal data are kept no longer than needed and are deleted on a defined schedule. The retention of the application record is set at design time in the platform's retention registry (new storage ⇒ retention at design), by analogy with the platform's existing personal-data request records — a design obligation of the spec, not an owner question. _(lead decision 2026-10-28; owner sees it at Stage A)_
+- **US-14** — As a **product owner**, applications holding personal data are kept only under the platform's personal-data policy. The application record gets its row in the retention matrix of [ADR-0009](../../../adr/0009-pd-lifecycle-and-consent-en.md) §2.6 at design time (new storage ⇒ retention at design); the applicant's personal data is erased per ADR-0009 §2.3 on the subject's request — a design obligation of the spec, not an owner question. _(lead decision 2026-10-28; owner sees it at Stage A)_
 
 ## Flows
 
@@ -73,7 +73,7 @@ This PRD owns the queue as a capability; 034 adds its own kind of request to it.
 - Every public intake into the queue — including the no-account investor form of 034 — is protected against bots and floods with the platform's existing bot-protection posture, as other public forms are.
 - Only an administrator with the 047 `platform_admin` role sees and works the queue; the applicant never sees internal notes or statuses beyond «received».
 - Every status change in the queue is attributed to the administrator who made it and timed. _(agent-proposed — UNCONFIRMED.)_
-- Applications are deleted on the retention schedule recorded at design in the platform's retention registry; nothing is kept indefinitely by default.
+- Application records have their row in the ADR-0009 §2.6 retention matrix, set at design time; the applicant's personal data is erased per ADR-0009 §2.3 on the subject's request; nothing is kept outside that policy.
 - Page, form and queue are usable on a phone and pass the platform accessibility bar (`playwright-axe`).
 
 ## Out of scope

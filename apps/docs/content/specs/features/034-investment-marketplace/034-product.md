@@ -55,7 +55,7 @@ Storefront affiliation (ADR-0016 §8): the page — `академия`; requests
 - Every request appears in the shared 033 queue as an investor request with organisation, contact and task; a double submission creates one request; the team is notified as for every queue entry, and the representative receives the «заявка получена» email.
 - The confirmation is shown in place of the form and promises only what the team does by hand (contact and a commercial offer), not an automatic offer.
 - The page shows no marketplace block, no cards and no figures until the later slice brings real data; links go only to pages that exist.
-- Investor requests follow the retention schedule recorded for the shared queue in the platform's retention registry (033 US-14).
+- Investor requests follow the shared queue's row in the ADR-0009 §2.6 retention matrix (033 US-14); the representative's personal data is erased per ADR-0009 §2.3 on the subject's request; nothing is kept outside that policy.
 - The page and form are usable on a phone and pass the platform accessibility bar (`playwright-axe`).
 
 ## Out of scope

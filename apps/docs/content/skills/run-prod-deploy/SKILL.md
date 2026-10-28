@@ -82,6 +82,8 @@ gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_
 
 Run it as **its own statement** — never piped (`| tee` returns the pipe's exit code and masks a failure). An empty or whitespace-only `owner_quote` is refused first. `concurrency: deploy-prod` runs one release at a time, never cancelled.
 
+**Incident recovery is not a release.** When a prod health probe is red, diagnose read-only from the monitoring box and recover with `-f mode=redeploy -f sha=<live sha>` under the owner's standing authorization (chat 2026-10-28: «redeploy разрешаю»; no fresh word; the owner is told the cause afterwards), with exactly `-f owner_quote="redeploy разрешаю (standing authorization 2026-10-28) — incident: <probe> red since <UTC>"` — procedure and query catalogue: runbook [`operations/prod-incident-response.md`](../../operations/prod-incident-response.md).
+
 ### 3. Poll the run, then verify
 
 ```bash
@@ -144,7 +146,7 @@ The pre-flight refuses a target that is not a strict descendant of the LIVE depl
 
 ## Failure modes
 
-- **Dispatching without the owner's word**, or with a paraphrase — every release needs the word verbatim in `owner_quote`. A rollback needs none.
+- **Dispatching without the owner's word**, or with a paraphrase — every release needs the word verbatim in `owner_quote`, and so does an env-change redeploy. A rollback needs none; a redeploy of the live SHA on a red prod health probe runs under the owner's standing authorization, cited in `owner_quote` (runbook `operations/prod-incident-response.md`).
 - **Piping a release command** (`| tee`) — masks a non-zero exit; run it standalone.
 - **`preflight` refuses** — the job names the gate: SHA not in `main`, `stage-suite` missing/pending/red (wait for `stage.yml`), CI red, release gate, live broadcast, or **no recorded images** (`recorded images for <sha>: …` — no branch-push `runtime-images.yml` run for the SHA, a run in progress, a failed run, an expired artifact, or a manifest that is not `ref: "main"`). Nothing was touched; fix the cause, then re-dispatch. Never build on the box.
 - **`runtime-images.yml` red on an npm registry 503** while pulling into the Runtime images — a registry blip, not a code defect: `gh run rerun <run-id> --failed`, and record the flake in `DEBT.md` in the same session (repo-conventions → «CI rerun ≠ free»).

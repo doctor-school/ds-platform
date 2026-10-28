@@ -1655,22 +1655,30 @@ Scope: `api-prod` only. `data-prod` builds nothing and needs no build-cache GC.
 
 ## Container log bound (#3386)
 
-Every service in every compose file under `compose/` logs through `json-file` with
-`max-size: 50m` × `max-file: 3` — at most 150 MB of log per container (a YAML
-`x-logging` anchor per file; `data-prod/compose.yml` is JSON and carries the block
-inline per service). The default driver keeps a log forever: on 2026-10-27 the stage
-Zitadel and Postgres logs reached 17.6 GB and 10.7 GB and pushed `ds-stage-1` under
-the release driver's 10 GB free-disk floor. The bound is compose-level, not a
-`daemon.json` `log-opts` default, because `daemon.json` is written only at box
-(re-)creation and a daemon default needs a dockerd restart. A logging change only
-takes effect when Compose **recreates** the container: on `api-prod` the release
-swap's `up -d`, on `data-prod` the `data-up` step (persistence plane and GlitchTip),
-on stage every slot `up -d`; `stg-infra` is recreated by its own `up -d` (stg-infra
-README). The release output proves it on data-prod: after `data-up`, one
-`↳ ds-data-prod: log bound: /<container> log=json-file max-size=50m max-file=3` line
-per container of both compose projects (evidence only: a docker error prints
-`log bounds: unavailable — <reason>` and the release goes on). `tools/deploy/compose-logging.test.mjs` fails on
-a service without the bound.
+Every service in every compose file under `compose/` except `data-prod/compose.yml`
+logs through `json-file` with `max-size: 50m` × `max-file: 3` — at most 150 MB of
+log per container (a YAML `x-logging` anchor per file). The default driver keeps a
+log forever: on 2026-10-27 the stage Zitadel and Postgres logs reached 17.6 GB and
+10.7 GB and pushed `ds-stage-1` under the release driver's 10 GB free-disk floor.
+The bound is compose-level, not a `daemon.json` `log-opts` default, because
+`daemon.json` is written only at box (re-)creation and a daemon default needs a
+dockerd restart. A logging change only takes effect when Compose **recreates** the
+container: on `api-prod` the release swap's `up -d`, on `data-prod` the `data-up`
+step (GlitchTip), on stage every slot `up -d`; `stg-infra` is recreated by its own
+`up -d` (stg-infra README). The release output proves it on data-prod: after
+`data-up`, one `↳ ds-data-prod: log bound: /<container> log=json-file max-size=50m max-file=3`
+line per container of both compose projects (evidence only: a docker error prints
+`log bounds: unavailable — <reason>` and the release goes on).
+
+The persistence plane (`postgres`, `redis`, `pgbackrest` in `data-prod/compose.yml`)
+is not bounded yet: that file is an input of the PostgreSQL source hash
+(`tools/deploy/README.md` → PostgreSQL deployment guard), so any byte change to it
+needs artifact certification, which the Actions release (`prod.mjs --local`) cannot
+take — adding the bound refused the prod release at `postgres-verify` (#3418).
+`tools/deploy/postgres-source-pin.test.mjs` pins the accepted hash so such a change
+fails CI instead. The bound re-lands in #3419 (via certification or a guard hash
+scoped to image/cluster inputs). `tools/deploy/compose-logging.test.mjs` fails on a
+service without the bound and skips `data-prod/compose.yml` with that reason.
 
 ## Key gotchas
 

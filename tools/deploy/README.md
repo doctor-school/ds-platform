@@ -663,7 +663,10 @@ delete or hand-edit the record to clear a refusal.
 
 Changed data build/configuration requires a generated same-major artifact
 certificate. The source hash covers the committed data compose and all files in
-its postgres/pgbackrest build contexts. Preparation sends only those infra
+its postgres/pgbackrest build contexts; `postgres-source-pin.test.mjs` pins the
+accepted hash, so a changed input fails CI rather than the Actions release (which
+cannot certify, #3418), and the pin moves only together with a certification.
+Preparation sends only those infra
 contexts to an explicitly selected Docker host, labels the resulting images,
 executes their real PostgreSQL version and UID commands without a cluster,
 checks image PGDATA and matching UIDs, and exports the exact built images:

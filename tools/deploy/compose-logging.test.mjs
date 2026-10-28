@@ -7,6 +7,11 @@
 // under `infra/deploy/compose/` must carry a `json-file` log with both
 // `max-size` and `max-file`. The files are discovered by walking the directory,
 // so a new compose file or a new service without a bound goes red here.
+//
+// One exemption (#3418): `data-prod/compose.yml` is an input of the PostgreSQL
+// source hash (`postgresSourceHash`, tools/deploy/postgres-guard.mjs), so adding
+// the bound there changes a certified data input the Actions release cannot
+// certify — it refused prod at `postgres-verify`. Its bound re-lands in #3419.
 
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
@@ -28,6 +33,14 @@ function composeFiles(dir) {
 }
 
 const files = composeFiles(COMPOSE_ROOT);
+
+/** Compose files exempt from the bound, with the Issue that re-lands it. */
+const EXEMPT = new Map([
+  [
+    "data-prod/compose.yml",
+    "#3419: a postgres source-hash input — the bound needs artifact certification (#3418)",
+  ],
+]);
 
 /** A size like `50m` / `1g`, in bytes — the json-file driver's own units. */
 function sizeBytes(value) {
@@ -66,6 +79,11 @@ for (const file of files) {
   test(`3386: ${name} declares services`, () => {
     assert.ok(services.length > 0, `${name} has no services`);
   });
+
+  if (EXEMPT.has(name)) {
+    test(`3386: ${name} log bound`, { skip: EXEMPT.get(name) }, () => {});
+    continue;
+  }
 
   for (const [service, spec] of services) {
     test(`3386: ${name} ${service} has a bounded json-file log`, () => {

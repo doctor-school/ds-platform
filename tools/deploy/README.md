@@ -672,10 +672,36 @@ diagnose it through read-only evidence and resume the reviewed operation. Do not
 delete or hand-edit the record to clear a refusal.
 
 Changed data build/configuration requires a generated same-major artifact
-certificate. The source hash covers the committed data compose and all files in
-its postgres/pgbackrest build contexts; `postgres-source-pin.test.mjs` pins the
-accepted hash, so a changed input fails CI rather than the Actions release (which
-cannot certify, #3418), and the pin moves only together with a certification.
+certificate. The source hash (v2, #3419) covers the image/cluster inputs only: the
+committed data compose with the runtime-only service keys `logging`, `restart`,
+`depends_on` and `ports` and the healthcheck timing fields removed
+(`RUNTIME_ONLY_SERVICE_KEYS` / `RUNTIME_ONLY_HEALTHCHECK_KEYS`, each justified there;
+the healthcheck `test` command and any other key stay hashed, so an unknown one fails safe), in one
+canonical JSON form, plus the bytes of every file in its postgres/pgbackrest build
+contexts. A log bound or restart policy therefore moves no hash; an image, command,
+volume, environment or build-context change does. The box probe computes the same v2
+when no record exists yet (`postgres-hash-migration.test.mjs` pins both
+implementations to one value). `postgres-source-pin.test.mjs` pins the accepted
+hash, so a changed input fails CI rather than the Actions release (which cannot
+certify, #3418), and the pin moves only together with a certification. The
+certificate and the image source label carry the v2 hash.
+
+Records written before v2 hold the v1 hash (the raw bytes of the same files) and no
+`hashVersion`. `POSTGRES_HASH_MIGRATIONS` in `postgres-guard.mjs` lists each v1
+record that is the certified tree of a commit, with that tree's v2 (both recomputed
+from git by `postgres-hash-migration.test.mjs`). A v1 record counts as unchanged
+only when it is a table entry whose v2 is the target's v2 and the image IDs are
+unchanged; any other v1 record keeps the certificate requirement. The first release
+after v2 reaches the box's previously installed probe and checkpoint verb (`install`
+runs after `ship`): when an entry's v2 is the target's v2, the guard's first probe
+request carries that entry's v1, so a v1 box answers from its recorded image IDs and
+never inspects the mutable compose tags (`ds-postgres:pg17-partman-pgbackrest`,
+`ds-pgbackrest:local`); a box answering with a v2 record, or a failed first read, is
+read once more with the target's v2, and a failure names each hash asked
+(`postgres-probe asked with … <hash>…: PostgreSQL evidence unavailable: …`). The pre-ship checkpoint rewrites the v1 record
+unchanged (the shape that verb accepts), and the checkpoint after `data-up` — the
+newly installed verb — writes the target's v2 with `hashVersion: 2`. An entry can go
+once no box holds a v1 record.
 Preparation sends only those infra
 contexts to an explicitly selected Docker host, labels the resulting images,
 executes their real PostgreSQL version and UID commands without a cluster,

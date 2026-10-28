@@ -1,12 +1,13 @@
-// tools/deploy/postgres-source-pin.test.mjs — Issue #3418.
+// tools/deploy/postgres-source-pin.test.mjs — Issues #3418, #3419.
 //
 // The regression this locks: #3392 changed the bytes of
 // `infra/deploy/compose/data-prod/compose.yml` (a log bound), which changed the
-// PostgreSQL source hash (`postgresSourceHash`: the data compose + every file under
-// `postgres/` and `pgbackrest/`). The Actions prod release runs the box-local
-// driver (`prod.mjs --local`), which takes no `--postgres-artifacts`, so its
-// `postgres-verify` refused the release on a hash it could not certify. This pin
-// moves that refusal from the prod release to CI.
+// PostgreSQL source hash, and the Actions prod release — the box-local driver
+// (`prod.mjs --local`), which takes no `--postgres-artifacts` — refused at
+// `postgres-verify` on a hash it could not certify. The hash is v2 since #3419
+// (`postgresSourceHash`: the data compose without its runtime-only service keys +
+// every file under `postgres/` and `pgbackrest/`), so a log bound no longer moves
+// it; an image/cluster input still does. This pin moves that refusal to CI.
 //
 // The hash is read from COMMITTED bytes (`git show`), never the working tree: a
 // Windows autocrlf checkout would otherwise disagree with CI.
@@ -19,9 +20,12 @@ import { readPostgresTarget } from "./postgres-guard.mjs";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
 
-/** The accepted source hash live on data-prod (adopted at 09c152b). */
+/**
+ * The accepted v2 source hash: the v2 of the tree live on data-prod (09c152b26, whose
+ * v1 record POSTGRES_HASH_MIGRATIONS maps onto this value).
+ */
 const ACCEPTED_SOURCE_HASH =
-  "e8656c8b6259847701dfae069a011ab878329bfc5b8adaa7724cd477318c0da4";
+  "537a33d8de0890dcfd724ebd90184d52d3ee69f9588bb824bd71fee9d42dd271";
 
 test("3418: the committed data-prod postgres source hash is the accepted one", () => {
   const { sourceHash } = readPostgresTarget("HEAD", REPO_ROOT);
@@ -34,6 +38,6 @@ test("3418: the committed data-prod postgres source hash is the accepted one", (
       "postgres-verify. A change needs postgres-artifact-prepare.mjs + break-glass " +
       "`pnpm deploy:prod --postgres-artifacts <certificate.json>` (tools/deploy/" +
       "README.md → PostgreSQL deployment guard); update this pin only together with " +
-      "that certification (the log bound waiting on it: #3419).",
+      "that certification.",
   );
 });

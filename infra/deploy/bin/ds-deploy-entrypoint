@@ -604,11 +604,14 @@ if action == "postgres-probe":
 
 if action == "postgres-checkpoint":
     state_file = sys.argv[2]
-    rec = payload(("schema", "sourceHash", "systemId", "images"))
+    # #3419: hashVersion 2 marks a v2 source hash; absent = a v1 record (postgres-guard.mjs).
+    rec = payload(("schema", "sourceHash", "systemId", "images"), ("hashVersion",))
     check(type(rec["schema"]) is int and rec["schema"] == 1)
+    check("hashVersion" not in rec or (type(rec["hashVersion"]) is int and rec["hashVersion"] == 2))
     check(isinstance(rec["sourceHash"], str) and HEX64.fullmatch(rec["sourceHash"]) is not None)
     check(isinstance(rec["systemId"], str) and SYSTEM_ID.fullmatch(rec["systemId"]) is not None)
-    state = {"schema": 1, "sourceHash": rec["sourceHash"], "systemId": rec["systemId"],
+    state = {"schema": 1, **({"hashVersion": 2} if "hashVersion" in rec else {}),
+             "sourceHash": rec["sourceHash"], "systemId": rec["systemId"],
              "images": images(rec["images"], IMAGE_ID)}
     write(state_file, json.dumps(state, separators=(",", ":")) + "\n")
     sys.stdout.write("PostgreSQL checkpoint written\n")

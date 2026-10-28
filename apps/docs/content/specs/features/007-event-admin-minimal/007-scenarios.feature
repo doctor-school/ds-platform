@@ -263,3 +263,26 @@ Feature: Minimal event admin — one operator creates, publishes, streams, runs,
     Given a doctor_guest or a public caller
     When they try to set the «Скрыть число записавшихся» option through UpdateEvent
     Then the command is refused as for any other admin command (EARS-8)
+
+  # --- Amendment 2026-10-28: show the live participant count to viewers (US-1, US-2) ---
+
+  @EARS-13 @happy
+  Scenario: An operator shows the live participant count of an event to viewers
+    Given an event with the «Показывать зрителям число участников» option off by default
+    When the operator turns the option on and saves the event
+    Then the event persists show_presence_count true
+    And the editor shows the option as on when the event is reopened
+    And a registered doctor's room read of the live event carries the presence count
+
+  @EARS-13 @edge
+  Scenario: An event that existed before the option reads it as off
+    Given an event created before the «Показывать зрителям число участников» option existed
+    When the operator opens it in the editor
+    Then the option is shown off
+    And a registered doctor's room read of the live event carries no presence count
+
+  @EARS-13 @failure
+  Scenario: A caller who may not edit the event cannot change the option
+    Given a doctor_guest or a public caller
+    When they try to set the «Показывать зрителям число участников» option through UpdateEvent
+    Then the command is refused as for any other admin command (EARS-8)

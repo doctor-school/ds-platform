@@ -385,3 +385,18 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
       | sign-out host         | other host            |
       | doctor.school         | academy.doctor.school |
       | academy.doctor.school | doctor.school         |
+
+  # --- Amendment 2026-10-28 (#2911): the room-entry CTA carries the presence count only where the event shows it ---
+
+  @EARS-24 @EARS-7 @happy
+  Scenario: The room-entry CTA shows no participant count while the event's setting is off
+    Given a live event whose «Показывать зрителям число участников» setting is off and doctors are in the room
+    When a registered doctor opens the event page
+    Then the participation read carries no presence count
+    And the sticky card offers room entry with no participant count, no zero and no empty slot
+
+  @EARS-24 @EARS-7 @happy
+  Scenario: The room-entry CTA shows the participant count while the event's setting is on
+    Given a live event whose «Показывать зрителям число участников» setting is on and doctors are in the room
+    When a registered doctor opens the event page
+    Then the sticky card offers room entry with the number of doctors in the room

@@ -7,12 +7,13 @@ GlitchTip collector on data-prod. The whole module is **inert unless `SENTRY_DSN
 is set** — unset on the dev-stand / CI (a no-op, exactly like the IdP / Redis /
 Unleash fakes), set only in the prod deployment (`/etc/ds-platform/api.env`).
 
-## The two pieces
+## The three pieces
 
-| Piece                                                  | Role                                                                                                                                                                                                                                                                                                                                               |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `initSentry` (`instrument.ts`)                         | Initialises `@sentry/node` from `SENTRY_DSN` (+ `SENTRY_ENVIRONMENT` / `SENTRY_TRACES_SAMPLE_RATE`). Called **first** in `main.ts` `bootstrap()`, before the Nest app is created, so the SDK's global handlers register ahead of app code. Returns `false` (no-op) when no DSN.                                                                    |
-| `SentryExceptionFilter` (`sentry-exception.filter.ts`) | Global exception filter (bound via `APP_FILTER` in `observability.module.ts`). Reports **5xx / non-`HttpException`** errors to GlitchTip, then defers to Nest's `BaseExceptionFilter` so client-facing responses are unchanged. 4xx client errors (validation / auth / not-found) are NOT reported — expected control flow, not monitoring signal. |
+| Piece                                                  | Role                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `initSentry` (`instrument.ts`)                         | Initialises `@sentry/node` from `SENTRY_DSN` (+ `SENTRY_ENVIRONMENT` / `SENTRY_TRACES_SAMPLE_RATE`). Called **first** in `main.ts` `bootstrap()`, before the Nest app is created, so the SDK's global handlers register ahead of app code. Returns `false` (no-op) when no DSN.                                                                                                   |
+| `SentryExceptionFilter` (`sentry-exception.filter.ts`) | Global exception filter (bound via `APP_FILTER` in `observability.module.ts`). Reports **5xx / non-`HttpException`** errors to GlitchTip, then defers to Nest's `BaseExceptionFilter` so client-facing responses are unchanged. 4xx client errors (validation / auth / not-found) are NOT reported — expected control flow, not monitoring signal.                                |
+| `runBootstrap` (`run-bootstrap.ts`)                    | Wraps `main.ts` `bootstrap()`. A boot that rejects (`createApiApplication`, a module's `onModuleInit`, `listen`) is logged, `Sentry.flush` gets at most 2 s, and the process exits with code 1 so Docker's restart policy retries the boot (#3412). Needed because the SDK's unhandled-rejection integration (`warn` mode) otherwise keeps a process alive with no HTTP listener. |
 
 ## PII discipline (ADR-0011)
 
@@ -26,6 +27,7 @@ never a doctor's identifier, phone, or email. This is unit-asserted in
 
 - `initSentry(env?)` — idempotent init guard; returns whether the SDK was enabled.
 - `SentryExceptionFilter` — the global reporting filter.
+- `runBootstrap(boot, { exit, flush, log, flushTimeoutMs? })` — the boot-failure exit; asserted in `run-bootstrap.spec.ts`.
 - `ObservabilityModule` — binds the filter as `APP_FILTER`; imported by `AppModule`.
 
 ## Deploy

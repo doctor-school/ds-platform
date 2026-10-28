@@ -1,6 +1,8 @@
 import "reflect-metadata";
+import * as Sentry from "@sentry/node";
 import { createApiApplication } from "./api-application.js";
 import { initSentry } from "./observability/instrument.js";
+import { runBootstrap } from "./observability/run-bootstrap.js";
 
 async function bootstrap(): Promise<void> {
   // Error monitoring (GlitchTip, DSO-125) — initialised BEFORE the app so the
@@ -15,4 +17,9 @@ async function bootstrap(): Promise<void> {
   await app.listen({ port, host: "0.0.0.0" });
 }
 
-void bootstrap();
+// A failed boot exits non-zero so Docker's restart policy retries it (#3412).
+void runBootstrap(bootstrap, {
+  exit: (code) => process.exit(code),
+  flush: (timeoutMs) => Sentry.flush(timeoutMs),
+  log: (message, error) => console.error(message, error),
+});

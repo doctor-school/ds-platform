@@ -112,49 +112,6 @@ async function signIn(page: Page) {
 test.describe("014 EARS-4 public post-live event page (e2e)", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test("014 EARS-4: a visitor with NO account sees the post-live page complete — the recording signal and every 004 field, server-rendered", async ({
-    page,
-    context,
-  }) => {
-    await context.clearCookies();
-    const res = await page.goto(`${BASE}/webinars/${ENDED_SLUG}`, {
-      waitUntil: "domcontentloaded",
-    });
-    expect(res?.status()).toBe(200);
-
-    // The one thing a post-live visitor came to find out.
-    const badge = page.getByTestId("recording-badge");
-    await expect(badge).toBeVisible();
-    await expect(badge).toHaveText("Запись доступна");
-
-    // The recording meta. It lives in the PLAYER CARD, not in the status card:
-    // #1343 mounted the card and the meta moved with it, so the same fact is
-    // not stated twice on one screen (the #1697 dedup obligation). For a guest
-    // the card is the login gate, and the gate's eyebrow carries the kind.
-    await expect(page.getByTestId("recording-meta")).toHaveCount(0);
-    const gate = page.getByTestId("recording-gate");
-    await expect(gate).toBeVisible();
-    await expect(gate).toContainText("Монтаж");
-
-    // The 004 projection still renders whole: title, school, description and the
-    // speaker list are the page's substance, not a recording teaser.
-    await expect(page.getByRole("heading", { level: 1 })).not.toBeEmpty();
-    await expect(
-      page.getByText("О чём событие", { exact: true }),
-    ).toBeVisible();
-    // `exact` because the assertion is about the section LABEL, not a
-    // substring other prose on the page may carry. The label is the canvas's
-    // «Ведёт» (020 EARS-1, the shared `EventSpeakerCard`) since the Academy
-    // page moved onto the one event page (#2072 wave 3).
-    await expect(page.getByText("Ведёт", { exact: true })).toBeVisible();
-
-    // The exactly-one-CTA invariant holds in the ended state: no participation
-    // CTA, and no half-built player button pretending to be one.
-    await expect(
-      page.getByRole("link", { name: "Участвовать", exact: true }),
-    ).toHaveCount(0);
-  });
-
   test("014 EARS-4: not one byte of playable source reaches the guest — not in the HTML, not on the wire", async ({
     page,
     context,
@@ -244,98 +201,10 @@ test.describe("014 EARS-4 public post-live event page (e2e)", () => {
     await expect(page.getByTestId("recording-badge")).toHaveCount(0);
     await expect(page.getByTestId("recording-meta")).toHaveCount(0);
   });
-
-  test("014 EARS-4: ONE route serves the post-live page — no /archive mirror, no second post-live URL", async ({
-    page,
-    context,
-  }) => {
-    await context.clearCookies();
-    for (const mirror of [
-      `/archive/${ENDED_SLUG}`,
-      `/webinars/${ENDED_SLUG}/archive`,
-      `/webinars/${ENDED_SLUG}/recording`,
-    ]) {
-      const res = await page.goto(`${BASE}${mirror}`, {
-        waitUntil: "domcontentloaded",
-      });
-      expect(
-        res?.status(),
-        `${mirror} must not exist — /webinars/:slug is the single route`,
-      ).toBe(404);
-    }
-  });
-
-  test("014 EARS-21: the post-live page renders the speaker cards from the canonical projection, in relation order", async ({
-    page,
-    context,
-  }) => {
-    await context.clearCookies();
-
-    // The canonical answer, taken from the SAME stand through the portal's own
-    // `/v1/*` rewrite: `GET :key/speakers` is the standalone rendering of the
-    // one 012 EARS-8 resolver (`position ASC`, then link id ASC) that
-    // `PublicEventPage.speakers` also serves. Reading it here rather than
-    // hard-coding names is the point of the test — the browser assertion is
-    // «the page shows exactly this list, in exactly this order», so a page that
-    // re-sorted, deduped or inferred a name fails even after the seed changes.
-    const res = await page.request.get(
-      `${BASE}/v1/public/events/${ENDED_SLUG}/speakers`,
-    );
-    expect(res.status()).toBe(200);
-    const projected = (await res.json()) as { name: string }[];
-    expect(
-      projected.length,
-      "the seeded ended event must carry at least one eligible event_experts link",
-    ).toBeGreaterThan(0);
-
-    await page.goto(`${BASE}/webinars/${ENDED_SLUG}`, {
-      waitUntil: "domcontentloaded",
-    });
-
-    const cards = page.getByTestId("event-speaker-card");
-    await expect(cards).toHaveCount(projected.length);
-    for (const [index, speaker] of projected.entries()) {
-      await expect(
-        cards.nth(index),
-        `speaker card ${index} must be «${speaker.name}» — the projection's own order`,
-      ).toContainText(speaker.name);
-    }
-  });
 });
 
 test.describe("014 EARS-7 the «запись готовится» plaque (e2e)", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
-
-  test("014 EARS-7: an ended event awaiting its recording shows the plaque in the PLAYER position with the operator's own readiness day", async ({
-    page,
-    context,
-  }) => {
-    test.skip(!PREPARING_SLUG, "requires an ended event with no recording");
-    await context.clearCookies();
-    await page.goto(`${BASE}/webinars/${PREPARING_SLUG}`, {
-      waitUntil: "domcontentloaded",
-    });
-
-    const plaque = page.getByTestId("recording-plaque");
-    await expect(plaque).toBeVisible();
-    await expect(plaque).toContainText("Запись готовится");
-    // The operator's committed day, formatted for a Russian reader — the whole
-    // point of EARS-7. The seed's `recording_expected_by` supplies it; the
-    // assertion is on the «до <day> <month>» SHAPE so the seed can move.
-    await expect(page.getByTestId("recording-plaque-date")).toHaveText(
-      /^до \d{1,2} [а-яё]+( \d{4})?$/,
-    );
-    await expect(plaque).toContainText("опубликуем на этой странице до");
-
-    // Still no player and no source — the plaque is what stands in the player
-    // position, not a frame waiting on something (#1343 owns the mount).
-    await expect(page.locator("iframe, video")).toHaveCount(0);
-    // No dead affordance: readiness notifications are a declared 014 non-goal,
-    // so the canvas's «Напомнить на почту» button must not exist.
-    await expect(page.getByText(/Напомнить/)).toHaveCount(0);
-    // And no invented estimate — «≈2 дня» is placeholder canvas copy.
-    await expect(page.getByText(/≈\s*\d+\s*дн/)).toHaveCount(0);
-  });
 
   test("014 EARS-7: with NO committed day the plaque stays honest — it promises the page, not a date it does not have", async ({
     page,

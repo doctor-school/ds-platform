@@ -33,6 +33,7 @@ import {
   isStartClaimComment,
   isStopStateComment,
   mentionsIssue,
+  missingFields,
   parseProseBlockers,
   queueAnnotationFor,
   subsystemName,
@@ -767,6 +768,87 @@ describe("backlog-triage claim-comment shape detection (#811)", () => {
     expect(isStopStateComment("where I stopped: mid-review")).toBe(true);
     expect(isStopStateComment("claim: taking this")).toBe(false);
     expect(isStopStateComment("")).toBe(false);
+  });
+
+  it("#3408: stop-state / claim-release openers release, case-insensitive (#1611, #2020)", () => {
+    // Verbatim first lines of the real releases the detector missed.
+    expect(
+      isStopStateComment(
+        "Stop-state: claim released, 2026-09-03 — owner: «оставь её в бэклоге».",
+      ),
+    ).toBe(true);
+    expect(isStopStateComment("stop-state (session 8a9c93a3, 2026-09-07):\n- PR #2022 merged")).toBe(
+      true,
+    );
+    expect(isStopStateComment("Stop state — parked until #729 lands.")).toBe(true);
+    expect(isStopStateComment("**Stop-state:** worktree removed.")).toBe(true);
+    expect(isStopStateComment("Claim released — owner reprioritised.")).toBe(true);
+    expect(isStopStateComment("**Claim released:** see above.")).toBe(true);
+  });
+
+  it("#3408: a release opener is never a start-claim, and a mere mention never releases", () => {
+    expect(isStartClaimComment("Claim released — owner reprioritised.")).toBe(false);
+    expect(isStartClaimComment("Stop-state: claim released, 2026-09-03.")).toBe(false);
+    expect(isStopStateComment("claim: taking this; the old stop-state is stale")).toBe(false);
+    expect(isStopStateComment("Result: shipped. The claim released earlier is moot.")).toBe(false);
+    expect(isStopStateComment("Recon-only stop-state (NOT a claim — stays takeable).")).toBe(false);
+    expect(isStopStateComment("stopped working on it")).toBe(false);
+  });
+
+  it("#3408: a `Stop-state: claim released` comment after the claim makes the Issue takeable", () => {
+    expect(
+      detectClaim({
+        comments: [
+          comment("claim: slice A — dispatching the implementer", 55 * DAY),
+          comment("Stop-state: claim released, 2026-09-03 — owner deprioritised.", 55 * DAY - HOUR),
+        ],
+        nowMs: NOW,
+      }),
+    ).toBeNull();
+    expect(
+      detectClaim({
+        comments: [
+          comment("Taking this — plan-spec session.", 51 * DAY),
+          comment("stop-state (session 8a9c93a3, 2026-09-07):", 51 * DAY - HOUR),
+        ],
+        nowMs: NOW,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("backlog-triage missingFields() — Field hygiene (#1137)", () => {
+  const base = {
+    number: 1,
+    title: "Fix the thing",
+    labels: ["tooling", "source:agent"],
+    hasType: true,
+    hasMilestone: true,
+    hasAssignee: true,
+  };
+
+  it("a fully-fielded Issue is compliant; a non-epic without a milestone is flagged", () => {
+    expect(missingFields(base)).toEqual([]);
+    expect(missingFields({ ...base, hasMilestone: false })).toEqual(["milestone"]);
+  });
+
+  it("#3408: an epic (`epic:` title) carries no milestone and is not flagged for one (#1240, #2522)", () => {
+    expect(
+      missingFields({
+        ...base,
+        number: 2522,
+        title: "epic: content production",
+        labels: ["feature", "source:owner"],
+        hasMilestone: false,
+      }),
+    ).toEqual([]);
+    expect(
+      missingFields({ ...base, title: "Epic: Academy roadmap", labels: ["feature", "source:owner"], hasMilestone: false }),
+    ).toEqual([]);
+    // The exemption is the milestone only — the other required fields still apply.
+    expect(
+      missingFields({ ...base, title: "epic: x", labels: ["feature"], hasMilestone: false, hasAssignee: false }),
+    ).toEqual(["assignee", "source-label"]);
   });
 });
 

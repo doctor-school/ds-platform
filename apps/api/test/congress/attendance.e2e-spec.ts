@@ -590,5 +590,54 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await attendanceRows(petrov)).toEqual(before);
       expect(await ledgerRows(petrov)).toEqual(ledgerBefore);
     });
+
+    // #2466 — a retired event is absent from every write path, the registrar's
+    // desk included: neither its attendance nor a new desk registration can be
+    // written to it (ADR-0003 design §3.6 rule 3). These two run LAST — each
+    // retires event B (idempotently) for the rest of the file.
+    const retireEventB = () =>
+      pool.query(
+        `UPDATE events SET record_status = 'retired', deleted_at = now() WHERE id = $1`,
+        [eventB],
+      );
+
+    it("044 EARS-34.11: a retired event's attendance mark is the 404, and nothing is written", async () => {
+      await retireEventB();
+
+      const markRes = await mark(admin.headers, slugB, otherEvent, DAY_1, true);
+      expect(markRes.statusCode, markRes.body).toBe(404);
+      expect(await attendanceRows(otherEvent)).toEqual([]);
+    });
+
+    it("044 EARS-35.7: a desk registration for a retired event is the 404, and no registration is written", async () => {
+      await retireEventB();
+
+      const { rows: before } = await pool.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM registrations WHERE event_id = $1",
+        [eventB],
+      );
+      const desk = await app.inject({
+        method: "POST",
+        url: `/v1/admin/events/${slugB}/registrations`,
+        headers: admin.headers,
+        payload: {
+          surname: "Кузнецова",
+          firstName: "Анна",
+          email: uniqueEmail("att-retired"),
+          specialtyId: randomUUID(),
+          workplace: "ГКБ №1",
+          city: "Москва",
+          region: "Москва",
+          contactPhone: "+7 (900) 765-43-21",
+          paperConsent: true,
+        },
+      });
+      expect(desk.statusCode, desk.body).toBe(404);
+      const { rows: after } = await pool.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM registrations WHERE event_id = $1",
+        [eventB],
+      );
+      expect(after[0]?.n).toBe(before[0]?.n);
+    });
   },
 );

@@ -554,7 +554,8 @@ export class CongressSignUpService {
         venue: events.venue,
       })
       .from(events)
-      .where(eq(events.id, eventId))
+      // #2466 — a retired event takes no registration on any path.
+      .where(and(eq(events.id, eventId), eq(events.recordStatus, "active")))
       .limit(1);
 
     if (!event || !isRegistrable(event.state as EventLifecycleState)) {
@@ -595,9 +596,13 @@ export class CongressSignUpService {
       .select({ id: events.id })
       .from(events)
       .where(
-        UUID_RE.test(eventKey)
-          ? or(eq(events.id, eventKey), eq(events.slug, eventKey))
-          : eq(events.slug, eventKey),
+        and(
+          UUID_RE.test(eventKey)
+            ? or(eq(events.id, eventKey), eq(events.slug, eventKey))
+            : eq(events.slug, eventKey),
+          // #2466 — a retired event is the desk's 404, like an unknown one.
+          eq(events.recordStatus, "active"),
+        ),
       )
       .limit(1);
     if (!found) throw new NotFoundException("event not found");

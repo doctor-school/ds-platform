@@ -14,6 +14,7 @@ import type { EventRegistrationState } from "@ds/schemas";
 import { Authz } from "../authz/index.js";
 import {
   EventNotRegistrableError,
+  EventSoldOutError,
   RegistrationEventNotFoundError,
   RegistrationService,
   UnknownSubjectError,
@@ -86,8 +87,10 @@ export class RegistrationController {
    * Shared body: resolve the acting doctor's Zitadel `sub` off the request (the
    * 003 session hook attaches it; the `AuthzGuard` has already refused any
    * unauthenticated caller — EARS-10), run the command/read, and map the domain
-   * errors to their HTTP status — a missing event to a 404, a non-registrable
-   * state to a 409, an unresolved subject to a 401.
+   * errors to their HTTP status — a missing or retired event to a 404
+   * (ADR-0003 design §3.6 rule 3), a non-registrable state to a 409, the
+   * sold-out refusal to a 409 with its reason (020 EARS-9), an unresolved
+   * subject to a 401.
    */
   private async run(
     idOrSlug: string,
@@ -108,6 +111,13 @@ export class RegistrationController {
         throw new ConflictException({
           message: "registration is not offered in the event's current state",
           state: err.state,
+        });
+      }
+      if (err instanceof EventSoldOutError) {
+        throw new ConflictException({
+          message: "registration is not offered: the event has no seats left",
+          state: err.state,
+          reason: "sold-out",
         });
       }
       if (err instanceof UnknownSubjectError) {

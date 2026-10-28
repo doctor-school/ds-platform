@@ -21,6 +21,7 @@ import {
   type CongressRosterRow,
   CONGRESS_ROSTER_SORT_DEFAULT,
   type EventLifecycleState,
+  type EventParticipationFormat,
   type EventRosterEntry,
   type MyEventItem,
   type MyEventsCounts,
@@ -237,11 +238,25 @@ function registrationOfEvent(eventId: string, registrationId: string): SQL {
   )!;
 }
 
-/** The registration-gating view of an event: its id + the single lifecycle state. */
+/**
+ * The registration-gating view of an event: its id, the single lifecycle state,
+ * and the two seat facts the 020 participation policy decides «мест нет» by —
+ * the same `participation_format` / `seats_left` the event page's CTA reads.
+ */
 export interface EventForRegistration {
   id: string;
   state: EventLifecycleState;
+  format: EventParticipationFormat;
+  seatsLeft: number | null;
 }
+
+/**
+ * #2466 (ADR-0003 design §3.6 rule 3) — a retired event (`record_status =
+ * 'retired'`, `deleted_at` set) is absent from every write path: registering,
+ * marking attendance. Spelled on `record_status` like `ACTIVE_EVENT` in
+ * `events.repository.ts`, the predicate the active partial indexes are built on.
+ */
+const ACTIVE_EVENT = eq(events.recordStatus, "active");
 
 /**
  * Drizzle data access for the 005 registration record (design §2). 005 owns the
@@ -272,21 +287,33 @@ export class RegistrationRepository {
    * Resolve an event by its stable public slug OR its id (mirrors 004's
    * `findByIdOrSlug`) to its `{ id, state }` gating view. A non-UUID `idOrSlug`
    * matches the slug only — never fed to the uuid `id` column, whose comparison
-   * would raise on a malformed value. `null` when no event matches.
+   * would raise on a malformed value. `null` when no ACTIVE event matches — a
+   * retired event is not found, as the public event read already answers
+   * (#2466).
    */
   async findEventForRegistration(
     idOrSlug: string,
   ): Promise<EventForRegistration | null> {
-    const where = UUID_RE.test(idOrSlug)
+    const key = UUID_RE.test(idOrSlug)
       ? or(eq(events.id, idOrSlug), eq(events.slug, idOrSlug))
       : eq(events.slug, idOrSlug);
     const [row] = await this.db
-      .select({ id: events.id, state: events.state })
+      .select({
+        id: events.id,
+        state: events.state,
+        format: events.participationFormat,
+        seatsLeft: events.seatsLeft,
+      })
       .from(events)
-      .where(where)
+      .where(and(key, ACTIVE_EVENT))
       .limit(1);
     if (!row) return null;
-    return { id: row.id, state: row.state as EventLifecycleState };
+    return {
+      id: row.id,
+      state: row.state as EventLifecycleState,
+      format: row.format as EventParticipationFormat,
+      seatsLeft: row.seatsLeft,
+    };
   }
 
   /**
@@ -1084,10 +1111,13 @@ export class RegistrationRepository {
     present: boolean,
   ): Promise<boolean> {
     return withRequestAuditContext(this.db, async (tx) => {
+      // #2466 — the registration must be one of this event's AND the event
+      // must be active: a retired event's attendance is never written.
       const [owned] = await tx
         .select({ id: registrations.id })
         .from(registrations)
-        .where(registrationOfEvent(eventId, registrationId))
+        .innerJoin(events, eq(events.id, registrations.eventId))
+        .where(and(registrationOfEvent(eventId, registrationId), ACTIVE_EVENT))
         .limit(1);
       if (!owned) return false;
 

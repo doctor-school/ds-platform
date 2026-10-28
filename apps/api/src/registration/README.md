@@ -24,7 +24,10 @@ Both carry the **EARS-10** cross-cutting classification `authenticated` /
 global `AuthzGuard` refuses an unauthenticated caller (401) and any
 non-`doctor_guest` role (403) before the handler runs — never a silent success.
 Gating reads the single `EventLifecycleState` (owned by 007, read-only): a
-non-`published`/`live` state is a 409, a missing event a 404.
+non-`published`/`live` state is a 409, a missing or retired event a 404. The
+command also applies the 020 participation policy's `participationSoldOut`
+(020 EARS-9): a pure offline event with no seats left is a 409 with
+`reason: "sold-out"`, unless the caller already holds a registration.
 
 **EARS-6** adds the `MyEvents` «Мои события» read; **014 EARS-9** splits it across
 the surface's two canvas tabs (014-design §8.3):
@@ -299,8 +302,9 @@ several congresses; its runbook is in
   and the 044 EARS-18 `eventRosterPage` read behind the registrar's HTTP route;
   resolves the acting doctor's `user_id` from the authenticated Zitadel `sub`
   (003 mirror) and the target event from its slug/id (007 read model). Domain
-  errors: `EventNotRegistrableError` (→ 409), `RegistrationEventNotFoundError`
-  (→ 404), `UnknownSubjectError` (→ 401).
+  errors: `EventNotRegistrableError` (→ 409), `EventSoldOutError` (→ 409,
+  `reason: "sold-out"`), `RegistrationEventNotFoundError` (→ 404),
+  `UnknownSubjectError` (→ 401).
 - `RegistrationController` — the `/events/:idOrSlug/registration` write + state
   read; `MyEventsController` — the `/me/events` list (`/me` path prefix, the
   caller's own resources). Both `doctor_guest`-authenticated (EARS-10).

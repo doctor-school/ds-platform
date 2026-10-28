@@ -237,7 +237,7 @@ Then(
     const grid = page.getByTestId("month-grid-desktop");
     await expect(grid).toBeVisible();
     await expect(grid.locator(`a[href^="${host.eventsPath}/"]`)).toHaveCount(0);
-    await expect(grid.locator(".grid-cols-7").first()).toContainText("пн");
+    await expect(grid.locator(".grid-cols-7").first()).toContainText(/пн/iu);
     expect(await grid.locator(".grid-cols-7").count()).toBeGreaterThanOrEqual(
       5,
     );

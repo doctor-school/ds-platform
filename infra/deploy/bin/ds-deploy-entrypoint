@@ -492,6 +492,9 @@ DATA_VERBS='capabilities postgres-probe postgres-checkpoint ship install data-en
 DATA_LIVE_TREE=$ROOT/home/deploy/ds-platform
 DATA_COMPOSE=$DATA_LIVE_TREE/infra/deploy/compose/data-prod
 DATA_STATE_FILE=$ROOT/home/deploy/ds-platform-postgres-state.json
+# GlitchTip's secrets (#3395): root 0600, outside the shipped tree, so every ship keeps
+# it; data-prod/glitchtip/compose.yml reads it as its env_file.
+GLITCHTIP_ENV=$ROOT/etc/ds-platform/glitchtip.env
 POSTGRES_PROBE=$ROOT/usr/local/lib/ds-platform/postgres-artifact-probe.py
 HARDEN_SSH=$ROOT/usr/local/lib/ds-platform/harden-ssh.sh
 # Box entrypoint = its path in the shipped tree; tools/deploy/lib/remote.mjs
@@ -734,15 +737,58 @@ install_entrypoints() {
   printf '%s: box entrypoints of %s installed\n' "$TAG" "$sha"
 }
 
+# #3395: one `log bound:` line per container of both data-prod compose projects
+# (ds-data-prod + ds-glitchtip): its name and json-log bound, never its env. Printed
+# by postgres-checkpoint, the verb that closes the release's data-prod-up phase on
+# every run — the durable `up` unit's own output stays in its journal. Evidence only:
+# it lists by the compose project label (no compose file, no .env — the pre-ship
+# checkpoint runs on whatever tree is live) and never fails the verb; any error is
+# one `log bounds: unavailable — <reason>` line.
+DATA_PROJECTS='ds-data-prod ds-glitchtip'
+data_log_bounds() {
+  local project ids='' out
+  for project in $DATA_PROJECTS; do
+    if ! out=$(sudo docker ps -aq --filter "label=com.docker.compose.project=$project" 2>&1); then
+      bounds_unavailable "$out"; return 0
+    fi
+    ids+="$out"$'\n'
+  done
+  [[ -n ${ids//[[:space:]]/} ]] || { bounds_unavailable "no data-prod containers"; return 0; }
+  # shellcheck disable=SC2086 # one id per word
+  if ! out=$(sudo docker inspect --format \
+    '{{.Name}} log={{.HostConfig.LogConfig.Type}} max-size={{index .HostConfig.LogConfig.Config "max-size"}} max-file={{index .HostConfig.LogConfig.Config "max-file"}}' \
+    $ids 2>&1); then
+    bounds_unavailable "$out"; return 0
+  fi
+  printf '%s\n' "$out" | sed 's/^/log bound: /'
+}
+# The first line of the error, printable and capped.
+bounds_unavailable() {
+  local reason=${1%%$'\n'*}
+  reason=${reason//[^[:print:]]/}
+  printf 'log bounds: unavailable — %s\n' "${reason:0:200}"
+}
+
 # The durable step units of data-prod: the step script is fixed here; ds-release
 # copies it root-only and runs it in ds-prod-<sha12>-<step>.
 data_step() {
   local step=$1 sha=$2 retry=$3 script
   case $step in
     up)
+      # #3395: GlitchTip is raised from the shipped tree with the persistence plane,
+      # so a changed glitchtip/compose.yml reaches its containers every release. Its
+      # secrets file is checked before the unit starts, so a box without it refuses
+      # before any `up`; the file is named, its contents never read here.
+      sudo test -f "$GLITCHTIP_ENV" && sudo test -r "$GLITCHTIP_ENV" ||
+        refuse "$GLITCHTIP_ENV is absent or unreadable; GlitchTip cannot start without it (deploy README → GlitchTip)"
+      # The `.env` data-env wrote supplies VPC_IP (a hand-made glitchtip/.env does not
+      # survive a ship). 300 s covers web's whole health window: start_period 90 s +
+      # 5 retries x 30 s interval, after valkey turns healthy — a version bump migrates
+      # before the port opens.
       script="cd '$DATA_COMPOSE'
 docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest
-docker compose up -d --no-deps redis"
+docker compose up -d --no-deps redis
+docker compose -f glitchtip/compose.yml --env-file .env up -d --no-build --pull missing --wait --wait-timeout 300"
       ;;
     backup)
       script="cd '$DATA_COMPOSE'
@@ -794,7 +840,9 @@ data_verb() {
       sudo test -f "$POSTGRES_PROBE" || refuse "the PostgreSQL probe is not installed"
       # The probe reads the live tree and the checkpoint under deploy's home.
       exec sudo env HOME="$ROOT/home/deploy" python3 -I "$POSTGRES_PROBE" "$request" </dev/null ;;
-    postgres-checkpoint) data_py postgres-checkpoint "$DATA_STATE_FILE" ;;
+    postgres-checkpoint)
+      data_py postgres-checkpoint "$DATA_STATE_FILE"
+      data_log_bounds </dev/null ;;
     data-env) data_py data-env "$DATA_COMPOSE" ;;
     ship) ship_tree "${words[1]}" ;;
     install) install_entrypoints "${words[1]}"; exit 0 ;;

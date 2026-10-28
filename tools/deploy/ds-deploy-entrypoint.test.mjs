@@ -748,6 +748,24 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     );
     chmodSync(join(stubs, "docker"), 0o755);
   };
+  // #3395: docker for the checkpoint's log-bound report; `fail` = the subcommand that errors.
+  const boundsDockerStub = (fail = "") => {
+    writeFileSync(
+      join(stubs, "docker"),
+      [
+        "#!/usr/bin/env bash",
+        'echo "$*" >> "$STUB_DIR/docker.log"',
+        `[[ $1 == "${fail}" ]] && { echo "Error: $1 broke" >&2; echo "second line" >&2; exit 1; }`,
+        'case "$*" in',
+        '  "ps -aq --filter label=com.docker.compose.project=ds-data-prod") echo pg; echo redis ;;',
+        '  "ps -aq --filter label=com.docker.compose.project=ds-glitchtip") echo web ;;',
+        '  inspect*) for id in "${@: -3}"; do echo "/$id log=json-file max-size=50m max-file=3"; done ;;',
+        "esac",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(join(stubs, "docker"), 0o755);
+  };
   const shipped = (entries) =>
     gzipSync(tarArchive([{ name: "ds-platform/", type: "5" }, ...entries]));
 
@@ -803,11 +821,54 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       systemId: "7544271560000000001",
       images: { postgres: IMG("b"), pgbackrest: IMG("c") },
     };
+    // #3395: docker lists both compose projects by label, then their log bounds.
+    boundsDockerStub();
     const r = run("postgres-checkpoint", { input: JSON.stringify(record) });
     assert.equal(r.status, 0, String(r.stderr));
     const file = join(root, "home/deploy/ds-platform-postgres-state.json");
     assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), record);
+    assert.equal(
+      r.stdout,
+      "PostgreSQL checkpoint written\n" +
+        "log bound: /pg log=json-file max-size=50m max-file=3\n" +
+        "log bound: /redis log=json-file max-size=50m max-file=3\n" +
+        "log bound: /web log=json-file max-size=50m max-file=3\n",
+    );
+    const calls = log("docker").split("\n");
+    assert.ok(calls.includes("ps -aq --filter label=com.docker.compose.project=ds-data-prod"), log("docker"));
+    assert.ok(calls.includes("ps -aq --filter label=com.docker.compose.project=ds-glitchtip"), log("docker"));
+    const inspect = calls.find((l) => l.startsWith("inspect "));
+    assert.ok(inspect?.includes("{{.HostConfig.LogConfig.Type}}") && inspect.endsWith(" pg redis web"), inspect);
   });
+
+  // #3395: the log-bound report is evidence only — it never fails the checkpoint, and
+  // it reads no compose file or .env (the pre-ship checkpoint runs on any tree).
+  for (const [label, fail] of [
+    ["docker inspect fails", "inspect"],
+    ["docker ps fails", "ps"],
+  ]) {
+    it(`3395: postgres-checkpoint still exits 0 with no .env when ${label}, naming the report unavailable`, () => {
+      setRole("data");
+      mkdirSync(join(root, "home/deploy"), { recursive: true });
+      const record = {
+        schema: 1,
+        sourceHash: "a".repeat(64),
+        systemId: "7544271560000000001",
+        images: { postgres: IMG("b"), pgbackrest: IMG("c") },
+      };
+      boundsDockerStub(fail);
+      const r = run("postgres-checkpoint", { input: JSON.stringify(record) });
+      assert.equal(r.status, 0, String(r.stderr));
+      assert.equal(existsSync(join(tree(), "infra/deploy/compose/data-prod/.env")), false);
+      assert.equal(
+        r.stdout,
+        `PostgreSQL checkpoint written\nlog bounds: unavailable — Error: ${fail} broke\n`,
+      );
+      const calls = log("docker").split("\n");
+      assert.ok(!calls.some((l) => l.startsWith("compose")), log("docker"));
+      assert.ok(existsSync(join(root, "home/deploy/ds-platform-postgres-state.json")));
+    });
+  }
 
   for (const [label, patch] of [
     ["an extra field", { extra: "x" }],
@@ -979,6 +1040,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       join(root, "usr/local/bin/ds-release"),
       '#!/usr/bin/env bash\necho "ds-release-called ${@:1:$#-1}" >> "$STUB_DIR/ds-release.log"\ncat "${@: -1}" >> "$STUB_DIR/ds-release.log"\n',
     );
+    writeFileSync(join(root, "etc/ds-platform/glitchtip.env"), "SECRET_KEY=x\n");
     assert.equal(run(`data-up ${SHA}`).status, 0);
     assert.equal(run(`backup ${SHA} retry-failed`).status, 0);
     const compose = join(tree(), "infra/deploy/compose/data-prod");
@@ -987,9 +1049,18 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       `ds-release-called release prod ${SHA} up\ncd '${compose}'\n` +
         "docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest\n" +
         "docker compose up -d --no-deps redis\n" +
+        "docker compose -f glitchtip/compose.yml --env-file .env up -d --no-build --pull missing --wait --wait-timeout 300\n" +
         `ds-release-called release --retry-failed prod ${SHA} backup\ncd '${compose}'\n` +
         "docker compose exec -T pgbackrest /usr/local/bin/backup.sh incr\n",
     );
+  });
+
+  it("3395: data-up refuses before any unit starts when /etc/ds-platform/glitchtip.env is absent", () => {
+    setRole("data");
+    const r = run(`data-up ${SHA}`);
+    assert.equal(r.status, 3, String(r.stderr));
+    assert.match(String(r.stderr), /etc\/ds-platform\/glitchtip\.env is absent or unreadable/);
+    assert.equal(log("ds-release"), "", "no durable unit started");
   });
 
   it("3313: finish, check and supersede call ds-release for prod only", () => {

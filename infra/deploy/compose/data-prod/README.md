@@ -21,6 +21,11 @@ VPC_IP=192.168.0.10 docker compose -f compose.yml up -d
 
 Both `postgres` (5432) and `redis` (6379) publish on `${VPC_IP}` only.
 
+A release does this itself: its `data-env` writes `.env` here and its `data-up` raises
+the persistence plane, then GlitchTip (`glitchtip/compose.yml`, project
+`ds-glitchtip`, with this same `.env` passed as `--env-file`; `infra/deploy/README.md`
+→ GlitchTip). A hand-made `glitchtip/.env` does not survive the next ship.
+
 ## Secrets
 
 Via `/etc/ds-platform/data.env`, never committed: `POSTGRES_PASSWORD`, the

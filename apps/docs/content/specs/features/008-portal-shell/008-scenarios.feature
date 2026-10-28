@@ -32,9 +32,9 @@ Feature: Persistent portal app-shell header and public discovery front-door
       Then the doctor lands on "/webinars" showing the discovery listing of upcoming broadcasts
       And the persistent header shows the logo, the top-nav [Эфиры], a theme toggle, and the signed-in auth cluster («Мои события» plus an avatar icon with the doctor's initials)
       When the doctor activates «Мои события» in the auth cluster
-      Then the portal navigates to "/account/events"
+      Then the portal lands on "/account/events" showing "Мои события"
       When the doctor activates the avatar icon
-      Then the portal navigates to the profile "/account"
+      Then the portal lands on "/account" showing "Профиль"
 
     # Amended 2026-09-14 (source: canvas ds-shell.dc.html line 220 guestCluster.primary,
     # owner Stage-B round 1 on PR #2198; see 008-requirements-en.md → Amendment — 2026-09-14):
@@ -73,14 +73,16 @@ Feature: Persistent portal app-shell header and public discovery front-door
       When the user opens the header navigation
       Then the top-nav is collapsed into a ≡ dropdown
       And the dropdown carries the same items [Эфиры] plus the signed-in auth cluster («Мои события», the avatar target)
-      And selecting «Мои события» navigates to "/account/events"
+      When the user selects «Мои события»
+      Then the portal lands on "/account/events" showing "Мои события"
 
-    @EARS-12 @stage-b
+    @EARS-12 @EARS-13 @stage-b
     Scenario: The rendered shell matches the vendored canvas across breakpoints and themes
       Given the persistent header and "/" are built from the vendored canvas via @ds/design-system tokens
       When the product owner reviews the running stand at Stage-B
       Then the rendered result matches the canvas element-by-element at both breakpoints and in both themes
       And no arbitrary Tailwind values are used (tokens only)
+      And the header's nav, auth-cluster, guest-control, theme-toggle and avatar accessible labels come from the RU-primary message catalogue without hardcoded user-facing strings in shell components
 
     @EARS-14 @happy
     Scenario: The Academy footer renders per the shared shell on every route

@@ -34,7 +34,7 @@ Given(
       (url) => url.origin === origin && url.pathname === "/",
     );
     await expect(page.getByTestId("storefront-header")).toBeVisible();
-    await expect(page.getByTestId("storefront-footer")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   },
 );
 

@@ -14,6 +14,7 @@ import {
 import { CentrifugoChatGateway } from "./chat.gateway.js";
 import { PresencePublisher } from "./presence-publisher.service.js";
 import { PresenceRepository } from "./presence.repository.js";
+import { presenceVisibleTo } from "./presence-visibility.js";
 import { resolveRoomStream } from "./provider-enum.js";
 import { RoomRepository, type EventForRoom } from "./room.repository.js";
 import {
@@ -148,7 +149,11 @@ export class RoomService {
    * and an absent/unknown provider yields `stream: null` — the truthful "stream
    * unavailable" room state, still a valid grant (the gate admitted the caller).
    */
-  async roomConfig(idOrSlug: string, sub: string): Promise<RoomConfig> {
+  async roomConfig(
+    idOrSlug: string,
+    sub: string,
+    staff = false,
+  ): Promise<RoomConfig> {
     const event = await this.admit(idOrSlug, sub);
     // Resolve the acting doctor so the grant carries a gate-scoped, subscribe-only
     // chat credential minted for THIS caller + THIS room (EARS-3). `admit` already
@@ -168,10 +173,11 @@ export class RoomService {
       // back-fill from the schedule. Serialized ISO-8601 with offset.
       liveAt: event.liveAt ? event.liveAt.toISOString() : null,
       // The live aggregate count seeded into the header on first render (EARS-8:
-      // an integer, never per-doctor identity or the roster).
-      presenceCount,
+      // an integer, never per-doctor identity or the roster) — `null` when the
+      // event hides it from this caller (EARS-19).
+      presenceCount: presenceVisibleTo(event, staff) ? presenceCount : null,
       stream: resolveRoomStream(event.streamConfig),
-      chat: userId ? this.chat.credential(userId, event.id) : null,
+      chat: userId ? this.chat.credential(userId, event.id, staff) : null,
     };
   }
 
@@ -240,6 +246,7 @@ export class RoomService {
   async recordHeartbeat(
     idOrSlug: string,
     sub: string,
+    staff = false,
   ): Promise<PresenceHeartbeatAck> {
     const event = await this.admit(idOrSlug, sub);
     const userId = await this.presence.findUserIdBySub(sub);
@@ -258,7 +265,15 @@ export class RoomService {
     // waiting on any observer's next beat. Fire-and-forget: the publisher swallows
     // every failure so a Centrifugo blip never turns this beat into a 5xx (the
     // portal then degrades to this same ack's count — #1136). The ack is unchanged.
+    // The publisher fans out to staff only while the event hides the count
+    // (EARS-19), so the count is always computed; the ack withholds it from a
+    // viewer the setting excludes — read fresh on every beat, which is how a
+    // mid-live toggle reaches an open room no later than its next accepted beat.
     void this.presencePublisher.onBeat(event.id, presenceCount);
-    return { eventId: event.id, beatAt: beatAt.toISOString(), presenceCount };
+    return {
+      eventId: event.id,
+      beatAt: beatAt.toISOString(),
+      presenceCount: presenceVisibleTo(event, staff) ? presenceCount : null,
+    };
   }
 }

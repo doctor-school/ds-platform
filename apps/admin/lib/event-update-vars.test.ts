@@ -31,6 +31,7 @@ const base: EventFormValues = {
   audience: "experts",
   projectId: null,
   hideSignUpCount: false,
+  showPresenceCount: false,
 };
 
 describe("eventUpdateVars", () => {
@@ -82,6 +83,7 @@ describe("eventUpdateVars", () => {
       participationFormat: "online",
       audience: "experts",
       hideSignUpCount: false,
+      showPresenceCount: false,
     });
   });
 
@@ -93,6 +95,17 @@ describe("eventUpdateVars", () => {
     expect(
       eventUpdateVars({ ...base, hideSignUpCount: false }, { legacy: true })
         .hideSignUpCount,
+    ).toBe(false);
+  });
+
+  it("007 EARS-13: the update carries «Показывать зрителям число участников» as the editor left it — on and off alike", () => {
+    expect(
+      eventUpdateVars({ ...base, showPresenceCount: true }, { legacy: false })
+        .showPresenceCount,
+    ).toBe(true);
+    expect(
+      eventUpdateVars({ ...base, showPresenceCount: false }, { legacy: true })
+        .showPresenceCount,
     ).toBe(false);
   });
 

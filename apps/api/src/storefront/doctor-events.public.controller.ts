@@ -11,6 +11,7 @@ import {
   Req,
   UseFilters,
 } from "@nestjs/common";
+import { callerIsStaff } from "../auth/staff-role.js";
 import { ApiOkResponse, ApiQuery } from "@nestjs/swagger";
 import type { FastifyRequest } from "fastify";
 import {
@@ -307,6 +308,7 @@ export class DoctorEventsPublicController {
       specialtyReference: readSpecialtyChoiceCookie(cookie),
       routes: DOCTOR_ROUTES,
       sub,
+      staff: callerIsStaff(req),
     });
   }
 
@@ -373,7 +375,12 @@ export class DoctorEventsPublicController {
     @Req() req: FastifyRequest,
   ): Promise<ParticipationCta> {
     const sub = (req as { user?: { sub?: string } }).user?.sub;
-    const cta = await this.participation.cta(idOrSlug, DOCTOR_ROUTES, sub);
+    const cta = await this.participation.cta(
+      idOrSlug,
+      DOCTOR_ROUTES,
+      sub,
+      callerIsStaff(req),
+    );
     if (!cta) throw new NotFoundException("event not found");
     return cta;
   }

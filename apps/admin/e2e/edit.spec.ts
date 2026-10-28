@@ -122,6 +122,62 @@ test.describe("007 EARS-12 — «Скрыть число записавшихс�
 });
 
 /**
+ * 007 EARS-13 (#2911), browser half — «Показывать зрителям число участников».
+ * The unit rows prove the projection and the request bodies; the API e2e
+ * (`apps/api/test/admin/show-presence-count.e2e-spec.ts`) proves the column and
+ * the viewer-side withholding (006 EARS-19). The browser proves the operator's
+ * round trip: off on a new event, absent on an архивный эфир, ticked → saved →
+ * reopened on, unticked → saved → reopened off.
+ */
+const PRESENCE_OPTION_LABEL = "Показывать зрителям число участников";
+
+test.describe("007 EARS-13 — «Показывать зрителям число участников» in the event editor", () => {
+  test("007 EARS-13: the create form offers the option off, and not on an архивный эфир", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+    await page.goto("/events/create");
+    const option = page.getByLabel(PRESENCE_OPTION_LABEL);
+    await expect(option).toBeVisible();
+    await expect(option).not.toBeChecked();
+    await evidenceShot(page, "admin-create-presence-option-off");
+    // The legacy create body has no such key — the box is not offered there.
+    await toggle(page, "legacy-toggle");
+    await expect(page.getByTestId("legacy-toggle")).toBeChecked();
+    await expect(page.getByTestId("show-presence-count")).toHaveCount(0);
+  });
+
+  test("007 EARS-13: on → saved, reopened on; off → saved, reopened off", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+    const id = await createPublishedEvent(
+      page,
+      `Счётчик в комнате ${Date.now()}`,
+      { audience: "experts" },
+    );
+    try {
+      const option = page.getByLabel(PRESENCE_OPTION_LABEL);
+      await expect(option).not.toBeChecked();
+
+      await toggle(page, "show-presence-count");
+      await expect(option).toBeChecked();
+      await saveAndReopen(page, id);
+      await expect(page.getByLabel(PRESENCE_OPTION_LABEL)).toBeChecked();
+      await page.getByTestId("show-presence-count").scrollIntoViewIfNeeded();
+      await evidenceShot(page, "admin-edit-presence-option-on");
+
+      await toggle(page, "show-presence-count");
+      await expect(page.getByLabel(PRESENCE_OPTION_LABEL)).not.toBeChecked();
+      await saveAndReopen(page, id);
+      await expect(page.getByLabel(PRESENCE_OPTION_LABEL)).not.toBeChecked();
+    } finally {
+      await retireEventFromStorefronts(page, id);
+    }
+  });
+});
+
+/**
  * 044 EARS-13 (#2517), browser half — «Место проведения» in the event editor.
  * The API e2e (`apps/api/test/admin/edit-event.e2e-spec.ts`) proves the column
  * and the null/blank clear; the browser proves the operator's round trip: an

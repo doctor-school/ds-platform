@@ -3249,7 +3249,7 @@ export interface components {
             endsAt: string;
             eventId: string;
             href: string;
-            presenceCount: number;
+            presenceCount: number | null;
             school: string;
             slug: string;
             title: string;

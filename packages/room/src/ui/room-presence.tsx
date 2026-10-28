@@ -31,8 +31,8 @@ import {
  */
 
 const PresenceContext = createContext<{
-  count: number;
-  setCount: (n: number) => void;
+  count: number | null;
+  setCount: (n: number | null) => void;
 } | null>(null);
 
 /**
@@ -40,15 +40,19 @@ const PresenceContext = createContext<{
  * Centrifugo room publications are the primary realtime fan-out, and heartbeat
  * acks are the fallback. The header's {@link PresenceCount} renders the shared
  * value without polling.
+ *
+ * 006 EARS-19 (#2911) — `null` is the WITHHELD count: the event's «Показывать
+ * зрителям число участников» is off and the caller is not staff, so the server
+ * sent no number. Every count surface then renders nothing in its place.
  */
 export function RoomPresenceProvider({
   initialCount,
   children,
 }: {
-  initialCount: number;
+  initialCount: number | null;
   children: ReactNode;
 }) {
-  const [count, setCount] = useState(initialCount);
+  const [count, setCount] = useState<number | null>(initialCount);
   return (
     <PresenceContext.Provider value={{ count, setCount }}>
       {children}
@@ -56,8 +60,11 @@ export function RoomPresenceProvider({
   );
 }
 
-/** Read the live presence count (0 when no provider is mounted — inert). */
-export function usePresenceCount(): number {
+/**
+ * Read the live presence count (0 when no provider is mounted — inert; `null`
+ * when the server withholds it from this viewer, 006 EARS-19).
+ */
+export function usePresenceCount(): number | null {
   return useContext(PresenceContext)?.count ?? 0;
 }
 
@@ -65,7 +72,7 @@ export function usePresenceCount(): number {
 const NOOP_SETTER = (): void => {};
 
 /** Setter shared by Centrifugo publications and heartbeat-ack fallback (no-op without a provider). */
-export function usePresenceCountSetter(): (n: number) => void {
+export function usePresenceCountSetter(): (n: number | null) => void {
   const ctx = useContext(PresenceContext);
   return ctx ? ctx.setCount : NOOP_SETTER;
 }
@@ -73,7 +80,8 @@ export function usePresenceCountSetter(): (n: number) => void {
 /**
  * The «N врачей в комнате» live count (desktop header cluster, canvas line 21). It
  * renders nothing while the count is 0 — a lone doctor sees it appear as «1 врач…»
- * the moment their own first beat lands, never a «0 врачей» flash.
+ * the moment their own first beat lands, never a «0 врачей» flash. A withheld
+ * (`null`) count renders nothing either — no slot, no placeholder (006 EARS-19).
  */
 export function PresenceCount({
   className,
@@ -84,7 +92,7 @@ export function PresenceCount({
   format: (count: number) => string;
 }) {
   const count = usePresenceCount();
-  if (count <= 0) return null;
+  if (count === null || count <= 0) return null;
   return (
     <span data-testid="room-presence-count" className={className}>
       {format(count)}

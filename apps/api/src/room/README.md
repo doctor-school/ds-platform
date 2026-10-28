@@ -18,7 +18,10 @@ the `fast-path` `doctor_guest` writes/reads).
   — distinct doctors whose latest accepted beat is inside the count-only freshness
   window `2 × N`, an **aggregate** integer, never physical-presence proof,
   per-doctor identity, or the roster, #690). This grace awards no trailing sponsor
-  minutes; those remain the distinct accepted-beat N-bucket derivation. A guest, an
+  minutes; those remain the distinct accepted-beat N-bucket derivation. It is
+  `null` — in the grant and every heartbeat ack — while the event's
+  `show_presence_count` setting is off and the caller's session carries no staff
+  role (006 EARS-19, `presence-visibility.ts`). A guest, an
   unregistered doctor, or a non-`live` event is refused **server-side** (401 /
   403 / 409) and never receives room content — there is no soft UI wall that
   renders the room for an ungated caller (EARS-1, EARS-8). A direct room URL, a
@@ -194,17 +197,23 @@ windowSeconds)` (the distinct-doctor count inside the `2 × N` count-only
   stable, non-reversible, PII-free author tag), and `channelForEvent`. Its config
   (`ROOM_CHAT_CONFIG`) is resolved from `CENTRIFUGO_*` env by `resolveRoomChatConfig`
   (`null` ⇒ chat disabled). Domain error: `ChatUnavailableError` (→ 503). Also
-  carries `publishPresenceCount(eventId, count)` — the EARS-5 realtime push:
-  publishes the typed `presence-count` message onto the same `room:event:<id>`
-  channel, best-effort (failures are swallowed; clients degrade to the
-  heartbeat-ack refresh).
+  carries `publishPresenceCount(eventId, count, audience)` — the EARS-5 realtime
+  push: publishes the typed `presence-count` message (with `skip_history`) onto
+  the shared `room:event:<id>` channel while the event shows the count to
+  viewers, otherwise onto the staff-only `room:staff:<id>` channel that only a
+  staff caller's credential lists (`credential(userId, eventId, staff)` →
+  `staffChannel`, 006 EARS-19); best-effort (failures are swallowed; clients
+  degrade to the heartbeat-ack refresh).
 - `PresencePublisher` (`presence-publisher.service.ts`) — the EARS-5
   publish-on-change service: recomputes the live distinct-doctor count on each
   accepted beat and when a stopped beat stream reaches its `2 × N` expiry
   (per-room in-memory timer armed at
   `nextPresenceExpiry`, re-armed on beats), publishes via
-  `CentrifugoChatGateway.publishPresenceCount` ONLY when the count changed
-  (last-published latch). Fire-and-forget from `recordHeartbeat`; state is
+  `CentrifugoChatGateway.publishPresenceCount` ONLY when the count or its
+  audience changed (last-published latch; the event's `show_presence_count` is
+  read at each publication — 006 EARS-19). `refresh(eventId)` is the toggle
+  hook `UpdateEvent` calls when the setting changes on a `live` event: it
+  re-publishes the unchanged count to the new audience at once. Fire-and-forget from `recordHeartbeat`; state is
   in-memory per api instance (Phase-0 scope — see `DEBT.md`).
 - `RoomController` — `GET /v1/events/:idOrSlug/room` (EARS-1) + `POST
 /v1/events/:idOrSlug/heartbeat` (EARS-4) + `POST /v1/events/:idOrSlug/chat`

@@ -46,8 +46,12 @@ export const EventLiveStripSchema = z
     href: z.string().min(1),
     /** ISO instant the эфир is scheduled to end — rendered as «до HH:MM МСК», never compared. */
     endsAt: z.iso.datetime({ offset: true }),
-    /** Distinct doctors currently in the room over the live heartbeat window (006 EARS-5). */
-    presenceCount: z.number().int().nonnegative(),
+    /**
+     * Distinct doctors currently in the room over the live heartbeat window
+     * (006 EARS-5); `null` when the event hides the count from this reader
+     * (019 EARS-30 / 006 EARS-19) — the block renders no count, no «0», no slot.
+     */
+    presenceCount: z.number().int().nonnegative().nullable(),
     /** Which of the two entry targets `href` carries — the label switch, not a second policy. */
     viewerIsRegistered: z.boolean(),
   })

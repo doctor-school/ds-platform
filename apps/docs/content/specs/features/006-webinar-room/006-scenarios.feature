@@ -399,7 +399,8 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
   @EARS-19 @happy
   Scenario: A staff account sees the count whatever the setting
     Given a live event whose «Показывать зрителям число участников» setting is off and doctors are present
-    When a staff account enters the room
+    And a staff account is registered for the event
+    When the staff account enters the room
     Then the room shows the live participant count, updating as doctors enter and leave
     And the staff account itself is not counted
 
@@ -409,3 +410,10 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
     When an operator turns «Показывать зрителям число участников» off
     Then the count disappears from the doctor's room no later than the doctor's next accepted heartbeat
     And presence capture and the doctor's minutes continue unchanged
+
+  @EARS-19 @edge
+  Scenario: Turning the setting on during the broadcast shows the count in an open room at once
+    Given a registered doctor in a live room whose «Показывать зрителям число участников» setting is off
+    When an operator turns «Показывать зрителям число участников» on
+    Then the participant count appears in the doctor's room without waiting for the doctor's next heartbeat
+    And the doctor's next heartbeat ack carries the count

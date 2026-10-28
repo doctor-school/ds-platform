@@ -24,7 +24,7 @@ const presenceLabel = (n: number) => `presenceCount:${n}`;
 const slug = "hsn-therapy";
 const eventId = "6f9b2f1e-8f1a-4b7e-9c3d-2a1b3c4d5e6f";
 
-function ack(presenceCount: number): Response {
+function ack(presenceCount: number | null): Response {
   return {
     ok: true,
     json: () =>
@@ -256,6 +256,38 @@ describe("006 EARS-5 heartbeat-ack fallback for the live presence count (#1122/#
  * stays a diagnostics-only breadcrumb, because a transient or an auth blip must
  * never fabricate «Эфир завершён» over a running broadcast.
  */
+describe("006 EARS-19 a withheld count on the ack drops the shown count (#2911)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => false,
+    });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("006 EARS-19: an ack carrying presenceCount null removes the count element; a later number brings it back", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(ack(null))
+      .mockResolvedValueOnce(ack(2));
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderRoom(60);
+    await flushBeat();
+    expect(screen.queryByTestId("room-presence-count")).toBeNull();
+
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+    await flushBeat();
+    expect(count()).toBe("presenceCount:2");
+  });
+});
+
 describe("006 EARS-7 the heartbeat 409 ended refusal closes an open room", () => {
   beforeEach(() => {
     vi.useFakeTimers();

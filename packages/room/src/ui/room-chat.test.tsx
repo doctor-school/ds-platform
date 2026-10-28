@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { RoomChatCredential, RoomChatMessage } from "@ds/schemas";
 import type { BrowserRoomApi } from "../client/room-api";
 import { RoomChat, type RoomChatCopy } from "./room-chat";
+import { PresenceCount, RoomPresenceProvider } from "./room-presence";
 
 // 006 EARS-3 — the chat pane's history bootstrap (#843). «Пока нет сообщений»
 // (`chatEmpty`) is a STATEMENT about the room, so it must never render while
@@ -77,6 +78,7 @@ const chat: RoomChatCredential = {
   url: "wss://rt.example/connection/websocket",
   token: "token",
   channel: "room:evt-1",
+  staffChannel: null,
   selfTag: "A1",
 };
 
@@ -425,5 +427,59 @@ describe("006 EARS-7 the ended room's chat keeps its ledger and drops the compos
     await waitFor(() => expect(screen.getByText(message.text)).toBeTruthy());
     expect(screen.queryByTestId("room-chat-ended")).toBeNull();
     expect(screen.getByLabelText("composerPlaceholder")).toBeInTheDocument();
+  });
+});
+
+/**
+ * 006 EARS-19 (#2911) — while the setting is off, the server publishes the
+ * realtime count only on the staff channel a staff caller's token lists
+ * (`chat.staffChannel`). The pane must apply a count arriving there, and must
+ * never treat anything else on that channel as a chat message.
+ */
+describe("006 EARS-19 the staff channel carries the count to a staff session", () => {
+  const staffChat: RoomChatCredential = {
+    ...chat,
+    staffChannel: "room:staff:evt-1",
+  };
+  const presence = (n: number) => ({
+    type: "presence-count",
+    count: n,
+    at: "2026-07-13T10:00:00.000Z",
+  });
+
+  function renderStaffRoom(credential: RoomChatCredential): void {
+    render(
+      <RoomPresenceProvider initialCount={null}>
+        <PresenceCount format={(n) => `presenceCount:${n}`} />
+        <RoomChat api={api} chat={credential} copy={copy} />
+      </RoomPresenceProvider>,
+    );
+  }
+
+  it("006 EARS-19: a count published on the staff channel appears in the header", () => {
+    renderStaffRoom(staffChat);
+    expect(screen.queryByTestId("room-presence-count")).toBeNull();
+    fire("publication", {
+      channel: "room:staff:evt-1",
+      data: presence(5),
+    });
+    expect(screen.getByTestId("room-presence-count").textContent).toBe(
+      "presenceCount:5",
+    );
+  });
+
+  it("006 EARS-19: a chat-shaped publication on the staff channel never enters the ledger", () => {
+    renderStaffRoom(staffChat);
+    fire("publication", { channel: "room:staff:evt-1", data: message });
+    expect(screen.queryByText(message.text)).toBeNull();
+  });
+
+  it("006 EARS-19: a viewer (no staff channel) ignores a foreign channel's count", () => {
+    renderStaffRoom(chat);
+    fire("publication", {
+      channel: "room:staff:evt-1",
+      data: presence(5),
+    });
+    expect(screen.queryByTestId("room-presence-count")).toBeNull();
   });
 });

@@ -161,6 +161,14 @@ export const events = pgTable(
      */
     hideSignUpCount: boolean("hide_sign_up_count").notNull().default(false),
     /**
+     * 007 EARS-13 / 006 EARS-19 (#2911) — «Показывать зрителям число
+     * участников». While `false` (the default and the back-fill) the API serves
+     * no live presence count to a caller whose session carries no staff role:
+     * the room read, heartbeat ack, realtime push, room-entry CTA and the
+     * «Идёт сейчас» strip all carry `null` / nothing. Staff always see it.
+     */
+    showPresenceCount: boolean("show_presence_count").notNull().default(false),
+    /**
      * #1593 — the optimistic-concurrency version of the event aggregate, the
      * same column `event_recordings` and every versioned taxonomy row already
      * carry (012-design §6). The 007 admin detail read projects it as the weak

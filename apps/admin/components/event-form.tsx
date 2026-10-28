@@ -97,6 +97,11 @@ export interface EventFormValues {
    * `signUpCount: null` (019 EARS-19). Not part of the legacy-эфир create body.
    */
   hideSignUpCount: boolean;
+  /**
+   * 007 EARS-13 (#2911) — «Показывать зрителям число участников». Off: viewers
+   * receive no live presence count (006 EARS-19); staff always see it.
+   */
+  showPresenceCount: boolean;
 }
 
 const PDF_MIME = "application/pdf";
@@ -250,6 +255,7 @@ export function EventForm({
       audience: fieldsValue.audience as EventAudience,
       projectId: detail ? null : fieldsValue.projectId || null,
       hideSignUpCount: fieldsValue.hideSignUpCount,
+      showPresenceCount: fieldsValue.showPresenceCount,
       // Only on CREATE: the route choice and the recording are authoring
       // facts, and the detail page's update never carries either.
       ...(detail ? null : legacySubmission(fieldsValue)),
@@ -363,6 +369,36 @@ export function EventForm({
                 </FormControl>
                 <FormMessage>
                   {t("events.fields.hideSignUpCountHint")}
+                </FormMessage>
+              </FormItem>
+            )}
+          />
+        )}
+
+        {/* 007 EARS-13 (#2911) — the second public-display option, styled and
+            gated exactly like «Скрыть число записавшихся»: the legacy create
+            body has no such key, and an архивный эфир has no live room. */}
+        {isCreateLegacy ? null : (
+          <FormField
+            control={form.control}
+            name="showPresenceCount"
+            render={({ field }) => (
+              <FormItem>
+                <FormControl>
+                  <Checkbox
+                    id="showPresenceCount"
+                    data-testid="show-presence-count"
+                    checked={field.value}
+                    name={field.name}
+                    onBlur={field.onBlur}
+                    onChange={(e) => field.onChange(e.target.checked)}
+                    ref={field.ref}
+                  >
+                    {t("events.fields.showPresenceCount")}
+                  </Checkbox>
+                </FormControl>
+                <FormMessage>
+                  {t("events.fields.showPresenceCountHint")}
                 </FormMessage>
               </FormItem>
             )}

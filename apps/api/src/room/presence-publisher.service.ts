@@ -1,6 +1,10 @@
 import { Inject, Injectable, type OnModuleDestroy } from "@nestjs/common";
-import { CentrifugoChatGateway } from "./chat.gateway.js";
+import {
+  CentrifugoChatGateway,
+  type PresenceAudience,
+} from "./chat.gateway.js";
 import { PresenceRepository } from "./presence.repository.js";
+import { RoomRepository } from "./room.repository.js";
 import {
   ROOM_HEARTBEAT_INTERVAL_SECONDS,
   presenceWindowSeconds as derivePresenceWindowSeconds,
@@ -12,9 +16,11 @@ const MIN_FIRE_DELAY_MS = 50;
 
 interface RoomTimer {
   timer: ReturnType<typeof setTimeout> | null;
-  /** The last count actually fanned out — the change-detection latch. `null` = the
-   * room has never published, so the first computed count always fans out. */
-  lastPublished: number | null;
+  /** The last count actually fanned out, and to which audience — the change-
+   * detection latch. `null` = the room has never published, so the first computed
+   * count always fans out. A change of audience (006 EARS-19: the event's
+   * «Показывать зрителям число участников» setting flipped) is a change too. */
+  lastPublished: { count: number; audience: PresenceAudience } | null;
 }
 
 /**
@@ -63,6 +69,7 @@ export class PresencePublisher implements OnModuleDestroy {
     @Inject(CentrifugoChatGateway)
     private readonly gateway: CentrifugoChatGateway,
     @Inject(PresenceRepository) private readonly presence: PresenceRepository,
+    @Inject(RoomRepository) private readonly roomEvents: RoomRepository,
     @Inject(ROOM_HEARTBEAT_INTERVAL_SECONDS)
     private readonly heartbeatIntervalSeconds: number,
   ) {}
@@ -99,9 +106,38 @@ export class PresencePublisher implements OnModuleDestroy {
     count: number,
   ): Promise<void> {
     const room = this.roomState(eventId);
-    if (room.lastPublished === count) return;
-    await this.gateway.publishPresenceCount(eventId, count);
-    room.lastPublished = count;
+    // 006 EARS-19 — the setting is read at EACH publication: while it is off the
+    // count rides the staff-only channel (granted only in a staff caller's
+    // credential), so a viewer's connection never receives it; while it is on it
+    // rides the shared room channel every admitted connection holds. A missing
+    // event (deleted mid-room) fails closed to the staff channel.
+    const audience: PresenceAudience =
+      (await this.roomEvents.showsPresenceCount(eventId)) === true
+        ? "everyone"
+        : "staff";
+    const last = room.lastPublished;
+    if (last && last.count === count && last.audience === audience) return;
+    await this.gateway.publishPresenceCount(eventId, count, audience);
+    room.lastPublished = { count, audience };
+  }
+
+  /**
+   * 006 EARS-19 — the event's «Показывать зрителям число участников» setting
+   * changed while the room may be open: recompute the live count and publish it
+   * to the audience the NEW setting names, even though the count itself did not
+   * change. Turning the setting on therefore reaches every open viewer room at
+   * once (the shared channel every viewer connection already holds — no re-grant),
+   * not at their next beat; turning it off sends the count to staff only, and a
+   * viewer's room drops what it showed at its next heartbeat ack (`null`).
+   * Best-effort and inert without Centrifugo, exactly like {@link onBeat}.
+   */
+  async refresh(eventId: string): Promise<void> {
+    if (!this.gateway.enabled) return;
+    // `fire` re-arms the expiry timer; drop a pending one first so it is not
+    // orphaned (it would only recompute again, but the room keeps ONE timer).
+    const room = this.roomState(eventId);
+    if (room.timer) clearTimeout(room.timer);
+    await this.fire(eventId);
   }
 
   /** (Re-)arm the single per-room timer at the next window-expiry instant. A fresh

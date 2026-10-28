@@ -198,6 +198,11 @@ interface SeedSpec {
    */
   readonly seatsLeft?: number;
   /**
+   * 006 EARS-19 (#2911): «Показывать зрителям число участников». Omitted ⇒ off,
+   * the column default — a viewer then receives no live presence count.
+   */
+  readonly showPresenceCount?: boolean;
+  /**
    * 014 EARS-1/7 (#2996): the day the operator promises the recording by, as
    * days after the seed run (a `date`, rendered «до <day> <month>»). Omitted ⇒
    * the column is left untouched.
@@ -347,6 +352,11 @@ function specs(now: number): SeedSpec[] {
         provider: "rutube",
         embedRef: "cef3a41b70985eedeefe504452a69adc",
       },
+      // 006 EARS-19 (#2911): the counted room — the EARS-5 realtime-count E2E
+      // (`apps/portal/e2e/room-presence-count.spec.ts`) asserts the count a viewer
+      // sees, so this fixture shows it; the provider rooms below keep the default
+      // (off) and are the «no count for a viewer» fixtures.
+      showPresenceCount: true,
     },
     // ── 006 room-integration live fixtures (#584) ──────────────────────────────
     // The EARS-2 provider-variant live rooms `apps/portal/e2e/room.spec.ts` drives:
@@ -728,6 +738,7 @@ export async function seedEvents(): Promise<void> {
           audience,
           participationFormat,
           liveAt,
+          showPresenceCount: spec.showPresenceCount ?? false,
           updatedAt: new Date(),
         })
         .onConflictDoUpdate({
@@ -749,6 +760,7 @@ export async function seedEvents(): Promise<void> {
             audience,
             participationFormat,
             liveAt,
+            showPresenceCount: spec.showPresenceCount ?? false,
             updatedAt: new Date(),
           },
         })

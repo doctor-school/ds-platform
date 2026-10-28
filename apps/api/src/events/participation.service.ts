@@ -9,6 +9,7 @@ import {
   UnknownSubjectError,
 } from "../registration/registration.service.js";
 import { PresenceRepository } from "../room/presence.repository.js";
+import { presenceVisibleTo } from "../room/presence-visibility.js";
 import {
   ROOM_HEARTBEAT_INTERVAL_SECONDS,
   presenceWindowSeconds,
@@ -84,6 +85,7 @@ export class ParticipationService {
     idOrSlug: string,
     routes: ParticipationRoutes,
     sub?: string,
+    staff = false,
   ): Promise<ParticipationCta | null> {
     const found = await this.events.findByIdOrSlug(idOrSlug);
     if (!found) return null;
@@ -105,6 +107,10 @@ export class ParticipationService {
     // aggregate queried. It is an integer over the live heartbeat window, never
     // a roster and never per-doctor identity (006 EARS-8).
     if (cta.action !== "enter-room") return cta;
+    // 020 EARS-24 / 006 EARS-19 — the event hides the count from a viewer whose
+    // session carries no staff role: the entry stays, the count is `null` and is
+    // not even queried.
+    if (!presenceVisibleTo(found.event, staff)) return cta;
     // The copy says «коллег» — OTHER doctors. `enter-room` is only ever reached
     // by a registered principal, so `sub` is present; the viewer's own beats
     // (they may be reading this page from inside the room, or on a second tab)

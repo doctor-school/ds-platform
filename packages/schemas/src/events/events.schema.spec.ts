@@ -297,11 +297,43 @@ describe("007 events schema", () => {
       ).toBe(false);
     });
 
+    it("007 EARS-13: create carries the boolean «Показывать зрителям число участников», default off", () => {
+      expect(CreateEventRequestSchema.parse(base).showPresenceCount).toBe(
+        false,
+      );
+      expect(
+        CreateEventRequestSchema.parse({ ...base, showPresenceCount: true })
+          .showPresenceCount,
+      ).toBe(true);
+      expect(
+        CreateEventRequestSchema.safeParse({
+          ...base,
+          showPresenceCount: "yes",
+        }).success,
+      ).toBe(false);
+    });
+
+    it("007 EARS-13: update sets «Показывать зрителям число участников» only when the key is present — an omitted key leaves it", () => {
+      expect(UpdateEventRequestSchema.parse({})).not.toHaveProperty(
+        "showPresenceCount",
+      );
+      expect(
+        UpdateEventRequestSchema.parse({ showPresenceCount: true })
+          .showPresenceCount,
+      ).toBe(true);
+      expect(
+        UpdateEventRequestSchema.safeParse({ showPresenceCount: null }).success,
+      ).toBe(false);
+    });
+
     it("012 EARS-26: create requires exactly one kind id — missing or non-uuid is refused", () => {
       const { kindId: _omit, ...withoutKind } = base;
-      expect(CreateEventRequestSchema.safeParse(withoutKind).success).toBe(false);
+      expect(CreateEventRequestSchema.safeParse(withoutKind).success).toBe(
+        false,
+      );
       expect(
-        CreateEventRequestSchema.safeParse({ ...base, kindId: "Вебинар" }).success,
+        CreateEventRequestSchema.safeParse({ ...base, kindId: "Вебинар" })
+          .success,
       ).toBe(false);
     });
 
@@ -315,7 +347,8 @@ describe("007 events schema", () => {
           .success,
       ).toBe(false);
       expect(
-        CreateEventRequestSchema.parse({ ...base, audience: "experts" }).audience,
+        CreateEventRequestSchema.parse({ ...base, audience: "experts" })
+          .audience,
       ).toBe("experts");
     });
 

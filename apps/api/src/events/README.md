@@ -41,7 +41,10 @@ The webinar event module. It hosts two surfaces over one aggregate:
   event's `hide_sign_up_count` option is on — 007 EARS-12 / 019 EARS-19), the Academy live read
   (`GET /v1/public/events/live` → `LiveStrip[]`, the `experts`-audience call
   of the ONE live resolution `EventsLiveService` the doctor storefront's live
-  read shares — wave-2 entry gate §4.3 D5), the
+  read shares — wave-2 entry gate §4.3 D5; each strip's `presenceCount`, like
+  the room-entry CTA's, is `null` while the event's `show_presence_count`
+  setting is off and the reader is not staff — 019 EARS-30 / 020 EARS-24 /
+  006 EARS-19), the
   month-range read (`GET /v1/public/events?month=YYYY-MM` →
   `MonthBroadcastEntry[]`, 004 EARS-15: every `published`/`live`/`ended` event
   whose start instant falls in the requested month — МСК month boundaries via the

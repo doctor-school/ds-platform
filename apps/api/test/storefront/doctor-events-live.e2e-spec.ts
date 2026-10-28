@@ -116,7 +116,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const id = randomUUID();
       const slug = `live-${id.slice(0, 8)}`;
       await pool.query(
-        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, kind_id, audience) VALUES ($1, $2, $3, $4, $5, $6, 'published', ${eventClassificationSql("doctors")})`,
+        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, show_presence_count, kind_id, audience) VALUES ($1, $2, $3, $4, $5, $6, 'published', true, ${eventClassificationSql("doctors")})`,
         [
           id,
           slug,
@@ -366,6 +366,68 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const strip = await readLive({ specialtyCode: ownCode });
       expect(strip.href).toBe(`/events/${liveSlug}`);
       expect(strip.presenceCount).toBe(2);
+    });
+
+    it("019 EARS-30: setting off — the live read carries `presenceCount: null` for a guest and for a signed-in doctor, registered or not; a staff reader still reads the count", async () => {
+      const staffEmail = uniqueEmail("live-staff");
+      const reg = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { email: staffEmail, password, consent },
+      });
+      expect(reg.statusCode).toBe(200);
+      const { rows } = await pool.query<{ zitadel_sub: string }>(
+        "SELECT zitadel_sub FROM users WHERE email = $1",
+        [staffEmail],
+      );
+      await fake.grantProjectRole(rows[0]!.zitadel_sub, "platform_admin");
+      const login = await app.inject({
+        method: "POST",
+        url: "/v1/auth/login",
+        headers: device,
+        payload: { identifier: staffEmail, password },
+      });
+      expect(login.statusCode).toBe(200);
+      const staffSession = login.cookies.find(
+        (c) => c.name === SESSION_COOKIE_NAME,
+      )!.value;
+
+      await pool.query(
+        "UPDATE events SET show_presence_count = false WHERE id = $1",
+        [liveEventId],
+      );
+      try {
+        expect(
+          (await readLive({ specialtyCode: ownCode })).presenceCount,
+        ).toBeNull();
+        const registered = await readLive({
+          specialtyCode: ownCode,
+          session: registeredSession,
+        });
+        expect(registered.viewerIsRegistered).toBe(true);
+        expect(registered.presenceCount).toBeNull();
+        expect(
+          (
+            await readLive({
+              specialtyCode: ownCode,
+              session: unregisteredSession,
+            })
+          ).presenceCount,
+        ).toBeNull();
+        expect(
+          (await readLive({ specialtyCode: ownCode, session: staffSession }))
+            .presenceCount,
+        ).toBe(2);
+      } finally {
+        await pool.query(
+          "UPDATE events SET show_presence_count = true WHERE id = $1",
+          [liveEventId],
+        );
+      }
+      // Setting on: the count as in EARS-6.
+      expect((await readLive({ specialtyCode: ownCode })).presenceCount).toBe(
+        2,
+      );
     });
 
     it("EARS-6.5: a viewer whose specialty reaches no direction reads an empty list under «Моя и смежные», even while two эфиры are live", async () => {

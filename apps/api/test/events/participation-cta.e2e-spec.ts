@@ -73,8 +73,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
             specialties, partner_ref, program_pdf_ref, state,
-            participation_format, seats_left, kind_id, audience)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, ${eventClassificationSql()})`,
+            participation_format, seats_left, show_presence_count, kind_id, audience)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, true, ${eventClassificationSql()})`,
         [
           id,
           slug,
@@ -415,6 +415,78 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       for (const url of [ACADEMY(slug), DOCTOR(slug)]) {
         const res = await app.inject({ method: "GET", url, headers: device });
         expect(res.statusCode).toBe(404);
+      }
+    });
+    /** A registered staff (platform_admin) portal session — 020 EARS-24. */
+    async function staffSession(
+      email = uniqueEmail("cta-staff"),
+    ): Promise<string> {
+      const reg = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { email, password, consent },
+      });
+      expect(reg.statusCode).toBe(200);
+      const { rows } = await pool.query<{ zitadel_sub: string }>(
+        "SELECT zitadel_sub FROM users WHERE email = $1",
+        [email],
+      );
+      await fake.grantProjectRole(rows[0]!.zitadel_sub, "platform_admin");
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/login",
+        headers: device,
+        payload: { identifier: email, password },
+      });
+      expect(res.statusCode).toBe(200);
+      return res.cookies.find((c) => c.name === SESSION_COOKIE_NAME)!.value;
+    }
+
+    /** A live event with a colleague beating in the room, and the setting given. */
+    async function liveWithColleague(showPresenceCount: boolean) {
+      const { id, slug } = await seedEvent({ state: "published" });
+      await pool.query(
+        "UPDATE events SET state = 'live', show_presence_count = $2 WHERE id = $1",
+        [id, showPresenceCount],
+      );
+      const colleagueEmail = uniqueEmail("cta24-colleague");
+      await doctorSession(colleagueEmail);
+      await pool.query(
+        `INSERT INTO presence_beats (user_id, event_id, beat_at)
+         SELECT id, $2, now() FROM users WHERE email = $1`,
+        [colleagueEmail, id],
+      );
+      return { id, slug };
+    }
+
+    it("020 EARS-24: setting off — a registered doctor's room entry carries `presenceCount: null` on both storefronts, never 0", async () => {
+      const { slug } = await liveWithColleague(false);
+      const doctor = await doctorSession();
+      await register(slug, doctor);
+      for (const url of [ACADEMY(slug), DOCTOR(slug)]) {
+        const entry = await cta(url, doctor);
+        expect(entry.action).toBe("enter-room");
+        expect(entry.presenceCount).toBeNull();
+      }
+    });
+
+    it("020 EARS-24: setting on — the room entry carries the count as EARS-7 states", async () => {
+      const { slug } = await liveWithColleague(true);
+      const doctor = await doctorSession();
+      await register(slug, doctor);
+      for (const url of [ACADEMY(slug), DOCTOR(slug)]) {
+        expect((await cta(url, doctor)).presenceCount).toBe(1);
+      }
+    });
+
+    it("020 EARS-24: a staff reader's room entry carries the count whatever the setting", async () => {
+      const { slug } = await liveWithColleague(false);
+      const staff = await staffSession();
+      await register(slug, staff);
+      for (const url of [ACADEMY(slug), DOCTOR(slug)]) {
+        const entry = await cta(url, staff);
+        expect(entry.action).toBe("enter-room");
+        expect(entry.presenceCount).toBe(1);
       }
     });
   },

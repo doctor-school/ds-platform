@@ -12,6 +12,7 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
+import { callerIsStaff } from "../auth/staff-role.js";
 import type { FastifyRequest } from "fastify";
 import type {
   PostChatMessageAck,
@@ -76,7 +77,9 @@ export class RoomController {
     @Param("idOrSlug") idOrSlug: string,
     @Req() req: FastifyRequest,
   ): Promise<RoomConfig> {
-    return this.gated(req, (sub) => this.room.roomConfig(idOrSlug, sub));
+    return this.gated(req, (sub) =>
+      this.room.roomConfig(idOrSlug, sub, callerIsStaff(req)),
+    );
   }
 
   @Post(":idOrSlug/heartbeat")
@@ -96,7 +99,9 @@ export class RoomController {
     @Param("idOrSlug") idOrSlug: string,
     @Req() req: FastifyRequest,
   ): Promise<PresenceHeartbeatAck> {
-    return this.gated(req, (sub) => this.room.recordHeartbeat(idOrSlug, sub));
+    return this.gated(req, (sub) =>
+      this.room.recordHeartbeat(idOrSlug, sub, callerIsStaff(req)),
+    );
   }
 
   @Post(":idOrSlug/chat")
@@ -165,7 +170,9 @@ export class RoomController {
       // gated command surfaces the failure rather than reporting a phantom post
       // (EARS-3). The gate already passed; only the fan-out could not complete.
       if (err instanceof ChatUnavailableError) {
-        throw new ServiceUnavailableException("chat is temporarily unavailable");
+        throw new ServiceUnavailableException(
+          "chat is temporarily unavailable",
+        );
       }
       throw err;
     }

@@ -428,6 +428,12 @@ export const CreateEventRequestSchema = z.object({
    * `signUpCount: null` (019 EARS-19). Default off.
    */
   hideSignUpCount: z.boolean().default(false),
+  /**
+   * 007 EARS-13 (#2911) — «Показывать зрителям число участников». While off,
+   * a caller whose session carries no staff role receives no live presence
+   * count (006 EARS-19). Default off.
+   */
+  showPresenceCount: z.boolean().default(false),
 });
 export type CreateEventRequest = z.infer<typeof CreateEventRequestSchema>;
 
@@ -519,6 +525,8 @@ export const UpdateEventRequestSchema = z.object({
   audience: EventAudienceSchema.optional(),
   /** 007 EARS-12 (#2913) — «Скрыть число записавшихся»; omitted leaves it. */
   hideSignUpCount: z.boolean().optional(),
+  /** 007 EARS-13 (#2911) — «Показывать зрителям число участников»; omitted leaves it. */
+  showPresenceCount: z.boolean().optional(),
   /**
    * 014 EARS-23 (#1741) — `origin` is set once at creation and **rejected** by
    * every update path. Declared as `z.never().optional()` rather than simply
@@ -580,6 +588,8 @@ export const EventAdminDetailSchema = z.object({
    * it. No admin read carries the registrant count itself.
    */
   hideSignUpCount: z.boolean(),
+  /** 007 EARS-13 (#2911) — the setting's own state; no admin read carries the count. */
+  showPresenceCount: z.boolean(),
   /**
    * #1593 — the aggregate's optimistic-concurrency counter, and the value the
    * admin read's `ETag` carries as `W/"<version>"` (`taxonomyETag`). It is

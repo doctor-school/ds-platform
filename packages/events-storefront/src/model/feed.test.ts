@@ -317,6 +317,15 @@ describe("liveStripView — 019 EARS-6 «Идёт сейчас»", () => {
     expect(view.strips[0]?.meta).toBe("12 в комнате · Школа · до 20:00 МСК");
     expect(view.moreLabel).toBeNull();
   });
+
+  it("019 EARS-30: a withheld count (null) leaves no count segment — no «null», no «0», no empty slot", () => {
+    const view = liveStripView([{ ...strip(1), presenceCount: null }], {
+      viewerZone: "Europe/Moscow",
+      routes: ROUTES,
+      copy: FEED_COPY,
+    });
+    expect(view.strips[0]?.meta).toBe("Школа · до 20:00 МСК");
+  });
 });
 
 describe("myEventsCut — 019 EARS-11", () => {

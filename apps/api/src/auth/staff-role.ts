@@ -59,3 +59,24 @@ export function isParticipant(userIdColumn: AnyColumn): SQL {
        and ${users.role} = ${PARTICIPANT_ROLE}
   )`;
 }
+
+/**
+ * Whether a session's project-roles claim carries any staff role. Read from the
+ * claims the auth hook already attached to the request — no DB lookup.
+ */
+export function holdsStaffRole(roles: readonly string[] | undefined): boolean {
+  if (!roles) return false;
+  const held = new Set(roles);
+  return STAFF_ROLES.some((role) => held.has(role));
+}
+
+/**
+ * 006 EARS-19 — whether the authenticated caller of `req` is staff: its session
+ * claims (attached by the session auth hook as `req.user.roles`) carry a role in
+ * {@link STAFF_ROLES}. A guest or a claims-less subject is not staff.
+ */
+export function callerIsStaff(req: unknown): boolean {
+  return holdsStaffRole(
+    (req as { user?: { roles?: readonly string[] } } | undefined)?.user?.roles,
+  );
+}

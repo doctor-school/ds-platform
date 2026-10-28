@@ -29,6 +29,8 @@ export interface EventForRoom {
    */
   liveAt: Date | null;
   streamConfig: StreamConfig | null;
+  /** 006 EARS-19 — «Показывать зрителям число участников» (default `false`). */
+  showPresenceCount: boolean;
 }
 
 /**
@@ -74,6 +76,7 @@ export class RoomRepository {
         id: events.id,
         state: events.state,
         liveAt: events.liveAt,
+        showPresenceCount: events.showPresenceCount,
         provider: streamConfig.provider,
         embedRef: streamConfig.embedRef,
       })
@@ -92,10 +95,25 @@ export class RoomRepository {
       id: row.id,
       state: row.state as EventLifecycleState,
       liveAt: row.liveAt,
+      showPresenceCount: row.showPresenceCount,
       streamConfig:
         row.provider !== null && row.embedRef !== null
           ? { provider: row.provider, embedRef: row.embedRef }
           : null,
     };
+  }
+
+  /**
+   * 006 EARS-19 — the event's «Показывать зрителям число участников» setting,
+   * read by the realtime publisher at each publication; `null` when the event is
+   * gone (the publisher then fails closed to the staff-only channel).
+   */
+  async showsPresenceCount(eventId: string): Promise<boolean | null> {
+    const [row] = await this.db
+      .select({ show: events.showPresenceCount })
+      .from(events)
+      .where(eq(events.id, eventId))
+      .limit(1);
+    return row ? row.show : null;
   }
 }

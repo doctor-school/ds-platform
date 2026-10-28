@@ -23,7 +23,8 @@ const SLUG = "prp-questions";
 
 async function setScenario(
   request: { post: (url: string, init: { data: unknown }) => Promise<unknown> },
-  scenario: "registered" | "unregistered" | "three" | "failing" | "none",
+  scenario:
+    "registered" | "unregistered" | "withheld" | "three" | "failing" | "none",
 ) {
   await request.post(`${API}/__e2e/live`, { data: { scenario } });
 }
@@ -146,4 +147,25 @@ test("gate row 44: a failed live read states its cause with a retry while the fe
   await error.getByRole("button", { name: "Повторить" }).click();
   await expect(page.getByTestId("events-live-block")).toBeVisible();
   await expect(page.getByTestId("events-live-error")).toHaveCount(0);
+});
+
+test("019 EARS-30: a withheld presence count leaves the strip with no count, no «0» and no empty slot", async ({
+  page,
+  request,
+}) => {
+  await setScenario(request, "withheld");
+  await page.setExtraHTTPHeaders({ cookie: "__Host-ds_session=e2e-doctor" });
+  await page.goto("/events");
+
+  const block = page.getByTestId("events-live-block");
+  await expect(block).toBeVisible();
+  const meta = block.getByTestId("live-event-strip-meta");
+  await expect(meta).toHaveText(/^Школа ортобиологии · до \d{2}:\d{2} /);
+  await expect(meta).not.toContainText("в комнате");
+  await expect(meta).not.toContainText("null");
+  // The room entry itself is untouched — only the number is withheld.
+  await expect(block.getByTestId("live-event-strip-action")).toHaveAttribute(
+    "href",
+    `/events/${SLUG}/room`,
+  );
 });

@@ -112,6 +112,7 @@ export function PresenceHeartbeat({
           // longer disappears with zero signal — #1122. A REFUSED beat rejects
           // inside `sendHeartbeat` (RoomApiError) and lands in `catch` below.
           const ack = PresenceHeartbeatAckSchema.safeParse(body);
+          // A `null` count is the withheld one (006 EARS-19): it drops the shown count.
           if (ack.success) setPresenceCount(ack.data.presenceCount);
           else reportBeatFailure("ack payload failed the schema contract");
         })

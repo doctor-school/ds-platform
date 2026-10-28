@@ -30,6 +30,7 @@ function fields(over: Partial<EventFormFields> = {}): EventFormFields {
     audience: "experts",
     projectId: "",
     hideSignUpCount: false,
+    showPresenceCount: false,
     ...over,
   };
 }
@@ -43,6 +44,19 @@ describe("EventFormSchema — «Скрыть число записавшихся
       EventFormSchema.safeParse(fields({ hideSignUpCount: false })).success,
     ).toBe(true);
     const { hideSignUpCount: _omit, ...withoutOption } = fields();
+    expect(EventFormSchema.safeParse(withoutOption).success).toBe(false);
+  });
+});
+
+describe("EventFormSchema — «Показывать зрителям число участников» (007 EARS-13, #2911)", () => {
+  it("007 EARS-13: the option is a plain boolean — on and off both validate, a missing value is refused", () => {
+    expect(
+      EventFormSchema.safeParse(fields({ showPresenceCount: true })).success,
+    ).toBe(true);
+    expect(
+      EventFormSchema.safeParse(fields({ showPresenceCount: false })).success,
+    ).toBe(true);
+    const { showPresenceCount: _omit, ...withoutOption } = fields();
     expect(EventFormSchema.safeParse(withoutOption).success).toBe(false);
   });
 });

@@ -10,6 +10,7 @@ import type {
 import type { EventsRepository, EventAggregate } from "./events.repository.js";
 import type { SpeakerProjectionService } from "../taxonomy/speaker-projection.service.js";
 import type { RecordingsProjectionService } from "../recordings/recordings.projection.js";
+import type { PresencePublisher } from "../room/presence-publisher.service.js";
 import { EventsService, type UploadedPdf } from "./events.service.js";
 
 // 007 EARS-2 — GC-on-supersede (#627). When a program-PDF replacement commits
@@ -57,6 +58,8 @@ function baseEvent(programPdfRef: string | null): Event {
     seatsLeft: null,
     // 007 EARS-12 (#2913) — the registrant count is shown (the default).
     hideSignUpCount: false,
+    // 007 EARS-13 (#2911) — the live count is hidden from viewers (the default).
+    showPresenceCount: false,
     liveAt: null,
     // 014 (#1339) — the operator's recording-readiness date; unset here.
     recordingExpectedBy: null,
@@ -179,6 +182,7 @@ function service(storage: RecordingStorage, repo: unknown): EventsService {
         Promise.resolve(new Map(ids.map((id) => [id, PREPARING_PROJECTION]))),
       resolveRecordingProjection: () => Promise.resolve(PREPARING_PROJECTION),
     } as unknown as RecordingsProjectionService,
+    { refresh: () => Promise.resolve() } as unknown as PresencePublisher,
   );
 }
 

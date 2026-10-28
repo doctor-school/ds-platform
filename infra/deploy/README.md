@@ -1664,10 +1664,12 @@ the release driver's 10 GB free-disk floor. The bound is compose-level, not a
 `daemon.json` `log-opts` default, because `daemon.json` is written only at box
 (re-)creation and a daemon default needs a dockerd restart. A logging change only
 takes effect when Compose **recreates** the container: on `api-prod` the release
-swap's `up -d`, on `data-prod` the `data-up` step, on stage every slot `up -d`;
-`stg-infra` and GlitchTip are recreated by their own `up -d` (stg-infra README,
-§GlitchTip below). `tools/deploy/compose-logging.test.mjs` fails on a service
-without the bound.
+swap's `up -d`, on `data-prod` the `data-up` step (persistence plane and GlitchTip),
+on stage every slot `up -d`; `stg-infra` is recreated by its own `up -d` (stg-infra
+README). The release output proves it on data-prod: after `data-up`, one
+`↳ ds-data-prod: /<container> log=json-file max-size=50m max-file=3` line per
+container of both compose projects. `tools/deploy/compose-logging.test.mjs` fails on
+a service without the bound.
 
 ## Key gotchas
 
@@ -1737,7 +1739,8 @@ reaches the UI via an SSH tunnel.
 - **Secrets:** `/etc/ds-platform/glitchtip.env` (root:root 0600) from
   `infra/deploy/glitchtip.env.example` — `SECRET_KEY` (`openssl rand -hex 32`),
   `DATABASE_URL` (the glitchtip role's password + `192.168.0.10:5432/glitchtip`),
-  `GLITCHTIP_DOMAIN`.
+  `GLITCHTIP_DOMAIN`. It lives outside the shipped tree, so every release's `ship`
+  keeps it; the release's `data-up` requires it.
 - **Firewall:** the web port binds `192.168.0.10:8000` (VPC, never `0.0.0.0`).
   `twc_firewall_rule.glitchtip_ingest` (network.tf) declares tcp `8000` from
   `var.vpc_cidr` for consistency with the `data_pg` / `data_redis` rules, but the
@@ -1746,14 +1749,19 @@ reaches the UI via an SSH tunnel.
   `curl → HTTP 200`, DSO-125). The rule was therefore **not** applied to live state
   on deploy — it materialises on the next planned `terraform apply` (one additive
   resource). No public exposure either way.
-- **Bring up:**
-
-  ```bash
-  cd ~/ds-platform/infra/deploy/compose/data-prod/glitchtip
-  echo "VPC_IP=192.168.0.10" > .env            # interpolation var (NOT a secret)
-  sudo docker compose up -d                     # web auto-runs migrations on first boot
-  sudo docker compose logs -f web               # wait for the web server to bind :8000
-  ```
+- **Bring up — the release does it.** Every forward release's `data-up` step raises
+  GlitchTip from the shipped tree right after postgres + pgbackrest + redis:
+  `docker compose -f glitchtip/compose.yml --env-file .env up -d --no-build --pull missing --wait --wait-timeout 300`
+  in `compose/data-prod/`, with the `.env` the release's `data-env` writes (`VPC_IP`);
+  a changed `glitchtip/compose.yml` recreates `web` + `valkey` (the `uploads` /
+  `valkey-data` volumes stay). The 300 s wait covers `web`'s whole health window
+  (start_period 90 s + 5 × 30 s retries; a version bump migrates before the port
+  opens). A redeploy does not touch data-prod, so it never recreates GlitchTip; a
+  `glitchtip.env` change alone is not a compose change either — recreate `web` by
+  hand (`sudo docker compose -f glitchtip/compose.yml --env-file .env up -d --force-recreate web`
+  in `compose/data-prod/`). **First install / DR:** create the database and
+  `/etc/ds-platform/glitchtip.env` (above) before the next release — `data-up`
+  refuses before any `up` while that file is absent or unreadable, naming it.
 
 - **Create the project + DSN:** open the UI over an SSH tunnel and register the first
   user, then create org `ds-platform` + project `api` (platform: Node.js) and copy the

@@ -107,8 +107,8 @@ gh workflow run deploy-prod.yml --ref main -f mode=redeploy -f sha=<live sha> -f
   and follows the rollback's rule for box tooling and ds-data-prod (tech spec §5
   «Two trees» (a)): it **skips** `postgres-verify`, `install` (no `ds-release` /
   entrypoint / release-driver install, `installed-tree` stays the newest forward
-  release's, no ds-data-prod converge), `data-prod-env`, `data-prod-up`,
-  `backup`, the IdP converge and the migrate (`REDEPLOY_SKIPPED_STEPS` in
+  release's, no ds-data-prod converge), `data-prod-env`, `data-prod-up` (so
+  neither the persistence plane nor GlitchTip is recreated), `backup`, the IdP converge and the migrate (`REDEPLOY_SKIPPED_STEPS` in
   `prod.mjs`), and ships the api-prod tree only. It **runs** the test-token
   refusal, the runtime-env check (#1468), the previous-SHA read, the runtime config backup, the api-prod ship,
   `pull`, boot verify, the edge config validate, the swap,

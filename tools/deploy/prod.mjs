@@ -2560,10 +2560,15 @@ async function deploy(hotfixRef = null, local = null) {
   }
   if (walk.releasePhase("data-prod-up")) {
     await postgres.run(() => dataProdStep(sha, "up", "data-prod up"));
-    await postgres.run(({ live, sourceHash }) =>
+    // #3395: the checkpoint verb also answers one line per data-prod container (name +
+    // json-log bound) — the release's own proof the bound reached ds-glitchtip too.
+    const checkpoint = await postgres.run(({ live, sourceHash }) =>
       dataProd().call(["postgres-checkpoint"], { input: postgresStateRecord(live, sourceHash) }),
     );
-    ok("postgres + redis + pgbackrest up", t);
+    for (const line of String(checkpoint ?? "").split("\n")) {
+      if (line.trim()) console.log(`  ↳ ${DATA_PROD}: ${line.trim()}`);
+    }
+    ok("postgres + redis + pgbackrest + glitchtip up", t);
   }
 
   // Reuse the on-box-proven wrapper (same one cron runs); `incr` is the fast,

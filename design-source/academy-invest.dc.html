@@ -22,7 +22,7 @@
       </nav>
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
         <div style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#D3E8FD">Путь инвестора · шаг «понял модель»</div>
-        <span style="display:inline-block;background:#fff;color:#114D9E;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;padding:9px 14px;box-shadow:3px 3px 0 {{ headerShadow }};transform:rotate(2deg)">маркетплейс проектов</span>
+        <span style="display:inline-block;background:#fff;color:#114D9E;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;padding:9px 14px;box-shadow:3px 3px 0 {{ headerShadow }};transform:rotate(2deg)">{{ headerBadge }}</span>
       </div>
       <h1 style="margin:10px 0 0;font-size:clamp(32px,5.5vw,56px);line-height:1.02;font-weight:800;letter-spacing:-.035em;color:#fff">Инвесторам</h1>
       <p style="margin:18px 0 0;max-width:680px;font-size:clamp(14.5px,2vw,16.5px);line-height:1.65;font-weight:500;color:#D3E8FD">Как устроено участие: вы входите в проект — эксперты производят обучение — врачи учатся.</p>
@@ -56,7 +56,8 @@
         <div style="margin-top:22px;border-top:1px solid {{ hairline }};border-bottom:1px solid {{ hairline }};padding:14px 4px;font-size:13.5px;font-weight:700;color:{{ inkMuted }}">Условия участия — в коммерческом предложении.</div>
       </section>
 
-      <!-- ============ МАРКЕТПЛЕЙС (REQ-133) ============ -->
+      <!-- ============ МАРКЕТПЛЕЙС (REQ-133) · только «целиком» ============ -->
+      <sc-if value="{{ full }}" hint-placeholder-val="{{ false }}">
       <section data-screen-label="a-invest · маркетплейс" style="margin-top:clamp(48px,7vw,72px)">
         <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:14px">
           <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Во что можно зайти сейчас</span>
@@ -152,6 +153,7 @@
           </div>
         </sc-if>
       </section>
+      </sc-if>
 
       <!-- ============ ЧТО ПОЛУЧАЕТ ИНВЕСТОР (REQ-10, REQ-90) ============ -->
       <section data-screen-label="a-invest · что получает инвестор" style="margin-top:clamp(48px,7vw,72px)">
@@ -169,7 +171,8 @@
         </div>
       </section>
 
-      <!-- ============ ОРГАНИЗАЦИЯ, НЕ ПЕРСОНА (REQ-88) ============ -->
+      <!-- ============ ОРГАНИЗАЦИЯ, НЕ ПЕРСОНА (REQ-88) · только «целиком» ============ -->
+      <sc-if value="{{ full }}" hint-placeholder-val="{{ false }}">
       <section data-screen-label="a-invest · организация" style="margin-top:clamp(48px,7vw,72px)">
         <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:18px">
           <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Организация, не персона</span>
@@ -186,6 +189,7 @@
           </div>
         </div>
       </section>
+      </sc-if>
 
       <!-- ============ КАК ОФОРМЛЯЮТСЯ ОТНОШЕНИЯ (CON-16) ============ -->
       <section data-screen-label="a-invest · как оформляются отношения" style="margin-top:clamp(48px,7vw,72px)">
@@ -216,7 +220,8 @@
             <div style="min-width:240px;flex:1">
               <div style="font-size:22px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Обсудить проект — оставить заявку</div>
               <p style="margin:10px 0 0;max-width:420px;font-size:14px;line-height:1.65;color:{{ inkMuted }}">Команда Академии ответит и соберёт коммерческое предложение.</p>
-              <div style="margin-top:18px;font-size:13px;font-weight:700;color:{{ inkFaint }}">Кто уже инвестирует — <a href="academy-partners.dc.html" style="color:{{ accent }}">Партнёры</a> · во что — <a href="academy-projects.dc.html" style="color:{{ accent }}">Проекты</a> · <a href="#" title="#a-docs — рисуется отдельным экраном" style="color:{{ accent }}">Документы и лицензия</a></div>
+              <sc-if value="{{ full }}" hint-placeholder-val="{{ false }}"><div style="margin-top:18px;font-size:13px;font-weight:700;color:{{ inkFaint }}">Кто уже инвестирует — <a href="academy-partners.dc.html" style="color:{{ accent }}">Партнёры</a> · во что — <a href="academy-projects.dc.html" style="color:{{ accent }}">Проекты</a> · <a href="#" title="#a-docs — рисуется отдельным экраном" style="color:{{ accent }}">Документы и лицензия</a></div></sc-if>
+              <sc-if value="{{ slice1 }}" hint-placeholder-val="{{ true }}"><div style="margin-top:18px;font-size:13px;font-weight:700;color:{{ inkFaint }}">Во что инвестировать — <a href="academy-projects.dc.html" style="color:{{ accent }}">Проекты</a></div></sc-if>
             </div>
             <div style="flex:1.4;min-width:280px">
               <sc-if value="{{ formNotSent }}" hint-placeholder-val="{{ true }}">
@@ -241,13 +246,23 @@
                     <label style="{{ labelStyle }}">Задача</label>
                     <textarea value="{{ taskValue }}" onChange="{{ taskChange }}" placeholder="Например: продвигаем линейку для регенеративной медицины, ищем проект под аудиторию травматологов" rows="3" style="{{ taskStyle }}"></textarea>
                   </div>
+                  <sc-if value="{{ slice1 }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;gap:12px;align-items:flex-start;border-top:2px solid {{ hairline }};padding-top:14px">
+                      <button onClick="{{ cbPd.onClick }}" aria-pressed="{{ cbPd.on }}" data-check style="{{ cbPd.boxStyle }}">{{ cbPd.mark }}</button>
+                      <div style="flex:1;min-width:0">
+                        <div style="font-size:13.5px;font-weight:700;color:{{ ink }};line-height:1.4">Согласие на обработку персональных данных из заявки</div>
+                        <div style="font-size:12px;line-height:1.5;color:{{ inkFaint }};margin-top:4px">Данные нужны, чтобы команда Академии связалась с вами по заявке. <a href="academy-docs.dc.html" style="color:{{ accent }}">Политика персональных данных и согласия</a></div>
+                        <div style="{{ cbPd.errStyle }}">⚠ Отметьте согласие — без него заявку не отправить.</div>
+                      </div>
+                    </div>
+                  </sc-if>
                   <button onClick="{{ submitForm }}" style="font:inherit;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:15px 24px;cursor:pointer;box-shadow:4px 4px 0 {{ border }};align-self:flex-start" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Отправить заявку</button>
                 </div>
               </sc-if>
               <sc-if value="{{ formSent }}" hint-placeholder-val="{{ false }}">
                 <div data-screen-label="a-invest · заявка отправлена" style="border:2px solid {{ success }};background:{{ successTint }};padding:24px 26px;display:flex;flex-direction:column;gap:8px">
                   <span style="font-size:17px;font-weight:800;letter-spacing:-.015em;color:{{ ink }}">Запрос отправлен</span>
-                  <span style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Коммерческое предложение придёт на указанную почту.</span>
+                  <span style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">{{ sentText }}</span>
                   <button onClick="{{ resetForm }}" style="font:inherit;margin-top:6px;font-size:12.5px;font-weight:700;color:{{ accent }};background:transparent;border:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px;align-self:flex-start">Отправить ещё одну заявку</button>
                 </div>
               </sc-if>
@@ -320,7 +335,7 @@
         <sc-if value="{{ formSent }}" hint-placeholder-val="{{ false }}">
           <div data-screen-label="a-invest · заявка отправлена · модальное окно" style="border:2px solid {{ success }};background:{{ successTint }};padding:24px 26px;display:flex;flex-direction:column;gap:8px">
             <span style="font-size:17px;font-weight:800;letter-spacing:-.015em;color:{{ ink }}">Запрос отправлен</span>
-            <span style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Коммерческое предложение придёт на указанную почту.</span>
+            <span style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">{{ sentText }}</span>
             <button onClick="{{ closeModal }}" style="font:inherit;margin-top:6px;font-size:12.5px;font-weight:700;color:{{ accent }};background:transparent;border:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px;align-self:flex-start">Закрыть</button>
           </div>
         </sc-if>
@@ -330,7 +345,7 @@
 
   <!-- Панель развилок и состояний (для владельца) -->
   <div style="position:fixed;bottom:16px;left:16px;z-index:70;background:{{ surface }};border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadow }};padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px">
-    <sc-for list="{{ panelRows }}" as="row" hint-placeholder-count="5">
+    <sc-for list="{{ panelRows }}" as="row" hint-placeholder-count="6">
       <div style="display:flex;align-items:center;gap:8px">
         <span style="width:80px;font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">{{ row.label }}</span>
         <span style="display:flex;gap:5px;flex-wrap:wrap">
@@ -343,7 +358,7 @@
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;dataState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;заполнен&quot;,&quot;загрузка&quot;,&quot;пуст&quot;,&quot;ошибка&quot;],&quot;default&quot;:&quot;заполнен&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;authState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;гость&quot;,&quot;вошёл&quot;],&quot;default&quot;:&quot;гость&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;requestChannel&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — форма на экране&quot;,&quot;Б — контакт команды&quot;,&quot;В — модальное окно&quot;],&quot;default&quot;:&quot;А — форма на экране&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;investButton&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — заявка команде&quot;,&quot;Б — КП на экране&quot;],&quot;default&quot;:&quot;А — заявка команде&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;expertCatalog&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — вперемешку&quot;,&quot;Б — отдельная вкладка&quot;],&quot;default&quot;:&quot;А — вперемешку&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;dataState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;заполнен&quot;,&quot;загрузка&quot;,&quot;пуст&quot;,&quot;ошибка&quot;],&quot;default&quot;:&quot;заполнен&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;authState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;гость&quot;,&quot;вошёл&quot;],&quot;default&quot;:&quot;гость&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;requestChannel&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — форма на экране&quot;,&quot;Б — контакт команды&quot;,&quot;В — модальное окно&quot;],&quot;default&quot;:&quot;А — форма на экране&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;investButton&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — заявка команде&quot;,&quot;Б — КП на экране&quot;],&quot;default&quot;:&quot;А — заявка команде&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;expertCatalog&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — вперемешку&quot;,&quot;Б — отдельная вкладка&quot;],&quot;default&quot;:&quot;А — вперемешку&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;scope&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;срез 1&quot;,&quot;целиком&quot;],&quot;default&quot;:&quot;срез 1&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Объём&quot;}}">
 class Component extends DCLogic {
   state = {
     dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
@@ -351,7 +366,7 @@ class Component extends DCLogic {
     form: { org: '', fio: '', role: '', email: '', phone: '', task: '' },
     touched: {}, submitAttempt: false, sent: false,
     prefill: null, sentProducts: {}, kpOpen: {}, notes: {},
-    modalOpen: false
+    modalOpen: false, pdConsent: false
   };
   componentDidMount() {
     this.mq = window.matchMedia('(max-width: 900px)');
@@ -389,6 +404,7 @@ class Component extends DCLogic {
     const btn = (s.btnV || p.investButton || 'А')[0]; // А заявка · Б КП на экране
     const cat = (s.catV || p.expertCatalog || 'А')[0]; // А вперемешку · Б вкладки
     const tab = s.tab || 'all';
+    const full = (s.scopeV || p.scope || 'срез 1') === 'целиком';
 
     const mpLoading = ds === 'загрузка';
     const mpEmpty = ds === 'пуст';
@@ -412,9 +428,9 @@ class Component extends DCLogic {
     ];
 
     const howSteps = [
-      { n: '1', title: 'Вы инвестируете в проект', desc: 'Школу, курс или конгресс — открытые позиции ниже, в маркетплейсе.' },
+      { n: '1', title: 'Вы инвестируете в проект', desc: full ? 'Школу, курс или конгресс — открытые позиции ниже, в маркетплейсе.' : 'Школу, курс или конгресс — проекты Академии собраны в разделе «Проекты».' },
       { n: '2', title: 'Эксперты производят обучение', desc: 'Результаты проекта попадают на doctor.school и расходятся по врачам вашей аудитории.' },
-      { n: '3', title: 'Вы видите результат', desc: 'Внимание врачей, аналитика и отчёт по проекту — в кабинете организации.' }
+      { n: '3', title: 'Вы видите результат', desc: full ? 'Внимание врачей, аналитика и отчёт по проекту — в кабинете организации.' : 'Внимание врачей, аналитика и отчёт по проекту.' }
     ];
 
     const gains = [
@@ -508,7 +524,8 @@ class Component extends DCLogic {
         error: err
       };
     });
-    const formValid = fieldDefs.every(f => !fieldError(f));
+    const formValid = fieldDefs.every(f => !fieldError(f)) && (full || req !== 'А' || s.pdConsent);
+    const pdErr = !full && s.submitAttempt && !s.pdConsent;
     const prefillProduct = s.prefill ? data.find(x => x.id === s.prefill) : null;
     const submitForm = () => {
       if (!formValid) { this.setState({ submitAttempt: true }); return; }
@@ -523,6 +540,7 @@ class Component extends DCLogic {
     const panelBtn = (active, wide) => 'font:inherit;font-size:11px;font-weight:800;' + (wide ? 'padding:0 9px;height:30px' : 'width:30px;height:30px') + ';cursor:pointer;border:2px solid ' + (active ? btnBg : border) + ';color:' + (active ? btnFg : ink) + ';background:' + (active ? btnBg : 'transparent');
     const B = (label, title, active, patch, wide) => ({ label, title, onClick: () => this.setState(patch), style: panelBtn(active, wide !== false) });
     const panelRows = [
+      { label: 'Объём', btns: [B('срез 1', 'Срез 1: без маркетплейса и кабинета организации', !full, { scopeV: 'срез 1' }), B('целиком', 'Целевая страница целиком', full, { scopeV: 'целиком' })] },
       { label: 'Данные', btns: [B('заполн.', 'Маркетплейс заполнен', mpFull, { dataV: 'заполнен' }), B('загр.', 'Загрузка — скелет сетки карточек', mpLoading, { dataV: 'загрузка' }), B('пуст', 'Открытых позиций нет — честная строка + CTA', mpEmpty, { dataV: 'пуст' }), B('ошибка', 'Ошибка загрузки — причина и повтор, модель читается', mpError, { dataV: 'ошибка' })] },
       { label: 'Вход', btns: [B('гость', 'Гость — экран публичный целиком', !logged, { authV: 'out' }), B('вошёл', 'Сотрудник организации-инвестора — прямой вход в кабинет', logged, { authV: 'in' })] },
       { label: 'Заявка', btns: [B('А', 'Форма на экране — данные сразу в CRM', req === 'А', { reqV: 'А' }, false), B('Б', 'Контакт команды без формы', req === 'Б', { reqV: 'Б' }, false), B('В', 'Форма в модальном окне, обе кнопки, продукт предзаполнен', req === 'В', { reqV: 'В' }, false)] },
@@ -577,8 +595,17 @@ class Component extends DCLogic {
       taskChange: (e) => { const v = e.target.value; this.setState(st => ({ form: Object.assign({}, st.form, { task: v }) })); },
       taskStyle: 'width:100%;box-sizing:border-box;font:inherit;font-size:14px;line-height:1.5;padding:12px 14px;border:2px solid ' + hairline + ';background:' + surface + ';color:' + ink + ';resize:vertical',
       submitForm,
-      resetForm: () => this.setState({ sent: false, submitAttempt: false, touched: {}, prefill: null, form: { org: '', fio: '', role: '', email: '', phone: '', task: '' } }),
+      resetForm: () => this.setState({ sent: false, submitAttempt: false, touched: {}, prefill: null, pdConsent: false, form: { org: '', fio: '', role: '', email: '', phone: '', task: '' } }),
       formSent: s.sent, formNotSent: !s.sent,
+      full, slice1: !full,
+      headerBadge: full ? 'маркетплейс проектов' : 'приём заявок открыт',
+      sentText: full ? 'Коммерческое предложение придёт на указанную почту.' : 'Команда Академии свяжется с вами и подготовит коммерческое предложение. Письмо «Заявка получена» придёт на указанную почту.',
+      cbPd: {
+        on: !!s.pdConsent, mark: s.pdConsent ? '✓' : '',
+        onClick: () => this.setState(st => ({ pdConsent: !st.pdConsent })),
+        boxStyle: 'flex:none;width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;font:inherit;font-size:14px;font-weight:800;cursor:pointer;border:2px solid ' + (pdErr ? danger : (s.pdConsent ? btnBg : border)) + ';background:' + (s.pdConsent ? btnBg : surface) + ';color:' + btnFg,
+        errStyle: pdErr ? 'display:flex;align-items:flex-start;gap:6px;font-size:12px;font-weight:700;line-height:1.4;color:' + danger + ';margin-top:7px' : 'display:none'
+      },
       panelRows,
       giantInk: d ? 'rgba(255,255,255,.08)' : 'oklch(.95 .01 250)',
       footLogoEl

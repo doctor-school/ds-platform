@@ -14,7 +14,10 @@
     <span style="position:absolute;bottom:8px;right:10px;font-size:9.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ photoNote }}">обложка</span>
   </div>
   <div style="padding:18px 20px 20px;display:flex;flex-direction:column;gap:9px;flex:1;min-width:0">
-    <div style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }}">{{ kind }}</div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }}">{{ kind }}</div>
+      <sc-if value="{{ hasStage }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ tintFg }};background:{{ tint }};padding:4px 9px;white-space:nowrap">{{ stage }}</span></sc-if>
+    </div>
     <div lang="ru" style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:{{ ink }};line-height:1.25;overflow-wrap:break-word;hyphens:auto;text-wrap:balance">{{ title }}</div>
     <div style="font-size:13.5px;line-height:1.55;color:{{ inkMuted }};display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">{{ description }}</div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto;padding-top:12px;flex-wrap:wrap">
@@ -29,7 +32,7 @@
   </div>
 </a>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:320,&quot;height&quot;:440},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;kind&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Школа&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;title&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Школа травматологии и ортопедии&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;description&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Разборы клинических случаев от артроскопии до эндопротезирования — каждую неделю в прямом эфире.&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;count&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;24 эфира&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;partnerName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Санофарм&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;emblem&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Тр&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;href&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;academy-project.dc.html&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:320,&quot;height&quot;:440},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;kind&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Школа&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;title&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Школа травматологии и ортопедии&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;description&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Разборы клинических случаев от артроскопии до эндопротезирования — каждую неделю в прямом эфире.&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;count&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;24 эфира&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;partnerName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Санофарм&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;emblem&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Тр&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;href&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;academy-project.dc.html&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;stage&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
 class Component extends DCLogic {
   renderVals() {
     const p = this.props, d = !!p.dark;
@@ -40,6 +43,8 @@ class Component extends DCLogic {
       title: p.title || '',
       description: p.description || '',
       count: p.count || '',
+      hasStage: !!p.stage,
+      stage: p.stage || '',
       emblem: p.emblem || (p.title || '?').replace(/^Школа\s+/i, '').slice(0, 2),
       hasPartner: !!partner,
       partnerName: partner,
@@ -49,6 +54,7 @@ class Component extends DCLogic {
       shadow: d ? '#6BB1F7' : '#114D9E',
       tint: d ? '#0D3A77' : '#D3E8FD',
       tintInk: d ? '#6BB1F7' : '#114D9E',
+      tintFg: d ? '#AED4FB' : '#114D9E',
       photoNote: d ? 'rgba(255,255,255,.4)' : 'rgba(17,77,158,.5)',
       accent: d ? '#6BB1F7' : '#2D84F2',
       ink: d ? '#fff' : 'oklch(.21 .02 250)',

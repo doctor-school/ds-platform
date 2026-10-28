@@ -328,20 +328,43 @@ Then(
         url.searchParams.get("month") === selectedOverflow.day.slice(0, 7) &&
         !url.searchParams.has("view"),
     );
-    const groupId =
-      selectedOverflow.day < state.today
-        ? selectedOverflow.day.slice(0, 7)
-        : selectedOverflow.day;
-    const group = page
-      .getByTestId("events-feed")
-      .locator(`section[id="day-${groupId}"]`);
-    await expect(group).toBeVisible();
-    for (const entry of selectedOverflow.entries) {
-      await expect(
-        group
-          .getByRole("link", { name: entry.title, exact: true })
-          .and(group.locator(`a[href="${host.eventsPath}/${entry.slug}"]`)),
-      ).toBeVisible();
+    // The feed splits Будущие/Прошедшие by lifecycle state (004 «Amendment —
+    // 2026-10-05»): a past day lives wholly in the past feed's month group,
+    // while today's already-ended entries leave the upcoming feed for the
+    // past one — the seed marks a grid event ended when it started before
+    // the seed instant, so their number depends on when stage was seeded.
+    const isEnded = (entry: Entry) =>
+      ["ended", "in_archive"].includes(entry.state);
+    const pastDay = selectedOverflow.day < state.today;
+    const upcoming = pastDay
+      ? []
+      : selectedOverflow.entries.filter((entry) => !isEnded(entry));
+    const pastEntries = pastDay
+      ? selectedOverflow.entries
+      : selectedOverflow.entries.filter(isEnded);
+    const expectInGroup = async (groupId: string, entries: Entry[]) => {
+      const group = page
+        .getByTestId("events-feed")
+        .locator(`section[id="day-${groupId}"]`);
+      await expect(group).toBeVisible();
+      for (const entry of entries) {
+        await expect(
+          group
+            .getByRole("link", { name: entry.title, exact: true })
+            .and(group.locator(`a[href="${host.eventsPath}/${entry.slug}"]`)),
+        ).toBeVisible();
+      }
+    };
+    if (pastDay) {
+      await expectInGroup(selectedOverflow.day.slice(0, 7), pastEntries);
+    } else {
+      await expectInGroup(selectedOverflow.day, upcoming);
+      if (pastEntries.length > 0) {
+        const pastFeed = new URL(selectedOverflow.href, page.url());
+        pastFeed.searchParams.set("tense", "past");
+        await open(page, `${pastFeed.pathname}${pastFeed.search}`);
+        await expectInGroup(selectedOverflow.day.slice(0, 7), pastEntries);
+      }
     }
     await open(page, original);
     await expect(grid).toBeVisible();

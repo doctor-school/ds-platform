@@ -26,11 +26,13 @@ import type {
   NewEventExpert,
   NewEventProject,
   NewExpert,
-  NewPartner,
+  NewOrganisation,
+  NewOrganisationRoleAssignment,
   NewProject,
   NewProjectExpert,
-  NewProjectPartner,
+  NewProjectOrganisation,
 } from "../../schema/taxonomy.js";
+import { SEED_ORGANISATION_ROLES } from "../../schema/taxonomy.js";
 import type { NewUser } from "../../schema/users.js";
 import { RAZDEL_I_NAMES } from "../specialties-minzdrav.data.js";
 import { GOLDEN_CONSENT_PURPOSES, GOLDEN_CONSENT_VERSION } from "./consent.js";
@@ -103,12 +105,14 @@ export interface GoldenDataset {
   consentRecords: NewConsentRecord[];
   doctorSpecialties: GoldenDoctorSpecialtyLink[];
   directions: NewDirection[];
-  partners: NewPartner[];
+  partners: NewOrganisation[];
+  /** 032 EARS-11 — every golden partner is an organisation holding «Инвестор». */
+  organisationRoleAssignments: NewOrganisationRoleAssignment[];
   directionSpecialties: GoldenDirectionSpecialtyLink[];
   directionAdjacency: NewDirectionAdjacency[];
   eventDirections: NewEventDirection[];
   projectExperts: NewProjectExpert[];
-  projectPartners: NewProjectPartner[];
+  projectPartners: NewProjectOrganisation[];
 }
 
 /** Raised when the dataset itself is inconsistent — a fixture defect, not a run defect. */
@@ -663,7 +667,7 @@ export function buildGoldenDataset(
   // admin has to reconcile, and the curated scenarios address directions by
   // slug through `goldenDirectionId` instead.
   const directions: NewDirection[] = [...volume.directions];
-  const partners: NewPartner[] = [...volume.partners];
+  const partners: NewOrganisation[] = [...volume.partners];
   const directionSpecialties: GoldenDirectionSpecialtyLink[] = [
     ...volume.directionSpecialties,
   ];
@@ -743,11 +747,11 @@ export function buildGoldenDataset(
     ...volume.projectExperts,
   ];
 
-  const projectPartners: NewProjectPartner[] = [
+  const projectPartners: NewProjectOrganisation[] = [
     {
       id: goldenUuid(GOLDEN_GROUP.projectPartners, 1),
       projectId: golden.projects.publishedSchool.id,
-      partnerId: goldenPartnerId(0),
+      organisationId: goldenPartnerId(0),
       isPrimary: true,
       status: "active",
       version: 1,
@@ -757,7 +761,7 @@ export function buildGoldenDataset(
     {
       id: goldenUuid(GOLDEN_GROUP.projectPartners, 2),
       projectId: golden.projects.publishedSchool.id,
-      partnerId: goldenPartnerId(11),
+      organisationId: goldenPartnerId(11),
       isPrimary: false,
       status: "active",
       version: 1,
@@ -767,7 +771,7 @@ export function buildGoldenDataset(
     {
       id: goldenUuid(GOLDEN_GROUP.projectPartners, 3),
       projectId: golden.projects.draft.id,
-      partnerId: goldenPartnerId(1),
+      organisationId: goldenPartnerId(1),
       isPrimary: true,
       status: "active",
       version: 1,
@@ -798,6 +802,10 @@ export function buildGoldenDataset(
     doctorSpecialties,
     directions,
     partners,
+    organisationRoleAssignments: partners.map((p) => ({
+      organisationId: p.id as string,
+      roleId: SEED_ORGANISATION_ROLES.investor.id,
+    })),
     directionSpecialties,
     directionAdjacency,
     eventDirections,

@@ -29,9 +29,10 @@ import {
   eventExperts,
   eventProjects,
   experts,
-  partners,
+  organisations,
+  organisationRoleAssignments,
   projectExperts,
-  projectPartners,
+  projectOrganisations,
   projects,
 } from "../../schema/taxonomy.js";
 import { users } from "../../schema/users.js";
@@ -124,7 +125,8 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
   "projects",
   // #2213 — the taxonomy books, before anything that classifies through them.
   "directions",
-  "partners",
+  "organisations",
+  "organisation_role_assignments",
   "events",
   "stream_config",
   "event_experts",
@@ -140,7 +142,7 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
   "direction_specialties",
   "direction_adjacency",
   "project_experts",
-  "project_partners",
+  "project_organisations",
 ]);
 
 /**
@@ -225,7 +227,13 @@ export function buildGoldenSeedPlan(
     step("experts", experts, dataset.experts, ["id"]),
     step("projects", projects, dataset.projects, ["id"]),
     step("directions", directions, dataset.directions, ["id"]),
-    step("partners", partners, dataset.partners, ["id"]),
+    step("organisations", organisations, dataset.partners, ["id"]),
+    step(
+      "organisation_role_assignments",
+      organisationRoleAssignments,
+      dataset.organisationRoleAssignments,
+      ["organisationId", "roleId"],
+    ),
     step("events", events, dataset.events, ["id"]),
     // `stream_config` is keyed by its event, not by a surrogate id.
     step("stream_config", streamConfig, dataset.streamConfig, ["eventId"]),
@@ -291,7 +299,12 @@ export function buildGoldenSeedPlan(
       ["id"],
     ),
     step("project_experts", projectExperts, dataset.projectExperts, ["id"]),
-    step("project_partners", projectPartners, dataset.projectPartners, ["id"]),
+    step(
+      "project_organisations",
+      projectOrganisations,
+      dataset.projectPartners,
+      ["id"],
+    ),
   ];
 
   const planned = steps.map((s) => s.name);
@@ -442,8 +455,19 @@ export function goldenReferentialIssues(dataset: GoldenDataset): string[] {
   );
   check("project_experts", dataset.projectExperts, "projectId", projectIds);
   check("project_experts", dataset.projectExperts, "expertId", expertIds);
-  check("project_partners", dataset.projectPartners, "projectId", projectIds);
-  check("project_partners", dataset.projectPartners, "partnerId", partnerIds);
+  check("project_organisations", dataset.projectPartners, "projectId", projectIds);
+  check(
+    "project_organisations",
+    dataset.projectPartners,
+    "organisationId",
+    partnerIds,
+  );
+  check(
+    "organisation_role_assignments",
+    dataset.organisationRoleAssignments,
+    "organisationId",
+    partnerIds,
+  );
 
   return issues;
 }

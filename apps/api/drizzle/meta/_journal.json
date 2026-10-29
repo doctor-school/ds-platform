@@ -379,6 +379,13 @@
       "when": 1793257468219,
       "tag": "0053_events_hide_sign_up_count_default_on",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1793280907273,
+      "tag": "0054_organisation_registry",
+      "breakpoints": true
     }
   ]
 }

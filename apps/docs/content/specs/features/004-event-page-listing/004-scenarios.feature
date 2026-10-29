@@ -157,13 +157,6 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       Then the full event page is rendered server-side with no authentication required
       And the response body is identical to what a logged-in principal would receive
 
-    @EARS-2 @happy
-    Scenario: The event page carries the complete decision set
-      Given a published event with speakers, specialties, partners, and a program PDF
-      When a visitor opens the event page
-      # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02».
-      Then the page shows the title, school/series, start date and start time labeled МСК, description, speakers with credentials, target specialty chips, and backing partners
-      And a downloadable program PDF link is present
 
     @EARS-3 @happy
     Scenario: The page offers exactly one «Участвовать» CTA that enters registration
@@ -290,3 +283,13 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       Given an event that transitions from live to ended
       When the listing is re-read
       Then that event is no longer listed
+
+  Rule: Owned public event originals remain complete and private
+
+    @EARS-2 @happy @public-event-originals @editor-write
+    Scenario: The event page carries the complete decision set
+      Given a published event with speakers, specialties, partners, and a program PDF
+      When a visitor opens the event page
+      # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02».
+      Then the page shows the title, school/series, start date and start time labeled МСК, description, speakers with credentials, target specialty chips, and backing partners
+      And a downloadable program PDF link is present

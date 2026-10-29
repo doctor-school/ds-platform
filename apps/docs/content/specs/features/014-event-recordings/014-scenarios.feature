@@ -294,12 +294,6 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       Then the project and topic blocks render from those 012 records
       And each project link resolves to its project page
 
-    @EARS-19 @facets @happy
-    Scenario: Before the taxonomy wave the page is complete without those blocks
-      Given a finished event with no feature 012 taxonomy links
-      When any visitor opens its post-live page
-      Then the page renders complete against the feature 004 projection
-      And the project and topic blocks are absent rather than empty, stubbed or promised as coming soon
 
     @EARS-5 @core @failure
     Scenario: No playable source reaches an unauthenticated caller
@@ -620,3 +614,12 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       Given a finished event with no published recording and no readiness date
       When any visitor opens the event page
       Then the plaque renders an honest line with no fabricated timeframe
+
+  Rule: Owned public event originals remain complete and private
+
+    @EARS-19 @facets @happy @public-event-originals @editor-write
+    Scenario: Before the taxonomy wave the page is complete without those blocks
+      Given a finished event with no feature 012 taxonomy links
+      When any visitor opens its post-live page
+      Then the page renders complete against the feature 004 projection
+      And the project and topic blocks are absent rather than empty, stubbed or promised as coming soon

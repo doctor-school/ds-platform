@@ -2,6 +2,12 @@
 
 import { type ReactNode, useState } from "react";
 import { useForm, type FieldValues, type Resolver } from "react-hook-form";
+import type {
+  MaterialBody,
+  MaterialBodyMark,
+  MaterialBodyText,
+} from "@ds/schemas";
+import { RichTextContent } from "@ds/design-system/rich-text-content";
 
 import {
   AccountProfileCard,
@@ -4590,6 +4596,130 @@ function LegalDocumentSection({ legalDocument, legalOthers }: BlocksViewProps) {
   );
 }
 
+const text = (value: string, marks?: MaterialBodyMark[]): MaterialBodyText =>
+  marks ? { type: "text", text: value, marks } : { type: "text", text: value };
+const para = (...content: MaterialBodyText[]) => ({
+  type: "paragraph" as const,
+  content,
+});
+const item = (value: string) => ({
+  type: "listItem" as const,
+  content: [para(text(value))],
+});
+
+/**
+ * A long material body carrying every allowlisted node and mark once — the
+ * canvas `academy-material.dc.html` «длинный» sample (048 EARS-2): h2, h3,
+ * paragraphs with bold / italic / a hard break, an Academy link (same tab), an
+ * external link (new tab), a mailto link, both lists and a block quote.
+ */
+const MATERIAL_BODY_SAMPLE: MaterialBody = {
+  type: "doc",
+  content: [
+    para(
+      text(
+        "Рекомендации по ведению пациентов с артериальной гипертензией обновляются регулярно, и ",
+      ),
+      text("каждое обновление", [{ type: "bold" }]),
+      text(" меняет повседневную практику. Ниже — "),
+      text("главное", [{ type: "italic" }]),
+      text(" из последней редакции."),
+    ),
+    {
+      type: "heading",
+      attrs: { level: 2 },
+      content: [text("Что изменилось в целевых значениях")],
+    },
+    {
+      type: "paragraph",
+      content: [
+        text("Целевой уровень снижен для большинства групп."),
+        { type: "hardBreak" },
+        text("Подробнее — в "),
+        text("записи вебинара", [
+          {
+            type: "link",
+            attrs: { href: "https://academy.doctor.school/events" },
+          },
+        ]),
+        text(" и в "),
+        text("тексте рекомендаций", [
+          { type: "link", attrs: { href: "https://example.org/guidelines" } },
+        ]),
+        text("."),
+      ],
+    },
+    {
+      type: "bulletList",
+      content: [
+        item("Измерение дома — дважды в день."),
+        item("Контроль через месяц после смены терапии."),
+      ],
+    },
+    {
+      type: "heading",
+      attrs: { level: 3 },
+      content: [text("Порядок пересмотра терапии")],
+    },
+    {
+      type: "orderedList",
+      attrs: { start: 1 },
+      content: [item("Оценить приверженность."), item("Усилить комбинацию.")],
+    },
+    {
+      type: "blockquote",
+      content: [
+        para(
+          text("Лучшее лечение — то, которое пациент действительно принимает."),
+        ),
+      ],
+    },
+    para(
+      text("Вопросы — на "),
+      text("почту редакции", [
+        { type: "link", attrs: { href: "mailto:info@doctor.school" } },
+      ]),
+      text("."),
+    ),
+  ],
+};
+
+const RICH_TEXT_CONTENT_PROPS: PropRow[] = [
+  {
+    name: "body",
+    type: "MaterialBody",
+    required: true,
+    description:
+      "The allowlisted ProseMirror document of @ds/schemas material-body.ts. Anything outside the set is dropped, never rendered as markup.",
+  },
+];
+
+function RichTextContentSection() {
+  return (
+    <BlockSection
+      title="Текст материала"
+      exportsLine="RichTextContent — props: body (MaterialBody)"
+    >
+      <p className="text-sm text-muted-foreground">
+        The ONE renderer of a material body (048 EARS-2 / EARS-12), canvas
+        academy-material.dc.html «текст». It walks only the body allowlist into
+        React elements: a link to academy.doctor.school opens in the same tab,
+        any other host in a new tab with noopener noreferrer.
+      </p>
+      <SubRow label="Live render — every allowlisted node">
+        <WideCanvas>
+          <div className="mx-auto max-w-2xl">
+            <RichTextContent body={MATERIAL_BODY_SAMPLE} />
+          </div>
+        </WideCanvas>
+      </SubRow>
+      <SubRow label="Slots / props">
+        <PropsTable rows={RICH_TEXT_CONTENT_PROPS} />
+      </SubRow>
+    </BlockSection>
+  );
+}
+
 export function BlocksView({ legalDocument, legalOthers }: BlocksViewProps) {
   return (
     <div className="flex flex-col gap-2">
@@ -4597,6 +4727,7 @@ export function BlocksView({ legalDocument, legalOthers }: BlocksViewProps) {
         legalDocument={legalDocument}
         legalOthers={legalOthers}
       />
+      <RichTextContentSection />
       <AccountProfileCardSection />
       <AuthCardSection />
       <AuthLayoutSection />

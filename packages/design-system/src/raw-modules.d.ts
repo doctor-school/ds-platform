@@ -19,3 +19,12 @@ declare module "*.css?raw" {
   const content: string;
   export default content;
 }
+
+/**
+ * `?raw` source imports — the 048 renderer test reads `rich-text-content.tsx`
+ * as text to prove it never sets HTML (048 V-7).
+ */
+declare module "*.tsx?raw" {
+  const content: string;
+  export default content;
+}

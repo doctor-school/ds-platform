@@ -248,6 +248,12 @@
       "remotePath": null,
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
+    "sign-in-refusal.dc.html": {
+      "sha256": "0d2bb2a346b222fa08e487bed7c894444ffa67ed3aef6c193ec37fe8036fc571",
+      "pulledSha256": "a69ba78b4e27a8dd81adbd36482ae9ccd2d2bad491cf5cc6529312f9e18c5587",
+      "pulledAt": "2026-10-29T08:34:31.916Z",
+      "remotePath": "sign-in-refusal.dc.html"
+    },
     "unit-chat-column.dc.html": {
       "sha256": "03329339e0de16f8dbae6bca495877dc401afe5dcd694252f423dcb80ae4c3f4",
       "pulledSha256": "1e888d5f45bc1d1e2afa077b03ae1d77cd2cfbe809139946886eaa74dedeedc5",

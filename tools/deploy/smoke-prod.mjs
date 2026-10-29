@@ -19,9 +19,9 @@
 //          GET without the navigation headers → bodyless 204 (003 EARS-61/62/71:
 //          the storefront entries render no form; #3435). The 303's authorize
 //          URL is fetched ONCE cookie-less and must answer the IdP's redirect
-//          into /ui/v2/login/… (a registered client + redirect_uri; an
-//          unregistered one draws an error, #3438) — never followed into the
-//          sign-in form
+//          into the sign-in host https://login.doctor.school/login (a
+//          registered client + redirect_uri; an unregistered one draws an
+//          error, #3438) — never followed into the sign-in form
 //   admin  GET https://admin.doctor.school/           → < 500 (Next renders; #729)
 //   doctor GET https://new.doctor.school/             → < 500 (the doctor
 //          storefront renders; #1723. TEMPORARY host until the doctor.school
@@ -314,19 +314,32 @@ export const STOREFRONT_ENTRY_PROBE_PATHS = Object.freeze(["/login", "/verify"])
 
 // --- IdP authorize answer (#3438; exported for unit tests) ------------------
 //
-// The entry's 303 Location is the authorize URL the API built for this
-// storefront. Fetched ONCE, cookie-less and not followed, it must draw the
-// IdP's redirect into its hosted login (`/ui/v2/login/…`): Zitadel answers so
-// for a registered `redirect_uri` and answers an error for an unregistered one
-// — a 4xx error page, or (for other refusals) a redirect carrying `?error=`.
-// The sign-in form itself is never submitted.
-export function checkAuthorizeAnswer(res, authorizeUrl) {
+// An authorize URL, fetched ONCE cookie-less and not followed, must draw the
+// IdP's redirect into the login UI its client is configured with: Zitadel
+// answers so for a registered client + `redirect_uri`, and answers an error for
+// an unregistered one — a 4xx (`invalid_request`, «The requested redirect_uri
+// is missing in the client configuration»), or for other refusals a redirect
+// carrying `?error=`. The sign-in form itself is never submitted.
+//
+// `loginUi` names that UI: `{ host, path }`, where a `path` ending in `/` is a
+// prefix and any other path is exact. The default is Zitadel's own hosted login
+// on the authorize URL's host (`/ui/v2/login/…`, the api client); a storefront
+// client hands its sign-in to the sign-in host (ADR-0015 §4, #3171:
+// `https://login.doctor.school/login?authRequest=…`).
+export const HOSTED_LOGIN_PATH = "/ui/v2/login/";
+
+export function checkAuthorizeAnswer(res, authorizeUrl, { loginUi } = {}) {
+  const expected = loginUi ?? {
+    host: new URL(authorizeUrl).host,
+    path: HOSTED_LOGIN_PATH,
+  };
+  const expectedLabel = `${expected.host}${expected.path}${expected.path.endsWith("/") ? "…" : ""}`;
   const isRedirect = res.status >= 300 && res.status < 400;
   if (!isRedirect) {
     const marker = findColdErrorMarker(res.body ?? "");
     const snippet = (res.body ?? "").replace(/\s+/g, " ").trim().slice(0, 140);
     throw new Error(
-      `authorize → ${res.status} (expected a 3xx into the hosted login)` +
+      `authorize → ${res.status} (expected a 3xx into ${expectedLabel})` +
         (marker
           ? ` — body contains ${JSON.stringify(marker)}`
           : snippet
@@ -339,17 +352,22 @@ export function checkAuthorizeAnswer(res, authorizeUrl) {
     throw new Error(`authorize → ${res.status} without a Location header`);
   const target = new URL(location, authorizeUrl);
   const error = target.searchParams.get("error");
-  if (error)
+  if (error) {
+    const description = target.searchParams.get("error_description");
     throw new Error(
       `authorize → ${res.status} with error=${error}` +
-        `${target.searchParams.get("error_description") ? ` (${target.searchParams.get("error_description")})` : ""}` +
+        (description ? ` (${description})` : "") +
         ` → ${target.host}${target.pathname}`,
     );
-  if (!target.pathname.includes("/ui/v2/login/"))
+  }
+  const onPath = expected.path.endsWith("/")
+    ? target.pathname.startsWith(expected.path)
+    : target.pathname === expected.path;
+  if (target.protocol !== "https:" || target.host !== expected.host || !onPath)
     throw new Error(
-      `authorize redirected outside the hosted login: ${target.href.slice(0, 140)}`,
+      `authorize redirected outside the login UI (expected ${expectedLabel}): ${target.href.slice(0, 140)}`,
     );
-  return `authorize → ${res.status} → ${target.pathname}`;
+  return `authorize → ${res.status} → ${target.host}${target.pathname}`;
 }
 
 // --- #877: hosted self-registration stays CLOSED (exported for unit tests) --
@@ -491,7 +509,12 @@ async function probeStorefrontEntry(path) {
   // #3438: the authorize URL the entry hands out must be one the IdP accepts
   // (its client + registered redirect_uri) — one cookie-less GET, not followed.
   const authorizeUrl = new URL(nav.headers.location, url).href;
-  const idpDetail = checkAuthorizeAnswer(await httpsGet(authorizeUrl), authorizeUrl);
+  const idpDetail = checkAuthorizeAnswer(
+    await httpsGet(authorizeUrl),
+    authorizeUrl,
+    // A target that ships no sign-in host keeps Zitadel's hosted login.
+    LOGIN_PROBES_SKIPPED ? {} : { loginUi: { host: LOGIN_HOST, path: "/login" } },
+  );
   const prefetchDetail = checkStorefrontPrefetch(await httpsGet(url));
   return `${navDetail} · ${idpDetail} · ${prefetchDetail}`;
 }

@@ -489,6 +489,35 @@ describe("IdP authorize answer behind the storefront entry (#3438)", () => {
     ).toContain("/ui/v2/login/loginname");
   });
 
+  const signInHost = { loginUi: { host: "login.example", path: "/login" } };
+
+  it("PASSES a storefront client's 302 into the sign-in host (ADR-0015)", () => {
+    expect(
+      checkAuthorizeAnswer(
+        answer(302, "https://login.example/login?authRequest=V2_1"),
+        authorizeUrl,
+        signInHost,
+      ),
+    ).toBe("authorize → 302 → login.example/login");
+  });
+
+  it("REJECTS the hosted login where the sign-in host is expected, and a path off it", () => {
+    expect(() =>
+      checkAuthorizeAnswer(
+        answer(302, "/ui/v2/login/login?authRequest=V2_1"),
+        authorizeUrl,
+        signInHost,
+      ),
+    ).toThrow("expected login.example/login");
+    expect(() =>
+      checkAuthorizeAnswer(
+        answer(302, "https://login.example/loginx?authRequest=V2_1"),
+        authorizeUrl,
+        signInHost,
+      ),
+    ).toThrow("outside the login UI");
+  });
+
   it("REJECTS the IdP's error answer to an unregistered redirect_uri (4xx body)", () => {
     expect(() =>
       checkAuthorizeAnswer(
@@ -520,7 +549,7 @@ describe("IdP authorize answer behind the storefront entry (#3438)", () => {
         answer(302, "https://id.example/ui/console"),
         authorizeUrl,
       ),
-    ).toThrow("outside the hosted login");
+    ).toThrow("outside the login UI");
   });
 
   it("REJECTS a 200 (an error page served in place of the redirect), naming a boundary marker", () => {

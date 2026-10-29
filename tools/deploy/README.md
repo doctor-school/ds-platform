@@ -970,9 +970,10 @@ storage outage reads apart from a DB outage),
 `academy.doctor.school/`, the Academy sign-in entries `/login` and `/verify` (a cold
 top-level navigation answers `303` to `id.doctor.school/oauth/v2/authorize` with the
 storefront's `redirect_uri`, any other GET a bodyless `204`; the authorize URL then gets
-one cookie-less GET, not followed, that must answer the IdP's redirect into
-`/ui/v2/login/…` — an unregistered client or `redirect_uri` draws an error and fails the
-probe), `admin.doctor.school/`, `new.doctor.school/` (the
+one cookie-less GET, not followed, that must answer the IdP's redirect into the sign-in
+host `login.doctor.school/login` (Zitadel's hosted `/ui/v2/login/…` for a target that
+ships no sign-in host) — an unregistered client or `redirect_uri` draws an error and fails
+the probe), `admin.doctor.school/`, `new.doctor.school/` (the
 doctor storefront, #1723), `id.doctor.school/ui/v2/login/loginname` (the login entry —
 the bare `/ui/v2/login` 404s per Caddy's sub-path routing), and cert
 validity/expiry on all five hosts. Exit non-zero on any failure. Hostnames default to the prod

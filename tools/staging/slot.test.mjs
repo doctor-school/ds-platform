@@ -2310,6 +2310,7 @@ test("EARS-3: retention preserves a shared requested tag and removes an unused o
       { encoding: "utf8", env: { ...process.env, REMOVED: removed }, input: `
 set -euo pipefail
 : > "$REMOVED"
+systemctl() { :; }
 sudo() {
   shift
   case "$1 $2" in
@@ -2471,12 +2472,28 @@ const BASH = process.platform === "win32" ? join(process.env.ProgramFiles, "Git"
  * remove — so a test of the kept set sees the prune too, not only the `rmi` loop.
  * `images` lists `<repo> <tag> <id>` lines, oldest first.
  */
-function runOnFakeBox(script, { images, digests, running = [], avail, prunedAvail = avail, refuseRmi = [], pruneSteps = [] }) {
+function runOnFakeBox(
+  script,
+  {
+    images,
+    digests,
+    running = [],
+    units = [],
+    beforeTagListing = ":",
+    afterRecordsListing = ":",
+    avail,
+    prunedAvail = avail,
+    refuseRmi = [],
+    pruneSteps = [],
+  },
+) {
   const dir = mkdtempSync(join(tmpdir(), "slot-floor-"));
   const p = (name) => join(dir, name).replaceAll("\\", "/");
   writeFileSync(p("images"), images.join("\n") + "\n");
   writeFileSync(p("digests"), digests.join("\n") + (digests.length ? "\n" : ""));
   writeFileSync(p("running"), running.join("\n") + (running.length ? "\n" : ""));
+  // `systemctl list-units --all --plain --no-legend` lines: UNIT LOAD ACTIVE SUB DESCRIPTION.
+  writeFileSync(p("units"), units.join("\n") + (units.length ? "\n" : ""));
   writeFileSync(p("avail"), String(avail));
   writeFileSync(p("refuse"), refuseRmi.join("\n") + "\n");
   writeFileSync(p("log"), "");
@@ -2487,6 +2504,10 @@ function runOnFakeBox(script, { images, digests, running = [], avail, prunedAvai
       input: `
 set -euo pipefail
 D='${p("")}'
+systemctl() {
+  if [ "$1" != list-units ]; then echo "unexpected systemctl command: $*" >&2; return 1; fi
+  cat "$D/units"
+}
 sudo() {
   if [ "$1" = df ]; then printf 'Avail\n%s\n' "$(cat "$D/avail")"; return; fi
   shift
@@ -2501,8 +2522,8 @@ sudo() {
         *Repository*Tag*) awk '{print $1 ":" $2}' "$D/images" ;;
         *) awk '{print $1}' "$D/images" ;;
       esac ;;
-    "images --digests") cat "$D/digests" ;;
-    "images ds-"*) awk -v r="$2" '$1==r {print "2026-10-0" NR "\t" $2}' "$D/images" ;;
+    "images --digests") cat "$D/digests"; ${afterRecordsListing} ;;
+    "images ds-"*) ${beforeTagListing}; awk -v r="$2" '$1==r {print "2026-10-0" NR "\t" $2}' "$D/images" ;;
     "rmi "*)
       if grep -Fxq "$2" "$D/refuse"; then return 1; fi
       echo "rmi $2" >> "$D/log"
@@ -2627,6 +2648,100 @@ test("3306: the old `prune -af` would have taken a kept tag — the fake prune i
   });
   assert.equal(box.status, 0, box.stderr);
   assert.deepEqual(box.log, ["image prune image prune -af --filter until=24h", `pruned ds-api-migrate:${SHA}`]);
+});
+
+// #3459: one release unit as `systemctl list-units --all --plain --no-legend` prints it.
+const releaseUnit = (env, sha, step, active = "active", sub = "exited") =>
+  `ds-${env}-${sha.slice(0, 12)}-${step}.service loaded ${active} ${sub} ds-release ${env} ${sha.slice(0, 12)} ${step}`;
+
+test("3459: the prune spares the tags of a slot whose release is in flight — pulled, not yet `up -d`, ranked out of retention", () => {
+  const fake = (units) =>
+    runOnFakeBox(pruneScript({ retention: 1, reservedSpace: BUILD_CACHE_RESERVED_SPACE }), {
+      // SHA2 is another slot's fresh pull of an OLDER build: outside retention, no container.
+      images: [`ds-api-migrate ${SHA2} id2`, `ds-api-migrate ${SHA} id1`],
+      digests: [`${REG}/pr/api-migrate@sha256:fresh id2`],
+      units,
+      avail: FLOOR * 2,
+    });
+  // The defect's control: no release unit names SHA2 — its tag and then its record go.
+  assert.deepEqual(fake([]).log, [`rmi ds-api-migrate:${SHA2}`, `rmi ${REG}/pr/api-migrate@sha256:fresh`]);
+  // Its pull unit has exited and its `up` has not run yet: the bundle stays whole.
+  const box = fake([releaseUnit("stage-pr-3454", SHA2, "pull-api-migrate")]);
+  assert.equal(box.status, 0, box.stderr);
+  assert.deepEqual(box.log, []);
+});
+
+test("3459: below the floor the tag loop spares an in-flight release's tags past FLOOR_KEEP_NEWEST", () => {
+  const sha = (c) => c.repeat(40);
+  const older = [sha("1"), sha("2")];
+  const newest = ["3", "4", "5", "6"].map(sha);
+  const box = runOnFakeBox(freeSpaceFloorScript({ refuse: true }), {
+    images: [...older.map((tag, i) => `ds-api ${tag} old${i}`), ...newest.map((tag, i) => `ds-api ${tag} new${i}`)],
+    digests: [],
+    units: [releaseUnit("stage-pr-7", older[1], "migrate", "active", "running")],
+    avail: FLOOR - 1,
+    prunedAvail: FLOOR * 3,
+  });
+  assert.equal(box.status, 0, box.stderr);
+  assert.deepEqual(box.log, [`rmi ds-api:${older[0]}`, "image prune image prune -f --filter until=24h"]);
+});
+
+test("3459: the in-flight set is read AFTER the tag listing — a release that starts mid-prune keeps its tag", () => {
+  const box = runOnFakeBox(pruneScript({ retention: 1, reservedSpace: BUILD_CACHE_RESERVED_SPACE }), {
+    images: [`ds-api ${SHA2} id2`, `ds-api ${SHA} id1`],
+    digests: [],
+    // The unit appears while the repo is listed; its pull and tag follow the unit's start.
+    beforeTagListing: `echo '${releaseUnit("stage-pr-9", SHA2, "pull-api", "active", "running")}' > "$D/units"`,
+    avail: FLOOR * 2,
+  });
+  assert.equal(box.status, 0, box.stderr);
+  assert.deepEqual(box.log, []);
+});
+
+test("3459: while a stage pull unit runs no registry record is removed — its record has no tag until `docker tag`", () => {
+  const box = runOnFakeBox(registryRecordsScript(), {
+    images: [`ds-api ${SHA} id1`],
+    digests: [`${REG}/api@sha256:orphan id3`, `${REG}/pr/api@sha256:pulling id4`],
+    units: [releaseUnit("stage-pr-7", SHA2, "pull-api", "active", "running"), releaseUnit("stage-main", SHA, "up")],
+    avail: FLOOR * 2,
+  });
+  assert.equal(box.status, 0, box.stderr);
+  assert.deepEqual(box.log, []);
+  assert.match(box.stdout, /registry records kept: a pull is in flight \(ds-stage-pr-7-89abcdef0123-pull-api\.service\)/);
+  // An exited pull unit is a finished pull — its record is tagged by then — so the orphan goes.
+  const done = runOnFakeBox(registryRecordsScript(), {
+    images: [`ds-api ${SHA} id1`],
+    digests: [`${REG}/api@sha256:orphan id3`],
+    units: [releaseUnit("stage-pr-7", SHA2, "pull-api")],
+    avail: FLOOR * 2,
+  });
+  assert.equal(done.status, 0, done.stderr);
+  assert.deepEqual(done.log, [`rmi ${REG}/api@sha256:orphan`]);
+});
+
+test("3459: the kept image IDs are read AFTER the pull check — a pull that tags mid-step keeps its record", () => {
+  const box = runOnFakeBox(registryRecordsScript(), {
+    images: [`ds-api ${SHA} id1`],
+    digests: [`${REG}/pr/api@sha256:fresh id7`],
+    units: [releaseUnit("stage-pr-7", SHA2, "pull-api", "active", "running")],
+    // Right after the record listing the pull tags its image and its unit exits.
+    afterRecordsListing: `echo 'ds-api ${SHA2} id7' >> "$D/images"; echo '${releaseUnit("stage-pr-7", SHA2, "pull-api")}' > "$D/units"`,
+    avail: FLOOR * 2,
+  });
+  assert.equal(box.status, 0, box.stderr);
+  assert.deepEqual(box.log, []);
+});
+
+test("3459: a box whose release units cannot be listed fails the prune — never a prune blind to in-flight releases", () => {
+  const prune = pruneScript({ retention: 1, reservedSpace: BUILD_CACHE_RESERVED_SPACE });
+  const box = runOnFakeBox(`systemctl() { return 1; }\n${prune}`, {
+    images: [`ds-api ${SHA2} id2`, `ds-api ${SHA} id1`],
+    digests: [],
+    avail: FLOOR * 2,
+  });
+  assert.notEqual(box.status, 0);
+  assert.deepEqual(box.log, []);
+  assert.match(box.stderr, /could not list the stage release units/);
 });
 
 test("3248: still below the floor after reclaiming, `up` refuses to pull and names the free space", () => {

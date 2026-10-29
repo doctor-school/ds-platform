@@ -2709,12 +2709,53 @@ export function assertRunningVerdict(stdout, { slot, sha }) {
 }
 
 /**
+ * #3459: the slot releases the box holds, read from its `ds-release` step units
+ * (`ds-<env>-<sha12>-<step>`, {@link slotReleaseEnv}). A unit is started before its
+ * step runs and stays loaded (`--remain-after-exit`) until the env's next release or
+ * `forget` reaps it, so a slot whose `up` sits between its pulls and `up -d` — no
+ * container yet — is named here from its first `pull-*` unit on.
+ *
+ * - `in_flight_shas`: the 12-hex SHA prefix of every stage release unit — the tags a
+ *   prune spares beside the running bundles. At most one extra SHA per env stays
+ *   spared (a failed release until the env's next one).
+ * - `running_pulls`: the `pull-*` units still running — a pull whose record its
+ *   `docker tag` does not name yet.
+ *
+ * A box whose units cannot be listed fails the step: a prune blind to in-flight
+ * releases is the defect itself.
+ */
+const RELEASE_UNITS_SHELL = `release_units() {
+  systemctl list-units --all --plain --no-legend --type=service 'ds-stage-*' \\
+    || { echo "✗ could not list the stage release units (systemctl list-units)" >&2; return 1; }
+}
+in_flight_shas() {
+  units=$(release_units) || return 1
+  printf '%s\\n' "$units" | awk '{print $1}' \\
+    | sed -nE 's/^ds-stage-(main|pr-[0-9]+)-([0-9a-f]{12})-[a-z][a-z0-9-]*\\.service$/\\2/p' | sort -u
+}
+running_pulls() {
+  units=$(release_units) || return 1
+  printf '%s\\n' "$units" \\
+    | awk '$1 ~ /^ds-stage-(main|pr-[0-9]+)-[0-9a-f]{12}-pull-[a-z0-9-]+\\.service$/ && $3 != "inactive" && $3 != "failed" && $4 != "exited" {print $1}'
+}
+`;
+
+/**
  * The containers' requested images (`in_use`) and the SHAs of the bundles they belong
  * to (`in_use_shas`). One-shot migrate has no container after `--rm`, but belongs to
  * the same bundle, and cached images retain their old CreatedAt: neither age nor a
  * missing container may evict that bundle.
+ *
+ * `spared <repo> <tag>`: such a tag, or one of an in-flight release (#3459). The caller
+ * sets `in_flight` (`in_flight_shas`) AFTER listing its candidate tags: a release's unit
+ * starts before its pull, so every tag the listing saw of a release in flight is named.
  */
-const IN_USE_SHELL = `ids=$(sudo docker ps -aq)
+const IN_USE_SHELL = `${RELEASE_UNITS_SHELL}spared() {
+  printf '%s\\n' "$in_use" | grep -Fxq "$1:$2" && return 0
+  printf '%s\\n' "$in_use_shas" | grep -Fxq "$2" && return 0
+  printf '%s\\n' "$in_flight" | grep -Fxq "$(printf '%.12s' "$2")"
+}
+ids=$(sudo docker ps -aq)
 in_use=""
 if [ -n "$ids" ]; then
   in_use=$(sudo docker inspect --format '{{.Config.Image}}' $ids)
@@ -2732,14 +2773,26 @@ in_use_shas=$(printf '%s\\n' "$in_use" | awk -F: '/^ds-/ && $2 ~ /^[0-9a-f]+$/ &
  * from `<registry>/pr/<image>` too, and a reference filter's `*` does not cross a `/`,
  * so both depths are listed. `rmi` without `-f`: a running container's image is
  * refused and kept. Each removal prints a line — the progress a full-disk run shows.
+ *
+ * #3459: a slot's pull (`pullAndTagArgv`) runs `docker pull <ref> && docker tag`, so
+ * while its `pull-*` unit runs, its record has no tag yet. The order closes that window:
+ * the records are listed, THEN the running pulls are read — any running ⇒ no record is
+ * removed this time — THEN the kept IDs: a pull that tagged and exited after the
+ * listing has its tag counted.
  */
 export function registryRecordsScript() {
-  return `${KEPT_LOCAL_IMAGE_IDS_SHELL}
-sudo docker images --digests --filter 'reference=${IMAGE_REGISTRY}/*' --filter 'reference=${IMAGE_REGISTRY}/*/*' --format '{{.Repository}}@{{.Digest}} {{.ID}}' \\
-  | while read -r ref id; do
-      if printf '%s\\n' "$kept_ids" | grep -Fxq "$id"; then continue; fi
-      if sudo docker rmi "$ref" >/dev/null 2>&1; then echo "  removed $ref"; fi
-    done
+  return `${RELEASE_UNITS_SHELL}records=$(sudo docker images --digests --filter 'reference=${IMAGE_REGISTRY}/*' --filter 'reference=${IMAGE_REGISTRY}/*/*' --format '{{.Repository}}@{{.Digest}} {{.ID}}')
+pulls=$(running_pulls) || exit 1
+if [ -n "$pulls" ]; then
+  echo "  registry records kept: a pull is in flight ($(printf '%s' "$pulls" | tr '\\n' ' ')) — the next prune removes the orphans"
+else
+${KEPT_LOCAL_IMAGE_IDS_SHELL}
+printf '%s\\n' "$records" | while read -r ref id; do
+    if [ -z "$ref" ]; then continue; fi
+    if printf '%s\\n' "$kept_ids" | grep -Fxq "$id"; then continue; fi
+    if sudo docker rmi "$ref" >/dev/null 2>&1; then echo "  removed $ref"; fi
+  done
+fi
 `;
 }
 
@@ -2815,17 +2868,18 @@ ${IN_USE_SHELL}sudo docker images --format '{{.Repository}}' \\
   | { grep -E '^ds-[a-z0-9][a-z0-9-]*$' || true; } \\
   | sort -u \\
   | while IFS= read -r repo; do
-      sudo docker images "$repo" --format '{{.CreatedAt}}\\t{{.Tag}}' \\
+      tags=$(sudo docker images "$repo" --format '{{.CreatedAt}}\\t{{.Tag}}' \\
         | sort -r \\
         | awk -F'\\t' '{print $2}' \\
         | { grep -E '^[0-9a-f]{40}$' || true; } \\
-        | awk -v k=${FLOOR_KEEP_NEWEST} 'NR>k' \\
-        | while IFS= read -r tag; do
-            ref="$repo:$tag"
-            if printf '%s\\n' "$in_use" | grep -Fxq "$ref"; then continue; fi
-            if printf '%s\\n' "$in_use_shas" | grep -Fxq "$tag"; then continue; fi
-            if sudo docker rmi "$ref" >/dev/null 2>&1; then echo "  removed $ref"; fi
-          done
+        | awk -v k=${FLOOR_KEEP_NEWEST} 'NR>k')
+      if [ -z "$tags" ]; then continue; fi
+      in_flight=$(in_flight_shas) || exit 1
+      printf '%s\\n' "$tags" | while IFS= read -r tag; do
+          ref="$repo:$tag"
+          if spared "$repo" "$tag"; then continue; fi
+          if sudo docker rmi "$ref" >/dev/null 2>&1; then echo "  removed $ref"; fi
+        done
     done
 ${registryRecordsScript()}with_progress "image prune" sudo docker image prune -f --filter until=24h
   free=$(free_bytes)
@@ -2855,15 +2909,16 @@ export function pruneScript({ retention, reservedSpace }) {
   repo="$1"; keep="$2"
   # \`|| true\` on grep: under pipefail a grep that filters out EVERY line (only
   # \`:local\` tags exist yet) exits 1. "Nothing to prune" is success, not failure.
-  sudo docker images "$repo" --format '{{.CreatedAt}}\\t{{.Tag}}' \\
+  tags=$(sudo docker images "$repo" --format '{{.CreatedAt}}\\t{{.Tag}}' \\
     | { grep -vP '\\tlocal$' || true; } \\
     | sort -r \\
-    | awk -v k="$keep" -F'\\t' 'NR>k{print $2}' \\
-    | while IFS= read -r tag; do
-        if printf '%s\n' "$in_use" | grep -Fxq "$repo:$tag"; then continue; fi
-        if printf '%s\n' "$in_use_shas" | grep -Fxq "$tag"; then continue; fi
-        [ -n "$tag" ] && sudo docker rmi "$repo:$tag" >/dev/null 2>&1 || true
-      done
+    | awk -v k="$keep" -F'\\t' 'NR>k{print $2}')
+  if [ -z "$tags" ]; then return 0; fi
+  in_flight=$(in_flight_shas) || return 1
+  printf '%s\\n' "$tags" | while IFS= read -r tag; do
+      if spared "$repo" "$tag"; then continue; fi
+      [ -n "$tag" ] && sudo docker rmi "$repo:$tag" >/dev/null 2>&1 || true
+    done
 }
 sudo docker images --format '{{.Repository}}' \\
   | { grep -E '^ds-[a-z0-9][a-z0-9-]*$' || true; } \\

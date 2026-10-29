@@ -346,7 +346,9 @@ export async function EventPage({
         aside={
           cta ? (
             <EventSignupCard
-              {...eventSignupCardProps(event, cta)}
+              {...eventSignupCardProps(event, cta, {
+                signedIn: isAuthenticated,
+              })}
               timeLabel={<ViewerZoneTime moment={moment} part="time" />}
               dateLabel={<ViewerZoneTime moment={moment} part="date" />}
               weekdayLabel={
@@ -501,7 +503,10 @@ export async function EventPage({
               <FormatTabs
                 mode={mode}
                 tabs={formatBlock.tabs}
-                hrefs={{ offline: tabHref("offline"), online: tabHref("online") }}
+                hrefs={{
+                  offline: tabHref("offline"),
+                  online: tabHref("online"),
+                }}
                 offline={
                   <EventFormatSeatsPanel seatsLine={formatBlock.seatsLine} />
                 }

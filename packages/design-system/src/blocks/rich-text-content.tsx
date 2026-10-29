@@ -104,8 +104,8 @@ function renderInline(
 type Context = "body" | "quote" | "list";
 
 const PARAGRAPH: Record<Context, string> = {
-  body: "mb-3.5 text-body-compact leading-relaxed font-medium text-pretty text-foreground",
-  list: "text-body-compact leading-relaxed font-medium text-pretty text-foreground",
+  body: "mb-3.5 text-reading leading-reading font-medium text-pretty text-foreground",
+  list: "text-reading leading-reading-list font-medium text-pretty text-foreground",
   quote:
     "m-0 text-lg leading-normal font-bold tracking-tight text-pretty text-foreground sm:text-xl",
 };
@@ -158,7 +158,7 @@ function renderBlock(
         .map((item, index) => (
           <li
             key={index}
-            className="text-body-compact leading-relaxed font-medium text-pretty text-foreground"
+            className="text-reading leading-reading-list font-medium text-pretty text-foreground"
           >
             {renderBlocks(item.content, "list")}
           </li>

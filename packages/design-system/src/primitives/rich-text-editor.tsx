@@ -15,7 +15,7 @@ import {
 
 import { cn } from "../lib/utils";
 import { Button } from "./button";
-import { FilterChip } from "./filter-chip";
+import { FilterChip, filterChipVariants } from "./filter-chip";
 import { Input } from "./input";
 
 /**
@@ -258,6 +258,7 @@ const RichTextEditor = React.forwardRef<HTMLDivElement, RichTextEditorProps>(
     const [linkHref, setLinkHref] = React.useState("");
     const [linkError, setLinkError] = React.useState(false);
     const linkFieldId = `${React.useId()}-link`;
+    const linkPanelId = `${linkFieldId}-panel`;
 
     const openLink = () => {
       const current = editor?.getAttributes("link").href;
@@ -320,24 +321,43 @@ const RichTextEditor = React.forwardRef<HTMLDivElement, RichTextEditorProps>(
           aria-label={copy.toolbar}
           className="flex flex-wrap gap-1.5"
         >
-          {tools.map((tool) => (
-            <FilterChip
-              key={tool.key}
-              selected={
-                tool.key === "link"
-                  ? linkOpen || Boolean(active?.link)
-                  : Boolean(active?.[tool.key])
-              }
-              disabled={disabled || !editor}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={tool.run}
-            >
-              {copy[tool.key]}
-            </FilterChip>
-          ))}
+          {tools.map((tool) =>
+            tool.key === "link" ? (
+              // The link chip opens a field rather than toggling a mark, so it
+              // reports the disclosure on `aria-expanded` / `aria-controls`
+              // (not FilterChip's `aria-pressed`) while keeping the chip look.
+              <button
+                key={tool.key}
+                type="button"
+                aria-expanded={linkOpen}
+                aria-controls={linkOpen ? linkPanelId : undefined}
+                data-state={
+                  linkOpen || active?.link ? "selected" : "unselected"
+                }
+                className={filterChipVariants({
+                  selected: linkOpen || Boolean(active?.link),
+                })}
+                disabled={disabled || !editor}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={tool.run}
+              >
+                {copy[tool.key]}
+              </button>
+            ) : (
+              <FilterChip
+                key={tool.key}
+                selected={Boolean(active?.[tool.key])}
+                disabled={disabled || !editor}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={tool.run}
+              >
+                {copy[tool.key]}
+              </FilterChip>
+            ),
+          )}
         </div>
         {linkOpen ? (
-          <div className="flex flex-col gap-1.5">
+          <div id={linkPanelId} className="flex flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <Input
                 id={linkFieldId}

@@ -183,4 +183,32 @@ describe("048 EARS-2: RichTextEditor", () => {
     expect(types(last())).toContain("mark:link");
     expect(materialBodySchema.safeParse(last()).success).toBe(true);
   });
+  it("048 EARS-2: the link chip opens the link field and reports it on aria-expanded, while mark toggles report aria-pressed", async () => {
+    const { surface } = setup({
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "слово" }] },
+      ],
+    });
+    await waitFor(() => expect(surface()?.editor).toBeTruthy());
+    const chip = screen.getByRole("button", {
+      name: RICH_TEXT_EDITOR_COPY.link,
+    });
+    expect(chip.getAttribute("aria-pressed")).toBeNull();
+    expect(chip.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      screen
+        .getByRole("button", { name: RICH_TEXT_EDITOR_COPY.bold })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+    fireEvent.click(chip);
+    expect(chip.getAttribute("aria-expanded")).toBe("true");
+    const panel = document.getElementById(chip.getAttribute("aria-controls")!);
+    expect(panel).toBeTruthy();
+    expect(
+      panel!.contains(
+        screen.getByRole("textbox", { name: RICH_TEXT_EDITOR_COPY.linkField }),
+      ),
+    ).toBe(true);
+  });
 });

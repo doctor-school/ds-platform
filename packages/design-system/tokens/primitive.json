@@ -155,7 +155,7 @@
     },
     "size": {
       "$type": "dimension",
-      "$description": "Neo-brutalist kegel (px→rem at 16px base): 2xs 10 · eyebrow 11 · pill 11.5 · xs 12 · caption 13 · chip 13.5 · sm 14 · body-compact 15 · base 16 · lg 20 (title) · xl 22 (h3) · title-lg 24 (listing-card title) · title-xl 26 (auth screen title) · 2xl 28 (h2) · 3xl 40 (h1) · 4xl 56 (display).",
+      "$description": "Neo-brutalist kegel (px→rem at 16px base): 2xs 10 · eyebrow 11 · pill 11.5 · xs 12 · caption 13 · chip 13.5 · sm 14 · body-compact 15 · reading 15.5 · base 16 · lg 20 (title) · xl 22 (h3) · title-lg 24 (listing-card title) · title-xl 26 (auth screen title) · 2xl 28 (h2) · 3xl 40 (h1) · 4xl 56 (display).",
       "chip": {
         "$value": "0.84375rem",
         "$description": "13.5px — the on-header chip label of the storefront chrome («Войти / Регистрация», «Личный кабинет»), the header search input and the auth consent statement (auth.dc.html 191/199/221: 13.5px/700/1.4); sources ds-shell.dc.html lines 24/37 (13.5px/800) and auth.dc.html. Between caption (13) and sm (14): ONE kegel, never a second token at the same size."
@@ -177,6 +177,10 @@
       "caption": { "$value": "0.8125rem" },
       "sm": { "$value": "0.875rem" },
       "body-compact": { "$value": "0.9375rem" },
+      "reading": {
+        "$value": "0.96875rem",
+        "$description": "15.5px — the material reading-page body: paragraphs and list items of the rich-text column (academy-material.dc.html 76/79/80: 15.5px/500). Between body-compact (15) and base (16): long-form reading copy, never UI copy."
+      },
       "base": { "$value": "1rem" },
       "lg": { "$value": "1.25rem" },
       "xl": { "$value": "1.375rem" },
@@ -210,7 +214,7 @@
     },
     "line-height": {
       "$type": "number",
-      "$description": "Leading by role: none 1 · title 1.15 (auth screen title, auth.dc.html 63) · tight 1.25 · snug 1.375 · label 1.4 (bold statement rows, auth.dc.html 191/199/221) · notice 1.45 (the operation-error plate copy, auth.dc.html 58) · normal 1.5 · prose 1.55 (card sub-copy and read-only statements, auth.dc.html 64/208) · relaxed 1.625.",
+      "$description": "Leading by role: none 1 · title 1.15 (auth screen title, auth.dc.html 63) · tight 1.25 · snug 1.375 · label 1.4 (bold statement rows, auth.dc.html 191/199/221) · notice 1.45 (the operation-error plate copy, auth.dc.html 58) · normal 1.5 · prose 1.55 (card sub-copy and read-only statements, auth.dc.html 64/208) · relaxed 1.625 · reading-list 1.7 / reading 1.75 (material reading body, academy-material.dc.html 76-80).",
       "none": { "$value": 1 },
       "title": { "$value": 1.15 },
       "tight": { "$value": 1.25 },
@@ -226,6 +230,14 @@
       "assurance": {
         "$value": 1.6,
         "$description": "1.6 — the return-context assurance line on the auth brand panel (auth.dc.html 304 `line-height:1.6`)."
+      },
+      "reading": {
+        "$value": 1.75,
+        "$description": "1.75 — the material reading-page body paragraph leading (academy-material.dc.html 76 `line-height:1.75`)."
+      },
+      "reading-list": {
+        "$value": 1.7,
+        "$description": "1.7 — the material reading-page list-item leading (academy-material.dc.html 79/80 `line-height:1.7`)."
       },
       "relaxed": { "$value": 1.625 }
     },

@@ -14,6 +14,7 @@ import {
   resolveSignInHostSettings,
   type SignInHostSettings,
 } from "./sign-in-host.config.js";
+import { BackChannelLogoutController } from "./back-channel-logout.controller.js";
 import { SignInHostController } from "./sign-in-host.controller.js";
 import { FakeSignInHostIdp } from "./sign-in-host.idp.fake.js";
 import {
@@ -67,7 +68,11 @@ import {
   // StorefrontModule: the doctor storefront's register / verify command the
   // host's doctor registration door runs (003 EARS-24 amended).
   imports: [AuthModule, SessionModule, StorefrontModule],
-  controllers: [SignInHostController, StorefrontOidcController],
+  controllers: [
+    SignInHostController,
+    StorefrontOidcController,
+    BackChannelLogoutController,
+  ],
   providers: [
     {
       // 003 EARS-62 / EARS-71 — the internal credential; unset, every
@@ -82,7 +87,12 @@ import {
       provide: STOREFRONT_OIDC_IDP,
       useFactory: (): StorefrontOidcIdp => {
         const env = loadEnv();
-        if (!env.IDP_ISSUER) return new FakeStorefrontOidc();
+        if (!env.IDP_ISSUER)
+          return new FakeStorefrontOidc(
+            [env.IDP_ACADEMY_CLIENT_ID, env.IDP_DOCTOR_CLIENT_ID].filter(
+              (id): id is string => !!id,
+            ),
+          );
         const keys = new Map<string, ClientKey>();
         for (const [clientId, raw] of [
           [env.IDP_ACADEMY_CLIENT_ID, env.IDP_ACADEMY_CLIENT_KEY],

@@ -222,3 +222,115 @@ export function verifyIdToken(
     expiresAtMs: exp * 1000,
   };
 }
+
+/** OIDC Back-Channel Logout 1.0 §2.4 — the one event a logout token carries. */
+export const BACK_CHANNEL_LOGOUT_EVENT =
+  "http://schemas.openid.net/event/backchannel-logout";
+
+/** Lifetime ceiling on a logout token's `iat` when it carries no `exp` (BCL §2.6 step 9). */
+const LOGOUT_TOKEN_MAX_AGE_SECONDS = 5 * 60;
+
+/** What a verified logout token tells the back-channel endpoint. */
+export interface VerifiedLogoutToken {
+  /** The Zitadel session that ended — the `zitadelSessionId` storefront sessions link to. */
+  readonly sid: string;
+  /** The person, when the token names one (BCL §2.4: `sub` or `sid`, here `sid` is required). */
+  readonly sub: string | null;
+}
+
+/** The `kid` of an RS256 JWT header — the key a verifier must hold; `null` otherwise. */
+export function jwtKid(token: string): string | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const header = decodePart(parts[0]!);
+  return header &&
+    header["alg"] === "RS256" &&
+    typeof header["kid"] === "string"
+    ? header["kid"]
+    : null;
+}
+
+interface LogoutTokenOpts {
+  readonly issuer: string;
+  readonly clientIds: ReadonlyArray<string>;
+  readonly now: Date;
+}
+
+/** BCL §2.6 steps 3–9 on a decoded payload — every check but the signature. */
+function logoutClaims(
+  payload: Record<string, unknown>,
+  opts: LogoutTokenOpts,
+): VerifiedLogoutToken | null {
+  if (payload["iss"] !== opts.issuer.replace(/\/$/, "")) return null;
+  const aud = payload["aud"];
+  const audiences = Array.isArray(aud) ? aud : [aud];
+  if (
+    !audiences.some((a) => typeof a === "string" && opts.clientIds.includes(a))
+  )
+    return null;
+
+  const nowS = opts.now.getTime() / 1000;
+  const iat = payload["iat"];
+  if (typeof iat !== "number" || iat > nowS + SKEW_SECONDS) return null;
+  const exp = payload["exp"];
+  if (exp !== undefined) {
+    if (typeof exp !== "number" || exp <= nowS) return null;
+  } else if (iat + LOGOUT_TOKEN_MAX_AGE_SECONDS < nowS) {
+    return null;
+  }
+
+  const events = payload["events"];
+  if (
+    !events ||
+    typeof events !== "object" ||
+    Array.isArray(events) ||
+    !Object.prototype.hasOwnProperty.call(events, BACK_CHANNEL_LOGOUT_EVENT)
+  )
+    return null;
+  if ("nonce" in payload) return null;
+
+  const sid = payload["sid"];
+  if (typeof sid !== "string" || !sid) return null;
+  const sub = payload["sub"];
+  return { sid, sub: typeof sub === "string" && sub ? sub : null };
+}
+
+/**
+ * 003 EARS-65 — the cheap, key-free half of logout-token verification: the
+ * token parses, names an RS256 `kid`, and its claims pass (`iss`, `aud`,
+ * `iat`/`exp`, `events`, `sid`, no `nonce`). Run BEFORE any JWKS fetch, so
+ * a token that could never verify never makes the API call the issuer.
+ * Answers the `kid` to look up; `null` = refuse at once.
+ */
+export function precheckLogoutToken(
+  token: string,
+  opts: LogoutTokenOpts,
+): { kid: string } | null {
+  const kid = jwtKid(token);
+  if (!kid) return null;
+  const payload = decodePart(token.split(".")[1]!);
+  if (!payload || !logoutClaims(payload, opts)) return null;
+  return { kid };
+}
+
+/**
+ * 003 EARS-65, ADR-0015 §4 «One sign-out» req. 6 — OIDC Back-Channel Logout
+ * 1.0 §2.6 for a logout token from `issuer` to either storefront client:
+ * RS256 signature against the issuer's JWKS, `iss`, `aud` naming one of
+ * `clientIds`, a fresh `iat` (and `exp` when present), the back-channel
+ * `events` member, a `sid`, and no `nonce` (which would make it an ID token).
+ * `null` on any failure — the caller then revokes nothing.
+ */
+export function verifyLogoutToken(
+  token: string,
+  opts: LogoutTokenOpts & { readonly jwks: Jwks },
+): VerifiedLogoutToken | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [h, p, s] = parts as [string, string, string];
+  const header = decodePart(h);
+  const payload = decodePart(p);
+  if (!header || !payload) return null;
+  if (!signatureValid(header, `${h}.${p}`, s, opts.jwks)) return null;
+  return logoutClaims(payload, opts);
+}

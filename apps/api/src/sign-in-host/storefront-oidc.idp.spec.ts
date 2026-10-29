@@ -1,8 +1,14 @@
 import { generateKeyPairSync, sign } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { FetchLike } from "../auth/idp/zitadel.idp.js";
-import { ZitadelStorefrontOidc } from "./storefront-oidc.idp.js";
-import { parseClientKey } from "./storefront-oidc.jwt.js";
+import {
+  JWKS_REFRESH_MIN_INTERVAL_MS,
+  ZitadelStorefrontOidc,
+} from "./storefront-oidc.idp.js";
+import {
+  BACK_CHANNEL_LOGOUT_EVENT,
+  parseClientKey,
+} from "./storefront-oidc.jwt.js";
 
 const ISSUER = "https://id.example.test";
 const CLIENT = "academy-client";
@@ -145,5 +151,147 @@ describe("ZitadelStorefrontOidc (003 EARS-62)", () => {
       }),
     ).toBeNull();
     expect(calls).toEqual([]);
+  });
+});
+
+describe("ZitadelStorefrontOidc logout-token JWKS use (003 EARS-65)", () => {
+  const forged = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const b = (v: unknown) =>
+    Buffer.from(JSON.stringify(v)).toString("base64url");
+  function logoutToken(
+    opts: {
+      kid?: string;
+      key?: typeof signing.privateKey;
+      claims?: object;
+    } = {},
+  ): string {
+    const nowS = Math.floor(clock.at.getTime() / 1000);
+    const input = `${b({ alg: "RS256", kid: opts.kid ?? "s1", typ: "logout+jwt" })}.${b(
+      {
+        iss: ISSUER,
+        aud: CLIENT,
+        sub: "u1",
+        sid: "zs1",
+        jti: "j",
+        iat: nowS,
+        exp: nowS + 120,
+        events: { [BACK_CHANNEL_LOGOUT_EVENT]: {} },
+        ...opts.claims,
+      },
+    )}`;
+    return `${input}.${sign("sha256", Buffer.from(input), opts.key ?? signing.privateKey).toString("base64url")}`;
+  }
+  const clock = { at: new Date(now) };
+
+  /** A JWKS endpoint that counts its calls and can be switched to failing. */
+  function keysEndpoint() {
+    const state = { calls: 0, failing: false };
+    const fetchImpl: FetchLike = () => {
+      state.calls += 1;
+      if (state.failing)
+        return Promise.resolve({
+          ok: false,
+          status: 503,
+          json: () => Promise.resolve({}),
+        });
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            keys: [
+              {
+                ...signing.publicKey.export({ format: "jwk" }),
+                kid: "s1",
+                alg: "RS256",
+              },
+            ],
+          }),
+      });
+    };
+    return { state, fetchImpl };
+  }
+
+  function adapter(fetchImpl: FetchLike) {
+    clock.at = new Date(now);
+    return new ZitadelStorefrontOidc({
+      issuer: ISSUER,
+      keys: new Map([[CLIENT, key]]),
+      fetchImpl,
+      clock: () => clock.at,
+    });
+  }
+
+  it("EARS-65: a token failing the cheap claim checks never makes the API fetch the JWKS", async () => {
+    const { state, fetchImpl } = keysEndpoint();
+    const oidc = adapter(fetchImpl);
+    for (const token of [
+      "not-a-jwt",
+      logoutToken({ claims: { iss: "https://evil.test" } }),
+      logoutToken({ claims: { aud: "someone-else" } }),
+      logoutToken({ claims: { events: {} } }),
+      logoutToken({ claims: { sid: "" } }),
+      logoutToken({ claims: { nonce: "n" } }),
+    ]) {
+      expect(await oidc.verifyLogoutToken(token)).toBeNull();
+    }
+    expect(state.calls).toBe(0);
+  });
+
+  it("EARS-65: forged tokens with an unknown kid cause at most one JWKS fetch per window; a known kid with a bad signature causes none", async () => {
+    const { state, fetchImpl } = keysEndpoint();
+    const oidc = adapter(fetchImpl);
+    expect(await oidc.verifyLogoutToken(logoutToken())).toEqual({
+      sid: "zs1",
+      sub: "u1",
+    });
+    expect(state.calls).toBe(1);
+    // A known kid, forged signature: refused from the cache, no refetch.
+    for (let i = 0; i < 5; i += 1)
+      expect(
+        await oidc.verifyLogoutToken(logoutToken({ key: forged.privateKey })),
+      ).toBeNull();
+    expect(state.calls).toBe(1);
+    // Unknown kids, concurrently and in a burst: one fetch in the window.
+    clock.at = new Date(now.getTime() + JWKS_REFRESH_MIN_INTERVAL_MS + 1);
+    const burst = await Promise.all(
+      Array.from({ length: 10 }, (_, i) =>
+        oidc.verifyLogoutToken(
+          logoutToken({ kid: `x${i}`, key: forged.privateKey }),
+        ),
+      ),
+    );
+    expect(burst.every((r) => r === null)).toBe(true);
+    expect(state.calls).toBe(2);
+    expect(
+      await oidc.verifyLogoutToken(
+        logoutToken({ kid: "y", key: forged.privateKey }),
+      ),
+    ).toBeNull();
+    expect(state.calls).toBe(2);
+    // The next window allows one more.
+    clock.at = new Date(clock.at.getTime() + JWKS_REFRESH_MIN_INTERVAL_MS + 1);
+    await oidc.verifyLogoutToken(
+      logoutToken({ kid: "z", key: forged.privateKey }),
+    );
+    expect(state.calls).toBe(3);
+  });
+
+  it("EARS-65: a failed JWKS refetch keeps the cached keys", async () => {
+    const { state, fetchImpl } = keysEndpoint();
+    const oidc = adapter(fetchImpl);
+    expect(await oidc.verifyLogoutToken(logoutToken())).not.toBeNull();
+    state.failing = true;
+    clock.at = new Date(now.getTime() + JWKS_REFRESH_MIN_INTERVAL_MS + 1);
+    expect(
+      await oidc.verifyLogoutToken(logoutToken({ kid: "rotated" })),
+    ).toBeNull();
+    expect(state.calls).toBe(2);
+    // The good key still verifies, with no further fetch.
+    expect(await oidc.verifyLogoutToken(logoutToken())).toEqual({
+      sid: "zs1",
+      sub: "u1",
+    });
+    expect(state.calls).toBe(2);
   });
 });

@@ -188,6 +188,9 @@ export class SessionService {
         sub: record.sub,
         sid,
       });
+      // 003 EARS-65 — reuse on a linked session ends the whole linked set
+      // (every storefront session of that shared session, both storefronts).
+      if (record.oidcClient) await this.revokeLinked(record.zitadelSessionId);
       return { status: "reuse_detected" };
     }
 

@@ -188,6 +188,11 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
         spec: "003-design.md EARS-44 (own-link server redirect)",
       },
     },
+    "POST /v1/auth/back-channel-logout": {
+      emits: ["SessionRevoked"],
+      coveredBy:
+        "back-channel-logout.e2e: EARS-65 a valid logout token revokes by sid every linked storefront session (SessionRevoked per session, SessionService.revokeLinked)",
+    },
     "POST /v1/auth/logout": {
       emits: ["SessionRevoked"],
       coveredBy:

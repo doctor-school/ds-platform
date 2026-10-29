@@ -3,10 +3,14 @@ import type { FetchLike } from "../auth/idp/zitadel.idp.js";
 import type { LinkedRefreshResult } from "../auth/session/shared-session.js";
 import {
   buildClientAssertion,
+  jwtKid,
+  precheckLogoutToken,
   verifyIdToken,
+  verifyLogoutToken,
   type ClientKey,
   type Jwks,
   type VerifiedIdToken,
+  type VerifiedLogoutToken,
 } from "./storefront-oidc.jwt.js";
 
 /**
@@ -49,7 +53,23 @@ export interface StorefrontOidcIdp {
     clientId: string;
     refreshToken: string;
   }): Promise<LinkedRefreshResult>;
+  /**
+   * 003 EARS-65 — verify an OIDC Back-Channel Logout token addressed to either
+   * storefront client (signature against the issuer JWKS, `iss`, `aud`, the
+   * back-channel `events`, `sid`, no `nonce`). `null` on any failure.
+   */
+  verifyLogoutToken(token: string): Promise<VerifiedLogoutToken | null>;
 }
+
+/**
+ * 003 EARS-65 — the issuer JWKS is refetched at most once per this window,
+ * and only for a `kid` the cache does not hold (a signing-key rotation). The
+ * back-channel endpoint is public: a stream of forged tokens naming unknown
+ * keys can then cost Zitadel at most one key fetch per window, never one per
+ * request. 30 s bounds that to 120 fetches an hour while a real rotation is
+ * picked up within one window.
+ */
+export const JWKS_REFRESH_MIN_INTERVAL_MS = 30_000;
 
 const ASSERTION_TYPE = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
 
@@ -74,6 +94,9 @@ export class ZitadelStorefrontOidc implements StorefrontOidcIdp {
   private readonly clock: () => Date;
   private readonly issuer: string;
   private jwks: Jwks | null = null;
+  /** The one JWKS fetch in flight (single-flight), if any. */
+  private jwksRefresh: Promise<void> | null = null;
+  private lastJwksFetchAtMs = Number.NEGATIVE_INFINITY;
 
   constructor(private readonly config: ZitadelStorefrontOidcConfig) {
     this.fetchImpl = config.fetchImpl ?? (globalThis.fetch as FetchLike);
@@ -158,20 +181,63 @@ export class ZitadelStorefrontOidc implements StorefrontOidcIdp {
     }
   }
 
-  /** Verify against the cached JWKS; refetch once when the signing key rotated. */
+  async verifyLogoutToken(token: string): Promise<VerifiedLogoutToken | null> {
+    // The audiences are the storefront clients this API holds keys for — the
+    // two that register the back-channel URI (ADR-0015 §4 req. 6).
+    const opts = {
+      issuer: this.issuer,
+      clientIds: [...this.config.keys.keys()],
+      now: this.clock(),
+    };
+    // Parse and check the claims first: a token that can never verify never
+    // reaches the key fetch.
+    const pre = precheckLogoutToken(token, opts);
+    if (!pre) return null;
+    const jwks = await this.keysFor(pre.kid);
+    return jwks ? verifyLogoutToken(token, { ...opts, jwks }) : null;
+  }
+
   private async verify(
     token: string,
     clientId: string,
   ): Promise<VerifiedIdToken | null> {
-    const opts = { issuer: this.issuer, clientId, now: this.clock() };
-    if (this.jwks) {
-      const verified = verifyIdToken(token, { ...opts, jwks: this.jwks });
-      if (verified) return verified;
-    }
-    this.jwks = await this.fetchJwks();
-    return this.jwks
-      ? verifyIdToken(token, { ...opts, jwks: this.jwks })
+    const kid = jwtKid(token);
+    if (!kid) return null;
+    const jwks = await this.keysFor(kid);
+    return jwks
+      ? verifyIdToken(token, {
+          issuer: this.issuer,
+          clientId,
+          now: this.clock(),
+          jwks,
+        })
       : null;
+  }
+
+  /**
+   * The cached JWKS, refetched only when it lacks `kid` — single-flight and
+   * at most once per {@link JWKS_REFRESH_MIN_INTERVAL_MS}. A failed or empty
+   * fetch never replaces good cached keys.
+   */
+  private async keysFor(kid: string): Promise<Jwks | null> {
+    if (!this.jwks?.keys.some((k) => k.kid === kid)) await this.refreshJwks();
+    return this.jwks;
+  }
+
+  private refreshJwks(): Promise<void> {
+    if (this.jwksRefresh) return this.jwksRefresh;
+    const nowMs = this.clock().getTime();
+    if (nowMs - this.lastJwksFetchAtMs < JWKS_REFRESH_MIN_INTERVAL_MS)
+      return Promise.resolve();
+    this.lastJwksFetchAtMs = nowMs;
+    this.jwksRefresh = this.fetchJwks()
+      .then((fetched) => {
+        if (fetched && fetched.keys.length > 0) this.jwks = fetched;
+      })
+      .finally(() => {
+        this.jwksRefresh = null;
+      });
+    return this.jwksRefresh;
   }
 
   private async fetchJwks(): Promise<Jwks | null> {

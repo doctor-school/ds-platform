@@ -138,6 +138,18 @@ export const STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE = "oidc:silent-check";
 export const STOREFRONT_SILENT_CHECK_PER_IP_15MIN = 1200;
 
 /**
+ * 003 EARS-65, ADR-0015 §4 req. 9 — the OIDC Back-Channel Logout endpoint
+ * keys its per-IP window under its own bucket. Its caller is Zitadel itself
+ * (one address), posting one logout token per ended session per storefront
+ * client, so «sign out on all devices» or a console bulk termination is a
+ * burst from one IP: the ceiling is the storefront NAT sizing, never the
+ * password limiter's 20. A token is useless without the issuer's signature,
+ * so the bound is against flooding, not guessing.
+ */
+export const BACK_CHANNEL_LOGOUT_RATE_LIMIT_SCOPE = "oidc:back-channel-logout";
+export const BACK_CHANNEL_LOGOUT_PER_IP_15MIN = 1200;
+
+/**
  * EARS-13 defaults (ADR-0001 §7): per-user 10/15 min, per-IP 20/15 min (failed
  * verifications, #2684), sending-door per-IP 60/15 min (#2684), per-ASN
  * 100/h. The per-user ceiling was raised 5 → 10 (#222) so a legitimate
@@ -158,6 +170,7 @@ export const DEFAULT_RATE_LIMIT_THRESHOLDS: RateLimitThresholds = {
     [STOREFRONT_ENTRY_RATE_LIMIT_SCOPE]: STOREFRONT_ENTRY_PER_IP_15MIN,
     [STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE]:
       STOREFRONT_SILENT_CHECK_PER_IP_15MIN,
+    [BACK_CHANNEL_LOGOUT_RATE_LIMIT_SCOPE]: BACK_CHANNEL_LOGOUT_PER_IP_15MIN,
   },
 };
 

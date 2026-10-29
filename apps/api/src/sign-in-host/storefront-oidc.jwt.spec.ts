@@ -4,6 +4,8 @@ import {
   buildClientAssertion,
   parseClientKey,
   verifyIdToken,
+  verifyLogoutToken,
+  BACK_CHANNEL_LOGOUT_EVENT,
   type Jwks,
 } from "./storefront-oidc.jwt.js";
 
@@ -159,5 +161,87 @@ describe("storefront ID token verification (003 EARS-62 / EARS-8)", () => {
       "a.b",
     ];
     for (const token of bad) expect(verifyIdToken(token, opts)).toBeNull();
+  });
+});
+
+describe("back-channel logout token verification (003 EARS-65, ADR-0015 §4 req. 6)", () => {
+  const { privateKey, publicKey } = keyPair();
+  const foreign = keyPair();
+  const jwks: Jwks = {
+    keys: [
+      {
+        ...publicKey.export({ format: "jwk" }),
+        kid: "sig-1",
+        alg: "RS256",
+        use: "sig",
+      },
+    ],
+  };
+  const now = new Date("2026-10-29T10:00:00Z");
+  const nowS = now.getTime() / 1000;
+  const header = { alg: "RS256", kid: "sig-1", typ: "logout+jwt" };
+  const claims = {
+    iss: ISSUER,
+    aud: CLIENT,
+    sub: "user-1",
+    sid: "zitadel-session-1",
+    jti: "jti-1",
+    iat: nowS - 5,
+    exp: nowS + 120,
+    events: { [BACK_CHANNEL_LOGOUT_EVENT]: {} },
+  };
+  const opts = {
+    jwks,
+    issuer: ISSUER,
+    clientIds: [CLIENT, "doctor-client"],
+    now,
+  };
+
+  it("EARS-65: a well-signed logout token for either storefront client yields its sid and sub", () => {
+    expect(
+      verifyLogoutToken(signJwt(header, claims, privateKey), opts),
+    ).toEqual({ sid: "zitadel-session-1", sub: "user-1" });
+    expect(
+      verifyLogoutToken(
+        signJwt(header, { ...claims, aud: ["doctor-client"] }, privateKey),
+        opts,
+      ),
+    ).toEqual({ sid: "zitadel-session-1", sub: "user-1" });
+    const { sub: _sub, ...noSub } = claims;
+    expect(verifyLogoutToken(signJwt(header, noSub, privateKey), opts)).toEqual(
+      { sid: "zitadel-session-1", sub: null },
+    );
+  });
+
+  it("EARS-65: an unsigned, foreign-signed, foreign-audience, foreign-issuer, nonce-carrying, event-less, sid-less, expired or malformed token is refused", () => {
+    const sign = (h: Record<string, unknown>, p: Record<string, unknown>) =>
+      signJwt(h, p, privateKey);
+    const [h, p] = sign(header, claims).split(".");
+    const { sid: _sid, ...noSid } = claims;
+    const { events: _events, ...noEvents } = claims;
+    const { iat: _iat, ...noIat } = claims;
+    for (const token of [
+      `${h}.${p}.`,
+      `${b64({ alg: "none" })}.${p}.`,
+      signJwt(header, claims, foreign.privateKey),
+      sign({ ...header, kid: "other" }, claims),
+      sign({ ...header, alg: "HS256" }, claims),
+      sign(header, { ...claims, aud: "someone-else" }),
+      sign(header, { ...claims, iss: "https://evil.test" }),
+      sign(header, { ...claims, nonce: "n-1" }),
+      sign(header, noEvents),
+      sign(header, { ...claims, events: { "http://other/event": {} } }),
+      sign(header, { ...claims, events: [BACK_CHANNEL_LOGOUT_EVENT] }),
+      sign(header, noSid),
+      sign(header, { ...claims, sid: "" }),
+      sign(header, noIat),
+      sign(header, { ...claims, iat: nowS + 600 }),
+      sign(header, { ...claims, exp: nowS - 1 }),
+      "not-a-jwt",
+      "a.b.c",
+      "",
+    ]) {
+      expect(verifyLogoutToken(token, opts)).toBeNull();
+    }
   });
 });

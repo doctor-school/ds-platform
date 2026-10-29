@@ -1,11 +1,20 @@
-import { randomBytes } from "node:crypto";
+import { generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import type { LinkedRefreshResult } from "../auth/session/shared-session.js";
 import type {
   CodeRedemption,
   StorefrontOidcIdp,
   StorefrontTokens,
 } from "./storefront-oidc.idp.js";
+import {
+  BACK_CHANNEL_LOGOUT_EVENT,
+  verifyLogoutToken,
+  type Jwks,
+  type VerifiedLogoutToken,
+} from "./storefront-oidc.jwt.js";
 import { s256 } from "./storefront-oidc.service.js";
+
+/** The fake issuer: the authorize endpoint base and every logout token `iss`. */
+export const FAKE_STOREFRONT_ISSUER = "http://idp.e2e.test";
 
 interface IssuedCode {
   readonly clientId: string;
@@ -18,7 +27,6 @@ interface IssuedCode {
   readonly expiresAtMs: number;
   used: boolean;
 }
-
 
 /**
  * In-memory {@link StorefrontOidcIdp} for the API e2e: the test issues a code
@@ -36,10 +44,75 @@ export class FakeStorefrontOidc implements StorefrontOidcIdp {
   readonly refreshes: Array<{ clientId: string; refreshToken: string }> = [];
   /** Live refresh token → the client it was issued to (single use, as Zitadel rotates). */
   private readonly liveRefresh = new Map<string, string>();
+  /**
+   * 003 EARS-65 — the fake issuer signing key: the e2e signs logout tokens as
+   * Zitadel would, and they are verified by the same {@link verifyLogoutToken}
+   * the real adapter runs, against this JWKS.
+   */
+  private readonly signing = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+  });
+  private readonly jwks: Jwks = {
+    keys: [
+      {
+        ...this.signing.publicKey.export({ format: "jwk" }),
+        kid: "fake-sig-1",
+        alg: "RS256",
+        use: "sig",
+      },
+    ],
+  };
+
+  /** `clientIds` — the storefront clients a logout token may be addressed to. */
+  constructor(private readonly clientIds: ReadonlyArray<string> = []) {}
+
+  verifyLogoutToken(token: string): Promise<VerifiedLogoutToken | null> {
+    return Promise.resolve(
+      verifyLogoutToken(token, {
+        jwks: this.jwks,
+        issuer: FAKE_STOREFRONT_ISSUER,
+        clientIds: this.clientIds,
+        now: new Date(),
+      }),
+    );
+  }
+
+  /**
+   * A logout token as Zitadel posts it (BCL §2.4), signed by the fake issuer;
+   * `claims` overrides or (with `undefined`) removes a member.
+   */
+  signLogoutToken(input: {
+    aud: string;
+    sid: string;
+    sub?: string;
+    claims?: Record<string, unknown>;
+  }): string {
+    const iat = Math.floor(Date.now() / 1000);
+    const payload: Record<string, unknown> = {
+      iss: FAKE_STOREFRONT_ISSUER,
+      aud: input.aud,
+      ...(input.sub ? { sub: input.sub } : {}),
+      sid: input.sid,
+      jti: randomBytes(8).toString("hex"),
+      iat,
+      exp: iat + 120,
+      events: { [BACK_CHANNEL_LOGOUT_EVENT]: {} },
+      ...input.claims,
+    };
+    const part = (v: unknown) =>
+      Buffer.from(JSON.stringify(v)).toString("base64url");
+    const signed = `${part({ alg: "RS256", kid: "fake-sig-1", typ: "logout+jwt" })}.${part(payload)}`;
+    const signature = sign(
+      "sha256",
+      Buffer.from(signed),
+      this.signing.privateKey,
+    );
+    return `${signed}.${signature.toString("base64url")}`;
+  }
 
   /** The fake issuer's authorize endpoint — the e2e reads its parameters, never follows it. */
   authorizeEndpoint(): string {
-    return "http://idp.e2e.test/oauth/v2/authorize";
+    return `${FAKE_STOREFRONT_ISSUER}/oauth/v2/authorize`;
   }
 
   refreshTokens(input: {

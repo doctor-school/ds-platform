@@ -3,6 +3,7 @@ import { FakeIdpClient } from "../idp/idp.fake.js";
 import { InMemorySessionStore } from "./session-store.fake.js";
 import { InMemoryAuthAuditLog } from "./auth-audit.fake.js";
 import { SessionService } from "./session.service.js";
+import { SharedSessionHub } from "./shared-session.js";
 import { SubjectRevocationHub } from "./subject-revocation.js";
 import { parseCookies, SESSION_COOKIE_NAME } from "./session.cookie.js";
 
@@ -167,5 +168,58 @@ describe("SessionService — subject revocation hook", () => {
       hub,
     );
     await expect(svc.revokeAllForSub("sub")).rejects.toThrow("down");
+  });
+
+  it("EARS-65: refresh-token reuse detected on a linked session revokes the whole linked set on both storefronts", async () => {
+    const store = new InMemorySessionStore();
+    const audit = new InMemoryAuthAuditLog();
+    const shared = new SharedSessionHub();
+    shared.registerRefresher({
+      refreshLinked: () => Promise.resolve({ reuseDetected: true }),
+    });
+    const svc = new SessionService(
+      new FakeIdpClient(),
+      store,
+      audit,
+      new SubjectRevocationHub(),
+      shared,
+    );
+    const claims = { sub: "sub-linked", roles: ["doctor_guest"], mfa: false };
+    const mint = async (
+      client: "academy" | "doctor",
+      zitadelSessionId: string,
+    ) =>
+      parseCookies(
+        (
+          await svc.mintLinked({
+            zitadelSessionId,
+            client,
+            claims,
+            accessToken: "at",
+            refreshToken: `rt-${client}-${zitadelSessionId}`,
+            fingerprint: "fp-device-1",
+            expiresAtMs: Date.now() + 3600_000,
+          })
+        ).cookie,
+      )[SESSION_COOKIE_NAME] as string;
+    const academy = await mint("academy", "zs-1");
+    const doctor = await mint("doctor", "zs-1");
+    const otherBrowser = await mint("doctor", "zs-2");
+
+    expect((await svc.refresh(academy)).status).toBe("reuse_detected");
+
+    expect(await store.get(academy)).toBeUndefined();
+    expect(await store.get(doctor)).toBeUndefined();
+    expect(await store.get(otherBrowser)).toBeDefined();
+    expect(audit.events).toContainEqual({
+      type: "RefreshReuseDetected",
+      sub: "sub-linked",
+      sid: academy,
+    });
+    expect(audit.events).toContainEqual({
+      type: "SessionRevoked",
+      sub: "sub-linked",
+      sid: doctor,
+    });
   });
 });

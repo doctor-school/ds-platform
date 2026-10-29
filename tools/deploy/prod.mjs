@@ -312,20 +312,27 @@ export function deployPlan({ local = false, redeploy = false } = {}) {
  * The cursor `deploy()` walks the plan with. `phase(id)` enters a phase every run
  * executes; `operatorPhase(id)` an operator-only one, answering whether this run
  * executes it. Either refuses a phase out of `DEPLOY_PLAN` order or a skipped phase
- * this run executes; `done()` refuses a run that left one out.
+ * this run executes; `done()` refuses a run that left one out. `current()` names the
+ * phase this run is in — the last one entered that it executes, null before the
+ * first: the phase a failed release's `status` names (#3439).
  */
 export function planWalker({ local = false, redeploy = false } = {}) {
   const plan = deployPlan({ local, redeploy });
   let at = 0;
+  let current = null;
   const advance = (id) => {
     const index = DEPLOY_PLAN.indexOf(id, at);
     if (index < 0) throw new Error(`deploy phase ${id} is out of plan order`);
     const missed = DEPLOY_PLAN.slice(at, index).find((skipped) => plan.includes(skipped));
     if (missed) throw new Error(`deploy phase ${missed} was left out before ${id}`);
     at = index + 1;
+    if (plan.includes(id)) current = id;
     return plan.includes(id);
   };
   return {
+    current() {
+      return current;
+    },
     phase(id) {
       if (OPERATOR_ONLY_STEPS.includes(id)) throw new Error(`${id} is an operator-only phase`);
       if (REDEPLOY_SKIPPED_STEPS.includes(id)) throw new Error(`${id} is a release-only phase`);
@@ -345,6 +352,43 @@ export function planWalker({ local = false, redeploy = false } = {}) {
       if (missed) throw new Error(`deploy phase ${missed} was left out`);
     },
   };
+}
+
+/** The longest reason a failure note carries (#3439). */
+export const RELEASE_FAILURE_REASON_MAX = 160;
+
+/** The reason of every failure that is not one of prod.mjs's authored refusals (#3439). */
+export const UNEXPECTED_FAILURE_REASON = "unexpected error — see the box journal";
+
+/**
+ * The note a failed release leaves for the release driver (#3439): the phase it failed
+ * in and a one-line reason. The driver records it for `status prod <sha>`, whose line
+ * is a public Actions log, so the reason is an allow-list: only a refusal prod.mjs
+ * authors — a `die(…, { authored: true })` whose first line interpolates no foreign
+ * text (no Error message, stderr or box output) — gives its first line, control
+ * characters folded to one space, bounded. Any other message (the catch-all, a wrapped
+ * child-process error, a JSON.parse or network error) gives UNEXPECTED_FAILURE_REASON;
+ * the full message stays in the unit's journal.
+ */
+export function releaseFailureNote(phase, message, { authored = false } = {}) {
+  if (!authored) return { phase: phase ?? null, reason: UNEXPECTED_FAILURE_REASON };
+  const line =
+    String(message ?? "")
+      .split(/\r?\n/)
+      // eslint-disable-next-line no-control-regex -- the control characters are what is folded
+      .map((l) => l.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim())
+      .find(Boolean) ?? "";
+  const reason =
+    line.length > RELEASE_FAILURE_REASON_MAX
+      ? `${line.slice(0, RELEASE_FAILURE_REASON_MAX - 1)}…`
+      : line;
+  return { phase: phase ?? null, reason };
+}
+
+/** A red smoke's `die()` reason: its exit code and the labels of its failing probes. */
+export function smokeFailureReason(code, labels) {
+  const failed = labels.length > 0 ? `: failed probes ${labels.join(", ")}` : "";
+  return `prod smoke RED (exit ${code})${failed} — the new build is unhealthy`;
 }
 
 /**
@@ -1030,7 +1074,7 @@ async function assertProdApiEnvHasNoTestToken() {
   const verdict = apiEnvTestTokenVerdict(
     await sshCapture(API_PROD, apiEnvTestTokenProbeScript()),
   );
-  if (!verdict.ok) die(verdict.reason);
+  if (!verdict.ok) die(verdict.reason, { authored: true });
   ok(`${API_PROD_ENV_FILE}: no BOT_PROTECTION_TEST_TOKEN`);
 }
 
@@ -1137,11 +1181,11 @@ async function assertProdApiEnvCarriesRuntimeEnv(sha, services) {
     die(`cannot read the runtime-env contract of ${sha.slice(0, 12)} (${e.message}). Nothing was changed.`);
   }
   if (contract.envFile !== API_PROD_ENV_FILE) {
-    die(`the runtime-env contract names ${contract.envFile}, the release reads ${API_PROD_ENV_FILE}. Nothing was changed.`);
+    die(`the runtime-env contract names ${contract.envFile}, the release reads ${API_PROD_ENV_FILE}. Nothing was changed.`, { authored: true });
   }
   const names = requiredRuntimeEnv(contract, services);
   const verdict = apiEnvRuntimeEnvVerdict(await sshCapture(API_PROD, apiEnvRuntimeEnvProbeScript(names)), names);
-  if (!verdict.ok) die(verdict.reason);
+  if (!verdict.ok) die(verdict.reason, { authored: true });
   ok(`${API_PROD_ENV_FILE}: ${names.length} required runtime variables set`);
 }
 
@@ -1252,9 +1296,24 @@ function ok(msg, since) {
   const dt = since ? ` (${((Date.now() - since) / 1000).toFixed(1)}s)` : "";
   console.log(`  ✓ ${msg}${dt}`);
 }
-function die(msg, { rollbackHint } = {}) {
+// The plan cursor of the running deploy: the phase a failure note names (#3439).
+let currentWalk = null;
+// `authored` (#3439): the first line of `msg` is prod.mjs's own refusal text and may
+// become the public failure reason; anything else is reported as unexpected.
+function die(msg, { rollbackHint, authored = false } = {}) {
   console.error(`\n✗ DEPLOY FAILED: ${msg}`);
   closeOpenReleaseAsFailed();
+  // #3439: the release driver's unit sets the file; it records the note for `status`.
+  if (process.env.DS_RELEASE_FAILURE_FILE) {
+    try {
+      writeFileSync(
+        process.env.DS_RELEASE_FAILURE_FILE,
+        `${JSON.stringify(releaseFailureNote(currentWalk?.current() ?? null, msg, { authored }))}\n`,
+      );
+    } catch (e) {
+      console.error(`  ⚠ could not write the failure note for status (${e.message})`);
+    }
+  }
   if (rollbackHint) {
     console.error(
       `\n  Rollback pointer: the prod boxes were NOT hand-patched. To revert the\n` +
@@ -1404,7 +1463,7 @@ async function assertPullToken() {
   const token = pullTokenVerdict(await sshCapture(API_PROD, pullTokenProbeScript()), {
     host: API_PROD,
   });
-  if (!token.ok) die(token.reason);
+  if (!token.ok) die(token.reason, { authored: true });
   ok(`registry pull token provisioned on ${API_PROD}`);
 }
 
@@ -1889,7 +1948,7 @@ async function provisionIdp(sha, label = sha.slice(0, 12)) {
     die(
       `cannot resolve PASSWORD_MIN_LENGTH from ${SCHEMAS_AUTH_SCHEMA_PATH} at ${label}` +
         ` — ${IDP_ROLLBACK_HINT}:\n  ${e.message}`,
-      { rollbackHint: true },
+      { rollbackHint: true, authored: true },
     );
   }
   console.log(
@@ -1919,7 +1978,7 @@ ${storefrontClientIdsEnvScript("$ids")}
         ` instance configuration is in an UNKNOWN state (provision.sh is idempotent,` +
         ` so a re-run is safe once the cause is fixed):\n  ${e.message}\n` +
         `  Manual recovery path: infra/deploy/README.md → step 9.`,
-      { rollbackHint: true },
+      { rollbackHint: true, authored: true },
     );
   }
 
@@ -1931,7 +1990,7 @@ ${storefrontClientIdsEnvScript("$ids")}
   // does not read them, so it is not held to them.
   if (provisionWritesStorefrontSecrets(targetFile(sha, IDP_PROVISION_SCRIPT_PATH))) {
     const secrets = storefrontSecretsVerdict(await sshCapture(API_PROD, storefrontSecretsProbeScript()));
-    if (!secrets.ok) die(`${secrets.reason} — ${IDP_ROLLBACK_HINT}`, { rollbackHint: true });
+    if (!secrets.ok) die(`${secrets.reason} — ${IDP_ROLLBACK_HINT}`, { rollbackHint: true, authored: true });
     ok(
       `${API_SIGN_IN_ENV_FILE}: ${STOREFRONT_SECRET_NAMES.join(", ")} present; ` +
         `${INTERNAL_ENV_FILE}: the same INTERNAL_API_TOKEN only; no client key in ${API_PROD_ENV_FILE}`,
@@ -1948,7 +2007,7 @@ ${storefrontClientIdsEnvScript("$ids")}
     die(
       `cannot READ BACK the prod IdP password-complexity policy — ${IDP_ROLLBACK_HINT}.` +
         ` An unreadable policy is a failed deploy, never an assumed-good one:\n  ${e.message}`,
-      { rollbackHint: true },
+      { rollbackHint: true, authored: true },
     );
   }
 
@@ -1962,7 +2021,7 @@ ${storefrontClientIdsEnvScript("$ids")}
       `prod IdP policy read-back REJECTED — ${IDP_ROLLBACK_HINT}:\n  ${e.message}\n` +
         `  Re-run the converge by hand (infra/deploy/README.md → step 9) and inspect` +
         ` the instance before serving registrations (#1994).`,
-      { rollbackHint: true },
+      { rollbackHint: true, authored: true },
     );
   }
 
@@ -1981,7 +2040,7 @@ ${storefrontClientIdsEnvScript("$ids")}
       `cannot resolve the expected code-generator shape from ${IDP_PROVISION_SCRIPT_PATH}` +
         ` / ${SCHEMAS_REGISTER_FIELDS_PATH} / ${CODE_EMAILS_PATH} at ${label} — ${IDP_ROLLBACK_HINT}:
   ${e.message}`,
-      { rollbackHint: true },
+      { rollbackHint: true, authored: true },
     );
   }
   if (!codeExpectation.check) {
@@ -2002,7 +2061,7 @@ ${storefrontClientIdsEnvScript("$ids")}
         `cannot READ BACK the prod IdP code generator ${type} — ${IDP_ROLLBACK_HINT}.` +
           ` An unreadable generator is a failed deploy, never an assumed-good one:
   ${e.message}`,
-        { rollbackHint: true },
+        { rollbackHint: true, authored: true },
       );
     }
     try {
@@ -2023,7 +2082,7 @@ ${storefrontClientIdsEnvScript("$ids")}
           `  A length/alphabet mismatch: re-run the converge by hand (infra/deploy/README.md → step 9),` +
           ` or sign-in codes would not match the shipped code input (#2555, #2636). An expiry` +
           ` mismatch: apply the remedy named above (#2814).`,
-        { rollbackHint: true },
+        { rollbackHint: true, authored: true },
       );
     }
   }
@@ -2043,6 +2102,7 @@ function resolveTargetServiceSet(sha, label = sha.slice(0, 12)) {
     die(
       `cannot read ${API_PROD_COMPOSE_PATH} at ${label} — the deploy cannot know` +
         ` which services it must verify:\n  ${e.message}`,
+      { authored: true },
     );
   }
   try {
@@ -2077,7 +2137,7 @@ async function verifyRunningSha(sha, services) {
       `running containers do NOT carry the deployed SHA (or never got healthy):\n` +
         `  ${out}\n` +
         `  The success line would be a lie — treating this deploy as FAILED.`,
-      { rollbackHint: true },
+      { rollbackHint: true, authored: true },
     );
   }
   ok(
@@ -2138,6 +2198,7 @@ async function verifyImagesBoot(sha, services) {
         .join(", ")}\n` +
         `  Nothing was swapped — the PREVIOUS containers are still up and serving.\n` +
         `  Fix the image (see the boot log above) and re-run the deploy (#1407/#1410).`,
+      { authored: true },
     );
   }
   ok(
@@ -2218,6 +2279,7 @@ async function deploy(hotfixRef = null, local = null) {
   // #3354: a redeploy of the live SHA recreates the app tier only (REDEPLOY_SKIPPED_STEPS).
   const redeploy = Boolean(local?.redeploy);
   const walk = planWalker({ local: Boolean(local), redeploy });
+  currentWalk = walk;
   const { sha, images } = walk.operatorPhase("preflight")
     ? await preflight(hotfixRef)
     : await readLocalRelease(local.imagesFile);
@@ -2281,7 +2343,7 @@ async function deploy(hotfixRef = null, local = null) {
       sha,
       status: prevSha ? await compareStatus(prevSha, sha) : null,
     });
-    if (!descent.ok) die(descent.reason);
+    if (!descent.ok) die(descent.reason, { authored: true });
     try {
       await sshScript(API_PROD, recordPreviousShaScript(sha, prevSha), {
         label: "record the previous SHA",
@@ -2538,22 +2600,36 @@ function runSmoke(sha, services) {
       console.log(`  ℹ the deploy target ships no ${image} image — its vhost probes are skipped for this smoke (#1896).`);
     }
   }
+  // #3439: the smoke writes the labels of its failing probes here, so the red verdict
+  // (and `status prod <sha>`) says which probe failed.
+  const failedDir = mkdtempSync(join(tmpdir(), "ds-smoke-"));
+  const failedFile = join(failedDir, "failed");
   return new Promise((resolve) => {
     const child = spawn(
       process.execPath,
       [join(import.meta.dirname, "smoke-prod.mjs"), "--expect-sha", sha],
       {
         stdio: "inherit",
-        env,
+        env: { ...env, DS_SMOKE_FAILED_FILE: failedFile },
       },
     );
     child.on("close", (code) => {
+      let labels = [];
+      try {
+        labels = readFileSync(failedFile, "utf8")
+          .split("\n")
+          .filter((l) => /^[a-z0-9][a-z0-9 ._:/-]{0,40}$/i.test(l));
+      } catch {
+        // no file: the smoke stopped before its probes ran
+      }
+      rmSync(failedDir, { recursive: true, force: true });
       if (code === 0) {
         ok("prod smoke green");
         resolve();
       } else {
-        die(`prod smoke RED (exit ${code}) — the new build is unhealthy`, {
+        die(smokeFailureReason(code, labels), {
           rollbackHint: true,
+          authored: true,
         });
       }
     });

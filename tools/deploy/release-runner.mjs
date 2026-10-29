@@ -128,14 +128,64 @@ const ROLLBACK_START_OUTCOMES = Object.freeze([
 /** The flags each command admits; anything else is refused. */
 const COMMAND_FLAGS = Object.freeze({
   preflight: ["--sha"],
-  record: ["--sha", "--state", "--previous-sha"],
+  record: ["--sha", "--state", "--previous-sha", "--failed-phase", "--failed-reason"],
+  "release-status": ["--sha"],
   "rollback-preflight": ["--sha"],
   "rollback-verdict": ["--sha", "--since"],
   "rollback-record": ["--sha", "--state", "--from-sha", "--why", "--start"],
   "rollback-notice": ["--sha", "--state", "--why"],
   "redeploy-preflight": ["--sha"],
-  "redeploy-record": ["--sha", "--state"],
+  "redeploy-record": ["--sha", "--state", "--failed-phase", "--failed-reason"],
 });
+
+/** The longest failure reason a status line or record carries (#3439). */
+export const FAILURE_REASON_MAX = 160;
+const PHASE_ID = /^[a-z][a-z0-9-]{0,39}$/;
+
+/**
+ * A failed release's note (#3439) — the box driver's `driver.failure` of
+ * `status prod <sha>`, or the record step's `--failed-phase` / `--failed-reason` —
+ * bounded again on this side of the public log: the phase a strict id or null, the
+ * reason one control-free line of at most FAILURE_REASON_MAX characters or null.
+ * Null when neither is there.
+ */
+export function releaseFailure(note) {
+  if (typeof note !== "object" || note === null) return null;
+  const phase = typeof note.phase === "string" && PHASE_ID.test(note.phase) ? note.phase : null;
+  let reason =
+    typeof note.reason === "string"
+      ? // eslint-disable-next-line no-control-regex -- the control characters are what is folded
+        note.reason.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim()
+      : "";
+  if (reason.length > FAILURE_REASON_MAX) reason = `${reason.slice(0, FAILURE_REASON_MAX - 1)}…`;
+  if (phase === null && !reason) return null;
+  return { phase, reason: reason || null };
+}
+
+/**
+ * The deploy job's status line of one `status prod <sha>` reply, or null when the
+ * reply is unreadable. A failed run's note follows as `phase=<id> reason=<line>`
+ * (#3439): the step ds-release recorded last is not where a red smoke or an early
+ * refusal stopped.
+ */
+export function releaseStatusLine(text) {
+  let doc;
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (typeof doc !== "object" || doc === null) return null;
+  const driver = typeof doc.driver === "object" && doc.driver !== null ? doc.driver : {};
+  const release = typeof doc.release === "object" && doc.release !== null ? doc.release : {};
+  const word = (v, empty) => (v === null || v === undefined || v === "" ? empty : String(v));
+  let line =
+    `driver=${word(driver.active, "?")} rc=${word(driver.rc, "-")} ` +
+    `step=${word(release.step, "-")} state=${word(release.state, "-")}`;
+  const failure = releaseFailure(driver.failure);
+  if (failure) line += ` phase=${failure.phase ?? "-"} reason=${failure.reason ?? "-"}`;
+  return line;
+}
 
 /** Parse the CLI. Unknown flags are refused, so no escape hatch can be passed. */
 export function parseRunnerArgs(argv) {
@@ -168,6 +218,10 @@ export function parseRunnerArgs(argv) {
     return { command, sha, since: since === null ? null : Number(since) };
   }
   if (!allowed.includes("--state")) return { command, sha };
+  const failure = releaseFailure({
+    phase: values["--failed-phase"] || null,
+    reason: values["--failed-reason"] || null,
+  });
 
   const state = values["--state"];
   if (!Object.hasOwn(RECORD_STATES, state ?? "")) {
@@ -188,7 +242,7 @@ export function parseRunnerArgs(argv) {
     };
   }
   if (command === "rollback-notice") return { command, sha, state, why };
-  if (command === "redeploy-record") return { command, sha, state };
+  if (command === "redeploy-record") return { command, sha, state, failure };
   const shaFlag = command === "record" ? "--previous-sha" : "--from-sha";
   const other = values[shaFlag] || null;
   if (other !== null && !FULL_SHA.test(other)) {
@@ -197,7 +251,7 @@ export function parseRunnerArgs(argv) {
     };
   }
   return command === "record"
-    ? { command, sha, state, previousSha: other }
+    ? { command, sha, state, previousSha: other, failure }
     : { command, sha, state, fromSha: other, why, start };
 }
 
@@ -416,6 +470,7 @@ export async function runRecord({
   state,
   previousSha,
   ownerQuote,
+  failure = null,
   cut = (args) => cutDeployRelease(args),
   record = (args) => recordDeployment(args),
   successRecorded = (s) => successRecordExistsViaGh({ sha: s }),
@@ -453,6 +508,7 @@ export async function runRecord({
     state: deploymentState,
     ownerQuote,
     healthUrl: PROD_HEALTH_URL,
+    failure,
     log,
   });
   return { ...res, recorded: "new" };
@@ -805,6 +861,7 @@ export async function runRedeployRecord({
   sha,
   state,
   ownerQuote,
+  failure = null,
   create = (args) => createDeploymentRecord(args),
   log = (l) => console.log(l),
 }) {
@@ -822,6 +879,7 @@ export async function runRedeployRecord({
     state: deploymentState,
     ownerQuote,
     redeploy: true,
+    failure,
   });
   if (res.ok) {
     log(
@@ -861,6 +919,12 @@ async function main() {
     console.error(`::error::release-runner: ${args.error}`);
     process.exit(2);
   }
+  if (args.command === "release-status") {
+    const line = releaseStatusLine(await readStdin());
+    if (line === null) process.exit(1);
+    console.log(line);
+    return;
+  }
   if (args.command === "rollback-verdict") {
     const v = rollbackVerdict(await readStdin(), args.sha, { since: args.since });
     const word = v.recovered
@@ -892,6 +956,7 @@ async function main() {
         sha: args.sha,
         state: args.state,
         ownerQuote: process.env.OWNER_QUOTE,
+        failure: args.failure,
       }),
     );
     if (verdict.message) console.error(verdict.message);
@@ -945,6 +1010,7 @@ async function main() {
     state: args.state,
     previousSha: args.previousSha,
     ownerQuote: process.env.OWNER_QUOTE,
+    failure: args.failure,
   });
   const verdict = reportRecord(res);
   if (verdict.message) console.error(verdict.message);

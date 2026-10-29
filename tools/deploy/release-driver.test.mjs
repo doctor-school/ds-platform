@@ -1096,6 +1096,7 @@ describe("2985: release-driver", { skip: SKIP }, () => {
         active: "active",
         rc: null,
         previousSha: null,
+        failure: null,
       });
     });
 
@@ -1764,6 +1765,8 @@ describe("2985: release-driver", { skip: SKIP }, () => {
       const dirOf = join(root, "var/lib/ds-platform/release-driver");
       mkdirSync(dirOf, { recursive: true });
       writeFileSync(join(dirOf, `${OTHER}.previous`), `${PREVIOUS}\n`);
+      // #3439: another SHA's failure note goes with it.
+      writeFileSync(join(dirOf, `${OTHER}.failure`), '{"phase":"smoke","reason":"x"}\n');
       run(["record-previous", "prod", SHA, PREVIOUS]);
       const r = run(["prod", SHA]);
       assert.equal(r.status, 0, r.stderr);
@@ -1963,6 +1966,7 @@ describe("2985: release-driver", { skip: SKIP }, () => {
           active,
           rc,
           previousSha: null,
+          failure: null,
         });
       });
     }
@@ -2092,6 +2096,98 @@ describe("2985: release-driver", { skip: SKIP }, () => {
         run(["_run", "prod", SHA], { env: { NODE_RC: "1" } }).status,
         1,
       );
+    });
+
+    describe("3439: a failed run names its phase and reason in unit-state", () => {
+      const noteFile = () =>
+        join(root, "var/lib/ds-platform/release-driver", `${SHA}.failure`);
+      const failureOf = () => {
+        const r = run(["unit-state", "prod", SHA], { input: "" });
+        assert.equal(r.status, 0, r.stderr);
+        return JSON.parse(r.stdout).failure;
+      };
+      beforeEach(() => {
+        // prod.mjs's die(): the note goes to the file the unit hands it.
+        stub(
+          join(root, "usr/local/bin/node"),
+          [
+            'printf "%s\\n" "$DS_RELEASE_FAILURE_FILE" > "$STUB_DIR/node.failure-file"',
+            'cat > /dev/null',
+            '[[ -z ${NODE_NOTE:-} ]] || printf "%s\\n" "$NODE_NOTE" > "$DS_RELEASE_FAILURE_FILE"',
+            'exit "${NODE_RC:-0}"',
+          ].join("\n"),
+        );
+      });
+
+      it("records the note prod.mjs wrote, root-only, and reports it", () => {
+        const note = {
+          phase: "smoke",
+          reason: "prod smoke RED (exit 1): failed probes api /v1/health — the new build is unhealthy",
+        };
+        const r = run(["_run", "prod", SHA], {
+          env: { NODE_RC: "1", NODE_NOTE: JSON.stringify(note) },
+        });
+        assert.equal(r.status, 1);
+        assert.match(log("node.failure-file"), /\/ds-release-driver\.[^/]+\/failure\n$/);
+        assert.equal(statSync(noteFile()).mode & 0o777, 0o600);
+        assert.deepEqual(failureOf(), note);
+      });
+
+      it("bounds the note: a strict phase id, one control-free line of at most 160 characters", () => {
+        run(["_run", "prod", SHA], {
+          env: {
+            NODE_RC: "1",
+            NODE_NOTE: JSON.stringify({ phase: "Smoke; rm", reason: `a\u0007b\nc${"x".repeat(300)}` }),
+          },
+        });
+        const failure = failureOf();
+        assert.equal(failure.phase, null);
+        assert.equal(failure.reason.length, 160);
+        assert.match(failure.reason, /^a b cx+…$/);
+      });
+
+      it("a red run without a note still names its exit", () => {
+        run(["_run", "prod", SHA], { env: { NODE_RC: "7" } });
+        assert.deepEqual(failureOf(), {
+          phase: null,
+          reason: "exited 7 without a failure note",
+        });
+      });
+
+      it("a failed download names the download phase", () => {
+        stub(join(stubs, "curl"), "exit 22");
+        assert.equal(run(["_run", "prod", SHA]).status, 1);
+        assert.equal(failureOf().phase, "download");
+      });
+
+      it("a new attempt drops the earlier note; a green run records none", () => {
+        run(["_run", "prod", SHA], {
+          env: { NODE_RC: "1", NODE_NOTE: '{"phase":"migrate","reason":"x"}' },
+        });
+        assert.equal(failureOf().phase, "migrate");
+        assert.equal(run(["_run", "prod", SHA]).status, 0);
+        assert.equal(existsSync(noteFile()), false);
+        assert.equal(failureOf(), null);
+      });
+
+      it("an attempt refused before its download reports no stale note of the earlier one", () => {
+        run(["_run", "prod", SHA], {
+          env: { NODE_RC: "1", NODE_NOTE: '{"phase":"migrate","reason":"x"}' },
+        });
+        assert.equal(failureOf().phase, "migrate");
+        rmSync(join(root, "usr/local/bin/node"));
+        const r = run(["_run", "prod", SHA]);
+        assert.equal(r.status, 1);
+        assert.match(r.stderr, /node is not installed/);
+        assert.equal(existsSync(noteFile()), false);
+        assert.equal(failureOf(), null);
+      });
+
+      it("reports null for an unreadable note", () => {
+        mkdirSync(dirname(noteFile()), { recursive: true });
+        writeFileSync(noteFile(), "not json\n");
+        assert.equal(failureOf(), null);
+      });
     });
   });
 });

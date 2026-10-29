@@ -93,6 +93,9 @@ function firstNonEmptyLine(text) {
  * @param {boolean} [args.redeploy] a redeploy record (#3354, same spec §3 item 3
  *   «Redeploy mode»): the live SHA run again, described `redeploy @ <sha12> —
  *   «<quote>»`, no release tag and no notes (it ships no new code).
+ * @param {{phase: string|null, reason: string|null}|null} [args.failure] a failed
+ *   release's or redeploy's note from `status prod <sha>` (#3439): its status
+ *   description names the phase and the one-line reason; the payload keeps both.
  */
 export function buildDeploymentPayload({
   sha,
@@ -104,6 +107,7 @@ export function buildDeploymentPayload({
   ownerQuote = null,
   rollback = null,
   redeploy = false,
+  failure = null,
 }) {
   if (!DEPLOYMENT_STATES.has(state)) {
     throw new Error(
@@ -112,7 +116,8 @@ export function buildDeploymentPayload({
   }
   const shortSha = typeof sha === "string" ? sha.slice(0, SHORT) : "";
   if (rollback) return buildRollbackPayload({ sha, shortSha, healthUrl, nowIso, state, rollback });
-  if (redeploy) return buildRedeployPayload({ sha, shortSha, healthUrl, nowIso, state, ownerQuote });
+  const failedAt = state === "failure" ? failureSuffix(failure) : "";
+  if (redeploy) return buildRedeployPayload({ sha, shortSha, healthUrl, nowIso, state, ownerQuote, failedAt, failure });
   const tagLabel = releaseTag ?? "(untagged)";
   const notes = notesText ?? "";
   const failed = state === "failure";
@@ -120,7 +125,7 @@ export function buildDeploymentPayload({
   // runner lost contact with the driver (#3179), which keeps running on the box.
   const unknown = state === "error";
   const statusSummary = failed
-    ? `release failed @ ${shortSha}`
+    ? `release failed @ ${shortSha}${failedAt}`
     : unknown
       ? `verdict unknown @ ${shortSha}: lost contact; re-dispatch the SHA to record it`
       : firstNonEmptyLine(notes) || `release ${tagLabel}`;
@@ -144,6 +149,7 @@ export function buildDeploymentPayload({
         deployedAt: nowIso,
         state,
         ownerQuote: quote,
+        ...(state === "failure" && failure ? { failure } : {}),
       },
     },
     status: {
@@ -153,6 +159,14 @@ export function buildDeploymentPayload({
       description: truncate(stripAstral(statusSummary), GH_DESCRIPTION_MAX),
     },
   };
+}
+
+// #3439: ` in <phase>: <reason>` of a failure note, or nothing without one.
+function failureSuffix(failure) {
+  if (!failure) return "";
+  const where = failure.phase ? ` in ${failure.phase}` : "";
+  const why = failure.reason ? `: ${failure.reason}` : "";
+  return `${where}${why}`;
 }
 
 // Why an `error` rollback record has no verdict (#3219): the runner lost contact, the
@@ -207,13 +221,13 @@ function buildRollbackPayload({ sha, shortSha, healthUrl, nowIso, state, rollbac
   };
 }
 
-function buildRedeployPayload({ sha, shortSha, healthUrl, nowIso, state, ownerQuote }) {
+function buildRedeployPayload({ sha, shortSha, healthUrl, nowIso, state, ownerQuote, failedAt, failure }) {
   const quote = ownerQuote ? String(ownerQuote) : null;
   const prefix = state === "failure" ? "failed " : state === "error" ? "unknown " : "";
   const intent = `${prefix}redeploy @ ${shortSha}`;
   const statusSummary =
     state === "failure"
-      ? `redeploy failed @ ${shortSha}`
+      ? `redeploy failed @ ${shortSha}${failedAt}`
       : state === "error"
         ? `redeploy verdict unknown @ ${shortSha}: lost contact with the driver`
         : `redeploy @ ${shortSha}`;
@@ -234,6 +248,7 @@ function buildRedeployPayload({ sha, shortSha, healthUrl, nowIso, state, ownerQu
         deployedAt: nowIso,
         state,
         ownerQuote: quote,
+        ...(state === "failure" && failure ? { failure } : {}),
       },
     },
     status: {
@@ -290,6 +305,7 @@ export function createDeploymentRecord({
   ownerQuote = null,
   rollback = null,
   redeploy = false,
+  failure = null,
   cwd = process.cwd(),
 }) {
   try {
@@ -304,6 +320,7 @@ export function createDeploymentRecord({
       ownerQuote,
       rollback,
       redeploy,
+      failure,
     });
 
     const created = ghApiPost(
@@ -373,6 +390,7 @@ export async function recordDeployment({
   state = "success",
   ownerQuote = null,
   healthUrl,
+  failure = null,
   cwd = process.cwd(),
   log = (line) => console.log(line),
   deps = {},
@@ -419,6 +437,7 @@ export async function recordDeployment({
       healthUrl,
       state,
       ownerQuote,
+      failure,
       cwd,
     });
     if (res.ok)

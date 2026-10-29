@@ -60,6 +60,7 @@
 // Invoked by `pnpm deploy:prod` after `up -d`; a red smoke fails the deploy loud.
 
 import { createHash, randomBytes } from "node:crypto";
+import { writeFileSync } from "node:fs";
 import https from "node:https";
 import { resolve as resolvePath } from "node:path";
 import tls from "node:tls";
@@ -630,6 +631,7 @@ async function main() {
   console.log("─".repeat(72));
   let failed = 0;
   let skipped = 0;
+  const failedNames = [];
   for (const [name, fn] of PROBES) {
     const t0 = Date.now();
     try {
@@ -646,12 +648,19 @@ async function main() {
         continue;
       }
       failed += 1;
+      failedNames.push(name);
       console.log(
         `  FAIL  ${name.padEnd(21)} ${String(Date.now() - t0).padStart(5)}ms  ${err.message}`,
       );
     }
   }
   console.log("─".repeat(72));
+  // #3439: prod.mjs's red verdict names the failing probe labels (fixed names, no
+  // detail) — the file it hands the smoke.
+  if (process.env.DS_SMOKE_FAILED_FILE) {
+    writeFileSync(process.env.DS_SMOKE_FAILED_FILE, failedNames.map((n) => `${n}
+`).join(""));
+  }
   const skipNote = skipped > 0 ? ` (${skipped} skipped)` : "";
   console.log(
     failed === 0

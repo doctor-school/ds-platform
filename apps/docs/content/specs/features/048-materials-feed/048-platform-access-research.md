@@ -1,6 +1,6 @@
 ---
 title: "Feature 048 — Server-side read access to our own platform accounts (research)"
-description: "Primary-source research, 2026-10-29: how the Academy server can read the newest publications of Doctor.School's own official accounts on Telegram, VK / VK Видео, RuTube, Dzen (and YouTube, removed from the starting set) to show them in the 048 materials feed — mechanism, auth, fields, limits, terms of use and embeds per platform, with confirmed and unconfirmed marks and source URLs."
+description: "Primary-source research, 2026-10-29: how the Academy server can read the newest publications of BBM Academy's own official accounts on Telegram, VK / VK Видео, RuTube, Dzen (and YouTube, removed from the starting set) to show them in the 048 materials feed — mechanism, auth, fields, limits, terms of use and embeds per platform, with confirmed and unconfirmed marks and source URLs."
 slug: two-site-ia-048-platform-access-research
 status: Draft
 surface: user-facing
@@ -9,7 +9,7 @@ lang: en
 
 > Input to the [048 PRD](./048-product.md) (Prior art) and to the 048 design spec. Embed rows record what each platform offers; they are not a plan — 048 opens every external original on its platform in a new tab. EN only: a technical research note, not an owner-facing product document.
 
-**Scope.** `academy.doctor.school` shows the newest publications of Doctor.School's own official accounts (we are their admins) in one mixed, date-sorted feed rendered in our own design. The question per platform: is there a documented, lawful server-side read path, what does it return, and what may we store and show.
+**Scope.** `academy.doctor.school` shows the newest publications of BBM Academy's own official accounts (we are their admins) in one mixed, date-sorted feed rendered in our own design. The question per platform: is there a documented, lawful server-side read path, what does it return, and what may we store and show.
 
 **Method.** Primary sources only: official API docs, terms of use, official help, official GitHub. Checked on 2026-10-29.
 

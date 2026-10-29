@@ -13,10 +13,11 @@ import { evidenceShot } from "./support/evidence-shot";
  * The unit rows (`lib/event-form-fields.test.ts`, `lib/event-create-vars.test.ts`,
  * `lib/event-update-vars.test.ts`) prove the projection and the request bodies;
  * the API e2e (`apps/api/test/admin/edit-event.e2e-spec.ts`) proves the column.
- * What only a browser proves is the operator's round trip: the option is off on
- * a new event, ticking it and saving persists it (the reopened editor shows it
- * on), the public read then serves `signUpCount: null` (019 EARS-19), and
- * unticking it brings the number back.
+ * What only a browser proves is the operator's round trip: the option is on for
+ * a new event (#3479 — hidden unless the operator turns it off), so the public
+ * read serves `signUpCount: null` (019 EARS-19); unticking it and saving
+ * persists it (the reopened editor shows it off) and brings the number back;
+ * ticking it again hides the number.
  *
  * The spec creates its OWN published event (titled with the run's timestamp, so
  * a re-run never collides) and takes it off every storefront at the end.
@@ -74,21 +75,21 @@ async function saveAndReopen(page: Page, eventId: string): Promise<void> {
 }
 
 test.describe("007 EARS-12 — «Скрыть число записавшихся» in the event editor", () => {
-  test("007 EARS-12: the create form offers the option off, and not on an архивный эфир", async ({
+  test("007 EARS-12: the create form offers the option ticked (#3479), and not on an архивный эфир", async ({
     page,
   }) => {
     await signInAsAdmin(page);
     await page.goto("/events/create");
     const option = page.getByLabel(OPTION_LABEL);
     await expect(option).toBeVisible();
-    await expect(option).not.toBeChecked();
+    await expect(option).toBeChecked();
     // The legacy create body has no such key — the box is not offered there.
     await toggle(page, "legacy-toggle");
     await expect(page.getByTestId("legacy-toggle")).toBeChecked();
     await expect(page.getByTestId("hide-sign-up-count")).toHaveCount(0);
   });
 
-  test("007 EARS-12 / 019 EARS-19: on → saved, reopened on, public count null; off → the number returns", async ({
+  test("007 EARS-12 / 019 EARS-19: on by default, public count null; off → saved, reopened off, the number returns; on again → null", async ({
     page,
   }) => {
     await signInAsAdmin(page);
@@ -99,22 +100,22 @@ test.describe("007 EARS-12 — «Скрыть число записавшихс�
     );
     try {
       const option = page.getByLabel(OPTION_LABEL);
-      await expect(option).not.toBeChecked();
-      expect(typeof (await publicSignUpCount(page, id))).toBe("number");
-
-      await toggle(page, "hide-sign-up-count");
       await expect(option).toBeChecked();
-      await saveAndReopen(page, id);
-      await expect(page.getByLabel(OPTION_LABEL)).toBeChecked();
       expect(await publicSignUpCount(page, id)).toBeNull();
       await page.getByTestId("hide-sign-up-count").scrollIntoViewIfNeeded();
       await evidenceShot(page, "admin-edit-option-on");
 
       await toggle(page, "hide-sign-up-count");
-      await expect(page.getByLabel(OPTION_LABEL)).not.toBeChecked();
+      await expect(option).not.toBeChecked();
       await saveAndReopen(page, id);
       await expect(page.getByLabel(OPTION_LABEL)).not.toBeChecked();
       expect(typeof (await publicSignUpCount(page, id))).toBe("number");
+
+      await toggle(page, "hide-sign-up-count");
+      await expect(page.getByLabel(OPTION_LABEL)).toBeChecked();
+      await saveAndReopen(page, id);
+      await expect(page.getByLabel(OPTION_LABEL)).toBeChecked();
+      expect(await publicSignUpCount(page, id)).toBeNull();
     } finally {
       await retireEventFromStorefronts(page, id);
     }

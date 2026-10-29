@@ -57,9 +57,10 @@ export function eventFormFields(detail?: EventAdminDetail): EventFormFields {
     audience: detail?.audience ?? "",
     // The project link is a create-time choice; on EDIT the «Проекты» tab owns it.
     projectId: "",
-    // 007 EARS-12 (#2913) — «Скрыть число записавшихся»: the event's own state,
-    // off on CREATE. No admin read carries the registrant count itself.
-    hideSignUpCount: detail?.hideSignUpCount ?? false,
+    // 007 EARS-12 (#2913, #3479) — «Скрыть число записавшихся»: the event's own
+    // state, ticked on CREATE (hidden unless the operator turns it off). No
+    // admin read carries the registrant count itself.
+    hideSignUpCount: detail?.hideSignUpCount ?? true,
     // 007 EARS-13 (#2911) — «Показывать зрителям число участников»: the event's
     // own state, off on CREATE. No admin read carries the presence count itself.
     showPresenceCount: detail?.showPresenceCount ?? false,

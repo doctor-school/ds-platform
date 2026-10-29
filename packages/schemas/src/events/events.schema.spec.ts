@@ -272,12 +272,12 @@ describe("007 events schema", () => {
       expect(parsed.participationFormat).toBe("online");
     });
 
-    it("007 EARS-12: create carries the boolean «Скрыть число записавшихся», default off", () => {
-      expect(CreateEventRequestSchema.parse(base).hideSignUpCount).toBe(false);
+    it("007 EARS-12: create carries the boolean «Скрыть число записавшихся», default on (#3479)", () => {
+      expect(CreateEventRequestSchema.parse(base).hideSignUpCount).toBe(true);
       expect(
-        CreateEventRequestSchema.parse({ ...base, hideSignUpCount: true })
+        CreateEventRequestSchema.parse({ ...base, hideSignUpCount: false })
           .hideSignUpCount,
-      ).toBe(true);
+      ).toBe(false);
       expect(
         CreateEventRequestSchema.safeParse({ ...base, hideSignUpCount: "yes" })
           .success,

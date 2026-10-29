@@ -156,10 +156,11 @@ export const events = pgTable(
      * 007 EARS-12 / 019 EARS-19 (#2913) — «Скрыть число записавшихся». A plain
      * authored display attribute (not lifecycle visibility, EARS-9): while it
      * is `true` every public card read serves `signUpCount: null`, so the
-     * number never reaches a client to be hidden there. `false` is the default
-     * and the back-fill — every existing event shows its count today.
+     * number never reaches a client to be hidden there. `true` is the default,
+     * and migration 0053 moved every existing event to `true` (#3479): the
+     * count shows only where an operator turns the option off.
      */
-    hideSignUpCount: boolean("hide_sign_up_count").notNull().default(false),
+    hideSignUpCount: boolean("hide_sign_up_count").notNull().default(true),
     /**
      * 007 EARS-13 / 006 EARS-19 (#2911) — «Показывать зрителям число
      * участников». While `false` (the default and the back-fill) the API serves

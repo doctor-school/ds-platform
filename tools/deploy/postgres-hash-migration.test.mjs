@@ -1,10 +1,9 @@
 // tools/deploy/postgres-hash-migration.test.mjs — Issue #3419.
 //
 // The PostgreSQL source hash v2 covers only the image/cluster inputs of the data-prod
-// compose (runtime-only service keys removed), so a log bound no longer moves it. A box
-// that still holds a v1 record is migrated through POSTGRES_HASH_MIGRATIONS without a
-// certificate only when the record is a table entry whose certified tree has the
-// target's v2; every other v1 record keeps the certificate requirement.
+// compose (runtime-only service keys removed), so a log bound no longer moves it. Since
+// ds-data-prod records hashVersion 2 (#3475) a box holding a v1 record always needs a
+// certificate.
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -20,7 +19,6 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 
 import {
-  POSTGRES_HASH_MIGRATIONS,
   assertPostgresEvidence,
   postgresContract,
   postgresSourceHash,
@@ -34,7 +32,8 @@ const REPO_ROOT = join(import.meta.dirname, "..", "..");
 const PROBE = join(import.meta.dirname, "postgres-artifact-probe.py");
 // Committed bytes, as in postgres-source-pin.test.mjs (an autocrlf checkout differs).
 const head = readPostgresTarget("HEAD", REPO_ROOT);
-const [entry] = POSTGRES_HASH_MIGRATIONS;
+// A v1 record: the v1 hash of the committed tree itself.
+const V1 = postgresSourceHashV1(head.files);
 
 const editCompose = (files, edit) => {
   const compose = JSON.parse(files["compose.yml"]);
@@ -74,21 +73,6 @@ function evidence(target, record) {
     ...record,
   };
 }
-
-test("3419: each migration entry is the certified tree of its commit (v1 and v2 recomputed from git)", () => {
-  assert.ok(POSTGRES_HASH_MIGRATIONS.length > 0);
-  for (const { commit, v1, v2 } of POSTGRES_HASH_MIGRATIONS) {
-    const tree = readPostgresTarget(commit, REPO_ROOT);
-    assert.equal(postgresSourceHashV1(tree.files), v1, `v1 of ${commit}`);
-    assert.equal(tree.sourceHash, v2, `v2 of ${commit}`);
-  }
-  // The live release (release-2026.10.27-2) runs 09c152b26: its box record is this v1.
-  assert.equal(entry.commit, "09c152b26ae7d67f9715ee5e7cbebc1015430c08");
-  assert.equal(
-    entry.v1,
-    "e8656c8b6259847701dfae069a011ab878329bfc5b8adaa7724cd477318c0da4",
-  );
-});
 
 test("3419: v2 ignores the runtime-only service keys and nothing else", () => {
   const base = postgresSourceHash(head.files);
@@ -174,55 +158,18 @@ test("3419: v2 ignores the runtime-only service keys and nothing else", () => {
   );
 });
 
-test("3419: the committed tree (logging re-landed) has the live tree's v2", () => {
-  assert.equal(head.sourceHash, entry.v2);
-  assert.notEqual(
-    postgresSourceHashV1(head.files),
-    entry.v1,
-    "the bound moved v1, as in #3418",
-  );
-});
-
-test("3419: a live v1 record of the migration table + the logging tree → unchanged, no certificate", () => {
-  const live = evidence(head.target, { sourceHash: entry.v1 });
-  assert.equal(
-    assertPostgresEvidence({ ...head, live }).systemId,
-    live.source.systemId,
-  );
-});
-
-test("3419: a v1 record not in the table (tampered previous tree) → certificate required", () => {
-  const live = evidence(head.target, { sourceHash: "f".repeat(64) });
-  assert.throws(
-    () => assertPostgresEvidence({ ...head, live }),
-    /missing\/stale artifact certification/,
-  );
+test("3475: a v1 record (the committed tree's own or any other) → certificate required", () => {
+  for (const sourceHash of [V1, "f".repeat(64)]) {
+    const live = evidence(head.target, { sourceHash });
+    assert.throws(
+      () => assertPostgresEvidence({ ...head, live }),
+      /missing\/stale artifact certification/,
+    );
+  }
   // A v1 record never counts as a v2 one, even with the target's own hash.
   const spoofed = evidence(head.target, { sourceHash: head.sourceHash });
   assert.throws(
     () => assertPostgresEvidence({ ...head, live: spoofed }),
-    /certification/,
-  );
-});
-
-test("3419: a table v1 record + an image/cluster change → certificate required", () => {
-  const files = {
-    ...head.files,
-    "postgres/Dockerfile": head.files["postgres/Dockerfile"] + "RUN true\n",
-  };
-  const changed = {
-    target: postgresContract(files),
-    sourceHash: postgresSourceHash(files),
-  };
-  const live = evidence(changed.target, { sourceHash: entry.v1 });
-  assert.throws(
-    () => assertPostgresEvidence({ ...changed, live }),
-    /certification/,
-  );
-  const moved = evidence(head.target, { sourceHash: entry.v1 });
-  moved.targetImages.postgres.id = "sha256:" + "b".repeat(64);
-  assert.throws(
-    () => assertPostgresEvidence({ ...head, live: moved }),
     /certification/,
   );
 });
@@ -283,7 +230,7 @@ for (const path of ["postgres/Dockerfile", "postgres/postgresql.conf"]) {
 }
 
 test("3419: the checkpoint record keeps a v1 record v1 (the live verb's shape) and writes v2 when told", () => {
-  const v1 = evidence(head.target, { sourceHash: entry.v1 });
+  const v1 = evidence(head.target, { sourceHash: V1 });
   const before = JSON.parse(postgresStateRecord(v1));
   assert.deepEqual(Object.keys(before).sort(), [
     "images",
@@ -291,7 +238,7 @@ test("3419: the checkpoint record keeps a v1 record v1 (the live verb's shape) a
     "sourceHash",
     "systemId",
   ]);
-  assert.equal(before.sourceHash, entry.v1);
+  assert.equal(before.sourceHash, V1);
   const after = JSON.parse(postgresStateRecord(v1, head.sourceHash));
   assert.equal(after.hashVersion, 2);
   assert.equal(after.sourceHash, head.sourceHash);
@@ -331,31 +278,14 @@ const prepare = (client, extra = {}) =>
   });
 const asked = (client) => client.requests.map((r) => r.sourceHash);
 
-test("3419: a v1 box is asked first with the table's v1, so it never reads the compose tags", async () => {
-  const client = box({ sourceHash: entry.v1 }, { tags: false });
-  await prepare(client);
-  assert.deepEqual(asked(client), [entry.v1]);
-  // Only the fields the live (09c152b) entrypoint accepts are sent.
-  assert.deepEqual(Object.keys(client.requests[0]).sort(), [
-    "paths",
-    "preferRecordedImages",
-    "sourceHash",
-    "target",
-  ]);
-});
-
-test("3419: a v2 box is re-read with the target v2 (tags present or gone)", async () => {
+test("3475: a box is read once with the target v2 (tags present or gone)", async () => {
   for (const tags of [true, false]) {
     const client = box(
       { sourceHash: head.sourceHash, hashVersion: 2 },
       { tags },
     );
     await prepare(client);
-    assert.deepEqual(
-      asked(client),
-      [entry.v1, head.sourceHash],
-      `tags ${tags}`,
-    );
+    assert.deepEqual(asked(client), [head.sourceHash], `tags ${tags}`);
   }
 });
 
@@ -369,9 +299,16 @@ const journal = async (t, client) => {
 };
 
 test("3466: preparation prints a v1 box's record once, naming the hash it was asked with", async (t) => {
-  assert.deepEqual(await journal(t, box({ sourceHash: entry.v1 })), [
-    "  ↳ ds-data-prod: postgres record v1 (no hashVersion), asked with the table's v1 record",
-  ]);
+  const log = t.mock.method(console, "log", () => {});
+  await assert.rejects(prepare(box({ sourceHash: V1 })), /certification/);
+  assert.deepEqual(
+    log.mock.calls
+      .map((c) => c.arguments.join(" "))
+      .filter((l) => l.includes("postgres record")),
+    [
+      "  ↳ ds-data-prod: postgres record v1 (no hashVersion), asked with the target v2",
+    ],
+  );
 });
 
 test("3466: preparation prints a v2 box's record hashVersion once", async (t) => {
@@ -402,25 +339,18 @@ log bound: /pg log=json-file
   assert.deepEqual(checkpointJournalLines(undefined), []);
 });
 
-test("3419: a v1 record not in the table is still refused, read once", async () => {
-  const client = box({ sourceHash: "f".repeat(64) });
-  await assert.rejects(prepare(client), /certification/);
-  assert.deepEqual(asked(client), [entry.v1]);
-});
-
-test("3419: a failed probe names every hash it was asked with", async () => {
+test("3419: a failed probe names the hash it was asked with", async () => {
   const client = box({ sourceHash: "f".repeat(64) }, { tags: false });
   await assert.rejects(prepare(client), (error) => {
-    for (const hash of [entry.v1, head.sourceHash])
-      assert.match(error.message, new RegExp(hash.slice(0, 12)));
+    assert.match(error.message, new RegExp(head.sourceHash.slice(0, 12)));
     assert.match(error.message, /command failed: sudo/);
     return true;
   });
-  assert.deepEqual(asked(client), [entry.v1, head.sourceHash]);
+  assert.deepEqual(asked(client), [head.sourceHash]);
 });
 
 test("3419: a certificate run never prefers the recorded images, so it reads once with the target v2", async () => {
-  const client = box({ sourceHash: entry.v1 });
+  const client = box({ sourceHash: V1 });
   const id = { id: "sha256:" + "d".repeat(64) };
   await prepare(client, {
     certificate: {

@@ -15,6 +15,7 @@ import {
 } from "../admin/index.js";
 import type { HostConfig } from "../hosts.js";
 import { redirectsBesidesSilentCheck } from "../lib/silent-check.js";
+import { standHttpCredentials } from "../lib/stand-http-credentials.js";
 import {
   After,
   Before,
@@ -41,8 +42,10 @@ function lifecycleOf(world: StepWorld): LifecycleJourney {
 }
 
 Before({ tags: "@public-event-lifecycle" }, async ({ browser, world }) => {
+  const credentials = standHttpCredentials();
   const context = await browser.newContext({
     baseURL: world.hostBaseUrl,
+    ...(credentials ? { httpCredentials: credentials } : {}),
     locale: "ru-RU",
     timezoneId: "Europe/Moscow",
   });
@@ -89,8 +92,10 @@ async function createLifecycleEvent(
   state: PublicLifecycle,
 ): Promise<void> {
   const journey = lifecycleOf(world);
+  const credentials = standHttpCredentials();
   const context = await browser.newContext({
     baseURL: ADMIN_ORIGIN,
+    ...(credentials ? { httpCredentials: credentials } : {}),
     locale: "ru-RU",
   });
   const admin = await context.newPage();

@@ -363,6 +363,47 @@ describe("storefront entry", () => {
     });
   });
 
+  it("EARS-71: a land-only event return (the header «Войти» / «Регистрация» on an event page) records the event target on the login and registration doors and carries no registration", async () => {
+    for (const entry of ["login", "register"] as const) {
+      const api = fakeApi();
+      await storefrontEntry(
+        get(
+          `/${entry}?returnTo=${encodeURIComponent("/webinars/live-1?intent=land")}`,
+        ),
+        ACADEMY,
+        entry,
+        { fetchImpl: api.fetchImpl, env: ENV },
+      );
+      const sent = api.internal("transaction")[0]?.body;
+      expect(sent, entry).toMatchObject({
+        door: entry,
+        intent: { eventTarget: "live-1" },
+      });
+      expect(sent?.completeRegistration, entry).toBeUndefined();
+    }
+  });
+
+  it("EARS-71: on the doctor storefront a land-only event return records the event target on the login and registration doors and carries no registration", async () => {
+    for (const entry of ["login", "register"] as const) {
+      const api = fakeApi();
+      await storefrontEntry(
+        get(
+          `/${entry}?returnTo=${encodeURIComponent("/events/live-1?intent=land")}`,
+        ),
+        DOCTOR,
+        entry,
+        { fetchImpl: api.fetchImpl, env: ENV },
+      );
+      const sent = api.internal("transaction")[0]?.body;
+      expect(sent, entry).toMatchObject({
+        client: "doctor",
+        door: entry,
+        intent: { eventTarget: "live-1" },
+      });
+      expect(sent?.completeRegistration, entry).toBeUndefined();
+    }
+  });
+
   it("005 EARS-2: an event return target carries its registration into the transaction on every door; a land-only, room or account return carries none", async () => {
     const carried = async (path: string, entry: "login" | "reset") => {
       const api = fakeApi();

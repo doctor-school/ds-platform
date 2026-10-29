@@ -54,6 +54,10 @@ const SESSION_COOKIE = "__Host-ds_session";
 const GENERIC_PASSWORD_ERROR =
   "Не удалось войти. Проверьте данные и попробуйте снова.";
 
+/** 003 EARS-71 — the return card's door lines (`returnContext` in `@ds/auth-flow` copy). */
+const LOGIN_ASSURANCE = "После входа вы вернётесь сюда же.";
+const REGISTER_ASSURANCE = "После подтверждения почты вы вернётесь сюда же.";
+
 /** A golden эфир on air per storefront (005 EARS-2 needs a joinable event). */
 const LIVE_EVENT: Record<HostId, string> = {
   academy: `/webinars/${golden.events.academyLive.slug}`,
@@ -502,8 +506,32 @@ for (const id of STOREFRONTS) {
       const event = LIVE_EVENT[id];
       // The shell carries an event page as a LAND-ONLY target (no registration).
       await pressSignInFrom(page, id, event, `${event}?intent=land`);
+
+      // 003 EARS-71 (#3414) — the land-only target still names its event: the
+      // host form shows that event's card, door by door, across hops and a reload.
+      const returnCard = page.locator(
+        '[data-testid="return-context-panel"]:visible, [data-testid="return-context-plate"]:visible',
+      );
+      await expect(returnCard).toContainText(LOGIN_ASSURANCE);
+      await page.getByRole("link", { name: "Создать аккаунт" }).click();
+      await page.waitForURL(
+        (url) => url.pathname === "/register" && isSignInHostForm(url),
+      );
+      await expect(returnCard).toContainText(REGISTER_ASSURANCE);
+      await page.reload({ waitUntil: "load" });
+      await settled(page);
+      await expect(returnCard).toContainText(REGISTER_ASSURANCE);
+      await page.getByRole("link", { name: /Уже есть аккаунт/ }).click();
+      await expect(page.getByTestId("password-login-submit")).toBeVisible();
+      await expect(returnCard).toContainText(LOGIN_ASSURANCE);
+      await settled(page);
+
       expect((await submitPassword(page, account)).status()).toBe(200);
       await expectBackSignedIn(page, id, event, account);
+
+      // Landed, not registered (005 EARS-2 unchanged): the event still offers
+      // its one-tap «Участвовать» — the inverse of the registered sibling below.
+      await expect(page.getByTestId("event-register-one-tap")).toBeVisible();
     });
 
     test(`005 EARS-2 (${id}): sign-in from an event page ends back on that event, registered`, async ({

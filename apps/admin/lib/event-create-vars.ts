@@ -23,7 +23,7 @@ export function eventCreateVars(values: EventFormValues): CreateEventVars {
     kindId: values.kindId,
     participationFormat: values.participationFormat,
     audience: values.audience,
-    // 007 EARS-12 (#2913) — «Скрыть число записавшихся», default off.
+    // 007 EARS-12 (#2913, #3479) — «Скрыть число записавшихся», on (ticked) by default.
     hideSignUpCount: values.hideSignUpCount,
     // 007 EARS-13 (#2911) — «Показывать зрителям число участников», default off.
     showPresenceCount: values.showPresenceCount,

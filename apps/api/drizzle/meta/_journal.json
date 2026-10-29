@@ -372,6 +372,13 @@
       "when": 1793174930377,
       "tag": "0052_events_show_presence_count",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1793257468219,
+      "tag": "0053_events_hide_sign_up_count_default_on",
+      "breakpoints": true
     }
   ]
 }

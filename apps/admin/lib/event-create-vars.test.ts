@@ -5,7 +5,7 @@ import { eventCreateVars } from "./event-create-vars";
 /**
  * 007 EARS-1 / EARS-12 (#2913) — the create form's values → multipart
  * `POST /v1/admin/events` variables. The option «Скрыть число записавшихся»
- * rides the ordinary create, default off.
+ * rides the ordinary create; the form starts it ticked (#3479).
  */
 const base: EventFormValues = {
   title: "Эфир",
@@ -23,19 +23,19 @@ const base: EventFormValues = {
   participationFormat: "online",
   audience: "doctors",
   projectId: null,
-  hideSignUpCount: false,
+  hideSignUpCount: true,
   showPresenceCount: false,
 };
 
 describe("eventCreateVars", () => {
-  it("007 EARS-12: an untouched create sends the option off", () => {
-    expect(eventCreateVars(base).hideSignUpCount).toBe(false);
+  it("007 EARS-12: an untouched create sends the option on", () => {
+    expect(eventCreateVars(base).hideSignUpCount).toBe(true);
   });
 
-  it("007 EARS-12: a create with the option ticked sends it on", () => {
+  it("007 EARS-12: a create with the option unticked sends it off", () => {
     expect(
-      eventCreateVars({ ...base, hideSignUpCount: true }).hideSignUpCount,
-    ).toBe(true);
+      eventCreateVars({ ...base, hideSignUpCount: false }).hideSignUpCount,
+    ).toBe(false);
   });
 
   it("007 EARS-13: an untouched create sends «Показывать зрителям число участников» off", () => {
@@ -63,7 +63,7 @@ describe("eventCreateVars", () => {
       kindId: "22222222-2222-4222-8222-222222222222",
       participationFormat: "online",
       audience: "doctors",
-      hideSignUpCount: false,
+      hideSignUpCount: true,
       showPresenceCount: false,
     });
     expect("projectId" in vars).toBe(false);

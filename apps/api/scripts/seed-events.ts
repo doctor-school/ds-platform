@@ -203,6 +203,12 @@ interface SeedSpec {
    */
   readonly showPresenceCount?: boolean;
   /**
+   * 007 EARS-12 / 019 EARS-19 (#3479): «Скрыть число записавшихся». Omitted ⇒
+   * on, the column default — the event's colleagues' sign-up count is hidden
+   * on every doctor surface. Set `false` on a fixture that must show the count.
+   */
+  readonly hideSignUpCount?: boolean;
+  /**
    * 014 EARS-1/7 (#2996): the day the operator promises the recording by, as
    * days after the seed run (a `date`, rendered «до <day> <month>»). Omitted ⇒
    * the column is left untouched.
@@ -739,6 +745,7 @@ export async function seedEvents(): Promise<void> {
           participationFormat,
           liveAt,
           showPresenceCount: spec.showPresenceCount ?? false,
+          hideSignUpCount: spec.hideSignUpCount ?? true,
           updatedAt: new Date(),
         })
         .onConflictDoUpdate({
@@ -761,6 +768,7 @@ export async function seedEvents(): Promise<void> {
             participationFormat,
             liveAt,
             showPresenceCount: spec.showPresenceCount ?? false,
+            hideSignUpCount: spec.hideSignUpCount ?? true,
             updatedAt: new Date(),
           },
         })

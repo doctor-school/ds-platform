@@ -404,7 +404,7 @@ describe.skipIf(
     );
   });
 
-  it("007 EARS-12: «Скрыть число записавшихся» defaults off on create, is set by create and update, survives an edit that omits it, and the detail read returns its state — never a registrant count", async () => {
+  it("007 EARS-12: «Скрыть число записавшихся» defaults ON on create (#3479), is set by create and update, survives an edit that omits it, and the detail read returns its state — never a registrant count", async () => {
     const cookie = await session(uniqueEmail("admin"), "platform_admin");
     const detail = async (id: string) => {
       const res = await app.inject({
@@ -427,15 +427,18 @@ describe.skipIf(
       return res.json() as Record<string, unknown>;
     };
 
-    // Default off.
+    // Default on — the owner's decision (#3479): hidden unless turned off.
     const plain = await createEvent(cookie);
-    expect(plain.hideSignUpCount).toBe(false);
-    expect((await detail(plain.id as string)).hideSignUpCount).toBe(false);
+    expect(plain.hideSignUpCount).toBe(true);
+    expect((await detail(plain.id as string)).hideSignUpCount).toBe(true);
 
-    // Set on create.
-    const hidden = await createEvent(cookie, { hideSignUpCount: true });
+    // Set off on create.
+    const shown = await createEvent(cookie, { hideSignUpCount: false });
+    expect(shown.hideSignUpCount).toBe(false);
+    expect((await detail(shown.id as string)).hideSignUpCount).toBe(false);
+
+    const hidden = plain;
     const id = hidden.id as string;
-    expect(hidden.hideSignUpCount).toBe(true);
     const read = await detail(id);
     expect(read.hideSignUpCount).toBe(true);
     // The admin read carries the option's own state only (007 design).

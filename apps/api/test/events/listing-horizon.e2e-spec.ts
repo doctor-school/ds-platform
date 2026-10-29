@@ -391,6 +391,24 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(bare?.signUpCount).toBeNull();
     });
 
+    it("019 EARS-19: an event carrying the column default (#3479 — hidden unless turned off) serves `signUpCount: null` on the Academy read despite real sign-ups", async () => {
+      await pool.query(
+        "UPDATE events SET hide_sign_up_count = DEFAULT WHERE id = $1",
+        [near.id],
+      );
+      try {
+        const upcoming = await page(
+          `timeframe=upcoming&from=${today}&to=${addDoctorEventsFeedDays(today, 14)}`,
+        );
+        expect(cardOf(upcoming.data, near.id)?.signUpCount).toBeNull();
+      } finally {
+        await pool.query(
+          "UPDATE events SET hide_sign_up_count = false WHERE id = $1",
+          [near.id],
+        );
+      }
+    });
+
     it("NEW: «Прошедшие» extends BACKWARD — `nextFrom` names an older bound and that widening reaches older events (rows 30, 32)", async () => {
       const first = await page(
         `timeframe=past&from=${addDoctorEventsFeedDays(today, -14)}`,

@@ -337,6 +337,18 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(page.signUps).toBeNull();
     });
 
+    it("019 EARS-19: an event carrying the column default (#3479 — hidden unless turned off) serves `signUps: null` despite a real sign-up", async () => {
+      const { id, slug } = await seedEvent({ state: "published" });
+      await pool.query(
+        "UPDATE events SET hide_sign_up_count = DEFAULT WHERE id = $1",
+        [id],
+      );
+      await register(await seedUser("doctor_guest", sameSpecialty.id), id);
+
+      const page = await readBothHosts(slug);
+      expect(page.signUps).toBeNull();
+    });
+
     it("020 EARS-3: the social proof is identical for a guest and for a signed-in doctor", async () => {
       const { id, slug } = await seedEvent({ state: "published" });
       await register(await seedUser("doctor_guest", sameSpecialty.id), id);

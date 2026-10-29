@@ -425,9 +425,10 @@ export const CreateEventRequestSchema = z.object({
   /**
    * 007 EARS-12 (#2913) — «Скрыть число записавшихся». A display attribute,
    * not lifecycle visibility: while it is on, every public card read serves
-   * `signUpCount: null` (019 EARS-19). Default off.
+   * `signUpCount: null` (019 EARS-19). Default on — hidden unless the
+   * operator turns it off (#3479).
    */
-  hideSignUpCount: z.boolean().default(false),
+  hideSignUpCount: z.boolean().default(true),
   /**
    * 007 EARS-13 (#2911) — «Показывать зрителям число участников». While off,
    * a caller whose session carries no staff role receives no live presence

@@ -506,12 +506,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(ids).not.toContain(expertsEventId);
     });
 
-    it("019 EARS-19: while an event's «Скрыть число записавшихся» is on, its feed card serves `signUpCount: null`; a neighbour with the option off keeps its number", async () => {
-      // Flip the option on an existing fixture for this read only, so the
-      // shared fixture set (and every count-paging case) stays as seeded.
+    it("019 EARS-19: an event seeded without the option is hidden by default (#3479) — its feed card serves `signUpCount: null`; a neighbour with the option turned off keeps its number", async () => {
+      // The fixtures omit `hide_sign_up_count`, so they carry the column
+      // default (on). Turn the option off on one fixture for this read only,
+      // so the shared fixture set stays as seeded.
       await pool.query(
-        "UPDATE events SET hide_sign_up_count = true WHERE id = $1",
-        [ownEventId],
+        "UPDATE events SET hide_sign_up_count = false WHERE id = $1",
+        [secondOwnEventId],
       );
       try {
         const feed = await readFeed({
@@ -526,8 +527,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
         expect(typeof shown?.signUpCount).toBe("number");
       } finally {
         await pool.query(
-          "UPDATE events SET hide_sign_up_count = false WHERE id = $1",
-          [ownEventId],
+          "UPDATE events SET hide_sign_up_count = DEFAULT WHERE id = $1",
+          [secondOwnEventId],
         );
       }
     });

@@ -270,7 +270,7 @@ Then(
   },
 );
 Then(
-  "each card shows its displayed date, time and zone, title, school/series, specialties, and speakers",
+  /^each card shows its displayed date, time and zone, title, school\/series, specialties, and speakers$/u,
   async ({ page, world }) => {
     const viewerZone = await page.evaluate(
       () => Intl.DateTimeFormat().resolvedOptions().timeZone,

@@ -3111,7 +3111,7 @@ Then("the past events are grouped by month, newest first", async ({ page }) => {
   );
 });
 Then(
-  "the screen holds the 10 most recent past events, «Показать ещё 10 (осталось N)» adding the next older ones",
+  /^the screen holds the 10 most recent past events, «Показать ещё 10 \(осталось N\)» adding the next older ones$/u,
   async ({ page, world }) => {
     const before = await expectDeliveredFeed(page);
     expect(before.items).toHaveLength(10);

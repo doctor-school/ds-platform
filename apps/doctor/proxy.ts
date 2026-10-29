@@ -66,8 +66,9 @@ export async function consumeGuestSpecialtyBeforeRender(
  *
  * 003 EARS-61 / 72, 014 EARS-6 — the four door paths are answered here by the
  * shared door gate (the parking rule, the entry, a refusal rewritten to the
- * refusal page at its truthful status); the specialty deletion a signed-in
- * door relays rides on that answer.
+ * refusal page at its truthful status); only the specialty cookies a door
+ * relays ride on that answer — a deferred request rewrite does not, as no
+ * door answer renders a page that reads the specialty.
  */
 export async function proxy(request: NextRequest): Promise<Response> {
   const check = await storefrontSilentCheck(request, DOCTOR_STOREFRONT_OIDC);

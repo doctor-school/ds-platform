@@ -180,6 +180,9 @@ describe("storefront entry", () => {
     ["a request without fetch metadata", {}],
     ["a frame", { "sec-fetch-mode": "navigate", "sec-fetch-dest": "iframe" }],
     ["a HEAD", { ...NAVIGATE }, "HEAD"],
+    // 003 EARS-72: the gate answers the door paths for every method now, so
+    // a POST is the same inert 204 (it was a route handler's 405 before).
+    ["a POST", { ...NAVIGATE }, "POST"],
   ];
 
   for (const entry of ENTRIES) {

@@ -216,3 +216,76 @@ describe("014 EARS-6 (#2495): the doctor storefront binds the parked target to t
     expect(dropsParked(response)).toBe(false);
   });
 });
+
+/**
+ * 003 EARS-63 — the doctor storefront's wiring of the shared silent check: it
+ * runs first in the proxy, before the guest-choice consumption and the
+ * parking. The rule is pinned in the package (`silent-check.test.ts`).
+ */
+describe("003 EARS-63: the doctor storefront mounts the shared silent check", () => {
+  const AUTHORIZE =
+    "https://id.example/oauth/v2/authorize?client_id=c&state=s&prompt=none";
+
+  it("EARS-63: a signed-out document navigation is answered with the check redirect into the doctor storefront's silent transaction, before anything else runs", async () => {
+    vi.stubEnv("INTERNAL_API_URL", "http://api:3000");
+    vi.stubEnv("INTERNAL_API_TOKEN", "t".repeat(40));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe(
+        "http://api:3000/v1/internal/oidc/silent-check",
+      );
+      return Response.json({ txId: "S".repeat(43), authorizeUrl: AUTHORIZE });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const response = await proxy(
+        new NextRequest("https://doctor.school/events?specialty=cardio", {
+          headers: {
+            "sec-fetch-mode": "navigate",
+            "sec-fetch-dest": "document",
+          },
+        }),
+      );
+      expect(response.status).toBe(303);
+      expect(response.headers.get("location")).toBe(AUTHORIZE);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const init = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(JSON.parse(String(init[1].body))).toEqual({
+        client: "doctor",
+        returnPath: "/events?specialty=cardio",
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("EARS-63: a render the check lets through carries its cookies (the spent guard)", async () => {
+    vi.stubEnv("INTERNAL_API_URL", "http://api:3000");
+    vi.stubEnv("INTERNAL_API_TOKEN", "t".repeat(40));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ sub: "u1", roles: ["doctor_guest"], mfa: false }),
+      ),
+    );
+    try {
+      const response = await proxy(
+        new NextRequest("https://doctor.school/events", {
+          headers: {
+            "sec-fetch-mode": "navigate",
+            "sec-fetch-dest": "document",
+            cookie: "__Host-ds_check=1; __Host-ds_session=sid",
+          },
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.getSetCookie()).toContain(
+        "__Host-ds_check=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax",
+      );
+    } finally {
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+    }
+  });
+});

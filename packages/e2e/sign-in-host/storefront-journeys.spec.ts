@@ -450,24 +450,42 @@ for (const id of STOREFRONTS) {
       expect(await isDark(page)).toBe(true);
     });
 
-    test(`003 EARS-61 (${id}): a guest view of the storefront home creates no IdP auth request`, async ({
+    test(`003 EARS-61 (${id}): a guest view of the storefront home creates no interactive IdP auth request — only the one silent check (EARS-63), and none once the guest marker is set`, async ({
       page,
     }) => {
-      const authorize: string[] = [];
+      const authorize: URL[] = [];
       page.on("request", (request) => {
-        if (
-          /\/oauth\/v2\/authorize(?:$|[?#])/.test(
-            new URL(request.url()).pathname,
-          )
-        )
-          authorize.push(request.url());
+        const url = new URL(request.url());
+        if (/\/oauth\/v2\/authorize(?:$|[?#])/.test(url.pathname))
+          authorize.push(url);
       });
+      // EARS-61 mints a transaction for the three entries and for a silent
+      // check; EARS-63 starts that check on the first marker-less document
+      // view. So the first view makes exactly one `prompt=none` authorize.
       await page.goto(`${base(id)}/`, { waitUntil: "load" });
       await settled(page);
-      // Pointing at «Войти» is where a router link would prefetch the entry.
+      expect(
+        authorize.map((url) => url.searchParams.get("prompt")),
+        "the first view's one silent check",
+      ).toEqual(["none"]);
+      expect(
+        (await page.context().cookies()).some(
+          (cookie) => cookie.name === "__Host-ds_guest",
+        ),
+        "the check ended signed out and set the guest marker",
+      ).toBe(true);
+
+      // With the marker held, a view and pointing at «Войти» (where a router
+      // link would prefetch the entry) create no auth request at all.
+      authorize.length = 0;
+      await page.goto(`${base(id)}/`, { waitUntil: "load" });
+      await settled(page);
       await page.getByTestId("shell-login").hover();
       await settled(page);
-      expect(authorize, "no request to the IdP authorize URL").toEqual([]);
+      expect(
+        authorize.map(String),
+        "no request to the IdP authorize URL",
+      ).toEqual([]);
       expect(
         (await page.context().cookies()).some(
           (cookie) => cookie.name === OIDC_TX_COOKIE,

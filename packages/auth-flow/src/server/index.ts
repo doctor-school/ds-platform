@@ -35,6 +35,15 @@ export {
   type StorefrontOidcDeps,
   type StorefrontOidcHost,
 } from "./storefront-oidc";
+export {
+  CHECK_GUARD_COOKIE,
+  GUEST_MARKER_COOKIE,
+  GUEST_QUERY_FLAG,
+  storefrontSilentCheck,
+  type SilentCheckDeps,
+  type SilentCheckHost,
+  type SilentCheckOutcome,
+} from "./silent-check";
 export { resolveOwnHandoff } from "./handoff-ownership";
 export { isTopLevelNavigation } from "./top-level-navigation";
 /**

@@ -1,35 +1,55 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { parkReturnTarget } from "@ds/auth-flow/server";
+import { parkReturnTarget, storefrontSilentCheck } from "@ds/auth-flow/server";
+
+import { ACADEMY_STOREFRONT_OIDC } from "./lib/auth-flow.host-config";
 
 /**
+ * 003 EARS-63 (ADR-0015 §4 step 4) — the silent check on this storefront, and
  * 014 EARS-6 — park the carried return target when a visitor enters the auth
  * flow from a login-gated surface (014 design §6).
  *
- * The RULE — validate through the `@ds/schemas` same-origin guard, write only a
- * guard-clean value, never `HttpOnly` because the client success handler
- * consumes it — and the cookie itself live once in `@ds/auth-flow/server`
- * (#2027 PR 1.4, rows 29–31; #2443), the same on both storefronts. What is left
- * here is the Next wiring: which routes of this app run it.
- *
- * Doing this in middleware rather than in each auth page is what makes the
- * mechanism PLATFORM-WIDE rather than per-surface: every gated surface that
- * links into the auth entry with a valid `returnTo` is carried, present and
- * future, with no page-level wiring of its own.
+ * Both RULES live once in `@ds/auth-flow/server`, the same on both
+ * storefronts (ADR-0013 A1): the silent check (a signed-out document
+ * navigation is answered, before anything renders and before the page cache
+ * answers, with a `303` into a `prompt=none` transaction; the marker, guard,
+ * exemption, crawler and caching rules are the core's), and the parking rule
+ * (#2027 PR 1.4, rows 29–31; #2443). What is left here is the Next wiring:
+ * which routes of this app run them.
  */
-export function middleware(request: NextRequest): NextResponse {
+export async function middleware(request: NextRequest): Promise<Response> {
+  const check = await storefrontSilentCheck(request, ACADEMY_STOREFRONT_OIDC);
+  if ("response" in check) return check.response;
   // `undefined` = nothing to park; the pass-through response stays this host's
   // to mint, so any other header this middleware grows is never discarded.
-  return parkReturnTarget(request) ?? NextResponse.next();
+  const response =
+    (PARKING_ENTRIES.includes(request.nextUrl.pathname)
+      ? parkReturnTarget(request)
+      : undefined) ?? NextResponse.next();
+  for (const cookie of check.setCookies) {
+    response.headers.append("set-cookie", cookie);
+  }
+  return response;
 }
 
 /**
- * The auth doors only. A narrow matcher keeps the blast radius at the four
- * routes that begin or continue an authentication round-trip — no other route
- * pays for this middleware. Each door runs the whole rule (#2495): a carried
- * target is parked, and a guest's door without one drops a target an earlier,
- * abandoned flow parked.
+ * 014 EARS-6 (#2495) — the auth doors that run the parking rule. Each door
+ * runs the whole rule: a carried target is parked, and a guest's door without
+ * one drops a target an earlier, abandoned flow parked.
+ */
+const PARKING_ENTRIES: readonly string[] = [
+  "/login",
+  "/register",
+  "/verify",
+  "/reset",
+];
+
+/**
+ * Every page route: the silent check decides on any top-level document
+ * request (its own exemptions keep `/v1/*`, assets, `/.well-known/*`, the auth
+ * routes and the health route out), so the matcher only spares the API proxy
+ * and the build assets the middleware call.
  */
 export const config = {
-  matcher: ["/login", "/register", "/verify", "/reset"],
+  matcher: ["/((?!v1/|_next/static|_next/image|favicon.ico).*)"],
 };

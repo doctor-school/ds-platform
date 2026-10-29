@@ -15,6 +15,8 @@ import type {
   SignInHostStorefront,
 } from "@ds/schemas";
 import { AuthService, type SessionAcceptor } from "../auth/auth.service.js";
+import { RateLimitService } from "../auth/rate-limit/rate-limit.service.js";
+import { STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE } from "../auth/rate-limit/rate-limit.types.js";
 import { SessionService } from "../auth/session/session.service.js";
 import {
   IDP_CLIENT,
@@ -69,6 +71,8 @@ const STEP_REVOKED = "invalid credentials";
 export interface HostRequest {
   readonly cookies: Readonly<Record<string, string>>;
   readonly fingerprint: string;
+  /** The client IP the sign-in-host server forwards (the per-IP silent bucket, req. 9). */
+  readonly ip: string;
 }
 
 export interface EntryOutcome {
@@ -109,6 +113,7 @@ export class SignInHostService {
     private readonly records: SignInHostRecordStore,
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(SessionService) private readonly sessions: SessionService,
+    @Inject(RateLimitService) private readonly limiter: RateLimitService,
   ) {}
 
   /** The module is disabled until every sign-in-host key is set: 404, as if the route did not exist. */
@@ -159,6 +164,30 @@ export class SignInHostService {
       );
       return {
         body: { action: "redirect", url: url ?? settings.loginUrls.doctor },
+        setCookies,
+      };
+    }
+
+    // 003 EARS-63 (f), ADR-0015 §4 req. 9 — every entry of a `prompt=none`
+    // auth request counts in the silent path's own per-IP bucket; a limited
+    // one finalises with `login_required`, so the storefront callback ends it
+    // as a guest render, never an error.
+    if (
+      request.prompt.includes("none") &&
+      !this.limiter.tryConsume({
+        ip: req.ip,
+        scope: STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE,
+      })
+    ) {
+      const url = await this.hostIdp.finaliseWithError(
+        request.id,
+        "login_required",
+      );
+      return {
+        body: {
+          action: "redirect",
+          url: url ?? settings.loginUrls[storefront],
+        },
         setCookies,
       };
     }

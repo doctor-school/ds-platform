@@ -147,6 +147,23 @@ Four rules live there, each stated once for both storefronts:
   is refused unread. Both reach the API at `INTERNAL_API_URL` with the
   `INTERNAL_API_TOKEN` bearer, server-side only, forwarding the browser's
   fingerprint headers and client chain.
+- **The silent check** (`silent-check.ts`, 003 EARS-63, 020 EARS-18/22,
+  ADR-0015 §4 step 4, req. 1/9/12). `storefrontSilentCheck` runs first in each
+  host's middleware/proxy: a checkable request (a top-level document `GET`
+  with fetch metadata, not a crawler, prefetch, router request, `/v1/*`,
+  asset, `/.well-known/*`, auth route or health route) with no live session,
+  no valid `__Host-ds_guest` marker, no `__Host-ds_check` guard and no live
+  silent transaction gets `303` into a silent transaction (`prompt=none`,
+  `POST /v1/internal/oidc/silent-check`, `Cache-Control: no-store`); a live
+  interactive transaction is replaced, a limited start renders the guest page.
+  The marker (`<issued s>.<HMAC>`, 10 min) and the silent transaction's cookie
+  value (`<txId>.<HMAC>`) are HMACs keyed by `INTERNAL_API_TOKEN` with their
+  own domain-separation labels. `storefrontCallback` sets the guard on every
+  silent outcome, the marker on every silent outcome without a session, clears
+  the marker on every mint, answers a cookieless silent callback with
+  `<path>?ds_guest=1#`, and recovers a callback with no live transaction (003
+  EARS-62) into a fresh silent check — or, with the guard present, `/` as a
+  guest with the marker.
 
 ## The five rules of the auth flow (S1–S5)
 

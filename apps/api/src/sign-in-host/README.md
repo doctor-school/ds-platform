@@ -23,7 +23,7 @@ into a storefront session (that is the storefront callback's redeem, below).
 | Subject revocation (reset / first verification ends records)      | `sign-in-host-subject-revocation.ts`   | 12, 41                        |
 | Retention purge (hourly)                                          | `sign-in-host-record.purge.ts`         | 64                            |
 | Cookies (`__Host-ds_login`, `__Host-ds_login_form`)               | `sign-in-host.cookies.ts`              | 64, 70                        |
-| Internal storefront routes (`/v1/internal/oidc/*`)                | `storefront-oidc.controller.ts`        | 8, 62, 71                     |
+| Internal storefront routes (`/v1/internal/oidc/*`)                | `storefront-oidc.controller.ts`        | 8, 62, 63, 71                 |
 | Transaction, redeem, linked-session refresh                       | `storefront-oidc.service.ts`           | 8, 62, 64, 71                 |
 | Storefront clients' token calls, `private_key_jwt` (+ fake)       | `storefront-oidc.idp.ts`, `*.jwt.ts`   | 8, 62                         |
 | Internal credential (bearer `INTERNAL_API_TOKEN`, 404 without it) | `internal-api.middleware.ts`           | 62                            |
@@ -81,6 +81,19 @@ slug whose registration the callback completes (005 EARS-2). The storefront
 server relays that `Set-Cookie` header unchanged on its callback response.
 Limits: per forwarded client IP, own scopes `oidc:entry` (the transaction) and
 `oidc:redeem`, 1200 / 15 min each.
+
+**Silent check** (003 EARS-63, ADR-0015 §4 req. 9). `POST oidc/silent-check`
+(`StorefrontSilentCheckRequest` `{client, returnPath?, replaces?}` →
+`{txId, authorizeUrl}`) creates a `kind: silent` transaction (60 s, authorize
+`prompt=none`) and deletes the interactive transaction it `replaces`;
+`POST oidc/transaction` refuses `kind: silent` with 400. The silent path has its
+own per-IP bucket `oidc:silent-check`, 1200 / 15 min, counting each start, each
+sign-in-host entry of a `prompt=none` auth request (limited → finalised with
+`login_required`) and each silent redeem (limited → nothing redeemed, the
+transaction deleted, a refusal). Refusal and success bodies carry the
+transaction's `kind`; a silent redeem without `txId` whose `state` names a live
+silent transaction burns it and answers the refusal with its return path and
+kind.
 
 **Linked sessions.** A redeemed session carries `zitadelSessionId` and
 `oidcClient`. Its refresh (`POST /v1/auth/refresh`) rotates through that

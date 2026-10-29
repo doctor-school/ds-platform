@@ -5,8 +5,10 @@ import {
   forwardedHeaders,
   forwardedSessionFrom,
   parkReturnTarget,
+  storefrontSilentCheck,
 } from "@ds/auth-flow/server";
 import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
+import { DOCTOR_STOREFRONT_OIDC } from "@/lib/auth-flow.host-config";
 import {
   SPECIALTY_CHOICE_COOKIE_NAME,
   SPECIALTY_CHOICE_ME_PATH,
@@ -71,10 +73,24 @@ const PARKING_ENTRIES: readonly string[] = [
   DOCTOR_AUTH_ROUTES.reset,
 ];
 
-export async function proxy(request: NextRequest): Promise<NextResponse> {
-  const response = await consumeGuestSpecialtyBeforeRender(request);
-  if (!PARKING_ENTRIES.includes(request.nextUrl.pathname)) return response;
-  return parkReturnTarget(request, response) ?? response;
+/**
+ * 003 EARS-63 (ADR-0015 §4 step 4) — the silent check runs first, before
+ * anything renders and before the page cache answers: a signed-out document
+ * navigation is answered with a `303` into a `prompt=none` transaction. The
+ * RULE is `@ds/auth-flow/server`'s, the same on both storefronts; a render it
+ * lets through carries its cookies (the spent guard, the guest marker).
+ */
+export async function proxy(request: NextRequest): Promise<Response> {
+  const check = await storefrontSilentCheck(request, DOCTOR_STOREFRONT_OIDC);
+  if ("response" in check) return check.response;
+  const consumed = await consumeGuestSpecialtyBeforeRender(request);
+  const response = PARKING_ENTRIES.includes(request.nextUrl.pathname)
+    ? (parkReturnTarget(request, consumed) ?? consumed)
+    : consumed;
+  for (const cookie of check.setCookies) {
+    response.headers.append("set-cookie", cookie);
+  }
+  return response;
 }
 
 export const config = {

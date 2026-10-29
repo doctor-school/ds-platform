@@ -12,6 +12,8 @@ import type {
   SignInHostStorefront,
   SignInHostDoor,
   StorefrontRedeemRequest,
+  StorefrontSilentCheckRequest,
+  StorefrontTransactionKind,
   StorefrontTransactionRequest,
   StorefrontTransactionResponse,
 } from "@ds/schemas";
@@ -23,6 +25,8 @@ import {
   AUTH_AUDIT,
   type AuthAuditLog,
 } from "../auth/session/auth-audit.types.js";
+import { RateLimitService } from "../auth/rate-limit/rate-limit.service.js";
+import { STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE } from "../auth/rate-limit/rate-limit.types.js";
 import { SessionService } from "../auth/session/session.service.js";
 import {
   SharedSessionHub,
@@ -67,6 +71,7 @@ export interface RedeemOutcome {
   readonly claims: SessionClaims;
   readonly returnPath: string | null;
   readonly door: SignInHostDoor;
+  readonly kind: StorefrontTransactionKind;
   readonly completeRegistration: string | null;
 }
 
@@ -103,11 +108,36 @@ export class StorefrontOidcService
     @Inject(SIGN_IN_HOST_CLOCK) private readonly clock: SignInHostClock,
     @Inject(SharedSessionHub) private readonly shared: SharedSessionHub,
     @Inject(AUTH_AUDIT) private readonly audit: AuthAuditLog,
+    @Inject(RateLimitService) private readonly limiter: RateLimitService,
   ) {}
 
   onModuleInit(): void {
     // A disabled sign-in host mints no linked session; nothing to refresh.
     if (this.settings) this.shared.registerRefresher(this);
+  }
+
+  /**
+   * 003 EARS-63, ADR-0015 §4 step 4 — the silent-check start: a silent
+   * transaction (`prompt=none`, ≈60 s, single-use) on the sign-in door, no
+   * intent, the request's path and query as its return path (none for the
+   * EARS-62 recovery). Its route counts it in `oidc:silent-check`.
+   */
+  async createSilentCheck(
+    req: StorefrontSilentCheckRequest,
+  ): Promise<StorefrontTransactionResponse> {
+    // EARS-63 (c) — the abandoned interactive transaction the browser still
+    // names is deleted server-side (with its intent); the cookie now names
+    // the silent one, and a sign-in finished in that form finds nothing.
+    if (req.replaces) {
+      const replaced = await this.state.takeTransaction(req.replaces);
+      if (replaced?.intentId) await this.state.takeIntent(replaced.intentId);
+    }
+    return this.createTransaction({
+      client: req.client,
+      kind: "silent",
+      door: "login",
+      ...(req.returnPath ? { returnPath: req.returnPath } : {}),
+    });
   }
 
   /**
@@ -223,6 +253,7 @@ export class StorefrontOidcService
   async redeem(
     req: StorefrontRedeemRequest,
     fingerprint: string,
+    ip: string,
   ): Promise<RedeemOutcome> {
     const clientId = this.clientIdOf(req.client);
     const own = req.txId ? await this.state.takeTransaction(req.txId) : null;
@@ -230,9 +261,13 @@ export class StorefrontOidcService
     if (own?.intentId) await this.state.takeIntent(own.intentId);
     const mine = own && own.clientId === clientId ? own : null;
     if (!mine || !sameValue(mine.state, req.state)) {
-      return this.refuseForeignState(req, mine);
+      return this.refuseForeignState(req, mine, ip);
     }
     const tx = mine;
+    // 003 EARS-63 (f), req. 9 — a silent transaction's callback counts in the
+    // silent path's own bucket; limited, it redeems nothing (the transaction
+    // is already taken, so deleted) and ends as on `login_required`.
+    if (tx.kind === "silent" && !this.admitSilent(ip)) throw refused(tx);
     // An OIDC error answer (the person aborted, `login_required`) carries no
     // code: the transaction is spent and nothing is minted. A transaction
     // without a verifier is never redeemed.
@@ -293,8 +328,17 @@ export class StorefrontOidcService
       ...minted,
       returnPath: tx.returnPath ?? null,
       door: tx.door,
+      kind: tx.kind,
       completeRegistration: tx.completeRegistration ?? null,
     };
+  }
+
+  /** One unit of the silent path's per-IP bucket (`oidc:silent-check`, req. 9). */
+  private admitSilent(ip: string): boolean {
+    return this.limiter.tryConsume({
+      ip,
+      scope: STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE,
+    });
   }
 
   /**
@@ -311,6 +355,7 @@ export class StorefrontOidcService
   private async refuseForeignState(
     req: StorefrontRedeemRequest,
     mine: StorefrontTransaction | null,
+    ip: string,
   ): Promise<never> {
     const named = req.state
       ? await this.state.takeTransactionByState(req.state)
@@ -337,6 +382,15 @@ export class StorefrontOidcService
       client: req.client,
       reason: "state_mismatch",
     });
+    // 003 EARS-63 (b) — a client that keeps no cookies: the callback names no
+    // transaction of its own and its `state` names a live SILENT one. That
+    // transaction is spent above (its code redeemed and discarded); its return
+    // path and kind come back so the callback lands there with `ds_guest=1` —
+    // one round trip per navigation, never a loop.
+    if (!req.txId && named?.kind === "silent") {
+      this.admitSilent(ip);
+      throw refused(named);
+    }
     throw refused(mine);
   }
 }
@@ -347,5 +401,6 @@ function refused(tx: StorefrontTransaction | null): UnauthorizedException {
     message: REDEEM_REFUSED,
     returnPath: tx?.returnPath ?? null,
     door: tx?.door ?? null,
+    kind: tx?.kind ?? null,
   });
 }

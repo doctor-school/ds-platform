@@ -96,13 +96,14 @@ export const AUTH_SENDING_DOOR_PER_IP_15MIN = 60;
  * 003 EARS-62, ADR-0015 §4 req. 9 — the storefront callback's redeem keys its
  * per-IP window under its own bucket, on the client IP the storefront server
  * forwards (as the BFF rewrites do). It takes no identifier and runs once per
- * sign-in and once per minted silent check.
+ * storefront callback, a silent one included (a silent callback also counts in
+ * {@link STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE}).
  */
 export const STOREFRONT_REDEEM_RATE_LIMIT_SCOPE = "oidc:redeem";
 
 /**
  * The redeem's ceiling: 1200 per 15 minutes, the NAT sizing ADR-0015 §4 step 4
- * sets for the silent path (`oidc:silent-check`) — tens of browsers behind one
+ * sets for the silent path ({@link STOREFRONT_SILENT_CHECK_PER_IP_15MIN}) — tens of browsers behind one
  * clinic or hospital address each mint a session on both storefronts after
  * every silent check; a code is useless without the server-held verifier and
  * the internal credential, so the bound is against flooding, not guessing.
@@ -110,14 +111,31 @@ export const STOREFRONT_REDEEM_RATE_LIMIT_SCOPE = "oidc:redeem";
 export const STOREFRONT_REDEEM_PER_IP_15MIN = 1200;
 
 /**
- * 003 EARS-61, ADR-0015 §4 req. 9 — the storefront entries' transaction
- * creation (sign-in, registration, reset, and the silent-check start) keys its
- * per-IP window under its own bucket, on the forwarded client IP. It takes no
- * identifier; the ceiling is the redeem's NAT sizing, since every redeem
- * follows one transaction.
+ * 003 EARS-61, ADR-0015 §4 req. 9 — the storefront entries' interactive
+ * transaction creation (sign-in, registration, reset) keys its per-IP window
+ * under its own bucket, on the forwarded client IP. It takes no identifier;
+ * the ceiling is the redeem's NAT sizing, since every redeem follows one
+ * transaction. The silent-check start counts in
+ * {@link STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE}, never here.
  */
 export const STOREFRONT_ENTRY_RATE_LIMIT_SCOPE = "oidc:entry";
 export const STOREFRONT_ENTRY_PER_IP_15MIN = 1200;
+
+/**
+ * 003 EARS-63 (f), ADR-0015 §4 step 4 «Rate limits» / req. 9 — the silent
+ * path's own per-IP bucket, separate from the password / code limiter and the
+ * interactive entry: it counts each silent-check start, each sign-in-host
+ * entry of a `prompt=none` auth request and each callback of a silent
+ * transaction, keyed by the client IP the storefront or sign-in-host server
+ * forwards. 1200 per 15 minutes is sized for a clinic or hospital NAT (tens of
+ * browsers, three hits per check, one check per browser per 10-minute marker).
+ * A tripped limit never reaches the person as an error: a limited start
+ * renders the guest page, a limited sign-in-host entry finalises with
+ * `login_required`, a limited silent callback redeems nothing and ends as on
+ * `login_required`.
+ */
+export const STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE = "oidc:silent-check";
+export const STOREFRONT_SILENT_CHECK_PER_IP_15MIN = 1200;
 
 /**
  * EARS-13 defaults (ADR-0001 §7): per-user 10/15 min, per-IP 20/15 min (failed
@@ -138,6 +156,8 @@ export const DEFAULT_RATE_LIMIT_THRESHOLDS: RateLimitThresholds = {
     [AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET]: AUTH_SENDING_DOOR_PER_IP_15MIN,
     [STOREFRONT_REDEEM_RATE_LIMIT_SCOPE]: STOREFRONT_REDEEM_PER_IP_15MIN,
     [STOREFRONT_ENTRY_RATE_LIMIT_SCOPE]: STOREFRONT_ENTRY_PER_IP_15MIN,
+    [STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE]:
+      STOREFRONT_SILENT_CHECK_PER_IP_15MIN,
   },
 };
 

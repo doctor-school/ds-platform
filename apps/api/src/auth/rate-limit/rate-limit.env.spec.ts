@@ -3,9 +3,12 @@ import {
   AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET,
   DEFAULT_RATE_LIMIT_THRESHOLDS,
   resolveRateLimitThresholds,
+  STOREFRONT_ENTRY_RATE_LIMIT_SCOPE,
+  STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE,
   type RateLimitEnv,
   type RateLimitOverrideRejection,
 } from "./rate-limit.types.js";
+import { RateLimitService } from "./rate-limit.service.js";
 
 // #1076: the EARS-13 ceilings become env-overridable for an ops / load-test
 // window (prep for the #873 phase-2 auth-burst run). The DI token's doc comment
@@ -149,5 +152,34 @@ describe("resolveRateLimitThresholds (EARS-13 env overrides, #1076)", () => {
     ).not.toThrow();
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
+  });
+});
+
+// 003 EARS-63 (f), ADR-0015 §4 step 4 «Rate limits» / req. 9 (#3173): the
+// silent path has its OWN per-IP bucket, NAT-sized, disjoint from the
+// interactive entry, the redeem and the password / code limiter.
+describe("oidc:silent-check bucket (003 EARS-63, ADR-0015 §4 req. 9)", () => {
+  it("EARS-63: the silent-check scope is its own 1200 per 15 minutes per-IP bucket", () => {
+    expect(STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE).toBe("oidc:silent-check");
+    expect(
+      DEFAULT_RATE_LIMIT_THRESHOLDS.scopedPerIpPer15Min[
+        STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE
+      ],
+    ).toBe(1200);
+    expect(STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE).not.toBe(
+      STOREFRONT_ENTRY_RATE_LIMIT_SCOPE,
+    );
+  });
+
+  it("EARS-63: exhausting the silent bucket leaves the interactive entry and the auth doors of that IP untouched", () => {
+    const svc = new RateLimitService(DEFAULT_RATE_LIMIT_THRESHOLDS, () => 0);
+    const ip = "198.51.100.7";
+    const silent = { ip, scope: STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE };
+    for (let i = 0; i < 1200; i++) expect(svc.tryConsume(silent)).toBe(true);
+    expect(svc.tryConsume(silent)).toBe(false);
+    expect(
+      svc.tryConsume({ ip, scope: STOREFRONT_ENTRY_RATE_LIMIT_SCOPE }),
+    ).toBe(true);
+    expect(svc.tryConsume({ ip })).toBe(true);
   });
 });

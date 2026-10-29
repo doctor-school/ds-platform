@@ -18,6 +18,7 @@ import {
 import type { IdpSession } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
+import { RateLimitService } from "../../src/auth/rate-limit/rate-limit.service.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import {
   SESSION_STORE,
@@ -34,6 +35,7 @@ import { STOREFRONT_OIDC_IDP } from "../../src/sign-in-host/storefront-oidc.idp.
 import {
   STOREFRONT_ENTRY_RATE_LIMIT_SCOPE,
   STOREFRONT_REDEEM_RATE_LIMIT_SCOPE,
+  STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE,
 } from "../../src/sign-in-host/storefront-oidc.controller.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 import {
@@ -259,6 +261,43 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return { client, txId: tx.txId, state: tx.state, code: value };
     }
 
+    /** 003 EARS-63 — the silent-check start (`prompt=none`), its own route. */
+    async function silentCheck(
+      client: "academy" | "doctor" = "academy",
+      returnPath?: string,
+    ) {
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/internal/oidc/silent-check",
+        headers: INTERNAL,
+        payload: { client, ...(returnPath ? { returnPath } : {}) },
+      });
+      expect(res.statusCode, res.body).toBe(200);
+      const { txId, authorizeUrl } = res.json() as {
+        txId: string;
+        authorizeUrl: string;
+      };
+      const q = new URL(authorizeUrl).searchParams;
+      return {
+        txId,
+        authorizeUrl,
+        state: q.get("state")!,
+        nonce: q.get("nonce")!,
+        codeChallenge: q.get("code_challenge")!,
+      };
+    }
+
+    /** The silent path's bucket tripped for every caller (`oidc:silent-check`, req. 9). */
+    function tripSilentLimit() {
+      const limiter = app.get(RateLimitService);
+      const real = limiter.tryConsume.bind(limiter);
+      vi.spyOn(limiter, "tryConsume").mockImplementation((ctx) =>
+        ctx.scope === STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE
+          ? false
+          : real(ctx),
+      );
+    }
+
     function redeem(
       payload: Record<string, unknown>,
       headers: Record<string, string> = INTERNAL,
@@ -430,6 +469,136 @@ describe.skipIf(!process.env.DATABASE_URL)(
       }
     });
 
+    it("EARS-63: the silent-check start creates a prompt=none transaction on the sign-in door with the request's return path; the interactive route refuses a silent kind", async () => {
+      const tx = await silentCheck("doctor", "/events?specialty=cardio");
+      const q = new URL(tx.authorizeUrl).searchParams;
+      expect(q.get("prompt")).toBe("none");
+      expect(q.get("login_hint")).toBeNull();
+      expect(q.get("redirect_uri")).toBe(DOCTOR_CALLBACK);
+      // An OIDC `login_required` answer carries no code: the redeem spends the
+      // silent transaction and names its path and kind (the guest marker).
+      const refused = await redeem({
+        client: "doctor",
+        txId: tx.txId,
+        state: tx.state,
+      });
+      expect(refused.statusCode).toBe(401);
+      expect(refused.json()).toMatchObject({
+        returnPath: "/events?specialty=cardio",
+        door: "login",
+        kind: "silent",
+      });
+      const viaInteractive = await app.inject({
+        method: "POST",
+        url: "/v1/internal/oidc/transaction",
+        headers: INTERNAL,
+        payload: { client: "academy", kind: "silent", door: "login" },
+      });
+      expect(viaInteractive.statusCode).toBe(400);
+      const offOrigin = await app.inject({
+        method: "POST",
+        url: "/v1/internal/oidc/silent-check",
+        headers: INTERNAL,
+        payload: { client: "academy", returnPath: "//evil.example" },
+      });
+      expect(offOrigin.statusCode).toBe(400);
+    });
+
+    it("EARS-63: a silent transaction finalised with a live shared session mints a session and says it was silent", async () => {
+      const address = await account("silent-mint");
+      const session = await hostSignIn(new Jar(), address);
+      const tx = await silentCheck("academy", "/webinars");
+      const value = oidc.issueCode({
+        clientId: ACADEMY,
+        redirectUri: ACADEMY_CALLBACK,
+        codeChallenge: tx.codeChallenge,
+        sid: session.zitadelSessionId,
+        sub: session.sub,
+        nonce: tx.nonce,
+      });
+      const res = await redeem({
+        client: "academy",
+        txId: tx.txId,
+        state: tx.state,
+        code: value,
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({
+        returnPath: "/webinars",
+        kind: "silent",
+      });
+      expect(sessionCookie(res)).toBeDefined();
+    });
+
+    it("EARS-63: (b) a silent callback without its transaction cookie (a client that keeps no cookies) burns the transaction and names its path, once", async () => {
+      const tx = await silentCheck("academy", "/webinars/live-1");
+      const res = await redeem({ client: "academy", state: tx.state });
+      expect(res.statusCode).toBe(401);
+      expect(res.json()).toMatchObject({
+        returnPath: "/webinars/live-1",
+        kind: "silent",
+      });
+      const again = await redeem({ client: "academy", state: tx.state });
+      expect(again.json()).toMatchObject({ returnPath: null, kind: null });
+      // An interactive transaction named by state alone stays the login-CSRF
+      // refusal: nothing about it leaves the API.
+      const interactive = await transaction("academy", { returnPath: "/x" });
+      const csrf = await redeem({
+        client: "academy",
+        state: interactive.state,
+      });
+      expect(csrf.json()).toMatchObject({ returnPath: null, kind: null });
+    });
+
+    it("EARS-63: (req. 9) a limited silent callback redeems nothing and ends as on login_required, with its path and kind", async () => {
+      const address = await account("silent-limited");
+      const session = await hostSignIn(new Jar(), address);
+      const tx = await silentCheck("academy", "/webinars");
+      const value = oidc.issueCode({
+        clientId: ACADEMY,
+        redirectUri: ACADEMY_CALLBACK,
+        codeChallenge: tx.codeChallenge,
+        sid: session.zitadelSessionId,
+        sub: session.sub,
+        nonce: tx.nonce,
+      });
+      tripSilentLimit();
+      const res = await redeem({
+        client: "academy",
+        txId: tx.txId,
+        state: tx.state,
+        code: value,
+      });
+      expect(res.statusCode).toBe(401);
+      expect(res.json()).toMatchObject({
+        returnPath: "/webinars",
+        kind: "silent",
+      });
+      expect(sessionCookie(res)).toBeUndefined();
+    });
+
+    it("EARS-63: (req. 9) a limited sign-in-host entry of a prompt=none auth request finalises with login_required, even with a live record", async () => {
+      const address = await account("silent-entry-limited");
+      const jar = new Jar();
+      await hostSignIn(jar, address);
+      tripSilentLimit();
+      const authRequest = hostIdp.seedAuthRequest({
+        clientId: ACADEMY,
+        prompt: ["none"],
+      });
+      const entry = await app.inject({
+        method: "GET",
+        url: `/v1/sign-in-host/entry?authRequest=${authRequest}`,
+        headers: { ...DEVICE, cookie: jar.header() },
+      });
+      expect(entry.statusCode).toBe(200);
+      expect((entry.json() as { action: string }).action).toBe("redirect");
+      expect(hostIdp.finalised.at(-1)).toEqual({
+        id: authRequest,
+        error: "login_required",
+      });
+    });
+
     it("EARS-8: a code finalised with a live record mints a fresh session linked to it, bounded by the record, with no token in the body", async () => {
       const address = await account("mint");
       const session = await hostSignIn(new Jar(), address);
@@ -446,6 +615,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         mfa: false,
         returnPath: "/webinars?x=1",
         door: "login",
+        kind: "interactive",
         completeRegistration: null,
       });
       expect(res.body).not.toMatch(/at-|rt-/);
@@ -474,7 +644,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       ).toBeLessThanOrEqual(3600);
     });
 
-    it("EARS-62 (req. 2): a replayed transaction, an expired code, a code whose challenge is not the transaction's verifier, a foreign nonce and a foreign state are refused", async () => {
+    it("EARS-62: (req. 2) a replayed transaction, an expired code, a code whose challenge is not the transaction's verifier, a foreign nonce and a foreign state are refused", async () => {
       const address = await account("replay");
       const session = await hostSignIn(new Jar(), address);
 
@@ -525,7 +695,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect((await redeem({ ...aborted, code: "late" })).statusCode).toBe(401);
     });
 
-    it("EARS-62 (req. 3): a foreign state burns the transaction, discards the tokens and appends auth.session.rejected (state_mismatch, storefront tier)", async () => {
+    it("EARS-62: (req. 3) a foreign state burns the transaction, discards the tokens and appends auth.session.rejected (state_mismatch, storefront tier)", async () => {
       const address = await account("csrf-audit");
       const session = await hostSignIn(new Jar(), address);
       // The attacker's own authorize request completes in the victim's
@@ -633,7 +803,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(silent.statusCode).toBe(400);
     });
 
-    it("EARS-62 (req. 8): a code whose sid is not the Zitadel session of a live sign-in-host record mints nothing", async () => {
+    it("EARS-62: (req. 8) a code whose sid is not the Zitadel session of a live sign-in-host record mints nothing", async () => {
       const address = await account("hosted");
       const session = await hostSignIn(new Jar(), address);
       // Finalised by another login UI: a Zitadel session no record holds.
@@ -779,7 +949,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 describe.skipIf(!process.env.DATABASE_URL)(
   "Storefront OIDC redeem limits (e2e)",
   () => {
-    it("EARS-62 (req. 9): the redeem endpoint is rate-limited per client IP in its own bucket", async () => {
+    it("EARS-62: (req. 9) the redeem endpoint is rate-limited per client IP in its own bucket", async () => {
       const { app } = await compile({
         ...RELAXED_RATE_LIMIT,
         scopedPerIpPer15Min: { [STOREFRONT_REDEEM_RATE_LIMIT_SCOPE]: 2 },
@@ -810,7 +980,53 @@ describe.skipIf(!process.env.DATABASE_URL)(
       }
     });
 
-    it("EARS-61 (req. 9): the storefront entry's transaction creation is rate-limited per client IP in its own bucket", async () => {
+    it("EARS-63: (req. 9) the silent-check start and a silent callback count in their own bucket; the interactive entry is untouched", async () => {
+      const { app } = await compile({
+        ...RELAXED_RATE_LIMIT,
+        scopedPerIpPer15Min: {
+          [STOREFRONT_SILENT_CHECK_RATE_LIMIT_SCOPE]: 3,
+          [STOREFRONT_ENTRY_RATE_LIMIT_SCOPE]: 1200,
+        },
+      });
+      try {
+        const headers = { ...INTERNAL, "x-forwarded-for": "203.0.113.9" };
+        const start = () =>
+          app.inject({
+            method: "POST",
+            url: "/v1/internal/oidc/silent-check",
+            headers,
+            payload: { client: "academy" },
+          });
+        const first = await start();
+        expect(first.statusCode).toBe(200);
+        const { txId, authorizeUrl } = first.json() as {
+          txId: string;
+          authorizeUrl: string;
+        };
+        const state = new URL(authorizeUrl).searchParams.get("state")!;
+        // The silent callback (an OIDC error: no code) takes the second unit.
+        const callback = await app.inject({
+          method: "POST",
+          url: "/v1/internal/oidc/redeem",
+          headers,
+          payload: { client: "academy", txId, state },
+        });
+        expect(callback.statusCode).toBe(401);
+        expect((await start()).statusCode).toBe(200);
+        expect((await start()).statusCode).toBe(429);
+        const interactive = await app.inject({
+          method: "POST",
+          url: "/v1/internal/oidc/transaction",
+          headers,
+          payload: { client: "academy", kind: "interactive", door: "login" },
+        });
+        expect(interactive.statusCode).toBe(200);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("EARS-61: (req. 9) the storefront entry's transaction creation is rate-limited per client IP in its own bucket", async () => {
       const { app } = await compile({
         ...RELAXED_RATE_LIMIT,
         scopedPerIpPer15Min: { [STOREFRONT_ENTRY_RATE_LIMIT_SCOPE]: 2 },

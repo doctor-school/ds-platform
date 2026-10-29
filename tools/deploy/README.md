@@ -700,8 +700,14 @@ never inspects the mutable compose tags (`ds-postgres:pg17-partman-pgbackrest`,
 read once more with the target's v2, and a failure names each hash asked
 (`postgres-probe asked with … <hash>…: PostgreSQL evidence unavailable: …`). The pre-ship checkpoint rewrites the v1 record
 unchanged (the shape that verb accepts), and the checkpoint after `data-up` — the
-newly installed verb — writes the target's v2 with `hashVersion: 2`. An entry can go
-once no box holds a v1 record.
+newly installed verb — writes the target's v2 with `hashVersion: 2`. With no prod ssh
+the release journal is where the record is read: preparation prints the probed record
+once (`↳ ds-data-prod: postgres record hashVersion 2, asked with the target v2`, or
+`postgres record v1 (no hashVersion), asked with the table's v1 record`), and the
+checkpoint after `data-up` echoes the box's own answer for the record it wrote
+(`↳ ds-data-prod: record: hashVersion 2` / `record: v1 (no hashVersion)`) beside its
+`log bound` lines. An entry can go once no box holds a v1 record — a release journal
+showing `record: hashVersion 2` is that evidence.
 Preparation sends only those infra
 contexts to an explicitly selected Docker host, labels the resulting images,
 executes their real PostgreSQL version and UID commands without a cluster,

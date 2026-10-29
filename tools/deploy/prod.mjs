@@ -2164,15 +2164,18 @@ export async function preparePostgresDeployment(
   };
   // #3313: ds-data-prod's `postgres-probe` verb. `client` is the read-only operator
   // check's own audited data-prod client (postgres-artifact-check.mjs) — same verb.
-  const probe = async (sourceHash, asked) => {
+  let asked;
+  const probe = async (sourceHash, label) => {
     try {
-      return JSON.parse(
+      const answer = JSON.parse(
         await (client ?? dataProd()).call(["postgres-probe"], {
           input: JSON.stringify(postgresProbeRequest({ ...probePlan, sourceHash })),
         }),
       );
+      asked = label;
+      return answer;
     } catch (error) {
-      throw new Error(`postgres-probe asked with ${asked} ${sourceHash.slice(0, 12)}…: ${error.message}`, {
+      throw new Error(`postgres-probe asked with ${label} ${sourceHash.slice(0, 12)}…: ${error.message}`, {
         cause: error,
       });
     }
@@ -2199,6 +2202,10 @@ export async function preparePostgresDeployment(
     }
   };
   let live = await read();
+  // #3466: no prod ssh (#2987) — the release journal is the only place the box's
+  // record is read. Once, at preparation; every `run()` re-reads silently.
+  const record = live?.hashVersion === 2 ? "hashVersion 2" : "v1 (no hashVersion)";
+  console.log(`  ↳ ${DATA_PROD}: postgres record ${record}, asked with ${asked}`);
   const expected = assertPostgresEvidence({ ...plan, live, certificate });
   return {
     identity: expected,
@@ -2213,6 +2220,15 @@ export async function preparePostgresDeployment(
       });
     },
   };
+}
+
+// #3395/#3466: of the checkpoint verb's answer only the box's own evidence is echoed —
+// the record it wrote (`record:`) and its log bounds (`log bound…`).
+export function checkpointJournalLines(answer) {
+  return String(answer ?? "")
+    .split("\n")
+    .filter((line) => line.startsWith("record:") || line.startsWith("log bound"))
+    .map((line) => `  ↳ ${DATA_PROD}: ${line.trim()}`);
 }
 
 // `local` (#3157): `{ imagesFile }` of a box-local run, null on the operator path.
@@ -2353,13 +2369,12 @@ async function deploy(hotfixRef = null, local = null) {
     await postgres.run(() => dataProdStep(sha, "up", "data-prod up"));
     // #3395: the checkpoint verb also answers one `log bound:` line per data-prod
     // container (or one `log bounds: unavailable — …`) — the release's own evidence
-    // the bound reached ds-glitchtip too. Only those lines are echoed.
+    // the bound reached ds-glitchtip too. #3466: and the `record:` it wrote — the
+    // request always marks v2 (postgresStateRecord), so only the box's answer counts.
     const checkpoint = await postgres.run(({ live, sourceHash }) =>
       dataProd().call(["postgres-checkpoint"], { input: postgresStateRecord(live, sourceHash) }),
     );
-    for (const line of String(checkpoint ?? "").split("\n")) {
-      if (line.startsWith("log bound")) console.log(`  ↳ ${DATA_PROD}: ${line.trim()}`);
-    }
+    for (const line of checkpointJournalLines(checkpoint)) console.log(line);
     ok("postgres + redis + pgbackrest + glitchtip up", t);
   }
 

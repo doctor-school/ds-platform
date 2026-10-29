@@ -28,7 +28,7 @@ import {
   postgresStateRecord,
   readPostgresTarget,
 } from "./postgres-guard.mjs";
-import { preparePostgresDeployment } from "./prod.mjs";
+import { checkpointJournalLines, preparePostgresDeployment } from "./prod.mjs";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
 const PROBE = join(import.meta.dirname, "postgres-artifact-probe.py");
@@ -357,6 +357,49 @@ test("3419: a v2 box is re-read with the target v2 (tags present or gone)", asyn
       `tags ${tags}`,
     );
   }
+});
+
+// #3466: no prod ssh — the release journal is the only place the box's record is read.
+const journal = async (t, client) => {
+  const log = t.mock.method(console, "log", () => {});
+  await prepare(client);
+  return log.mock.calls
+    .map((c) => c.arguments.join(" "))
+    .filter((l) => l.includes("postgres record"));
+};
+
+test("3466: preparation prints a v1 box's record once, naming the hash it was asked with", async (t) => {
+  assert.deepEqual(await journal(t, box({ sourceHash: entry.v1 })), [
+    "  ↳ ds-data-prod: postgres record v1 (no hashVersion), asked with the table's v1 record",
+  ]);
+});
+
+test("3466: preparation prints a v2 box's record hashVersion once", async (t) => {
+  assert.deepEqual(
+    await journal(t, box({ sourceHash: head.sourceHash, hashVersion: 2 })),
+    [
+      "  ↳ ds-data-prod: postgres record hashVersion 2, asked with the target v2",
+    ],
+  );
+});
+
+test("3466: the post-up checkpoint echoes the box's record line and its log bounds only", () => {
+  for (const [record, expected] of [
+    ["record: hashVersion 2", "  ↳ ds-data-prod: record: hashVersion 2"],
+    [
+      "record: v1 (no hashVersion)",
+      "  ↳ ds-data-prod: record: v1 (no hashVersion)",
+    ],
+  ]) {
+    assert.deepEqual(
+      checkpointJournalLines(`PostgreSQL checkpoint written
+${record}
+log bound: /pg log=json-file
+`),
+      [expected, "  ↳ ds-data-prod: log bound: /pg log=json-file"],
+    );
+  }
+  assert.deepEqual(checkpointJournalLines(undefined), []);
 });
 
 test("3419: a v1 record not in the table is still refused, read once", async () => {

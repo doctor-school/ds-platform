@@ -680,86 +680,101 @@ Then(
   },
 );
 
+async function pickCompactDay(
+  page: Page,
+  world: StepWorld,
+  excludedDay?: string,
+): Promise<void> {
+  const compact = page.getByTestId("events-compact-month");
+  const populated = compact.getByRole("button", { name: DAY_WITH_EVENTS });
+  const days = excludedDay
+    ? populated.filter({
+        hasNotText: new RegExp(`^${Number(excludedDay.slice(8))}$`),
+      })
+    : populated;
+  // Late in a month the remaining event days may all lie in the next one.
+  for (let paged = 0; (await days.count()) === 0 && paged < 2; paged += 1) {
+    const month = await compact.getAttribute("data-month");
+    await compact.getByTestId("events-compact-month-next").click();
+    await expect(compact).not.toHaveAttribute("data-month", month!);
+  }
+  expect(await days.count(), "a day carrying events").toBeGreaterThan(0);
+  await page.evaluate(() => {
+    (window as unknown as { __shellSentinel?: string }).__shellSentinel =
+      "kept";
+  });
+  feedOf(world).history.push(pathAndQuery(page));
+  feedOf(world).groupsBeforeDay = await page
+    .locator('section[id^="day-"]')
+    .count();
+  feedOf(world).scrollBeforeDay = await page.evaluate(() => window.scrollY);
+  feedOf(world).groupTopsBeforeDay = await page
+    .locator('section[id^="day-"]')
+    .evaluateAll((nodes) =>
+      Object.fromEntries(
+        nodes.map((node) => [node.id, node.getBoundingClientRect().top]),
+      ),
+    );
+  const picked = days.last();
+  const label = (await picked.getAttribute("aria-label")) ?? "";
+  await picked.click();
+  await page.waitForURL((url) => url.searchParams.has("day"));
+  feedOf(world).pickedDay = params(page).get("day")!;
+  feedOf(world).pickedLabel = label;
+}
+
 When(
   "the {word} picks a day carrying events in the compact month",
-  async ({ page, world }, _actor: string) => {
-    const compact = page.getByTestId("events-compact-month");
-    const days = compact.getByRole("button", { name: DAY_WITH_EVENTS });
-    // Late in a month the remaining event days may all lie in the next one.
-    for (let paged = 0; (await days.count()) === 0 && paged < 2; paged += 1) {
-      const month = await compact.getAttribute("data-month");
-      await compact.getByTestId("events-compact-month-next").click();
-      await expect(compact).not.toHaveAttribute("data-month", month!);
-    }
-    expect(await days.count(), "a day carrying events").toBeGreaterThan(0);
-    await page.evaluate(() => {
-      (window as unknown as { __shellSentinel?: string }).__shellSentinel =
-        "kept";
-    });
-    feedOf(world).history.push(pathAndQuery(page));
-    feedOf(world).groupsBeforeDay = await page
-      .locator('section[id^="day-"]')
-      .count();
-    feedOf(world).scrollBeforeDay = await page.evaluate(() => window.scrollY);
-    feedOf(world).groupTopsBeforeDay = await page
-      .locator('section[id^="day-"]')
-      .evaluateAll((nodes) =>
-        Object.fromEntries(
-          nodes.map((node) => [node.id, node.getBoundingClientRect().top]),
-        ),
-      );
-    const picked = days.last();
-    const label = (await picked.getAttribute("aria-label")) ?? "";
-    await picked.click();
-    await page.waitForURL((url) => url.searchParams.has("day"));
-    feedOf(world).pickedDay = params(page).get("day")!;
-    feedOf(world).pickedLabel = label;
-  },
+  async ({ page, world }, _actor: string) => pickCompactDay(page, world),
 );
+
+async function expectCompactDayMoved(
+  page: Page,
+  world: StepWorld,
+): Promise<void> {
+  const day = feedOf(world).pickedDay;
+  expect(day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  const group = page.locator(`section[id="day-${day}"]`);
+  await expect(group).toBeInViewport();
+  // The feed body actually moved: the picked group rose, or (a group that
+  // was not rendered before) the page scrolled down to it.
+  const topBefore = feedOf(world).groupTopsBeforeDay?.[`day-${day}`];
+  if (topBefore === undefined) {
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(feedOf(world).scrollBeforeDay ?? 0);
+  } else {
+    await expect
+      .poll(async () => (await group.boundingBox())?.y ?? topBefore)
+      .toBeLessThan(topBefore);
+  }
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { __shellSentinel?: string }).__shellSentinel,
+    ),
+    "the shell was not reloaded",
+  ).toBe("kept");
+  const compact = page.getByTestId("events-compact-month");
+  await expect(compact).toHaveAttribute(
+    "data-selected-day",
+    String(Number(day!.slice(8))),
+  );
+  const label = feedOf(world).pickedLabel;
+  if (label) {
+    await expect(
+      compact.getByRole("button", { name: label, exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+  }
+  // The pick moves the feed; it never narrows the read to that day.
+  expect(
+    await page.locator('section[id^="day-"]').count(),
+    "the day groups around the picked day stay",
+  ).toBeGreaterThanOrEqual(feedOf(world).groupsBeforeDay ?? 1);
+}
 
 Then(
   "the URL names that day and the feed body moves to that day without reloading the shell",
-  async ({ page, world }) => {
-    const day = feedOf(world).pickedDay;
-    expect(day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    const group = page.locator(`section[id="day-${day}"]`);
-    await expect(group).toBeInViewport();
-    // The feed body actually moved: the picked group rose, or (a group that
-    // was not rendered before) the page scrolled down to it.
-    const topBefore = feedOf(world).groupTopsBeforeDay?.[`day-${day}`];
-    if (topBefore === undefined) {
-      await expect
-        .poll(() => page.evaluate(() => window.scrollY))
-        .toBeGreaterThan(feedOf(world).scrollBeforeDay ?? 0);
-    } else {
-      await expect
-        .poll(async () => (await group.boundingBox())?.y ?? topBefore)
-        .toBeLessThan(topBefore);
-    }
-    expect(
-      await page.evaluate(
-        () =>
-          (window as unknown as { __shellSentinel?: string }).__shellSentinel,
-      ),
-      "the shell was not reloaded",
-    ).toBe("kept");
-    const compact = page.getByTestId("events-compact-month");
-    await expect(compact).toHaveAttribute(
-      "data-selected-day",
-      String(Number(day!.slice(8))),
-    );
-    const label = feedOf(world).pickedLabel;
-    if (label) {
-      await expect(
-        compact.getByRole("button", { name: label, exact: true }),
-      ).toHaveAttribute("aria-pressed", "true");
-    }
-    // The pick moves the feed; it never narrows the read to that day.
-    expect(
-      await page.locator('section[id^="day-"]').count(),
-      "the day groups around the picked day stay",
-    ).toBeGreaterThanOrEqual(feedOf(world).groupsBeforeDay ?? 1);
-  },
+  async ({ page, world }) => expectCompactDayMoved(page, world),
 );
 
 // ── EARS-5: the month view of the same page ─────────────────────────────────
@@ -2372,3 +2387,263 @@ Then(
     expect(doctor.filter((slug) => academy.includes(slug))).toEqual([]);
   },
 );
+
+// ── Original public 019 obligations (#3499) ────────────────────────────────
+
+type PublicDoctorCard = {
+  slug: string;
+  title: string;
+  href: string;
+  recording?: {
+    state: string;
+    primaryKind: string | null;
+    secondaryKind: string | null;
+  };
+};
+type PublicDoctorReading = {
+  today: string;
+  to: string;
+  nextFrom: string | null;
+  days: { day: string; items: PublicDoctorCard[] }[];
+};
+type PublicDoctorState = {
+  today?: string;
+  liveDay?: string;
+  noRecording?: PublicDoctorCard;
+  pastQuery?: string;
+};
+const publicDoctorStates = new WeakMap<StepWorld, PublicDoctorState>();
+function publicDoctorState(world: StepWorld): PublicDoctorState {
+  let value = publicDoctorStates.get(world);
+  if (!value) {
+    value = {};
+    publicDoctorStates.set(world, value);
+  }
+  return value;
+}
+async function publicDoctorRead<T>(page: Page, path: string): Promise<T> {
+  const response = await page.request.get(path);
+  expect(response.status(), path).toBe(200);
+  return response.json() as Promise<T>;
+}
+function compactDay(page: Page, day: string): Locator {
+  return page
+    .getByTestId("events-compact-month")
+    .locator("button[aria-pressed]")
+    .filter({ hasText: new RegExp(`^${Number(day.slice(8))}$`) });
+}
+
+Then(
+  "the compact month and the day-grouped feed are visible at the same time",
+  async ({ page, world }) => {
+    const reading = await publicDoctorRead<PublicDoctorReading>(
+      page,
+      "/v1/storefront/doctor/events?tense=upcoming",
+    );
+    expect(reading.today).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
+    publicDoctorState(world).today = reading.today;
+    const compact = page.getByTestId("events-compact-month");
+    const feed = page.getByTestId("events-feed");
+    await expect(compact).toBeInViewport();
+    await expect(feed).toBeInViewport();
+    await expect(compact).toHaveAttribute(
+      "data-month",
+      reading.today.slice(0, 7),
+    );
+    const compactBox = await boxOf(compact, "compact month");
+    const feedBox = await boxOf(feed, "day feed");
+    expect(feedBox.x).toBeGreaterThan(compactBox.x + compactBox.width - 1);
+    const groups = feed.locator('section[id^="day-"]');
+    expect(await groups.count(), "populated day-grouped feed").toBeGreaterThan(
+      0,
+    );
+    for (const group of await groups.all()) {
+      await expect(group).toHaveAttribute("id", /^day-\d{4}-\d{2}-\d{2}$/u);
+      expect(
+        await group.locator("[data-webinar-card]").count(),
+      ).toBeGreaterThan(0);
+    }
+  },
+);
+
+Then("«Сегодня» is marked in the compact month", async ({ page, world }) => {
+  const today = publicDoctorState(world).today;
+  expect(today, "Doctor response supplies today").toBeDefined();
+  const cell = compactDay(page, today!);
+  await expect(cell).toHaveCount(1);
+  // MonthDotGrid gives the selected cell priority; the independent today tint
+  // is also checked after the visitor selects another day (019 EARS-4).
+  await expect(cell).toHaveAttribute("aria-pressed", "true");
+  await expect(cell).toHaveClass(/bg-primary-action/u);
+});
+
+Then(
+  "a day holding a live эфир carries the live marker",
+  async ({ page, world }) => {
+    const today = publicDoctorState(world).today!;
+    const month = await publicDoctorRead<{
+      today: string;
+      days: { date: string; count: number; hasLive: boolean }[];
+      entries: { slug: string; state: string; startsAt: string }[];
+    }>(page, `/v1/storefront/doctor/events/month?month=${today.slice(0, 7)}`);
+    expect(month.today).toBe(today);
+    const live = await publicDoctorRead<{ slug: string }[]>(
+      page,
+      DOCTOR_LIVE_READ,
+    );
+    const entry = month.entries.find(
+      (row) =>
+        row.state === "live" && live.some((item) => item.slug === row.slug),
+    );
+    expect(entry, "a real current-month live event is required").toBeDefined();
+    const day = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Moscow",
+    }).format(new Date(entry!.startsAt));
+    const liveDay = month.days.find((row) => row.date === day);
+    expect(liveDay?.hasLive, "month contract carries actual live day").toBe(
+      true,
+    );
+    expect(liveDay!.count).toBeGreaterThan(0);
+    publicDoctorState(world).liveDay = day;
+    await expect(compactDay(page, day).locator(".bg-live")).toBeVisible();
+  },
+);
+
+When(
+  "the doctor selects a day in the compact month",
+  async ({ page, world }) => {
+    await pickCompactDay(page, world, publicDoctorState(world).today);
+  },
+);
+Then("the URL changes to that day", async ({ page, world }) => {
+  expect(params(page).get("day")).toBe(feedOf(world).pickedDay);
+  expect(params(page).get("day")).not.toBe(publicDoctorState(world).today);
+});
+Then(
+  "the feed body moves to that day without reloading the shell",
+  async ({ page, world }) => {
+    await expectCompactDayMoved(page, world);
+    const { today, liveDay } = publicDoctorState(world);
+    await expect(compactDay(page, today!)).toHaveClass(/bg-tint/u);
+    await expect(compactDay(page, today!).locator("span").first()).toHaveClass(
+      /text-primary-action/u,
+    );
+    await expect(compactDay(page, liveDay!).locator(".bg-live")).toBeVisible();
+  },
+);
+
+Given(
+  "a past event for which feature 014 has published nothing",
+  async ({ page, host, world }) => {
+    let query = new URLSearchParams({ tense: "past" });
+    let selected: PublicDoctorCard | undefined;
+    for (let batch = 0; batch < 20; batch += 1) {
+      const reading = await publicDoctorRead<PublicDoctorReading>(
+        page,
+        `/v1/storefront/doctor/events?${query}`,
+      );
+      selected = reading.days
+        .flatMap((day) => day.items)
+        .find(
+          (card) =>
+            card.recording?.state === "preparing" &&
+            card.recording.primaryKind === null &&
+            card.recording.secondaryKind === null,
+        );
+      if (selected || !reading.nextFrom) break;
+      query = new URLSearchParams({
+        tense: "past",
+        from: reading.nextFrom,
+        to: reading.to,
+      });
+    }
+    expect(
+      selected,
+      "actual 014 projection with no published raw or edited cut",
+    ).toBeDefined();
+    const state = publicDoctorState(world);
+    state.noRecording = selected!;
+    state.pastQuery = query.toString();
+    await openFeed(page, host.eventsPath);
+  },
+);
+
+Then(
+  "the card renders without a recording action",
+  async ({ page, host, world }) => {
+    const state = publicDoctorState(world);
+    if (state.pastQuery !== "tense=past") {
+      await openFeed(page, `${host.eventsPath}?${state.pastQuery}`);
+    }
+    const card = feedCards(page).filter({
+      has: page.locator(`a[href="${state.noRecording!.href}"]`),
+    });
+    await expect(card).toHaveCount(1);
+    await expect(card).toContainText(state.noRecording!.title);
+    await expect(card).toContainText("Без записи");
+    await expect(
+      card.getByRole("link", { name: /Смотреть запись/iu }),
+    ).toHaveCount(0);
+    await expect(card.getByRole("button")).toHaveCount(0);
+  },
+);
+
+Then(
+  "no link resolves to a missing recording",
+  async ({ page, host, world }) => {
+    const event = publicDoctorState(world).noRecording!;
+    const card = feedCards(page).filter({
+      has: page.locator(`a[href="${event.href}"]`),
+    });
+    const links = card.getByRole("link");
+    await expect(links).toHaveCount(1);
+    await expect(links).toHaveAttribute("href", eventPathOf(host, event.slug));
+    const response = await page.request.get(event.href);
+    expect(response.status(), "ordinary event page is a real destination").toBe(
+      200,
+    );
+    expect(await response.text()).toContain(event.title);
+  },
+);
+
+Then(
+  "no community-discussion link or placeholder control is rendered anywhere in the tense",
+  async ({ page }) => {
+    await expect(
+      page
+        .getByTestId("events-tense-tabs")
+        .getByRole("tab", { name: "Прошедшие", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(await page.locator("main").innerText()).not.toMatch(
+      /обсуждени|сообществ|Запись готовится/iu,
+    );
+    await expect(
+      page.locator('main a[href*="community"], main a[href*="discussion"]'),
+    ).toHaveCount(0);
+    await expect(
+      page
+        .getByTestId("events-feed")
+        .locator(
+          'button:disabled,[role="button"][aria-disabled="true"],a[href="#"]',
+        ),
+    ).toHaveCount(0);
+  },
+);
+
+Then("the response carries no «Мои события» cut", async ({ page, host }) => {
+  const response = await page.request.get(host.eventsPath);
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  expect(
+    html,
+    "fresh anonymous server-rendered response has no personal cut",
+  ).not.toMatch(
+    /data-testid="events-my-events(?:-skeleton|-error)?"|data-feed-block="my-events"/u,
+  );
+  expect(html).not.toContain('"myEvents":{');
+});
+Then("no such block exists in the DOM", async ({ page }) => {
+  await expect(page.getByTestId("events-my-events")).toHaveCount(0);
+  await expect(page.getByTestId("events-my-events-skeleton")).toHaveCount(0);
+  await expect(page.locator('[data-feed-block="my-events"]')).toHaveCount(0);
+});

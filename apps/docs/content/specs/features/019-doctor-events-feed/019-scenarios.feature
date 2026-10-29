@@ -307,6 +307,48 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       And the facet sets differ only as the «filterSet» row cites
       And the content sets differ as the «contentSet» row cites: no event is listed on both storefronts
 
+  @public-doctor-feed-states
+  Rule: Public desktop calendar markers
+
+    Background:
+      Given a visitor with no account
+
+    @EARS-4 @happy
+    Scenario: The month calendar stands beside the day feed on desktop
+      Given the viewport is 1440 wide
+      When the doctor opens «События»
+      Then the compact month and the day-grouped feed are visible at the same time
+      And «Сегодня» is marked in the compact month
+      And a day holding a live эфир carries the live marker
+      When the doctor selects a day in the compact month
+      Then the URL changes to that day
+      And the feed body moves to that day without reloading the shell
+
+  @public-doctor-feed-states
+  Rule: Past cards without a published recording
+
+    Background:
+      Given a visitor with no account
+      And the viewport is 1440 wide
+
+    @EARS-10 @failure
+    Scenario: A past event with no recording renders without a dead link
+      Given a past event for which feature 014 has published nothing
+      When the doctor switches the tense to «Прошедшие»
+      Then the card renders without a recording action
+      And no link resolves to a missing recording
+      And no community-discussion link or placeholder control is rendered anywhere in the tense
+
+  @public-doctor-feed-states
+  Rule: Anonymous initial response and DOM
+
+    @EARS-11 @failure
+    Scenario: A guest never sees the «Мои события» block
+      Given a visitor with no account
+      When the visitor opens «События»
+      Then the response carries no «Мои события» cut
+      And no such block exists in the DOM
+
   Rule: Remaining events-feed scenarios
 
     Background:
@@ -381,17 +423,6 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       When the doctor opens «События»
       Then the feed lists only events of that specialty
       And no event is included because of a shared name prefix or a computed likeness
-
-    @EARS-4 @happy
-    Scenario: The month calendar stands beside the day feed on desktop
-      Given the viewport is 1440 wide
-      When the doctor opens «События»
-      Then the compact month and the day-grouped feed are visible at the same time
-      And «Сегодня» is marked in the compact month
-      And a day holding a live эфир carries the live marker
-      When the doctor selects a day in the compact month
-      Then the URL changes to that day
-      And the feed body moves to that day without reloading the shell
 
     @EARS-5 @happy
     Scenario: The month is a view of the same page
@@ -488,14 +519,6 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       And the screen holds the 10 most recent past events, «Показать ещё 10 (осталось N)» adding the next older ones
       And no separate archive page, tab or block below the feed is rendered
 
-    @EARS-10 @failure
-    Scenario: A past event with no recording renders without a dead link
-      Given a past event for which feature 014 has published nothing
-      When the doctor switches the tense to «Прошедшие»
-      Then the card renders without a recording action
-      And no link resolves to a missing recording
-      And no community-discussion link or placeholder control is rendered anywhere in the tense
-
     @EARS-11 @happy
     Scenario: A signed-in doctor sees the short «Мои события» cut
       Given a signed-in doctor registered for two upcoming events
@@ -503,13 +526,6 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       Then a short cut lists those two events, at most the nearest three and no live one
       And «Все мои события →» leads into the account's «Мои события»
       And no ticket, QR or НМО check-in is rendered in the cut
-
-    @EARS-11 @failure
-    Scenario: A guest never sees the «Мои события» block
-      Given a visitor with no account
-      When the visitor opens «События»
-      Then the response carries no «Мои события» cut
-      And no such block exists in the DOM
 
     @EARS-12 @happy
     # Read under 019 «Amendment — 2026-10-06»: the card carries no action and no guest band renders.

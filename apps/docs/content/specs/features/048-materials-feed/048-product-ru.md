@@ -129,9 +129,9 @@ lang: ru
 
 ## Ссылка на утверждённый макет
 
-Пусто — заполняется на Stage A (`author-design-mockup`). Ожидаемые канвасы:
+Пусто — заполняется на Stage A (`author-design-mockup`). Канвасы, завендоренные для этого просмотра:
 
-- `academy-material.dc.html` — страница для чтения материала платформы (US-8); промпт Claude Design: [#3403, комментарий 6487221951](https://github.com/doctor-school/ds-platform/issues/3403#issuecomment-6487221951) (промпт 2).
+- `academy-material.dc.html` — страница для чтения материала платформы (US-8), нарисована владельцем и завендорена 2026-10-29 (#3403); промпт Claude Design: [#3403, комментарий 6487221951](https://github.com/doctor-school/ds-platform/issues/3403#issuecomment-6487221951) (промпт 2).
 - `unit-feed-card.dc.html` — карточка ленты, а также лента на главной Академии; промпт Claude Design: [#3403, комментарий 6487273524](https://github.com/doctor-school/ds-platform/issues/3403#issuecomment-6487273524).
 
 Заменённый вход: блоки «Новости и блог» и «Рилсы и видео» в [`design-source/academy-home.dc.html`](../../../../../../design-source/academy-home.dc.html) — лента заменяет оба; из них до появления канваса ленты берутся только тексты состояний загрузки / пусто / ошибка. У экранов админки (материалы, источники) канваса пока нет.

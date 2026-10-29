@@ -129,9 +129,9 @@ Per-platform mechanism, fields, limits and terms: [`048-platform-access-research
 
 ## Approved-mockup reference
 
-Empty — filled at Stage A (`author-design-mockup`). Pending canvases:
+Empty — filled at Stage A (`author-design-mockup`). Canvases vendored for that review:
 
-- `academy-material.dc.html` — the reading page of a platform material (US-8); Claude Design prompt: [#3403 comment 6487221951](https://github.com/doctor-school/ds-platform/issues/3403#issuecomment-6487221951) (prompt 2).
+- `academy-material.dc.html` — the reading page of a platform material (US-8), drawn by the owner and vendored 2026-10-29 (#3403); Claude Design prompt: [#3403 comment 6487221951](https://github.com/doctor-school/ds-platform/issues/3403#issuecomment-6487221951) (prompt 2).
 - `unit-feed-card.dc.html` — the feed card unit, and the rail on the Academy home; Claude Design prompt: [#3403 comment 6487273524](https://github.com/doctor-school/ds-platform/issues/3403#issuecomment-6487273524).
 
 Superseded input: the «Новости и блог» and «Рилсы и видео» blocks of [`design-source/academy-home.dc.html`](../../../../../../design-source/academy-home.dc.html) — the rail replaces both; only their loading / empty / error copy is carried until the rail canvas exists. The admin materials and sources screens have no canvas yet.

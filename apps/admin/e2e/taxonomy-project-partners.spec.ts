@@ -102,10 +102,10 @@ async function createPartner(
   page: Page,
   title: string,
 ): Promise<{ title: string; url: string }> {
-  await page.goto("/partners/create");
-  await page.getByTestId("partner-title").fill(title);
-  await page.getByTestId("submit-partner").click();
-  await page.waitForURL(/\/partners\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+  await page.goto("/organisations/create");
+  await page.getByTestId("organisation-title").fill(title);
+  await page.getByTestId("submit-organisation").click();
+  await page.waitForURL(/\/organisations\/[0-9a-f-]{36}$/, { timeout: 20_000 });
   return { title, url: page.url() };
 }
 

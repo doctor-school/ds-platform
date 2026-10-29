@@ -18,7 +18,7 @@ const REPLACEMENT_PNG_1x1 = Buffer.from(
 );
 
 interface MediaCase {
-  resource: "projects" | "experts" | "partners";
+  resource: "projects" | "experts" | "organisations";
   inputId: "cover" | "photo" | "logo";
   previewAlt: string;
   errorTestId: string;
@@ -233,24 +233,26 @@ test.describe("012 EARS-21 — reversible taxonomy entity media", () => {
     page,
   }) => {
     await signInAsAdmin(page);
-    await page.goto("/partners/create");
+    await page.goto("/organisations/create");
     await page
-      .getByTestId("partner-title")
+      .getByTestId("organisation-title")
       .fill(`Фонд развития медицинского образования ${Date.now()}`);
     await page
-      .getByTestId("partner-website-url")
+      .getByTestId("organisation-website-url")
       .fill("https://education.example.ru");
-    await expectNoStorageReferenceAuthoring(page, "partner-slug");
-    await page.getByTestId("submit-partner").click();
-    await page.waitForURL(/\/partners\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    await expectNoStorageReferenceAuthoring(page, "organisation-slug");
+    await page.getByTestId("submit-organisation").click();
+    await page.waitForURL(/\/organisations\/[0-9a-f-]{36}$/, {
+      timeout: 20_000,
+    });
 
     await driveMediaLifecycle(page, {
-      resource: "partners",
+      resource: "organisations",
       inputId: "logo",
-      previewAlt: "Логотип партнёра",
-      errorTestId: "partner-logo-error",
-      submitTestId: "submit-partner",
-      slugTestId: "partner-slug",
+      previewAlt: "Логотип организации",
+      errorTestId: "organisation-logo-error",
+      submitTestId: "submit-organisation",
+      slugTestId: "organisation-slug",
       storageErrorText: "Хранилище файлов временно недоступно",
     });
   });
@@ -293,7 +295,7 @@ for (const variant of RENDER_MATRIX) {
       for (const media of [
         { path: "/projects/create", inputId: "cover", label: "Обложка" },
         { path: "/experts/create", inputId: "photo", label: "Фото" },
-        { path: "/partners/create", inputId: "logo", label: "Логотип" },
+        { path: "/organisations/create", inputId: "logo", label: "Логотип" },
       ]) {
         await page.goto(media.path);
         const fileInput = page.locator(`input[type="file"]#${media.inputId}`);

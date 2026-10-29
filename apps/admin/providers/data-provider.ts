@@ -80,8 +80,8 @@ import type {
  *   experts  (012)  the same four calls against /v1/admin/experts, with `photo`
  *                   as the file part instead of `cover` (#1284, EARS-2).
  *
- *   partners (012)  the same four calls against /v1/admin/organisations (032), with `logo`
- *                   as the file part (#1286, EARS-4).
+ *   organisations (032)  the same four calls against /v1/admin/organisations, with
+ *                   `logo` as the file part (012 #1286, 032 #3492 — the renamed partners).
  *
  *   directions   (012)  the same four calls against /v1/admin/directions, with NO file
  *                   part at all — a direction is a title plus its address, so every
@@ -122,9 +122,9 @@ export type UpdateEventVars = UpdateEventRequest & { programPdf?: File | null };
 const TAXONOMY_MEDIA_PART = {
   projects: "cover",
   experts: "photo",
-  // A partner's image is its LOGO, and the part name is kind-specific by design
+  // An organisation's image is its LOGO, and the part name is kind-specific by design
   // (012-design §5.1): sending it as `cover`/`photo` is a 400, not a synonym.
-  partners: "logo",
+  organisations: "logo",
   // A direction carries no image anywhere in the entity (012-design §2.2 / §5.1): it
   // is a title plus its permanent address. `null` registers the resource on this
   // map — so list/detail/create/update all dispatch for it — WITHOUT inventing a
@@ -135,15 +135,6 @@ const TAXONOMY_MEDIA_PART = {
   "event-kinds": null,
 } as const;
 type TaxonomyResource = keyof typeof TAXONOMY_MEDIA_PART;
-
-/**
- * 032 (#3492) — the partner registry is served as `/v1/admin/organisations`;
- * the Refine resource keeps its `partners` name until the organisation admin
- * section replaces it in this same PR.
- */
-function resourcePath(resource: string): string {
-  return resource === "partners" ? "organisations" : resource;
-}
 
 function isTaxonomyResource(resource: string): resource is TaxonomyResource {
   return Object.hasOwn(TAXONOMY_MEDIA_PART, resource);
@@ -178,17 +169,17 @@ export type EligibleExpertUserList =
   components["schemas"]["EligibleExpertUserListDto"];
 export type EligibleExpertUserOption = EligibleExpertUserList["data"][number];
 
-/** Partner create variables: the authored fields plus an optional logo file (#1286). */
-export type CreatePartnerVars = CreateOrganisationRequest & {
+/** Organisation create variables: the authored fields plus an optional logo file (032 EARS-1). */
+export type CreateOrganisationVars = CreateOrganisationRequest & {
   logo?: File | null;
 };
 /**
- * Partner edit variables. `logo` sets/replaces the stored logo; `mediaAction:
+ * Organisation edit variables. `logo` sets/replaces the stored logo; `mediaAction:
  * "clear"` removes it; supplying both is refused by the API with
  * `MEDIA_INPUT_CONFLICT`, so the form never offers both at once. `version`
  * becomes the `If-Match` precondition.
  */
-export type UpdatePartnerVars = UpdateOrganisationRequest & {
+export type UpdateOrganisationVars = UpdateOrganisationRequest & {
   logo?: File | null;
   version: number;
 };
@@ -340,7 +331,7 @@ export async function fetchRelationshipEndpointOptions({
   page = 1,
   pageSize = 20,
 }: {
-  resource: "events" | "projects" | "experts" | "directions" | "partners";
+  resource: "events" | "projects" | "experts" | "directions" | "organisations";
   q?: string;
   page?: number;
   pageSize?: number;
@@ -354,13 +345,10 @@ export async function fetchRelationshipEndpointOptions({
     pageSize: String(pageSize),
   });
   if (q.trim()) params.set("q", q.trim());
-  const res = await fetch(
-    `${ADMIN_BASE}/${resourcePath(resource)}?${params.toString()}`,
-    {
-      credentials: "include",
-      headers: { accept: "application/json" },
-    },
-  );
+  const res = await fetch(`${ADMIN_BASE}/${resource}?${params.toString()}`, {
+    credentials: "include",
+    headers: { accept: "application/json" },
+  });
   if (!res.ok) throw await toHttpError(res);
   const body = (await res.json()) as {
     data: { id: string; title?: string; name?: string | null }[];
@@ -443,7 +431,7 @@ export const dataProvider: DataProvider = {
   getList: async ({ resource, pagination, filters }) => {
     if (isTaxonomyResource(resource)) {
       const res = await fetch(
-        `${ADMIN_BASE}/${resourcePath(resource)}?${taxonomyListQuery({
+        `${ADMIN_BASE}/${resource}?${taxonomyListQuery({
           ...(pagination ? { pagination } : {}),
           ...(filters ? { filters } : {}),
         })}`,
@@ -475,7 +463,7 @@ export const dataProvider: DataProvider = {
 
   getOne: async ({ resource, id }) => {
     if (isTaxonomyResource(resource)) {
-      const res = await fetch(`${ADMIN_BASE}/${resourcePath(resource)}/${id}`, {
+      const res = await fetch(`${ADMIN_BASE}/${resource}/${id}`, {
         credentials: "include",
         headers: { accept: "application/json" },
       });
@@ -498,14 +486,14 @@ export const dataProvider: DataProvider = {
       const { cover, photo, logo, ...payload } =
         variables as CreateProjectVars &
           CreateExpertVars &
-          CreatePartnerVars &
+          CreateOrganisationVars &
           CreateDirectionVars;
       const { body, headers } = taxonomyBody(
         resource,
         payload as Record<string, unknown>,
         taxonomyFile(resource, { cover, photo, logo }),
       );
-      const res = await fetch(`${ADMIN_BASE}/${resourcePath(resource)}`, {
+      const res = await fetch(`${ADMIN_BASE}/${resource}`, {
         method: "POST",
         credentials: "include",
         headers: {
@@ -556,14 +544,14 @@ export const dataProvider: DataProvider = {
       const { cover, photo, logo, version, ...payload } =
         variables as UpdateProjectVars &
           UpdateExpertVars &
-          UpdatePartnerVars &
+          UpdateOrganisationVars &
           UpdateDirectionVars;
       const { body, headers } = taxonomyBody(
         resource,
         payload as Record<string, unknown>,
         taxonomyFile(resource, { cover, photo, logo }),
       );
-      const res = await fetch(`${ADMIN_BASE}/${resourcePath(resource)}/${id}`, {
+      const res = await fetch(`${ADMIN_BASE}/${resource}/${id}`, {
         method: "PATCH",
         credentials: "include",
         headers: {
@@ -1111,8 +1099,20 @@ export const expertsUrl = {
   publish: (id: string) => `${ADMIN_BASE}/experts/${id}/publish`,
 };
 
-export const partnersUrl = {
+export const organisationsUrl = {
   publish: (id: string) => `${ADMIN_BASE}/organisations/${id}/publish`,
+};
+
+/**
+ * 032 EARS-3 — the organisation-role reference book. Not a taxonomy resource:
+ * its list is the whole book (no page, no `q`; `OrganisationRoleAdminListQuerySchema`
+ * is `.strict()` and takes only `status`) and there is no `GET :id`, so it rides
+ * the `custom` transport, which owns the Idempotency-Key, If-Match and CSRF
+ * headers every write owes.
+ */
+export const organisationRolesUrl = {
+  collection: () => `${ADMIN_BASE}/organisation-roles`,
+  row: (id: string) => `${ADMIN_BASE}/organisation-roles/${id}`,
 };
 
 /** The two named lifecycle commands a relationship row answers to. */

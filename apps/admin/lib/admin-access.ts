@@ -51,7 +51,18 @@ export const ADMIN_SECTION_NAV: readonly AdminNavItem[] = [
   { href: "/events", testId: "nav-events", labelKey: "app.nav.events" },
   { href: "/projects", testId: "nav-projects", labelKey: "app.nav.projects" },
   { href: "/experts", testId: "nav-experts", labelKey: "app.nav.experts" },
-  { href: "/partners", testId: "nav-partners", labelKey: "app.nav.partners" },
+  // 032 EARS-14 (#3492) — «Организации» take the place of «Партнёры», and the
+  // role book they draw their roles from sits right beside them.
+  {
+    href: "/organisations",
+    testId: "nav-organisations",
+    labelKey: "app.nav.organisations",
+  },
+  {
+    href: "/organisation-roles",
+    testId: "nav-organisation-roles",
+    labelKey: "app.nav.organisationRoles",
+  },
   // 012 EARS-25 (#2509) — the event-kind dictionary classifies events, so it
   // sits with the event-side books, before directions and their relations.
   {

@@ -35,8 +35,8 @@ export function Providers({ children }: { children: ReactNode }) {
           meta: { label: t("app.nav.events") },
         },
         // 012 content taxonomy: projects (#1283), experts (#1284), directions
-        // (#1285) and partners (#1286) on the same shared list shell and
-        // provider — one composition, four verticals.
+        // (#1285) and organisations (012 #1286 partners, renamed by 032 #3492)
+        // on the same shared list shell and provider — one composition.
         {
           name: "projects",
           list: "/projects",
@@ -52,11 +52,20 @@ export function Providers({ children }: { children: ReactNode }) {
           meta: { label: t("app.nav.experts") },
         },
         {
-          name: "partners",
-          list: "/partners",
-          create: "/partners/create",
-          edit: "/partners/:id",
-          meta: { label: t("app.nav.partners") },
+          name: "organisations",
+          list: "/organisations",
+          create: "/organisations/create",
+          edit: "/organisations/:id",
+          meta: { label: t("app.nav.organisations") },
+        },
+        // 032 EARS-3 — the role book; read and written through `custom`
+        // (organisationRolesUrl), registered so the chrome knows the section.
+        {
+          name: "organisation-roles",
+          list: "/organisation-roles",
+          create: "/organisation-roles/create",
+          edit: "/organisation-roles/:id",
+          meta: { label: t("app.nav.organisationRoles") },
         },
         {
           name: "directions",

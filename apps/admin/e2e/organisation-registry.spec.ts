@@ -192,6 +192,47 @@ test.describe("032 EARS-14 — the organisation registry in the live admin", () 
       page.getByTestId("organisation-role-educational-licensee"),
     ).not.toBeChecked();
 
+    // ── EARS-2: no save from a role book that has not loaded ───────────────
+    // The set is replaced whole, so a save from a missing book would drop
+    // every held role. Reject: the book request fails, the form says so and
+    // cannot be saved. Accept: the retry loads it, the held roles are still
+    // ticked, and a save keeps them.
+    const isRoleBook = (url: URL) => url.pathname.endsWith("/organisation-roles");
+    await page.route(isRoleBook, (route) => route.abort("failed"));
+    await page.reload();
+    await expect(page.getByTestId("organisation-roles-error")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId("submit-organisation")).toBeDisabled();
+    await page.unroute(isRoleBook);
+    await page.getByTestId("organisation-roles-retry").click();
+    await expect(page.getByTestId("organisation-role-investor")).toBeChecked();
+    await expect(
+      page.getByTestId("organisation-role-clinical-base"),
+    ).toBeChecked();
+    await expect(page.getByTestId("submit-organisation")).toBeEnabled();
+    // A slow book keeps the save disabled until it arrives.
+    let releaseBook: () => void = () => {};
+    const bookHeld = new Promise<void>((resolve) => (releaseBook = resolve));
+    await page.route(isRoleBook, async (route) => {
+      await bookHeld;
+      await route.continue();
+    });
+    await page.reload();
+    await page.getByTestId("organisation-form").waitFor();
+    await expect(page.getByTestId("submit-organisation")).toBeDisabled();
+    releaseBook();
+    await expect(page.getByTestId("submit-organisation")).toBeEnabled();
+    await page.unroute(isRoleBook);
+    await page.getByTestId("organisation-description").fill("Учебная база.");
+    await page.getByTestId("submit-organisation").click();
+    await expect(page.getByTestId("update-saved")).toBeVisible();
+    await page.reload();
+    await expect(page.getByTestId("organisation-role-investor")).toBeChecked();
+    await expect(
+      page.getByTestId("organisation-role-clinical-base"),
+    ).toBeChecked();
+
     // ── org-list: «Название», «Роли», «Статус», «Обновлено» ───────────────
     await page.getByTestId("back-to-list").click();
     await page.waitForURL(/\/organisations$/, { timeout: 20_000 });
@@ -238,6 +279,10 @@ test.describe("032 EARS-14 — the organisation registry in the live admin", () 
     await page.setViewportSize(NARROW);
     await page.goto("/organisations");
     await page.getByTestId("organisations-filters").waitFor();
+    await expectNoPageSideScroll(page);
+    // The same row the desktop capture shows, not whatever else the stand holds.
+    await page.getByRole("searchbox", { name: "Поиск" }).fill(title);
+    await expect(page.getByTestId("organisations-table")).toContainText(title);
     await expectNoPageSideScroll(page);
     await shot(page, "list-mobile");
 

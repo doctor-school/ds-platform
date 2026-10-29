@@ -6,6 +6,7 @@ import { useCustom } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import type { z } from "zod";
 import {
+  Alert,
   Button,
   Checkbox,
   Input,
@@ -33,7 +34,6 @@ import {
   ORGANISATION_DESCRIPTION_MAX,
   type OrganisationAdminDetail,
   type OrganisationRoleAdminList,
-  type OrganisationRoleRef,
 } from "@ds/schemas";
 import {
   OrganisationFormSchema,
@@ -42,6 +42,11 @@ import {
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 import { useAcademyPublicUrl } from "@/components/academy-origin-provider";
 import { organisationRolesUrl } from "@/providers/data-provider";
+import {
+  offeredRoles,
+  rolesBookReady,
+  submittedRoleIds,
+} from "@/lib/organisation-roles";
 
 /**
  * The organisation full-page form (032 EARS-1, EARS-2; `org-form` of 032-design
@@ -56,10 +61,12 @@ import { organisationRolesUrl } from "@/providers/data-provider";
  * 3. **The website box is an absolute https address** — the SSOT
  *    `OrganisationWebsiteUrlSchema`, the exact twin of the DB CHECK.
  *
- * Roles (EARS-2): every ACTIVE role of the book is offered; a retired role the
- * organisation already holds stays on the form, ticked and marked «Роль снята»,
- * so a save never drops it silently. A retired role it does not hold is not
- * offered — the server would refuse it.
+ * Roles (EARS-2): every ACTIVE role of the book is offered, and every role the
+ * organisation already holds stays on the form, ticked (a retired one marked
+ * «Роль снята»), so a save never drops it silently. A retired role it does not
+ * hold is not offered — the server would refuse it. The save stays disabled
+ * until the book has loaded: the role set is replaced whole, so a save from a
+ * partial list would drop roles (`@/lib/organisation-roles`).
  *
  * Slug: the server owns it; the form only exposes the resulting public link.
  * Logo: preflight only here; the API normalizer is authoritative. Picking a file
@@ -86,21 +93,6 @@ function defaults(detail?: OrganisationAdminDetail): OrganisationFormFields {
     publicNameVisible: detail?.publicNameVisible ?? true,
     publicLogoVisible: detail?.publicLogoVisible ?? true,
   };
-}
-
-/** Active roles plus the retired ones this organisation already holds (EARS-2). */
-function offeredRoles(
-  book: readonly OrganisationRoleRef[],
-  held: readonly OrganisationRoleRef[],
-): OrganisationRoleRef[] {
-  const active = book.filter((role) => role.status === "active");
-  const activeIds = new Set(active.map((role) => role.id));
-  return [
-    ...active,
-    ...held.filter(
-      (role) => role.status === "retired" && !activeIds.has(role.id),
-    ),
-  ];
 }
 
 const NO_REFUSED_FIELDS: readonly string[] = [];
@@ -144,6 +136,7 @@ export function OrganisationForm({
       method: "get",
     });
   const roles = offeredRoles(rolesResult.data?.data ?? [], detail?.roles ?? []);
+  const rolesReady = rolesBookReady(rolesQuery);
   const [logo, setLogo] = useState<File | null>(null);
   const [removeLogo, setRemoveLogo] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
@@ -168,15 +161,13 @@ export function OrganisationForm({
         data-testid="organisation-form"
         noValidate
         onSubmit={form.handleSubmit((fields) => {
-          if (logoError) return;
+          if (logoError || !rolesReady) return;
           onSubmit({
             title: fields.title,
             websiteUrl: fields.websiteUrl.trim(),
             description: fields.description.trim(),
             // Kept in the book's order, whatever order the boxes were ticked.
-            roleIds: roles
-              .map((role) => role.id)
-              .filter((id) => fields.roleIds.includes(id)),
+            roleIds: submittedRoleIds(roles, fields.roleIds),
             publicNameVisible: fields.publicNameVisible,
             publicLogoVisible: fields.publicLogoVisible,
             logo,
@@ -352,9 +343,22 @@ export function OrganisationForm({
                       {t("common.loading")}
                     </p>
                   ) : rolesQuery.isError ? (
-                    <FormError data-testid="organisation-roles-error">
-                      {t("organisations.errors.rolesLoadFailed")}
-                    </FormError>
+                    <Alert
+                      variant="danger"
+                      data-testid="organisation-roles-error"
+                    >
+                      <p>{t("organisations.errors.rolesLoadFailed")}</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-3"
+                        data-testid="organisation-roles-retry"
+                        onClick={() => void rolesQuery.refetch()}
+                      >
+                        {t("common.retry")}
+                      </Button>
+                    </Alert>
                   ) : (
                     roles.map((role) => (
                       <Checkbox
@@ -431,6 +435,7 @@ export function OrganisationForm({
           <Button
             type="submit"
             loading={submitting}
+            disabled={!rolesReady}
             data-testid="submit-organisation"
           >
             {submitLabel}

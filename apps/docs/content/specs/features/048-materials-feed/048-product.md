@@ -1,6 +1,6 @@
 ---
 title: "Feature 048 — Materials feed: platform news and external sources (PRD)"
-description: "Product requirements for the Academy materials feed: one horizontal rail on the Academy home (029) that mixes news and expert columns authored on the platform with posts and videos from the official Doctor.School / Academy accounts on external platforms, newest first. Delivered in slices — own materials first, then one source connector per network (Telegram, VK / VK Видео, RuTube, Dzen). Source of the 048 EARS triplet (ADR-0014)."
+description: "Product requirements for the Academy materials feed: one horizontal rail on the Academy home (029) that mixes news and expert columns authored on the platform with posts and videos from the official BBM Academy accounts on external platforms, newest first. Delivered in slices — own materials first, then one source connector per network (Telegram, VK / VK Видео, RuTube, Dzen). Source of the 048 EARS triplet (ADR-0014)."
 slug: two-site-ia-048-materials-feed-product
 epic: ../../product/two-site-ia/brief.md
 status: Draft
@@ -14,11 +14,11 @@ lang: en
 
 ## Feature summary
 
-The Academy home (029) carries **one feed of materials** — «Всё вперемешку на одной стене, и видео тоже» (owner, chat 2026-10-29). It replaces both the «Новости и блог» and the «Рилсы и видео» blocks of the home canvas: the Academy's own news, expert columns, posts from the official Doctor.School / Academy accounts on other networks and videos from their video accounts sit together, mixed, newest first.
+The Academy home (029) carries **one feed of materials** — «Всё вперемешку на одной стене, и видео тоже» (owner, chat 2026-10-29). It replaces both the «Новости и блог» and the «Рилсы и видео» blocks of the home canvas: the Academy's own news, expert columns, posts from the official BBM Academy accounts on other networks and videos from their video accounts sit together, mixed, newest first.
 
 The feed is **one horizontal rail** — «Давай лучше сделаем бесконечную горизонтальную ленту» (owner, chat 2026-10-29): the next card is partly visible, desktop has always-visible ←/→ buttons, a phone swipes, the keyboard scrolls it, older materials load as the visitor nears the end, nothing rotates by itself and no video plays by itself. _(UI basis — lead decision from research; owner sees it at Stage A: horizontal scrolling works only with a clear cue that more content lies sideways and an explicit control — [NN/g, horizontal scrolling, 2014](https://www.nngroup.com/articles/horizontal-scrolling/); auto-rotation is ignored or disrupts reading — [NN/g, auto-forwarding](https://www.nngroup.com/articles/auto-forwarding/); a growing list of articles is announced to assistive technology as a feed and stays keyboard-reachable — [W3C APG feed pattern](https://www.w3.org/WAI/ARIA/apg/patterns/feed/examples/feed/), [Deque, infinite scrolling and role=feed](https://www.deque.com/blog/infinite-scrolling-rolefeed-accessibility-issues/).)_
 
-Only **official** accounts appear, and the admin keeps their list. The networks are connected **one at a time** — «важно всё сделать модульно. Сначала мы добавим только наши внутренние новости. И потом будем постепенно подключать каждую соцсеть, чтобы не застревать сейчас на агрегации всего и интеграциях» (owner, chat 2026-10-29). The starting set of networks is Telegram, VK / VK Видео, RuTube and Dzen, **pending marketing confirmation** (the owner asked marketing). YouTube is not in it: «YouTube в РФ заблокирован - я не понял, что он делает на главной» (owner, chat 2026-10-29).
+Only **official** accounts appear, and the admin keeps their list. The networks are connected **one at a time** — «важно всё сделать модульно. Сначала мы добавим только наши внутренние новости. И потом будем постепенно подключать каждую соцсеть, чтобы не застревать сейчас на агрегации всего и интеграциях» (owner, chat 2026-10-29). The accounts are the **BBM Academy** accounts, not Doctor.School ones: «Показываем из Bbm, не доктор скул. Именно на сайте академии» (marketing, relayed by the owner, [#3403 comment 6490823839](https://github.com/doctor-school/ds-platform/issues/3403#issuecomment-6490823839)). The starting set is **Telegram, VK / VK Видео, RuTube and Dzen**, all of them BBM Academy accounts (owner, [#3403 comment 6490905025](https://github.com/doctor-school/ds-platform/issues/3403#issuecomment-6490905025); addresses in «Source connectors» below). Out of the start: Instagram — open with the owner, the network is blocked in the RF; Threads, TikTok, Pinterest; and YouTube — «YouTube в РФ заблокирован - я не понял, что он делает на главной» (owner, chat 2026-10-29), marketing: «нет, пока» ([#3403 comment 6490823839](https://github.com/doctor-school/ds-platform/issues/3403#issuecomment-6490823839)). No further networks are added now; Max may come later (marketing, [#3403 comment 6490823839](https://github.com/doctor-school/ds-platform/issues/3403#issuecomment-6490823839)).
 
 Under the owner's governing principle for this cascade — «не городить временные костыли … сразу делать нормально» — every material on the home comes from this real, admin-managed feed: no hand-set tiles, no placeholder that is replaced later.
 
@@ -27,6 +27,17 @@ The feed is a shared capability: the 029 home only reads it. Its capability owne
 ## Source connectors and the common card
 
 Each network is a separate **source connector** that translates that network's publications into **one common card shape**: kind (news, expert column, network post, video), title or the post's first lines, date of publication, preview image, duration (videos), source (platform and account), permalink, and a partner mark. The rail and the admin know only that shape. A new network is a new connector plus a row in the admin source list — no rework of the rail, the admin screens or the materials already in the feed (US-10).
+
+The official accounts of the starting set — BBM Academy's own accounts, from the marketing accounts sheet (tab «Соц.сети»; owner, [#3403 comment 6490905025](https://github.com/doctor-school/ds-platform/issues/3403#issuecomment-6490905025)):
+
+| Network       | Account                       | What the connector reads         |
+| ------------- | ----------------------------- | -------------------------------- |
+| Telegram      | `t.me/bbmacademy`             | channel posts                    |
+| VK / VK Видео | `vk.ru/bbm.academy`           | wall posts and VK Видео videos   |
+| RuTube        | channel 32061512 «bbmacademy» | videos                           |
+| Dzen          | `dzen.ru/bbmacademy`          | posts (slice 5 decides the path) |
+
+The admin source list (US-3) is where these addresses live; the table records the starting accounts, not a hard-coded list.
 
 Only card data is stored. Video files are never stored, and media hosted on a network is not mirrored into our storage; whether a network's preview image is copied or referenced follows that network's terms and is settled in the design spec ([research](./048-platform-access-research.md): Telegram preview links expire, so a Telegram preview is copied; VK Rules §1.6 forbid autonomous media stores). The retention period of stored card data is set in the design spec, together with the storage itself.
 
@@ -44,7 +55,7 @@ Per-platform mechanism, fields, limits and terms: [`048-platform-access-research
 
 ## User stories
 
-- **US-1** — As a **platform administrator**, I write a news item or an expert column in the admin — columns in this feature are written by the team on the expert's behalf _(lead decision 2026-10-28; owner sees it at Stage A)_ — preview it and publish it, so the Academy can say something on its own site without posting it elsewhere first.
+- **US-1** — As a **platform administrator**, I write a news item or an expert column in the admin (written in `apps/admin`, see Flows — Platform material, step 1) — columns in this feature are written by the team on the expert's behalf _(lead decision 2026-10-28; owner sees it at Stage A)_ — preview it and publish it, so the Academy can say something on its own site without posting it elsewhere first.
 - **US-2** — As a **platform administrator**, I edit or unpublish a platform material I published, and the change shows on the site without a release.
 - **US-3** — As a **platform administrator**, I keep the list of official accounts the feed reads: for each account I set its platform and its address, and I can switch an account off without deleting what it already brought in.
 - **US-4** — As a **platform administrator**, materials published on the connected accounts appear in the feed by themselves; nobody copies posts into the admin by hand.
@@ -59,7 +70,7 @@ Per-platform mechanism, fields, limits and terms: [`048-platform-access-research
 
 **Platform material (US-1, US-2, US-6, US-8) — slice 1:**
 
-1. The administrator opens the materials section of the admin (047 access: role `platform_admin`, admin session with TOTP per 011) and creates a material: kind (news / expert column), title, text, cover image (optional), author line. For an expert column the author is chosen from the experts directory (012). _(Field set — agent-proposed — UNCONFIRMED.)_
+1. The administrator opens the materials section of the admin (047 access: role `platform_admin`, admin session with TOTP per 011) and creates a material: kind (news / expert column), title, text, cover image (optional), author line. For an expert column the author is chosen from the experts directory (012). _(Field set — agent-proposed — UNCONFIRMED.)_ Materials are written in the admin app `apps/admin` and stored as platform domain data through the platform API — not in the Payload CMS `apps/cms`: ADR-0004 §10.1 limits Payload to marketing content (`pages`, `blocks`, `glossary`, `media`) and forbids it to own domain data, and `apps/cms` is a reserved empty scaffold. The text is written in a rich-text editor primitive of `@ds/design-system` built on TipTap (ADR-0004 design: «Rich-text editor … → TipTap + custom extensions»); it is the one admin element outside the approved admin kit, so its look goes to the owner at Stage A as that element alone. The stored body format and its sanitised render on the reading page are settled in the design spec. _(lead decision 2026-10-29; owner sees it at Stage A)_
 2. The administrator previews and publishes it; it becomes the first card of the rail on the Academy home.
 3. A visitor taps the card → reads the material on its Academy page.
 4. The administrator edits or unpublishes it → the site reflects the change; an unpublished material leaves the rail and its page stops being public.
@@ -85,7 +96,7 @@ Per-platform mechanism, fields, limits and terms: [`048-platform-access-research
 - The home shows one horizontal rail in place of both «Новости и блог» and «Рилсы и видео»: every kind mixed, newest first; the next card partly visible; ←/→ buttons always visible on desktop; swipe on a phone; keyboard scrolling; older materials load near the end; no auto-rotation; no video autoplay.
 - Every card has the common card shape (kind, title or first lines, date, preview, duration for videos, source, permalink, partner mark), whatever network it came from.
 - An administrator with the 047 `platform_admin` role creates, edits, publishes and unpublishes platform materials in the admin, and nobody without that role can.
-- The source list is kept in the admin; only accounts listed there feed the site, each bound to one connected network; the starting networks are Telegram, VK / VK Видео, RuTube and Dzen, pending marketing confirmation.
+- The source list is kept in the admin; only accounts listed there feed the site, each bound to one connected network; the starting networks are Telegram, VK / VK Видео, RuTube and Dzen, read from the BBM Academy accounts listed in «Source connectors».
 - Each network is a separate connector; adding one changes neither the rail, nor the visitor's flow, nor the materials already in the feed.
 - Slice 1 ships with own materials only and is complete without any network connector.
 - New publications of a listed account reach the feed without manual copying, within a bounded delay. _(Delay value — agent-proposed — UNCONFIRMED: about an hour is enough for a news rail; push-based connectors deliver sooner; set at spec time.)_
@@ -102,14 +113,16 @@ Per-platform mechanism, fields, limits and terms: [`048-platform-access-research
 - Publishing from the platform to the social networks (cross-posting) — the feed only reads. The Dzen fallback (Dzen imports the Academy's RSS) is Dzen's own documented import, not cross-posting by the platform.
 - Embedded video players — videos open on their platform.
 - Reading any platform's web pages by scraping.
-- YouTube — removed from the starting set (blocked in the RF); it can return later as a connector if marketing names it.
+- YouTube (blocked in the RF; marketing: «нет, пока»), Threads, TikTok and Pinterest — not in the starting set; each can return later as a connector if marketing names it. Instagram stays an open question; Max may come later (marketing).
+- Payload CMS (`apps/cms`) as the place where materials are written — not used: materials are platform domain data, ADR-0004 §10.1 keeps Payload to marketing content and forbids it to own domain data, and `apps/cms` is a reserved empty scaffold; materials are written in `apps/admin` (Flows — Platform material, step 1).
 - Comments, likes, view counters, subscriptions to the feed.
 - A feed on the doctor storefront `doctor.school`; a full «all news» archive page. _(agent-proposed — UNCONFIRMED.)_
 - Roles narrower than `platform_admin` (e.g. an editor) — feature 039.
 
 ## Open questions
 
-- **Final platform list** — the owner asked marketing; the starting set (Telegram, VK / VK Видео, RuTube, Dzen) is pending their confirmation. The connector model (US-10) means the answer changes the slice list, not the feature. _(owner — marketing.)_
+- **Own materials (slice 1)** — «Предварительно да» (owner, [#3403 comment 6490905025](https://github.com/doctor-school/ds-platform/issues/3403#issuecomment-6490905025)): own materials stay and slice 1 is built as described, but the answer is preliminary — the final confirmation of the Academy's own blog is still to come. _(owner — final confirmation of the own blog.)_
+- **Instagram** — the BBM Academy account `@bbm.academy` exists, the network is blocked in the RF; whether it joins the feed stays open. The connector model (US-10) means the answer adds a slice, not a feature change. _(owner.)_
 - **RuTube** — written confirmation of the channel-list endpoint (blocks slice 4). _(Маркетинг sends the letter.)_
 - **Dzen** — permission under ToS §5.1, or the reverse RSS path (decides the shape of slice 5). _(Маркетинг sends the letter.)_
 - **VK clips** — no documented read route; settled when slice 3 is designed. _(lead — design.)_

@@ -16,6 +16,7 @@ import {
 import type { HostConfig } from "../hosts.js";
 import { redirectsBesidesSilentCheck } from "../lib/silent-check.js";
 import { standHttpCredentials } from "../lib/stand-http-credentials.js";
+import { originalEventPage } from "./public-event-originals.steps.js";
 import {
   After,
   Before,
@@ -202,7 +203,10 @@ async function openPublicEvent({
   world: StepWorld;
 }) {
   if (!world.publicEvent) throw new Error("004 public event was not selected");
-  const page = lifecycleJourneys.get(world)?.page ?? defaultPage;
+  const page =
+    originalEventPage(world) ??
+    lifecycleJourneys.get(world)?.page ??
+    defaultPage;
   await page.context().clearCookies();
   const path = `${host.eventsPath}/${world.publicEvent.slug}`;
   const response = await page.goto(path, { waitUntil: "domcontentloaded" });

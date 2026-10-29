@@ -7,12 +7,12 @@
 # exactly what a doctor sees and does in the running portal on the live dev stand —
 # the required user-facing deliverable (requirements Verification, the `all` row):
 # admission → real-time chat → denied-access routing → room-close degradation →
-# the browser-observable authz + frame-only + МСК-no-drift cross-cuts (the
+# the browser-observable authz + frame-only + time-zone-label cross-cuts (the
 # provider-enum player and the heartbeat cadence live in
 # room-provider-journey.feature and room-heartbeat-journey.feature). The whole run rides a deliberately non-Moscow
 # browser timezone (playwright.config `bdd` project, America/New_York) + ru-RU
-# locale, so the МСК labels prove no viewer-local drift globally (EARS-10), not just
-# in one tagged step.
+# locale, so the event page's label proves the #2537 rule (EARS-10 as amended):
+# an online or hybrid event reads in the viewer's zone, an offline one in МСК.
 #
 # Self-provisioning: there is NO seeded roster — every scenario builds its roster
 # LIVE, minting its doctor through the REAL 003 register→verify(Mailpit-OTP)→
@@ -39,7 +39,7 @@ Feature: 006 Webinar room journey — a registered doctor watches live, chats in
     When the doctor enters the live room
     Then the room renders the embed player and the live chat composition
     And the live-room player is a configured provider frame only, never a re-hosted surface
-    And the event page the room admits through labels every absolute time in МСК with no viewer-local drift
+    And the event page the room admits through labels its start time in the zone the event's format sets
 
   # The provider-enum variants (EARS-2) live in room-provider-journey.feature and the
   # heartbeat cadence (EARS-4) in room-heartbeat-journey.feature: each needs a stand

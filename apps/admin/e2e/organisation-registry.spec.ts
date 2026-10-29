@@ -31,6 +31,14 @@ async function expectNoPageSideScroll(page: Page): Promise<void> {
   expect(overflow, `${page.url()} side-scrolls by ${overflow}px`).toBe(0);
 }
 
+/**
+ * Toggle a design-system checkbox the way a mouse does: the input is `sr-only`
+ * behind its painted box, so the wrapping label is the click target.
+ */
+async function toggle(page: Page, testId: string): Promise<void> {
+  await page.getByTestId(testId).locator("xpath=ancestor::label[1]").click();
+}
+
 async function shot(page: Page, name: string): Promise<void> {
   if (!SHOT_DIR) return;
   await page.screenshot({ path: `${SHOT_DIR}/${name}.png`, fullPage: true });
@@ -74,7 +82,8 @@ test.describe("032 EARS-14 — the organisation registry in the live admin", () 
         seeded,
       );
     }
-    await expect(page.getByTestId("role-count-investor")).toBeVisible();
+    // The table row and the narrow card both carry the count; one is shown.
+    await expect(page.getByTestId("role-count-investor").first()).toBeAttached();
 
     // ── EARS-3 reject: an empty title never leaves the browser ─────────────
     await page.getByTestId("organisation-roles-create").click();
@@ -133,9 +142,9 @@ test.describe("032 EARS-14 — the organisation registry in the live admin", () 
     await page
       .getByTestId("organisation-description")
       .fill("Многопрофильная клиника и учебная база.");
-    await page.getByTestId("organisation-role-clinical-base").check();
-    await page.getByTestId("organisation-role-educational-licensee").check();
-    await page.getByTestId("organisation-public-logo-visible").uncheck();
+    await toggle(page, "organisation-role-clinical-base");
+    await toggle(page, "organisation-role-educational-licensee");
+    await toggle(page, "organisation-public-logo-visible");
     await shot(page, "form-desktop");
     await page.getByTestId("submit-organisation").click();
 
@@ -165,8 +174,8 @@ test.describe("032 EARS-14 — the organisation registry in the live admin", () 
     );
 
     // ── EARS-2: the next save REPLACES the set ─────────────────────────────
-    await page.getByTestId("organisation-role-educational-licensee").uncheck();
-    await page.getByTestId("organisation-role-investor").check();
+    await toggle(page, "organisation-role-educational-licensee");
+    await toggle(page, "organisation-role-investor");
     await page.getByTestId("submit-organisation").click();
     await expect(page.getByTestId("update-saved")).toBeVisible();
     await page.reload();
@@ -194,7 +203,7 @@ test.describe("032 EARS-14 — the organisation registry in the live admin", () 
     await page.goto("/organisation-roles");
     await page
       .getByTestId("organisation-roles-table")
-      .getByText(roleTitle)
+      .getByRole("link", { name: roleTitle })
       .click();
     await page.waitForURL(/\/organisation-roles\/[0-9a-f-]{36}$/, {
       timeout: 20_000,

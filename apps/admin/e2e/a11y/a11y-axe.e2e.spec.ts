@@ -316,7 +316,10 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     await page
       .getByTestId("organisation-title")
       .fill(`Axe-скан организация ${Date.now()}`);
-    await page.getByTestId("organisation-role-investor").check();
+    await page
+      .getByTestId("organisation-role-investor")
+      .locator("xpath=ancestor::label[1]")
+      .click();
     await page.getByTestId("submit-organisation").click();
     await page.waitForURL(/\/organisations\/[0-9a-f-]{36}$/);
     await page.getByTestId("organisation-form").waitFor({ state: "visible" });
@@ -330,7 +333,7 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     await page.goto("/organisation-roles");
     await page
       .getByTestId("organisation-roles-table")
-      .getByText("Инвестор", { exact: true })
+      .getByRole("link", { name: "Инвестор", exact: true })
       .waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
 
@@ -349,7 +352,7 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     await page.goto("/organisation-roles");
     await page
       .getByTestId("organisation-roles-table")
-      .getByText("Инвестор", { exact: true })
+      .getByRole("link", { name: "Инвестор", exact: true })
       .click();
     await page.waitForURL(/\/organisation-roles\/[0-9a-f-]{36}$/);
     await page

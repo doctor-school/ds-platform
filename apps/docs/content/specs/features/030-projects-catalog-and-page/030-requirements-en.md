@@ -3,7 +3,7 @@ title: "030 — Projects: the container, its admin, the «Все проекты�
 description: "Requirements for slice 1 of feature 030: the project as the single container of Academy work (ADR-0016 §4) — it declares the results it produces from an operator-maintained list of output kinds and carries a public stage (running, «Скоро», «Завершён»), with no project kind; its admin form, results editor, organisations panel over the 032 registry, display order and publish rule; the public «Все проекты» catalog on academy.doctor.school with a computed scale line and one shared project card that also feeds the Academy home block; the project page without its dashboard, team, backstage block or project number — hero, results, organisations and the «Войти в проект» entries to 033 and 034; the absorption of the feature-012 project records; platform-administrator-only access with the second factor and the 010 change audit."
 slug: 030-projects-catalog-and-page
 status: Draft
-issues: []
+issues: [3503, 3504, 3505, 3506, 3507, 3508]
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/issues/1800
 prior_decisions:
@@ -146,9 +146,9 @@ Each Issue is a sub-issue of #1800 and ships its UI with its backend; slices and
 
 | EARS                                             | Issue | Work package                                                                                                        |
 | ------------------------------------------------ | ----- | ------------------------------------------------------------------------------------------------------------------- |
-| EARS-1, EARS-2, EARS-3, EARS-6, EARS-17, EARS-18 | —     | **Project container** — migration and seed, form with stage and results, output kinds, publish rule, access         |
-| EARS-4, EARS-5, EARS-7                           | —     | **Organisations, order, lifecycle** — registry-backed panel, display order, retire and restore effects              |
-| EARS-8, EARS-9, EARS-13                          | —     | **Public reads** — catalog, scale line, project and results reads                                                   |
-| EARS-10, EARS-11, EARS-12, EARS-19               | —     | **Catalog and home block** — shared card, `/projects`, navigation item, home block, doctor-host absence             |
-| EARS-14, EARS-15, EARS-16, EARS-20, EARS-21      | —     | **Project page** — hero, results, organisations, «Войти в проект» with the sought specialty, narrow screens and axe |
-| V-9 / V-10 journeys (EARS-1…EARS-16)             | —     | **Browser journeys** — CI Playwright admin and Academy journeys over the delivered UI; integration Issue            |
+| EARS-1, EARS-2, EARS-3, EARS-6, EARS-17, EARS-18 | #3503 | **Project container** — migration and seed, form with stage and results, output kinds, publish rule, access         |
+| EARS-4, EARS-5, EARS-7                           | #3504 | **Organisations, order, lifecycle** — registry-backed panel, display order, retire and restore effects              |
+| EARS-8, EARS-9, EARS-13                          | #3505 | **Public reads** — catalog, scale line, project and results reads                                                   |
+| EARS-10, EARS-11, EARS-12, EARS-19               | #3506 | **Catalog and home block** — shared card, `/projects`, navigation item, home block, doctor-host absence             |
+| EARS-14, EARS-15, EARS-16, EARS-20, EARS-21      | #3507 | **Project page** — hero, results, organisations, «Войти в проект» with the sought specialty, narrow screens and axe |
+| V-9 / V-10 journeys (EARS-1…EARS-16)             | #3508 | **Browser journeys** — CI Playwright admin and Academy journeys over the delivered UI; integration Issue            |

@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   SIGN_IN_HOST_ENTRY_HEADER,
-  SIGN_IN_HOST_UNAVAILABLE_HEADER,
+  ENTRY_REFUSAL_HEADER,
   writeSignInHostHandOver,
   type SignInHostRender,
 } from "@ds/auth-flow/server";
@@ -52,7 +52,7 @@ function request(
       }),
     );
   } else {
-    headers.set(SIGN_IN_HOST_UNAVAILABLE_HEADER, "unavailable");
+    headers.set(ENTRY_REFUSAL_HEADER, "reason=unavailable");
   }
   requestHeaders.value = headers;
 }

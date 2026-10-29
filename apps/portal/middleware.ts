@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { parkReturnTarget, storefrontSilentCheck } from "@ds/auth-flow/server";
+import {
+  storefrontDoorGate,
+  storefrontSilentCheck,
+} from "@ds/auth-flow/server";
 
 import { ACADEMY_STOREFRONT_OIDC } from "./lib/auth-flow.host-config";
 
@@ -14,35 +17,24 @@ import { ACADEMY_STOREFRONT_OIDC } from "./lib/auth-flow.host-config";
  * navigation is answered, before anything renders and before the page cache
  * answers, with a `303` into a `prompt=none` transaction; the marker, guard,
  * exemption, crawler and caching rules are the core's), and the parking rule
- * (#2027 PR 1.4, rows 29–31; #2443). What is left here is the Next wiring:
- * which routes of this app run them.
+ * (#2027 PR 1.4, rows 29–31; #2443), and the door gate (003 EARS-61 / 72:
+ * the four door paths run the parking rule and the shared entry; a refused
+ * entry is rewritten to the refusal page at its truthful status). What is
+ * left here is the Next wiring.
  */
 export async function middleware(request: NextRequest): Promise<Response> {
   const check = await storefrontSilentCheck(request, ACADEMY_STOREFRONT_OIDC);
   if ("response" in check) return check.response;
-  // `undefined` = nothing to park; the pass-through response stays this host's
-  // to mint, so any other header this middleware grows is never discarded.
+  // `undefined` = no door; the pass-through response stays this host's to
+  // mint, so any other header this middleware grows is never discarded.
   const response =
-    (PARKING_ENTRIES.includes(request.nextUrl.pathname)
-      ? parkReturnTarget(request)
-      : undefined) ?? NextResponse.next();
+    (await storefrontDoorGate(request, ACADEMY_STOREFRONT_OIDC)) ??
+    NextResponse.next();
   for (const cookie of check.setCookies) {
     response.headers.append("set-cookie", cookie);
   }
   return response;
 }
-
-/**
- * 014 EARS-6 (#2495) — the auth doors that run the parking rule. Each door
- * runs the whole rule: a carried target is parked, and a guest's door without
- * one drops a target an earlier, abandoned flow parked.
- */
-const PARKING_ENTRIES: readonly string[] = [
-  "/login",
-  "/register",
-  "/verify",
-  "/reset",
-];
 
 /**
  * Every page route: the silent check decides on any top-level document

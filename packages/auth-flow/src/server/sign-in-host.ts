@@ -160,24 +160,6 @@ export type SignInHostStorefronts = Readonly<
  */
 export const SIGN_IN_HOST_ENTRY_HEADER = "x-ds-sign-in-entry";
 
-/**
- * The request header the proxy names an unread entry in (#3170): the API
- * refused the entry read (`rate-limited`, its 429) or could not answer
- * (`unavailable`). The page then renders the forms' own banner for that case
- * instead of a form — the response status stays the proxy's truthful one.
- * The proxy deletes a browser-sent value on every other answer.
- */
-export const SIGN_IN_HOST_UNAVAILABLE_HEADER = "x-ds-sign-in-unavailable";
-
-export type SignInHostUnavailable = "rate-limited" | "unavailable";
-
-/** The proxy's unread-entry reason; `null` if absent or unknown. */
-export function readSignInHostUnavailable(
-  value: string | null | undefined,
-): SignInHostUnavailable | null {
-  return value === "rate-limited" || value === "unavailable" ? value : null;
-}
-
 /** What the page renders: the door and the entry's render answer. */
 export type SignInHostHandOver = {
   door: SignInHostPageDoor;

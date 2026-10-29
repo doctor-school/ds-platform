@@ -32,7 +32,13 @@ export default defineConfig({
     {
       command: `pnpm --filter @ds/login exec next start -H 127.0.0.1 -p ${PORT} --keepAliveTimeout 125000`,
       url: `${BASE}/icon.svg`,
-      env: { API_PROXY_TARGET: API },
+      // 003 EARS-72 — the refusal page's way out names both storefronts,
+      // read at request time from the storefronts' own origin variables.
+      env: {
+        API_PROXY_TARGET: API,
+        ACADEMY_PUBLIC_ORIGIN: "http://localhost:3001",
+        DOCTOR_PUBLIC_ORIGIN: "http://localhost:3004",
+      },
       timeout: 120_000,
       reuseExistingServer: false,
     },

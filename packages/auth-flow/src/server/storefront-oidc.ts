@@ -19,6 +19,7 @@ import {
 import type { AuthFlowHostConfig } from "../host-config";
 import { resolveHandoffRef } from "../login/login-handoff";
 import { resolveOwnHandoff } from "./handoff-ownership";
+import { parseRetryAfter, type EntryRefusal } from "./entry-refusal";
 import { resolveArrivalLanding } from "./landing";
 import {
   RETURN_CONTEXT_PARAM,
@@ -88,6 +89,9 @@ export interface StorefrontOidcHost {
 
 /** The four storefront entries; `/verify` is the registration door's code step. */
 export type StorefrontEntry = "login" | "register" | "reset" | "verify";
+
+/** 003 EARS-72 — an entry whose transaction the API refused or did not answer. */
+export type StorefrontEntryRefused = { readonly refused: EntryRefusal };
 
 export interface StorefrontOidcDeps {
   readonly fetchImpl?: typeof fetch;
@@ -196,6 +200,17 @@ function doorOf(entry: StorefrontEntry): SignInHostDoor {
 }
 
 /**
+ * EARS-71 / EARS-72 — the event an entry carries (its slug): an event return
+ * target, a land-only one (the header «Войти» on an event page) included. The
+ * transaction records it as the intent's event target; a refused entry names
+ * it as the way back.
+ */
+function entryEventTarget(returnTo: string | undefined): string | undefined {
+  const landOnly = parseLandOnlyReturnTarget(returnTo);
+  return parseReturnTarget(landOnly ? landOnly.page : returnTo)?.eventSlug;
+}
+
+/**
  * EARS-71 — the intent an entry records, or `undefined` for the plain form of
  * its door: `?method=code` (with its hand-off reference, EARS-44), the reset
  * door, and an event return target (its slug only) on every door — the reset
@@ -210,10 +225,7 @@ function entryIntent(
   returnTo: string | undefined,
   handoff: string | null,
 ): StorefrontEntryIntent | undefined {
-  const landOnly = parseLandOnlyReturnTarget(returnTo);
-  const eventTarget = parseReturnTarget(
-    landOnly ? landOnly.page : returnTo,
-  )?.eventSlug;
+  const eventTarget = entryEventTarget(returnTo);
   const code = entry === "login" && params.get("method") === "code";
   const intent: StorefrontEntryIntent = {
     ...(code ? { method: "code" as const } : {}),
@@ -225,16 +237,17 @@ function entryIntent(
 }
 
 /**
- * 003 EARS-61 / 43 / 44 / 12 / 24 / 71 — a storefront entry. Answers `303`
- * to the authorize URL with a fresh interactive transaction, or the existing
- * signed-in redirect.
+ * 003 EARS-61 / 43 / 44 / 12 / 24 / 71 / 72 — a storefront entry. Answers
+ * `303` to the authorize URL with a fresh interactive transaction, or the
+ * existing signed-in redirect; a transaction the API refuses or cannot
+ * answer is returned as a typed refusal (EARS-72) for the gate to render.
  */
 export async function storefrontEntry(
   request: Request,
   host: StorefrontOidcHost,
   entry: StorefrontEntry,
   deps: StorefrontOidcDeps = {},
-): Promise<Response> {
+): Promise<Response | StorefrontEntryRefused> {
   // 003 EARS-61 — a transaction is created only when an entry is OPENED: a
   // top-level document `GET`. An RSC / router prefetch of a `<Link>`, a fetch,
   // an XHR or a `HEAD` mints nothing, sets no cookie and calls no API — else
@@ -303,16 +316,43 @@ export async function storefrontEntry(
     ...(intent ? { intent } : {}),
     ...(toRegister ? { completeRegistration: toRegister } : {}),
   };
-  const res = await fetchImpl(`${api.base}/v1/internal/oidc/transaction`, {
-    method: "POST",
-    headers: internalHeaders(api, request.headers),
-    body: JSON.stringify(body),
-    cache: "no-store",
+  // 003 EARS-72 — a refused or unanswered transaction is the refusal page's
+  // input, never a thrown error: the gate answers it at the truthful status.
+  const eventSlug = entryEventTarget(returnTo);
+  const refused = (
+    reason: EntryRefusal["reason"],
+    retryAfter: string | null,
+  ): StorefrontEntryRefused => ({
+    refused: {
+      reason,
+      retryAfterSeconds:
+        reason === "rate-limited" ? parseRetryAfter(retryAfter) : null,
+      ...(eventSlug ? { eventSlug } : {}),
+    },
   });
-  if (!res.ok) {
-    throw new Error(`storefront entry: transaction refused (${res.status})`);
+  let tx;
+  try {
+    const res = await fetchImpl(`${api.base}/v1/internal/oidc/transaction`, {
+      method: "POST",
+      headers: internalHeaders(api, request.headers),
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      console.error(`[storefront-entry] transaction refused (${res.status})`);
+      return refused(
+        res.status === 429 ? "rate-limited" : "unavailable",
+        res.headers.get("retry-after"),
+      );
+    }
+    tx = StorefrontTransactionResponseSchema.parse(await res.json());
+  } catch (error) {
+    console.error(
+      "[storefront-entry] transaction failed:",
+      error instanceof Error ? error.message : error,
+    );
+    return refused("unavailable", null);
   }
-  const tx = StorefrontTransactionResponseSchema.parse(await res.json());
   const headers = new Headers();
   headers.append("set-cookie", txCookie(tx.txId, INTERACTIVE_TX_SECONDS));
   // EARS-44 — the entry URL may carry a hand-off reference: it never leaves

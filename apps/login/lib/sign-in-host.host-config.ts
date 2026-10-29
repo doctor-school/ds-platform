@@ -1,5 +1,7 @@
 import { ACADEMY_AUTH_FLOW, DOCTOR_AUTH_FLOW } from "@ds/auth-flow/hosts";
 import type { SignInHostStorefronts } from "@ds/auth-flow/server";
+import type { SignInSiteRefusalConfig } from "@ds/auth-flow/sign-in-host/route";
+import { readSiblingOrigin } from "@ds/storefront-shell/sibling-origin";
 import {
   THEME_FOUC_GUARD,
   THEME_INIT_SCRIPT,
@@ -34,3 +36,18 @@ export const SIGN_IN_HOST_THEMES = {
   academy: { initScript: THEME_INIT_SCRIPT, followsSystem: true },
   doctor: { initScript: THEME_FOUC_GUARD, followsSystem: false },
 } satisfies Record<keyof SignInHostStorefronts, SignInHostTheme>;
+
+/**
+ * 003 EARS-72 — the sign-in site's refusal page: the two storefront homes its
+ * way out names and the platform logo of its top bar. The origins are
+ * per-environment and read at REQUEST time (the storefronts' own variables,
+ * `readSiblingOrigin`: `ACADEMY_PUBLIC_ORIGIN` / `DOCTOR_PUBLIC_ORIGIN`),
+ * only when a refusal renders.
+ */
+export function signInHostRefusalSites(): SignInSiteRefusalConfig {
+  return {
+    academyHref: `${readSiblingOrigin(process.env, "doctor")}/`,
+    doctorHref: `${readSiblingOrigin(process.env, "academy")}/`,
+    logo: { light: "/brand/logo.svg", dark: "/brand/logo-white.svg" },
+  };
+}

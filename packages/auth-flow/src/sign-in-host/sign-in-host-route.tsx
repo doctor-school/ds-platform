@@ -1,17 +1,17 @@
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
-import { FormError } from "@ds/design-system/form";
-
-import { DEFAULT_AUTH_FLOW_COPY } from "../copy";
 import { LoginRoute } from "../login/login-route";
 import { RegisterRoute } from "../register/register-route";
+import {
+  SignInSiteRefusal,
+  type SignInSiteRefusalConfig,
+} from "../refusal/entry-refusal-route";
 import { ResetRoute } from "../reset/reset-route";
+import { ENTRY_REFUSAL_HEADER, readEntryRefusal } from "../server/entry-refusal";
 import {
   SIGN_IN_HOST_ENTRY_HEADER,
-  SIGN_IN_HOST_UNAVAILABLE_HEADER,
   readSignInHostHandOver,
-  readSignInHostUnavailable,
   signInHostConfig,
   signInHostSearchParams,
   type SignInHostPageDoor,
@@ -19,6 +19,8 @@ import {
 } from "../server/sign-in-host";
 import { VerifyRoute } from "../verify/verify-route";
 import { SettleDoorPath } from "./settle-door-path";
+
+export type { SignInSiteRefusalConfig };
 
 /** The storefront route each door of the sign-in host mounts. */
 const DOOR_ROUTES: Record<SignInHostPageDoor, typeof LoginRoute> = {
@@ -42,35 +44,28 @@ const DOOR_ROUTES: Record<SignInHostPageDoor, typeof LoginRoute> = {
  * reload / Back / Forward re-enters the same door after the intent is spent.
  *
  * An entry the proxy could not read (the API's 429, or no answer) arrives as
- * `SIGN_IN_HOST_UNAVAILABLE_HEADER` instead: no storefront is known, so no
- * door and no brand — only the forms' own operation-level banner with the
- * forms' own words (`errors.tooManyAttempts` / `errors.unavailable`).
+ * `ENTRY_REFUSAL_HEADER` instead (003 EARS-72): no storefront is known, so no
+ * door and no brand — the sign-in site's refusal page, with the way out
+ * naming both sites.
  *
- * `storefronts` is the host's own host-config value (the two storefront
- * configs); the package core never picks a storefront config itself.
+ * `storefronts` and `refusalSites` are the host's own host-config values
+ * (the two storefront configs; the refusal's site links and logo, read only
+ * when a refusal renders); the package core never picks a storefront config
+ * itself.
  */
 export async function SignInHostRoute({
   storefronts,
+  refusalSites,
   searchParams,
 }: {
   storefronts: SignInHostStorefronts;
+  refusalSites: () => SignInSiteRefusalConfig;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const request = await headers();
-  const unavailable = readSignInHostUnavailable(
-    request.get(SIGN_IN_HOST_UNAVAILABLE_HEADER),
-  );
-  if (unavailable) {
-    const { errors } = DEFAULT_AUTH_FLOW_COPY;
-    return (
-      <div className="mx-auto w-full max-w-md px-4 py-16">
-        <FormError variant="banner">
-          {unavailable === "rate-limited"
-            ? errors.tooManyAttempts
-            : errors.unavailable}
-        </FormError>
-      </div>
-    );
+  const refusal = readEntryRefusal(request.get(ENTRY_REFUSAL_HEADER));
+  if (refusal) {
+    return <SignInSiteRefusal refusal={refusal} sites={refusalSites()} />;
   }
   const handOver = readSignInHostHandOver(
     request.get(SIGN_IN_HOST_ENTRY_HEADER),

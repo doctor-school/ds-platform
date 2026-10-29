@@ -38,17 +38,24 @@ import { RegisterRoute } from "../register/register-route";
 import { ResetRoute } from "../reset/reset-route";
 import {
   SIGN_IN_HOST_ENTRY_HEADER,
-  SIGN_IN_HOST_UNAVAILABLE_HEADER,
   signInHostConfig,
   writeSignInHostHandOver,
   type SignInHostHandOver,
   type SignInHostRender,
 } from "../server/sign-in-host";
+import { ENTRY_REFUSAL_COPY } from "../copy/entry-refusal";
+import { ENTRY_REFUSAL_HEADER } from "../server/entry-refusal";
+import { SignInSiteRefusal } from "../refusal/entry-refusal-route";
 import { VerifyRoute } from "../verify/verify-route";
 import { SettleDoorPath } from "./settle-door-path";
 import { SignInHostRoute } from "./sign-in-host-route";
 
 const STOREFRONTS = { academy: ACADEMY_AUTH_FLOW, doctor: DOCTOR_AUTH_FLOW };
+const SITES = {
+  academyHref: "https://academy.example",
+  doctorHref: "https://doctor.example",
+  logo: { light: "/brand/logo.svg", dark: "/brand/logo-white.svg" },
+};
 
 const RENDER: SignInHostRender = {
   action: "render",
@@ -78,6 +85,7 @@ function handOver(value: SignInHostHandOver | string | null) {
 async function mountPage(browser: Params = {}) {
   return (await SignInHostRoute({
     storefronts: STOREFRONTS,
+    refusalSites: () => SITES,
     searchParams: Promise.resolve(browser),
   })) as ReactElement<{ children?: ReactNode }>;
 }
@@ -223,31 +231,41 @@ describe("003 EARS-71: the door's params come from the entry intent, never the b
   });
 });
 
-describe("the entry could not be read: the host says so in the forms' own words", () => {
-  function unavailable(value: string) {
-    requestHeaders.value = new Headers({
-      [SIGN_IN_HOST_UNAVAILABLE_HEADER]: value,
-    });
+describe("003 EARS-72: the entry could not be read: the host renders the refusal page", () => {
+  function refused(value: string) {
+    requestHeaders.value = new Headers({ [ENTRY_REFUSAL_HEADER]: value });
   }
 
-  it("the API's rate limit renders the forms' too-many-attempts banner, no form", async () => {
-    unavailable("rate-limited");
-    const html = renderToStaticMarkup(await mount());
-    expect(html).toContain(DEFAULT_AUTH_FLOW_COPY.errors.tooManyAttempts);
-    expect(html).toContain('role="alert"');
+  it("003 EARS-72: the API's rate limit renders the sign-in site's refusal with its wait and both sites, no form and no banner", async () => {
+    refused("reason=rate-limited&retryAfter=42");
+    const page = (await mountPage()) as ReactElement<Record<string, unknown>>;
+    expect(page.type).toBe(SignInSiteRefusal);
+    expect(page.props).toMatchObject({
+      refusal: { reason: "rate-limited", retryAfterSeconds: 42 },
+      sites: SITES,
+    });
+    const html = renderToStaticMarkup(page);
+    expect(html).toContain("Можно повторить через 0:42");
+    expect(html).toContain(ENTRY_REFUSAL_COPY.academySite);
+    expect(html).toContain(ENTRY_REFUSAL_COPY.doctorSite);
     expect(html).not.toContain("<form");
+    expect(html).not.toContain(DEFAULT_AUTH_FLOW_COPY.errors.tooManyAttempts);
+    expect(html).not.toContain('role="alert"');
     expect(notFound).not.toHaveBeenCalled();
   });
 
-  it("any other failure renders the forms' temporarily-unavailable banner", async () => {
-    unavailable("unavailable");
-    const html = renderToStaticMarkup(await mount());
-    expect(html).toContain(DEFAULT_AUTH_FLOW_COPY.errors.unavailable);
-    expect(html).not.toContain(DEFAULT_AUTH_FLOW_COPY.errors.tooManyAttempts);
+  it("003 EARS-72: any other failure renders the refusal with the retry open at once", async () => {
+    refused("reason=unavailable");
+    const html = renderToStaticMarkup(await mountPage());
+    expect(html).toContain(ENTRY_REFUSAL_COPY.retry);
+    expect(html).not.toContain(DEFAULT_AUTH_FLOW_COPY.errors.unavailable);
+    expect(
+      ENTRY_REFUSAL_COPY.variants.unavailable.some((v) => html.includes(v.title)),
+    ).toBe(true);
   });
 
-  it("an unknown value is no state at all (not found)", async () => {
-    unavailable("bogus");
+  it("003 EARS-72: an unknown value is no state at all (not found)", async () => {
+    refused("reason=bogus");
     await expect(mount()).rejects.toThrow("NEXT_NOT_FOUND");
   });
 });

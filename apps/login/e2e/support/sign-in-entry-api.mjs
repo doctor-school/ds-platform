@@ -200,6 +200,17 @@ createServer((req, res) => {
 
   if (url.pathname === "/v1/sign-in-host/entry") {
     const authRequest = url.searchParams.get("authRequest") ?? "";
+    // 003 EARS-72 — an entry the API refuses: its per-IP limit (429 with
+    // `Retry-After`, or without one) or a failure (503).
+    if (authRequest === "REFUSE_429") {
+      return json(res, 429, { message: "Too Many Requests" }, { "retry-after": "105" });
+    }
+    if (authRequest === "REFUSE_429_BARE") {
+      return json(res, 429, { message: "Too Many Requests" });
+    }
+    if (authRequest === "REFUSE_503") {
+      return json(res, 503, { message: "Service Unavailable" });
+    }
     // EARS-66 — a spent auth request is sent on to the storefront's `/login`.
     if (SPENT.has(authRequest)) {
       return json(res, 200, {

@@ -23,7 +23,8 @@
     "./verify/route": "./src/verify/verify-route.tsx",
     "./reset": "./src/reset/index.ts",
     "./reset/route": "./src/reset/reset-route.tsx",
-    "./sign-in-host/route": "./src/sign-in-host/sign-in-host-route.tsx"
+    "./sign-in-host/route": "./src/sign-in-host/sign-in-host-route.tsx",
+    "./refusal/route": "./src/refusal/entry-refusal-route.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

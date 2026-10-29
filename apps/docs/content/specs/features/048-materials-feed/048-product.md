@@ -50,7 +50,7 @@ Per-platform mechanism, fields, limits and terms: [`048-platform-access-research
 - **US-4** — As a **platform administrator**, materials published on the connected accounts appear in the feed by themselves; nobody copies posts into the admin by hand.
 - **US-5** — As a **platform administrator**, I can hide one specific external material from the feed (an off-topic or outdated post) without switching off the whole account. _(lead decision 2026-10-28; owner sees it at Stage A)_
 - **US-6** — As an **Academy visitor**, the home shows one horizontal rail with the latest materials of every kind mixed together — news, expert columns, network posts and videos — newest first. Each card tells me its kind, its title (or the post's first lines), its source and date; a video card also shows its preview and duration. I see that the rail goes on (the next card is partly visible), move it with the ←/→ buttons on a computer, by swiping on a phone or with the keyboard, and older materials load as I near the end. Nothing in the rail moves or plays by itself.
-- **US-7** — As an **Academy visitor**, a card from another network opens the material on its platform in a new tab, or plays the video in that platform's official player; the Academy never hosts the network's video itself.
+- **US-7** — As an **Academy visitor**, a card from another network — a post or a video — opens its original on its platform in a new tab; nothing plays inside the Academy. _(lead decision 2026-10-29; owner sees it at Stage A)_
 - **US-8** — As an **Academy visitor**, I open a platform-authored news item or column and read it on its own reading page on the Academy itself — a platform material otherwise has nowhere to link. Owner: «давай-ка мы сразу сделаем правильно, так как задумано» (owner, chat 2026-10-29).
 - **US-9** — As an **Academy visitor**, while the feed is loading, when there is nothing in it yet, or when it could not be loaded, the rail tells me so honestly and lets me retry — never a fake entry, never a blank hole.
 - **US-10** — As a **product owner**, when marketing names a new platform, it joins the feed as a new source connector next to the existing ones, without redesigning the rail or migrating materials already in the feed.
@@ -68,7 +68,7 @@ Per-platform mechanism, fields, limits and terms: [`048-platform-access-research
 
 1. The administrator adds an official account: platform (one of the connected networks) and its address.
 2. New publications of that account appear in the rail automatically as cards of their kind (network post or video). Cards keep the platform's own publication date.
-3. A visitor taps an external card → the material opens on its platform in a new tab, or the video plays in the platform's official player.
+3. A visitor taps an external card → the original opens on its platform in a new tab.
 4. The administrator hides an unwanted post → it leaves the rail; switching an account off stops new materials from it and removes its materials from the rail, without deleting them from the admin. _(agent-proposed — UNCONFIRMED.)_
 
 **Branches:**
@@ -89,7 +89,7 @@ Per-platform mechanism, fields, limits and terms: [`048-platform-access-research
 - Each network is a separate connector; adding one changes neither the rail, nor the visitor's flow, nor the materials already in the feed.
 - Slice 1 ships with own materials only and is complete without any network connector.
 - New publications of a listed account reach the feed without manual copying, within a bounded delay. _(Delay value — agent-proposed — UNCONFIRMED: about an hour is enough for a news rail; push-based connectors deliver sooner; set at spec time.)_
-- Every card opens its material: a platform material on its Academy page, an external one on its platform (new tab) or in the platform's official player.
+- Every card opens its material: a platform material on its Academy page, an external one — post or video — on its platform in a new tab; nothing plays inside the Academy.
 - Only card data is stored: no video files, no mirrored network-hosted media; a retention period for stored card data is set in the design spec.
 - An unpublished, hidden or switched-off material never shows on the site.
 - One failing external platform never breaks the rail.
@@ -100,6 +100,7 @@ Per-platform mechanism, fields, limits and terms: [`048-platform-access-research
 - The 029 home page itself and the placement of the rail on it — feature 029.
 - Experts writing their own columns in a cabinet (REQ-124 in full) — a later 048 slice; in this feature the team enters columns in the admin on the expert's behalf. Linking a column author to the expert's personal page — `blocked_by` **031** (expert page).
 - Publishing from the platform to the social networks (cross-posting) — the feed only reads. The Dzen fallback (Dzen imports the Academy's RSS) is Dzen's own documented import, not cross-posting by the platform.
+- Embedded video players — videos open on their platform.
 - Reading any platform's web pages by scraping.
 - YouTube — removed from the starting set (blocked in the RF); it can return later as a connector if marketing names it.
 - Comments, likes, view counters, subscriptions to the feed.

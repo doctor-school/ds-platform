@@ -218,8 +218,8 @@ previous_sha() {
 # #3439: a failure note as the one JSON value `status` carries — {"phase", "reason"},
 # the phase a strict id or null, the reason one control-free line of at most
 # FAILURE_REASON_MAX characters — or null when the note is absent or unreadable. The
-# note crosses into a public Actions log: prod.mjs writes the first line of its
-# refusal, which names variables, never values; this bounds its shape.
+# note crosses into a public Actions log: prod.mjs's releaseFailureNote decides what
+# it says (an allow-list of authored refusals); this bounds its shape.
 FAILURE_REASON_MAX=160
 read -r -d '' FAILURE_PY <<'PY' || true
 import json, re, sys

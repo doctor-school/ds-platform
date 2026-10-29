@@ -23,6 +23,7 @@ import {
   OPERATOR_ONLY_STEPS,
   REDEPLOY_SKIPPED_STEPS,
   RELEASE_FAILURE_REASON_MAX,
+  UNEXPECTED_FAILURE_REASON,
   compareStatus,
   deployPlan,
   descendsFromLiveVerdict,
@@ -430,7 +431,7 @@ test("3157: the --local run checks the descent right after its previous-SHA read
   );
   assert.match(
     phase.slice(guard),
-    /if \(!descent\.ok\) die\(descent\.reason\);/,
+    /if \(!descent\.ok\) die\(descent\.reason, \{ authored: true \}\);/,
   );
 });
 
@@ -1017,43 +1018,74 @@ test("3439: the walker names the phase this run is in, operator-only phases it s
   assert.equal(redeploy.current(), "runtime-env");
 });
 
-test("3439: the failure note is the phase and the message's first line, control-free and bounded", () => {
-  assert.deepEqual(releaseFailureNote("smoke", "prod smoke RED (exit 1)\n  more"), {
+test("3439: an authored refusal's note is the phase and its first line, control-free and bounded", () => {
+  const authored = { authored: true };
+  assert.deepEqual(releaseFailureNote("smoke", "prod smoke RED (exit 1)\n  more", authored), {
     phase: "smoke",
     reason: "prod smoke RED (exit 1)",
   });
-  assert.deepEqual(releaseFailureNote(null, "\n\n  Error: boom\tnow\n    at x (y:1)"), {
-    phase: null,
-    reason: "Error: boom now",
-  });
-  const long = releaseFailureNote("migrate", "x".repeat(500));
+  assert.deepEqual(
+    releaseFailureNote("idp", "\n\n  prod IdP policy read-back REJECTED —\thint:\n  PASSWORD=x", authored),
+    { phase: "idp", reason: "prod IdP policy read-back REJECTED — hint:" },
+  );
+  const long = releaseFailureNote("migrate", "x".repeat(500), authored);
   assert.equal(long.reason.length, RELEASE_FAILURE_REASON_MAX);
   assert.match(long.reason, /…$/);
-  assert.deepEqual(releaseFailureNote("idp", "a\u0007b\u001b[31mc"), { phase: "idp", reason: "a b [31mc" });
+  assert.deepEqual(releaseFailureNote("idp", "a\u0007b\u001b[31mc", authored), { phase: "idp", reason: "a b [31mc" });
 });
 
-test("3439: a wrapped box command's stderr never reaches the note, only prod.mjs's own text", () => {
-  // remote.mjs boxCapture / data-prod.mjs client: «… on <host> exited N: <first stderr line>».
-  assert.deepEqual(
-    releaseFailureNote("migrate", "postgres-probe: ssh capture on ds-api-prod exited 1: PASSWORD=x leaked"),
-    { phase: "migrate", reason: "postgres-probe: ssh capture on ds-api-prod exited 1" },
-  );
-  assert.deepEqual(
-    releaseFailureNote(
-      "data-up",
-      "runtime config apply failed: data-prod on ds-data-prod exited 2: could not connect to postgres://u:p@h/db",
-    ),
-    { phase: "data-up", reason: "runtime config apply failed: data-prod on ds-data-prod exited 2" },
-  );
-  // localCap: «`<cmd> <args>` exited N: <stderr>»; a signal kill exits null.
-  assert.deepEqual(releaseFailureNote(null, "Error: `docker compose up` exited null: token=abc\n    at x"), {
-    phase: null,
-    reason: "Error: `docker compose up` exited null",
-  });
-  const note = JSON.stringify(
-    releaseFailureNote("idp", "ssh capture on ds-api-prod exited 255: postgres://u:p@h PASSWORD=x"),
-  );
-  assert.doesNotMatch(note, /PASSWORD|postgres:\/\//);
+test("3439: any other failure gets the fixed reason — no foreign Error text reaches the note", () => {
+  let parseError;
+  try {
+    JSON.parse('{"url": postgres://u:p@h/db}');
+  } catch (e) {
+    parseError = e;
+  }
+  for (const message of [
+    // the catch-all die(err.stack || err.message) of a JSON.parse error echoing its input
+    parseError.stack,
+    // a wrapped box command: «… on <host> exited N: <first stderr line>» (lib/remote.mjs)
+    "postgres-probe: ssh capture on ds-api-prod exited 1: PASSWORD=x leaked",
+    "runtime config apply failed: data-prod on ds-data-prod exited 2: postgres://u:p@h/db",
+    // a network error
+    "TypeError: fetch failed\n  cause: getaddrinfo ENOTFOUND u:p@h",
+  ]) {
+    const note = releaseFailureNote("migrate", message);
+    assert.deepEqual(note, { phase: "migrate", reason: UNEXPECTED_FAILURE_REASON });
+    assert.doesNotMatch(JSON.stringify(note), /PASSWORD|postgres:\/\/|u:p@h/);
+  }
+  assert.deepEqual(releaseFailureNote(null, "boom"), { phase: null, reason: UNEXPECTED_FAILURE_REASON });
+});
+
+test("3439: no authored refusal interpolates an Error message or box output on its first line", () => {
+  const src = readFileSync(new URL("./prod.mjs", import.meta.url), "utf8");
+  const calls = [...src.matchAll(/\bdie\(/g)]
+    .map((m) => {
+      // the call's source up to its options, which name `authored: true`
+      const end = src.indexOf("authored: true", m.index);
+      const next = src.indexOf("die(", m.index + 4);
+      return end > 0 && (next < 0 || end < next) ? src.slice(m.index, end) : null;
+    })
+    .filter(Boolean);
+  assert.ok(calls.length >= 15, `found ${calls.length} authored refusals`);
+  for (const call of calls) {
+    // the first message line ends at a `\n` escape or a raw newline inside a template
+    let firstLineEnd = call.length;
+    let ticks = 0;
+    for (let i = 0; i < call.length; i += 1) {
+      if (call[i] === "`") ticks += 1;
+      if (ticks % 2 === 1 && (call.startsWith("\\n", i) || call[i] === "\n")) {
+        firstLineEnd = i;
+        break;
+      }
+    }
+    assert.doesNotMatch(
+      call.slice(0, firstLineEnd),
+      /\$\{\s*(e|err|error)\b|\.message|\.stderr|\.stack|\$\{out\}|verdict\.detail/,
+      call,
+    );
+  }
+  assert.match(src, /die\(err\.stack \|\| err\.message\);/);
 });
 
 test("3439: a red smoke names its failing probe labels", () => {
@@ -1071,7 +1103,7 @@ test("3439: die() writes the note to the driver's file, the smoke hands its fail
   const src = readFileSync(new URL("./prod.mjs", import.meta.url), "utf8");
   const die = src.slice(src.indexOf("\nfunction die("), src.indexOf("\n}\n", src.indexOf("\nfunction die(")));
   assert.match(die, /process\.env\.DS_RELEASE_FAILURE_FILE/);
-  assert.match(die, /releaseFailureNote\(currentWalk\?\.current\(\) \?\? null, msg\)/);
+  assert.match(die, /releaseFailureNote\(currentWalk\?\.current\(\) \?\? null, msg, \{ authored \}\)/);
   assert.match(src, /currentWalk = walk;/);
   const smoke = src.slice(src.indexOf("\nfunction runSmoke("));
   assert.match(smoke.slice(0, 2000), /DS_SMOKE_FAILED_FILE/);

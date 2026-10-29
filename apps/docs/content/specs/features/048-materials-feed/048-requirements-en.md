@@ -2,7 +2,7 @@
 title: "048 — Materials feed: own materials, the reading page and the rail on the Academy home (Requirements, slice 1)"
 description: "Requirements for slice 1 of feature 048: platform administrators write news items and expert columns in apps/admin with a TipTap rich-text editor of @ds/design-system, preview, publish, edit and unpublish them, optionally naming a partner from the 032 organisation registry that the card marks «Партнёрский материал · <партнёр>»; every published material becomes an entry of the one materials feed that later network connectors also write; the Academy home shows that feed as one horizontal rail «Новости, блог и видео» — newest first, the next card partly visible, ←/→ on desktop, swipe on a phone, keyboard scrolling, older materials loaded near the end, honest loading / empty / error states, nothing moving or playing by itself; each material has its own reading page on academy.doctor.school; the doctor storefront shows nothing of the feed; platform-administrator-only writes with the second factor and the 010 change audit. No network connector, source list or per-material hiding in this slice."
 slug: 048-materials-feed
-status: Draft
+status: In dev
 issues: [3511, 3512, 3513, 3514, 3516, 3517]
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/issues/3403

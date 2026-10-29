@@ -25,7 +25,9 @@ test("003 EARS-72: a rate-limited door is a 429 refusal page counting down, its 
     page.getByRole("button", { name: /Можно повторить через 1:4\d/ }),
   ).toBeDisabled();
   await expect(
-    page.getByRole("link", { name: ENTRY_REFUSAL_COPY.backToEvent }),
+    page
+      .getByRole("main")
+      .getByRole("link", { name: ENTRY_REFUSAL_COPY.backToEvent }),
   ).toHaveAttribute("href", /refuse-429$/);
   await expect(page.getByRole("banner").first()).toBeVisible();
 });
@@ -39,7 +41,7 @@ test("003 EARS-72: a rate-limited door without Retry-After opens the retry at on
     page.getByRole("button", { name: ENTRY_REFUSAL_COPY.retry }),
   ).toBeEnabled();
   await expect(
-    page.getByRole("link", { name: ENTRY_REFUSAL_COPY.home }),
+    page.getByRole("main").getByRole("link", { name: ENTRY_REFUSAL_COPY.home }),
   ).toHaveAttribute("href", "/");
 });
 

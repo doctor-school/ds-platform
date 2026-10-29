@@ -1,11 +1,9 @@
 // tools/deploy/postgres-hash-migration.test.mjs — Issue #3419.
 //
 // The PostgreSQL source hash v2 covers only the image/cluster inputs of the data-prod
-// compose (runtime-only service keys removed), so a log bound no longer moves it. A box
-// holding a v1 record is migrated through POSTGRES_HASH_MIGRATIONS without a certificate
-// only when the record is a table entry whose certified tree has the target's v2. The
-// table is empty since ds-data-prod records hashVersion 2 (#3475), so every v1 record
-// keeps the certificate requirement.
+// compose (runtime-only service keys removed), so a log bound no longer moves it. Since
+// ds-data-prod records hashVersion 2 (#3475) a box holding a v1 record always needs a
+// certificate.
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -21,7 +19,6 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 
 import {
-  POSTGRES_HASH_MIGRATIONS,
   assertPostgresEvidence,
   postgresContract,
   postgresSourceHash,
@@ -76,16 +73,6 @@ function evidence(target, record) {
     ...record,
   };
 }
-
-test("3419: each migration entry is the certified tree of its commit (v1 and v2 recomputed from git)", () => {
-  for (const { commit, v1, v2 } of POSTGRES_HASH_MIGRATIONS) {
-    const tree = readPostgresTarget(commit, REPO_ROOT);
-    assert.equal(postgresSourceHashV1(tree.files), v1, `v1 of ${commit}`);
-    assert.equal(tree.sourceHash, v2, `v2 of ${commit}`);
-  }
-  // #3475: ds-data-prod records hashVersion 2, so no v1 entry is left.
-  assert.deepEqual(POSTGRES_HASH_MIGRATIONS, []);
-});
 
 test("3419: v2 ignores the runtime-only service keys and nothing else", () => {
   const base = postgresSourceHash(head.files);
@@ -291,7 +278,7 @@ const prepare = (client, extra = {}) =>
   });
 const asked = (client) => client.requests.map((r) => r.sourceHash);
 
-test("3475: with no table entry a box is read once with the target v2 (tags present or gone)", async () => {
+test("3475: a box is read once with the target v2 (tags present or gone)", async () => {
   for (const tags of [true, false]) {
     const client = box(
       { sourceHash: head.sourceHash, hashVersion: 2 },
@@ -350,12 +337,6 @@ log bound: /pg log=json-file
     );
   }
   assert.deepEqual(checkpointJournalLines(undefined), []);
-});
-
-test("3419: a v1 record not in the table is refused, read once", async () => {
-  const client = box({ sourceHash: "f".repeat(64) });
-  await assert.rejects(prepare(client), /certification/);
-  assert.deepEqual(asked(client), [head.sourceHash]);
 });
 
 test("3419: a failed probe names the hash it was asked with", async () => {

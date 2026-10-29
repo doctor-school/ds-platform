@@ -123,7 +123,6 @@ import {
   assertPostgresEvidence,
   certifiedTarget,
   guardedPostgresStep,
-  migrationProbeHash,
   postgresImageOverride,
   postgresProbeRequest,
   postgresStateRecord,
@@ -2181,26 +2180,9 @@ export async function preparePostgresDeployment(
     }
   };
   // #3419: the box prefers its recorded images only for a request hash equal to its
-  // record; any other hash makes it inspect the mutable compose tags. When the migration
-  // table maps a v1 onto the target, the first read asks with that v1, so a v1 box answers
-  // from its record. A v2 record (or a failed first read) is read again with the target
-  // v2 — at most two reads, each failure naming the hash it asked with.
-  const read = async () => {
-    const v1 = probePlan.preferRecordedImages && migrationProbeHash(plan.sourceHash);
-    if (!v1) return probe(plan.sourceHash, "the target v2");
-    let first;
-    try {
-      const live = await probe(v1, "the table's v1 record");
-      if (live?.hashVersion !== 2) return live;
-    } catch (error) {
-      first = error;
-    }
-    try {
-      return await probe(plan.sourceHash, "the target v2");
-    } catch (error) {
-      throw first ? new Error(`${first.message}; then ${error.message}`, { cause: error }) : error;
-    }
-  };
+  // record; any other hash makes it inspect the mutable compose tags. One read, with the
+  // target v2; a failure names the hash it asked with.
+  const read = () => probe(plan.sourceHash, "the target v2");
   let live = await read();
   // #3466: no prod ssh (#2987) — the release journal is the only place the box's
   // record is read. Once, at preparation; every `run()` re-reads silently.

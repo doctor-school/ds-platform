@@ -6,6 +6,7 @@ import {
   forwardedHeaders,
   forwardedSessionFrom,
   STOREFRONT_RETURN_PATH_MAX,
+  parseLandOnlyReturnTarget,
   parseReturnTarget,
   isStorefrontReturnPath,
   toStorefrontReturnPath,
@@ -199,7 +200,9 @@ function doorOf(entry: StorefrontEntry): SignInHostDoor {
  * its door: `?method=code` (with its hand-off reference, EARS-44), the reset
  * door, and an event return target (its slug only) on every door — the reset
  * entry's included, so «Вернуться ко входу» opens the sign-in form with that
- * event's card, as the storefront's reset door linked it.
+ * event's card, as the storefront's reset door linked it. A land-only return
+ * (the header «Войти» on an event page, 014) names its event page too: the
+ * card shows, while `registrationToComplete` still registers nothing.
  */
 function entryIntent(
   entry: StorefrontEntry,
@@ -207,7 +210,10 @@ function entryIntent(
   returnTo: string | undefined,
   handoff: string | null,
 ): StorefrontEntryIntent | undefined {
-  const eventTarget = parseReturnTarget(returnTo)?.eventSlug;
+  const landOnly = parseLandOnlyReturnTarget(returnTo);
+  const eventTarget = parseReturnTarget(
+    landOnly ? landOnly.page : returnTo,
+  )?.eventSlug;
   const code = entry === "login" && params.get("method") === "code";
   const intent: StorefrontEntryIntent = {
     ...(code ? { method: "code" as const } : {}),

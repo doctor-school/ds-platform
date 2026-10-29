@@ -25,6 +25,24 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     And writes a body and publishes the material
     Then the card of "Ортобиология в России: чего не хватает практике" reads «Колонка эксперта» and the expert's name
 
+  @EARS-19 @EARS-9 @EARS-13
+  Scenario: A material with a partner carries the partner mark
+    Given the published organisation "Партнёр А" with its name shown publicly is in the organisation registry
+    And a platform administrator is signed in to the admin with a second factor
+    When the administrator creates a material of kind «Новость» titled "Совместная программа обучения PRP"
+    And chooses the partner "Партнёр А"
+    And writes a body and publishes the material
+    Then the card of "Совместная программа обучения PRP" reads «Партнёрский материал · Партнёр А»
+    When the organisation "Партнёр А" stops showing its name publicly
+    Then the card of "Совместная программа обучения PRP" has no partner mark
+    And "Совместная программа обучения PRP" stays in the rail
+
+  @EARS-19 @EARS-13
+  Scenario: A material without a partner carries no partner mark
+    Given the news item "Открыт набор центров в исследование PRP" is published with no partner
+    When a visitor opens the Academy home
+    Then the card of "Открыт набор центров в исследование PRP" has no partner mark
+
   @EARS-4
   Scenario: A material without a body cannot be published
     Given a platform administrator is signed in to the admin with a second factor

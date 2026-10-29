@@ -24,8 +24,9 @@ import { test, expect, type Page } from "@playwright/test";
  *
  * 014 EARS-7 (#1344) added the second describe below — the «запись готовится»
  * PLAQUE that occupies the player position while nothing is published, carrying
- * the operator's readiness day when there is one and an honest date-free line
- * when there is not.
+ * the operator's readiness day when there is one. The date-free promise is
+ * covered by the shared 014 scenario in `@ds/e2e` (#3481), using an owned event
+ * closed through Admin with no recording or readiness day.
  *
  * 014 EARS-5 (#1343) added the third describe: the login gate a guest gets in
  * the player position, the mounted player a signed-in doctor gets from the same
@@ -63,13 +64,6 @@ const ENDED_SLUG = process.env.E2E_ENDED_WEBINAR_SLUG;
  * Carries `recording_expected_by`, so it drives the DATED plaque (014 EARS-7).
  */
 const PREPARING_SLUG = process.env.E2E_PREPARING_WEBINAR_SLUG;
-/**
- * A second `ended`, nothing-published event whose `recording_expected_by` is
- * NULL — the operator committed to no day. It exists as its own seed because the
- * date-free plaque copy is a distinct product promise, not a formatting branch:
- * the page must say «как только будет готова» rather than invent an estimate.
- */
-const PREPARING_UNDATED_SLUG = process.env.E2E_PREPARING_UNDATED_WEBINAR_SLUG;
 /** A `hidden` event — the 004 EARS-5 notice must survive 014 untouched. */
 const HIDDEN_SLUG = process.env.E2E_HIDDEN_WEBINAR_SLUG;
 /**
@@ -205,28 +199,6 @@ test.describe("014 EARS-4 public post-live event page (e2e)", () => {
 
 test.describe("014 EARS-7 the «запись готовится» plaque (e2e)", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
-
-  test("014 EARS-7: with NO committed day the plaque stays honest — it promises the page, not a date it does not have", async ({
-    page,
-    context,
-  }) => {
-    test.skip(
-      !PREPARING_UNDATED_SLUG,
-      "requires an ended event with no recording and no expected-by day",
-    );
-    await context.clearCookies();
-    await page.goto(`${BASE}/webinars/${PREPARING_UNDATED_SLUG}`, {
-      waitUntil: "domcontentloaded",
-    });
-
-    const plaque = page.getByTestId("recording-plaque");
-    await expect(plaque).toBeVisible();
-    await expect(plaque).toContainText("Запись готовится");
-    await expect(plaque).toContainText("как только будет готова");
-    // Hide-until-content: no date line at all, not an empty slot or a dash.
-    await expect(page.getByTestId("recording-plaque-date")).toHaveCount(0);
-    await expect(plaque).not.toContainText("до ");
-  });
 
   test("014 EARS-7: a PUBLISHED recording carries no plaque — the promise clears itself the moment it is kept", async ({
     page,

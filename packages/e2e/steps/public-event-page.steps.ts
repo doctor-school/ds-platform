@@ -429,7 +429,8 @@ Then(
       "Монтируем запись — она появится на этой странице, как только будет готова.",
     );
     await expect(page.getByTestId("recording-plaque-date")).toHaveCount(0);
-    await expect(plaque).not.toContainText(/\d|≈|\bдо\s/u);
+    await expect(plaque).not.toContainText("до ");
+    await expect(plaque).not.toContainText(/\d|≈/u);
     await expect(plaque.locator("a, button, iframe, video")).toHaveCount(0);
     await expect(page.getByTestId("recording-player")).toHaveCount(0);
     await expect(page.getByTestId("recording-gate")).toHaveCount(0);

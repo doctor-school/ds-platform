@@ -407,22 +407,34 @@ routes:
     route: /access
     file: apps/admin/app/access/page.tsx
     status: product-ready
-  # 012 EARS-4 (#1286): the descriptive-partner authoring vertical — the same
-  # shared list shell and tabbed detail, with a logo slot and an https-only
-  # website address. Real product deliverables, driven live in
-  # `apps/admin/e2e/taxonomy-partners.spec.ts` and scanned by the partner block of
-  # `apps/admin/e2e/a11y/a11y-axe.e2e.spec.ts`. Same one-tab rule: no empty
-  # «Публикация» placeholder ships ahead of the slice that fills it, and no
-  # retire/restore control ships ahead of the route that would back it (#1287).
+  # 032 EARS-14 (#3492): the organisation registry and its role book — the
+  # same shared list shell and tabbed detail, a logo slot, an https-only website
+  # address and the role checkboxes. Real product deliverables, driven live in
+  # `apps/admin/e2e/organisation-registry.spec.ts` + `taxonomy-organisations.spec.ts`
+  # and scanned by the 032 EARS-14 blocks of `apps/admin/e2e/a11y/a11y-axe.e2e.spec.ts`.
+  # Same one-tab rule: no empty «Публикация» placeholder ships ahead of the slice
+  # that fills it, and no retire/restore control ahead of the route backing it (#1287).
   - app: admin
-    route: /partners
-    file: apps/admin/app/partners/page.tsx
+    route: /organisations
+    file: apps/admin/app/organisations/page.tsx
     status: product-ready
   - app: admin
-    route: /partners/create
-    file: apps/admin/app/partners/create/page.tsx
+    route: /organisations/create
+    file: apps/admin/app/organisations/create/page.tsx
     status: product-ready
   - app: admin
-    route: /partners/[id]
-    file: apps/admin/app/partners/[id]/page.tsx
+    route: /organisations/[id]
+    file: apps/admin/app/organisations/[id]/page.tsx
+    status: product-ready
+  - app: admin
+    route: /organisation-roles
+    file: apps/admin/app/organisation-roles/page.tsx
+    status: product-ready
+  - app: admin
+    route: /organisation-roles/create
+    file: apps/admin/app/organisation-roles/create/page.tsx
+    status: product-ready
+  - app: admin
+    route: /organisation-roles/[id]
+    file: apps/admin/app/organisation-roles/[id]/page.tsx
     status: product-ready

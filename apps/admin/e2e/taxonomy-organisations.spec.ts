@@ -21,7 +21,7 @@ import { ADMIN_ORIGIN, signInAsAdmin } from "@ds/e2e/admin-events";
  *
  *   E2E_ADMIN_URL=http://localhost:3201 ACADEMY_PUBLIC_ORIGIN=http://localhost:3001 \
  *   IDP_ISSUER=… IDP_SERVICE_TOKEN=… \
- *   IDP_PROJECT_ID=… pnpm --filter @ds/admin exec playwright test e2e/taxonomy-partners.spec.ts \
+ *   IDP_PROJECT_ID=… pnpm --filter @ds/admin exec playwright test e2e/taxonomy-organisations.spec.ts \
  *     --config=playwright.flows.config.ts
  */
 

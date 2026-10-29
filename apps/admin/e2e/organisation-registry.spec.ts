@@ -39,9 +39,17 @@ async function toggle(page: Page, testId: string): Promise<void> {
   await page.getByTestId(testId).locator("xpath=ancestor::label[1]").click();
 }
 
+/** The responsive-web evidence profile owes each screen in both schemes. */
 async function shot(page: Page, name: string): Promise<void> {
   if (!SHOT_DIR) return;
-  await page.screenshot({ path: `${SHOT_DIR}/${name}.png`, fullPage: true });
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    await page.screenshot({
+      path: `${SHOT_DIR}/${name}-${colorScheme}.png`,
+      fullPage: true,
+    });
+  }
+  await page.emulateMedia({ colorScheme: "light" });
 }
 
 test.describe.configure({ mode: "serial" });
@@ -231,12 +239,12 @@ test.describe("032 EARS-14 — the organisation registry in the live admin", () 
     await page.goto("/organisations");
     await page.getByTestId("organisations-filters").waitFor();
     await expectNoPageSideScroll(page);
-    await shot(page, "list-narrow");
+    await shot(page, "list-mobile");
 
     await page.goto("/organisations/create");
     await page.getByTestId("organisation-form").waitFor();
     await expectNoPageSideScroll(page);
-    await shot(page, "form-narrow");
+    await shot(page, "form-mobile");
 
     await page.goto(detailUrl);
     await page.getByTestId("organisation-form").waitFor();
@@ -247,7 +255,7 @@ test.describe("032 EARS-14 — the organisation registry in the live admin", () 
       renamedRole,
     );
     await expectNoPageSideScroll(page);
-    await shot(page, "roles-narrow");
+    await shot(page, "roles-mobile");
 
     await page.goto("/organisation-roles/create");
     await page.getByTestId("organisation-role-form").waitFor();

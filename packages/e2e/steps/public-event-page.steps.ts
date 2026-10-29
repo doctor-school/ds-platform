@@ -331,9 +331,7 @@ Given(
       await upcomingIds(journey.page),
       "live control is listed before closing",
     ).toContain(journey.event!.id);
-    const response = await journey.page.goto(
-      `${world.host.eventsPath}?q=${encodeURIComponent(journey.event!.title)}`,
-    );
+    const response = await journey.page.goto(world.host.eventsPath);
     expect(response?.status()).toBe(200);
     await expect(
       journey.page.getByRole("heading", {
@@ -425,8 +423,8 @@ Then(
     const plaque = page.getByTestId("recording-plaque");
     await expect(plaque).toBeVisible();
     await expect(plaque).toContainText("Запись готовится");
-    await expect(plaque).toContainText(
-      "Монтируем запись — она появится на этой странице, как только будет готова.",
+    await expect(plaque).toHaveText(
+      /^\s*Запись\s*Запись готовится\s*Монтируем запись — она появится на этой странице, как только будет готова\.\s*$/u,
     );
     await expect(page.getByTestId("recording-plaque-date")).toHaveCount(0);
     await expect(plaque).not.toContainText("до ");

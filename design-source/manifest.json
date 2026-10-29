@@ -29,11 +29,10 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "academy-home.dc.html": {
-      "sha256": "35ba85430bea35ccdc3244e209dcd25af8b0fc2d57e061211ea074a8cb2becca",
-      "pulledSha256": "0fa0cdee00a7e7cda1d3ec85bbdba3077949c0a46286d33bd4f083f5aa9ff999",
-      "pulledAt": "2026-09-28",
-      "remotePath": null,
-      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+      "sha256": "c8f7b04a2584df6c8755f5a4b6057508da19bb3e5679c1e0e2b706b32cad0adb",
+      "pulledSha256": "6082d1d80dd1068eb244335b121a06cf48161d71293ffd1c7805e1006a30c218",
+      "pulledAt": "2026-10-29T08:18:03.922Z",
+      "remotePath": "academy-home.dc.html"
     },
     "academy-index-demo.dc.html": {
       "sha256": "488f978760af88aed88108bd32cab4d0ac7235b2cc54145e2e57c45dba31a5f2",
@@ -220,7 +219,7 @@
     "ds-shell.dc.html": {
       "sha256": "b659e8be997070bcf9e1eeea28bd68e9961640c01deeea39d7595df2cd7ecaee",
       "pulledSha256": "a6bfaff51b665dcc8b3d128f35bae89c355606b426b5b23ca6c5eba75f377077",
-      "pulledAt": "2026-10-05T03:52:53.831Z",
+      "pulledAt": "2026-10-29T08:18:04.022Z",
       "remotePath": "ds-shell.dc.html"
     },
     "event-page.dc.html": {
@@ -271,7 +270,7 @@
     "unit-event-card.dc.html": {
       "sha256": "d1f9e830b4bf44b3e4a5236b20419a042e4c6be1a7417929c7d30471c9bafe85",
       "pulledSha256": "d0f00ce3bd0f5991481ac5ae0439be82af089bffd4974deb5d9bec84b5cdf9b7",
-      "pulledAt": "2026-10-16T09:50:47.641Z",
+      "pulledAt": "2026-10-29T08:18:04.134Z",
       "remotePath": "unit-event-card.dc.html"
     },
     "unit-events-filter.dc.html": {
@@ -288,11 +287,17 @@
       "remotePath": null,
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
+    "unit-feed-card.dc.html": {
+      "sha256": "eb70d12f349d819e1a8b31b7cf7f8c98a4b38cf90ced77dc4ca247d5ab321ca8",
+      "pulledSha256": "aa0c0a65020aa40bbecc19ee4e2eccd14748bcfd1feb42cf206f240ea2043963",
+      "pulledAt": "2026-10-29T08:18:03.819Z",
+      "remotePath": "unit-feed-card.dc.html"
+    },
     "unit-project-card.dc.html": {
       "sha256": "f369bac6f3635e58c2bec3610a12a982f005d43763105490fa6d3f2d9ef1f078",
       "pulledSha256": "224dd8f0f5973cd694d09a9c9769db5e56934595783af58a1fbcbf481580f858",
-      "pulledAt": "2026-10-28T09:48:47.012Z",
-      "remotePath": null
+      "pulledAt": "2026-10-29T08:18:04.271Z",
+      "remotePath": "unit-project-card.dc.html"
     },
     "unit-room-frame.dc.html": {
       "sha256": "b8b87e44f44df08c69e51bdbc14f23e0207ee8403132ec08e4dd8b01e201fb01",

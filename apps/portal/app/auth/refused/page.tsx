@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 
-import { ENTRY_REFUSAL_COPY } from "@ds/auth-flow/copy";
-import { StorefrontEntryRefusalRoute } from "@ds/auth-flow/refusal/route";
+import {
+  ENTRY_REFUSAL_PAGE_METADATA,
+  StorefrontEntryRefusalRoute,
+} from "@ds/auth-flow/refusal/route";
 
 import { ACADEMY_AUTH_FLOW } from "../../../lib/auth-flow.host-config";
 
 export const metadata: Metadata = {
-  title: ENTRY_REFUSAL_COPY.pageTitle,
-  robots: { index: false, follow: false },
+  title: ENTRY_REFUSAL_PAGE_METADATA.title,
+  robots: ENTRY_REFUSAL_PAGE_METADATA.robots,
 };
 
 /**
@@ -17,5 +19,7 @@ export const metadata: Metadata = {
  * and home.
  */
 export default function AcademyEntryRefusalPage() {
-  return <StorefrontEntryRefusalRoute config={ACADEMY_AUTH_FLOW} homeHref="/" />;
+  return (
+    <StorefrontEntryRefusalRoute config={ACADEMY_AUTH_FLOW} homeHref="/" />
+  );
 }

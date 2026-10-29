@@ -11,6 +11,16 @@ import {
 } from "../server/entry-refusal";
 import { EntryRefusal } from "./entry-refusal";
 
+/**
+ * 003 EARS-72 — the refusal page's metadata, read member by member by each
+ * storefront's mount: its tab title, and never indexed (the page answers only a
+ * refused entry).
+ */
+export const ENTRY_REFUSAL_PAGE_METADATA = {
+  title: ENTRY_REFUSAL_COPY.pageTitle,
+  robots: { index: false, follow: false },
+} as const;
+
 /** A random source in `[0, 1)` — injectable so a test can pin the variant. */
 export type RefusalRandom = () => number;
 
@@ -40,9 +50,7 @@ export async function StorefrontEntryRefusalRoute({
   homeHref: string;
   random?: RefusalRandom;
 }) {
-  const refusal = readEntryRefusal(
-    (await headers()).get(ENTRY_REFUSAL_HEADER),
-  );
+  const refusal = readEntryRefusal((await headers()).get(ENTRY_REFUSAL_HEADER));
   if (!refusal) notFound();
   const wayOut = refusal.eventSlug
     ? {

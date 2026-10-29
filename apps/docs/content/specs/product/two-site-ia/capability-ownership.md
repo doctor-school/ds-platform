@@ -189,6 +189,7 @@ Out of scope, as in the allowlist: `loading` / `error` / `not-found` / `template
 | `apps/doctor/app/(storefront)/account/congress/page.tsx` | `@ds/congress-submissions`                                                                                                                      | mounted   |
 | `apps/doctor/app/(storefront)/account/events/page.tsx`   | `@ds/events-storefront`                                                                                                                         | mounted   |
 | `apps/doctor/app/(storefront)/account/page.tsx`          | `@ds/account`                                                                                                                                   | mounted   |
+| `apps/doctor/app/(storefront)/auth/refused/page.tsx`     | `@ds/auth-flow`                                                                                                                                 | mounted   |
 | `apps/doctor/app/(storefront)/documents/[slug]/page.tsx` | — host-only surface (legal document reading page; the 028 content package is net-new, no wave)                                                  | permanent |
 | `apps/doctor/app/(storefront)/documents/page.tsx`        | — host-only surface (legal documents list; the 028 content package is net-new, no wave)                                                         | permanent |
 | `apps/doctor/app/(storefront)/events/[slug]/page.tsx`    | `@ds/event-page`                                                                                                                                | mounted   |
@@ -217,6 +218,7 @@ Out of scope, as in the allowlist: `loading` / `error` / `not-found` / `template
 | `apps/portal/app/@footer/page.tsx`                      | — page-footer slot per host (Academy home footer after the root `<main>`, #2664)                         | permanent |
 | `apps/portal/app/account/events/page.tsx`               | `@ds/events-storefront`                                                                                  | mounted   |
 | `apps/portal/app/account/page.tsx`                      | `@ds/account`                                                                                            | mounted   |
+| `apps/portal/app/auth/refused/page.tsx`                 | `@ds/auth-flow`                                                                                          | mounted   |
 | `apps/portal/app/documents/[slug]/page.tsx`             | — host-only surface (legal document reading page; the 028 content package is net-new, no wave)           | permanent |
 | `apps/portal/app/documents/page.tsx`                    | — host-only surface (legal documents list; the 028 content package is net-new, no wave)                  | permanent |
 | `apps/portal/app/education-index/page.tsx`              | — host-only surface (temporary 045 demo leaderboard, #2360; deleted by the EARS-14 release, no wave)     | permanent |

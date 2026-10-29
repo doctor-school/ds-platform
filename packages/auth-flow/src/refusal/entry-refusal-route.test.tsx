@@ -26,6 +26,7 @@ import {
 } from "../server/entry-refusal";
 import type { EntryRefusalProps } from "./entry-refusal";
 import {
+  ENTRY_REFUSAL_PAGE_METADATA,
   pickRefusalVariant,
   StorefrontEntryRefusalRoute,
 } from "./entry-refusal-route";
@@ -74,7 +75,11 @@ describe("storefront refusal page", () => {
       [ACADEMY_AUTH_FLOW, "/webinars/live-1"],
       [DOCTOR_AUTH_FLOW, "/events/live-1"],
     ] as const) {
-      handOver({ reason: "unavailable", retryAfterSeconds: null, eventSlug: "live-1" });
+      handOver({
+        reason: "unavailable",
+        retryAfterSeconds: null,
+        eventSlug: "live-1",
+      });
       const el = (await StorefrontEntryRefusalRoute({
         config,
         homeHref: "/",
@@ -91,8 +96,18 @@ describe("storefront refusal page", () => {
     for (const value of [null, "reason=bogus", "garbage"]) {
       handOver(value);
       await expect(
-        StorefrontEntryRefusalRoute({ config: ACADEMY_AUTH_FLOW, homeHref: "/" }),
+        StorefrontEntryRefusalRoute({
+          config: ACADEMY_AUTH_FLOW,
+          homeHref: "/",
+        }),
       ).rejects.toThrow("NEXT_NOT_FOUND");
     }
+  });
+
+  it("003 EARS-72: the page's metadata is its tab title and is never indexed", () => {
+    expect(ENTRY_REFUSAL_PAGE_METADATA).toEqual({
+      title: ENTRY_REFUSAL_COPY.pageTitle,
+      robots: { index: false, follow: false },
+    });
   });
 });

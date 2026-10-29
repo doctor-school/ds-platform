@@ -155,8 +155,8 @@ routes:
   # one app that renders the Academy's or the doctor storefront's
   # `@ds/auth-flow` door for a Zitadel auth request, the storefront chosen by the
   # server entry decision. These are the only form pages of the sign-in doors:
-  # each storefront's `/login`, `/register`, `/reset` and `/verify` is a route
-  # handler that answers `303` into this host (EARS-61), and its
+  # each storefront's `/login`, `/register`, `/reset` and `/verify` is answered
+  # by its storefront gate with a `303` into this host (EARS-61), and its
   # `/auth/callback` is a route handler that renders no document (EARS-62).
   - app: login
     route: /login
@@ -176,6 +176,20 @@ routes:
   - app: login
     route: /verify
     file: apps/login/app/verify/page.tsx
+    status: product-ready
+
+  # 003 EARS-72 (#3379) — the refused sign-in entry: each storefront gate
+  # rewrites a refused door to its own refusal page, the `@ds/auth-flow`
+  # refusal screen mounted inside the storefront shell (429 / 503). A direct
+  # visit without the gate's hand-over is a 404.
+  - app: portal
+    route: /auth/refused
+    file: apps/portal/app/auth/refused/page.tsx
+    status: product-ready
+
+  - app: doctor
+    route: /auth/refused
+    file: apps/doctor/app/(storefront)/auth/refused/page.tsx
     status: product-ready
 
   # 046 EARS-4 (#2433) — «Мои заявки на Конгресс», the route-file mount of the

@@ -174,19 +174,6 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
 
     # --- Lifecycle states (US-6) ---
 
-    @EARS-4 @happy
-    Scenario Outline: The page reflects the event's lifecycle state from the single state machine
-      Given an event in the "<state>" state
-      When a visitor opens the event page
-      Then the hero badge, time plate, and CTA reflect the "<render>" render
-      And no signal contradicts the state machine
-
-      Examples:
-        | state     | render   |
-        | published | upcoming |
-        | live      | live     |
-        | ended     | ended    |
-
     @EARS-9 @happy
     Scenario: A live event routes toward the room
       Given an event in the "live" state
@@ -201,12 +188,6 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
     # Amendment - 2026-09-02.
 
     # --- Upcoming-broadcasts listing (US-4) ---
-
-    @EARS-9 @edge
-    Scenario: An ended event drops from the listing
-      Given an event that transitions from live to ended
-      When the listing is re-read
-      Then that event is no longer listed
 
     @EARS-11 @failure
     Scenario: The listing shows an empty-state when nothing is upcoming
@@ -288,3 +269,24 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       Given the public month-range read
       When a caller requests a month with the zone parameter "Mars/Olympus"
       Then the read answers 400 and no events are returned
+
+  Rule: Public lifecycle signals follow real Admin transitions
+
+    @EARS-4 @happy @public-event-lifecycle @editor-write
+    Scenario Outline: The page reflects the event's lifecycle state from the single state machine
+      Given an event in the "<state>" state
+      When a visitor opens the event page
+      Then the hero badge, time plate, and CTA reflect the "<render>" render
+      And no signal contradicts the state machine
+
+      Examples:
+        | state     | render   |
+        | published | upcoming |
+        | live      | live     |
+        | ended     | ended    |
+
+    @EARS-9 @edge @public-event-lifecycle @editor-write
+    Scenario: An ended event drops from the listing
+      Given an event that transitions from live to ended
+      When the listing is re-read
+      Then that event is no longer listed

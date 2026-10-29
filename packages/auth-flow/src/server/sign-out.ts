@@ -35,10 +35,27 @@ function unavailable(): Response {
   );
 }
 
+/**
+ * A browser marks every request with `Sec-Fetch-Site`; the storefront's own
+ * sign-out button sends `same-origin`. A POST from any other page (a
+ * cross-site form, the other storefront) is refused before anything runs, so
+ * it can neither clear this storefront's cookie nor set its guest marker. A
+ * client that sends no such header (not a browser) is not a forgery vector.
+ */
+function crossOrigin(request: Request): boolean {
+  const site = request.headers.get("sec-fetch-site");
+  return site !== null && site !== "same-origin";
+}
+
 export async function storefrontSignOut(
   request: Request,
   deps: StorefrontSignOutDeps = {},
 ): Promise<Response> {
+  if (crossOrigin(request))
+    return Response.json(
+      { message: "cross-origin sign-out refused" },
+      { status: 403, headers: { "cache-control": "no-store" } },
+    );
   const api = internalApi(deps.env ?? process.env);
   if (!api) return unavailable();
   const fetchImpl = deps.fetchImpl ?? fetch;

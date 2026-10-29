@@ -114,7 +114,8 @@ before anything is revoked — RS256 against the issuer JWKS, `iss`, `aud` one
 of the two storefront clients, a fresh `iat`/`exp`, the back-channel
 `events` member, a `sid`, no `nonce` (`verifyLogoutToken`,
 `storefront-oidc.jwt.ts`); then every storefront session linked to that `sid`
-is revoked on both storefronts (`SessionRevoked` each) and the record holding
+is revoked on both storefronts (`SessionRevoked` each, reason `force`) and,
+when the token carries the `sub` (Zitadel always sends it), the record holding
 it deleted. `200` on success, `400 {"error":"invalid_request"}` on any invalid
 or non-form request, both `Cache-Control: no-store`; public (the signature is
 the credential), own per-IP bucket `oidc:back-channel-logout` (1200 / 15 min —
@@ -122,9 +123,16 @@ the caller is Zitadel's one address), excluded from the OpenAPI document.
 
 A reset (EARS-12) ends every session of the person through the one subject
 revocation (`SessionService.revokeSubject` → this module's records and their
-Zitadel sessions); an automatic lockout (EARS-15) blocks new sign-ins and leaves
-live sessions in place (it signals guessing, not compromise); refresh-token
-reuse on a linked session revokes its whole linked set.
+Zitadel sessions). An automatic lockout (EARS-15, native Zitadel) ends every
+session of the person inside Zitadel: the session projection deletes their
+Zitadel sessions and the token endpoint refuses their refresh
+(`invalid_request` `Errors.User.NotActive`, proved live in
+`test/auth/zitadel-lock-ends-sessions.e2e-spec.ts`), so each linked storefront
+session ends alone at its next refresh; this module adds no revocation for it.
+Only a refresh Zitadel refuses as `invalid_grant` is reuse: it revokes the
+whole linked set (`SessionRevoked` reason `theft_detected`). Any other refused
+refresh — an IdP outage, a locked person — ends only the presenting session
+(reason `force`), with no theft verdict.
 
 ## The record and its lifetime
 

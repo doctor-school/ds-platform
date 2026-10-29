@@ -154,7 +154,7 @@ export class StorefrontOidcService
     if (!verified) return false;
     if (verified.sub)
       await this.records.deleteBySession(verified.sub, verified.sid);
-    await this.sessions.revokeLinked(verified.sid);
+    await this.sessions.revokeLinked(verified.sid, "force");
     return true;
   }
 

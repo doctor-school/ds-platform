@@ -113,3 +113,35 @@ describe("storefront sign-out (003 EARS-10 amended, EARS-63 (a))", () => {
     expect(unconfigured.status).toBe(503);
   });
 });
+
+describe("storefront sign-out — same-origin only", () => {
+  it.each(["cross-site", "same-site", "none"])(
+    "EARS-10: a sign-out POST whose Sec-Fetch-Site is %s is refused before the API is called, and sets no cookie",
+    async (site) => {
+      const api = fakeApi();
+      const req = request();
+      req.headers.set("sec-fetch-site", site);
+      const res = await storefrontSignOut(req, {
+        env: ENV,
+        fetchImpl: api.fetchImpl,
+        now: () => NOW,
+      });
+      expect(res.status).toBe(403);
+      expect(api.calls).toHaveLength(0);
+      expect(res.headers.getSetCookie()).toEqual([]);
+    },
+  );
+
+  it("EARS-10: a same-origin sign-out POST goes through", async () => {
+    const api = fakeApi();
+    const req = request();
+    req.headers.set("sec-fetch-site", "same-origin");
+    const res = await storefrontSignOut(req, {
+      env: ENV,
+      fetchImpl: api.fetchImpl,
+      now: () => NOW,
+    });
+    expect(res.status).toBe(200);
+    expect(api.calls).toHaveLength(1);
+  });
+});

@@ -6,12 +6,8 @@ import {
   describe,
   expect,
   it,
-  vi,
 } from "vitest";
-import {
-  FAKE_LOCKOUT_THRESHOLD,
-  FAKE_VALID_CODE,
-} from "../../src/auth/idp/idp.fake.js";
+import { FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { BACK_CHANNEL_LOGOUT_RATE_LIMIT_SCOPE } from "../../src/sign-in-host/back-channel-logout.controller.js";
 import {
@@ -29,7 +25,8 @@ import { RELAXED_RATE_LIMIT } from "../setup/rate-limit.js";
  * elsewhere. A Zitadel session terminated outside a storefront sign-out
  * reaches the API as an OIDC Back-Channel Logout token, verified before
  * anything is revoked; a reset ends every session of the person on both
- * storefronts, while an automatic lockout leaves live sessions in place.
+ * storefronts. What a lockout does is IdP behaviour, proved against the real
+ * Zitadel in `zitadel-lock-ends-sessions.e2e-spec.ts`.
  */
 describe.skipIf(!process.env.DATABASE_URL)(
   "003 EARS-65 — back-channel logout and credential events (e2e)",
@@ -42,7 +39,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
       pool = h.app.get<pg.Pool>(DRIZZLE_POOL);
     });
     afterEach(async () => {
-      vi.restoreAllMocks();
       await h.cleanup();
     });
     afterAll(async () => {
@@ -109,6 +105,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(await h.sessionLive(doctor)).toBe(false);
       expect(await h.sessionLive(other)).toBe(true);
       expect(await records(address)).toBe(1);
+      // ADR-0001 §7.3: an IdP-side termination is recorded as `force`.
+      const { rows } = await pool.query<{ reason: string }>(
+        "SELECT reason FROM audit_ledger WHERE event_type = 'auth.session.terminated' AND sid = ANY($1)",
+        [[academy, doctor]],
+      );
+      expect(rows.map((r) => r.reason)).toEqual(["force", "force"]);
     });
 
     it("EARS-65: an unsigned, foreign-audience or malformed logout token revokes nothing", async () => {
@@ -186,28 +188,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(await h.sessionLive(doctor)).toBe(false);
       expect(await records(address)).toBe(0);
       await expectSilentLoginRequired(jar);
-    });
-
-    it("003 EARS-65: an automatic lockout (EARS-15) blocks new sign-ins and leaves the live sessions on both storefronts signed in", async () => {
-      const { address, academy, doctor } = await signedInOnBoth("lock");
-      const terminate = vi.spyOn(h.idp, "terminateSession");
-      const answers: { statusCode: number; body: unknown }[] = [];
-      for (let i = 0; i < FAKE_LOCKOUT_THRESHOLD; i += 1) {
-        const r = await h.app.inject({
-          method: "POST",
-          url: "/v1/auth/login",
-          headers: DEVICE,
-          payload: { identifier: address, password: "Wrong!password-1" },
-        });
-        answers.push({ statusCode: r.statusCode, body: r.json() });
-      }
-      // The tripping attempt answers the plain wrong-password 401 (EARS-16).
-      expect(answers[0]!.statusCode).toBe(401);
-      expect(answers[answers.length - 1]).toEqual(answers[0]);
-      expect(await h.sessionLive(academy)).toBe(true);
-      expect(await h.sessionLive(doctor)).toBe(true);
-      expect(await records(address)).toBe(1);
-      expect(terminate).not.toHaveBeenCalled();
     });
 
     /** The browser's next silent authorize finds no shared session: `login_required`. */

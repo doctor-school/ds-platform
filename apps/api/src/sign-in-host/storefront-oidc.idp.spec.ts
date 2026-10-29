@@ -128,10 +128,87 @@ describe("ZitadelStorefrontOidc (003 EARS-62)", () => {
     expect(form.get("client_assertion")?.split(".")).toHaveLength(3);
     expect(form.get("client_secret")).toBeNull();
     expect(form.get("scope")).toBeNull();
-    // A client without its key fails closed as a refused grant.
+    // A client without its key is a configuration fault, not a refused grant:
+    // it fails closed without the reuse verdict.
     expect(
       await oidc.refreshTokens({ clientId: "other", refreshToken: "rt" }),
+    ).toEqual({ reuseDetected: false, failed: true });
+  });
+
+  /** A token endpoint that answers every call with `answer` (the JWKS is never asked). */
+  function tokenEndpoint(
+    answer: () => Promise<{ status: number; body?: unknown }>,
+  ): FetchLike {
+    return async () => {
+      const { status, body } = await answer();
+      return {
+        ok: status >= 200 && status < 300,
+        status,
+        json: () => Promise.resolve(body ?? {}),
+      };
+    };
+  }
+
+  function refreshWith(fetchImpl: FetchLike) {
+    return new ZitadelStorefrontOidc({
+      issuer: ISSUER,
+      keys: new Map([[CLIENT, key]]),
+      fetchImpl,
+      clock: () => now,
+    }).refreshTokens({ clientId: CLIENT, refreshToken: "rt0" });
+  }
+
+  it("EARS-65: only a 400 invalid_grant (reuse or a revoked grant) is the reuse verdict", async () => {
+    expect(
+      await refreshWith(
+        tokenEndpoint(() =>
+          Promise.resolve({ status: 400, body: { error: "invalid_grant" } }),
+        ),
+      ),
     ).toEqual({ reuseDetected: true });
+  });
+
+  it("EARS-65: an IdP outage or a non-reuse refusal — a 5xx, a locked user's invalid_request, another 400 error, a timeout or an unreadable body — is failed, never the reuse verdict", async () => {
+    const unavailable = { reuseDetected: false, failed: true };
+    // Zitadel v4.17.3's refusal for a locked user (proved live in
+    // test/auth/zitadel-lock-ends-sessions.e2e-spec.ts).
+    expect(
+      await refreshWith(
+        tokenEndpoint(() =>
+          Promise.resolve({
+            status: 400,
+            body: {
+              error: "invalid_request",
+              error_description: "Errors.User.NotActive",
+            },
+          }),
+        ),
+      ),
+    ).toEqual(unavailable);
+    expect(
+      await refreshWith(tokenEndpoint(() => Promise.resolve({ status: 503 }))),
+    ).toEqual(unavailable);
+    expect(
+      await refreshWith(
+        tokenEndpoint(() =>
+          Promise.resolve({ status: 400, body: { error: "invalid_client" } }),
+        ),
+      ),
+    ).toEqual(unavailable);
+    expect(
+      await refreshWith(() =>
+        Promise.reject(new Error("The operation was aborted due to timeout")),
+      ),
+    ).toEqual(unavailable);
+    expect(
+      await refreshWith(() =>
+        Promise.resolve({
+          ok: false,
+          status: 400,
+          json: () => Promise.reject(new SyntaxError("not json")),
+        }),
+      ),
+    ).toEqual(unavailable);
   });
 
   it("EARS-62: a client without a configured key fails closed without calling Zitadel", async () => {

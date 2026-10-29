@@ -47,7 +47,11 @@ export interface StorefrontOidcIdp {
   /**
    * 003 EARS-8 (amended) / EARS-9 — rotate a linked session's refresh token
    * through the storefront client that holds it (`refresh_token` grant with
-   * that client's `private_key_jwt`). Any refusal is `reuseDetected` (fail closed).
+   * that client's `private_key_jwt`). Only a 400 `invalid_grant` — a reused
+   * or revoked grant (RFC 6749 §5.2) — is `reuseDetected`; any other refusal
+   * (another non-2xx such as a locked user's `invalid_request`
+   * `Errors.User.NotActive`, a transport failure or timeout, a missing client
+   * key) is `failed` (003 EARS-65: only reuse ends the linked set).
    */
   refreshTokens(input: {
     clientId: string;
@@ -79,6 +83,12 @@ interface TokenResponse {
   id_token?: string;
 }
 
+/** One token-endpoint answer: the grant, Zitadel's `invalid_grant` refusal, or any other failure. */
+type TokenCallResult =
+  | { kind: "ok"; data: TokenResponse }
+  | { kind: "invalid_grant" }
+  | { kind: "failed" };
+
 export interface ZitadelStorefrontOidcConfig {
   /** The Zitadel issuer — the token endpoint's base, the assertion `aud` and the ID token `iss`. */
   readonly issuer: string;
@@ -109,12 +119,13 @@ export class ZitadelStorefrontOidc implements StorefrontOidcIdp {
   }
 
   async redeemCode(input: CodeRedemption): Promise<StorefrontTokens | null> {
-    const data = await this.tokenCall(input.clientId, {
+    const call = await this.tokenCall(input.clientId, {
       grant_type: "authorization_code",
       code: input.code,
       redirect_uri: input.redirectUri,
       code_verifier: input.codeVerifier,
     });
+    const data = call.kind === "ok" ? call.data : null;
     if (!data?.access_token || !data.refresh_token || !data.id_token)
       return null;
     const idToken = await this.verify(data.id_token, input.clientId);
@@ -132,12 +143,14 @@ export class ZitadelStorefrontOidc implements StorefrontOidcIdp {
   }): Promise<LinkedRefreshResult> {
     // No `scope`: a refresh re-issues the originally granted set (see the BFF
     // adapter's `refreshTokens` — Zitadel refuses re-requesting the roles URN).
-    const data = await this.tokenCall(input.clientId, {
+    const call = await this.tokenCall(input.clientId, {
       grant_type: "refresh_token",
       refresh_token: input.refreshToken,
     });
+    if (call.kind === "invalid_grant") return { reuseDetected: true };
+    const data = call.kind === "ok" ? call.data : null;
     if (!data?.access_token || !data.refresh_token)
-      return { reuseDetected: true };
+      return { reuseDetected: false, failed: true };
     return {
       reuseDetected: false,
       tokens: {
@@ -147,17 +160,21 @@ export class ZitadelStorefrontOidc implements StorefrontOidcIdp {
     };
   }
 
-  /** One token-endpoint call authenticated by the client's `private_key_jwt`; `null` on any refusal. */
+  /**
+   * One token-endpoint call authenticated by the client's `private_key_jwt`.
+   * `invalid_grant` only for a 400 whose body names that error; every other
+   * failure is `failed`.
+   */
   private async tokenCall(
     clientId: string,
     grant: Record<string, string>,
-  ): Promise<TokenResponse | null> {
+  ): Promise<TokenCallResult> {
     const key = this.config.keys.get(clientId);
     if (!key) {
       this.logger.error(
         "storefront token call: no client key is configured for this client; it fails closed",
       );
-      return null;
+      return { kind: "failed" };
     }
     try {
       const res = await this.fetchImpl(`${this.issuer}/oauth/v2/token`, {
@@ -174,10 +191,21 @@ export class ZitadelStorefrontOidc implements StorefrontOidcIdp {
           ),
         }).toString(),
       });
-      if (!res.ok) return null;
-      return (await res.json()) as TokenResponse;
+      if (res.ok)
+        return { kind: "ok", data: (await res.json()) as TokenResponse };
+      if (res.status === 400) {
+        const body = (await res.json()) as { error?: unknown } | null;
+        if (body?.error === "invalid_grant") return { kind: "invalid_grant" };
+      }
+      this.logger.warn(
+        `storefront token call refused with HTTP ${res.status}; not a reuse verdict`,
+      );
+      return { kind: "failed" };
     } catch {
-      return null;
+      this.logger.warn(
+        "storefront token call failed in transport; not a reuse verdict",
+      );
+      return { kind: "failed" };
     }
   }
 

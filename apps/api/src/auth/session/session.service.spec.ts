@@ -220,6 +220,55 @@ describe("SessionService — subject revocation hook", () => {
       type: "SessionRevoked",
       sub: "sub-linked",
       sid: doctor,
+      reason: "theft_detected",
+    });
+  });
+
+  it("EARS-65: a refused linked refresh that is not reuse (an IdP outage, a locked user) ends only the presenting session and records no reuse", async () => {
+    const store = new InMemorySessionStore();
+    const audit = new InMemoryAuthAuditLog();
+    const shared = new SharedSessionHub();
+    shared.registerRefresher({
+      refreshLinked: () =>
+        Promise.resolve({ reuseDetected: false, failed: true }),
+    });
+    const svc = new SessionService(
+      new FakeIdpClient(),
+      store,
+      audit,
+      new SubjectRevocationHub(),
+      shared,
+    );
+    const claims = { sub: "sub-linked", roles: ["doctor_guest"], mfa: false };
+    const mint = async (client: "academy" | "doctor") =>
+      parseCookies(
+        (
+          await svc.mintLinked({
+            zitadelSessionId: "zs-1",
+            client,
+            claims,
+            accessToken: "at",
+            refreshToken: `rt-${client}`,
+            fingerprint: "fp-device-1",
+            expiresAtMs: Date.now() + 3600_000,
+          })
+        ).cookie,
+      )[SESSION_COOKIE_NAME] as string;
+    const academy = await mint("academy");
+    const doctor = await mint("doctor");
+
+    expect((await svc.refresh(academy)).status).toBe("refresh_failed");
+
+    expect(await store.get(academy)).toBeUndefined();
+    expect(await store.get(doctor)).toBeDefined();
+    expect(audit.events.map((e) => e.type)).not.toContain(
+      "RefreshReuseDetected",
+    );
+    expect(audit.events).toContainEqual({
+      type: "SessionRevoked",
+      sub: "sub-linked",
+      sid: academy,
+      reason: "force",
     });
   });
 });

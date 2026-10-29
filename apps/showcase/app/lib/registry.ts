@@ -61,6 +61,8 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   // 012 authoring controls (#1283; Stage A #1282 — adopted shadcn Textarea and
   // the Kibo UI Dropzone pattern, re-skinned to DS tokens).
   { id: "textarea", section: "primitives" },
+  // 048 EARS-2 (#3511) — the material body editor (TipTap trimmed to the allowlist).
+  { id: "rich-text-editor", section: "primitives" },
   { id: "media-dropzone", section: "primitives" },
   // 014 modal element class (#1339; Stage A #1337 — adopted official shadcn/ui
   // `dialog` + `alert-dialog`, MIT). Two units, not one: they differ in dismissal
@@ -151,6 +153,10 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   //    (document.dc.html): ToC aside, «обновлено» chip, loading/error/not-found.
   { id: "legal-document", section: "blocks" },
   { id: "LegalDocument", section: "blocks" },
+  // 048 EARS-2 / EARS-12 (#3511) — the material body renderer
+  //    (academy-material.dc.html «текст»): every allowlisted node, link targets.
+  { id: "rich-text-content", section: "blocks" },
+  { id: "RichTextContent", section: "blocks" },
   // 014 EARS-10/11 — the controlled cross-front event feed.
   { id: "EventList", section: "blocks" },
   // 020 EARS-1 — event-page composition (archive/archive-event-page-variant-a.dc.html), #1764

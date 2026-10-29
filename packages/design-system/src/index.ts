@@ -91,6 +91,15 @@ export {
 } from "./primitives/sheet";
 // ── 012 authoring controls (#1283, Stage A #1282) ─────────────────────────────
 export { Textarea, type TextareaProps } from "./primitives/textarea";
+// 048 EARS-2 (#3511) — the material body editor: TipTap trimmed to the
+// `@ds/schemas` body allowlist.
+export {
+  RichTextEditor,
+  RICH_TEXT_EDITOR_COPY,
+  materialBodyExtensions,
+  type RichTextEditorProps,
+  type RichTextEditorCopy,
+} from "./primitives/rich-text-editor";
 export {
   MediaDropzone,
   type MediaDropzoneProps,
@@ -178,6 +187,12 @@ export {
   type LegalDocumentCopy,
   type LegalDocumentNeighbour,
 } from "./blocks/legal-document";
+// 048 EARS-2 / EARS-12 (#3511) — the ONE renderer of a material body.
+export {
+  RichTextContent,
+  RICH_TEXT_SAME_TAB_HOSTS,
+  type RichTextContentProps,
+} from "./blocks/rich-text-content";
 export {
   parseLegalDocument,
   type LegalDocumentTocEntry,

@@ -23,8 +23,9 @@ import {
  * visibility-gated heartbeat fires on the N-second cadence (pauses backgrounded,
  * resumes on re-focus) → denied-access branches route truthfully → a closed room
  * degrades to the ended state, plus the browser-observable authz + frame-only +
- * МСК-no-drift cross-cuts. Driven on the live dev stand, riding the non-Moscow
- * `bdd`-project timezone so the МСК labels prove no viewer-local drift (EARS-10).
+ * time-zone cross-cuts. Driven on the live dev stand, riding the non-Moscow
+ * `bdd`-project timezone so an online event's time proves it reads in the
+ * viewer's zone with its label (EARS-10 as amended 2026-10-02, #2537).
  *
  * There is NO seeded roster: every scenario self-provisions its doctor through the
  * REAL 003 register→verify(Mailpit-OTP)→auto-login flow (`support/doctor-session`,
@@ -224,16 +225,24 @@ Then(
 );
 
 Then(
-  "the event page the room admits through labels every absolute time in МСК with no viewer-local drift",
+  "the event page the room admits through states the start time in the viewer's zone with its label",
   async ({ page, world }) => {
-    // EARS-10: under the non-Moscow browser timezone (config `bdd` project,
-    // America/New_York) absolute times still render in Europe/Moscow, labeled МСК.
-    // The room composition itself carries NO absolute program time in wave 1 (the
-    // «О эфире» tab shows live-status copy, not a timed agenda — room-view.tsx), so
-    // the МСК-no-drift guarantee is pinned on the registered event page the room's
-    // admission passes through, which DOES render the МСК start instant.
+    // EARS-10 as amended 2026-10-02 (#2537 → 004 EARS-12): an online or hybrid
+    // event states its time in the viewer's zone with an explicit label; only an
+    // offline one stays МСК. The room composition itself carries NO absolute
+    // program time in wave 1 (the «О эфире» tab shows live-status copy, not a
+    // timed agenda — room-view.tsx), so the rule is pinned on the registered event
+    // page the room's admission passes through. The server bytes say МСК (the
+    // server never knows the viewer's zone) and the client island re-formats after
+    // mount, so the retrying assertion waits for that switch — the `bdd` project's
+    // America/New_York reads «GMT-4» / «GMT-5». Asserting «МСК» on the body raced
+    // hydration and failed whenever the island won (#3520).
     await page.goto(eventUrl(world.slug), { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).toContainText("МСК");
+    const kicker =
+      (await page.getByTestId("event-page-kicker").textContent()) ?? "";
+    await expect(page.getByTestId("event-page-hero")).toContainText(
+      /Очно/u.test(kicker) ? "(МСК)" : /\(GMT-[45]\)/u,
+    );
   },
 );
 

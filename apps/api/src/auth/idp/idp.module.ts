@@ -14,6 +14,7 @@ import {
 import { ZitadelIdpClient } from "./zitadel.idp.js";
 import { DRIZZLE_DB } from "../../database/database.tokens.js";
 import { DrizzleConfirmedPhoneDirectory } from "./confirmed-phone.directory.js";
+import { DrizzleRegisteredEmailDirectory } from "./registered-email.directory.js";
 import type { DrizzleHandle } from "@ds/db";
 
 /**
@@ -92,6 +93,9 @@ import type { DrizzleHandle } from "@ds/db";
               // 003 EARS-58: a phone identifier resolves only through the
               // mirror's confirmed phone.
               confirmedPhones: new DrizzleConfirmedPhoneDirectory(db),
+              // 003 EARS-41 (#3525): an email-code subject resolves off the
+              // mirror first — the IdP search lags a just-created user.
+              registeredEmails: new DrizzleRegisteredEmailDirectory(db),
             },
             // #410: the shared cross-request OTP-challenge store — Redis-backed
             // under scale-out, so the login hop finds the challenge whichever

@@ -201,6 +201,17 @@ export interface ConfirmedPhoneDirectory {
 }
 
 /**
+ * 003 EARS-41 (#3525): the account registered under `email` in the `users`
+ * mirror (matched case-insensitively, as the mirror column is `citext`), or
+ * `null`. Registration writes the row synchronously, before its code is
+ * mailed, so an email-code check resolves its subject here instead of through
+ * the IdP's user search, whose projection lags a just-created user.
+ */
+export interface RegisteredEmailDirectory {
+  subjectFor(email: string): Promise<string | null>;
+}
+
+/**
  * A phone identifier is `+`-prefixed E.164 (the sign-in identifier mask,
  * 003 EARS-22); anything else is an email. The one split every sign-in and
  * reset path makes.

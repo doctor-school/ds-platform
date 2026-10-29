@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ZitadelIdpClient } from "../../src/auth/idp/zitadel.idp.js";
+import {
+  ZitadelIdpClient,
+  type FetchLike,
+} from "../../src/auth/idp/zitadel.idp.js";
 import {
   codeLifetimeLine,
   VERIFY_EMAIL_CODE_LIFETIME_SECONDS,
@@ -118,6 +121,7 @@ async function fetchVerificationMail(
 
 describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
   let client: ZitadelIdpClient;
+  let mailer: SmtpMailer;
   const createdEmails: string[] = [];
 
   const newEmail = (): string => {
@@ -139,7 +143,7 @@ describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
       process.env.MAILER_SMTP_PORT ?? "1025",
       10,
     );
-    const mailer = new SmtpMailer({
+    mailer = new SmtpMailer({
       intercept: {
         host: mailpitHost,
         port: Number.isFinite(mailpitPort) ? mailpitPort : 1025,
@@ -303,5 +307,63 @@ describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
     await expect(client.passwordLogin(email, password)).resolves.toEqual({
       outcome: "rejected",
     });
+  }, 60_000);
+
+  it("003 EARS-41: the code check reads a mirror-registered subject by id, never through the lagging user search (#3525)", async () => {
+    const email = newEmail();
+    const created = await client.createUser({ email, password: livePassword() });
+    expect(created.alreadyExisted).toBe(false);
+    // Let the create-side code generation settle (see EARS-3 above).
+    await sleep(3000);
+
+    // The registration mirror row names the subject (the directory port the
+    // module binds to the `users` mirror); every hop is recorded so the test
+    // proves the live `GET /v2/users/{id}` shape carries the subject.
+    const hops: string[] = [];
+    const recording: FetchLike = (url, init) => {
+      hops.push(`${init.method} ${new URL(url).pathname}`);
+      return fetch(url, init);
+    };
+    const mirrored = new ZitadelIdpClient({
+      baseUrl: process.env.IDP_ISSUER!,
+      serviceToken: process.env.IDP_SERVICE_TOKEN!,
+      mailer,
+      fetchImpl: recording,
+      registeredEmails: {
+        subjectFor: (address) =>
+          Promise.resolve(
+            address.toLowerCase() === email ? created.sub : null,
+          ),
+      },
+    });
+
+    let result: Awaited<ReturnType<typeof mirrored.submitEmailCode>> = null;
+    for (let attempt = 0; attempt < 3 && !result; attempt++) {
+      const sentAt = new Date().toISOString();
+      // The sign-in request resolves its subject through the same mirror path.
+      hops.length = 0;
+      await expect(mirrored.requestEmailLoginCode(email)).resolves.toBe(
+        "verification",
+      );
+      expect(hops[0]).toBe(`GET /v2/users/${created.sub}`);
+      const mail = await fetchVerificationMail(
+        email,
+        sentAt,
+        NOTIFICATION_SUBJECTS.verifyEmailOtp,
+      );
+      expect(mail, "sign-in mail should be delivered").toBeTruthy();
+      hops.length = 0;
+      result = await mirrored.submitEmailCode(
+        email.toUpperCase(),
+        mail!.Subject.slice(0, 6),
+        { password: livePassword() },
+      );
+      if (!result) await sleep(2000);
+    }
+
+    expect(result).toMatchObject({ sub: created.sub, verifiedNow: true });
+    expect(result!.session?.sessionToken).toBeTruthy();
+    expect(hops[0]).toBe(`GET /v2/users/${created.sub}`);
+    expect(hops).not.toContain("POST /v2/users");
   }, 60_000);
 });

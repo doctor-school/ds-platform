@@ -9,6 +9,7 @@ import {
   type AdminAuthorityVerdict,
   type CreatedUser,
   type ConfirmedPhoneDirectory,
+  type RegisteredEmailDirectory,
   type CreateUserInput,
   type EmailCodeRegistration,
   type EmailCodeSubmission,
@@ -124,6 +125,13 @@ export interface ZitadelConfig {
    * closed): an unverified IdP phone must never authenticate anyone.
    */
   confirmedPhones?: ConfirmedPhoneDirectory | undefined;
+  /**
+   * 003 EARS-41 (#3525): resolves an email identifier to the account the
+   * `users` mirror registered under it. The email-code paths read their
+   * subject here first, because the IdP search projection lags a just-created
+   * user. Absent => those paths resolve through the IdP search alone.
+   */
+  registeredEmails?: RegisteredEmailDirectory | undefined;
   /** Injected for tests; defaults to the global `fetch`. */
   fetchImpl?: FetchLike | undefined;
 }
@@ -1226,6 +1234,23 @@ export class ZitadelIdpClient implements IdpClient {
     emailVerified: boolean;
     email: string | undefined;
   } | null> {
+    // 003 EARS-41 (#3525): the User v2 search reads an asynchronously updated
+    // projection, which may not yet hold a user created a second ago — a code
+    // entered (or a resend clicked) right after sign-up would then be refused.
+    // The mirror row is written before the code is mailed, so it names the
+    // subject first, and the subject is read by id (`GET /v2/users/{id}`,
+    // which brings its projection up to date before answering). The search
+    // stays only for a mirror miss — an account created outside our
+    // registration (console, import) has no mirror row until a sweep heals it.
+    const directory = this.config.registeredEmails;
+    if (directory && !isPhoneIdentifier(identifier)) {
+      const registered = await this.registeredEmailUser(
+        directory,
+        identifier,
+        signal,
+      );
+      if (registered) return registered;
+    }
     const query = await this.signInUserQuery(identifier);
     if (!query) return null;
     const res = await this.fetchImpl(this.url("/v2/users"), {
@@ -1248,6 +1273,56 @@ export class ZitadelIdpClient implements IdpClient {
       emailVerified: hit.human?.email?.isVerified ?? false,
       email: hit.human?.email?.email,
     };
+  }
+
+  /**
+   * 003 EARS-41 (#3525): the mirror-registered account of an email identifier,
+   * read by id, or `null` (a mirror miss, any fault, or
+   * an IdP address that is not this identifier — a stale row never names
+   * another account). `null` sends the caller to the IdP search.
+   */
+  private async registeredEmailUser(
+    directory: RegisteredEmailDirectory,
+    identifier: string,
+    signal?: AbortSignal,
+  ): Promise<{
+    userId: string;
+    emailVerified: boolean;
+    email: string | undefined;
+  } | null> {
+    try {
+      const sub = await directory.subjectFor(identifier);
+      if (!sub) return null;
+      const res = await this.fetchImpl(
+        this.url(`/v2/users/${encodeURIComponent(sub)}`),
+        {
+          method: "GET",
+          headers: this.headers(),
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (!res.ok) return null;
+      const data = (await res.json()) as {
+        user?: {
+          userId?: string;
+          human?: { email?: { email?: string; isVerified?: boolean } };
+        };
+      };
+      const email = data.user?.human?.email?.email;
+      if (
+        data.user?.userId !== sub ||
+        email?.toLowerCase() !== identifier.toLowerCase()
+      ) {
+        return null;
+      }
+      return {
+        userId: sub,
+        emailVerified: data.user.human?.email?.isVerified ?? false,
+        email,
+      };
+    } catch {
+      return null;
+    }
   }
 
   async resendEmailVerification(identifier: string): Promise<boolean> {

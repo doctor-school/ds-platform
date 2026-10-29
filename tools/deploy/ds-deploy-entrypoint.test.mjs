@@ -830,6 +830,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(
       r.stdout,
       "PostgreSQL checkpoint written\n" +
+        "record: v1 (no hashVersion)\n" +
         "log bound: /pg log=json-file max-size=50m max-file=3\n" +
         "log bound: /redis log=json-file max-size=50m max-file=3\n" +
         "log bound: /web log=json-file max-size=50m max-file=3\n",
@@ -862,7 +863,7 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
       assert.equal(existsSync(join(tree(), "infra/deploy/compose/data-prod/.env")), false);
       assert.equal(
         r.stdout,
-        `PostgreSQL checkpoint written\nlog bounds: unavailable — Error: ${fail} broke\n`,
+        `PostgreSQL checkpoint written\nrecord: v1 (no hashVersion)\nlog bounds: unavailable — Error: ${fail} broke\n`,
       );
       const calls = log("docker").split("\n");
       assert.ok(!calls.some((l) => l.startsWith("compose")), log("docker"));
@@ -909,6 +910,8 @@ describe("2984: ds-deploy-entrypoint", { skip: SKIP }, () => {
     assert.equal(r.status, 0, String(r.stderr));
     const file = join(root, "home/deploy/ds-platform-postgres-state.json");
     assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), record);
+    // #3466: the box answers the hashVersion of the record it wrote.
+    assert.equal(r.stdout.split("\n")[1], "record: hashVersion 2");
   });
 
   // #3419: the first release after the v2 guard reaches the box's PREVIOUSLY installed

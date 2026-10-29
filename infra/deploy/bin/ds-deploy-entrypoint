@@ -614,7 +614,9 @@ if action == "postgres-checkpoint":
              "sourceHash": rec["sourceHash"], "systemId": rec["systemId"],
              "images": images(rec["images"], IMAGE_ID)}
     write(state_file, json.dumps(state, separators=(",", ":")) + "\n")
-    sys.stdout.write("PostgreSQL checkpoint written\n")
+    # #3466: the box answers the record it wrote — the release journal's only view of it.
+    sys.stdout.write("PostgreSQL checkpoint written\nrecord: "
+                     + ("hashVersion 2" if state.get("hashVersion") == 2 else "v1 (no hashVersion)") + "\n")
     sys.exit(0)
 
 if action == "data-env":

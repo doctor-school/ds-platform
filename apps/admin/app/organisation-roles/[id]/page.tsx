@@ -32,9 +32,12 @@ export default function OrganisationRoleDetailPage() {
     url: organisationRolesUrl.collection(),
     method: "get",
   });
-  const role: OrganisationRoleAdminDetail | undefined = result.data?.data.find(
-    (row) => row.id === id,
-  );
+  // Until the book arrives Refine hands back an EMPTY `{}` as `result.data`
+  // (not `undefined`), so the rows array is absent — read it defensively, as
+  // the list page does, or the page throws before its loading branch renders.
+  const role: OrganisationRoleAdminDetail | undefined = (
+    result.data?.data ?? []
+  ).find((row) => row.id === id);
   const { mutate, mutation } = useCustomMutation();
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [refused, setRefused] = useState<string[]>([]);

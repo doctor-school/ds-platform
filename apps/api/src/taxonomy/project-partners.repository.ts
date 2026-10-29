@@ -23,7 +23,8 @@ import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import { withRelationConflictMapping } from "./taxonomy.errors.js";
 
-// 012 EARS-10 (#1292) — Drizzle data access for the `project_partners` join.
+// 012 EARS-10 (#1292) — Drizzle data access for the `project_organisations` join
+// (the 012 `project_partners` table, renamed by 032 migration 0054).
 //
 // The write protocol here is deliberately SHORTER than the `project_experts`
 // one, and the difference is a property of the invariant rather than a shortcut:

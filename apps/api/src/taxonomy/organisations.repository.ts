@@ -22,12 +22,14 @@ import type { AdminTaxonomyListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 
-// 012 EARS-4 (#1286) — Drizzle data access for the `partners` aggregate, shaped
-// exactly like `ProjectsRepository` / `ExpertsRepository`: every mutating path
-// runs through `withRequestAuditContext`, so feature 010's capture trigger
-// attributes the resulting `data.partners.*` ledger rows to the acting admin
-// without this layer knowing who that is. A partner's title and website are
-// ordinary audited columns (012-design §6) — no masked-column registry entry.
+// 032 EARS-1, EARS-2 (#3492; 012 EARS-4, #1286) — Drizzle data access for the
+// `organisations` aggregate and its `organisation_role_assignments` role set,
+// shaped exactly like `ProjectsRepository` / `ExpertsRepository`: every mutating
+// path runs through `withRequestAuditContext`, so feature 010's capture trigger
+// attributes the resulting `data.organisations.*` ledger rows to the acting
+// admin without this layer knowing who that is. An organisation's title and
+// website are ordinary audited columns (012-design §6) — no masked-column
+// registry entry.
 
 type Db = DrizzleHandle["db"];
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];

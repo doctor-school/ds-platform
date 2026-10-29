@@ -22,7 +22,7 @@ import { users } from "./users.js";
 
 // 012 — Content taxonomy: the retained entity write model (012-design §2, §2.1;
 // ADR-0003 §4 retained-row lifecycle). EARS-1 (#1283) lands the FIRST entity of
-// the four — `projects`. `experts` / `directions` / `partners` are their own W1
+// the four — `projects`. `experts` / `directions` / `organisations` (012 `partners`) are their own W1
 // verticals (#1284–#1286) and land in this same file as siblings; the two enums
 // and the shared constraint vocabulary below are authored once here.
 //

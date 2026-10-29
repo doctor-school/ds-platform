@@ -132,3 +132,14 @@ design-source/support\.js
 # false-positive class as the npmjs / GOV.UK / Yandex Cloud entries above.
 ^https://www\.yhec\.co\.uk/.*$
 ^https://signalvnoise\.com/.*$
+
+# VK developer docs (dev.vk.com), cited as primary sources in
+# apps/docs/content/specs/features/048-materials-feed/048-platform-access-research.md
+# (18 links). The host answers HTTP 500 to GitHub-hosted runners: PR #3480
+# runs 40834231247 (1 URL) and 40834945764 (3 URLs) — 3 different URLs, 4
+# failures across two consecutive runs — while the same URLs answer 200 to
+# probes from outside, with and without a lychee user-agent. Cause unproven
+# (possibly per-IP throttling of lychee's parallel requests). Verified
+# manually. Same crawler-hostile false-positive class as the Yandex Cloud
+# entry above; tracked in DEBT.md.
+^https://dev\.vk\.com/.*$

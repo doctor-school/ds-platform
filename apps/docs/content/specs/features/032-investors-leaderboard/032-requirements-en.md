@@ -3,7 +3,7 @@ title: "032 — Organization registry and its admin (Requirements, slice 1)"
 description: "Requirements for slice 1 of feature 032: one admin-managed registry of the organizations Doctor.School works with, absorbing the feature-012 partners; an open, operator-maintained list of organization roles (starting with investor, clinical base, educational licensee) of which one organization holds a set; per-organization public-display rules for the name and the logo; the draft → published → retired lifecycle with restore to draft; search and role/status filters; a non-blocking duplicate hint; the Academy home partner count computed from the registry; platform-administrator-only access with the second factor and the 010 change audit."
 slug: 032-organization-registry
 status: Draft
-issues: []
+issues: [3492, 3493, 3494, 3495, 3496]
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/issues/1823
 prior_decisions:

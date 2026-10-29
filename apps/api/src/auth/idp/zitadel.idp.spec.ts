@@ -3814,3 +3814,163 @@ describe("ZitadelIdpClient 047 staff-access calls wire shape (V-8)", () => {
     });
   });
 });
+
+// 003 EARS-41 (#3525): a code entered right after sign-up must verify. The
+// User v2 search reads an asynchronously updated projection that may not yet
+// hold a just-created user; the subject therefore comes from the `users`
+// mirror (written before the code is mailed) and is re-read from the IdP by id.
+describe("ZitadelIdpClient email-code subject resolution off the mirror (003 EARS-41, #3525)", () => {
+  const CONFIG = { baseUrl: "http://idp.test:9080", serviceToken: "svc-token" };
+
+  function freshUser(opts: {
+    /** The address `GET /v2/users/{id}` reports for the subject. */
+    idpEmail?: string;
+    /** Whether the search projection already holds the user. */
+    searchable?: boolean;
+  }) {
+    const calls: ScriptedCall[] = [];
+    const ok = (body: unknown) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(body),
+      });
+    const human = (email: string) => ({
+      email: { email, isVerified: false },
+    });
+    const fetchImpl: FetchLike = (url, init) => {
+      calls.push({
+        url,
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+      });
+      if (url.endsWith("/v2/users") && init.method === "POST")
+        return ok({
+          result: opts.searchable
+            ? [{ userId: "user-9", human: human("user@ds.test") }]
+            : [],
+        });
+      if (url.endsWith("/v2/users/user-9") && init.method === "GET")
+        return ok({
+          user: {
+            userId: "user-9",
+            state: "USER_STATE_ACTIVE",
+            human: human(opts.idpEmail ?? "User@ds.test"),
+          },
+        });
+      if (url.endsWith("/email/verify")) return ok({});
+      if (url.endsWith("/email/resend"))
+        return ok({ verificationCode: "LC7Q2M" });
+      if (url.endsWith("/password") || url.endsWith("/otp_email"))
+        return ok({});
+      if (url.endsWith("/v2/sessions") && init.method === "POST")
+        return ok({
+          sessionId: "sess-1",
+          sessionToken: "tok-1",
+          challenges: { otpEmail: "K7Q2MX" },
+        });
+      if (url.endsWith("/v2/sessions/sess-1") && init.method === "PATCH")
+        return ok({ sessionToken: "tok-2" });
+      throw new Error(`unexpected hop: ${init.method} ${url}`);
+    };
+    return { calls, fetchImpl };
+  }
+
+  const mirror = (sub: string | null) => ({
+    subjectFor: vi.fn(() => Promise.resolve(sub)),
+  });
+
+  it("003 EARS-41: a correct code entered before the search projection holds the just-created user verifies through the mirror subject", async () => {
+    const { calls, fetchImpl } = freshUser({ searchable: false });
+    const registeredEmails = mirror("user-9");
+    const client = new ZitadelIdpClient({
+      ...CONFIG,
+      fetchImpl,
+      registeredEmails,
+    });
+
+    const result = await client.submitEmailCode("user@ds.test", "LC7Q2M", {
+      password: "Fresh-Passw0rd!",
+    });
+
+    expect(result).toMatchObject({ sub: "user-9", verifiedNow: true });
+    expect(result?.session).not.toBeNull();
+    expect(registeredEmails.subjectFor).toHaveBeenCalledWith("user@ds.test");
+    expect(
+      calls.some((c) => c.url.endsWith("/v2/users") && c.method === "POST"),
+    ).toBe(false);
+    const verify = calls.find((c) => c.url.endsWith("/email/verify"));
+    expect(verify?.url).toBe(
+      "http://idp.test:9080/v2/users/user-9/email/verify",
+    );
+  });
+
+  it("003 EARS-25: a resend clicked before the search projection holds the just-created user still re-issues the code", async () => {
+    const { calls, fetchImpl } = freshUser({ searchable: false });
+    const mailer = new FakeMailer();
+    const client = new ZitadelIdpClient({
+      ...CONFIG,
+      fetchImpl,
+      mailer,
+      registeredEmails: mirror("user-9"),
+    });
+
+    await expect(client.resendEmailVerification("user@ds.test")).resolves.toBe(
+      true,
+    );
+    expect(
+      calls.some((c) => c.url.endsWith("/v2/users/user-9/email/resend")),
+    ).toBe(true);
+  });
+
+  it("003 EARS-41: a mirror miss falls back to the IdP search (an account created outside registration)", async () => {
+    const { calls, fetchImpl } = freshUser({ searchable: true });
+    const client = new ZitadelIdpClient({
+      ...CONFIG,
+      fetchImpl,
+      registeredEmails: mirror(null),
+    });
+
+    const result = await client.submitEmailCode("user@ds.test", "LC7Q2M", {
+      password: "Fresh-Passw0rd!",
+    });
+
+    expect(result).toMatchObject({ sub: "user-9", verifiedNow: true });
+    expect(calls.some((c) => c.method === "GET")).toBe(false);
+  });
+
+  it("003 EARS-16: a mirror subject whose IdP address is another one is not trusted, and an absent search hit stays the generic null", async () => {
+    const { calls, fetchImpl } = freshUser({
+      searchable: false,
+      idpEmail: "someone-else@ds.test",
+    });
+    const client = new ZitadelIdpClient({
+      ...CONFIG,
+      fetchImpl,
+      registeredEmails: mirror("user-9"),
+    });
+
+    await expect(
+      client.submitEmailCode("user@ds.test", "LC7Q2M"),
+    ).resolves.toBeNull();
+    expect(calls.some((c) => c.url.endsWith("/email/verify"))).toBe(false);
+  });
+
+  it("003 EARS-16: a failing mirror lookup falls back to the IdP search and never throws", async () => {
+    const { fetchImpl } = freshUser({ searchable: true });
+    const client = new ZitadelIdpClient({
+      ...CONFIG,
+      fetchImpl,
+      registeredEmails: {
+        subjectFor: () => Promise.reject(new Error("db down")),
+      },
+    });
+
+    await expect(
+      client.submitEmailCode("user@ds.test", "LC7Q2M", {
+        password: "Fresh-Passw0rd!",
+      }),
+    ).resolves.toMatchObject({ sub: "user-9", verifiedNow: true });
+  });
+});

@@ -9,6 +9,7 @@ import {
   assertOpenPr,
   branchWorktreeMessage,
   classifyCheckRuns,
+  classifyHeadBoard,
   classifyModeAVerdict,
   classifyRangeDiff,
   hasMergeCommits,
@@ -286,6 +287,221 @@ describe("merge-gate has no WARN-name exemption (#1253)", () => {
     ]);
     expect(verdict.state).toBe("green");
     expect(verdict).not.toHaveProperty("warn");
+  });
+});
+
+/**
+ * #3264 — the check-runs board alone is not current-attempt evidence. Fixture
+ * is the observed PR #3260 sequence (head 9764aac3): CI workflow run
+ * 39788068193 attempt 1 was cancelled, attempt 2 ended `startup_failure`, its
+ * check-suite 107833022369 held `latest_check_runs_count: 0`, the aggregate
+ * `ci` check-run 119884331256 (failure, started in attempt 1) was absent from
+ * the default `filter=latest` board, and the 53 remaining check-runs were
+ * attempt-1/other-workflow successes — the gate printed GREEN from them.
+ */
+describe("merge-gate classifyHeadBoard() — latest workflow attempt + required ci (#3264)", () => {
+  const CI_SUITE = 107833022369;
+  const BODY_SUITE = 107839895224;
+  const ciWorkflow = (over = {}) => ({
+    id: 39788068193,
+    name: "CI",
+    workflow_id: 279193708,
+    event: "pull_request",
+    run_attempt: 2,
+    status: "completed",
+    conclusion: "startup_failure",
+    check_suite_id: CI_SUITE,
+    run_started_at: "2026-10-22T14:43:21Z",
+    ...over,
+  });
+  const bodyWorkflow = {
+    id: 39790499152,
+    name: "PR body guards",
+    workflow_id: 312715605,
+    event: "pull_request",
+    run_attempt: 1,
+    status: "completed",
+    conclusion: "success",
+    check_suite_id: BODY_SUITE,
+    run_started_at: "2026-10-22T13:50:51Z",
+  };
+  const suites = (ciCount) => [
+    { id: CI_SUITE, status: "completed", latest_check_runs_count: ciCount },
+    { id: BODY_SUITE, status: "completed", latest_check_runs_count: 1 },
+  ];
+  // 52 attempt-1 CI job successes + 1 body guard = the 53 runs the gate saw.
+  const attempt1Successes = Array.from({ length: 52 }, (_, i) => ({
+    id: 119880000000 + i,
+    name: `job-${i}`,
+    status: "completed",
+    conclusion: "success",
+    started_at: "2026-10-22T13:40:00Z",
+    completed_at: "2026-10-22T13:45:00Z",
+    check_suite: { id: CI_SUITE },
+  }));
+  const bodyGuard = {
+    id: 119890000000,
+    name: "spec-link",
+    status: "completed",
+    conclusion: "success",
+    started_at: "2026-10-22T13:51:00Z",
+    completed_at: "2026-10-22T13:51:30Z",
+    check_suite: { id: BODY_SUITE },
+  };
+  const ciRun = (over = {}) => ({
+    id: 119884331256,
+    name: "ci",
+    status: "completed",
+    conclusion: "success",
+    started_at: "2026-10-22T14:50:00Z",
+    completed_at: "2026-10-22T14:50:10Z",
+    check_suite: { id: CI_SUITE },
+    ...over,
+  });
+
+  it("EARS-3264.1: the observed attempt-2 startup_failure / zero-check sequence is RED, never GREEN from attempt-1 checks", () => {
+    const checkRuns = [...attempt1Successes, bodyGuard];
+    // The check-runs board alone reads green — the pre-fix gate's verdict.
+    expect(classifyCheckRuns(checkRuns).state).toBe("green");
+    const verdict = classifyHeadBoard({
+      checkRuns,
+      workflowRuns: [ciWorkflow(), bodyWorkflow],
+      checkSuites: suites(0),
+    });
+    expect(verdict.state).toBe("red");
+    expect(verdict.red.join(" | ")).toMatch(
+      /CI run 39788068193 attempt 2: startup_failure/,
+    );
+    expect(verdict.red.join(" | ")).toMatch(/required check `ci`/);
+  });
+
+  it("EARS-3264.2: a completed latest attempt that registered zero check-runs is RED", () => {
+    const verdict = classifyHeadBoard({
+      checkRuns: [...attempt1Successes, bodyGuard, ciRun()],
+      workflowRuns: [ciWorkflow({ conclusion: "failure" }), bodyWorkflow],
+      checkSuites: suites(0),
+    });
+    expect(verdict.state).toBe("red");
+    expect(verdict.red.join(" | ")).toMatch(
+      /attempt 2: zero check-runs registered/,
+    );
+  });
+
+  it("EARS-3264.3: a missing required `ci` is RED once every workflow attempt is terminal", () => {
+    const verdict = classifyHeadBoard({
+      checkRuns: [...attempt1Successes, bodyGuard],
+      workflowRuns: [ciWorkflow({ conclusion: "success" }), bodyWorkflow],
+      checkSuites: suites(53),
+    });
+    expect(verdict.state).toBe("red");
+    expect(verdict.red).toEqual([
+      "required check `ci` not registered on the head's latest workflow attempt",
+    ]);
+  });
+
+  it("EARS-3264.4: a `ci` success from an EARLIER attempt is stale — RED, not fresh green", () => {
+    const verdict = classifyHeadBoard({
+      checkRuns: [
+        ...attempt1Successes,
+        bodyGuard,
+        ciRun({ started_at: "2026-10-22T14:31:12Z" }),
+      ],
+      workflowRuns: [ciWorkflow({ conclusion: "success" }), bodyWorkflow],
+      checkSuites: suites(53),
+    });
+    expect(verdict.state).toBe("red");
+    expect(verdict.red.join(" | ")).toMatch(
+      /`ci` check-run 119884331256 predates CI run 39788068193 attempt 2/,
+    );
+  });
+
+  it("EARS-3264.5: a `ci` bound to no workflow run on the head is RED", () => {
+    const verdict = classifyHeadBoard({
+      checkRuns: [
+        ...attempt1Successes,
+        bodyGuard,
+        ciRun({ check_suite: { id: 1 } }),
+      ],
+      workflowRuns: [ciWorkflow({ conclusion: "success" }), bodyWorkflow],
+      checkSuites: suites(53),
+    });
+    expect(verdict.state).toBe("red");
+    expect(verdict.red.join(" | ")).toMatch(/not bound to a workflow run/);
+  });
+
+  it("EARS-3264.6: a latest attempt still running is pending even when the board reads green", () => {
+    const verdict = classifyHeadBoard({
+      checkRuns: [
+        ...attempt1Successes,
+        bodyGuard,
+        ciRun({ started_at: "2026-10-22T14:31:12Z" }),
+      ],
+      workflowRuns: [
+        ciWorkflow({ status: "in_progress", conclusion: null }),
+        bodyWorkflow,
+      ],
+      checkSuites: suites(0),
+    });
+    expect(verdict.state).toBe("pending");
+    expect(verdict.pending.join(" | ")).toMatch(/CI run 39788068193 attempt 2/);
+  });
+
+  it("EARS-3264.7: a normal fresh success on the latest attempt is GREEN with attempt evidence", () => {
+    const verdict = classifyHeadBoard({
+      checkRuns: [...attempt1Successes, bodyGuard, ciRun()],
+      workflowRuns: [ciWorkflow({ conclusion: "success" }), bodyWorkflow],
+      checkSuites: suites(53),
+    });
+    expect(verdict.state).toBe("green");
+    expect(verdict.red).toEqual([]);
+    expect(verdict.evidence).toBe(
+      "required `ci` check-run 119884331256 success on CI run 39788068193 attempt 2",
+    );
+  });
+
+  it("EARS-3264.8: #955 supersession stays green — a superseded cancelled run + older superseded workflow run", () => {
+    const checkRuns = [
+      ...attempt1Successes,
+      {
+        ...bodyGuard,
+        id: 1,
+        conclusion: "cancelled",
+        started_at: "2026-10-22T13:50:00Z",
+        completed_at: "2026-10-22T13:50:10Z",
+      },
+      bodyGuard,
+      ciRun(),
+    ];
+    const verdict = classifyHeadBoard({
+      checkRuns,
+      workflowRuns: [
+        ciWorkflow({ conclusion: "success" }),
+        // The body edit's concurrency group cancelled this earlier run.
+        {
+          ...bodyWorkflow,
+          id: 39790400000,
+          conclusion: "cancelled",
+          run_started_at: "2026-10-22T13:49:59Z",
+        },
+        bodyWorkflow,
+      ],
+      checkSuites: suites(53),
+    });
+    expect(verdict.state).toBe("green");
+  });
+
+  it("EARS-3264.9: a red check-run still wins fail-fast", () => {
+    const verdict = classifyHeadBoard({
+      checkRuns: [
+        ...attempt1Successes,
+        bodyGuard,
+        ciRun({ conclusion: "failure" }),
+      ],
+      workflowRuns: [ciWorkflow({ conclusion: "failure" }), bodyWorkflow],
+      checkSuites: suites(53),
+    });
+    expect(verdict.state).toBe("red");
+    expect(verdict.red).toContain("ci");
   });
 });
 

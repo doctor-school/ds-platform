@@ -47,6 +47,10 @@
  *      blocks, whatever it is called. WARN guards are made non-blocking where
  *      severity belongs, in exit codes (ADR-0007 §2.6): a WARN run concludes
  *      SUCCESS, so a red WARN batch means the batch never ran, and that blocks.
+ *   7. Latest-attempt binding (#3264) — a green board is re-classified
+ *      against the head's latest workflow-run attempts (`startup_failure` or a
+ *      zero-check suite = RED) and requires the ruleset-required `ci` success
+ *      from the latest attempt (`classifyHeadBoard`).
  *
  * Bounded FOREGROUND poll with a mandatory terminal GREEN/RED/TIMEOUT line
  * (CLAUDE.md → checkpoint rule for CI waits; retro 85170286).
@@ -209,6 +213,130 @@ export function classifyCheckRuns(runs) {
   if (red.length > 0) return { state: "red", red, pending };
   if (pending.length > 0) return { state: "pending", red, pending };
   return { state: "green", red, pending };
+}
+
+/**
+ * The aggregate check-run the `main` ruleset requires (ruleset 21084011
+ * `main protection`; job `ci` in `.github/workflows/ci.yml`, whose name branch
+ * protection pins). GitHub refuses the merge without a successful one, so the
+ * gate must not print GREEN without it (#3264).
+ */
+export const REQUIRED_CHECK = "ci";
+
+/**
+ * Newest workflow run per (workflow, event) on the head SHA. A PR-body edit
+ * starts a NEW run of the body-guards workflow and cancels the old one — the
+ * superseded run must not decide the verdict (the workflow-level twin of #955).
+ * A re-run keeps its run id and only bumps `run_attempt`, so the listing
+ * already carries the latest attempt's status/conclusion.
+ *
+ * @param {{id?: number, workflow_id?: number, event?: string, name?: string, run_started_at?: string|null, created_at?: string|null}[]|null|undefined} workflowRuns
+ */
+function latestWorkflowRuns(workflowRuns) {
+  if (!Array.isArray(workflowRuns)) return [];
+  const latest = new Map();
+  for (const wr of workflowRuns) {
+    const key = `${wr?.workflow_id ?? wr?.name ?? "<unnamed>"}:${wr?.event ?? ""}`;
+    const prev = latest.get(key);
+    const t = runTimeMs(wr?.run_started_at ?? wr?.created_at);
+    const pt = prev ? runTimeMs(prev.run_started_at ?? prev.created_at) : 0;
+    if (!prev || t > pt || (t === pt && (wr?.id ?? 0) > (prev.id ?? 0)))
+      latest.set(key, wr);
+  }
+  return [...latest.values()];
+}
+
+const attemptLabel = (wr) =>
+  `${wr?.name ?? "<workflow>"} run ${wr?.id ?? "?"} attempt ${wr?.run_attempt ?? 1}`;
+
+/**
+ * Classify the head as a whole: the check-runs board (`classifyCheckRuns`)
+ * PLUS the head's latest workflow-run attempts and the required aggregate
+ * check (#3264). The check-runs listing is not current-attempt evidence on its
+ * own: after a partial re-run whose latest attempt ended `startup_failure`
+ * with zero check-runs, the listing held only earlier-attempt successes (the
+ * failed `ci` dropped out of `filter=latest`) and read green — PR #3260.
+ *
+ * RED (fail-fast, after the board's own red):
+ *   - a latest attempt concluded `startup_failure`;
+ *   - a completed latest attempt whose check-suite registered zero check-runs;
+ *   - once every latest attempt is terminal: `ci` missing, bound to no
+ *     workflow run on this head, or started before its run's latest attempt
+ *     (a stale result carried over from an earlier attempt).
+ * PENDING: the board is pending, or a latest attempt is not yet completed.
+ * GREEN: board green, every latest attempt terminal, and a `ci` success that
+ * started within the latest attempt of the run owning its check-suite.
+ *
+ * @param {{checkRuns: any[], workflowRuns: any[], checkSuites?: any[]}} input
+ * @returns {{state: "empty"|"red"|"pending"|"green", red: string[], pending: string[], evidence: string|null}}
+ */
+export function classifyHeadBoard({ checkRuns, workflowRuns, checkSuites }) {
+  const board = classifyCheckRuns(checkRuns);
+  if (board.state === "red" || board.state === "empty")
+    return { ...board, evidence: null };
+
+  const runs = latestWorkflowRuns(workflowRuns);
+  const suiteById = new Map(
+    (Array.isArray(checkSuites) ? checkSuites : []).map((s) => [s?.id, s]),
+  );
+  const red = [];
+  const pending = [...board.pending];
+  for (const wr of runs) {
+    if (wr?.status !== "completed") {
+      pending.push(attemptLabel(wr));
+      continue;
+    }
+    if (wr.conclusion === "startup_failure") {
+      red.push(`${attemptLabel(wr)}: startup_failure`);
+      continue;
+    }
+    const suite = suiteById.get(wr.check_suite_id);
+    if (suite && suite.latest_check_runs_count === 0)
+      red.push(`${attemptLabel(wr)}: zero check-runs registered`);
+  }
+  const ci = latestRunsByName(checkRuns).find(
+    (r) => r?.name === REQUIRED_CHECK,
+  );
+  const owner = ci
+    ? runs.find((wr) => wr?.check_suite_id === ci.check_suite?.id)
+    : undefined;
+  let ciProblem = null;
+  if (!ci) {
+    ciProblem = `required check \`${REQUIRED_CHECK}\` not registered on the head's latest workflow attempt`;
+  } else if (ci.status === "completed" && ci.conclusion !== "success") {
+    // A `skipped` aggregate passes the board's non-blocking rule but not the ruleset.
+    ciProblem = `required \`${REQUIRED_CHECK}\` check-run ${ci.id ?? "?"} concluded ${ci.conclusion}`;
+  } else if (!owner) {
+    ciProblem = `required \`${REQUIRED_CHECK}\` check-run ${ci.id ?? "?"} not bound to a workflow run on this head`;
+  } else if (runTimeMs(ci.started_at) < runTimeMs(owner.run_started_at)) {
+    ciProblem = `required \`${REQUIRED_CHECK}\` check-run ${ci.id ?? "?"} predates ${attemptLabel(owner)} (stale result from an earlier attempt)`;
+  }
+  // Attempt-level red is terminal: report the `ci` problem beside it.
+  if (red.length > 0)
+    return {
+      state: "red",
+      red: ciProblem ? [...red, ciProblem] : red,
+      pending,
+      evidence: null,
+    };
+  if (ciProblem) {
+    if (pending.length > 0)
+      return {
+        state: "pending",
+        red,
+        pending: [...pending, ciProblem],
+        evidence: null,
+      };
+    return { state: "red", red: [ciProblem], pending, evidence: null };
+  }
+  if (pending.length > 0)
+    return { state: "pending", red, pending, evidence: null };
+  return {
+    state: "green",
+    red,
+    pending,
+    evidence: `required \`${REQUIRED_CHECK}\` check-run ${ci.id ?? "?"} ${ci.conclusion} on ${attemptLabel(owner)}`,
+  };
 }
 
 /**
@@ -870,6 +998,39 @@ function fetchCheckRuns(sha) {
 }
 
 /**
+ * Fetch one paginated list endpoint and flatten its `field` arrays (#3264
+ * workflow runs / check-suites for the head SHA).
+ */
+function fetchList(path, field, what) {
+  const res = gh(["api", path, "--paginate", "--slurp"]);
+  if (res.status !== 0)
+    die(`gh api ${what} failed: ${(res.stderr ?? "").trim()}`);
+  try {
+    return flattenApiPages(JSON.parse(res.stdout), field);
+  } catch {
+    die(`could not parse gh api ${what} JSON`);
+  }
+}
+
+/** Workflow runs on the head SHA — each carries its latest `run_attempt`. */
+function fetchWorkflowRuns(sha) {
+  return fetchList(
+    `repos/{owner}/{repo}/actions/runs?head_sha=${sha}&per_page=100`,
+    "workflow_runs",
+    `workflow runs for ${sha}`,
+  );
+}
+
+/** Check-suites on the head SHA — `latest_check_runs_count` per suite. */
+function fetchCheckSuites(sha) {
+  return fetchList(
+    `repos/{owner}/{repo}/commits/${sha}/check-suites?per_page=100`,
+    "check_suites",
+    `check-suites for ${sha}`,
+  );
+}
+
+/**
  * Fetch the PR's reviews (native `commit_id` = the head SHA each review was
  * submitted against — the pin `classifyModeAVerdict` consumes).
  */
@@ -1074,7 +1235,18 @@ async function main() {
   for (;;) {
     attempt += 1;
     const runs = fetchCheckRuns(sha);
-    const { state, red, pending } = classifyCheckRuns(runs);
+    let { state, red, pending } = classifyCheckRuns(runs);
+    let evidence = null;
+    // #3264: a green board is only a candidate — bind it to the head's latest
+    // workflow attempts and the ruleset-required `ci` before trusting it. The
+    // two extra reads run only on a green board to spare the shared gh budget.
+    if (state === "green") {
+      ({ state, red, pending, evidence } = classifyHeadBoard({
+        checkRuns: runs,
+        workflowRuns: fetchWorkflowRuns(sha),
+        checkSuites: fetchCheckSuites(sha),
+      }));
+    }
 
     if (state === "green") {
       // 4. Head pinning: a green observed for a SHA that is no longer the PR
@@ -1088,6 +1260,7 @@ async function main() {
       }
       // A review can be dismissed or revoked while CI runs without moving the head.
       assertCurrentReview();
+      process.stdout.write(`${TAG} ${evidence}.\n`);
       process.stdout.write(
         `${TAG} GREEN — PR #${prNumber} head ${sha.slice(0, 12)}: ${runs.length} check-run(s) registered, all non-skipped terminal-successful (${attempt} poll(s)). OK to merge.\n`,
       );
@@ -1095,7 +1268,7 @@ async function main() {
     }
     if (state === "red") {
       die(
-        `RED — PR #${prNumber} head ${sha.slice(0, 12)}: ${red.length} check-run(s) not successful — ${red.join(", ")}. Do NOT merge.`,
+        `RED — PR #${prNumber} head ${sha.slice(0, 12)}: ${red.length} check-run(s)/workflow attempt(s) not successful — ${red.join(", ")}. Do NOT merge.`,
         1,
       );
     }

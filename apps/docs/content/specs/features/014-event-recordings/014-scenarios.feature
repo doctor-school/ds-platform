@@ -350,12 +350,6 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
     # ---------------------------------------------------------------- preparing plaque
 
     @EARS-7 @core @happy
-    Scenario: The plaque is honest without a date too
-      Given a finished event with no published recording and no readiness date
-      When any visitor opens the event page
-      Then the plaque renders an honest line with no fabricated timeframe
-
-    @EARS-7 @core @happy
     Scenario: The plaque clears and returns by itself
       Given a finished event showing the plaque
       When the operator publishes a raw recording
@@ -618,3 +612,11 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       When the platform_admin runs the recording backfill in dry-run mode
       Then the report reads would-attach skipped and refused respectively
       And no recording row audit row or event field changed
+
+  Rule: A publicly readable preparing recording makes no invented promise
+
+    @EARS-7 @core @happy @public-event-lifecycle @editor-write
+    Scenario: The plaque is honest without a date too
+      Given a finished event with no published recording and no readiness date
+      When any visitor opens the event page
+      Then the plaque renders an honest line with no fabricated timeframe

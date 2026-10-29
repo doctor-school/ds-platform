@@ -4,8 +4,12 @@ import {
   AUTH_SENDING_DOOR_PER_IP_15MIN,
   AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET,
   DEFAULT_RATE_LIMIT_THRESHOLDS,
+  type RateLimitDecision,
   type RateLimitThresholds,
 } from "./rate-limit.types.js";
+
+/** The receipt of an allowed decision (`undefined` when refused). */
+const receiptOf = (d: RateLimitDecision) => (d.allowed ? d.receipt : undefined);
 
 // EARS-13: the auth rate limiter. Three fixed-window counters — per-user (the
 // submitted identifier, 10/15 min after #222), per-IP (20/15 min), per-ASN
@@ -365,8 +369,8 @@ describe("RateLimitService (EARS-13)", () => {
     it("EARS-13: when a verification succeeds, the system shall give back that request's own per-IP unit", () => {
       // Many successes from one address: each consumes then refunds its unit.
       for (let i = 0; i < 100; i++) {
-        const receipt = split.consume({ ip });
-        expect(receipt).not.toBeNull();
+        const receipt = receiptOf(split.consume({ ip }));
+        expect(receipt).toBeDefined();
         split.refundIpUnit(ip, receipt?.ipWindowResetAtMs);
       }
       // The window is empty again — the full failure budget is still there.
@@ -380,8 +384,8 @@ describe("RateLimitService (EARS-13)", () => {
       for (let i = 0; i < thresholds.perIpPer15Min - 1; i++) {
         expect(split.tryConsume({ ip })).toBe(true); // failures
       }
-      const success = split.consume({ ip }); // the 20th: a success
-      expect(success).not.toBeNull();
+      const success = receiptOf(split.consume({ ip })); // the 20th: a success
+      expect(success).toBeDefined();
       split.refundIpUnit(ip, success?.ipWindowResetAtMs);
       expect(split.tryConsume({ ip })).toBe(true); // 20th failure
       expect(split.tryConsume({ ip })).toBe(false); // 21st → refused
@@ -389,7 +393,7 @@ describe("RateLimitService (EARS-13)", () => {
 
     it("EARS-13: a refund on an empty or rolled-over window grants no credit", () => {
       split.refundIpUnit(ip, undefined); // nothing consumed yet
-      const stale = split.consume({ ip });
+      const stale = receiptOf(split.consume({ ip }));
       now += 15 * 60 * 1000; // the window rolls over
       split.refundIpUnit(ip, stale?.ipWindowResetAtMs);
       for (let i = 0; i < thresholds.perIpPer15Min; i++) {
@@ -400,8 +404,8 @@ describe("RateLimitService (EARS-13)", () => {
 
     it("EARS-13: a refund after the window rolled over does not decrement the fresh window", () => {
       // The success's own unit was consumed in window A…
-      const receipt = split.consume({ ip });
-      expect(receipt).not.toBeNull();
+      const receipt = receiptOf(split.consume({ ip }));
+      expect(receipt).toBeDefined();
       now += 15 * 60 * 1000; // …window A rolls over before the handler refunds
       // Window B opens with a failure the refund must not erase.
       for (let i = 0; i < thresholds.perIpPer15Min; i++) {
@@ -412,11 +416,43 @@ describe("RateLimitService (EARS-13)", () => {
     });
 
     it("EARS-13: a refund leaves the sending-door window untouched", () => {
-      let last = null;
+      let last;
       for (let i = 0; i < 60; i++)
-        last = split.consume({ ip, door: "sending" });
+        last = receiptOf(split.consume({ ip, door: "sending" }));
       split.refundIpUnit(ip, last?.ipWindowResetAtMs);
       expect(split.tryConsume({ ip, door: "sending" })).toBe(false);
+    });
+  });
+
+  describe("refusal names its window (#3379)", () => {
+    const WINDOW_MS = 15 * 60 * 1000;
+
+    it("003 EARS-13: a per-IP refusal returns the per-IP window and its reset time", () => {
+      const opened = now;
+      for (let i = 0; i < thresholds.perIpPer15Min; i++) {
+        svc.tryConsume({ ip, identifier: `u${i}@ds.test` });
+        now += 1000;
+      }
+      expect(svc.consume({ ip, identifier: "u99@ds.test" })).toEqual({
+        allowed: false,
+        refusal: { window: "ip", resetAtMs: opened + WINDOW_MS, atMs: now },
+      });
+    });
+
+    it("003 EARS-13: a per-user refusal names the identifier window", () => {
+      for (let i = 0; i < thresholds.perUserPer15Min; i++) {
+        svc.tryConsume({ ip: `10.0.0.${i}`, identifier });
+      }
+      const d = svc.consume({ ip: "10.0.0.99", identifier });
+      expect(d.allowed).toBe(false);
+      expect(d.allowed ? undefined : d.refusal.window).toBe("user");
+    });
+
+    it("003 EARS-13: an allowed attempt returns its receipt", () => {
+      expect(svc.consume({ ip })).toEqual({
+        allowed: true,
+        receipt: { ipWindowResetAtMs: now + WINDOW_MS },
+      });
     });
   });
 });

@@ -5,7 +5,8 @@ import {
   RATE_LIMIT_THRESHOLDS,
   type Clock,
   type RateLimitContext,
-  type RateLimitReceipt,
+  type RateLimitDecision,
+  type RateLimitRefusal,
   type RateLimitThresholds,
 } from "./rate-limit.types.js";
 
@@ -20,6 +21,7 @@ interface Window {
 
 /** A dimension to evaluate for one attempt: its counter map, key, window, ceiling. */
 interface Dimension {
+  window: RateLimitRefusal["window"];
   map: Map<string, Window>;
   key: string;
   windowMs: number;
@@ -90,16 +92,17 @@ export class RateLimitService {
    * missing edge `x-asn` simply skips that dimension).
    */
   tryConsume(ctx: RateLimitContext): boolean {
-    return this.consume(ctx) !== null;
+    return this.consume(ctx).allowed;
   }
 
   /**
    * {@link tryConsume} that also hands back a receipt naming the per-IP window
-   * the unit was taken from (`null` when refused). A refund presents it, so a
-   * success gives back the unit it consumed rather than one from a window that
-   * opened after it (003 EARS-13, #2684).
+   * the unit was taken from. A refund presents it, so a success gives back the
+   * unit it consumed rather than one from a window that opened after it
+   * (003 EARS-13, #2684). A refusal names the refusing window and its reset
+   * time instead (003 EARS-13, #3379).
    */
-  consume(ctx: RateLimitContext): RateLimitReceipt | null {
+  consume(ctx: RateLimitContext): RateLimitDecision {
     const t = this.now();
     // #2684: an unscoped SENDING door keys its per-IP window under its own
     // bucket (60 / 15 min); every other attempt keeps the caller's scope.
@@ -110,6 +113,7 @@ export class RateLimitService {
         : undefined);
     const dims: Dimension[] = [
       {
+        window: "ip",
         map: this.byIp,
         key: scoped(ipBucket, ctx.ip),
         windowMs: FIFTEEN_MIN_MS,
@@ -118,6 +122,7 @@ export class RateLimitService {
     ];
     if (ctx.identifier !== undefined) {
       dims.push({
+        window: "user",
         map: this.byUser,
         key: ctx.identifier.toLowerCase(),
         windowMs: FIFTEEN_MIN_MS,
@@ -126,6 +131,7 @@ export class RateLimitService {
     }
     if (ctx.asn !== undefined) {
       dims.push({
+        window: "asn",
         map: this.byAsn,
         key: scoped(ctx.scope, ctx.asn),
         windowMs: HOUR_MS,
@@ -136,12 +142,22 @@ export class RateLimitService {
     // Phase 1 — check every window before mutating any, so a request refused on
     // the last dimension does not leave the earlier ones spuriously incremented.
     for (const d of dims) {
-      if (this.current(d, t) >= d.limit) return null;
+      if (this.current(d, t) >= d.limit) {
+        // A full window is live, so it exists and has not rolled over.
+        const resetAtMs = d.map.get(d.key)!.resetAtMs;
+        return {
+          allowed: false,
+          refusal: { window: d.window, resetAtMs, atMs: t },
+        };
+      }
     }
     // Phase 2 — allowed: consume one unit from each window.
     for (const d of dims) this.bump(d, t);
     const ipWindow = this.byIp.get(dims[0]!.key)!;
-    return { ipWindowResetAtMs: ipWindow.resetAtMs };
+    return {
+      allowed: true,
+      receipt: { ipWindowResetAtMs: ipWindow.resetAtMs },
+    };
   }
 
   /**
@@ -166,6 +182,7 @@ export class RateLimitService {
    */
   tryConsumeUser(identifier: string): boolean {
     const dimension: Dimension = {
+      window: "user",
       map: this.byUser,
       key: identifier.toLowerCase(),
       windowMs: FIFTEEN_MIN_MS,

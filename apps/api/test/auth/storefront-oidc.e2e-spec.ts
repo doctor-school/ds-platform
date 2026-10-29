@@ -1048,5 +1048,32 @@ describe.skipIf(!process.env.DATABASE_URL)(
         await app.close();
       }
     });
+
+    it("003 EARS-13: the storefront entry's per-IP 429 names its Retry-After in whole seconds", async () => {
+      const { app } = await compile({
+        ...RELAXED_RATE_LIMIT,
+        scopedPerIpPer15Min: { [STOREFRONT_ENTRY_RATE_LIMIT_SCOPE]: 1 },
+      });
+      try {
+        const from = () =>
+          app.inject({
+            method: "POST",
+            url: "/v1/internal/oidc/transaction",
+            headers: { ...INTERNAL, "x-forwarded-for": "203.0.113.11" },
+            payload: { client: "academy", kind: "interactive", door: "login" },
+          });
+        const ok = await from();
+        expect(ok.statusCode).toBe(200);
+        expect(ok.headers["retry-after"]).toBeUndefined();
+        const refused = await from();
+        expect(refused.statusCode).toBe(429);
+        const seconds = Number(refused.headers["retry-after"]);
+        expect(Number.isInteger(seconds)).toBe(true);
+        expect(seconds).toBeGreaterThanOrEqual(1);
+        expect(seconds).toBeLessThanOrEqual(15 * 60);
+      } finally {
+        await app.close();
+      }
+    });
   },
 );

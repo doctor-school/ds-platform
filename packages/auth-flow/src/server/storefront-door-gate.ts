@@ -34,7 +34,7 @@ export async function storefrontDoorGate(
   // 003 EARS-72: the refusal page is reached only by this gate's rewrite
   // (an internal rewrite re-runs no gate); a request for it from outside
   // loses any refusal it names, so the page answers 404.
-  if (request.nextUrl.pathname === STOREFRONT_ENTRY_REFUSAL_ROUTE) {
+  if (isRefusalRoute(request.nextUrl.pathname)) {
     const headers = new Headers(request.headers);
     headers.delete(ENTRY_REFUSAL_HEADER);
     return NextResponse.next({ request: { headers } });
@@ -51,10 +51,33 @@ export async function storefrontDoorGate(
           STOREFRONT_ENTRY_REFUSAL_ROUTE,
           outcome.refused,
         );
+  // 003 EARS-43 / 72: a middleware/proxy answer's Location must be absolute
+  // (Next parses it as a URL and relativises a same-origin one again), so a
+  // landing path the entry answers is resolved against the door's own URL.
+  const location = answer.headers.get("location");
+  if (location !== null) {
+    answer.headers.set("location", new URL(location, request.url).href);
+  }
   for (const cookie of parked?.headers.getSetCookie() ?? []) {
     answer.headers.append("set-cookie", cookie);
   }
   return answer;
+}
+
+/**
+ * 003 EARS-72 — any spelling of the refusal route a router could resolve to
+ * the page (percent-encoded segments, a trailing slash) counts as a direct
+ * request, so a browser-sent hand-over never reaches the page.
+ */
+function isRefusalRoute(pathname: string): boolean {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return true;
+  }
+  const trimmed = decoded.replace(/\/+$/, "");
+  return trimmed === STOREFRONT_ENTRY_REFUSAL_ROUTE;
 }
 
 function doorEntry(

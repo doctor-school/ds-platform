@@ -64,9 +64,13 @@ describe("storefront door gate", () => {
       expect(res).toBeUndefined();
     });
 
-    it(`003 EARS-72: on ${name} a direct request for the refusal page drops a browser-sent refusal, so the page is a 404`, async () => {
+    it.each([
+      STOREFRONT_ENTRY_REFUSAL_ROUTE,
+      "/auth/%72efused",
+      `${STOREFRONT_ENTRY_REFUSAL_ROUTE}/`,
+    ])(`003 EARS-72: on ${name} a direct request for the refusal page (%s) drops a browser-sent refusal, so the page is a 404`, async (path) => {
       const res = await storefrontDoorGate(
-        door(STOREFRONT_ENTRY_REFUSAL_ROUTE, {
+        door(path, {
           ...NAVIGATE,
           [ENTRY_REFUSAL_HEADER]: "reason=unavailable",
         }),
@@ -106,6 +110,27 @@ describe("storefront door gate", () => {
       const cookies = res?.headers.getSetCookie() ?? [];
       expect(cookies.some((c) => c.startsWith("__Host-ds_oidc_tx="))).toBe(true);
       expect(cookies.some((c) => c.startsWith("ds_return_to=%2Fdocuments") || c.startsWith("ds_return_to=/documents"))).toBe(true);
+    });
+
+    it(`003 EARS-43 / EARS-72: on ${name} a signed-in browser's door redirect carries an absolute Location, as a middleware answer must`, async () => {
+      const signedIn = (async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/v1/auth/session"))
+          return Response.json({ sub: "u1", roles: ["doctor_guest"], mfa: false });
+        throw new Error(`unexpected fetch ${url}`);
+      }) as typeof fetch;
+      const res = await storefrontDoorGate(
+        door("/login?returnTo=%2Faccount", {
+          ...NAVIGATE,
+          cookie: "__Host-ds_session=live-sid",
+        }),
+        host,
+        { fetchImpl: signedIn, env: ENV },
+      );
+      expect(res?.status).toBe(303);
+      expect(res?.headers.get("location")).toBe(
+        "https://storefront.example/account",
+      );
     });
 
     it(`003 EARS-72: on ${name} a 429 entry rewrites every door to the refusal page with 429, Retry-After and the reason`, async () => {

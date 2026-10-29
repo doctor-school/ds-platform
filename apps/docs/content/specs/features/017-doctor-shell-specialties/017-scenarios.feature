@@ -60,6 +60,27 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
       And no empty box, skeleton or «скоро» marker stands in for the block
       And the home page reads as complete without it
 
+  Rule: Public source-backed statistics and the closed specialty book
+
+    Background:
+      Given a guest uses the configured Doctor specialty catalog
+
+    @EARS-2 @failure @public-read-models @017-counter-source-omitted
+    Scenario: A counter with no source is omitted rather than shown as zero
+      Given one of the four scale counters has no available source
+      When any visitor opens the storefront home page
+      Then that counter is absent from the rendered statistics row
+      And the remaining counters render normally
+      And no counter renders as a zero
+
+    @EARS-3 @happy @public-read-models @017-closed-specialty-book
+    Scenario: The specialty book is the closed Минздрав list plus «Другое»
+      When the public specialty book is read
+      Then it returns every seeded book entry plus the «Другое» entry
+      And the reported total equals the number of entries returned
+      And each entry carries a stable id
+      And specialties, directions and schools are three distinct read models
+
   Rule: Remaining storefront and operator scenarios
 
     Background:
@@ -108,24 +129,6 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
       And the four scale counters render from one computed read carrying its computedAt
       And no rouble amount, cart, subscription or payment affordance appears anywhere on the page
       And the page never states who finances the doctor's learning
-
-    @EARS-2 @failure
-    Scenario: A counter with no source is omitted rather than shown as zero
-      Given one of the four scale counters has no available source
-      When any visitor opens the storefront home page
-      Then that counter is absent from the rendered statistics row
-      And the remaining counters render normally
-      And no counter renders as a zero
-
-    # --------------------------------------------------------------- the book
-
-    @EARS-3 @happy
-    Scenario: The specialty book is the closed Минздрав list plus «Другое»
-      When the public specialty book is read
-      Then it returns every seeded book entry plus the «Другое» entry
-      And the reported total equals the number of entries returned
-      And each entry carries a stable id
-      And specialties, directions and schools are three distinct read models
 
     @EARS-3 @failure
     Scenario: A specialty outside the book is refused

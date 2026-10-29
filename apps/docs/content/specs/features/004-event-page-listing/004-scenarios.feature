@@ -127,6 +127,18 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       When the visitor opens that live event from its listing card
       Then the live event page shows the same live signal without contradictory lifecycle copy
 
+  Rule: The public upcoming listing carries eligible ordered cards
+
+    @EARS-7 @EARS-8 @happy @public-read-models @004-upcoming-nearest-first
+    Scenario: The listing shows published upcoming events, nearest first
+      Given several published events with future air dates and some past, draft, and archived events
+      When a visitor opens the upcoming-broadcasts listing
+      # 004 EARS-7 includes currently airing events within its six-hour air window.
+      Then only published or live currently-airing or future events are listed, ordered nearest air date first
+      # Amended 2026-10-02 (#2537): online and hybrid events use the viewer zone; offline keeps МСК.
+      And each card shows its displayed date, time and zone, title, school/series, specialties, and speakers
+      And past, draft, and archived events are absent
+
   Rule: Remaining public event and calendar scenarios
 
     Background:
@@ -189,15 +201,6 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
     # Amendment - 2026-09-02.
 
     # --- Upcoming-broadcasts listing (US-4) ---
-
-    @EARS-7 @EARS-8 @happy
-    Scenario: The listing shows published upcoming events, nearest first
-      Given several published events with future air dates and some past, draft, and archived events
-      When a visitor opens the upcoming-broadcasts listing
-      Then only published or live future-dated events are listed, ordered nearest air date first
-      # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02».
-      And each card shows date and time (МСК), title, school/series, specialties, and speakers
-      And past, draft, and archived events are absent
 
     @EARS-9 @edge
     Scenario: An ended event drops from the listing

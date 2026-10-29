@@ -346,6 +346,7 @@ describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
         "verification",
       );
       expect(hops[0]).toBe(`GET /v2/users/${created.sub}`);
+      expect(hops).not.toContain("POST /v2/users");
       const mail = await fetchVerificationMail(
         email,
         sentAt,

@@ -1216,13 +1216,19 @@ export class ZitadelIdpClient implements IdpClient {
 
   /**
    * Resolve an identifier (email or phone) to a Zitadel user's `{ userId,
-   * emailVerified, email }`, or `null` if no user matches. Like
-   * {@link resolveUserId} but also surfaces the email-verified flag and the
-   * stored email address the User v2 search carries (`human.email`, the same
-   * fields {@link listUsers} reads): the verified flag lets
-   * {@link resendEmailVerification} skip an already-verified registrant, and
-   * the address is the delivery destination the `returnCode` hops need
-   * (EARS-29 — a phone-keyed reset still emails the user's stored address).
+   * emailVerified, email }`, or `null` if no user matches (003 EARS-41,
+   * #3525). Mirror first: for an email identifier the `users` mirror
+   * ({@link RegisteredEmailDirectory}, written by registration before the
+   * code is mailed) names the subject, which is read by id
+   * (`GET /v2/users/{id}`, see {@link registeredEmailUser}) — so a code
+   * submitted or a resend requested right after sign-up never depends on the
+   * eventually consistent user search. The User v2 search (`POST /v2/users`)
+   * answers only the fallback cases: a phone identifier, no directory bound,
+   * a mirror miss, a mirror lookup failure, a failed GET by id, or an id or
+   * address mismatch between the mirror row and the IdP user. The verified
+   * flag lets {@link resendEmailVerification} skip an already-verified
+   * registrant; the address is the delivery destination the `returnCode` hops
+   * need (EARS-29 — a phone-keyed reset still emails the stored address).
    * Fails closed — any non-2xx or empty result is `null` — so the callers stay
    * enumeration-safe (an unknown identifier looks like a hiccup).
    */

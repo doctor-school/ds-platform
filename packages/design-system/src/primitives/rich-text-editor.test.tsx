@@ -58,11 +58,20 @@ const types = (node: unknown, out: string[] = []): string[] => {
 };
 
 // `useEditor` destroys its editor on a deferred tick after unmount (StrictMode
-// safety, @tiptap/react `scheduleDestroy`). Unmount here and let that tick run,
-// so the #441 orphan-timer sweep sees no pending library timer.
+// safety, @tiptap/react `scheduleDestroy`), after the editor's own deferred
+// update tick. Unmount here and wait for that destroy to have happened (not a
+// fixed delay, which a loaded runner can outlast), so the #441 orphan-timer
+// sweep sees no pending library timer.
 afterEach(async () => {
+  const editors = Array.from(
+    document.querySelectorAll<HTMLElement & { editor?: Editor }>(
+      ".ProseMirror",
+    ),
+  ).flatMap((el) => (el.editor ? [el.editor] : []));
   cleanup();
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await vi.waitFor(() => {
+    expect(editors.every((editor) => editor.isDestroyed)).toBe(true);
+  });
 });
 
 describe("048 EARS-2: RichTextEditor", () => {

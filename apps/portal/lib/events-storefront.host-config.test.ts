@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ACADEMY_EVENT_PAGE,
+  ACADEMY_EVENTS_STOREFRONT,
   ACADEMY_ROOM_PAGE,
 } from "./events-storefront.host-config";
 import { ACADEMY_ROOM_ROUTES } from "./room-config";
@@ -42,6 +43,7 @@ describe("006 EARS-6 ACADEMY_ROOM_PAGE — the Academy's live-room host values",
         eventPage: "/webinars/:slug",
         brandHome: "/webinars",
         login: "/login",
+        accountEvents: "/account/events",
       },
       copy: { brandHome: "На страницу эфиров" },
       eventRead: { pagePath: "/v1/public/events" },
@@ -50,6 +52,12 @@ describe("006 EARS-6 ACADEMY_ROOM_PAGE — the Academy's live-room host values",
 
   it("EARS-6: the room template is the one the room-return codec reads", () => {
     expect(ACADEMY_ROOM_PAGE.routes.room).toBe(ACADEMY_ROOM_ROUTES.room);
+  });
+
+  it("EARS-7: the end card's «Мои события» link is the Academy's own «Мои события» route", () => {
+    expect(ACADEMY_ROOM_PAGE.routes.accountEvents).toBe(
+      ACADEMY_EVENTS_STOREFRONT.routes.accountEvents,
+    );
   });
 
   it("EARS-6: carries no function-valued field (the closed adapter list is empty)", () => {

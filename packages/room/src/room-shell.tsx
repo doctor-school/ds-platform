@@ -85,6 +85,8 @@ export function RoomShell({
           config={config}
           context={context}
           copy={copy}
+          accountEventsHref={routes.accountEvents}
+          linkComponent={linkComponent}
           ended={ended}
           probeRoomClosed={probeRoomClosed}
         />

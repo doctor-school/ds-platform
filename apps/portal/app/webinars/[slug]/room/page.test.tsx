@@ -52,6 +52,7 @@ describe("#2073: /webinars/:slug/room is a mount of @ds/room-page with the Acade
       room: {
         brandHome: "/webinars",
         eventPage: "/webinars/cardio-live",
+        accountEvents: "/account/events",
       },
     });
   });

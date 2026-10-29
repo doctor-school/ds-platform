@@ -47,6 +47,7 @@ vi.mock("centrifuge", () => ({
 const routes: RoomRoutes = {
   brandHome: "/webinars",
   eventPage: "/webinars/hsn-therapy",
+  accountEvents: "/account/events",
 };
 
 const context: RoomContext = {
@@ -86,6 +87,7 @@ const copy: RoomCopy = {
   unavailableTitle: "Трансляция недоступна",
   endedTitle: "Эфир завершён",
   endedBody: "Запись появится в разделе «Мои события»",
+  endedBodyLink: "Мои события",
   endedBadge: "Эфир завершён",
   chatEnded: "Эфир завершён — сообщения больше не отправляются",
   unavailableBody: "Восстанавливаем сигнал",
@@ -102,6 +104,7 @@ const copy: RoomCopy = {
   moderatorPin: "Модератор",
   chatLoading: "Загружаем сообщения",
   chatEmpty: "Пока нет сообщений",
+  chatEmptyEnded: "В этом эфире сообщений не было.",
   chatParticipant: "Участник",
   chatYou: "Вы",
   chatNewMessages: "Новые сообщения",
@@ -270,6 +273,10 @@ describe("006 EARS-7 the close reaches every region of the mounted shell", () =>
     const card = screen.getByTestId("room-player-ended");
     expect(card.textContent).toContain(copy.endedTitle);
     expect(container.querySelector("iframe")).toBeNull();
+    // The card's «Мои события» leads to the host's own «Мои события» page.
+    expect(
+      within(card).getByRole("link", { name: copy.endedBodyLink }).getAttribute("href"),
+    ).toBe(routes.accountEvents);
 
     // Header pill: the neutral ended badge, no live wording, no guessed minutes.
     // Scoped to the header — «Эфир завершён» is also the end card's own title.

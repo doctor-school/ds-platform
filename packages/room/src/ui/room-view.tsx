@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@ds/design-system/badge";
+import { Link as DsLink } from "@ds/design-system/link";
 import { WebinarRoomLayout } from "@ds/design-system/webinar-room";
 import type { RoomConfig } from "@ds/schemas";
 import { resolveEmbed } from "../model/room-player";
@@ -10,8 +11,9 @@ import { ROOM_STATUS_PROBE_WAIT_MS } from "../model/room-player-state";
 import type { BrowserRoomApi } from "../client/room-api";
 import type { RoomStatusProbeAnswer } from "./presence-heartbeat";
 import type { RoomCopyStrings } from "../copy/room-copy";
-import type { RoomContext } from "../types";
+import type { RoomContext, RoomLinkComponent } from "../types";
 import { RoomChat, type RoomChatCopy } from "./room-chat";
+import { PlainAnchor } from "./room-header-bar";
 import { usePresenceCount } from "./room-presence";
 
 /**
@@ -68,6 +70,7 @@ export type RoomViewCopy = Pick<
   // the eyebrow/pill wording that replaces «Идёт эфир».
   | "endedTitle"
   | "endedBody"
+  | "endedBodyLink"
   | "endedBadge"
 > &
   RoomChatCopy & {
@@ -92,6 +95,7 @@ type PlayerCopy = Pick<
   | "playerRestart"
   | "endedTitle"
   | "endedBody"
+  | "endedBodyLink"
 >;
 
 /** The fixed-white outline restart control — the same «Перезапустить плеер» affordance
@@ -201,14 +205,58 @@ function postYouTubeListening(iframe: HTMLIFrameElement) {
   );
 }
 
+/**
+ * 006 EARS-7 (#3468) — the end card's body sentence with its «Мои события» words
+ * as a link to the host's «Мои события» page. The sentence is rendered WHOLE (no
+ * new text): `linkWords` is one occurrence inside `body` (pinned by the RU copy
+ * suite) and only that span becomes the link. The DS `Link` owns the hover +
+ * focus states via `asChild` over the host's link component; the inline variant
+ * keeps a resting underline, and the white ink overrides its brand-blue default
+ * on the permanently-dark player plate.
+ */
+function EndedBody({
+  body,
+  linkWords,
+  href,
+  linkComponent,
+}: {
+  body: string;
+  linkWords: string;
+  href: string;
+  linkComponent?: RoomLinkComponent | undefined;
+}) {
+  const LinkImpl = linkComponent ?? PlainAnchor;
+  const at = body.indexOf(linkWords);
+  const link = (
+    <DsLink asChild variant="inline" className="text-white">
+      <LinkImpl href={href}>{linkWords}</LinkImpl>
+    </DsLink>
+  );
+  // Unreachable while the copy suite holds; the sentence stays truthful whole.
+  if (at < 0) return <>{body}</>;
+  return (
+    <>
+      {body.slice(0, at)}
+      {link}
+      {body.slice(at + linkWords.length)}
+    </>
+  );
+}
+
 export function PlayerFrame({
   config,
   copy,
+  accountEventsHref,
+  linkComponent,
   ended = false,
   probeRoomClosed,
 }: {
   config: RoomConfig;
   copy: PlayerCopy;
+  /** 006 EARS-7 (#3468) — the host's «Мои события» page (`RoomRoutes.accountEvents`), the end card's link. */
+  accountEventsHref: string;
+  /** D7 — the host's link component; defaults to a plain anchor. */
+  linkComponent?: RoomLinkComponent | undefined;
   /** 006 EARS-7 — the broadcast is over (server-proven); render the end card. */
   ended?: boolean;
   /**
@@ -312,8 +360,16 @@ export function PlayerFrame({
         className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 px-6 text-center"
       >
         <p className="text-lg font-extrabold text-white">{copy.endedTitle}</p>
-        <p className="max-w-sm text-sm leading-relaxed text-white/60">
-          {copy.endedBody}
+        <p
+          data-testid="room-player-ended-body"
+          className="max-w-sm text-sm leading-relaxed text-white/60"
+        >
+          <EndedBody
+            body={copy.endedBody}
+            linkWords={copy.endedBodyLink}
+            href={accountEventsHref}
+            linkComponent={linkComponent}
+          />
         </p>
       </div>
     );
@@ -473,6 +529,8 @@ export function RoomView({
   config,
   context,
   copy,
+  accountEventsHref,
+  linkComponent,
   ended = false,
   probeRoomClosed,
 }: {
@@ -481,6 +539,10 @@ export function RoomView({
   config: RoomConfig;
   context: RoomContext;
   copy: RoomViewCopy;
+  /** 006 EARS-7 (#3468) — the host's «Мои события» page, handed to the end card. */
+  accountEventsHref: string;
+  /** D7 — the host's link component; defaults to a plain anchor. */
+  linkComponent?: RoomLinkComponent | undefined;
   /**
    * 006 EARS-7 — the server-proven ended phase, lifted by {@link RoomShell}. The
    * view does not derive it; it only projects it onto the player region, the
@@ -520,6 +582,8 @@ export function RoomView({
         <PlayerFrame
           config={config}
           copy={copy}
+          accountEventsHref={accountEventsHref}
+          linkComponent={linkComponent}
           ended={ended}
           probeRoomClosed={probeRoomClosed}
         />

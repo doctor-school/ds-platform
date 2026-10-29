@@ -64,7 +64,7 @@ export const ACADEMY_EVENT_PAGE = {
  * (`@ds/room-page`) can serve it at `/webinars/:slug/room` (#2073, wave-4 gate
  * D9, rows 22 / 24). DATA only: the room and event-page path templates, the
  * brand home (target and label — «На страницу эфиров» → the эфиры list), the
- * login route and the same public event read the event page makes. The room
+ * login route, the «Мои события» page the end card links to (006 EARS-7) and the same public event read the event page makes. The room
  * template is the value `lib/room-config.ts` states for the room-return codec
  * (pinned equal by the test). Every rule lives in `@ds/room-page` / `@ds/room`.
  */
@@ -74,6 +74,7 @@ export const ACADEMY_ROOM_PAGE = {
     eventPage: "/webinars/:slug",
     brandHome: ACADEMY_EVENTS_STOREFRONT.routes.listing,
     login: ACADEMY_EVENTS_STOREFRONT.routes.login,
+    accountEvents: ACADEMY_EVENTS_STOREFRONT.routes.accountEvents,
   },
   copy: {
     brandHome: "На страницу эфиров",

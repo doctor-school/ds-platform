@@ -19,6 +19,7 @@ import { RoomPresenceProvider } from "./room-presence";
 const routes: RoomRoutes = {
   brandHome: "/webinars",
   eventPage: "/webinars/hsn-therapy",
+  accountEvents: "/account/events",
 };
 
 const copy: RoomCopy = {
@@ -48,6 +49,7 @@ const copy: RoomCopy = {
   moderatorPin: "Модератор",
   chatLoading: "Загружаем сообщения",
   chatEmpty: "Пока нет сообщений",
+  chatEmptyEnded: "В этом эфире сообщений не было.",
   chatParticipant: "Участник",
   chatYou: "Вы",
   chatNewMessages: "Новые сообщения",
@@ -58,6 +60,7 @@ const copy: RoomCopy = {
   composerSend: "Отправить",
   endedTitle: "Эфир завершён",
   endedBody: "Запись появится в разделе «Мои события»",
+  endedBodyLink: "Мои события",
   endedBadge: "Эфир завершён",
   chatEnded: "Эфир завершён — сообщения больше не отправляются",
   displayNamePrompt: {

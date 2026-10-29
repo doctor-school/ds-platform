@@ -72,7 +72,7 @@ export const DOCTOR_EVENT_PAGE = {
  * (`@ds/room-page`) can serve it at `/events/:slug/room` (#2073, wave-4 gate
  * D9, rows 22 / 24). DATA only: the room and event-page path templates, the
  * brand home (target and label — «На главную» → the storefront home), the login
- * route and the same storefront read the event page makes. The room template is
+ * route, the «Мои события» page the end card links to (006 EARS-7) and the same storefront read the event page makes. The room template is
  * the value `lib/room-config.ts` states for the room-return codec (pinned equal
  * by the test). Every rule lives in `@ds/room-page` / `@ds/room`.
  */
@@ -82,6 +82,7 @@ export const DOCTOR_ROOM_PAGE = {
     eventPage: "/events/:slug",
     brandHome: "/",
     login: DOCTOR_EVENTS_STOREFRONT.routes.login,
+    accountEvents: DOCTOR_EVENTS_STOREFRONT.routes.accountEvents,
   },
   copy: {
     brandHome: "На главную",

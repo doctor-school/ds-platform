@@ -53,6 +53,7 @@ export type RoomChatCopy = Pick<
   | "moderatorPin"
   | "chatLoading"
   | "chatEmpty"
+  | "chatEmptyEnded"
   | "chatParticipant"
   | "chatYou"
   | "chatNewMessages"
@@ -349,8 +350,10 @@ export function RoomChat({
                 <Skeleton className="h-11 w-2/3" />
               </div>
             ) : (
+              // A settled empty ledger. Live, the chat may still open; ended, it
+              // never will — the line states what happened instead (#3468).
               <p className="m-auto text-center text-sm text-muted-foreground">
-                {copy.chatEmpty}
+                {ended ? copy.chatEmptyEnded : copy.chatEmpty}
               </p>
             )
           ) : (

@@ -26,12 +26,14 @@ export interface RoomContext {
   speakers: string;
 }
 
-/** The two host-owned room routes the composition links to. */
+/** The three host-owned room routes the composition links to. */
 export interface RoomRoutes {
   /** The brand-home target of the header wordmark (эфиры list). */
   brandHome: string;
   /** The truthful exit target — the host's own event page. */
   eventPage: string;
+  /** The host's «Мои события» page — the end card's recording pointer (006 EARS-7, #3468). */
+  accountEvents: string;
 }
 
 /**

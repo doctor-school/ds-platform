@@ -22,6 +22,7 @@ const copy: RoomChatCopy = {
   moderatorPin: "moderatorPin",
   chatLoading: "chatLoading",
   chatEmpty: "chatEmpty",
+  chatEmptyEnded: "chatEmptyEnded",
   chatParticipant: "chatParticipant",
   chatYou: "chatYou",
   chatNewMessages: "chatNewMessages",
@@ -419,6 +420,32 @@ describe("006 EARS-7 the ended room's chat keeps its ledger and drops the compos
     await waitFor(() => expect(screen.getByText(message.text)).toBeTruthy());
     expect(screen.getByTestId("room-chat-messages")).toBeInTheDocument();
     expect(screen.queryByText("chatEmpty")).toBeNull();
+  });
+
+  it("EARS-7.8: an ended room whose settled history is empty says no messages were sent — never the live promise line", async () => {
+    renderEndedChat([], { ended: true });
+
+    await waitFor(() => expect(screen.getByText("chatEmptyEnded")).toBeTruthy());
+    expect(screen.queryByText("chatEmpty")).toBeNull();
+    // The ended strip stays — the empty line is the ledger's, not the composer's.
+    expect(screen.getByTestId("room-chat-ended").textContent).toBe("chatEnded");
+  });
+
+  it("EARS-7.8: an ended room keeps the history latch — no empty line before the read settles", () => {
+    render(<RoomChat api={api} chat={chat} copy={copy} ended />);
+    fire("connected", {});
+    fire("subscribed", { channel: chat.channel });
+
+    expect(screen.getByTestId("room-chat-loading")).toBeTruthy();
+    expect(screen.queryByText("chatEmptyEnded")).toBeNull();
+    expect(screen.queryByText("chatEmpty")).toBeNull();
+  });
+
+  it("EARS-7.8: a live room with an empty settled history keeps the live empty line", async () => {
+    renderEndedChat([]);
+
+    await waitFor(() => expect(screen.getByText("chatEmpty")).toBeTruthy());
+    expect(screen.queryByText("chatEmptyEnded")).toBeNull();
   });
 
   it("EARS-7.8: a live room keeps its composer — the strip is not the default", async () => {

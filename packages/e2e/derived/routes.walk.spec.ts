@@ -10,7 +10,7 @@ import {
 } from "../hosts.js";
 import { isDynamic, pageRoutesFrom } from "../lib/routes.js";
 import type { AppPathsManifest } from "../lib/routes.js";
-import { resolveRoute } from "../route-params.js";
+import { directVisitAnswer, resolveRoute } from "../route-params.js";
 import { signInOnHostForm } from "../lib/sign-in.js";
 import { isSignInHostForm } from "../lib/sign-in-host-api.js";
 
@@ -53,7 +53,11 @@ const WALK_DOCTOR = "verified-cardiologist";
 
 /** What collection produced for a host: its routes, or the reason there are none. */
 type HostRoutes =
-  | { readonly kind: "routes"; readonly base: string; readonly routes: string[] }
+  | {
+      readonly kind: "routes";
+      readonly base: string;
+      readonly routes: string[];
+    }
   | { readonly kind: "unavailable"; readonly reason: string };
 
 const FETCH_TIMEOUT_MS = 30_000;
@@ -139,12 +143,39 @@ for (const hostId of HOST_IDS) {
         continue;
       }
 
+      // A page with no address of its own (a rewrite target, `route-params.ts`
+      // `directVisitAnswers`) is still opened: the walk asserts the status its
+      // EARS declares for a direct visit, so it can never silently start
+      // serving one.
+      const declared = directVisitAnswer(hostId, pattern);
+      if (declared) {
+        test(`${hostId} ${pattern} → ${address} answers ${declared.status} on a direct visit (${declared.cite})`, async ({
+          page,
+        }) => {
+          const response = await page.goto(`${resolved.base}${address}`, {
+            waitUntil: "domcontentloaded",
+          });
+          expect(response, `no response for ${address}`).not.toBeNull();
+          expect(
+            response!.status(),
+            `status of a direct visit to ${address} (${declared.cite})`,
+          ).toBe(declared.status);
+          expect(
+            new URL(page.url()).pathname,
+            `pathname after opening ${address} (${pattern})`,
+          ).toBe(address);
+        });
+        continue;
+      }
+
       test(`${hostId} ${pattern} → ${address}`, async ({ page }) => {
         const response = await page.goto(`${resolved.base}${address}`, {
           waitUntil: "domcontentloaded",
         });
         expect(response, `no response for ${address}`).not.toBeNull();
-        expect(response!.status(), `status of ${address} (${pattern})`).toBe(200);
+        expect(response!.status(), `status of ${address} (${pattern})`).toBe(
+          200,
+        );
 
         // A 200 alone does not say WHICH page answered (#2012). Assert the landed
         // pathname, with the one lawful exception the navigation walk already

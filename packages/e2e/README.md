@@ -386,7 +386,11 @@ redirect that loses `returnTo` strands the guest after sign-in.
 the addresses a visitor can type (`lib/routes.ts` — route handlers, `/api/**`,
 `/_not-found`, `/_next/**`, parallel slots and intercepting routes are out; route
 groups are stripped from the address), resolves dynamic segments through
-`route-params.ts`, and asserts 200 + a non-empty `h1`. Three conditions are
+`route-params.ts`, and asserts 200 + a non-empty `h1`. A page with no address of
+its own — a rewrite target such as the storefront refusal page `/auth/refused`
+(003 EARS-72) — is declared in `route-params.ts` `directVisitAnswers` with the
+status its EARS gives a direct visit, and the walk opens it and asserts that
+status instead. Three conditions are
 FAILING tests rather than skips, each titled with what is missing: an
 unconfigured base URL, a manifest the slot does not serve, and a dynamic route
 with no `route-params.ts` entry.

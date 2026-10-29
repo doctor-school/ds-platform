@@ -158,15 +158,20 @@ Then(
   async ({ page, world }) => {
     const state = arrival(page);
     // #3172 — the storefront's `/verify` renders no document at all: it is a
-    // `303` entry with an empty body (the host's step HTML is pinned by the
-    // sign-in host tier, `apps/login/e2e/academy-verify-bare-entry`).
+    // `303` entry (the host's step HTML is pinned by the sign-in host tier,
+    // `apps/login/e2e/academy-verify-bare-entry`). The storefront gate answers
+    // it from the proxy (003 EARS-61 / 72, `storefrontDoorGate`), and Next's
+    // router writes a proxy redirect's destination as its plain-text body — so
+    // the body is exactly the `Location` and nothing else.
     const response = await state.context.request.get(
       new URL("/verify", world.hostBaseUrl).toString(),
       { maxRedirects: 0, headers: TOP_LEVEL_NAVIGATION_HEADERS },
     );
     expect(response.status()).toBe(303);
+    const location = response.headers()["location"];
+    expect(location, "the entry names where it goes").toBeTruthy();
     const html = await response.text();
-    expect(html).toBe("");
+    expect(html, "the 303 body is its Location, no document").toBe(location);
     expect(html).not.toContain('data-testid="verify-card"');
     expect(html).not.toContain("ваш аккаунт");
     expect(html).not.toContain('data-testid="auth-wordmark"');

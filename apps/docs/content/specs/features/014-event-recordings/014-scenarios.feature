@@ -441,13 +441,6 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       Then the same narrowed view is restored each time
       And the URL can be shared with a colleague to reproduce that exact view
 
-    @EARS-11 @EARS-15 @core @happy
-    Scenario: Browsing the archive and the gate are one continuous path
-      Given a visitor with no account on the «Прошедшие» tab
-      When the visitor opens an entry
-      Then the post-live page renders fully readable
-      And the sign-in invitation is the next step in the player position
-
     # ---------------------------------------------------------------- facets
 
     @EARS-12 @facets @happy
@@ -623,3 +616,12 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       When any visitor opens its post-live page
       Then the page renders complete against the feature 004 projection
       And the project and topic blocks are absent rather than empty, stubbed or promised as coming soon
+
+  Rule: An anonymous archive entry leads to the complete recording page
+
+    @archive-feed-readthrough @EARS-11 @EARS-15 @core @happy
+    Scenario: Browsing the archive and the gate are one continuous path
+      Given a visitor with no account on the «Прошедшие» tab
+      When the visitor opens an entry
+      Then the post-live page renders fully readable
+      And the sign-in invitation is the next step in the player position

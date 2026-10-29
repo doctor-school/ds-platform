@@ -500,17 +500,6 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       Then the facets are lost and the URL does not describe the screen
       And the build fails review
 
-    @EARS-10 @happy
-    # Read under 019 «Amendment — 2026-10-06»: the past card offers the recording only; the materials live on the recording's page.
-    Scenario: «Прошедшие» leads to the recording
-      Given a past event whose recording feature 014 has published
-      When the doctor switches the tense to «Прошедшие»
-      Then the same card unit renders in its «прошло — есть запись» state
-      And the card offers «Смотреть запись» instead of a sign-up action and lists no materials
-      And the past events are grouped by month, newest first
-      And the screen holds the 10 most recent past events, «Показать ещё 10 (осталось N)» adding the next older ones
-      And no separate archive page, tab or block below the feed is rendered
-
     @EARS-11 @happy
     Scenario: A signed-in doctor sees the short «Мои события» cut
       Given a signed-in doctor registered for two upcoming events
@@ -588,12 +577,6 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       And the experts-audience event is not listed
       And the selection was made by the doctor read contract on the server
 
-    @EARS-16 @failure
-    Scenario: The doctor feed never hides delivered events in the client
-      When the doctor read contract answers a feed request
-      Then every event in the response is rendered or excluded only by the applied facets in the URL
-      And no event is delivered to the client and hidden there
-
     @EARS-18 @failure
     Scenario: An uncited storefront difference is a defect
       Given a build in which one storefront's events feed differs from the other outside the three cited rows
@@ -659,3 +642,27 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       When the doctor opens that control
       Then the panel opens as a sheet with every facet operable
       And the day feed, the month grid, the live block and the card states render in the canvas mobile composition
+
+  Rule: The original past recording journey with the Online format selected
+
+    Background:
+      Given the public doctor feed has the Online format selected
+
+    @archive-feed-readthrough @EARS-10 @happy
+    # Read under 019 «Amendment — 2026-10-06»: the past card offers the recording only; the materials live on the recording's page.
+    Scenario: «Прошедшие» leads to the recording
+      Given a past event whose recording feature 014 has published
+      When the doctor switches the tense to «Прошедшие»
+      Then the same card unit renders in its «прошло — есть запись» state
+      And the card offers «Смотреть запись» instead of a sign-up action and lists no materials
+      And the past events are grouped by month, newest first
+      And the screen holds the 10 most recent past events, «Показать ещё 10 (осталось N)» adding the next older ones
+      And no separate archive page, tab or block below the feed is rendered
+
+  Rule: Every delivered doctor event remains visible
+
+    @archive-feed-readthrough @EARS-16 @failure
+    Scenario: The doctor feed never hides delivered events in the client
+      When the doctor read contract answers a feed request
+      Then every event in the response is rendered or excluded only by the applied facets in the URL
+      And no event is delivered to the client and hidden there

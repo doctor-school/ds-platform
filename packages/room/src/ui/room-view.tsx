@@ -211,8 +211,10 @@ function postYouTubeListening(iframe: HTMLIFrameElement) {
  * new text): `linkWords` is one occurrence inside `body` (pinned by the RU copy
  * suite) and only that span becomes the link. The DS `Link` owns the hover +
  * focus states via `asChild` over the host's link component; the inline variant
- * keeps a resting underline, and the white ink overrides its brand-blue default
- * on the permanently-dark player plate.
+ * keeps a resting underline, and `tone="on-primary"` — the DS invariant light-ink
+ * tone (white at rest, the AA-safe light press step, identical in every theme) —
+ * keeps it legible on the permanently-dark player plate in every state, where
+ * the default tone's dark-blue press tint would vanish.
  */
 function EndedBody({
   body,
@@ -228,7 +230,7 @@ function EndedBody({
   const LinkImpl = linkComponent ?? PlainAnchor;
   const at = body.indexOf(linkWords);
   const link = (
-    <DsLink asChild variant="inline" className="text-white">
+    <DsLink asChild variant="inline" tone="on-primary">
       <LinkImpl href={href}>{linkWords}</LinkImpl>
     </DsLink>
   );

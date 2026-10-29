@@ -318,6 +318,17 @@ describe("006 EARS-7 the ended room's end card replaces the player", () => {
     expect(screen.getByTestId("room-player-ended-body").textContent).toBe(copy.endedBody);
   });
 
+  it("EARS-7.7: the «Мои события» link keeps light ink on the dark plate when pressed, never the page-blue press tint", () => {
+    render(<PlayerFrame config={configFor("youtube")} copy={copy} accountEventsHref={ACCOUNT_EVENTS} ended />);
+
+    const link = screen.getByRole("link", { name: copy.endedBodyLink });
+    // The DS invariant light-ink tone: white at rest, the AA-safe light press step.
+    expect(link.classList.contains("text-primary-surface-foreground")).toBe(true);
+    expect(link.classList.contains("active:text-primary-surface-muted")).toBe(true);
+    // The default tone's dark-blue press tint would vanish on the near-black plate.
+    expect(link.classList.contains("active:text-primary-action/80")).toBe(false);
+  });
+
   it("EARS-7.7: the «Мои события» link renders through the host's link component", () => {
     const HostLink = ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
       <a href={href} data-host-link="" {...rest}>

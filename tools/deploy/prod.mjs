@@ -361,15 +361,19 @@ export const RELEASE_FAILURE_REASON_MAX = 160;
  * The note a failed release leaves for the release driver (#3439): the phase it failed
  * in and the first line of the `die()` / Error message, control characters folded to
  * one space, bounded. The driver records it for `status prod <sha>`, whose line is a
- * public Actions log — refusal lines name variables, never values.
+ * public Actions log, so it carries prod.mjs's own refusal text only: a wrapped
+ * child-process error («… exited N: <first stderr line>», lib/remote.mjs boxCapture,
+ * lib/data-prod.mjs, localCap) is cut after its «exited N» — the command's stderr
+ * stays in the unit's journal.
  */
 export function releaseFailureNote(phase, message) {
-  const line =
+  const first =
     String(message ?? "")
       .split(/\r?\n/)
       // eslint-disable-next-line no-control-regex -- the control characters are what is folded
       .map((l) => l.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim())
       .find(Boolean) ?? "";
+  const line = first.match(/^.*?\bexited (?:-?\d+|null)\b/)?.[0] ?? first;
   const reason =
     line.length > RELEASE_FAILURE_REASON_MAX
       ? `${line.slice(0, RELEASE_FAILURE_REASON_MAX - 1)}…`

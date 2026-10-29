@@ -1032,6 +1032,30 @@ test("3439: the failure note is the phase and the message's first line, control-
   assert.deepEqual(releaseFailureNote("idp", "a\u0007b\u001b[31mc"), { phase: "idp", reason: "a b [31mc" });
 });
 
+test("3439: a wrapped box command's stderr never reaches the note, only prod.mjs's own text", () => {
+  // remote.mjs boxCapture / data-prod.mjs client: «… on <host> exited N: <first stderr line>».
+  assert.deepEqual(
+    releaseFailureNote("migrate", "postgres-probe: ssh capture on ds-api-prod exited 1: PASSWORD=x leaked"),
+    { phase: "migrate", reason: "postgres-probe: ssh capture on ds-api-prod exited 1" },
+  );
+  assert.deepEqual(
+    releaseFailureNote(
+      "data-up",
+      "runtime config apply failed: data-prod on ds-data-prod exited 2: could not connect to postgres://u:p@h/db",
+    ),
+    { phase: "data-up", reason: "runtime config apply failed: data-prod on ds-data-prod exited 2" },
+  );
+  // localCap: «`<cmd> <args>` exited N: <stderr>»; a signal kill exits null.
+  assert.deepEqual(releaseFailureNote(null, "Error: `docker compose up` exited null: token=abc\n    at x"), {
+    phase: null,
+    reason: "Error: `docker compose up` exited null",
+  });
+  const note = JSON.stringify(
+    releaseFailureNote("idp", "ssh capture on ds-api-prod exited 255: postgres://u:p@h PASSWORD=x"),
+  );
+  assert.doesNotMatch(note, /PASSWORD|postgres:\/\//);
+});
+
 test("3439: a red smoke names its failing probe labels", () => {
   assert.equal(
     smokeFailureReason(1, ["api-health", "portal-cold"]),

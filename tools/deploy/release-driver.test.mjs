@@ -2170,6 +2170,19 @@ describe("2985: release-driver", { skip: SKIP }, () => {
         assert.equal(failureOf(), null);
       });
 
+      it("an attempt refused before its download reports no stale note of the earlier one", () => {
+        run(["_run", "prod", SHA], {
+          env: { NODE_RC: "1", NODE_NOTE: '{"phase":"migrate","reason":"x"}' },
+        });
+        assert.equal(failureOf().phase, "migrate");
+        rmSync(join(root, "usr/local/bin/node"));
+        const r = run(["_run", "prod", SHA]);
+        assert.equal(r.status, 1);
+        assert.match(r.stderr, /node is not installed/);
+        assert.equal(existsSync(noteFile()), false);
+        assert.equal(failureOf(), null);
+      });
+
       it("reports null for an unreadable note", () => {
         mkdirSync(dirname(noteFile()), { recursive: true });
         writeFileSync(noteFile(), "not json\n");

@@ -466,9 +466,11 @@ upload_report() {
 
 # status: ds-release's one JSON line with the release driver's unit added as
 # `driver` (#2985): {"release", "unitAlive", "driver": {"unit", "active", "rc",
-# "previousSha"}} — `previousSha` (#3157) is the SHA prod ran before <sha>, the
-# release-notes basis, or null. Without an installed driver there is no driver unit:
-# `absent`.
+# "previousSha", "failure"}} — `previousSha` (#3157) is the SHA prod ran before <sha>,
+# the release-notes basis, or null; `failure` (#3439) is null or the {"phase",
+# "reason"} note of a failed unit run, and may be absent (an older driver; the no-driver
+# fallback below), which reads as none. Without an installed driver there is no driver
+# unit: `absent`.
 release_status() {
   local env=$1 sha=$2 line driver
   line=$(sudo "$DS_RELEASE" status "$env" "$sha")

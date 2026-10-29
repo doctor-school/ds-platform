@@ -862,11 +862,13 @@ run_unit() {
     prod/redeploy) command=(tools/deploy/prod.mjs --local --redeploy --images-file -) ;;
     *) usage "the driver runs stage-main and prod only" ;;
   esac
+  # #3439: this attempt's failure note replaces any earlier one before any refusal of
+  # this attempt, so `status` never reports an earlier attempt's phase for it. A failed
+  # run's note names its phase and reason: prod.mjs's die() writes it to
+  # DS_RELEASE_FAILURE_FILE.
+  sudo rm -f -- "$MANIFEST_DIR/$sha.failure"
   command -v curl >/dev/null || fail "curl is not installed"
   [[ -x $NODE ]] || fail "node is not installed at $NODE (infra/deploy/bin/install-node.sh)"
-  # #3439: this attempt's failure note replaces any earlier one. A failed run's note
-  # names its phase and reason: prod.mjs's die() writes it to DS_RELEASE_FAILURE_FILE.
-  sudo rm -f -- "$MANIFEST_DIR/$sha.failure"
   work=$(mktemp -d "${HOME:-/tmp}/ds-release-driver.XXXXXX") # global, for the EXIT trap
   trap 'rm -rf -- "${work:-}"' EXIT
   mkdir "$work/tree"

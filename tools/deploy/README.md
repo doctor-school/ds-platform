@@ -71,8 +71,12 @@ gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_
   `/var/lib/ds-platform/release-driver/<sha>.failure`, and `unit-state` reports it
   as `driver.failure`. A failed download records `phase=download`, an exit without
   a note `exited <rc> without a failure note`. Both sides bound the note to a strict
-  phase id and one control-free line of at most 160 characters. Refusal lines
-  name variables, never values, and the journal stays on the box. The failure
+  phase id and one control-free line of at most 160 characters. The note carries
+  prod.mjs's own refusal text only: `releaseFailureNote` cuts a wrapped
+  child-process error (`… exited N: <first stderr line>` of `lib/remote.mjs`,
+  `lib/data-prod.mjs` or a local command) after its `exited N`, so a box
+  command's stderr never reaches it; the full message and the journal stay on
+  the box. The failure
   Deployment record's status description reads
   `release failed @ <sha12> in <phase>: <reason>` (redeploy alike), and its payload
   keeps the note as `failure`. A new attempt drops the earlier note.

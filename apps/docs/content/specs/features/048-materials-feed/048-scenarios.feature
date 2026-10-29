@@ -23,7 +23,7 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When the administrator creates a material of kind «Колонка эксперта» titled "Ортобиология в России: чего не хватает практике"
     And chooses the expert "Страхов Михаил Андреевич"
     And writes a body and publishes the material
-    Then the card of "Ортобиология в России: чего не хватает практике" reads «Колонка эксперта» and the expert's name
+    Then the card of "Ортобиология в России: чего не хватает практике" reads «Колонка эксперта» and «Страхов М. А.»
 
   @EARS-19 @EARS-9 @EARS-13
   Scenario: A material with a partner carries the partner mark
@@ -88,6 +88,17 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     When the administrator changes its title to "Открыт набор центров в исследование эффективности PRP"
     Then its card reads "Открыт набор центров в исследование эффективности PRP" dated «27 октября»
     And its reading page shows the new title
+
+  @EARS-5 @EARS-9
+  Scenario: A published column stays editable while its expert is not published
+    Given the column "Ортобиология в России: чего не хватает практике" by "Страхов Михаил Андреевич" is published
+    And the expert "Страхов Михаил Андреевич" is unpublished
+    And a platform administrator is signed in to the admin with a second factor
+    When the administrator changes its title to "Ортобиология в России: что нужно практике"
+    Then the edit is saved
+    And the rail has no card "Ортобиология в России: что нужно практике"
+    When the expert "Страхов Михаил Андреевич" is published again
+    Then the card of "Ортобиология в России: что нужно практике" is back in the rail with its first publication date
 
   @EARS-5 @EARS-8
   Scenario: A stale edit is refused
@@ -165,6 +176,18 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     Then the next 8 cards are shown
 
   @EARS-16
+  Scenario: The first feed page shows placeholders while it loads
+    Given 30 published materials exist
+    And the first feed page is slow to answer
+    When a visitor on a desktop opens the Academy home
+    Then the feed section shows 10 placeholder cards
+    And both arrow buttons are disabled
+    When the first feed page arrives
+    Then the rail shows the 12 newest cards
+    When a visitor on a phone opens the Academy home while the first feed page loads
+    Then the feed section shows 3 placeholder cards
+
+  @EARS-16
   Scenario: The empty feed says so honestly
     Given no material is published
     When a visitor opens the Academy home
@@ -188,6 +211,15 @@ Feature: 048 — Materials feed: own materials, the reading page and the rail on
     Then the visitor lands on its reading page showing "Ортобиология в России: чего не хватает практике"
     And the page shows «Колонка эксперта», the publication date and the expert's name as plain text
     And the link to "https://pubmed.ncbi.nlm.nih.gov/" targets a new tab with rel "noopener noreferrer"
+
+  @EARS-12
+  Scenario: A failed material read offers a retry
+    Given the news item "Открыт набор центров в исследование PRP" is published with the slug "otkryt-nabor-centrov"
+    And the material read fails once
+    When a visitor opens "/materials/otkryt-nabor-centrov" on the Academy
+    Then the page shows the error state with «Повторить»
+    When the visitor chooses «Повторить»
+    Then the reading page shows "Открыт набор центров в исследование PRP"
 
   @EARS-11 @EARS-12
   Scenario: A draft material has no public page

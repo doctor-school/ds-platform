@@ -207,6 +207,24 @@ export interface RateLimitReceipt {
   ipWindowResetAtMs: number;
 }
 
+/**
+ * 003 EARS-13 (#3379): the window that refused an attempt and when it rolls
+ * over, read at `atMs` on the limiter's clock. Only `ip`, the client-address
+ * window, has its reset exposed. `user` is identifier-keyed, so its timing stays
+ * inside the API (003 EARS-16); `asn` is shared by a whole network, so its reset
+ * reflects other clients' traffic and is not the caller's to act on.
+ */
+export interface RateLimitRefusal {
+  window: "ip" | "user" | "asn";
+  resetAtMs: number;
+  atMs: number;
+}
+
+/** {@link RateLimitService.consume}'s answer: a receipt, or the refusing window. */
+export type RateLimitDecision =
+  | { allowed: true; receipt: RateLimitReceipt }
+  | { allowed: false; refusal: RateLimitRefusal };
+
 /** Request property the guard stores the {@link RateLimitReceipt} under. */
 export const RATE_LIMIT_RECEIPT_KEY = "dsRateLimitReceipt";
 

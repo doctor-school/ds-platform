@@ -28,6 +28,11 @@ interface GuardRequest {
   [RATE_LIMIT_RECEIPT_KEY]?: RateLimitReceipt;
 }
 
+/** The reply surface the guard writes a header on (Fastify's `reply.header`). */
+interface GuardResponse {
+  header(name: string, value: string): unknown;
+}
+
 /**
  * Global EARS-13 rate-limit gate (ADR-0001 §7).
  *
@@ -36,8 +41,9 @@ interface GuardRequest {
  * touches no other call site — the same pattern as `BotProtectionGuard`). For a
  * marked handler it derives the per-user key (the submitted identifier), the
  * per-IP key, and the per-ASN key, then asks {@link RateLimitService}. A refusal
- * is a generic `429` that reveals neither the breached dimension nor whether the
- * account exists (EARS-16).
+ * is a generic `429` that names no identifier-keyed dimension and does not reveal
+ * whether the account exists (EARS-16); a refusal by the per-IP window carries
+ * `Retry-After` until that window resets (003 EARS-13).
  *
  * When the marker carries a scope tag (`@RateLimited("<tag>")`, #1646) the
  * source-address windows are partitioned under it, so that handler's traffic
@@ -59,7 +65,7 @@ export class RateLimitGuard implements CanActivate {
     if (!marked) return true;
 
     const request = context.switchToHttp().getRequest<GuardRequest>();
-    const receipt = this.limiter.consume({
+    const decision = this.limiter.consume({
       ip: request.ip ?? "",
       identifier: this.extractIdentifier(request),
       asn: this.extractAsn(request),
@@ -70,12 +76,25 @@ export class RateLimitGuard implements CanActivate {
       // `{ door }` (#2684): a sending door counts in its own per-IP window.
       door: typeof marked === "object" ? marked.door : undefined,
     });
-    if (receipt === null) {
+    if (!decision.allowed) {
+      // 003 EARS-13: only the client-address window names its reset (EARS-16).
+      if (decision.refusal.window === "ip") {
+        const seconds = Math.max(
+          1,
+          Math.ceil(
+            (decision.refusal.resetAtMs - decision.refusal.atMs) / 1000,
+          ),
+        );
+        context
+          .switchToHttp()
+          .getResponse<GuardResponse>()
+          .header("Retry-After", String(seconds));
+      }
       throw new HttpException(GENERIC_THROTTLED, HttpStatus.TOO_MANY_REQUESTS);
     }
     // EARS-13 (#2684): a succeeding verification refunds the unit taken here,
     // so the handler must know which per-IP window that unit came from.
-    request[RATE_LIMIT_RECEIPT_KEY] = receipt;
+    request[RATE_LIMIT_RECEIPT_KEY] = decision.receipt;
     return true;
   }
 

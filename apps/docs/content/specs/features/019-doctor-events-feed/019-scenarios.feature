@@ -493,14 +493,6 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
         | doctor  | name search, specialty, format, kind, city, direction, «только с НМО» |
         | academy | project, expert, topic                                                |
 
-    @EARS-8 @happy
-    Scenario: Feed state round-trips through the URL
-      Given the doctor has applied a format facet, selected a day in the month grid and widened the horizon
-      When the doctor copies the URL and opens it in a fresh browser context
-      Then the same facets, the same selected day and the same horizon are rendered
-      When the doctor presses the browser back button
-      Then the previous feed state is rendered rather than the doctor leaving the feed
-
     @EARS-8 @failure
     Scenario: Feed state held only in client memory is a defect
       Given a build in which the applied facets are stored in component state only
@@ -527,32 +519,12 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
       And «Все мои события →» leads into the account's «Мои события»
       And no ticket, QR or НМО check-in is rendered in the cut
 
-    @EARS-12 @happy
-    # Read under 019 «Amendment — 2026-10-06»: the card carries no action and no guest band renders.
-    Scenario: A guest reads the whole screen and signs up on the event page
-      Given a visitor with no account
-      When the visitor opens «События»
-      Then the feed, the month view and the facet panel are fully readable
-      And no band under the feed states that an account is needed
-      And an upcoming card carries no action of its own
-      When the visitor opens an upcoming card
-      Then feature 020's event page for that event opens, carrying its one-click sign-up
-
     @EARS-12 @failure
     Scenario: A gated payload is never delivered to an anonymous reader and hidden
       Given a visitor with no account
       When the anonymous read of the events feed is inspected
       Then the response carries no payload that the client hides
       And no release-1 block is withheld from the guest
-
-    @EARS-13 @happy
-    Scenario: The screen works at 390 with the facet panel behind a counted control
-      Given the viewport is 390 wide
-      When the doctor opens «События» with two facets applied
-      Then the facet panel is collapsed behind a «Фильтры» control showing the applied count
-      When the doctor opens that control
-      Then the panel opens as a sheet with every facet operable
-      And the day feed, the month grid, the live block and the card states render in the canvas mobile composition
 
     @EARS-13 @happy
     Scenario: The events route passes the accessibility bar in its feed and month views
@@ -656,3 +628,34 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     Given a live targeted event whose «Показывать зрителям число участников» setting is on and doctors are in the room
     When a doctor opens the events feed
     Then the «Идёт сейчас» block shows the number of doctors in the room
+
+  @public-doctor-navigation-mobile
+  Rule: Public URL, guest event entry and mobile composition
+
+    @EARS-8 @happy
+    Scenario: Feed state round-trips through the URL
+      Given the doctor has applied a format facet, selected a day in the month grid and widened the horizon
+      When the doctor copies the URL and opens it in a fresh browser context
+      Then the same facets, the same selected day and the same horizon are rendered
+      When the doctor presses the browser back button
+      Then the previous feed state is rendered rather than the doctor leaving the feed
+
+    @EARS-12 @happy
+    # Read under 019 «Amendment — 2026-10-06»: the card carries no action and no guest band renders.
+    Scenario: A guest reads the whole screen and signs up on the event page
+      Given a visitor with no account
+      When the visitor opens «События»
+      Then the feed, the month view and the facet panel are fully readable
+      And no band under the feed states that an account is needed
+      And an upcoming card carries no action of its own
+      When the visitor opens an upcoming card
+      Then feature 020's event page for that event opens, carrying its one-click sign-up
+
+    @EARS-13 @happy
+    Scenario: The screen works at 390 with the facet panel behind a counted control
+      Given the viewport is 390 wide
+      When the doctor opens «События» with two facets applied
+      Then the facet panel is collapsed behind a «Фильтры» control showing the applied count
+      When the doctor opens that control
+      Then the panel opens as a sheet with every facet operable
+      And the day feed, the month grid, the live block and the card states render in the canvas mobile composition

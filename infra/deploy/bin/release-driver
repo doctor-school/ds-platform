@@ -30,8 +30,10 @@
 #       As `_run prod <sha>`, with prod.mjs --local --redeploy (recreates every
 #       container of the api compose).
 #   release-driver unit-state <env> <sha>
-#       One JSON object {"unit", "active", "rc", "previousSha"} — the entrypoint's
-#       `status` adds it to the ds-release status line as `driver`.
+#       One JSON object {"unit", "active", "rc", "previousSha", "failure"} — the
+#       entrypoint's `status` adds it to the ds-release status line as `driver`.
+#       `failure` (#3439) is null, or {"phase", "reason"}: the phase a failed run of the
+#       unit stopped in and the one-line reason it gave, recorded by the unit itself.
 #   release-driver record-previous <env> <sha> <previous-sha|none>
 #       (called by the unit) Saves the SHA production ran before <sha> — the
 #       release-notes basis `unit-state` reports as `previousSha`. The first SHA
@@ -213,13 +215,56 @@ previous_sha() {
   if [[ $value =~ $SHA_RE ]]; then printf '"%s"' "$value"; else printf 'null'; fi
 }
 
+# #3439: a failure note as the one JSON value `status` carries — {"phase", "reason"},
+# the phase a strict id or null, the reason one control-free line of at most
+# FAILURE_REASON_MAX characters — or null when the note is absent or unreadable. The
+# note crosses into a public Actions log: prod.mjs writes the first line of its
+# refusal, which names variables, never values; this bounds its shape.
+FAILURE_REASON_MAX=160
+read -r -d '' FAILURE_PY <<'PY' || true
+import json, re, sys
+limit = int(sys.argv[1])
+try:
+    doc = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace"))
+    phase, reason = doc.get("phase"), doc.get("reason")
+    if not (isinstance(phase, str) and re.fullmatch(r"[a-z][a-z0-9-]{0,39}", phase)):
+        phase = None
+    if not isinstance(reason, str):
+        reason = ""
+    reason = " ".join(re.sub(r"[\x00-\x1f\x7f-\x9f]", " ", reason).split())
+    if len(reason) > limit:
+        reason = reason[: limit - 1] + "…"
+    if phase is None and not reason:
+        raise ValueError("empty note")
+    print(json.dumps({"phase": phase, "reason": reason or None}, separators=(",", ":")))
+except Exception:
+    print("null")
+PY
+failure_note() { python3 -I -c "$FAILURE_PY" "$FAILURE_REASON_MAX"; }
+
+# The recorded failure note of <sha>'s unit run, as that JSON value.
+recorded_failure() {
+  { sudo cat "$MANIFEST_DIR/$1.failure" 2>/dev/null || true; } | failure_note
+}
+
+# (the unit) Records the JSON note <note> as <sha>'s failure, root-only beside its
+# manifest; a note that normalises to nothing is not recorded.
+record_failure() {
+  local sha=$1 note
+  note=$(printf '%s' "$2" | failure_note)
+  [[ $note != null ]] || return 0
+  sudo install -d -m 0700 -o root -g root "$MANIFEST_DIR"
+  printf '%s\n' "$note" | sudo tee "$MANIFEST_DIR/$sha.failure" >/dev/null
+  sudo chmod 0600 "$MANIFEST_DIR/$sha.failure"
+}
+
 cmd_unit_state() {
   check_args "$@"
   local unit state rc
   unit=$(unit_name "$1" "$2")
   read -r state rc < <(unit_state "$unit")
-  printf '{"unit":"%s","active":"%s","rc":%s,"previousSha":%s}\n' \
-    "$unit" "$state" "$rc" "$(previous_sha "$2")"
+  printf '{"unit":"%s","active":"%s","rc":%s,"previousSha":%s,"failure":%s}\n' \
+    "$unit" "$state" "$rc" "$(previous_sha "$2")" "$(recorded_failure "$2")"
 }
 
 cmd_record_previous() {
@@ -537,9 +582,11 @@ release_unit() {
   sudo install -d -m 0700 -o root -g root "$MANIFEST_DIR"
   # Only this SHA's manifest is kept: systemd opened every other unit's stdin when it
   # started, and a restart of another SHA saves that SHA's manifest again. Another
-  # SHA's recorded previous SHA goes with it: only a leased release asks for its own.
+  # SHA's recorded previous SHA and failure note go with it: only a leased release asks
+  # for its own.
   sudo find "$MANIFEST_DIR" -maxdepth 1 -type f \
-    \( -name '*.json' ! -name "$sha.json" -o -name '*.previous' ! -name "$sha.previous" \) -delete
+    \( -name '*.json' ! -name "$sha.json" -o -name '*.previous' ! -name "$sha.previous" \
+    -o -name '*.failure' ! -name "$sha.failure" \) -delete
   sudo install -m 0600 -o root -g root "$manifest" "$MANIFEST_DIR/$sha.json"
   # systemd opens the root-only manifest as the unit's stdin before it drops to the
   # deploy user; the journal takes the unit's output.
@@ -817,16 +864,29 @@ run_unit() {
   esac
   command -v curl >/dev/null || fail "curl is not installed"
   [[ -x $NODE ]] || fail "node is not installed at $NODE (infra/deploy/bin/install-node.sh)"
+  # #3439: this attempt's failure note replaces any earlier one. A failed run's note
+  # names its phase and reason: prod.mjs's die() writes it to DS_RELEASE_FAILURE_FILE.
+  sudo rm -f -- "$MANIFEST_DIR/$sha.failure"
   work=$(mktemp -d "${HOME:-/tmp}/ds-release-driver.XXXXXX") # global, for the EXIT trap
   trap 'rm -rf -- "${work:-}"' EXIT
   mkdir "$work/tree"
   echo "downloading $CODELOAD/$sha"
-  curl -fsSL --proto '=https' --retry 3 --max-time 600 -o "$work/tree.tar.gz" "$CODELOAD/$sha"
-  tar xzf "$work/tree.tar.gz" --strip-components=1 -C "$work/tree"
+  if ! curl -fsSL --proto '=https' --retry 3 --max-time 600 -o "$work/tree.tar.gz" "$CODELOAD/$sha" ||
+    ! tar xzf "$work/tree.tar.gz" --strip-components=1 -C "$work/tree"; then
+    record_failure "$sha" '{"phase":"download","reason":"the codeload tree could not be downloaded or extracted"}'
+    fail "the codeload tree of ${sha:0:12} could not be downloaded or extracted"
+  fi
   set +e
-  "$NODE" "$work/tree/${command[0]}" "${command[@]:1}"
+  DS_RELEASE_FAILURE_FILE=$work/failure "$NODE" "$work/tree/${command[0]}" "${command[@]:1}"
   local rc=$?
   set -e
+  if ((rc != 0)); then
+    if [[ -s $work/failure ]]; then
+      record_failure "$sha" "$(head -c 4096 -- "$work/failure")"
+    else
+      record_failure "$sha" "{\"phase\":null,\"reason\":\"exited $rc without a failure note\"}"
+    fi
+  fi
   exit "$rc"
 }
 

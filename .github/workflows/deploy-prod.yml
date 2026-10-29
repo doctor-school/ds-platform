@@ -288,6 +288,10 @@ jobs:
             prev=$(jq -r '.driver.previousSha // ""' <<<"$last_json")
             [[ "$prev" =~ ^[0-9a-f]{40}$ ]] || prev=""
             echo "previous-sha=$prev" >> "$GITHUB_OUTPUT"
+            # #3439: the phase a failed run stopped in and its one-line reason, from
+            # the box driver's note; release-runner.mjs bounds both again.
+            echo "failed-phase=$(jq -j '.driver.failure.phase // ""' <<<"$last_json" | tr '\000-\037' ' ')" >> "$GITHUB_OUTPUT"
+            echo "failed-reason=$(jq -j '.driver.failure.reason // ""' <<<"$last_json" | tr '\000-\037' ' ')" >> "$GITHUB_OUTPUT"
           }
           while :; do
             set +e
@@ -313,7 +317,8 @@ jobs:
               continue
             fi
             ssh_failures=0
-            if ! line=$(jq -er '"driver=\(.driver.active // "?") rc=\(.driver.rc // "-") step=\(.release.step // "-") state=\(.release.state // "-")"' <<<"$json" 2>/dev/null); then
+            # The status line names a failed run's phase and reason (#3439).
+            if ! line=$(node tools/deploy/release-runner.mjs release-status --sha "$SHA" <<<"$json" 2>/dev/null); then
               echo "status: unreadable reply"
             else
               echo "status: $line"
@@ -335,7 +340,7 @@ jobs:
                     terminal succeeded; echo "release: succeeded"; exit 0
                   fi
                   terminal failed
-                  echo "::error::release failed (driver=$active rc=${rc:--} state=${state:--})"
+                  echo "::error::release failed ($line)"
                   exit 1 ;;
               esac
             fi
@@ -494,9 +499,12 @@ jobs:
           OWNER_QUOTE: ${{ inputs.owner_quote }}
           TERMINAL: ${{ steps.poll.outputs.terminal }}
           PREVIOUS_SHA: ${{ steps.poll.outputs.previous-sha }}
+          FAILED_PHASE: ${{ steps.poll.outputs.failed-phase }}
+          FAILED_REASON: ${{ steps.poll.outputs.failed-reason }}
         run: |
           node tools/deploy/release-runner.mjs record --sha "$SHA" \
-            --state "$TERMINAL" --previous-sha "$PREVIOUS_SHA"
+            --state "$TERMINAL" --previous-sha "$PREVIOUS_SHA" \
+            --failed-phase "$FAILED_PHASE" --failed-reason "$FAILED_REASON"
 
       # Redeploy: no release cut, a new Deployment record of every run, with the quote.
       - name: The redeploy Deployment record
@@ -507,7 +515,11 @@ jobs:
           GH_REPO: ${{ github.repository }}
           OWNER_QUOTE: ${{ inputs.owner_quote }}
           TERMINAL: ${{ steps.poll.outputs.terminal }}
-        run: node tools/deploy/release-runner.mjs redeploy-record --sha "$SHA" --state "$TERMINAL"
+          FAILED_PHASE: ${{ steps.poll.outputs.failed-phase }}
+          FAILED_REASON: ${{ steps.poll.outputs.failed-reason }}
+        run: |
+          node tools/deploy/release-runner.mjs redeploy-record --sha "$SHA" --state "$TERMINAL" \
+            --failed-phase "$FAILED_PHASE" --failed-reason "$FAILED_REASON"
 
       # Rollback: no release cut, the ONE Deployment record with the reason.
       - name: The rollback Deployment record

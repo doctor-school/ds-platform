@@ -22,6 +22,7 @@ import {
   DEPLOY_PLAN,
   OPERATOR_ONLY_STEPS,
   REDEPLOY_SKIPPED_STEPS,
+  RELEASE_FAILURE_REASON_MAX,
   compareStatus,
   deployPlan,
   descendsFromLiveVerdict,
@@ -35,6 +36,8 @@ import {
   prodShipOptions,
   recordPreviousShaScript,
   recreateScript,
+  releaseFailureNote,
+  smokeFailureReason,
 } from "./prod.mjs";
 import {
   readPostgresTarget,
@@ -990,4 +993,65 @@ test("3354: the redeploy's swap is up -d --force-recreate without a migrate; a r
     /if \(redeploy\) \{\s*step\("[^"]*"\);\s*await boxStep\(API_PROD, sha, "recreate", recreateScript\(\), "api-prod redeploy"\);\s*\} else \{/,
   );
   assert.match(deployBody, /await boxStep\(API_PROD, sha, "migrate", migrateAndUpScript\(\), "api-prod deploy"\);/);
+});
+
+// #3439: a failed box-side release names its phase and a one-line reason in
+// `status prod <sha>` — the walker knows the phase it is in, `die()` writes the note
+// the release driver records, and a red smoke names its failing probe labels.
+test("3439: the walker names the phase this run is in, operator-only phases it skips excluded", () => {
+  const walk = planWalker({ local: true });
+  assert.equal(walk.current(), null);
+  walk.operatorPhase("preflight");
+  assert.equal(walk.current(), null, "a skipped operator phase is not the run's phase");
+  walk.phase("test-token");
+  assert.equal(walk.current(), "test-token");
+  walk.phase("service-set");
+  walk.phase("runtime-env");
+  assert.equal(walk.releasePhase("postgres-verify"), true);
+  assert.equal(walk.current(), "postgres-verify");
+  const redeploy = planWalker({ local: true, redeploy: true });
+  redeploy.phase("test-token");
+  redeploy.phase("service-set");
+  redeploy.phase("runtime-env");
+  assert.equal(redeploy.releasePhase("postgres-verify"), false);
+  assert.equal(redeploy.current(), "runtime-env");
+});
+
+test("3439: the failure note is the phase and the message's first line, control-free and bounded", () => {
+  assert.deepEqual(releaseFailureNote("smoke", "prod smoke RED (exit 1)\n  more"), {
+    phase: "smoke",
+    reason: "prod smoke RED (exit 1)",
+  });
+  assert.deepEqual(releaseFailureNote(null, "\n\n  Error: boom\tnow\n    at x (y:1)"), {
+    phase: null,
+    reason: "Error: boom now",
+  });
+  const long = releaseFailureNote("migrate", "x".repeat(500));
+  assert.equal(long.reason.length, RELEASE_FAILURE_REASON_MAX);
+  assert.match(long.reason, /…$/);
+  assert.deepEqual(releaseFailureNote("idp", "a\u0007b\u001b[31mc"), { phase: "idp", reason: "a b [31mc" });
+});
+
+test("3439: a red smoke names its failing probe labels", () => {
+  assert.equal(
+    smokeFailureReason(1, ["api-health", "portal-cold"]),
+    "prod smoke RED (exit 1): failed probes api-health, portal-cold — the new build is unhealthy",
+  );
+  assert.equal(
+    smokeFailureReason(3, []),
+    "prod smoke RED (exit 3) — the new build is unhealthy",
+  );
+});
+
+test("3439: die() writes the note to the driver's file, the smoke hands its failing labels back", () => {
+  const src = readFileSync(new URL("./prod.mjs", import.meta.url), "utf8");
+  const die = src.slice(src.indexOf("\nfunction die("), src.indexOf("\n}\n", src.indexOf("\nfunction die(")));
+  assert.match(die, /process\.env\.DS_RELEASE_FAILURE_FILE/);
+  assert.match(die, /releaseFailureNote\(currentWalk\?\.current\(\) \?\? null, msg\)/);
+  assert.match(src, /currentWalk = walk;/);
+  const smoke = src.slice(src.indexOf("\nfunction runSmoke("));
+  assert.match(smoke.slice(0, 2000), /DS_SMOKE_FAILED_FILE/);
+  assert.match(smoke.slice(0, 2000), /smokeFailureReason\(code, /);
+  const smokeSrc = readFileSync(new URL("./smoke-prod.mjs", import.meta.url), "utf8");
+  assert.match(smokeSrc, /process\.env\.DS_SMOKE_FAILED_FILE/);
 });

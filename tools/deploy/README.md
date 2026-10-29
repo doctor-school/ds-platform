@@ -59,6 +59,23 @@ gh workflow run deploy-prod.yml --ref main -f sha=<40-hex sha on main> -f owner_
   reattaches to the running driver unit (`attached`) or reports
   `already-succeeded`; to run a succeeded release of the live SHA again (an env
   file changed on the box) dispatch redeploy mode (below).
+- **Status line (#3439).** Each poll prints
+  `status: driver=<active> rc=<rc> step=<step> state=<state>` from
+  `release-runner.mjs release-status`. `step` is the last step ds-release recorded,
+  which is not where a red smoke (a plain child process) or an early refusal (no
+  step yet, `step=-`) stopped, so a failed run adds
+  `phase=<plan phase> reason=<one line>`: prod.mjs's `die()` writes the phase its
+  plan walker is in and the first line of its message to the file the driver unit
+  hands it (`DS_RELEASE_FAILURE_FILE`). A red smoke's reason names its failing
+  probe labels. The unit records the note root-only as
+  `/var/lib/ds-platform/release-driver/<sha>.failure`, and `unit-state` reports it
+  as `driver.failure`. A failed download records `phase=download`, an exit without
+  a note `exited <rc> without a failure note`. Both sides bound the note to a strict
+  phase id and one control-free line of at most 160 characters. Refusal lines
+  name variables, never values, and the journal stays on the box. The failure
+  Deployment record's status description reads
+  `release failed @ <sha12> in <phase>: <reason>` (redeploy alike), and its payload
+  keeps the note as `failure`. A new attempt drops the earlier note.
 - **Record.** `deployment-record.mjs` `recordDeployment` writes the Deployment
   with `GITHUB_TOKEN`; the driver's `previousSha` is the basis of the
   Deployment-record notes. Events of `GITHUB_TOKEN` start no workflow, which is

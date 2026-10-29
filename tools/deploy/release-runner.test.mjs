@@ -12,7 +12,10 @@ import {
   ROLLBACK_PREFLIGHT_ORDER,
   buildRollbackNotice,
   liveProdShaViaGh,
+  FAILURE_REASON_MAX,
   parseRunnerArgs,
+  releaseFailure,
+  releaseStatusLine,
   preflightChecks,
   redeployPreflightChecks,
   reportRecord,
@@ -49,7 +52,7 @@ describe("parseRunnerArgs", () => {
         "--previous-sha",
         PREV,
       ]),
-      { command: "record", sha: SHA, state: "failed", previousSha: PREV },
+      { command: "record", sha: SHA, state: "failed", previousSha: PREV, failure: null },
     );
   });
 
@@ -259,6 +262,7 @@ describe("runRecord", () => {
         sha: SHA,
         state: "success",
         ownerQuote: "катим",
+        failure: null,
         log: undefined,
         healthUrl: undefined,
       },
@@ -1077,7 +1081,7 @@ describe("parseRunnerArgs — redeploy commands", () => {
     });
     assert.deepEqual(
       parseRunnerArgs(["redeploy-record", "--sha", SHA, "--state", "unknown"]),
-      { command: "redeploy-record", sha: SHA, state: "unknown" },
+      { command: "redeploy-record", sha: SHA, state: "unknown", failure: null },
     );
   });
 
@@ -1294,5 +1298,128 @@ describe("buildDeploymentPayload — redeploy", () => {
       ownerQuote: "q",
     });
     assert.match(unknown.status.description, /^redeploy verdict unknown @ /);
+  });
+});
+
+// #3439: a failed release's status names the phase it stopped in and a one-line
+// reason, from the box driver's own note — not the step ds-release recorded last.
+describe("3439: the failing phase and reason", () => {
+  const SHA = "a".repeat(40);
+  const reply = (failure, over = {}) =>
+    JSON.stringify({
+      release: { step: "prune", state: "failed" },
+      unitAlive: false,
+      driver: { unit: "u", active: "failed", rc: 1, previousSha: null, failure },
+      ...over,
+    });
+
+  it("the status line names a red smoke's phase and failing probes, not the last recorded step", () => {
+    assert.equal(
+      releaseStatusLine(
+        reply({
+          phase: "smoke",
+          reason: "prod smoke RED (exit 1): failed probes api /v1/health — the new build is unhealthy",
+        }),
+      ),
+      "driver=failed rc=1 step=prune state=failed phase=smoke reason=prod smoke RED (exit 1): failed probes api /v1/health — the new build is unhealthy",
+    );
+  });
+
+  it("an early refusal with no recorded step still names its phase", () => {
+    assert.equal(
+      releaseStatusLine(
+        reply(
+          { phase: "postgres-verify", reason: "POSTGRES_PASSWORD is not set" },
+          { release: null },
+        ),
+      ),
+      "driver=failed rc=1 step=- state=- phase=postgres-verify reason=POSTGRES_PASSWORD is not set",
+    );
+  });
+
+  it("no note (a running unit, an older driver) keeps the line it always was; garbage is unreadable", () => {
+    assert.equal(
+      releaseStatusLine(JSON.stringify({ release: { step: "migrate", state: "running" }, driver: { active: "active", rc: null } })),
+      "driver=active rc=- step=migrate state=running",
+    );
+    assert.equal(releaseStatusLine(reply(null)), "driver=failed rc=1 step=prune state=failed");
+    assert.equal(releaseStatusLine("not json"), null);
+    assert.equal(releaseStatusLine("null"), null);
+  });
+
+  it("bounds the note again on this side of the public log", () => {
+    assert.equal(releaseFailure({ phase: "Smoke;rm", reason: "" }), null);
+    assert.deepEqual(releaseFailure({ phase: "idp", reason: "a\u0007b\r\nc" }), { phase: "idp", reason: "a b c" });
+    const long = releaseFailure({ phase: null, reason: "x".repeat(400) });
+    assert.equal(long.reason.length, FAILURE_REASON_MAX);
+    assert.match(long.reason, /…$/);
+    assert.equal(releaseFailure("smoke"), null);
+  });
+
+  it("record and redeploy-record take --failed-phase / --failed-reason, empty meaning none", () => {
+    assert.deepEqual(
+      parseRunnerArgs([
+        "record", "--sha", SHA, "--state", "failed", "--previous-sha", "",
+        "--failed-phase", "smoke", "--failed-reason", "prod smoke RED (exit 1)",
+      ]).failure,
+      { phase: "smoke", reason: "prod smoke RED (exit 1)" },
+    );
+    assert.equal(
+      parseRunnerArgs(["redeploy-record", "--sha", SHA, "--state", "failed", "--failed-phase", "", "--failed-reason", ""]).failure,
+      null,
+    );
+    assert.deepEqual(parseRunnerArgs(["release-status", "--sha", SHA]), { command: "release-status", sha: SHA });
+    assert.match(parseRunnerArgs(["release-status", "--sha", SHA, "--failed-phase", "x"]).error, /unknown argument/);
+  });
+
+  it("the failure Deployment record's status description names the phase and reason", async () => {
+    const failure = { phase: "smoke", reason: "prod smoke RED (exit 1): failed probes api /v1/health" };
+    const { status, deployment } = buildDeploymentPayload({
+      sha: SHA,
+      releaseTag: null,
+      notesText: "",
+      healthUrl: "https://api.example/v1/health",
+      nowIso: "2026-10-29T00:00:00Z",
+      state: "failure",
+      ownerQuote: "катим",
+      failure,
+    });
+    assert.equal(
+      status.description,
+      `release failed @ ${SHA.slice(0, 12)} in smoke: prod smoke RED (exit 1): failed probes api /v1/health`,
+    );
+    assert.deepEqual(deployment.payload.failure, failure);
+    const redeploy = buildDeploymentPayload({
+      sha: SHA, releaseTag: null, notesText: "", healthUrl: "h", nowIso: "n",
+      state: "failure", ownerQuote: "q", redeploy: true, failure: { phase: "up", reason: null },
+    });
+    assert.equal(redeploy.status.description, `redeploy failed @ ${SHA.slice(0, 12)} in up`);
+    const ok = buildDeploymentPayload({
+      sha: SHA, releaseTag: null, notesText: "x", healthUrl: "h", nowIso: "n", state: "success", failure,
+    });
+    assert.equal(ok.deployment.payload.failure, undefined, "a success carries no note");
+
+    const calls = [];
+    await runRecord({
+      sha: SHA,
+      state: "failed",
+      previousSha: null,
+      ownerQuote: "катим",
+      failure,
+      cut: () => assert.fail("no cut on failure"),
+      record: async (args) => (calls.push(args), { ok: true, deploymentId: 1 }),
+      log: () => {},
+    });
+    assert.deepEqual(calls[0].failure, failure);
+    const created = [];
+    await runRedeployRecord({
+      sha: SHA,
+      state: "failed",
+      ownerQuote: "q",
+      failure,
+      create: (args) => (created.push(args), { ok: true, deploymentId: 2 }),
+      log: () => {},
+    });
+    assert.deepEqual(created[0].failure, failure);
   });
 });

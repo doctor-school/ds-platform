@@ -312,20 +312,27 @@ export function deployPlan({ local = false, redeploy = false } = {}) {
  * The cursor `deploy()` walks the plan with. `phase(id)` enters a phase every run
  * executes; `operatorPhase(id)` an operator-only one, answering whether this run
  * executes it. Either refuses a phase out of `DEPLOY_PLAN` order or a skipped phase
- * this run executes; `done()` refuses a run that left one out.
+ * this run executes; `done()` refuses a run that left one out. `current()` names the
+ * phase this run is in — the last one entered that it executes, null before the
+ * first: the phase a failed release's `status` names (#3439).
  */
 export function planWalker({ local = false, redeploy = false } = {}) {
   const plan = deployPlan({ local, redeploy });
   let at = 0;
+  let current = null;
   const advance = (id) => {
     const index = DEPLOY_PLAN.indexOf(id, at);
     if (index < 0) throw new Error(`deploy phase ${id} is out of plan order`);
     const missed = DEPLOY_PLAN.slice(at, index).find((skipped) => plan.includes(skipped));
     if (missed) throw new Error(`deploy phase ${missed} was left out before ${id}`);
     at = index + 1;
+    if (plan.includes(id)) current = id;
     return plan.includes(id);
   };
   return {
+    current() {
+      return current;
+    },
     phase(id) {
       if (OPERATOR_ONLY_STEPS.includes(id)) throw new Error(`${id} is an operator-only phase`);
       if (REDEPLOY_SKIPPED_STEPS.includes(id)) throw new Error(`${id} is a release-only phase`);
@@ -345,6 +352,35 @@ export function planWalker({ local = false, redeploy = false } = {}) {
       if (missed) throw new Error(`deploy phase ${missed} was left out`);
     },
   };
+}
+
+/** The longest reason a failure note carries (#3439). */
+export const RELEASE_FAILURE_REASON_MAX = 160;
+
+/**
+ * The note a failed release leaves for the release driver (#3439): the phase it failed
+ * in and the first line of the `die()` / Error message, control characters folded to
+ * one space, bounded. The driver records it for `status prod <sha>`, whose line is a
+ * public Actions log — refusal lines name variables, never values.
+ */
+export function releaseFailureNote(phase, message) {
+  const line =
+    String(message ?? "")
+      .split(/\r?\n/)
+      // eslint-disable-next-line no-control-regex -- the control characters are what is folded
+      .map((l) => l.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim())
+      .find(Boolean) ?? "";
+  const reason =
+    line.length > RELEASE_FAILURE_REASON_MAX
+      ? `${line.slice(0, RELEASE_FAILURE_REASON_MAX - 1)}…`
+      : line;
+  return { phase: phase ?? null, reason };
+}
+
+/** A red smoke's `die()` reason: its exit code and the labels of its failing probes. */
+export function smokeFailureReason(code, labels) {
+  const failed = labels.length > 0 ? `: failed probes ${labels.join(", ")}` : "";
+  return `prod smoke RED (exit ${code})${failed} — the new build is unhealthy`;
 }
 
 /**
@@ -1252,9 +1288,22 @@ function ok(msg, since) {
   const dt = since ? ` (${((Date.now() - since) / 1000).toFixed(1)}s)` : "";
   console.log(`  ✓ ${msg}${dt}`);
 }
+// The plan cursor of the running deploy: the phase a failure note names (#3439).
+let currentWalk = null;
 function die(msg, { rollbackHint } = {}) {
   console.error(`\n✗ DEPLOY FAILED: ${msg}`);
   closeOpenReleaseAsFailed();
+  // #3439: the release driver's unit sets the file; it records the note for `status`.
+  if (process.env.DS_RELEASE_FAILURE_FILE) {
+    try {
+      writeFileSync(
+        process.env.DS_RELEASE_FAILURE_FILE,
+        `${JSON.stringify(releaseFailureNote(currentWalk?.current() ?? null, msg))}\n`,
+      );
+    } catch (e) {
+      console.error(`  ⚠ could not write the failure note for status (${e.message})`);
+    }
+  }
   if (rollbackHint) {
     console.error(
       `\n  Rollback pointer: the prod boxes were NOT hand-patched. To revert the\n` +
@@ -2218,6 +2267,7 @@ async function deploy(hotfixRef = null, local = null) {
   // #3354: a redeploy of the live SHA recreates the app tier only (REDEPLOY_SKIPPED_STEPS).
   const redeploy = Boolean(local?.redeploy);
   const walk = planWalker({ local: Boolean(local), redeploy });
+  currentWalk = walk;
   const { sha, images } = walk.operatorPhase("preflight")
     ? await preflight(hotfixRef)
     : await readLocalRelease(local.imagesFile);
@@ -2538,21 +2588,34 @@ function runSmoke(sha, services) {
       console.log(`  ℹ the deploy target ships no ${image} image — its vhost probes are skipped for this smoke (#1896).`);
     }
   }
+  // #3439: the smoke writes the labels of its failing probes here, so the red verdict
+  // (and `status prod <sha>`) says which probe failed.
+  const failedDir = mkdtempSync(join(tmpdir(), "ds-smoke-"));
+  const failedFile = join(failedDir, "failed");
   return new Promise((resolve) => {
     const child = spawn(
       process.execPath,
       [join(import.meta.dirname, "smoke-prod.mjs"), "--expect-sha", sha],
       {
         stdio: "inherit",
-        env,
+        env: { ...env, DS_SMOKE_FAILED_FILE: failedFile },
       },
     );
     child.on("close", (code) => {
+      let labels = [];
+      try {
+        labels = readFileSync(failedFile, "utf8")
+          .split("\n")
+          .filter((l) => /^[a-z0-9][a-z0-9 ._:/-]{0,40}$/i.test(l));
+      } catch {
+        // no file: the smoke stopped before its probes ran
+      }
+      rmSync(failedDir, { recursive: true, force: true });
       if (code === 0) {
         ok("prod smoke green");
         resolve();
       } else {
-        die(`prod smoke RED (exit ${code}) — the new build is unhealthy`, {
+        die(smokeFailureReason(code, labels), {
           rollbackHint: true,
         });
       }

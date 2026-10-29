@@ -571,3 +571,89 @@ describe("3219: the rollback poll, run against a stubbed box", () => {
     assert.equal(r.polls, 1);
   });
 });
+
+describe("3439: the release poll names the failing phase and reason, run against a stubbed box", () => {
+  const SHA = "0123456789abcdef0123456789abcdef01234567";
+  const poll = wf.jobs.deploy.steps.find((s) => s.id === "poll");
+  const REPO = fileURLToPath(new URL("../../", import.meta.url));
+
+  const runPoll = (replies) => {
+    const dir = mkdtempSync(path.join(tmpdir(), "rel-poll-"));
+    const stubs = path.join(dir, "stubs");
+    mkdirSync(stubs);
+    replies.forEach((r, i) => writeFileSync(path.join(dir, `reply-${i}`), r));
+    const stub = (name, body) => {
+      writeFileSync(path.join(stubs, name), `#!/usr/bin/env bash\n${body}\n`);
+      chmodSync(path.join(stubs, name), 0o755);
+    };
+    stub(
+      "ssh",
+      [
+        `n=$(cat "${dir}/n" 2>/dev/null || echo 0)`,
+        `f="${dir}/reply-$n"; [ -f "$f" ] || f="${dir}/reply-${replies.length - 1}"`,
+        `echo $((n + 1)) > "${dir}/n"`,
+        'cat "$f"',
+      ].join("\n"),
+    );
+    stub("sleep", "true");
+    const out = path.join(dir, "out");
+    writeFileSync(out, "");
+    const r = spawnSync("bash", ["-e", "-c", poll.run], {
+      timeout: 60_000,
+      cwd: REPO,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${stubs}${path.delimiter}${process.env.PATH}`,
+        SHA,
+        OUTCOME: "started",
+        RUNNER_TEMP: dir,
+        GITHUB_OUTPUT: out,
+      },
+    });
+    const outputs = Object.fromEntries(
+      readFileSync(out, "utf8").trim().split("\n").filter(Boolean).map((l) => l.split(/=(.*)/s).slice(0, 2)),
+    );
+    return { status: r.status, stdout: r.stdout, outputs };
+  };
+  const reply = (active, rc, release, failure = null) =>
+    JSON.stringify({
+      release,
+      unitAlive: active === "active",
+      driver: { unit: "u", active, rc, previousSha: null, failure },
+    });
+
+  it("a red smoke after a recorded prune names phase=smoke and its probes, and hands them to the record", () => {
+    const reason = "prod smoke RED (exit 1): failed probes api /v1/health — the new build is unhealthy";
+    const r = runPoll([
+      reply("active", null, { step: "prune", state: "running" }),
+      reply("failed", 1, { step: "prune", state: "failed" }, { phase: "smoke", reason }),
+    ]);
+    assert.equal(r.status, 1);
+    assert.match(r.stdout, /status: driver=active rc=- step=prune state=running\n/);
+    assert.ok(
+      r.stdout.includes(`::error::release failed (driver=failed rc=1 step=prune state=failed phase=smoke reason=${reason})`),
+      r.stdout,
+    );
+    assert.equal(r.outputs.terminal, "failed");
+    assert.equal(r.outputs["failed-phase"], "smoke");
+    assert.equal(r.outputs["failed-reason"], reason);
+  });
+
+  it("a success carries no failure outputs", () => {
+    const r = runPoll([reply("inactive", 0, { step: "finish", state: "succeeded" })]);
+    assert.equal(r.status, 0);
+    assert.equal(r.outputs.terminal, "succeeded");
+    assert.equal(r.outputs["failed-phase"], "");
+    assert.equal(r.outputs["failed-reason"], "");
+  });
+
+  it("the record steps pass the phase and reason on", () => {
+    for (const id of ["record", "redeploy-record"]) {
+      const step = wf.jobs.deploy.steps.find((s) => s.id === id);
+      assert.equal(step.env.FAILED_PHASE, "${{ steps.poll.outputs.failed-phase }}", id);
+      assert.equal(step.env.FAILED_REASON, "${{ steps.poll.outputs.failed-reason }}", id);
+      assert.match(step.run, /--failed-phase "\$FAILED_PHASE" --failed-reason "\$FAILED_REASON"/, id);
+    }
+  });
+});
